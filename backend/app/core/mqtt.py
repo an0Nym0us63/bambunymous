@@ -26,17 +26,15 @@ def _notify():
 
 
 def _decode_temp(raw: int) -> tuple[float, float]:
-    """Décode un int32 H2C en (actuel°C, target°C). Encodage: little-endian bytes [curr, 0, target, 0]."""
+    """Décode un int32 Bambu H2C en (actuel°C, target°C).
+    Méthode ha-bambulab: low word = actuel, high word = target.
+    Ex: 14418139 → actuel=219°C, target=220°C
+    """
     if raw < 0:
         return 0.0, 0.0
-    b = raw.to_bytes(4, 'little')
-    return float(b[0]), float(b[2])
-
-def _decode_snow(snow: int) -> float:
-    """snow/star = température × 10, 65279 (0xFEFF) = off/inactive."""
-    if snow == 65279 or snow <= 0:
-        return 0.0
-    return round(snow / 10, 1)
+    current = raw & 0xFFFF
+    target  = (raw >> 16) & 0xFFFF
+    return float(current), float(target)
 
 
 class MQTTManager:
