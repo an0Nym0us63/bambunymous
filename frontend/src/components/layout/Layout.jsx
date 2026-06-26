@@ -1,12 +1,12 @@
 import React from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { Home, Settings, LogOut, Box, Layers, Spool } from "lucide-react";
+import { Home, Settings, LogOut, Box, Layers, Package } from "lucide-react";
 import { useAuth } from "../../store/auth";
 import clsx from "clsx";
 
 const nav = [
   { to: "/",          icon: Home,    label: "Accueil"    },
-  { to: "/filaments", icon: Spool,   label: "Filaments"  },
+  { to: "/filaments", icon: Package, label: "Filaments"  },
   { to: "/settings",  icon: Settings,label: "Paramètres" },
 ];
 
