@@ -5,6 +5,7 @@ import Layout from "./components/layout/Layout";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
+import Filaments from "./pages/Filaments";
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -21,6 +22,7 @@ export default function App() {
         </PrivateRoute>
       }>
         <Route index element={<Home />} />
+        <Route path="filaments" element={<Filaments />} />
         <Route path="settings" element={<Settings />} />
       </Route>
     </Routes>
