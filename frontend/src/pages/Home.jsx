@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { usePrinter } from "../store/printer";
 import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, ChevronDown, ChevronUp, Droplets } from "lucide-react";
 import client from "../api/client";
+import AMSSection from "../components/AMSSection";
 import clsx from "clsx";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -367,14 +368,24 @@ export default function Home() {
   const fetchSpoolLookup = useCallback(async () => {
     try {
       const { data: spools } = await client.get("/filaments/spools", { params: { archived: false } });
+      const { data: filaments } = await client.get("/filaments/filaments");
+      // Map filament_id → filament details (weight etc.)
+      const filMap = {};
+      filaments.forEach(f => { filMap[f.id] = f; });
+
       const map = {};
       spools.forEach(s => {
-        if (s.tag_number) map[s.tag_number] = {
-          name: s.filament_name,
-          manufacturer: s.filament_manufacturer,
-          material: s.filament_material,
-          color: s.filament_color,
+        const fil = filMap[s.filament_id] ?? {};
+        const info = {
+          filament_name: s.filament_name,
+          filament_manufacturer: s.filament_manufacturer,
+          filament_material: s.filament_material,
+          filament_color: s.filament_color,
+          remaining_weight_g: s.remaining_weight_g,
+          filament_weight_g: fil.filament_weight_g ?? 1000,
         };
+        // Indexer par tag_number (= tag_uid du NFC)
+        if (s.tag_number) map[s.tag_number] = info;
       });
       setSpoolLookup(map);
     } catch {}
@@ -393,14 +404,11 @@ export default function Home() {
       <StatusBanner status={status} />
       <PrinterTemps status={status} />
       {hasRack && <VortekRack rack={status.hotend_rack} />}
-      <div className="space-y-3">
-        {(status?.ams_list ?? []).map(ams => (
-          <AMSUnit key={ams.id} ams={ams} activeTray={status?.active_tray ?? -1} spoolLookup={spoolLookup} />
-        ))}
-        {!(status?.ams_list?.length) && (
-          <div className="card p-6 text-center text-gray-600 text-sm">Aucun AMS détecté</div>
-        )}
-      </div>
+      <AMSSection
+        amsList={status?.ams_list ?? []}
+        activeTray={status?.active_tray ?? -1}
+        spoolLookup={spoolLookup}
+      />
     </div>
   );
 }
