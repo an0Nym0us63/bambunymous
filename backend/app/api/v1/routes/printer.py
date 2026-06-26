@@ -1,21 +1,27 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
-from ....core.mqtt import get_state, mqtt_manager
+from ....core.mqtt import get_state
 from .auth import get_current_user
 
 router = APIRouter()
+
+
+class NozzleTempOut(BaseModel):
+    id: int
+    temp: float
+    target: float
+    active: bool
 
 
 class TrayOut(BaseModel):
     id: int
     color: str
     filament_type: str
+    tray_id_name: str
     remain: int
     uuid: str
     tag_uid: str
-    info_idx: str
-    tray_id_name: str
     empty: bool
     drying_temp: int
     drying_time: int
@@ -60,8 +66,7 @@ class PrinterStatusOut(BaseModel):
     layer: int
     total_layers: int
     remaining_minutes: int
-    nozzle_temp: float
-    target_nozzle_temp: float
+    nozzles: list[NozzleTempOut]
     bed_temp: float
     target_bed_temp: float
     chamber_temp: float
@@ -75,6 +80,7 @@ class PrinterStatusOut(BaseModel):
     speed_mag: int
     ams_list: list[AMSOut]
     ams_mapping: list[int]
+    active_tray: int
     hotend_rack: HotendRackOut
     hms_errors: list[dict]
     print_error: int
@@ -92,8 +98,10 @@ async def printer_status(_: str = Depends(get_current_user)):
         layer=s.layer,
         total_layers=s.total_layers,
         remaining_minutes=s.remaining_minutes,
-        nozzle_temp=s.nozzle_temp,
-        target_nozzle_temp=s.target_nozzle_temp,
+        nozzles=[
+            NozzleTempOut(id=n.id, temp=n.temp, target=n.target, active=n.active)
+            for n in s.nozzles
+        ],
         bed_temp=s.bed_temp,
         target_bed_temp=s.target_bed_temp,
         chamber_temp=s.chamber_temp,
@@ -110,15 +118,16 @@ async def printer_status(_: str = Depends(get_current_user)):
                 id=a.id,
                 trays=[TrayOut(
                     id=t.id, color=t.color, filament_type=t.filament_type,
-                    remain=t.remain, uuid=t.uuid, tag_uid=t.tag_uid,
-                    info_idx=t.info_idx, tray_id_name=t.tray_id_name,
-                    empty=t.empty, drying_temp=t.drying_temp,
-                    drying_time=t.drying_time, spool_id=t.spool_id,
+                    tray_id_name=t.tray_id_name, remain=t.remain,
+                    uuid=t.uuid, tag_uid=t.tag_uid, empty=t.empty,
+                    drying_temp=t.drying_temp, drying_time=t.drying_time,
+                    spool_id=t.spool_id,
                 ) for t in a.trays],
                 humidity=a.humidity, temp=a.temp,
             ) for a in s.ams_list
         ],
         ams_mapping=s.ams_mapping,
+        active_tray=s.active_tray,
         hotend_rack=HotendRackOut(
             hotends=[HotendSlotOut(
                 id=h.id, color=h.color, filament_id=h.filament_id,
