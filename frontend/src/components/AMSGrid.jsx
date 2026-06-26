@@ -1,76 +1,147 @@
-import React from "react";
+import React, { useState } from "react";
 import clsx from "clsx";
+import { ChevronDown, ChevronUp, Droplets, Thermometer } from "lucide-react";
 
-function colorStyle(hex) {
-  if (!hex || hex.length < 6) return {};
-  const h = hex.startsWith("#") ? hex : `#${hex}`;
-  return { backgroundColor: h };
+function hexColor(hex) {
+  if (!hex || hex === "00000000") return null;
+  const h = hex.length === 8 ? hex.slice(0, 6) : hex.slice(0, 6);
+  return `#${h}`;
 }
 
-function TraySlot({ tray, active }) {
-  const isEmpty = tray.empty || !tray.filament_type;
+function isLight(hex) {
+  if (!hex) return false;
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000 > 160;
+}
+
+function ColorDot({ color, size = 20 }) {
+  const c = hexColor(color);
+  return (
+    <div
+      className="rounded-md ring-1 ring-white/10 shrink-0"
+      style={{
+        width: size, height: size,
+        backgroundColor: c || "#1f2937",
+      }}
+    />
+  );
+}
+
+function RemainBar({ remain, color }) {
+  const c = hexColor(color);
+  const pct = Math.max(0, Math.min(100, remain));
+  const barColor = pct > 30 ? c : "#ef4444";
+  return (
+    <div className="h-1 bg-gray-700/60 rounded-full overflow-hidden mt-1.5">
+      <div className="h-full rounded-full transition-all duration-500"
+        style={{ width: `${pct}%`, backgroundColor: barColor || "#3b82f6" }} />
+    </div>
+  );
+}
+
+// Mini pastilles de couleur pour le header AMS
+function ColorPills({ trays }) {
+  return (
+    <div className="flex gap-1">
+      {trays.map(t => (
+        <div key={t.id}
+          className="w-5 h-5 rounded-full ring-1 ring-white/10"
+          style={{ backgroundColor: hexColor(t.color) || "#1f2937" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+function TrayCard({ tray, isActive }) {
   return (
     <div className={clsx(
-      "relative rounded-xl p-3 border transition-all",
-      active ? "border-brand-500 shadow-lg shadow-brand-500/20" : "border-gray-700/50",
-      isEmpty ? "bg-gray-800/40" : "bg-gray-800/70"
+      "card-sm p-3 transition-all",
+      isActive && "border-blue-500/50 glow-blue"
     )}>
-      {/* Couleur */}
-      <div className="flex items-center gap-2 mb-2">
-        <div className="w-5 h-5 rounded-md ring-1 ring-white/20 shrink-0"
-          style={isEmpty ? { backgroundColor: "#374151" } : colorStyle(tray.color)} />
-        <span className="text-xs font-mono text-gray-300">#{tray.id + 1}</span>
-        {active && <span className="ml-auto text-[10px] text-brand-400 font-semibold">ACTIF</span>}
-      </div>
-
-      {isEmpty ? (
-        <p className="text-xs text-gray-600">Vide</p>
-      ) : (
-        <>
-          <p className="text-xs font-medium text-gray-200 truncate">{tray.filament_type}</p>
-          {/* Barre de reste */}
-          <div className="mt-2 h-1 bg-gray-700 rounded-full overflow-hidden">
-            <div className="h-full rounded-full transition-all"
-              style={{ width: `${tray.remain}%`, ...colorStyle(tray.color) }} />
+      <div className="flex items-start gap-2">
+        <ColorDot color={tray.color} size={18} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1">
+            <p className="text-xs font-semibold text-gray-200 truncate">
+              {tray.empty ? "Vide" : (tray.tray_id_name || tray.filament_type || "—")}
+            </p>
+            {isActive && (
+              <span className="shrink-0 text-[9px] font-bold text-blue-400 bg-blue-400/10 px-1.5 py-0.5 rounded-full">
+                ●
+              </span>
+            )}
           </div>
-          <p className="text-[10px] text-gray-500 mt-1 mono">{tray.remain}%</p>
-        </>
+          {!tray.empty && (
+            <p className="text-[10px] text-gray-500 truncate">{tray.filament_type}</p>
+          )}
+        </div>
+        <span className="text-xs mono text-gray-500 shrink-0">
+          {tray.empty ? "" : `${tray.remain}%`}
+        </span>
+      </div>
+      {!tray.empty && <RemainBar remain={tray.remain} color={tray.color} />}
+    </div>
+  );
+}
+
+function AMSUnit({ ams, activeTray }) {
+  const [open, setOpen] = useState(true);
+
+  return (
+    <div className="card overflow-hidden">
+      {/* Header */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-3 p-3 hover:bg-white/[0.02] transition-colors"
+      >
+        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider shrink-0">
+          AMS {ams.id + 1}
+        </span>
+        <ColorPills trays={ams.trays.filter(t => !t.empty)} />
+        <div className="flex items-center gap-3 ml-auto text-gray-600 text-[11px]">
+          <span className="flex items-center gap-1">
+            <Droplets size={11} />
+            <span className="mono">{ams.humidity}%</span>
+          </span>
+          <span className="flex items-center gap-1">
+            <Thermometer size={11} />
+            <span className="mono">{ams.temp}°C</span>
+          </span>
+          {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+        </div>
+      </button>
+
+      {/* Trays */}
+      {open && (
+        <div className="grid grid-cols-2 gap-2 p-3 pt-0">
+          {ams.trays.map(tray => (
+            <TrayCard
+              key={tray.id}
+              tray={tray}
+              isActive={activeTray === ams.id * 4 + tray.id}
+            />
+          ))}
+        </div>
       )}
     </div>
   );
 }
 
-function AMSUnit({ ams }) {
-  return (
-    <div className="glass rounded-2xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-          AMS {ams.id + 1}
-        </h3>
-        <div className="flex gap-3 text-xs text-gray-500">
-          <span>💧 {ams.humidity}%</span>
-          <span>🌡 {ams.temp}°C</span>
-        </div>
-      </div>
-      <div className="grid grid-cols-4 gap-2">
-        {ams.trays.map((tray) => (
-          <TraySlot key={tray.id} tray={tray} active={false} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-export default function AMSGrid({ amsList }) {
+export default function AMSGrid({ amsList, activeTray }) {
   if (!amsList?.length) return (
-    <div className="glass rounded-2xl p-6 text-center text-gray-600 text-sm">
+    <div className="card p-6 text-center text-gray-600 text-sm">
       Aucun AMS détecté
     </div>
   );
-
   return (
     <div className="space-y-3">
-      {amsList.map((ams) => <AMSUnit key={ams.id} ams={ams} />)}
+      {amsList.map(ams => (
+        <AMSUnit key={ams.id} ams={ams} activeTray={activeTray ?? -1} />
+      ))}
     </div>
   );
 }
