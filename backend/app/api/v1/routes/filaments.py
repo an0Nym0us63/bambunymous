@@ -52,6 +52,7 @@ class SpoolOut(BaseModel):
     id: int
     filament_id: int
     filament_name: str
+    filament_manufacturer: Optional[str]
     filament_material: str
     filament_color: Optional[str]
     remaining_weight_g: Optional[float]
@@ -244,6 +245,7 @@ def _spool_out(s: Spool) -> SpoolOut:
     return SpoolOut(
         id=s.id, filament_id=s.filament_id,
         filament_name=f.name if f else "?",
+        filament_manufacturer=f.manufacturer if f else None,
         filament_material=f.material if f else "?",
         filament_color=f.color if f else None,
         remaining_weight_g=s.remaining_weight_g,
