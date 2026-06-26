@@ -5,7 +5,10 @@ import path from "path";
 export default defineConfig({
   plugins: [react()],
   resolve: { alias: { "@": path.resolve(__dirname, "src") } },
-  build: { outDir: "../backend/static", emptyOutDir: true },
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+  },
   server: {
     port: 5173,
     proxy: {
