@@ -55,6 +55,7 @@ class SpoolOut(BaseModel):
     filament_manufacturer: Optional[str]
     filament_material: str
     filament_color: Optional[str]
+    filament_weight_g: Optional[float]
     remaining_weight_g: Optional[float]
     price_override: Optional[float]
     location: Optional[str]
@@ -248,6 +249,7 @@ def _spool_out(s: Spool) -> SpoolOut:
         filament_manufacturer=f.manufacturer if f else None,
         filament_material=f.material if f else "?",
         filament_color=f.color if f else None,
+        filament_weight_g=f.filament_weight_g if f else None,
         remaining_weight_g=s.remaining_weight_g,
         price_override=s.price_override,
         location=s.location, tag_number=s.tag_number,
