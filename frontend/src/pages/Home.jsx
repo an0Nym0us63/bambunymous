@@ -190,10 +190,17 @@ function VortekRack({ rack }) {
   if (!rack?.hotends?.length) return null;
 
   const h = rack.hotends;
-  // Slots 1-6 dans le rack (idx 0-5), idx 6 = sur la tête
+  // Les 7 items sont TOUS dans le rack (src_id=16 ne matche aucun → tête sans hotend tracké)
+  // Rang A: slots 1,3,5 → idx 0,2,4
+  // Rang B: slots 2,4,6 → idx 1,3,5
+  // Slot 7: idx 6 (affiché séparément)
   const rowA   = [h[0], h[2], h[4]].filter(Boolean); // slots 1, 3, 5
   const rowB   = [h[1], h[3], h[5]].filter(Boolean); // slots 2, 4, 6
-  const onHead = h[6] ?? null;                        // idx 6 = sur la tête
+  const slot7  = h[6] ?? null;                        // slot 7 optionnel
+  // L'hotend sur la tête = celui dont l'id = rack.active_id (si présent dans la liste)
+  const onHead = rack.active_id >= 0
+    ? h.find(s => s?.id === rack.active_id) ?? null
+    : null;
 
   const isOnHead = (slot) => onHead && slot?.id === onHead.id;
   const filled = h.filter(x => x && !x.empty && x.filament_id);
@@ -230,7 +237,16 @@ function VortekRack({ rack }) {
               ))}
             </div>
           </div>
-          {/* Hotend actuellement sur la tête */}
+          {/* Slot 7 si présent */}
+          {slot7 && (
+            <div className="mt-1">
+              <p className="text-[8px] text-gray-700 uppercase tracking-widest mb-1.5">Slot 7</p>
+              <div className="w-1/3 pr-1">
+                <RackSlot key={slot7.id} slot={slot7} slotNum={7} onHead={slot7.id === rack.active_id} />
+              </div>
+            </div>
+          )}
+          {/* Hotend sur la tête (si src_id correspond à un slot connu) */}
           {onHead && (
             <div className="flex items-center gap-2 px-2.5 py-2 bg-blue-500/5 border border-blue-500/15 rounded-lg">
               <div className="w-2.5 h-2.5 rounded-sm shrink-0 ring-1 ring-white/10"
@@ -241,6 +257,12 @@ function VortekRack({ rack }) {
               {onHead.print_time > 0 && (
                 <span className="text-[10px] text-gray-600 mono shrink-0">{Math.round(onHead.print_time/60)}h</span>
               )}
+            </div>
+          )}
+          {/* Tête sans hotend tracké */}
+          {!onHead && rack.active_id >= 0 && (
+            <div className="flex items-center gap-2 px-2.5 py-2 bg-white/[0.03] border border-white/[0.06] rounded-lg">
+              <p className="text-[11px] text-gray-600">Tête — hotend #{rack.active_id} (non référencé dans le rack)</p>
             </div>
           )}
         </div>
