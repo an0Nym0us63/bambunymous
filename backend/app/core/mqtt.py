@@ -194,10 +194,14 @@ class MQTTManager:
                 n = state.nozzles[eid]
                 # temp: int32 little-endian → b[0]=actuel, b[2]=target
                 temp_raw = ext.get("temp", 0)
-                if isinstance(temp_raw, int) and temp_raw > 255:
-                    n.temp, n.target = _decode_temp(temp_raw)
-                elif isinstance(temp_raw, (int, float)):
-                    n.temp = float(temp_raw)
+                if isinstance(temp_raw, int) and temp_raw > 0xFFFF:
+                    # H2C encoding: low word = actuel, high word = target (ha-bambulab method)
+                    n.temp   = float(temp_raw & 0xFFFF)
+                    n.target = float((temp_raw >> 16) & 0xFFFF)
+                elif isinstance(temp_raw, (int, float)) and temp_raw > 0:
+                    # Valeur directe (ex: nozzle inactif à 39°C)
+                    n.temp   = float(temp_raw)
+                    n.target = 0.0
                 # active: extruder 0 = toujours primaire sur H2C; sinon stat != 0
                 n.active = (eid == 0) or (ext.get("stat", 0) != 0)
                 changed = True
@@ -221,12 +225,19 @@ class MQTTManager:
                 for tr in ams_raw.get("tray", []):
                     t = AMSTray(id=int(tr.get("id", 0)))
                     t.color = (tr.get("tray_color") or "").rstrip("FF") or tr.get("tray_color", "")
-                    t.filament_type = tr.get("tray_sub_brands") or tr.get("tray_type") or ""
+                    t.filament_type = (tr.get("tray_sub_brands") or "").strip() or (tr.get("tray_type") or "").strip()
                     t.tray_id_name = tr.get("tray_id_name", "")
                     t.remain = max(0, int(tr.get("remain", 0)))
                     t.uuid = (tr.get("tray_uuid") or "")[:8]
                     t.tag_uid = tr.get("tag_uid", "")
-                    t.empty = not bool(tr.get("tray_sub_brands"))
+                    # Un tray est vide uniquement si son UUID est tout à zéro
+                    # Les filaments custom n'ont pas de tray_sub_brands mais ont un UUID valide
+                    tray_uuid = tr.get("tray_uuid", "") or ""
+                    tray_color = tr.get("tray_color", "") or ""
+                    t.empty = (
+                        tray_uuid.replace("0", "") == "" and
+                        tray_color.replace("0", "") == ""
+                    )
                     t.drying_temp = int(tr.get("drying_temp") or 0)
                     t.drying_time = int(tr.get("drying_time") or 0)
                     t.total_len = int(tr.get("total_len") or 0)
