@@ -4,8 +4,7 @@ WORKDIR /frontend
 COPY frontend/package.json ./
 RUN npm install --silent
 COPY frontend/ .
-# Override outDir pour garder le dist dans /frontend/dist
-RUN npx vite build --outDir /frontend/dist --emptyOutDir
+RUN npm run build
 
 # Stage 2 : Python deps
 FROM python:3.12-slim AS py-builder
