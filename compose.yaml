@@ -1,15 +1,15 @@
 services:
-  spoolnymous:
-    image: ghcr.io/an0nym0us63/spoolnymous:v2
-    container_name: spoolnymous-v2
+  bambunymous:
+    image: ghcr.io/an0nym0us63/bambunymous:latest
+    container_name: bambunymous
     restart: unless-stopped
     ports:
       - "7914:8000"
     volumes:
-      - spoolnymous_v2_data:/data
+      - bambunymous_data:/data
     environment:
       - DATA_DIR=/data
-      - DATABASE_URL=sqlite+aiosqlite:////data/spoolnymous.db
+      - DATABASE_URL=sqlite+aiosqlite:////data/bambunymous.db
       - UPLOADS_DIR=/data/uploads
     env_file:
       - .env
@@ -21,4 +21,4 @@ services:
       start_period: 20s
 
 volumes:
-  spoolnymous_v2_data:
+  bambunymous_data:
