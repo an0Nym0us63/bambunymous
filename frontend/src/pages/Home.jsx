@@ -13,14 +13,14 @@ export default function Home() {
     return () => stopPolling();
   }, []);
 
-  const hasRack = status?.hotend_rack?.hotends?.length > 0;
+  const hasRack = (status?.hotend_rack?.hotends?.length ?? 0) > 0;
 
   return (
-    <div className="space-y-4 max-w-5xl mx-auto">
+    <div className="space-y-3 max-w-2xl mx-auto">
       <StatusBanner status={status} />
       <PrinterCard status={status} />
       {hasRack && <HotendRackCard rack={status.hotend_rack} />}
-      <AMSGrid amsList={status?.ams_list ?? []} />
+      <AMSGrid amsList={status?.ams_list ?? []} activeTray={status?.active_tray} />
     </div>
   );
 }
