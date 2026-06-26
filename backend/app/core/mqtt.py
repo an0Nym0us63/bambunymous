@@ -1,7 +1,6 @@
 """
 MQTT Manager — Bambu Lab H2C.
 Températures: encodage little-endian int32 (b[0]=actuel°C, b[2]=target°C).
-snow/star: température cible nozzle × 10 (514 → 51.4°C), 65279=off.
 """
 import json, logging, ssl, threading
 from typing import Callable
@@ -199,16 +198,8 @@ class MQTTManager:
                     n.temp, n.target = _decode_temp(temp_raw)
                 elif isinstance(temp_raw, (int, float)):
                     n.temp = float(temp_raw)
-                # snow = target×10, 65279 = off
-                snow = ext.get("snow", 65279)
-                decoded_target = _decode_snow(snow)
-                if decoded_target > 0:
-                    n.target = decoded_target
-                # active: stat != 0 ou snow != 65279
-                n.active = (ext.get("stat", 0) != 0) or (snow != 65279)
-                # L'extruder 0 est toujours l'actif primaire sur H2C
-                if eid == 0:
-                    n.active = True
+                # active: extruder 0 = toujours primaire sur H2C; sinon stat != 0
+                n.active = (eid == 0) or (ext.get("stat", 0) != 0)
                 changed = True
 
         # Fallback legacy (autres modèles)
