@@ -1,14 +1,15 @@
 """
-Script d'import de la DB Spoolnymous v1 vers BambuNymous.
-Usage: python -m app.db.import_db --src /data/3d_printer_logs.db
-Import idempotent: peut être rejoué sans créer de doublons.
+Script d'import de la DB Spoolnymous v1 → BambuNymous.
+Appelable en CLI ou via l'API.
+Idempotent: ne crée pas de doublons.
 """
-import argparse
-import asyncio
 import sqlite3
 import logging
 from datetime import datetime
-from pathlib import Path
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text, select
+from ..models.filament import Filament, Spool
+from ..models.setting import Setting
 
 logger = logging.getLogger(__name__)
 
@@ -31,55 +32,59 @@ def table_exists(conn, name):
     ).fetchone())
 
 
-async def run_import(src_path: str):
-    from app.db.session import init_db, AsyncSessionLocal
-    from app.models.filament import Filament, Spool
-    from app.models.setting import Setting
-    from sqlalchemy import text
-
-    logger.info(f"📂 Source: {src_path}")
+async def run_import(src_path: str) -> dict:
+    from ..db.session import AsyncSessionLocal, init_db
     await init_db()
 
     src = sqlite3.connect(src_path)
     src.row_factory = sqlite3.Row
+    stats = {"filaments": 0, "spools": 0, "settings": 0, "skipped": 0}
 
     async with AsyncSessionLocal() as db:
 
         # ── SETTINGS ────────────────────────────────────────────────────
-        logger.info("Import settings…")
         key_map = {
             "PRINTER_ID": "PRINTER_ID",
             "PRINTER_ACCESS_CODE": "PRINTER_ACCESS_CODE",
             "PRINTER_IP": "PRINTER_IP",
             "COST_BY_HOUR": "COST_BY_HOUR",
         }
-        for src_key, dst_key in key_map.items():
-            row = src.execute("SELECT value FROM settings WHERE key=?", (src_key,)).fetchone()
-            if row and row[0]:
-                existing = await db.execute(text("SELECT value FROM settings WHERE key=:k"), {"k": dst_key})
-                if not existing.scalar_one_or_none():
-                    db.add(Setting(key=dst_key, value=str(row[0])))
-                    logger.info(f"  {dst_key} = {str(row[0])[:30]}")
+        if table_exists(src, "settings"):
+            for src_key, dst_key in key_map.items():
+                row = src.execute("SELECT value FROM settings WHERE key=?", (src_key,)).fetchone()
+                if row and row[0]:
+                    existing = (await db.execute(
+                        text("SELECT value FROM settings WHERE key=:k"), {"k": dst_key}
+                    )).scalar_one_or_none()
+                    if not existing:
+                        db.add(Setting(key=dst_key, value=str(row[0])))
+                        stats["settings"] += 1
 
         # ── FILAMENTS ────────────────────────────────────────────────────
-        logger.info("Import filaments…")
-        fil_map: dict[int, int] = {}  # old_id → new_id
-
+        fil_map: dict[int, int] = {}
         for row in src.execute("SELECT * FROM filaments ORDER BY id").fetchall():
             row = dict(row)
             old_id = row["id"]
-
-            # Check doublon par external_filament_id ou par nom+matière
             ext_id = str(row.get("external_filament_id") or "")
+
+            # Doublon check par external_filament_id
             if ext_id:
-                res = await db.execute(
-                    text("SELECT id FROM filaments WHERE external_filament_id=:e"),
-                    {"e": ext_id}
-                )
-                existing = res.scalar_one_or_none()
-                if existing:
-                    fil_map[old_id] = existing
+                res = (await db.execute(
+                    text("SELECT id FROM filaments WHERE external_filament_id=:e"), {"e": ext_id}
+                )).scalar_one_or_none()
+                if res:
+                    fil_map[old_id] = res
+                    stats["skipped"] += 1
                     continue
+
+            # Doublon check par id
+            res = (await db.execute(
+                text("SELECT id FROM filaments WHERE id=:id"), {"id": old_id}
+            )).scalar_one_or_none()
+            if res:
+                fil_map[old_id] = old_id
+                stats["skipped"] += 1
+                continue
 
             f = Filament(
                 id=old_id,
@@ -105,30 +110,24 @@ async def run_import(src_path: str):
             db.add(f)
             await db.flush()
             fil_map[old_id] = f.id
-            logger.debug(f"  Filament {old_id} → {f.id}: {f.name}")
-
-        logger.info(f"  → {len(fil_map)} filaments importés")
+            stats["filaments"] += 1
 
         # ── BOBINES ──────────────────────────────────────────────────────
-        logger.info("Import bobines…")
-        spool_map: dict[int, int] = {}
-
         for row in src.execute("SELECT * FROM bobines ORDER BY id").fetchall():
             row = dict(row)
             old_id = row["id"]
-            old_fil = row.get("filament_id")
-            new_fil = fil_map.get(old_fil)
-
+            new_fil = fil_map.get(row.get("filament_id"))
             if not new_fil:
-                logger.warning(f"  Bobine {old_id}: filament {old_fil} introuvable, ignoré")
                 continue
 
-            res = await db.execute(text("SELECT id FROM bobines WHERE id=:id"), {"id": old_id})
-            if res.scalar_one_or_none():
-                spool_map[old_id] = old_id
+            res = (await db.execute(
+                text("SELECT id FROM bobines WHERE id=:id"), {"id": old_id}
+            )).scalar_one_or_none()
+            if res:
+                stats["skipped"] += 1
                 continue
 
-            s = Spool(
+            db.add(Spool(
                 id=old_id,
                 filament_id=new_fil,
                 remaining_weight_g=row.get("remaining_weight_g"),
@@ -143,23 +142,11 @@ async def run_import(src_path: str):
                 first_used_at=parse_dt(row.get("first_used_at")),
                 last_used_at=parse_dt(row.get("last_used_at")),
                 updated_at=parse_dt(row.get("updated_at")) or datetime.utcnow(),
-            )
-            db.add(s)
-            await db.flush()
-            spool_map[old_id] = s.id
-
-        logger.info(f"  → {len(spool_map)} bobines importées")
+            ))
+            stats["spools"] += 1
 
         await db.commit()
-        logger.info("✅ Import terminé.")
 
     src.close()
-    return {"filaments": len(fil_map), "spools": len(spool_map)}
-
-
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--src", required=True, help="Chemin DB source (3d_printer_logs.db)")
-    args = parser.parse_args()
-    asyncio.run(run_import(args.src))
+    logger.info(f"Import: {stats}")
+    return stats
