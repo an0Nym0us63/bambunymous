@@ -1,15 +1,14 @@
 """
 MQTT Manager — connexion Bambu Lab via MQTT TLS.
-Log détaillé de tous les messages reçus pour analyse.
+Protocole analysé sur H2C (SN: 31B...) avec 3x AMS + Vortek HotendRack.
 """
-import asyncio
 import json
 import logging
 import ssl
 import threading
 from typing import Callable
 import paho.mqtt.client as mqtt
-from ..models.printer import PrinterState, AMS, AMSTray
+from ..models.printer import PrinterState, AMS, AMSTray, HotendRack, HotendSlot
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +30,6 @@ def _notify():
             fn(state)
         except Exception:
             logger.exception("Listener error")
-
-
-def _log_unknown_keys(section: str, data: dict, known: set):
-    """Log les clés non encore traitées pour découverte du protocole."""
-    unknown = {k: v for k, v in data.items() if k not in known}
-    if unknown:
-        logger.info(f"[MQTT DISCOVERY] {section} — clés non traitées : {json.dumps(unknown, default=str)}")
 
 
 class MQTTManager:
@@ -66,7 +58,7 @@ class MQTTManager:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run_loop, daemon=True)
         self._thread.start()
-        logger.info(f"MQTT: démarrage vers {self._ip} (printer_id={self._printer_id})")
+        logger.info(f"MQTT: démarrage vers {self._ip} (id={self._printer_id})")
 
     async def stop(self):
         self._stop_event.set()
@@ -98,17 +90,14 @@ class MQTTManager:
     def _connect_once(self):
         client = mqtt.Client()
         client.username_pw_set("bblp", self._code)
-
         ctx = ssl.create_default_context()
         ctx.check_hostname = False
         ctx.verify_mode = ssl.CERT_NONE
         client.tls_set_context(ctx)
         client.tls_insecure_set(True)
-
-        client.on_connect    = self._on_connect
+        client.on_connect = self._on_connect
         client.on_disconnect = self._on_disconnect
-        client.on_message    = self._on_message
-
+        client.on_message = self._on_message
         client.connect(self._ip, 8883, keepalive=60)
         self._client = client
         client.loop_forever()
@@ -118,15 +107,11 @@ class MQTTManager:
         state.connected = True
         _notify()
         logger.info(f"MQTT connecté (rc={rc})")
-        topic = f"device/{self._printer_id}/report"
-        client.subscribe(topic)
-        logger.info(f"MQTT subscribed: {topic}")
-        # Demander l'état complet
+        client.subscribe(f"device/{self._printer_id}/report")
         client.publish(
             f"device/{self._printer_id}/request",
             json.dumps({"pushing": {"sequence_id": "0", "command": "pushall"}}),
         )
-        logger.info("MQTT: pushall envoyé")
 
     def _on_disconnect(self, client, userdata, rc):
         self._connected = False
@@ -136,46 +121,48 @@ class MQTTManager:
 
     def _on_message(self, client, userdata, msg):
         try:
-            raw = msg.payload.decode()
-            data = json.loads(raw)
-
-            # Log complet du message (niveau DEBUG)
-            logger.debug(f"[MQTT RAW] topic={msg.topic} payload={raw[:500]}")
-
-            # Log de la structure de haut niveau (niveau INFO)
-            top_keys = list(data.keys())
-            logger.info(f"[MQTT MSG] top-level keys: {top_keys}")
-
-            self._process(data)
-
+            data = json.loads(msg.payload.decode())
+            if "print" in data:
+                self._process_print(data["print"])
+            elif "info" in data:
+                self._process_info(data["info"])
         except Exception:
-            logger.exception(f"MQTT message error — payload={msg.payload[:200]}")
+            logger.exception("MQTT message error")
 
-    def _process(self, data: dict):
-        p = data.get("print", {})
-        if not p:
-            # Log les messages qui ne sont pas des "print"
-            logger.info(f"[MQTT NON-PRINT] keys: {list(data.keys())}")
-            return
+    def _process_info(self, info: dict):
+        """Traite le bloc 'info' — version firmware et SN."""
+        for module in info.get("module", []):
+            if module.get("name") == "ota":
+                sn = module.get("sn", "")
+                sw = module.get("sw_ver", "")
+                if sn:
+                    state.serial = sn
+                if sw:
+                    state.fw_version = sw
+                logger.info(f"[MQTT INFO] SN={sn} FW={sw}")
 
-        p_keys = set(p.keys())
-        logger.debug(f"[MQTT PRINT] keys ({len(p_keys)}): {sorted(p_keys)}")
-
+    def _process_print(self, p: dict):
         changed = False
 
         # ── Statut / progression ─────────────────────────────────────────
-        KNOWN_STATUS = {"gcode_state", "mc_percent", "layer_num", "total_layer_num",
-                        "mc_remaining_time", "subtask_name", "job_id", "print_type",
-                        "sequence_id", "command"}
-
         if "gcode_state" in p:
             old = state.status
             state.status = p["gcode_state"]
             if old != state.status:
-                logger.info(f"[MQTT] gcode_state: {old} → {state.status}")
+                logger.info(f"[MQTT] status: {old} → {state.status}")
             changed = True
+
         if "mc_percent" in p:
             state.progress = float(p["mc_percent"])
+            changed = True
+
+        # Progression aussi dans p["percent"] ou p["3D"]["layer_num"]
+        block_3d = p.get("3D", {})
+        if "layer_num" in block_3d:
+            state.layer = int(block_3d["layer_num"])
+            changed = True
+        if "total_layer_num" in block_3d:
+            state.total_layers = int(block_3d["total_layer_num"])
             changed = True
         if "layer_num" in p:
             state.layer = int(p["layer_num"])
@@ -183,22 +170,78 @@ class MQTTManager:
         if "total_layer_num" in p:
             state.total_layers = int(p["total_layer_num"])
             changed = True
+
         if "mc_remaining_time" in p:
             state.remaining_minutes = int(p["mc_remaining_time"])
             changed = True
+        if "remain_time" in p:
+            state.remaining_minutes = int(p["remain_time"])
+            changed = True
+
         if "subtask_name" in p:
-            if state.print_name != p["subtask_name"]:
-                logger.info(f"[MQTT] subtask_name: {p['subtask_name']}")
             state.print_name = p["subtask_name"]
             changed = True
         if "job_id" in p:
             state.job_id = str(p["job_id"])
             changed = True
+        if "design_id" in p:
+            state.design_id = str(p["design_id"])
+            changed = True
+        if "model_id" in p:
+            state.model_id = str(p["model_id"])
+            changed = True
+        if "profile_id" in p:
+            state.profile_id = str(p["profile_id"])
+            changed = True
+        if "gcode_file" in p:
+            state.gcode_file = p["gcode_file"]
+            changed = True
+        if "stg_cur" in p:
+            state.print_stage = int(p["stg_cur"])
+            changed = True
+
+        # SN depuis upgrade_state
+        upgrade = p.get("upgrade_state", {})
+        if upgrade.get("sn") and not state.serial:
+            state.serial = upgrade["sn"]
+            logger.info(f"[MQTT] SN détecté: {state.serial}")
 
         # ── Températures ─────────────────────────────────────────────────
-        KNOWN_TEMPS = {"bed_temper", "bed_target_temper", "nozzle_temper",
-                       "nozzle_target_temper", "chamber_temper"}
+        # H2C: températures dans p["device"]["bed"], p["device"]["extruder"]
+        device = p.get("device", {})
+        if device:
+            # Bed temp
+            bed_info = device.get("bed", {}).get("info", {})
+            if "temp" in bed_info:
+                # valeur encodée (ex: 3604535 → diviser par 100?)
+                raw = bed_info["temp"]
+                if raw > 10000:
+                    state.bed_temp = round(raw / 100, 1)
+                else:
+                    state.bed_temp = float(raw)
+                changed = True
 
+            # Températures extrudeurs (extruder.info[])
+            extruder = device.get("extruder", {})
+            for ext in extruder.get("info", []):
+                if ext.get("id") == 0:
+                    temp_raw = ext.get("temp", 0)
+                    if temp_raw > 10000:
+                        state.nozzle_temp = round(temp_raw / 100, 1)
+                    elif temp_raw > 0:
+                        state.nozzle_temp = float(temp_raw)
+                    snow = ext.get("snow", 0)
+                    if snow > 0 and snow != 65279:  # 65279 = 0xFF7F = vide
+                        state.target_nozzle_temp = float(snow)
+                    changed = True
+
+            # Chambre (ctc)
+            ctc = device.get("ctc", {})
+            if "info" in ctc and "temp" in ctc["info"]:
+                state.chamber_temp = float(ctc["info"]["temp"])
+                changed = True
+
+        # Températures legacy (P1/X1 style)
         if "bed_temper" in p:
             state.bed_temp = float(p["bed_temper"])
             changed = True
@@ -215,70 +258,96 @@ class MQTTManager:
             state.chamber_temp = float(p["chamber_temper"])
             changed = True
 
-        # ── AMS ──────────────────────────────────────────────────────────
-        KNOWN_AMS_TOP = {"ams", "ams_exist_bits", "tray_exist_bits", "tray_is_bbl_bits",
-                         "tray_tar", "tray_now", "tray_pre", "tray_read_done_bits",
-                         "tray_reading_bits", "tray_type_bits", "version"}
-        KNOWN_VIR = {"vir_slot"}
+        # ── Vitesse ──────────────────────────────────────────────────────
+        if "spd_lvl" in p:
+            state.speed_level = int(p["spd_lvl"])
+            changed = True
+        if "spd_mag" in p:
+            state.speed_mag = int(p["spd_mag"])
+            changed = True
 
+        # ── AMS ──────────────────────────────────────────────────────────
         ams_data = p.get("ams", {})
         if "ams" in ams_data:
-            logger.info(f"[MQTT AMS] ams_exist_bits={ams_data.get('ams_exist_bits')} "
-                        f"tray_tar={ams_data.get('tray_tar')} tray_now={ams_data.get('tray_now')}")
-            _log_unknown_keys("ams_top", ams_data, KNOWN_AMS_TOP)
-
             state.ams_list = []
             for ams_raw in ams_data["ams"]:
                 ams = AMS(id=int(ams_raw.get("id", 0)))
                 ams.humidity = int(ams_raw.get("humidity_raw", 0))
                 ams.temp = float(ams_raw.get("temp", 0))
-                logger.info(f"[MQTT AMS {ams.id}] humidity={ams.humidity} temp={ams.temp}")
-
                 for tray_raw in ams_raw.get("tray", []):
                     tray = AMSTray(id=int(tray_raw.get("id", 0)))
-                    tray.color = tray_raw.get("tray_color", "")
-                    tray.filament_type = tray_raw.get("tray_sub_brands", "") or tray_raw.get("tray_type", "")
-                    tray.remain = int(tray_raw.get("remain", 0))
-                    tray.uuid = tray_raw.get("tray_uuid", "")
+                    tray.color = (tray_raw.get("tray_color", "") or "").rstrip("F") or tray_raw.get("tray_color", "")
+                    tray.filament_type = (tray_raw.get("tray_sub_brands") or
+                                          tray_raw.get("tray_type") or "")
+                    remain_raw = tray_raw.get("remain", 0)
+                    tray.remain = max(0, int(remain_raw)) if remain_raw >= 0 else 0
+                    tray.uuid = tray_raw.get("tray_uuid", "")[:8]
+                    tray.tag_uid = tray_raw.get("tag_uid", "")
                     tray.info_idx = tray_raw.get("tray_info_idx", "")
+                    tray.tray_id_name = tray_raw.get("tray_id_name", "")
                     tray.empty = not bool(tray_raw.get("tray_sub_brands"))
-                    logger.info(f"[MQTT AMS {ams.id} TRAY {tray.id}] "
-                                f"type={tray.filament_type} color=#{tray.color} "
-                                f"remain={tray.remain}% uuid={tray.uuid[:8] if tray.uuid else '-'} "
-                                f"empty={tray.empty}")
-                    # Log les champs non traités du tray
-                    KNOWN_TRAY = {"id", "tray_color", "tray_sub_brands", "tray_type",
-                                  "remain", "tray_uuid", "tray_info_idx", "tray_weight",
-                                  "tray_diameter", "tray_temp", "tray_time", "bed_temp_type",
-                                  "nozzle_temp_max", "nozzle_temp_min", "xcam_info",
-                                  "tray_color_format", "cols"}
-                    _log_unknown_keys(f"tray_{ams.id}_{tray.id}", tray_raw, KNOWN_TRAY)
+                    tray.drying_temp = int(tray_raw.get("drying_temp", 0) or 0)
+                    tray.drying_time = int(tray_raw.get("drying_time", 0) or 0)
+                    tray.total_len = int(tray_raw.get("total_len", 0) or 0)
                     ams.trays.append(tray)
                 state.ams_list.append(ams)
             changed = True
 
-        # vir_slot (H2C / Vortek / external spool)
-        if "vir_slot" in p:
-            logger.info(f"[MQTT VIR_SLOT] {json.dumps(p['vir_slot'], default=str)}")
+        # ── Mapping filament→slot (pendant un print) ──────────────────────
+        if "mapping" in p:
+            state.ams_mapping = p["mapping"]
+            changed = True
 
-        # ── Découverte : log toutes les clés non traitées ─────────────────
-        ALL_KNOWN = (KNOWN_STATUS | KNOWN_TEMPS | KNOWN_AMS_TOP | KNOWN_VIR |
-                     {"ams", "print_error", "wifi_signal", "spd_lvl", "spd_mag",
-                      "lights_report", "fan_gear", "cooling_fan_speed",
-                      "big_fan1_speed", "big_fan2_speed", "heatbreak_fan_speed",
-                      "ipcam", "xcam", "upload", "nozzle_diameter", "nozzle_type",
-                      "home_flag", "hw_switch_state", "mc_print_stage",
-                      "mc_print_error_code", "mc_print_line_number",
-                      "sdcard", "force_upgrade", "mess_production_state",
-                      "lifecycle", "camera_time_lapse", "s_obj"})
-        _log_unknown_keys("print", p, ALL_KNOWN)
+        # ── vir_slot (slots externes) ─────────────────────────────────────
+        # Sur H2C: ids 254 et 255 = slots externes vides (ignorés)
 
-        if "wifi_signal" in p:
-            logger.debug(f"[MQTT] wifi_signal={p['wifi_signal']}")
+        # ── Hotend Rack Vortek (H2C) ──────────────────────────────────────
+        # Les hotends sont dans p["device"]["nozzle"]
+        if device:
+            nozzle = device.get("nozzle", {})
+            if "info" in nozzle:
+                rack = HotendRack()
+                rack.active_id = nozzle.get("src_id", -1)
+                rack.target_id = nozzle.get("tar_id", -1)
+                rack.state = nozzle.get("state", 0)
+
+                holder = device.get("holder", {})
+                rack.holder_pos = holder.get("pos", 0)
+                rack.holder_stat = holder.get("stat", 0)
+                rack.holder_job = holder.get("job", 0)
+
+                for n in nozzle["info"]:
+                    color = (n.get("color_m") or "").strip()
+                    slot = HotendSlot(
+                        id=int(n.get("id", 0)),
+                        color=color,
+                        filament_id=n.get("fila_id", ""),
+                        diameter=float(n.get("diameter", 0.4)),
+                        nozzle_type=n.get("type", ""),
+                        serial=n.get("sn", ""),
+                        wear=float(n.get("wear", 0)),
+                        print_time=int(n.get("p_t", 0)),
+                        empty=not bool(n.get("fila_id", "").strip()),
+                    )
+                    rack.hotends.append(slot)
+
+                state.hotend_rack = rack
+                logger.debug(f"[MQTT RACK] {len(rack.hotends)} hotends, "
+                             f"active={rack.active_id} target={rack.target_id} "
+                             f"holder_pos={rack.holder_pos}")
+                changed = True
+
+        # ── Erreurs HMS ───────────────────────────────────────────────────
+        if "hms" in p:
+            state.hms_errors = p["hms"]
+            if state.hms_errors:
+                logger.warning(f"[MQTT HMS] {len(state.hms_errors)} erreur(s): {state.hms_errors}")
+            changed = True
+
         if "print_error" in p and p["print_error"] != 0:
-            logger.warning(f"[MQTT] print_error={p['print_error']}")
-        if "spd_lvl" in p:
-            logger.info(f"[MQTT] speed level={p['spd_lvl']} mag={p.get('spd_mag')}")
+            state.print_error = int(p["print_error"])
+            logger.warning(f"[MQTT] print_error={state.print_error}")
+            changed = True
 
         if changed:
             _notify()
