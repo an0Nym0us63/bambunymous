@@ -1,4 +1,4 @@
 from .setting import Setting
-from .printer import PrinterStatus
+from .printer import PrinterState
 
-__all__ = ["Setting", "PrinterStatus"]
+__all__ = ["Setting", "PrinterState"]
