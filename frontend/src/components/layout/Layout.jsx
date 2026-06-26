@@ -1,13 +1,13 @@
 import React from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { Home, Settings, LogOut, Box, Layers } from "lucide-react";
+import { Home, Settings, LogOut, Box, Layers, Spool } from "lucide-react";
 import { useAuth } from "../../store/auth";
 import clsx from "clsx";
 
 const nav = [
-  { to: "/",         icon: Home,     label: "Accueil"    },
-  { to: "/history",  icon: Layers,   label: "Historique" },
-  { to: "/settings", icon: Settings, label: "Paramètres" },
+  { to: "/",          icon: Home,    label: "Accueil"    },
+  { to: "/filaments", icon: Spool,   label: "Filaments"  },
+  { to: "/settings",  icon: Settings,label: "Paramètres" },
 ];
 
 export default function Layout() {
@@ -16,9 +16,7 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#0f1117]">
-      {/* Sidebar desktop */}
       <aside className="hidden md:flex flex-col w-16 lg:w-52 border-r border-white/[0.06] py-5 shrink-0">
-        {/* Logo */}
         <div className="flex items-center gap-2.5 px-4 mb-8">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center shrink-0">
             <Box size={14} className="text-white" />
@@ -27,7 +25,6 @@ export default function Layout() {
             BambuNymous
           </span>
         </div>
-
         <nav className="flex-1 space-y-0.5 px-2">
           {nav.map(({ to, icon: Icon, label }) => (
             <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) =>
@@ -42,7 +39,6 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
-
         <button onClick={() => { logout(); navigate("/login"); }}
           className="flex items-center gap-3 mx-2 px-3 py-2.5 rounded-xl text-gray-600 hover:text-red-400 hover:bg-white/[0.04] text-sm transition-all">
           <LogOut size={17} className="shrink-0" />
@@ -50,9 +46,7 @@ export default function Layout() {
         </button>
       </aside>
 
-      {/* Main */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header mobile */}
         <header className="md:hidden flex items-center gap-2 px-4 py-3 border-b border-white/[0.06]">
           <div className="w-6 h-6 rounded-md bg-gradient-to-br from-blue-500 to-cyan-400 flex items-center justify-center">
             <Box size={12} className="text-white" />
@@ -61,12 +55,9 @@ export default function Layout() {
             BambuNymous
           </span>
         </header>
-
         <main className="flex-1 overflow-y-auto p-4">
           <Outlet />
         </main>
-
-        {/* Bottom nav mobile */}
         <nav className="md:hidden flex border-t border-white/[0.06] bg-[#0f1117]">
           {nav.map(({ to, icon: Icon, label }) => (
             <NavLink key={to} to={to} end={to === "/"} className={({ isActive }) =>
