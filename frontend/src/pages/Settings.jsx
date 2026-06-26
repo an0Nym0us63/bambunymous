@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon } from "lucide-react";
+import ImportSection from "../components/ImportSection";
 import client from "../api/client";
 
 export default function Settings() {
@@ -121,6 +122,8 @@ export default function Settings() {
             <Field label="Tarif (€/h)" name="COST_BY_HOUR" placeholder="0.20" />
           </div>
         </section>
+
+        <ImportSection />
 
         <button type="submit" disabled={saving}
           className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-lg text-sm font-medium transition-colors">
