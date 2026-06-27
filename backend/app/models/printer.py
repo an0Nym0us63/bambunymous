@@ -102,7 +102,9 @@ class PrinterState:
     # AMS
     ams_list: list[AMS] = field(default_factory=list)
     ams_mapping: list[int] = field(default_factory=list)
-    active_tray: int = -1   # tray_now de ams_data
+    active_tray_local: int = -1   # tray_now = index local dans son AMS (0-3)
+    active_ams_id: int = -1       # depuis mapping high byte
+    active_tray_id: int = -1      # depuis mapping low byte
 
     # Vortek rack
     hotend_rack: HotendRack = field(default_factory=HotendRack)
