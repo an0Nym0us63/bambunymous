@@ -11,33 +11,17 @@ from app.db.session import init_db
 from app.api.v1 import router as api_router
 from app.core.mqtt import mqtt_manager
 
-# ── Log buffer : DOIT être installé avant basicConfig ─────────────────────
-# basicConfig écrase les handlers du root logger si appelé après addHandler
-# On crée le handler, on le garde, puis on l'ajoute après basicConfig
-import collections as _col
-
-class _BufHandler(logging.Handler):
-    buf: _col.deque = _col.deque(maxlen=1000)
-    def emit(self, record):
-        try:
-            self.buf.append({
-                "ts":    self.formatTime(record, "%H:%M:%S"),
-                "level": record.levelname,
-                "name":  record.name.split(".")[-1],
-                "msg":   record.getMessage(),
-            })
-        except Exception:
-            pass
-
-LOG_HANDLER = _BufHandler()
-LOG_HANDLER.setLevel(logging.DEBUG)
+# ── Logging : stdout + fichier /data/bambunymous.log ─────────────────────
+LOG_FILE = "/data/bambunymous.log"
 
 logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+    ]
 )
-# Ajouter après basicConfig pour ne pas être écrasé
-logging.getLogger().addHandler(LOG_HANDLER)
 
 
 @asynccontextmanager
