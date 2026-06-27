@@ -9,12 +9,24 @@ LOG_FILE = "/data/bambunymous.log"
 # Format: "2026-06-27 16:04:34,320 INFO app.core.mqtt message..."
 _RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})[,.]\d+ (\w+) (\S+) (.*)$")
 
+# Logs à exclure (trop verbeux / inutiles dans le journal)
+_EXCLUDE = (
+    "/api/v1/logs",     # auto-polling
+    "/api/v1/printer",  # polling printer status
+    "/healthz",
+    "/favicon",
+    "/assets/",
+)
+
 
 def _parse(line: str):
     m = _RE.match(line.strip())
     if not m:
         return None
     dt, level, name, msg = m.groups()
+    # Exclure les logs d'accès HTTP polluants
+    if any(x in msg for x in _EXCLUDE):
+        return None
     return {
         "ts":    dt[11:19],
         "level": level,
