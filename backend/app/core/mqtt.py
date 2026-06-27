@@ -263,8 +263,9 @@ class MQTTManager:
         if device:
             nozzle = device.get("nozzle", {})
             if "info" in nozzle:
+                src_id = int(nozzle.get("src_id", -1))
                 rack = HotendRack(
-                    active_id=nozzle.get("src_id", -1),
+                    active_id=src_id,
                     target_id=nozzle.get("tar_id", -1),
                     state=nozzle.get("state", 0),
                 )
