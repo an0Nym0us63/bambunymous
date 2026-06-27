@@ -186,34 +186,66 @@ function SlotDetail({ slot, num, isOnHead }) {
 function VortekRack({ rack }) {
   const [sel, setSel] = useState(0);
   if (!rack?.hotends?.length) return null;
-  const h = rack.hotends.slice(0, 6);
-  const top = h.filter((_,i) => i%2===0);
-  const bot = h.filter((_,i) => i%2===1);
-  const selected = h[sel] ?? h[0];
-  const filled = h.filter(s => s.filament_id).length;
+
+  const h = rack.hotends;
+  const headId = rack.head_id ?? -1;
+
+  // Mapping physique confirmé:
+  // Slot 1→idx2, Slot 2→idx5, Slot 3→idx3, Slot 4→idx0, Slot 5→idx4, Slot 6→idx6
+  const SLOT_MAP = [2, 5, 3, 0, 4, 6];
+  const slots = SLOT_MAP.map((idx, i) => {
+    const slot = h[idx] ?? null;
+    const onHead = slot && headId >= 0 && slot.id === rack.active_id;
+    return { slot, num: i+1, onHead };
+  });
+
+  const top = [slots[0], slots[2], slots[4]]; // slots 1,3,5
+  const bot = [slots[1], slots[3], slots[5]]; // slots 2,4,6
+  const selEntry = slots[sel] ?? slots[0];
+  const filled = slots.filter(s => s.slot?.filament_id && !s.onHead).length;
 
   return (
     <div className="card" style={{ padding:16 }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
         <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em" }}>Rack Vortek</span>
-        <span style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)" }}>{filled}/{h.length} chargés</span>
+        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+          <span style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)" }}>{filled}/6 chargés</span>
+          {headId >= 0 && <span style={{ fontSize:10, color:"#60a5fa" }}>● sur la tête</span>}
+        </div>
       </div>
       <div style={{ display:"flex", gap:12 }}>
-        {/* Grille */}
+        {/* Grille 2x3 */}
         <div style={{ display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
           <div style={{ display:"flex", gap:6 }}>
-            {top.map((slot,i) => <SlotMini key={slot.id} slot={slot} num={i*2+1} isOnHead={slot.id===rack.active_id} isSelected={sel===i*2} onClick={()=>setSel(i*2)} />)}
+            {top.map(({slot, num, onHead}, i) => slot && (
+              <SlotMini key={slot.id}
+                slot={onHead ? {...slot, filament_id:"", color:""} : slot}
+                num={num} isOnHead={onHead}
+                isSelected={sel === [0,2,4][i]}
+                onClick={() => setSel([0,2,4][i])} />
+            ))}
           </div>
           <div style={{ display:"flex", gap:6 }}>
-            {bot.map((slot,i) => <SlotMini key={slot.id} slot={slot} num={i*2+2} isOnHead={slot.id===rack.active_id} isSelected={sel===i*2+1} onClick={()=>setSel(i*2+1)} />)}
+            {bot.map(({slot, num, onHead}, i) => slot && (
+              <SlotMini key={slot.id}
+                slot={onHead ? {...slot, filament_id:"", color:""} : slot}
+                num={num} isOnHead={onHead}
+                isSelected={sel === [1,3,5][i]}
+                onClick={() => setSel([1,3,5][i])} />
+            ))}
           </div>
         </div>
         {/* Détail */}
-        <SlotDetail slot={selected} num={sel+1} isOnHead={selected?.id===rack.active_id} />
+        <SlotDetail
+          slot={selEntry.onHead ? {...selEntry.slot, filament_id:"", color:""} : selEntry.slot}
+          num={selEntry.num}
+          isOnHead={selEntry.onHead}
+        />
       </div>
     </div>
   );
 }
+
 
 // ── Page Home ──────────────────────────────────────────────────────────────
 export default function Home() {
