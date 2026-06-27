@@ -112,6 +112,14 @@ function PrinterTemps({ status }) {
 
 // ── Vortek Rack ────────────────────────────────────────────────────────────
 
+// Déduire l'état du slot
+function slotStatus(slot, isOnHead) {
+  if (isOnHead)                                        return "head";      // sur la buse droite
+  if (!slot?.filament_id && !slot?.wear && !slot?.print_time) return "empty";  // pas de hotend
+  if (!slot?.filament_id)                              return "no_fila";   // hotend sans filament
+  return "loaded";
+}
+
 function WearBar({ wear }) {
   const filled = Math.min(5, Math.max(0, Math.round((wear / 255) * 5)));
   const color  = filled <= 2 ? "#22c55e" : filled <= 3 ? "#f59e0b" : "#ef4444";
@@ -126,56 +134,85 @@ function WearBar({ wear }) {
 }
 
 function SlotMini({ slot, num, isOnHead, isSelected, onClick }) {
-  const color = hexCss(slot?.color);
-  const empty = !slot?.filament_id;
+  const status = slotStatus(slot, isOnHead);
+  const color  = status === "loaded" ? `#${slot.color.slice(0,6)}` : null;
+  const borderColor = status === "head"
+    ? "#3b82f6"
+    : isSelected ? "rgba(255,255,255,0.25)" : "var(--border)";
+  const bg = status === "head"
+    ? "rgba(59,130,246,0.12)"
+    : isSelected ? "var(--surface2)" : "var(--surface2)";
+
   return (
     <button onClick={onClick} style={{
-      border:`1px solid ${isOnHead ? "rgba(59,130,246,0.6)" : isSelected ? "rgba(255,255,255,0.25)" : "var(--border)"}`,
-      borderRadius:10, padding:8,
-      background: isOnHead ? "rgba(59,130,246,0.06)" : isSelected ? "var(--surface2)" : "var(--surface2)",
-      display:"flex", flexDirection:"column", gap:4, alignItems:"center",
-      cursor:"pointer", transition:"all 0.15s", minWidth:44,
+      border:`2px solid ${borderColor}`, borderRadius:10, padding:8,
+      background:bg, display:"flex", flexDirection:"column", gap:4,
+      alignItems:"center", cursor:"pointer", transition:"all 0.15s", minWidth:44,
+      boxShadow: status==="head" ? "0 0 0 3px rgba(59,130,246,0.15)" : "none",
     }}>
       <div style={{ width:22, height:22, borderRadius:6,
-        backgroundColor: (color && !empty && !isOnHead) ? color : "var(--border)",
+        backgroundColor: color || "var(--border)",
         border:"1px solid rgba(255,255,255,0.1)",
-        display:"flex", alignItems:"center", justifyContent:"center" }}>
-        {isOnHead && <span style={{ fontSize:8, color:"#60a5fa" }}>↓</span>}
+        display:"flex", alignItems:"center", justifyContent:"center",
+        fontSize:10 }}>
+        {status === "head"  && <span style={{ color:"#60a5fa" }}>↓</span>}
+        {status === "empty" && <span style={{ color:"var(--muted)", fontSize:8 }}>—</span>}
       </div>
-      <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700, color: isOnHead ? "#60a5fa" : "var(--muted)" }}>{num}</span>
+      <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700,
+        color: status==="head" ? "#60a5fa" : "var(--muted)" }}>{num}</span>
     </button>
   );
 }
 
 function SlotDetail({ slot, num, isOnHead, headSlot }) {
-  const color = hexCss(slot?.color);
-  const empty = !slot?.filament_id || isOnHead;
+  const status = slotStatus(slot, isOnHead);
+  const color  = status === "loaded" ? `#${slot?.color?.slice(0,6)}` : null;
   if (!slot) return <div style={{ flex:1 }}/>;
+
+  const borderColor = status === "head" ? "rgba(59,130,246,0.5)" : "var(--border)";
+  const bg          = status === "head" ? "rgba(59,130,246,0.06)" : "var(--surface2)";
+
+  const statusBadge = {
+    head:    { label:"Buse droite", color:"#60a5fa", bg:"rgba(59,130,246,0.15)" },
+    no_fila: { label:"Non chargé",  color:"#f59e0b", bg:"rgba(245,158,11,0.12)" },
+    empty:   { label:"Vide",        color:"var(--muted)", bg:"var(--border)" },
+    loaded:  null,
+  }[status];
+
+  const displaySlot = (status === "head" && headSlot) ? headSlot : slot;
+
   return (
-    <div style={{
-      border:`1px solid ${isOnHead ? "rgba(59,130,246,0.4)" : "var(--border)"}`,
-      borderRadius:12, padding:16, background: isOnHead ? "rgba(59,130,246,0.04)" : "var(--surface2)",
-      display:"flex", flexDirection:"column", gap:12, flex:1,
-    }}>
+    <div style={{ border:`2px solid ${borderColor}`, borderRadius:12, padding:16,
+      background:bg, display:"flex", flexDirection:"column", gap:12, flex:1,
+      boxShadow: status==="head" ? "0 0 0 4px rgba(59,130,246,0.10)" : "none" }}>
+
+      {/* En-tête */}
       <div style={{ display:"flex", alignItems:"center", gap:12 }}>
         <div style={{ width:40, height:40, borderRadius:10, flexShrink:0,
-          backgroundColor: (!empty && color) ? color : "var(--border)",
-          border:"1px solid rgba(255,255,255,0.1)" }} />
+          backgroundColor: color || "var(--border)",
+          border: status==="head" ? "2px solid rgba(59,130,246,0.4)" : "1px solid rgba(255,255,255,0.1)" }} />
         <div>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
             <span style={{ fontWeight:700, fontSize:14, fontFamily:"monospace", color:"var(--text)" }}>Slot {num}</span>
-            {isOnHead && <span style={{ fontSize:9, background:"rgba(59,130,246,0.15)", color:"#60a5fa", padding:"2px 8px", borderRadius:20, fontWeight:600 }}>Buse droite</span>}
+            {statusBadge && (
+              <span style={{ fontSize:9, background:statusBadge.bg, color:statusBadge.color,
+                padding:"2px 8px", borderRadius:20, fontWeight:600 }}>{statusBadge.label}</span>
+            )}
           </div>
           <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
-            {(isOnHead && headSlot ? headSlot.nozzle_type : slot.nozzle_type) || "—"} · {(isOnHead && headSlot ? headSlot.diameter : slot.diameter)}mm
+            {displaySlot.nozzle_type || "—"} · {displaySlot.diameter}mm
           </p>
         </div>
       </div>
 
-      {isOnHead && headSlot ? (
+      {/* Contenu selon status */}
+      {status === "empty" ? (
+        <p style={{ fontSize:12, color:"var(--muted)", fontStyle:"italic" }}>Aucun hotend installé</p>
+
+      ) : status === "head" && headSlot ? (
         <>
           <div>
-            <p style={{ fontSize:10, color:"var(--muted)", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.05em" }}>Monté sur la buse droite</p>
+            <p style={{ fontSize:10, color:"var(--muted)", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.05em" }}>Sur la buse droite</p>
             <p style={{ fontSize:14, fontWeight:600, fontFamily:"monospace", color:"#60a5fa" }}>{headSlot.filament_id}</p>
           </div>
           <div>
@@ -187,8 +224,16 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
             <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{Math.round(headSlot.print_time/60)}h cumulées</p>
           )}
         </>
-      ) : empty ? (
-        <p style={{ fontSize:12, color:"var(--muted)", fontStyle:"italic" }}>Slot vide</p>
+
+      ) : status === "no_fila" ? (
+        <>
+          <p style={{ fontSize:12, color:"#f59e0b", fontStyle:"italic" }}>Hotend installé — filament non chargé</p>
+          <div>
+            <p style={{ fontSize:10, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Usure</p>
+            <WearBar wear={slot.wear} />
+          </div>
+        </>
+
       ) : (
         <>
           <div>
@@ -208,6 +253,7 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
     </div>
   );
 }
+
 
 function VortekRack({ rack }) {
   const [sel, setSel] = useState(0);
