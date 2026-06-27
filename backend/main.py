@@ -30,9 +30,15 @@ async def lifespan(app: FastAPI):
     _fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
     _fh.setFormatter(_log_fmt)
     _fh.setLevel(logging.DEBUG)
-    for _name in ("", "uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "app"):
-        _lg = logging.getLogger(_name)
-        _lg.addHandler(_fh)
+    # Ajouter sur TOUS les loggers déjà créés + root
+    root = logging.getLogger()
+    root.addHandler(_fh)
+    root.setLevel(logging.DEBUG)
+    # S'assurer que tous les sous-loggers propagent vers root
+    for _name, _lg in list(logging.Logger.manager.loggerDict.items()):
+        if isinstance(_lg, logging.Logger):
+            _lg.setLevel(logging.DEBUG)
+            _lg.propagate = True
     logger.info(f"BambuNymous starting — version {VERSION}")
     await init_db()
     await mqtt_manager.start()
