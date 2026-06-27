@@ -57,12 +57,14 @@ class HotendSlot:
 @dataclass
 class HotendRack:
     hotends: list[HotendSlot] = field(default_factory=list)
-    active_id: int = -1
+    active_id: int = -1        # src_id hardware
     target_id: int = -1
     state: int = 0
-    holder_pos: int = 0    # 1=A, 2=B, 3=Centre
+    holder_pos: int = 0        # 1=A, 2=B, 3=Centre
     holder_stat: int = 0
     holder_job: int = 0
+    head_id: int = -1          # id de l'hotend sur la tête (-1 si dans le rack)
+    head_in_rack_idx: int = -1 # index dans hotends[] si src_id est dans le rack
 
 
 @dataclass
