@@ -15,26 +15,24 @@ from app.core.mqtt import mqtt_manager
 VERSION = os.getenv("COMMIT_SHA", "dev")[:8]
 
 # ── Logging ────────────────────────────────────────────────────────────────
-# /data doit exister avant FileHandler
-Path(settings.DATA_DIR).mkdir(parents=True, exist_ok=True)
+# basicConfig est appelé par uvicorn AVANT notre code → on ne peut pas l'utiliser
+# On ajoute le FileHandler directement dans le lifespan, après que /data existe
 LOG_FILE = str(Path(settings.DATA_DIR) / "bambunymous.log")
-
-logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    handlers=[
-        logging.StreamHandler(),
-        logging.FileHandler(LOG_FILE, encoding="utf-8"),
-    ]
-)
-
+_log_fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
 logger = logging.getLogger(__name__)
-logger.info(f"BambuNymous starting — version {VERSION}")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Créer /data et installer le FileHandler maintenant que /data existe
+    Path(settings.DATA_DIR).mkdir(parents=True, exist_ok=True)
     Path(settings.UPLOADS_DIR).mkdir(parents=True, exist_ok=True)
+    _fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    _fh.setFormatter(_log_fmt)
+    _fh.setLevel(logging.DEBUG)
+    root = logging.getLogger()
+    root.addHandler(_fh)
+    logger.info(f"BambuNymous starting — version {VERSION}")
     await init_db()
     await mqtt_manager.start()
     yield
