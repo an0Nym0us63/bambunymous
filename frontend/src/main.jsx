@@ -4,12 +4,10 @@ import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
 
-// Appliquer le thème avant le premier render pour éviter le flash
-const savedTheme = localStorage.getItem("theme") ?? "dark";
-document.documentElement.classList.toggle("dark", savedTheme === "dark");
+// Init thème avant premier render (évite le flash)
+const savedTheme = localStorage.getItem("bambu-theme") || "dark";
+document.documentElement.setAttribute("data-theme", savedTheme === "light" ? "light" : "");
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  <BrowserRouter>
-    <App />
-  </BrowserRouter>
+  <BrowserRouter><App /></BrowserRouter>
 );
