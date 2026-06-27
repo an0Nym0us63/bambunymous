@@ -184,17 +184,17 @@ class MQTTManager:
                 changed = True
 
             # Dual nozzle extruder (H2C)
-            # ha-bambulab: extruder.state → low 4 bits = nozzle count, next 4 bits = active nozzle index
             extruder = device.get("extruder", {})
             extruder_state = extruder.get("state", 0)
-            active_nozzle_idx = (extruder_state >> 4) & 0xF  # bits 4-7 = active nozzle id (0=right, 1=left)
-            for ext in extruder.get("info", []):
+            active_nozzle_idx = (extruder_state >> 4) & 0xF
+            extruder_infos = extruder.get("info", [])
+            logger.info(f"[MQTT EXTRUDER] state={extruder_state:#x} active_idx={active_nozzle_idx} entries={[e.get('id') for e in extruder_infos]}")
+            for ext in extruder_infos:
                 eid = int(ext.get("id", 0))
                 if eid >= len(state.nozzles):
                     while len(state.nozzles) <= eid:
                         state.nozzles.append(NozzleTemp(id=len(state.nozzles)))
                 n = state.nozzles[eid]
-                # H2C encoding: low word = actuel°C, high word = target°C (ha-bambulab method)
                 temp_raw = ext.get("temp", 0)
                 if isinstance(temp_raw, int) and temp_raw > 0xFFFF:
                     n.temp   = float(temp_raw & 0xFFFF)
@@ -202,8 +202,8 @@ class MQTTManager:
                 elif isinstance(temp_raw, (int, float)) and temp_raw > 0:
                     n.temp   = float(temp_raw)
                     n.target = 0.0
-                # active: celui dont l'id correspond à active_nozzle_idx
                 n.active = (eid == active_nozzle_idx)
+                logger.info(f"[MQTT NOZZLE id={eid}] raw={temp_raw} → {n.temp}°C target={n.target}°C active={n.active}")
                 changed = True
 
         # Fallback legacy (autres modèles)
