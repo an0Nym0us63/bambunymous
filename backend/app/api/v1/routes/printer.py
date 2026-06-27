@@ -80,7 +80,8 @@ class PrinterStatusOut(BaseModel):
     speed_mag: int
     ams_list: list[AMSOut]
     ams_mapping: list[int]
-    active_tray: int
+    active_ams_id: int
+    active_tray_id: int
     hotend_rack: HotendRackOut
     hms_errors: list[dict]
     print_error: int
@@ -127,7 +128,8 @@ async def printer_status(_: str = Depends(get_current_user)):
             ) for a in s.ams_list
         ],
         ams_mapping=s.ams_mapping,
-        active_tray=s.active_tray,
+        active_ams_id=s.active_ams_id,
+        active_tray_id=s.active_tray_id,
         hotend_rack=HotendRackOut(
             hotends=[HotendSlotOut(
                 id=h.id, color=h.color, filament_id=h.filament_id,
