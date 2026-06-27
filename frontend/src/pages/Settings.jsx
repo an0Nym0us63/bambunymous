@@ -1,18 +1,25 @@
 import React, { useState, useEffect } from "react";
-import { Save, Wifi, RefreshCw } from "lucide-react";
+import { Save, Wifi, RefreshCw, Sun, Moon } from "lucide-react";
 import client from "../api/client";
 import ImportSection from "../components/ImportSection";
+import { useTheme } from "../useTheme";
+
+const inp = {
+  width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
+  borderRadius:10, padding:"8px 12px", fontSize:14, color:"var(--text)",
+  outline:"none", transition:"border-color 0.15s",
+};
 
 export default function Settings() {
+  const { theme, toggle } = useTheme();
   const [form, setForm] = useState({
-    PRINTER_IP: "", PRINTER_ID: "",
-    PRINTER_ACCESS_CODE: "",
-    PRINTER_NAME: "", ADMIN_USERNAME: "admin",
-    ADMIN_PASSWORD: "", COST_BY_HOUR: "0",
+    PRINTER_IP:"", PRINTER_ID:"", PRINTER_ACCESS_CODE:"",
+    PRINTER_NAME:"", ADMIN_USERNAME:"admin",
+    ADMIN_PASSWORD:"", COST_BY_HOUR:"0",
   });
   const [accessCodeSet, setAccessCodeSet] = useState(false);
-  const [saving, setSaving]   = useState(false);
-  const [saved,  setSaved]    = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved,  setSaved]  = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -25,8 +32,7 @@ export default function Settings() {
         PRINTER_NAME:   data.PRINTER_NAME   ?? "",
         ADMIN_USERNAME: data.ADMIN_USERNAME ?? "admin",
         COST_BY_HOUR:   data.COST_BY_HOUR   ?? "0",
-        PRINTER_ACCESS_CODE: "",
-        ADMIN_PASSWORD: "",
+        PRINTER_ACCESS_CODE:"", ADMIN_PASSWORD:"",
       }));
       setLoading(false);
     });
@@ -49,44 +55,68 @@ export default function Settings() {
     } finally { setSaving(false); }
   };
 
-  const Field = ({ label, name, type = "text", placeholder = "" }) => (
+  const Field = ({ label, name, type="text", placeholder="" }) => (
     <div>
-      <label className="block text-xs text-gray-500 mb-1.5">{label}</label>
-      <input
-        type={type} value={form[name] || ""} placeholder={placeholder}
-        onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500/60 transition-colors placeholder:text-gray-600"
+      <label style={{ display:"block", fontSize:11, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>{label}</label>
+      <input type={type} value={form[name]||""} placeholder={placeholder}
+        onChange={e => setForm(f => ({...f, [name]: e.target.value}))}
+        style={inp}
+        onFocus={e => e.target.style.borderColor="#3b82f6"}
+        onBlur={e => e.target.style.borderColor="var(--border)"}
       />
     </div>
   );
 
+  const Section = ({ title, icon, children }) => (
+    <section className="card" style={{ padding:16 }}>
+      <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6 }}>
+        {icon}{title}
+      </div>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>{children}</div>
+    </section>
+  );
+
   if (loading) return (
-    <div className="flex items-center justify-center h-64 text-gray-500 text-sm">Chargement…</div>
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:200, color:"var(--muted)", fontSize:14 }}>Chargement…</div>
   );
 
   return (
-    <div className="max-w-2xl mx-auto space-y-5">
-      <h1 className="text-lg font-bold">Paramètres</h1>
-      <form onSubmit={handleSave} className="space-y-5">
+    <div style={{ maxWidth:640, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
+      <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Paramètres</h1>
+
+      <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
+
+        {/* Thème */}
+        <section className="card" style={{ padding:16 }}>
+          <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16 }}>Apparence</div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <span style={{ fontSize:14, color:"var(--text2)" }}>Thème</span>
+            <button type="button" onClick={toggle}
+              style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:20, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontSize:13, cursor:"pointer", transition:"all 0.15s" }}>
+              {theme === "dark" ? <><Moon size={14}/> Sombre</> : <><Sun size={14}/> Clair</>}
+            </button>
+          </div>
+        </section>
 
         {/* Imprimante */}
-        <section className="card p-4">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4 flex items-center gap-2">
+        <section className="card" style={{ padding:16 }}>
+          <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6 }}>
             <Wifi size={13}/> Imprimante
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Adresse IP"      name="PRINTER_IP"   placeholder="192.168.1.xxx" />
-            <Field label="Numéro de série" name="PRINTER_ID"   placeholder="31B…" />
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+            <Field label="Adresse IP" name="PRINTER_IP" placeholder="192.168.1.xxx" />
+            <Field label="Numéro de série" name="PRINTER_ID" placeholder="31B…" />
             <div>
-              <label className="block text-xs text-gray-500 mb-1.5">Code d&apos;accès</label>
-              <input
-                type="password" value={form.PRINTER_ACCESS_CODE}
-                placeholder={accessCodeSet ? "Laisser vide pour conserver" : "Code d'accès LAN"}
-                onChange={e => setForm(f => ({ ...f, PRINTER_ACCESS_CODE: e.target.value }))}
-                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500/60 transition-colors placeholder:text-gray-600"
+              <label style={{ display:"block", fontSize:11, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Code d&apos;accès</label>
+              <input type="password" value={form.PRINTER_ACCESS_CODE}
+                placeholder={accessCodeSet ? "Laisser vide pour conserver" : "Code LAN"}
+                onChange={e => setForm(f => ({...f, PRINTER_ACCESS_CODE: e.target.value}))}
+                style={inp}
+                onFocus={e => e.target.style.borderColor="#3b82f6"}
+                onBlur={e => e.target.style.borderColor="var(--border)"}
               />
               {accessCodeSet && !form.PRINTER_ACCESS_CODE && (
-                <p className="text-[10px] text-green-500 mt-1">✓ Code configuré</p>
+                <p style={{ fontSize:10, color:"#22c55e", marginTop:4 }}>✓ Code configuré</p>
               )}
             </div>
             <Field label="Nom affiché" name="PRINTER_NAME" placeholder="Mon H2C" />
@@ -94,19 +124,18 @@ export default function Settings() {
         </section>
 
         {/* Compte */}
-        <section className="card p-4">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Compte</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Nom d'utilisateur" name="ADMIN_USERNAME" />
-            <Field label="Nouveau mot de passe" name="ADMIN_PASSWORD" type="password"
-              placeholder="Laisser vide pour conserver" />
+        <section className="card" style={{ padding:16 }}>
+          <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16 }}>Compte</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+            <Field label="Utilisateur" name="ADMIN_USERNAME" />
+            <Field label="Mot de passe" name="ADMIN_PASSWORD" type="password" placeholder="Laisser vide pour conserver" />
           </div>
         </section>
 
         {/* Électricité */}
-        <section className="card p-4">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Électricité</h2>
-          <div className="max-w-xs">
+        <section className="card" style={{ padding:16 }}>
+          <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16 }}>Électricité</div>
+          <div style={{ maxWidth:200 }}>
             <Field label="Tarif (€/h)" name="COST_BY_HOUR" placeholder="0.20" />
           </div>
         </section>
@@ -114,8 +143,10 @@ export default function Settings() {
         <ImportSection />
 
         <button type="submit" disabled={saving}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition-colors">
-          {saving ? <RefreshCw size={15} className="animate-spin" /> : <Save size={15} />}
+          style={{ display:"inline-flex", alignItems:"center", gap:8, background:"#3b82f6", color:"white", border:"none", padding:"10px 20px", borderRadius:12, fontSize:14, fontWeight:500, cursor:"pointer", opacity: saving ? 0.6 : 1, transition:"opacity 0.15s, background 0.15s" }}
+          onMouseEnter={e => { if(!saving) e.currentTarget.style.background="#2563eb"; }}
+          onMouseLeave={e => e.currentTarget.style.background="#3b82f6"}>
+          {saving ? <RefreshCw size={15} style={{ animation:"spin 1s linear infinite" }} /> : <Save size={15} />}
           {saved ? "Sauvegardé ✓" : "Sauvegarder"}
         </button>
       </form>
