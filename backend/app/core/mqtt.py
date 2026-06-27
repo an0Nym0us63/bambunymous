@@ -119,8 +119,9 @@ class MQTTManager:
                 self._process_print(data["print"])
             elif "info" in data:
                 self._process_info(data["info"])
-        except Exception:
-            logger.exception("MQTT message error")
+        except Exception as _e:
+            import traceback as _tb
+            logger.error(f"MQTT message error: {_e}\n{_tb.format_exc()}")
 
     def _process_info(self, info: dict):
         for m in info.get("module", []):
