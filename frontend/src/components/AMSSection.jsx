@@ -46,7 +46,7 @@ function ColorPill({ color, active }) {
 // ── Boîtier AMS compact (sélecteur en haut) ────────────────────────────────
 
 function AMSBox({ ams, activeTrayGlobal, isSelected, onClick }) {
-  const hasActive = ams.trays.some(t => activeTrayGlobal === ams.id * 4 + t.id);
+  const hasActive = ams.id === activeAmsId;
   return (
     <button onClick={onClick}
       className="flex flex-col items-center gap-1.5 flex-1 transition-all duration-200 hover:scale-[1.02] active:scale-95">
@@ -153,7 +153,7 @@ function SpoolSVG({ color, empty, size = 72, active }) {
 // ── Carte tray détaillée ───────────────────────────────────────────────────
 
 function TrayCard({ tray, amsId, label, activeTrayGlobal, spoolInfo }) {
-  const isActive = activeTrayGlobal === amsId * 4 + tray.id;
+  const isActive = amsId === activeAmsId && tray.id === activeTrayGlobal;
   const empty    = isEmptyTray(tray);
   const color    = hexCss(tray.color);
 
@@ -212,8 +212,8 @@ function TrayCard({ tray, amsId, label, activeTrayGlobal, spoolInfo }) {
 
 // ── Détail AMS ─────────────────────────────────────────────────────────────
 
-function AMSDetail({ ams, activeTrayGlobal, spoolLookup }) {
-  const hasActive = ams.trays.some(t => activeTrayGlobal === ams.id * 4 + t.id);
+function AMSDetail({ ams, activeAmsId, activeTrayGlobal, spoolLookup }) {
+  const hasActive = ams.id === activeAmsId;
   const getSpoolInfo = t =>
     spoolLookup?.[t.tag_uid] ?? spoolLookup?.[t.uuid] ?? null;
 
@@ -256,8 +256,8 @@ function AMSDetail({ ams, activeTrayGlobal, spoolLookup }) {
 
 // ── Section principale ─────────────────────────────────────────────────────
 
-export default function AMSSection({ amsList, activeTray, spoolLookup }) {
-  const activeAmsId = activeTray >= 0 ? Math.floor(activeTray / 4) : -1;
+export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLookup }) {
+  // activeAmsId + activeTrayId viennent du mapping MQTT (high byte=ams, low byte=tray)
   const [selectedId, setSelectedId] = useState(null);
 
   // AMS affiché en détail: celui cliqué ou l'actif par défaut
@@ -277,7 +277,7 @@ export default function AMSSection({ amsList, activeTray, spoolLookup }) {
             <AMSBox
               key={ams.id}
               ams={ams}
-              activeTrayGlobal={activeTray ?? -1}
+              activeTrayGlobal={activeTrayId}
               isSelected={ams.id === displayId}
               onClick={() => setSelectedId(ams.id === selectedId ? null : ams.id)}
             />
@@ -289,7 +289,7 @@ export default function AMSSection({ amsList, activeTray, spoolLookup }) {
       {displayAms && (
         <AMSDetail
           ams={displayAms}
-          activeTrayGlobal={activeTray ?? -1}
+          activeTrayGlobal={activeTrayId}
           spoolLookup={spoolLookup}
         />
       )}
