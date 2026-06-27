@@ -216,7 +216,12 @@ class MQTTManager:
         # ── AMS ─────────────────────────────────────────────────────────
         ams_data = p.get("ams", {})
         if "ams" in ams_data:
-            state.active_tray = int(ams_data.get("tray_now", -1))
+            # tray_now = index LOCAL du tray actif dans son AMS (0-3), pas un index global
+            # tray_tar = idem pour le tray cible
+            # Pour identifier l'AMS actif, on utilise tray_now + ams_id depuis cfs ou mapping
+            tray_now_raw = ams_data.get("tray_now", -1)
+            state.active_tray_local = int(tray_now_raw) if tray_now_raw is not None else -1
+            # active_tray reste calculé depuis mapping si disponible (high byte=ams, low byte=tray)
             state.ams_list = []
             for ams_raw in ams_data["ams"]:
                 ams = AMS(id=int(ams_raw.get("id", 0)),
@@ -246,7 +251,13 @@ class MQTTManager:
             changed = True
 
         if "mapping" in p:
-            state.ams_mapping = p["mapping"]; changed = True
+            state.ams_mapping = p["mapping"]
+            # mapping[0] encode l'AMS+tray actif: high byte = ams_id, low byte = tray_id
+            if p["mapping"]:
+                v = p["mapping"][0]
+                state.active_ams_id  = (v >> 8) & 0xFF
+                state.active_tray_id = v & 0xFF
+            changed = True
 
         # ── Hotend Rack Vortek ───────────────────────────────────────────
         if device:
