@@ -1,214 +1,221 @@
 import React, { useState } from "react";
 import clsx from "clsx";
-import { Droplets, Thermometer, ChevronDown, ChevronUp } from "lucide-react";
+import { Droplets, Sun } from "lucide-react";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function hexCss(hex) {
-  if (!hex || hex.replace(/[0F]/gi, "") === "" && hex.length <= 8) return null;
-  const clean = hex.slice(0, 6);
-  if (clean === "000000") return null;
-  return `#${clean}`;
+  if (!hex) return null;
+  const h = hex.slice(0, 6);
+  if (h === "000000" || h.replace(/0/g, "") === "") return null;
+  return `#${h}`;
 }
 
 function isEmptyTray(tray) {
   if (tray.empty) return true;
-  const uuid = tray.uuid?.replace(/0/g, "") ?? "";
-  const color = tray.color?.replace(/[0F]/gi, "") ?? "";
+  const uuid  = (tray.uuid  || "").replace(/0/g, "");
+  const color = (tray.color || "").replace(/[0F]/gi, "");
   return uuid === "" && color === "";
 }
 
-// ── Mini slot (dans la représentation compacte du AMS) ──────────────────────
+function luminance(hex) {
+  if (!hex) return 0;
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return (r * 299 + g * 587 + b * 114) / 1000;
+}
 
-function SlotPill({ color, active }) {
-  const c = hexCss(color);
+// ── Bobine SVG ─────────────────────────────────────────────────────────────
+
+function SpoolSVG({ color, empty, size = 80, active }) {
+  const c     = color || (empty ? "#2a2a2a" : "#444");
+  const dark  = luminance(c.replace("#", "")) < 128;
+  const text  = dark ? "#ffffff" : "#1a1a1a";
+  const rim   = dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.12)";
+  const shine = dark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.35)";
+
   return (
-    <div className={clsx(
-      "h-8 flex-1 rounded-md transition-all duration-300",
-      active ? "ring-2 ring-white/80 scale-110 shadow-lg" : "ring-1 ring-white/10",
-    )}
-      style={{ backgroundColor: c || "rgba(255,255,255,0.06)" }}
-    />
+    <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
+      {/* Ombre portée */}
+      <ellipse cx="40" cy="74" rx="22" ry="4" fill="rgba(0,0,0,0.25)" />
+
+      {/* Flasque gauche */}
+      <ellipse cx="40" cy="40" rx="28" ry="28" fill={empty ? "#222" : c} />
+      <ellipse cx="40" cy="40" rx="28" ry="28" fill={rim} />
+
+      {/* Corps bobine (filament visible) */}
+      <rect x="18" y="22" width="44" height="36" rx="2" fill={empty ? "#1a1a1a" : c} />
+      {!empty && (
+        <rect x="18" y="22" width="44" height="36" rx="2" fill="rgba(0,0,0,0.08)" />
+      )}
+
+      {/* Reflet haut */}
+      <rect x="18" y="22" width="44" height="8" rx="2" fill={shine} />
+
+      {/* Moyeu */}
+      <circle cx="40" cy="40" r="11" fill={empty ? "#111" : "rgba(0,0,0,0.35)"} />
+      <circle cx="40" cy="40" r="7"  fill={empty ? "#0a0a0a" : "rgba(0,0,0,0.5)"} />
+
+      {/* Point brillant moyeu */}
+      <circle cx="37" cy="37" r="2" fill="rgba(255,255,255,0.15)" />
+
+      {/* Barre filament sur tranche */}
+      {!empty && (
+        <>
+          <rect x="16" y="19" width="4" height="42" rx="2" fill={c} />
+          <rect x="16" y="19" width="4" height="42" rx="2" fill="rgba(0,0,0,0.2)" />
+          <rect x="60" y="19" width="4" height="42" rx="2" fill={c} />
+          <rect x="60" y="19" width="4" height="42" rx="2" fill="rgba(0,0,0,0.2)" />
+        </>
+      )}
+
+      {/* Anneau actif */}
+      {active && (
+        <ellipse cx="40" cy="40" rx="29" ry="29"
+          stroke="#3b82f6" strokeWidth="2.5" fill="none"
+          strokeDasharray="4 2" opacity="0.8" />
+      )}
+    </svg>
   );
 }
 
-// ── Représentation visuelle du boîtier AMS ───────────────────────────────────
+// ── Carte tray ─────────────────────────────────────────────────────────────
 
-function AMSBox({ ams, activeTrayGlobal }) {
-  return (
-    <div className="flex flex-col gap-1.5 items-center">
-      {/* Label */}
-      <span className="text-[9px] text-gray-600 uppercase tracking-widest font-medium">
-        AMS {ams.id + 1}
-      </span>
-      {/* Boîtier */}
-      <div className={clsx(
-        "rounded-xl p-1.5 flex gap-1 w-full border transition-all duration-500",
-        ams.trays.some((t, i) => activeTrayGlobal === ams.id * 4 + t.id)
-          ? "border-blue-500/40 bg-blue-500/5 shadow-lg shadow-blue-500/15"
-          : "border-white/[0.07] bg-white/[0.03]"
-      )}>
-        {ams.trays.map(tray => (
-          <SlotPill
-            key={tray.id}
-            color={tray.color}
-            active={activeTrayGlobal === ams.id * 4 + tray.id}
-          />
-        ))}
-      </div>
-      {/* Stats */}
-      <div className="flex gap-2 text-[9px] text-gray-700">
-        <span className="flex items-center gap-0.5">
-          <Droplets size={8}/>{ams.humidity}%
-        </span>
-        <span>{ams.temp}°C</span>
-      </div>
-    </div>
-  );
-}
-
-// ── Carte tray détaillée ─────────────────────────────────────────────────────
-
-function TrayDetail({ tray, amsId, activeTrayGlobal, spoolInfo }) {
+function TrayCard({ tray, amsId, label, activeTrayGlobal, spoolInfo }) {
   const isActive = activeTrayGlobal === amsId * 4 + tray.id;
-  const empty = isEmptyTray(tray);
-  const color = hexCss(tray.color);
+  const empty    = isEmptyTray(tray);
+  const color    = hexCss(tray.color);
 
-  // Données depuis DB si disponibles, sinon MQTT
-  const name = spoolInfo?.filament_name ?? (tray.tray_id_name || null);
-  const brand = spoolInfo?.filament_manufacturer ?? null;
+  const name     = spoolInfo?.filament_name ?? (tray.tray_id_name || null);
   const material = spoolInfo?.filament_material ?? tray.filament_type ?? null;
-  
-  // Poids restant: DB en g ou MQTT en %
+
   const hasDbWeight = spoolInfo?.remaining_weight_g != null;
-  const hasDbTotal = spoolInfo?.filament_weight_g != null;
-  const remainPct = hasDbWeight && hasDbTotal
+  const hasDbTotal  = spoolInfo?.filament_weight_g  != null;
+  const pct = hasDbWeight && hasDbTotal
     ? Math.round((spoolInfo.remaining_weight_g / spoolInfo.filament_weight_g) * 100)
-    : tray.remain ?? 0;
-  const remainLabel = hasDbWeight
+    : (tray.remain ?? 0);
+  const weightLabel = hasDbWeight
     ? `${Math.round(spoolInfo.remaining_weight_g)}g`
     : `${tray.remain}%`;
 
-  const barColor = color || "#3b82f6";
-  const barPct = Math.max(0, Math.min(100, remainPct));
-  const barAccent = barPct > 30 ? barColor : "#ef4444";
-
   return (
-    <div className={clsx(
-      "rounded-xl p-3 border transition-all duration-300 flex flex-col gap-2",
-      isActive
-        ? "border-blue-500/50 bg-blue-500/5 shadow-md shadow-blue-500/10"
-        : "border-white/[0.06] bg-white/[0.03]",
-      empty && "opacity-50"
-    )}>
-      {/* Ligne principale: couleur + nom + actif */}
-      <div className="flex items-start gap-2">
-        <div className={clsx(
-          "w-4 h-4 rounded-md shrink-0 mt-0.5 ring-1 transition-all",
-          isActive ? "ring-blue-400/60 scale-110" : "ring-white/10"
-        )}
-          style={{ backgroundColor: color || "#1f2937" }}
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <p className="text-xs font-semibold text-gray-200 truncate leading-tight">
-              {empty ? "Vide" : (name || "—")}
-            </p>
-            {isActive && (
-              <span className="shrink-0 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-            )}
-          </div>
-          {!empty && (
-            <p className="text-[10px] text-gray-500 truncate">
-              {[brand, material].filter(Boolean).join(" · ") || tray.filament_type || "—"}
-            </p>
-          )}
-        </div>
+    <div className="flex flex-col items-center gap-1.5">
+      {/* Matière */}
+      <p className="text-[10px] text-gray-500 font-medium tracking-wide">
+        {empty ? "" : (material || "—")}
+      </p>
+
+      {/* Barre filament */}
+      <div className="w-10 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
         {!empty && (
-          <span className="text-[10px] mono text-gray-500 shrink-0">{remainLabel}</span>
+          <div className="h-full rounded-full"
+            style={{
+              width: `${Math.max(0, Math.min(100, pct))}%`,
+              backgroundColor: color || "#3b82f6"
+            }} />
         )}
       </div>
 
-      {/* Barre de reste */}
-      {!empty && (
-        <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
-          <div className="h-full rounded-full transition-all duration-700"
-            style={{ width: `${barPct}%`, backgroundColor: barAccent }} />
+      {/* Bobine */}
+      <div className={clsx(
+        "relative transition-transform duration-300",
+        isActive && "scale-105"
+      )}>
+        <SpoolSVG color={color} empty={empty} size={72} active={isActive} />
+        {/* Badge label */}
+        <div className={clsx(
+          "absolute bottom-3 left-1/2 -translate-x-1/2",
+          "px-2 py-0.5 rounded-full text-[9px] font-bold",
+          isActive
+            ? "bg-blue-500 text-white"
+            : "bg-black/40 text-white/80"
+        )}>
+          {label}
         </div>
-      )}
+      </div>
+
+      {/* Nom filament */}
+      <p className="text-[9px] text-gray-400 text-center truncate max-w-[72px] leading-tight">
+        {empty ? "Vide" : (name || tray.filament_type || "—")}
+      </p>
     </div>
   );
 }
 
-// ── AMS Section principale ────────────────────────────────────────────────────
+// ── AMS Unit ──────────────────────────────────────────────────────────────
+
+const AMS_NAMES = ["AMS-A", "AMS-B", "AMS-C", "AMS-D"];
+
+function AMSUnit({ ams, activeTrayGlobal, spoolLookup }) {
+  const isActive = ams.trays.some(t => activeTrayGlobal === ams.id * 4 + t.id);
+
+  const getSpoolInfo = (tray) =>
+    spoolLookup?.[tray.tag_uid] ?? spoolLookup?.[tray.uuid] ?? null;
+
+  return (
+    <div className={clsx(
+      "card p-4 transition-all duration-500",
+      isActive && "border-blue-500/30 shadow-lg shadow-blue-500/10"
+    )}>
+      {/* Header AMS */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <span className={clsx(
+            "text-xs font-bold tracking-wider",
+            isActive ? "text-blue-400" : "text-gray-400"
+          )}>
+            {AMS_NAMES[ams.id] ?? `AMS ${ams.id + 1}`}
+          </span>
+          {isActive && (
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+          )}
+        </div>
+        <div className="flex items-center gap-3 text-[10px] text-gray-600">
+          <span className="flex items-center gap-1">
+            <Droplets size={10} />{ams.humidity}%
+          </span>
+          <span className="flex items-center gap-1">
+            <Sun size={10} />{ams.temp}°C
+          </span>
+        </div>
+      </div>
+
+      {/* Grille des 4 bobines */}
+      <div className="grid grid-cols-4 gap-2">
+        {ams.trays.map(tray => (
+          <TrayCard
+            key={tray.id}
+            tray={tray}
+            amsId={ams.id}
+            label={`${AMS_NAMES[ams.id]?.slice(-1) ?? ams.id + 1}${tray.id + 1}`}
+            activeTrayGlobal={activeTrayGlobal}
+            spoolInfo={getSpoolInfo(tray)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Section AMS principale ─────────────────────────────────────────────────
 
 export default function AMSSection({ amsList, activeTray, spoolLookup }) {
-  const [selectedAms, setSelectedAms] = useState(null);
-
   if (!amsList?.length) return (
     <div className="card p-6 text-center text-gray-600 text-sm">Aucun AMS détecté</div>
   );
 
-  // AMS actuellement actif (celui qui contient le tray actif)
-  const activeAmsId = activeTray >= 0 ? Math.floor(activeTray / 4) : -1;
-
-  // AMS sélectionné pour le détail: celui qu'on a cliqué, ou l'actif par défaut
-  const displayAmsId = selectedAms ?? activeAmsId ?? 0;
-  const displayAms = amsList.find(a => a.id === displayAmsId) ?? amsList[0];
-
-  // Lookup spool: par tag_uid (prioritaire) puis uuid court
-  const getSpoolInfo = (tray) => {
-    if (!spoolLookup) return null;
-    return spoolLookup[tray.tag_uid]
-      ?? spoolLookup[tray.uuid]
-      ?? null;
-  };
-
   return (
-    <div className="card overflow-hidden">
-      {/* Vue compacte des AMS avec sélection */}
-      <div className="p-3 pb-0">
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pb-3">
-          {amsList.map(ams => (
-            <button key={ams.id} onClick={() => setSelectedAms(ams.id)}
-              className="transition-all duration-200 hover:scale-[1.02] active:scale-95">
-              <AMSBox ams={ams} activeTrayGlobal={activeTray} />
-              <div className={clsx(
-                "mt-1.5 mx-auto h-0.5 rounded-full transition-all duration-300",
-                ams.id === displayAmsId ? "w-12 bg-blue-500" : "w-4 bg-white/[0.08]"
-              )} />
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Séparateur */}
-      <div className="mx-3 border-t border-white/[0.05]" />
-
-      {/* Détail des 4 slots de l'AMS sélectionné */}
-      {displayAms && (
-        <div className="p-3 space-y-2">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[10px] text-gray-600 uppercase tracking-widest font-medium">
-              AMS {displayAms.id + 1} — Slots
-            </p>
-            {activeAmsId === displayAms.id && (
-              <span className="text-[9px] text-blue-400 font-medium">● En cours</span>
-            )}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            {displayAms.trays.map(tray => (
-              <TrayDetail
-                key={tray.id}
-                tray={tray}
-                amsId={displayAms.id}
-                activeTrayGlobal={activeTray}
-                spoolInfo={getSpoolInfo(tray)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
+    <div className="space-y-3">
+      {amsList.map(ams => (
+        <AMSUnit
+          key={ams.id}
+          ams={ams}
+          activeTrayGlobal={activeTray ?? -1}
+          spoolLookup={spoolLookup}
+        />
+      ))}
     </div>
   );
 }
