@@ -5,6 +5,7 @@ import Layout from "./components/layout/Layout";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
+import Logs from "./pages/Logs";
 import Filaments from "./pages/Filaments";
 
 function PrivateRoute({ children }) {
@@ -24,6 +25,7 @@ export default function App() {
         <Route index element={<Home />} />
         <Route path="filaments" element={<Filaments />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="logs" element={<Logs />} />
       </Route>
     </Routes>
   );
