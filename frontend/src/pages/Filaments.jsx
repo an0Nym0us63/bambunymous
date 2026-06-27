@@ -1,37 +1,43 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Search, Package, Archive, ChevronRight, X, Save, RefreshCw } from "lucide-react";
+import { Plus, Search, Archive, X, Save, RefreshCw } from "lucide-react";
 import client from "../api/client";
-import clsx from "clsx";
 
-const MATERIALS = ["PLA", "PETG", "ABS", "ASA", "PA", "PC", "TPU", "PVA", "BVOH", "PLA-CF", "PETG-CF", "PA-CF", "PPS"];
+const MATERIALS = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","BVOH","PLA-CF","PETG-CF","PA-CF","PPS"];
 
-function ColorDot({ color, size = 16 }) {
+// ── Helpers ────────────────────────────────────────────────────────────────
+const inp = {
+  width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
+  borderRadius:8, padding:"8px 12px", fontSize:13, color:"var(--text)",
+  outline:"none", transition:"border-color 0.15s",
+};
+const inpFocus = e => e.target.style.borderColor="#3b82f6";
+const inpBlur  = e => e.target.style.borderColor="var(--border)";
+
+function ColorDot({ color, size=16 }) {
   return (
-    <div className="rounded-md ring-1 ring-white/10 shrink-0"
-      style={{ width: size, height: size, backgroundColor: color ? `#${color}` : "#374151" }} />
+    <div style={{ width:size, height:size, borderRadius:4, flexShrink:0,
+      backgroundColor: color ? `#${color.slice(0,6)}` : "var(--border)",
+      border:"1px solid rgba(255,255,255,0.1)" }} />
   );
 }
 
-function SpoolBar({ remaining, total = 1000 }) {
+function RemainBar({ remaining, total=1000 }) {
   if (remaining == null) return null;
-  const pct = Math.max(0, Math.min(100, (remaining / total) * 100));
+  const pct = Math.max(0, Math.min(100, (remaining/total)*100));
   const color = pct > 30 ? "#3b82f6" : pct > 15 ? "#f59e0b" : "#ef4444";
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
+    <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+      <div style={{ flex:1, height:4, background:"var(--border)", borderRadius:2, overflow:"hidden" }}>
+        <div style={{ height:"100%", width:`${pct}%`, backgroundColor:color, borderRadius:2 }} />
       </div>
-      <span className="text-[10px] mono text-gray-600 shrink-0">{Math.round(remaining)}g</span>
+      <span style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", flexShrink:0 }}>{Math.round(remaining)}g</span>
     </div>
   );
 }
 
-// Modal ajout bobine
+// ── Modal ajout bobine ─────────────────────────────────────────────────────
 function AddSpoolModal({ filaments, onSave, onClose }) {
-  const [form, setForm] = useState({
-    filament_id: "", remaining_weight_g: "", price_override: "",
-    location: "", tag_number: "", comment: ""
-  });
+  const [form, setForm] = useState({ filament_id:"", remaining_weight_g:"", price_override:"", location:"", tag_number:"", comment:"" });
   const [saving, setSaving] = useState(false);
 
   const handleSave = async () => {
@@ -47,54 +53,55 @@ function AddSpoolModal({ filaments, onSave, onClose }) {
         comment: form.comment || null,
       });
       onSave();
-    } finally {
-      setSaving(false);
-    }
+    } finally { setSaving(false); }
   };
 
-  const Field = ({ label, name, type = "text", placeholder }) => (
-    <div>
-      <label className="block text-xs text-gray-500 mb-1">{label}</label>
-      {name === "filament_id" ? (
-        <select value={form[name]}
-          onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500/50">
-          <option value="">— Choisir un filament —</option>
-          {filaments.map(f => (
-            <option key={f.id} value={f.id}>
-              {f.manufacturer} — {f.name} ({f.material})
-            </option>
-          ))}
-        </select>
-      ) : (
-        <input type={type} value={form[name] || ""}
-          placeholder={placeholder}
-          onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-          className="w-full bg-white/[0.04] border border-white/[0.08] rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-blue-500/50" />
-      )}
-    </div>
+  const Label = ({ children }) => (
+    <label style={{ display:"block", fontSize:11, color:"var(--muted)", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.05em" }}>{children}</label>
   );
 
   return (
-    <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="card w-full max-w-md p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">Nouvelle bobine</h2>
-          <button onClick={onClose} className="text-gray-600 hover:text-gray-300"><X size={18} /></button>
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:50, display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div className="card" style={{ width:"100%", maxWidth:420, padding:20, display:"flex", flexDirection:"column", gap:14 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <h2 style={{ fontWeight:700, fontSize:15, color:"var(--text)" }}>Nouvelle bobine</h2>
+          <button onClick={onClose} style={{ color:"var(--muted)", background:"none", border:"none", cursor:"pointer" }}><X size={18}/></button>
         </div>
-        <Field label="Filament *" name="filament_id" />
-        <div className="grid grid-cols-2 gap-3">
-          <Field label="Reste (g)" name="remaining_weight_g" type="number" placeholder="1000" />
-          <Field label="Prix (€)" name="price_override" type="number" placeholder="" />
+
+        <div>
+          <Label>Filament *</Label>
+          <select value={form.filament_id} onChange={e => setForm(f=>({...f,filament_id:e.target.value}))}
+            style={{ ...inp }} onFocus={inpFocus} onBlur={inpBlur}>
+            <option value="">— Choisir un filament —</option>
+            {filaments.map(f => <option key={f.id} value={f.id}>{f.manufacturer} — {f.name} ({f.material})</option>)}
+          </select>
         </div>
-        <Field label="Emplacement" name="location" placeholder="AMS 1, Tiroir..." />
-        <Field label="Tag NFC" name="tag_number" placeholder="UUID" />
-        <Field label="Commentaire" name="comment" placeholder="" />
-        <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-300">Annuler</button>
-          <button onClick={handleSave} disabled={saving || !form.filament_id}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm">
-            {saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          {[["Reste (g)","remaining_weight_g","number","1000"],["Prix (€)","price_override","number",""]].map(([l,n,t,p])=>(
+            <div key={n}>
+              <Label>{l}</Label>
+              <input type={t} value={form[n]||""} placeholder={p}
+                onChange={e=>setForm(f=>({...f,[n]:e.target.value}))}
+                style={inp} onFocus={inpFocus} onBlur={inpBlur} />
+            </div>
+          ))}
+        </div>
+
+        {[["Emplacement","location","text","AMS 1, Tiroir..."],["Tag NFC","tag_number","text","UUID"],["Commentaire","comment","text",""]].map(([l,n,t,p])=>(
+          <div key={n}>
+            <Label>{l}</Label>
+            <input type={t} value={form[n]||""} placeholder={p}
+              onChange={e=>setForm(f=>({...f,[n]:e.target.value}))}
+              style={inp} onFocus={inpFocus} onBlur={inpBlur} />
+          </div>
+        ))}
+
+        <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:4 }}>
+          <button onClick={onClose} style={{ padding:"8px 16px", fontSize:13, color:"var(--muted)", background:"none", border:"1px solid var(--border)", borderRadius:8, cursor:"pointer" }}>Annuler</button>
+          <button onClick={handleSave} disabled={saving||!form.filament_id}
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 16px", fontSize:13, background:"#3b82f6", color:"white", border:"none", borderRadius:8, cursor:"pointer", opacity:saving||!form.filament_id?0.5:1 }}>
+            {saving ? <RefreshCw size={13} style={{animation:"spin 1s linear infinite"}}/> : <Save size={13}/>}
             Enregistrer
           </button>
         </div>
@@ -103,7 +110,7 @@ function AddSpoolModal({ filaments, onSave, onClose }) {
   );
 }
 
-// Vue Bobines
+// ── Vue Bobines ────────────────────────────────────────────────────────────
 function SpoolsView({ filaments, showArchived }) {
   const [spools, setSpools] = useState([]);
   const [q, setQ] = useState("");
@@ -113,82 +120,67 @@ function SpoolsView({ filaments, showArchived }) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await client.get("/filaments/spools", {
-        params: { archived: showArchived, q: q || undefined }
-      });
+      const { data } = await client.get("/filaments/spools", { params:{ archived:showArchived, q:q||undefined } });
       setSpools(data);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [showArchived, q]);
 
   useEffect(() => { load(); }, [load]);
 
-  const archive = async (id) => {
-    await client.delete(`/filaments/spools/${id}`);
-    load();
-  };
-
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2">
-        <div className="relative flex-1">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher…"
-            className="w-full bg-white/[0.03] border border-white/[0.07] rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-blue-500/50" />
+    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      {/* Barre de recherche + bouton */}
+      <div style={{ display:"flex", gap:8 }}>
+        <div style={{ position:"relative", flex:1 }}>
+          <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher…"
+            style={{ ...inp, paddingLeft:36 }} onFocus={inpFocus} onBlur={inpBlur}/>
         </div>
-        <button onClick={() => setShowAdd(true)}
-          className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm shrink-0">
-          <Plus size={15} /> Bobine
+        <button onClick={()=>setShowAdd(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"#3b82f6", color:"white", border:"none", borderRadius:8, fontSize:13, cursor:"pointer", flexShrink:0 }}>
+          <Plus size={14}/> Bobine
         </button>
       </div>
 
       {loading ? (
-        <div className="text-center text-gray-600 py-8 text-sm">Chargement…</div>
+        <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Chargement…</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:8 }}>
           {spools.map(s => (
-            <div key={s.id} className="card-sm p-3 flex flex-col gap-2">
-              <div className="flex items-start gap-2">
-                <ColorDot color={s.filament_color} size={18} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{s.filament_name}</p>
-                  <p className="text-xs text-gray-500">{s.filament_material}</p>
+            <div key={s.id} className="card-sm" style={{ padding:12, display:"flex", flexDirection:"column", gap:8 }}>
+              <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
+                <ColorDot color={s.filament_color} size={18}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.filament_name}</p>
+                  <p style={{ fontSize:11, color:"var(--muted)" }}>{s.filament_material}{s.filament_manufacturer ? ` · ${s.filament_manufacturer}` : ""}</p>
                 </div>
-                <div className="flex items-center gap-1.5 shrink-0">
+                <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
                   {s.location && (
-                    <span className="text-[10px] bg-white/[0.05] px-1.5 py-0.5 rounded text-gray-500">{s.location}</span>
+                    <span style={{ fontSize:10, background:"var(--surface)", border:"1px solid var(--border)", padding:"2px 6px", borderRadius:4, color:"var(--muted)" }}>{s.location}</span>
                   )}
                   {!showArchived && (
-                    <button onClick={() => archive(s.id)}
-                      className="text-gray-700 hover:text-red-400 transition-colors">
-                      <Archive size={13} />
+                    <button onClick={async()=>{ await client.delete(`/filaments/spools/${s.id}`); load(); }}
+                      style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2 }}
+                      onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
+                      onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
+                      <Archive size={13}/>
                     </button>
                   )}
                 </div>
               </div>
-              <SpoolBar remaining={s.remaining_weight_g} />
-              {s.comment && <p className="text-[10px] text-gray-600 truncate">{s.comment}</p>}
+              <RemainBar remaining={s.remaining_weight_g}/>
+              {s.comment && <p style={{ fontSize:10, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.comment}</p>}
             </div>
           ))}
-          {!spools.length && (
-            <p className="col-span-2 text-center text-gray-600 py-8 text-sm">Aucune bobine</p>
-          )}
+          {!spools.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucune bobine</p>}
         </div>
       )}
 
-      {showAdd && (
-        <AddSpoolModal
-          filaments={filaments}
-          onSave={() => { setShowAdd(false); load(); }}
-          onClose={() => setShowAdd(false)}
-        />
-      )}
+      {showAdd && <AddSpoolModal filaments={filaments} onSave={()=>{ setShowAdd(false); load(); }} onClose={()=>setShowAdd(false)}/>}
     </div>
   );
 }
 
-// Vue Filaments
+// ── Vue Catalogue ──────────────────────────────────────────────────────────
 function FilamentsView() {
   const [filaments, setFilaments] = useState([]);
   const [q, setQ] = useState("");
@@ -198,69 +190,61 @@ function FilamentsView() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await client.get("/filaments/filaments", {
-        params: { q: q || undefined, material: material || undefined }
-      });
+      const { data } = await client.get("/filaments/filaments", { params:{ q:q||undefined, material:material||undefined } });
       setFilaments(data);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [q, material]);
 
   useEffect(() => { load(); }, [load]);
 
   return (
-    <div className="space-y-3">
-      <div className="flex gap-2 flex-wrap">
-        <div className="relative flex-1 min-w-48">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" />
-          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Nom, fabricant…"
-            className="w-full bg-white/[0.03] border border-white/[0.07] rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:border-blue-500/50" />
+    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+        <div style={{ position:"relative", flex:1, minWidth:180 }}>
+          <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Nom, fabricant…"
+            style={{ ...inp, paddingLeft:36 }} onFocus={inpFocus} onBlur={inpBlur}/>
         </div>
-        <select value={material} onChange={e => setMaterial(e.target.value)}
-          className="bg-white/[0.03] border border-white/[0.07] rounded-lg px-3 py-2 text-sm focus:outline-none">
+        <select value={material} onChange={e=>setMaterial(e.target.value)}
+          style={{ ...inp, width:"auto", minWidth:140 }} onFocus={inpFocus} onBlur={inpBlur}>
           <option value="">Tous matériaux</option>
           {MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
       </div>
 
       {loading ? (
-        <div className="text-center text-gray-600 py-8 text-sm">Chargement…</div>
+        <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Chargement…</p>
       ) : (
-        <div className="space-y-1">
+        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
           {filaments.map(f => (
-            <div key={f.id} className="card-sm px-3 py-2.5 flex items-center gap-3">
-              <ColorDot color={f.color} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate">{f.name}</p>
-                <p className="text-xs text-gray-500">{f.manufacturer} · {f.material}</p>
+            <div key={f.id} className="card-sm" style={{ padding:"10px 14px", display:"flex", alignItems:"center", gap:12 }}>
+              <ColorDot color={f.color}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ fontWeight:500, fontSize:13, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</p>
+                <p style={{ fontSize:11, color:"var(--muted)" }}>{f.manufacturer} · {f.material}</p>
               </div>
-              <div className="flex items-center gap-2 shrink-0">
-                <span className={clsx(
-                  "text-[10px] px-1.5 py-0.5 rounded font-medium",
-                  f.active_spool_count > 0
-                    ? "bg-green-500/15 text-green-400"
-                    : "bg-white/[0.05] text-gray-600"
-                )}>
-                  {f.active_spool_count} bobine{f.active_spool_count !== 1 ? "s" : ""}
+              <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
+                <span style={{
+                  fontSize:10, padding:"2px 8px", borderRadius:20, fontWeight:600,
+                  background: f.active_spool_count > 0 ? "rgba(34,197,94,0.12)" : "var(--surface2)",
+                  color: f.active_spool_count > 0 ? "#22c55e" : "var(--muted)",
+                }}>
+                  {f.active_spool_count} bobine{f.active_spool_count!==1?"s":""}
                 </span>
-                {f.price && <span className="text-[10px] text-gray-600 mono">{f.price}€</span>}
+                {f.price && <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"monospace" }}>{f.price}€</span>}
               </div>
             </div>
           ))}
-          {!filaments.length && (
-            <p className="text-center text-gray-600 py-8 text-sm">Aucun filament</p>
-          )}
+          {!filaments.length && <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
         </div>
       )}
     </div>
   );
 }
 
-// Page principale
+// ── Page principale ────────────────────────────────────────────────────────
 export default function Filaments() {
   const [tab, setTab] = useState("spools");
-  const [showArchived, setShowArchived] = useState(false);
   const [filaments, setFilaments] = useState([]);
 
   useEffect(() => {
@@ -268,34 +252,33 @@ export default function Filaments() {
   }, []);
 
   const tabs = [
-    { id: "spools",   label: "Bobines actives" },
-    { id: "archived", label: "Archivées" },
-    { id: "catalog",  label: "Catalogue" },
+    { id:"spools",   label:"Bobines actives" },
+    { id:"archived", label:"Archivées" },
+    { id:"catalog",  label:"Catalogue" },
   ];
 
   return (
-    <div className="max-w-3xl mx-auto space-y-4">
-      <h1 className="text-lg font-bold">Filaments</h1>
+    <div style={{ maxWidth:768, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
+      <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Filaments</h1>
 
       {/* Tabs */}
-      <div className="flex gap-1 bg-white/[0.03] rounded-xl p-1 border border-white/[0.06]">
+      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
         {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={clsx("flex-1 py-2 rounded-lg text-xs font-medium transition-all",
-              tab === t.id
-                ? "bg-blue-600 text-white"
-                : "text-gray-500 hover:text-gray-300"
-            )}>
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
+            background: tab===t.id ? "#3b82f6" : "transparent",
+            color: tab===t.id ? "white" : "var(--muted)",
+            border:"none", transition:"all 0.15s",
+          }}>
             {t.label}
           </button>
         ))}
       </div>
 
-      {tab === "catalog" ? (
-        <FilamentsView />
-      ) : (
-        <SpoolsView filaments={filaments} showArchived={tab === "archived"} />
-      )}
+      {tab==="catalog"
+        ? <FilamentsView/>
+        : <SpoolsView filaments={filaments} showArchived={tab==="archived"}/>
+      }
     </div>
   );
 }
