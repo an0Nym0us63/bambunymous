@@ -355,7 +355,8 @@ export default function Home() {
       {hasRack && <VortekRack rack={status.hotend_rack} />}
       <AMSSection
         amsList={status?.ams_list ?? []}
-        activeTray={status?.active_tray ?? -1}
+        activeAmsId={status?.active_ams_id ?? -1}
+        activeTrayId={status?.active_tray_id ?? -1}
         spoolLookup={spoolLookup}
       />
     </div>
