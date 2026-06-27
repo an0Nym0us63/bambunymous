@@ -272,8 +272,8 @@ class MQTTManager:
                 rack.holder_pos = holder.get("pos", 0)
                 rack.holder_stat = holder.get("stat", 0)
                 rack.holder_job = holder.get("job", 0)
-                for n in nozzle["info"]:
-                    rack.hotends.append(HotendSlot(
+                for idx, n in enumerate(nozzle["info"]):
+                    slot = HotendSlot(
                         id=int(n.get("id", 0)),
                         color=(n.get("color_m") or "").strip(),
                         filament_id=n.get("fila_id", ""),
@@ -283,7 +283,26 @@ class MQTTManager:
                         wear=float(n.get("wear", 0)),
                         print_time=int(n.get("p_t", 0)),
                         empty=not bool((n.get("fila_id") or "").strip()),
-                    ))
+                    )
+                    rack.hotends.append(slot)
+                    logger.info(
+                        f"[VORTEK slot idx={idx}] id={slot.id} "
+                        f"fila={slot.filament_id or 'VIDE'} "
+                        f"color={slot.color} "
+                        f"diam={slot.diameter}mm type={slot.nozzle_type} "
+                        f"wear={slot.wear:.0f} p_t={slot.print_time}"
+                    )
+                logger.info(
+                    f"[VORTEK RACK] {len(rack.hotends)} slots | "
+                    f"src_id={rack.active_id} tar_id={rack.target_id} "
+                    f"state={rack.state} holder_pos={rack.holder_pos} "
+                    f"holder_job={rack.holder_job}"
+                )
+                # Log holder block brut pour comprendre les positions
+                holder_raw = device.get("holder", {})
+                logger.info(f"[VORTEK HOLDER RAW] {holder_raw}")
+                # Log nozzle block complet brut
+                logger.info(f"[VORTEK NOZZLE RAW] src={nozzle.get('src_id')} tar={nozzle.get('tar_id')} exist={nozzle.get('exist')} state={nozzle.get('state')}")
                 state.hotend_rack = rack
                 changed = True
 
