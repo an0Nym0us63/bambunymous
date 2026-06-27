@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Upload, Play, CheckCircle, AlertCircle, RefreshCw, Database } from "lucide-react";
 import client from "../api/client";
-import clsx from "clsx";
 
 export default function ImportSection() {
   const [status, setStatus] = useState(null);
@@ -15,135 +14,99 @@ export default function ImportSection() {
     try {
       const { data } = await client.get("/import/status");
       setStatus(data);
-      // Stop polling si terminé
-      if (!data.running) {
-        clearInterval(pollRef.current);
-        setImporting(false);
-      }
+      if (!data.running) { clearInterval(pollRef.current); setImporting(false); }
     } catch {}
   };
 
-  useEffect(() => {
-    fetchStatus();
-    return () => clearInterval(pollRef.current);
-  }, []);
+  useEffect(() => { fetchStatus(); return () => clearInterval(pollRef.current); }, []);
 
   const handleUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    setUploading(true);
-    setUploadInfo(null);
+    setUploading(true); setUploadInfo(null);
     try {
       const form = new FormData();
       form.append("file", file);
-      const { data } = await client.post("/import/upload", form, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
+      const { data } = await client.post("/import/upload", form, { headers:{"Content-Type":"multipart/form-data"} });
       setUploadInfo(data);
       await fetchStatus();
-    } catch (err) {
+    } catch(err) {
       setUploadInfo({ error: err.response?.data?.detail || "Erreur upload" });
-    } finally {
-      setUploading(false);
-      fileRef.current.value = "";
-    }
+    } finally { setUploading(false); fileRef.current.value = ""; }
   };
 
   const handleImport = async () => {
     setImporting(true);
     try {
       await client.post("/import/run");
-      // Polling toutes les 500ms
       pollRef.current = setInterval(fetchStatus, 500);
-    } catch (err) {
+    } catch(err) {
       setImporting(false);
       setUploadInfo({ error: err.response?.data?.detail || "Erreur import" });
     }
   };
 
   if (!status) return null;
-
-  const alreadyImported = status.already_imported;
   const canImport = status.uploaded && !status.running && !status.done;
 
+  const Msg = ({ color, bg, icon: Icon, children }) => (
+    <div style={{ display:"flex", alignItems:"flex-start", gap:8, fontSize:12, color, background:bg, border:`1px solid ${color}33`, borderRadius:8, padding:"8px 12px" }}>
+      <Icon size={14} style={{ flexShrink:0, marginTop:1 }}/>{children}
+    </div>
+  );
+
+  const Btn = ({ onClick, disabled, children, primary }) => (
+    <button onClick={onClick} disabled={disabled} style={{
+      display:"flex", alignItems:"center", gap:6, padding:"8px 14px", borderRadius:8, fontSize:13, cursor: disabled?"not-allowed":"pointer",
+      background: primary && !disabled ? "#3b82f6" : "var(--surface2)",
+      color: primary && !disabled ? "white" : "var(--text2)",
+      border:`1px solid ${primary && !disabled ? "#3b82f6" : "var(--border)"}`,
+      opacity: disabled ? 0.5 : 1, transition:"all 0.15s",
+    }}>
+      {children}
+    </button>
+  );
+
   return (
-    <section className="card p-4 space-y-4">
-      <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-2">
-        <Database size={13} /> Import base de données v1
-      </h2>
+    <div className="card" style={{ padding:16, display:"flex", flexDirection:"column", gap:12 }}>
+      <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", display:"flex", alignItems:"center", gap:6 }}>
+        <Database size={13}/> Import base de données v1
+      </div>
 
-      {/* État actuel */}
-      {alreadyImported && !status.done && (
-        <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
-          <AlertCircle size={14} />
+      {status.already_imported && !status.done && (
+        <Msg color="#f59e0b" bg="rgba(245,158,11,0.08)" icon={AlertCircle}>
           Des données existent déjà en base. L'import est idempotent (pas de doublons).
-        </div>
+        </Msg>
       )}
-
       {status.done && status.stats && (
-        <div className="flex items-center gap-2 text-xs text-green-400 bg-green-500/10 border border-green-500/20 rounded-lg px-3 py-2">
-          <CheckCircle size={14} />
-          Import terminé — {status.stats.filaments} filaments, {status.stats.spools} bobines, {status.stats.settings} settings importés ({status.stats.skipped} déjà présents)
-        </div>
+        <Msg color="#22c55e" bg="rgba(34,197,94,0.08)" icon={CheckCircle}>
+          Import terminé — {status.stats.filaments} filaments, {status.stats.spools} bobines ({status.stats.skipped} déjà présents)
+        </Msg>
       )}
+      {status.error && <Msg color="#ef4444" bg="rgba(239,68,68,0.08)" icon={AlertCircle}>{status.error}</Msg>}
 
-      {status.error && (
-        <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2">
-          <AlertCircle size={14} /> {status.error}
-        </div>
-      )}
-
-      {/* Upload */}
-      <div className="space-y-2">
-        <p className="text-xs text-gray-500">
-          Fichier <span className="mono text-gray-400">3d_printer_logs.db</span> depuis Spoolnymous
-          {status.uploaded && <span className="ml-2 text-green-400 text-[10px]">✓ fichier prêt</span>}
+      <div>
+        <p style={{ fontSize:12, color:"var(--muted)", marginBottom:8 }}>
+          Fichier <code style={{ fontFamily:"monospace", color:"var(--text2)" }}>3d_printer_logs.db</code> depuis Spoolnymous
+          {status.uploaded && <span style={{ marginLeft:8, color:"#22c55e", fontSize:11 }}>✓ fichier prêt</span>}
         </p>
-        <div className="flex gap-2">
-          <button
-            onClick={() => fileRef.current.click()}
-            disabled={uploading || status.running}
-            className={clsx(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm border transition-all",
-              "border-white/[0.08] text-gray-400 hover:text-gray-200 hover:border-white/20",
-              (uploading || status.running) && "opacity-50 cursor-not-allowed"
-            )}>
-            {uploading
-              ? <><RefreshCw size={14} className="animate-spin" /> Upload…</>
-              : <><Upload size={14} /> {status.uploaded ? "Remplacer le fichier" : "Choisir le fichier"}</>
-            }
-          </button>
-          <input ref={fileRef} type="file" accept=".db" onChange={handleUpload} className="hidden" />
-
-          {/* Bouton Import */}
-          <button
-            onClick={handleImport}
-            disabled={!canImport || importing}
-            className={clsx(
-              "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all",
-              canImport && !importing
-                ? "bg-blue-600 hover:bg-blue-700 text-white"
-                : "bg-white/[0.04] text-gray-600 cursor-not-allowed border border-white/[0.06]"
-            )}>
-            {status.running || importing
-              ? <><RefreshCw size={14} className="animate-spin" /> Import en cours…</>
-              : status.done
-              ? <><CheckCircle size={14} /> Réimporter</>
-              : <><Play size={14} /> Lancer l'import</>
-            }
-          </button>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          <Btn onClick={() => fileRef.current.click()} disabled={uploading||status.running}>
+            {uploading ? <><RefreshCw size={13} style={{animation:"spin 1s linear infinite"}}/> Upload…</> : <><Upload size={13}/> {status.uploaded?"Remplacer":"Choisir"}</>}
+          </Btn>
+          <input ref={fileRef} type="file" accept=".db" onChange={handleUpload} style={{ display:"none" }}/>
+          <Btn onClick={handleImport} disabled={!canImport||importing} primary>
+            {status.running||importing ? <><RefreshCw size={13} style={{animation:"spin 1s linear infinite"}}/> En cours…</>
+              : status.done ? <><CheckCircle size={13}/> Réimporter</>
+              : <><Play size={13}/> Lancer l'import</>}
+          </Btn>
         </div>
       </div>
 
-      {/* Info fichier uploadé */}
       {uploadInfo && !uploadInfo.error && (
-        <div className="text-xs text-gray-500 bg-white/[0.02] rounded-lg px-3 py-2 space-y-0.5">
-          <p>📦 {uploadInfo.filaments} filaments · {uploadInfo.spools} bobines · {uploadInfo.size_kb} Ko</p>
-        </div>
+        <p style={{ fontSize:11, color:"var(--muted)" }}>📦 {uploadInfo.filaments} filaments · {uploadInfo.spools} bobines · {uploadInfo.size_kb} Ko</p>
       )}
-      {uploadInfo?.error && (
-        <p className="text-xs text-red-400">{uploadInfo.error}</p>
-      )}
-    </section>
+      {uploadInfo?.error && <p style={{ fontSize:12, color:"#ef4444" }}>{uploadInfo.error}</p>}
+    </div>
   );
 }
