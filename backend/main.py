@@ -19,6 +19,8 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.core.log_buffer import install as install_log_buffer
+    install_log_buffer()
     Path(settings.DATA_DIR).mkdir(parents=True, exist_ok=True)
     Path(settings.UPLOADS_DIR).mkdir(parents=True, exist_ok=True)
     await init_db()
