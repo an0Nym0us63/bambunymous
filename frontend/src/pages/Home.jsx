@@ -144,11 +144,13 @@ function PrinterTemps({ status }) {
 
 const HOLDER_POS = { 1: "Rang A", 2: "Rang B", 3: "Centre" };
 
+// ── Vortek Rack ────────────────────────────────────────────────────────────
+
 function WearSegs({ wear }) {
   const filled = Math.min(5, Math.max(0, Math.round((wear / 255) * 5)));
   const color  = filled <= 2 ? "#22c55e" : filled <= 3 ? "#f59e0b" : "#ef4444";
   return (
-    <div className="flex gap-0.5">
+    <div className="flex gap-0.5 mt-1">
       {[1,2,3,4,5].map(i => (
         <div key={i} className="h-1 flex-1 rounded-full"
           style={{ backgroundColor: i <= filled ? color : "rgba(255,255,255,0.08)" }} />
@@ -157,31 +159,37 @@ function WearSegs({ wear }) {
   );
 }
 
-function RackSlot({ slot, slotNum, onHead }) {
+function HotendCard({ slot, slotNum, isOnHead }) {
   const color = hexCss(slot.color);
   const empty = slot.empty || !slot.filament_id;
   return (
     <div className={clsx(
-      "rounded-xl p-2.5 border flex flex-col gap-1.5 relative transition-all",
-      onHead ? "border-blue-500/40 bg-blue-500/5 shadow shadow-blue-500/10"
-             : "border-white/[0.07] bg-white/[0.03]"
+      "rounded-xl p-2.5 border flex flex-col gap-1.5 relative",
+      isOnHead
+        ? "border-blue-500/40 bg-blue-500/5 shadow shadow-blue-500/10"
+        : "border-white/[0.07] bg-white/[0.03]"
     )}>
-      {onHead && <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-xl bg-gradient-to-r from-blue-500 to-cyan-400" />}
+      {isOnHead && (
+        <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-xl bg-gradient-to-r from-blue-500 to-cyan-400" />
+      )}
       <div className="flex items-center gap-1.5">
         <div className="w-4 h-4 rounded shrink-0 ring-1 ring-white/10"
-          style={{ backgroundColor: (color && !empty) ? color : "rgba(255,255,255,0.05)" }} />
-        <span className="text-[10px] mono font-bold text-gray-500">{slotNum}</span>
-        {onHead && <span className="ml-auto text-[8px] text-blue-400 font-semibold">tête</span>}
+          style={{ backgroundColor: color || (empty ? "rgba(255,255,255,0.04)" : "#374151") }} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] mono font-semibold text-gray-500">{slotNum}</span>
+            {isOnHead && <span className="text-[8px] text-blue-400 font-bold">tête</span>}
+          </div>
+          <p className="text-[8px] text-gray-700 mono">{slot.nozzle_type || "—"} {slot.diameter}mm</p>
+        </div>
       </div>
-      {empty ? (
-        <p className="text-[9px] text-gray-700 italic">Vide</p>
-      ) : (
-        <>
-          <p className="text-[9px] mono text-gray-400 truncate">{slot.filament_id}</p>
-          <p className="text-[8px] text-gray-600">{slot.nozzle_type} {slot.diameter}mm</p>
-          <WearSegs wear={slot.wear} />
-        </>
-      )}
+      {empty
+        ? <p className="text-[9px] text-gray-700 italic">Vide</p>
+        : <>
+            <p className="text-[9px] mono text-gray-400 truncate">{slot.filament_id}</p>
+            <WearSegs wear={slot.wear} />
+          </>
+      }
     </div>
   );
 }
@@ -191,79 +199,87 @@ function VortekRack({ rack }) {
   if (!rack?.hotends?.length) return null;
 
   const h = rack.hotends;
-  // Les 7 items sont TOUS dans le rack (src_id=16 ne matche aucun → tête sans hotend tracké)
-  // Rang A: slots 1,3,5 → idx 0,2,4
-  // Rang B: slots 2,4,6 → idx 1,3,5
-  // Slot 7: idx 6 (affiché séparément)
-  const rowA   = [h[0], h[2], h[4]].filter(Boolean); // slots 1, 3, 5
-  const rowB   = [h[1], h[3], h[5]].filter(Boolean); // slots 2, 4, 6
-  const slot7  = h[6] ?? null;                        // slot 7 optionnel
-  // L'hotend sur la tête = celui dont l'id = rack.active_id (si présent dans la liste)
-  const onHead = rack.active_id >= 0
-    ? h.find(s => s?.id === rack.active_id) ?? null
-    : null;
+  // On affiche les hotends dans l'ordre reçu du firmware (index 0-N)
+  // La numérotation UI = index + 1 (en attendant confirmation du mapping physique)
+  // src_id pointe vers un hotend par son hardware id
+  const onHeadIdx = h.findIndex(slot => slot.id === rack.active_id);
+  const onHead    = onHeadIdx >= 0 ? h[onHeadIdx] : null;
+  const filled    = h.filter(s => !s.empty && s.filament_id);
+  const isMoving  = rack.holder_job !== 0;
 
-  const isOnHead = (slot) => onHead && slot?.id === onHead.id;
-  const filled = h.filter(x => x && !x.empty && x.filament_id);
-  const moving = rack.holder_job !== 0;
+  // Layout: 6 premiers en grille 3x2, le 7e séparé si présent
+  const mainSlots  = h.slice(0, 6);
+  const extraSlots = h.slice(6);
 
   return (
     <div className="card overflow-hidden">
       <button onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-3 p-3 hover:bg-white/[0.02] transition-colors">
         <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Rack Vortek</span>
-        {moving && <span className="text-[9px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full animate-pulse">En mouvement</span>}
+        {isMoving && (
+          <span className="text-[9px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full animate-pulse">
+            En mouvement
+          </span>
+        )}
         <div className="flex items-center gap-3 ml-auto text-[10px] text-gray-600">
           <span className="mono">{filled.length}/{h.length} chargés</span>
-          <span>{HOLDER_POS[rack.holder_pos] ?? "—"}</span>
           {open ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
         </div>
       </button>
 
       {open && (
         <div className="p-3 pt-0 space-y-2">
-          <div>
-            <p className="text-[8px] text-gray-700 uppercase tracking-widest mb-1.5">Rang A</p>
-            <div className="grid grid-cols-3 gap-1.5">
-              {rowA.map((slot, i) => slot && (
-                <RackSlot key={slot.id} slot={slot} slotNum={i*2+1} onHead={false} />
-              ))}
-            </div>
+          {/* Grille 3x2 */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {mainSlots.map((slot, i) => (
+              <HotendCard
+                key={slot.id}
+                slot={slot}
+                slotNum={i + 1}
+                isOnHead={slot.id === rack.active_id}
+              />
+            ))}
           </div>
-          <div>
-            <p className="text-[8px] text-gray-700 uppercase tracking-widest mb-1.5">Rang B</p>
+
+          {/* Slots supplémentaires (index 6+) */}
+          {extraSlots.length > 0 && (
             <div className="grid grid-cols-3 gap-1.5">
-              {rowB.map((slot, i) => slot && (
-                <RackSlot key={slot.id} slot={slot} slotNum={i*2+2} onHead={false} />
+              {extraSlots.map((slot, i) => (
+                <HotendCard
+                  key={slot.id}
+                  slot={slot}
+                  slotNum={mainSlots.length + i + 1}
+                  isOnHead={slot.id === rack.active_id}
+                />
               ))}
-            </div>
-          </div>
-          {/* Slot 7 si présent */}
-          {slot7 && (
-            <div className="mt-1">
-              <p className="text-[8px] text-gray-700 uppercase tracking-widest mb-1.5">Slot 7</p>
-              <div className="w-1/3 pr-1">
-                <RackSlot key={slot7.id} slot={slot7} slotNum={7} onHead={slot7.id === rack.active_id} />
-              </div>
             </div>
           )}
-          {/* Hotend sur la tête (si src_id correspond à un slot connu) */}
-          {onHead && (
+
+          {/* Résumé hotend actif si trouvé */}
+          {onHead && !onHead.empty && (
             <div className="flex items-center gap-2 px-2.5 py-2 bg-blue-500/5 border border-blue-500/15 rounded-lg">
               <div className="w-2.5 h-2.5 rounded-sm shrink-0 ring-1 ring-white/10"
                 style={{ backgroundColor: hexCss(onHead.color) || "#374151" }} />
               <p className="text-[11px] text-gray-400 flex-1 min-w-0">
-                Sur la tête — <span className="text-gray-200 font-medium mono">{onHead.filament_id || "—"} {onHead.diameter}mm {onHead.nozzle_type}</span>
+                Sur la tête —
+                <span className="text-gray-200 font-medium mono ml-1">
+                  {onHead.filament_id} {onHead.diameter}mm {onHead.nozzle_type}
+                </span>
               </p>
               {onHead.print_time > 0 && (
-                <span className="text-[10px] text-gray-600 mono shrink-0">{Math.round(onHead.print_time/60)}h</span>
+                <span className="text-[10px] text-gray-600 mono shrink-0">
+                  {Math.round(onHead.print_time / 60)}h
+                </span>
               )}
             </div>
           )}
-          {/* Tête sans hotend tracké */}
+
+          {/* src_id sans match dans la liste */}
           {!onHead && rack.active_id >= 0 && (
-            <div className="flex items-center gap-2 px-2.5 py-2 bg-white/[0.03] border border-white/[0.06] rounded-lg">
-              <p className="text-[11px] text-gray-600">Tête — hotend #{rack.active_id} (non référencé dans le rack)</p>
+            <div className="px-2.5 py-2 border border-white/[0.05] rounded-lg">
+              <p className="text-[10px] text-gray-600 mono">
+                Actif: id #{rack.active_id} — non présent dans le rack
+              </p>
             </div>
           )}
         </div>
@@ -272,91 +288,6 @@ function VortekRack({ rack }) {
   );
 }
 
-// ── AMS Grid avec lookup filament ──────────────────────────────────────────
-
-function RemainBar({ pct, color }) {
-  const c = hexCss(color);
-  const barColor = pct > 30 ? (c || "#3b82f6") : "#ef4444";
-  return (
-    <div className="h-1 bg-white/[0.06] rounded-full overflow-hidden">
-      <div className="h-full rounded-full transition-all duration-500"
-        style={{ width: `${Math.max(0,Math.min(100,pct))}%`, backgroundColor: barColor }} />
-    </div>
-  );
-}
-
-function TrayCard({ tray, isActive, spoolInfo }) {
-  // spoolInfo: { name, manufacturer, material } depuis lookup RFID/UUID
-  return (
-    <div className={clsx(
-      "card-sm p-3 transition-all",
-      isActive && "border-blue-500/50 shadow shadow-blue-500/10"
-    )}>
-      <div className="flex items-start gap-2">
-        <div className="w-4 h-4 rounded shrink-0 mt-0.5 ring-1 ring-white/10"
-          style={{ backgroundColor: hexCss(tray.color) || "#1f2937" }} />
-        <div className="flex-1 min-w-0">
-          {spoolInfo ? (
-            <>
-              <p className="text-xs font-semibold text-gray-200 truncate leading-tight">{spoolInfo.name}</p>
-              <p className="text-[10px] text-gray-500 truncate">{spoolInfo.manufacturer} · {spoolInfo.material}</p>
-            </>
-          ) : (
-            <>
-              <p className="text-xs font-medium text-gray-300 truncate">
-                {tray.empty ? "Vide" : (tray.tray_id_name || tray.filament_type || "—")}
-              </p>
-              {!tray.empty && tray.filament_type && tray.filament_type !== tray.tray_id_name && (
-                <p className="text-[10px] text-gray-600 truncate">{tray.filament_type}</p>
-              )}
-            </>
-          )}
-        </div>
-        <div className="flex flex-col items-end gap-1 shrink-0">
-          {isActive && <span className="text-[8px] text-blue-400 font-bold">●</span>}
-          {!tray.empty && <span className="text-[10px] mono text-gray-600">{tray.remain}%</span>}
-        </div>
-      </div>
-      {!tray.empty && <RemainBar pct={tray.remain} color={tray.color} />}
-    </div>
-  );
-}
-
-function AMSUnit({ ams, activeTray, spoolLookup }) {
-  const [open, setOpen] = useState(true);
-  const filled = ams.trays.filter(t => !t.empty);
-  return (
-    <div className="card overflow-hidden">
-      <button onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-3 p-3 hover:bg-white/[0.02] transition-colors">
-        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">AMS {ams.id+1}</span>
-        <div className="flex gap-1 ml-1">
-          {filled.map(t => (
-            <div key={t.id} className="w-4 h-4 rounded-full ring-1 ring-white/10"
-              style={{ backgroundColor: hexCss(t.color) || "#374151" }} />
-          ))}
-        </div>
-        <div className="flex items-center gap-3 ml-auto text-[10px] text-gray-600">
-          <span className="flex items-center gap-0.5"><Droplets size={10}/><span className="mono">{ams.humidity}%</span></span>
-          <span className="mono">{ams.temp}°</span>
-          {open ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
-        </div>
-      </button>
-      {open && (
-        <div className="grid grid-cols-2 gap-2 p-3 pt-0">
-          {ams.trays.map(tray => (
-            <TrayCard
-              key={tray.id}
-              tray={tray}
-              isActive={activeTray === ams.id*4 + tray.id}
-              spoolInfo={spoolLookup?.[tray.uuid] ?? spoolLookup?.[tray.tag_uid] ?? null}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── Page Home ──────────────────────────────────────────────────────────────
 
