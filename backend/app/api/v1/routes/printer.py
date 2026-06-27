@@ -56,6 +56,7 @@ class HotendRackOut(BaseModel):
     holder_pos: int
     holder_stat: int
     holder_job: int
+    head_id: int = -1
 
 
 class PrinterStatusOut(BaseModel):
@@ -144,6 +145,7 @@ async def printer_status(_: str = Depends(get_current_user)):
             holder_pos=s.hotend_rack.holder_pos,
             holder_stat=s.hotend_rack.holder_stat,
             holder_job=s.hotend_rack.holder_job,
+            head_id=s.hotend_rack.head_id,
         ),
         hms_errors=s.hms_errors,
         print_error=s.print_error,
