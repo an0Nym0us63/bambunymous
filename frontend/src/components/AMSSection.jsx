@@ -43,7 +43,7 @@ function AMSBox({ ams, activeTrayGlobal }) {
       </span>
       {/* Boîtier */}
       <div className={clsx(
-        "rounded-xl p-1.5 flex gap-1 w-28 border transition-all duration-500",
+        "rounded-xl p-1.5 flex gap-1 w-full border transition-all duration-500",
         ams.trays.some((t, i) => activeTrayGlobal === ams.id * 4 + t.id)
           ? "border-blue-500/40 bg-blue-500/5 shadow-lg shadow-blue-500/15"
           : "border-white/[0.07] bg-white/[0.03]"
@@ -168,17 +168,14 @@ export default function AMSSection({ amsList, activeTray, spoolLookup }) {
     <div className="card overflow-hidden">
       {/* Vue compacte des AMS avec sélection */}
       <div className="p-3 pb-0">
-        <div className="flex items-end gap-4 overflow-x-auto pb-3 scrollbar-hide">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pb-3">
           {amsList.map(ams => (
             <button key={ams.id} onClick={() => setSelectedAms(ams.id)}
-              className="shrink-0 transition-all duration-200 hover:scale-105 active:scale-95">
+              className="transition-all duration-200 hover:scale-[1.02] active:scale-95">
               <AMSBox ams={ams} activeTrayGlobal={activeTray} />
-              {/* Indicateur sélection */}
               <div className={clsx(
                 "mt-1.5 mx-auto h-0.5 rounded-full transition-all duration-300",
-                ams.id === displayAmsId
-                  ? "w-12 bg-blue-500"
-                  : "w-4 bg-white/[0.08]"
+                ams.id === displayAmsId ? "w-12 bg-blue-500" : "w-4 bg-white/[0.08]"
               )} />
             </button>
           ))}
