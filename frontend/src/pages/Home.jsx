@@ -111,54 +111,83 @@ function PrinterTemps({ status }) {
 }
 
 // ── Vortek Rack ────────────────────────────────────────────────────────────
+
 function WearBar({ wear }) {
-  const pct = Math.round((wear / 255) * 100);
-  const color = pct < 40 ? "#22c55e" : pct < 70 ? "#f59e0b" : "#ef4444";
-  const filled = Math.ceil((wear / 255) * 5);
+  const filled = Math.min(5, Math.max(0, Math.round((wear / 255) * 5)));
+  const color  = filled <= 2 ? "#22c55e" : filled <= 3 ? "#f59e0b" : "#ef4444";
   return (
     <div style={{ display:"flex", gap:2 }}>
       {[1,2,3,4,5].map(i => (
-        <div key={i} style={{ height:4, flex:1, borderRadius:2, backgroundColor: i <= filled ? color : "var(--border)" }} />
+        <div key={i} style={{ height:4, flex:1, borderRadius:2,
+          backgroundColor: i <= filled ? color : "var(--border)" }} />
       ))}
     </div>
   );
 }
 
 function SlotMini({ slot, num, isOnHead, isSelected, onClick }) {
-  const color = hexCss(slot.color);
-  const empty = !slot.filament_id;
+  const color = hexCss(slot?.color);
+  const empty = !slot?.filament_id;
   return (
     <button onClick={onClick} style={{
-      border: `1px solid ${isOnHead ? "rgba(59,130,246,0.6)" : isSelected ? "rgba(255,255,255,0.2)" : "var(--border)"}`,
-      borderRadius:10, padding:8, background: isOnHead ? "rgba(59,130,246,0.08)" : isSelected ? "var(--surface2)" : "var(--surface2)",
-      display:"flex", flexDirection:"column", gap:4, alignItems:"center", cursor:"pointer", transition:"all 0.15s",
+      border:`1px solid ${isOnHead ? "rgba(59,130,246,0.6)" : isSelected ? "rgba(255,255,255,0.25)" : "var(--border)"}`,
+      borderRadius:10, padding:8,
+      background: isOnHead ? "rgba(59,130,246,0.06)" : isSelected ? "var(--surface2)" : "var(--surface2)",
+      display:"flex", flexDirection:"column", gap:4, alignItems:"center",
+      cursor:"pointer", transition:"all 0.15s", minWidth:44,
     }}>
-      <div style={{ width:22, height:22, borderRadius:6, backgroundColor: color || (empty ? "var(--border)" : "#374151"), border:"1px solid rgba(255,255,255,0.1)" }} />
-      <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700, color:"var(--muted)" }}>{num}</span>
+      <div style={{ width:22, height:22, borderRadius:6,
+        backgroundColor: (color && !empty && !isOnHead) ? color : "var(--border)",
+        border:"1px solid rgba(255,255,255,0.1)",
+        display:"flex", alignItems:"center", justifyContent:"center" }}>
+        {isOnHead && <span style={{ fontSize:8, color:"#60a5fa" }}>↓</span>}
+      </div>
+      <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700, color: isOnHead ? "#60a5fa" : "var(--muted)" }}>{num}</span>
     </button>
   );
 }
 
-function SlotDetail({ slot, num, isOnHead }) {
-  const color = hexCss(slot.color);
-  const empty = !slot.filament_id;
+function SlotDetail({ slot, num, isOnHead, headSlot }) {
+  const color = hexCss(slot?.color);
+  const empty = !slot?.filament_id || isOnHead;
+  if (!slot) return <div style={{ flex:1 }}/>;
   return (
     <div style={{
       border:`1px solid ${isOnHead ? "rgba(59,130,246,0.4)" : "var(--border)"}`,
-      borderRadius:12, padding:16, background: isOnHead ? "rgba(59,130,246,0.05)" : "var(--surface2)",
+      borderRadius:12, padding:16, background: isOnHead ? "rgba(59,130,246,0.04)" : "var(--surface2)",
       display:"flex", flexDirection:"column", gap:12, flex:1,
     }}>
       <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        <div style={{ width:40, height:40, borderRadius:10, backgroundColor: color || (empty ? "var(--border)" : "#374151"), border:"1px solid rgba(255,255,255,0.1)", flexShrink:0 }} />
+        <div style={{ width:40, height:40, borderRadius:10, flexShrink:0,
+          backgroundColor: (!empty && color) ? color : "var(--border)",
+          border:"1px solid rgba(255,255,255,0.1)" }} />
         <div>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             <span style={{ fontWeight:700, fontSize:14, fontFamily:"monospace", color:"var(--text)" }}>Slot {num}</span>
-            {isOnHead && <span style={{ fontSize:9, background:"rgba(59,130,246,0.2)", color:"#60a5fa", padding:"2px 8px", borderRadius:20, fontWeight:600 }}>Sur la tête</span>}
+            {isOnHead && <span style={{ fontSize:9, background:"rgba(59,130,246,0.15)", color:"#60a5fa", padding:"2px 8px", borderRadius:20, fontWeight:600 }}>Buse droite</span>}
           </div>
-          <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{slot.nozzle_type || "—"} · {slot.diameter}mm</p>
+          <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
+            {(isOnHead && headSlot ? headSlot.nozzle_type : slot.nozzle_type) || "—"} · {(isOnHead && headSlot ? headSlot.diameter : slot.diameter)}mm
+          </p>
         </div>
       </div>
-      {empty ? (
+
+      {isOnHead && headSlot ? (
+        <>
+          <div>
+            <p style={{ fontSize:10, color:"var(--muted)", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.05em" }}>Monté sur la buse droite</p>
+            <p style={{ fontSize:14, fontWeight:600, fontFamily:"monospace", color:"#60a5fa" }}>{headSlot.filament_id}</p>
+          </div>
+          <div>
+            <p style={{ fontSize:10, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Usure</p>
+            <WearBar wear={headSlot.wear} />
+            <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", marginTop:4 }}>{Math.round((headSlot.wear/255)*100)}%</p>
+          </div>
+          {headSlot.print_time > 0 && (
+            <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{Math.round(headSlot.print_time/60)}h cumulées</p>
+          )}
+        </>
+      ) : empty ? (
         <p style={{ fontSize:12, color:"var(--muted)", fontStyle:"italic" }}>Slot vide</p>
       ) : (
         <>
@@ -172,10 +201,7 @@ function SlotDetail({ slot, num, isOnHead }) {
             <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", marginTop:4 }}>{Math.round((slot.wear/255)*100)}%</p>
           </div>
           {slot.print_time > 0 && (
-            <div>
-              <p style={{ fontSize:10, color:"var(--muted)", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.05em" }}>Temps cumulé</p>
-              <p style={{ fontSize:13, fontFamily:"monospace", color:"var(--text2)" }}>{Math.round(slot.print_time/60)}h</p>
-            </div>
+            <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{Math.round(slot.print_time/60)}h cumulées</p>
           )}
         </>
       )}
@@ -195,52 +221,60 @@ function VortekRack({ rack }) {
   const SLOT_MAP = [2, 5, 3, 0, 4, 6];
   const slots = SLOT_MAP.map((idx, i) => {
     const slot = h[idx] ?? null;
-    const onHead = slot && headId >= 0 && slot.id === rack.active_id;
-    return { slot, num: i+1, onHead };
+    const onHead = !!(slot && headId >= 0 && slot.id === rack.active_id);
+    return { slot, num: i + 1, onHead };
   });
 
-  const top = [slots[0], slots[2], slots[4]]; // slots 1,3,5
-  const bot = [slots[1], slots[3], slots[5]]; // slots 2,4,6
+  const topSlots = [slots[0], slots[2], slots[4]];
+  const botSlots = [slots[1], slots[3], slots[5]];
+  const topSels  = [0, 2, 4];
+  const botSels  = [1, 3, 5];
   const selEntry = slots[sel] ?? slots[0];
-  const filled = slots.filter(s => s.slot?.filament_id && !s.onHead).length;
+  const filled   = slots.filter(s => s.slot?.filament_id && !s.onHead).length;
+  const headSlot = headId >= 0 ? h.find(s => s.id === rack.active_id) ?? null : null;
 
   return (
     <div className="card" style={{ padding:16 }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
         <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em" }}>Rack Vortek</span>
-        <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
           <span style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)" }}>{filled}/6 chargés</span>
-          {headId >= 0 && <span style={{ fontSize:10, color:"#60a5fa" }}>● sur la tête</span>}
+          {headSlot && (
+            <span style={{ fontSize:10, color:"#60a5fa", fontFamily:"monospace" }}>
+              ● Buse droite : {headSlot.filament_id} {headSlot.diameter}mm
+            </span>
+          )}
         </div>
       </div>
+
       <div style={{ display:"flex", gap:12 }}>
-        {/* Grille 2x3 */}
         <div style={{ display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
           <div style={{ display:"flex", gap:6 }}>
-            {top.map(({slot, num, onHead}, i) => slot && (
+            {topSlots.map(({slot, num, onHead}, i) => slot && (
               <SlotMini key={slot.id}
-                slot={onHead ? {...slot, filament_id:"", color:""} : slot}
-                num={num} isOnHead={onHead}
-                isSelected={sel === [0,2,4][i]}
-                onClick={() => setSel([0,2,4][i])} />
+                slot={slot} num={num} isOnHead={onHead}
+                isSelected={sel === topSels[i]}
+                onClick={() => setSel(topSels[i])} />
             ))}
           </div>
           <div style={{ display:"flex", gap:6 }}>
-            {bot.map(({slot, num, onHead}, i) => slot && (
+            {botSlots.map(({slot, num, onHead}, i) => slot && (
               <SlotMini key={slot.id}
-                slot={onHead ? {...slot, filament_id:"", color:""} : slot}
-                num={num} isOnHead={onHead}
-                isSelected={sel === [1,3,5][i]}
-                onClick={() => setSel([1,3,5][i])} />
+                slot={slot} num={num} isOnHead={onHead}
+                isSelected={sel === botSels[i]}
+                onClick={() => setSel(botSels[i])} />
             ))}
           </div>
         </div>
-        {/* Détail */}
-        <SlotDetail
-          slot={selEntry.onHead ? {...selEntry.slot, filament_id:"", color:""} : selEntry.slot}
-          num={selEntry.num}
-          isOnHead={selEntry.onHead}
-        />
+
+        {selEntry?.slot && (
+          <SlotDetail
+            slot={selEntry.slot}
+            num={selEntry.num}
+            isOnHead={selEntry.onHead}
+            headSlot={selEntry.onHead ? headSlot : null}
+          />
+        )}
       </div>
     </div>
   );
