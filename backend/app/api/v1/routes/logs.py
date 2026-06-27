@@ -1,30 +1,48 @@
-import logging
-from fastapi import APIRouter, Depends
+import os
+import re
+from fastapi import APIRouter, Depends, Query
 from .auth import get_current_user
 
 router = APIRouter()
 
-# Import du buffer via le handler installé dans main.py
-# On accède au buffer via le handler stocké dans le root logger
-def _get_buffer():
-    import main as _main
-    return list(_main.LOG_HANDLER.buf)
+LOG_FILE = "/data/bambunymous.log"
+# Format: "2026-06-27 12:34:56 INFO app.core.mqtt message..."
+_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\w+) (\S+) (.*)$")
+
+
+def _parse_line(line: str) -> dict | None:
+    m = _RE.match(line.strip())
+    if not m:
+        return None
+    dt, level, name, msg = m.groups()
+    return {
+        "ts":    dt[11:19],   # HH:MM:SS
+        "level": level,
+        "name":  name.split(".")[-1],
+        "msg":   msg,
+    }
+
 
 @router.get("")
-async def get_logs(limit: int = 500, _: str = Depends(get_current_user)):
+async def get_logs(
+    limit: int = Query(300, le=1000),
+    _: str = Depends(get_current_user)
+):
+    if not os.path.exists(LOG_FILE):
+        return {"logs": [], "total": 0, "error": f"{LOG_FILE} not found"}
     try:
-        import main as _main
-        entries = list(_main.LOG_HANDLER.buf)[-limit:]
-        return {"logs": entries, "total": len(_main.LOG_HANDLER.buf)}
+        with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+        parsed = [p for l in lines if (p := _parse_line(l))]
+        return {"logs": parsed[-limit:], "total": len(parsed)}
     except Exception as e:
-        return {"logs": [{"ts":"--:--:--","level":"ERROR","name":"logs","msg":str(e)}], "total": 0}
+        return {"logs": [], "total": 0, "error": str(e)}
 
 
 @router.delete("")
 async def clear_logs(_: str = Depends(get_current_user)):
     try:
-        import main as _main
-        _main.LOG_HANDLER.buf.clear()
+        open(LOG_FILE, "w").close()
     except Exception:
         pass
     return {"ok": True}
