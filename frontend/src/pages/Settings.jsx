@@ -5,10 +5,12 @@ import ImportSection from "../components/ImportSection";
 
 export default function Settings() {
   const [form, setForm] = useState({
-    PRINTER_IP: "", PRINTER_ID: "", PRINTER_ACCESS_CODE: "",
+    PRINTER_IP: "", PRINTER_ID: "",
+    PRINTER_ACCESS_CODE: "",   // vide = ne pas modifier
     PRINTER_NAME: "", ADMIN_USERNAME: "admin",
     ADMIN_PASSWORD: "", COST_BY_HOUR: "0",
   });
+  const [accessCodeSet, setAccessCodeSet] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved]   = useState(false);
   const [loading, setLoading] = useState(true);
@@ -22,7 +24,17 @@ export default function Settings() {
 
   useEffect(() => {
     client.get("/settings").then(({ data }) => {
-      setForm(f => ({ ...f, ...data, ADMIN_PASSWORD: "" }));
+      setAccessCodeSet(data.PRINTER_ACCESS_CODE_SET ?? false);
+      setForm(f => ({
+        ...f,
+        PRINTER_IP:   data.PRINTER_IP   ?? "",
+        PRINTER_ID:   data.PRINTER_ID   ?? "",
+        PRINTER_NAME: data.PRINTER_NAME ?? "",
+        ADMIN_USERNAME: data.ADMIN_USERNAME ?? "admin",
+        COST_BY_HOUR: data.COST_BY_HOUR ?? "0",
+        PRINTER_ACCESS_CODE: "",  // toujours vide au chargement
+        ADMIN_PASSWORD: "",
+      }));
       setLoading(false);
     });
   }, []);
@@ -85,7 +97,19 @@ export default function Settings() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Adresse IP"       name="PRINTER_IP"          placeholder="192.168.1.xxx" />
             <Field label="Numéro de série"  name="PRINTER_ID"          placeholder="31B…" />
-            <Field label="Code d'accès"     name="PRINTER_ACCESS_CODE" placeholder="••••••••" />
+            <div>
+              <label className="block text-xs text-t3 mb-1.5">Code d'accès</label>
+              <input
+                type="password"
+                value={form.PRINTER_ACCESS_CODE}
+                placeholder={accessCodeSet ? "Laisser vide pour conserver" : "Code d'accès LAN"}
+                onChange={e => setForm(f => ({ ...f, PRINTER_ACCESS_CODE: e.target.value }))}
+                className="w-full card-sm px-3 py-2 text-sm text-t1 focus:outline-none focus:border-blue-500/50 transition-colors placeholder:text-t4"
+              />
+              {accessCodeSet && !form.PRINTER_ACCESS_CODE && (
+                <p className="text-[10px] text-green-500 mt-1">✓ Code configuré</p>
+              )}
+            </div>
             <Field label="Nom affiché"      name="PRINTER_NAME"        placeholder="Mon H2C" />
           </div>
         </section>
