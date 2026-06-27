@@ -1,40 +1,30 @@
 import os
-import re
 from fastapi import APIRouter, Depends, Query
 from .auth import get_current_user
 
 router = APIRouter()
-
 LOG_FILE = "/data/bambunymous.log"
-# Format: "2026-06-27 12:34:56 INFO app.core.mqtt message..."
-_RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) (\w+) (\S+) (.*)$")
-
-
-def _parse_line(line: str) -> dict | None:
-    m = _RE.match(line.strip())
-    if not m:
-        return None
-    dt, level, name, msg = m.groups()
-    return {
-        "ts":    dt[11:19],   # HH:MM:SS
-        "level": level,
-        "name":  name.split(".")[-1],
-        "msg":   msg,
-    }
 
 
 @router.get("")
-async def get_logs(
-    limit: int = Query(300, le=1000),
-    _: str = Depends(get_current_user)
-):
+async def get_logs(limit: int = Query(500, le=2000), _: str = Depends(get_current_user)):
     if not os.path.exists(LOG_FILE):
-        return {"logs": [], "total": 0, "error": f"{LOG_FILE} not found"}
+        return {"logs": [], "total": 0, "error": f"Fichier {LOG_FILE} introuvable"}
     try:
         with open(LOG_FILE, "r", encoding="utf-8", errors="replace") as f:
-            lines = f.readlines()
-        parsed = [p for l in lines if (p := _parse_line(l))]
-        return {"logs": parsed[-limit:], "total": len(parsed)}
+            lines = [l.rstrip() for l in f.readlines() if l.strip()]
+        total = len(lines)
+        # Retourner les lignes brutes — pas de parsing, juste afficher
+        entries = []
+        for line in lines[-limit:]:
+            # Détecter le niveau
+            lvl = "INFO"
+            for l in ("ERROR","WARNING","WARN","CRITICAL","DEBUG"):
+                if l in line[:40].upper():
+                    lvl = l.replace("WARN","WARNING")
+                    break
+            entries.append({"ts": line[:19] if len(line) > 19 else "", "level": lvl, "name": "", "msg": line})
+        return {"logs": entries, "total": total}
     except Exception as e:
         return {"logs": [], "total": 0, "error": str(e)}
 
