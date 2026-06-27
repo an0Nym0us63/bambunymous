@@ -59,6 +59,7 @@ class HotendRackOut(BaseModel):
 
 
 class PrinterStatusOut(BaseModel):
+    model_config = {"protected_namespaces": ()}
     connected: bool
     serial: str
     status: str
