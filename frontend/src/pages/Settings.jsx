@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Save, Wifi, RefreshCw, Sun, Moon } from "lucide-react";
+import { Save, Wifi, RefreshCw } from "lucide-react";
 import client from "../api/client";
 import ImportSection from "../components/ImportSection";
 
@@ -14,21 +14,6 @@ export default function Settings() {
   const [saving, setSaving]   = useState(false);
   const [saved,  setSaved]    = useState(false);
   const [loading, setLoading] = useState(true);
-  const [theme,  setTheme]    = useState(
-    () => document.documentElement.classList.contains("dark") ? "dark" : "light"
-  );
-
-  const applyTheme = (t) => {
-    document.documentElement.classList.toggle("dark", t === "dark");
-    localStorage.setItem("theme", t);
-    setTheme(t);
-  };
-
-  useEffect(() => {
-    // Appliquer le thème sauvegardé au montage
-    const saved = localStorage.getItem("theme") ?? "dark";
-    applyTheme(saved);
-  }, []);
 
   useEffect(() => {
     client.get("/settings").then(({ data }) => {
@@ -52,67 +37,37 @@ export default function Settings() {
     setSaving(true);
     const payload = {};
     Object.entries(form).forEach(([k, v]) => {
-      if (v !== "") payload[k] = v;
+      if (v !== "" && k !== "ADMIN_PASSWORD") payload[k] = v;
     });
-    delete payload.ADMIN_PASSWORD;
     if (form.ADMIN_PASSWORD) payload.ADMIN_PASSWORD = form.ADMIN_PASSWORD;
     try {
       await client.patch("/settings", payload);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-    } catch(e) {
-      alert("Erreur lors de la sauvegarde: " + (e.response?.data?.detail || e.message));
+    } catch(err) {
+      alert("Erreur: " + (err.response?.data?.detail || err.message));
     } finally { setSaving(false); }
   };
 
   const Field = ({ label, name, type = "text", placeholder = "" }) => (
     <div>
-      <label className="block text-xs text-gray-500 dark:text-gray-500 mb-1.5">{label}</label>
+      <label className="block text-xs text-gray-500 mb-1.5">{label}</label>
       <input
-        type={type}
-        value={form[name] || ""}
-        placeholder={placeholder}
+        type={type} value={form[name] || ""} placeholder={placeholder}
         onChange={e => setForm(f => ({ ...f, [name]: e.target.value }))}
-        className="w-full bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600"
+        className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500/60 transition-colors placeholder:text-gray-600"
       />
     </div>
   );
 
   if (loading) return (
-    <div className="flex items-center justify-center h-64 text-gray-400 text-sm">Chargement…</div>
+    <div className="flex items-center justify-center h-64 text-gray-500 text-sm">Chargement…</div>
   );
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">
-      <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">Paramètres</h1>
-
+      <h1 className="text-lg font-bold">Paramètres</h1>
       <form onSubmit={handleSave} className="space-y-5">
-
-        {/* Thème */}
-        <section className="card p-4">
-          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-4">Apparence</h2>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-gray-700 dark:text-gray-300">Thème</span>
-            <div className="flex gap-2 ml-auto">
-              <button type="button" onClick={() => applyTheme("dark")}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                  theme === "dark"
-                    ? "bg-blue-500/15 text-blue-500 border-blue-500/30"
-                    : "bg-transparent text-gray-500 border-gray-200 dark:border-gray-700 hover:text-gray-900 dark:hover:text-gray-200"
-                }`}>
-                <Moon size={13}/> Sombre
-              </button>
-              <button type="button" onClick={() => applyTheme("light")}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                  theme === "light"
-                    ? "bg-amber-500/15 text-amber-600 border-amber-500/30"
-                    : "bg-transparent text-gray-500 border-gray-200 dark:border-gray-700 hover:text-gray-900 dark:hover:text-gray-200"
-                }`}>
-                <Sun size={13}/> Clair
-              </button>
-            </div>
-          </div>
-        </section>
 
         {/* Imprimante */}
         <section className="card p-4">
@@ -120,22 +75,21 @@ export default function Settings() {
             <Wifi size={13}/> Imprimante
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Field label="Adresse IP"      name="PRINTER_IP"          placeholder="192.168.1.xxx" />
-            <Field label="Numéro de série" name="PRINTER_ID"          placeholder="31B…" />
+            <Field label="Adresse IP"      name="PRINTER_IP"   placeholder="192.168.1.xxx" />
+            <Field label="Numéro de série" name="PRINTER_ID"   placeholder="31B…" />
             <div>
-              <label className="block text-xs text-gray-500 dark:text-gray-500 mb-1.5">Code d'accès</label>
+              <label className="block text-xs text-gray-500 mb-1.5">Code d&apos;accès</label>
               <input
-                type="password"
-                value={form.PRINTER_ACCESS_CODE}
+                type="password" value={form.PRINTER_ACCESS_CODE}
                 placeholder={accessCodeSet ? "Laisser vide pour conserver" : "Code d'accès LAN"}
                 onChange={e => setForm(f => ({ ...f, PRINTER_ACCESS_CODE: e.target.value }))}
-                className="w-full bg-gray-100 dark:bg-white/[0.04] border border-gray-200 dark:border-white/[0.08] rounded-xl px-3 py-2 text-sm text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500 transition-colors placeholder:text-gray-400 dark:placeholder:text-gray-600"
+                className="w-full bg-white/[0.04] border border-white/[0.08] rounded-xl px-3 py-2 text-sm text-gray-100 focus:outline-none focus:border-blue-500/60 transition-colors placeholder:text-gray-600"
               />
               {accessCodeSet && !form.PRINTER_ACCESS_CODE && (
                 <p className="text-[10px] text-green-500 mt-1">✓ Code configuré</p>
               )}
             </div>
-            <Field label="Nom affiché"     name="PRINTER_NAME"        placeholder="Mon H2C" />
+            <Field label="Nom affiché" name="PRINTER_NAME" placeholder="Mon H2C" />
           </div>
         </section>
 
