@@ -22,7 +22,10 @@ export default function Settings() {
   const [saved,  setSaved]  = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const [version, setVersion] = useState(null);
+
   useEffect(() => {
+    client.get("/version").then(({ data }) => setVersion(data)).catch(() => {});
     client.get("/settings").then(({ data }) => {
       setAccessCodeSet(data.PRINTER_ACCESS_CODE_SET ?? false);
       setForm(f => ({
@@ -141,6 +144,13 @@ export default function Settings() {
         </section>
 
         <ImportSection />
+
+        {/* Version */}
+        {version && (
+          <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
+            Version: {version.commit?.slice(0,8) || "dev"} — {version.build_date?.slice(0,10) || "?"}
+          </p>
+        )}
 
         <button type="submit" disabled={saving}
           style={{ display:"inline-flex", alignItems:"center", gap:8, background:"#3b82f6", color:"white", border:"none", padding:"10px 20px", borderRadius:12, fontSize:14, fontWeight:500, cursor:"pointer", opacity: saving ? 0.6 : 1, transition:"opacity 0.15s, background 0.15s" }}
