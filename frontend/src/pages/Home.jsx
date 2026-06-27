@@ -142,15 +142,11 @@ function PrinterTemps({ status }) {
 
 // ── Vortek Rack ────────────────────────────────────────────────────────────
 
-const HOLDER_POS = { 1: "Rang A", 2: "Rang B", 3: "Centre" };
-
-// ── Vortek Rack ────────────────────────────────────────────────────────────
-
 function WearSegs({ wear }) {
   const filled = Math.min(5, Math.max(0, Math.round((wear / 255) * 5)));
   const color  = filled <= 2 ? "#22c55e" : filled <= 3 ? "#f59e0b" : "#ef4444";
   return (
-    <div className="flex gap-0.5 mt-1">
+    <div className="flex gap-0.5">
       {[1,2,3,4,5].map(i => (
         <div key={i} className="h-1 flex-1 rounded-full"
           style={{ backgroundColor: i <= filled ? color : "rgba(255,255,255,0.08)" }} />
@@ -159,135 +155,157 @@ function WearSegs({ wear }) {
   );
 }
 
-function HotendCard({ slot, slotNum, isOnHead }) {
+function HotendMini({ slot, slotNum, isOnHead, isSelected, onClick }) {
   const color = hexCss(slot.color);
   const empty = slot.empty || !slot.filament_id;
   return (
+    <button onClick={onClick}
+      className={clsx(
+        "rounded-xl p-2 border flex flex-col gap-1 items-center transition-all duration-200 hover:scale-[1.03] active:scale-95",
+        isOnHead
+          ? "border-blue-500/50 bg-blue-500/5"
+          : isSelected
+          ? "border-white/25 bg-white/[0.06]"
+          : "border-white/[0.07] bg-white/[0.03]"
+      )}>
+      {isOnHead && (
+        <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-xl bg-gradient-to-r from-blue-500 to-cyan-400" />
+      )}
+      <div className="w-6 h-6 rounded-md ring-1 ring-white/10"
+        style={{ backgroundColor: color || (empty ? "rgba(255,255,255,0.04)" : "#374151") }} />
+      <span className="text-[9px] mono font-bold text-gray-500">{slotNum}</span>
+    </button>
+  );
+}
+
+function HotendDetail({ slot, slotNum, isOnHead }) {
+  const color = hexCss(slot.color);
+  const empty = slot.empty || !slot.filament_id;
+  if (!slot) return null;
+  return (
     <div className={clsx(
-      "rounded-xl p-2.5 border flex flex-col gap-1.5 relative",
-      isOnHead
-        ? "border-blue-500/40 bg-blue-500/5 shadow shadow-blue-500/10"
-        : "border-white/[0.07] bg-white/[0.03]"
+      "rounded-xl p-4 border h-full flex flex-col gap-3 transition-all",
+      isOnHead ? "border-blue-500/40 bg-blue-500/5" : "border-white/[0.08] bg-white/[0.03]"
     )}>
       {isOnHead && (
         <div className="absolute inset-x-0 top-0 h-0.5 rounded-t-xl bg-gradient-to-r from-blue-500 to-cyan-400" />
       )}
-      <div className="flex items-center gap-1.5">
-        <div className="w-4 h-4 rounded shrink-0 ring-1 ring-white/10"
-          style={{ backgroundColor: color || (empty ? "rgba(255,255,255,0.04)" : "#374151") }} />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] mono font-semibold text-gray-500">{slotNum}</span>
-            {isOnHead && <span className="text-[8px] text-blue-400 font-bold">tête</span>}
+      {/* Couleur + numéro */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl ring-1 ring-white/10 shrink-0"
+          style={{ backgroundColor: color || (empty ? "#111" : "#374151") }} />
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-bold mono">Slot {slotNum}</span>
+            {isOnHead && (
+              <span className="text-[9px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded-full font-semibold">
+                Sur la tête
+              </span>
+            )}
           </div>
-          <p className="text-[8px] text-gray-700 mono">{slot.nozzle_type || "—"} {slot.diameter}mm</p>
+          <p className="text-[10px] text-gray-500 mono">{slot.nozzle_type || "—"} · {slot.diameter}mm</p>
         </div>
       </div>
-      {empty
-        ? <p className="text-[9px] text-gray-700 italic">Vide</p>
-        : <>
-            <p className="text-[9px] mono text-gray-400 truncate">{slot.filament_id}</p>
+
+      {/* Filament */}
+      {empty ? (
+        <p className="text-xs text-gray-600 italic">Slot vide</p>
+      ) : (
+        <>
+          <div>
+            <p className="text-[10px] text-gray-500 mb-1">Filament</p>
+            <p className="text-sm font-medium mono text-gray-200">{slot.filament_id}</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-gray-500 mb-1">Usure</p>
             <WearSegs wear={slot.wear} />
-          </>
-      }
+            <p className="text-[10px] text-gray-600 mono mt-1">
+              {Math.round((slot.wear / 255) * 100)}%
+            </p>
+          </div>
+          {slot.print_time > 0 && (
+            <div>
+              <p className="text-[10px] text-gray-500 mb-1">Temps cumulé</p>
+              <p className="text-xs mono text-gray-400">{Math.round(slot.print_time / 60)}h</p>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
 
 function VortekRack({ rack }) {
-  const [open, setOpen] = useState(true);
+  const [selectedIdx, setSelectedIdx] = useState(0);
   if (!rack?.hotends?.length) return null;
 
   const h = rack.hotends;
-  // On affiche les hotends dans l'ordre reçu du firmware (index 0-N)
-  // La numérotation UI = index + 1 (en attendant confirmation du mapping physique)
-  // src_id pointe vers un hotend par son hardware id
-  const onHeadIdx = h.findIndex(slot => slot.id === rack.active_id);
-  const onHead    = onHeadIdx >= 0 ? h[onHeadIdx] : null;
-  const filled    = h.filter(s => !s.empty && s.filament_id);
-  const isMoving  = rack.holder_job !== 0;
-
-  // Layout: 6 premiers en grille 3x2, le 7e séparé si présent
-  const mainSlots  = h.slice(0, 6);
-  const extraSlots = h.slice(6);
+  // 6 slots max dans le rack, layout 2 rangées de 3
+  const rack6    = h.slice(0, 6);
+  const topRow   = rack6.filter((_, i) => i % 2 === 0); // idx 0,2,4 → slots 1,3,5
+  const botRow   = rack6.filter((_, i) => i % 2 === 1); // idx 1,3,5 → slots 2,4,6
+  const selected = h[selectedIdx] ?? h[0];
+  const isMoving = rack.holder_job !== 0;
 
   return (
-    <div className="card overflow-hidden">
-      <button onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center gap-3 p-3 hover:bg-white/[0.02] transition-colors">
-        <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Rack Vortek</span>
-        {isMoving && (
-          <span className="text-[9px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full animate-pulse">
-            En mouvement
-          </span>
-        )}
-        <div className="flex items-center gap-3 ml-auto text-[10px] text-gray-600">
-          <span className="mono">{filled.length}/{h.length} chargés</span>
-          {open ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
+    <div className="card p-4">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Rack Vortek</span>
+          {isMoving && (
+            <span className="text-[9px] bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full animate-pulse">
+              En mouvement
+            </span>
+          )}
         </div>
-      </button>
+        <span className="text-[10px] text-gray-600 mono">
+          {h.filter(s => !s.empty && s.filament_id).length}/{rack6.length} chargés
+        </span>
+      </div>
 
-      {open && (
-        <div className="p-3 pt-0 space-y-2">
-          {/* Grille 3x2 */}
-          <div className="grid grid-cols-3 gap-1.5">
-            {mainSlots.map((slot, i) => (
-              <HotendCard
+      {/* Layout: grille à gauche + détail à droite */}
+      <div className="flex gap-3">
+        {/* Grille 2×3 */}
+        <div className="flex flex-col gap-1.5 shrink-0">
+          <div className="flex gap-1.5">
+            {topRow.map((slot, i) => (
+              <HotendMini
                 key={slot.id}
                 slot={slot}
-                slotNum={i + 1}
+                slotNum={i * 2 + 1}
                 isOnHead={slot.id === rack.active_id}
+                isSelected={selectedIdx === i * 2}
+                onClick={() => setSelectedIdx(i * 2)}
               />
             ))}
           </div>
-
-          {/* Slots supplémentaires (index 6+) */}
-          {extraSlots.length > 0 && (
-            <div className="grid grid-cols-3 gap-1.5">
-              {extraSlots.map((slot, i) => (
-                <HotendCard
-                  key={slot.id}
-                  slot={slot}
-                  slotNum={mainSlots.length + i + 1}
-                  isOnHead={slot.id === rack.active_id}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Résumé hotend actif si trouvé */}
-          {onHead && !onHead.empty && (
-            <div className="flex items-center gap-2 px-2.5 py-2 bg-blue-500/5 border border-blue-500/15 rounded-lg">
-              <div className="w-2.5 h-2.5 rounded-sm shrink-0 ring-1 ring-white/10"
-                style={{ backgroundColor: hexCss(onHead.color) || "#374151" }} />
-              <p className="text-[11px] text-gray-400 flex-1 min-w-0">
-                Sur la tête —
-                <span className="text-gray-200 font-medium mono ml-1">
-                  {onHead.filament_id} {onHead.diameter}mm {onHead.nozzle_type}
-                </span>
-              </p>
-              {onHead.print_time > 0 && (
-                <span className="text-[10px] text-gray-600 mono shrink-0">
-                  {Math.round(onHead.print_time / 60)}h
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* src_id sans match dans la liste */}
-          {!onHead && rack.active_id >= 0 && (
-            <div className="px-2.5 py-2 border border-white/[0.05] rounded-lg">
-              <p className="text-[10px] text-gray-600 mono">
-                Actif: id #{rack.active_id} — non présent dans le rack
-              </p>
-            </div>
-          )}
+          <div className="flex gap-1.5">
+            {botRow.map((slot, i) => (
+              <HotendMini
+                key={slot.id}
+                slot={slot}
+                slotNum={i * 2 + 2}
+                isOnHead={slot.id === rack.active_id}
+                isSelected={selectedIdx === i * 2 + 1}
+                onClick={() => setSelectedIdx(i * 2 + 1)}
+              />
+            ))}
+          </div>
         </div>
-      )}
+
+        {/* Détail du slot sélectionné */}
+        <div className="flex-1 relative">
+          <HotendDetail
+            slot={selected}
+            slotNum={selectedIdx + 1}
+            isOnHead={selected?.id === rack.active_id}
+          />
+        </div>
+      </div>
     </div>
   );
 }
-
 
 // ── Page Home ──────────────────────────────────────────────────────────────
 
