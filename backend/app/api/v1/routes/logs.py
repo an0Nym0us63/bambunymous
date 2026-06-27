@@ -11,12 +11,14 @@ _RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})[,.]\d+ (\w+) (\S+) (.*
 
 # Logs à exclure (trop verbeux / inutiles dans le journal)
 _EXCLUDE = (
-    "/api/v1/logs",     # auto-polling
-    "/api/v1/printer",  # polling printer status
+    "/api/v1/logs",
+    "/api/v1/printer",
     "/healthz",
     "/favicon",
     "/assets/",
 )
+# Loggers trop verbeux à exclure du journal
+_EXCLUDE_NAMES = ("aiosqlite", "NullPool", "Engine", "sqlalchemy")
 
 
 def _parse(line: str):
@@ -26,6 +28,8 @@ def _parse(line: str):
     dt, level, name, msg = m.groups()
     # Exclure les logs d'accès HTTP polluants
     if any(x in msg for x in _EXCLUDE):
+        return None
+    if any(name.startswith(x) for x in _EXCLUDE_NAMES):
         return None
     return {
         "ts":    dt[11:19],
