@@ -2,9 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { RefreshCw, Trash2, Play, Square, Filter } from "lucide-react";
 import client from "../api/client";
 
-const LEVEL_COLOR = { DEBUG:"#64748b", INFO:"#3b82f6", WARNING:"#f59e0b", ERROR:"#ef4444" };
+const LEVEL_COLOR = { DEBUG:"#64748b", INFO:"#3b82f6", WARNING:"#f59e0b", ERROR:"#ef4444", CRITICAL:"#dc2626" };
 const LEVELS = ["DEBUG","INFO","WARNING","ERROR"];
-const LEVEL_ORDER = { DEBUG:0, INFO:1, WARNING:2, ERROR:3 };
+const LEVEL_ORDER = { DEBUG:0, INFO:1, WARNING:2, ERROR:3, CRITICAL:4 };
 
 export default function Logs() {
   const [logs, setLogs]         = useState([]);
@@ -12,23 +12,18 @@ export default function Logs() {
   const [minLevel, setMinLevel] = useState("INFO");
   const [live, setLive]         = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [total, setTotal]       = useState(0);
   const [status, setStatus]     = useState("");
-  const bottomRef  = useRef();
+  const bottomRef   = useRef();
   const intervalRef = useRef();
 
   const load = useCallback(async () => {
     try {
       const { data } = await client.get("/logs?limit=500");
       setLogs(data.logs ?? []);
-      setTotal(data.total ?? 0);
-      if (data.error) {
-        setStatus("⚠ " + data.error);
-      } else {
-        setStatus(`${data.total ?? 0} lignes dans le fichier`);
-      }
+      if (data.error) setStatus("⚠ " + data.error);
+      else setStatus(`${data.total ?? 0} entrées`);
     } catch(e) {
-      setStatus("⚠ Erreur: " + (e.response?.data?.detail || e.message));
+      setStatus("⚠ " + (e.response?.data?.detail || e.message));
     }
   }, []);
 
@@ -38,19 +33,13 @@ export default function Logs() {
     if (autoScroll) bottomRef.current?.scrollIntoView({ behavior:"smooth" });
   }, [logs, autoScroll]);
 
-  const startLive = () => {
-    setLive(true);
-    intervalRef.current = setInterval(load, 1000);
-  };
-  const stopLive = () => {
-    setLive(false);
-    clearInterval(intervalRef.current);
-  };
+  const startLive = () => { setLive(true); intervalRef.current = setInterval(load, 2000); };
+  const stopLive  = () => { setLive(false); clearInterval(intervalRef.current); };
   useEffect(() => () => clearInterval(intervalRef.current), []);
 
   const clearLogs = async () => {
     await client.delete("/logs");
-    setLogs([]); setTotal(0); setStatus("Fichier vidé");
+    setLogs([]); setStatus("Vidé");
   };
 
   const minIdx = LEVEL_ORDER[minLevel] ?? 0;
@@ -68,23 +57,22 @@ export default function Logs() {
       border:"1px solid var(--border)",
       background: active ? "#3b82f6" : "var(--surface2)",
       color: active ? "white" : "var(--text2)",
-    }}>
-      {children}
-    </button>
+    }}>{children}</button>
   );
 
   return (
     <div style={{ maxWidth:1000, margin:"0 auto", display:"flex", flexDirection:"column", gap:12, height:"calc(100dvh - 100px)" }}>
 
+      {/* Header */}
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Journal</h1>
-          {status && <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{status}</span>}
+          <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{status}</span>
           {live && <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"#22c55e" }}>
-            <span style={{ width:6, height:6, borderRadius:"50%", background:"#22c55e", display:"inline-block", animation:"livePulse 2s infinite" }}/>Live
+            <span style={{ width:6, height:6, borderRadius:"50%", background:"#22c55e", display:"inline-block", animation:"livePulse 2s infinite" }}/> Live
           </span>}
         </div>
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+        <div style={{ display:"flex", gap:6 }}>
           <Btn onClick={load}><RefreshCw size={13}/> Actualiser</Btn>
           {live ? <Btn onClick={stopLive} active><Square size={13}/> Stop</Btn>
                 : <Btn onClick={startLive}><Play size={13}/> Live</Btn>}
@@ -92,6 +80,7 @@ export default function Logs() {
         </div>
       </div>
 
+      {/* Filtres */}
       <div className="card" style={{ padding:"10px 12px", display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
         <Filter size={13} style={{ color:"var(--muted)" }}/>
         <input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Filtrer…"
@@ -111,24 +100,25 @@ export default function Logs() {
         </label>
       </div>
 
-      <div className="card" style={{ flex:1, overflowY:"auto", padding:8 }}>
-        {filtered.length === 0 ? (
-          <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0", fontSize:13 }}>
-            {logs.length === 0 ? "Aucun log — vérifiez que le fichier /data/bambunymous.log existe" : "Aucun résultat pour ce filtre"}
-          </p>
-        ) : filtered.map((l, i) => (
-          <div key={i} style={{
-            display:"grid", gridTemplateColumns:"64px 80px 100px 1fr",
-            gap:8, padding:"2px 8px", borderRadius:4,
-            background: l.level==="ERROR" ? "rgba(239,68,68,0.06)" : l.level==="WARNING" ? "rgba(245,158,11,0.05)" : "transparent",
-            fontFamily:"JetBrains Mono, monospace", fontSize:11, alignItems:"start",
-          }}>
-            <span style={{ color:"var(--muted)" }}>{l.ts}</span>
-            <span style={{ color:LEVEL_COLOR[l.level]||"var(--text2)", fontWeight:600 }}>{l.level}</span>
-            <span style={{ color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.name}</span>
-            <span style={{ color:"var(--text)", wordBreak:"break-word" }}>{l.msg}</span>
-          </div>
-        ))}
+      {/* Logs */}
+      <div className="card" style={{ flex:1, overflowY:"auto", padding:8, fontFamily:"JetBrains Mono, monospace", fontSize:11 }}>
+        {filtered.length === 0
+          ? <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0", fontSize:13 }}>Aucun log</p>
+          : filtered.map((l, i) => (
+            <div key={i} style={{
+              display:"flex", gap:8, padding:"3px 6px", borderRadius:4, alignItems:"baseline",
+              background: l.level==="ERROR"||l.level==="CRITICAL" ? "rgba(239,68,68,0.07)"
+                        : l.level==="WARNING" ? "rgba(245,158,11,0.06)" : "transparent",
+              borderLeft: `2px solid ${LEVEL_COLOR[l.level]||"transparent"}`,
+              marginBottom:1,
+            }}>
+              <span style={{ color:"var(--muted)", flexShrink:0, minWidth:60 }}>{l.ts}</span>
+              <span style={{ color:LEVEL_COLOR[l.level]||"var(--text2)", fontWeight:700, flexShrink:0, minWidth:56 }}>{l.level}</span>
+              <span style={{ color:"var(--muted)", flexShrink:0, minWidth:64, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.name}</span>
+              <span style={{ color:"var(--text)", flex:1, wordBreak:"break-word", lineHeight:1.5 }}>{l.msg}</span>
+            </div>
+          ))
+        }
         <div ref={bottomRef}/>
       </div>
     </div>
