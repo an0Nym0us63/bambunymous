@@ -24,14 +24,15 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Créer /data et installer le FileHandler maintenant que /data existe
     Path(settings.DATA_DIR).mkdir(parents=True, exist_ok=True)
     Path(settings.UPLOADS_DIR).mkdir(parents=True, exist_ok=True)
+    # Ajouter FileHandler sur TOUS les loggers existants (uvicorn les a déjà créés)
     _fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
     _fh.setFormatter(_log_fmt)
     _fh.setLevel(logging.DEBUG)
-    root = logging.getLogger()
-    root.addHandler(_fh)
+    for _name in ("", "uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "app"):
+        _lg = logging.getLogger(_name)
+        _lg.addHandler(_fh)
     logger.info(f"BambuNymous starting — version {VERSION}")
     await init_db()
     await mqtt_manager.start()
