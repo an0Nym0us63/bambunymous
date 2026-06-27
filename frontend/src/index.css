@@ -4,60 +4,32 @@
 
 @layer base {
   * { box-sizing: border-box; }
-
-  :root {
-    --bg:        #0f1117;
-    --bg-card:   rgba(255,255,255,0.04);
-    --bg-sm:     rgba(255,255,255,0.05);
-    --border:    rgba(255,255,255,0.08);
-    --text-1:    #f1f5f9;
-    --text-2:    #94a3b8;
-    --text-3:    #475569;
-    --text-4:    #64748b;
-    --sidebar-bg: #0a0d13;
-  }
-
-  .light {
-    --bg:        #f0f4f8;
-    --bg-card:   rgba(255,255,255,0.90);
-    --bg-sm:     rgba(255,255,255,0.95);
-    --border:    rgba(0,0,0,0.09);
-    --text-1:    #0f172a;
-    --text-2:    #334155;
-    --text-3:    #64748b;
-    --text-4:    #94a3b8;
-    --sidebar-bg: #e8edf3;
-  }
-
-  body {
-    background-color: var(--bg);
-    color: var(--text-1);
-    @apply antialiased;
-    transition: background-color 0.3s, color 0.3s;
-  }
-
+  html { transition: background-color 0.25s, color 0.25s; }
+  body { @apply bg-gray-50 text-gray-900 antialiased; }
+  html.dark body { @apply bg-[#0f1117] text-gray-100; }
   ::-webkit-scrollbar { width: 5px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+  ::-webkit-scrollbar-track { @apply bg-transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-gray-300 dark:bg-gray-700 rounded-full; }
+}
+
+@layer components {
+  /* Carte principale */
+  .card {
+    @apply bg-white border border-gray-200 rounded-2xl;
+    @apply dark:bg-white/[0.04] dark:border-white/[0.08];
+  }
+  /* Carte petite */
+  .card-sm {
+    @apply bg-white/80 border border-gray-200 rounded-xl;
+    @apply dark:bg-white/[0.05] dark:border-white/[0.07];
+  }
+  /* Sidebar */
+  .sidebar {
+    @apply bg-gray-100 border-r border-gray-200;
+    @apply dark:bg-[#0a0d13] dark:border-white/[0.06];
+  }
 }
 
 @layer utilities {
-  .card {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: 1rem;
-  }
-  .card-sm {
-    background: var(--bg-sm);
-    border: 1px solid var(--border);
-    border-radius: 0.75rem;
-  }
-  .bg-base   { background-color: var(--bg); }
-  .bg-sidebar{ background-color: var(--sidebar-bg); }
-  .text-t1   { color: var(--text-1); }
-  .text-t2   { color: var(--text-2); }
-  .text-t3   { color: var(--text-3); }
-  .text-t4   { color: var(--text-4); }
-  .border-theme { border-color: var(--border); }
   .mono { font-family: "JetBrains Mono", monospace; }
 }
