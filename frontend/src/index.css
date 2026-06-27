@@ -5,50 +5,59 @@
 @layer base {
   * { box-sizing: border-box; }
 
-  /* Variables thème sombre (défaut) */
   :root {
-    --bg-base:      #0f1117;
-    --bg-card:      rgba(255,255,255,0.04);
-    --bg-card-sm:   rgba(255,255,255,0.05);
-    --border-card:  rgba(255,255,255,0.08);
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --text-muted:   #475569;
+    --bg:        #0f1117;
+    --bg-card:   rgba(255,255,255,0.04);
+    --bg-sm:     rgba(255,255,255,0.05);
+    --border:    rgba(255,255,255,0.08);
+    --text-1:    #f1f5f9;
+    --text-2:    #94a3b8;
+    --text-3:    #475569;
+    --text-4:    #64748b;
+    --sidebar-bg: #0a0d13;
   }
 
-  /* Thème clair */
-  .light-theme {
-    --bg-base:      #f1f5f9;
-    --bg-card:      rgba(255,255,255,0.85);
-    --bg-card-sm:   rgba(255,255,255,0.9);
-    --border-card:  rgba(0,0,0,0.08);
-    --text-primary: #0f172a;
-    --text-secondary: #475569;
-    --text-muted:   #94a3b8;
+  .light {
+    --bg:        #f0f4f8;
+    --bg-card:   rgba(255,255,255,0.90);
+    --bg-sm:     rgba(255,255,255,0.95);
+    --border:    rgba(0,0,0,0.09);
+    --text-1:    #0f172a;
+    --text-2:    #334155;
+    --text-3:    #64748b;
+    --text-4:    #94a3b8;
+    --sidebar-bg: #e8edf3;
   }
 
   body {
-    background-color: var(--bg-base);
-    color: var(--text-primary);
+    background-color: var(--bg);
+    color: var(--text-1);
     @apply antialiased;
+    transition: background-color 0.3s, color 0.3s;
   }
 
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { @apply bg-gray-700 rounded-full; }
-  .light-theme ::-webkit-scrollbar-thumb { @apply bg-gray-300; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
 }
 
 @layer utilities {
   .card {
     background: var(--bg-card);
-    border: 1px solid var(--border-card);
+    border: 1px solid var(--border);
     border-radius: 1rem;
   }
   .card-sm {
-    background: var(--bg-card-sm);
-    border: 1px solid var(--border-card);
+    background: var(--bg-sm);
+    border: 1px solid var(--border);
     border-radius: 0.75rem;
   }
+  .bg-base   { background-color: var(--bg); }
+  .bg-sidebar{ background-color: var(--sidebar-bg); }
+  .text-t1   { color: var(--text-1); }
+  .text-t2   { color: var(--text-2); }
+  .text-t3   { color: var(--text-3); }
+  .text-t4   { color: var(--text-4); }
+  .border-theme { border-color: var(--border); }
   .mono { font-family: "JetBrains Mono", monospace; }
 }
