@@ -188,7 +188,6 @@ class MQTTManager:
             extruder_state = extruder.get("state", 0)
             active_nozzle_idx = (extruder_state >> 4) & 0xF
             extruder_infos = extruder.get("info", [])
-            logger.info(f"[MQTT EXTRUDER] state={extruder_state:#x} active_idx={active_nozzle_idx} entries={[e.get('id') for e in extruder_infos]}")
             for ext in extruder_infos:
                 eid = int(ext.get("id", 0))
                 if eid >= len(state.nozzles):
@@ -203,7 +202,7 @@ class MQTTManager:
                     n.temp   = float(temp_raw)
                     n.target = 0.0
                 n.active = (eid == active_nozzle_idx)
-                logger.info(f"[MQTT NOZZLE id={eid}] raw={temp_raw} → {n.temp}°C target={n.target}°C active={n.active}")
+
                 changed = True
 
         # Fallback legacy (autres modèles)
@@ -272,8 +271,9 @@ class MQTTManager:
                 rack.holder_pos = holder.get("pos", 0)
                 rack.holder_stat = holder.get("stat", 0)
                 rack.holder_job = holder.get("job", 0)
-                for idx, n in enumerate(nozzle["info"]):
-                    slot = HotendSlot(
+                exist_bits = nozzle.get("exist", 0)
+                for n in nozzle["info"]:
+                    rack.hotends.append(HotendSlot(
                         id=int(n.get("id", 0)),
                         color=(n.get("color_m") or "").strip(),
                         filament_id=n.get("fila_id", ""),
@@ -283,26 +283,14 @@ class MQTTManager:
                         wear=float(n.get("wear", 0)),
                         print_time=int(n.get("p_t", 0)),
                         empty=not bool((n.get("fila_id") or "").strip()),
-                    )
-                    rack.hotends.append(slot)
-                    logger.info(
-                        f"[VORTEK slot idx={idx}] id={slot.id} "
-                        f"fila={slot.filament_id or 'VIDE'} "
-                        f"color={slot.color} "
-                        f"diam={slot.diameter}mm type={slot.nozzle_type} "
-                        f"wear={slot.wear:.0f} p_t={slot.print_time}"
-                    )
-                logger.info(
-                    f"[VORTEK RACK] {len(rack.hotends)} slots | "
-                    f"src_id={rack.active_id} tar_id={rack.target_id} "
-                    f"state={rack.state} holder_pos={rack.holder_pos} "
-                    f"holder_job={rack.holder_job}"
-                )
-                # Log holder block brut pour comprendre les positions
-                holder_raw = device.get("holder", {})
-                logger.info(f"[VORTEK HOLDER RAW] {holder_raw}")
-                # Log nozzle block complet brut
-                logger.info(f"[VORTEK NOZZLE RAW] src={nozzle.get('src_id')} tar={nozzle.get('tar_id')} exist={nozzle.get('exist')} state={nozzle.get('state')}")
+                    ))
+                # src_id = hotend actuellement sur la tête
+                # S'il n'est PAS dans exist_bits → il est sorti du rack (sur la tête)
+                src_in_rack = bool(exist_bits & (1 << src_id)) if src_id >= 0 else False
+                rack.head_id = src_id if not src_in_rack else -1
+                rack.head_in_rack_idx = next(
+                    (i for i, h in enumerate(rack.hotends) if h.id == src_id), -1
+                ) if src_in_rack else -1
                 state.hotend_rack = rack
                 changed = True
 
