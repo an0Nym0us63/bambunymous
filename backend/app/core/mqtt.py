@@ -286,10 +286,10 @@ class MQTTManager:
                     ))
                 # src_id = hotend actuellement sur la tête
                 # S'il n'est PAS dans exist_bits → il est sorti du rack (sur la tête)
-                src_in_rack = bool(exist_bits & (1 << src_id)) if src_id >= 0 else False
+                src_in_rack = bool(exist_bits & (1 << src_id)) if 0 <= src_id < 64 else False
                 rack.head_id = src_id if not src_in_rack else -1
                 rack.head_in_rack_idx = next(
-                    (i for i, h in enumerate(rack.hotends) if h.id == src_id), -1
+                    (idx for idx, hh in enumerate(rack.hotends) if hh.id == src_id), -1
                 ) if src_in_rack else -1
                 state.hotend_rack = rack
                 changed = True
