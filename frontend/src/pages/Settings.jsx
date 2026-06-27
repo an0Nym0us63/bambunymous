@@ -145,13 +145,6 @@ export default function Settings() {
 
         <ImportSection />
 
-        {/* Version */}
-        {version && (
-          <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
-            Version: {version.commit?.slice(0,8) || "dev"} — {version.build_date?.slice(0,10) || "?"}
-          </p>
-        )}
-
         <button type="submit" disabled={saving}
           style={{ display:"inline-flex", alignItems:"center", gap:8, background:"#3b82f6", color:"white", border:"none", padding:"10px 20px", borderRadius:12, fontSize:14, fontWeight:500, cursor:"pointer", opacity: saving ? 0.6 : 1, transition:"opacity 0.15s, background 0.15s" }}
           onMouseEnter={e => { if(!saving) e.currentTarget.style.background="#2563eb"; }}
@@ -160,6 +153,12 @@ export default function Settings() {
           {saved ? "Sauvegardé ✓" : "Sauvegarder"}
         </button>
       </form>
+
+      {version && (
+        <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace", textAlign:"center", marginTop:8 }}>
+          v{version.commit?.slice(0,8) || "dev"} · {version.build_date?.slice(0,10) || "?"}
+        </p>
+      )}
     </div>
   );
 }
