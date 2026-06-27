@@ -1,21 +1,30 @@
 import logging
-from fastapi import APIRouter, Depends, Query
-from ....core.log_buffer import LOG_BUFFER
+from fastapi import APIRouter, Depends
 from .auth import get_current_user
 
 router = APIRouter()
-logger = logging.getLogger(__name__)
 
+# Import du buffer via le handler installé dans main.py
+# On accède au buffer via le handler stocké dans le root logger
+def _get_buffer():
+    import main as _main
+    return list(_main.LOG_HANDLER.buf)
 
 @router.get("")
-async def get_logs(limit: int = 300, _: str = Depends(get_current_user)):
-    # Test que le buffer fonctionne
-    logger.info("[LOGS] endpoint appelé — buffer size=%d", len(LOG_BUFFER))
-    entries = list(LOG_BUFFER)[-limit:]
-    return {"logs": entries, "total": len(LOG_BUFFER)}
+async def get_logs(limit: int = 500, _: str = Depends(get_current_user)):
+    try:
+        import main as _main
+        entries = list(_main.LOG_HANDLER.buf)[-limit:]
+        return {"logs": entries, "total": len(_main.LOG_HANDLER.buf)}
+    except Exception as e:
+        return {"logs": [{"ts":"--:--:--","level":"ERROR","name":"logs","msg":str(e)}], "total": 0}
 
 
 @router.delete("")
 async def clear_logs(_: str = Depends(get_current_user)):
-    LOG_BUFFER.clear()
+    try:
+        import main as _main
+        _main.LOG_HANDLER.buf.clear()
+    except Exception:
+        pass
     return {"ok": True}
