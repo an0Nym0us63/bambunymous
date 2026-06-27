@@ -183,27 +183,27 @@ class MQTTManager:
                 state.chamber_temp = float(ctc_temp)
                 changed = True
 
-            # Dual nozzle extruder
+            # Dual nozzle extruder (H2C)
+            # ha-bambulab: extruder.state → low 4 bits = nozzle count, next 4 bits = active nozzle index
             extruder = device.get("extruder", {})
+            extruder_state = extruder.get("state", 0)
+            active_nozzle_idx = (extruder_state >> 4) & 0xF  # bits 4-7 = active nozzle id (0=right, 1=left)
             for ext in extruder.get("info", []):
                 eid = int(ext.get("id", 0))
                 if eid >= len(state.nozzles):
-                    # Étendre si besoin
                     while len(state.nozzles) <= eid:
                         state.nozzles.append(NozzleTemp(id=len(state.nozzles)))
                 n = state.nozzles[eid]
-                # temp: int32 little-endian → b[0]=actuel, b[2]=target
+                # H2C encoding: low word = actuel°C, high word = target°C (ha-bambulab method)
                 temp_raw = ext.get("temp", 0)
                 if isinstance(temp_raw, int) and temp_raw > 0xFFFF:
-                    # H2C encoding: low word = actuel, high word = target (ha-bambulab method)
                     n.temp   = float(temp_raw & 0xFFFF)
                     n.target = float((temp_raw >> 16) & 0xFFFF)
                 elif isinstance(temp_raw, (int, float)) and temp_raw > 0:
-                    # Valeur directe (ex: nozzle inactif à 39°C)
                     n.temp   = float(temp_raw)
                     n.target = 0.0
-                # active: extruder 0 = toujours primaire sur H2C; sinon stat != 0
-                n.active = (eid == 0) or (ext.get("stat", 0) != 0)
+                # active: celui dont l'id correspond à active_nozzle_idx
+                n.active = (eid == active_nozzle_idx)
                 changed = True
 
         # Fallback legacy (autres modèles)
