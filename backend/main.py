@@ -7,6 +7,7 @@ from pathlib import Path
 import logging
 
 from app.core.config import settings
+from app.core.log_buffer import LOG_BUFFER  # noqa — installe le handler à l'import
 from app.db.session import init_db
 from app.api.v1 import router as api_router
 from app.core.mqtt import mqtt_manager
@@ -19,8 +20,6 @@ logging.basicConfig(
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    from app.core.log_buffer import install as install_log_buffer
-    install_log_buffer()
     Path(settings.DATA_DIR).mkdir(parents=True, exist_ok=True)
     Path(settings.UPLOADS_DIR).mkdir(parents=True, exist_ok=True)
     await init_db()
