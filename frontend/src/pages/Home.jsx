@@ -29,21 +29,35 @@ const STATUS_CFG = {
 
 function StatusBanner({ status }) {
   const [expanded, setExpanded] = useState(false);
-  const [snapUrl, setSnapUrl]   = useState(null);
-  const snapRef = useState(null);
 
   const isRunning = status?.status === "RUNNING";
   const cfg = STATUS_CFG[status?.status] ?? STATUS_CFG.IDLE;
   const pct = status?.progress ?? 0;
   const remain = fmtTime(status?.remaining_minutes);
 
-  // Rafraîchir le snapshot toutes les 3s quand déplié
+  // Caméra — même pattern que Spoolnymous: img.src change, inFlight flag
+  const camRef = useRef(null);
+  const timerRef = useRef(null);
+  const inFlightRef = useRef(false);
+
+  const stopCam = () => {
+    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+  };
+  const tickCam = () => {
+    if (inFlightRef.current || !camRef.current) return;
+    inFlightRef.current = true;
+    camRef.current.src = `/api/v1/camera/snapshot?t=${Date.now()}`;
+  };
+  const startCam = () => {
+    if (timerRef.current) return;
+    tickCam();
+    timerRef.current = setInterval(tickCam, 1200);
+  };
+
   useEffect(() => {
-    if (!expanded || !isRunning) return;
-    const refresh = () => setSnapUrl(`/api/v1/camera/snapshot?t=${Date.now()}`);
-    refresh();
-    const id = setInterval(refresh, 3000);
-    return () => clearInterval(id);
+    if (expanded && isRunning) startCam();
+    else stopCam();
+    return stopCam;
   }, [expanded, isRunning]);
 
   if (!status) return <div className="card" style={{ height:56, animation:"pulse 2s infinite" }} />;
@@ -91,22 +105,20 @@ function StatusBanner({ status }) {
       {/* Panneau déplié */}
       {expanded && isRunning && (
         <div style={{ borderTop:"1px solid var(--border)", padding:12, display:"flex", gap:12, flexWrap:"wrap" }}>
-          {/* Snapshot caméra */}
+          {/* Snapshot caméra — pattern Spoolnymous: img.src + inFlight */}
           <div style={{ flex:"1 1 200px", minWidth:0 }}>
-            {snapUrl ? (
-              <img src={snapUrl} alt="Camera"
-                style={{ width:"100%", borderRadius:8, display:"block",
-                  border:"1px solid var(--border)", background:"#000",
-                  minHeight:120, objectFit:"cover" }}
-                onError={() => setSnapUrl(null)}
-              />
-            ) : (
-              <div style={{ width:"100%", minHeight:120, borderRadius:8, background:"var(--surface2)",
-                border:"1px solid var(--border)", display:"flex", alignItems:"center",
-                justifyContent:"center", color:"var(--muted)", fontSize:12 }}>
-                Caméra indisponible
-              </div>
-            )}
+            <img ref={camRef} alt="Camera"
+              style={{ width:"100%", borderRadius:8, display:"block",
+                border:"1px solid var(--border)", background:"#111",
+                minHeight:120, objectFit:"cover" }}
+              onLoad={() => { inFlightRef.current = false; }}
+              onError={(e) => {
+                inFlightRef.current = false;
+                e.currentTarget.src = "data:image/svg+xml;utf8," + encodeURIComponent(
+                  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 225'><rect width='100%' height='100%' fill='%23111'/><text x='50%' y='50%' fill='%23666' font-family='sans-serif' font-size='14' text-anchor='middle' dominant-baseline='middle'>Caméra indisponible</text></svg>"
+                );
+              }}
+            />
           </div>
           {/* Détails impression */}
           <div style={{ flex:"1 1 140px", display:"flex", flexDirection:"column", gap:8, justifyContent:"center" }}>
