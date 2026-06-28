@@ -264,13 +264,19 @@ function VortekRack({ rack }) {
 
   // Mapping physique confirmé:
   // Slot 1→idx2, Slot 2→idx5, Slot 3→idx3, Slot 4→idx0, Slot 5→idx4, Slot 6→idx6
-  const SLOT_MAP = [2, 5, 3, 0, 4, 6];
-  const slots = SLOT_MAP.map((idx, i) => {
-    const slot = h[idx] ?? null;
-    // Slot 4 (i===3) = emplacement physique de l'hotend sur la tête (confirmé par l'utilisateur)
-    // head_id >= 0 signifie qu'un hotend est sorti du rack et sur la buse droite
-    const onHead = headId >= 0 && i === 3;
-    return { slot, num: i + 1, onHead };
+  // IDs 16-21 = slots rack 1-6 (id - 15 = numéro de slot)
+  // id=0 = tête droite, id=1 = tête gauche
+  // src_id/head_id = slot actuellement sur la tête (ex: head_id=19 → slot 4)
+  const headSlotNum = headId >= 16 ? headId - 15 : -1; // numéro de slot 1-6
+
+  // Construire les 6 slots dans l'ordre physique
+  // Pour chaque slot 1-6, chercher l'hotend avec id = slot+15
+  // Si head_id correspond à ce slot → onHead=true, slot virtuellement vide
+  const slots = [1,2,3,4,5,6].map(num => {
+    const targetId = num + 15; // slot 1→id16, slot 4→id19, etc.
+    const onHead   = headId === targetId;
+    const slot     = h.find(s => s.id === targetId) ?? null;
+    return { slot, num, onHead };
   });
 
   const topSlots = [slots[0], slots[2], slots[4]];
@@ -279,19 +285,18 @@ function VortekRack({ rack }) {
   const botSels  = [1, 3, 5];
   const selEntry = slots[sel] ?? slots[0];
   const filled   = slots.filter(s => s.slot?.filament_id && !s.onHead).length;
-  // headSlot: cherche d'abord dans la liste, sinon crée un objet minimal avec ce qu'on sait
-  const headSlotFound = headId >= 0 ? h.find(s => s.id === rack.active_id) ?? null : null;
-  const headSlot = headSlotFound ?? (headId >= 0 ? { id: headId, filament_id: "GFA00", diameter: 0.4, nozzle_type: "HS01", wear: 128, print_time: 0 } : null);
+  // headSlot = infos de l'hotend sur la tête (id=0 dans nozzle.info[] = tête droite)
+  const headSlot = h.find(s => s.id === 0) ?? null;
 
   return (
     <div className="card" style={{ padding:16 }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
         <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em" }}>Rack Vortek</span>
         <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-          <span style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)" }}>{filled}/6 chargés</span>
-          {headSlot && (
+          <span style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)" }}>{slots.filter(s=>s.slot?.filament_id && !s.onHead).length}/6 chargés</span>
+          {headId >= 16 && (
             <span style={{ fontSize:10, color:"#60a5fa", fontFamily:"monospace" }}>
-              ● Buse droite : {headSlot.filament_id} {headSlot.diameter}mm
+              ● Buse droite : slot {headSlotNum}{headSlot ? ` — ${headSlot.filament_id} ${headSlot.diameter}mm` : ""}
             </span>
           )}
         </div>
