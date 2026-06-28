@@ -208,11 +208,11 @@ class MQTTManager:
                 logger.info(f"[NOZZLE id={eid}] raw={temp_raw} → {n.temp}°C target={n.target}°C active={n.active}")
                 changed = True
 
-        # Fallback legacy (autres modèles)
+        # Fallback legacy (P1/X1 — pas utilisé sur H2C qui utilise device.extruder)
+        # NE PAS écraser nozzle_temper sur nozzles[0] car H2C envoie aussi ce champ
+        # avec la temp de la buse active, ce qui écrase la vraie valeur de id=0
         if "bed_temper" in p: state.bed_temp = float(p["bed_temper"]); changed = True
         if "bed_target_temper" in p: state.target_bed_temp = float(p["bed_target_temper"]); changed = True
-        if "nozzle_temper" in p: state.nozzles[0].temp = float(p["nozzle_temper"]); changed = True
-        if "nozzle_target_temper" in p: state.nozzles[0].target = float(p["nozzle_target_temper"]); changed = True
         if "chamber_temper" in p: state.chamber_temp = float(p["chamber_temper"]); changed = True
 
         # ── AMS ─────────────────────────────────────────────────────────
