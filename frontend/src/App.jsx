@@ -7,6 +7,7 @@ import Home from "./pages/Home";
 import Settings from "./pages/Settings";
 import Logs from "./pages/Logs";
 import Filaments from "./pages/Filaments";
+import Prints from "./pages/Prints";
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -26,6 +27,7 @@ export default function App() {
         <Route path="filaments" element={<Filaments />} />
         <Route path="settings" element={<Settings />} />
         <Route path="logs" element={<Logs />} />
+        <Route path="prints" element={<Prints />} />
       </Route>
     </Routes>
   );
