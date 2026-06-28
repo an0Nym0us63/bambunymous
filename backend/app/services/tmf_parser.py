@@ -27,9 +27,10 @@ async def _download_http(url: str) -> bytes:
     logger.info(f"[3MF-HTTP] ▶ Téléchargement: {url[:80]}")
     async with aiohttp.ClientSession() as s:
         async with s.get(url, timeout=aiohttp.ClientTimeout(total=60)) as r:
-            logger.info(f"[3MF-HTTP] ✅ {len(data)} bytes")
             r.raise_for_status()
-            return await r.read()
+            data = await r.read()
+            logger.info(f"[3MF-HTTP] ✅ {len(data)} bytes téléchargés")
+            return data
 
 
 def _download_ftp_sync(taskname: str, ip: str, code: str) -> bytes:
