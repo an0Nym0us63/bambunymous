@@ -233,7 +233,7 @@ async def create_manual_print(local_path: str, print_date: datetime) -> Optional
         from ..services.tmf_parser import _parse_3mf, _clean_name
         meta = _parse_3mf(data, pid)
         name = _clean_name(meta.get("title") or meta.get("file") or Path(local_path).stem)
-        if meta.get("plate_id", "1") != "1": name += f" — Plateau {meta[\'plate_id\']}"
+        if meta.get("plate_id", "1") != "1": name += f" — Plateau {meta[plate_id]}"
         async with AsyncSessionLocal() as db:
             await db.execute(update(Print).where(Print.id == pid).values(
                 file_name=name, original_name=Path(local_path).name,
