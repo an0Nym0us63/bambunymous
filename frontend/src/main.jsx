@@ -8,6 +8,10 @@ import "./index.css";
 const savedTheme = localStorage.getItem("bambu-theme") || "dark";
 document.documentElement.setAttribute("data-theme", savedTheme === "light" ? "light" : "");
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <BrowserRouter><App /></BrowserRouter>
-);
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<BrowserRouter><App /></BrowserRouter>);
+
+// Masquer le splash screen une fois React monté
+requestAnimationFrame(() => {
+  if (typeof window.__hideSplash === "function") window.__hideSplash();
+});
