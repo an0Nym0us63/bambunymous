@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
 import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun } from "lucide-react";
 import client from "../api/client";
