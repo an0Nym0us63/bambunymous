@@ -1,12 +1,13 @@
 import React from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { Home, Settings, LogOut, Box, Package, ScrollText } from "lucide-react";
+import { Home, Settings, LogOut, Box, Package, ScrollText, History } from "lucide-react";
 import { useAuth } from "../../store/auth";
 
 const nav = [
   { to: "/",          icon: Home,     label: "Accueil"    },
   { to: "/filaments", icon: Package,  label: "Filaments"  },
   { to: "/settings",  icon: Settings, label: "Paramètres" },
+  { to: "/prints",     icon: History,   label: "Historique" },
   { to: "/logs",       icon: ScrollText,label: "Journal"    },
 ];
 
