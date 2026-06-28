@@ -26,6 +26,7 @@ class TrayOut(BaseModel):
     drying_temp: int
     drying_time: int
     spool_id: Optional[int] = None
+    match_mode: str = ""   # rfid | color | manual | ""
 
 
 class AMSOut(BaseModel):
@@ -125,6 +126,7 @@ async def printer_status(_: str = Depends(get_current_user)):
                     uuid=t.uuid, tag_uid=t.tag_uid, empty=t.empty,
                     drying_temp=t.drying_temp, drying_time=t.drying_time,
                     spool_id=t.spool_id,
+                    match_mode=getattr(t, "match_mode", ""),
                 ) for t in a.trays],
                 humidity=a.humidity, temp=a.temp,
             ) for a in s.ams_list
