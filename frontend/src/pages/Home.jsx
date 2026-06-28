@@ -28,38 +28,107 @@ const STATUS_CFG = {
 };
 
 function StatusBanner({ status }) {
+  const [expanded, setExpanded] = useState(false);
+  const [snapUrl, setSnapUrl]   = useState(null);
+  const snapRef = useState(null);
+
+  const isRunning = status?.status === "RUNNING";
+  const cfg = STATUS_CFG[status?.status] ?? STATUS_CFG.IDLE;
+  const pct = status?.progress ?? 0;
+  const remain = fmtTime(status?.remaining_minutes);
+
+  // Rafraîchir le snapshot toutes les 3s quand déplié
+  useEffect(() => {
+    if (!expanded || !isRunning) return;
+    const refresh = () => setSnapUrl(`/api/v1/camera/snapshot?t=${Date.now()}`);
+    refresh();
+    const id = setInterval(refresh, 3000);
+    return () => clearInterval(id);
+  }, [expanded, isRunning]);
+
   if (!status) return <div className="card" style={{ height:56, animation:"pulse 2s infinite" }} />;
-  const cfg = STATUS_CFG[status.status] ?? STATUS_CFG.IDLE;
-  const pct = status.progress ?? 0;
-  const isRunning = status.status === "RUNNING";
-  const remain = fmtTime(status.remaining_minutes);
 
   return (
     <div className="card" style={{ position:"relative", overflow:"hidden" }}>
+      {/* Barre de progression */}
       {isRunning && (
-        <div style={{ position:"absolute", inset:0, background:`linear-gradient(90deg, ${cfg.color}18, transparent)`, width:`${pct}%`, transition:"width 1s", pointerEvents:"none" }} />
+        <div style={{ position:"absolute", top:0, left:0, height:"100%",
+          background:`linear-gradient(90deg, ${cfg.color}15, transparent)`,
+          width:`${pct}%`, transition:"width 1s", pointerEvents:"none" }} />
       )}
-      <div style={{ position:"relative", display:"flex", alignItems:"center", gap:12, padding:"12px 16px" }}>
-        <div style={{ width:8, height:8, borderRadius:"50%", backgroundColor:cfg.dot, flexShrink:0, animation: isRunning ? "livePulse 2s infinite" : "none" }} />
-        <div style={{ flex:1, minWidth:0 }}>
-          <p style={{ fontWeight:600, fontSize:14, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-            {isRunning && status.print_name ? status.print_name : cfg.label}
-          </p>
-          {isRunning && status.print_name && (
-            <p style={{ fontSize:11, color:"var(--muted)" }}>{cfg.label}</p>
-          )}
-        </div>
-        {isRunning && (
-          <div style={{ display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
-            {remain && <span style={{ fontSize:12, color:"var(--muted)", display:"flex", alignItems:"center", gap:4 }}><Clock size={11}/>{remain}</span>}
-            {status.total_layers > 0 && <span style={{ fontSize:12, color:"var(--muted)", display:"flex", alignItems:"center", gap:4 }}><Layers size={11}/>{status.layer}/{status.total_layers}</span>}
-            <span style={{ fontSize:20, fontWeight:700, fontFamily:"monospace", color:cfg.color }}>{pct}%</span>
+
+      {/* Ligne principale — cliquable pour déplier */}
+      <button onClick={() => isRunning && setExpanded(e => !e)}
+        style={{ width:"100%", background:"none", border:"none", cursor: isRunning ? "pointer" : "default", padding:0 }}>
+        <div style={{ position:"relative", display:"flex", alignItems:"center", gap:12, padding:"12px 16px" }}>
+          <div style={{ width:8, height:8, borderRadius:"50%", backgroundColor:cfg.dot, flexShrink:0,
+            animation: isRunning ? "livePulse 2s infinite" : "none" }} />
+          <div style={{ flex:1, minWidth:0, textAlign:"left" }}>
+            <p style={{ fontWeight:600, fontSize:14, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {isRunning && status.print_name ? status.print_name : cfg.label}
+            </p>
+            {isRunning && status.print_name && (
+              <p style={{ fontSize:11, color:"var(--muted)" }}>{cfg.label}</p>
+            )}
           </div>
-        )}
-        {status.connected
-          ? <Wifi size={15} style={{ color:"#22c55e", flexShrink:0 }} />
-          : <WifiOff size={15} style={{ color:"#ef4444", flexShrink:0 }} />}
-      </div>
+          {isRunning && (
+            <div style={{ display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
+              {remain && <span style={{ fontSize:12, color:"var(--muted)", display:"flex", alignItems:"center", gap:4 }}><Clock size={11}/>{remain}</span>}
+              {status.total_layers > 0 && (
+                <span style={{ fontSize:12, color:"var(--muted)", display:"flex", alignItems:"center", gap:4 }}>
+                  <Layers size={11}/>{status.layer}/{status.total_layers}
+                </span>
+              )}
+              <span style={{ fontSize:20, fontWeight:700, fontFamily:"monospace", color:cfg.color }}>{pct}%</span>
+            </div>
+          )}
+          {status.connected
+            ? <Wifi size={15} style={{ color:"#22c55e", flexShrink:0 }} />
+            : <WifiOff size={15} style={{ color:"#ef4444", flexShrink:0 }} />}
+        </div>
+      </button>
+
+      {/* Panneau déplié */}
+      {expanded && isRunning && (
+        <div style={{ borderTop:"1px solid var(--border)", padding:12, display:"flex", gap:12, flexWrap:"wrap" }}>
+          {/* Snapshot caméra */}
+          <div style={{ flex:"1 1 200px", minWidth:0 }}>
+            {snapUrl ? (
+              <img src={snapUrl} alt="Camera"
+                style={{ width:"100%", borderRadius:8, display:"block",
+                  border:"1px solid var(--border)", background:"#000",
+                  minHeight:120, objectFit:"cover" }}
+                onError={() => setSnapUrl(null)}
+              />
+            ) : (
+              <div style={{ width:"100%", minHeight:120, borderRadius:8, background:"var(--surface2)",
+                border:"1px solid var(--border)", display:"flex", alignItems:"center",
+                justifyContent:"center", color:"var(--muted)", fontSize:12 }}>
+                Caméra indisponible
+              </div>
+            )}
+          </div>
+          {/* Détails impression */}
+          <div style={{ flex:"1 1 140px", display:"flex", flexDirection:"column", gap:8, justifyContent:"center" }}>
+            <div>
+              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>Couche</p>
+              <p style={{ fontSize:16, fontWeight:700, fontFamily:"monospace", color:"var(--text)" }}>
+                {status.layer} <span style={{ fontSize:12, color:"var(--muted)" }}>/ {status.total_layers}</span>
+              </p>
+            </div>
+            <div>
+              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>Restant</p>
+              <p style={{ fontSize:16, fontWeight:700, fontFamily:"monospace", color:"var(--text)" }}>{remain || "—"}</p>
+            </div>
+            {status.speed_mag && (
+              <div>
+                <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>Vitesse</p>
+                <p style={{ fontSize:14, fontFamily:"monospace", color:"var(--text)" }}>{status.speed_mag}%</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
