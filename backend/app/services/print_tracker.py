@@ -90,9 +90,10 @@ async def create_print(job_id: str, url: str, taskname: str,
         db.add(p); await db.flush()
         pid = p.id; await db.commit()
 
-    logger.info(f"Print créé id={pid} job={job_id}")
+    logger.info(f"[PRINT] ✅ Print créé: id={pid} job={job_id}")
     st = _job(job_id)
     with _LOCK: st["print_id"] = pid; st["start_time"] = time.time()
+    logger.info(f"[PRINT] ▶ Lancement extraction 3MF en background...")
     _bg(_enrich(pid, job_id, url, taskname, printer_ip, printer_code))
     return pid
 
@@ -100,8 +101,14 @@ async def create_print(job_id: str, url: str, taskname: str,
 async def _enrich(pid: int, job_id: str, url: str, taskname: str,
                    printer_ip: str, printer_code: str):
     try:
+        logger.info(f"[3MF] ▶ Téléchargement 3MF pour print_id={pid} url={url[:60]!r}")
         meta = await extract_3mf(url, taskname, pid, printer_ip, printer_code)
-        if not meta: return
+        if not meta:
+            logger.error(f"[3MF] ❌ Extraction vide pour print_id={pid}")
+            return
+        logger.info(f"[3MF] ✅ titre={meta.get('title')!r} plateau={meta.get('plate_id')} durée={meta.get('estimated_seconds')}s")
+        logger.info(f"[3MF] ✅ vignette={meta.get('plate_image')} fichiers={meta.get('model_3mf')}")
+        logger.info(f"[3MF] ✅ {len(meta.get('filaments', {}))} filaments: " + str({k: f"{v['type']} {v['color']} {v['used_g']}g" for k,v in meta.get('filaments',{}).items()}))
         name = _clean_name(meta.get("title") or meta.get("file") or taskname)
         plate_id = meta.get("plate_id", "1")
         if plate_id != "1": name += " — Plateau " + plate_id
@@ -122,7 +129,7 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
                     ams_slot=int(slot),
                 ))
             await db.commit()
-        logger.info(f"Print {pid} enrichi: {name}")
+        logger.info(f"[DB] ✅ Print {pid} sauvegardé: {name!r} avec {len(meta.get('filaments', {}))} filaments")
     except Exception as e:
         logger.error(f"_enrich pid={pid}: {e}")
 
@@ -146,6 +153,7 @@ def on_progress(job_id: str, pct: float, layer: int):
         with _LOCK:
             if st[flag] or prev >= thr or pct < thr: return
             st[flag] = True
+        logger.info(f"[MILESTONE] 📸 Snapshot {trig} à {pct:.0f}% print_id={pid}")
         _bg(_snap(pid, trig))
 
     _fire("m50",  50.0,  "pct50")
@@ -155,8 +163,14 @@ def on_progress(job_id: str, pct: float, layer: int):
     if layer:
         with _LOCK:
             st["last_layer"] = max(st.get("last_layer", 0), layer)
-            if not st["l2"] and layer >= 2: st["l2"] = True; _bg(_snap(pid, "layer1"))
-            if not st["l3"] and layer >= 3: st["l3"] = True; _bg(_snap(pid, "layer2"))
+            if not st["l2"] and layer >= 2:
+                st["l2"] = True
+                logger.info(f"[MILESTONE] 📸 Snapshot layer1 couche={layer} print_id={pid}")
+                _bg(_snap(pid, "layer1"))
+            if not st["l3"] and layer >= 3:
+                st["l3"] = True
+                logger.info(f"[MILESTONE] 📸 Snapshot layer2 couche={layer} print_id={pid}")
+                _bg(_snap(pid, "layer2"))
 
 
 def on_finish(job_id: str, gcode_state: str):
@@ -174,8 +188,10 @@ def on_finish(job_id: str, gcode_state: str):
     st = _job(job_id); pid = st.get("print_id")
     if not pid: return
     final = "SUCCESS" if gcode_state == "FINISH" else "FAILED"
+    logger.info(f"[PRINT] 🏁 Fin job={job_id} print_id={pid} statut={final}")
     if final == "FAILED":
         pct = int(st.get("last_pct", 0))
+        logger.info(f"[MILESTONE] 📸 Snapshot échec à {pct}% print_id={pid}")
         _bg(_snap(pid, f"fail-{pct}pct"))
     _bg(_finalize(pid, job_id, final, st.get("start_time")))
 
@@ -194,7 +210,7 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float]):
             # Coûts
             await _costs(db, p)
             await db.commit()
-        logger.info(f"Print {pid} finalisé: {status}")
+        logger.info(f"[FINAL] ✅ Print {pid} → {status} | poids={p.total_weight_g:.1f}g coût={p.total_cost:.2f}€")
         with _LOCK: _JOBS.pop(job_id, None)
     except Exception as e:
         logger.error(f"_finalize pid={pid}: {e}")
