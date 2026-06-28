@@ -20,6 +20,7 @@ class AMSTray:
     drying_time: int = 0
     total_len: int = 0
     spool_id: Optional[int] = None
+    match_mode: str = ""   # "rfid" | "color" | "manual" | ""
 
 
 @dataclass
