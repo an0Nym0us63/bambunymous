@@ -51,28 +51,70 @@ function StatusBadge({ status }) {
   );
 }
 
-function PrintCard({ p, onClick }) {
+function PrintCard({ p, onClick, onDelete }) {
   const imgUrl = p.plate_image ? `/api/v1/prints/${p.id}/image` : null;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+
+  const handleDelete = async (e) => {
+    e.stopPropagation();
+    if (!confirming) { setConfirming(true); return; }
+    try {
+      await client.delete(`/prints/${p.id}`);
+      onDelete(p.id);
+    } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+    setMenuOpen(false); setConfirming(false);
+  };
+
   return (
-    <div onClick={onClick} className="card" style={{
-      cursor:"pointer", overflow:"hidden", transition:"transform 0.15s",
-      display:"flex", flexDirection:"column", gap:0,
-    }}
-    onMouseEnter={e=>e.currentTarget.style.transform="translateY(-2px)"}
-    onMouseLeave={e=>e.currentTarget.style.transform="translateY(0)"}>
-      {/* Vignette */}
-      <div style={{ height:140, background:"#111", flexShrink:0, position:"relative" }}>
+    <div className="card" style={{ overflow:"hidden", display:"flex",
+      flexDirection:"column", gap:0, position:"relative" }}>
+
+      <div onClick={onClick} style={{ height:140, background:"#111",
+        flexShrink:0, position:"relative", cursor:"pointer" }}>
         {imgUrl
           ? <img src={imgUrl} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
           : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center",
               justifyContent:"center", color:"var(--muted)", fontSize:11 }}>Pas de vignette</div>
         }
-        <div style={{ position:"absolute", top:6, right:6 }}>
+        <div style={{ position:"absolute", top:6, left:6 }}>
           <StatusBadge status={p.status}/>
         </div>
+        <button onClick={e=>{ e.stopPropagation(); setMenuOpen(m=>!m); setConfirming(false); }}
+          style={{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,0.55)",
+            border:"none", borderRadius:"50%", width:26, height:26, cursor:"pointer",
+            color:"white", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center",
+            lineHeight:1 }}>
+          ⋮
+        </button>
+        {menuOpen && (
+          <div onClick={e=>e.stopPropagation()} style={{
+            position:"absolute", top:36, right:6, background:"var(--surface)",
+            border:"1px solid var(--border)", borderRadius:10,
+            boxShadow:"0 4px 20px rgba(0,0,0,0.5)", zIndex:10, minWidth:170, overflow:"hidden",
+          }}>
+            <button onClick={handleDelete} style={{
+              width:"100%", padding:"11px 16px", background:"none", border:"none",
+              textAlign:"left", fontSize:13, cursor:"pointer",
+              color: confirming ? "#ef4444" : "var(--text)",
+              display:"flex", alignItems:"center", gap:8,
+            }}>
+              🗑 {confirming ? "Confirmer ?" : "Supprimer"}
+            </button>
+            {confirming && (
+              <button onClick={e=>{ e.stopPropagation(); setConfirming(false); setMenuOpen(false); }}
+                style={{ width:"100%", padding:"9px 16px", background:"none",
+                  borderTop:"1px solid var(--border)", border:"none", textAlign:"left",
+                  fontSize:12, cursor:"pointer", color:"var(--muted)" }}>
+                Annuler
+              </button>
+            )}
+          </div>
+        )}
       </div>
-      {/* Infos */}
-      <div style={{ padding:"10px 12px", display:"flex", flexDirection:"column", gap:6 }}>
+
+      <div onClick={onClick} style={{ padding:"10px 12px", display:"flex",
+        flexDirection:"column", gap:6, cursor:"pointer" }}>
         <p style={{ fontWeight:700, fontSize:13, color:"var(--text)",
           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
           {p.file_name || "Sans nom"}
@@ -293,7 +335,8 @@ export default function Prints() {
       {!loading && !error && prints.length > 0 && (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
           {prints.map(p => (
-            <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)}/>
+            <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)}
+              onDelete={id => { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => t-1); }}/>
           ))}
         </div>
       )}
