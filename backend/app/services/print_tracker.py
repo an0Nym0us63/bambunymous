@@ -93,9 +93,54 @@ async def create_print(job_id: str, url: str, taskname: str,
     logger.info(f"[PRINT] ✅ Print créé: id={pid} job={job_id}")
     st = _job(job_id)
     with _LOCK: st["print_id"] = pid; st["start_time"] = time.time()
-    logger.info(f"[PRINT] ▶ Lancement extraction 3MF en background...")
-    _bg(_enrich(pid, job_id, url, taskname, printer_ip, printer_code))
-    return pid
+    # URLs HTTP pre-signed (AWS S3) expirent en ~60s → lancer un thread immédiat
+    if url.startswith("http"):
+        import threading as _dlt, asyncio as _dla
+        _taskname, _url, _pid = taskname, url, pid
+        def _dl_now(_u=_url, _p=_pid, _t=_taskname):
+            lp = _dla.new_event_loop()
+            async def _go():
+                from .tmf_parser import _download_http, _parse_3mf
+                try:
+                    raw = await _download_http(_u)
+                    logger.info(f"[PRINT] ✅ 3MF téléchargé {len(raw)} bytes")
+                    meta = _parse_3mf(raw, _p)
+                    if meta: await _apply_meta(_p, meta, _t)
+                    else: logger.error(f"[PRINT] ❌ _parse_3mf vide print_id={_p}")
+                except Exception as e:
+                    import traceback as _tb
+                    logger.error(f"[PRINT] ❌ 3MF failed: {e}\n{_tb.format_exc()}")
+            try: lp.run_until_complete(_go())
+            finally: lp.close()
+        _dlt.Thread(target=_dl_now, daemon=True).start()
+    else:
+        _bg(_enrich(pid, job_id, url, taskname, printer_ip, printer_code))
+
+
+async def _apply_meta(pid: int, meta: dict, taskname: str):
+    """Applique les métadonnées 3MF en base."""
+    name = _clean_name(meta.get("title") or meta.get("file") or taskname)
+    plate_id = meta.get("plate_id", "1")
+    if plate_id != "1": name += " — Plateau " + plate_id
+    logger.info(f"[DB] ▶ Sauvegarde print_id={pid} nom={name!r}")
+    async with AsyncSessionLocal() as db:
+        await db.execute(update(Print).where(Print.id == pid).values(
+            file_name=name, plate_id=plate_id,
+            estimated_seconds=meta.get("estimated_seconds"),
+            plate_image=meta.get("plate_image"),
+            model_3mf=meta.get("model_3mf"),
+            design_id=meta.get("design_id", ""),
+        ))
+        for slot, fil in meta.get("filaments", {}).items():
+            db.add(FilamentUsage(
+                print_id=pid,
+                filament_type=fil.get("type", ""),
+                color_hex=fil.get("color", ""),
+                grams_used=float(fil.get("used_g", 0)),
+                ams_slot=int(slot),
+            ))
+        await db.commit()
+    logger.info(f"[DB] ✅ Print {pid}: {name!r}, {len(meta.get('filaments',{}))} filaments")
 
 
 async def _enrich(pid: int, job_id: str, url: str, taskname: str,
