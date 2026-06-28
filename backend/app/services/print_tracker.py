@@ -103,7 +103,8 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
         meta = await extract_3mf(url, taskname, pid, printer_ip, printer_code)
         if not meta: return
         name = _clean_name(meta.get("title") or meta.get("file") or taskname)
-        if meta.get("plate_id", "1") != "1": name += f" — Plateau {meta[\'plate_id\']}"
+        plate_id = meta.get("plate_id", "1")
+        if plate_id != "1": name += " — Plateau " + plate_id
         async with AsyncSessionLocal() as db:
             await db.execute(update(Print).where(Print.id == pid).values(
                 file_name=name, plate_id=meta.get("plate_id", "1"),
