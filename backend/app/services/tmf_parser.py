@@ -24,8 +24,10 @@ def _clean_name(raw: str) -> str:
 
 
 async def _download_http(url: str) -> bytes:
+    logger.info(f"[3MF-HTTP] ▶ Téléchargement: {url[:80]}")
     async with aiohttp.ClientSession() as s:
         async with s.get(url, timeout=aiohttp.ClientTimeout(total=60)) as r:
+            logger.info(f"[3MF-HTTP] ✅ {len(data)} bytes")
             r.raise_for_status()
             return await r.read()
 
@@ -111,6 +113,7 @@ def _parse_3mf(data: bytes, print_id: int) -> dict:
         "plate_image": None, "model_3mf": None, "design_id": "",
     }
     print_dir = DATA_DIR / "prints" / str(print_id)
+    logger.info(f"[3MF-PARSE] ▶ Parsing {len(data)} bytes, print_id={print_id}")
     print_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -162,6 +165,7 @@ def _parse_3mf(data: bytes, print_id: int) -> dict:
                     with z.open(key) as src, open(dest, "wb") as dst: dst.write(src.read())
                     result["plate_image"] = f"prints/{print_id}/plate.png"
                     break
+                    logger.info(f"[3MF-PARSE] ✅ Vignette: {dest}")
 
     except zipfile.BadZipFile: logger.error("3MF BadZipFile")
     except Exception as e: logger.error(f"_parse_3mf: {e}")
@@ -170,13 +174,16 @@ def _parse_3mf(data: bytes, print_id: int) -> dict:
     model_name = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{str(uuid.uuid4())[:8]}.3mf"
     (print_dir / model_name).write_bytes(data)
     result["model_3mf"] = f"prints/{print_id}/{model_name}"
+    logger.info(f"[3MF-PARSE] ✅ 3MF sauvegardé: {model_name}")
     return result
+    logger.info(f"[3MF-PARSE] ✅ titre={result['title']!r} plateau={result['plate_id']} durée={result['estimated_seconds']}s filaments={len(result['filaments'])}")
 
 
 async def extract_3mf(url: str, taskname: str, print_id: int,
                        printer_ip: str = "", printer_code: str = "") -> dict:
     """Point d'entrée principal — détecte le type d'URL et dispatch."""
     logger.info(f"extract_3mf url={url[:60]!r} print_id={print_id}")
+    logger.info(f"[3MF] ▶ URL={url[:60]!r}")
     try:
         if url.startswith("http"):
             data = await _download_http(url)
