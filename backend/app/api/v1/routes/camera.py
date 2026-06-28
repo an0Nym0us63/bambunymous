@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from ....services.settings_service import get_setting
 from ....db.session import AsyncSessionLocal
-from .auth import get_current_user
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -76,7 +75,7 @@ async def _serve(ip: str, code: str) -> Response:
 
 
 @router.get("/snapshot")
-async def camera_snapshot(_: str = Depends(get_current_user)):
+async def camera_snapshot():
     async with AsyncSessionLocal() as db:
         ip   = await get_setting(db, "PRINTER_IP")
         code = await get_setting(db, "PRINTER_ACCESS_CODE")
