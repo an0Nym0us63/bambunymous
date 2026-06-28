@@ -195,6 +195,7 @@ export default function Prints() {
   const [statusF, setStatusF] = useState("");
   const [selected, setSelected] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [rawDebug, setRawDebug] = useState(null);
 
   const [apiError, setApiError] = useState(null);
 
@@ -206,7 +207,7 @@ export default function Prints() {
       if (search)  params.set("search",  search);
       if (statusF) params.set("status",  statusF);
       const { data } = await client.get(`/prints?${params}`);
-      console.log("API /prints response:", JSON.stringify(data));
+      setRawDebug(JSON.stringify(data, null, 2));
       setPrints(data.prints ?? []);
       setTotal(data.total ?? 0);
     } catch(e) {
@@ -278,6 +279,9 @@ export default function Prints() {
       {/* Grille */}
       {loading ? (
         <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>
+      ) : rawDebug !== null && prints.length === 0 && !apiError ? (
+        <pre style={{ fontSize:10, color:"#22c55e", padding:12, overflowX:"auto",
+          background:"#111", borderRadius:8, margin:8 }}>{rawDebug}</pre>
       ) : apiError ? (
         <div style={{ margin:16, padding:"12px 16px", background:"rgba(239,68,68,0.1)",
           border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, color:"#ef4444", fontSize:13 }}>
