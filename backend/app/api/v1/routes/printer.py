@@ -92,11 +92,7 @@ class PrinterStatusOut(BaseModel):
 
 @router.get("/status", response_model=PrinterStatusOut)
 async def printer_status(_: str = Depends(get_current_user)):
-    import logging as _log
     s = get_state()
-    _log.getLogger(__name__).info(
-        f"[STATUS] nozzles={[(n.id, n.temp, n.target, n.active) for n in s.nozzles]}"
-    )
     return PrinterStatusOut(
         connected=s.connected,
         serial=s.serial,
