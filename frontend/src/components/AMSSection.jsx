@@ -38,7 +38,28 @@ function ColorPill({ tray, spoolInfo, active }) {
     <div style={{ flex:1, height:28, borderRadius:6, transition:"transform 0.2s",
       transform: active ? "scaleY(1.15)" : "scaleY(1)",
       outline: active ? "2px solid white" : "none",
-      outlineOffset:1, ...bg }} />
+      outlineOffset:1, position:"relative", ...bg }}>
+      {tray.match_mode && (
+        <span style={{ position:"absolute", top:2, right:3 }}><MatchIcon mode={tray.match_mode} size={8}/></span>
+      )}
+    </div>
+  );
+}
+
+// ── Icône de détection filament ─────────────────────────────────────────────
+function MatchIcon({ mode, size = 10 }) {
+  if (!mode) return null;
+  const cfg = {
+    rfid:   { symbol: "⬡", color: "#22c55e", title: "Tag RFID Bambu Lab" },
+    color:  { symbol: "◈", color: "#f59e0b", title: "Matching couleur (filament custom)" },
+    manual: { symbol: "◇", color: "#94a3b8", title: "Non identifié automatiquement" },
+  }[mode];
+  if (!cfg) return null;
+  return (
+    <span title={cfg.title} style={{ fontSize:size, lineHeight:1, color:cfg.color,
+      textShadow:"0 0 4px rgba(0,0,0,0.8)", userSelect:"none", pointerEvents:"none" }}>
+      {cfg.symbol}
+    </span>
   );
 }
 
@@ -138,6 +159,9 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo }) 
         <div style={{ position:"absolute", bottom:10, left:"50%", transform:"translateX(-50%)", padding:"1px 7px", borderRadius:20, fontSize:9, fontWeight:700, whiteSpace:"nowrap", background: isActive?"#3b82f6":"rgba(0,0,0,0.6)", color:"white", opacity: isActive ? 1 : 0.8 }}>
           {label}
         </div>
+        {tray.match_mode && !empty && (
+          <span style={{ position:"absolute", top:2, right:2 }}><MatchIcon mode={tray.match_mode} size={12}/></span>
+        )}
       </div>
       <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace" }}>{empty ? "" : wLabel}</p>
       <p style={{ fontSize:9, color:"var(--text2)", textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", width:68 }}>
