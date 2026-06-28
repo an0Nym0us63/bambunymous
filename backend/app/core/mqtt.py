@@ -189,6 +189,7 @@ class MQTTManager:
             extruder_state = extruder.get("state", 0)
             active_nozzle_idx = (extruder_state >> 4) & 0xF
             extruder_infos = extruder.get("info", [])
+            logger.info(f"[EXTRUDER] state=0x{extruder_state:X} active_idx={active_nozzle_idx} ids={[e.get('id') for e in extruder_infos]}")
             for ext in extruder_infos:
                 eid = int(ext.get("id", 0))
                 if eid >= len(state.nozzles):
@@ -203,7 +204,7 @@ class MQTTManager:
                     n.temp   = float(temp_raw)
                     n.target = 0.0
                 n.active = (eid == active_nozzle_idx)
-
+                logger.info(f"[NOZZLE id={eid}] raw={temp_raw} → {n.temp}°C target={n.target}°C active={n.active}")
                 changed = True
 
         # Fallback legacy (autres modèles)
