@@ -192,8 +192,8 @@ async def del_tag(print_id: int, tag: str, _: str = Depends(get_current_user)):
 
 
 @router.get("/debug")
-async def debug_prints():
-    """Route de debug — dump brut de la table prints."""
+async def debug_prints():  # noqa — public debug route
+    """Route de debug — dump brut de la table prints (pas d'auth requis)."""
     import aiosqlite, os
     db_path = os.getenv("DATABASE_URL", "sqlite+aiosqlite:////data/bambunymous.db")
     db_path = db_path.replace("sqlite+aiosqlite:///", "")
