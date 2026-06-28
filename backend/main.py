@@ -69,6 +69,25 @@ app.add_middleware(
 app.include_router(api_router)
 
 
+@app.get("/db")
+async def db_debug():
+    import aiosqlite, os
+    path = "/data/bambunymous.db"
+    if not os.path.exists(path):
+        return {"error": f"{path} introuvable"}
+    result = {}
+    async with aiosqlite.connect(path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT name FROM sqlite_master WHERE type=\'table\'") as cur:
+            result["tables"] = [r[0] async for r in cur]
+        if "prints" in result["tables"]:
+            async with db.execute("SELECT id,job_id,file_name,status,plate_image,created_at FROM prints ORDER BY id DESC LIMIT 10") as cur:
+                result["prints"] = [dict(r) async for r in cur]
+        else:
+            result["prints_table"] = "ABSENTE"
+    return result
+
+
 @app.get("/healthz", include_in_schema=False)
 async def healthz():
     return JSONResponse({"status": "ok", "version": VERSION})
