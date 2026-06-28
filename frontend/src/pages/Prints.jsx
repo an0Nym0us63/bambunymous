@@ -206,6 +206,7 @@ export default function Prints() {
       if (search)  params.set("search",  search);
       if (statusF) params.set("status",  statusF);
       const { data } = await client.get(`/prints?${params}`);
+      console.log("API /prints response:", JSON.stringify(data));
       setPrints(data.prints ?? []);
       setTotal(data.total ?? 0);
     } catch(e) {
