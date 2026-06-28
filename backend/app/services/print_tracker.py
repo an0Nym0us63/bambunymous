@@ -1,0 +1,255 @@
+"""
+Tracker d\'impressions BambuNymous.
+Gère : création, milestones (%, couches), snapshots, fin de print.
+Logique identique à Spoolnymous (processMessage + safe_update_status).
+"""
+import asyncio, logging, time
+from datetime import datetime
+from pathlib import Path
+from threading import Lock
+from typing import Optional, Dict, Any
+
+from sqlalchemy import select, update
+
+from ..models.print_history import Print, FilamentUsage, PrintSnapshot
+from ..db.session import AsyncSessionLocal
+from ..services.settings_service import get_setting
+from ..services.tmf_parser import extract_3mf, _clean_name
+
+logger = logging.getLogger(__name__)
+DATA_DIR = Path("/data")
+
+# ── État mémoire par job_id ────────────────────────────────────────────────
+_LOCK   = Lock()
+_JOBS:           Dict[str, Dict[str, Any]] = {}
+_FIN_PENDING:    Dict[str, tuple]          = {}  # job_id -> (state, first_seen_ts)
+_PROCESSED:      set                       = set()
+
+
+def _job(job_id: str) -> dict:
+    with _LOCK:
+        if job_id not in _JOBS:
+            _JOBS[job_id] = {
+                "print_id": None, "last_pct": -1.0,
+                "m50": False, "m99": False, "m100": False,
+                "l2": False, "l3": False, "last_layer": 0,
+                "start_time": time.time(),
+            }
+        return _JOBS[job_id]
+
+
+def _bg(coro):
+    import threading
+    def _r():
+        loop = asyncio.new_event_loop()
+        try:    loop.run_until_complete(coro)
+        finally: loop.close()
+    threading.Thread(target=_r, daemon=True).start()
+
+
+# ── Snapshot ───────────────────────────────────────────────────────────────
+async def _snap(print_id: int, trigger: str):
+    try:
+        from ..api.v1.routes.camera import _grab_rtsps
+        async with AsyncSessionLocal() as db:
+            ip   = await get_setting(db, "PRINTER_IP")
+            code = await get_setting(db, "PRINTER_ACCESS_CODE")
+        if not ip or not code: return
+        loop = asyncio.get_event_loop()
+        jpeg = await loop.run_in_executor(None, _grab_rtsps, ip, code)
+        d = DATA_DIR / "prints" / str(print_id)
+        d.mkdir(parents=True, exist_ok=True)
+        rel = f"prints/{print_id}/snapshot-{trigger}.jpg"
+        (DATA_DIR / rel).write_bytes(jpeg)
+        async with AsyncSessionLocal() as db:
+            db.add(PrintSnapshot(print_id=print_id, trigger=trigger,
+                                  file_path=rel, taken_at=datetime.utcnow()))
+            await db.commit()
+        logger.info(f"Snapshot {trigger} → {rel}")
+    except Exception as e:
+        logger.warning(f"Snapshot {trigger} print={print_id}: {e}")
+
+
+# ── Création ───────────────────────────────────────────────────────────────
+async def create_print(job_id: str, url: str, taskname: str,
+                        print_type: str = "cloud",
+                        printer_ip: str = "", printer_code: str = "") -> Optional[int]:
+    async with AsyncSessionLocal() as db:
+        existing = (await db.execute(select(Print).where(Print.job_id == str(job_id)))).scalar_one_or_none()
+        if existing:
+            logger.info(f"job_id {job_id} déjà en base → skip")
+            return existing.id
+        p = Print(
+            job_id=str(job_id),
+            print_date=datetime.utcnow(),
+            file_name=_clean_name(taskname) or taskname,
+            original_name=taskname,
+            print_type=print_type,
+            status="IN_PROGRESS",
+        )
+        db.add(p); await db.flush()
+        pid = p.id; await db.commit()
+
+    logger.info(f"Print créé id={pid} job={job_id}")
+    st = _job(job_id)
+    with _LOCK: st["print_id"] = pid; st["start_time"] = time.time()
+    _bg(_enrich(pid, job_id, url, taskname, printer_ip, printer_code))
+    return pid
+
+
+async def _enrich(pid: int, job_id: str, url: str, taskname: str,
+                   printer_ip: str, printer_code: str):
+    try:
+        meta = await extract_3mf(url, taskname, pid, printer_ip, printer_code)
+        if not meta: return
+        name = _clean_name(meta.get("title") or meta.get("file") or taskname)
+        if meta.get("plate_id", "1") != "1": name += f" — Plateau {meta[\'plate_id\']}"
+        async with AsyncSessionLocal() as db:
+            await db.execute(update(Print).where(Print.id == pid).values(
+                file_name=name, plate_id=meta.get("plate_id", "1"),
+                estimated_seconds=meta.get("estimated_seconds"),
+                plate_image=meta.get("plate_image"),
+                model_3mf=meta.get("model_3mf"),
+                design_id=meta.get("design_id", ""),
+            ))
+            for slot, fil in meta.get("filaments", {}).items():
+                db.add(FilamentUsage(
+                    print_id=pid,
+                    filament_type=fil.get("type", ""),
+                    color_hex=fil.get("color", ""),
+                    grams_used=float(fil.get("used_g", 0)),
+                    ams_slot=int(slot),
+                ))
+            await db.commit()
+        logger.info(f"Print {pid} enrichi: {name}")
+    except Exception as e:
+        logger.error(f"_enrich pid={pid}: {e}")
+
+
+# ── Milestones ─────────────────────────────────────────────────────────────
+def on_progress(job_id: str, pct: float, layer: int):
+    if not job_id or job_id in _PROCESSED: return
+    st = _job(job_id); pid = st.get("print_id")
+    if not pid: return
+
+    prev = st["last_pct"]
+    # Régression forte = nouveau print
+    if prev >= 5.0 and pct <= 1.0:
+        with _LOCK:
+            st.update(last_pct=-1.0, m50=False, m99=False, m100=False, l2=False, l3=False)
+        return
+
+    with _LOCK: st["last_pct"] = max(prev, pct)
+
+    def _fire(flag, thr, trig):
+        with _LOCK:
+            if st[flag] or prev >= thr or pct < thr: return
+            st[flag] = True
+        _bg(_snap(pid, trig))
+
+    _fire("m50",  50.0,  "pct50")
+    _fire("m99",  99.0,  "pct99")
+    _fire("m100", 100.0, "pct100")
+
+    if layer:
+        with _LOCK:
+            st["last_layer"] = max(st.get("last_layer", 0), layer)
+            if not st["l2"] and layer >= 2: st["l2"] = True; _bg(_snap(pid, "layer1"))
+            if not st["l3"] and layer >= 3: st["l3"] = True; _bg(_snap(pid, "layer2"))
+
+
+def on_finish(job_id: str, gcode_state: str):
+    if not job_id or job_id in _PROCESSED: return
+    now = time.time()
+    with _LOCK:
+        if job_id not in _FIN_PENDING:
+            _FIN_PENDING[job_id] = (gcode_state, now); return
+        prev_s, t0 = _FIN_PENDING[job_id]
+        if prev_s != gcode_state:
+            _FIN_PENDING[job_id] = (gcode_state, now); return
+        if now - t0 < 10: return   # anti-rebond 10s (≡ Spoolnymous)
+        _PROCESSED.add(job_id); del _FIN_PENDING[job_id]
+
+    st = _job(job_id); pid = st.get("print_id")
+    if not pid: return
+    final = "SUCCESS" if gcode_state == "FINISH" else "FAILED"
+    if final == "FAILED":
+        pct = int(st.get("last_pct", 0))
+        _bg(_snap(pid, f"fail-{pct}pct"))
+    _bg(_finalize(pid, job_id, final, st.get("start_time")))
+
+
+async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float]):
+    try:
+        async with AsyncSessionLocal() as db:
+            p = await db.get(Print, pid)
+            if not p: return
+            p.status = status; p.updated_at = datetime.utcnow()
+            if t0:
+                real = time.time() - t0
+                est  = p.estimated_seconds or 0
+                if est <= 0 or real <= est * 1.3:
+                    p.duration_seconds = real
+            # Coûts
+            await _costs(db, p)
+            await db.commit()
+        logger.info(f"Print {pid} finalisé: {status}")
+        with _LOCK: _JOBS.pop(job_id, None)
+    except Exception as e:
+        logger.error(f"_finalize pid={pid}: {e}")
+
+
+async def _costs(db, p: Print):
+    try:
+        usages = (await db.execute(
+            select(FilamentUsage).where(FilamentUsage.print_id == p.id)
+        )).scalars().all()
+        total_w = sum(u.grams_used for u in usages)
+        total_c = sum(u.cost for u in usages)
+
+        from ..services.settings_service import get_setting
+        rate = float(await get_setting(db, "COST_BY_HOUR") or 0)
+        dur_h = (p.duration_seconds or p.estimated_seconds or 0) / 3600
+        elec  = dur_h * rate
+
+        p.total_weight_g      = total_w
+        p.total_cost_filament = total_c
+        p.electric_cost       = elec
+        p.total_cost          = total_c + elec
+    except Exception as e:
+        logger.debug(f"_costs: {e}")
+
+
+# ── Import manuel (upload .3mf) ────────────────────────────────────────────
+async def create_manual_print(local_path: str, print_date: datetime) -> Optional[int]:
+    try:
+        import aiofiles
+        async with aiofiles.open(local_path, "rb") as f: data = await f.read()
+        # Créer un print temporaire pour obtenir l'id
+        async with AsyncSessionLocal() as db:
+            p = Print(print_date=print_date, file_name="import", print_type="manual", status="SUCCESS")
+            db.add(p); await db.flush(); pid = p.id; await db.commit()
+        from ..services.tmf_parser import _parse_3mf, _clean_name
+        meta = _parse_3mf(data, pid)
+        name = _clean_name(meta.get("title") or meta.get("file") or Path(local_path).stem)
+        if meta.get("plate_id", "1") != "1": name += f" — Plateau {meta[\'plate_id\']}"
+        async with AsyncSessionLocal() as db:
+            await db.execute(update(Print).where(Print.id == pid).values(
+                file_name=name, original_name=Path(local_path).name,
+                plate_id=meta.get("plate_id", "1"),
+                estimated_seconds=meta.get("estimated_seconds"),
+                duration_seconds=meta.get("estimated_seconds"),  # estimé = réel pour import manuel
+                plate_image=meta.get("plate_image"),
+                model_3mf=meta.get("model_3mf"),
+                design_id=meta.get("design_id", ""),
+            ))
+            for slot, fil in meta.get("filaments", {}).items():
+                db.add(FilamentUsage(
+                    print_id=pid, filament_type=fil.get("type", ""),
+                    color_hex=fil.get("color", ""), grams_used=float(fil.get("used_g", 0)),
+                    ams_slot=int(slot),
+                ))
+            await db.commit()
+        return pid
+    except Exception as e:
+        logger.error(f"create_manual_print: {e}"); return None
