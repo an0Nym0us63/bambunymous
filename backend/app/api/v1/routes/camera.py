@@ -1,11 +1,13 @@
 """
-Proxy caméra — extrait un snapshot JPEG du flux RTSPS Bambu Lab.
-URL: rtsps://bblp:{access_code}@{ip}:322/streaming/live/1
+Proxy caméra H2C — protocole TLS port 6000 (même que Spoolnymous).
+La H2C utilise le protocole Bambu bblp sur port 6000, pas RTSPS:322.
 """
-import asyncio
 import ssl
 import socket
+import struct
+import time
 import logging
+import asyncio
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from ....services.settings_service import get_setting
@@ -15,65 +17,79 @@ from .auth import get_current_user
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-RTSP_PORT = 322
-RTSP_PATH = "/streaming/live/1"
 
+def _snapshot_tls6000(ip: str, access_code: str, timeout_s: float = 8.0) -> bytes:
+    """
+    Capture un snapshot JPEG via le protocole Bambu TLS port 6000.
+    Identique à Spoolnymous camera.py _snapshot_once_tls6000.
+    """
+    username = "bblp"
+    port = 6000
 
-def _grab_jpeg(ip: str, code: str, timeout: float = 5.0) -> bytes | None:
-    """
-    Connexion RTSPS et extraction d'un snapshot JPEG.
-    Envoie DESCRIBE puis lit jusqu'à trouver un JPEG complet.
-    """
+    # Buffer d'auth Bambu (format binaire documenté)
+    auth_data = bytearray()
+    auth_data += struct.pack("<I", 0x40)
+    auth_data += struct.pack("<I", 0x3000)
+    auth_data += struct.pack("<I", 0)
+    auth_data += struct.pack("<I", 0)
+    for i in range(len(username)):
+        auth_data += struct.pack("<c", username[i].encode("ascii"))
+    for _ in range(32 - len(username)):
+        auth_data += struct.pack("<x")
+    for i in range(len(access_code)):
+        auth_data += struct.pack("<c", access_code[i].encode("ascii"))
+    for _ in range(32 - len(access_code)):
+        auth_data += struct.pack("<x")
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+
+    sock = socket.create_connection((ip, port), timeout=timeout_s)
     try:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
+        with ctx.wrap_socket(sock, server_hostname=ip) as ssock:
+            ssock.settimeout(timeout_s)
+            ssock.sendall(auth_data)
 
-        raw = socket.create_connection((ip, RTSP_PORT), timeout=timeout)
-        sock = ctx.wrap_socket(raw, server_hostname=ip)
-        sock.settimeout(timeout)
+            buf = bytearray()
+            need_header = True
+            payload_size = None
+            start = time.monotonic()
 
-        # RTSP DESCRIBE
-        req = (
-            f"DESCRIBE rtsps://{ip}:{RTSP_PORT}{RTSP_PATH} RTSP/1.0\r\n"
-            f"CSeq: 1\r\n"
-            f"Authorization: Basic {_b64(f'bblp:{code}')}\r\n"
-            f"Accept: application/sdp\r\n\r\n"
-        )
-        sock.sendall(req.encode())
-        resp = sock.recv(4096)
-
-        if b"200 OK" not in resp:
-            sock.close()
-            return None
-
-        # Pour un snapshot simple, on lit les données du buffer
-        # et on cherche la signature JPEG FF D8
-        buf = b""
-        for _ in range(50):
-            try:
-                chunk = sock.recv(65536)
+            while True:
+                if time.monotonic() - start > timeout_s:
+                    raise TimeoutError("TLS6000 snapshot timeout")
+                try:
+                    chunk = ssock.recv(4096)
+                except ssl.SSLWantReadError:
+                    time.sleep(0.05)
+                    continue
                 if not chunk:
-                    break
+                    raise RuntimeError("Flux TLS6000 fermé")
                 buf += chunk
-                start = buf.find(b'\xff\xd8\xff')
-                if start >= 0:
-                    end = buf.find(b'\xff\xd9', start)
-                    if end >= 0:
-                        sock.close()
-                        return buf[start:end+2]
-            except Exception:
-                break
-        sock.close()
-        return None
-    except Exception as e:
-        logger.debug(f"Camera grab failed: {e}")
-        return None
 
-
-def _b64(s: str) -> str:
-    import base64
-    return base64.b64encode(s.encode()).decode()
+                while True:
+                    if need_header:
+                        if len(buf) < 16:
+                            break
+                        payload_size = int.from_bytes(buf[0:4], "little")
+                        buf = buf[16:]
+                        need_header = False
+                    else:
+                        if payload_size is None or len(buf) < payload_size:
+                            break
+                        img = bytes(buf[:payload_size])
+                        # Validation JPEG SOI + EOI
+                        if len(img) < 4 or img[0] != 0xFF or img[1] != 0xD8:
+                            raise RuntimeError("JPEG SOI manquante")
+                        if img[-2] != 0xFF or img[-1] != 0xD9:
+                            raise RuntimeError("JPEG EOI manquante")
+                        return img
+    finally:
+        try:
+            sock.close()
+        except Exception:
+            pass
 
 
 @router.get("/snapshot")
@@ -83,13 +99,15 @@ async def camera_snapshot(_: str = Depends(get_current_user)):
         code = await get_setting(db, "PRINTER_ACCESS_CODE")
 
     if not ip or not code:
-        return Response(status_code=503, content="Imprimante non configurée")
+        return Response(status_code=503, content=b"Imprimante non configuree")
 
-    # Exécuter dans un thread (bloquant)
     loop = asyncio.get_event_loop()
-    jpeg = await loop.run_in_executor(None, _grab_jpeg, ip, code)
-
-    if jpeg:
-        return Response(content=jpeg, media_type="image/jpeg",
-                       headers={"Cache-Control": "no-cache, no-store"})
-    return Response(status_code=503, content="Snapshot indisponible")
+    try:
+        jpeg = await loop.run_in_executor(None, _snapshot_tls6000, ip, code)
+        return Response(
+            content=jpeg, media_type="image/jpeg",
+            headers={"Cache-Control": "no-cache, no-store", "X-Camera-Status": "ok"}
+        )
+    except Exception as e:
+        logger.warning(f"Camera snapshot failed: {e}")
+        return Response(status_code=503, content=str(e).encode())
