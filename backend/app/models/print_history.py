@@ -5,7 +5,7 @@ Champs compatibles Spoolnymous (même sémantique, même stats possibles).
 from datetime import datetime
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, ForeignKey, Index
 from sqlalchemy.orm import relationship
-from .base import Base
+from ..db.session import Base
 
 
 class Print(Base):
