@@ -164,6 +164,59 @@ class MQTTManager:
         if "spd_lvl" in p: state.speed_level = int(p["spd_lvl"]); changed = True
         if "spd_mag" in p: state.speed_mag = int(p["spd_mag"]); changed = True
 
+        # ── Historique impressions ─────────────────────────────────────────
+        _jid  = str(p.get("job_id", "")) if p.get("job_id") else ""
+        _gst  = p.get("gcode_state", "")
+        _pct  = float(p.get("mc_percent", 0) or 0)
+        _lay  = int(p.get("layer_num", 0) or 0)
+        _task = p.get("subtask_name", "")
+        _url  = p.get("url", "")
+
+        # Cloud: command=project_file + url
+        if p.get("command") == "project_file" and _url and _jid:
+            import threading as _th, asyncio as _aio
+            from ..db.session import AsyncSessionLocal as _AS
+            from ..services.settings_service import get_setting as _GS
+            _u0, _t0, _j0 = _url, _task, _jid
+            def _cloud0():
+                lp = _aio.new_event_loop()
+                async def _go():
+                    async with _AS() as db:
+                        ip   = await _GS(db, "PRINTER_IP")
+                        code = await _GS(db, "PRINTER_ACCESS_CODE")
+                    await create_print(_j0, _u0, _t0, "cloud", ip or "", code or "")
+                try:    lp.run_until_complete(_go())
+                finally: lp.close()
+            _th.Thread(target=_cloud0, daemon=True).start()
+
+        # Local: RUNNING après PREPARE + print_type=local
+        elif (_gst == "RUNNING" and p.get("print_type") == "local"
+              and p.get("gcode_file") and _jid
+              and state.status in ("PREPARE", "IDLE", "")):
+            import threading as _th2, asyncio as _aio2
+            from ..db.session import AsyncSessionLocal as _AS2
+            from ..services.settings_service import get_setting as _GS2
+            _u2 = "ftp://" + (p.get("gcode_file") or "")
+            _t2 = p.get("subtask_name") or p.get("gcode_file") or ""
+            _j2 = _jid
+            def _local2():
+                lp = _aio2.new_event_loop()
+                async def _go():
+                    async with _AS2() as db:
+                        ip   = await _GS2(db, "PRINTER_IP")
+                        code = await _GS2(db, "PRINTER_ACCESS_CODE")
+                    await create_print(_j2, _u2, _t2, "local", ip or "", code or "")
+                try:    lp.run_until_complete(_go())
+                finally: lp.close()
+            _th2.Thread(target=_local2, daemon=True).start()
+
+        # Milestones
+        if _jid and _gst == "RUNNING":
+            on_progress(_jid, _pct, _lay)
+        # Fin
+        if _jid and _gst in ("FINISH", "FAILED"):
+            on_finish(_jid, _gst)
+
         # SN depuis upgrade_state
         sn = p.get("upgrade_state", {}).get("sn", "")
         if sn and not state.serial:
