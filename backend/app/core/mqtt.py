@@ -300,6 +300,21 @@ class MQTTManager:
                     t.drying_temp = int(tr.get("drying_temp") or 0)
                     t.drying_time = int(tr.get("drying_time") or 0)
                     t.total_len = int(tr.get("total_len") or 0)
+                    # Détection du mode de reconnaissance du filament
+                    # RFID : filament Bambu avec tag NFC (tray_info_idx non vide = ID catalogue Bambu)
+                    # COLOR : filament custom reconnu par UUID + matching couleur
+                    # MANUAL : aucune détection automatique possible
+                    _tray_info = (tr.get("tray_info_idx") or "").strip()
+                    _tray_uuid = (tr.get("tray_uuid") or "")
+                    _uuid_valid = bool(_tray_uuid and _tray_uuid.replace("0",""))
+                    if _tray_info and tr.get("tray_sub_brands"):
+                        t.match_mode = "rfid"    # Tag RFID Bambu Lab
+                    elif _uuid_valid and not tr.get("tray_sub_brands"):
+                        t.match_mode = "color"   # UUID + matching couleur
+                    elif not t.empty:
+                        t.match_mode = "manual"  # Filament présent mais non identifié
+                    else:
+                        t.match_mode = ""
                     ams.trays.append(t)
                 state.ams_list.append(ams)
             changed = True
