@@ -192,10 +192,11 @@ class MQTTManager:
             logger.info(f"[EXTRUDER] state=0x{extruder_state:X} active_idx={active_nozzle_idx} ids={[e.get('id') for e in extruder_infos]}")
             for ext in extruder_infos:
                 eid = int(ext.get("id", 0))
-                if eid >= len(state.nozzles):
-                    while len(state.nozzles) <= eid:
-                        state.nozzles.append(NozzleTemp(id=len(state.nozzles)))
-                n = state.nozzles[eid]
+                # Chercher par id, pas par index (l'ordre peut ne pas correspondre)
+                n = next((x for x in state.nozzles if x.id == eid), None)
+                if n is None:
+                    n = NozzleTemp(id=eid)
+                    state.nozzles.append(n)
                 temp_raw = ext.get("temp", 0)
                 if isinstance(temp_raw, int) and temp_raw > 0xFFFF:
                     n.temp   = float(temp_raw & 0xFFFF)
