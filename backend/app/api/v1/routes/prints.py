@@ -191,6 +191,23 @@ async def del_tag(print_id: int, tag: str, _: str = Depends(get_current_user)):
     return {"ok": True}
 
 
+@router.get("/debug")
+async def debug_prints():
+    """Route de debug — dump brut de la table prints."""
+    import aiosqlite, os
+    db_path = os.getenv("DATABASE_URL", "sqlite+aiosqlite:////data/bambunymous.db")
+    db_path = db_path.replace("sqlite+aiosqlite:///", "")
+    rows = []
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT id,job_id,file_name,status,plate_image,model_3mf,created_at FROM prints ORDER BY id DESC LIMIT 20") as cur:
+            async for row in cur:
+                rows.append(dict(row))
+        async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
+            tables = [r[0] async for r in cur]
+    return {"tables": tables, "prints": rows}
+
+
 @router.get("/stats/summary")
 async def prints_stats(_: str = Depends(get_current_user)):
     """Statistiques globales — compat Spoolnymous."""
