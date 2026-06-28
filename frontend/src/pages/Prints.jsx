@@ -195,26 +195,25 @@ export default function Prints() {
   const [statusF, setStatusF] = useState("");
   const [selected, setSelected] = useState(null);
   const [importing, setImporting] = useState(false);
-  const [rawDebug, setRawDebug] = useState(null);
-
-  const [apiError, setApiError] = useState(null);
+  const [error, setError]     = useState(null);
+  const [debugInfo, setDebugInfo] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    setApiError(null);
+    setError(null);
     try {
       const params = new URLSearchParams({ limit:100 });
       if (search)  params.set("search",  search);
       if (statusF) params.set("status",  statusF);
       const { data } = await client.get(`/prints?${params}`);
-      setRawDebug(JSON.stringify(data, null, 2));
+      setDebugInfo(`total=${data.total} prints=${(data.prints||[]).length}`);
       setPrints(data.prints ?? []);
       setTotal(data.total ?? 0);
     } catch(e) {
-      console.error(e);
-      setApiError(e.response?.data?.detail || e.message || "Erreur API");
+      setError(e.response?.data?.detail || e.message || "Erreur");
+      setDebugInfo("ERREUR: " + (e.response?.data?.detail || e.message));
     }
-    finally { setLoading(false); }
+    setLoading(false);
   }, [search, statusF]);
 
   useEffect(() => { load(); }, [load]);
@@ -237,11 +236,12 @@ export default function Prints() {
 
   return (
     <div style={{ maxWidth:900, margin:"0 auto", display:"flex", flexDirection:"column", gap:12 }}>
-      {/* Header */}
+
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Historique</h1>
           <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{total} impressions</span>
+          {debugInfo && <span style={{ fontSize:10, color:"#f59e0b", fontFamily:"monospace" }}>[{debugInfo}]</span>}
         </div>
         <div style={{ display:"flex", gap:6 }}>
           <button onClick={load} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
@@ -258,7 +258,6 @@ export default function Prints() {
         </div>
       </div>
 
-      {/* Filtres */}
       <div className="card" style={{ padding:"10px 12px", display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
         <Search size={13} style={{ color:"var(--muted)" }}/>
         <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher…"
@@ -276,22 +275,22 @@ export default function Prints() {
         </div>
       </div>
 
-      {/* Grille */}
-      {loading ? (
-        <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>
-      ) : rawDebug !== null && prints.length === 0 && !apiError ? (
-        <pre style={{ fontSize:10, color:"#22c55e", padding:12, overflowX:"auto",
-          background:"#111", borderRadius:8, margin:8 }}>{rawDebug}</pre>
-      ) : apiError ? (
-        <div style={{ margin:16, padding:"12px 16px", background:"rgba(239,68,68,0.1)",
+      {loading && <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>}
+
+      {!loading && error && (
+        <div style={{ margin:8, padding:"12px 16px", background:"rgba(239,68,68,0.1)",
           border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, color:"#ef4444", fontSize:13 }}>
-          ⚠ Erreur: {apiError}
+          ⚠ {error}
         </div>
-      ) : prints.length === 0 ? (
+      )}
+
+      {!loading && !error && prints.length === 0 && (
         <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>
           Aucune impression — les prochains prints apparaîtront automatiquement.
         </p>
-      ) : (
+      )}
+
+      {!loading && !error && prints.length > 0 && (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
           {prints.map(p => (
             <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)}/>
@@ -299,7 +298,6 @@ export default function Prints() {
         </div>
       )}
 
-      {/* Détail */}
       {selected && <PrintDetail p={selected} onClose={()=>setSelected(null)}/>}
     </div>
   );
