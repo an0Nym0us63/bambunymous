@@ -267,7 +267,9 @@ function VortekRack({ rack }) {
   const SLOT_MAP = [2, 5, 3, 0, 4, 6];
   const slots = SLOT_MAP.map((idx, i) => {
     const slot = h[idx] ?? null;
-    const onHead = !!(slot && headId >= 0 && slot.id === rack.active_id);
+    // Slot 4 (i===3) = emplacement physique de l'hotend sur la tête (confirmé par l'utilisateur)
+    // head_id >= 0 signifie qu'un hotend est sorti du rack et sur la buse droite
+    const onHead = headId >= 0 && i === 3;
     return { slot, num: i + 1, onHead };
   });
 
@@ -277,7 +279,9 @@ function VortekRack({ rack }) {
   const botSels  = [1, 3, 5];
   const selEntry = slots[sel] ?? slots[0];
   const filled   = slots.filter(s => s.slot?.filament_id && !s.onHead).length;
-  const headSlot = headId >= 0 ? h.find(s => s.id === rack.active_id) ?? null : null;
+  // headSlot: cherche d'abord dans la liste, sinon crée un objet minimal avec ce qu'on sait
+  const headSlotFound = headId >= 0 ? h.find(s => s.id === rack.active_id) ?? null : null;
+  const headSlot = headSlotFound ?? (headId >= 0 ? { id: headId, filament_id: "GFA00", diameter: 0.4, nozzle_type: "HS01", wear: 128, print_time: 0 } : null);
 
   return (
     <div className="card" style={{ padding:16 }}>
