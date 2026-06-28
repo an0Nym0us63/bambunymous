@@ -29,15 +29,8 @@ const STATUS_CFG = {
 
 function StatusBanner({ status }) {
   const [expanded, setExpanded] = useState(false);
-
-  const isRunning = status?.status === "RUNNING";
-  const cfg = STATUS_CFG[status?.status] ?? STATUS_CFG.IDLE;
-  const pct = status?.progress ?? 0;
-  const remain = fmtTime(status?.remaining_minutes);
-
-  // Caméra — img.src direct (pas de Bearer nécessaire, route publique)
-  const camRef     = useRef(null);
-  const timerRef   = useRef(null);
+  const camRef      = useRef(null);
+  const timerRef    = useRef(null);
   const inFlightRef = useRef(false);
 
   const stopCam = () => {
@@ -54,45 +47,67 @@ function StatusBanner({ status }) {
     timerRef.current = setInterval(tickCam, 1500);
   };
 
+  const isRunning = status?.status === "RUNNING";
   useEffect(() => {
-    if (expanded && isRunning) startCam();
-    else stopCam();
+    if (expanded && isRunning) startCam(); else stopCam();
     return stopCam;
   }, [expanded, isRunning]);
 
   if (!status) return <div className="card" style={{ height:56, animation:"pulse 2s infinite" }} />;
+  const cfg    = STATUS_CFG[status.status] ?? STATUS_CFG.IDLE;
+  const pct    = status.progress ?? 0;
+  const remain = fmtTime(status.remaining_minutes);
+  const left   = status.nozzles?.find(n => n.id === 1);
+  const right  = status.nozzles?.find(n => n.id === 0);
+
+  const TempChip = ({ label, current, target, active, accent }) => {
+    const hot = current > 40;
+    return (
+      <div style={{ flex:1, background: active ? "rgba(59,130,246,0.08)" : "var(--surface2)",
+        border:`1px solid ${active ? "rgba(59,130,246,0.4)" : "var(--border)"}`,
+        borderRadius:10, padding:"8px 10px", position:"relative", overflow:"hidden" }}>
+        {active && <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:"linear-gradient(90deg,transparent,#3b82f6,transparent)" }}/>}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:2 }}>
+          <span style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em" }}>{label}</span>
+          {active && <span style={{ fontSize:8, color:"#3b82f6", fontWeight:700 }}>ACTIF</span>}
+        </div>
+        <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
+          <span style={{ fontSize:22, fontWeight:700, fontFamily:"monospace", lineHeight:1,
+            color: current===0 ? "var(--muted)" : hot ? (accent||"#fb923c") : "var(--text)" }}>
+            {current > 0 ? Math.round(current) : "—"}
+          </span>
+          <span style={{ fontSize:11, color:"var(--muted)" }}>°</span>
+          {target > 0 && <span style={{ fontSize:11, color:"var(--muted)", marginLeft:"auto", fontFamily:"monospace" }}>/{Math.round(target)}°</span>}
+        </div>
+      </div>
+    );
+  };
 
   return (
-    <div className="card" style={{ position:"relative", overflow:"hidden" }}>
-      {/* Barre de progression */}
+    <div className="card" style={{ overflow:"hidden" }}>
+      {/* Barre progression */}
       {isRunning && (
         <div style={{ position:"absolute", top:0, left:0, height:"100%",
-          background:`linear-gradient(90deg, ${cfg.color}15, transparent)`,
-          width:`${pct}%`, transition:"width 1s", pointerEvents:"none" }} />
+          background:`linear-gradient(90deg,${cfg.color}12,transparent)`,
+          width:`${pct}%`, transition:"width 1s", pointerEvents:"none", zIndex:0 }} />
       )}
 
-      {/* Ligne principale — cliquable pour déplier */}
+      {/* Header cliquable */}
       <button onClick={() => isRunning && setExpanded(e => !e)}
-        style={{ width:"100%", background:"none", border:"none", cursor: isRunning ? "pointer" : "default", padding:0 }}>
-        <div style={{ position:"relative", display:"flex", alignItems:"center", gap:12, padding:"12px 16px" }}>
+        style={{ width:"100%", background:"none", border:"none", cursor:isRunning?"pointer":"default", padding:0, position:"relative", zIndex:1 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px" }}>
           <div style={{ width:8, height:8, borderRadius:"50%", backgroundColor:cfg.dot, flexShrink:0,
-            animation: isRunning ? "livePulse 2s infinite" : "none" }} />
+            animation:isRunning?"livePulse 2s infinite":"none" }} />
           <div style={{ flex:1, minWidth:0, textAlign:"left" }}>
             <p style={{ fontWeight:600, fontSize:14, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {isRunning && status.print_name ? status.print_name : cfg.label}
             </p>
-            {isRunning && status.print_name && (
-              <p style={{ fontSize:11, color:"var(--muted)" }}>{cfg.label}</p>
-            )}
+            {isRunning && status.print_name && <p style={{ fontSize:11, color:"var(--muted)" }}>{cfg.label}</p>}
           </div>
           {isRunning && (
-            <div style={{ display:"flex", alignItems:"center", gap:12, flexShrink:0 }}>
-              {remain && <span style={{ fontSize:12, color:"var(--muted)", display:"flex", alignItems:"center", gap:4 }}><Clock size={11}/>{remain}</span>}
-              {status.total_layers > 0 && (
-                <span style={{ fontSize:12, color:"var(--muted)", display:"flex", alignItems:"center", gap:4 }}>
-                  <Layers size={11}/>{status.layer}/{status.total_layers}
-                </span>
-              )}
+            <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
+              {remain && <span style={{ fontSize:12, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Clock size={11}/>{remain}</span>}
+              {status.total_layers > 0 && <span style={{ fontSize:12, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Layers size={11}/>{status.layer}/{status.total_layers}</span>}
               <span style={{ fontSize:20, fontWeight:700, fontFamily:"monospace", color:cfg.color }}>{pct}%</span>
             </div>
           )}
@@ -104,40 +119,36 @@ function StatusBanner({ status }) {
 
       {/* Panneau déplié */}
       {expanded && isRunning && (
-        <div style={{ borderTop:"1px solid var(--border)", padding:12, display:"flex", gap:12, flexWrap:"wrap" }}>
-          {/* Snapshot caméra — pattern Spoolnymous: img.src + inFlight */}
-          <div style={{ flex:"1 1 200px", minWidth:0 }}>
-            <img ref={camRef} alt="Camera"
-              style={{ width:"100%", borderRadius:8, display:"block",
-                border:"1px solid var(--border)", background:"#111",
-                minHeight:120, objectFit:"cover" }}
-              onLoad={() => { inFlightRef.current = false; }}
-              onError={(e) => {
-                inFlightRef.current = false;
-                e.currentTarget.src = "data:image/svg+xml;utf8," + encodeURIComponent(
-                  "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 225'><rect width='100%' height='100%' fill='%23111'/><text x='50%' y='50%' fill='%23666' font-family='sans-serif' font-size='14' text-anchor='middle' dominant-baseline='middle'>Caméra indisponible</text></svg>"
-                );
-              }}
-            />
-          </div>
-          {/* Détails impression */}
-          <div style={{ flex:"1 1 140px", display:"flex", flexDirection:"column", gap:8, justifyContent:"center" }}>
-            <div>
-              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>Couche</p>
-              <p style={{ fontSize:16, fontWeight:700, fontFamily:"monospace", color:"var(--text)" }}>
-                {status.layer} <span style={{ fontSize:12, color:"var(--muted)" }}>/ {status.total_layers}</span>
-              </p>
+        <div style={{ borderTop:"1px solid var(--border)" }}>
+          {/* Caméra */}
+          <img ref={camRef} alt="Camera"
+            style={{ width:"100%", display:"block", maxHeight:280, objectFit:"cover",
+              background:"#000" }}
+            onLoad={() => { inFlightRef.current = false; }}
+            onError={e => { inFlightRef.current = false; e.currentTarget.style.display="none"; }}
+          />
+          {/* Températures + infos */}
+          <div style={{ padding:12, display:"flex", flexDirection:"column", gap:10 }}>
+            {/* Buses */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              {left  && <TempChip label="Buse Gauche" current={left.temp}   target={left.target}   active={left.active}  />}
+              {right && <TempChip label="Buse Droite" current={right.temp}  target={right.target}  active={right.active} />}
+              <TempChip label="Plateau" current={status.bed_temp}     target={status.target_bed_temp} accent="#ef4444" />
+              <TempChip label="Chambre" current={status.chamber_temp} target={0} />
             </div>
-            <div>
-              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>Restant</p>
-              <p style={{ fontSize:16, fontWeight:700, fontFamily:"monospace", color:"var(--text)" }}>{remain || "—"}</p>
+            {/* Couche + vitesse */}
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+              {[
+                { label:"Couche", value:`${status.layer}/${status.total_layers}` },
+                { label:"Restant", value:remain||"—" },
+                { label:"Vitesse", value:status.speed_mag ? `${status.speed_mag}%` : "—" },
+              ].map(({ label, value }) => (
+                <div key={label} style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10, padding:"8px 10px" }}>
+                  <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:2 }}>{label}</p>
+                  <p style={{ fontSize:14, fontWeight:700, fontFamily:"monospace", color:"var(--text)" }}>{value}</p>
+                </div>
+              ))}
             </div>
-            {status.speed_mag && (
-              <div>
-                <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:2 }}>Vitesse</p>
-                <p style={{ fontSize:14, fontFamily:"monospace", color:"var(--text)" }}>{status.speed_mag}%</p>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -145,51 +156,6 @@ function StatusBanner({ status }) {
   );
 }
 
-// ── Températures ───────────────────────────────────────────────────────────
-function TempCard({ label, current, target, accent, icon: Icon, active }) {
-  const hot = current > 40;
-  const heating = target > 0 && current < target - 3;
-  return (
-    <div className="card-sm" style={{ padding:12, display:"flex", flexDirection:"column", gap:4, position:"relative", overflow:"hidden", borderColor: active ? "rgba(59,130,246,0.4)" : undefined }}>
-      {active && <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:"linear-gradient(90deg,transparent,#3b82f6,transparent)" }} />}
-      <div style={{ display:"flex", alignItems:"center", gap:4, color:"var(--muted)", justifyContent:"space-between" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-          <Icon size={11} />
-          <span style={{ fontSize:10, textTransform:"uppercase", letterSpacing:"0.05em" }}>{label}</span>
-        </div>
-        {active && <span style={{ fontSize:9, color:"#3b82f6", fontWeight:700 }}>ACTIF</span>}
-      </div>
-      <div style={{ display:"flex", alignItems:"flex-end", gap:4 }}>
-        <span style={{ fontSize:26, fontWeight:700, fontFamily:"monospace", lineHeight:1, color: current === 0 ? "var(--muted)" : hot ? (accent||"#fb923c") : "var(--text)" }}>
-          {current > 0 ? Math.round(current) : "—"}
-        </span>
-        <span style={{ fontSize:12, color:"var(--muted)", marginBottom:2 }}>°</span>
-        {target > 0 && (
-          <span style={{ fontSize:12, fontFamily:"monospace", color: heating ? "#f59e0b" : "var(--muted)", marginBottom:2, marginLeft:"auto" }}>
-            /{Math.round(target)}°
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function PrinterTemps({ status }) {
-  if (!status) return <div className="card" style={{ height:96, animation:"pulse 2s infinite" }} />;
-  const left  = status.nozzles?.find(n => n.id === 1);
-  const right = status.nozzles?.find(n => n.id === 0);
-  return (
-    <div className="card" style={{ padding:16 }}>
-      <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.1em", marginBottom:12 }}>Températures</p>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:8 }}>
-        {left  && <TempCard label="Buse Gauche" current={left.temp}  target={left.target}  active={left.active}  icon={Thermometer} />}
-        {right && <TempCard label="Buse Droite" current={right.temp} target={right.target} active={right.active} icon={Thermometer} />}
-        <TempCard label="Plateau" current={status.bed_temp}     target={status.target_bed_temp} icon={Thermometer} accent="#ef4444" />
-        <TempCard label="Chambre" current={status.chamber_temp} target={0}                      icon={Wind} />
-      </div>
-    </div>
-  );
-}
 
 // ── Vortek Rack ────────────────────────────────────────────────────────────
 
@@ -465,7 +431,6 @@ export default function Home() {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, maxWidth:640, margin:"0 auto" }}>
       <StatusBanner status={status} />
-      <PrinterTemps status={status} />
       {hasRack && <VortekRack rack={status.hotend_rack} />}
       <AMSSection
         amsList={status?.ams_list ?? []}
