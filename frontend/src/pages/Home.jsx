@@ -157,6 +157,16 @@ function StatusBanner({ status }) {
 }
 
 
+// ── Icône détection filament ─────────────────────────────────────────────────
+function MatchBadge({ mode }) {
+  const cfg = { rfid:{symbol:"⬡",color:"#22c55e",title:"Tag RFID Bambu Lab"},
+                color:{symbol:"◈",color:"#f59e0b",title:"Matching couleur"},
+                manual:{symbol:"◇",color:"#94a3b8",title:"Non identifié"} }[mode];
+  if (!cfg) return null;
+  return <span title={cfg.title} style={{ fontSize:9, color:cfg.color,
+    textShadow:"0 0 3px rgba(0,0,0,0.9)", userSelect:"none", lineHeight:1 }}>{cfg.symbol}</span>;
+}
+
 // ── Vortek Rack ────────────────────────────────────────────────────────────
 
 // Déduire l'état du slot
@@ -202,6 +212,9 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick }) {
         {isHead && <span style={{ color:"#60a5fa", fontSize:9 }}>↑</span>}
         {status === "empty" && <span style={{ color:"var(--muted)", fontSize:8 }}>—</span>}
       </div>
+      {slot?.match_mode && !isHead && status==="loaded" && (
+        <span style={{ position:"absolute", top:-2, right:-2, zIndex:1 }}><MatchBadge mode={slot.match_mode}/></span>
+      )}
       <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700,
         color: isHead ? "#60a5fa" : "var(--muted)" }}>{num}</span>
     </button>
@@ -242,6 +255,7 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
               <span style={{ fontSize:9, background:statusBadge.bg, color:statusBadge.color,
                 padding:"2px 8px", borderRadius:20, fontWeight:600 }}>{statusBadge.label}</span>
             )}
+            {slot?.match_mode && status==="loaded" && <MatchBadge mode={slot.match_mode}/>}
           </div>
           <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
             {displaySlot.nozzle_type || "—"} · {displaySlot.diameter}mm
