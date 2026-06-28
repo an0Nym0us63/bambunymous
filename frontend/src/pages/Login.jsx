@@ -1,16 +1,47 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Box, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../store/auth";
 
+function AppIcon({ size = 72 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="lbg" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{stopColor:"#1a1f2e"}}/>
+          <stop offset="100%" style={{stopColor:"#0f1219"}}/>
+        </linearGradient>
+        <linearGradient id="ltop" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{stopColor:"#60a5fa"}}/>
+          <stop offset="100%" style={{stopColor:"#3b82f6"}}/>
+        </linearGradient>
+        <linearGradient id="lleft" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{stopColor:"#2563eb"}}/>
+          <stop offset="100%" style={{stopColor:"#1d4ed8"}}/>
+        </linearGradient>
+        <linearGradient id="lright" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" style={{stopColor:"#93c5fd"}}/>
+          <stop offset="100%" style={{stopColor:"#60a5fa"}}/>
+        </linearGradient>
+      </defs>
+      <rect width="512" height="512" rx="112" fill="url(#lbg)"/>
+      <polygon points="256,110 390,188 256,266 122,188" fill="url(#ltop)"/>
+      <polygon points="122,188 256,266 256,370 122,292" fill="url(#lleft)"/>
+      <polygon points="390,188 256,266 256,370 390,292" fill="url(#lright)"/>
+      <path d="M 256 110 Q 320 80 340 50" stroke="#f59e0b" strokeWidth="12" fill="none" strokeLinecap="round" opacity="0.9"/>
+      <circle cx="340" cy="50" r="10" fill="#f59e0b" opacity="0.9"/>
+    </svg>
+  );
+}
+
 export default function Login() {
-  const [user, setUser] = useState("admin");
-  const [pass, setPass] = useState("");
-  const [show, setShow] = useState(false);
-  const [error, setError] = useState("");
+  const [user, setUser]     = useState("admin");
+  const [pass, setPass]     = useState("");
+  const [show, setShow]     = useState(false);
+  const [error, setError]   = useState("");
   const [loading, setLoading] = useState(false);
-  const { login } = useAuth();
-  const navigate = useNavigate();
+  const { login }   = useAuth();
+  const navigate    = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,50 +54,55 @@ export default function Login() {
   const inp = {
     width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
     borderRadius:10, padding:"10px 14px", fontSize:14, color:"var(--text)",
-    outline:"none", transition:"border-color 0.15s",
+    outline:"none", transition:"border-color 0.15s", boxSizing:"border-box",
   };
 
   return (
-    <div style={{ minHeight:"100dvh", display:"flex", alignItems:"center", justifyContent:"center", background:"var(--bg)", padding:16 }}>
-      <div style={{ width:"100%", maxWidth:360 }}>
-        {/* Logo */}
-        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", marginBottom:32 }}>
-          <div style={{ width:56, height:56, borderRadius:16, background:"linear-gradient(135deg,#3b82f6,#06b6d4)", display:"flex", alignItems:"center", justifyContent:"center", marginBottom:16, boxShadow:"0 8px 32px rgba(59,130,246,0.3)" }}>
-            <Box size={26} color="white"/>
+    <div style={{ minHeight:"100dvh", display:"flex", alignItems:"center",
+      justifyContent:"center", background:"var(--bg)", padding:16 }}>
+      <div style={{ width:"100%", maxWidth:360, display:"flex", flexDirection:"column", gap:0 }}>
+
+        {/* Logo + nom */}
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:12, marginBottom:32 }}>
+          <AppIcon size={80}/>
+          <div style={{ textAlign:"center" }}>
+            <h1 style={{ fontSize:26, fontWeight:800, color:"var(--text)",
+              letterSpacing:"-0.02em", margin:0 }}>BambuNymous</h1>
+            <p style={{ fontSize:12, color:"var(--muted)", margin:"4px 0 0",
+              textTransform:"uppercase", letterSpacing:"0.08em" }}>3D Print Manager</p>
           </div>
-          <h1 style={{ fontSize:22, fontWeight:700, color:"var(--text)" }}>BambuNymous</h1>
-          <p style={{ fontSize:13, color:"var(--muted)", marginTop:4 }}>Gestionnaire de bobines</p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="card" style={{ padding:24, display:"flex", flexDirection:"column", gap:14 }}>
-          <div>
-            <label style={{ display:"block", fontSize:11, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Utilisateur</label>
-            <input value={user} onChange={e=>setUser(e.target.value)} style={inp}
-              onFocus={e=>e.target.style.borderColor="#3b82f6"}
-              onBlur={e=>e.target.style.borderColor="var(--border)"}/>
+        {/* Formulaire */}
+        <div className="card" style={{ padding:24, display:"flex", flexDirection:"column", gap:14 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            <label style={{ fontSize:12, color:"var(--muted)", fontWeight:600 }}>Utilisateur</label>
+            <input value={user} onChange={e=>setUser(e.target.value)}
+              style={inp} autoComplete="username"/>
           </div>
-          <div>
-            <label style={{ display:"block", fontSize:11, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Mot de passe</label>
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            <label style={{ fontSize:12, color:"var(--muted)", fontWeight:600 }}>Mot de passe</label>
             <div style={{ position:"relative" }}>
-              <input type={show?"text":"password"} value={pass} onChange={e=>setPass(e.target.value)}
-                style={{ ...inp, paddingRight:42 }}
-                onFocus={e=>e.target.style.borderColor="#3b82f6"}
-                onBlur={e=>e.target.style.borderColor="var(--border)"}/>
-              <button type="button" onClick={()=>setShow(!show)}
-                style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:"var(--muted)" }}>
+              <input type={show?"text":"password"} value={pass}
+                onChange={e=>setPass(e.target.value)}
+                onKeyDown={e=>e.key==="Enter"&&handleSubmit(e)}
+                style={{...inp, paddingRight:44}} autoComplete="current-password"/>
+              <button type="button" onClick={()=>setShow(s=>!s)}
+                style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)",
+                  background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:0 }}>
                 {show ? <EyeOff size={16}/> : <Eye size={16}/>}
               </button>
             </div>
           </div>
-          {error && <p style={{ fontSize:12, color:"#ef4444" }}>{error}</p>}
-          <button type="submit" disabled={loading} style={{
-            padding:"11px 0", background:"#3b82f6", color:"white", border:"none", borderRadius:10,
-            fontSize:14, fontWeight:600, cursor:"pointer", opacity:loading?0.7:1, marginTop:4,
-          }}>
+          {error && <p style={{ fontSize:12, color:"#ef4444", margin:0 }}>{error}</p>}
+          <button onClick={handleSubmit} disabled={loading}
+            style={{ width:"100%", padding:"11px", background:"#3b82f6", border:"none",
+              borderRadius:10, color:"white", fontSize:14, fontWeight:700,
+              cursor:loading?"not-allowed":"pointer", opacity:loading?0.7:1,
+              transition:"opacity 0.15s" }}>
             {loading ? "Connexion…" : "Se connecter"}
           </button>
-        </form>
+        </div>
       </div>
     </div>
   );
