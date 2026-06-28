@@ -35,9 +35,9 @@ function StatusBanner({ status }) {
   const pct = status?.progress ?? 0;
   const remain = fmtTime(status?.remaining_minutes);
 
-  // Caméra — même pattern que Spoolnymous: img.src change, inFlight flag
-  const camRef = useRef(null);
-  const timerRef = useRef(null);
+  // Caméra — img.src direct (pas de Bearer nécessaire, route publique)
+  const camRef     = useRef(null);
+  const timerRef   = useRef(null);
   const inFlightRef = useRef(false);
 
   const stopCam = () => {
@@ -51,7 +51,7 @@ function StatusBanner({ status }) {
   const startCam = () => {
     if (timerRef.current) return;
     tickCam();
-    timerRef.current = setInterval(tickCam, 1200);
+    timerRef.current = setInterval(tickCam, 1500);
   };
 
   useEffect(() => {
