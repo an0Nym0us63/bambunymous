@@ -131,7 +131,7 @@ async def delete_print(print_id: int, _: str = Depends(get_current_user)):
 
 
 @router.get("/{print_id}/image")
-async def print_image(print_id: int, _: str = Depends(get_current_user)):
+async def print_image(print_id: int):
     async with AsyncSessionLocal() as db:
         p = await db.get(Print, print_id)
     if not p or not p.plate_image: raise HTTPException(404)
@@ -141,7 +141,7 @@ async def print_image(print_id: int, _: str = Depends(get_current_user)):
 
 
 @router.get("/{print_id}/snapshot/{trigger}")
-async def print_snapshot(print_id: int, trigger: str, _: str = Depends(get_current_user)):
+async def print_snapshot(print_id: int, trigger: str):
     path = DATA_DIR / "prints" / str(print_id) / f"snapshot-{trigger}.jpg"
     if not path.exists(): raise HTTPException(404)
     return FileResponse(path, media_type="image/jpeg")
