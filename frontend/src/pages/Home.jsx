@@ -281,7 +281,9 @@ function VortekRack({ rack }) {
     const targetId = num + 15; // slot 1→id16, slot 4→id19, etc.
     const onHead   = headId === targetId;
     const slot     = h.find(s => s.id === targetId) ?? null;
-    return { slot, num, onHead };
+    // Si onHead et slot null → créer un slot fantôme pour l'affichage
+    const displaySlot = slot ?? (onHead ? { id: targetId, filament_id: "", color: "", diameter: 0.4, nozzle_type: "HS01", wear: 0, print_time: 0, empty: true } : null);
+    return { slot: displaySlot, num, onHead };
   });
 
   const topSlots = [slots[0], slots[2], slots[4]];
@@ -310,20 +312,20 @@ function VortekRack({ rack }) {
       <div style={{ display:"flex", gap:12 }}>
         <div style={{ display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
           <div style={{ display:"flex", gap:6 }}>
-            {topSlots.map(({slot, num, onHead}, i) => slot && (
-              <SlotMini key={slot.id}
+            {topSlots.map(({slot, num, onHead}, i) => slot ? (
+              <SlotMini key={num}
                 slot={slot} num={num} isOnHead={onHead}
                 isSelected={sel === topSels[i]}
                 onClick={() => setSel(topSels[i])} />
-            ))}
+            ) : null)}
           </div>
           <div style={{ display:"flex", gap:6 }}>
-            {botSlots.map(({slot, num, onHead}, i) => slot && (
-              <SlotMini key={slot.id}
+            {botSlots.map(({slot, num, onHead}, i) => slot ? (
+              <SlotMini key={num}
                 slot={slot} num={num} isOnHead={onHead}
                 isSelected={sel === botSels[i]}
                 onClick={() => setSel(botSels[i])} />
-            ))}
+            ) : null)}
           </div>
         </div>
 
