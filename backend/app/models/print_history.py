@@ -71,7 +71,7 @@ class FilamentUsage(Base):
 
     id            = Column(Integer, primary_key=True, autoincrement=True)
     print_id      = Column(Integer, ForeignKey("prints.id", ondelete="CASCADE"), nullable=False)
-    spool_id      = Column(Integer, ForeignKey("spools.id", ondelete="SET NULL"), nullable=True)
+    spool_id      = Column(Integer, ForeignKey("bobines.id", ondelete="SET NULL"), nullable=True)
 
     # Snapshot au moment du print
     filament_type = Column(String(64), nullable=False, default="")
@@ -88,7 +88,6 @@ class FilamentUsage(Base):
     normal_cost   = Column(Float, default=0.0)  # coût au prix catalogue
 
     print  = relationship("Print", back_populates="filament_usage")
-    spool  = relationship("Spool", foreign_keys=[spool_id])
 
     __table_args__ = (
         Index("idx_filament_usage_print", "print_id"),
