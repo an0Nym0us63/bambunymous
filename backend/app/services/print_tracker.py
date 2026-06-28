@@ -1,5 +1,5 @@
 """
-Tracker d\'impressions BambuNymous.
+Tracker d'impressions BambuNymous.
 Gère : création, milestones (%, couches), snapshots, fin de print.
 Logique identique à Spoolnymous (processMessage + safe_update_status).
 """
@@ -233,7 +233,8 @@ async def create_manual_print(local_path: str, print_date: datetime) -> Optional
         from ..services.tmf_parser import _parse_3mf, _clean_name
         meta = _parse_3mf(data, pid)
         name = _clean_name(meta.get("title") or meta.get("file") or Path(local_path).stem)
-        if meta.get("plate_id", "1") != "1": name += f" — Plateau {meta[plate_id]}"
+        plate_id2 = meta.get("plate_id", "1")
+        if plate_id2 != "1": name += " — Plateau " + plate_id2
         async with AsyncSessionLocal() as db:
             await db.execute(update(Print).where(Print.id == pid).values(
                 file_name=name, original_name=Path(local_path).name,
