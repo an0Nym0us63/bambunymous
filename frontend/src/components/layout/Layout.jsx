@@ -15,7 +15,7 @@ const S = {
   app:     { display:"flex", height:"100dvh", overflow:"hidden", background:"var(--bg)" },
   aside:   { display:"flex", flexDirection:"column", width:208, background:"var(--sidebar)", borderRight:"1px solid var(--border)", padding:"20px 0", flexShrink:0 },
   logo:    { display:"flex", alignItems:"center", gap:10, padding:"0 16px", marginBottom:32 },
-  logoBox: { width:28, height:28, borderRadius:10, background:"linear-gradient(135deg,#3b82f6,#06b6d4)", display:"flex", alignItems:"center", justifyContent:"center" },
+  logoBox: { width:28, height:28, borderRadius:8, overflow:"hidden" },
   nav:     { flex:1, padding:"0 8px", display:"flex", flexDirection:"column", gap:2 },
   main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
   page:    { flex:1, overflowY:"auto", padding:16, background:"var(--bg)" },
@@ -48,7 +48,7 @@ export default function Layout() {
       {/* Sidebar desktop */}
       <aside className="hidden-mobile" style={S.aside}>
         <div style={S.logo}>
-          <div style={S.logoBox}><Box size={14} color="white" /></div>
+          <img src="/icon.svg" style={{ width:28, height:28, borderRadius:8 }} alt="BambuNymous"/>
           <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
             BambuNymous
           </span>
@@ -67,7 +67,7 @@ export default function Layout() {
       <div style={S.main}>
         {/* Header mobile */}
         <header className="show-mobile" style={S.header}>
-          <div style={S.logoBox}><Box size={12} color="white" /></div>
+          <img src="/icon.svg" style={{ width:24, height:24, borderRadius:6 }} alt="BambuNymous"/>
           <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
             BambuNymous
           </span>
