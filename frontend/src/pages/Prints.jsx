@@ -196,8 +196,11 @@ export default function Prints() {
   const [selected, setSelected] = useState(null);
   const [importing, setImporting] = useState(false);
 
+  const [apiError, setApiError] = useState(null);
+
   const load = useCallback(async () => {
     setLoading(true);
+    setApiError(null);
     try {
       const params = new URLSearchParams({ limit:100 });
       if (search)  params.set("search",  search);
@@ -205,7 +208,10 @@ export default function Prints() {
       const { data } = await client.get(`/prints?${params}`);
       setPrints(data.prints ?? []);
       setTotal(data.total ?? 0);
-    } catch(e) { console.error(e); }
+    } catch(e) {
+      console.error(e);
+      setApiError(e.response?.data?.detail || e.message || "Erreur API");
+    }
     finally { setLoading(false); }
   }, [search, statusF]);
 
@@ -271,6 +277,11 @@ export default function Prints() {
       {/* Grille */}
       {loading ? (
         <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>
+      ) : apiError ? (
+        <div style={{ margin:16, padding:"12px 16px", background:"rgba(239,68,68,0.1)",
+          border:"1px solid rgba(239,68,68,0.3)", borderRadius:8, color:"#ef4444", fontSize:13 }}>
+          ⚠ Erreur: {apiError}
+        </div>
       ) : prints.length === 0 ? (
         <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>
           Aucune impression — les prochains prints apparaîtront automatiquement.
