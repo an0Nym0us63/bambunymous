@@ -165,6 +165,13 @@ class MQTTManager:
         if "spd_mag" in p: state.speed_mag = int(p["spd_mag"]); changed = True
 
         # ── Historique impressions ─────────────────────────────────────────
+        import threading as _pth, asyncio as _pio
+        from app.services.print_tracker import (
+            create_print as _cp, on_progress as _op, on_finish as _of
+        )
+        from app.db.session import AsyncSessionLocal as _PAS
+        from app.services.settings_service import get_setting as _PGS
+
         _jid  = str(p.get("job_id", "")) if p.get("job_id") else ""
         _gst  = p.get("gcode_state", "")
         _pct  = float(p.get("mc_percent", 0) or 0)
@@ -174,48 +181,42 @@ class MQTTManager:
 
         # Cloud: command=project_file + url
         if p.get("command") == "project_file" and _url and _jid:
-            import threading as _th, asyncio as _aio
-            from ..db.session import AsyncSessionLocal as _AS
-            from ..services.settings_service import get_setting as _GS
             _u0, _t0, _j0 = _url, _task, _jid
-            def _cloud0():
-                lp = _aio.new_event_loop()
+            def _cloud0(_u=_u0, _t=_t0, _j=_j0):
+                lp = _pio.new_event_loop()
                 async def _go():
-                    async with _AS() as db:
-                        ip   = await _GS(db, "PRINTER_IP")
-                        code = await _GS(db, "PRINTER_ACCESS_CODE")
-                    await create_print(_j0, _u0, _t0, "cloud", ip or "", code or "")
+                    async with _PAS() as db:
+                        ip   = await _PGS(db, "PRINTER_IP")
+                        code = await _PGS(db, "PRINTER_ACCESS_CODE")
+                    await _cp(_j, _u, _t, "cloud", ip or "", code or "")
                 try:    lp.run_until_complete(_go())
                 finally: lp.close()
-            _th.Thread(target=_cloud0, daemon=True).start()
+            _pth.Thread(target=_cloud0, daemon=True).start()
 
         # Local: RUNNING après PREPARE + print_type=local
         elif (_gst == "RUNNING" and p.get("print_type") == "local"
               and p.get("gcode_file") and _jid
               and state.status in ("PREPARE", "IDLE", "")):
-            import threading as _th2, asyncio as _aio2
-            from ..db.session import AsyncSessionLocal as _AS2
-            from ..services.settings_service import get_setting as _GS2
             _u2 = "ftp://" + (p.get("gcode_file") or "")
             _t2 = p.get("subtask_name") or p.get("gcode_file") or ""
             _j2 = _jid
-            def _local2():
-                lp = _aio2.new_event_loop()
+            def _local2(_u=_u2, _t=_t2, _j=_j2):
+                lp = _pio.new_event_loop()
                 async def _go():
-                    async with _AS2() as db:
-                        ip   = await _GS2(db, "PRINTER_IP")
-                        code = await _GS2(db, "PRINTER_ACCESS_CODE")
-                    await create_print(_j2, _u2, _t2, "local", ip or "", code or "")
+                    async with _PAS() as db:
+                        ip   = await _PGS(db, "PRINTER_IP")
+                        code = await _PGS(db, "PRINTER_ACCESS_CODE")
+                    await _cp(_j, _u, _t, "local", ip or "", code or "")
                 try:    lp.run_until_complete(_go())
                 finally: lp.close()
-            _th2.Thread(target=_local2, daemon=True).start()
+            _pth.Thread(target=_local2, daemon=True).start()
 
         # Milestones
         if _jid and _gst == "RUNNING":
-            on_progress(_jid, _pct, _lay)
+            _op(_jid, _pct, _lay)
         # Fin
         if _jid and _gst in ("FINISH", "FAILED"):
-            on_finish(_jid, _gst)
+            _of(_jid, _gst)
 
         # SN depuis upgrade_state
         sn = p.get("upgrade_state", {}).get("sn", "")
