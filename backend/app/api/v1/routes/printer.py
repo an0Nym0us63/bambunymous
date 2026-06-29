@@ -18,20 +18,33 @@ class NozzleTempOut(BaseModel):
 class SpoolInfoOut(BaseModel):
     id: int
     name: Optional[str] = None
+    translated_name: Optional[str] = None
     color: Optional[str] = None
     material: Optional[str] = None
     brand: Optional[str] = None
+    profile_id: Optional[str] = None
+    multicolor_type: Optional[str] = None
+    colors_array: Optional[str] = None
     remaining_weight_g: Optional[float] = None
     initial_weight_g: Optional[float] = None
+    spool_weight_g: Optional[float] = None
     price: Optional[float] = None
-    purchase_date: Optional[str] = None
-    notes: Optional[str] = None
+    price_override: Optional[float] = None
+    location: Optional[str] = None
+    tag_number: Optional[str] = None
+    ams_tray: Optional[str] = None
+    comment: Optional[str] = None
+    found_mode: Optional[str] = None
+    external_spool_id: Optional[str] = None
+    first_used_at: Optional[str] = None
+    last_used_at: Optional[str] = None
 
 class TrayOut(BaseModel):
     id: int
     color: str
     filament_type: str
     tray_id_name: str
+    tray_info_idx: str = ""   # ex: GFA00 = profile_id Bambu
     remain: int
     uuid: str
     tag_uid: str
@@ -111,15 +124,27 @@ def _spool_info(spool_id, spools_map):
     s, f = spools_map[spool_id]
     return SpoolInfoOut(
         id=s.id,
-        name=getattr(f, "name", None) or getattr(f, "display_name", None) if f else None,
-        color=s.color,
+        name=f.name if f else None,
+        translated_name=getattr(f, "translated_name", None) if f else None,
+        color=f"#{f.color}" if (f and f.color) else None,
         material=f.material if f else None,
-        brand=f.brand if f else None,
+        brand=f.manufacturer if f else None,
+        profile_id=f.profile_id if f else None,
+        multicolor_type=f.multicolor_type if f else None,
+        colors_array=f.colors_array if f else None,
         remaining_weight_g=s.remaining_weight_g,
         initial_weight_g=f.filament_weight_g if f else None,
+        spool_weight_g=f.spool_weight_g if f else None,
         price=f.price if f else None,
-        purchase_date=str(s.purchase_date) if getattr(s, "purchase_date", None) else None,
-        notes=getattr(s, "notes", None),
+        price_override=s.price_override,
+        location=s.location,
+        tag_number=s.tag_number,
+        ams_tray=s.ams_tray,
+        comment=s.comment,
+        found_mode=getattr(s, "found_mode", None),
+        external_spool_id=s.external_spool_id,
+        first_used_at=str(s.first_used_at) if s.first_used_at else None,
+        last_used_at=str(s.last_used_at) if s.last_used_at else None,
     )
 
 
@@ -168,7 +193,9 @@ async def printer_status(_: str = Depends(get_current_user)):
                 id=a.id,
                 trays=[TrayOut(
                     id=t.id, color=t.color, filament_type=t.filament_type,
-                    tray_id_name=t.tray_id_name, remain=t.remain,
+                    tray_id_name=t.tray_id_name,
+                    tray_info_idx=getattr(t, "tray_info_idx", ""),
+                    remain=t.remain,
                     uuid=t.uuid, tag_uid=t.tag_uid, empty=t.empty,
                     drying_temp=t.drying_temp, drying_time=t.drying_time,
                     spool_id=t.spool_id,
