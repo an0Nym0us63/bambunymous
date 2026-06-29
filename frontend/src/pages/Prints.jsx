@@ -364,7 +364,7 @@ export default function Prints() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ limit:100 });
+      const params = new URLSearchParams({ limit:500 });
       if (search)  params.set("search",  search);
       if (statusF) params.set("status",  statusF);
       if (groupF)  params.set("group",   groupF);
@@ -383,8 +383,9 @@ export default function Prints() {
   const loadGroups = useCallback(async () => {
     try {
       const { data } = await client.get("/prints/groups");
+      console.log("[GROUPES]", data.groups);
       setGroups(data.groups || []);
-    } catch(e) {}
+    } catch(e) { console.error("[GROUPES] erreur", e); }
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -446,9 +447,12 @@ export default function Prints() {
           ))}
         </div>
       </div>
-        {groups.length > 0 && (
+        {/* Toujours afficher le sélecteur de groupes même si vide pour debug */}
+        {true && (
           <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginTop:6 }}>
-            <span style={{ fontSize:11, color:"var(--muted)", alignSelf:"center" }}>Groupe :</span>
+            <span style={{ fontSize:11, color:"var(--muted)", alignSelf:"center" }}>
+              Groupes ({groups.length}) :
+            </span>
             <button onClick={()=>setGroupF("")} style={{
               padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600,
               cursor:"pointer", border:"none",
@@ -482,14 +486,7 @@ export default function Prints() {
       {!loading && !error && prints.length > 0 && (() => {
         const onDelete = id => { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => t-1); };
         // Si un groupe est sélectionné ou pas de groupes → grille flat
-        if (groupF || !groups.length) {
-          return (
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
-              {prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
-            </div>
-          );
-        }
-        // Sans filtre groupe → regrouper par groupe
+        // Regrouper par groupe si au moins un print a un tag groupe
         const grouped = {};
         const ungrouped = [];
         prints.forEach(p => {
@@ -503,6 +500,17 @@ export default function Prints() {
             ungrouped.push(p);
           }
         });
+        const hasGroups = Object.keys(grouped).length > 0;
+        console.log("[VUE] grouped:", Object.keys(grouped), "ungrouped:", ungrouped.length);
+
+        // Grille flat si filtre actif ou aucun groupe
+        if (groupF || !hasGroups) {
+          return (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
+              {prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
+            </div>
+          );
+        }
         return (
           <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
             {Object.entries(grouped).map(([g, gprints]) => (
