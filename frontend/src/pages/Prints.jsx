@@ -28,12 +28,21 @@ function FilamentDots({ filaments }) {
   return (
     <div style={{ display:"flex", gap:3, flexWrap:"wrap" }}>
       {filaments.map((f, i) => (
-        <div key={i} title={`${f.filament_type} — ${f.grams_used.toFixed(1)}g`} style={{
-          width:12, height:12, borderRadius:"50%",
-          backgroundColor: hexCss(f.color_hex),
-          border:"1px solid rgba(255,255,255,0.15)",
-          flexShrink:0,
-        }}/>
+        <div key={i}
+          title={`${f.filament_type} — ${f.grams_used.toFixed(1)}g${f.spool_id ? " · Bobine liée" : " · Non mappé"}`}
+          style={{ position:"relative", flexShrink:0 }}>
+          <div style={{
+            width:14, height:14, borderRadius:"50%",
+            backgroundColor: hexCss(f.color_hex),
+            border: f.spool_id
+              ? "2px solid #22c55e"
+              : "1px solid rgba(255,255,255,0.15)",
+          }}/>
+          {!f.spool_id && (
+            <span style={{ position:"absolute", top:-2, right:-2,
+              fontSize:7, lineHeight:1, color:"#f59e0b" }}>?</span>
+          )}
+        </div>
       ))}
     </div>
   );
@@ -75,7 +84,10 @@ function PrintCard({ p, onClick, onDelete }) {
         {imgUrl
           ? <img src={imgUrl} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
           : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center",
-              justifyContent:"center", color:"var(--muted)", fontSize:11 }}>Pas de vignette</div>
+              justifyContent:"center", color:"var(--muted)", fontSize:11,
+              background:"repeating-conic-gradient(var(--surface2) 0% 25%, var(--surface) 0% 50%) 0 0/20px 20px" }}>
+              <span style={{ background:"var(--surface)", padding:"4px 10px", borderRadius:6, fontSize:10 }}>Pas de vignette</span>
+            </div>
         }
         <div style={{ position:"absolute", top:6, left:6 }}>
           <StatusBadge status={p.status}/>
@@ -194,14 +206,29 @@ function PrintDetail({ p, onClose }) {
             <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
               {p.filament_usage.map((f,i) => (
                 <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
-                  background:"var(--surface2)", border:"1px solid var(--border)",
+                  background:"var(--surface2)",
+                  border:`1px solid ${f.spool_id ? "rgba(34,197,94,0.3)" : "var(--border)"}`,
                   borderRadius:8, padding:"6px 10px" }}>
-                  <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
-                    backgroundColor:hexCss(f.color_hex), border:"1px solid rgba(255,255,255,0.15)" }}/>
-                  <span style={{ fontSize:12, color:"var(--text)", flex:1 }}>
-                    {f.filament_type || "Inconnu"}
-                  </span>
-                  <span style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>
+                  <div style={{ position:"relative", flexShrink:0 }}>
+                    <div style={{ width:22, height:22, borderRadius:"50%",
+                      backgroundColor:hexCss(f.color_hex),
+                      border: f.spool_id ? "2px solid #22c55e" : "1px solid rgba(255,255,255,0.15)" }}/>
+                    {!f.spool_id && (
+                      <span style={{ position:"absolute", top:-3, right:-3,
+                        fontSize:9, color:"#f59e0b", fontWeight:700 }}>?</span>
+                    )}
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontSize:12, color:"var(--text)", margin:0,
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {f.filament_type || "Inconnu"}
+                      {f.spool_id && <span style={{ fontSize:10, color:"#22c55e", marginLeft:6 }}>✓ liée</span>}
+                    </p>
+                    {!f.spool_id && (
+                      <p style={{ fontSize:10, color:"#f59e0b", margin:0 }}>Non mappé à une bobine</p>
+                    )}
+                  </div>
+                  <span style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)", flexShrink:0 }}>
                     {f.grams_used.toFixed(1)}g
                   </span>
                 </div>
