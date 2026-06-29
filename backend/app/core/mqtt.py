@@ -287,7 +287,7 @@ class MQTTManager:
                     t.filament_type = (tr.get("tray_sub_brands") or "").strip() or (tr.get("tray_type") or "").strip()
                     t.tray_id_name = tr.get("tray_id_name", "")
                     t.remain = max(0, int(tr.get("remain", 0)))
-                    t.uuid = (tr.get("tray_uuid") or "")[:8]
+                    t.uuid = (tr.get("tray_uuid") or "")
                     t.tag_uid = tr.get("tag_uid", "")
                     # Un tray est vide uniquement si son UUID est tout à zéro
                     # Les filaments custom n'ont pas de tray_sub_brands mais ont un UUID valide
@@ -321,13 +321,13 @@ class MQTTManager:
                             f"sub_brands={_sub_brands!r} uuid={_tray_uuid!r}"
                         )
 
-                    # ── Match mode (avant DB lookup) ────────────────────────
-                    # RFID  : sub_brands non vide = filament Bambu reconnu via tag interne
-                    # AUTO  : tray_info_idx connu (profil) ou uuid valide → matching DB
-                    # MANUEL: filament présent mais rien d'identifiable
-                    if _sub_brands:
+                    # Match mode :
+                    # rfid   = uuid non vide = tag RFID Bambu (tray_uuid = vrai identifiant NFC)
+                    # auto   = tray_info_idx connu → matching DB par profil/couleur
+                    # manual = filament présent mais non identifiable
+                    if _uuid_valid:
                         t.match_mode = "rfid"
-                    elif _tray_info or _uuid_valid:
+                    elif _tray_info:
                         t.match_mode = "auto"
                     elif not t.empty:
                         t.match_mode = "manual"
@@ -337,7 +337,7 @@ class MQTTManager:
                     # ── Matching spool en DB ────────────────────────────────
                     if not t.empty:
                         import threading as _mth, asyncio as _mio
-                        def _match_spool(_t=t, _tag=_tag_uid, _tinfo=_tray_info, _tc=_tray_color):
+                        def _match_spool(_t=t, _tag=_tray_uuid, _tinfo=_tray_info, _tc=_tray_color):
                             lp = _mio.new_event_loop()
                             async def _go():
                                 from ..services.spool_matcher import match_spool
