@@ -486,29 +486,10 @@ export default function Prints() {
       {!loading && !error && prints.length > 0 && (() => {
         const onDelete = id => { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => t-1); };
         // Si un groupe est sélectionné ou pas de groupes → grille flat
-        // Prints triés chronologiquement (plus récent en premier) — déjà fait par le backend
-        // Regrouper : chaque groupe prend la date du print le plus récent qu'il contient
-        const grouped = {};   // nom → { prints: [], latestDate: "" }
-        const ungrouped = [];
-        prints.forEach(p => {
-          const gtags = (p.tags||[]).filter(t=>t.startsWith("groupe:"));
-          if (gtags.length) {
-            gtags.forEach(t => {
-              const g = t.replace("groupe:","");
-              if (!grouped[g]) grouped[g] = { prints: [], latestDate: "" };
-              grouped[g].prints.push(p);
-              // Garder la date la plus récente du groupe
-              if (!grouped[g].latestDate || p.print_date > grouped[g].latestDate)
-                grouped[g].latestDate = p.print_date;
-            });
-          } else {
-            ungrouped.push(p);
-          }
-        });
-        const hasGroups = Object.keys(grouped).length > 0;
-
-        // Grille flat si filtre actif ou aucun groupe
-        if (groupF || !hasGroups) {
+        // Construire une liste d'items entrelacés triés par date décroissante.
+        // Un groupe est représenté une seule fois à la date de son print le plus récent.
+        // Grille flat si filtre actif
+        if (groupF) {
           return (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
               {prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
@@ -516,36 +497,66 @@ export default function Prints() {
           );
         }
 
-        // Trier les groupes par date du print le plus récent (décroissant)
-        const sortedGroups = Object.entries(grouped)
-          .sort(([,a],[,b]) => b.latestDate.localeCompare(a.latestDate));
+        // Agréger les groupes
+        const groupMap = {};   // nom → { prints[], latestDate }
+        const seen = new Set();
+        prints.forEach(p => {
+          const gtags = (p.tags||[]).filter(t=>t.startsWith("groupe:"));
+          if (gtags.length) {
+            gtags.forEach(t => {
+              const g = t.replace("groupe:","");
+              if (!groupMap[g]) groupMap[g] = { prints:[], latestDate:"" };
+              groupMap[g].prints.push(p);
+              if (!groupMap[g].latestDate || p.print_date > groupMap[g].latestDate)
+                groupMap[g].latestDate = p.print_date;
+            });
+          }
+        });
+
+        // Construire la liste d'items : soit un print solo, soit un groupe entier
+        const items = [];
+        const addedGroups = new Set();
+        prints.forEach(p => {
+          const gtags = (p.tags||[]).filter(t=>t.startsWith("groupe:"));
+          if (!gtags.length) {
+            // Print solo → item individuel
+            items.push({ type:"print", p, date: p.print_date });
+          } else {
+            // Print de groupe → ajouter le groupe une seule fois à sa date max
+            gtags.forEach(t => {
+              const g = t.replace("groupe:","");
+              if (!addedGroups.has(g)) {
+                addedGroups.add(g);
+                items.push({ type:"group", name:g, ...groupMap[g] });
+              }
+            });
+          }
+        });
+
+        // Trier par date décroissante (groupes à la date de leur print le plus récent)
+        items.sort((a,b) => (b.date||b.latestDate||"").localeCompare(a.date||a.latestDate||""));
 
         return (
-          <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-            {sortedGroups.map(([g, { prints: gprints, latestDate }]) => (
-              <div key={g}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                  <span style={{ fontSize:13, fontWeight:700, color:"#a78bfa" }}>📁 {g}</span>
-                  <span style={{ fontSize:11, color:"var(--muted)" }}>
-                    {gprints.length} print{gprints.length>1?"s":""} · {fmtDate(latestDate)}
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            {items.map((item, idx) => item.type === "print" ? (
+              <PrintCard key={item.p.id} p={item.p}
+                onClick={()=>setSelected(item.p)}
+                onDelete={onDelete}
+                style={{ display:"block" }}/>
+            ) : (
+              <div key={item.name} style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:"#a78bfa" }}>📁 {item.name}</span>
+                  <span style={{ fontSize:10, color:"var(--muted)" }}>
+                    {item.prints.length} print{item.prints.length>1?"s":""} · {fmtDate(item.latestDate)}
                   </span>
                 </div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
-                  {gprints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", gap:8, paddingLeft:12,
+                  borderLeft:"2px solid rgba(167,139,250,0.3)" }}>
+                  {item.prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
                 </div>
               </div>
             ))}
-            {ungrouped.length > 0 && (
-              <div>
-                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-                  <span style={{ fontSize:13, fontWeight:700, color:"var(--muted)" }}>📄 Sans groupe</span>
-                  <span style={{ fontSize:11, color:"var(--muted)" }}>{ungrouped.length} print{ungrouped.length>1?"s":""}</span>
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
-                  {ungrouped.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
-                </div>
-              </div>
-            )}
           </div>
         );
       })()}
