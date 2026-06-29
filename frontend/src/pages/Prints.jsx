@@ -61,72 +61,170 @@ function StatusBadge({ status }) {
 }
 
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
+function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, onDelete }) {
+  const [selectedPrint, setSelectedPrint] = useState(null);
+
+  // Stats agrégées
+  const totalWeight = prints.reduce((s, p) => s + (p.total_weight_g || 0), 0);
+  const totalCost   = prints.reduce((s, p) => s + (p.total_cost || 0), 0);
+  const totalDur    = prints.reduce((s, p) => s + (p.duration_seconds || p.estimated_seconds || 0), 0);
+
+  // Agrégation filaments par couleur+type
+  const filAgg = {};
+  prints.forEach(p => {
+    (p.filament_usage || []).forEach(f => {
+      const key = (f.color_hex || "#888") + "|" + (f.filament_type || "?");
+      if (!filAgg[key]) filAgg[key] = { color: f.color_hex, type: f.filament_type,
+        name: f.filament_name, grams: 0 };
+      filAgg[key].grams += f.grams_used || 0;
+    });
+  });
+  const filaments = Object.values(filAgg).sort((a,b) => b.grams - a.grams);
+
+  return (
+    <>
+      {/* Bottom sheet groupe — z-index 1000 */}
+      <div onClick={onClose} style={{ position:"fixed", inset:0,
+        background:"rgba(0,0,0,0.55)", zIndex:1000,
+        display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+        <div onClick={e => e.stopPropagation()}
+          style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
+            width:"100%", maxWidth:640, maxHeight:"88dvh", overflowY:"auto",
+            paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
+
+          {/* Handle */}
+          <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
+            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          </div>
+
+          <div style={{ padding:"16px 20px 20px" }}>
+            {/* Titre */}
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+              <span style={{ fontSize:20 }}>📁</span>
+              <div style={{ flex:1 }}>
+                <h2 style={{ fontSize:18, fontWeight:800, color:"#a78bfa", margin:0 }}>{name}</h2>
+                <p style={{ fontSize:11, color:"var(--muted)", margin:"2px 0 0" }}>
+                  {prints.length} print{prints.length>1?"s":""} · {fmtDate(latestDate)}
+                </p>
+              </div>
+            </div>
+
+            {/* Stats globales */}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:16 }}>
+              {[
+                ["Poids total",   totalWeight > 0 ? totalWeight.toFixed(0)+"g" : "—"],
+                ["Coût total",    totalCost > 0   ? totalCost.toFixed(2)+"€"  : "—"],
+                ["Durée totale",  totalDur > 0    ? fmtDur(totalDur)          : "—"],
+              ].map(([label, val]) => (
+                <div key={label} style={{ background:"var(--surface2)",
+                  border:"1px solid var(--border)", borderRadius:10, padding:"8px 10px" }}>
+                  <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase",
+                    letterSpacing:"0.06em", margin:"0 0 3px" }}>{label}</p>
+                  <p style={{ fontSize:14, fontWeight:700, color:"var(--text)",
+                    margin:0, fontFamily:"monospace" }}>{val}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Filaments agrégés */}
+            {filaments.length > 0 && (
+              <div style={{ marginBottom:16 }}>
+                <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+                  letterSpacing:"0.06em", marginBottom:8 }}>Filaments utilisés</p>
+                <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                  {filaments.map((f, i) => (
+                    <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
+                      background:"var(--surface2)", borderRadius:8, padding:"6px 10px" }}>
+                      <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
+                        backgroundColor: hexCss(f.color),
+                        border:"1.5px solid rgba(255,255,255,0.2)" }}/>
+                      <span style={{ flex:1, fontSize:12, color:"var(--text)", fontWeight:600 }}>
+                        {f.name || f.type || "Inconnu"}
+                      </span>
+                      <span style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>
+                        {f.grams.toFixed(0)}g
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Galerie prints */}
+            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+              letterSpacing:"0.06em", marginBottom:8 }}>Prints</p>
+            <div style={{ display:"grid",
+              gridTemplateColumns:"repeat(auto-fill, minmax(120px, 1fr))", gap:8 }}>
+              {prints.map(p => (
+                <div key={p.id} onClick={() => setSelectedPrint(p)}
+                  style={{ cursor:"pointer", borderRadius:10, overflow:"hidden",
+                    border:"1px solid var(--border)", background:"var(--surface2)" }}>
+                  <div style={{ position:"relative", paddingTop:"75%" }}>
+                    <img src={"/api/v1/prints/" + p.id + "/image"} alt=""
+                      style={{ position:"absolute", inset:0, width:"100%", height:"100%",
+                        objectFit:"contain" }}
+                      onError={e => { e.currentTarget.style.display="none"; }}/>
+                  </div>
+                  <p style={{ fontSize:9, color:"var(--muted)", margin:"4px 6px 4px",
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {p.file_name || "Sans nom"}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Bottom sheet print par dessus — z-index 1100 */}
+      {selectedPrint && (
+        <div style={{ position:"fixed", inset:0, zIndex:1100 }}>
+          <PrintDetail p={selectedPrint}
+            onClose={() => setSelectedPrint(null)}
+            onDelete={id => { onDelete(id); setSelectedPrint(null); }}/>
+        </div>
+      )}
+    </>
+  );
+}
+
 function GroupTile({ name, prints, latestDate, onSelectPrint, onDelete }) {
-  const [open, setOpen] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const coverPrint = prints[0];
 
   return (
     <>
-      {/* Tuile groupe — même taille qu'une PrintCard normale */}
-      <div className="card" onClick={() => setOpen(o => !o)}
+      <div className="card" onClick={() => setSheetOpen(true)}
         style={{ overflow:"hidden", display:"flex", flexDirection:"column",
-          position:"relative", padding:0, cursor:"pointer",
-          outline: open ? "2px solid rgba(167,139,250,0.6)" : "none",
-          outlineOffset:-2 }}>
-
-        {/* Vignette ratio 4/3 — contain pour pas zoomer */}
+          position:"relative", padding:0, cursor:"pointer" }}>
         <div style={{ position:"relative", paddingTop:"75%",
           background:"var(--surface2)", overflow:"hidden" }}>
           {coverPrint && (
             <img src={"/api/v1/prints/" + coverPrint.id + "/image"} alt=""
               style={{ position:"absolute", inset:0, width:"100%", height:"100%",
-                objectFit:"contain", imageRendering:"auto" }}
+                objectFit:"contain" }}
               onError={e => { e.currentTarget.style.display="none"; }}/>
           )}
-          {/* Overlay violet léger pour identifier comme groupe */}
-          <div style={{ position:"absolute", inset:0,
-            background: open
-              ? "rgba(167,139,250,0.15)"
-              : "rgba(167,139,250,0.05)" }}/>
-          {/* Badge groupe */}
+          <div style={{ position:"absolute", inset:0, background:"rgba(124,58,237,0.08)" }}/>
           <span style={{ position:"absolute", top:6, left:6,
             background:"rgba(124,58,237,0.85)", color:"white",
-            fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20,
-            backdropFilter:"blur(4px)" }}>
+            fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>
             📁 {prints.length} print{prints.length>1?"s":""}
           </span>
-          {/* Flèche */}
-          <span style={{ position:"absolute", top:6, right:8,
-            color:"rgba(167,139,250,0.9)", fontSize:11, fontWeight:700 }}>
-            {open ? "▲" : "▼"}
-          </span>
         </div>
-
-        {/* Nom du groupe */}
         <div style={{ padding:"8px 10px" }}>
           <p style={{ fontWeight:700, fontSize:12, color:"#a78bfa", margin:"0 0 2px",
-            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-            {name}
-          </p>
+            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</p>
           <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>{fmtDate(latestDate)}</p>
         </div>
       </div>
 
-      {/* Prints du groupe — s'insèrent après, pleine largeur, avec liseré */}
-      {open && (
-        <div style={{ gridColumn:"1 / -1",
-          borderLeft:"3px solid rgba(167,139,250,0.5)",
-          marginLeft:4, paddingLeft:10,
-          marginBottom:4 }}>
-          <div style={{ display:"grid",
-            gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:10 }}>
-            {prints.map(p => (
-              <PrintCard key={p.id} p={p}
-                onClick={() => onSelectPrint(p)}
-                onDelete={onDelete}/>
-            ))}
-          </div>
-        </div>
+      {sheetOpen && (
+        <GroupBottomSheet
+          name={name} prints={prints} latestDate={latestDate}
+          onClose={() => setSheetOpen(false)}
+          onSelectPrint={onSelectPrint}
+          onDelete={id => { onDelete(id); }}/>
       )}
     </>
   );
