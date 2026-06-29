@@ -153,13 +153,46 @@ async def _apply_meta(pid: int, meta: dict, taskname: str):
             model_3mf=meta.get("model_3mf"),
             design_id=meta.get("design_id", ""),
         ))
+
+        # Charger toutes les bobines actives pour le matching
+        from sqlalchemy import select as _sel
+        from ..models.filament import Spool as _Spool, Filament as _Fil
+        spools_r = await db.execute(_sel(_Spool).where(_Spool.archived == False))
+        spools = spools_r.scalars().all()
+
         for slot, fil in meta.get("filaments", {}).items():
+            fil_color = (fil.get("color") or "").upper().replace("#","")[:6]
+            fil_type  = (fil.get("type") or "").upper()
+
+            # Matching bobine : même couleur (6 hex) ET même type de filament
+            matched_spool = None
+            for spool in spools:
+                s_color = (spool.color or "").upper().replace("#","")[:6]
+                # Chercher le type via la relation filament
+                s_type = ""
+                if spool.filament_id:
+                    fil_obj = await db.get(_Fil, spool.filament_id)
+                    if fil_obj:
+                        s_type = (fil_obj.material or "").upper()
+                if s_color == fil_color and fil_type and s_type and fil_type in s_type:
+                    matched_spool = spool
+                    break
+                elif s_color == fil_color and not fil_type:
+                    matched_spool = spool
+                    break
+
+            if matched_spool:
+                logger.info(f"[DB] ✅ Filament slot={slot} {fil_color} → bobine id={matched_spool.id}")
+            else:
+                logger.info(f"[DB] ⚠ Filament slot={slot} {fil_color}/{fil_type} → aucune bobine trouvée")
+
             db.add(FilamentUsage(
                 print_id=pid,
                 filament_type=fil.get("type", ""),
                 color_hex=fil.get("color", ""),
                 grams_used=float(fil.get("used_g", 0)),
                 ams_slot=int(slot),
+                spool_id=matched_spool.id if matched_spool else None,
             ))
         await db.commit()
     logger.info(f"[DB] ✅ Print {pid}: {name!r}, {len(meta.get('filaments',{}))} filaments")
