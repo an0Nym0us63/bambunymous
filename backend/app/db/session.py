@@ -17,20 +17,7 @@ engine = create_async_engine(
     pool_pre_ping=True,
 )
 
-# Activer WAL mode au démarrage — permet lectures concurrentes sans bloquer
-import asyncio as _asyncio
 
-async def _enable_wal():
-    async with engine.connect() as conn:
-        await conn.execute(__import__("sqlalchemy").text("PRAGMA journal_mode=WAL"))
-        await conn.execute(__import__("sqlalchemy").text("PRAGMA busy_timeout=30000"))
-        await conn.execute(__import__("sqlalchemy").text("PRAGMA synchronous=NORMAL"))
-        await conn.commit()
-
-try:
-    _asyncio.get_event_loop().run_until_complete(_enable_wal())
-except Exception:
-    pass  # Sera fait au premier appel sinon
 
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
@@ -44,8 +31,12 @@ async def init_db():
     from ..models import setting, printer  # noqa - import pour créer les tables
     from ..models import filament, print_history  # noqa
     async with engine.begin() as conn:
+        # WAL mode : permet lectures concurrentes, évite les database locked
+        await conn.execute(__import__("sqlalchemy").text("PRAGMA journal_mode=WAL"))
+        await conn.execute(__import__("sqlalchemy").text("PRAGMA busy_timeout=30000"))
+        await conn.execute(__import__("sqlalchemy").text("PRAGMA synchronous=NORMAL"))
         await conn.run_sync(Base.metadata.create_all)
-    # Migration automatique : ADD COLUMN si manquant (SQLite ne fait pas d'ALTER via create_all)
+    # Migration automatique : ADD COLUMN si manquant
     await _migrate()
 
 
