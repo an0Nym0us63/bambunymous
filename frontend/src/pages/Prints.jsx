@@ -442,7 +442,7 @@ export default function Prints() {
         // Grille flat si filtre actif
         if (groupF) {
           return (
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:12 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(160px, 1fr))", gap:10 }}>
               {prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
             </div>
           );
@@ -487,23 +487,24 @@ export default function Prints() {
         // Trier par date décroissante (groupes à la date de leur print le plus récent)
         items.sort((a,b) => (b.date||b.latestDate||"").localeCompare(a.date||a.latestDate||""));
 
+        // Grille responsive : 2 cols mobile, 3-4 cols desktop
+        const GRID = "repeat(auto-fill, minmax(160px, 1fr))";
         return (
-          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <div style={{ display:"grid", gridTemplateColumns:GRID, gap:10 }}>
             {items.map((item, idx) => item.type === "print" ? (
               <PrintCard key={item.p.id} p={item.p}
                 onClick={()=>setSelected(item.p)}
-                onDelete={onDelete}
-                style={{ display:"block" }}/>
+                onDelete={onDelete}/>
             ) : (
-              <div key={item.name} style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              <div key={item.name} style={{ gridColumn:"1 / -1",
+                display:"flex", flexDirection:"column", gap:8 }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                   <span style={{ fontSize:12, fontWeight:700, color:"#a78bfa" }}>📁 {item.name}</span>
                   <span style={{ fontSize:10, color:"var(--muted)" }}>
                     {item.prints.length} print{item.prints.length>1?"s":""} · {fmtDate(item.latestDate)}
                   </span>
                 </div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:8, paddingLeft:12,
-                  borderLeft:"2px solid rgba(167,139,250,0.3)" }}>
+                <div style={{ display:"grid", gridTemplateColumns:GRID, gap:10 }}>
                   {item.prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
                 </div>
               </div>
