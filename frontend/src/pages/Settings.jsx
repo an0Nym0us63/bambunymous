@@ -7,55 +7,47 @@ import { useTheme } from "../useTheme";
 const inp = {
   width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
   borderRadius:10, padding:"8px 12px", fontSize:14, color:"var(--text)",
-  outline:"none", transition:"border-color 0.15s",
+  outline:"none", transition:"border-color 0.15s", boxSizing:"border-box",
 };
-
-function Field({ label, name, type="text", placeholder="", form, setForm }) {
-  return (
-    <div>
-      <label style={{ display:"block", fontSize:11, color:"var(--muted)", marginBottom:6,
-        textTransform:"uppercase", letterSpacing:"0.05em" }}>{label}</label>
-      <input type={type} value={form[name]||""} placeholder={placeholder}
-        onChange={e => setForm(f => ({...f, [name]: e.target.value}))}
-        style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
-          borderRadius:10, padding:"8px 12px", fontSize:14, color:"var(--text)",
-          outline:"none", transition:"border-color 0.15s", boxSizing:"border-box" }}
-        onFocus={e => e.target.style.borderColor="#3b82f6"}
-        onBlur={e => e.target.style.borderColor="var(--border)"}
-      />
-    </div>
-  );
-}
+const lbl = {
+  display:"block", fontSize:11, color:"var(--muted)", marginBottom:6,
+  textTransform:"uppercase", letterSpacing:"0.05em",
+};
+const sec = {
+  display:"grid", gridTemplateColumns:"1fr 1fr", gap:12,
+};
+const card = { padding:16 };
+const cardTitle = {
+  fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase",
+  letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6,
+};
 
 export default function Settings() {
   const { theme, toggle } = useTheme();
-  const [form, setForm] = useState({
-    PRINTER_IP:"", PRINTER_ID:"", PRINTER_ACCESS_CODE:"",
-    PRINTER_NAME:"", ADMIN_USERNAME:"admin",
-    ADMIN_PASSWORD:"", COST_BY_HOUR:"0",
-  });
-  const [accessCodeSet, setAccessCodeSet] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saved,  setSaved]  = useState(false);
+  const [ip,      setIp]      = useState("");
+  const [serial,  setSerial]  = useState("");
+  const [code,    setCode]    = useState("");
+  const [pname,   setPname]   = useState("");
+  const [user,    setUser]    = useState("admin");
+  const [pass,    setPass]    = useState("");
+  const [cost,    setCost]    = useState("0");
+  const [codeSet, setCodeSet] = useState(false);
+  const [saving,  setSaving]  = useState(false);
+  const [saved,   setSaved]   = useState(false);
   const [loading, setLoading] = useState(true);
-  const [resetting, setResetting] = useState(false);
+  const [resetting,    setResetting]    = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
-
   const [version, setVersion] = useState(null);
 
   useEffect(() => {
     client.get("/version").then(({ data }) => setVersion(data)).catch(() => {});
     client.get("/settings").then(({ data }) => {
-      setAccessCodeSet(data.PRINTER_ACCESS_CODE_SET ?? false);
-      setForm(f => ({
-        ...f,
-        PRINTER_IP:     data.PRINTER_IP     ?? "",
-        PRINTER_ID:     data.PRINTER_ID     ?? "",
-        PRINTER_NAME:   data.PRINTER_NAME   ?? "",
-        ADMIN_USERNAME: data.ADMIN_USERNAME ?? "admin",
-        COST_BY_HOUR:   data.COST_BY_HOUR   ?? "0",
-        PRINTER_ACCESS_CODE:"", ADMIN_PASSWORD:"",
-      }));
+      setCodeSet(data.PRINTER_ACCESS_CODE_SET ?? false);
+      setIp(data.PRINTER_IP     ?? "");
+      setSerial(data.PRINTER_ID ?? "");
+      setPname(data.PRINTER_NAME ?? "");
+      setUser(data.ADMIN_USERNAME ?? "admin");
+      setCost(data.COST_BY_HOUR ?? "0");
       setLoading(false);
     });
   }, []);
@@ -64,10 +56,13 @@ export default function Settings() {
     e.preventDefault();
     setSaving(true);
     const payload = {};
-    Object.entries(form).forEach(([k, v]) => {
-      if (v !== "" && k !== "ADMIN_PASSWORD") payload[k] = v;
-    });
-    if (form.ADMIN_PASSWORD) payload.ADMIN_PASSWORD = form.ADMIN_PASSWORD;
+    if (ip)     payload.PRINTER_IP     = ip;
+    if (serial) payload.PRINTER_ID     = serial;
+    if (code)   payload.PRINTER_ACCESS_CODE = code;
+    if (pname)  payload.PRINTER_NAME   = pname;
+    if (user)   payload.ADMIN_USERNAME = user;
+    if (pass)   payload.ADMIN_PASSWORD = pass;
+    if (cost)   payload.COST_BY_HOUR   = cost;
     try {
       await client.patch("/settings", payload);
       setSaved(true);
@@ -77,17 +72,25 @@ export default function Settings() {
     } finally { setSaving(false); }
   };
 
-  const Section = ({ title, icon, children }) => (
-    <section className="card" style={{ padding:16 }}>
-      <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6 }}>
-        {icon}{title}
-      </div>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>{children}</div>
-    </section>
+  if (loading) return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
+      height:200, color:"var(--muted)", fontSize:14 }}>Chargement…</div>
   );
 
-  if (loading) return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:200, color:"var(--muted)", fontSize:14 }}>Chargement…</div>
+  const F = (label, value, set, opts={}) => (
+    <div>
+      <label style={lbl}>{label}</label>
+      <input
+        type={opts.type||"text"}
+        value={value}
+        placeholder={opts.placeholder||""}
+        onChange={e => set(e.target.value)}
+        style={inp}
+        onFocus={e => e.target.style.borderColor="#3b82f6"}
+        onBlur={e => e.target.style.borderColor="var(--border)"}
+      />
+      {opts.hint && <p style={{ fontSize:10, color:"#22c55e", marginTop:4 }}>{opts.hint}</p>}
+    </div>
   );
 
   return (
@@ -97,63 +100,64 @@ export default function Settings() {
       <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
         {/* Thème */}
-        <section className="card" style={{ padding:16 }}>
-          <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16 }}>Apparence</div>
+        <div className="card" style={card}>
+          <div style={cardTitle}>Apparence</div>
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
             <span style={{ fontSize:14, color:"var(--text2)" }}>Thème</span>
             <button type="button" onClick={toggle}
-              style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px", borderRadius:20, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontSize:13, cursor:"pointer", transition:"all 0.15s" }}>
+              style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px",
+                borderRadius:20, border:"1px solid var(--border)", background:"var(--surface2)",
+                color:"var(--text)", fontSize:13, cursor:"pointer" }}>
               {theme === "dark" ? <><Moon size={14}/> Sombre</> : <><Sun size={14}/> Clair</>}
             </button>
           </div>
-        </section>
+        </div>
 
         {/* Imprimante */}
-        <section className="card" style={{ padding:16 }}>
-          <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6 }}>
-            <Wifi size={13}/> Imprimante
-          </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-            <Field form={form} setForm={setForm} label="Adresse IP" name="PRINTER_IP" placeholder="192.168.1.xxx" />
-            <Field form={form} setForm={setForm} label="Numéro de série" name="PRINTER_ID" placeholder="31B…" />
+        <div className="card" style={card}>
+          <div style={cardTitle}><Wifi size={13}/> Imprimante</div>
+          <div style={sec}>
+            {F("Adresse IP", ip, setIp, { placeholder:"192.168.1.xxx" })}
+            {F("Numéro de série", serial, setSerial, { placeholder:"31B…" })}
             <div>
-              <label style={{ display:"block", fontSize:11, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Code d&apos;accès</label>
-              <input type="password" value={form.PRINTER_ACCESS_CODE}
-                placeholder={accessCodeSet ? "Laisser vide pour conserver" : "Code LAN"}
-                onChange={e => setForm(f => ({...f, PRINTER_ACCESS_CODE: e.target.value}))}
+              <label style={lbl}>Code d&apos;accès</label>
+              <input type="password" value={code}
+                placeholder={codeSet ? "Laisser vide pour conserver" : "Code LAN"}
+                onChange={e => setCode(e.target.value)}
                 style={inp}
                 onFocus={e => e.target.style.borderColor="#3b82f6"}
                 onBlur={e => e.target.style.borderColor="var(--border)"}
               />
-              {accessCodeSet && !form.PRINTER_ACCESS_CODE && (
-                <p style={{ fontSize:10, color:"#22c55e", marginTop:4 }}>✓ Code configuré</p>
-              )}
+              {codeSet && !code && <p style={{ fontSize:10, color:"#22c55e", marginTop:4 }}>✓ Code configuré</p>}
             </div>
-            <Field form={form} setForm={setForm} label="Nom affiché" name="PRINTER_NAME" placeholder="Mon H2C" />
+            {F("Nom affiché", pname, setPname, { placeholder:"Mon H2C" })}
           </div>
-        </section>
+        </div>
 
         {/* Compte */}
-        <section className="card" style={{ padding:16 }}>
-          <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16 }}>Compte</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-            <Field form={form} setForm={setForm} label="Utilisateur" name="ADMIN_USERNAME" />
-            <Field form={form} setForm={setForm} label="Mot de passe" name="ADMIN_PASSWORD" type="password" placeholder="Laisser vide pour conserver" />
+        <div className="card" style={card}>
+          <div style={cardTitle}>Compte</div>
+          <div style={sec}>
+            {F("Utilisateur", user, setUser)}
+            {F("Mot de passe", pass, setPass, { type:"password", placeholder:"Laisser vide pour conserver" })}
           </div>
-        </section>
+        </div>
 
         {/* Électricité */}
-        <section className="card" style={{ padding:16 }}>
-          <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16 }}>Électricité</div>
+        <div className="card" style={card}>
+          <div style={cardTitle}>Électricité</div>
           <div style={{ maxWidth:200 }}>
-            <Field form={form} setForm={setForm} label="Tarif (€/h)" name="COST_BY_HOUR" placeholder="0.20" />
+            {F("Tarif (€/h)", cost, setCost, { placeholder:"0.20" })}
           </div>
-        </section>
+        </div>
 
         <ImportSection />
 
         <button type="submit" disabled={saving}
-          style={{ display:"inline-flex", alignItems:"center", gap:8, background:"#3b82f6", color:"white", border:"none", padding:"10px 20px", borderRadius:12, fontSize:14, fontWeight:500, cursor:"pointer", opacity: saving ? 0.6 : 1, transition:"opacity 0.15s, background 0.15s" }}
+          style={{ display:"inline-flex", alignItems:"center", gap:8,
+            background:"#3b82f6", color:"white", border:"none",
+            padding:"10px 20px", borderRadius:12, fontSize:14, fontWeight:500,
+            cursor:saving?"not-allowed":"pointer", opacity:saving?0.6:1 }}
           onMouseEnter={e => { if(!saving) e.currentTarget.style.background="#2563eb"; }}
           onMouseLeave={e => e.currentTarget.style.background="#3b82f6"}>
           {saving ? <RefreshCw size={15} style={{ animation:"spin 1s linear infinite" }} /> : <Save size={15} />}
@@ -162,7 +166,7 @@ export default function Settings() {
       </form>
 
       {/* Zone dangereuse */}
-      <div style={{ marginTop:24, padding:16, borderRadius:12,
+      <div style={{ marginTop:8, padding:16, borderRadius:12,
         border:"1px solid rgba(239,68,68,0.3)", background:"rgba(239,68,68,0.04)" }}>
         <p style={{ fontSize:12, fontWeight:700, color:"#ef4444", margin:"0 0 8px",
           textTransform:"uppercase", letterSpacing:"0.06em" }}>⚠ Zone dangereuse</p>
@@ -178,7 +182,7 @@ export default function Settings() {
           </button>
         ) : (
           <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
-            <span style={{ fontSize:13, color:"#ef4444", fontWeight:600 }}>Confirmer la suppression ?</span>
+            <span style={{ fontSize:13, color:"#ef4444", fontWeight:600 }}>Confirmer ?</span>
             <button onClick={async()=>{
               setResetting(true);
               try {
@@ -205,7 +209,8 @@ export default function Settings() {
       </div>
 
       {version && (
-        <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace", textAlign:"center", marginTop:8 }}>
+        <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace",
+          textAlign:"center", marginTop:8 }}>
           v{version.commit?.slice(0,8) || "dev"} · {version.build_date?.slice(0,10) || "?"}
         </p>
       )}
