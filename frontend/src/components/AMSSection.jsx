@@ -166,7 +166,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
       </div>
       <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace" }}>{empty ? "" : wLabel}</p>
       <p style={{ fontSize:9, color:"var(--text2)", textAlign:"center",
-        whiteSpace:"nowrap", maxWidth:90, overflow:"hidden", textOverflow:"clip" }}>
+        whiteSpace:"normal", wordBreak:"break-word", maxWidth:80, lineHeight:"12px" }}>
         {empty ? "Vide" : (name || tray.filament_type || tray.tray_id_name || "—")}
       </p>
     </div>
