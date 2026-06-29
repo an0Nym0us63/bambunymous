@@ -63,7 +63,7 @@ function StatusBadge({ status }) {
 function PrintCard({ p, onClick, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const statusCfg = STATUS_CFG[p.status] || STATUS_CFG.UNKNOWN;
+  const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.4)", color:"#94a3b8", label: p.status || "?" };
 
   const handleDelete = async (e) => {
     e.stopPropagation();
@@ -417,26 +417,7 @@ export default function Prints() {
           ))}
         </div>
       </div>
-        {/* Toujours afficher le sélecteur de groupes même si vide pour debug */}
-        {true && (
-          <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginTop:6 }}>
-            <span style={{ fontSize:11, color:"var(--muted)", alignSelf:"center" }}>
-              Groupes ({groups.length}) :
-            </span>
-            <button onClick={()=>setGroupF("")} style={{
-              padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600,
-              cursor:"pointer", border:"none",
-              background: groupF==="" ? "#7c3aed" : "var(--surface2)",
-              color: groupF==="" ? "white" : "var(--muted)" }}>Tous</button>
-            {groups.map(g => (
-              <button key={g} onClick={()=>setGroupF(g)} style={{
-                padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600,
-                cursor:"pointer", border:"none",
-                background: groupF===g ? "#7c3aed" : "var(--surface2)",
-                color: groupF===g ? "white" : "var(--muted)" }}>{g}</button>
-            ))}
-          </div>
-        )}
+
 
       {loading && <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>}
 
