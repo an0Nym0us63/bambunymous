@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from .auth import get_current_user
 from ....models.print_history import Print, FilamentUsage, PrintSnapshot, PrintTag
+from ....models.filament import Spool, Filament
 from ....db.session import AsyncSessionLocal
 
 router  = APIRouter()
@@ -52,18 +53,64 @@ class PrintOut(BaseModel):
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
+def _usage_to_dict(u) -> dict:
+    d = {col.name: getattr(u, col.name) for col in u.__table__.columns}
+    # Enrichir color_hex et filament_type depuis la bobine liée si vide
+    if u.spool_id and (not d.get("color_hex") or not d.get("filament_type")):
+        try:
+            if hasattr(u, "spool") and u.spool and u.spool.filament:
+                f = u.spool.filament
+                if not d.get("color_hex") and f.color:
+                    d["color_hex"] = f"#{f.color}" if not str(f.color).startswith("#") else f.color
+                if not d.get("filament_type") and f.material:
+                    d["filament_type"] = f.material
+        except Exception:
+            pass
+    # Attribut temporaire injecté par _enrich_filament_usage
+    if hasattr(u, "_filament_name"):
+        d["filament_name"] = u._filament_name
+    return d
+
+
 def _print_to_out(p: Print) -> dict:
-    d = {c.name: getattr(p, c.name) for c in p.__table__.columns}
-    d["filament_usage"] = [
-        {c.name: getattr(u, c.name) for c in u.__table__.columns}
-        for u in (p.filament_usage or [])
-    ]
+    d = {col.name: getattr(p, col.name) for col in p.__table__.columns}
+    d["filament_usage"] = [_usage_to_dict(u) for u in (p.filament_usage or [])]
     d["snapshots"] = [
-        {c.name: getattr(s, c.name) for c in s.__table__.columns}
+        {col.name: getattr(s, col.name) for col in s.__table__.columns}
         for s in (p.snapshots or [])
     ]
     d["tags"] = [t.tag for t in (p.tags or [])]
     return d
+
+
+async def _enrich_filament_usage(db, prints):
+    """Enrichit color_hex/filament_type/filament_name depuis les bobines liées."""
+    spool_ids = {u.spool_id for p in prints for u in (p.filament_usage or []) if u.spool_id}
+    if not spool_ids:
+        return
+    from sqlalchemy.orm import selectinload as _sil
+    spools_r = await db.execute(
+        select(Spool).where(Spool.id.in_(spool_ids))
+    )
+    spools = {s.id: s for s in spools_r.scalars().all()}
+    # Charger les filaments
+    fil_ids = {s.filament_id for s in spools.values() if s.filament_id}
+    fils_r = await db.execute(select(Filament).where(Filament.id.in_(fil_ids)))
+    fils = {f.id: f for f in fils_r.scalars().all()}
+
+    for p in prints:
+        for u in (p.filament_usage or []):
+            if not u.spool_id: continue
+            spool = spools.get(u.spool_id)
+            if not spool: continue
+            fil = fils.get(spool.filament_id)
+            if not fil: continue
+            if not u.color_hex and fil.color:
+                u.color_hex = f"#{fil.color}" if not str(fil.color).startswith("#") else fil.color
+            if not u.filament_type and fil.material:
+                u.filament_type = fil.material
+            # Injecter le nom (attribut temporaire, pas en DB)
+            u._filament_name = fil.name
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────
@@ -97,6 +144,8 @@ async def list_prints(
         total_q = select(func.count()).select_from(q.subquery())
         total   = (await db.execute(total_q)).scalar()
         rows    = (await db.execute(q.offset(offset).limit(limit))).scalars().all()
+        # Enrichir les filament_usage avec les données bobine/filament
+        await _enrich_filament_usage(db, rows)
     return {"total": total, "prints": [_print_to_out(p) for p in rows]}
 
 
@@ -125,6 +174,8 @@ async def get_print(print_id: int, _: str = Depends(get_current_user)):
                      selectinload(Print.tags))
         )).scalar_one_or_none()
     if not p: raise HTTPException(404, "Print introuvable")
+    async with AsyncSessionLocal() as db2:
+        await _enrich_filament_usage(db2, [p])
     return _print_to_out(p)
 
 
