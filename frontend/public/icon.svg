@@ -1,99 +1,33 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
-    <!-- Fond bleu/violet profond -->
-    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#1e1b4b"/>
-      <stop offset="100%" stop-color="#0f0c29"/>
-    </linearGradient>
-    <!-- Accent bleu électrique -->
-    <linearGradient id="blue" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#818cf8"/>
-      <stop offset="100%" stop-color="#4f46e5"/>
-    </linearGradient>
-    <!-- Violet -->
-    <linearGradient id="purple" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#a78bfa"/>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="140%" y2="140%">
+      <stop offset="0%" stop-color="#4f46e5"/>
       <stop offset="100%" stop-color="#7c3aed"/>
     </linearGradient>
-    <!-- Lueur centrale -->
-    <radialGradient id="glow" cx="50%" cy="50%" r="45%">
-      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
-    </radialGradient>
-    <!-- Filament -->
-    <linearGradient id="fil" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#c4b5fd"/>
-      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
+    <linearGradient id="shine" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="rgba(255,255,255,0.15)"/>
+      <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
     </linearGradient>
-    <filter id="gf" x="-20%" y="-20%" width="140%" height="140%">
-      <feGaussianBlur stdDeviation="6" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
   </defs>
 
-  <!-- Fond arrondi -->
-  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
-  <!-- Lueur centrale -->
-  <ellipse cx="256" cy="256" rx="220" ry="200" fill="url(#glow)"/>
+  <!-- Fond arrondi bleu/violet -->
+  <rect width="512" height="512" rx="115" fill="url(#bg)"/>
+  <!-- Reflet subtil -->
+  <rect width="512" height="256" rx="115" fill="url(#shine)"/>
 
-  <!-- Tête d'impression — forme hexagonale technique -->
-  <!-- Corps principal : rectangle arrondi centré -->
-  <rect x="156" y="148" width="200" height="180" rx="16"
-        fill="none" stroke="url(#blue)" stroke-width="6" opacity="0.9"/>
+  <!-- Lettre B blanche, bold, centrée légèrement haute -->
+  <text x="220" y="330"
+        font-family="system-ui,-apple-system,BlinkMacSystemFont,sans-serif"
+        font-size="320" font-weight="900"
+        fill="white" text-anchor="middle"
+        letter-spacing="-10">B</text>
 
-  <!-- Ligne centrale horizontal (axe X) -->
-  <line x1="130" y1="238" x2="382" y2="238"
-        stroke="url(#blue)" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+  <!-- Nozzle sous le B — signature 3D printing -->
+  <rect x="196" y="370" width="48" height="52" rx="6" fill="rgba(255,255,255,0.9)"/>
+  <path d="M 196 422 L 220 474 L 244 422 Z" fill="rgba(255,255,255,0.9)"/>
+  <!-- Point fondu -->
+  <circle cx="220" cy="480" r="10" fill="rgba(255,255,255,0.7)"/>
 
-  <!-- Nozzle gauche — triangle pointu vers le bas -->
-  <path d="M 210 328 L 230 328 L 220 364 Z" fill="url(#purple)" opacity="0.95"/>
-  <!-- Nozzle droit -->
-  <path d="M 282 328 L 302 328 L 292 364 Z" fill="url(#blue)" opacity="0.95"/>
-
-  <!-- Points de connexion nozzle (détail technique) -->
-  <circle cx="220" cy="320" r="14" fill="#1e1b4b" stroke="url(#purple)" stroke-width="4"/>
-  <circle cx="220" cy="320" r="5" fill="#a78bfa"/>
-  <circle cx="292" cy="320" r="14" fill="#1e1b4b" stroke="url(#blue)" stroke-width="4"/>
-  <circle cx="292" cy="320" r="5" fill="#818cf8"/>
-
-  <!-- Rail horizontal supérieur (axe de déplacement) -->
-  <rect x="96" y="142" width="320" height="12" rx="6"
-        fill="url(#blue)" opacity="0.35"/>
-  <!-- Curseur sur le rail -->
-  <rect x="220" y="138" width="72" height="20" rx="6"
-        fill="url(#purple)" opacity="0.85"/>
-
-  <!-- Filament gauche — courbe entrant dans le nozzle -->
-  <path d="M 108 178 C 108 178 160 178 200 210 L 200 290"
-        stroke="url(#fil)" stroke-width="5" fill="none"
-        stroke-linecap="round" opacity="0.8"/>
-  <!-- Point filament -->
-  <circle cx="108" cy="178" r="8" fill="#c4b5fd" opacity="0.9"/>
-
-  <!-- Filament droit -->
-  <path d="M 404 178 C 404 178 352 178 312 210 L 312 290"
-        stroke="url(#blue)" stroke-width="5" fill="none"
-        stroke-linecap="round" opacity="0.7"
-        stroke-dasharray="0"/>
-  <circle cx="404" cy="178" r="8" fill="#818cf8" opacity="0.9"/>
-
-  <!-- Détails techniques : petits tirets sur les côtés du corps -->
-  <line x1="156" y1="180" x2="144" y2="180" stroke="#6366f1" stroke-width="2.5" opacity="0.6"/>
-  <line x1="156" y1="200" x2="144" y2="200" stroke="#6366f1" stroke-width="2.5" opacity="0.4"/>
-  <line x1="156" y1="220" x2="144" y2="220" stroke="#6366f1" stroke-width="2.5" opacity="0.6"/>
-  <line x1="356" y1="180" x2="368" y2="180" stroke="#6366f1" stroke-width="2.5" opacity="0.6"/>
-  <line x1="356" y1="200" x2="368" y2="200" stroke="#6366f1" stroke-width="2.5" opacity="0.4"/>
-  <line x1="356" y1="220" x2="368" y2="220" stroke="#6366f1" stroke-width="2.5" opacity="0.6"/>
-
-  <!-- Ligne d'impression (couche déposée) — glow violet -->
-  <path d="M 168 390 Q 220 382 256 385 Q 292 388 344 382"
-        stroke="#7c3aed" stroke-width="5" fill="none"
-        stroke-linecap="round" filter="url(#gf)" opacity="0.7"/>
-  <path d="M 168 390 Q 220 382 256 385 Q 292 388 344 382"
-        stroke="#c4b5fd" stroke-width="2.5" fill="none"
-        stroke-linecap="round" opacity="0.9"/>
-
-  <!-- Plateau -->
-  <rect x="136" y="400" width="240" height="8" rx="4"
-        fill="url(#blue)" opacity="0.4"/>
+  <!-- Ligne d impression -->
+  <rect x="96" y="490" width="320" height="6" rx="3" fill="rgba(255,255,255,0.2)"/>
 </svg>
