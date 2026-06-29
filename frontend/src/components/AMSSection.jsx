@@ -148,8 +148,9 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
 
   return (
     <div onClick={onClick} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, cursor: onClick ? "pointer" : "default" }}>
-      <p style={{ fontSize:10, color:"var(--muted)", fontWeight:500, height:16, lineHeight:"16px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:72, textAlign:"center" }}>
-        {empty ? "" : (material||"—")}
+      <p style={{ fontSize:10, color:"var(--muted)", fontWeight:500, lineHeight:"14px",
+        textAlign:"center", maxWidth:80, wordBreak:"break-word", whiteSpace:"normal" }}>
+        {empty ? "" : (name || material || "—")}
       </p>
       <div style={{ width:48, height:5, background:"var(--border)", borderRadius:3, overflow:"hidden" }}>
         {!empty && <div style={{ height:"100%", borderRadius:3, width:`${Math.max(0,Math.min(100,pct))}%`, transition:"width 0.7s", ...barColor }} />}
