@@ -48,7 +48,20 @@ export default function Layout() {
       {/* Sidebar desktop */}
       <aside className="hidden-mobile" style={S.aside}>
         <div style={S.logo}>
-          <img src="/icon.svg" style={{ width:28, height:28, borderRadius:8 }} alt="BambuNymous"/>
+          <svg width="28" height="28" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" style={{borderRadius:8,flexShrink:0}}>
+              <defs>
+                <linearGradient id="sb" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#1a1f2e"/><stop offset="100%" stopColor="#0f1219"/></linearGradient>
+                <linearGradient id="st" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#60a5fa"/><stop offset="100%" stopColor="#3b82f6"/></linearGradient>
+                <linearGradient id="sl" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#2563eb"/><stop offset="100%" stopColor="#1d4ed8"/></linearGradient>
+                <linearGradient id="sr" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" stopColor="#93c5fd"/><stop offset="100%" stopColor="#60a5fa"/></linearGradient>
+              </defs>
+              <rect width="512" height="512" rx="112" fill="url(#sb)"/>
+              <polygon points="256,110 390,188 256,266 122,188" fill="url(#st)"/>
+              <polygon points="122,188 256,266 256,370 122,292" fill="url(#sl)"/>
+              <polygon points="390,188 256,266 256,370 390,292" fill="url(#sr)"/>
+              <path d="M256 110 Q320 80 340 50" stroke="#f59e0b" strokeWidth="12" fill="none" strokeLinecap="round" opacity="0.9"/>
+              <circle cx="340" cy="50" r="10" fill="#f59e0b" opacity="0.9"/>
+            </svg>
           <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
             BambuNymous
           </span>
@@ -67,7 +80,14 @@ export default function Layout() {
       <div style={S.main}>
         {/* Header mobile */}
         <header className="show-mobile" style={S.header}>
-          <img src="/icon.svg" style={{ width:24, height:24, borderRadius:6 }} alt="BambuNymous"/>
+          <svg width="24" height="24" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg" style={{borderRadius:6,flexShrink:0}}>
+            <rect width="512" height="512" rx="112" fill="#0f1219"/>
+            <polygon points="256,110 390,188 256,266 122,188" fill="#3b82f6"/>
+            <polygon points="122,188 256,266 256,370 122,292" fill="#1d4ed8"/>
+            <polygon points="390,188 256,266 256,370 390,292" fill="#60a5fa"/>
+            <path d="M256 110 Q320 80 340 50" stroke="#f59e0b" strokeWidth="12" fill="none" strokeLinecap="round" opacity="0.9"/>
+            <circle cx="340" cy="50" r="10" fill="#f59e0b" opacity="0.9"/>
+          </svg>
           <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
             BambuNymous
           </span>
