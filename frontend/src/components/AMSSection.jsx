@@ -66,7 +66,7 @@ function MatchIcon({ mode, size = 10 }) {
 // ── Boîtier AMS compact ─────────────────────────────────────────────────────
 function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup }) {
   const isActive = ams.id === activeAmsId;
-  const getInfo = t => t.spool_info ?? spoolLookup?.[t.tag_uid] ?? spoolLookup?.[t.uuid] ?? null;
+  const getInfo = t => t.spool_info ?? null;
   return (
     <button onClick={onClick} style={{
       display:"flex", flexDirection:"column", alignItems:"center", gap:6,
@@ -176,7 +176,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
 // ── Détail AMS ─────────────────────────────────────────────────────────────
 function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick }) {
   const isActive = ams.id===activeAmsId;
-  const getInfo = t => t.spool_info ?? spoolLookup?.[t.tag_uid] ?? spoolLookup?.[t.uuid] ?? null;
+  const getInfo = t => t.spool_info ?? null;
   return (
     <div className="card" style={{ padding:16, borderColor: isActive ? "rgba(59,130,246,0.3)" : undefined, boxShadow: isActive ? "0 0 0 1px rgba(59,130,246,0.1)" : undefined }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
