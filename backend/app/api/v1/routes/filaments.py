@@ -51,18 +51,31 @@ class FilamentCreate(BaseModel):
 class SpoolOut(BaseModel):
     id: int
     filament_id: int
+    # Filament catalogue
     filament_name: str
-    filament_manufacturer: Optional[str]
+    filament_translated_name: Optional[str] = None
+    filament_manufacturer: Optional[str] = None
     filament_material: str
-    filament_color: Optional[str]
-    filament_weight_g: Optional[float]
-    remaining_weight_g: Optional[float]
-    price_override: Optional[float]
-    location: Optional[str]
-    tag_number: Optional[str]
+    filament_color: Optional[str] = None
+    filament_weight_g: Optional[float] = None
+    filament_spool_weight_g: Optional[float] = None
+    filament_price: Optional[float] = None
+    filament_profile_id: Optional[str] = None
+    filament_multicolor_type: Optional[str] = None
+    filament_colors_array: Optional[str] = None
+    filament_external_id: Optional[str] = None
+    # Bobine physique
+    remaining_weight_g: Optional[float] = None
+    price_override: Optional[float] = None
+    location: Optional[str] = None
+    tag_number: Optional[str] = None
+    ams_tray: Optional[str] = None
     archived: bool
-    comment: Optional[str]
-    last_used_at: Optional[datetime]
+    comment: Optional[str] = None
+    external_spool_id: Optional[str] = None
+    found_mode: Optional[str] = None
+    first_used_at: Optional[datetime] = None
+    last_used_at: Optional[datetime] = None
     created_at: datetime
 
 class SpoolCreate(BaseModel):
@@ -246,13 +259,27 @@ def _spool_out(s: Spool) -> SpoolOut:
     return SpoolOut(
         id=s.id, filament_id=s.filament_id,
         filament_name=f.name if f else "?",
+        filament_translated_name=getattr(f, "translated_name", None) if f else None,
         filament_manufacturer=f.manufacturer if f else None,
         filament_material=f.material if f else "?",
         filament_color=f.color if f else None,
         filament_weight_g=f.filament_weight_g if f else None,
+        filament_spool_weight_g=f.spool_weight_g if f else None,
+        filament_price=f.price if f else None,
+        filament_profile_id=f.profile_id if f else None,
+        filament_multicolor_type=f.multicolor_type if f else None,
+        filament_colors_array=f.colors_array if f else None,
+        filament_external_id=f.external_filament_id if f else None,
         remaining_weight_g=s.remaining_weight_g,
         price_override=s.price_override,
-        location=s.location, tag_number=s.tag_number,
-        archived=s.archived, comment=s.comment,
-        last_used_at=s.last_used_at, created_at=s.created_at,
+        location=s.location,
+        tag_number=s.tag_number,
+        ams_tray=s.ams_tray,
+        archived=s.archived,
+        comment=s.comment,
+        external_spool_id=s.external_spool_id,
+        found_mode=getattr(s, "found_mode", None),
+        first_used_at=s.first_used_at,
+        last_used_at=s.last_used_at,
+        created_at=s.created_at,
     )
