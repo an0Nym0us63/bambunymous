@@ -68,6 +68,12 @@ async def restore_in_progress():
                     if "pct100" in existing_triggers: st["m100"] = True
                     if "layer1" in existing_triggers: st["l2"]   = True
                     if "layer2" in existing_triggers: st["l3"]   = True
+                    # Initialiser last_pct au dernier milestone connu
+                    # pour éviter de rejouer les snapshots au prochain tick MQTT
+                    if "pct100" in existing_triggers: st["last_pct"] = 100.0
+                    elif "pct99" in existing_triggers: st["last_pct"] = 99.0
+                    elif "pct50" in existing_triggers: st["last_pct"] = 50.0
+                    else: st["last_pct"] = 0.0
 
                 logger.info(
                     f"[RESTORE] Print id={p.id} job={p.job_id} nom={p.file_name!r} "
