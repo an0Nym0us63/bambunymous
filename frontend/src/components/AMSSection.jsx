@@ -132,7 +132,7 @@ function SpoolSVG({ colors, empty, size=68, active }) {
 }
 
 // ── Tray card ──────────────────────────────────────────────────────────────
-function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo }) {
+function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, onClick }) {
   const isActive = amsId===activeAmsId && tray.id===activeTrayId;
   const empty = isEmptyTray(tray);
   const colors = parseColors(tray, spoolInfo);
@@ -172,7 +172,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo }) 
 }
 
 // ── Détail AMS ─────────────────────────────────────────────────────────────
-function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup }) {
+function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick }) {
   const isActive = ams.id===activeAmsId;
   const getInfo = t => spoolLookup?.[t.tag_uid] ?? spoolLookup?.[t.uuid] ?? null;
   return (
@@ -195,8 +195,126 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup }) {
             label={`${AMS_NAMES[ams.id]?.slice(-1)??ams.id+1}${t.id+1}`}
             activeAmsId={activeAmsId} activeTrayId={activeTrayId}
             spoolInfo={getInfo(t)}
+            onClick={()=>onTrayClick&&onTrayClick({tray:t,amsLabel:AMS_NAMES[ams.id]||`AMS-${ams.id+1}`})}
           />
         ))}
+      </div>
+    </div>
+  );
+}
+
+
+const MATCH_LABEL = {
+  rfid:   { text:"Tag RFID Bambu Lab",       color:"#22c55e" },
+  color:  { text:"Matching couleur (custom)", color:"#f59e0b" },
+  manual: { text:"Non identifié",             color:"#94a3b8" },
+};
+
+function TrayBottomSheet({ tray, amsLabel, onClose }) {
+  if (!tray) return null;
+  const color  = tray.color ? `#${tray.color.slice(0,6)}` : null;
+  const info   = tray.spool_info;
+  const match  = MATCH_LABEL[tray.match_mode];
+  const pct    = tray.remain ?? 0;
+  const isEmpty = tray.empty || !tray.filament_type;
+
+  const Row = ({ label, value, mono }) => (value == null || value === "") ? null : (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
+      padding:"7px 0", borderBottom:"1px solid var(--border)" }}>
+      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>{label}</span>
+      <span style={{ fontSize:13, fontWeight:600, color:"var(--text)",
+        fontFamily: mono ? "JetBrains Mono,monospace" : "inherit",
+        textAlign:"right", marginLeft:12 }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
+      zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
+          width:"100%", maxWidth:540, maxHeight:"88dvh", overflowY:"auto",
+          paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
+        {/* Handle */}
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+        </div>
+        <div style={{ padding:"16px 20px 24px" }}>
+          {/* En-tête */}
+          <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:20 }}>
+            <div style={{ width:60, height:60, borderRadius:14, flexShrink:0,
+              backgroundColor: isEmpty ? "var(--border)" : color || "var(--border)",
+              boxShadow:"0 2px 12px rgba(0,0,0,0.25)", border:"2px solid var(--border)" }}/>
+            <div style={{ flex:1, minWidth:0 }}>
+              <p style={{ fontSize:19, fontWeight:800, color:"var(--text)", margin:0,
+                letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {info?.name || tray.filament_type || "Slot vide"}
+              </p>
+              <p style={{ fontSize:12, color:"var(--muted)", margin:"4px 0 0" }}>
+                {amsLabel} · Slot {tray.id + 1}
+                {tray.tray_id_name ? ` · ${tray.tray_id_name}` : ""}
+              </p>
+            </div>
+          </div>
+
+          {isEmpty ? (
+            <p style={{ color:"var(--muted)", fontSize:14, textAlign:"center", padding:"24px 0" }}>Slot vide</p>
+          ) : (<>
+            {/* Jauge restant */}
+            {pct > 0 && (
+              <div style={{ marginBottom:20 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+                  <span style={{ fontSize:12, color:"var(--muted)" }}>Restant estimé</span>
+                  <span style={{ fontSize:14, fontWeight:700, fontFamily:"monospace",
+                    color: pct < 20 ? "#ef4444" : pct < 40 ? "#f59e0b" : "#22c55e" }}>
+                    {pct}%{info?.remaining_weight_g ? ` · ${info.remaining_weight_g.toFixed(0)}g` : ""}
+                  </span>
+                </div>
+                <div style={{ height:10, borderRadius:5, background:"var(--border)", overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${pct}%`, borderRadius:5, transition:"width 0.5s",
+                    background: pct < 20 ? "#ef4444" : pct < 40 ? "#f59e0b" : "#22c55e" }}/>
+                </div>
+              </div>
+            )}
+
+            {/* Badge détection */}
+            {match && (
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16,
+                padding:"9px 12px", borderRadius:10, background:`${match.color}14`,
+                border:`1px solid ${match.color}35` }}>
+                <MatchIcon mode={tray.match_mode} size={14}/>
+                <span style={{ fontSize:12, color:match.color, fontWeight:600 }}>{match.text}</span>
+              </div>
+            )}
+
+            {/* Infos */}
+            <Row label="Filament"      value={tray.filament_type}/>
+            <Row label="Couleur"       value={color} mono/>
+            {info ? (<>
+              <Row label="Marque"        value={info.brand}/>
+              <Row label="Matière"       value={info.material}/>
+              <Row label="Poids initial" value={info.initial_weight_g ? `${info.initial_weight_g}g` : null}/>
+              <Row label="Prix"          value={info.price ? `${Number(info.price).toFixed(2)}€` : null}/>
+              <Row label="Achat"         value={info.purchase_date?.slice(0,10)}/>
+              <Row label="Bobine #"      value={`${tray.spool_id}`} mono/>
+              {info.notes && <Row label="Notes" value={info.notes}/>}
+            </>) : (
+              <Row label="Bobine #"  value={tray.spool_id ? `${tray.spool_id}` : "Non mappée"} mono/>
+            )}
+
+            {/* Séchage */}
+            {tray.drying_temp > 0 && (
+              <div style={{ marginTop:14, padding:"10px 14px", borderRadius:10,
+                background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.25)" }}>
+                <p style={{ fontSize:11, color:"#f59e0b", fontWeight:700, margin:"0 0 4px",
+                  textTransform:"uppercase", letterSpacing:"0.05em" }}>🌡 Séchage</p>
+                <p style={{ fontSize:12, color:"var(--text)", margin:0 }}>
+                  {tray.drying_temp}°C · {tray.drying_time}min
+                </p>
+              </div>
+            )}
+          </>)}
+        </div>
       </div>
     </div>
   );
@@ -205,6 +323,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup }) {
 // ── Section principale ─────────────────────────────────────────────────────
 export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLookup }) {
   const [selectedId, setSelectedId] = useState(null);
+  const [selectedTray, setSelectedTray] = useState(null);
   if (!amsList?.length) return (
     <div className="card" style={{ padding:24, textAlign:"center", color:"var(--muted)", fontSize:14 }}>Aucun AMS détecté</div>
   );
@@ -227,7 +346,8 @@ export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLo
         </div>
       </div>
       {/* Détail */}
-      {displayAms && <AMSDetail ams={displayAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId} spoolLookup={spoolLookup}/>}
+      {displayAms && <AMSDetail ams={displayAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId} spoolLookup={spoolLookup} onTrayClick={setSelectedTray}/>}
+      {selectedTray && <TrayBottomSheet tray={selectedTray.tray} amsLabel={selectedTray.amsLabel} onClose={()=>setSelectedTray(null)}/>}
     </div>
   );
 }
