@@ -145,6 +145,99 @@ function PrintCard({ p, onClick, onDelete }) {
   );
 }
 
+
+function SnapshotGallery({ snaps, printId, onDelete }) {
+  const [lightbox, setLightbox] = useState(null); // snap en grand
+
+  const LABELS = {
+    layer1: "Couche 1", layer2: "Couche 2",
+    pct50: "50%", pct99: "99%", pct100: "100%",
+    manual: "Manuel",
+  };
+  const label  = (trigger) => LABELS[trigger] || trigger;
+  const url    = (s) => `/api/v1/prints/${printId}/snapshot/${s.trigger}`;
+
+  const handleDelete = async (e, s) => {
+    e.stopPropagation();
+    try {
+      await client.delete(`/prints/${printId}/snapshots/${s.id}`);
+      onDelete(s.id);
+      if (lightbox?.id === s.id) setLightbox(null);
+    } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+  };
+
+  return (
+    <>
+      <div>
+        <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase",
+          letterSpacing:"0.05em", marginBottom:8 }}>
+          Snapshots <span style={{ color:"var(--muted)", fontWeight:400 }}>{}</span>
+        </p>
+        {/* Carrousel sans limite */}
+        <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6,
+          scrollbarWidth:"thin" }}>
+          {snaps.map((s,i) => (
+            <div key={s.id} onClick={()=>setLightbox(s)}
+              style={{ position:"relative", flexShrink:0, cursor:"pointer" }}>
+              <img src={url(s)} alt={label(s.trigger)}
+                style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
+                  border:"1px solid var(--border)", display:"block" }}/>
+              {/* Label */}
+              <span style={{ position:"absolute", bottom:4, left:4,
+                background:"rgba(0,0,0,0.65)", color:"white",
+                fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:4,
+                letterSpacing:"0.03em" }}>
+                {label(s.trigger)}
+              </span>
+              {/* Bouton supprimer */}
+              <button onClick={e=>handleDelete(e,s)}
+                style={{ position:"absolute", top:4, right:4,
+                  background:"rgba(0,0,0,0.6)", border:"none", borderRadius:"50%",
+                  width:20, height:20, cursor:"pointer", color:"white",
+                  fontSize:11, display:"flex", alignItems:"center", justifyContent:"center",
+                  lineHeight:1 }}>
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Lightbox */}
+      {lightbox && (
+        <div onClick={()=>setLightbox(null)}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)",
+            zIndex:2000, display:"flex", flexDirection:"column",
+            alignItems:"center", justifyContent:"center", gap:12, padding:16 }}>
+          <div style={{ position:"relative", maxWidth:"100%", maxHeight:"80dvh" }}>
+            <img src={url(lightbox)} alt={label(lightbox.trigger)}
+              style={{ maxWidth:"100%", maxHeight:"80dvh", borderRadius:10,
+                objectFit:"contain", display:"block" }}/>
+          </div>
+          {/* Nom + navigation */}
+          <div style={{ display:"flex", alignItems:"center", gap:16 }}>
+            <button onClick={e=>{e.stopPropagation();const i=snaps.findIndex(s=>s.id===lightbox.id);if(i>0)setLightbox(snaps[i-1]);}}
+              style={{ background:"rgba(255,255,255,0.1)", border:"none", borderRadius:8,
+                width:36, height:36, cursor:"pointer", color:"white", fontSize:20 }}>‹</button>
+            <span style={{ color:"white", fontSize:14, fontWeight:700, minWidth:80, textAlign:"center" }}>
+              {label(lightbox.trigger)}
+            </span>
+            <button onClick={e=>{e.stopPropagation();const i=snaps.findIndex(s=>s.id===lightbox.id);if(i<snaps.length-1)setLightbox(snaps[i+1]);}}
+              style={{ background:"rgba(255,255,255,0.1)", border:"none", borderRadius:8,
+                width:36, height:36, cursor:"pointer", color:"white", fontSize:20 }}>›</button>
+          </div>
+          <button onClick={e=>handleDelete(e,lightbox)}
+            style={{ background:"rgba(239,68,68,0.2)", border:"1px solid rgba(239,68,68,0.4)",
+              borderRadius:8, padding:"6px 16px", cursor:"pointer", color:"#ef4444",
+              fontSize:12, fontWeight:600 }}>
+            🗑 Supprimer ce snapshot
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 function PrintDetail({ p, onClose }) {
   const [snaps, setSnaps] = useState([]);
   const imgUrl = p.plate_image ? `/api/v1/prints/${p.id}/image` : null;
@@ -240,17 +333,8 @@ function PrintDetail({ p, onClose }) {
 
         {/* Snapshots */}
         {snaps.length > 0 && (
-          <div>
-            <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase",
-              letterSpacing:"0.05em", marginBottom:6 }}>Snapshots</p>
-            <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
-              {snaps.map((s,i) => (
-                <img key={i} src={snapUrl(s.trigger)} alt={s.trigger}
-                  style={{ height:100, borderRadius:8, flexShrink:0, objectFit:"cover",
-                    border:"1px solid var(--border)" }}/>
-              ))}
-            </div>
-          </div>
+          <SnapshotGallery snaps={snaps} printId={p.id}
+            onDelete={sid => setSnaps(ss => ss.filter(s => s.id !== sid))}/>
         )}
       </div>
     </div>
