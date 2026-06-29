@@ -191,14 +191,14 @@ async def run_import(src_path: str) -> dict:
                     print_type=row.get("print_type") or "cloud",
                     status=row.get("status") or "SUCCESS",
                     status_note=row.get("status_note"),
-                    plate_image=row.get("plate_image"),
-                    model_3mf=row.get("model_3mf"),
+                    plate_image=row.get("image_file") or row.get("plate_image"),
+                    model_3mf=None,  # sera importé via ZIP séparément
                     estimated_seconds=row.get("estimated_seconds"),
-                    duration_seconds=row.get("duration_seconds"),
-                    total_weight_g=row.get("total_weight_g") or 0.0,
-                    total_cost_filament=row.get("total_cost_filament") or 0.0,
+                    duration_seconds=int(row.get("duration") or row.get("duration_seconds") or 0),
+                    total_weight_g=row.get("total_weight") or row.get("total_weight_g") or 0.0,
+                    total_cost_filament=row.get("total_cost") or row.get("total_cost_filament") or 0.0,
                     electric_cost=row.get("electric_cost") or 0.0,
-                    total_cost=row.get("total_cost") or 0.0,
+                    total_cost=row.get("full_cost") or row.get("total_cost") or 0.0,
                     number_of_items=row.get("number_of_items") or 1,
                     sold_units=row.get("sold_units") or 0,
                     sold_price_total=row.get("sold_price_total"),
@@ -233,7 +233,7 @@ async def run_import(src_path: str) -> dict:
                         print_id=new_pid,
                         spool_id=spool_map.get(row.get("spool_id")),
                         filament_type=row.get("filament_type") or "",
-                        color_hex=row.get("color_hex") or "",
+                        color_hex=row.get("color") or row.get("color_hex") or "",
                         grams_used=float(row.get("grams_used") or 0),
                         ams_slot=int(row.get("ams_slot") or 0),
                         cost=float(row.get("cost") or 0),
@@ -261,17 +261,20 @@ async def run_import(src_path: str) -> dict:
             # ── GROUPES Spoolnymous → PrintTag "groupe:NomDuGroupe" ───
             # Spoolnymous a une table "groups" + prints.group_id (FK)
             group_map: dict[int, str] = {}
-            if table_exists(src, "groups"):
-                for row in src.execute("SELECT id, name FROM groups").fetchall():
-                    group_map[row[0]] = row[1] or f"Groupe {row[0]}"
-                logger.info(f"[IMPORT] {len(group_map)} groupes trouvés: {list(group_map.values())}")
+            # Spoolnymous utilise "print_groups" comme nom de table
+            for grp_table in ("print_groups", "groups"):
+                if table_exists(src, grp_table):
+                    for row in src.execute(f"SELECT id, name FROM {grp_table}").fetchall():
+                        group_map[row[0]] = row[1] or f"Groupe {row[0]}"
+                    logger.info(f"[IMPORT] {len(group_map)} groupes ({grp_table}): {list(group_map.values())[:5]}")
+                    break
 
             if group_map:
                 # Chercher group_id dans prints
                 for old_pid, new_pid in print_map.items():
                     try:
                         row = src.execute(
-                            "SELECT group_id FROM prints WHERE id=?", (old_pid,)
+                            "SELECT group_id FROM prints WHERE id=?", (int(old_pid),)
                         ).fetchone()
                         if not row or not row[0]:
                             continue
