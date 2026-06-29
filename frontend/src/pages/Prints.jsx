@@ -63,27 +63,54 @@ function StatusBadge({ status }) {
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
 function GroupTile({ name, prints, latestDate, onSelectPrint, onDelete }) {
   const [open, setOpen] = useState(false);
+  // Vignette = print le plus récent du groupe (premier car triés desc)
+  const coverPrint = prints[0];
+  const coverUrl = coverPrint ? "/api/v1/prints/" + coverPrint.id + "/image" : null;
 
   return (
     <div style={{ gridColumn:"1 / -1" }}>
+      {/* Header avec vignette en arrière-plan */}
       <button onClick={() => setOpen(o => !o)}
-        style={{ width:"100%", background:"var(--surface)", border:"1px solid rgba(167,139,250,0.35)",
-          borderRadius: open ? "12px 12px 0 0" : 12, padding:"10px 16px",
-          cursor:"pointer", display:"flex", alignItems:"center", gap:10, textAlign:"left" }}>
-        <span style={{ fontSize:15 }}>{open ? "📂" : "📁"}</span>
-        <span style={{ flex:1, fontWeight:700, fontSize:13, color:"#a78bfa" }}>{name}</span>
-        <span style={{ fontSize:11, color:"var(--muted)" }}>
-          {prints.length} print{prints.length > 1 ? "s" : ""} · {fmtDate(latestDate)}
-        </span>
-        <span style={{ fontSize:11, color:"var(--muted)" }}>{open ? "▲" : "▼"}</span>
+        style={{ width:"100%", border:"1px solid rgba(167,139,250,0.35)",
+          borderRadius: open ? "12px 12px 0 0" : 12, padding:0,
+          cursor:"pointer", textAlign:"left", overflow:"hidden",
+          position:"relative", display:"block", height:72 }}>
+        {/* Image de fond */}
+        {coverUrl && (
+          <img src={coverUrl} alt=""
+            style={{ position:"absolute", inset:0, width:"100%", height:"100%",
+              objectFit:"cover", filter:"brightness(0.35)" }}
+            onError={e => { e.currentTarget.style.display="none"; }}/>
+        )}
+        {/* Overlay gradient */}
+        <div style={{ position:"absolute", inset:0,
+          background:"linear-gradient(90deg, rgba(167,139,250,0.3) 0%, rgba(0,0,0,0.1) 100%)" }}/>
+        {/* Contenu */}
+        <div style={{ position:"relative", display:"flex", alignItems:"center",
+          gap:12, padding:"0 16px", height:"100%" }}>
+          <span style={{ fontSize:20 }}>{open ? "📂" : "📁"}</span>
+          <div style={{ flex:1, minWidth:0 }}>
+            <p style={{ fontWeight:800, fontSize:14, color:"white", margin:0,
+              textShadow:"0 1px 4px rgba(0,0,0,0.5)",
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {name}
+            </p>
+            <p style={{ fontSize:11, color:"rgba(255,255,255,0.7)", margin:"2px 0 0" }}>
+              {prints.length} print{prints.length > 1 ? "s" : ""} · {fmtDate(latestDate)}
+            </p>
+          </div>
+          <span style={{ fontSize:12, color:"rgba(255,255,255,0.6)" }}>{open ? "▲" : "▼"}</span>
+        </div>
       </button>
+
+      {/* Contenu dépliable */}
       {open && (
-        <div style={{ borderLeft:"3px solid rgba(167,139,250,0.45)",
+        <div style={{ borderLeft:"3px solid rgba(167,139,250,0.5)",
           borderRight:"1px solid rgba(167,139,250,0.2)",
           borderBottom:"1px solid rgba(167,139,250,0.2)",
           borderRadius:"0 0 12px 12px",
-          padding:"12px 12px 12px 16px",
-          background:"rgba(167,139,250,0.03)" }}>
+          padding:"12px 12px 12px 14px",
+          background:"rgba(167,139,250,0.04)" }}>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:10 }}>
             {prints.map(p => (
               <PrintCard key={p.id} p={p}
@@ -626,7 +653,7 @@ export default function Prints() {
         </button>
       )}
 
-      {selected && <PrintDetail p={selected} onClose={()=>setSelected(null)}/>}
+      {selected && <PrintDetail p={selected} onClose={()=>setSelected(null)} onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}/>}
     </div>
   );
 }
