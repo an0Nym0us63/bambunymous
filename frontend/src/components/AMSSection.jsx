@@ -140,26 +140,34 @@ function SpoolSVG({ colors, empty, size=68, active }) {
   const ringColor = dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)";
   const hubColor  = dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.20)";
   const spokeColor= dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.10)";
-  const fill = empty ? "#2a2a2a" : multi ? `url(#${uid})` : c1;
+  const fill = empty ? "#2a2a2a" : c1;
 
   return (
     <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
-      {/* Gradient multicolore */}
-      {multi && !empty && (
-        <defs>
-          <linearGradient id={uid} x1="0%" y1="0%" x2="100%" y2="0%">
-            {colors.map((cl,i)=>(
-              <stop key={i} offset={`${Math.round(i/(colors.length-1)*100)}%`} stopColor={cl}/>
-            ))}
-          </linearGradient>
-        </defs>
-      )}
-
       {/* Ombre portée */}
       <ellipse cx="40" cy="75" rx="22" ry="3" fill="rgba(0,0,0,0.20)"/>
 
-      {/* Disque principal — couleur exacte du filament */}
-      <circle cx="40" cy="40" r="30" fill={fill}/>
+      {/* Disque principal — couleur exacte, ou secteurs pour multicolore */}
+      {multi && !empty ? (
+        // Secteurs de couleur (pie chart SVG)
+        colors.map((cl, i) => {
+          const total = colors.length;
+          const startAngle = (i / total) * 2 * Math.PI - Math.PI / 2;
+          const endAngle   = ((i + 1) / total) * 2 * Math.PI - Math.PI / 2;
+          const x1 = 40 + 30 * Math.cos(startAngle);
+          const y1 = 40 + 30 * Math.sin(startAngle);
+          const x2 = 40 + 30 * Math.cos(endAngle);
+          const y2 = 40 + 30 * Math.sin(endAngle);
+          const large = total === 1 ? 1 : 0;
+          return (
+            <path key={i}
+              d={`M 40 40 L ${x1.toFixed(2)} ${y1.toFixed(2)} A 30 30 0 ${large} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z`}
+              fill={cl}/>
+          );
+        })
+      ) : (
+        <circle cx="40" cy="40" r="30" fill={fill}/>
+      )}
 
       {/* Anneau extérieur (léger contour) */}
       <circle cx="40" cy="40" r="30" fill="none" stroke={ringColor} strokeWidth="2"/>
