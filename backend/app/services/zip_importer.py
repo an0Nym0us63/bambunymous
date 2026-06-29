@@ -242,36 +242,63 @@ async def import_uploads_prints_zip(zip_source) -> dict:
 
 
 async def import_uploads_filaments_zip(zip_source) -> dict:
-    """Importe photos depuis uploads/filaments/{filament_id}/."""
+    """
+    Importe photos depuis le ZIP uploads/filaments de Spoolnymous.
+
+    Deux structures possibles :
+    1. Fichier racine : {id}.webp  → photo principale → /data/filaments/{id}/Photo-01.webp
+    2. Dossier : {id}/Photo-01.webp → galerie → /data/filaments/{id}/Photo-01.webp
+    """
     stats = {"copied": 0, "errors": 0, "skipped": 0}
     with zipfile.ZipFile(zip_source) as z:
         names = z.namelist()
-        sample = [n for n in names[:5]]
-        logger.info(f"[ZIP-FIL] Structure ZIP (5 premiers): {sample}")
-        logger.info(f"[ZIP-FIL] Total entrées: {len(names)}")
+        logger.info(f"[ZIP-FIL] {len(names)} entrées, exemples: {names[:5]}")
 
         for name in names:
             if name.endswith("/"): continue
-            parts = _normalize(name).split("/")
-            base = os.path.basename(parts[-1])
+            norm = _normalize(name)
+            parts = norm.split("/")
+            base = os.path.basename(norm)
             if not base or base.startswith("."): continue
             if not _is_image(base):
                 stats["skipped"] += 1
                 continue
-            # Chercher un dossier numérique à n'importe quel niveau
-            fil_id = next((p for p in parts[:-1] if p.isdigit()), None)
+
+            fil_id = None
+            dest_name = None
+
+            if len(parts) == 1:
+                # Cas 1 : fichier à la racine — {id}.webp ou {id}.jpg
+                stem = re.sub(r"\.[^.]+$", "", base)
+                if stem.isdigit():
+                    fil_id = stem
+                    dest_name = "Photo-01" + os.path.splitext(base)[1]
+            else:
+                # Cas 2 : dans un dossier — {id}/Photo-xx.webp
+                fil_id = next((p for p in parts[:-1] if p.isdigit()), None)
+                dest_name = _safe_name(base)
+
             if not fil_id:
-                logger.debug(f"[ZIP-FIL] Pas d'id numérique dans: {name}")
+                logger.debug(f"[ZIP-FIL] Skip (pas d'id): {name}")
                 stats["skipped"] += 1
                 continue
+
             dest_dir = DATA_DIR / "filaments" / fil_id
             dest_dir.mkdir(parents=True, exist_ok=True)
             try:
-                (dest_dir / _safe_name(base)).write_bytes(z.read(name))
+                dest = dest_dir / dest_name
+                # Éviter d'écraser Photo-01 si existe déjà (cas multi-fichiers racine)
+                if dest.exists() and len(parts) == 1:
+                    idx = 2
+                    while (dest_dir / f"Photo-{idx:02d}{os.path.splitext(base)[1]}").exists():
+                        idx += 1
+                    dest = dest_dir / f"Photo-{idx:02d}{os.path.splitext(base)[1]}"
+                dest.write_bytes(z.read(name))
                 stats["copied"] += 1
             except Exception as e:
                 logger.error(f"[ZIP-FIL] {name}: {e}")
                 stats["errors"] += 1
+
     logger.info(f"[ZIP-FIL] {stats}")
     return stats
 
