@@ -21,6 +21,7 @@ class Print(Base):
     status_note         = Column(Text,        nullable=True)
 
     plate_image         = Column(String(512), nullable=True)
+    external_ref        = Column(String(256), nullable=True)  # stem fichier Spoolnymous ex: 20250807163605_19b0e749
     model_3mf           = Column(String(512), nullable=True)
 
     estimated_seconds   = Column(Float, nullable=True)
