@@ -10,6 +10,23 @@ const inp = {
   outline:"none", transition:"border-color 0.15s",
 };
 
+function Field({ label, name, type="text", placeholder="", form, setForm }) {
+  return (
+    <div>
+      <label style={{ display:"block", fontSize:11, color:"var(--muted)", marginBottom:6,
+        textTransform:"uppercase", letterSpacing:"0.05em" }}>{label}</label>
+      <input type={type} value={form[name]||""} placeholder={placeholder}
+        onChange={e => setForm(f => ({...f, [name]: e.target.value}))}
+        style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
+          borderRadius:10, padding:"8px 12px", fontSize:14, color:"var(--text)",
+          outline:"none", transition:"border-color 0.15s", boxSizing:"border-box" }}
+        onFocus={e => e.target.style.borderColor="#3b82f6"}
+        onBlur={e => e.target.style.borderColor="var(--border)"}
+      />
+    </div>
+  );
+}
+
 export default function Settings() {
   const { theme, toggle } = useTheme();
   const [form, setForm] = useState({
@@ -60,18 +77,6 @@ export default function Settings() {
     } finally { setSaving(false); }
   };
 
-  const Field = ({ label, name, type="text", placeholder="" }) => (
-    <div>
-      <label style={{ display:"block", fontSize:11, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>{label}</label>
-      <input type={type} value={form[name]||""} placeholder={placeholder}
-        onChange={e => setForm(f => ({...f, [name]: e.target.value}))}
-        style={inp}
-        onFocus={e => e.target.style.borderColor="#3b82f6"}
-        onBlur={e => e.target.style.borderColor="var(--border)"}
-      />
-    </div>
-  );
-
   const Section = ({ title, icon, children }) => (
     <section className="card" style={{ padding:16 }}>
       <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6 }}>
@@ -109,8 +114,8 @@ export default function Settings() {
             <Wifi size={13}/> Imprimante
           </div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-            <Field label="Adresse IP" name="PRINTER_IP" placeholder="192.168.1.xxx" />
-            <Field label="Numéro de série" name="PRINTER_ID" placeholder="31B…" />
+            <Field form={form} setForm={setForm} label="Adresse IP" name="PRINTER_IP" placeholder="192.168.1.xxx" />
+            <Field form={form} setForm={setForm} label="Numéro de série" name="PRINTER_ID" placeholder="31B…" />
             <div>
               <label style={{ display:"block", fontSize:11, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Code d&apos;accès</label>
               <input type="password" value={form.PRINTER_ACCESS_CODE}
@@ -124,7 +129,7 @@ export default function Settings() {
                 <p style={{ fontSize:10, color:"#22c55e", marginTop:4 }}>✓ Code configuré</p>
               )}
             </div>
-            <Field label="Nom affiché" name="PRINTER_NAME" placeholder="Mon H2C" />
+            <Field form={form} setForm={setForm} label="Nom affiché" name="PRINTER_NAME" placeholder="Mon H2C" />
           </div>
         </section>
 
@@ -132,8 +137,8 @@ export default function Settings() {
         <section className="card" style={{ padding:16 }}>
           <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16 }}>Compte</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-            <Field label="Utilisateur" name="ADMIN_USERNAME" />
-            <Field label="Mot de passe" name="ADMIN_PASSWORD" type="password" placeholder="Laisser vide pour conserver" />
+            <Field form={form} setForm={setForm} label="Utilisateur" name="ADMIN_USERNAME" />
+            <Field form={form} setForm={setForm} label="Mot de passe" name="ADMIN_PASSWORD" type="password" placeholder="Laisser vide pour conserver" />
           </div>
         </section>
 
@@ -141,7 +146,7 @@ export default function Settings() {
         <section className="card" style={{ padding:16 }}>
           <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:16 }}>Électricité</div>
           <div style={{ maxWidth:200 }}>
-            <Field label="Tarif (€/h)" name="COST_BY_HOUR" placeholder="0.20" />
+            <Field form={form} setForm={setForm} label="Tarif (€/h)" name="COST_BY_HOUR" placeholder="0.20" />
           </div>
         </section>
 
