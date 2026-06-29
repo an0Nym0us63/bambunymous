@@ -72,6 +72,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Pas de limite de taille pour les uploads (fichiers ZIP plusieurs Go)
+from starlette.middleware.base import BaseHTTPMiddleware
+class NoSizeLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        request._body = None  # Laisser le body streamer gérer
+        return await call_next(request)
+
+app.state.max_upload_size = None
+
 from fastapi import Request as _Req
 from fastapi.responses import FileResponse as _FR
 
