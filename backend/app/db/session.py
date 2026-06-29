@@ -67,6 +67,7 @@ async def _migrate():
         ("prints",    "print_type",           "TEXT DEFAULT 'cloud'"),
         ("prints",    "status_note",          "TEXT"),
         ("prints",    "model_3mf",            "TEXT"),
+        ("prints",    "external_ref",         "TEXT"),
         ("prints",    "plate_id",             "TEXT DEFAULT '1'"),
         ("prints",    "printer_model",        "TEXT DEFAULT 'H2C'"),
         ("filament_usage", "ams_id",          "INTEGER"),
