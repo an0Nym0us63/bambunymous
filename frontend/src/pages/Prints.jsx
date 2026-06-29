@@ -132,7 +132,15 @@ function PrintCard({ p, onClick, onDelete }) {
           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
           {p.file_name || "Sans nom"}
         </p>
-        <p style={{ fontSize:11, color:"var(--muted)" }}>{fmtDate(p.print_date)}</p>
+        <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+          <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>{fmtDate(p.print_date)}</p>
+          {(p.tags||[]).filter(t=>t.startsWith("groupe:")).map(t=>(
+            <span key={t} style={{ fontSize:9, background:"rgba(124,58,237,0.15)",
+              color:"#a78bfa", padding:"1px 6px", borderRadius:10, fontWeight:700 }}>
+              {t.replace("groupe:","")}
+            </span>
+          ))}
+        </div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <FilamentDots filaments={p.filament_usage}/>
           <div style={{ display:"flex", gap:10, fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
@@ -351,6 +359,9 @@ export default function Prints() {
   const [importing, setImporting] = useState(false);
   const [error, setError]     = useState(null);
   const [debugInfo, setDebugInfo] = useState("");
+  const [groups, setGroups]   = useState([]);
+  const [groupF, setGroupF]   = useState("");
+
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -359,6 +370,7 @@ export default function Prints() {
       const params = new URLSearchParams({ limit:100 });
       if (search)  params.set("search",  search);
       if (statusF) params.set("status",  statusF);
+      if (groupF)  params.set("group",   groupF);
       const { data } = await client.get(`/prints?${params}`);
       setDebugInfo(`total=${data.total} prints=${(data.prints||[]).length}`);
       setPrints(data.prints ?? []);
@@ -368,9 +380,18 @@ export default function Prints() {
       setDebugInfo("ERREUR: " + (e.response?.data?.detail || e.message));
     }
     setLoading(false);
-  }, [search, statusF]);
+  }, [search, statusF, groupF]);
+
+
+  const loadGroups = useCallback(async () => {
+    try {
+      const { data } = await client.get("/prints/groups");
+      setGroups(data.groups || []);
+    } catch(e) {}
+  }, []);
 
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { loadGroups(); }, [loadGroups]);
 
   const handleImport = async (e) => {
     const file = e.target.files?.[0];
@@ -428,6 +449,23 @@ export default function Prints() {
           ))}
         </div>
       </div>
+        {groups.length > 0 && (
+          <div style={{ display:"flex", gap:4, flexWrap:"wrap", marginTop:6 }}>
+            <span style={{ fontSize:11, color:"var(--muted)", alignSelf:"center" }}>Groupe :</span>
+            <button onClick={()=>setGroupF("")} style={{
+              padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600,
+              cursor:"pointer", border:"none",
+              background: groupF==="" ? "#7c3aed" : "var(--surface2)",
+              color: groupF==="" ? "white" : "var(--muted)" }}>Tous</button>
+            {groups.map(g => (
+              <button key={g} onClick={()=>setGroupF(g)} style={{
+                padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600,
+                cursor:"pointer", border:"none",
+                background: groupF===g ? "#7c3aed" : "var(--surface2)",
+                color: groupF===g ? "white" : "var(--muted)" }}>{g}</button>
+            ))}
+          </div>
+        )}
 
       {loading && <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>}
 
