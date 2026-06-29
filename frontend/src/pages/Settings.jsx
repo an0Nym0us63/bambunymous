@@ -21,6 +21,8 @@ export default function Settings() {
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
   const [loading, setLoading] = useState(true);
+  const [resetting, setResetting] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
 
   const [version, setVersion] = useState(null);
 
