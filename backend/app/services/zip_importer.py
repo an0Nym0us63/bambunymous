@@ -243,15 +243,27 @@ async def import_uploads_prints_zip(zip_source) -> dict:
 
 async def import_uploads_filaments_zip(zip_source) -> dict:
     """Importe photos depuis uploads/filaments/{filament_id}/."""
-    stats = {"copied": 0, "errors": 0}
+    stats = {"copied": 0, "errors": 0, "skipped": 0}
     with zipfile.ZipFile(zip_source) as z:
-        for name in z.namelist():
+        names = z.namelist()
+        sample = [n for n in names[:5]]
+        logger.info(f"[ZIP-FIL] Structure ZIP (5 premiers): {sample}")
+        logger.info(f"[ZIP-FIL] Total entrées: {len(names)}")
+
+        for name in names:
             if name.endswith("/"): continue
             parts = _normalize(name).split("/")
             base = os.path.basename(parts[-1])
-            if not base or not _is_image(base): continue
+            if not base or base.startswith("."): continue
+            if not _is_image(base):
+                stats["skipped"] += 1
+                continue
+            # Chercher un dossier numérique à n'importe quel niveau
             fil_id = next((p for p in parts[:-1] if p.isdigit()), None)
-            if not fil_id: continue
+            if not fil_id:
+                logger.debug(f"[ZIP-FIL] Pas d'id numérique dans: {name}")
+                stats["skipped"] += 1
+                continue
             dest_dir = DATA_DIR / "filaments" / fil_id
             dest_dir.mkdir(parents=True, exist_ok=True)
             try:
