@@ -69,6 +69,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from fastapi import Request as _Req
+from fastapi.responses import FileResponse as _FR
+
+@app.get("/favicon.png",  include_in_schema=False)
+@app.get("/icon.svg",     include_in_schema=False)
+@app.get("/icon-180.png", include_in_schema=False)
+@app.get("/icon-192.png", include_in_schema=False)
+@app.get("/icon-512.png", include_in_schema=False)
+@app.get("/manifest.json",include_in_schema=False)
+async def _pwa_asset(request: _Req):
+    fname = request.url.path.lstrip("/")
+    p = STATIC_DIR / fname
+    if p.exists():
+        mt = "image/svg+xml" if fname.endswith(".svg") else              "application/manifest+json" if fname.endswith(".json") else "image/png"
+        return _FR(str(p), media_type=mt)
+    from fastapi import HTTPException
+    raise HTTPException(404)
+
 app.include_router(api_router)
 
 
@@ -108,13 +126,6 @@ app.mount("/uploads", StaticFiles(directory=str(uploads)), name="uploads")
 STATIC_DIR = Path(__file__).parent / "static"
 if STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
-    # Servir les fichiers racine (favicon, manifest, icônes PWA)
-    # Vite copie public/ à la racine de dist/ donc on les sert explicitement
-    from fastapi.responses import FileResponse as _FR
-    for _f in ["favicon.png","icon-192.png","icon-512.png","icon-180.png","icon.svg","manifest.json"]:
-        _path = STATIC_DIR / _f
-        if _path.exists():
-            app.add_route(f"/{_f}", lambda req, p=_path: _FR(str(p)), methods=["GET"])
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
