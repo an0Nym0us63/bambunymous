@@ -15,6 +15,7 @@ class AMSTray:
     remain: int = 0
     uuid: str = ""
     tag_uid: str = ""
+    tray_info_idx: str = ""
     empty: bool = False
     drying_temp: int = 0
     drying_time: int = 0
