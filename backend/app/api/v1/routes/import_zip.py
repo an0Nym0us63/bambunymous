@@ -7,7 +7,7 @@ import logging
 import os
 import uuid
 from pathlib import Path
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from .auth import get_current_user
 
 router  = APIRouter()
@@ -47,7 +47,6 @@ async def zip_status_all(_: str = Depends(get_current_user)):
 @router.post("/{zip_type}")
 async def import_zip(
     zip_type: str,
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     _: str = Depends(get_current_user),
 ):
@@ -83,8 +82,9 @@ async def import_zip(
         "error":   None,
     }
 
-    # Lancer le traitement en background
-    background_tasks.add_task(_run_import, job_id, zip_type, tmp_path)
+    # Lancer le traitement en background (asyncio.create_task pour survivre à la réponse HTTP)
+    import asyncio as _aio
+    _aio.create_task(_run_import(job_id, zip_type, tmp_path))
 
     return {"ok": True, "job_id": job_id, "size_mb": size_mb}
 
