@@ -86,7 +86,14 @@ function StatusBanner({ status }) {
   const left   = status.nozzles?.find(n => n.id === 1);
   const right  = status.nozzles?.find(n => n.id === 0);
 
-  const TempChip = ({ label, current, target, active, accent }) => {
+  // Couleur du filament actif dans chaque buse
+  const activeTray = status.ams_list
+    ?.find(a => a.id === status.active_ams_id)
+    ?.trays?.find(t => t.id === status.active_tray_id);
+  const activeTrayColor  = activeTray?.color;   // buse active (droite id=0)
+  // Pour la buse gauche : pas d'info fiable depuis MQTT, on laisse vide pour l'instant
+
+  const TempChip = ({ label, current, target, active, accent, filamentColor }) => {
     const hot = current > 40;
     return (
       <div style={{ flex:1, background: active ? "rgba(59,130,246,0.08)" : "var(--surface2)",
@@ -94,7 +101,15 @@ function StatusBanner({ status }) {
         borderRadius:10, padding:"8px 10px", position:"relative", overflow:"hidden" }}>
         {active && <div style={{ position:"absolute", top:0, left:0, right:0, height:2, background:"linear-gradient(90deg,transparent,#3b82f6,transparent)" }}/>}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:2 }}>
-          <span style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em" }}>{label}</span>
+          <div style={{ display:"flex", alignItems:"center", gap:5 }}>
+            {filamentColor && (
+              <div style={{ width:10, height:10, borderRadius:"50%",
+                backgroundColor:`#${filamentColor.slice(0,6)}`,
+                border:"1.5px solid rgba(255,255,255,0.3)",
+                flexShrink:0 }}/>
+            )}
+            <span style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em" }}>{label}</span>
+          </div>
           {active && <span style={{ fontSize:8, color:"#3b82f6", fontWeight:700 }}>ACTIF</span>}
         </div>
         <div style={{ display:"flex", alignItems:"baseline", gap:4 }}>
@@ -181,8 +196,10 @@ function StatusBanner({ status }) {
           <div style={{ padding:12, display:"flex", flexDirection:"column", gap:10 }}>
             {/* Buses */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-              {left  && <TempChip label="Buse Gauche" current={left.temp}   target={left.target}   active={left.active}  />}
-              {right && <TempChip label="Buse Droite" current={right.temp}  target={right.target}  active={right.active} />}
+              {left  && <TempChip label="Buse G" current={left.temp}  target={left.target}  active={left.active}
+                filamentColor={left.active ? activeTrayColor : null}/>}
+              {right && <TempChip label="Buse D" current={right.temp} target={right.target} active={right.active}
+                filamentColor={right.active ? activeTrayColor : null}/>}
               <TempChip label="Plateau" current={status.bed_temp}     target={status.target_bed_temp} accent="#ef4444" />
               <TempChip label="Chambre" current={status.chamber_temp} target={0} />
             </div>
