@@ -154,6 +154,49 @@ export default function Settings() {
         </button>
       </form>
 
+      {/* Zone dangereuse */}
+      <div style={{ marginTop:24, padding:16, borderRadius:12,
+        border:"1px solid rgba(239,68,68,0.3)", background:"rgba(239,68,68,0.04)" }}>
+        <p style={{ fontSize:12, fontWeight:700, color:"#ef4444", margin:"0 0 8px",
+          textTransform:"uppercase", letterSpacing:"0.06em" }}>⚠ Zone dangereuse</p>
+        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
+          Supprime toutes les données : filaments, bobines, historique, snapshots, fichiers 3MF.
+          Les paramètres (IP, token…) sont conservés.
+        </p>
+        {!resetConfirm ? (
+          <button onClick={()=>setResetConfirm(true)}
+            style={{ padding:"8px 16px", background:"none", border:"1px solid #ef4444",
+              borderRadius:8, color:"#ef4444", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+            Vider toutes les données
+          </button>
+        ) : (
+          <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+            <span style={{ fontSize:13, color:"#ef4444", fontWeight:600 }}>Confirmer la suppression ?</span>
+            <button onClick={async()=>{
+              setResetting(true);
+              try {
+                await client.delete("/settings/reset-all");
+                setResetConfirm(false);
+                alert("✅ Toutes les données ont été supprimées.");
+                window.location.reload();
+              } catch(e) {
+                alert("Erreur: " + (e.response?.data?.detail || e.message));
+              } finally { setResetting(false); }
+            }} disabled={resetting}
+              style={{ padding:"8px 16px", background:"#ef4444", border:"none",
+                borderRadius:8, color:"white", fontSize:13, fontWeight:700,
+                cursor:resetting?"not-allowed":"pointer", opacity:resetting?0.6:1 }}>
+              {resetting ? "Suppression…" : "Oui, tout supprimer"}
+            </button>
+            <button onClick={()=>setResetConfirm(false)}
+              style={{ padding:"8px 14px", background:"none", border:"1px solid var(--border)",
+                borderRadius:8, color:"var(--muted)", fontSize:13, cursor:"pointer" }}>
+              Annuler
+            </button>
+          </div>
+        )}
+      </div>
+
       {version && (
         <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace", textAlign:"center", marginTop:8 }}>
           v{version.commit?.slice(0,8) || "dev"} · {version.build_date?.slice(0,10) || "?"}
