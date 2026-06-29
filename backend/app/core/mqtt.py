@@ -335,56 +335,63 @@ class MQTTManager:
                         t.match_mode = ""
 
                     # ── Matching spool en DB ────────────────────────────────
+                    # Matching spool en DB — cache pour éviter thread par tick
                     if not t.empty:
                         import threading as _mth, asyncio as _mio
-                        # IMPORTANT: capturer ams.id par défaut pour éviter
-                        # le problème de late-binding (closure sur boucle for)
-                        def _match_spool(_t=t, _tag=_tray_uuid, _tinfo=_tray_info,
-                                         _tc=_tray_color, _ams_id=ams.id, _tray_slot=t.id):
-                            lp = _mio.new_event_loop()
-                            async def _go():
-                                from ..services.spool_matcher import match_spool
-                                spool_id, mode = await match_spool(_tag, _tinfo, _tc)
-                                if spool_id:
-                                    _t.spool_id   = spool_id
-                                    _t.match_mode = mode or _t.match_mode
-                                    ams_letter = chr(65 + _ams_id)
-                                    loc = f"AMS-{ams_letter} slot {_tray_slot + 1}"
-                                    logger.debug(f"[AMS] AMS{_ams_id} tray{_tray_slot} → spool #{spool_id} ({mode}) → {loc}")
-                                    try:
-                                        from ..services.spool_location import update_spool_location
-                                        await update_spool_location(spool_id, loc)
-                                    except Exception as _le:
-                                        logger.debug(f"[AMS] location update failed: {_le}")
-                                else:
-                                    logger.debug(f"[AMS] AMS{_ams_id} tray{_tray_slot} → aucune bobine trouvée")
-                            try:    lp.run_until_complete(_go())
-                            finally: lp.close()
-                        _mth.Thread(target=_match_spool, daemon=True).start()
-
+                        _cache_key = (ams.id, t.id, _tray_uuid or _tray_info or "")
+                        _cached = _MATCH_CACHE.get(_cache_key)
+                        if _cached is not None:
+                            t.spool_id = _cached if _cached != -1 else None
+                        else:
+                            def _match_spool(_t=t, _tag=_tray_uuid, _tinfo=_tray_info,
+                                             _tc=_tray_color, _ams_id=ams.id, _tray_slot=t.id,
+                                             _key=_cache_key):
+                                lp = _mio.new_event_loop()
+                                async def _go():
+                                    from ..services.spool_matcher import match_spool
+                                    spool_id, mode = await match_spool(_tag, _tinfo, _tc)
+                                    _MATCH_CACHE[_key] = spool_id if spool_id else -1
+                                    if spool_id:
+                                        _t.spool_id   = spool_id
+                                        _t.match_mode = mode or _t.match_mode
+                                        ams_letter = chr(65 + _ams_id)
+                                        loc = f"AMS-{ams_letter} slot {_tray_slot + 1}"
+                                        logger.debug(f"[AMS] {_ams_id}/{_tray_slot} → #{spool_id} {mode}")
+                                        try:
+                                            from ..services.spool_location import update_spool_location
+                                            await update_spool_location(spool_id, loc)
+                                        except Exception as _le:
+                                            logger.debug(f"[AMS] loc failed: {_le}")
+                                    else:
+                                        logger.debug(f"[AMS] {_ams_id}/{_tray_slot} no match")
+                                try:    lp.run_until_complete(_go())
+                                finally: lp.close()
+                            _mth.Thread(target=_match_spool, daemon=True).start()
                     ams.trays.append(t)
                 state.ams_list.append(ams)
 
-            # Marquer comme Tiroir les bobines qui ne sont plus dans l'AMS
-            # On attend 5s pour laisser les threads de matching terminer
+            # Retrait AMS : supprimer du cache les trays qui ne sont plus présents
+            # → sera mis en Tiroir au prochain tick via spool_location
             try:
-                from ..services.spool_location import mark_inactive_spools_as_drawer
-                import asyncio as _lio, threading as _lth, time as _lt
-                _state_ref = state
-                def _upd_inactive():
-                    _lt.sleep(5)  # Attendre que les matchings soient terminés
-                    active_ids = {
-                        t.spool_id
-                        for a in _state_ref.ams_list
-                        for t in a.trays
-                        if t.spool_id
-                    }
-                    lp = _lio.new_event_loop()
-                    try: lp.run_until_complete(mark_inactive_spools_as_drawer(active_ids))
-                    finally: lp.close()
-                _lth.Thread(target=_upd_inactive, daemon=True).start()
+                current_keys = {
+                    (a.id, t.id, t.uuid or t.tray_info_idx or "")
+                    for a in state.ams_list for t in a.trays if not t.empty
+                }
+                for _k in list(_MATCH_CACHE.keys()):
+                    if _k not in current_keys:
+                        _old = _MATCH_CACHE.pop(_k, -1)
+                        if _old and _old != -1:
+                            import asyncio as _lio3, threading as _lth3
+                            def _mk_drawer(_sid=_old):
+                                lp = _lio3.new_event_loop()
+                                async def _d():
+                                    from ..services.spool_location import update_spool_location
+                                    await update_spool_location(_sid, "Tiroir")
+                                try: lp.run_until_complete(_d())
+                                finally: lp.close()
+                            _lth3.Thread(target=_mk_drawer, daemon=True).start()
             except Exception as _le:
-                logger.debug(f"[AMS] inactive check failed: {_le}")
+                logger.debug(f"[AMS] inactive check: {_le}")
 
             changed = True
 
