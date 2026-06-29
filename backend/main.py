@@ -48,6 +48,9 @@ async def lifespan(app: FastAPI):
     # Restaurer les prints IN_PROGRESS en mémoire après un redémarrage
     from app.services.print_tracker import restore_in_progress
     await restore_in_progress()
+    # Démarrer le worker de location AMS (doit être dans le bon event loop)
+    from app.services.spool_location import _ensure_worker
+    await _ensure_worker()
     await mqtt_manager.start()
     yield
     await mqtt_manager.stop()
