@@ -100,6 +100,20 @@ async def list_prints(
     return {"total": total, "prints": [_print_to_out(p) for p in rows]}
 
 
+@router.get("/groups")
+async def list_groups(_: str = Depends(get_current_user)):
+    """Retourne les groupes disponibles (tags préfixés 'groupe:')."""
+    from sqlalchemy import distinct
+    from ....models.print_history import PrintTag as _PT
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(distinct(_PT.tag)).where(_PT.tag.like("groupe:%")).order_by(_PT.tag)
+        )
+        groups = [r[0].replace("groupe:", "") for r in result.all()]
+    return {"groups": groups}
+
+
+
 @router.get("/{print_id}")
 async def get_print(print_id: int, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
@@ -232,19 +246,6 @@ async def debug_prints():  # noqa — public debug route
         async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
             tables = [r[0] async for r in cur]
     return {"tables": tables, "prints": rows}
-
-
-@router.get("/groups")
-async def list_groups(_: str = Depends(get_current_user)):
-    """Retourne les groupes disponibles (tags préfixés 'groupe:')."""
-    from sqlalchemy import distinct
-    from ....models.print_history import PrintTag as _PT
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(distinct(_PT.tag)).where(_PT.tag.like("groupe:%")).order_by(_PT.tag)
-        )
-        groups = [r[0].replace("groupe:", "") for r in result.all()]
-    return {"groups": groups}
 
 
 @router.post("/{print_id}/group")
