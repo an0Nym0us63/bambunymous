@@ -147,7 +147,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
     : { backgroundColor: pct>30 ? (colors?.[0]||"#3b82f6") : "#ef4444" };
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+    <div onClick={onClick} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, cursor: onClick ? "pointer" : "default" }}>
       <p style={{ fontSize:10, color:"var(--muted)", fontWeight:500, height:16, lineHeight:"16px", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", maxWidth:72, textAlign:"center" }}>
         {empty ? "" : (material||"—")}
       </p>
@@ -254,6 +254,11 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
                 {amsLabel} · Slot {tray.id + 1}
                 {tray.tray_id_name ? ` · ${tray.tray_id_name}` : ""}
               </p>
+              {tray.uuid && tray.uuid !== "00000000" && (
+                <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0", fontFamily:"monospace" }}>
+                  UUID: {tray.uuid}
+                </p>
+              )}
             </div>
           </div>
 
@@ -287,19 +292,32 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
               </div>
             )}
 
-            {/* Infos */}
-            <Row label="Filament"      value={tray.filament_type}/>
-            <Row label="Couleur"       value={color} mono/>
+            {/* ── Données imprimante (MQTT) ── */}
+            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+              letterSpacing:"0.08em", marginBottom:4, marginTop:4 }}>Données imprimante</p>
+            <Row label="Type filament"  value={tray.filament_type}/>
+            <Row label="Couleur MQTT"   value={color} mono/>
+            <Row label="Ref. catalogue" value={tray.tray_id_name}/>
+            <Row label="Tag UID"        value={tray.tag_uid && tray.tag_uid !== "0000000000000000" ? tray.tag_uid : null} mono/>
+            <Row label="Restant AMS"    value={`${tray.remain}%`}/>
+
+            {/* ── Bobine liée en base ── */}
+            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+              letterSpacing:"0.08em", marginBottom:4, marginTop:12 }}>Bobine en base</p>
             {info ? (<>
+              <Row label="Nom"           value={info.name}/>
               <Row label="Marque"        value={info.brand}/>
               <Row label="Matière"       value={info.material}/>
               <Row label="Poids initial" value={info.initial_weight_g ? `${info.initial_weight_g}g` : null}/>
+              <Row label="Restant"       value={info.remaining_weight_g ? `${Math.round(info.remaining_weight_g)}g` : null}/>
               <Row label="Prix"          value={info.price ? `${Number(info.price).toFixed(2)}€` : null}/>
               <Row label="Achat"         value={info.purchase_date?.slice(0,10)}/>
-              <Row label="Bobine #"      value={`${tray.spool_id}`} mono/>
+              <Row label="ID bobine"     value={`#${tray.spool_id}`} mono/>
               {info.notes && <Row label="Notes" value={info.notes}/>}
             </>) : (
-              <Row label="Bobine #"  value={tray.spool_id ? `${tray.spool_id}` : "Non mappée"} mono/>
+              <p style={{ fontSize:12, color:"#f59e0b", fontStyle:"italic", padding:"4px 0" }}>
+                {tray.spool_id ? `Bobine #${tray.spool_id} (données non chargées)` : "Aucune bobine mappée en base"}
+              </p>
             )}
 
             {/* Séchage */}
