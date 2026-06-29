@@ -148,9 +148,9 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
 
   return (
     <div onClick={onClick} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, cursor: onClick ? "pointer" : "default" }}>
-      <p style={{ fontSize:10, color:"var(--muted)", fontWeight:500, lineHeight:"14px",
-        textAlign:"center", maxWidth:80, wordBreak:"break-word", whiteSpace:"normal" }}>
-        {empty ? "" : (name || material || "—")}
+      <p style={{ fontSize:10, color:"var(--muted)", fontWeight:600, lineHeight:"13px",
+        textAlign:"center", whiteSpace:"nowrap" }}>
+        {empty ? "" : (material || "—")}
       </p>
       <div style={{ width:48, height:5, background:"var(--border)", borderRadius:3, overflow:"hidden" }}>
         {!empty && <div style={{ height:"100%", borderRadius:3, width:`${Math.max(0,Math.min(100,pct))}%`, transition:"width 0.7s", ...barColor }} />}
@@ -165,8 +165,9 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
         )}
       </div>
       <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace" }}>{empty ? "" : wLabel}</p>
-      <p style={{ fontSize:9, color:"var(--text2)", textAlign:"center", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", width:68 }}>
-        {empty ? "Vide" : (name||tray.tray_id_name||"—")}
+      <p style={{ fontSize:9, color:"var(--text2)", textAlign:"center",
+        whiteSpace:"nowrap", maxWidth:90, overflow:"hidden", textOverflow:"clip" }}>
+        {empty ? "Vide" : (name || tray.filament_type || tray.tray_id_name || "—")}
       </p>
     </div>
   );
