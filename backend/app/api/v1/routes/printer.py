@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from typing import Optional
 from ....core.mqtt import get_state
+from ....db.session import AsyncSessionLocal
 from .auth import get_current_user
 
 router = APIRouter()
@@ -13,6 +14,18 @@ class NozzleTempOut(BaseModel):
     target: float
     active: bool
 
+
+class SpoolInfoOut(BaseModel):
+    id: int
+    name: Optional[str] = None
+    color: Optional[str] = None
+    material: Optional[str] = None
+    brand: Optional[str] = None
+    remaining_weight_g: Optional[float] = None
+    initial_weight_g: Optional[float] = None
+    price: Optional[float] = None
+    purchase_date: Optional[str] = None
+    notes: Optional[str] = None
 
 class TrayOut(BaseModel):
     id: int
@@ -26,7 +39,8 @@ class TrayOut(BaseModel):
     drying_temp: int
     drying_time: int
     spool_id: Optional[int] = None
-    match_mode: str = ""   # rfid | color | manual | ""
+    match_mode: str = ""
+    spool_info: Optional[SpoolInfoOut] = None
 
 
 class AMSOut(BaseModel):
@@ -91,9 +105,41 @@ class PrinterStatusOut(BaseModel):
     fw_version: str
 
 
+def _spool_info(spool_id, spools_map):
+    if not spool_id or spool_id not in spools_map:
+        return None
+    s, f = spools_map[spool_id]
+    return SpoolInfoOut(
+        id=s.id,
+        name=getattr(f, "name", None) or getattr(f, "display_name", None) if f else None,
+        color=s.color,
+        material=f.material if f else None,
+        brand=f.brand if f else None,
+        remaining_weight_g=s.remaining_weight_g,
+        initial_weight_g=f.filament_weight_g if f else None,
+        price=f.price if f else None,
+        purchase_date=str(s.purchase_date) if getattr(s, "purchase_date", None) else None,
+        notes=getattr(s, "notes", None),
+    )
+
+
 @router.get("/status", response_model=PrinterStatusOut)
 async def printer_status(_: str = Depends(get_current_user)):
+    from sqlalchemy import select as _sel
+    from ....models.filament import Spool as _Spool, Filament as _Fil
     s = get_state()
+    # Charger les bobines liées aux trays AMS
+    _spools_map = {}
+    all_spool_ids = [
+        t.spool_id
+        for a in s.ams_list for t in a.trays if t.spool_id
+    ]
+    if all_spool_ids:
+        async with AsyncSessionLocal() as db:
+            spools_r = await db.execute(_sel(_Spool).where(_Spool.id.in_(all_spool_ids)))
+            for sp in spools_r.scalars().all():
+                fil = await db.get(_Fil, sp.filament_id) if sp.filament_id else None
+                _spools_map[sp.id] = (sp, fil)
     return PrinterStatusOut(
         connected=s.connected,
         serial=s.serial,
@@ -127,6 +173,7 @@ async def printer_status(_: str = Depends(get_current_user)):
                     drying_temp=t.drying_temp, drying_time=t.drying_time,
                     spool_id=t.spool_id,
                     match_mode=getattr(t, "match_mode", ""),
+                    spool_info=_spool_info(t.spool_id, _spools_map),
                 ) for t in a.trays],
                 humidity=a.humidity, temp=a.temp,
             ) for a in s.ams_list
