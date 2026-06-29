@@ -121,7 +121,7 @@ async def list_prints(
     search:  Optional[str] = None,
     group:   Optional[str] = None,
     tag:     Optional[str] = None,
-    limit:   int = Query(50, le=200),
+    limit:   int = Query(50, le=2000),
     offset:  int = 0,
     _: str = Depends(get_current_user),
 ):
