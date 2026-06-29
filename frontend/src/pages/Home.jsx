@@ -48,10 +48,21 @@ function StatusBanner({ status }) {
   };
 
   const isRunning = status?.status === "RUNNING";
+  // Déplier possible même hors impression (pour voir temps, températures)
   useEffect(() => {
     if (expanded && isRunning) startCam(); else stopCam();
     return stopCam;
   }, [expanded, isRunning]);
+
+  const [printInfo, setPrintInfo] = useState(null);
+
+  // Charger les infos du print en cours (vignette + nom)
+  useEffect(() => {
+    if (!status?.status) return;
+    client.get("/prints?limit=1&status=" + (status.status === "RUNNING" ? "IN_PROGRESS" : "SUCCESS"))
+      .then(r => { const p = r.data?.prints?.[0]; if (p) setPrintInfo(p); })
+      .catch(() => {});
+  }, [status?.status]);
 
   if (!status) return <div className="card" style={{ height:56, animation:"pulse 2s infinite" }} />;
   const cfg    = STATUS_CFG[status.status] ?? STATUS_CFG.IDLE;
@@ -93,16 +104,24 @@ function StatusBanner({ status }) {
       )}
 
       {/* Header cliquable */}
-      <button onClick={() => isRunning && setExpanded(e => !e)}
-        style={{ width:"100%", background:"none", border:"none", cursor:isRunning?"pointer":"default", padding:0, position:"relative", zIndex:1 }}>
+      <button onClick={() => setExpanded(e => !e)}
+        style={{ width:"100%", background:"none", border:"none", cursor:"pointer", padding:0, position:"relative", zIndex:1 }}>
         <div style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px" }}>
           <div style={{ width:8, height:8, borderRadius:"50%", backgroundColor:cfg.dot, flexShrink:0,
             animation:isRunning?"livePulse 2s infinite":"none" }} />
+          {/* Vignette du print */}
+          {printInfo?.plate_image && (
+            <div style={{ width:36, height:36, borderRadius:8, overflow:"hidden", flexShrink:0 }}>
+              <img src={`/api/v1/prints/${printInfo.id}/image`} alt=""
+                style={{ width:"100%", height:"100%", objectFit:"cover" }}
+                onError={e => e.currentTarget.style.display="none"}/>
+            </div>
+          )}
           <div style={{ flex:1, minWidth:0, textAlign:"left" }}>
             <p style={{ fontWeight:600, fontSize:14, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {isRunning && status.print_name ? status.print_name : cfg.label}
+              {printInfo?.file_name || (isRunning && status.print_name ? status.print_name : cfg.label)}
             </p>
-            {isRunning && status.print_name && <p style={{ fontSize:11, color:"var(--muted)" }}>{cfg.label}</p>}
+            <p style={{ fontSize:11, color:"var(--muted)" }}>{cfg.label}</p>
           </div>
           {isRunning && (
             <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
@@ -118,15 +137,17 @@ function StatusBanner({ status }) {
       </button>
 
       {/* Panneau déplié */}
-      {expanded && isRunning && (
+      {expanded && (
         <div style={{ borderTop:"1px solid var(--border)" }}>
-          {/* Caméra */}
-          <img ref={camRef} alt="Camera"
-            style={{ width:"100%", display:"block", maxHeight:280, objectFit:"cover",
-              background:"#000" }}
-            onLoad={() => { inFlightRef.current = false; }}
-            onError={e => { inFlightRef.current = false; e.currentTarget.style.display="none"; }}
-          />
+          {/* Caméra — seulement si impression en cours */}
+          {isRunning && (
+            <img ref={camRef} alt="Camera"
+              style={{ width:"100%", display:"block", maxHeight:280, objectFit:"cover",
+                background:"#111" }}
+              onLoad={() => { inFlightRef.current = false; }}
+              onError={e => { inFlightRef.current = false; e.currentTarget.style.display="none"; }}
+            />
+          )}
           {/* Températures + infos */}
           <div style={{ padding:12, display:"flex", flexDirection:"column", gap:10 }}>
             {/* Buses */}
