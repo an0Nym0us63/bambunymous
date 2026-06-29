@@ -490,7 +490,7 @@ function PrintDetail({ p, onClose, onDelete }) {
                         {f.spool_id && <span style={{ fontSize:9, color:"#22c55e", marginLeft:6 }}>✓ #{f.spool_id}</span>}
                       </p>
                       <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
-                        {[f.filament_type, f.color_hex, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
+                        {[f.filament_brand, f.filament_type, f.color_hex, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
                       </p>
                     </div>
                   </div>
