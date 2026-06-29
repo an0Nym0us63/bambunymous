@@ -167,7 +167,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
       <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace" }}>{empty ? "" : wLabel}</p>
       <p style={{ fontSize:9, color:"var(--text2)", textAlign:"center",
         whiteSpace:"normal", wordBreak:"break-word", maxWidth:80, lineHeight:"12px" }}>
-        {empty ? "Vide" : (name || tray.filament_type || tray.tray_id_name || "—")}
+        {empty ? "Vide" : (name || tray.tray_id_name || "")}
       </p>
     </div>
   );
