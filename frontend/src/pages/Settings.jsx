@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon } from "lucide-react";
 import client from "../api/client";
-import ImportSection from "../components/ImportSection";
+import ImportSection, { ZipImportSection } from "../components/ImportSection";
 import { useTheme } from "../useTheme";
 
 const inp = {
@@ -152,6 +152,7 @@ export default function Settings() {
         </div>
 
         <ImportSection />
+        <ZipImportSection />
 
         <button type="submit" disabled={saving}
           style={{ display:"inline-flex", alignItems:"center", gap:8,
