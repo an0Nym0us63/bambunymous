@@ -17,6 +17,9 @@ export const usePrinter = create((set, get) => ({
   },
 
   startPolling: (intervalMs = 3000) => {
+    // Stopper l'intervalle existant avant d'en créer un nouveau
+    const existing = get()._interval;
+    if (existing) clearInterval(existing);
     get().fetch();
     const id = setInterval(() => get().fetch(), intervalMs);
     set({ _interval: id });
