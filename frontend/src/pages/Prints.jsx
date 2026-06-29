@@ -63,55 +63,63 @@ function StatusBadge({ status }) {
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
 function GroupTile({ name, prints, latestDate, onSelectPrint, onDelete }) {
   const [open, setOpen] = useState(false);
-  // Vignette = print le plus récent du groupe (premier car triés desc)
   const coverPrint = prints[0];
-  const coverUrl = coverPrint ? "/api/v1/prints/" + coverPrint.id + "/image" : null;
 
   return (
-    <div style={{ gridColumn:"1 / -1" }}>
-      {/* Header avec vignette en arrière-plan */}
-      <button onClick={() => setOpen(o => !o)}
-        style={{ width:"100%", border:"1px solid rgba(167,139,250,0.35)",
-          borderRadius: open ? "12px 12px 0 0" : 12, padding:0,
-          cursor:"pointer", textAlign:"left", overflow:"hidden",
-          position:"relative", display:"block", height:72 }}>
-        {/* Image de fond */}
-        {coverUrl && (
-          <img src={coverUrl} alt=""
-            style={{ position:"absolute", inset:0, width:"100%", height:"100%",
-              objectFit:"cover", filter:"brightness(0.35)" }}
-            onError={e => { e.currentTarget.style.display="none"; }}/>
-        )}
-        {/* Overlay gradient */}
-        <div style={{ position:"absolute", inset:0,
-          background:"linear-gradient(90deg, rgba(167,139,250,0.3) 0%, rgba(0,0,0,0.1) 100%)" }}/>
-        {/* Contenu */}
-        <div style={{ position:"relative", display:"flex", alignItems:"center",
-          gap:12, padding:"0 16px", height:"100%" }}>
-          <span style={{ fontSize:20 }}>{open ? "📂" : "📁"}</span>
-          <div style={{ flex:1, minWidth:0 }}>
-            <p style={{ fontWeight:800, fontSize:14, color:"white", margin:0,
-              textShadow:"0 1px 4px rgba(0,0,0,0.5)",
-              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {name}
-            </p>
-            <p style={{ fontSize:11, color:"rgba(255,255,255,0.7)", margin:"2px 0 0" }}>
-              {prints.length} print{prints.length > 1 ? "s" : ""} · {fmtDate(latestDate)}
-            </p>
-          </div>
-          <span style={{ fontSize:12, color:"rgba(255,255,255,0.6)" }}>{open ? "▲" : "▼"}</span>
-        </div>
-      </button>
+    <>
+      {/* Tuile groupe — même taille qu'une PrintCard normale */}
+      <div className="card" onClick={() => setOpen(o => !o)}
+        style={{ overflow:"hidden", display:"flex", flexDirection:"column",
+          position:"relative", padding:0, cursor:"pointer",
+          outline: open ? "2px solid rgba(167,139,250,0.6)" : "none",
+          outlineOffset:-2 }}>
 
-      {/* Contenu dépliable */}
+        {/* Vignette ratio 4/3 — contain pour pas zoomer */}
+        <div style={{ position:"relative", paddingTop:"75%",
+          background:"var(--surface2)", overflow:"hidden" }}>
+          {coverPrint && (
+            <img src={"/api/v1/prints/" + coverPrint.id + "/image"} alt=""
+              style={{ position:"absolute", inset:0, width:"100%", height:"100%",
+                objectFit:"contain", imageRendering:"auto" }}
+              onError={e => { e.currentTarget.style.display="none"; }}/>
+          )}
+          {/* Overlay violet léger pour identifier comme groupe */}
+          <div style={{ position:"absolute", inset:0,
+            background: open
+              ? "rgba(167,139,250,0.15)"
+              : "rgba(167,139,250,0.05)" }}/>
+          {/* Badge groupe */}
+          <span style={{ position:"absolute", top:6, left:6,
+            background:"rgba(124,58,237,0.85)", color:"white",
+            fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20,
+            backdropFilter:"blur(4px)" }}>
+            📁 {prints.length} print{prints.length>1?"s":""}
+          </span>
+          {/* Flèche */}
+          <span style={{ position:"absolute", top:6, right:8,
+            color:"rgba(167,139,250,0.9)", fontSize:11, fontWeight:700 }}>
+            {open ? "▲" : "▼"}
+          </span>
+        </div>
+
+        {/* Nom du groupe */}
+        <div style={{ padding:"8px 10px" }}>
+          <p style={{ fontWeight:700, fontSize:12, color:"#a78bfa", margin:"0 0 2px",
+            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {name}
+          </p>
+          <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>{fmtDate(latestDate)}</p>
+        </div>
+      </div>
+
+      {/* Prints du groupe — s'insèrent après, pleine largeur, avec liseré */}
       {open && (
-        <div style={{ borderLeft:"3px solid rgba(167,139,250,0.5)",
-          borderRight:"1px solid rgba(167,139,250,0.2)",
-          borderBottom:"1px solid rgba(167,139,250,0.2)",
-          borderRadius:"0 0 12px 12px",
-          padding:"12px 12px 12px 14px",
-          background:"rgba(167,139,250,0.04)" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:10 }}>
+        <div style={{ gridColumn:"1 / -1",
+          borderLeft:"3px solid rgba(167,139,250,0.5)",
+          marginLeft:4, paddingLeft:10,
+          marginBottom:4 }}>
+          <div style={{ display:"grid",
+            gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:10 }}>
             {prints.map(p => (
               <PrintCard key={p.id} p={p}
                 onClick={() => onSelectPrint(p)}
@@ -120,7 +128,7 @@ function GroupTile({ name, prints, latestDate, onSelectPrint, onDelete }) {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 
@@ -637,7 +645,8 @@ export default function Prints() {
             ) : (
               <GroupTile key={item.name} name={item.name}
                 prints={item.prints} latestDate={item.latestDate}
-                onSelectPrint={setSelected} onDelete={onDelete}/>
+                onSelectPrint={setSelected}
+                onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}/>
             ))}
           </div>
         );
