@@ -3,10 +3,10 @@ import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle
 import client from "../api/client";
 
 const STATUS_CFG = {
-  IN_PROGRESS: { label:"En cours",  color:"#3b82f6", icon:Loader },
-  SUCCESS:     { label:"Réussi",    color:"#22c55e", icon:CheckCircle },
-  FAILED:      { label:"Échoué",    color:"#ef4444", icon:XCircle },
-  CANCELLED:   { label:"Annulé",    color:"#94a3b8", icon:XCircle },
+  IN_PROGRESS: { label:"En cours", color:"#3b82f6", bg:"rgba(59,130,246,0.75)",  icon:Loader },
+  SUCCESS:     { label:"Réussi",   color:"#22c55e", bg:"rgba(34,197,94,0.75)",   icon:CheckCircle },
+  FAILED:      { label:"Échoué",   color:"#ef4444", bg:"rgba(239,68,68,0.75)",   icon:XCircle },
+  CANCELLED:   { label:"Annulé",   color:"#94a3b8", bg:"rgba(148,163,184,0.75)", icon:XCircle },
 };
 
 function fmtDur(s) {
@@ -101,7 +101,7 @@ function GroupTile({ name, prints, latestDate, onSelectPrint, onDelete }) {
 function PrintCard({ p, onClick, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
-  const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.4)", color:"#94a3b8", label: p.status || "?" };
+  const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.5)", color:"white", label: p.status || "?" };
 
   const handleDelete = async (e) => {
     e.stopPropagation();
