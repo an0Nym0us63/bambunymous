@@ -38,6 +38,28 @@ def _job(job_id: str) -> dict:
         return _JOBS[job_id]
 
 
+async def restore_in_progress():
+    """
+    Au démarrage du container, recharge les prints IN_PROGRESS depuis la DB
+    pour ne pas perdre le lien si le container a redémarré pendant une impression.
+    """
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(Print).where(Print.status == "IN_PROGRESS")
+            )
+            prints = result.scalars().all()
+            for p in prints:
+                if p.job_id:
+                    st = _job(p.job_id)
+                    with _LOCK:
+                        st["print_id"]   = p.id
+                        st["start_time"] = p.created_at.timestamp() if p.created_at else time.time()
+                    logger.info(f"[RESTORE] Print IN_PROGRESS récupéré: id={p.id} job={p.job_id} nom={p.file_name!r}")
+    except Exception as e:
+        logger.error(f"[RESTORE] Erreur restore_in_progress: {e}")
+
+
 def _bg(coro):
     import threading
     def _r():
@@ -183,7 +205,25 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
 def on_progress(job_id: str, pct: float, layer: int):
     if not job_id or job_id in _PROCESSED: return
     st = _job(job_id); pid = st.get("print_id")
-    if not pid: return
+    if not pid:
+        # Pas en mémoire (redémarrage container) → chercher en DB par job_id
+        import asyncio as _afi
+        def _find():
+            lp = _afi.new_event_loop()
+            async def _go():
+                async with AsyncSessionLocal() as db:
+                    r = await db.execute(select(Print).where(Print.job_id == str(job_id), Print.status == "IN_PROGRESS"))
+                    p = r.scalar_one_or_none()
+                    return p.id if p else None
+            try:    return lp.run_until_complete(_go())
+            finally: lp.close()
+        pid = _find()
+        if pid:
+            with _LOCK: st["print_id"] = pid
+            logger.info(f"[FINISH] Print récupéré depuis DB: id={pid} job={job_id}")
+        else:
+            logger.warning(f"[FINISH] job_id={job_id} introuvable en mémoire ni en DB")
+            return
 
     prev = st["last_pct"]
     # Régression forte = nouveau print
