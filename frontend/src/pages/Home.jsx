@@ -35,6 +35,9 @@ function StatusBanner({ status }) {
 
   const stopCam = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
+    inFlightRef.current = false;
+    // Réinitialiser l'image pour éviter l'icône cassée au prochain déploi
+    if (camRef.current) { camRef.current.src = ""; }
   };
   const tickCam = () => {
     if (inFlightRef.current || !camRef.current) return;
@@ -96,11 +99,12 @@ function StatusBanner({ status }) {
 
   return (
     <div className="card" style={{ overflow:"hidden" }}>
-      {/* Barre progression */}
-      {isRunning && (
-        <div style={{ position:"absolute", top:0, left:0, height:"100%",
-          background:`linear-gradient(90deg,${cfg.color}12,transparent)`,
-          width:`${pct}%`, transition:"width 1s", pointerEvents:"none", zIndex:0 }} />
+      {/* Barre de progression — fine ligne en bas */}
+      {isRunning && pct > 0 && (
+        <div style={{ position:"absolute", bottom:0, left:0, height:3,
+          background:`linear-gradient(90deg,${cfg.color},${cfg.color}88)`,
+          width:`${pct}%`, transition:"width 1s", pointerEvents:"none", zIndex:2,
+          borderRadius:"0 2px 2px 0" }} />
       )}
 
       {/* Header cliquable */}
@@ -111,7 +115,7 @@ function StatusBanner({ status }) {
             animation:isRunning?"livePulse 2s infinite":"none" }} />
           {/* Vignette du print */}
           {printInfo?.plate_image && (
-            <div style={{ width:36, height:36, borderRadius:8, overflow:"hidden", flexShrink:0 }}>
+            <div style={{ width:52, height:52, borderRadius:10, overflow:"hidden", flexShrink:0 }}>
               <img src={`/api/v1/prints/${printInfo.id}/image`} alt=""
                 style={{ width:"100%", height:"100%", objectFit:"cover" }}
                 onError={e => e.currentTarget.style.display="none"}/>
