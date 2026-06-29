@@ -5,12 +5,19 @@ import { Droplets, Sun } from "lucide-react";
 function hexCss(hex) {
   if (!hex) return null;
   const h = hex.replace(/^#/, "").slice(0, 6);
-  if (h.replace(/0/g,"") === "") return null;
+  if (h.length < 6) return null;
+  // Ne pas filtrer le noir pur (#000000) — seulement les UUIDs vides type "000000"
+  // On filtre uniquement si la couleur EST exactement 000000 ET que c'est un uuid vide
   return `#${h}`;
 }
 function isEmptyTray(tray) {
   if (tray.empty) return true;
-  return (tray.uuid||"").replace(/0/g,"") === "" && (tray.color||"").replace(/[0F]/gi,"") === "";
+  // Un tray est vide si uuid ET filament_type sont vides
+  // Ne pas se fier à la couleur (le noir pur #000000 serait faussement détecté comme vide)
+  const noUuid = (tray.uuid||"").replace(/0/g,"") === "";
+  const noType = !(tray.filament_type||"").trim();
+  const noName = !(tray.tray_id_name||"").trim();
+  return noUuid && noType && noName;
 }
 function luminance(hex) {
   const h = (hex||"").replace("#","");
@@ -122,58 +129,53 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
   );
 }
 
-// ── Bobine SVG ─────────────────────────────────────────────────────────────
+// ── Bobine SVG — vue de face, disque plat ──────────────────────────────────
 function SpoolSVG({ colors, empty, size=68, active }) {
-  const c1 = colors?.[0] || (empty ? "#1a1a1a" : "#555");
+  const c1 = colors?.[0] || (empty ? "#2a2a2a" : "#888");
   const multi = colors && colors.length > 1;
   const uid = `sg${Math.random().toString(36).slice(2,7)}`;
   const lum = luminance(c1.replace("#",""));
   const dark = lum < 128;
-  const shine    = dark ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.45)";
-  const rimShade = dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.10)";
-  const hubRing  = dark ? "rgba(255,255,255,0.20)" : "rgba(0,0,0,0.30)";
-  const fill = empty ? "#222" : multi ? `url(#${uid})` : c1;
+  // Teinte légèrement plus claire/foncée pour l'anneau extérieur
+  const ringColor = dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)";
+  const hubColor  = dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.20)";
+  const spokeColor= dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.10)";
+  const fill = empty ? "#2a2a2a" : multi ? `url(#${uid})` : c1;
 
   return (
     <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
+      {/* Gradient multicolore */}
       {multi && !empty && (
         <defs>
           <linearGradient id={uid} x1="0%" y1="0%" x2="100%" y2="0%">
-            {colors.map((c,i)=>(
-              <stop key={i} offset={`${Math.round(i/(colors.length-1)*100)}%`} stopColor={c}/>
+            {colors.map((cl,i)=>(
+              <stop key={i} offset={`${Math.round(i/(colors.length-1)*100)}%`} stopColor={cl}/>
             ))}
           </linearGradient>
         </defs>
       )}
 
       {/* Ombre portée */}
-      <ellipse cx="40" cy="76" rx="20" ry="3" fill="rgba(0,0,0,0.22)"/>
+      <ellipse cx="40" cy="75" rx="22" ry="3" fill="rgba(0,0,0,0.20)"/>
 
-      {/* Disque principal */}
-      <circle cx="40" cy="40" r="28" fill={fill}/>
-      {/* Ombrage bas */}
-      <circle cx="40" cy="40" r="28" fill="rgba(0,0,0,0.10)"/>
-      {/* Reflet haut-gauche */}
-      <ellipse cx="32" cy="26" rx="9" ry="5" fill={shine} opacity="0.7"/>
+      {/* Disque principal — couleur exacte du filament */}
+      <circle cx="40" cy="40" r="30" fill={fill}/>
 
-      {/* Joues latérales — cercles légèrement plus petits */}
-      {!empty && <>
-        <circle cx="15" cy="40" r="10" fill={fill}/>
-        <circle cx="15" cy="40" r="10" fill={rimShade}/>
-        <circle cx="65" cy="40" r="10" fill={fill}/>
-        <circle cx="65" cy="40" r="10" fill={rimShade}/>
-      </>}
+      {/* Anneau extérieur (léger contour) */}
+      <circle cx="40" cy="40" r="30" fill="none" stroke={ringColor} strokeWidth="2"/>
 
-      {/* Hub — anneaux concentriques */}
-      <circle cx="40" cy="40" r="13" fill="rgba(0,0,0,0.25)" stroke={hubRing} strokeWidth="1"/>
-      <circle cx="40" cy="40" r="8"  fill="rgba(0,0,0,0.20)" stroke={hubRing} strokeWidth="1"/>
-      <circle cx="40" cy="40" r="4"  fill="rgba(0,0,0,0.55)"/>
-      <circle cx="38" cy="38" r="1.5" fill="rgba(255,255,255,0.18)"/>
+      {/* Zone hub (cercle intérieur plus sombre) */}
+      <circle cx="40" cy="40" r="14" fill={hubColor}/>
+      {/* Trou central */}
+      <circle cx="40" cy="40" r="6" fill={empty ? "#111" : "rgba(0,0,0,0.65)"}/>
+
+      {/* Minuscule reflet */}
+      <circle cx="34" cy="34" r="3" fill={dark ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.30)"} opacity="0.8"/>
 
       {/* Animation impression */}
       {active && (
-        <circle cx="40" cy="40" r="30" stroke="#3b82f6" strokeWidth="2.5"
-          fill="none" strokeDasharray="5 2.5" opacity="0.9">
+        <circle cx="40" cy="40" r="32" stroke="#3b82f6" strokeWidth="2.5"
+          fill="none" strokeDasharray="6 3" opacity="0.9">
           <animateTransform attributeName="transform" type="rotate"
             from="0 40 40" to="360 40 40" dur="8s" repeatCount="indefinite"/>
         </circle>
