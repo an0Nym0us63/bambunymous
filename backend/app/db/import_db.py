@@ -38,7 +38,7 @@ async def run_import(src_path: str) -> dict:
 
     src = sqlite3.connect(src_path)
     src.row_factory = sqlite3.Row
-    stats = {"filaments": 0, "spools": 0, "settings": 0, "skipped": 0}
+    stats = {"filaments": 0, "spools": 0, "settings": 0, "prints": 0, "filament_usage": 0, "tags": 0, "skipped": 0}
 
     async with AsyncSessionLocal() as db:
 
@@ -149,6 +149,117 @@ async def run_import(src_path: str) -> dict:
 
         await db.commit()
 
+        # ── PRINTS (historique) ──────────────────────────────────────
+        spool_map: dict[int, int] = {}  # old_spool_id → new_spool_id
+        # Construire la map des bobines importées
+        for row in src.execute("SELECT id FROM bobines ORDER BY id").fetchall():
+            spool_map[row[0]] = row[0]  # IDs préservés à l'identique
+
+        if table_exists(src, "prints"):
+            print_map: dict[int, int] = {}
+            for row in src.execute("SELECT * FROM prints ORDER BY id").fetchall():
+                row = dict(row)
+                old_pid = row["id"]
+
+                # Doublon check par job_id
+                job_id = str(row.get("job_id") or "")
+                if job_id:
+                    res = (await db.execute(
+                        text("SELECT id FROM prints WHERE job_id=:j"), {"j": job_id}
+                    )).scalar_one_or_none()
+                    if res:
+                        print_map[old_pid] = res
+                        stats["skipped"] += 1
+                        continue
+
+                # Doublon check par id
+                res = (await db.execute(
+                    text("SELECT id FROM prints WHERE id=:id"), {"id": old_pid}
+                )).scalar_one_or_none()
+                if res:
+                    print_map[old_pid] = old_pid
+                    stats["skipped"] += 1
+                    continue
+
+                from ..models.print_history import Print as PrintModel
+                p = PrintModel(
+                    id=old_pid,
+                    job_id=job_id or None,
+                    print_date=parse_dt(row.get("print_date") or row.get("created_at")) or datetime.utcnow(),
+                    file_name=row.get("file_name") or row.get("original_name") or "Import",
+                    original_name=row.get("original_name"),
+                    print_type=row.get("print_type") or "cloud",
+                    status=row.get("status") or "SUCCESS",
+                    status_note=row.get("status_note"),
+                    plate_image=row.get("plate_image"),
+                    model_3mf=row.get("model_3mf"),
+                    estimated_seconds=row.get("estimated_seconds"),
+                    duration_seconds=row.get("duration_seconds"),
+                    total_weight_g=row.get("total_weight_g") or 0.0,
+                    total_cost_filament=row.get("total_cost_filament") or 0.0,
+                    electric_cost=row.get("electric_cost") or 0.0,
+                    total_cost=row.get("total_cost") or 0.0,
+                    number_of_items=row.get("number_of_items") or 1,
+                    sold_units=row.get("sold_units") or 0,
+                    sold_price_total=row.get("sold_price_total"),
+                    margin=row.get("margin") or 0.0,
+                    plate_id=str(row.get("plate_id") or "1"),
+                    design_id=row.get("design_id"),
+                    printer_model=row.get("printer_model") or "H2C",
+                    created_at=parse_dt(row.get("created_at")) or datetime.utcnow(),
+                    updated_at=parse_dt(row.get("updated_at")) or datetime.utcnow(),
+                )
+                db.add(p)
+                await db.flush()
+                print_map[old_pid] = p.id
+                stats["prints"] = stats.get("prints", 0) + 1
+
+            # ── FILAMENT USAGE ────────────────────────────────────────
+            if table_exists(src, "filament_usage"):
+                for row in src.execute("SELECT * FROM filament_usage ORDER BY id").fetchall():
+                    row = dict(row)
+                    new_pid = print_map.get(row.get("print_id"))
+                    if not new_pid:
+                        continue
+                    # Doublon check
+                    res = (await db.execute(
+                        text("SELECT id FROM filament_usage WHERE id=:id"), {"id": row["id"]}
+                    )).scalar_one_or_none()
+                    if res:
+                        continue
+                    from ..models.print_history import FilamentUsage
+                    db.add(FilamentUsage(
+                        id=row["id"],
+                        print_id=new_pid,
+                        spool_id=spool_map.get(row.get("spool_id")),
+                        filament_type=row.get("filament_type") or "",
+                        color_hex=row.get("color_hex") or "",
+                        grams_used=float(row.get("grams_used") or 0),
+                        ams_slot=int(row.get("ams_slot") or 0),
+                        cost=float(row.get("cost") or 0),
+                        normal_cost=float(row.get("normal_cost") or 0),
+                    ))
+                    stats["filament_usage"] = stats.get("filament_usage", 0) + 1
+
+            # ── PRINT TAGS (groupes depuis Spoolnymous) ───────────────
+            if table_exists(src, "print_tags"):
+                for row in src.execute("SELECT * FROM print_tags").fetchall():
+                    row = dict(row)
+                    new_pid = print_map.get(row.get("print_id"))
+                    if not new_pid:
+                        continue
+                    res = (await db.execute(
+                        text("SELECT id FROM print_tags WHERE print_id=:p AND tag=:t"),
+                        {"p": new_pid, "t": row.get("tag")}
+                    )).scalar_one_or_none()
+                    if not res:
+                        from ..models.print_history import PrintTag
+                        db.add(PrintTag(print_id=new_pid, tag=row.get("tag") or ""))
+                        stats["tags"] = stats.get("tags", 0) + 1
+
+            await db.commit()
+            logger.info(f"[IMPORT] Prints: {stats.get('prints',0)} filament_usage: {stats.get('filament_usage',0)}")
+
     src.close()
-    logger.info(f"Import: {stats}")
+    logger.info(f"Import terminé: {stats}")
     return stats
