@@ -28,65 +28,16 @@ const STATUS_CFG = {
 };
 
 
-// Codes HMS Bambu Lab connus
-const HMS_CODES = {
-  "0300_0C00_0001_0001": "Filament AMS bloqué",
-  "0300_0C00_0001_0002": "Erreur chargement filament",
-  "0300_0C00_0001_0003": "Echec déchargement filament",
-  "0500_0400_0001_0001": "Filament hors tolérance",
-  "0500_0300_0001_0001": "Température buse trop basse",
-  "0500_0300_0002_0001": "Température buse trop haute",
-  "0500_0300_0003_0001": "Panne thermistance buse",
-  "0500_0100_0001_0001": "Température plateau trop basse",
-  "0500_0100_0002_0001": "Température plateau trop haute",
-  "0C00_0200_0001_0001": "AMS hub déconnecté",
-  "0C00_0200_0002_0001": "AMS communication perdue",
-};
-
 function HMSBanner({ errors }) {
-  const [expanded, setExpanded] = useState(false);
   if (!errors?.length) return null;
-
-  const fmtCode = (e) => {
-    const hex = (e.code || e.attr || "").toString(16).toUpperCase().padStart(16,"0");
-    const fmt = `${hex.slice(0,4)}_${hex.slice(4,8)}_${hex.slice(8,12)}_${hex.slice(12,16)}`;
-    return HMS_CODES[fmt] || e.msg || `Code 0x${hex}`;
-  };
-
   return (
-    <div style={{ borderRadius:12, overflow:"hidden",
-      border:"1px solid rgba(239,68,68,0.35)",
-      background:"rgba(239,68,68,0.07)" }}>
-      <button onClick={()=>setExpanded(e=>!e)}
-        style={{ width:"100%", padding:"10px 14px", background:"none", border:"none",
-          cursor:"pointer", display:"flex", alignItems:"center", gap:10, textAlign:"left" }}>
-        <span style={{ fontSize:16 }}>⚠️</span>
-        <span style={{ flex:1, fontWeight:700, fontSize:13, color:"#ef4444" }}>
-          {errors.length} erreur{errors.length>1?"s":""} imprimante (HMS)
-        </span>
-        <span style={{ fontSize:12, color:"#ef4444", opacity:0.7 }}>{expanded?"▲":"▼"}</span>
-      </button>
-      {expanded && (
-        <div style={{ padding:"0 14px 12px", display:"flex", flexDirection:"column", gap:6 }}>
-          {errors.map((e,i) => (
-            <div key={i} style={{ background:"rgba(239,68,68,0.08)",
-              border:"1px solid rgba(239,68,68,0.2)", borderRadius:8, padding:"8px 12px" }}>
-              <p style={{ fontSize:13, fontWeight:600, color:"#ef4444", margin:0 }}>
-                {fmtCode(e)}
-              </p>
-              {e.code && (
-                <p style={{ fontSize:10, color:"rgba(239,68,68,0.6)", margin:"2px 0 0",
-                  fontFamily:"monospace" }}>
-                  0x{(e.code||0).toString(16).toUpperCase().padStart(8,"0")}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+    <p style={{ fontSize:12, color:"#f59e0b", padding:"4px 8px",
+      textAlign:"center", letterSpacing:"0.01em" }}>
+      ⚠ {errors.length} alerte{errors.length > 1 ? "s" : ""} HMS imprimante
+    </p>
   );
 }
+
 
 function StatusBanner({ status }) {
   const [expanded, setExpanded] = useState(false);
