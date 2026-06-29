@@ -346,6 +346,13 @@ class MQTTManager:
                                     _t.spool_id   = spool_id
                                     _t.match_mode = mode or _t.match_mode
                                     logger.debug(f"[AMS] AMS{ams.id} tray{_t.id} → spool #{spool_id} ({mode})")
+                                    # Mettre à jour la location en DB
+                                    try:
+                                        from ..services.spool_location import update_spool_location
+                                        ams_letter = chr(65 + ams.id)
+                                        await update_spool_location(spool_id, f"AMS-{ams_letter} slot {_t.id + 1}")
+                                    except Exception as _le:
+                                        logger.debug(f"[AMS] location update failed: {_le}")
                                 else:
                                     logger.debug(f"[AMS] AMS{ams.id} tray{_t.id} → aucune bobine trouvée")
                             try:    lp.run_until_complete(_go())
