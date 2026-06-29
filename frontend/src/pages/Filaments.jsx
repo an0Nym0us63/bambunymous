@@ -111,6 +111,48 @@ function AddSpoolModal({ filaments, onSave, onClose }) {
 }
 
 // ── Bottom sheet détail bobine ────────────────────────────────────────────
+function FilamentPhotos({ filamentId }) {
+  const [photos, setPhotos] = React.useState([]);
+  const [lightbox, setLightbox] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!filamentId) return;
+    client.get("/filaments/" + filamentId + "/photos")
+      .then(r => setPhotos(r.data.files || []))
+      .catch(() => {});
+  }, [filamentId]);
+
+  if (!photos.length) return null;
+
+  return (
+    <div style={{ marginBottom:16 }}>
+      <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+        letterSpacing:"0.06em", marginBottom:8 }}>Photos</p>
+      <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
+        {photos.map((f, i) => (
+          <div key={i} onClick={() => setLightbox(f.url)}
+            style={{ flexShrink:0, cursor:"pointer", borderRadius:8, overflow:"hidden",
+              border:"1px solid var(--border)", width:90, height:90 }}>
+            <img src={f.url} alt={f.name}
+              style={{ width:"100%", height:"100%", objectFit:"cover" }}
+              onError={e => { e.currentTarget.style.display="none"; }}/>
+          </div>
+        ))}
+      </div>
+      {lightbox && (
+        <div onClick={() => setLightbox(null)}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.88)",
+            zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <img src={lightbox} alt=""
+            style={{ maxWidth:"92vw", maxHeight:"92vh", borderRadius:12, objectFit:"contain" }}
+            onClick={e => e.stopPropagation()}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function SpoolBottomSheet({ spool, onClose, onArchive }) {
   if (!spool) return null;
   const color = spool.filament_color ? `#${spool.filament_color.slice(0,6)}` : null;
@@ -212,6 +254,11 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
           <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
           <Row label="Dernière util." value={spool.last_used_at?.slice(0,10)}/>
           <Row label="Commentaire"    value={spool.comment}/>
+
+
+
+          {/* Photos du filament */}
+          <FilamentPhotos filamentId={spool.filament_id} />
 
 
           {/* Actions */}
