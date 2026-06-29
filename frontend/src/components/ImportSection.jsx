@@ -125,56 +125,79 @@ export default function ImportSection() {
 
 // ── Import ZIP fichiers Spoolnymous ─────────────────────────────────────────
 const ZIP_TYPES = [
-  { id:"prints",            label:"Prints (3MF + vignettes)",      hint:"dossier prints/" },
+  { id:"prints",            label:"Prints (3MF + vignettes)",      hint:"prints/" },
   { id:"uploads_prints",    label:"Snapshots prints",               hint:"uploads/prints/" },
   { id:"uploads_filaments", label:"Photos filaments",               hint:"uploads/filaments/" },
   { id:"uploads_groups",    label:"Photos groupes",                 hint:"uploads/groups/" },
 ];
 
 export function ZipImportSection() {
-  const [results, setResults] = useState({});
-  const [loading, setLoading] = useState({});
+  const [jobs, setJobs] = useState({});   // type → {job_id, status, stats, error, size_mb}
+  const pollRef = useRef({});
+
+  const pollJob = (type, job_id) => {
+    if (pollRef.current[type]) clearInterval(pollRef.current[type]);
+    pollRef.current[type] = setInterval(async () => {
+      try {
+        const { data } = await client.get(`/import-zip/status/${job_id}`);
+        setJobs(j => ({...j, [type]: data}));
+        if (data.status !== "running") {
+          clearInterval(pollRef.current[type]);
+          delete pollRef.current[type];
+        }
+      } catch(e) { clearInterval(pollRef.current[type]); }
+    }, 2000);
+  };
 
   const handleZip = async (type, file) => {
     if (!file) return;
-    setLoading(l => ({...l, [type]: true}));
+    setJobs(j => ({...j, [type]: {status:"uploading", size_mb:0}}));
     const form = new FormData();
     form.append("file", file);
     try {
-      const { data } = await client.post(`/import-zip/${type}`, form,
-        { headers:{"Content-Type":"multipart/form-data"} });
-      setResults(r => ({...r, [type]: data.stats}));
+      const { data } = await client.post(`/import-zip/${type}`, form, {
+        headers:{"Content-Type":"multipart/form-data"},
+        timeout: 0,   // pas de timeout pour les gros fichiers
+      });
+      setJobs(j => ({...j, [type]: {job_id: data.job_id, status:"running", size_mb: data.size_mb}}));
+      pollJob(type, data.job_id);
     } catch(e) {
-      setResults(r => ({...r, [type]: {error: e.response?.data?.detail || e.message}}));
-    } finally {
-      setLoading(l => ({...l, [type]: false}));
+      setJobs(j => ({...j, [type]: {status:"error", error: e.response?.data?.detail || e.message}}));
     }
   };
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
       <p style={{ fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
         letterSpacing:"0.08em", margin:0 }}>Import fichiers Spoolnymous (.zip)</p>
       {ZIP_TYPES.map(({ id, label, hint }) => {
-        const res = results[id];
-        const busy = loading[id];
+        const job = jobs[id];
+        const busy = job?.status === "uploading" || job?.status === "running";
         return (
           <label key={id} style={{ display:"flex", alignItems:"center", gap:10,
             padding:"8px 12px", background:"var(--surface2)", borderRadius:8,
-            border:"1px solid var(--border)", cursor:"pointer" }}>
-            <span style={{ flex:1, fontSize:12, color:"var(--text)" }}>
-              {label}
+            border:`1px solid ${job?.status==="done"?"rgba(34,197,94,0.3)":job?.status==="error"?"rgba(239,68,68,0.3)":"var(--border)"}`,
+            cursor: busy ? "not-allowed" : "pointer", opacity: busy ? 0.8 : 1 }}>
+            <span style={{ flex:1 }}>
+              <span style={{ fontSize:12, color:"var(--text)" }}>{label}</span>
               <span style={{ fontSize:10, color:"var(--muted)", marginLeft:6 }}>{hint}</span>
             </span>
-            {busy && <span style={{ fontSize:11, color:"var(--muted)" }}>Import…</span>}
-            {res && !res.error && (
+            {job?.status === "uploading" && (
+              <span style={{ fontSize:10, color:"var(--muted)" }}>⬆ Upload…</span>
+            )}
+            {job?.status === "running" && (
+              <span style={{ fontSize:10, color:"#f59e0b" }}>⚙ Traitement {job.size_mb}Mo…</span>
+            )}
+            {job?.status === "done" && job.stats && (
               <span style={{ fontSize:10, color:"#22c55e" }}>
-                ✓ {Object.entries(res).map(([k,v])=>`${k}:${v}`).join(" · ")}
+                ✓ {Object.entries(job.stats).map(([k,v])=>`${k}:${v}`).join(" · ")}
               </span>
             )}
-            {res?.error && <span style={{ fontSize:10, color:"#ef4444" }}>⚠ {res.error}</span>}
-            <input type="file" accept=".zip" style={{ display:"none" }}
-              onChange={e => { handleZip(id, e.target.files?.[0]); e.target.value=""; }}/>
+            {job?.status === "error" && (
+              <span style={{ fontSize:10, color:"#ef4444" }}>⚠ {job.error}</span>
+            )}
+            <input type="file" accept=".zip" style={{ display:"none" }} disabled={busy}
+              onChange={e => { if(!busy){handleZip(id, e.target.files?.[0]); e.target.value="";} }}/>
           </label>
         );
       })}
