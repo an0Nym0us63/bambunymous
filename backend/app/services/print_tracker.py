@@ -3,7 +3,7 @@ Tracker d'impressions BambuNymous.
 Gère : création, milestones (%, couches), snapshots, fin de print.
 Logique identique à Spoolnymous (processMessage + safe_update_status).
 """
-import asyncio, logging, time
+import asyncio, logging, re, time
 from datetime import datetime
 from pathlib import Path
 from threading import Lock
@@ -166,8 +166,7 @@ async def _apply_meta(pid: int, meta: dict, taskname: str):
             if tray_info:
                 # Parser le tray_info_idx pour trouver ams_id + tray_id
                 # Format lettres: "A00" → ams=0, tray=0 | "B02" → ams=1, tray=2
-                import re as _re
-                m = _re.match(r"^([A-Z])(\d{2})", tray_info)
+                m = re.match(r"^([A-Z])(\d{2})", tray_info)
                 if m:
                     ams_id_matched  = ord(m.group(1)) - ord("A")
                     tray_id_matched = int(m.group(2))
