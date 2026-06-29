@@ -114,54 +114,39 @@ function PrintCard({ p, onClick, onDelete }) {
   };
 
   return (
-    <div className="card" style={{ overflow:"hidden", display:"flex",
-      flexDirection:"column", position:"relative", padding:0 }}>
+    <div className="card" onClick={onClick} style={{ overflow:"hidden", display:"flex",
+      flexDirection:"column", position:"relative", padding:0, cursor:"pointer" }}>
 
       {/* Vignette pleine largeur ratio 4/3 */}
-      <div onClick={onClick} style={{ cursor:"pointer", position:"relative",
-        paddingTop:"75%", background:"var(--surface2)", overflow:"hidden" }}>
+      <div style={{ position:"relative", paddingTop:"75%",
+        background:"var(--surface2)", overflow:"hidden" }}>
         <img src={"/api/v1/prints/" + p.id + "/image"} alt=""
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
           onError={e => { e.currentTarget.style.display="none"; }}/>
-        {/* Badge statut */}
-        <span style={{ position:"absolute", top:6, left:6,
-          background: statusCfg.bg, color: statusCfg.color,
-          fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:20 }}>
-          {statusCfg.label}
-        </span>
+        {/* Badge statut — fond opaque + contour pour lisibilité */}
+        {p.status !== "SUCCESS" && (
+          <span style={{ position:"absolute", top:6, left:6,
+            background: statusCfg.bg, color:"white",
+            fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20,
+            boxShadow:"0 1px 4px rgba(0,0,0,0.4)", letterSpacing:"0.03em" }}>
+            {statusCfg.label}
+          </span>
+        )}
         {/* Pastilles filament */}
         {p.filament_usage?.length > 0 && (
           <div style={{ position:"absolute", bottom:6, left:6, display:"flex", gap:3 }}>
             {p.filament_usage.map((f,i) => (
-              <div key={i} style={{ width:11, height:11, borderRadius:"50%",
+              <div key={i} style={{ width:12, height:12, borderRadius:"50%",
                 backgroundColor: hexCss(f.color_hex),
-                border:"1.5px solid rgba(255,255,255,0.7)", flexShrink:0 }}/>
+                border:"1.5px solid rgba(255,255,255,0.8)", flexShrink:0,
+                boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/>
             ))}
           </div>
         )}
-        {/* Menu */}
-        <div style={{ position:"absolute", top:6, right:6 }}>
-          <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o);setConfirming(false);}}
-            style={{ background:"rgba(0,0,0,0.55)", border:"none", borderRadius:"50%",
-              width:24, height:24, cursor:"pointer", color:"white", fontSize:14,
-              display:"flex", alignItems:"center", justifyContent:"center" }}>⋮</button>
-          {menuOpen && (
-            <div style={{ position:"absolute", top:28, right:0, background:"var(--surface)",
-              border:"1px solid var(--border)", borderRadius:8, padding:4,
-              minWidth:120, zIndex:10 }}>
-              <button onClick={handleDelete}
-                style={{ width:"100%", padding:"6px 10px", background:"none", border:"none",
-                  color:confirming?"#ef4444":"var(--text)", cursor:"pointer",
-                  fontSize:12, textAlign:"left", borderRadius:4 }}>
-                {confirming ? "Confirmer ?" : "Supprimer"}
-              </button>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Infos minimales */}
-      <div onClick={onClick} style={{ padding:"8px 10px", cursor:"pointer" }}>
+      <div style={{ padding:"8px 10px" }}>
         <p style={{ fontWeight:700, fontSize:12, color:"var(--text)", margin:"0 0 2px",
           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
           {p.file_name || "Sans nom"}
@@ -254,7 +239,7 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
 }
 
 
-function PrintDetail({ p, onClose }) {
+function PrintDetail({ p, onClose, onDelete }) {
   const [snaps, setSnaps] = useState([]);
 
   useEffect(() => {
@@ -387,9 +372,31 @@ function PrintDetail({ p, onClose }) {
         </div>
 
         {/* Snapshots — pleine largeur */}
-        <div style={{ padding:"0 20px 20px" }}>
+        <div style={{ padding:"0 20px 12px" }}>
           <SnapshotGallery snaps={snaps} printId={p.id}
             onDelete={sid => setSnaps(ss => ss.filter(s => s.id !== sid))}/>
+        </div>
+
+        {/* Actions */}
+        <div style={{ padding:"0 20px 20px", display:"flex", gap:8 }}>
+          <button onClick={async () => {
+            if (!window.confirm("Supprimer ce print ?")) return;
+            try {
+              await client.delete("/prints/" + p.id);
+              onDelete(p.id);
+              onClose();
+            } catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
+          }} style={{ flex:1, padding:"10px", background:"rgba(239,68,68,0.1)",
+            border:"1px solid rgba(239,68,68,0.3)", borderRadius:10,
+            color:"#ef4444", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+            🗑 Supprimer
+          </button>
+          <button onClick={onClose}
+            style={{ flex:2, padding:"10px", background:"#3b82f6",
+              border:"none", borderRadius:10, color:"white",
+              fontSize:13, fontWeight:600, cursor:"pointer" }}>
+            Fermer
+          </button>
         </div>
       </div>
     </div>
