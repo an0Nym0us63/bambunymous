@@ -51,7 +51,7 @@ def _safe_name(name: str) -> str:
 
 # ── 1. prints.zip ────────────────────────────────────────────────────────────
 
-async def import_prints_zip(zip_data: bytes) -> dict:
+async def import_prints_zip(zip_source) -> dict:
     """
     Importe les 3MF et vignettes depuis le dossier prints/ de Spoolnymous.
     Chaque fichier est nommé {timestamp}_{hash}.3mf ou {timestamp}_{hash}.png
@@ -59,7 +59,8 @@ async def import_prints_zip(zip_data: bytes) -> dict:
     """
     stats = {"matched": 0, "unmatched": 0, "copied": 0, "errors": 0}
 
-    with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
+    _src = str(zip_source) if hasattr(zip_source, "__fspath__") else io.BytesIO(zip_source)
+    with zipfile.ZipFile(_src) as z:
         names = z.namelist()
         # Grouper par stem (timestamp_hash)
         stems: dict[str, list[str]] = {}
@@ -121,14 +122,15 @@ async def import_prints_zip(zip_data: bytes) -> dict:
 
 # ── 2. uploads_prints.zip ────────────────────────────────────────────────────
 
-async def import_uploads_prints_zip(zip_data: bytes) -> dict:
+async def import_uploads_prints_zip(zip_source) -> dict:
     """
     Importe les snapshots depuis uploads/prints/{old_print_id}/*.jpg
     Mappe old_print_id → new_print_id via la DB (id préservé à l'import).
     """
     stats = {"matched": 0, "unmatched": 0, "copied": 0, "errors": 0}
 
-    with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
+    _src = str(zip_source) if hasattr(zip_source, "__fspath__") else io.BytesIO(zip_source)
+    with zipfile.ZipFile(_src) as z:
         # Structure : {print_id}/Impression-50.jpg
         files_by_print: dict[str, list[str]] = {}
         for name in z.namelist():
@@ -204,14 +206,15 @@ def _guess_trigger(filename: str) -> str:
 
 # ── 3. uploads_filaments.zip ─────────────────────────────────────────────────
 
-async def import_uploads_filaments_zip(zip_data: bytes) -> dict:
+async def import_uploads_filaments_zip(zip_source) -> dict:
     """
     Importe les photos depuis uploads/filaments/{filament_id}/*.webp
     → /data/filaments/{filament_id}/{nom}
     """
     stats = {"copied": 0, "errors": 0}
 
-    with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
+    _src = str(zip_source) if hasattr(zip_source, "__fspath__") else io.BytesIO(zip_source)
+    with zipfile.ZipFile(_src) as z:
         for name in z.namelist():
             if name.endswith("/"): continue
             parts = name.replace("\", "/").split("/")
@@ -237,7 +240,7 @@ async def import_uploads_filaments_zip(zip_data: bytes) -> dict:
 
 # ── 4. uploads_groups.zip ────────────────────────────────────────────────────
 
-async def import_uploads_groups_zip(zip_data: bytes) -> dict:
+async def import_uploads_groups_zip(zip_source) -> dict:
     """
     Importe les photos depuis uploads/groups/{group_id}/*.webp
     → /data/groups/{group_id}/{nom}
@@ -246,7 +249,8 @@ async def import_uploads_groups_zip(zip_data: bytes) -> dict:
     """
     stats = {"copied": 0, "errors": 0}
 
-    with zipfile.ZipFile(io.BytesIO(zip_data)) as z:
+    _src = str(zip_source) if hasattr(zip_source, "__fspath__") else io.BytesIO(zip_source)
+    with zipfile.ZipFile(_src) as z:
         for name in z.namelist():
             if name.endswith("/"): continue
             parts = name.replace("\", "/").split("/")
