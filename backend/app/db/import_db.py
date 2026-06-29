@@ -170,7 +170,7 @@ async def run_import(src_path: str) -> dict:
                         text("SELECT id FROM prints WHERE job_id=:j"), {"j": job_id}
                     )).scalar_one_or_none()
                     if res:
-                        print_map[old_pid] = res
+                        print_map[old_pid] = res  # garder dans print_map pour tags/groupes
                         stats["skipped"] += 1
                         continue
 
@@ -179,7 +179,7 @@ async def run_import(src_path: str) -> dict:
                     text("SELECT id FROM prints WHERE id=:id"), {"id": old_pid}
                 )).scalar_one_or_none()
                 if res:
-                    print_map[old_pid] = old_pid
+                    print_map[old_pid] = res  # important : garder dans print_map pour les tags/groupes
                     stats["skipped"] += 1
                     continue
 
