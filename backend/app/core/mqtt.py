@@ -346,7 +346,7 @@ class MQTTManager:
                         _cached = _MATCH_CACHE.get(_cache_key)
                         if _cached is not None:
                             t.spool_id = _cached if _cached != -1 else None
-                        else:
+                            t.spool_id = _cached if _cached != -1 else None
                             def _match_spool(_t=t, _tag=_tray_uuid, _tinfo=_tray_info,
                                              _tc=_tray_color, _ams_id=ams.id, _tray_slot=t.id,
                                              _key=_cache_key):
