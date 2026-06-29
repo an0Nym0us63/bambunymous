@@ -110,10 +110,20 @@ async def import_prints_zip(zip_source) -> dict:
                     p = result3.scalar_one_or_none()
 
                 if not p:
-                    logger.debug(
-                        f"[ZIP-PRINTS] UNMATCHED: {stem} "
-                        f"(ext={stem in ext_index}, ts={stem[:14] in date_index})"
+                    logger.warning(
+                        f"[ZIP-PRINTS] UNMATCHED: stem={stem!r} "
+                        f"ext_in_index={stem in ext_index} "
+                        f"ts_in_index={stem[:14] in date_index} "
+                        f"ext_index_size={len(ext_index)}"
                     )
+                    # Log les 5 premières clés de ext_index pour comparer
+                    if len(ext_index) < 20:
+                        logger.warning(f"[ZIP-PRINTS] ext_index keys: {list(ext_index.keys())[:5]}")
+                    else:
+                        # Chercher les clés similaires
+                        similar = [k for k in ext_index if k[:14] == stem[:14]]
+                        if similar:
+                            logger.warning(f"[ZIP-PRINTS] Clés similaires en DB: {similar}")
                     stats["unmatched"] += 1
                     continue
 
