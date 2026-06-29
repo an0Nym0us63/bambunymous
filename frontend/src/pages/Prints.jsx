@@ -486,22 +486,26 @@ export default function Prints() {
       {!loading && !error && prints.length > 0 && (() => {
         const onDelete = id => { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => t-1); };
         // Si un groupe est sélectionné ou pas de groupes → grille flat
-        // Regrouper par groupe si au moins un print a un tag groupe
-        const grouped = {};
+        // Prints triés chronologiquement (plus récent en premier) — déjà fait par le backend
+        // Regrouper : chaque groupe prend la date du print le plus récent qu'il contient
+        const grouped = {};   // nom → { prints: [], latestDate: "" }
         const ungrouped = [];
         prints.forEach(p => {
           const gtags = (p.tags||[]).filter(t=>t.startsWith("groupe:"));
           if (gtags.length) {
             gtags.forEach(t => {
               const g = t.replace("groupe:","");
-              (grouped[g] = grouped[g]||[]).push(p);
+              if (!grouped[g]) grouped[g] = { prints: [], latestDate: "" };
+              grouped[g].prints.push(p);
+              // Garder la date la plus récente du groupe
+              if (!grouped[g].latestDate || p.print_date > grouped[g].latestDate)
+                grouped[g].latestDate = p.print_date;
             });
           } else {
             ungrouped.push(p);
           }
         });
         const hasGroups = Object.keys(grouped).length > 0;
-        console.log("[VUE] grouped:", Object.keys(grouped), "ungrouped:", ungrouped.length);
 
         // Grille flat si filtre actif ou aucun groupe
         if (groupF || !hasGroups) {
@@ -511,13 +515,20 @@ export default function Prints() {
             </div>
           );
         }
+
+        // Trier les groupes par date du print le plus récent (décroissant)
+        const sortedGroups = Object.entries(grouped)
+          .sort(([,a],[,b]) => b.latestDate.localeCompare(a.latestDate));
+
         return (
           <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
-            {Object.entries(grouped).map(([g, gprints]) => (
+            {sortedGroups.map(([g, { prints: gprints, latestDate }]) => (
               <div key={g}>
                 <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
                   <span style={{ fontSize:13, fontWeight:700, color:"#a78bfa" }}>📁 {g}</span>
-                  <span style={{ fontSize:11, color:"var(--muted)" }}>{gprints.length} print{gprints.length>1?"s":""}</span>
+                  <span style={{ fontSize:11, color:"var(--muted)" }}>
+                    {gprints.length} print{gprints.length>1?"s":""} · {fmtDate(latestDate)}
+                  </span>
                 </div>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
                   {gprints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
