@@ -79,7 +79,8 @@ function PrintCard({ p, onClick, onDelete }) {
     <div className="card" style={{ overflow:"hidden", display:"flex",
       flexDirection:"column", gap:0, position:"relative" }}>
 
-      <div onClick={onClick} style={{ height:140, background:"#111",
+      <div onClick={onClick} style={{ height:140,
+        background:"repeating-conic-gradient(var(--surface2) 0% 25%, var(--surface) 0% 50%) 0 0/16px 16px",
         flexShrink:0, position:"relative", cursor:"pointer" }}>
         {imgUrl
           ? <img src={imgUrl} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
