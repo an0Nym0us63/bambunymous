@@ -361,6 +361,25 @@ class MQTTManager:
 
                     ams.trays.append(t)
                 state.ams_list.append(ams)
+
+            # Marquer comme Tiroir les bobines qui ne sont plus dans l'AMS
+            try:
+                from ..services.spool_location import mark_inactive_spools_as_drawer
+                active_ids = {
+                    t.spool_id
+                    for a in state.ams_list
+                    for t in a.trays
+                    if t.spool_id
+                }
+                import asyncio as _lio, threading as _lth
+                def _upd_inactive():
+                    lp = _lio.new_event_loop()
+                    try: lp.run_until_complete(mark_inactive_spools_as_drawer(active_ids))
+                    finally: lp.close()
+                _lth.Thread(target=_upd_inactive, daemon=True).start()
+            except Exception as _le:
+                logger.debug(f"[AMS] inactive check failed: {_le}")
+
             changed = True
 
         if "mapping" in p:
