@@ -4,7 +4,7 @@ import { Droplets, Sun } from "lucide-react";
 // ── Helpers ────────────────────────────────────────────────────────────────
 function hexCss(hex) {
   if (!hex) return null;
-  const h = hex.slice(0, 6);
+  const h = hex.replace(/^#/, "").slice(0, 6);
   if (h.replace(/0/g,"") === "") return null;
   return `#${h}`;
 }
