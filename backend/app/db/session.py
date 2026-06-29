@@ -23,5 +23,55 @@ async def get_db():
 
 async def init_db():
     from ..models import setting, printer  # noqa - import pour créer les tables
+    from ..models import filament, print_history  # noqa
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # Migration automatique : ADD COLUMN si manquant (SQLite ne fait pas d'ALTER via create_all)
+    await _migrate()
+
+
+async def _migrate():
+    """Applique les colonnes manquantes sans perdre les données."""
+    migrations = [
+        # table, colonne, type SQL
+        ("filaments", "translated_name",      "TEXT"),
+        ("filaments", "external_filament_id", "TEXT"),
+        ("filaments", "reference_id",         "TEXT"),
+        ("filaments", "profile_id",           "TEXT"),
+        ("filaments", "spool_weight_g",       "REAL"),
+        ("filaments", "multicolor_type",      "TEXT DEFAULT 'monochrome'"),
+        ("filaments", "colors_array",         "TEXT"),
+        ("filaments", "swatch",               "INTEGER DEFAULT 0"),
+        ("filaments", "transparent",          "INTEGER DEFAULT 0"),
+        ("filaments", "to_order",             "INTEGER DEFAULT 0"),
+        ("bobines",   "found_mode",           "TEXT"),
+        ("bobines",   "ams_tray",             "TEXT"),
+        ("bobines",   "external_spool_id",    "TEXT"),
+        ("bobines",   "first_used_at",        "TEXT"),
+        ("prints",    "number_of_items",      "INTEGER DEFAULT 1"),
+        ("prints",    "sold_units",           "INTEGER DEFAULT 0"),
+        ("prints",    "sold_price_total",     "REAL"),
+        ("prints",    "margin",              "REAL DEFAULT 0"),
+        ("prints",    "design_id",            "TEXT"),
+        ("prints",    "original_name",        "TEXT"),
+        ("prints",    "print_type",           "TEXT DEFAULT 'cloud'"),
+        ("prints",    "status_note",          "TEXT"),
+        ("prints",    "model_3mf",            "TEXT"),
+        ("prints",    "plate_id",             "TEXT DEFAULT '1'"),
+        ("prints",    "printer_model",        "TEXT DEFAULT 'H2C'"),
+        ("filament_usage", "ams_id",          "INTEGER"),
+        ("filament_usage", "tray_id",         "INTEGER"),
+        ("filament_usage", "normal_cost",     "REAL DEFAULT 0"),
+        ("filament_usage", "spool_id",        "INTEGER"),
+    ]
+    async with engine.connect() as conn:
+        for table, col, col_type in migrations:
+            try:
+                await conn.execute(
+                    __import__("sqlalchemy").text(
+                        f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"
+                    )
+                )
+                await conn.commit()
+            except Exception:
+                pass  # colonne déjà existante → ignorer
