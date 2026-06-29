@@ -271,13 +271,13 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
                   <span style={{ fontSize:12, color:"var(--muted)" }}>Restant estimé</span>
                   <span style={{ fontSize:14, fontWeight:700, fontFamily:"monospace",
-                    color: pct < 20 ? "#ef4444" : pct < 40 ? "#f59e0b" : "#22c55e" }}>
+                    color: pct<20?"#ef4444":pct<40?"#f59e0b":"#22c55e" }}>
                     {pct}%{info?.remaining_weight_g ? ` · ${info.remaining_weight_g.toFixed(0)}g` : ""}
                   </span>
                 </div>
                 <div style={{ height:10, borderRadius:5, background:"var(--border)", overflow:"hidden" }}>
                   <div style={{ height:"100%", width:`${pct}%`, borderRadius:5, transition:"width 0.5s",
-                    background: pct < 20 ? "#ef4444" : pct < 40 ? "#f59e0b" : "#22c55e" }}/>
+                    background: pct<20?"#ef4444":pct<40?"#f59e0b":"#22c55e" }}/>
                 </div>
               </div>
             )}
@@ -288,35 +288,55 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
                 padding:"9px 12px", borderRadius:10, background:`${match.color}14`,
                 border:`1px solid ${match.color}35` }}>
                 <MatchIcon mode={tray.match_mode} size={14}/>
-                <span style={{ fontSize:12, color:match.color, fontWeight:600 }}>{match.text}</span>
+                <span style={{ fontSize:12, color:match.color, fontWeight:600 }}>
+                  {match.text}
+                  {info?.found_mode && info.found_mode !== tray.match_mode && (
+                    <span style={{ color:"var(--muted)", fontWeight:400, marginLeft:4 }}>
+                      (DB: {info.found_mode})
+                    </span>
+                  )}
+                </span>
               </div>
             )}
 
-            {/* ── Données imprimante (MQTT) ── */}
+            {/* ── Section MQTT (données temps réel imprimante) ── */}
             <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-              letterSpacing:"0.08em", marginBottom:4, marginTop:4 }}>Données imprimante</p>
-            <Row label="Type filament"  value={tray.filament_type}/>
-            <Row label="Couleur MQTT"   value={color} mono/>
-            <Row label="Ref. catalogue" value={tray.tray_id_name}/>
-            <Row label="Tag UID"        value={tray.tag_uid && tray.tag_uid !== "0000000000000000" ? tray.tag_uid : null} mono/>
-            <Row label="Restant AMS"    value={`${tray.remain}%`}/>
+              letterSpacing:"0.08em", margin:"0 0 4px" }}>Données imprimante (temps réel)</p>
+            <Row label="Type"          value={tray.filament_type}/>
+            <Row label="Couleur"       value={color} mono/>
+            <Row label="Profile ID"    value={tray.tray_info_idx || tray.tray_id_name}/>
+            <Row label="Tag UID (RFID)"value={tray.tag_uid && !tray.tag_uid.match(/^0+$/) ? tray.tag_uid : null} mono/>
+            <Row label="Restant"       value={`${tray.remain}%`}/>
+            <Row label="UUID tray"     value={tray.uuid && !tray.uuid.match(/^0+$/) ? tray.uuid : null} mono/>
 
-            {/* ── Bobine liée en base ── */}
+            {/* ── Section DB (bobine liée) ── */}
             <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-              letterSpacing:"0.08em", marginBottom:4, marginTop:12 }}>Bobine en base</p>
+              letterSpacing:"0.08em", margin:"16px 0 4px" }}>Bobine liée en base</p>
             {info ? (<>
-              <Row label="Nom"           value={info.name}/>
-              <Row label="Marque"        value={info.brand}/>
-              <Row label="Matière"       value={info.material}/>
-              <Row label="Poids initial" value={info.initial_weight_g ? `${info.initial_weight_g}g` : null}/>
-              <Row label="Restant"       value={info.remaining_weight_g ? `${Math.round(info.remaining_weight_g)}g` : null}/>
-              <Row label="Prix"          value={info.price ? `${Number(info.price).toFixed(2)}€` : null}/>
-              <Row label="Achat"         value={info.purchase_date?.slice(0,10)}/>
-              <Row label="ID bobine"     value={`#${tray.spool_id}`} mono/>
-              {info.notes && <Row label="Notes" value={info.notes}/>}
+              <Row label="Nom"             value={info.name}/>
+              <Row label="Nom traduit"     value={info.translated_name}/>
+              <Row label="Marque"          value={info.brand}/>
+              <Row label="Matière"         value={info.material}/>
+              <Row label="Profile ID"      value={info.profile_id} mono/>
+              <Row label="Multicolor"      value={info.multicolor_type !== "monochrome" ? info.multicolor_type : null}/>
+              <Row label="Poids bobine"    value={info.initial_weight_g ? `${info.initial_weight_g}g` : null}/>
+              <Row label="Poids support"   value={info.spool_weight_g ? `${info.spool_weight_g}g` : null}/>
+              <Row label="Restant"         value={info.remaining_weight_g ? `${Math.round(info.remaining_weight_g)}g` : null}/>
+              <Row label="Prix catalogue"  value={info.price ? `${Number(info.price).toFixed(2)}€` : null}/>
+              <Row label="Prix achat"      value={info.price_override ? `${Number(info.price_override).toFixed(2)}€` : null}/>
+              <Row label="Emplacement"     value={info.location}/>
+              <Row label="Tag NFC"         value={info.tag_number} mono/>
+              <Row label="Tray AMS"        value={info.ams_tray}/>
+              <Row label="Commentaire"     value={info.comment}/>
+              <Row label="ID externe"      value={info.external_spool_id} mono/>
+              <Row label="Première util."  value={info.first_used_at?.slice(0,10)}/>
+              <Row label="Dernière util."  value={info.last_used_at?.slice(0,10)}/>
+              <Row label="Bobine #"        value={`${tray.spool_id}`} mono/>
             </>) : (
               <p style={{ fontSize:12, color:"#f59e0b", fontStyle:"italic", padding:"4px 0" }}>
-                {tray.spool_id ? `Bobine #${tray.spool_id} (données non chargées)` : "Aucune bobine mappée en base"}
+                {tray.spool_id
+                  ? `Bobine #${tray.spool_id} — données non chargées`
+                  : "Aucune bobine mappée — matching en attente"}
               </p>
             )}
 
