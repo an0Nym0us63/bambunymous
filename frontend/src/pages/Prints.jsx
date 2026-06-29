@@ -61,15 +61,15 @@ function StatusBadge({ status }) {
 }
 
 function PrintCard({ p, onClick, onDelete }) {
-  const imgUrl = p.plate_image ? `/api/v1/prints/${p.id}/image` : null;
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const statusCfg = STATUS_CFG[p.status] || STATUS_CFG.UNKNOWN;
 
   const handleDelete = async (e) => {
     e.stopPropagation();
     if (!confirming) { setConfirming(true); return; }
     try {
-      await client.delete(`/prints/${p.id}`);
+      await client.delete("/prints/" + p.id);
       onDelete(p.id);
     } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
     setMenuOpen(false); setConfirming(false);
@@ -77,77 +77,58 @@ function PrintCard({ p, onClick, onDelete }) {
 
   return (
     <div className="card" style={{ overflow:"hidden", display:"flex",
-      flexDirection:"column", gap:0, position:"relative" }}>
+      flexDirection:"column", position:"relative", padding:0 }}>
 
-      <div onClick={onClick} style={{ height:140,
-        background:"repeating-conic-gradient(var(--surface2) 0% 25%, var(--surface) 0% 50%) 0 0/16px 16px",
-        flexShrink:0, position:"relative", cursor:"pointer" }}>
-        {imgUrl
-          ? <img src={imgUrl} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
-          : <div style={{ width:"100%", height:"100%", display:"flex", alignItems:"center",
-              justifyContent:"center", color:"var(--muted)", fontSize:11,
-              background:"repeating-conic-gradient(var(--surface2) 0% 25%, var(--surface) 0% 50%) 0 0/20px 20px" }}>
-              <span style={{ background:"var(--surface)", padding:"4px 10px", borderRadius:6, fontSize:10 }}>Pas de vignette</span>
-            </div>
-        }
-        <div style={{ position:"absolute", top:6, left:6 }}>
-          <StatusBadge status={p.status}/>
-        </div>
-        <button onClick={e=>{ e.stopPropagation(); setMenuOpen(m=>!m); setConfirming(false); }}
-          style={{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,0.55)",
-            border:"none", borderRadius:"50%", width:26, height:26, cursor:"pointer",
-            color:"white", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center",
-            lineHeight:1 }}>
-          ⋮
-        </button>
-        {menuOpen && (
-          <div onClick={e=>e.stopPropagation()} style={{
-            position:"absolute", top:36, right:6, background:"var(--surface)",
-            border:"1px solid var(--border)", borderRadius:10,
-            boxShadow:"0 4px 20px rgba(0,0,0,0.5)", zIndex:10, minWidth:170, overflow:"hidden",
-          }}>
-            <button onClick={handleDelete} style={{
-              width:"100%", padding:"11px 16px", background:"none", border:"none",
-              textAlign:"left", fontSize:13, cursor:"pointer",
-              color: confirming ? "#ef4444" : "var(--text)",
-              display:"flex", alignItems:"center", gap:8,
-            }}>
-              🗑 {confirming ? "Confirmer ?" : "Supprimer"}
-            </button>
-            {confirming && (
-              <button onClick={e=>{ e.stopPropagation(); setConfirming(false); setMenuOpen(false); }}
-                style={{ width:"100%", padding:"9px 16px", background:"none",
-                  borderTop:"1px solid var(--border)", border:"none", textAlign:"left",
-                  fontSize:12, cursor:"pointer", color:"var(--muted)" }}>
-                Annuler
-              </button>
-            )}
+      {/* Vignette pleine largeur ratio 4/3 */}
+      <div onClick={onClick} style={{ cursor:"pointer", position:"relative",
+        paddingTop:"75%", background:"var(--surface2)", overflow:"hidden" }}>
+        <img src={"/api/v1/prints/" + p.id + "/image"} alt=""
+          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
+          onError={e => { e.currentTarget.style.display="none"; }}/>
+        {/* Badge statut */}
+        <span style={{ position:"absolute", top:6, left:6,
+          background: statusCfg.bg, color: statusCfg.color,
+          fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:20 }}>
+          {statusCfg.label}
+        </span>
+        {/* Pastilles filament */}
+        {p.filament_usage?.length > 0 && (
+          <div style={{ position:"absolute", bottom:6, left:6, display:"flex", gap:3 }}>
+            {p.filament_usage.map((f,i) => (
+              <div key={i} style={{ width:11, height:11, borderRadius:"50%",
+                backgroundColor: hexCss(f.color_hex),
+                border:"1.5px solid rgba(255,255,255,0.7)", flexShrink:0 }}/>
+            ))}
           </div>
         )}
+        {/* Menu */}
+        <div style={{ position:"absolute", top:6, right:6 }}>
+          <button onClick={e=>{e.stopPropagation();setMenuOpen(o=>!o);setConfirming(false);}}
+            style={{ background:"rgba(0,0,0,0.55)", border:"none", borderRadius:"50%",
+              width:24, height:24, cursor:"pointer", color:"white", fontSize:14,
+              display:"flex", alignItems:"center", justifyContent:"center" }}>⋮</button>
+          {menuOpen && (
+            <div style={{ position:"absolute", top:28, right:0, background:"var(--surface)",
+              border:"1px solid var(--border)", borderRadius:8, padding:4,
+              minWidth:120, zIndex:10 }}>
+              <button onClick={handleDelete}
+                style={{ width:"100%", padding:"6px 10px", background:"none", border:"none",
+                  color:confirming?"#ef4444":"var(--text)", cursor:"pointer",
+                  fontSize:12, textAlign:"left", borderRadius:4 }}>
+                {confirming ? "Confirmer ?" : "Supprimer"}
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div onClick={onClick} style={{ padding:"10px 12px", display:"flex",
-        flexDirection:"column", gap:6, cursor:"pointer" }}>
-        <p style={{ fontWeight:700, fontSize:13, color:"var(--text)",
+      {/* Infos minimales */}
+      <div onClick={onClick} style={{ padding:"8px 10px", cursor:"pointer" }}>
+        <p style={{ fontWeight:700, fontSize:12, color:"var(--text)", margin:"0 0 2px",
           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
           {p.file_name || "Sans nom"}
         </p>
-        <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-          <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>{fmtDate(p.print_date)}</p>
-          {(p.tags||[]).filter(t=>t.startsWith("groupe:")).map(t=>(
-            <span key={t} style={{ fontSize:9, background:"rgba(124,58,237,0.15)",
-              color:"#a78bfa", padding:"1px 6px", borderRadius:10, fontWeight:700 }}>
-              {t.replace("groupe:","")}
-            </span>
-          ))}
-        </div>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <FilamentDots filaments={p.filament_usage}/>
-          <div style={{ display:"flex", gap:10, fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
-            {p.total_weight_g > 0 && <span>{p.total_weight_g.toFixed(0)}g</span>}
-            {p.duration_seconds > 0 && <span>{fmtDur(p.duration_seconds)}</span>}
-          </div>
-        </div>
+        <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>{fmtDate(p.print_date)}</p>
       </div>
     </div>
   );
@@ -480,7 +461,7 @@ export default function Prints() {
         // Grille flat si filtre actif
         if (groupF) {
           return (
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:12 }}>
               {prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
             </div>
           );
@@ -540,7 +521,7 @@ export default function Prints() {
                     {item.prints.length} print{item.prints.length>1?"s":""} · {fmtDate(item.latestDate)}
                   </span>
                 </div>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(180px, 1fr))", gap:8, paddingLeft:12,
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(2, 1fr)", gap:8, paddingLeft:12,
                   borderLeft:"2px solid rgba(167,139,250,0.3)" }}>
                   {item.prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
                 </div>
