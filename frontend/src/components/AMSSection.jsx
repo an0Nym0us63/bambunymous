@@ -362,21 +362,23 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
 
 // ── Section principale ─────────────────────────────────────────────────────
 export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLookup }) {
+  // Dédupliquer par id au cas où le polling enverrait des doublons
+  const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const [selectedId, setSelectedId] = useState(null);
   const [selectedTray, setSelectedTray] = useState(null);
-  if (!amsList?.length) return (
+  if (!uniqueAmsList?.length) return (
     <div className="card" style={{ padding:24, textAlign:"center", color:"var(--muted)", fontSize:14 }}>Aucun AMS détecté</div>
   );
-  const autoId = activeAmsId >= 0 ? activeAmsId : amsList[0]?.id ?? 0;
+  const autoId = activeAmsId >= 0 ? activeAmsId : uniqueAmsList[0]?.id ?? 0;
   const displayId = selectedId !== null ? selectedId : autoId;
-  const displayAms = amsList.find(a=>a.id===displayId) ?? amsList[0];
+  const displayAms = uniqueAmsList.find(a=>a.id===displayId) ?? uniqueAmsList[0];
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
       {/* Sélecteur */}
       <div className="card" style={{ padding:12 }}>
-        <div style={{ display:"grid", gridTemplateColumns:`repeat(${Math.min(amsList.length,4)},1fr)`, gap:12 }}>
-          {amsList.map(ams => (
+        <div style={{ display:"grid", gridTemplateColumns:`repeat(${Math.min(uniqueAmsList.length,4)},1fr)`, gap:12 }}>
+          {uniqueAmsList.map(ams => (
             <AMSBox key={ams.id} ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
               isSelected={ams.id===displayId}
               onClick={() => setSelectedId(p => p===ams.id ? null : ams.id)}
