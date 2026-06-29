@@ -287,7 +287,7 @@ def _spool_out(s: Spool) -> SpoolOut:
 
 
 @router.get("/{fid}/photos")
-async def filament_photos(fid: int, _: str = Depends(get_current_user)):
+async def filament_photos(fid: int):
     """Liste les photos d'un filament depuis /data/filaments/{id}/"""
     import mimetypes
     from pathlib import Path as _Path
@@ -302,7 +302,7 @@ async def filament_photos(fid: int, _: str = Depends(get_current_user)):
 
 
 @router.get("/{fid}/photo/{filename}")
-async def filament_photo(fid: int, filename: str, _: str = Depends(get_current_user)):
+async def filament_photo(fid: int, filename: str):
     """Sert une photo de filament."""
     import mimetypes
     from pathlib import Path as _Path
