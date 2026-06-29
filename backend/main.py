@@ -45,6 +45,9 @@ async def lifespan(app: FastAPI):
             _lg.propagate = True
     logger.info(f"BambuNymous starting — version {VERSION}")
     await init_db()
+    # Restaurer les prints IN_PROGRESS en mémoire après un redémarrage
+    from app.services.print_tracker import restore_in_progress
+    await restore_in_progress()
     await mqtt_manager.start()
     yield
     await mqtt_manager.stop()
