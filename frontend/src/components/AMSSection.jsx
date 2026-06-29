@@ -50,9 +50,9 @@ function ColorPill({ tray, spoolInfo, active }) {
 function MatchIcon({ mode, size = 10 }) {
   if (!mode) return null;
   const cfg = {
-    rfid:   { symbol: "⬡", color: "#22c55e", title: "Tag RFID Bambu Lab" },
-    color:  { symbol: "◈", color: "#f59e0b", title: "Matching couleur (filament custom)" },
-    manual: { symbol: "◇", color: "#94a3b8", title: "Non identifié automatiquement" },
+    rfid:   { symbol: "⬡", color: "#22c55e", title: "Reconnu par RFID Bambu" },
+    auto:   { symbol: "◈", color: "#f59e0b", title: "Reconnu automatiquement (profil/couleur)" },
+    manual: { symbol: "◇", color: "#94a3b8", title: "Non identifié" },
   }[mode];
   if (!cfg) return null;
   return (
@@ -205,9 +205,9 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
 
 
 const MATCH_LABEL = {
-  rfid:   { text:"Tag RFID Bambu Lab",       color:"#22c55e" },
-  color:  { text:"Matching couleur (custom)", color:"#f59e0b" },
-  manual: { text:"Non identifié",             color:"#94a3b8" },
+  rfid:   { text:"RFID Bambu",   color:"#22c55e" },
+  auto:   { text:"Auto",         color:"#f59e0b" },
+  manual: { text:"Manuel",       color:"#94a3b8" },
 };
 
 function TrayBottomSheet({ tray, amsLabel, onClose }) {
