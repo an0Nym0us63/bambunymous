@@ -25,6 +25,7 @@ class Filament(Base):
     spool_weight_g: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     profile_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # ex: GFA00
     external_filament_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    translated_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # nom localisé
     reference_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     swatch: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -58,6 +59,7 @@ class Spool(Base):
     archived: Mapped[bool] = mapped_column(Boolean, default=False)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     external_spool_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    found_mode: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # rfid/profile/color
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     first_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
