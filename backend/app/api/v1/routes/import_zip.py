@@ -1,17 +1,19 @@
 """
 Routes d'import ZIP depuis Spoolnymous.
-L'import tourne en background, le client peut poller le statut.
+L'import tourne dans un thread dédié (avec son propre event loop) pour ne pas
+bloquer uvicorn et pour survivre à la réponse HTTP.
 """
 import asyncio
 import logging
 import os
+import threading
 import uuid
 from pathlib import Path
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from .auth import get_current_user
 
-router  = APIRouter()
-logger  = logging.getLogger(__name__)
+router   = APIRouter()
+logger   = logging.getLogger(__name__)
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 TMP_DIR  = DATA_DIR / "tmp"
 
@@ -22,7 +24,7 @@ ZIP_TYPES = {
     "uploads_groups":    "Photos galeries groupes (Photo-01.webp…)",
 }
 
-# Statuts en mémoire : {job_id: {status, type, stats, error}}
+# Statuts en mémoire : {job_id: {...}}
 _JOBS: dict[str, dict] = {}
 
 
@@ -59,7 +61,7 @@ async def import_zip(
     job_id   = uuid.uuid4().hex[:12]
     tmp_path = TMP_DIR / f"{zip_type}_{job_id}.zip"
 
-    # Écrire le fichier sur disque en streaming
+    # Écrire sur disque en streaming (évite de charger tout en RAM)
     written = 0
     try:
         with open(tmp_path, "wb") as f:
@@ -82,9 +84,18 @@ async def import_zip(
         "error":   None,
     }
 
-    # Lancer le traitement en background (asyncio.create_task pour survivre à la réponse HTTP)
-    import asyncio as _aio
-    _aio.create_task(_run_import(job_id, zip_type, tmp_path))
+    # Thread dédié avec son propre event loop — plus fiable qu'asyncio.create_task
+    def _thread_run():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(_run_import(job_id, zip_type, tmp_path))
+        finally:
+            loop.close()
+
+    t = threading.Thread(target=_thread_run, daemon=True, name=f"zip-{job_id}")
+    t.start()
+    logger.info(f"[ZIP] thread démarré: {t.name}")
 
     return {"ok": True, "job_id": job_id, "size_mb": size_mb}
 
@@ -103,14 +114,14 @@ async def _run_import(job_id: str, zip_type: str, tmp_path: Path):
         "uploads_groups":    import_uploads_groups_zip,
     }[zip_type]
     try:
+        logger.info(f"[ZIP] {zip_type} traitement démarré ({tmp_path})")
         stats = await fn(tmp_path)
         _JOBS[job_id]["status"] = "done"
         _JOBS[job_id]["stats"]  = stats
-        logger.info(f"[ZIP] job {job_id} terminé: {stats}")
+        logger.info(f"[ZIP] {zip_type} terminé: {stats}")
     except Exception as e:
-        logger.exception(f"[ZIP] job {job_id} échoué")
+        logger.exception(f"[ZIP] {zip_type} échoué: {e}")
         _JOBS[job_id]["status"] = "error"
         _JOBS[job_id]["error"]  = str(e)
     finally:
         tmp_path.unlink(missing_ok=True)
-        logger.info(f"[ZIP] tmp supprimé: {tmp_path}")
