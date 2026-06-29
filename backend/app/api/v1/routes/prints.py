@@ -248,6 +248,18 @@ async def print_image(print_id: int):
     raise HTTPException(404, "Aucune image trouvée")
 
 
+@router.get("/{print_id}/file/{filename}")
+async def print_file(print_id: int, filename: str):
+    """Sert n'importe quel fichier du dossier d'un print."""
+    import mimetypes
+    if ".." in filename or "/" in filename:
+        raise HTTPException(400)
+    path = DATA_DIR / "prints" / str(print_id) / filename
+    if not path.exists(): raise HTTPException(404)
+    mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+    return FileResponse(str(path), media_type=mime)
+
+
 @router.get("/{print_id}/snapshot/{trigger}")
 async def print_snapshot(print_id: int, trigger: str):
     path = DATA_DIR / "prints" / str(print_id) / f"snapshot-{trigger}.jpg"
