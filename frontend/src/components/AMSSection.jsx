@@ -124,60 +124,53 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
 
 // ── Bobine SVG ─────────────────────────────────────────────────────────────
 function SpoolSVG({ colors, empty, size=68, active }) {
-  const c1 = colors?.[0] || (empty ? "#1a1a1a" : "#444");
+  const c1 = colors?.[0] || (empty ? "#1a1a1a" : "#555");
   const multi = colors && colors.length > 1;
   const uid = `sg${Math.random().toString(36).slice(2,7)}`;
   const lum = luminance(c1.replace("#",""));
-  const shine = lum < 128 ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.35)";
-  const shadow = lum < 128 ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.12)";
-  const hubFill = lum < 128 ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.18)";
-  const hubStroke = lum < 128 ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.25)";
-
-  // fill principal : gradient multicolore ou couleur unique
+  const dark = lum < 128;
+  const shine    = dark ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.45)";
+  const rimShade = dark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.10)";
+  const hubRing  = dark ? "rgba(255,255,255,0.20)" : "rgba(0,0,0,0.30)";
   const fill = empty ? "#222" : multi ? `url(#${uid})` : c1;
 
   return (
     <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
-      {/* Gradient multicolore */}
       {multi && !empty && (
         <defs>
           <linearGradient id={uid} x1="0%" y1="0%" x2="100%" y2="0%">
             {colors.map((c,i)=>(
-              <stop key={i}
-                offset={`${Math.round(i/(colors.length-1)*100)}%`}
-                stopColor={c}/>
+              <stop key={i} offset={`${Math.round(i/(colors.length-1)*100)}%`} stopColor={c}/>
             ))}
           </linearGradient>
         </defs>
       )}
 
       {/* Ombre portée */}
-      <ellipse cx="40" cy="76" rx="20" ry="3" fill="rgba(0,0,0,0.25)"/>
+      <ellipse cx="40" cy="76" rx="20" ry="3" fill="rgba(0,0,0,0.22)"/>
 
-      {/* Corps principal de la bobine */}
+      {/* Disque principal */}
       <circle cx="40" cy="40" r="28" fill={fill}/>
-      {/* Ombrage volumétrique */}
-      <circle cx="40" cy="40" r="28" fill="rgba(0,0,0,0.12)"/>
-      {/* Reflet haut */}
-      <ellipse cx="33" cy="27" rx="10" ry="6" fill={shine} style={{filter:"blur(2px)"}}/>
+      {/* Ombrage bas */}
+      <circle cx="40" cy="40" r="28" fill="rgba(0,0,0,0.10)"/>
+      {/* Reflet haut-gauche */}
+      <ellipse cx="32" cy="26" rx="9" ry="5" fill={shine} opacity="0.7"/>
 
-      {/* Flasques latérales (disques) */}
+      {/* Joues latérales — cercles légèrement plus petits */}
       {!empty && <>
-        <rect x="14" y="22" width="5" height="36" rx="2.5" fill={fill}/>
-        <rect x="14" y="22" width="5" height="36" rx="2.5" fill={shadow}/>
-        <rect x="61" y="22" width="5" height="36" rx="2.5" fill={fill}/>
-        <rect x="61" y="22" width="5" height="36" rx="2.5" fill={shadow}/>
+        <circle cx="15" cy="40" r="10" fill={fill}/>
+        <circle cx="15" cy="40" r="10" fill={rimShade}/>
+        <circle cx="65" cy="40" r="10" fill={fill}/>
+        <circle cx="65" cy="40" r="10" fill={rimShade}/>
       </>}
 
-      {/* Hub central — cercle, pas de carré */}
-      <circle cx="40" cy="40" r="12" fill={hubFill} stroke={hubStroke} strokeWidth="1.5"/>
-      <circle cx="40" cy="40" r="7" fill={hubFill} stroke={hubStroke} strokeWidth="1"/>
-      {/* Trou central */}
-      <circle cx="40" cy="40" r="4" fill={empty ? "#111" : "rgba(0,0,0,0.6)"}/>
-      {/* Petit reflet hub */}
-      <circle cx="38" cy="38" r="1.5" fill="rgba(255,255,255,0.15)"/>
+      {/* Hub — anneaux concentriques */}
+      <circle cx="40" cy="40" r="13" fill="rgba(0,0,0,0.25)" stroke={hubRing} strokeWidth="1"/>
+      <circle cx="40" cy="40" r="8"  fill="rgba(0,0,0,0.20)" stroke={hubRing} strokeWidth="1"/>
+      <circle cx="40" cy="40" r="4"  fill="rgba(0,0,0,0.55)"/>
+      <circle cx="38" cy="38" r="1.5" fill="rgba(255,255,255,0.18)"/>
 
-      {/* Cercle d'animation (impression en cours) */}
+      {/* Animation impression */}
       {active && (
         <circle cx="40" cy="40" r="30" stroke="#3b82f6" strokeWidth="2.5"
           fill="none" strokeDasharray="5 2.5" opacity="0.9">
@@ -208,7 +201,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
   const lum = luminance((c1||"").replace("#",""));
   const barBg = colorBg(colors);
   // Si filament gris/blanc → fond de la barre plus foncé
-  const barTrackColor = (!c1 || lum > 180) ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.12)";
+  const barTrackColor = "var(--border)";
 
   return (
     <div onClick={onClick} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
@@ -221,12 +214,12 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
       {/* Barre de progression couleur filament */}
       <div style={{ width:48, height:5, background: barTrackColor,
         borderRadius:3, overflow:"hidden",
-        boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.12)" }}>
+        boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)" }}>
         {!empty && (
           <div style={{ height:"100%", borderRadius:3,
             width:`${Math.max(0,Math.min(100,pct))}%`,
             transition:"width 0.7s",
-            boxShadow: lum > 200 ? "inset 0 0 0 1px rgba(0,0,0,0.2)" : "none",
+            boxShadow: lum > 200 ? "inset 0 0 0 1px rgba(0,0,0,0.15)" : lum < 30 ? "inset 0 0 0 1px rgba(255,255,255,0.1)" : "none",
             ...barBg }}/>
         )}
       </div>
@@ -238,8 +231,8 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
         <div style={{ position:"absolute", bottom:10, left:"50%",
           transform:"translateX(-50%)", padding:"1px 7px", borderRadius:20,
           fontSize:9, fontWeight:700, whiteSpace:"nowrap",
-          background: isActive ? "#3b82f6" : c1 || "rgba(0,0,0,0.6)",
-          color: isActive ? "white" : c1 ? contrast(c1) : "white",
+          background: isActive ? "#3b82f6" : "rgba(0,0,0,0.55)",
+          color: "white",
           opacity: isActive ? 1 : 0.85,
           boxShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
           {label}
