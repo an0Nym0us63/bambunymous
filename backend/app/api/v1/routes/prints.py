@@ -70,10 +70,12 @@ def _print_to_out(p: Print) -> dict:
 
 @router.get("")
 async def list_prints(
-    status: Optional[str] = None,
-    search: Optional[str] = None,
-    limit:  int = Query(50, le=200),
-    offset: int = 0,
+    status:  Optional[str] = None,
+    search:  Optional[str] = None,
+    group:   Optional[str] = None,
+    tag:     Optional[str] = None,
+    limit:   int = Query(50, le=200),
+    offset:  int = 0,
     _: str = Depends(get_current_user),
 ):
     async with AsyncSessionLocal() as db:
@@ -84,6 +86,14 @@ async def list_prints(
              .order_by(desc(Print.print_date)))
         if status:  q = q.where(Print.status == status)
         if search:  q = q.where(Print.file_name.ilike(f"%{search}%"))
+        # Filtre par groupe (tag préfixé "groupe:") ou tag libre
+        filter_tag = f"groupe:{group}" if group else tag
+        if filter_tag:
+            from sqlalchemy import exists
+            from ....models.print_history import PrintTag as _PT
+            q = q.where(exists().where(
+                (_PT.print_id == Print.id) & (_PT.tag == filter_tag)
+            ))
         total_q = select(func.count()).select_from(q.subquery())
         total   = (await db.execute(total_q)).scalar()
         rows    = (await db.execute(q.offset(offset).limit(limit))).scalars().all()
@@ -222,6 +232,37 @@ async def debug_prints():  # noqa — public debug route
         async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
             tables = [r[0] async for r in cur]
     return {"tables": tables, "prints": rows}
+
+
+@router.get("/groups")
+async def list_groups(_: str = Depends(get_current_user)):
+    """Retourne les groupes disponibles (tags préfixés 'groupe:')."""
+    from sqlalchemy import distinct
+    from ....models.print_history import PrintTag as _PT
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(distinct(_PT.tag)).where(_PT.tag.like("groupe:%")).order_by(_PT.tag)
+        )
+        groups = [r[0].replace("groupe:", "") for r in result.all()]
+    return {"groups": groups}
+
+
+@router.post("/{print_id}/group")
+async def set_group(print_id: int, body: dict, _: str = Depends(get_current_user)):
+    """Assigne un print à un groupe (remplace l'ancien groupe si existant)."""
+    group = (body.get("group") or "").strip()
+    async with AsyncSessionLocal() as db:
+        # Supprimer l'ancien groupe
+        result = await db.execute(
+            select(PrintTag).where(PrintTag.print_id == print_id, PrintTag.tag.like("groupe:%"))
+        )
+        for old in result.scalars().all():
+            await db.delete(old)
+        # Ajouter le nouveau si non vide
+        if group:
+            db.add(PrintTag(print_id=print_id, tag=f"groupe:{group}"))
+        await db.commit()
+    return {"ok": True}
 
 
 @router.get("/stats/summary")
