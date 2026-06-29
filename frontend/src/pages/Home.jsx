@@ -50,7 +50,7 @@ function StatusBanner({ status }) {
   const isRunning = status?.status === "RUNNING";
   // Déplier possible même hors impression (pour voir temps, températures)
   useEffect(() => {
-    if (expanded && isRunning) startCam(); else stopCam();
+    if (expanded) startCam(); else stopCam();
     return stopCam;
   }, [expanded, isRunning]);
 
@@ -139,15 +139,13 @@ function StatusBanner({ status }) {
       {/* Panneau déplié */}
       {expanded && (
         <div style={{ borderTop:"1px solid var(--border)" }}>
-          {/* Caméra — seulement si impression en cours */}
-          {isRunning && (
-            <img ref={camRef} alt="Camera"
-              style={{ width:"100%", display:"block", maxHeight:280, objectFit:"cover",
-                background:"#111" }}
-              onLoad={() => { inFlightRef.current = false; }}
-              onError={e => { inFlightRef.current = false; e.currentTarget.style.display="none"; }}
-            />
-          )}
+          {/* Caméra */}
+          <img ref={camRef} alt="Camera"
+            style={{ width:"100%", display:"block", maxHeight:280, objectFit:"cover",
+              background:"#111" }}
+            onLoad={() => { inFlightRef.current = false; }}
+            onError={e => { inFlightRef.current = false; e.currentTarget.style.display="none"; }}
+          />
           {/* Températures + infos */}
           <div style={{ padding:12, display:"flex", flexDirection:"column", gap:10 }}>
             {/* Buses */}
