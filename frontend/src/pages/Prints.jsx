@@ -60,6 +60,44 @@ function StatusBadge({ status }) {
   );
 }
 
+// ── Tuile groupe collapsible ────────────────────────────────────────────────
+function GroupTile({ name, prints, latestDate, onSelectPrint, onDelete }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div style={{ gridColumn:"1 / -1" }}>
+      <button onClick={() => setOpen(o => !o)}
+        style={{ width:"100%", background:"var(--surface)", border:"1px solid rgba(167,139,250,0.35)",
+          borderRadius: open ? "12px 12px 0 0" : 12, padding:"10px 16px",
+          cursor:"pointer", display:"flex", alignItems:"center", gap:10, textAlign:"left" }}>
+        <span style={{ fontSize:15 }}>{open ? "📂" : "📁"}</span>
+        <span style={{ flex:1, fontWeight:700, fontSize:13, color:"#a78bfa" }}>{name}</span>
+        <span style={{ fontSize:11, color:"var(--muted)" }}>
+          {prints.length} print{prints.length > 1 ? "s" : ""} · {fmtDate(latestDate)}
+        </span>
+        <span style={{ fontSize:11, color:"var(--muted)" }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div style={{ borderLeft:"3px solid rgba(167,139,250,0.45)",
+          borderRight:"1px solid rgba(167,139,250,0.2)",
+          borderBottom:"1px solid rgba(167,139,250,0.2)",
+          borderRadius:"0 0 12px 12px",
+          padding:"12px 12px 12px 16px",
+          background:"rgba(167,139,250,0.03)" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(150px, 1fr))", gap:10 }}>
+            {prints.map(p => (
+              <PrintCard key={p.id} p={p}
+                onClick={() => onSelectPrint(p)}
+                onDelete={onDelete}/>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 function PrintCard({ p, onClick, onDelete }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -320,6 +358,9 @@ export default function Prints() {
   const [prints, setPrints]   = useState([]);
   const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [offset, setOffset]   = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [search, setSearch]   = useState("");
   const [statusF, setStatusF] = useState("");
   const [selected, setSelected] = useState(null);
@@ -330,24 +371,46 @@ export default function Prints() {
   const [groupF, setGroupF]   = useState("");
 
 
+  const LIMIT = 40;
+
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setOffset(0);
     try {
-      const params = new URLSearchParams({ limit:1000 });
-      if (search)  params.set("search",  search);
-      if (statusF) params.set("status",  statusF);
-      if (groupF)  params.set("group",   groupF);
-      const { data } = await client.get(`/prints?${params}`);
-      setDebugInfo(`total=${data.total} prints=${(data.prints||[]).length}`);
+      const params = new URLSearchParams({ limit: LIMIT, offset: 0 });
+      if (search)  params.set("search", search);
+      if (statusF) params.set("status", statusF);
+      if (groupF)  params.set("group",  groupF);
+      const { data } = await client.get("/prints?" + params);
+      setDebugInfo("total=" + data.total + " prints=" + (data.prints||[]).length);
       setPrints(data.prints ?? []);
       setTotal(data.total ?? 0);
+      setHasMore(data.has_more ?? false);
     } catch(e) {
       setError(e.response?.data?.detail || e.message || "Erreur");
-      setDebugInfo("ERREUR: " + (e.response?.data?.detail || e.message));
     }
     setLoading(false);
   }, [search, statusF, groupF]);
+
+  const loadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const next = offset + LIMIT;
+      const params = new URLSearchParams({ limit: LIMIT, offset: next });
+      if (search)  params.set("search", search);
+      if (statusF) params.set("status", statusF);
+      if (groupF)  params.set("group",  groupF);
+      const { data } = await client.get("/prints?" + params);
+      const existingIds = new Set(prints.map(p => p.id));
+      const fresh = (data.prints || []).filter(p => !existingIds.has(p.id));
+      setPrints(prev => [...prev, ...fresh]);
+      setOffset(next);
+      setHasMore(data.has_more ?? false);
+    } catch(e) {}
+    setLoadingMore(false);
+  };
 
 
   const loadGroups = useCallback(async () => {
@@ -496,22 +559,23 @@ export default function Prints() {
                 onClick={()=>setSelected(item.p)}
                 onDelete={onDelete}/>
             ) : (
-              <div key={item.name} style={{ gridColumn:"1 / -1",
-                display:"flex", flexDirection:"column", gap:8 }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:12, fontWeight:700, color:"#a78bfa" }}>📁 {item.name}</span>
-                  <span style={{ fontSize:10, color:"var(--muted)" }}>
-                    {item.prints.length} print{item.prints.length>1?"s":""} · {fmtDate(item.latestDate)}
-                  </span>
-                </div>
-                <div style={{ display:"grid", gridTemplateColumns:GRID, gap:10 }}>
-                  {item.prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
-                </div>
-              </div>
+              <GroupTile key={item.name} name={item.name}
+                prints={item.prints} latestDate={item.latestDate}
+                onSelectPrint={setSelected} onDelete={onDelete}/>
             ))}
           </div>
         );
       })()}
+
+      {hasMore && !loading && (
+        <button onClick={loadMore} disabled={loadingMore}
+          style={{ width:"100%", padding:"12px", marginTop:8,
+            background:"var(--surface2)", border:"1px solid var(--border)",
+            borderRadius:10, cursor:loadingMore?"not-allowed":"pointer",
+            color:"var(--muted)", fontSize:13, fontWeight:600 }}>
+          {loadingMore ? "Chargement…" : "Charger plus (" + (total - prints.length) + " restants)"}
+        </button>
+      )}
 
       {selected && <PrintDetail p={selected} onClose={()=>setSelected(null)}/>}
     </div>
