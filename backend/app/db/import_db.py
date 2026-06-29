@@ -241,24 +241,57 @@ async def run_import(src_path: str) -> dict:
                     ))
                     stats["filament_usage"] = stats.get("filament_usage", 0) + 1
 
-            # ── PRINT TAGS (groupes depuis Spoolnymous) ───────────────
+            # ── PRINT TAGS existants ─────────────────────────────────
             if table_exists(src, "print_tags"):
                 for row in src.execute("SELECT * FROM print_tags").fetchall():
                     row = dict(row)
                     new_pid = print_map.get(row.get("print_id"))
                     if not new_pid:
                         continue
+                    tag = row.get("tag") or ""
                     res = (await db.execute(
                         text("SELECT id FROM print_tags WHERE print_id=:p AND tag=:t"),
-                        {"p": new_pid, "t": row.get("tag")}
+                        {"p": new_pid, "t": tag}
                     )).scalar_one_or_none()
                     if not res:
                         from ..models.print_history import PrintTag
-                        db.add(PrintTag(print_id=new_pid, tag=row.get("tag") or ""))
+                        db.add(PrintTag(print_id=new_pid, tag=tag))
                         stats["tags"] = stats.get("tags", 0) + 1
 
+            # ── GROUPES Spoolnymous → PrintTag "groupe:NomDuGroupe" ───
+            # Spoolnymous a une table "groups" + prints.group_id (FK)
+            group_map: dict[int, str] = {}
+            if table_exists(src, "groups"):
+                for row in src.execute("SELECT id, name FROM groups").fetchall():
+                    group_map[row[0]] = row[1] or f"Groupe {row[0]}"
+                logger.info(f"[IMPORT] {len(group_map)} groupes trouvés: {list(group_map.values())}")
+
+            if group_map:
+                # Chercher group_id dans prints
+                for old_pid, new_pid in print_map.items():
+                    try:
+                        row = src.execute(
+                            "SELECT group_id FROM prints WHERE id=?", (old_pid,)
+                        ).fetchone()
+                        if not row or not row[0]:
+                            continue
+                        group_name = group_map.get(row[0])
+                        if not group_name:
+                            continue
+                        tag = f"groupe:{group_name}"
+                        res = (await db.execute(
+                            text("SELECT id FROM print_tags WHERE print_id=:p AND tag=:t"),
+                            {"p": new_pid, "t": tag}
+                        )).scalar_one_or_none()
+                        if not res:
+                            from ..models.print_history import PrintTag
+                            db.add(PrintTag(print_id=new_pid, tag=tag))
+                            stats["groups"] = stats.get("groups", 0) + 1
+                    except Exception as _ge:
+                        logger.debug(f"[IMPORT] group for print {old_pid}: {_ge}")
+
             await db.commit()
-            logger.info(f"[IMPORT] Prints: {stats.get('prints',0)} filament_usage: {stats.get('filament_usage',0)}")
+            logger.info(f"[IMPORT] Prints:{stats.get('prints',0)} usage:{stats.get('filament_usage',0)} tags:{stats.get('tags',0)} groupes:{stats.get('groups',0)}")
 
     src.close()
     logger.info(f"Import terminé: {stats}")
