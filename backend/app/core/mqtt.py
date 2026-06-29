@@ -300,38 +300,54 @@ class MQTTManager:
                     t.drying_temp = int(tr.get("drying_temp") or 0)
                     t.drying_time = int(tr.get("drying_time") or 0)
                     t.total_len = int(tr.get("total_len") or 0)
-                    # Détection du mode de reconnaissance du filament
-                    # RFID : filament Bambu avec tag NFC (tray_info_idx non vide = ID catalogue Bambu)
-                    # COLOR : filament custom reconnu par UUID + matching couleur
-                    # MANUAL : aucune détection automatique possible
-                    # Détection match_mode + spool_id via DB
-                    _tray_info = (tr.get("tray_info_idx") or "").strip()
-                    _tag_uid   = (tr.get("tag_uid") or "").strip()
-                    _tray_uuid = (tr.get("tray_uuid") or "").strip()
-                    _uid_valid = bool(_tag_uid and _tag_uid.replace("0",""))
-                    _uuid_valid = bool(_tray_uuid and _tray_uuid.replace("0",""))
+                    # ── Champs bruts pour le matching ─────────────────────
+                    _tray_info   = (tr.get("tray_info_idx") or "").strip()
+                    _tag_uid     = (tr.get("tag_uid") or "").strip()
+                    _tray_uuid   = (tr.get("tray_uuid") or "").strip()
+                    _sub_brands  = (tr.get("tray_sub_brands") or "").strip()
+                    _tray_color  = (tr.get("tray_color") or "").strip()
+                    _uid_valid   = bool(_tag_uid and _tag_uid.replace("0",""))
+                    _uuid_valid  = bool(_tray_uuid and _tray_uuid.replace("0",""))
 
-                    if _uid_valid:
+                    # Stocker tray_info_idx sur le tray pour l'API
+                    t.tray_info_idx = _tray_info
+
+                    # ── Log détaillé par slot (1 seul log à l'init du tray) ──
+                    if not t.empty:
+                        logger.debug(
+                            f"[AMS] AMS{ams.id} tray{t.id} | "
+                            f"type={t.filament_type!r} color={_tray_color!r} "
+                            f"tag_uid={_tag_uid!r} tray_info_idx={_tray_info!r} "
+                            f"sub_brands={_sub_brands!r} uuid={_tray_uuid!r}"
+                        )
+
+                    # ── Match mode (avant DB lookup) ────────────────────────
+                    # RFID  : sub_brands non vide = filament Bambu reconnu via tag interne
+                    # AUTO  : tray_info_idx connu (profil) ou uuid valide → matching DB
+                    # MANUEL: filament présent mais rien d'identifiable
+                    if _sub_brands:
                         t.match_mode = "rfid"
-                    elif _tray_info:
-                        t.match_mode = "color"
+                    elif _tray_info or _uuid_valid:
+                        t.match_mode = "auto"
                     elif not t.empty:
                         t.match_mode = "manual"
                     else:
                         t.match_mode = ""
 
-                    # Matching spool en DB (async fire-and-forget)
+                    # ── Matching spool en DB ────────────────────────────────
                     if not t.empty:
                         import threading as _mth, asyncio as _mio
-                        _tag, _tinfo, _tcolor = _tag_uid, _tray_info, (tr.get("tray_color") or tr.get("color") or "")
-                        _tid, _ams_id, _tray_id = id(t), ams.id, t.id
-                        def _match_spool(_t=t, _tag=_tag, _tinfo=_tinfo, _tcolor=_tcolor):
+                        def _match_spool(_t=t, _tag=_tag_uid, _tinfo=_tray_info, _tc=_tray_color):
                             lp = _mio.new_event_loop()
                             async def _go():
                                 from ..services.spool_matcher import match_spool
-                                spool_id, mode = await match_spool(_tag, _tinfo, _tcolor)
-                                _t.spool_id   = spool_id
-                                _t.match_mode = mode or _t.match_mode
+                                spool_id, mode = await match_spool(_tag, _tinfo, _tc)
+                                if spool_id:
+                                    _t.spool_id   = spool_id
+                                    _t.match_mode = mode or _t.match_mode
+                                    logger.debug(f"[AMS] AMS{ams.id} tray{_t.id} → spool #{spool_id} ({mode})")
+                                else:
+                                    logger.debug(f"[AMS] AMS{ams.id} tray{_t.id} → aucune bobine trouvée")
                             try:    lp.run_until_complete(_go())
                             finally: lp.close()
                         _mth.Thread(target=_match_spool, daemon=True).start()
