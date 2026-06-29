@@ -121,32 +121,76 @@ async def list_prints(
     search:  Optional[str] = None,
     group:   Optional[str] = None,
     tag:     Optional[str] = None,
-    limit:   int = Query(50, le=2000),
+    limit:   int = Query(40, le=200),
     offset:  int = 0,
     _: str = Depends(get_current_user),
 ):
+    """
+    Retourne les prints paginés.
+    Si un print appartient à un groupe, TOUS les prints de ce groupe sont inclus
+    dans la réponse (pour éviter un groupe coupé entre deux pages).
+    """
+    from sqlalchemy import exists
+    from ....models.print_history import PrintTag as _PT
+
     async with AsyncSessionLocal() as db:
         q = (select(Print)
              .options(selectinload(Print.filament_usage),
                       selectinload(Print.snapshots),
                       selectinload(Print.tags))
              .order_by(desc(Print.print_date)))
-        if status:  q = q.where(Print.status == status)
-        if search:  q = q.where(Print.file_name.ilike(f"%{search}%"))
-        # Filtre par groupe (tag préfixé "groupe:") ou tag libre
+        if status:
+            q = q.where(Print.status == status)
+        if search:
+            q = q.where(Print.file_name.ilike(f"%{search}%"))
         filter_tag = f"groupe:{group}" if group else tag
         if filter_tag:
-            from sqlalchemy import exists
-            from ....models.print_history import PrintTag as _PT
             q = q.where(exists().where(
                 (_PT.print_id == Print.id) & (_PT.tag == filter_tag)
             ))
-        total_q = select(func.count()).select_from(q.subquery())
-        total   = (await db.execute(total_q)).scalar()
-        rows    = (await db.execute(q.offset(offset).limit(limit))).scalars().all()
-        # Enrichir les filament_usage avec les données bobine/filament
+
+        total = (await db.execute(
+            select(func.count()).select_from(q.subquery())
+        )).scalar()
+
+        # Page courante
+        rows = (await db.execute(q.offset(offset).limit(limit))).scalars().all()
+
+        # Compléter les groupes partiels :
+        # Si un print de la page appartient à un groupe, récupérer tous les prints
+        # de ce groupe qui ne sont pas déjà dans la page
+        if rows and not filter_tag:
+            page_ids = {p.id for p in rows}
+            # Trouver les groupes présents dans la page
+            page_groups: set[str] = set()
+            for p in rows:
+                for t in (p.tags or []):
+                    if t.tag.startswith("groupe:"):
+                        page_groups.add(t.tag)
+
+            if page_groups:
+                # Récupérer tous les prints de ces groupes manquants
+                extra_q = (select(Print)
+                    .options(selectinload(Print.filament_usage),
+                             selectinload(Print.snapshots),
+                             selectinload(Print.tags))
+                    .where(
+                        exists().where(
+                            (_PT.print_id == Print.id) &
+                            (_PT.tag.in_(list(page_groups)))
+                        )
+                    )
+                    .where(Print.id.notin_(list(page_ids)))
+                    .order_by(desc(Print.print_date)))
+                extra = (await db.execute(extra_q)).scalars().all()
+                if extra:
+                    rows = list(rows) + extra
+
         await _enrich_filament_usage(db, rows)
-    return {"total": total, "prints": [_print_to_out(p) for p in rows]}
+
+    return {"total": total, "has_more": (offset + limit) < total,
+            "next_offset": offset + limit,
+            "prints": [_print_to_out(p) for p in rows]}
 
 
 @router.get("/groups")
