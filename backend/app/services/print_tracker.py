@@ -41,7 +41,7 @@ def _job(job_id: str) -> dict:
 async def restore_in_progress():
     """
     Au démarrage du container, recharge les prints IN_PROGRESS depuis la DB
-    pour ne pas perdre le lien si le container a redémarré pendant une impression.
+    ET reconstruit les flags milestones depuis les snapshots existants.
     """
     try:
         async with AsyncSessionLocal() as db:
@@ -50,12 +50,29 @@ async def restore_in_progress():
             )
             prints = result.scalars().all()
             for p in prints:
-                if p.job_id:
-                    st = _job(p.job_id)
-                    with _LOCK:
-                        st["print_id"]   = p.id
-                        st["start_time"] = p.created_at.timestamp() if p.created_at else time.time()
-                    logger.info(f"[RESTORE] Print IN_PROGRESS récupéré: id={p.id} job={p.job_id} nom={p.file_name!r}")
+                if not p.job_id:
+                    continue
+                st = _job(p.job_id)
+                with _LOCK:
+                    st["print_id"]   = p.id
+                    st["start_time"] = p.created_at.timestamp() if p.created_at else time.time()
+
+                # Reconstruire les flags milestones depuis les snapshots déjà pris
+                snaps_r = await db.execute(
+                    select(PrintSnapshot).where(PrintSnapshot.print_id == p.id)
+                )
+                existing_triggers = {s.trigger for s in snaps_r.scalars().all()}
+                with _LOCK:
+                    if "pct50"  in existing_triggers: st["m50"]  = True
+                    if "pct99"  in existing_triggers: st["m99"]  = True
+                    if "pct100" in existing_triggers: st["m100"] = True
+                    if "layer1" in existing_triggers: st["l2"]   = True
+                    if "layer2" in existing_triggers: st["l3"]   = True
+
+                logger.info(
+                    f"[RESTORE] Print id={p.id} job={p.job_id} nom={p.file_name!r} "
+                    f"milestones restaurés: {existing_triggers}"
+                )
     except Exception as e:
         logger.error(f"[RESTORE] Erreur restore_in_progress: {e}")
 
