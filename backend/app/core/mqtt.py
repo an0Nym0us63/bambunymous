@@ -11,6 +11,10 @@ logger = logging.getLogger(__name__)
 state = PrinterState()
 _listeners: list[Callable] = []
 
+# Cache matching AMS: (ams_id, tray_id, uuid_or_profile) → spool_id|-1
+# Évite de relancer un thread de matching à chaque tick MQTT (toutes les 2s)
+_MATCH_CACHE: dict = {}
+
 
 def get_state() -> PrinterState:
     return state
