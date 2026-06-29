@@ -75,7 +75,7 @@ function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, on
     (p.filament_usage || []).forEach(f => {
       const key = (f.color_hex || "#888") + "|" + (f.filament_type || "?");
       if (!filAgg[key]) filAgg[key] = { color: f.color_hex, type: f.filament_type,
-        name: f.filament_name, grams: 0 };
+        name: f.filament_name, brand: f.filament_brand, grams: 0, spool_id: f.spool_id };
       filAgg[key].grams += f.grams_used || 0;
     });
   });
@@ -134,16 +134,23 @@ function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, on
                 <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
                   {filaments.map((f, i) => (
                     <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
-                      background:"var(--surface2)", borderRadius:8, padding:"6px 10px" }}>
-                      <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
+                      background:"var(--surface2)",
+                      border:"1px solid " + (f.spool_id ? "rgba(34,197,94,0.25)" : "var(--border)"),
+                      borderRadius:8, padding:"6px 10px" }}>
+                      <div style={{ width:22, height:22, borderRadius:"50%", flexShrink:0,
                         backgroundColor: hexCss(f.color),
-                        border:"1.5px solid rgba(255,255,255,0.2)" }}/>
-                      <span style={{ flex:1, fontSize:12, color:"var(--text)", fontWeight:600 }}>
-                        {f.name || f.type || "Inconnu"}
-                      </span>
-                      <span style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>
-                        {f.grams.toFixed(0)}g
-                      </span>
+                        border: f.spool_id ? "2px solid #22c55e" : "1.5px solid rgba(255,255,255,0.2)",
+                        boxShadow:"0 1px 4px rgba(0,0,0,0.2)" }}/>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:0,
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {f.name || f.type || "Inconnu"}
+                          {f.spool_id && <span style={{ fontSize:9, color:"#22c55e", marginLeft:6, fontWeight:400 }}>✓</span>}
+                        </p>
+                        <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
+                          {[f.brand, f.type, f.grams.toFixed(0)+"g"].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
                     </div>
                   ))}
                 </div>
