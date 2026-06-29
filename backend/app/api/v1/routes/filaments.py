@@ -1,3 +1,4 @@
+from fastapi.responses import FileResponse
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_
@@ -283,3 +284,32 @@ def _spool_out(s: Spool) -> SpoolOut:
         last_used_at=s.last_used_at,
         created_at=s.created_at,
     )
+
+
+@router.get("/{fid}/photos")
+async def filament_photos(fid: int, _: str = Depends(get_current_user)):
+    """Liste les photos d'un filament depuis /data/filaments/{id}/"""
+    import mimetypes
+    from pathlib import Path as _Path
+    fil_dir = _Path(DATA_DIR) / "filaments" / str(fid)
+    if not fil_dir.exists():
+        return {"files": []}
+    files = []
+    for f in sorted(fil_dir.iterdir()):
+        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+            files.append({"name": f.name, "url": f"/api/v1/filaments/{fid}/photo/{f.name}"})
+    return {"files": files}
+
+
+@router.get("/{fid}/photo/{filename}")
+async def filament_photo(fid: int, filename: str, _: str = Depends(get_current_user)):
+    """Sert une photo de filament."""
+    import mimetypes
+    from pathlib import Path as _Path
+    if ".." in filename or "/" in filename:
+        raise HTTPException(400)
+    path = _Path(DATA_DIR) / "filaments" / str(fid) / filename
+    if not path.exists():
+        raise HTTPException(404)
+    mime = mimetypes.guess_type(str(path))[0] or "image/jpeg"
+    return FileResponse(str(path), media_type=mime)
