@@ -111,7 +111,7 @@ function AddSpoolModal({ filaments, onSave, onClose }) {
 }
 
 // ── Bottom sheet détail bobine ────────────────────────────────────────────
-function FilamentPhotos({ filamentId }) {
+function FilamentPhotos({ filamentId, onLightbox }) {
   const [photos, setPhotos] = React.useState([]);
   const [lightbox, setLightbox] = React.useState(null);
 
@@ -130,7 +130,7 @@ function FilamentPhotos({ filamentId }) {
         letterSpacing:"0.06em", marginBottom:8 }}>Photos</p>
       <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
         {photos.map((f, i) => (
-          <div key={i} onClick={() => setLightbox(f.url)}
+          <div key={i} onClick={() => onLightbox ? onLightbox(f.url) : setLightbox(f.url)}
             style={{ flexShrink:0, cursor:"pointer", borderRadius:8, overflow:"hidden",
               border:"1px solid var(--border)", width:90, height:90 }}>
             <img src={f.url} alt={f.name}
@@ -365,11 +365,101 @@ function SpoolsView({ filaments, showArchived }) {
 }
 
 // ── Vue Catalogue ──────────────────────────────────────────────────────────
+// ── Fiche filament catalogue ────────────────────────────────────────────────
+function FilamentSheet({ f, onClose }) {
+  const [lightbox, setLightbox] = useState(null);
+  const color = f.color ? "#" + f.color.replace("#","").slice(0,6) : null;
+
+  const Row = ({ label, value, mono }) => (!value && value !== 0) ? null : (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
+      padding:"7px 0", borderBottom:"1px solid var(--border)" }}>
+      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>{label}</span>
+      <span style={{ fontSize:13, fontWeight:600, color:"var(--text)", marginLeft:12,
+        fontFamily: mono ? "JetBrains Mono,monospace" : "inherit", textAlign:"right" }}>
+        {value}
+      </span>
+    </div>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
+      zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
+          width:"100%", maxWidth:540, maxHeight:"90dvh", overflowY:"auto",
+          paddingBottom:"env(safe-area-inset-bottom,20px)" }}>
+
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+        </div>
+
+        <div style={{ padding:"16px 20px 24px" }}>
+          {/* En-tête */}
+          <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
+            <div style={{ width:56, height:56, borderRadius:14, flexShrink:0,
+              backgroundColor: color || "var(--border)",
+              boxShadow:"0 2px 12px rgba(0,0,0,0.2)", border:"2px solid var(--border)" }}/>
+            <div style={{ flex:1, minWidth:0 }}>
+              <p style={{ fontSize:18, fontWeight:800, color:"var(--text)", margin:0,
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {f.name}
+              </p>
+              {f.translated_name && f.translated_name !== f.name && (
+                <p style={{ fontSize:11, color:"var(--muted)", margin:"2px 0 0" }}>{f.translated_name}</p>
+              )}
+              <p style={{ fontSize:12, color:"var(--muted)", margin:"4px 0 0" }}>
+                {[f.manufacturer, f.material].filter(Boolean).join(" · ")}
+              </p>
+            </div>
+          </div>
+
+          {/* Photos */}
+          <FilamentPhotos filamentId={f.id} onLightbox={setLightbox} />
+
+          {/* Infos */}
+          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+            letterSpacing:"0.08em", marginBottom:4 }}>Caractéristiques</p>
+          <Row label="Marque"        value={f.manufacturer}/>
+          <Row label="Matière"       value={f.material}/>
+          <Row label="Couleur"       value={color} mono/>
+          <Row label="Profile ID"    value={f.profile_id} mono/>
+          <Row label="Poids bobine"  value={f.filament_weight_g ? f.filament_weight_g+"g" : null}/>
+          <Row label="Poids support" value={f.spool_weight_g ? f.spool_weight_g+"g" : null}/>
+          <Row label="Prix"          value={f.price ? f.price+"€" : null}/>
+          <Row label="Multicolor"    value={f.multicolor_type !== "monochrome" ? f.multicolor_type : null}/>
+          <Row label="Profile"       value={f.profile_id} mono/>
+
+          {/* Bobines */}
+          <div style={{ marginTop:16, display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em" }}>
+              Bobines
+            </span>
+            <span style={{ fontSize:12, fontWeight:700,
+              color: f.active_spool_count > 0 ? "#22c55e" : "var(--muted)" }}>
+              {f.active_spool_count || 0} active{f.active_spool_count !== 1 ? "s" : ""}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {lightbox && (
+        <div onClick={() => setLightbox(null)}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.9)",
+            zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <img src={lightbox} alt="" onClick={e=>e.stopPropagation()}
+            style={{ maxWidth:"92vw", maxHeight:"92vh", borderRadius:12, objectFit:"contain" }}/>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FilamentsView() {
   const [filaments, setFilaments] = useState([]);
   const [q, setQ] = useState("");
   const [material, setMaterial] = useState("");
   const [loading, setLoading] = useState(true);
+  const [selectedFil, setSelectedFil] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -401,11 +491,14 @@ function FilamentsView() {
       ) : (
         <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
           {filaments.map(f => (
-            <div key={f.id} className="card-sm" style={{ padding:"10px 14px", display:"flex", alignItems:"center", gap:12 }}>
+            <div key={f.id} className="card-sm"
+              onClick={() => setSelectedFil(f)}
+              style={{ padding:"10px 14px", display:"flex", alignItems:"center",
+                gap:12, cursor:"pointer" }}>
               <ColorDot color={f.color}/>
               <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontWeight:500, fontSize:13, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</p>
-                <p style={{ fontSize:11, color:"var(--muted)" }}>{f.manufacturer} · {f.material}</p>
+                <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</p>
+                <p style={{ fontSize:11, color:"var(--muted)" }}>{[f.manufacturer, f.material].filter(Boolean).join(" · ")}</p>
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
                 <span style={{
@@ -422,6 +515,7 @@ function FilamentsView() {
           {!filaments.length && <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
         </div>
       )}
+      {selectedFil && <FilamentSheet f={selectedFil} onClose={() => setSelectedFil(null)}/>}
     </div>
   );
 }
