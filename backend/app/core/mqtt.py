@@ -304,17 +304,38 @@ class MQTTManager:
                     # RFID : filament Bambu avec tag NFC (tray_info_idx non vide = ID catalogue Bambu)
                     # COLOR : filament custom reconnu par UUID + matching couleur
                     # MANUAL : aucune détection automatique possible
+                    # Détection match_mode + spool_id via DB
                     _tray_info = (tr.get("tray_info_idx") or "").strip()
-                    _tray_uuid = (tr.get("tray_uuid") or "")
+                    _tag_uid   = (tr.get("tag_uid") or "").strip()
+                    _tray_uuid = (tr.get("tray_uuid") or "").strip()
+                    _uid_valid = bool(_tag_uid and _tag_uid.replace("0",""))
                     _uuid_valid = bool(_tray_uuid and _tray_uuid.replace("0",""))
-                    if _tray_info and tr.get("tray_sub_brands"):
-                        t.match_mode = "rfid"    # Tag RFID Bambu Lab
-                    elif _uuid_valid and not tr.get("tray_sub_brands"):
-                        t.match_mode = "color"   # UUID + matching couleur
+
+                    if _uid_valid:
+                        t.match_mode = "rfid"
+                    elif _tray_info:
+                        t.match_mode = "color"
                     elif not t.empty:
-                        t.match_mode = "manual"  # Filament présent mais non identifié
+                        t.match_mode = "manual"
                     else:
                         t.match_mode = ""
+
+                    # Matching spool en DB (async fire-and-forget)
+                    if not t.empty:
+                        import threading as _mth, asyncio as _mio
+                        _tag, _tinfo, _tcolor = _tag_uid, _tray_info, (tr.get("tray_color") or tr.get("color") or "")
+                        _tid, _ams_id, _tray_id = id(t), ams.id, t.id
+                        def _match_spool(_t=t, _tag=_tag, _tinfo=_tinfo, _tcolor=_tcolor):
+                            lp = _mio.new_event_loop()
+                            async def _go():
+                                from ..services.spool_matcher import match_spool
+                                spool_id, mode = await match_spool(_tag, _tinfo, _tcolor)
+                                _t.spool_id   = spool_id
+                                _t.match_mode = mode or _t.match_mode
+                            try:    lp.run_until_complete(_go())
+                            finally: lp.close()
+                        _mth.Thread(target=_match_spool, daemon=True).start()
+
                     ams.trays.append(t)
                 state.ams_list.append(ams)
             changed = True
