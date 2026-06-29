@@ -220,8 +220,9 @@ async def list_prints(
 
         # Si la recherche matche des noms de groupe → ajouter ces groupes aussi
         if search:
+            from sqlalchemy import distinct as _distinct
             grp_result = await db.execute(
-                select(distinct(_PT.tag)).where(
+                select(_distinct(_PT.tag)).where(
                     _PT.tag.like("groupe:%"),
                     _PT.tag.ilike(f"%{search}%")
                 )
