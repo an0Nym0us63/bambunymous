@@ -14,6 +14,7 @@ _listeners: list[Callable] = []
 # Cache matching AMS: (ams_id, tray_id, uuid_or_profile) → spool_id|-1
 # Évite de relancer un thread de matching à chaque tick MQTT (toutes les 2s)
 _MATCH_CACHE: dict = {}
+_SPOOL_INFO_CACHE: dict = {}  # même clé → dict spool_info
 
 
 def get_state() -> PrinterState:
@@ -338,15 +339,18 @@ class MQTTManager:
                     else:
                         t.match_mode = ""
 
-                    # ── Matching spool en DB ────────────────────────────────
-                    # Matching spool en DB — cache pour éviter thread par tick
+                    # ── Matching spool en DB — cache par tray ──────────────
                     if not t.empty:
                         import threading as _mth, asyncio as _mio
                         _cache_key = (ams.id, t.id, _tray_uuid or _tray_info or "")
-                        _cached = _MATCH_CACHE.get(_cache_key)
-                        if _cached is not None:
-                            t.spool_id = _cached if _cached != -1 else None
-                            t.spool_id = _cached if _cached != -1 else None
+                        _cached_id = _MATCH_CACHE.get(_cache_key)
+                        if _cached_id is not None:
+                            # Cache hit — restaurer spool_id et spool_info
+                            t.spool_id = _cached_id if _cached_id != -1 else None
+                            if t.spool_id and _cache_key in _SPOOL_INFO_CACHE:
+                                t._spool_info_cache = _SPOOL_INFO_CACHE[_cache_key]
+                        else:
+                            # Nouveau tray → lancer le matching
                             def _match_spool(_t=t, _tag=_tray_uuid, _tinfo=_tray_info,
                                              _tc=_tray_color, _ams_id=ams.id, _tray_slot=t.id,
                                              _key=_cache_key):
@@ -358,19 +362,40 @@ class MQTTManager:
                                     if spool_id:
                                         _t.spool_id   = spool_id
                                         _t.match_mode = mode or _t.match_mode
-                                        ams_letter = chr(65 + _ams_id)
-                                        loc = f"AMS-{ams_letter} slot {_tray_slot + 1}"
+                                        loc = f"AMS-{chr(65+_ams_id)} slot {_tray_slot+1}"
                                         logger.debug(f"[AMS] {_ams_id}/{_tray_slot} → #{spool_id} {mode}")
+                                        # Stocker spool_info en cache
+                                        try:
+                                            from ..db.session import AsyncSessionLocal as _ASL
+                                            from ..models.filament import Spool as _Sp2, Filament as _Fi2
+                                            async with _ASL() as _db2:
+                                                _sp2 = await _db2.get(_Sp2, spool_id)
+                                                _fi2 = await _db2.get(_Fi2, _sp2.filament_id) if _sp2 and _sp2.filament_id else None
+                                            if _sp2:
+                                                _info = {
+                                                    "id": _sp2.id,
+                                                    "name": _fi2.name if _fi2 else None,
+                                                    "color": f"#{_fi2.color}" if _fi2 and _fi2.color else None,
+                                                    "material": _fi2.material if _fi2 else None,
+                                                    "brand": _fi2.manufacturer if _fi2 else None,
+                                                    "remaining_weight_g": _sp2.remaining_weight_g,
+                                                    "initial_weight_g": _fi2.filament_weight_g if _fi2 else None,
+                                                }
+                                                _t._spool_info_cache = _info
+                                                _SPOOL_INFO_CACHE[_key] = _info
+                                        except Exception as _ce:
+                                            logger.debug(f"[AMS] spool_info cache: {_ce}")
                                         try:
                                             from ..services.spool_location import update_spool_location
                                             await update_spool_location(spool_id, loc)
                                         except Exception as _le:
-                                            logger.debug(f"[AMS] loc failed: {_le}")
+                                            logger.debug(f"[AMS] loc: {_le}")
                                     else:
                                         logger.debug(f"[AMS] {_ams_id}/{_tray_slot} no match")
                                 try:    lp.run_until_complete(_go())
                                 finally: lp.close()
                             _mth.Thread(target=_match_spool, daemon=True).start()
+
                     ams.trays.append(t)
                 state.ams_list.append(ams)
 
