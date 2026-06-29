@@ -68,7 +68,9 @@ def _usage_to_dict(u) -> dict:
             pass
     # Attribut temporaire injecté par _enrich_filament_usage
     if hasattr(u, "_filament_name"):
-        d["filament_name"] = u._filament_name
+        d["filament_name"]  = u._filament_name
+    if hasattr(u, "_filament_brand"):
+        d["filament_brand"] = u._filament_brand
     return d
 
 
@@ -109,8 +111,8 @@ async def _enrich_filament_usage(db, prints):
                 u.color_hex = f"#{fil.color}" if not str(fil.color).startswith("#") else fil.color
             if not u.filament_type and fil.material:
                 u.filament_type = fil.material
-            # Injecter le nom (attribut temporaire, pas en DB)
-            u._filament_name = fil.name
+            u._filament_name  = fil.name
+            u._filament_brand = fil.manufacturer
 
 
 def _apply_search(q, search: str):
