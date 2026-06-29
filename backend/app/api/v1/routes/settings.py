@@ -11,6 +11,39 @@ from .auth import get_current_user
 router = APIRouter()
 
 
+@router.delete("/reset-all", tags=["settings"])
+async def reset_all_data(_: str = Depends(get_current_user)):
+    """
+    Vide TOUTES les données : historique, filaments, bobines, snapshots, 3MF.
+    Garde les settings (IP, token…).
+    """
+    import shutil, os
+    from sqlalchemy import text
+    from ....db.session import AsyncSessionLocal
+    from pathlib import Path
+
+    async with AsyncSessionLocal() as db:
+        # Supprimer dans l'ordre FK
+        for tbl in [
+            "print_tags", "print_snapshots", "filament_usage", "prints",
+            "bobines", "filaments", "settings"
+        ]:
+            try:
+                await db.execute(text(f"DELETE FROM {tbl}"))
+            except Exception:
+                pass
+        await db.commit()
+
+    # Supprimer les fichiers prints (vignettes, snapshots, 3MF)
+    data_dir = Path(os.getenv("DATA_DIR", "/data"))
+    prints_dir = data_dir / "prints"
+    if prints_dir.exists():
+        shutil.rmtree(prints_dir, ignore_errors=True)
+        prints_dir.mkdir(exist_ok=True)
+
+    return {"ok": True, "message": "Toutes les données supprimées"}
+
+
 class SettingsOut(BaseModel):
     PRINTER_IP: str = ""
     PRINTER_ID: str = ""
