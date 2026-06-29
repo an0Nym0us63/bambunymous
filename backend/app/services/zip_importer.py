@@ -54,41 +54,72 @@ async def import_prints_zip(zip_source) -> dict:
         # Construire un index date→print depuis la DB
         # stem = YYYYMMDDHHMMSS_xxxxxxxx → les 14 premiers chars = timestamp
         async with AsyncSessionLocal() as db:
-            # Charger tous les prints avec leur date
+            # Construire deux index de matching :
+            # 1. external_ref exact (YYYYMMDDHHMMSS_uuid8) — le plus fiable
+            # 2. timestamp seul (YYYYMMDDHHMMSS) — fallback si unique
             all_prints = (await db.execute(select(Print))).scalars().all()
-            # Index : "YYYYMMDDHHMMSS" → print (peut avoir collisions, on prend le plus proche)
-            date_index: dict[str, list] = {}
+            ext_index: dict[str, object] = {}  # stem complet → print
+            date_index: dict[str, list]  = {}  # timestamp → [prints]
+
             for p in all_prints:
+                if p.external_ref:
+                    ext_index[p.external_ref] = p
                 if p.print_date:
                     try:
                         from datetime import datetime as _dt
-                        if isinstance(p.print_date, str):
-                            d = _dt.strptime(p.print_date[:19], "%Y-%m-%d %H:%M:%S")
-                        else:
-                            d = p.print_date
-                        key = d.strftime("%Y%m%d%H%M%S")
-                        date_index.setdefault(key, []).append(p)
+                        d = p.print_date if not isinstance(p.print_date, str)                             else _dt.strptime(p.print_date[:19], "%Y-%m-%d %H:%M:%S")
+                        date_index.setdefault(d.strftime("%Y%m%d%H%M%S"), []).append(p)
                     except Exception:
                         pass
+
+            logger.info(
+                f"[ZIP-PRINTS] Index: {len(ext_index)} external_ref "
+                f"| {len(date_index)} timestamps | {len(stems)} stems ZIP"
+            )
+            if stems:
+                logger.info(f"[ZIP-PRINTS] Exemples stems ZIP: {list(stems)[:3]}")
+            if ext_index:
+                logger.info(f"[ZIP-PRINTS] Exemples external_ref DB: {list(ext_index)[:3]}")
 
             for stem, files in stems.items():
                 p = None
 
-                # 1. Matcher par timestamp (14 premiers chars du stem)
-                ts = stem[:14]
-                if ts.isdigit() and len(ts) == 14:
-                    candidates = date_index.get(ts, [])
-                    if len(candidates) == 1:
-                        p = candidates[0]
-                    elif len(candidates) > 1:
-                        # Plusieurs prints à la même seconde → prendre le premier
-                        p = candidates[0]
-                        logger.debug(f"[ZIP-PRINTS] {stem}: {len(candidates)} candidats pour ts={ts}, prend #{p.id}")
+                # 1. Match exact par external_ref
+                p = ext_index.get(stem)
+
+                # 2. Fallback timestamp (14 premiers chars)
+                if not p:
+                    ts = stem[:14]
+                    if ts.isdigit() and len(ts) == 14:
+                        candidates = date_index.get(ts, [])
+                        if len(candidates) == 1:
+                            p = candidates[0]
+                        elif len(candidates) > 1:
+                            # Choisir le plus proche par uuid (8 derniers chars du stem)
+                            uuid_part = stem[-8:] if len(stem) > 14 else ""
+                            p = candidates[0]
+                            logger.debug(f"[ZIP-PRINTS] {stem}: {len(candidates)} candidats → #{p.id}")
+
+                # 3. Dernier recours : chercher dans plate_image
+                if not p:
+                    result3 = await db.execute(
+                        select(Print).where(
+                            Print.plate_image.ilike(f"%{stem}%")
+                        )
+                    )
+                    p = result3.scalar_one_or_none()
 
                 if not p:
-                    logger.debug(f"[ZIP-PRINTS] {stem}: ts={ts!r} → aucun print trouvé")
+                    logger.debug(
+                        f"[ZIP-PRINTS] UNMATCHED: {stem} "
+                        f"(ext={stem in ext_index}, ts={stem[:14] in date_index})"
+                    )
                     stats["unmatched"] += 1
                     continue
+
+                # Mémoriser l'external_ref pour la prochaine fois
+                if not p.external_ref:
+                    p.external_ref = stem
 
                 stats["matched"] += 1
                 dest_dir = DATA_DIR / "prints" / str(p.id)
@@ -106,13 +137,11 @@ async def import_prints_zip(zip_source) -> dict:
                         elif _is_image(base):
                             dest = dest_dir / "plate.png"
                             dest.write_bytes(data)
-                            if not p.plate_image:
-                                p.plate_image = f"prints/{p.id}/plate.png"
+                            p.plate_image = f"prints/{p.id}/plate.png"
                         stats["copied"] += 1
                     except Exception as e:
                         logger.error(f"[ZIP-PRINTS] {fname}: {e}")
                         stats["errors"] += 1
-
             await db.commit()
 
     logger.info(f"[ZIP-PRINTS] {stats}")
