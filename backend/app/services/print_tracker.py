@@ -154,37 +154,50 @@ async def _apply_meta(pid: int, meta: dict, taskname: str):
             design_id=meta.get("design_id", ""),
         ))
 
-        # Charger toutes les bobines actives pour le matching
-        from sqlalchemy import select as _sel
-        from ..models.filament import Spool as _Spool, Filament as _Fil
-        spools_r = await db.execute(_sel(_Spool).where(_Spool.archived == False))
-        spools = spools_r.scalars().all()
-
         for slot, fil in meta.get("filaments", {}).items():
-            fil_color = (fil.get("color") or "").upper().replace("#","")[:6]
-            fil_type  = (fil.get("type") or "").upper()
+            # tray_info_idx encode l'AMS et le slot physique
+            # Format: "A00-Y4" → AMS 0 (A=0,B=1,C=2), slot 0
+            # Format numérique possible: slot global 0-15 (ams*4 + tray)
+            tray_info = (fil.get("tray_info_idx") or "").strip()
+            spool_id  = None
+            ams_id_matched  = None
+            tray_id_matched = None
 
-            # Matching bobine : même couleur (6 hex) ET même type de filament
-            matched_spool = None
-            for spool in spools:
-                s_color = (spool.color or "").upper().replace("#","")[:6]
-                # Chercher le type via la relation filament
-                s_type = ""
-                if spool.filament_id:
-                    fil_obj = await db.get(_Fil, spool.filament_id)
-                    if fil_obj:
-                        s_type = (fil_obj.material or "").upper()
-                if s_color == fil_color and fil_type and s_type and fil_type in s_type:
-                    matched_spool = spool
-                    break
-                elif s_color == fil_color and not fil_type:
-                    matched_spool = spool
-                    break
+            if tray_info:
+                # Parser le tray_info_idx pour trouver ams_id + tray_id
+                # Format lettres: "A00" → ams=0, tray=0 | "B02" → ams=1, tray=2
+                import re as _re
+                m = _re.match(r"^([A-Z])(\d{2})", tray_info)
+                if m:
+                    ams_id_matched  = ord(m.group(1)) - ord("A")
+                    tray_id_matched = int(m.group(2))
+                else:
+                    # Format numérique global: slot = ams*4 + tray
+                    try:
+                        global_slot = int(tray_info)
+                        ams_id_matched  = global_slot // 4
+                        tray_id_matched = global_slot % 4
+                    except ValueError:
+                        pass
 
-            if matched_spool:
-                logger.info(f"[DB] ✅ Filament slot={slot} {fil_color} → bobine id={matched_spool.id}")
-            else:
-                logger.info(f"[DB] ⚠ Filament slot={slot} {fil_color}/{fil_type} → aucune bobine trouvée")
+            if ams_id_matched is not None and tray_id_matched is not None:
+                # Chercher le spool_id dans l'état AMS en mémoire
+                from app.core.mqtt import get_state as _gs
+                try:
+                    state = _gs()
+                    for ams in state.ams_list:
+                        if ams.id == ams_id_matched:
+                            for tray in ams.trays:
+                                if tray.id == tray_id_matched and tray.spool_id:
+                                    spool_id = tray.spool_id
+                                    logger.info(f"[DB] ✅ Filament slot={slot} tray_info={tray_info!r} → AMS{ams_id_matched} tray{tray_id_matched} → spool_id={spool_id}")
+                                    break
+                            break
+                except Exception as _e:
+                    logger.debug(f"[DB] get_state failed: {_e}")
+
+            if spool_id is None:
+                logger.info(f"[DB] ⚠ Filament slot={slot} tray_info={tray_info!r} → spool non trouvé dans état AMS")
 
             db.add(FilamentUsage(
                 print_id=pid,
@@ -192,7 +205,9 @@ async def _apply_meta(pid: int, meta: dict, taskname: str):
                 color_hex=fil.get("color", ""),
                 grams_used=float(fil.get("used_g", 0)),
                 ams_slot=int(slot),
-                spool_id=matched_spool.id if matched_spool else None,
+                ams_id=ams_id_matched,
+                tray_id=tray_id_matched,
+                spool_id=spool_id,
             ))
         await db.commit()
     logger.info(f"[DB] ✅ Print {pid}: {name!r}, {len(meta.get('filaments',{}))} filaments")
