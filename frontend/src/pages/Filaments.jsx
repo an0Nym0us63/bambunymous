@@ -110,12 +110,130 @@ function AddSpoolModal({ filaments, onSave, onClose }) {
   );
 }
 
+// ── Bottom sheet détail bobine ────────────────────────────────────────────
+function SpoolBottomSheet({ spool, onClose, onArchive }) {
+  if (!spool) return null;
+  const color = spool.filament_color ? `#${spool.filament_color.slice(0,6)}` : null;
+  const total = spool.filament_weight_g || 1000;
+  const remaining = spool.remaining_weight_g ?? total;
+  const pct = Math.max(0, Math.min(100, Math.round((remaining / total) * 100)));
+  const barColor = pct > 30 ? "#3b82f6" : pct > 15 ? "#f59e0b" : "#ef4444";
+
+  const Row = ({ label, value, mono, accent }) => (value == null || value === "") ? null : (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
+      padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>{label}</span>
+      <span style={{ fontSize:13, fontWeight:600,
+        color: accent || "var(--text)",
+        fontFamily: mono ? "JetBrains Mono,monospace" : "inherit",
+        textAlign:"right", marginLeft:12 }}>{value}</span>
+    </div>
+  );
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
+      zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
+          width:"100%", maxWidth:540, maxHeight:"90dvh", overflowY:"auto",
+          paddingBottom:"env(safe-area-inset-bottom,20px)" }}>
+
+        {/* Handle */}
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+        </div>
+
+        <div style={{ padding:"16px 20px 28px" }}>
+          {/* En-tête */}
+          <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:24 }}>
+            <div style={{ width:64, height:64, borderRadius:16, flexShrink:0,
+              backgroundColor: color || "var(--border)",
+              boxShadow:"0 2px 14px rgba(0,0,0,0.25)", border:"2px solid var(--border)" }}/>
+            <div style={{ flex:1, minWidth:0 }}>
+              <p style={{ fontSize:20, fontWeight:800, color:"var(--text)", margin:0,
+                letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {spool.filament_name}
+              </p>
+              <p style={{ fontSize:13, color:"var(--muted)", margin:"4px 0 0" }}>
+                {spool.filament_material}
+                {spool.filament_manufacturer ? ` · ${spool.filament_manufacturer}` : ""}
+              </p>
+              {spool.archived && (
+                <span style={{ fontSize:10, background:"rgba(148,163,184,0.15)",
+                  color:"#94a3b8", padding:"2px 8px", borderRadius:20,
+                  fontWeight:600, display:"inline-block", marginTop:4 }}>Archivée</span>
+              )}
+            </div>
+          </div>
+
+          {/* Jauge restant */}
+          <div style={{ marginBottom:24 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
+              <span style={{ fontSize:12, color:"var(--muted)" }}>Filament restant</span>
+              <span style={{ fontSize:15, fontWeight:700, fontFamily:"monospace",
+                color: barColor }}>
+                {remaining.toFixed(0)}g
+                <span style={{ fontSize:11, color:"var(--muted)", fontWeight:400, marginLeft:4 }}>
+                  / {total}g ({pct}%)
+                </span>
+              </span>
+            </div>
+            <div style={{ height:12, borderRadius:6, background:"var(--border)", overflow:"hidden" }}>
+              <div style={{ height:"100%", width:`${pct}%`, borderRadius:6,
+                background: barColor, transition:"width 0.5s" }}/>
+            </div>
+          </div>
+
+          {/* Infos filament */}
+          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+            letterSpacing:"0.08em", marginBottom:4 }}>Filament</p>
+          <Row label="Nom"          value={spool.filament_name}/>
+          <Row label="Marque"       value={spool.filament_manufacturer}/>
+          <Row label="Matière"      value={spool.filament_material}/>
+          <Row label="Couleur"      value={color} mono/>
+          <Row label="Poids bobine" value={spool.filament_weight_g ? `${spool.filament_weight_g}g` : null}/>
+          <Row label="Prix catalogue" value={spool.filament_price ? `${Number(spool.filament_price).toFixed(2)}€` : null}/>
+
+          {/* Infos bobine */}
+          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+            letterSpacing:"0.08em", marginBottom:4, marginTop:16 }}>Bobine #{spool.id}</p>
+          <Row label="Restant"      value={`${remaining.toFixed(0)}g`} accent={barColor}/>
+          <Row label="Prix achat"   value={spool.price_override ? `${Number(spool.price_override).toFixed(2)}€` : null}/>
+          <Row label="Emplacement"  value={spool.location}/>
+          <Row label="Tag NFC"      value={spool.tag_number} mono/>
+          <Row label="Commentaire"  value={spool.comment}/>
+
+          {/* Actions */}
+          <div style={{ display:"flex", gap:8, marginTop:20 }}>
+            {!spool.archived && (
+              <button onClick={async()=>{ await onArchive(spool.id); onClose(); }}
+                style={{ flex:1, padding:"10px", background:"var(--surface2)",
+                  border:"1px solid var(--border)", borderRadius:10, cursor:"pointer",
+                  color:"var(--muted)", fontSize:13, display:"flex",
+                  alignItems:"center", justifyContent:"center", gap:6 }}>
+                <Archive size={14}/> Archiver
+              </button>
+            )}
+            <button onClick={onClose}
+              style={{ flex:1, padding:"10px", background:"#3b82f6",
+                border:"none", borderRadius:10, cursor:"pointer",
+                color:"white", fontSize:13, fontWeight:600 }}>
+              Fermer
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Vue Bobines ────────────────────────────────────────────────────────────
 function SpoolsView({ filaments, showArchived }) {
   const [spools, setSpools] = useState([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
+  const [selected, setSelected] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -146,7 +264,8 @@ function SpoolsView({ filaments, showArchived }) {
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:8 }}>
           {spools.map(s => (
-            <div key={s.id} className="card-sm" style={{ padding:12, display:"flex", flexDirection:"column", gap:8 }}>
+            <div key={s.id} onClick={()=>setSelected(s)} className="card-sm"
+              style={{ padding:12, display:"flex", flexDirection:"column", gap:8, cursor:"pointer" }}>
               <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
                 <ColorDot color={s.filament_color} size={18}/>
                 <div style={{ flex:1, minWidth:0 }}>
@@ -176,6 +295,13 @@ function SpoolsView({ filaments, showArchived }) {
       )}
 
       {showAdd && <AddSpoolModal filaments={filaments} onSave={()=>{ setShowAdd(false); load(); }} onClose={()=>setShowAdd(false)}/>}
+      {selected && (
+        <SpoolBottomSheet
+          spool={selected}
+          onClose={()=>setSelected(null)}
+          onArchive={async(id)=>{ await client.delete(`/filaments/spools/${id}`); load(); }}
+        />
+      )}
     </div>
   );
 }
