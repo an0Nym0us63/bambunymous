@@ -321,18 +321,15 @@ function PrintDetail({ p, onClose }) {
                     )}
                   </div>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontSize:12, color:"var(--text)", margin:0,
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {f.filament_type || "Inconnu"}
-                      {f.spool_id && <span style={{ fontSize:10, color:"#22c55e", marginLeft:6 }}>✓ liée</span>}
+                    <p style={{ fontSize:12, color:"var(--text)", margin:0, fontWeight:600 }}>
+                      {f.filament_name || f.filament_type || "Inconnu"}
+                      {f.spool_id && <span style={{ fontSize:10, color:"#22c55e", marginLeft:6, fontWeight:400 }}>✓</span>}
                     </p>
-                    {!f.spool_id && (
-                      <p style={{ fontSize:10, color:"#f59e0b", margin:0 }}>Non mappé à une bobine</p>
-                    )}
+                    <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
+                      {[f.filament_type, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
+                      {!f.spool_id && <span style={{ color:"#f59e0b", marginLeft:4 }}>Non mappé</span>}
+                    </p>
                   </div>
-                  <span style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)", flexShrink:0 }}>
-                    {f.grams_used.toFixed(1)}g
-                  </span>
                 </div>
               ))}
             </div>
@@ -482,14 +479,57 @@ export default function Prints() {
         </p>
       )}
 
-      {!loading && !error && prints.length > 0 && (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
-          {prints.map(p => (
-            <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)}
-              onDelete={id => { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => t-1); }}/>
-          ))}
-        </div>
-      )}
+      {!loading && !error && prints.length > 0 && (() => {
+        const onDelete = id => { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => t-1); };
+        // Si un groupe est sélectionné ou pas de groupes → grille flat
+        if (groupF || !groups.length) {
+          return (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
+              {prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
+            </div>
+          );
+        }
+        // Sans filtre groupe → regrouper par groupe
+        const grouped = {};
+        const ungrouped = [];
+        prints.forEach(p => {
+          const gtags = (p.tags||[]).filter(t=>t.startsWith("groupe:"));
+          if (gtags.length) {
+            gtags.forEach(t => {
+              const g = t.replace("groupe:","");
+              (grouped[g] = grouped[g]||[]).push(p);
+            });
+          } else {
+            ungrouped.push(p);
+          }
+        });
+        return (
+          <div style={{ display:"flex", flexDirection:"column", gap:20 }}>
+            {Object.entries(grouped).map(([g, gprints]) => (
+              <div key={g}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:"#a78bfa" }}>📁 {g}</span>
+                  <span style={{ fontSize:11, color:"var(--muted)" }}>{gprints.length} print{gprints.length>1?"s":""}</span>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
+                  {gprints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
+                </div>
+              </div>
+            ))}
+            {ungrouped.length > 0 && (
+              <div>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                  <span style={{ fontSize:13, fontWeight:700, color:"var(--muted)" }}>📄 Sans groupe</span>
+                  <span style={{ fontSize:11, color:"var(--muted)" }}>{ungrouped.length} print{ungrouped.length>1?"s":""}</span>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(200px, 1fr))", gap:12 }}>
+                  {ungrouped.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {selected && <PrintDetail p={selected} onClose={()=>setSelected(null)}/>}
     </div>
