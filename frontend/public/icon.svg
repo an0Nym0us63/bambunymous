@@ -1,36 +1,99 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <defs>
+    <!-- Fond bleu/violet profond -->
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#1a1f2e"/>
-      <stop offset="100%" style="stop-color:#0f1219"/>
+      <stop offset="0%" stop-color="#1e1b4b"/>
+      <stop offset="100%" stop-color="#0f0c29"/>
     </linearGradient>
-    <linearGradient id="top" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#60a5fa"/>
-      <stop offset="100%" style="stop-color:#3b82f6"/>
+    <!-- Accent bleu électrique -->
+    <linearGradient id="blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#4f46e5"/>
     </linearGradient>
-    <linearGradient id="left" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#2563eb"/>
-      <stop offset="100%" style="stop-color:#1d4ed8"/>
+    <!-- Violet -->
+    <linearGradient id="purple" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#a78bfa"/>
+      <stop offset="100%" stop-color="#7c3aed"/>
     </linearGradient>
-    <linearGradient id="right" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" style="stop-color:#93c5fd"/>
-      <stop offset="100%" style="stop-color:#60a5fa"/>
+    <!-- Lueur centrale -->
+    <radialGradient id="glow" cx="50%" cy="50%" r="45%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Filament -->
+    <linearGradient id="fil" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#c4b5fd"/>
+      <stop offset="100%" stop-color="#7c3aed" stop-opacity="0"/>
     </linearGradient>
+    <filter id="gf" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
   </defs>
+
   <!-- Fond arrondi -->
-  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
-  <!-- Cube isométrique centré -->
-  <!-- Face du haut -->
-  <polygon points="256,110 390,188 256,266 122,188" fill="url(#top)"/>
-  <!-- Face gauche -->
-  <polygon points="122,188 256,266 256,370 122,292" fill="url(#left)"/>
-  <!-- Face droite -->
-  <polygon points="390,188 256,266 256,370 390,292" fill="url(#right)"/>
-  <!-- Filament animé — courbe qui sort du cube -->
-  <path d="M 256 110 Q 320 80 340 50" stroke="#f59e0b" stroke-width="12" fill="none"
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+  <!-- Lueur centrale -->
+  <ellipse cx="256" cy="256" rx="220" ry="200" fill="url(#glow)"/>
+
+  <!-- Tête d'impression — forme hexagonale technique -->
+  <!-- Corps principal : rectangle arrondi centré -->
+  <rect x="156" y="148" width="200" height="180" rx="16"
+        fill="none" stroke="url(#blue)" stroke-width="6" opacity="0.9"/>
+
+  <!-- Ligne centrale horizontal (axe X) -->
+  <line x1="130" y1="238" x2="382" y2="238"
+        stroke="url(#blue)" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+
+  <!-- Nozzle gauche — triangle pointu vers le bas -->
+  <path d="M 210 328 L 230 328 L 220 364 Z" fill="url(#purple)" opacity="0.95"/>
+  <!-- Nozzle droit -->
+  <path d="M 282 328 L 302 328 L 292 364 Z" fill="url(#blue)" opacity="0.95"/>
+
+  <!-- Points de connexion nozzle (détail technique) -->
+  <circle cx="220" cy="320" r="14" fill="#1e1b4b" stroke="url(#purple)" stroke-width="4"/>
+  <circle cx="220" cy="320" r="5" fill="#a78bfa"/>
+  <circle cx="292" cy="320" r="14" fill="#1e1b4b" stroke="url(#blue)" stroke-width="4"/>
+  <circle cx="292" cy="320" r="5" fill="#818cf8"/>
+
+  <!-- Rail horizontal supérieur (axe de déplacement) -->
+  <rect x="96" y="142" width="320" height="12" rx="6"
+        fill="url(#blue)" opacity="0.35"/>
+  <!-- Curseur sur le rail -->
+  <rect x="220" y="138" width="72" height="20" rx="6"
+        fill="url(#purple)" opacity="0.85"/>
+
+  <!-- Filament gauche — courbe entrant dans le nozzle -->
+  <path d="M 108 178 C 108 178 160 178 200 210 L 200 290"
+        stroke="url(#fil)" stroke-width="5" fill="none"
+        stroke-linecap="round" opacity="0.8"/>
+  <!-- Point filament -->
+  <circle cx="108" cy="178" r="8" fill="#c4b5fd" opacity="0.9"/>
+
+  <!-- Filament droit -->
+  <path d="M 404 178 C 404 178 352 178 312 210 L 312 290"
+        stroke="url(#blue)" stroke-width="5" fill="none"
+        stroke-linecap="round" opacity="0.7"
+        stroke-dasharray="0"/>
+  <circle cx="404" cy="178" r="8" fill="#818cf8" opacity="0.9"/>
+
+  <!-- Détails techniques : petits tirets sur les côtés du corps -->
+  <line x1="156" y1="180" x2="144" y2="180" stroke="#6366f1" stroke-width="2.5" opacity="0.6"/>
+  <line x1="156" y1="200" x2="144" y2="200" stroke="#6366f1" stroke-width="2.5" opacity="0.4"/>
+  <line x1="156" y1="220" x2="144" y2="220" stroke="#6366f1" stroke-width="2.5" opacity="0.6"/>
+  <line x1="356" y1="180" x2="368" y2="180" stroke="#6366f1" stroke-width="2.5" opacity="0.6"/>
+  <line x1="356" y1="200" x2="368" y2="200" stroke="#6366f1" stroke-width="2.5" opacity="0.4"/>
+  <line x1="356" y1="220" x2="368" y2="220" stroke="#6366f1" stroke-width="2.5" opacity="0.6"/>
+
+  <!-- Ligne d'impression (couche déposée) — glow violet -->
+  <path d="M 168 390 Q 220 382 256 385 Q 292 388 344 382"
+        stroke="#7c3aed" stroke-width="5" fill="none"
+        stroke-linecap="round" filter="url(#gf)" opacity="0.7"/>
+  <path d="M 168 390 Q 220 382 256 385 Q 292 388 344 382"
+        stroke="#c4b5fd" stroke-width="2.5" fill="none"
         stroke-linecap="round" opacity="0.9"/>
-  <circle cx="340" cy="50" r="10" fill="#f59e0b" opacity="0.9"/>
-  <!-- Lettre B subtile au centre de la face gauche -->
-  <text x="178" y="300" font-family="system-ui,sans-serif" font-size="52" font-weight="800"
-        fill="white" opacity="0.18" text-anchor="middle">B</text>
+
+  <!-- Plateau -->
+  <rect x="136" y="400" width="240" height="8" rx="4"
+        fill="url(#blue)" opacity="0.4"/>
 </svg>
