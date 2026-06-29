@@ -3,37 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../store/auth";
 
-function AppIcon({ size = 72 }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="lbg" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style={{stopColor:"#1a1f2e"}}/>
-          <stop offset="100%" style={{stopColor:"#0f1219"}}/>
-        </linearGradient>
-        <linearGradient id="ltop" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style={{stopColor:"#60a5fa"}}/>
-          <stop offset="100%" style={{stopColor:"#3b82f6"}}/>
-        </linearGradient>
-        <linearGradient id="lleft" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style={{stopColor:"#2563eb"}}/>
-          <stop offset="100%" style={{stopColor:"#1d4ed8"}}/>
-        </linearGradient>
-        <linearGradient id="lright" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style={{stopColor:"#93c5fd"}}/>
-          <stop offset="100%" style={{stopColor:"#60a5fa"}}/>
-        </linearGradient>
-      </defs>
-      <rect width="512" height="512" rx="112" fill="url(#lbg)"/>
-      <polygon points="256,110 390,188 256,266 122,188" fill="url(#ltop)"/>
-      <polygon points="122,188 256,266 256,370 122,292" fill="url(#lleft)"/>
-      <polygon points="390,188 256,266 256,370 390,292" fill="url(#lright)"/>
-      <path d="M 256 110 Q 320 80 340 50" stroke="#f59e0b" strokeWidth="12" fill="none" strokeLinecap="round" opacity="0.9"/>
-      <circle cx="340" cy="50" r="10" fill="#f59e0b" opacity="0.9"/>
-    </svg>
-  );
-}
-
 export default function Login() {
   const [user, setUser]     = useState("admin");
   const [pass, setPass]     = useState("");
@@ -64,7 +33,7 @@ export default function Login() {
 
         {/* Logo + nom */}
         <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:12, marginBottom:32 }}>
-          <AppIcon size={80}/>
+          <img src="/icon-192.png" alt="BambuNymous" style={{ width:80, height:80, borderRadius:18 }}/>
           <div style={{ textAlign:"center" }}>
             <h1 style={{ fontSize:26, fontWeight:800, color:"var(--text)",
               letterSpacing:"-0.02em", margin:0 }}>BambuNymous</h1>
