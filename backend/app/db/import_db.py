@@ -89,6 +89,7 @@ async def run_import(src_path: str) -> dict:
             f = Filament(
                 id=old_id,
                 name=row.get("name") or "Filament",
+                translated_name=row.get("translated_name"),
                 manufacturer=row.get("manufacturer"),
                 material=row.get("material") or "PLA",
                 color=row.get("color"),
@@ -137,7 +138,8 @@ async def run_import(src_path: str) -> dict:
                 ams_tray=row.get("ams_tray"),
                 archived=bool(row.get("archived", 0)),
                 comment=row.get("comment"),
-                external_spool_id=str(row.get("external_spool_id") or ""),
+                external_spool_id=str(row.get("external_spool_id") or "") or None,
+                found_mode=row.get("foundMode") or row.get("found_mode"),
                 created_at=parse_dt(row.get("created_at")) or datetime.utcnow(),
                 first_used_at=parse_dt(row.get("first_used_at")),
                 last_used_at=parse_dt(row.get("last_used_at")),
