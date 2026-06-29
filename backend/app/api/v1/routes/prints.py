@@ -113,6 +113,75 @@ async def _enrich_filament_usage(db, prints):
             u._filament_name = fil.name
 
 
+def _apply_search(q, search: str):
+    """
+    Recherche full-text case-insensitive sur :
+    - file_name, original_name du print
+    - tags (nom de groupe "groupe:X")
+    - filament_type, color_hex des filament_usage
+    - filament name, translated_name, material, manufacturer, color de la bobine liée
+    Retourne les prints dont le groupe matche aussi (group expansion gérée après).
+    """
+    from sqlalchemy import or_, exists, and_
+    from ....models.print_history import PrintTag as _PT, FilamentUsage as _FU
+    from ....models.filament import Filament as _Fil, Spool as _Sp
+
+    s = f"%{search}%"
+
+    # Conditions directes sur le print
+    direct = or_(
+        Print.file_name.ilike(s),
+        Print.original_name.ilike(s),
+        Print.status.ilike(s),
+    )
+
+    # Match sur un tag (nom de groupe ou tag libre)
+    tag_match = exists().where(
+        and_(_PT.print_id == Print.id, _PT.tag.ilike(s))
+    )
+
+    # Match sur filament_usage (type, couleur)
+    usage_match = exists().where(
+        and_(
+            _FU.print_id == Print.id,
+            or_(
+                _FU.filament_type.ilike(s),
+                _FU.color_hex.ilike(s),
+            )
+        )
+    )
+
+    # Match sur spool/filament via filament_usage
+    spool_match = exists().where(
+        and_(
+            _FU.print_id == Print.id,
+            _FU.spool_id.isnot(None),
+            exists().where(
+                and_(
+                    _Sp.id == _FU.spool_id,
+                    or_(
+                        exists().where(
+                            and_(
+                                _Fil.id == _Sp.filament_id,
+                                or_(
+                                    _Fil.name.ilike(s),
+                                    _Fil.translated_name.ilike(s),
+                                    _Fil.material.ilike(s),
+                                    _Fil.manufacturer.ilike(s),
+                                    _Fil.color.ilike(s),
+                                    _Fil.profile_id.ilike(s),
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+    )
+
+    return q.where(or_(direct, tag_match, usage_match, spool_match))
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────
 
 @router.get("")
@@ -142,7 +211,7 @@ async def list_prints(
         if status:
             q = q.where(Print.status == status)
         if search:
-            q = q.where(Print.file_name.ilike(f"%{search}%"))
+            q = _apply_search(q, search)
         filter_tag = f"groupe:{group}" if group else tag
         if filter_tag:
             q = q.where(exists().where(
@@ -156,35 +225,54 @@ async def list_prints(
         # Page courante
         rows = (await db.execute(q.offset(offset).limit(limit))).scalars().all()
 
-        # Compléter les groupes partiels :
-        # Si un print de la page appartient à un groupe, récupérer tous les prints
-        # de ce groupe qui ne sont pas déjà dans la page
-        if rows and not filter_tag:
-            page_ids = {p.id for p in rows}
-            # Trouver les groupes présents dans la page
-            page_groups: set[str] = set()
-            for p in rows:
-                for t in (p.tags or []):
-                    if t.tag.startswith("groupe:"):
-                        page_groups.add(t.tag)
+        # Compléter les groupes :
+        # 1. Si un print de la page appartient à un groupe → ramener tous les prints du groupe
+        # 2. Si la recherche matche un nom de groupe → ramener tous les prints du groupe
+        page_ids = {p.id for p in rows}
+        page_groups: set[str] = set()
 
-            if page_groups:
-                # Récupérer tous les prints de ces groupes manquants
-                extra_q = (select(Print)
-                    .options(selectinload(Print.filament_usage),
-                             selectinload(Print.snapshots),
-                             selectinload(Print.tags))
-                    .where(
-                        exists().where(
-                            (_PT.print_id == Print.id) &
-                            (_PT.tag.in_(list(page_groups)))
-                        )
+        for p in rows:
+            for t in (p.tags or []):
+                if t.tag.startswith("groupe:"):
+                    page_groups.add(t.tag)
+
+        # Si la recherche matche des tags de groupe → ajouter ces groupes aussi
+        if search:
+            from sqlalchemy import func as _func
+            grp_result = await db.execute(
+                select(distinct(_PT.tag)).where(
+                    _PT.tag.like("groupe:%"),
+                    _PT.tag.ilike(f"%{search}%")
+                )
+            )
+            for row_g in grp_result.all():
+                page_groups.add(row_g[0])
+            # Aussi chercher le tag "groupe:X" où X contient le search
+            grp_result2 = await db.execute(
+                select(distinct(_PT.tag)).where(
+                    _PT.tag.like("groupe:%"),
+                    func.lower(_PT.tag).contains(search.lower())
+                )
+            )
+            for row_g in grp_result2.all():
+                page_groups.add(row_g[0])
+
+        if page_groups:
+            extra_q = (select(Print)
+                .options(selectinload(Print.filament_usage),
+                         selectinload(Print.snapshots),
+                         selectinload(Print.tags))
+                .where(
+                    exists().where(
+                        (_PT.print_id == Print.id) &
+                        (_PT.tag.in_(list(page_groups)))
                     )
-                    .where(Print.id.notin_(list(page_ids)))
-                    .order_by(desc(Print.print_date)))
-                extra = (await db.execute(extra_q)).scalars().all()
-                if extra:
-                    rows = list(rows) + extra
+                )
+                .where(Print.id.notin_(list(page_ids)))
+                .order_by(desc(Print.print_date)))
+            extra = (await db.execute(extra_q)).scalars().all()
+            if extra:
+                rows = list(rows) + extra
 
         await _enrich_filament_usage(db, rows)
 
