@@ -164,6 +164,18 @@ function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, on
                       style={{ position:"absolute", inset:0, width:"100%", height:"100%",
                         objectFit:"contain" }}
                       onError={e => { e.currentTarget.style.display="none"; }}/>
+                    {/* Pastilles filament */}
+                    {p.filament_usage?.length > 0 && (
+                      <div style={{ position:"absolute", bottom:4, left:4,
+                        display:"flex", gap:2, flexWrap:"wrap", maxWidth:"calc(100% - 8px)" }}>
+                        {p.filament_usage.map((f, i) => (
+                          <div key={i} style={{ width:10, height:10, borderRadius:"50%",
+                            backgroundColor: hexCss(f.color_hex),
+                            border:"1.5px solid rgba(255,255,255,0.8)",
+                            boxShadow:"0 1px 3px rgba(0,0,0,0.4)", flexShrink:0 }}/>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <p style={{ fontSize:9, color:"var(--muted)", margin:"4px 6px 4px",
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
