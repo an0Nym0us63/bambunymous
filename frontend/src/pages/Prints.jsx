@@ -364,7 +364,7 @@ export default function Prints() {
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ limit:500 });
+      const params = new URLSearchParams({ limit:1000 });
       if (search)  params.set("search",  search);
       if (statusF) params.set("status",  statusF);
       if (groupF)  params.set("group",   groupF);
