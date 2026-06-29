@@ -184,24 +184,35 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
             </div>
           </div>
 
-          {/* Infos filament */}
+          {/* ── Filament (catalogue) ── */}
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:"0.08em", marginBottom:4 }}>Filament</p>
-          <Row label="Nom"          value={spool.filament_name}/>
-          <Row label="Marque"       value={spool.filament_manufacturer}/>
-          <Row label="Matière"      value={spool.filament_material}/>
-          <Row label="Couleur"      value={color} mono/>
-          <Row label="Poids bobine" value={spool.filament_weight_g ? `${spool.filament_weight_g}g` : null}/>
+            letterSpacing:"0.08em", marginBottom:4 }}>Filament (catalogue)</p>
+          <Row label="Nom"            value={spool.filament_name}/>
+          <Row label="Nom traduit"    value={spool.filament_translated_name}/>
+          <Row label="Marque"         value={spool.filament_manufacturer}/>
+          <Row label="Matière"        value={spool.filament_material}/>
+          <Row label="Couleur"        value={color} mono/>
+          <Row label="Profile ID"     value={spool.filament_profile_id} mono/>
+          <Row label="Multicolor"     value={spool.filament_multicolor_type !== "monochrome" ? spool.filament_multicolor_type : null}/>
+          <Row label="Poids total"    value={spool.filament_weight_g ? `${spool.filament_weight_g}g` : null}/>
+          <Row label="Poids support"  value={spool.filament_spool_weight_g ? `${spool.filament_spool_weight_g}g` : null}/>
           <Row label="Prix catalogue" value={spool.filament_price ? `${Number(spool.filament_price).toFixed(2)}€` : null}/>
+          <Row label="Réf. externe"   value={spool.filament_external_id} mono/>
 
-          {/* Infos bobine */}
+          {/* ── Bobine physique ── */}
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:"0.08em", marginBottom:4, marginTop:16 }}>Bobine #{spool.id}</p>
-          <Row label="Restant"      value={`${remaining.toFixed(0)}g`} accent={barColor}/>
-          <Row label="Prix achat"   value={spool.price_override ? `${Number(spool.price_override).toFixed(2)}€` : null}/>
-          <Row label="Emplacement"  value={spool.location}/>
-          <Row label="Tag NFC"      value={spool.tag_number} mono/>
-          <Row label="Commentaire"  value={spool.comment}/>
+            letterSpacing:"0.08em", margin:"16px 0 4px" }}>Bobine #{spool.id}</p>
+          <Row label="Restant"        value={`${remaining.toFixed(0)}g`} accent={barColor}/>
+          <Row label="Prix achat"     value={spool.price_override ? `${Number(spool.price_override).toFixed(2)}€` : null}/>
+          <Row label="Emplacement"    value={spool.location}/>
+          <Row label="Tag NFC"        value={spool.tag_number} mono/>
+          <Row label="Tray AMS"       value={spool.ams_tray}/>
+          <Row label="ID externe"     value={spool.external_spool_id} mono/>
+          <Row label="Mode détection" value={spool.found_mode}/>
+          <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
+          <Row label="Dernière util." value={spool.last_used_at?.slice(0,10)}/>
+          <Row label="Commentaire"    value={spool.comment}/>
+
 
           {/* Actions */}
           <div style={{ display:"flex", gap:8, marginTop:20 }}>
