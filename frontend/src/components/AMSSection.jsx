@@ -136,12 +136,12 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
   const isActive = amsId===activeAmsId && tray.id===activeTrayId;
   const empty = isEmptyTray(tray);
   const colors = parseColors(tray, spoolInfo);
-  const name = spoolInfo?.filament_name ?? null;
-  const material = spoolInfo?.filament_material ?? tray.filament_type ?? null;
+  const name = spoolInfo?.name ?? spoolInfo?.filament_name ?? null;
+  const material = spoolInfo?.material ?? spoolInfo?.filament_material ?? tray.filament_type ?? null;
   const hasW = spoolInfo?.remaining_weight_g != null;
-  const hasT = spoolInfo?.filament_weight_g != null;
-  const pct = hasW && hasT ? Math.round((spoolInfo.remaining_weight_g/spoolInfo.filament_weight_g)*100) : (tray.remain??0);
-  const wLabel = hasW ? `${Math.round(spoolInfo.remaining_weight_g)}g` : `${tray.remain}%`;
+  const hasT = (spoolInfo?.initial_weight_g ?? spoolInfo?.filament_weight_g) != null;
+  const pct = hasW && hasT ? Math.round((spoolInfo.remaining_weight_g/(spoolInfo.initial_weight_g ?? spoolInfo.filament_weight_g))*100) : (tray.remain??0);
+  const wLabel = hasW ? `${Math.round(spoolInfo.remaining_weight_g)}g` : `${tray.remain ?? 0}%`;
   const barColor = colors?.length>1
     ? { background:`linear-gradient(90deg,${colors.join(",")})` }
     : { backgroundColor: pct>30 ? (colors?.[0]||"#3b82f6") : "#ef4444" };
