@@ -1,3 +1,5 @@
+import re
+import os
 """
 Script d'import de la DB Spoolnymous v1 → BambuNymous.
 Appelable en CLI ou via l'API.
@@ -193,6 +195,7 @@ async def run_import(src_path: str) -> dict:
                     status_note=row.get("status_note"),
                     plate_image=row.get("image_file") or row.get("plate_image"),
                     model_3mf=None,  # sera importé via ZIP séparément
+                    external_ref=re.sub(r"\.(png|3mf|jpg)$","",os.path.basename(row.get("image_file") or ""),flags=re.IGNORECASE) or None,
                     estimated_seconds=row.get("estimated_seconds"),
                     duration_seconds=int(row.get("duration") or row.get("duration_seconds") or 0),
                     total_weight_g=row.get("total_weight") or row.get("total_weight_g") or 0.0,
