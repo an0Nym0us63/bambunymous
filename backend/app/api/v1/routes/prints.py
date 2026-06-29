@@ -115,69 +115,51 @@ async def _enrich_filament_usage(db, prints):
 
 def _apply_search(q, search: str):
     """
-    Recherche full-text case-insensitive sur :
-    - file_name, original_name du print
-    - tags (nom de groupe "groupe:X")
-    - filament_type, color_hex des filament_usage
-    - filament name, translated_name, material, manufacturer, color de la bobine liée
-    Retourne les prints dont le groupe matche aussi (group expansion gérée après).
+    Recherche full-text case-insensitive via sous-requêtes simples compatibles SQLite.
+    Champs : file_name, original_name, tags, filament_type, color_hex,
+             filament.name, translated_name, material, manufacturer, color, profile_id
     """
-    from sqlalchemy import or_, exists, and_
+    from sqlalchemy import or_, exists, and_, select as _sel
     from ....models.print_history import PrintTag as _PT, FilamentUsage as _FU
     from ....models.filament import Filament as _Fil, Spool as _Sp
 
     s = f"%{search}%"
 
-    # Conditions directes sur le print
+    # 1. Champs directs du print
     direct = or_(
         Print.file_name.ilike(s),
         Print.original_name.ilike(s),
-        Print.status.ilike(s),
     )
 
-    # Match sur un tag (nom de groupe ou tag libre)
+    # 2. Tag
     tag_match = exists().where(
         and_(_PT.print_id == Print.id, _PT.tag.ilike(s))
     )
 
-    # Match sur filament_usage (type, couleur)
+    # 3. filament_usage direct
     usage_match = exists().where(
         and_(
             _FU.print_id == Print.id,
-            or_(
-                _FU.filament_type.ilike(s),
-                _FU.color_hex.ilike(s),
-            )
+            or_(_FU.filament_type.ilike(s), _FU.color_hex.ilike(s))
         )
     )
 
-    # Match sur spool/filament via filament_usage
-    spool_match = exists().where(
-        and_(
-            _FU.print_id == Print.id,
-            _FU.spool_id.isnot(None),
-            exists().where(
-                and_(
-                    _Sp.id == _FU.spool_id,
-                    or_(
-                        exists().where(
-                            and_(
-                                _Fil.id == _Sp.filament_id,
-                                or_(
-                                    _Fil.name.ilike(s),
-                                    _Fil.translated_name.ilike(s),
-                                    _Fil.material.ilike(s),
-                                    _Fil.manufacturer.ilike(s),
-                                    _Fil.color.ilike(s),
-                                    _Fil.profile_id.ilike(s),
-                                )
-                            )
-                        )
-                    )
-                )
-            )
-        )
+    # 4. Filament via spool — jointure plate sans EXISTS imbriqués
+    fil_subq = (
+        _sel(_FU.print_id)
+        .join(_Sp, _Sp.id == _FU.spool_id)
+        .join(_Fil, _Fil.id == _Sp.filament_id)
+        .where(or_(
+            _Fil.name.ilike(s),
+            _Fil.translated_name.ilike(s),
+            _Fil.material.ilike(s),
+            _Fil.manufacturer.ilike(s),
+            _Fil.color.ilike(s),
+            _Fil.profile_id.ilike(s),
+        ))
+        .scalar_subquery()
     )
+    spool_match = Print.id.in_(fil_subq)
 
     return q.where(or_(direct, tag_match, usage_match, spool_match))
 
@@ -236,9 +218,8 @@ async def list_prints(
                 if t.tag.startswith("groupe:"):
                     page_groups.add(t.tag)
 
-        # Si la recherche matche des tags de groupe → ajouter ces groupes aussi
+        # Si la recherche matche des noms de groupe → ajouter ces groupes aussi
         if search:
-            from sqlalchemy import func as _func
             grp_result = await db.execute(
                 select(distinct(_PT.tag)).where(
                     _PT.tag.like("groupe:%"),
@@ -246,15 +227,6 @@ async def list_prints(
                 )
             )
             for row_g in grp_result.all():
-                page_groups.add(row_g[0])
-            # Aussi chercher le tag "groupe:X" où X contient le search
-            grp_result2 = await db.execute(
-                select(distinct(_PT.tag)).where(
-                    _PT.tag.like("groupe:%"),
-                    func.lower(_PT.tag).contains(search.lower())
-                )
-            )
-            for row_g in grp_result2.all():
                 page_groups.add(row_g[0])
 
         if page_groups:
