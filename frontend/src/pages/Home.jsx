@@ -111,44 +111,59 @@ function StatusBanner({ status }) {
 
   return (
     <div className="card" style={{ overflow:"hidden" }}>
-      {/* Barre de progression — fine ligne en bas */}
-      {isRunning && pct > 0 && (
-        <div style={{ position:"absolute", bottom:0, left:0, height:3,
-          background:`linear-gradient(90deg,${cfg.color},${cfg.color}88)`,
-          width:`${pct}%`, transition:"width 1s", pointerEvents:"none", zIndex:2,
-          borderRadius:"0 2px 2px 0" }} />
-      )}
+
 
       {/* Header cliquable */}
       <button onClick={() => setExpanded(e => !e)}
         style={{ width:"100%", background:"none", border:"none", cursor:"pointer", padding:0, position:"relative", zIndex:1 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px" }}>
+
+        {/* Nom du print — ligne complète en haut */}
+        <div style={{ padding:"10px 16px 4px", display:"flex", alignItems:"center", gap:8 }}>
           <div style={{ width:8, height:8, borderRadius:"50%", backgroundColor:cfg.dot, flexShrink:0,
             animation:isRunning?"livePulse 2s infinite":"none" }} />
-          {/* Vignette du print */}
-          {printInfo?.plate_image && (
-            <div style={{ width:52, height:52, borderRadius:10, overflow:"hidden", flexShrink:0 }}>
+          <p style={{ fontWeight:700, fontSize:14, color:"var(--text)", margin:0,
+            flex:1, textAlign:"left", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"clip" }}>
+            {printInfo?.file_name || cfg.label}
+          </p>
+          {status.connected
+            ? <Wifi size={14} style={{ color:"#22c55e", flexShrink:0 }} />
+            : <WifiOff size={14} style={{ color:"#ef4444", flexShrink:0 }} />}
+        </div>
+
+        {/* Ligne du bas : vignette + infos + % */}
+        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"4px 16px 12px" }}>
+          {/* Vignette plus grande */}
+          <div style={{ width:64, height:64, borderRadius:10, overflow:"hidden", flexShrink:0,
+            background:"repeating-conic-gradient(var(--surface2) 0% 25%,var(--surface) 0% 50%) 0 0/12px 12px" }}>
+            {printInfo?.plate_image && (
               <img src={`/api/v1/prints/${printInfo.id}/image`} alt=""
                 style={{ width:"100%", height:"100%", objectFit:"cover" }}
                 onError={e => e.currentTarget.style.display="none"}/>
-            </div>
-          )}
+            )}
+          </div>
           <div style={{ flex:1, minWidth:0, textAlign:"left" }}>
-            <p style={{ fontWeight:600, fontSize:14, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {printInfo?.file_name || (isRunning && status.print_name ? status.print_name : cfg.label)}
-            </p>
-            <p style={{ fontSize:11, color:"var(--muted)" }}>{cfg.label}</p>
+            <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 6px" }}>{cfg.label}</p>
+            {/* Barre de progression */}
+            {isRunning && pct > 0 && (
+              <div style={{ marginBottom:6 }}>
+                <div style={{ height:6, borderRadius:3, background:"var(--border)", overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${pct}%`,
+                    background:`linear-gradient(90deg,${cfg.color},${cfg.color}cc)`,
+                    borderRadius:3, transition:"width 1s" }}/>
+                </div>
+              </div>
+            )}
+            {isRunning && (
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                {remain && <span style={{ fontSize:11, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Clock size={10}/>{remain}</span>}
+                {status.total_layers > 0 && <span style={{ fontSize:11, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Layers size={10}/>{status.layer}/{status.total_layers}</span>}
+              </div>
+            )}
           </div>
           {isRunning && (
-            <div style={{ display:"flex", alignItems:"center", gap:10, flexShrink:0 }}>
-              {remain && <span style={{ fontSize:12, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Clock size={11}/>{remain}</span>}
-              {status.total_layers > 0 && <span style={{ fontSize:12, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Layers size={11}/>{status.layer}/{status.total_layers}</span>}
-              <span style={{ fontSize:20, fontWeight:700, fontFamily:"monospace", color:cfg.color }}>{pct}%</span>
-            </div>
+            <span style={{ fontSize:24, fontWeight:800, fontFamily:"monospace",
+              color:cfg.color, flexShrink:0, letterSpacing:"-0.02em" }}>{pct}%</span>
           )}
-          {status.connected
-            ? <Wifi size={15} style={{ color:"#22c55e", flexShrink:0 }} />
-            : <WifiOff size={15} style={{ color:"#ef4444", flexShrink:0 }} />}
         </div>
       </button>
 
