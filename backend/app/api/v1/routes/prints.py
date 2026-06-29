@@ -170,6 +170,22 @@ async def import_print(
         except Exception: pass
 
 
+@router.delete("/{print_id}/snapshots/{snapshot_id}")
+async def delete_snapshot(print_id: int, snapshot_id: int, _: str = Depends(get_current_user)):
+    import os as _os
+    async with AsyncSessionLocal() as db:
+        s = await db.get(PrintSnapshot, snapshot_id)
+        if not s or s.print_id != print_id:
+            raise HTTPException(404)
+        if s.file_path:
+            p = DATA_DIR / s.file_path
+            try: p.unlink(missing_ok=True)
+            except Exception: pass
+        await db.delete(s)
+        await db.commit()
+    return {"ok": True}
+
+
 @router.post("/{print_id}/tags")
 async def add_tag(print_id: int, body: dict, _: str = Depends(get_current_user)):
     tag = (body.get("tag") or "").strip()
