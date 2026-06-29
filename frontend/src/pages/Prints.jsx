@@ -256,7 +256,6 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
 
 function PrintDetail({ p, onClose }) {
   const [snaps, setSnaps] = useState([]);
-  const imgUrl = p.plate_image ? `/api/v1/prints/${p.id}/image` : null;
 
   useEffect(() => {
     if (p.snapshots?.length) {
@@ -264,7 +263,7 @@ function PrintDetail({ p, onClose }) {
     }
   }, [p]);
 
-  const snapUrl = (trigger) => `/api/v1/prints/${p.id}/snapshot/${trigger}`;
+  const groupe = (p.tags||[]).find(t=>t.startsWith("groupe:"))?.replace("groupe:","");
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000,
@@ -272,83 +271,126 @@ function PrintDetail({ p, onClose }) {
       onClick={onClose}>
       <div onClick={e=>e.stopPropagation()}
         style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0", width:"100%",
-          maxWidth:600, maxHeight:"90dvh", overflowY:"auto", padding:20 }}>
+          maxWidth:640, maxHeight:"92dvh", overflowY:"auto",
+          paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
 
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
-          <h2 style={{ fontSize:16, fontWeight:700, color:"var(--text)", flex:1,
-            overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-            {p.file_name}
+        {/* Handle */}
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+        </div>
+
+        {/* Vignette pleine largeur — contain pour voir tout sans rogner */}
+        <div style={{ width:"100%", background:"var(--surface2)", position:"relative",
+          minHeight:180, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <img src={"/api/v1/prints/" + p.id + "/image"} alt=""
+            style={{ width:"100%", maxHeight:320, objectFit:"contain",
+              imageRendering:"auto" }}
+            onError={e => { e.currentTarget.parentElement.style.display="none"; }}/>
+          <button onClick={onClose}
+            style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.5)",
+              border:"none", borderRadius:"50%", width:28, height:28, cursor:"pointer",
+              color:"white", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>
+            ✕
+          </button>
+        </div>
+
+        <div style={{ padding:"16px 20px 8px" }}>
+          {/* Titre + groupe */}
+          <h2 style={{ fontSize:16, fontWeight:800, color:"var(--text)", margin:"0 0 4px",
+            letterSpacing:"-0.01em" }}>
+            {p.file_name || "Sans nom"}
           </h2>
-          <button onClick={onClose} style={{ background:"none", border:"none",
-            color:"var(--muted)", cursor:"pointer", fontSize:20, padding:"0 4px" }}>✕</button>
-        </div>
+          {p.original_name && p.original_name !== p.file_name && (
+            <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 4px" }}>{p.original_name}</p>
+          )}
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12, flexWrap:"wrap" }}>
+            <StatusBadge status={p.status}/>
+            {groupe && (
+              <span style={{ fontSize:10, background:"rgba(167,139,250,0.15)",
+                color:"#a78bfa", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>
+                📁 {groupe}
+              </span>
+            )}
+          </div>
 
-        <StatusBadge status={p.status}/>
+          {/* Infos principales */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:14 }}>
+            {[
+              ["Date",    fmtDate(p.print_date)],
+              ["Durée",   fmtDur(p.duration_seconds || p.estimated_seconds)],
+              ["Poids",   p.total_weight_g ? p.total_weight_g.toFixed(1)+"g" : "—"],
+              ["Coût",    p.total_cost ? p.total_cost.toFixed(2)+"€" : "—"],
+              ["Type",    p.print_type || "—"],
+              ["Plateau", p.plate_id || "1"],
+            ].map(([label, value]) => value && value !== "—" ? (
+              <div key={label} style={{ background:"var(--surface2)",
+                border:"1px solid var(--border)", borderRadius:8, padding:"6px 10px" }}>
+                <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase",
+                  letterSpacing:"0.06em", margin:"0 0 2px" }}>{label}</p>
+                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:0,
+                  fontFamily:"monospace" }}>{value}</p>
+              </div>
+            ) : null)}
+          </div>
 
-        {/* Vignette */}
-        {imgUrl && <img src={imgUrl} alt="" style={{ width:"100%", borderRadius:12,
-          marginTop:12, marginBottom:12, objectFit:"cover", maxHeight:200 }}/>}
-
-        {/* Infos */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
-          {[
-            ["Date",      fmtDate(p.print_date)],
-            ["Type",      p.print_type],
-            ["Durée",     fmtDur(p.duration_seconds || p.estimated_seconds)],
-            ["Plateau",   p.plate_id || "1"],
-            ["Poids",     p.total_weight_g ? `${p.total_weight_g.toFixed(1)}g` : "—"],
-            ["Coût",      p.total_cost ? `${p.total_cost.toFixed(2)}€` : "—"],
-          ].map(([label, value]) => (
-            <div key={label} style={{ background:"var(--surface2)",
-              border:"1px solid var(--border)", borderRadius:10, padding:"8px 12px" }}>
+          {/* Filaments */}
+          {p.filament_usage?.length > 0 && (
+            <div style={{ marginBottom:14 }}>
               <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.05em", marginBottom:2 }}>{label}</p>
-              <p style={{ fontSize:13, fontWeight:600, fontFamily:"monospace", color:"var(--text)" }}>{value}</p>
-            </div>
-          ))}
-        </div>
-
-        {/* Filaments */}
-        {p.filament_usage?.length > 0 && (
-          <div style={{ marginBottom:12 }}>
-            <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase",
-              letterSpacing:"0.05em", marginBottom:6 }}>Filaments</p>
-            <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-              {p.filament_usage.map((f,i) => (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
-                  background:"var(--surface2)",
-                  border:`1px solid ${f.spool_id ? "rgba(34,197,94,0.3)" : "var(--border)"}`,
-                  borderRadius:8, padding:"6px 10px" }}>
-                  <div style={{ position:"relative", flexShrink:0 }}>
-                    <div style={{ width:22, height:22, borderRadius:"50%",
+                letterSpacing:"0.06em", marginBottom:6 }}>Filaments utilisés</p>
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                {p.filament_usage.map((f,i) => (
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
+                    background:"var(--surface2)",
+                    border:"1px solid " + (f.spool_id ? "rgba(34,197,94,0.3)" : "var(--border)"),
+                    borderRadius:8, padding:"6px 10px" }}>
+                    <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
                       backgroundColor:hexCss(f.color_hex),
-                      border: f.spool_id ? "2px solid #22c55e" : "1px solid rgba(255,255,255,0.15)" }}/>
-                    {!f.spool_id && (
-                      <span style={{ position:"absolute", top:-3, right:-3,
-                        fontSize:9, color:"#f59e0b", fontWeight:700 }}>?</span>
-                    )}
+                      border: f.spool_id ? "2px solid #22c55e" : "1px solid rgba(255,255,255,0.2)" }}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0 }}>
+                        {f.filament_name || f.filament_type || "Inconnu"}
+                        {f.spool_id && <span style={{ fontSize:9, color:"#22c55e", marginLeft:6 }}>✓ #{f.spool_id}</span>}
+                      </p>
+                      <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
+                        {[f.filament_type, f.color_hex, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
                   </div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontSize:12, color:"var(--text)", margin:0, fontWeight:600 }}>
-                      {f.filament_name || f.filament_type || "Inconnu"}
-                      {f.spool_id && <span style={{ fontSize:10, color:"#22c55e", marginLeft:6, fontWeight:400 }}>✓</span>}
-                    </p>
-                    <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
-                      {[f.filament_type, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
-                      {!f.spool_id && <span style={{ color:"#f59e0b", marginLeft:4 }}>Non mappé</span>}
-                    </p>
-                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Identifiants — utiles pour recherche / debug */}
+          <details style={{ marginBottom:12 }}>
+            <summary style={{ fontSize:10, color:"var(--muted)", cursor:"pointer",
+              textTransform:"uppercase", letterSpacing:"0.06em", userSelect:"none" }}>
+              Identifiants
+            </summary>
+            <div style={{ marginTop:6, display:"flex", flexDirection:"column", gap:3 }}>
+              {[
+                ["ID BambuNymous", p.id],
+                ["Job ID",         p.job_id],
+                ["External ref",   p.external_ref],
+                ["Design ID",      p.design_id],
+                ["Modèle printer", p.printer_model],
+              ].filter(([,v]) => v).map(([label, value]) => (
+                <div key={label} style={{ display:"flex", gap:8, alignItems:"baseline" }}>
+                  <span style={{ fontSize:10, color:"var(--muted)", flexShrink:0, minWidth:100 }}>{label}</span>
+                  <span style={{ fontSize:11, fontFamily:"monospace", color:"var(--text)",
+                    wordBreak:"break-all" }}>{value}</span>
                 </div>
               ))}
             </div>
-          </div>
-        )}
+          </details>
+        </div>
 
-        {/* Snapshots */}
-        {snaps.length > 0 && (
+        {/* Snapshots — pleine largeur */}
+        <div style={{ padding:"0 20px 20px" }}>
           <SnapshotGallery snaps={snaps} printId={p.id}
             onDelete={sid => setSnaps(ss => ss.filter(s => s.id !== sid))}/>
-        )}
+        </div>
       </div>
     </div>
   );
