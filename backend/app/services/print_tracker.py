@@ -166,7 +166,7 @@ async def _apply_meta(pid: int, meta: dict, taskname: str):
             if tray_info:
                 # Parser le tray_info_idx pour trouver ams_id + tray_id
                 # Format lettres: "A00" → ams=0, tray=0 | "B02" → ams=1, tray=2
-                m = re.match(r"^([A-Z])(\d{2})", tray_info)
+                m = re.match(r"^([A-Z])([0-9]{2})", tray_info)
                 if m:
                     ams_id_matched  = ord(m.group(1)) - ord("A")
                     tray_id_matched = int(m.group(2))
