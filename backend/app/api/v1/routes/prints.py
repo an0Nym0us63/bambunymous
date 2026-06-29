@@ -208,44 +208,19 @@ async def delete_print(print_id: int, _: str = Depends(get_current_user)):
 @router.get("/{print_id}/image")
 async def print_image(print_id: int):
     import mimetypes
-    async with AsyncSessionLocal() as db:
-        p = await db.get(Print, print_id)
-    if not p: raise HTTPException(404)
-
-    # Chercher l'image dans cet ordre de priorité :
-    # 1. plate.png dans le dossier du print (fichier physique)
-    # 2. plate_image en DB (chemin relatif à DATA_DIR)
-    # 3. N'importe quelle image dans le dossier du print
     print_dir = DATA_DIR / "prints" / str(print_id)
-
-    candidates = []
-    # Priorité 1 : plate.png physique
-    candidates.append(print_dir / "plate.png")
-    # Priorité 2 : chemin en DB
-    if p.plate_image:
-        candidates.append(DATA_DIR / p.plate_image)
-        # Aussi essayer juste le nom de fichier dans le dossier print
-        candidates.append(print_dir / Path(p.plate_image).name)
-    # Priorité 3 : n'importe quelle image dans le dossier
-    if print_dir.exists():
-        for f in sorted(print_dir.iterdir()):
-            if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"):
-                candidates.append(f)
-
-    for candidate in candidates:
-        if candidate.exists():
-            # Mettre à jour plate_image en DB si nécessaire
-            rel = str(candidate.relative_to(DATA_DIR))
-            if p.plate_image != rel:
-                async with AsyncSessionLocal() as db2:
-                    p2 = await db2.get(Print, print_id)
-                    if p2:
-                        p2.plate_image = rel
-                        await db2.commit()
-            mime = mimetypes.guess_type(str(candidate))[0] or "image/png"
-            return FileResponse(str(candidate), media_type=mime)
-
-    raise HTTPException(404, "Aucune image trouvée")
+    if not print_dir.exists():
+        raise HTTPException(404)
+    # plate.png en priorité, sinon première image trouvée
+    for name in ("plate.png", "plate.jpg"):
+        f = print_dir / name
+        if f.exists():
+            return FileResponse(str(f), media_type=f"image/{f.suffix[1:]}")
+    for f in sorted(print_dir.iterdir()):
+        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp"):
+            mime = mimetypes.guess_type(str(f))[0] or "image/png"
+            return FileResponse(str(f), media_type=mime)
+    raise HTTPException(404)
 
 
 @router.get("/{print_id}/file/{filename}")
@@ -258,6 +233,20 @@ async def print_file(print_id: int, filename: str):
     if not path.exists(): raise HTTPException(404)
     mime = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
     return FileResponse(str(path), media_type=mime)
+
+
+@router.get("/{print_id}/snapshots")
+async def print_snapshots_list(print_id: int):
+    """Liste toutes les images du dossier d'un print (snapshots + vignettes importées)."""
+    import mimetypes
+    print_dir = DATA_DIR / "prints" / str(print_id)
+    if not print_dir.exists():
+        return {"files": []}
+    files = []
+    for f in sorted(print_dir.iterdir()):
+        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp") and f.name != "plate.png":
+            files.append({"name": f.name, "url": f"/api/v1/prints/{print_id}/file/{f.name}"})
+    return {"files": files}
 
 
 @router.get("/{print_id}/snapshot/{trigger}")
