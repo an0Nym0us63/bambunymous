@@ -134,6 +134,10 @@ async def import_uploads_prints_zip(zip_source) -> dict:
     """Importe snapshots depuis uploads/prints/{print_id}/."""
     stats = {"matched": 0, "unmatched": 0, "copied": 0, "errors": 0}
     with zipfile.ZipFile(zip_source) as z:
+        # Log structure pour debug
+        sample = [n for n in z.namelist()[:5]]
+        logger.info(f"[ZIP-UPRINT] Structure ZIP (5 premiers): {sample}")
+
         files_by_print: dict[str, list[str]] = {}
         for name in z.namelist():
             if name.endswith("/"): continue
@@ -143,11 +147,27 @@ async def import_uploads_prints_zip(zip_source) -> dict:
                     files_by_print.setdefault(part, []).append(name)
                     break
 
+        logger.info(f"[ZIP-UPRINT] {len(files_by_print)} dossiers print trouvés: {list(files_by_print.keys())[:10]}")
+
         async with AsyncSessionLocal() as db:
             for old_pid_str, files in files_by_print.items():
                 p = await db.get(Print, int(old_pid_str))
                 if not p:
-                    stats["unmatched"] += 1
+                    # Copier quand même si le dossier existe sur disque
+                    dest_dir = DATA_DIR / "prints" / old_pid_str
+                    if dest_dir.exists():
+                        logger.debug(f"[ZIP-UPRINT] print_id={old_pid_str} pas en DB mais dossier existe → copie directe")
+                        for fname in files:
+                            base = os.path.basename(_normalize(fname))
+                            if not base or not _is_image(base): continue
+                            try:
+                                (dest_dir / _safe_name(base)).write_bytes(z.read(fname))
+                                stats["copied"] += 1
+                            except Exception as e:
+                                logger.error(f"[ZIP-UPRINT] {fname}: {e}")
+                    else:
+                        logger.debug(f"[ZIP-UPRINT] print_id={old_pid_str} introuvable en DB ni sur disque")
+                        stats["unmatched"] += 1
                     continue
                 stats["matched"] += 1
                 dest_dir = DATA_DIR / "prints" / str(p.id)
