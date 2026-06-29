@@ -97,14 +97,26 @@ export default function ImportSection() {
           <input ref={fileRef} type="file" accept=".db" onChange={handleUpload} style={{ display:"none" }}/>
           <Btn onClick={handleImport} disabled={!canImport||importing} primary>
             {status.running||importing ? <><RefreshCw size={13} style={{animation:"spin 1s linear infinite"}}/> En cours…</>
-              : status.done ? <><CheckCircle size={13}/> Réimporter</>
+              : status.done ? (
+                <>
+                  <CheckCircle size={13}/> Réimporter
+                  {status.stats && (
+                    <span style={{ fontSize:10, marginLeft:6, opacity:0.8 }}>
+                      ({status.stats.prints||0} prints, {status.stats.filament_usage||0} usages)
+                    </span>
+                  )}
+                </>
+              )
               : <><Play size={13}/> Lancer l'import</>}
           </Btn>
         </div>
       </div>
 
       {uploadInfo && !uploadInfo.error && (
-        <p style={{ fontSize:11, color:"var(--muted)" }}>📦 {uploadInfo.filaments} filaments · {uploadInfo.spools} bobines · {uploadInfo.size_kb} Ko</p>
+        <p style={{ fontSize:11, color:"var(--muted)" }}>
+          📦 {uploadInfo.filaments} filaments · {uploadInfo.spools} bobines
+          {uploadInfo.prints != null && ` · ${uploadInfo.prints} prints`} · {uploadInfo.size_kb} Ko
+        </p>
       )}
       {uploadInfo?.error && <p style={{ fontSize:12, color:"#ef4444" }}>{uploadInfo.error}</p>}
     </div>
