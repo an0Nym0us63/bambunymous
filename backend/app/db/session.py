@@ -10,8 +10,27 @@ class Base(DeclarativeBase):
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
-    connect_args={"check_same_thread": False},
+    connect_args={
+        "check_same_thread": False,
+        "timeout": 30,           # attendre 30s si DB locked
+    },
+    pool_pre_ping=True,
 )
+
+# Activer WAL mode au démarrage — permet lectures concurrentes sans bloquer
+import asyncio as _asyncio
+
+async def _enable_wal():
+    async with engine.connect() as conn:
+        await conn.execute(__import__("sqlalchemy").text("PRAGMA journal_mode=WAL"))
+        await conn.execute(__import__("sqlalchemy").text("PRAGMA busy_timeout=30000"))
+        await conn.execute(__import__("sqlalchemy").text("PRAGMA synchronous=NORMAL"))
+        await conn.commit()
+
+try:
+    _asyncio.get_event_loop().run_until_complete(_enable_wal())
+except Exception:
+    pass  # Sera fait au premier appel sinon
 
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 
