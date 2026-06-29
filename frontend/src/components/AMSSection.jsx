@@ -361,7 +361,7 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
 }
 
 // ── Section principale ─────────────────────────────────────────────────────
-export default function AMSSection({ amsList, activeAmsId, activeTrayId, activeTrayLocal, spoolLookup }) {
+export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLookup }) {
   // Dédupliquer par id au cas où le polling enverrait des doublons
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const [selectedId, setSelectedId] = useState(null);
@@ -370,8 +370,6 @@ export default function AMSSection({ amsList, activeAmsId, activeTrayId, activeT
     <div className="card" style={{ padding:24, textAlign:"center", color:"var(--muted)", fontSize:14 }}>Aucun AMS détecté</div>
   );
   const autoId = activeAmsId >= 0 ? activeAmsId : uniqueAmsList[0]?.id ?? 0;
-  // tray "local" actif hors impression (filament physiquement chargé)
-  const effectiveTrayId = activeTrayId >= 0 ? activeTrayId : activeTrayLocal ?? -1;
   const displayId = selectedId !== null ? selectedId : autoId;
   const displayAms = uniqueAmsList.find(a=>a.id===displayId) ?? uniqueAmsList[0];
 
@@ -381,7 +379,7 @@ export default function AMSSection({ amsList, activeAmsId, activeTrayId, activeT
       <div className="card" style={{ padding:12 }}>
         <div style={{ display:"grid", gridTemplateColumns:`repeat(${Math.min(uniqueAmsList.length,4)},1fr)`, gap:12 }}>
           {uniqueAmsList.map(ams => (
-            <AMSBox key={ams.id} ams={ams} activeAmsId={activeAmsId} activeTrayId={effectiveTrayId}
+            <AMSBox key={ams.id} ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
               isSelected={ams.id===displayId}
               onClick={() => setSelectedId(p => p===ams.id ? null : ams.id)}
               spoolLookup={spoolLookup}
@@ -390,7 +388,7 @@ export default function AMSSection({ amsList, activeAmsId, activeTrayId, activeT
         </div>
       </div>
       {/* Détail */}
-      {displayAms && <AMSDetail ams={displayAms} activeAmsId={activeAmsId} activeTrayId={effectiveTrayId} spoolLookup={spoolLookup} onTrayClick={setSelectedTray}/>}
+      {displayAms && <AMSDetail ams={displayAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId} spoolLookup={spoolLookup} onTrayClick={setSelectedTray}/>}
       {selectedTray && <TrayBottomSheet tray={selectedTray.tray} amsLabel={selectedTray.amsLabel} onClose={()=>setSelectedTray(null)}/>}
     </div>
   );
