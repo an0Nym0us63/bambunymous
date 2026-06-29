@@ -108,6 +108,13 @@ app.mount("/uploads", StaticFiles(directory=str(uploads)), name="uploads")
 STATIC_DIR = Path(__file__).parent / "static"
 if STATIC_DIR.exists():
     app.mount("/assets", StaticFiles(directory=str(STATIC_DIR / "assets")), name="assets")
+    # Servir les fichiers racine (favicon, manifest, icônes PWA)
+    # Vite copie public/ à la racine de dist/ donc on les sert explicitement
+    from fastapi.responses import FileResponse as _FR
+    for _f in ["favicon.png","icon-192.png","icon-512.png","icon-180.png","icon.svg","manifest.json"]:
+        _path = STATIC_DIR / _f
+        if _path.exists():
+            app.add_route(f"/{_f}", lambda req, p=_path: _FR(str(p)), methods=["GET"])
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
