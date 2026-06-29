@@ -122,3 +122,62 @@ export default function ImportSection() {
     </div>
   );
 }
+
+// ── Import ZIP fichiers Spoolnymous ─────────────────────────────────────────
+const ZIP_TYPES = [
+  { id:"prints",            label:"Prints (3MF + vignettes)",      hint:"dossier prints/" },
+  { id:"uploads_prints",    label:"Snapshots prints",               hint:"uploads/prints/" },
+  { id:"uploads_filaments", label:"Photos filaments",               hint:"uploads/filaments/" },
+  { id:"uploads_groups",    label:"Photos groupes",                 hint:"uploads/groups/" },
+];
+
+export function ZipImportSection() {
+  const [results, setResults] = useState({});
+  const [loading, setLoading] = useState({});
+
+  const handleZip = async (type, file) => {
+    if (!file) return;
+    setLoading(l => ({...l, [type]: true}));
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const { data } = await client.post(`/import-zip/${type}`, form,
+        { headers:{"Content-Type":"multipart/form-data"} });
+      setResults(r => ({...r, [type]: data.stats}));
+    } catch(e) {
+      setResults(r => ({...r, [type]: {error: e.response?.data?.detail || e.message}}));
+    } finally {
+      setLoading(l => ({...l, [type]: false}));
+    }
+  };
+
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+      <p style={{ fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
+        letterSpacing:"0.08em", margin:0 }}>Import fichiers Spoolnymous (.zip)</p>
+      {ZIP_TYPES.map(({ id, label, hint }) => {
+        const res = results[id];
+        const busy = loading[id];
+        return (
+          <label key={id} style={{ display:"flex", alignItems:"center", gap:10,
+            padding:"8px 12px", background:"var(--surface2)", borderRadius:8,
+            border:"1px solid var(--border)", cursor:"pointer" }}>
+            <span style={{ flex:1, fontSize:12, color:"var(--text)" }}>
+              {label}
+              <span style={{ fontSize:10, color:"var(--muted)", marginLeft:6 }}>{hint}</span>
+            </span>
+            {busy && <span style={{ fontSize:11, color:"var(--muted)" }}>Import…</span>}
+            {res && !res.error && (
+              <span style={{ fontSize:10, color:"#22c55e" }}>
+                ✓ {Object.entries(res).map(([k,v])=>`${k}:${v}`).join(" · ")}
+              </span>
+            )}
+            {res?.error && <span style={{ fontSize:10, color:"#ef4444" }}>⚠ {res.error}</span>}
+            <input type="file" accept=".zip" style={{ display:"none" }}
+              onChange={e => { handleZip(id, e.target.files?.[0]); e.target.value=""; }}/>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
