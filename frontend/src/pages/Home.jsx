@@ -86,12 +86,15 @@ function StatusBanner({ status }) {
   const left   = status.nozzles?.find(n => n.id === 1);
   const right  = status.nozzles?.find(n => n.id === 0);
 
-  // Couleur du filament actif dans chaque buse
-  const activeTray = status.ams_list
-    ?.find(a => a.id === status.active_ams_id)
-    ?.trays?.find(t => t.id === status.active_tray_id);
-  const activeTrayColor  = activeTray?.color;   // buse active (droite id=0)
-  // Pour la buse gauche : pas d'info fiable depuis MQTT, on laisse vide pour l'instant
+  // Couleur du filament actif — cherche d'abord le tray actif (impression en cours)
+  // puis le tray local chargé physiquement dans la buse
+  const findTrayColor = (amsId, trayId) => {
+    if (amsId < 0 || trayId < 0) return null;
+    const tray = status.ams_list?.find(a => a.id === amsId)?.trays?.find(t => t.id === trayId);
+    return tray?.color || null;
+  };
+  const activeTrayColor = findTrayColor(status.active_ams_id, status.active_tray_id)
+    ?? findTrayColor(status.active_ams_id, status.active_tray_local);
 
   const TempChip = ({ label, current, target, active, accent, filamentColor }) => {
     const hot = current > 40;
