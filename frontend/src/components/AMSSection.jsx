@@ -15,32 +15,58 @@ function isEmptyTray(tray) {
 function luminance(hex) {
   const h = (hex||"").replace("#","");
   const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16);
-  return (r*299+g*587+b*114)/1000;
+  return isNaN(r) ? 128 : (r*299+g*587+b*114)/1000;
 }
+// Contraste : retourne "white" ou "black" selon la luminance du fond
+function contrast(hex) {
+  return luminance((hex||"").replace("#","")) < 128 ? "white" : "rgba(0,0,0,0.75)";
+}
+
 function parseColors(tray, spoolInfo) {
+  // 1. multicolor via colors_array
   const arr = spoolInfo?.colors_array || tray?.colors_array;
   if (arr) {
     const cols = arr.split(",").map(c=>c.trim()).filter(Boolean);
-    if (cols.length > 1) return cols.map(c=>`#${c.slice(0,6)}`);
+    if (cols.length > 1) return cols.map(c=>`#${c.replace(/^#/,"").slice(0,6)}`);
   }
+  // 2. couleur simple
   const single = hexCss(spoolInfo?.color || spoolInfo?.filament_color || tray?.color);
   return single ? [single] : null;
 }
+
+// Génère le style background pour n couleurs
+function colorBg(colors) {
+  if (!colors?.length) return { backgroundColor: "var(--border)" };
+  if (colors.length === 1) return { backgroundColor: colors[0] };
+  // Gradient linéaire pour multicolore
+  const stops = colors.map((c,i)=>{
+    const a = Math.round(i/colors.length*100);
+    const b = Math.round((i+1)/colors.length*100);
+    return `${c} ${a}%, ${c} ${b}%`;
+  }).join(", ");
+  return { background: `linear-gradient(90deg, ${stops})` };
+}
+
 const AMS_NAMES = ["AMS-A","AMS-B","AMS-C","AMS-D"];
 
 // ── Mini pastille ──────────────────────────────────────────────────────────
 function ColorPill({ tray, spoolInfo, active }) {
   const colors = parseColors(tray, spoolInfo);
-  const bg = colors?.length > 1
-    ? { background: `conic-gradient(${colors.map((c,i)=>`${c} ${Math.round(i/colors.length*360)}deg ${Math.round((i+1)/colors.length*360)}deg`).join(",")})` }
-    : { backgroundColor: colors?.[0] || "var(--border)" };
+  const c1 = colors?.[0];
+  const bg = colorBg(colors);
+  // Contour léger pour les couleurs claires/blanches
+  const lum = luminance((c1||"").replace("#",""));
+  const outline = active
+    ? "2px solid white"
+    : lum > 200 ? "1px solid rgba(0,0,0,0.15)" : "1px solid rgba(255,255,255,0.1)";
   return (
     <div style={{ flex:1, height:28, borderRadius:6, transition:"transform 0.2s",
       transform: active ? "scaleY(1.15)" : "scaleY(1)",
-      outline: active ? "2px solid white" : "none",
-      outlineOffset:1, position:"relative", ...bg }}>
+      outline, outlineOffset: active ? 1 : 0, position:"relative", ...bg }}>
       {tray.match_mode && (
-        <span style={{ position:"absolute", top:2, right:3 }}><MatchIcon mode={tray.match_mode} size={8}/></span>
+        <span style={{ position:"absolute", top:2, right:3 }}>
+          <MatchIcon mode={tray.match_mode} size={8}/>
+        </span>
       )}
     </div>
   );
@@ -51,7 +77,7 @@ function MatchIcon({ mode, size = 10 }) {
   if (!mode) return null;
   const cfg = {
     rfid:   { symbol: "⬡", color: "#22c55e", title: "Reconnu par RFID Bambu" },
-    auto:   { symbol: "◈", color: "#f59e0b", title: "Reconnu automatiquement (profil/couleur)" },
+    auto:   { symbol: "◈", color: "#f59e0b", title: "Reconnu automatiquement" },
     manual: { symbol: "◇", color: "#94a3b8", title: "Non identifié" },
   }[mode];
   if (!cfg) return null;
@@ -81,7 +107,7 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
       <div style={{
         width:"100%", borderRadius:12, padding:6, display:"flex", gap:4,
         border:`1px solid ${isActive ? "rgba(59,130,246,0.4)" : isSelected ? "rgba(255,255,255,0.2)" : "var(--border)"}`,
-        background: isActive ? "rgba(59,130,246,0.06)" : isSelected ? "var(--surface2)" : "var(--surface2)",
+        background: isActive ? "rgba(59,130,246,0.06)" : "var(--surface2)",
         boxShadow: isActive ? "0 4px 16px rgba(59,130,246,0.15)" : "none",
         transition:"all 0.2s",
       }}>
@@ -98,35 +124,67 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
 
 // ── Bobine SVG ─────────────────────────────────────────────────────────────
 function SpoolSVG({ colors, empty, size=68, active }) {
-  const main = colors?.[0] || (empty ? "#111" : "#333");
-  const dark = luminance(main.replace("#","")) < 140;
-  const shine = dark ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.28)";
-  const uid = `g${Math.random().toString(36).slice(2,6)}`;
+  const c1 = colors?.[0] || (empty ? "#1a1a1a" : "#444");
   const multi = colors && colors.length > 1;
-  const fill = multi ? `url(#${uid})` : main;
+  const uid = `sg${Math.random().toString(36).slice(2,7)}`;
+  const lum = luminance(c1.replace("#",""));
+  const shine = lum < 128 ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.35)";
+  const shadow = lum < 128 ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.12)";
+  const hubFill = lum < 128 ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.18)";
+  const hubStroke = lum < 128 ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.25)";
+
+  // fill principal : gradient multicolore ou couleur unique
+  const fill = empty ? "#222" : multi ? `url(#${uid})` : c1;
+
   return (
     <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
-      {multi && <defs><linearGradient id={uid} x1="0%" y1="0%" x2="100%" y2="0%">
-        {colors.map((c,i)=><stop key={i} offset={`${Math.round(i/(colors.length-1)*100)}%`} stopColor={c}/>)}
-      </linearGradient></defs>}
-      <ellipse cx="40" cy="75" rx="22" ry="3.5" fill="rgba(0,0,0,0.3)"/>
-      <ellipse cx="40" cy="40" rx="28" ry="28" fill={empty?"#1a1a1a":fill}/>
-      <ellipse cx="40" cy="40" rx="28" ry="28" fill="rgba(0,0,0,0.15)"/>
-      <rect x="19" y="23" width="42" height="34" rx="2" fill={empty?"#111":fill}/>
-      {!empty && <rect x="19" y="23" width="42" height="34" rx="2" fill="rgba(0,0,0,0.08)"/>}
-      <rect x="19" y="23" width="42" height="9" rx="2" fill={shine}/>
+      {/* Gradient multicolore */}
+      {multi && !empty && (
+        <defs>
+          <linearGradient id={uid} x1="0%" y1="0%" x2="100%" y2="0%">
+            {colors.map((c,i)=>(
+              <stop key={i}
+                offset={`${Math.round(i/(colors.length-1)*100)}%`}
+                stopColor={c}/>
+            ))}
+          </linearGradient>
+        </defs>
+      )}
+
+      {/* Ombre portée */}
+      <ellipse cx="40" cy="76" rx="20" ry="3" fill="rgba(0,0,0,0.25)"/>
+
+      {/* Corps principal de la bobine */}
+      <circle cx="40" cy="40" r="28" fill={fill}/>
+      {/* Ombrage volumétrique */}
+      <circle cx="40" cy="40" r="28" fill="rgba(0,0,0,0.12)"/>
+      {/* Reflet haut */}
+      <ellipse cx="33" cy="27" rx="10" ry="6" fill={shine} style={{filter:"blur(2px)"}}/>
+
+      {/* Flasques latérales (disques) */}
       {!empty && <>
-        <rect x="16" y="20" width="4" height="40" rx="2" fill={fill}/>
-        <rect x="16" y="20" width="4" height="40" rx="2" fill="rgba(0,0,0,0.2)"/>
-        <rect x="60" y="20" width="4" height="40" rx="2" fill={fill}/>
-        <rect x="60" y="20" width="4" height="40" rx="2" fill="rgba(0,0,0,0.2)"/>
+        <rect x="14" y="22" width="5" height="36" rx="2.5" fill={fill}/>
+        <rect x="14" y="22" width="5" height="36" rx="2.5" fill={shadow}/>
+        <rect x="61" y="22" width="5" height="36" rx="2.5" fill={fill}/>
+        <rect x="61" y="22" width="5" height="36" rx="2.5" fill={shadow}/>
       </>}
-      <circle cx="40" cy="40" r="11" fill="rgba(0,0,0,0.4)"/>
-      <circle cx="40" cy="40" r="7" fill="rgba(0,0,0,0.55)"/>
-      <circle cx="37" cy="37" r="2" fill="rgba(255,255,255,0.12)"/>
-      {active && <ellipse cx="40" cy="40" rx="30" ry="30" stroke="#3b82f6" strokeWidth="2.5" fill="none" strokeDasharray="5 2.5" opacity="0.9">
-        <animateTransform attributeName="transform" type="rotate" from="0 40 40" to="360 40 40" dur="8s" repeatCount="indefinite"/>
-      </ellipse>}
+
+      {/* Hub central — cercle, pas de carré */}
+      <circle cx="40" cy="40" r="12" fill={hubFill} stroke={hubStroke} strokeWidth="1.5"/>
+      <circle cx="40" cy="40" r="7" fill={hubFill} stroke={hubStroke} strokeWidth="1"/>
+      {/* Trou central */}
+      <circle cx="40" cy="40" r="4" fill={empty ? "#111" : "rgba(0,0,0,0.6)"}/>
+      {/* Petit reflet hub */}
+      <circle cx="38" cy="38" r="1.5" fill="rgba(255,255,255,0.15)"/>
+
+      {/* Cercle d'animation (impression en cours) */}
+      {active && (
+        <circle cx="40" cy="40" r="30" stroke="#3b82f6" strokeWidth="2.5"
+          fill="none" strokeDasharray="5 2.5" opacity="0.9">
+          <animateTransform attributeName="transform" type="rotate"
+            from="0 40 40" to="360 40 40" dur="8s" repeatCount="indefinite"/>
+        </circle>
+      )}
     </svg>
   );
 }
@@ -136,35 +194,65 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
   const isActive = amsId===activeAmsId && tray.id===activeTrayId;
   const empty = isEmptyTray(tray);
   const colors = parseColors(tray, spoolInfo);
+  const c1 = colors?.[0];
   const name = spoolInfo?.name ?? spoolInfo?.filament_name ?? null;
   const material = spoolInfo?.material ?? spoolInfo?.filament_material ?? tray.filament_type ?? null;
   const hasW = spoolInfo?.remaining_weight_g != null;
   const hasT = (spoolInfo?.initial_weight_g ?? spoolInfo?.filament_weight_g) != null;
-  const pct = hasW && hasT ? Math.round((spoolInfo.remaining_weight_g/(spoolInfo.initial_weight_g ?? spoolInfo.filament_weight_g))*100) : (tray.remain??0);
+  const pct = hasW && hasT
+    ? Math.round((spoolInfo.remaining_weight_g/(spoolInfo.initial_weight_g ?? spoolInfo.filament_weight_g))*100)
+    : (tray.remain ?? 0);
   const wLabel = hasW ? `${Math.round(spoolInfo.remaining_weight_g)}g` : `${tray.remain ?? 0}%`;
-  const barColor = colors?.length>1
-    ? { background:`linear-gradient(90deg,${colors.join(",")})` }
-    : { backgroundColor: pct>30 ? (colors?.[0]||"#3b82f6") : "#ef4444" };
+
+  // Barre de progression : couleur du filament, contour si trop clair
+  const lum = luminance((c1||"").replace("#",""));
+  const barBg = colorBg(colors);
+  // Si filament gris/blanc → fond de la barre plus foncé
+  const barTrackColor = (!c1 || lum > 180) ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.12)";
 
   return (
-    <div onClick={onClick} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, cursor: onClick ? "pointer" : "default" }}>
+    <div onClick={onClick} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+      cursor: onClick ? "pointer" : "default" }}>
+      {/* Type de filament en haut */}
       <p style={{ fontSize:10, color:"var(--muted)", fontWeight:600, lineHeight:"13px",
         textAlign:"center", whiteSpace:"nowrap" }}>
         {empty ? "" : (material || "—")}
       </p>
-      <div style={{ width:48, height:5, background:"var(--border)", borderRadius:3, overflow:"hidden" }}>
-        {!empty && <div style={{ height:"100%", borderRadius:3, width:`${Math.max(0,Math.min(100,pct))}%`, transition:"width 0.7s", ...barColor }} />}
+      {/* Barre de progression couleur filament */}
+      <div style={{ width:48, height:5, background: barTrackColor,
+        borderRadius:3, overflow:"hidden",
+        boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.12)" }}>
+        {!empty && (
+          <div style={{ height:"100%", borderRadius:3,
+            width:`${Math.max(0,Math.min(100,pct))}%`,
+            transition:"width 0.7s",
+            boxShadow: lum > 200 ? "inset 0 0 0 1px rgba(0,0,0,0.2)" : "none",
+            ...barBg }}/>
+        )}
       </div>
-      <div style={{ position:"relative", transform: isActive ? "scale(1.06)" : "scale(1)", transition:"transform 0.3s" }}>
+      {/* Bobine SVG */}
+      <div style={{ position:"relative",
+        transform: isActive ? "scale(1.06)" : "scale(1)", transition:"transform 0.3s" }}>
         <SpoolSVG colors={empty?null:colors} empty={empty} size={68} active={isActive}/>
-        <div style={{ position:"absolute", bottom:10, left:"50%", transform:"translateX(-50%)", padding:"1px 7px", borderRadius:20, fontSize:9, fontWeight:700, whiteSpace:"nowrap", background: isActive?"#3b82f6":"rgba(0,0,0,0.6)", color:"white", opacity: isActive ? 1 : 0.8 }}>
+        {/* Label slot */}
+        <div style={{ position:"absolute", bottom:10, left:"50%",
+          transform:"translateX(-50%)", padding:"1px 7px", borderRadius:20,
+          fontSize:9, fontWeight:700, whiteSpace:"nowrap",
+          background: isActive ? "#3b82f6" : c1 || "rgba(0,0,0,0.6)",
+          color: isActive ? "white" : c1 ? contrast(c1) : "white",
+          opacity: isActive ? 1 : 0.85,
+          boxShadow: "0 1px 4px rgba(0,0,0,0.3)" }}>
           {label}
         </div>
         {tray.match_mode && !empty && (
-          <span style={{ position:"absolute", top:2, right:2 }}><MatchIcon mode={tray.match_mode} size={12}/></span>
+          <span style={{ position:"absolute", top:2, right:2 }}>
+            <MatchIcon mode={tray.match_mode} size={12}/>
+          </span>
         )}
       </div>
-      <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace" }}>{empty ? "" : wLabel}</p>
+      <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace" }}>
+        {empty ? "" : wLabel}
+      </p>
       <p style={{ fontSize:9, color:"var(--text2)", textAlign:"center",
         whiteSpace:"normal", wordBreak:"break-word", maxWidth:80, lineHeight:"12px" }}>
         {empty ? "Vide" : (name || "")}
@@ -172,6 +260,8 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
     </div>
   );
 }
+
+
 
 // ── Détail AMS ─────────────────────────────────────────────────────────────
 function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick }) {
