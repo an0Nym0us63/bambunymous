@@ -503,6 +503,7 @@ export default function Home() {
         amsList={status?.ams_list ?? []}
         activeAmsId={status?.active_ams_id ?? -1}
         activeTrayId={status?.active_tray_id ?? -1}
+        activeTrayLocal={status?.active_tray_local ?? -1}
         spoolLookup={spoolLookup}
       />
     </div>
