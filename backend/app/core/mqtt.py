@@ -388,9 +388,17 @@ class MQTTManager:
 
         # ── HMS ──────────────────────────────────────────────────────────
         if "hms" in p:
-            state.hms_errors = p["hms"]
-            if state.hms_errors:
-                logger.warning(f"[MQTT HMS] {len(state.hms_errors)} erreur(s)")
+            new_hms = p["hms"] or []
+            # Logger seulement si les erreurs changent (pas à chaque tick MQTT)
+            old_codes = {e.get("code") for e in (state.hms_errors or [])}
+            new_codes = {e.get("code") for e in new_hms}
+            if new_codes != old_codes:
+                if new_hms:
+                    codes = ", ".join(str(e.get("code","?")) for e in new_hms)
+                    logger.warning(f"[HMS] {len(new_hms)} erreur(s) — codes: {codes}")
+                elif state.hms_errors:
+                    logger.info("[HMS] Erreurs résolues")
+            state.hms_errors = new_hms
             changed = True
         if "print_error" in p and p["print_error"] != 0:
             state.print_error = int(p["print_error"])
