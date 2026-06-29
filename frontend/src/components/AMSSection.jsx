@@ -23,7 +23,7 @@ function parseColors(tray, spoolInfo) {
     const cols = arr.split(",").map(c=>c.trim()).filter(Boolean);
     if (cols.length > 1) return cols.map(c=>`#${c.slice(0,6)}`);
   }
-  const single = hexCss(spoolInfo?.filament_color || tray?.color);
+  const single = hexCss(spoolInfo?.color || spoolInfo?.filament_color || tray?.color);
   return single ? [single] : null;
 }
 const AMS_NAMES = ["AMS-A","AMS-B","AMS-C","AMS-D"];
