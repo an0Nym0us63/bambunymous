@@ -32,10 +32,18 @@ def _normalize(path):
 
 
 async def import_prints_zip(zip_source) -> dict:
-    """Importe vignettes PNG + 3MF depuis prints/ de Spoolnymous."""
+    """
+    Importe vignettes PNG + 3MF depuis le dossier prints/ de Spoolnymous.
+    
+    Nommage Spoolnymous : {YYYYMMDDHHMMSS}_{uuid8}.png / .3mf
+    Le timestamp = print_date formaté → on mappe par date.
+    """
     stats = {"matched": 0, "unmatched": 0, "copied": 0, "errors": 0}
+
     with zipfile.ZipFile(zip_source) as z:
         names = z.namelist()
+
+        # Grouper par stem
         stems: dict[str, list[str]] = {}
         for name in names:
             base = os.path.basename(_normalize(name))
@@ -43,18 +51,42 @@ async def import_prints_zip(zip_source) -> dict:
             stem = re.sub(r"\.(3mf|png|jpg|jpeg|webp)$", "", base, flags=re.IGNORECASE)
             stems.setdefault(stem, []).append(name)
 
+        # Construire un index date→print depuis la DB
+        # stem = YYYYMMDDHHMMSS_xxxxxxxx → les 14 premiers chars = timestamp
         async with AsyncSessionLocal() as db:
+            # Charger tous les prints avec leur date
+            all_prints = (await db.execute(select(Print))).scalars().all()
+            # Index : "YYYYMMDDHHMMSS" → print (peut avoir collisions, on prend le plus proche)
+            date_index: dict[str, list] = {}
+            for p in all_prints:
+                if p.print_date:
+                    try:
+                        from datetime import datetime as _dt
+                        if isinstance(p.print_date, str):
+                            d = _dt.strptime(p.print_date[:19], "%Y-%m-%d %H:%M:%S")
+                        else:
+                            d = p.print_date
+                        key = d.strftime("%Y%m%d%H%M%S")
+                        date_index.setdefault(key, []).append(p)
+                    except Exception:
+                        pass
+
             for stem, files in stems.items():
-                result = await db.execute(
-                    select(Print).where(Print.model_3mf.like(f"%{stem}%"))
-                )
-                p = result.scalar_one_or_none()
+                p = None
+
+                # 1. Matcher par timestamp (14 premiers chars du stem)
+                ts = stem[:14]
+                if ts.isdigit() and len(ts) == 14:
+                    candidates = date_index.get(ts, [])
+                    if len(candidates) == 1:
+                        p = candidates[0]
+                    elif len(candidates) > 1:
+                        # Plusieurs prints à la même seconde → prendre le premier
+                        p = candidates[0]
+                        logger.debug(f"[ZIP-PRINTS] {stem}: {len(candidates)} candidats pour ts={ts}, prend #{p.id}")
+
                 if not p:
-                    result = await db.execute(
-                        select(Print).where(Print.plate_image.like(f"%{stem}%"))
-                    )
-                    p = result.scalar_one_or_none()
-                if not p:
+                    logger.debug(f"[ZIP-PRINTS] {stem}: ts={ts!r} → aucun print trouvé")
                     stats["unmatched"] += 1
                     continue
 
@@ -80,6 +112,7 @@ async def import_prints_zip(zip_source) -> dict:
                     except Exception as e:
                         logger.error(f"[ZIP-PRINTS] {fname}: {e}")
                         stats["errors"] += 1
+
             await db.commit()
 
     logger.info(f"[ZIP-PRINTS] {stats}")
