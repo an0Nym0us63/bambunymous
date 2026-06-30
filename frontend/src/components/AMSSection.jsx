@@ -454,6 +454,8 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
 }
 
 // ── Section principale ─────────────────────────────────────────────────────
+export { AMSBox, AMSDetail, TrayBottomSheet, AMS_NAMES };
+
 export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLookup }) {
   // Dédupliquer par id au cas où le polling enverrait des doublons
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
