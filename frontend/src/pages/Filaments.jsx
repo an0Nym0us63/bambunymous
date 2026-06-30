@@ -577,6 +577,7 @@ function FilamentsView() {
 // ── Page principale ────────────────────────────────────────────────────────
 export default function Filaments() {
   const [tab, setTab] = useState("spools");
+  const [galleryMode, setGalleryMode] = useState("photos"); // "photos" | "swatch"
   const [filaments, setFilaments] = useState([]);
 
   useEffect(() => {
@@ -610,22 +611,60 @@ export default function Filaments() {
 
       {tab==="catalog" && <FilamentsView/>}
       {tab==="gallery" && (
-        <GalleryCompare
-          items={filaments}
-          getId={f => f.id}
-          getImage={f => f.photo_url}
-          getTitle={f => f.name}
-          getSubtitle={f => [f.manufacturer, f.material].filter(Boolean).join(" · ")}
-          emptyLabel="Aucune photo de filament"
-          compareFields={[
-            ["Matière",   f => f.material],
-            ["Marque",    f => f.manufacturer],
-            ["Couleur",   f => f.color ? `#${f.color}` : null],
-            ["Poids",     f => f.filament_weight_g ? `${f.filament_weight_g}g` : null],
-            ["Prix",      f => f.price ? `${f.price}€` : null],
-            ["Bobines",   f => `${f.active_spool_count} active${f.active_spool_count!==1?"s":""} / ${f.spool_count}`],
-          ]}
-        />
+        <>
+          {/* Sous-mode : photos réelles vs nuancier de couleurs */}
+          <div style={{ display:"flex", gap:6 }}>
+            {[["photos","Photos"],["swatch","Nuancier"]].map(([id,label]) => (
+              <button key={id} onClick={()=>setGalleryMode(id)} style={{
+                padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer",
+                background: galleryMode===id ? "#3b82f6" : "var(--surface2)",
+                color: galleryMode===id ? "white" : "var(--muted)",
+                border:"1px solid var(--border)",
+              }}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {galleryMode==="photos" ? (
+            <GalleryCompare
+              items={filaments}
+              getId={f => f.id}
+              getImage={f => f.photo_url}
+              getTitle={f => f.name}
+              getSubtitle={f => [f.manufacturer, f.material].filter(Boolean).join(" · ")}
+              emptyLabel="Aucune photo de filament"
+              compareFields={[
+                ["Matière",   f => f.material],
+                ["Marque",    f => f.manufacturer],
+                ["Couleur",   f => f.color ? `#${f.color}` : null],
+                ["Poids",     f => f.filament_weight_g ? `${f.filament_weight_g}g` : null],
+                ["Prix",      f => f.price ? `${f.price}€` : null],
+                ["Bobines",   f => `${f.active_spool_count} active${f.active_spool_count!==1?"s":""} / ${f.spool_count}`],
+              ]}
+            />
+          ) : (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))", gap:8 }}>
+              {filaments.map(f => {
+                const colors = parseColorsList(f.color, f.colors_array);
+                return (
+                  <div key={f.id} title={`${f.name} — ${f.material || ""}`}
+                    style={{ position:"relative", aspectRatio:"1", borderRadius:10, overflow:"hidden",
+                      boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.1)", ...colorBg(colors, f.multicolor_type) }}>
+                    <div style={{ position:"absolute", bottom:0, left:0, right:0,
+                      background:"linear-gradient(transparent,rgba(0,0,0,0.65))", padding:"16px 6px 4px" }}>
+                      <p style={{ fontSize:9, color:"white", fontWeight:700, margin:0,
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</p>
+                    </div>
+                  </div>
+                );
+              })}
+              {!filaments.length && (
+                <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>
+              )}
+            </div>
+          )}
+        </>
       )}
       {(tab==="spools" || tab==="archived") && (
         <SpoolsView filaments={filaments} showArchived={tab==="archived"}/>
