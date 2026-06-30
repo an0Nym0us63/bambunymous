@@ -275,12 +275,21 @@ class MQTTManager:
         # ── AMS ─────────────────────────────────────────────────────────
         ams_data = p.get("ams", {})
         if "ams" in ams_data:
-            # tray_now = index LOCAL du tray actif dans son AMS (0-3), pas un index global
-            # tray_tar = idem pour le tray cible
-            # Pour identifier l'AMS actif, on utilise tray_now + ams_id depuis cfs ou mapping
+            # tray_now = index GLOBAL (ams_id*4 + tray_id) du tray en cours d'extrusion,
+            # mis à jour en temps réel (confirmé par les logs [ACTIVE] : bascule bien pendant
+            # un print bicolore, contrairement à "mapping" qui reste figé au mapping de job).
+            # Valeurs spéciales : 255 = aucun tray sélectionné / transition, 254 = bobine externe.
             tray_now_raw = ams_data.get("tray_now", -1)
-            state.active_tray_local = int(tray_now_raw) if tray_now_raw is not None else -1
-            # active_tray reste calculé depuis mapping si disponible (high byte=ams, low byte=tray)
+            tray_now = int(tray_now_raw) if tray_now_raw is not None else -1
+            state.active_tray_local = tray_now
+            if 0 <= tray_now <= 15:
+                new_ams, new_tray = tray_now // 4, tray_now % 4
+                if new_ams != state.active_ams_id or new_tray != state.active_tray_id:
+                    logger.info(f"[ACTIVE] tray_now={tray_now} → active_ams_id {state.active_ams_id}→{new_ams} active_tray_id {state.active_tray_id}→{new_tray}")
+                state.active_ams_id  = new_ams
+                state.active_tray_id = new_tray
+            # Si tray_now==255 (transition) ou 254 (externe) : on garde la dernière valeur connue
+            # plutôt que de tout effacer, pour éviter un clignotement de la surbrillance.
             state.ams_list = []
             for ams_raw in ams_data["ams"]:
                 ams = AMS(id=int(ams_raw.get("id", 0)),
@@ -428,24 +437,18 @@ class MQTTManager:
 
         if "mapping" in p:
             state.ams_mapping = p["mapping"]
-            # mapping[0] encode l'AMS+tray actif: high byte = ams_id, low byte = tray_id
-            if p["mapping"]:
+            # mapping[0] encodait auparavant l'AMS+tray actif (high byte=ams, low byte=tray),
+            # mais confirmé par logs [ACTIVE] : ce champ reste figé pendant un print bicolore
+            # (mapping de job, pas l'extrudeur réel). La source fiable est désormais tray_now
+            # ci-dessus. On ne s'en sert plus que comme fallback si tray_now est invalide.
+            if p["mapping"] and not (0 <= state.active_tray_local <= 15):
                 v = p["mapping"][0]
-                new_ams  = (v >> 8) & 0xFF
-                new_tray = v & 0xFF
+                new_ams, new_tray = (v >> 8) & 0xFF, v & 0xFF
                 if new_ams != state.active_ams_id or new_tray != state.active_tray_id:
-                    logger.info(f"[ACTIVE] mapping={p['mapping']} → active_ams_id {state.active_ams_id}→{new_ams} active_tray_id {state.active_tray_id}→{new_tray} (tray_now_local={state.active_tray_local})")
+                    logger.info(f"[ACTIVE] fallback mapping={p['mapping']} → active_ams_id {state.active_ams_id}→{new_ams} active_tray_id {state.active_tray_id}→{new_tray}")
                 state.active_ams_id  = new_ams
                 state.active_tray_id = new_tray
             changed = True
-
-        # Diagnostic : log si tray_now (par-AMS) change pendant qu'aucun "mapping" n'arrive
-        # → permettrait de confirmer si tray_now est l'indicateur fiable de bascule couleur
-        if "ams" in ams_data:
-            _tn = ams_data.get("tray_now", None)
-            if _tn is not None and getattr(state, "_last_tray_now_logged", None) != _tn:
-                logger.info(f"[ACTIVE] ams.tray_now → {_tn} (active_ams_id={state.active_ams_id} active_tray_id={state.active_tray_id})")
-                state._last_tray_now_logged = _tn
 
         # ── Hotend Rack Vortek ───────────────────────────────────────────
         if device:
