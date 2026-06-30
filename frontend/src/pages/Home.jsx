@@ -246,28 +246,30 @@ function WearBar({ wear }) {
   );
 }
 
-function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor }) {
+function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeNozzleId }) {
   const status = slotStatus(slot, isOnHead);
   const isHead = status === "head";
   const color  = isHead
     ? (headColor ? `#${headColor.slice(0,6)}` : null)
     : (status === "loaded" ? `#${slot?.color?.slice(0,6)}` : null);
+  // id=0 = buse droite, id=1 = buse gauche
+  const isRightNozzle = activeNozzleId === 0;
+  const headBorderStyle = isHead ? (isRightNozzle ? "solid" : "dashed") : "solid";
 
   return (
     <button onClick={onClick} style={{
-      border: `2px solid ${isHead ? "#3b82f6" : isSelected ? "rgba(255,255,255,0.25)" : "var(--border)"}`,
+      border: `2px ${headBorderStyle} ${isHead ? "#3b82f6" : isSelected ? "rgba(255,255,255,0.25)" : "var(--border)"}`,
       borderRadius:10, padding:8,
       background: isHead ? "rgba(59,130,246,0.10)" : "var(--surface2)",
       display:"flex", flexDirection:"column", gap:4,
       alignItems:"center", cursor:"pointer", transition:"all 0.15s", minWidth:44,
       boxShadow: isHead ? "0 0 0 3px rgba(59,130,246,0.12)" : "none",
     }}>
-      {/* Couleur du slot — couleur réelle même sur la tête, cerclé bleu si actif */}
+      {/* Couleur du slot — couleur réelle même sur la tête */}
       <div style={{ width:22, height:22, borderRadius:6,
         backgroundColor: color || (isHead ? "rgba(59,130,246,0.15)" : "var(--border)"),
-        border: isHead ? "1.5px solid #3b82f6" : "1px solid rgba(255,255,255,0.1)",
+        border: isHead ? `1.5px ${headBorderStyle} #3b82f6` : "1px solid rgba(255,255,255,0.1)",
         display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
-        {isHead && <span style={{ color:"white", fontSize:9, textShadow:"0 0 3px rgba(0,0,0,0.85)" }}>↑</span>}
         {status === "empty" && <span style={{ color:"var(--muted)", fontSize:8 }}>—</span>}
       </div>
       {slot?.match_mode && !isHead && status==="loaded" && (
@@ -379,7 +381,7 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
 }
 
 
-function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
+function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId }) {
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const hasRack = (rack?.hotends?.length ?? 0) > 0;
   const headId  = rack?.head_id ?? -1;
@@ -498,6 +500,7 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
                     <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
                       headColor={onHead ? headColorValue : null}
                       isSelected={current.kind==="hotend" && current.num===num}
+                      activeNozzleId={activeNozzleId}
                       onClick={() => setSel({ kind:"hotend", num })}/>
                   ) : null)}
                 </div>
@@ -506,6 +509,7 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
                     <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
                       headColor={onHead ? headColorValue : null}
                       isSelected={current.kind==="hotend" && current.num===num}
+                      activeNozzleId={activeNozzleId}
                       onClick={() => setSel({ kind:"hotend", num })}/>
                   ) : null)}
                 </div>
@@ -576,6 +580,7 @@ export default function Home() {
         activeTrayId={status?.active_tray_id ?? -1}
         rack={status?.hotend_rack}
         spoolLookup={spoolLookup}
+        activeNozzleId={status?.nozzles?.find(n => n.active)?.id ?? null}
       />
     </div>
   );
