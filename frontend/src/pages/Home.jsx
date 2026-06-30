@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun } from "lucide-react";
+import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle } from "lucide-react";
 import client from "../api/client";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
 
@@ -63,6 +63,11 @@ function StatusBanner({ status }) {
 
   const [printInfo, setPrintInfo] = useState(null);
 
+  // Au moins un tray chargé dont le filament n'a pas été retrouvé en base
+  const hasUnmatched = (status?.ams_list || []).some(ams =>
+    (ams.trays || []).some(t => t.match_mode === "notfound")
+  );
+
   // Charger les infos du print en cours (vignette + nom)
   useEffect(() => {
     if (!status?.status) return;
@@ -110,18 +115,6 @@ function StatusBanner({ status }) {
       <button onClick={() => setExpanded(e => !e)}
         style={{ width:"100%", background:"none", border:"none", cursor:"pointer", padding:0, position:"relative", zIndex:1 }}>
 
-        {/* Badge HMS discret, ancré sous le pourcentage — reste dans le header, jamais recouvert par le panneau déplié */}
-        {status.hms_errors?.length > 0 && (
-          <div title={`${status.hms_errors.length} alerte${status.hms_errors.length>1?"s":""} HMS imprimante`}
-            style={{ position:"absolute", bottom:8, right:16, zIndex:2,
-              width:20, height:20, borderRadius:"50%",
-              background:"rgba(245,158,11,0.15)", border:"1px solid rgba(245,158,11,0.45)",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              fontSize:11, fontWeight:800, color:"#f59e0b" }}>
-            !
-          </div>
-        )}
-
         {/* Nom du print — ligne complète en haut */}
         <div style={{ padding:"10px 16px 4px", display:"flex", alignItems:"center", gap:8 }}>
           <div style={{ width:8, height:8, borderRadius:"50%", backgroundColor:cfg.dot, flexShrink:0,
@@ -130,6 +123,16 @@ function StatusBanner({ status }) {
             flex:1, textAlign:"left", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"clip" }}>
             {printInfo?.file_name || cfg.label}
           </p>
+          {hasUnmatched && (
+            <span title="Au moins un filament détecté par l'imprimante est introuvable en base">
+              <AlertTriangle size={13} style={{ color:"#ef4444", flexShrink:0 }} />
+            </span>
+          )}
+          {status.hms_errors?.length > 0 && (
+            <span title={`${status.hms_errors.length} alerte${status.hms_errors.length>1?"s":""} HMS imprimante`}>
+              <AlertTriangle size={13} style={{ color:"#f59e0b", flexShrink:0 }} />
+            </span>
+          )}
           {status.connected
             ? <Wifi size={14} style={{ color:"#22c55e", flexShrink:0 }} />
             : <WifiOff size={14} style={{ color:"#ef4444", flexShrink:0 }} />}
