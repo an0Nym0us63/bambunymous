@@ -613,6 +613,49 @@ function PrintDetail({ p, onClose, onDelete }) {
   );
 }
 
+// ── Galerie — indépendante de la pagination, parcourt tout l'historique ────
+function PrintsGalleryView() {
+  const [data, setData] = useState(null); // { prints:[], groups:[] }
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    client.get("/prints/gallery")
+      .then(r => { if (!cancelled) setData(r.data); })
+      .catch(() => { if (!cancelled) setData({ prints:[], groups:[] }); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>;
+
+  const items = [
+    ...(data?.prints || []).map(p => ({ ...p, kind:"print" })),
+    ...(data?.groups || []).map(g => ({ ...g, kind:"group", title: g.name, count: g.prints })),
+  ];
+  items.sort((a,b) => (b.print_date || b.latest_date || "").localeCompare(a.print_date || a.latest_date || ""));
+
+  return (
+    <GalleryCompare
+      items={items}
+      getId={it => it.kind + it.id}
+      getCoverImage={it => it.photos?.[0]?.url}
+      getPhotos={it => it.photos}
+      getTitle={it => it.kind==="group" ? it.title : it.title}
+      getSubtitle={it => it.kind==="group" ? `📁 ${it.count} print${it.count>1?"s":""}` : fmtDate(it.print_date)}
+      emptyLabel="Aucune photo manuelle uploadée sur tes prints (hors milestones auto)"
+      compareFields={[
+        ["Statut",   it => it.status],
+        ["Date",     it => fmtDate(it.print_date)],
+        ["Durée",    it => it.duration_seconds ? `${Math.round(it.duration_seconds/60)}min` : null],
+        ["Poids",    it => it.total_weight_g ? `${it.total_weight_g.toFixed(1)}g` : null],
+        ["Coût",     it => it.total_cost ? `${it.total_cost.toFixed(2)}€` : null],
+      ]}
+    />
+  );
+}
+
 export default function Prints() {
   const [prints, setPrints]   = useState([]);
   const [total, setTotal]     = useState(0);
@@ -762,61 +805,7 @@ export default function Prints() {
         </p>
       )}
 
-      {!loading && !error && prints.length > 0 && viewMode==="gallery" && (() => {
-        const manualSnap = p => p?.snapshots?.find(s => s.trigger === "manual") || null;
-        const realPhoto  = p => {
-          const s = manualSnap(p);
-          if (!s) return null;
-          const filename = s.file_path ? s.file_path.split("/").pop() : `snapshot-${s.trigger}.jpg`;
-          return "/api/v1/prints/" + p.id + "/file/" + filename;
-        };
-        const withPhoto  = prints.filter(p => manualSnap(p));
-
-        const soloItems = withPhoto.filter(p => !p.group_id).map(p => ({
-          id: "p" + p.id, image: realPhoto(p), title: p.file_name || "Sans nom",
-          subtitle: fmtDate(p.print_date), status: p.status, print_date: p.print_date,
-          duration_seconds: p.duration_seconds, total_weight_g: p.total_weight_g,
-          total_cost: p.total_cost, group_name: p.group_name, count: null,
-        }));
-
-        const groupIds = [...new Set(withPhoto.filter(p => p.group_id).map(p => p.group_id))];
-        const groupItems = groupIds.map(gid => {
-          const members = prints.filter(p => p.group_id === gid);
-          const withPhotoMember = members.find(p => manualSnap(p));
-          return {
-            id: "g" + gid, image: withPhotoMember ? realPhoto(withPhotoMember) : null,
-            title: members[0]?.group_name || `Groupe #${gid}`,
-            subtitle: `${members.length} print${members.length>1?"s":""}`,
-            status: null, print_date: members[0]?.print_date,
-            duration_seconds: members.reduce((s,p)=>s+(p.duration_seconds||0),0),
-            total_weight_g: members.reduce((s,p)=>s+(p.total_weight_g||0),0),
-            total_cost: members.reduce((s,p)=>s+(p.total_cost||0),0),
-            group_name: members[0]?.group_name, count: members.length,
-          };
-        });
-
-        const galleryItems = [...soloItems, ...groupItems];
-
-        return (
-          <GalleryCompare
-            items={galleryItems}
-            getId={it => it.id}
-            getImage={it => it.image}
-            getTitle={it => it.title}
-            getSubtitle={it => it.count ? `📁 ${it.subtitle}` : it.subtitle}
-            emptyLabel="Aucune photo manuelle uploadée sur tes prints (hors milestones auto)"
-            compareFields={[
-              ["Statut",   it => it.status],
-              ["Date",     it => fmtDate(it.print_date)],
-              ["Durée",    it => it.duration_seconds ? `${Math.round(it.duration_seconds/60)}min` : null],
-              ["Poids",    it => it.total_weight_g ? `${it.total_weight_g.toFixed(1)}g` : null],
-              ["Coût",     it => it.total_cost ? `${it.total_cost.toFixed(2)}€` : null],
-              ["Groupe",   it => it.group_name],
-            ]}
-          />
-        );
-      })()}
-
+      {viewMode==="gallery" && <PrintsGalleryView/>}
 
       {!loading && !error && prints.length > 0 && viewMode==="list" && (() => {
         const onDelete = id => { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => t-1); };
