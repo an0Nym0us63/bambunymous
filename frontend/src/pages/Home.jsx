@@ -402,6 +402,7 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
   const autoAmsId = uniqueAmsList.length ? (activeAmsId >= 0 ? activeAmsId : uniqueAmsList[0]?.id ?? 0) : null;
   const [sel, setSel] = useState(null); // {kind:'ams', id} | {kind:'hotend', num}
   const [selectedTray, setSelectedTray] = useState(null);
+  const [amsOrder, setAmsOrder] = useState(null);
 
   // Si l'AMS/tray actif change pendant qu'on est sur l'accueil, suivre automatiquement
   // (comme si on avait cliqué dessus) plutôt que de rester figé sur une vieille sélection.
@@ -413,6 +414,11 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
     }
   }, [activeAmsId, activeTrayId]);
 
+  useEffect(() => {
+    client.get("/settings/ams-order").then(({ data }) => setAmsOrder(data.order || []))
+      .catch(() => setAmsOrder([]));
+  }, []);
+
   if (!uniqueAmsList.length && !hasRack) return (
     <div className="card" style={{ padding:24, textAlign:"center", color:"var(--muted)", fontSize:14 }}>Aucun AMS détecté</div>
   );
@@ -420,11 +426,6 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
   const current = sel ?? (autoAmsId !== null ? { kind:"ams", id:autoAmsId } : { kind:"hotend", num:1 });
   const selectedAms     = current.kind === "ams"    ? (uniqueAmsList.find(a => a.id === current.id) ?? uniqueAmsList[0]) : null;
   const selectedHotend  = current.kind === "hotend" ? slots.find(s => s.num === current.num) : null;
-  const [amsOrder, setAmsOrder] = useState(null);
-  useEffect(() => {
-    client.get("/settings/ams-order").then(({ data }) => setAmsOrder(data.order || []))
-      .catch(() => setAmsOrder([]));
-  }, []);
 
   const orderedAmsList = (() => {
     if (!amsOrder || !amsOrder.length) return uniqueAmsList;
