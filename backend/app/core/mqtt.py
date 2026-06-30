@@ -287,12 +287,14 @@ class MQTTManager:
             # logs [ACTIVE] (toujours ams_id=0 quel que soit l'AMS réel).
             # On ne garde tray_now que comme repli legacy (mono-buse / vieux firmware).
             new_ams, new_tray = None, None
+            source = None
             for ext in extruder_infos:
                 if int(ext.get("id", -1)) == active_nozzle_idx and "snow" in ext:
                     try:
                         snow_val = int(ext.get("snow"))
                         new_ams  = snow_val >> 8
                         new_tray = snow_val & 0x3
+                        source = "snow"
                     except (TypeError, ValueError):
                         pass
                     break
@@ -304,10 +306,17 @@ class MQTTManager:
             if new_ams is None and 0 <= tray_now <= 15:
                 # Repli legacy : suppose un index global (vrai sur mono-buse/AMS unique)
                 new_ams, new_tray = tray_now // 4, tray_now % 4
+                source = "tray_now_fallback"
+
+            # Diagnostic ponctuel : structure brute de extruder_infos, pour vérifier
+            # si le champ "snow" existe réellement dans ce payload/firmware.
+            if extruder_infos and getattr(state, "_extruder_infos_logged", None) != str(extruder_infos):
+                logger.info(f"[ACTIVE] device.extruder.info brut: {extruder_infos}")
+                state._extruder_infos_logged = str(extruder_infos)
 
             if new_ams is not None and new_tray is not None:
                 if new_ams != state.active_ams_id or new_tray != state.active_tray_id:
-                    logger.info(f"[ACTIVE] snow→ams_id={new_ams} tray={new_tray} (tray_now={tray_now}, nozzle={active_nozzle_idx}) — avant: ams={state.active_ams_id} tray={state.active_tray_id}")
+                    logger.info(f"[ACTIVE] source={source} → ams_id={new_ams} tray={new_tray} (tray_now={tray_now}, nozzle={active_nozzle_idx}) — avant: ams={state.active_ams_id} tray={state.active_tray_id}")
                 state.active_ams_id  = new_ams
                 state.active_tray_id = new_tray
             # Si tray_now==255 (transition) ou 254 (externe) : on garde la dernière valeur connue
