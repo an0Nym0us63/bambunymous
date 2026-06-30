@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List } from "lucide-react";
+import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus } from "lucide-react";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
 
@@ -62,7 +62,7 @@ function StatusBadge({ status }) {
 }
 
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
-function GroupBottomSheet({ groupId, name, prints, latestDate, onClose, onSelectPrint, onDelete }) {
+function GroupBottomSheet({ groupId, name, prints, latestDate, onClose, onSelectPrint, onDelete, onUngroup }) {
   const [selectedPrint, setSelectedPrint] = useState(null);
   const [lightbox, setLightbox] = useState(null);
   const [groupPhotos, setGroupPhotos] = useState([]);
@@ -197,10 +197,10 @@ function GroupBottomSheet({ groupId, name, prints, latestDate, onClose, onSelect
             <div style={{ display:"grid",
               gridTemplateColumns:"repeat(auto-fill, minmax(120px, 1fr))", gap:8 }}>
               {prints.map(p => (
-                <div key={p.id} onClick={() => setSelectedPrint(p)}
-                  style={{ cursor:"pointer", borderRadius:10, overflow:"hidden",
+                <div key={p.id} style={{ position:"relative", borderRadius:10, overflow:"hidden",
                     border:"1px solid var(--border)", background:"var(--surface2)" }}>
-                  <div style={{ position:"relative", paddingTop:"75%" }}>
+                  <div onClick={() => setSelectedPrint(p)}
+                    style={{ position:"relative", paddingTop:"75%", cursor:"pointer" }}>
                     <img src={"/api/v1/prints/" + p.id + "/image"} alt=""
                       style={{ position:"absolute", inset:0, width:"100%", height:"100%",
                         objectFit:"contain" }}
@@ -217,6 +217,20 @@ function GroupBottomSheet({ groupId, name, prints, latestDate, onClose, onSelect
                         ))}
                       </div>
                     )}
+                    <button title="Retirer du groupe"
+                      onClick={async e => {
+                        e.stopPropagation();
+                        if (!confirm("Retirer ce print du groupe ?")) return;
+                        try {
+                          await client.post("/prints/" + p.id + "/group", {});
+                          onUngroup?.(p.id);
+                        } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+                      }}
+                      style={{ position:"absolute", top:4, right:4, width:20, height:20, borderRadius:"50%",
+                        background:"rgba(0,0,0,0.6)", border:"none", color:"white", cursor:"pointer",
+                        display:"flex", alignItems:"center", justifyContent:"center" }}>
+                      <FolderMinus size={11}/>
+                    </button>
                   </div>
                   <p style={{ fontSize:9, color:"var(--muted)", margin:"4px 6px 4px",
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -244,14 +258,15 @@ function GroupBottomSheet({ groupId, name, prints, latestDate, onClose, onSelect
         <div style={{ position:"fixed", inset:0, zIndex:1100 }}>
           <PrintDetail p={selectedPrint}
             onClose={() => setSelectedPrint(null)}
-            onDelete={id => { onDelete(id); setSelectedPrint(null); }}/>
+            onDelete={id => { onDelete(id); setSelectedPrint(null); }}
+            onChanged={() => onUngroup?.(selectedPrint.id)}/>
         </div>
       )}
     </>
   );
 }
 
-function GroupTile({ groupId, name, prints, latestDate, onSelectPrint, onDelete }) {
+function GroupTile({ groupId, name, prints, latestDate, onSelectPrint, onDelete, onUngroup }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const coverPrint = prints[0];
 
@@ -287,6 +302,7 @@ function GroupTile({ groupId, name, prints, latestDate, onSelectPrint, onDelete 
           groupId={groupId} name={name} prints={prints} latestDate={latestDate}
           onClose={() => setSheetOpen(false)}
           onSelectPrint={onSelectPrint}
+          onUngroup={onUngroup}
           onDelete={id => { onDelete(id); }}/>
       )}
     </>
@@ -294,7 +310,7 @@ function GroupTile({ groupId, name, prints, latestDate, onSelectPrint, onDelete 
 }
 
 
-function PrintCard({ p, onClick, onDelete }) {
+function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.5)", color:"white", label: p.status || "?" };
@@ -310,8 +326,10 @@ function PrintCard({ p, onClick, onDelete }) {
   };
 
   return (
-    <div className="card" onClick={onClick} style={{ overflow:"hidden", display:"flex",
-      flexDirection:"column", position:"relative", padding:0, cursor:"pointer" }}>
+    <div className="card" onClick={selectMode ? () => onToggleSelect(p.id) : onClick}
+      style={{ overflow:"hidden", display:"flex",
+      flexDirection:"column", position:"relative", padding:0, cursor:"pointer",
+      outline: selected ? "2px solid #3b82f6" : "none" }}>
 
       {/* Vignette pleine largeur ratio 4/3 */}
       <div style={{ position:"relative", paddingTop:"75%",
@@ -319,12 +337,21 @@ function PrintCard({ p, onClick, onDelete }) {
         <img src={"/api/v1/prints/" + p.id + "/image"} alt=""
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
           onError={e => { e.currentTarget.style.display="none"; }}/>
+        {selectMode && (
+          <div style={{ position:"absolute", top:6, left:6, width:20, height:20, borderRadius:6,
+            border: selected ? "none" : "1.5px solid rgba(255,255,255,0.8)",
+            background: selected ? "#3b82f6" : "rgba(0,0,0,0.4)",
+            display:"flex", alignItems:"center", justifyContent:"center" }}>
+            {selected && <Check size={13} color="white" strokeWidth={3}/>}
+          </div>
+        )}
         {/* Badge statut — fond opaque + contour pour lisibilité */}
         {p.status !== "SUCCESS" && (
           <span style={{ position:"absolute", top:6, left:6,
             background: statusCfg.bg, color:"white",
             fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20,
-            boxShadow:"0 1px 4px rgba(0,0,0,0.4)", letterSpacing:"0.03em" }}>
+            boxShadow:"0 1px 4px rgba(0,0,0,0.4)", letterSpacing:"0.03em",
+            visibility: selectMode ? "hidden" : "visible" }}>
             {statusCfg.label}
           </span>
         )}
@@ -449,8 +476,9 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
 }
 
 
-function PrintDetail({ p, onClose, onDelete }) {
+function PrintDetail({ p, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
+  const [ungrouped, setUngrouped] = useState(false);
 
   useEffect(() => {
     if (p.snapshots?.length) {
@@ -458,7 +486,16 @@ function PrintDetail({ p, onClose, onDelete }) {
     }
   }, [p]);
 
-  const groupe = p.group_name;
+  const groupe = ungrouped ? null : p.group_name;
+
+  const handleUngroup = async () => {
+    if (!confirm("Retirer ce print de son groupe ?")) return;
+    try {
+      await client.post("/prints/" + p.id + "/group", {});
+      setUngrouped(true);
+      onChanged?.();
+    } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+  };
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000,
@@ -506,9 +543,15 @@ function PrintDetail({ p, onClose, onDelete }) {
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12, flexWrap:"wrap" }}>
             <StatusBadge status={p.status}/>
             {groupe && (
-              <span style={{ fontSize:10, background:"rgba(167,139,250,0.15)",
-                color:"#a78bfa", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>
+              <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:10,
+                background:"rgba(167,139,250,0.15)",
+                color:"#a78bfa", padding:"2px 6px 2px 8px", borderRadius:20, fontWeight:700 }}>
                 📁 {groupe}
+                <button onClick={handleUngroup} title="Retirer du groupe"
+                  style={{ background:"none", border:"none", color:"#a78bfa", cursor:"pointer",
+                    padding:0, display:"flex", alignItems:"center", opacity:0.8 }}>
+                  <X size={11}/>
+                </button>
               </span>
             )}
           </div>
@@ -666,6 +709,18 @@ export default function Prints() {
   const [groups, setGroups]   = useState([]);
   const [groupF, setGroupF]   = useState("");
   const [viewMode, setViewMode] = useState("list"); // "list" | "gallery"
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [groupPickerOpen, setGroupPickerOpen] = useState(false);
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
 
   const LIMIT = 40;
 
@@ -746,6 +801,16 @@ export default function Prints() {
           {debugInfo && <span style={{ fontSize:10, color:"#f59e0b", fontFamily:"monospace" }}>[{debugInfo}]</span>}
         </div>
         <div style={{ display:"flex", gap:6 }}>
+          {viewMode==="list" && (
+            <button onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
+              borderRadius:8, fontSize:12, fontWeight: selectMode ? 700 : 400,
+              background: selectMode ? "#3b82f6" : "var(--surface2)",
+              border:"1px solid var(--border)",
+              color: selectMode ? "white" : "var(--text2)", cursor:"pointer" }}>
+              <Check size={13}/> {selectMode ? "Annuler" : "Sélectionner"}
+            </button>
+          )}
           <button onClick={() => setViewMode(v => v==="list" ? "gallery" : "list")}
             style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
             borderRadius:8, fontSize:12, background:"var(--surface2)", border:"1px solid var(--border)",
@@ -850,11 +915,15 @@ export default function Prints() {
             {items.map((item, idx) => item.type === "print" ? (
               <PrintCard key={item.p.id} p={item.p}
                 onClick={()=>setSelected(item.p)}
-                onDelete={onDelete}/>
+                onDelete={onDelete}
+                selectMode={selectMode}
+                selected={selectedIds.has(item.p.id)}
+                onToggleSelect={toggleSelect}/>
             ) : (
               <GroupTile key={item.groupId} groupId={item.groupId} name={item.name}
                 prints={item.prints} latestDate={item.latestDate}
                 onSelectPrint={setSelected}
+                onUngroup={() => load()}
                 onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}/>
             ))}
           </div>
@@ -871,7 +940,114 @@ export default function Prints() {
         </button>
       )}
 
-      {selected && <PrintDetail p={selected} onClose={()=>setSelected(null)} onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}/>}
+      {selected && <PrintDetail p={selected} onClose={()=>setSelected(null)}
+        onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}
+        onChanged={() => { load(); loadGroups(); }}/>}
+
+      {/* Barre flottante de sélection multiple */}
+      {selectMode && selectedIds.size > 0 && (
+        <div style={{ position:"fixed", bottom:76, left:12, right:12, zIndex:500,
+          background:"var(--sheet-bg)", border:"1px solid var(--border)", borderRadius:14,
+          padding:10, display:"flex", alignItems:"center", gap:10, boxShadow:"0 4px 24px rgba(0,0,0,0.35)" }}>
+          <span style={{ fontSize:12, color:"var(--text)", fontWeight:700, flexShrink:0 }}>
+            {selectedIds.size} sélectionné{selectedIds.size>1?"s":""}
+          </span>
+          <div style={{ flex:1 }}/>
+          <button onClick={() => setGroupPickerOpen(true)}
+            style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8,
+              fontSize:12, fontWeight:700, background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
+            <FolderPlus size={14}/> Grouper
+          </button>
+          <button onClick={exitSelectMode}
+            style={{ padding:"7px 10px", borderRadius:8, fontSize:12, background:"none",
+              border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>
+            Annuler
+          </button>
+        </div>
+      )}
+
+      {/* Sélecteur de groupe — créer ou choisir un groupe existant (recherche substring) */}
+      {groupPickerOpen && (
+        <GroupPickerSheet
+          groups={groups}
+          onClose={() => setGroupPickerOpen(false)}
+          onPick={async (payload) => {
+            try {
+              await client.post("/prints/group/bulk", { print_ids: Array.from(selectedIds), ...payload });
+              setGroupPickerOpen(false);
+              exitSelectMode();
+              await Promise.all([load(), loadGroups()]);
+            } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+// ── Sélecteur de groupe — recherche substring + création ───────────────────
+function GroupPickerSheet({ groups, onClose, onPick }) {
+  const [q, setQ] = useState("");
+  const filtered = q.trim()
+    ? groups.filter(g => g.name.toLowerCase().includes(q.trim().toLowerCase()))
+    : groups;
+  const exactNameExists = groups.some(g => g.name.toLowerCase() === q.trim().toLowerCase());
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:1400,
+      background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)",
+        borderRadius:"20px 20px 0 0", width:"100%", maxWidth:480, maxHeight:"80dvh",
+        display:"flex", flexDirection:"column",
+        paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
+
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+        </div>
+
+        <div style={{ padding:"14px 18px 10px" }}>
+          <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 10px" }}>
+            Ajouter à un groupe
+          </h3>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher ou créer un groupe…"
+            autoFocus
+            style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
+              borderRadius:8, padding:"9px 12px", fontSize:13, color:"var(--text)", outline:"none" }}/>
+        </div>
+
+        <div style={{ overflowY:"auto", padding:"0 18px 16px", flex:1 }}>
+          {q.trim() && !exactNameExists && (
+            <button onClick={() => onPick({ group_name: q.trim() })}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
+                marginBottom:8, borderRadius:10, background:"rgba(59,130,246,0.12)",
+                border:"1px solid rgba(59,130,246,0.35)", color:"#3b82f6", fontSize:13, fontWeight:700,
+                cursor:"pointer", textAlign:"left" }}>
+              <FolderPlus size={15}/> Créer le groupe « {q.trim()} »
+            </button>
+          )}
+
+          {filtered.length === 0 && !q.trim() && (
+            <p style={{ textAlign:"center", color:"var(--muted)", fontSize:12, padding:"20px 0" }}>
+              Aucun groupe pour l'instant — tape un nom pour en créer un.
+            </p>
+          )}
+
+          {filtered.map(g => (
+            <button key={g.id} onClick={() => onPick({ group_id: g.id })}
+              style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
+                gap:8, padding:"10px 12px", marginBottom:6, borderRadius:10,
+                background:"var(--surface2)", border:"1px solid var(--border)", cursor:"pointer", textAlign:"left" }}>
+              <div style={{ minWidth:0 }}>
+                <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0,
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>📁 {g.name}</p>
+                <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
+                  {fmtDate(g.latest_date)} · {g.print_count} print{g.print_count>1?"s":""}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
