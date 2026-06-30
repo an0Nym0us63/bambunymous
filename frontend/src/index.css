@@ -8,6 +8,7 @@
   --text2:   #94a3b8;
   --muted:   #475569;
   --sidebar: #0a0d13;
+  --sheet-bg: #1a1d27;
   --r: 1rem;
   --r-sm: 0.75rem;
 }
@@ -22,6 +23,7 @@
   --text2:   #334155;
   --muted:   #64748b;
   --sidebar: #e8edf3;
+  --sheet-bg: #ffffff;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
