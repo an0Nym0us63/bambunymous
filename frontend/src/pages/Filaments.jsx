@@ -40,8 +40,8 @@ function colorBg(colors, type) {
 function ColorDot({ color, colorsArray, multicolorType, size=16 }) {
   const colors = parseColorsList(color, colorsArray);
   return (
-    <div style={{ width:size, height:size, borderRadius:4, flexShrink:0,
-      border:"1px solid rgba(255,255,255,0.1)", ...colorBg(colors, multicolorType) }} />
+    <div style={{ width:size, height:size, borderRadius:4, flexShrink:0, overflow:"hidden",
+      boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.1)", ...colorBg(colors, multicolorType) }} />
   );
 }
 
@@ -214,7 +214,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
           {/* En-tête */}
           <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:24 }}>
             <div style={{ width:64, height:64, borderRadius:16, flexShrink:0,
-              boxShadow:"0 2px 14px rgba(0,0,0,0.25)", border:"2px solid var(--border)", ...colorBg(colorsList, spool.filament_multicolor_type) }}/>
+              overflow:"hidden", boxShadow:"0 2px 14px rgba(0,0,0,0.25), inset 0 0 0 2px var(--border)", ...colorBg(colorsList, spool.filament_multicolor_type) }}/>
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:20, fontWeight:800, color:"var(--text)", margin:0,
                 letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -437,7 +437,7 @@ function FilamentSheet({ f, onClose }) {
           {/* En-tête */}
           <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
             <div style={{ width:56, height:56, borderRadius:14, flexShrink:0,
-              boxShadow:"0 2px 12px rgba(0,0,0,0.2)", border:"2px solid var(--border)", ...colorBg(colorsList, f.multicolor_type) }}/>
+              overflow:"hidden", boxShadow:"0 2px 12px rgba(0,0,0,0.2), inset 0 0 0 2px var(--border)", ...colorBg(colorsList, f.multicolor_type) }}/>
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:18, fontWeight:800, color:"var(--text)", margin:0,
                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
