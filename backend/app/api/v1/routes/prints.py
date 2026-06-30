@@ -263,7 +263,7 @@ def _group_dir(group_id: int) -> Optional[Path]:
 
 
 @router.get("/groups/{group_id}/photos")
-async def group_photos(group_id: int, _: str = Depends(get_current_user)):
+async def group_photos(group_id: int):
     """Liste les photos d'un groupe."""
     d = _group_dir(group_id)
     if not d:
@@ -276,8 +276,8 @@ async def group_photos(group_id: int, _: str = Depends(get_current_user)):
 
 
 @router.get("/groups/{group_id}/photo/{filename}")
-async def group_photo(group_id: int, filename: str, _: str = Depends(get_current_user)):
-    """Sert une photo de groupe."""
+async def group_photo(group_id: int, filename: str):
+    """Sert une photo de groupe (pas d'auth — utilisée dans des balises <img>)."""
     import mimetypes
     if ".." in filename or "/" in filename:
         raise HTTPException(400)
