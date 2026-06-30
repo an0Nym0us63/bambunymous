@@ -22,9 +22,14 @@ function parseColorsList(color, colorsArray) {
   }
   return color ? [`#${color.replace(/^#/, "").slice(0,6)}`] : null;
 }
-function colorBg(colors) {
+function colorBg(colors, type) {
   if (!colors?.length) return { backgroundColor: "var(--border)" };
   if (colors.length === 1) return { backgroundColor: colors[0] };
+  if (type === "gradient") {
+    // Fondu lisse entre les couleurs
+    return { background: `linear-gradient(90deg, ${colors.join(", ")})` };
+  }
+  // Autres types (coaxial, etc.) : séparation nette
   const stops = colors.map((c,i) => {
     const a = Math.round(i/colors.length*100), b = Math.round((i+1)/colors.length*100);
     return `${c} ${a}%, ${c} ${b}%`;
@@ -32,11 +37,11 @@ function colorBg(colors) {
   return { background: `linear-gradient(90deg, ${stops})` };
 }
 
-function ColorDot({ color, colorsArray, size=16 }) {
+function ColorDot({ color, colorsArray, multicolorType, size=16 }) {
   const colors = parseColorsList(color, colorsArray);
   return (
     <div style={{ width:size, height:size, borderRadius:4, flexShrink:0,
-      border:"1px solid rgba(255,255,255,0.1)", ...colorBg(colors) }} />
+      border:"1px solid rgba(255,255,255,0.1)", ...colorBg(colors, multicolorType) }} />
   );
 }
 
@@ -209,7 +214,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
           {/* En-tête */}
           <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:24 }}>
             <div style={{ width:64, height:64, borderRadius:16, flexShrink:0,
-              boxShadow:"0 2px 14px rgba(0,0,0,0.25)", border:"2px solid var(--border)", ...colorBg(colorsList) }}/>
+              boxShadow:"0 2px 14px rgba(0,0,0,0.25)", border:"2px solid var(--border)", ...colorBg(colorsList, spool.filament_multicolor_type) }}/>
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:20, fontWeight:800, color:"var(--text)", margin:0,
                 letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -344,10 +349,10 @@ function SpoolsView({ filaments, showArchived }) {
               <div key={s.id} onClick={()=>setSelected(s)} className="card-sm"
                 style={{ overflow:"hidden", cursor:"pointer", display:"flex", flexDirection:"column" }}>
                 {/* Bandeau couleur du filament */}
-                <div style={{ height:6, flexShrink:0, ...colorBg(colorsList) }}/>
+                <div style={{ height:6, flexShrink:0, ...colorBg(colorsList, s.filament_multicolor_type) }}/>
                 <div style={{ padding:"10px 12px 12px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
                   <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
-                    <ColorDot color={s.filament_color} colorsArray={s.filament_colors_array} size={20}/>
+                    <ColorDot color={s.filament_color} colorsArray={s.filament_colors_array} multicolorType={s.filament_multicolor_type} size={20}/>
                     <div style={{ flex:1, minWidth:0 }}>
                       <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden",
                         textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:"16px" }}>{s.filament_name}</p>
@@ -432,7 +437,7 @@ function FilamentSheet({ f, onClose }) {
           {/* En-tête */}
           <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
             <div style={{ width:56, height:56, borderRadius:14, flexShrink:0,
-              boxShadow:"0 2px 12px rgba(0,0,0,0.2)", border:"2px solid var(--border)", ...colorBg(colorsList) }}/>
+              boxShadow:"0 2px 12px rgba(0,0,0,0.2)", border:"2px solid var(--border)", ...colorBg(colorsList, f.multicolor_type) }}/>
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:18, fontWeight:800, color:"var(--text)", margin:0,
                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -531,10 +536,10 @@ function FilamentsView() {
                 onClick={() => setSelectedFil(f)}
                 style={{ overflow:"hidden", cursor:"pointer", display:"flex", flexDirection:"column" }}>
                 {/* Bandeau couleur du filament */}
-                <div style={{ height:6, flexShrink:0, ...colorBg(colorsList) }}/>
+                <div style={{ height:6, flexShrink:0, ...colorBg(colorsList, f.multicolor_type) }}/>
                 <div style={{ padding:"10px 12px 12px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
                   <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
-                    <ColorDot color={f.color} colorsArray={f.colors_array} size={20}/>
+                    <ColorDot color={f.color} colorsArray={f.colors_array} multicolorType={f.multicolor_type} size={20}/>
                     <div style={{ flex:1, minWidth:0 }}>
                       <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden",
                         textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:"16px" }}>{f.name}</p>
