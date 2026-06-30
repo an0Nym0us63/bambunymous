@@ -390,13 +390,17 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
 
   if (!allItems.length) return null;
 
-  return (
-    <>
+  // Photos = fichiers manuels (pas un snapshot milestone connu) ; Milestones = snapshots auto pct/layer
+  const photoItems     = allItems.filter(i => !i.snap);
+  const milestoneItems = allItems.filter(i => i.snap);
+
+  const Row = ({ title, items }) => items.length > 0 && (
+    <div style={{ marginBottom:12 }}>
       <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>
-        Photos ({allItems.length})
+        {title} ({items.length})
       </p>
       <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6, scrollbarWidth:"thin" }}>
-        {allItems.map((item, i) => (
+        {items.map((item, i) => (
           <div key={i} onClick={() => setLightbox(item)}
             style={{ position:"relative", flexShrink:0, cursor:"pointer" }}>
             <img src={item.url} alt={item.label}
@@ -420,6 +424,13 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
           </div>
         ))}
       </div>
+    </div>
+  );
+
+  return (
+    <>
+      <Row title="Photos"     items={photoItems}/>
+      <Row title="Milestones" items={milestoneItems}/>
       {lightbox && (
         <div onClick={() => setLightbox(null)}
           style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:2000,
