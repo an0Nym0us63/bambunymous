@@ -113,3 +113,23 @@ class PrintTag(Base):
         Index("idx_print_tags_print", "print_id"),
         Index("idx_print_tags_tag",   "tag"),
     )
+
+
+class GroupRef(Base):
+    """
+    Mapping persistant id Spoolnymous → nom de groupe BambuNymous.
+    BambuNymous n'a pas de table "groupes" (juste des tags 'groupe:Nom' sur les prints),
+    donc ce mapping sert uniquement à retrouver le dossier /data/groups/{external_ref}/
+    importé depuis Spoolnymous et le rattacher au bon groupe par son nom — même rôle
+    que Print.external_ref pour les prints et le dossier /data/filaments/{id}/ pour les filaments.
+    """
+    __tablename__ = "group_refs"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    external_ref = Column(String(64),  nullable=False)   # id numérique Spoolnymous (groups.id)
+    group_name   = Column(String(256), nullable=False)
+
+    __table_args__ = (
+        Index("idx_group_refs_external_ref", "external_ref"),
+        Index("idx_group_refs_name", "group_name"),
+    )
