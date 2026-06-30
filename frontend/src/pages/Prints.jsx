@@ -431,6 +431,11 @@ function PrintDetail({ p, onClose, onDelete }) {
           </button>
         </div>
 
+        <div style={{ padding:"0 20px 12px" }}>
+          <SnapshotGallery snaps={snaps} printId={p.id}
+            onDelete={sid => setSnaps(ss => ss.filter(s => s.id !== sid))}/>
+        </div>
+
         <div style={{ padding:"16px 20px 8px" }}>
           {/* Titre + groupe */}
           <h2 style={{ fontSize:16, fontWeight:800, color:"var(--text)", margin:"0 0 4px",
@@ -521,12 +526,6 @@ function PrintDetail({ p, onClose, onDelete }) {
               ))}
             </div>
           </details>
-        </div>
-
-        {/* Snapshots — pleine largeur */}
-        <div style={{ padding:"0 20px 12px" }}>
-          <SnapshotGallery snaps={snaps} printId={p.id}
-            onDelete={sid => setSnaps(ss => ss.filter(s => s.id !== sid))}/>
         </div>
 
         {/* Actions */}
