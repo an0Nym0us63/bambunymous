@@ -104,23 +104,23 @@ function StatusBanner({ status }) {
   };
 
   return (
-    <div className="card" style={{ overflow:"hidden", position:"relative" }}>
-
-      {/* Badge HMS discret, coin bas droite */}
-      {status.hms_errors?.length > 0 && (
-        <div title={`${status.hms_errors.length} alerte${status.hms_errors.length>1?"s":""} HMS imprimante`}
-          style={{ position:"absolute", bottom:8, right:8, zIndex:2,
-            width:20, height:20, borderRadius:"50%",
-            background:"rgba(245,158,11,0.15)", border:"1px solid rgba(245,158,11,0.45)",
-            display:"flex", alignItems:"center", justifyContent:"center",
-            fontSize:11, fontWeight:800, color:"#f59e0b" }}>
-          !
-        </div>
-      )}
+    <div className="card" style={{ overflow:"hidden" }}>
 
       {/* Header cliquable */}
       <button onClick={() => setExpanded(e => !e)}
         style={{ width:"100%", background:"none", border:"none", cursor:"pointer", padding:0, position:"relative", zIndex:1 }}>
+
+        {/* Badge HMS discret, ancré sous le pourcentage — reste dans le header, jamais recouvert par le panneau déplié */}
+        {status.hms_errors?.length > 0 && (
+          <div title={`${status.hms_errors.length} alerte${status.hms_errors.length>1?"s":""} HMS imprimante`}
+            style={{ position:"absolute", bottom:8, right:16, zIndex:2,
+              width:20, height:20, borderRadius:"50%",
+              background:"rgba(245,158,11,0.15)", border:"1px solid rgba(245,158,11,0.45)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              fontSize:11, fontWeight:800, color:"#f59e0b" }}>
+            !
+          </div>
+        )}
 
         {/* Nom du print — ligne complète en haut */}
         <div style={{ padding:"10px 16px 4px", display:"flex", alignItems:"center", gap:8 }}>
@@ -384,6 +384,11 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
   const hasRack = (rack?.hotends?.length ?? 0) > 0;
   const headId  = rack?.head_id ?? -1;
   const headSlot = hasRack ? (rack.hotends.find(s => s.id === 0) ?? null) : null;
+  // Couleur réelle du filament en train d'être extrudé (le champ color du headSlot
+  // est parfois vide une fois le hotend monté) — fallback sur le tray AMS actif
+  const activeAms      = amsList?.find(a => a.id === activeAmsId) ?? null;
+  const activeTray      = activeAms?.trays?.find(t => t.id === activeTrayId) ?? null;
+  const headColorValue  = headSlot?.color || activeTray?.color || null;
 
   const slots = hasRack ? [1,2,3,4,5,6].map(num => {
     const targetId = num + 15; // slot 1→id16 ... slot 6→id21
@@ -464,7 +469,7 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
                 <div style={{ display:"flex", gap:5 }}>
                   {[slots[0], slots[2], slots[4]].map(({ slot, num, onHead }) => slot ? (
                     <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
-                      headColor={onHead ? headSlot?.color : null}
+                      headColor={onHead ? headColorValue : null}
                       isSelected={current.kind==="hotend" && current.num===num}
                       onClick={() => setSel({ kind:"hotend", num })}/>
                   ) : null)}
@@ -472,7 +477,7 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
                 <div style={{ display:"flex", gap:5 }}>
                   {[slots[1], slots[3], slots[5]].map(({ slot, num, onHead }) => slot ? (
                     <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
-                      headColor={onHead ? headSlot?.color : null}
+                      headColor={onHead ? headColorValue : null}
                       isSelected={current.kind==="hotend" && current.num===num}
                       onClick={() => setSel({ kind:"hotend", num })}/>
                   ) : null)}
