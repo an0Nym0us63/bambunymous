@@ -169,6 +169,25 @@ def _guess_trigger(filename):
     return "manual"
 
 
+def _snapshot_dest_name(original_base, dest_dir, manual_idx, trigger=None):
+    """
+    Nom de destination selon la convention BambuNymous (snapshot-{trigger}.ext),
+    au lieu du nom d'origine Spoolnymous — c'est ce nom qui sert au matching
+    disque↔DB (cf. PrintSnapshot.file_path et SnapshotGallery côté frontend).
+    Les triggers "manual" (photos non reconnues) sont numérotés pour rester uniques.
+    Retourne (dest_name, manual_idx_suivant).
+    """
+    ext = os.path.splitext(original_base)[1].lower() or ".jpg"
+    if trigger is None:
+        trigger = _guess_trigger(original_base)
+    if trigger == "manual":
+        idx = manual_idx
+        while (dest_dir / f"Photo-{idx:02d}{ext}").exists():
+            idx += 1
+        return f"Photo-{idx:02d}{ext}", idx + 1
+    return f"snapshot-{trigger}{ext}", manual_idx
+
+
 async def import_uploads_prints_zip(zip_source) -> dict:
     """Importe snapshots depuis uploads/prints/{print_id}/."""
     stats = {"matched": 0, "unmatched": 0, "copied": 0, "errors": 0}
@@ -196,11 +215,13 @@ async def import_uploads_prints_zip(zip_source) -> dict:
                     dest_dir = DATA_DIR / "prints" / old_pid_str
                     if dest_dir.exists():
                         logger.debug(f"[ZIP-UPRINT] print_id={old_pid_str} pas en DB mais dossier existe → copie directe")
+                        manual_idx = 1
                         for fname in files:
                             base = os.path.basename(_normalize(fname))
                             if not base or not _is_image(base): continue
                             try:
-                                (dest_dir / _safe_name(base)).write_bytes(z.read(fname))
+                                dest_name, manual_idx = _snapshot_dest_name(base, dest_dir, manual_idx)
+                                (dest_dir / dest_name).write_bytes(z.read(fname))
                                 stats["copied"] += 1
                             except Exception as e:
                                 logger.error(f"[ZIP-UPRINT] {fname}: {e}")
@@ -211,12 +232,18 @@ async def import_uploads_prints_zip(zip_source) -> dict:
                 stats["matched"] += 1
                 dest_dir = DATA_DIR / "prints" / str(p.id)
                 dest_dir.mkdir(parents=True, exist_ok=True)
+                manual_idx = 1
                 for fname in files:
                     base = os.path.basename(_normalize(fname))
                     if not base or not _is_image(base): continue
                     try:
                         data = z.read(fname)
-                        dest = dest_dir / _safe_name(base)
+                        trigger = _guess_trigger(base)
+                        # Renommer selon la convention BambuNymous (snapshot-{trigger}.ext)
+                        # plutôt que de garder le nom d'origine Spoolnymous — c'est ce nom
+                        # qui sert ensuite au matching disque↔DB côté frontend/API.
+                        dest_name, manual_idx = _snapshot_dest_name(base, dest_dir, manual_idx, trigger)
+                        dest = dest_dir / dest_name
                         dest.write_bytes(data)
                         rel_path = f"prints/{p.id}/{dest.name}"
                         existing = (await db.execute(
@@ -228,7 +255,7 @@ async def import_uploads_prints_zip(zip_source) -> dict:
                         if not existing:
                             db.add(PrintSnapshot(
                                 print_id=p.id,
-                                trigger=_guess_trigger(base),
+                                trigger=trigger,
                                 file_path=rel_path,
                             ))
                         stats["copied"] += 1
