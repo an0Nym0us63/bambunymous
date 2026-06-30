@@ -61,16 +61,17 @@ function StatusBadge({ status }) {
 }
 
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
-function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, onDelete }) {
+function GroupBottomSheet({ groupId, name, prints, latestDate, onClose, onSelectPrint, onDelete }) {
   const [selectedPrint, setSelectedPrint] = useState(null);
   const [lightbox, setLightbox] = useState(null);
   const [groupPhotos, setGroupPhotos] = useState([]);
 
   useEffect(() => {
-    client.get("/prints/groups/" + encodeURIComponent(name) + "/photos")
+    if (!groupId) { setGroupPhotos([]); return; }
+    client.get("/prints/groups/" + groupId + "/photos")
       .then(r => setGroupPhotos(r.data?.files || []))
       .catch(() => setGroupPhotos([]));
-  }, [name]);
+  }, [groupId]);
 
   // Stats agrégées
   const totalWeight = prints.reduce((s, p) => s + (p.total_weight_g || 0), 0);
@@ -252,7 +253,7 @@ function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, on
   );
 }
 
-function GroupTile({ name, prints, latestDate, onSelectPrint, onDelete }) {
+function GroupTile({ groupId, name, prints, latestDate, onSelectPrint, onDelete }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const coverPrint = prints[0];
 
@@ -285,7 +286,7 @@ function GroupTile({ name, prints, latestDate, onSelectPrint, onDelete }) {
 
       {sheetOpen && (
         <GroupBottomSheet
-          name={name} prints={prints} latestDate={latestDate}
+          groupId={groupId} name={name} prints={prints} latestDate={latestDate}
           onClose={() => setSheetOpen(false)}
           onSelectPrint={onSelectPrint}
           onDelete={id => { onDelete(id); }}/>
@@ -445,7 +446,7 @@ function PrintDetail({ p, onClose, onDelete }) {
     }
   }, [p]);
 
-  const groupe = (p.tags||[]).find(t=>t.startsWith("groupe:"))?.replace("groupe:","");
+  const groupe = p.group_name;
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000,
@@ -562,6 +563,7 @@ function PrintDetail({ p, onClose, onDelete }) {
                 ["External ref",   p.external_ref],
                 ["Design ID",      p.design_id],
                 ["Modèle printer", p.printer_model],
+                ["Groupe",         p.group_id ? `#${p.group_id} — ${p.group_name || ""}` : null],
               ].filter(([,v]) => v).map(([label, value]) => (
                 <div key={label} style={{ display:"flex", gap:8, alignItems:"baseline" }}>
                   <span style={{ fontSize:10, color:"var(--muted)", flexShrink:0, minWidth:100 }}>{label}</span>
@@ -626,7 +628,7 @@ export default function Prints() {
       const params = new URLSearchParams({ limit: LIMIT, offset: 0 });
       if (search)  params.set("search", search);
       if (statusF) params.set("status", statusF);
-      if (groupF)  params.set("group",  groupF);
+      if (groupF)  params.set("group_id", groupF);
       const { data } = await client.get("/prints?" + params);
       setDebugInfo("total=" + data.total + " prints=" + (data.prints||[]).length);
       setPrints(data.prints ?? []);
@@ -646,7 +648,7 @@ export default function Prints() {
       const params = new URLSearchParams({ limit: LIMIT, offset: next });
       if (search)  params.set("search", search);
       if (statusF) params.set("status", statusF);
-      if (groupF)  params.set("group",  groupF);
+      if (groupF)  params.set("group_id", groupF);
       const { data } = await client.get("/prints?" + params);
       const existingIds = new Set(prints.map(p => p.id));
       const fresh = (data.prints || []).filter(p => !existingIds.has(p.id));
@@ -756,39 +758,28 @@ export default function Prints() {
           );
         }
 
-        // Agréger les groupes
-        const groupMap = {};   // nom → { prints[], latestDate }
-        const seen = new Set();
+        // Agréger les groupes par id (et non par nom — deux groupes distincts peuvent
+        // porter le même nom, ex. import Spoolnymous à des dates différentes)
+        const groupMap = {};   // group_id → { name, prints[], latestDate }
         prints.forEach(p => {
-          const gtags = (p.tags||[]).filter(t=>t.startsWith("groupe:"));
-          if (gtags.length) {
-            gtags.forEach(t => {
-              const g = t.replace("groupe:","");
-              if (!groupMap[g]) groupMap[g] = { prints:[], latestDate:"" };
-              groupMap[g].prints.push(p);
-              if (!groupMap[g].latestDate || p.print_date > groupMap[g].latestDate)
-                groupMap[g].latestDate = p.print_date;
-            });
-          }
+          if (!p.group_id) return;
+          if (!groupMap[p.group_id]) groupMap[p.group_id] = { name: p.group_name, prints:[], latestDate:"" };
+          groupMap[p.group_id].prints.push(p);
+          if (!groupMap[p.group_id].latestDate || p.print_date > groupMap[p.group_id].latestDate)
+            groupMap[p.group_id].latestDate = p.print_date;
         });
 
         // Construire la liste d'items : soit un print solo, soit un groupe entier
         const items = [];
         const addedGroups = new Set();
         prints.forEach(p => {
-          const gtags = (p.tags||[]).filter(t=>t.startsWith("groupe:"));
-          if (!gtags.length) {
+          if (!p.group_id) {
             // Print solo → item individuel
             items.push({ type:"print", p, date: p.print_date });
-          } else {
+          } else if (!addedGroups.has(p.group_id)) {
             // Print de groupe → ajouter le groupe une seule fois à sa date max
-            gtags.forEach(t => {
-              const g = t.replace("groupe:","");
-              if (!addedGroups.has(g)) {
-                addedGroups.add(g);
-                items.push({ type:"group", name:g, ...groupMap[g] });
-              }
-            });
+            addedGroups.add(p.group_id);
+            items.push({ type:"group", groupId:p.group_id, ...groupMap[p.group_id] });
           }
         });
 
@@ -804,7 +795,7 @@ export default function Prints() {
                 onClick={()=>setSelected(item.p)}
                 onDelete={onDelete}/>
             ) : (
-              <GroupTile key={item.name} name={item.name}
+              <GroupTile key={item.groupId} groupId={item.groupId} name={item.name}
                 prints={item.prints} latestDate={item.latestDate}
                 onSelectPrint={setSelected}
                 onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}/>
