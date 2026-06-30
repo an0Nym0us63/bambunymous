@@ -273,6 +273,20 @@ async def run_import(src_path: str) -> dict:
                     break
 
             if group_map:
+                from ..models.print_history import GroupRef
+
+                # Persister le mapping id Spoolnymous → nom de groupe (sert au matching photos)
+                for old_gid, gname in group_map.items():
+                    try:
+                        res = (await db.execute(
+                            text("SELECT id FROM group_refs WHERE external_ref=:e"),
+                            {"e": str(old_gid)}
+                        )).scalar_one_or_none()
+                        if not res:
+                            db.add(GroupRef(external_ref=str(old_gid), group_name=gname))
+                    except Exception as _gre:
+                        logger.debug(f"[IMPORT] group_ref {old_gid}: {_gre}")
+
                 # Chercher group_id dans prints
                 for old_pid, new_pid in print_map.items():
                     try:
