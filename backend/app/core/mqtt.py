@@ -231,6 +231,8 @@ class MQTTManager:
 
         # ── Températures (device block H2C) ──────────────────────────────
         device = p.get("device", {})
+        extruder_infos = []
+        active_nozzle_idx = 0
         if device:
             # Bed: encodage int32 little-endian
             bed_raw = device.get("bed", {}).get("info", {}).get("temp")
@@ -276,17 +278,36 @@ class MQTTManager:
         # ── AMS ─────────────────────────────────────────────────────────
         ams_data = p.get("ams", {})
         if "ams" in ams_data:
-            # tray_now = index GLOBAL (ams_id*4 + tray_id) du tray en cours d'extrusion,
-            # mis à jour en temps réel (confirmé par les logs [ACTIVE] : bascule bien pendant
-            # un print bicolore, contrairement à "mapping" qui reste figé au mapping de job).
-            # Valeurs spéciales : 255 = aucun tray sélectionné / transition, 254 = bobine externe.
+            # Source fiable de l'AMS+tray actif sur H2C (double buse) :
+            # device.extruder.info[].snow, pour l'entrée dont id == buse active
+            # (active_nozzle_idx, calculé plus haut). snow est bit-packé :
+            # ams_id = snow >> 8, tray_local = snow & 0x3.
+            # /!\ tray_now seul est un index LOCAL (0-3) à l'AMS actif, PAS un
+            # index global (ams*4+tray) — confirmé par Spoolnymous et par les
+            # logs [ACTIVE] (toujours ams_id=0 quel que soit l'AMS réel).
+            # On ne garde tray_now que comme repli legacy (mono-buse / vieux firmware).
+            new_ams, new_tray = None, None
+            for ext in extruder_infos:
+                if int(ext.get("id", -1)) == active_nozzle_idx and "snow" in ext:
+                    try:
+                        snow_val = int(ext.get("snow"))
+                        new_ams  = snow_val >> 8
+                        new_tray = snow_val & 0x3
+                    except (TypeError, ValueError):
+                        pass
+                    break
+
             tray_now_raw = ams_data.get("tray_now", -1)
             tray_now = int(tray_now_raw) if tray_now_raw is not None else -1
             state.active_tray_local = tray_now
-            if 0 <= tray_now <= 15:
+
+            if new_ams is None and 0 <= tray_now <= 15:
+                # Repli legacy : suppose un index global (vrai sur mono-buse/AMS unique)
                 new_ams, new_tray = tray_now // 4, tray_now % 4
+
+            if new_ams is not None and new_tray is not None:
                 if new_ams != state.active_ams_id or new_tray != state.active_tray_id:
-                    logger.info(f"[ACTIVE] tray_now={tray_now} → active_ams_id {state.active_ams_id}→{new_ams} active_tray_id {state.active_tray_id}→{new_tray}")
+                    logger.info(f"[ACTIVE] snow→ams_id={new_ams} tray={new_tray} (tray_now={tray_now}, nozzle={active_nozzle_idx}) — avant: ams={state.active_ams_id} tray={state.active_tray_id}")
                 state.active_ams_id  = new_ams
                 state.active_tray_id = new_tray
             # Si tray_now==255 (transition) ou 254 (externe) : on garde la dernière valeur connue
