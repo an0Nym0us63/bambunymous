@@ -14,6 +14,7 @@ _listeners: list[Callable] = []
 # Cache matching AMS: (ams_id, tray_id, uuid_or_profile) → spool_id|-1
 # Évite de relancer un thread de matching à chaque tick MQTT (toutes les 2s)
 _MATCH_CACHE: dict = {}
+_MATCH_MODE_CACHE: dict = {}  # même clé → "rfid"/"auto"/"notfound" (persiste même sans spool_id)
 _SPOOL_INFO_CACHE: dict = {}  # même clé → dict spool_info
 
 
@@ -354,8 +355,10 @@ class MQTTManager:
                         _cache_key = (ams.id, t.id, _tray_uuid or _tray_info or "")
                         _cached_id = _MATCH_CACHE.get(_cache_key)
                         if _cached_id is not None:
-                            # Cache hit — restaurer spool_id et spool_info
+                            # Cache hit — restaurer spool_id, match_mode et spool_info
                             t.spool_id = _cached_id if _cached_id != -1 else None
+                            if _cache_key in _MATCH_MODE_CACHE:
+                                t.match_mode = _MATCH_MODE_CACHE[_cache_key]
                             if t.spool_id and _cache_key in _SPOOL_INFO_CACHE:
                                 t._spool_info_cache = _SPOOL_INFO_CACHE[_cache_key]
                         else:
@@ -368,9 +371,13 @@ class MQTTManager:
                                     from ..services.spool_matcher import match_spool
                                     spool_id, mode = await match_spool(_tag, _tinfo, _tc)
                                     _MATCH_CACHE[_key] = spool_id if spool_id else -1
+                                    # mode est mis en cache même sans spool_id (ex: "notfound")
+                                    # pour ne pas revenir au mode provisoire "rfid"/"auto" au tick suivant
+                                    if mode:
+                                        _t.match_mode = mode
+                                        _MATCH_MODE_CACHE[_key] = mode
                                     if spool_id:
                                         _t.spool_id   = spool_id
-                                        _t.match_mode = mode or _t.match_mode
                                         loc = f"AMS-{chr(65+_ams_id)} slot {_tray_slot+1}"
                                         logger.debug(f"[AMS] {_ams_id}/{_tray_slot} → #{spool_id} {mode}")
                                         # Stocker spool_info en cache
@@ -402,7 +409,7 @@ class MQTTManager:
                                         except Exception as _le:
                                             logger.debug(f"[AMS] loc: {_le}")
                                     else:
-                                        logger.debug(f"[AMS] {_ams_id}/{_tray_slot} no match")
+                                        logger.debug(f"[AMS] {_ams_id}/{_tray_slot} no match ({mode})")
                                 try:    lp.run_until_complete(_go())
                                 finally: lp.close()
                             _mth.Thread(target=_match_spool, daemon=True).start()
