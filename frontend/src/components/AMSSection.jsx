@@ -42,16 +42,23 @@ function parseColors(tray, spoolInfo) {
 }
 
 // Génère le style background pour n couleurs
-function colorBg(colors) {
+function colorBg(colors, type) {
   if (!colors?.length) return { backgroundColor: "var(--border)" };
   if (colors.length === 1) return { backgroundColor: colors[0] };
-  // Gradient linéaire pour multicolore
+  if (type === "gradient") {
+    // Fondu lisse entre les couleurs
+    return { background: `linear-gradient(90deg, ${colors.join(", ")})` };
+  }
+  // Autres types (coaxial, etc.) : séparation nette
   const stops = colors.map((c,i)=>{
     const a = Math.round(i/colors.length*100);
     const b = Math.round((i+1)/colors.length*100);
     return `${c} ${a}%, ${c} ${b}%`;
   }).join(", ");
   return { background: `linear-gradient(90deg, ${stops})` };
+}
+function multicolorType(tray, spoolInfo) {
+  return spoolInfo?.multicolor_type || tray?.multicolor_type || null;
 }
 
 const AMS_NAMES = ["AMS-A","AMS-B","AMS-C","AMS-D"];
@@ -60,7 +67,7 @@ const AMS_NAMES = ["AMS-A","AMS-B","AMS-C","AMS-D"];
 function ColorPill({ tray, spoolInfo, active }) {
   const colors = parseColors(tray, spoolInfo);
   const c1 = colors?.[0];
-  const bg = colorBg(colors);
+  const bg = colorBg(colors, multicolorType(tray, spoolInfo));
   // Contour léger pour les couleurs claires/blanches
   const lum = luminance((c1||"").replace("#",""));
   const outline = active
@@ -130,9 +137,10 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
 }
 
 // ── Bobine SVG — vue de face, disque plat ──────────────────────────────────
-function SpoolSVG({ colors, empty, size=68, active }) {
+function SpoolSVG({ colors, empty, size=68, active, type }) {
   const c1 = colors?.[0] || (empty ? "#2a2a2a" : "#888");
   const multi = colors && colors.length > 1;
+  const isGradient = multi && type === "gradient";
   const uid = `sg${Math.random().toString(36).slice(2,7)}`;
   const lum = luminance(c1.replace("#",""));
   const dark = lum < 128;
@@ -147,9 +155,21 @@ function SpoolSVG({ colors, empty, size=68, active }) {
       {/* Ombre portée */}
       <ellipse cx="40" cy="75" rx="22" ry="3" fill="rgba(0,0,0,0.20)"/>
 
-      {/* Disque principal — couleur exacte, ou secteurs pour multicolore */}
-      {multi && !empty ? (
-        // Secteurs de couleur (pie chart SVG)
+      {isGradient && (
+        <defs>
+          <linearGradient id={uid} x1="10" y1="40" x2="70" y2="40" gradientUnits="userSpaceOnUse">
+            {colors.map((cl, i) => (
+              <stop key={i} offset={`${Math.round(i/(colors.length-1)*100)}%`} stopColor={cl}/>
+            ))}
+          </linearGradient>
+        </defs>
+      )}
+
+      {/* Disque principal — couleur exacte, dégradé lisse, ou secteurs selon le type */}
+      {!empty && isGradient ? (
+        <circle cx="40" cy="40" r="30" fill={`url(#${uid})`}/>
+      ) : multi && !empty ? (
+        // Secteurs de couleur (pie chart SVG) — coaxial et autres types
         colors.map((cl, i) => {
           const total = colors.length;
           const startAngle = (i / total) * 2 * Math.PI - Math.PI / 2;
@@ -209,7 +229,8 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
 
   // Barre de progression : couleur du filament, contour si trop clair
   const lum = luminance((c1||"").replace("#",""));
-  const barBg = colorBg(colors);
+  const mcType = multicolorType(tray, spoolInfo);
+  const barBg = colorBg(colors, mcType);
   // Si filament gris/blanc → fond de la barre plus foncé
   const barTrackColor = "var(--border)";
 
@@ -236,7 +257,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
       {/* Bobine SVG */}
       <div style={{ position:"relative",
         transform: isActive ? "scale(1.06)" : "scale(1)", transition:"transform 0.3s" }}>
-        <SpoolSVG colors={empty?null:colors} empty={empty} size={68} active={isActive}/>
+        <SpoolSVG colors={empty?null:colors} empty={empty} size={68} active={isActive} type={mcType}/>
         {/* Label slot */}
         <div style={{ position:"absolute", bottom:10, left:"50%",
           transform:"translateX(-50%)", padding:"1px 7px", borderRadius:20,
@@ -337,9 +358,9 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
         <div style={{ padding:"16px 20px 24px" }}>
           {/* En-tête */}
           <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:20 }}>
-            <div style={{ width:60, height:60, borderRadius:14, flexShrink:0,
-              backgroundColor: isEmpty ? "var(--border)" : color || "var(--border)",
-              boxShadow:"0 2px 12px rgba(0,0,0,0.25)", border:"2px solid var(--border)" }}/>
+            <div style={{ width:60, height:60, borderRadius:14, flexShrink:0, overflow:"hidden",
+              boxShadow:"0 2px 12px rgba(0,0,0,0.25), inset 0 0 0 2px var(--border)",
+              ...(isEmpty ? { backgroundColor:"var(--border)" } : colorBg(parseColors(tray, info), multicolorType(tray, info))) }}/>
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:19, fontWeight:800, color:"var(--text)", margin:0,
                 letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -398,7 +419,7 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
             <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
               letterSpacing:"0.08em", margin:"0 0 4px" }}>Données imprimante (temps réel)</p>
             <Row label="Type"          value={tray.filament_type}/>
-            <Row label="Couleur"       value={color} mono/>
+            <Row label="Couleur"       value={(() => { const cs = parseColors(tray, info); return cs?.length > 1 ? cs.join(" / ") : color; })()} mono/>
             <Row label="Profile ID"    value={tray.tray_info_idx || tray.tray_id_name}/>
             <Row label="Tag UID (RFID)"value={tray.tag_uid && !tray.tag_uid.match(/^0+$/) ? tray.tag_uid : null} mono/>
             <Row label="Restant"       value={`${tray.remain}%`}/>
