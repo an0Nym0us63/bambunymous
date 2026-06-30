@@ -306,10 +306,22 @@ async def prints_gallery(_: str = Depends(get_current_user)):
 
 @router.get("/groups")
 async def list_groups(_: str = Depends(get_current_user)):
-    """Retourne les groupes (id BambuNymous + nom)."""
+    """Retourne les groupes (id BambuNymous + nom + nb de prints + date), pour distinguer
+    deux groupes portant le même nom (créés à des dates différentes)."""
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Group).order_by(Group.name))
-        groups = [{"id": g.id, "name": g.name} for g in result.scalars().all()]
+        result = await db.execute(
+            select(Group).options(selectinload(Group.prints)).order_by(Group.name)
+        )
+        groups = []
+        for g in result.scalars().all():
+            dates = [p.print_date for p in (g.prints or []) if p.print_date]
+            groups.append({
+                "id": g.id, "name": g.name,
+                "print_count": len(g.prints or []),
+                "created_at": g.created_at,
+                "latest_date": max(dates) if dates else g.created_at,
+            })
+    groups.sort(key=lambda g: g["latest_date"] or "", reverse=True)
     return {"groups": groups}
 
 
@@ -517,6 +529,44 @@ async def debug_prints():  # noqa — public debug route
         async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
             tables = [r[0] async for r in cur]
     return {"tables": tables, "prints": rows}
+
+
+@router.post("/group/bulk")
+async def set_group_bulk(body: dict, _: str = Depends(get_current_user)):
+    """
+    Assigne plusieurs prints au même groupe en un seul appel (évite de créer
+    un nouveau groupe par print lors d'une sélection multiple).
+    body: {"print_ids": [1,2,3], "group_id": 12} pour un groupe existant,
+          {"print_ids": [1,2,3], "group_name": "Nouveau nom"} pour en créer un nouveau,
+          {"print_ids": [1,2,3]} (sans group_id/group_name) pour retirer du groupe.
+    """
+    print_ids  = body.get("print_ids") or []
+    group_id   = body.get("group_id")
+    group_name = (body.get("group_name") or "").strip()
+    if not print_ids:
+        raise HTTPException(400, "print_ids requis")
+
+    async with AsyncSessionLocal() as db:
+        target_gid = None
+        if group_id:
+            g = await db.get(Group, int(group_id))
+            if not g:
+                raise HTTPException(404, "Groupe introuvable")
+            target_gid = g.id
+        elif group_name:
+            g = Group(name=group_name)
+            db.add(g)
+            await db.flush()
+            target_gid = g.id
+
+        updated = 0
+        for pid in print_ids:
+            p = await db.get(Print, int(pid))
+            if p:
+                p.group_id = target_gid
+                updated += 1
+        await db.commit()
+    return {"ok": True, "group_id": target_gid, "updated": updated}
 
 
 @router.post("/{print_id}/group")
