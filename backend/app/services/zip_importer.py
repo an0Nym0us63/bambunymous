@@ -11,7 +11,7 @@ from pathlib import Path
 from sqlalchemy import select
 
 from ..db.session import AsyncSessionLocal
-from ..models.print_history import Print, PrintSnapshot, GroupRef
+from ..models.print_history import Print, PrintSnapshot, Group
 
 logger = logging.getLogger(__name__)
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
@@ -307,23 +307,27 @@ async def import_uploads_groups_zip(zip_source) -> dict:
     """
     Importe photos depuis uploads/groups/{group_id}/.
 
-    {group_id} est l'id numérique Spoolnymous (pas un id BambuNymous, qui n'a
-    pas de table groupes). On résout ce numéro vers le nom du groupe via
-    GroupRef (persisté pendant l'import DB — cf. import_db.py) et on stocke
-    les photos sous /data/groups/{nom_du_groupe}/ — fallback sur l'id brut
-    si le mapping n'est pas (encore) disponible.
-    """
-    stats = {"copied": 0, "errors": 0}
+    {group_id} est l'id numérique Spoolnymous, pas un id BambuNymous. On le
+    résout vers le Group BambuNymous correspondant via Group.external_ref
+    (rempli pendant l'import DB — cf. import_db.py) et on stocke les photos
+    sous /data/groups/{group.id}/ (id propre BambuNymous), exactement comme
+    /data/prints/{print.id}/ et /data/filaments/{filament.id}/.
 
-    # Pré-charger le mapping id Spoolnymous → nom de groupe
-    ref_map: dict[str, str] = {}
+    Si l'import DB n'a pas encore été fait pour ce groupe (external_ref
+    inconnu), les photos sont ignorées plutôt que mal rattachées — relancer
+    ce zip après l'import DB.
+    """
+    stats = {"copied": 0, "errors": 0, "skipped": 0}
+
+    # Pré-charger le mapping id Spoolnymous (external_ref) → id Group BambuNymous
+    ref_map: dict[str, int] = {}
     try:
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(GroupRef))
-            for gr in result.scalars().all():
-                ref_map[str(gr.external_ref)] = gr.group_name
+            result = await db.execute(select(Group).where(Group.external_ref.is_not(None)))
+            for g in result.scalars().all():
+                ref_map[str(g.external_ref)] = g.id
     except Exception as e:
-        logger.debug(f"[ZIP-GRP] chargement GroupRef: {e}")
+        logger.debug(f"[ZIP-GRP] chargement Group: {e}")
 
     with zipfile.ZipFile(zip_source) as z:
         for name in z.namelist():
@@ -331,13 +335,14 @@ async def import_uploads_groups_zip(zip_source) -> dict:
             parts = _normalize(name).split("/")
             base = os.path.basename(parts[-1])
             if not base or not _is_image(base): continue
-            group_id = next((p for p in parts[:-1] if p.isdigit()), None)
-            if not group_id: continue
-            group_name = ref_map.get(group_id)
-            folder = _safe_name(group_name) if group_name else group_id
-            if not group_name:
-                logger.debug(f"[ZIP-GRP] pas de GroupRef pour id={group_id} → dossier legacy {group_id}/")
-            dest_dir = DATA_DIR / "groups" / folder
+            old_group_id = next((p for p in parts[:-1] if p.isdigit()), None)
+            if not old_group_id: continue
+            new_group_id = ref_map.get(old_group_id)
+            if not new_group_id:
+                logger.debug(f"[ZIP-GRP] pas de Group pour external_ref={old_group_id} (faire l'import DB d'abord) → {name} ignoré")
+                stats["skipped"] += 1
+                continue
+            dest_dir = DATA_DIR / "groups" / str(new_group_id)
             dest_dir.mkdir(parents=True, exist_ok=True)
             try:
                 (dest_dir / _safe_name(base)).write_bytes(z.read(name))
