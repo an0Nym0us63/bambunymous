@@ -70,14 +70,11 @@ function ColorPill({ tray, spoolInfo, active }) {
   const bg = colorBg(colors, multicolorType(tray, spoolInfo));
   // Contour léger pour les couleurs claires/blanches
   const lum = luminance((c1||"").replace("#",""));
-  const ringColor = active ? "white" : lum > 200 ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.1)";
+  const ringColor = active ? "#3b82f6" : lum > 200 ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.1)";
   return (
     <div style={{ flex:1, height:28, borderRadius:6, transition:"all 0.2s",
-      transform: active ? "scaleY(1.15)" : "scaleY(1)",
-      boxShadow: active
-        ? `0 0 0 2px ${ringColor}, 0 0 0 4px #3b82f6, 0 0 10px 2px rgba(59,130,246,0.6)`
-        : `0 0 0 1px ${ringColor}`,
-      position:"relative", zIndex: active ? 1 : 0, ...bg }}>
+      boxShadow: active ? `0 0 0 2px ${ringColor}` : `0 0 0 1px ${ringColor}`,
+      position:"relative", ...bg }}>
       {tray.match_mode && (
         <span style={{ position:"absolute", top:2, right:3 }}>
           <MatchIcon mode={tray.match_mode} size={8}/>
