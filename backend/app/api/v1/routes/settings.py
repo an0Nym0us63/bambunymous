@@ -27,7 +27,7 @@ async def reset_all_data(_: str = Depends(get_current_user)):
         # Supprimer dans l'ordre FK
         for tbl in [
             "print_tags", "print_snapshots", "filament_usage", "prints",
-            "bobines", "filaments"
+            "bobines", "filaments", "groups"
         ]:
             try:
                 await db.execute(text(f"DELETE FROM {tbl}"))
