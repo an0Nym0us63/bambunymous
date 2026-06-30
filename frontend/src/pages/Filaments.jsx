@@ -176,7 +176,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
       zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
+        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
           width:"100%", maxWidth:540, maxHeight:"90dvh", overflowY:"auto",
           paddingBottom:"env(safe-area-inset-bottom,20px)" }}>
 
@@ -385,7 +385,7 @@ function FilamentSheet({ f, onClose }) {
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
       zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
+        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
           width:"100%", maxWidth:540, maxHeight:"90dvh", overflowY:"auto",
           paddingBottom:"env(safe-area-inset-bottom,20px)" }}>
 
