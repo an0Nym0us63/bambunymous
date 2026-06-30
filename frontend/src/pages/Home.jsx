@@ -17,6 +17,19 @@ function fmtTime(mins) {
   return h > 0 ? `${h}h ${m > 0 ? m+"min" : ""}` : `${m}min`;
 }
 
+// Heure de fin estimée + décalage en jours (0 = aujourd'hui, 1 = demain, etc.)
+function fmtFinishTime(mins) {
+  if (!mins) return null;
+  const now = new Date();
+  const finish = new Date(now.getTime() + mins * 60000);
+  const dayDiff = Math.round(
+    (new Date(finish.getFullYear(), finish.getMonth(), finish.getDate()) -
+     new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000
+  );
+  const time = finish.toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" });
+  return { time, dayDiff };
+}
+
 // ── Status Banner ──────────────────────────────────────────────────────────
 const STATUS_CFG = {
   RUNNING: { label:"En cours",    color:"#3b82f6", dot:"#60a5fa" },
@@ -80,6 +93,7 @@ function StatusBanner({ status }) {
   const cfg    = STATUS_CFG[status.status] ?? STATUS_CFG.IDLE;
   const pct    = status.progress ?? 0;
   const remain = fmtTime(status.remaining_minutes);
+  const finish = fmtFinishTime(status.remaining_minutes);
   const left   = status.nozzles?.find(n => n.id === 1);
   const right  = status.nozzles?.find(n => n.id === 0);
 
@@ -140,9 +154,9 @@ function StatusBanner({ status }) {
 
         {/* Ligne du bas : vignette + infos + % */}
         <div style={{ display:"flex", alignItems:"center", gap:12, padding:"4px 16px 12px" }}>
-          {/* Vignette plus grande */}
-          <div style={{ width:64, height:64, borderRadius:10, overflow:"hidden", flexShrink:0,
-            background:"repeating-conic-gradient(var(--surface2) 0% 25%,var(--surface) 0% 50%) 0 0/12px 12px" }}>
+          {/* Vignette */}
+          <div style={{ width:72, height:72, borderRadius:10, overflow:"hidden", flexShrink:0,
+            background:"var(--surface2)" }}>
             {printInfo?.plate_image && (
               <img src={`/api/v1/prints/${printInfo.id}/image`} alt=""
                 style={{ width:"100%", height:"100%", objectFit:"cover" }}
@@ -166,6 +180,14 @@ function StatusBanner({ status }) {
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 {remain && <span style={{ fontSize:11, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Clock size={10}/>{remain}</span>}
                 {status.total_layers > 0 && <span style={{ fontSize:11, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Layers size={10}/>{status.layer}/{status.total_layers}</span>}
+              </div>
+            )}
+            {isRunning && finish && (
+              <div style={{ display:"flex", alignItems:"center", gap:2, marginTop:3 }}>
+                <span style={{ fontSize:11, color:"var(--muted)" }}>Fin estimée : {finish.time}</span>
+                {finish.dayDiff > 0 && (
+                  <sup style={{ fontSize:9, fontWeight:800, color:cfg.color, marginLeft:1 }}>+{finish.dayDiff}</sup>
+                )}
               </div>
             )}
           </div>
