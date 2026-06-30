@@ -70,6 +70,7 @@ async def _migrate():
         ("prints",    "external_ref",         "TEXT"),
         ("prints",    "plate_id",             "TEXT DEFAULT '1'"),
         ("prints",    "printer_model",        "TEXT DEFAULT 'H2C'"),
+        ("prints",    "group_id",             "INTEGER"),
         ("filament_usage", "ams_id",          "INTEGER"),
         ("filament_usage", "tray_id",         "INTEGER"),
         ("filament_usage", "normal_cost",     "REAL DEFAULT 0"),
