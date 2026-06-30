@@ -41,6 +41,8 @@ class Print(Base):
     design_id           = Column(String(128), nullable=True)
     printer_model       = Column(String(32),  default="H2C")
 
+    group_id            = Column(Integer, ForeignKey("groups.id", ondelete="SET NULL"), nullable=True)
+
     created_at          = Column(DateTime, default=datetime.utcnow)
     updated_at          = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -50,12 +52,14 @@ class Print(Base):
                                    cascade="all, delete-orphan")
     tags            = relationship("PrintTag",        back_populates="print",
                                    cascade="all, delete-orphan")
+    group           = relationship("Group", back_populates="prints")
 
     __table_args__ = (
         Index("idx_prints_job_id",   "job_id"),
         Index("idx_prints_date",     "print_date"),
         Index("idx_prints_status",   "status"),
         Index("idx_prints_filename", "file_name"),
+        Index("idx_prints_group_id", "group_id"),
     )
 
 
@@ -115,21 +119,26 @@ class PrintTag(Base):
     )
 
 
-class GroupRef(Base):
+class Group(Base):
     """
-    Mapping persistant id Spoolnymous → nom de groupe BambuNymous.
-    BambuNymous n'a pas de table "groupes" (juste des tags 'groupe:Nom' sur les prints),
-    donc ce mapping sert uniquement à retrouver le dossier /data/groups/{external_ref}/
-    importé depuis Spoolnymous et le rattacher au bon groupe par son nom — même rôle
-    que Print.external_ref pour les prints et le dossier /data/filaments/{id}/ pour les filaments.
+    Groupe de prints, identifié par son propre id BambuNymous (exactement
+    comme Print.id ou Filament.id) — distinct du nom, pour éviter que deux
+    groupes différents portant le même nom (mais créés à des dates
+    différentes côté Spoolnymous) ne soient fusionnés en un seul.
     """
-    __tablename__ = "group_refs"
+    __tablename__ = "groups"
 
     id           = Column(Integer, primary_key=True, autoincrement=True)
-    external_ref = Column(String(64),  nullable=False)   # id numérique Spoolnymous (groups.id)
-    group_name   = Column(String(256), nullable=False)
+    name         = Column(String(256), nullable=False)
+    # id numérique Spoolnymous d'origine — sert uniquement à rattacher le
+    # dossier de photos importé (/data/groups/{old_id}/) au bon groupe lors
+    # de l'import ZIP, même rôle que Print.external_ref pour les prints.
+    external_ref = Column(String(64), nullable=True)
+    created_at   = Column(DateTime, default=datetime.utcnow)
+
+    prints = relationship("Print", back_populates="group")
 
     __table_args__ = (
-        Index("idx_group_refs_external_ref", "external_ref"),
-        Index("idx_group_refs_name", "group_name"),
+        Index("idx_groups_external_ref", "external_ref"),
+        Index("idx_groups_name", "name"),
     )
