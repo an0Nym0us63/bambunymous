@@ -346,15 +346,18 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
     <div className="card" onClick={handleClick}
       onTouchStart={startPress} onTouchEnd={cancelPress} onTouchMove={cancelPress}
       onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+      onContextMenu={e => e.preventDefault()}
       style={{ overflow:"hidden", display:"flex",
       flexDirection:"column", position:"relative", padding:0, cursor:"pointer",
-      outline: selected ? "2px solid #3b82f6" : "none", userSelect:"none", WebkitUserSelect:"none" }}>
+      outline: selected ? "2px solid #3b82f6" : "none",
+      userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none", touchAction:"manipulation" }}>
 
       {/* Vignette pleine largeur ratio 4/3 */}
       <div style={{ position:"relative", paddingTop:"75%",
         background:"var(--surface2)", overflow:"hidden" }}>
-        <img src={"/api/v1/prints/" + p.id + "/image"} alt=""
-          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
+        <img src={"/api/v1/prints/" + p.id + "/image"} alt="" draggable={false}
+          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover",
+            WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
           onError={e => { e.currentTarget.style.display="none"; }}/>
         {selectMode && (
           <div style={{ position:"absolute", top:6, left:6, width:20, height:20, borderRadius:6,
