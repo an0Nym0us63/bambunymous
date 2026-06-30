@@ -64,6 +64,13 @@ function StatusBadge({ status }) {
 function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, onDelete }) {
   const [selectedPrint, setSelectedPrint] = useState(null);
   const [lightbox, setLightbox] = useState(null);
+  const [groupPhotos, setGroupPhotos] = useState([]);
+
+  useEffect(() => {
+    client.get("/prints/groups/" + encodeURIComponent(name) + "/photos")
+      .then(r => setGroupPhotos(r.data?.files || []))
+      .catch(() => setGroupPhotos([]));
+  }, [name]);
 
   // Stats agrégées
   const totalWeight = prints.reduce((s, p) => s + (p.total_weight_g || 0), 0);
@@ -82,10 +89,12 @@ function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, on
   });
   const filaments = Object.values(filAgg).sort((a,b) => b.grams - a.grams);
 
-  // Photos — une vignette par print du groupe, ouvrable en grand
-  const photoItems = prints
+  // Photos — d'abord celles du dossier groupe (legacy Spoolnymous), puis une vignette par print
+  const groupPhotoItems = groupPhotos.map(f => ({ url: f.url, label: f.name }));
+  const printPhotoItems = prints
     .filter(p => p.plate_image)
     .map(p => ({ url: "/api/v1/prints/" + p.id + "/image", label: p.file_name || "Sans nom", print: p }));
+  const photoItems = [...groupPhotoItems, ...printPhotoItems];
 
   return (
     <>
