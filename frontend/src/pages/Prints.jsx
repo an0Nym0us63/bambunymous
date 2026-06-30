@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus } from "lucide-react";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
@@ -310,10 +310,27 @@ function GroupTile({ groupId, name, prints, latestDate, onSelectPrint, onDelete,
 }
 
 
-function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect }) {
+function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect, onLongPress }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.5)", color:"white", label: p.status || "?" };
+  const pressTimer = useRef(null);
+  const longPressed = useRef(false);
+
+  const startPress = () => {
+    if (selectMode) return;
+    longPressed.current = false;
+    pressTimer.current = setTimeout(() => {
+      longPressed.current = true;
+      if (navigator.vibrate) navigator.vibrate(15);
+      onLongPress?.(p.id);
+    }, 480);
+  };
+  const cancelPress = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
+  const handleClick = () => {
+    if (longPressed.current) { longPressed.current = false; return; } // évite d'ouvrir la fiche juste après le long-press
+    if (selectMode) onToggleSelect(p.id); else onClick();
+  };
 
   const handleDelete = async (e) => {
     e.stopPropagation();
@@ -326,10 +343,12 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect 
   };
 
   return (
-    <div className="card" onClick={selectMode ? () => onToggleSelect(p.id) : onClick}
+    <div className="card" onClick={handleClick}
+      onTouchStart={startPress} onTouchEnd={cancelPress} onTouchMove={cancelPress}
+      onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
       style={{ overflow:"hidden", display:"flex",
       flexDirection:"column", position:"relative", padding:0, cursor:"pointer",
-      outline: selected ? "2px solid #3b82f6" : "none" }}>
+      outline: selected ? "2px solid #3b82f6" : "none", userSelect:"none", WebkitUserSelect:"none" }}>
 
       {/* Vignette pleine largeur ratio 4/3 */}
       <div style={{ position:"relative", paddingTop:"75%",
@@ -918,7 +937,8 @@ export default function Prints() {
                 onDelete={onDelete}
                 selectMode={selectMode}
                 selected={selectedIds.has(item.p.id)}
-                onToggleSelect={toggleSelect}/>
+                onToggleSelect={toggleSelect}
+                onLongPress={id => { setSelectMode(true); setSelectedIds(new Set([id])); }}/>
             ) : (
               <GroupTile key={item.groupId} groupId={item.groupId} name={item.name}
                 prints={item.prints} latestDate={item.latestDate}
@@ -988,16 +1008,28 @@ export default function Prints() {
 // ── Sélecteur de groupe — recherche substring + création ───────────────────
 function GroupPickerSheet({ groups, onClose, onPick }) {
   const [q, setQ] = useState("");
+  const [vh, setVh] = useState(typeof window !== "undefined" ? window.innerHeight : 800);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const update = () => setVh(vv.height);
+    update();
+    vv.addEventListener("resize", update);
+    return () => vv.removeEventListener("resize", update);
+  }, []);
+
   const filtered = q.trim()
     ? groups.filter(g => g.name.toLowerCase().includes(q.trim().toLowerCase()))
     : groups;
   const exactNameExists = groups.some(g => g.name.toLowerCase() === q.trim().toLowerCase());
 
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:1400,
+    <div onClick={onClose} style={{ position:"fixed", left:0, right:0, top:0, height: vh + "px", zIndex:1400,
       background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)",
-        borderRadius:"20px 20px 0 0", width:"100%", maxWidth:480, maxHeight:"80dvh",
+        borderRadius:"20px 20px 0 0", width:"100%", maxWidth:480,
+        maxHeight: Math.round(vh * 0.9) + "px",
         display:"flex", flexDirection:"column",
         paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
 
