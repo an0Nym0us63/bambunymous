@@ -257,27 +257,32 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
   const headBorderStyle = isHead ? (isRightNozzle ? "solid" : "dashed") : "solid";
 
   return (
-    <button onClick={onClick} style={{
-      border: `2px ${headBorderStyle} ${isHead ? "#3b82f6" : isSelected ? "rgba(255,255,255,0.25)" : "var(--border)"}`,
-      borderRadius:10, padding:8,
-      background: isHead ? "rgba(59,130,246,0.10)" : "var(--surface2)",
-      display:"flex", flexDirection:"column", gap:4,
-      alignItems:"center", cursor:"pointer", transition:"all 0.15s", minWidth:44,
-      boxShadow: isHead ? "0 0 0 3px rgba(59,130,246,0.12)" : "none",
-    }}>
-      {/* Couleur du slot — couleur réelle même sur la tête */}
-      <div style={{ width:22, height:22, borderRadius:6,
-        backgroundColor: color || (isHead ? "rgba(59,130,246,0.15)" : "var(--border)"),
-        border: isHead ? `1.5px ${headBorderStyle} #3b82f6` : "1px solid rgba(255,255,255,0.1)",
-        display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
-        {status === "empty" && <span style={{ color:"var(--muted)", fontSize:8 }}>—</span>}
-      </div>
-      {slot?.match_mode && !isHead && status==="loaded" && (
-        <span style={{ position:"absolute", top:-2, right:-2, zIndex:1 }}><MatchBadge mode={slot.match_mode}/></span>
-      )}
-      <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700,
-        color: isHead ? "#60a5fa" : "var(--muted)" }}>{num}</span>
-    </button>
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+      <button onClick={onClick} style={{
+        border: `1.5px ${headBorderStyle} ${isHead ? "rgba(59,130,246,0.6)" : isSelected ? "rgba(255,255,255,0.2)" : "var(--border)"}`,
+        borderRadius:10, padding:8,
+        background: isHead ? "rgba(59,130,246,0.06)" : "var(--surface2)",
+        display:"flex", flexDirection:"column", gap:4,
+        alignItems:"center", cursor:"pointer", transition:"all 0.2s", minWidth:44,
+        boxShadow: isHead ? "0 4px 16px rgba(59,130,246,0.15)" : "none",
+      }}>
+        {/* Couleur du slot — couleur réelle même sur la tête */}
+        <div style={{ width:22, height:22, borderRadius:6,
+          backgroundColor: color || (isHead ? "rgba(59,130,246,0.15)" : "var(--border)"),
+          border: isHead ? `1.5px ${headBorderStyle} #3b82f6` : "1px solid rgba(255,255,255,0.1)",
+          display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
+          {status === "empty" && <span style={{ color:"var(--muted)", fontSize:8 }}>—</span>}
+        </div>
+        {slot?.match_mode && !isHead && status==="loaded" && (
+          <span style={{ position:"absolute", top:-2, right:-2, zIndex:1 }}><MatchBadge mode={slot.match_mode}/></span>
+        )}
+        <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700,
+          color: isHead ? "#60a5fa" : "var(--muted)" }}>{num}</span>
+      </button>
+      {/* Barre de sélection — identique à AMSBox pour cohérence visuelle */}
+      <div style={{ height:2, borderRadius:1, background: isSelected ? "#3b82f6" : "transparent",
+        width: isSelected ? 32 : 8, transition:"all 0.3s" }} />
+    </div>
   );
 }
 
