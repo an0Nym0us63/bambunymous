@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Plus, Search, Archive, X, Save, RefreshCw } from "lucide-react";
 import client from "../api/client";
+import GalleryCompare from "../components/GalleryCompare";
 
 const MATERIALS = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","BVOH","PLA-CF","PETG-CF","PA-CF","PPS"];
 
@@ -586,6 +587,7 @@ export default function Filaments() {
     { id:"spools",   label:"Bobines actives" },
     { id:"archived", label:"Archivées" },
     { id:"catalog",  label:"Catalogue" },
+    { id:"gallery",  label:"Galerie" },
   ];
 
   return (
@@ -606,10 +608,28 @@ export default function Filaments() {
         ))}
       </div>
 
-      {tab==="catalog"
-        ? <FilamentsView/>
-        : <SpoolsView filaments={filaments} showArchived={tab==="archived"}/>
-      }
+      {tab==="catalog" && <FilamentsView/>}
+      {tab==="gallery" && (
+        <GalleryCompare
+          items={filaments}
+          getId={f => f.id}
+          getImage={f => f.photo_url}
+          getTitle={f => f.name}
+          getSubtitle={f => [f.manufacturer, f.material].filter(Boolean).join(" · ")}
+          emptyLabel="Aucune photo de filament"
+          compareFields={[
+            ["Matière",   f => f.material],
+            ["Marque",    f => f.manufacturer],
+            ["Couleur",   f => f.color ? `#${f.color}` : null],
+            ["Poids",     f => f.filament_weight_g ? `${f.filament_weight_g}g` : null],
+            ["Prix",      f => f.price ? `${f.price}€` : null],
+            ["Bobines",   f => `${f.active_spool_count} active${f.active_spool_count!==1?"s":""} / ${f.spool_count}`],
+          ]}
+        />
+      )}
+      {(tab==="spools" || tab==="archived") && (
+        <SpoolsView filaments={filaments} showArchived={tab==="archived"}/>
+      )}
     </div>
   );
 }
