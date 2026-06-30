@@ -13,11 +13,30 @@ const inp = {
 const inpFocus = e => e.target.style.borderColor="#3b82f6";
 const inpBlur  = e => e.target.style.borderColor="var(--border)";
 
-function ColorDot({ color, size=16 }) {
+// Parse "colors_array" (CSV hex, sans #) → liste de couleurs CSS, avec fallback sur color simple
+function parseColorsList(color, colorsArray) {
+  if (colorsArray) {
+    const cols = colorsArray.split(",").map(c => c.trim()).filter(Boolean)
+      .map(c => `#${c.replace(/^#/, "").slice(0,6)}`);
+    if (cols.length > 1) return cols;
+  }
+  return color ? [`#${color.replace(/^#/, "").slice(0,6)}`] : null;
+}
+function colorBg(colors) {
+  if (!colors?.length) return { backgroundColor: "var(--border)" };
+  if (colors.length === 1) return { backgroundColor: colors[0] };
+  const stops = colors.map((c,i) => {
+    const a = Math.round(i/colors.length*100), b = Math.round((i+1)/colors.length*100);
+    return `${c} ${a}%, ${c} ${b}%`;
+  }).join(", ");
+  return { background: `linear-gradient(90deg, ${stops})` };
+}
+
+function ColorDot({ color, colorsArray, size=16 }) {
+  const colors = parseColorsList(color, colorsArray);
   return (
     <div style={{ width:size, height:size, borderRadius:4, flexShrink:0,
-      backgroundColor: color ? `#${color.slice(0,6)}` : "var(--border)",
-      border:"1px solid rgba(255,255,255,0.1)" }} />
+      border:"1px solid rgba(255,255,255,0.1)", ...colorBg(colors) }} />
   );
 }
 
@@ -156,6 +175,7 @@ function FilamentPhotos({ filamentId, onLightbox }) {
 function SpoolBottomSheet({ spool, onClose, onArchive }) {
   if (!spool) return null;
   const color = spool.filament_color ? `#${spool.filament_color.slice(0,6)}` : null;
+  const colorsList = parseColorsList(spool.filament_color, spool.filament_colors_array);
   const total = spool.filament_weight_g || 1000;
   const remaining = spool.remaining_weight_g ?? total;
   const pct = Math.max(0, Math.min(100, Math.round((remaining / total) * 100)));
@@ -189,8 +209,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
           {/* En-tête */}
           <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:24 }}>
             <div style={{ width:64, height:64, borderRadius:16, flexShrink:0,
-              backgroundColor: color || "var(--border)",
-              boxShadow:"0 2px 14px rgba(0,0,0,0.25)", border:"2px solid var(--border)" }}/>
+              boxShadow:"0 2px 14px rgba(0,0,0,0.25)", border:"2px solid var(--border)", ...colorBg(colorsList) }}/>
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:20, fontWeight:800, color:"var(--text)", margin:0,
                 letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -236,7 +255,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
           <Row label="Nom traduit"    value={spool.filament_translated_name}/>
           <Row label="Marque"         value={spool.filament_manufacturer}/>
           <Row label="Matière"        value={spool.filament_material}/>
-          <Row label="Couleur"        value={color} mono/>
+          <Row label="Couleur"        value={colorsList?.length > 1 ? colorsList.join(" / ") : color} mono/>
           <Row label="Profile ID"     value={spool.filament_profile_id} mono/>
           <Row label="Multicolor"     value={spool.filament_multicolor_type !== "monochrome" ? spool.filament_multicolor_type : null}/>
           <Row label="Poids total"    value={spool.filament_weight_g ? `${spool.filament_weight_g}g` : null}/>
@@ -320,15 +339,15 @@ function SpoolsView({ filaments, showArchived }) {
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
           {spools.map(s => {
-            const colorHex = s.filament_color ? `#${s.filament_color.slice(0,6)}` : null;
+            const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
             return (
               <div key={s.id} onClick={()=>setSelected(s)} className="card-sm"
                 style={{ overflow:"hidden", cursor:"pointer", display:"flex", flexDirection:"column" }}>
                 {/* Bandeau couleur du filament */}
-                <div style={{ height:6, background: colorHex || "var(--border)", flexShrink:0 }}/>
+                <div style={{ height:6, flexShrink:0, ...colorBg(colorsList) }}/>
                 <div style={{ padding:"10px 12px 12px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
                   <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
-                    <ColorDot color={s.filament_color} size={20}/>
+                    <ColorDot color={s.filament_color} colorsArray={s.filament_colors_array} size={20}/>
                     <div style={{ flex:1, minWidth:0 }}>
                       <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden",
                         textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:"16px" }}>{s.filament_name}</p>
@@ -384,6 +403,7 @@ function SpoolsView({ filaments, showArchived }) {
 function FilamentSheet({ f, onClose }) {
   const [lightbox, setLightbox] = useState(null);
   const color = f.color ? "#" + f.color.replace("#","").slice(0,6) : null;
+  const colorsList = parseColorsList(f.color, f.colors_array);
 
   const Row = ({ label, value, mono }) => (!value && value !== 0) ? null : (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
@@ -412,8 +432,7 @@ function FilamentSheet({ f, onClose }) {
           {/* En-tête */}
           <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
             <div style={{ width:56, height:56, borderRadius:14, flexShrink:0,
-              backgroundColor: color || "var(--border)",
-              boxShadow:"0 2px 12px rgba(0,0,0,0.2)", border:"2px solid var(--border)" }}/>
+              boxShadow:"0 2px 12px rgba(0,0,0,0.2)", border:"2px solid var(--border)", ...colorBg(colorsList) }}/>
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:18, fontWeight:800, color:"var(--text)", margin:0,
                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -436,7 +455,7 @@ function FilamentSheet({ f, onClose }) {
             letterSpacing:"0.08em", marginBottom:4 }}>Caractéristiques</p>
           <Row label="Marque"        value={f.manufacturer}/>
           <Row label="Matière"       value={f.material}/>
-          <Row label="Couleur"       value={color} mono/>
+          <Row label="Couleur"       value={colorsList?.length > 1 ? colorsList.join(" / ") : color} mono/>
           <Row label="Profile ID"    value={f.profile_id} mono/>
           <Row label="Poids bobine"  value={f.filament_weight_g ? f.filament_weight_g+"g" : null}/>
           <Row label="Poids support" value={f.spool_weight_g ? f.spool_weight_g+"g" : null}/>
@@ -506,16 +525,16 @@ function FilamentsView() {
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
           {filaments.map(f => {
-            const colorHex = f.color ? `#${f.color.slice(0,6)}` : null;
+            const colorsList = parseColorsList(f.color, f.colors_array);
             return (
               <div key={f.id} className="card-sm"
                 onClick={() => setSelectedFil(f)}
                 style={{ overflow:"hidden", cursor:"pointer", display:"flex", flexDirection:"column" }}>
                 {/* Bandeau couleur du filament */}
-                <div style={{ height:6, background: colorHex || "var(--border)", flexShrink:0 }}/>
+                <div style={{ height:6, flexShrink:0, ...colorBg(colorsList) }}/>
                 <div style={{ padding:"10px 12px 12px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
                   <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
-                    <ColorDot color={f.color} size={20}/>
+                    <ColorDot color={f.color} colorsArray={f.colors_array} size={20}/>
                     <div style={{ flex:1, minWidth:0 }}>
                       <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden",
                         textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:"16px" }}>{f.name}</p>
