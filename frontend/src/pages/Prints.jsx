@@ -642,16 +642,10 @@ function PrintsGalleryView() {
       getId={it => it.kind + it.id}
       getCoverImage={it => it.photos?.[0]?.url}
       getPhotos={it => it.photos}
-      getTitle={it => it.kind==="group" ? it.title : it.title}
+      getTitle={it => it.title}
       getSubtitle={it => it.kind==="group" ? `📁 ${it.count} print${it.count>1?"s":""}` : fmtDate(it.print_date)}
       emptyLabel="Aucune photo manuelle uploadée sur tes prints (hors milestones auto)"
-      compareFields={[
-        ["Statut",   it => it.status],
-        ["Date",     it => fmtDate(it.print_date)],
-        ["Durée",    it => it.duration_seconds ? `${Math.round(it.duration_seconds/60)}min` : null],
-        ["Poids",    it => it.total_weight_g ? `${it.total_weight_g.toFixed(1)}g` : null],
-        ["Coût",     it => it.total_cost ? `${it.total_cost.toFixed(2)}€` : null],
-      ]}
+      enableCompare={false}
     />
   );
 }
