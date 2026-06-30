@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon } from "lucide-react";
 import client from "../api/client";
+import { usePrinter } from "../store/printer";
 import ImportSection, { ZipImportSection } from "../components/ImportSection";
 import { useTheme } from "../useTheme";
 
@@ -21,6 +22,122 @@ const cardTitle = {
   fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase",
   letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6,
 };
+
+const AMS_NAMES = { 0:"AMS-A", 1:"AMS-B", 2:"AMS-C", 3:"AMS-D" };
+const POSITION_LABELS = [
+  "Position 1 — haut gauche",
+  "Position 2 — bas gauche (sous A)",
+  "Position 3 — à côté de A",
+  "Position 4 — sous la position 3",
+];
+
+function AMSOrderSection() {
+  const status = usePrinter(s => s.status);
+  const availableIds = [...new Map((status?.ams_list || []).map(a => [a.id, a])).values()]
+    .map(a => a.id).sort((a,b) => a-b);
+
+  const [order, setOrder] = useState([null, null, null, null]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    client.get("/settings/ams-order").then(({ data }) => {
+      const o = data.order || [];
+      setOrder([0,1,2,3].map(i => (o[i] ?? null)));
+    }).finally(() => setLoading(false));
+  }, []);
+
+  const unplaced = availableIds.filter(id => !order.includes(id));
+
+  const placeAt = (slotIndex, amsId) => {
+    setOrder(prev => prev.map((v, i) => {
+      if (i === slotIndex) return amsId;
+      return v === amsId ? null : v; // retire l'AMS de son ancienne position
+    }));
+  };
+  const clearSlot = (slotIndex) => setOrder(prev => prev.map((v,i) => i===slotIndex ? null : v));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await client.post("/settings/ams-order", { order });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch(e) {
+      alert("Erreur: " + (e.response?.data?.detail || e.message));
+    } finally { setSaving(false); }
+  };
+
+  const chipStyle = (draggable) => ({
+    display:"flex", alignItems:"center", gap:6, padding:"8px 12px", borderRadius:10,
+    background:"var(--surface2)", border:"1px solid var(--border)", fontSize:13, fontWeight:700,
+    color:"var(--text)", cursor: draggable ? "grab" : "default", userSelect:"none",
+  });
+
+  if (loading) return null;
+
+  return (
+    <div className="card" style={card}>
+      <p style={cardTitle}>Disposition AMS sur l'accueil</p>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 14px" }}>
+        Glisse-dépose un AMS dans la position où tu veux le voir sur l'accueil.
+      </p>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+        {order.map((amsId, idx) => (
+          <div key={idx}
+            onDragOver={e => e.preventDefault()}
+            onDrop={e => { e.preventDefault(); const id = Number(e.dataTransfer.getData("text/plain")); if (!isNaN(id)) placeAt(idx, id); }}
+            style={{ minHeight:64, borderRadius:12, border:"2px dashed var(--border)",
+              background:"var(--surface)", padding:10, display:"flex", flexDirection:"column", gap:6 }}>
+            <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.04em" }}>
+              {POSITION_LABELS[idx]}
+            </span>
+            {amsId != null ? (
+              <div draggable onDragStart={e => e.dataTransfer.setData("text/plain", String(amsId))}
+                style={chipStyle(true)}>
+                {AMS_NAMES[amsId] ?? `AMS ${amsId+1}`}
+                <button onClick={() => clearSlot(idx)} style={{ marginLeft:"auto", background:"none",
+                  border:"none", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>✕</button>
+              </div>
+            ) : (
+              <span style={{ fontSize:11, color:"var(--muted)", opacity:0.6 }}>Vide — dépose un AMS ici</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {unplaced.length > 0 && (
+        <div style={{ marginBottom:16 }}>
+          <p style={{ fontSize:11, color:"var(--muted)", marginBottom:8 }}>AMS disponibles (non placés)</p>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            {unplaced.map(id => (
+              <div key={id} draggable onDragStart={e => e.dataTransfer.setData("text/plain", String(id))}
+                style={chipStyle(true)}>
+                {AMS_NAMES[id] ?? `AMS ${id+1}`}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!availableIds.length && (
+        <p style={{ fontSize:12, color:"var(--muted)" }}>
+          Aucun AMS détecté pour l'instant — connecte-toi à l'imprimante pour les voir apparaître ici.
+        </p>
+      )}
+
+      <button onClick={save} disabled={saving}
+        style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 16px",
+          background:"#3b82f6", border:"none", borderRadius:10, color:"white",
+          fontSize:13, fontWeight:700, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1 }}>
+        {saving ? <RefreshCw size={14} style={{ animation:"spin 1s linear infinite" }}/> : <Save size={14}/>}
+        {saved ? "Sauvegardé ✓" : "Sauvegarder la disposition"}
+      </button>
+    </div>
+  );
+}
 
 export default function Settings() {
   const { theme, toggle } = useTheme();
@@ -165,6 +282,8 @@ export default function Settings() {
           {saved ? "Sauvegardé ✓" : "Sauvegarder"}
         </button>
       </form>
+
+      <AMSOrderSection/>
 
       {/* Zone dangereuse */}
       <div style={{ marginTop:8, padding:16, borderRadius:12,
