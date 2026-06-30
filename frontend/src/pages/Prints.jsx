@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader } from "lucide-react";
+import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List } from "lucide-react";
 import client from "../api/client";
+import GalleryCompare from "../components/GalleryCompare";
 
 const STATUS_CFG = {
   IN_PROGRESS: { label:"En cours", color:"#3b82f6", bg:"rgba(59,130,246,0.75)",  icon:Loader },
@@ -627,7 +628,7 @@ export default function Prints() {
   const [debugInfo, setDebugInfo] = useState("");
   const [groups, setGroups]   = useState([]);
   const [groupF, setGroupF]   = useState("");
-
+  const [viewMode, setViewMode] = useState("list"); // "list" | "gallery"
 
   const LIMIT = 40;
 
@@ -708,6 +709,12 @@ export default function Prints() {
           {debugInfo && <span style={{ fontSize:10, color:"#f59e0b", fontFamily:"monospace" }}>[{debugInfo}]</span>}
         </div>
         <div style={{ display:"flex", gap:6 }}>
+          <button onClick={() => setViewMode(v => v==="list" ? "gallery" : "list")}
+            style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
+            borderRadius:8, fontSize:12, background:"var(--surface2)", border:"1px solid var(--border)",
+            color:"var(--text2)", cursor:"pointer" }}>
+            {viewMode==="list" ? <><ImageIcon size={13}/> Galerie</> : <><List size={13}/> Liste</>}
+          </button>
           <button onClick={load} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
             borderRadius:8, fontSize:12, background:"var(--surface2)", border:"1px solid var(--border)",
             color:"var(--text2)", cursor:"pointer" }}>
@@ -755,7 +762,26 @@ export default function Prints() {
         </p>
       )}
 
-      {!loading && !error && prints.length > 0 && (() => {
+      {!loading && !error && prints.length > 0 && viewMode==="gallery" && (
+        <GalleryCompare
+          items={prints}
+          getId={p => p.id}
+          getImage={p => "/api/v1/prints/" + p.id + "/image"}
+          getTitle={p => p.file_name || "Sans nom"}
+          getSubtitle={p => fmtDate(p.print_date)}
+          emptyLabel="Aucune photo de print"
+          compareFields={[
+            ["Statut",   p => p.status],
+            ["Date",     p => fmtDate(p.print_date)],
+            ["Durée",    p => p.duration_seconds ? `${Math.round(p.duration_seconds/60)}min` : null],
+            ["Poids",    p => p.total_weight_g ? `${p.total_weight_g.toFixed(1)}g` : null],
+            ["Coût",     p => p.total_cost ? `${p.total_cost.toFixed(2)}€` : null],
+            ["Groupe",   p => p.group_name],
+          ]}
+        />
+      )}
+
+      {!loading && !error && prints.length > 0 && viewMode==="list" && (() => {
         const onDelete = id => { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => t-1); };
         // Si un groupe est sélectionné ou pas de groupes → grille flat
         // Construire une liste d'items entrelacés triés par date décroissante.
