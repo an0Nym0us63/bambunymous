@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { X, ChevronLeft, ChevronRight, Check } from "lucide-react";
 
 /**
@@ -21,6 +21,23 @@ export default function GalleryCompare({
   const [carousel, setCarousel]   = useState(null); // { item, index }
   const [compareOpen, setCompareOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(pageSize);
+  const sentinelRef = useRef(null);
+
+  // Reset la pagination si la liste source change (ex: changement d'onglet/filtre)
+  useEffect(() => { setVisibleCount(pageSize); }, [items, pageSize]);
+
+  // Lazy-load au scroll — charge le batch suivant quand la sentinelle approche du viewport
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setVisibleCount(c => Math.min(c + pageSize, items?.length || 0));
+      }
+    }, { rootMargin: "600px" });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [pageSize, items]);
 
   const normPhotos = (item) => (getPhotos ? (getPhotos(item) || []) : []).map(p =>
     typeof p === "string" ? { url: p, label: "" } : p
@@ -103,12 +120,9 @@ export default function GalleryCompare({
       </div>
 
       {visibleCount < items.length && (
-        <button onClick={() => setVisibleCount(c => c + pageSize)}
-          style={{ width:"100%", marginTop:10, padding:"10px", borderRadius:10,
-            background:"var(--surface2)", border:"1px solid var(--border)",
-            color:"var(--muted)", fontSize:12, fontWeight:600, cursor:"pointer" }}>
-          Charger plus ({items.length - visibleCount} restants)
-        </button>
+        <div ref={sentinelRef} style={{ textAlign:"center", padding:"14px 0", color:"var(--muted)", fontSize:11 }}>
+          Chargement…
+        </div>
       )}
 
       {/* Tray flottant de sélection */}
