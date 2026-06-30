@@ -269,17 +269,32 @@ async def list_groups(_: str = Depends(get_current_user)):
     return {"groups": groups}
 
 
-def _legacy_group_dir(group_name: str) -> Optional[Path]:
+def _safe_folder_name(name: str) -> str:
+    import re
+    return re.sub(r"[^a-zA-Z0-9._-]", "_", name)
+
+
+async def _legacy_group_dir(group_name: str) -> Optional[Path]:
     """
-    Les photos de groupe importées depuis Spoolnymous sont stockées sous
-    /data/groups/{old_numeric_id}/ (id Spoolnymous), alors que BambuNymous
-    n'identifie ses groupes que par leur nom (tag "groupe:NomDuGroupe").
-    Le mapping id→nom n'est pas persisté lors de l'import DB, donc on le
-    reconstruit à la volée depuis import_v1.db (conservé sur disque) si présent.
+    Résout le dossier photos d'un groupe par son nom.
+    Ordre de résolution :
+    1. Dossier direct /data/groups/{nom_du_groupe}/ (cas normal depuis l'ajout de GroupRef).
+    2. GroupRef (DB) → /data/groups/{external_ref}/ — pour les imports déjà faits sous
+       l'ancien schéma (id numérique Spoolnymous) avant l'introduction de ce mapping.
+    3. import_v1.db (si toujours présent sur disque) — dernier recours pour les
+       installations très anciennes n'ayant jamais eu de GroupRef persisté.
     """
-    direct = DATA_DIR / "groups" / group_name
+    direct = DATA_DIR / "groups" / _safe_folder_name(group_name)
     if direct.exists():
         return direct
+
+    from ....models.print_history import GroupRef
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(GroupRef).where(GroupRef.group_name == group_name))
+        for gr in result.scalars().all():
+            d = DATA_DIR / "groups" / str(gr.external_ref)
+            if d.exists():
+                return d
 
     src_db = DATA_DIR / "import_v1.db"
     if not src_db.exists():
@@ -308,8 +323,8 @@ def _legacy_group_dir(group_name: str) -> Optional[Path]:
 
 @router.get("/groups/{group_name}/photos")
 async def group_photos(group_name: str, _: str = Depends(get_current_user)):
-    """Liste les photos d'un groupe (dossier legacy Spoolnymous résolu par nom)."""
-    d = _legacy_group_dir(group_name)
+    """Liste les photos d'un groupe."""
+    d = await _legacy_group_dir(group_name)
     if not d:
         return {"files": []}
     files = []
@@ -325,7 +340,7 @@ async def group_photo(group_name: str, filename: str, _: str = Depends(get_curre
     import mimetypes
     if ".." in filename or "/" in filename:
         raise HTTPException(400)
-    d = _legacy_group_dir(group_name)
+    d = await _legacy_group_dir(group_name)
     if not d:
         raise HTTPException(404)
     path = d / filename
