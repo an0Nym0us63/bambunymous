@@ -630,7 +630,8 @@ export default function Filaments() {
             <GalleryCompare
               items={filaments}
               getId={f => f.id}
-              getImage={f => f.photo_url}
+              getCoverImage={f => f.photo_url}
+              getPhotos={f => f.photos}
               getTitle={f => f.name}
               getSubtitle={f => [f.manufacturer, f.material].filter(Boolean).join(" · ")}
               emptyLabel="Aucune photo de filament"
