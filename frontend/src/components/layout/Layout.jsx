@@ -21,7 +21,9 @@ const S = {
   page:    { flex:1, overflowY:"auto", padding:16, background:"var(--bg)" },
   // Mobile
   header:  { display:"flex", alignItems:"center", gap:8, padding:"12px 16px", background:"var(--sidebar)", borderBottom:"1px solid var(--border)" },
-  bottomNav: { display:"flex", background:"var(--sidebar)", borderTop:"1px solid var(--border)" },
+  bottomNav: { display:"flex", background:"var(--sidebar)", borderTop:"1px solid var(--border)",
+    position:"fixed", left:0, right:0, bottom:0, zIndex:50,
+    paddingBottom:"env(safe-area-inset-bottom,0px)" },
 };
 
 function NavItem({ to, icon: Icon, label }) {
@@ -73,7 +75,7 @@ export default function Layout() {
           </span>
         </header>
 
-        <main style={S.page}><Outlet /></main>
+        <main className="page-content" style={S.page}><Outlet /></main>
 
         {/* Bottom nav mobile */}
         <nav className="show-mobile" style={S.bottomNav}>
@@ -91,7 +93,11 @@ export default function Layout() {
 
       <style>{`
         @media (min-width: 768px) { .hidden-mobile { display:flex!important; } .show-mobile { display:none!important; } }
-        @media (max-width: 767px) { .hidden-mobile { display:none!important; } .show-mobile { display:flex!important; } }
+        @media (max-width: 767px) {
+          .hidden-mobile { display:none!important; }
+          .show-mobile { display:flex!important; }
+          .page-content { padding-bottom: calc(76px + env(safe-area-inset-bottom,0px)) !important; }
+        }
       `}</style>
     </div>
   );
