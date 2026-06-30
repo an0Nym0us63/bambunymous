@@ -320,34 +320,51 @@ function SpoolsView({ filaments, showArchived }) {
       {loading ? (
         <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Chargement…</p>
       ) : (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:8 }}>
-          {spools.map(s => (
-            <div key={s.id} onClick={()=>setSelected(s)} className="card-sm"
-              style={{ padding:12, display:"flex", flexDirection:"column", gap:8, cursor:"pointer" }}>
-              <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
-                <ColorDot color={s.filament_color} size={18}/>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.filament_name}</p>
-                  <p style={{ fontSize:11, color:"var(--muted)" }}>{s.filament_material}{s.filament_manufacturer ? ` · ${s.filament_manufacturer}` : ""}</p>
-                </div>
-                <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
-                  {s.location && (
-                    <span style={{ fontSize:10, background:"var(--surface)", border:"1px solid var(--border)", padding:"2px 6px", borderRadius:4, color:"var(--muted)" }}>{s.location}</span>
-                  )}
-                  {!showArchived && (
-                    <button onClick={async()=>{ await client.delete(`/filaments/spools/${s.id}`); load(); }}
-                      style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2 }}
-                      onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
-                      onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
-                      <Archive size={13}/>
-                    </button>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
+          {spools.map(s => {
+            const colorHex = s.filament_color ? `#${s.filament_color.slice(0,6)}` : null;
+            return (
+              <div key={s.id} onClick={()=>setSelected(s)} className="card-sm"
+                style={{ overflow:"hidden", cursor:"pointer", display:"flex", flexDirection:"column" }}>
+                {/* Bandeau couleur du filament */}
+                <div style={{ height:6, background: colorHex || "var(--border)", flexShrink:0 }}/>
+                <div style={{ padding:"10px 12px 12px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
+                  <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
+                    <ColorDot color={s.filament_color} size={20}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden",
+                        textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:"16px" }}>{s.filament_name}</p>
+                      <p style={{ fontSize:11, color:"var(--muted)", overflow:"hidden",
+                        textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {s.filament_material}{s.filament_manufacturer ? ` · ${s.filament_manufacturer}` : ""}
+                      </p>
+                    </div>
+                    {!showArchived && (
+                      <button onClick={async e => { e.stopPropagation(); await client.delete(`/filaments/spools/${s.id}`); load(); }}
+                        style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2, flexShrink:0 }}
+                        onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
+                        onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
+                        <Archive size={13}/>
+                      </button>
+                    )}
+                  </div>
+                  <RemainBar remaining={s.remaining_weight_g}/>
+                  {(s.location || s.comment) && (
+                    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                      {s.location && (
+                        <span style={{ fontSize:10, background:"var(--surface)", border:"1px solid var(--border)",
+                          padding:"2px 7px", borderRadius:20, color:"var(--muted)" }}>{s.location}</span>
+                      )}
+                      {s.comment && (
+                        <span style={{ fontSize:10, color:"var(--muted)", overflow:"hidden",
+                          textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1, minWidth:0 }}>{s.comment}</span>
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
-              <RemainBar remaining={s.remaining_weight_g}/>
-              {s.comment && <p style={{ fontSize:10, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.comment}</p>}
-            </div>
-          ))}
+            );
+          })}
           {!spools.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucune bobine</p>}
         </div>
       )}
@@ -536,7 +553,7 @@ export default function Filaments() {
   ];
 
   return (
-    <div style={{ maxWidth:768, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
+    <div style={{ maxWidth:960, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
       <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Filaments</h1>
 
       {/* Tabs */}
