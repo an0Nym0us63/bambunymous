@@ -258,12 +258,52 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
                 design_id=meta.get("design_id", ""),
             ))
             for slot, fil in meta.get("filaments", {}).items():
+                # tray_info_idx encode l'AMS et le slot physique (cf. _apply_meta)
+                tray_info = (fil.get("tray_info_idx") or "").strip()
+                spool_id  = None
+                ams_id_matched  = None
+                tray_id_matched = None
+
+                if tray_info:
+                    m = re.match(r"^([A-Z])([0-9]{2})", tray_info)
+                    if m:
+                        ams_id_matched  = ord(m.group(1)) - ord("A")
+                        tray_id_matched = int(m.group(2))
+                    else:
+                        try:
+                            global_slot = int(tray_info)
+                            ams_id_matched  = global_slot // 4
+                            tray_id_matched = global_slot % 4
+                        except ValueError:
+                            pass
+
+                if ams_id_matched is not None and tray_id_matched is not None:
+                    from app.core.mqtt import get_state as _gs
+                    try:
+                        state = _gs()
+                        for ams in state.ams_list:
+                            if ams.id == ams_id_matched:
+                                for tray in ams.trays:
+                                    if tray.id == tray_id_matched and tray.spool_id:
+                                        spool_id = tray.spool_id
+                                        logger.info(f"[DB] ✅ Filament slot={slot} tray_info={tray_info!r} → AMS{ams_id_matched} tray{tray_id_matched} → spool_id={spool_id}")
+                                        break
+                                break
+                    except Exception as _e:
+                        logger.debug(f"[DB] get_state failed: {_e}")
+
+                if spool_id is None:
+                    logger.info(f"[DB] ⚠ Filament slot={slot} tray_info={tray_info!r} → spool non trouvé dans état AMS")
+
                 db.add(FilamentUsage(
                     print_id=pid,
                     filament_type=fil.get("type", ""),
                     color_hex=fil.get("color", ""),
                     grams_used=float(fil.get("used_g", 0)),
                     ams_slot=int(slot),
+                    ams_id=ams_id_matched,
+                    tray_id=tray_id_matched,
+                    spool_id=spool_id,
                 ))
             await db.commit()
         logger.info(f"[DB] ✅ Print {pid} sauvegardé: {name!r} avec {len(meta.get('filaments', {}))} filaments")
