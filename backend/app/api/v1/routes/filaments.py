@@ -6,9 +6,13 @@ from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
+import os
+from pathlib import Path
 from ....db.session import get_db
 from ....models.filament import Filament, Spool
 from .auth import get_current_user
+
+DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 
 router = APIRouter()
 
