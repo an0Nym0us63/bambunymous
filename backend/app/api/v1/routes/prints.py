@@ -269,6 +269,72 @@ async def list_groups(_: str = Depends(get_current_user)):
     return {"groups": groups}
 
 
+def _legacy_group_dir(group_name: str) -> Optional[Path]:
+    """
+    Les photos de groupe importées depuis Spoolnymous sont stockées sous
+    /data/groups/{old_numeric_id}/ (id Spoolnymous), alors que BambuNymous
+    n'identifie ses groupes que par leur nom (tag "groupe:NomDuGroupe").
+    Le mapping id→nom n'est pas persisté lors de l'import DB, donc on le
+    reconstruit à la volée depuis import_v1.db (conservé sur disque) si présent.
+    """
+    direct = DATA_DIR / "groups" / group_name
+    if direct.exists():
+        return direct
+
+    src_db = DATA_DIR / "import_v1.db"
+    if not src_db.exists():
+        return None
+    import sqlite3
+    try:
+        con = sqlite3.connect(str(src_db))
+        con.row_factory = sqlite3.Row
+        for tbl in ("print_groups", "groups"):
+            try:
+                rows = con.execute(f"SELECT id, name FROM {tbl}").fetchall()
+            except sqlite3.OperationalError:
+                continue
+            for row in rows:
+                if (row["name"] or "").strip() == group_name.strip():
+                    d = DATA_DIR / "groups" / str(row["id"])
+                    if d.exists():
+                        con.close()
+                        return d
+            break
+        con.close()
+    except Exception:
+        pass
+    return None
+
+
+@router.get("/groups/{group_name}/photos")
+async def group_photos(group_name: str, _: str = Depends(get_current_user)):
+    """Liste les photos d'un groupe (dossier legacy Spoolnymous résolu par nom)."""
+    d = _legacy_group_dir(group_name)
+    if not d:
+        return {"files": []}
+    files = []
+    for f in sorted(d.iterdir()):
+        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+            files.append({"name": f.name, "url": f"/api/v1/prints/groups/{group_name}/photo/{f.name}"})
+    return {"files": files}
+
+
+@router.get("/groups/{group_name}/photo/{filename}")
+async def group_photo(group_name: str, filename: str, _: str = Depends(get_current_user)):
+    """Sert une photo de groupe."""
+    import mimetypes
+    if ".." in filename or "/" in filename:
+        raise HTTPException(400)
+    d = _legacy_group_dir(group_name)
+    if not d:
+        raise HTTPException(404)
+    path = d / filename
+    if not path.exists():
+        raise HTTPException(404)
+    mime = mimetypes.guess_type(str(path))[0] or "image/jpeg"
+    return FileResponse(str(path), media_type=mime)
+
+
 
 @router.get("/{print_id}")
 async def get_print(print_id: int, _: str = Depends(get_current_user)):
