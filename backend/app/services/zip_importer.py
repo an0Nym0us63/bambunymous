@@ -248,11 +248,24 @@ async def import_uploads_filaments_zip(zip_source) -> dict:
     Deux structures possibles :
     1. Fichier racine : {id}.webp  → photo principale → /data/filaments/{id}/Photo-01.webp
     2. Dossier : {id}/Photo-01.webp → galerie → /data/filaments/{id}/Photo-01.webp
+
+    Si les deux existent pour le même id, le dossier (galerie) prend
+    systématiquement la priorité — le fichier racine est ignoré.
     """
     stats = {"copied": 0, "errors": 0, "skipped": 0}
     with zipfile.ZipFile(zip_source) as z:
         names = z.namelist()
         logger.info(f"[ZIP-FIL] {len(names)} entrées, exemples: {names[:5]}")
+
+        # Pré-scan : ids ayant un dossier (galerie) → le fichier racine sera ignoré pour ceux-là
+        ids_with_folder = set()
+        for name in names:
+            if name.endswith("/"): continue
+            norm = _normalize(name)
+            parts = norm.split("/")
+            if len(parts) > 1:
+                fid = next((p for p in parts[:-1] if p.isdigit()), None)
+                if fid: ids_with_folder.add(fid)
 
         for name in names:
             if name.endswith("/"): continue
@@ -271,6 +284,11 @@ async def import_uploads_filaments_zip(zip_source) -> dict:
                 # Cas 1 : fichier à la racine — {id}.webp ou {id}.jpg
                 stem = re.sub(r"\.[^.]+$", "", base)
                 if stem.isdigit():
+                    if stem in ids_with_folder:
+                        # Un dossier existe pour cet id → la galerie prime, on ignore le fichier racine
+                        logger.debug(f"[ZIP-FIL] Skip racine {name} (dossier {stem}/ prioritaire)")
+                        stats["skipped"] += 1
+                        continue
                     fil_id = stem
                     dest_name = "Photo-01" + os.path.splitext(base)[1]
             else:
