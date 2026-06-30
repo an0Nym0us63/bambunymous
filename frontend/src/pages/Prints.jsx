@@ -63,6 +63,7 @@ function StatusBadge({ status }) {
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
 function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, onDelete }) {
   const [selectedPrint, setSelectedPrint] = useState(null);
+  const [lightbox, setLightbox] = useState(null);
 
   // Stats agrégées
   const totalWeight = prints.reduce((s, p) => s + (p.total_weight_g || 0), 0);
@@ -80,6 +81,11 @@ function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, on
     });
   });
   const filaments = Object.values(filAgg).sort((a,b) => b.grams - a.grams);
+
+  // Photos — une vignette par print du groupe, ouvrable en grand
+  const photoItems = prints
+    .filter(p => p.plate_image)
+    .map(p => ({ url: "/api/v1/prints/" + p.id + "/image", label: p.file_name || "Sans nom", print: p }));
 
   return (
     <>
@@ -108,6 +114,26 @@ function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, on
                 </p>
               </div>
             </div>
+
+            {/* Photos — en premier */}
+            {photoItems.length > 0 && (
+              <div style={{ marginBottom:16 }}>
+                <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>
+                  Photos ({photoItems.length})
+                </p>
+                <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6, scrollbarWidth:"thin" }}>
+                  {photoItems.map((item, i) => (
+                    <div key={i} onClick={() => setLightbox(item)}
+                      style={{ position:"relative", flexShrink:0, cursor:"pointer" }}>
+                      <img src={item.url} alt={item.label}
+                        style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
+                          border:"1px solid var(--border)", display:"block" }}
+                        onError={e => { e.currentTarget.style.display="none"; }}/>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Stats globales */}
             <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:16 }}>
@@ -194,6 +220,16 @@ function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, on
           </div>
         </div>
       </div>
+
+      {lightbox && (
+        <div onClick={() => setLightbox(null)}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:1200,
+            display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <img src={lightbox.url} alt={lightbox.label}
+            style={{ maxWidth:"90vw", maxHeight:"90vh", borderRadius:12, objectFit:"contain" }}
+            onClick={e => e.stopPropagation()}/>
+        </div>
+      )}
 
       {/* Bottom sheet print par dessus — z-index 1100 */}
       {selectedPrint && (
