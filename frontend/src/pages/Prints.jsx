@@ -88,7 +88,7 @@ function GroupBottomSheet({ name, prints, latestDate, onClose, onSelectPrint, on
         background:"rgba(0,0,0,0.55)", zIndex:1000,
         display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
         <div onClick={e => e.stopPropagation()}
-          style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0",
+          style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
             width:"100%", maxWidth:640, maxHeight:"88dvh", overflowY:"auto",
             paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
 
@@ -407,7 +407,7 @@ function PrintDetail({ p, onClose, onDelete }) {
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}
       onClick={onClose}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:"var(--surface)", borderRadius:"20px 20px 0 0", width:"100%",
+        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
           maxWidth:640, maxHeight:"92dvh", overflowY:"auto",
           paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
 
