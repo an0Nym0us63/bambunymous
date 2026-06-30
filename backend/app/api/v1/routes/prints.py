@@ -274,57 +274,16 @@ def _safe_folder_name(name: str) -> str:
     return re.sub(r"[^a-zA-Z0-9._-]", "_", name)
 
 
-async def _legacy_group_dir(group_name: str) -> Optional[Path]:
-    """
-    Résout le dossier photos d'un groupe par son nom.
-    Ordre de résolution :
-    1. Dossier direct /data/groups/{nom_du_groupe}/ (cas normal depuis l'ajout de GroupRef).
-    2. GroupRef (DB) → /data/groups/{external_ref}/ — pour les imports déjà faits sous
-       l'ancien schéma (id numérique Spoolnymous) avant l'introduction de ce mapping.
-    3. import_v1.db (si toujours présent sur disque) — dernier recours pour les
-       installations très anciennes n'ayant jamais eu de GroupRef persisté.
-    """
-    direct = DATA_DIR / "groups" / _safe_folder_name(group_name)
-    if direct.exists():
-        return direct
-
-    from ....models.print_history import GroupRef
-    async with AsyncSessionLocal() as db:
-        result = await db.execute(select(GroupRef).where(GroupRef.group_name == group_name))
-        for gr in result.scalars().all():
-            d = DATA_DIR / "groups" / str(gr.external_ref)
-            if d.exists():
-                return d
-
-    src_db = DATA_DIR / "import_v1.db"
-    if not src_db.exists():
-        return None
-    import sqlite3
-    try:
-        con = sqlite3.connect(str(src_db))
-        con.row_factory = sqlite3.Row
-        for tbl in ("print_groups", "groups"):
-            try:
-                rows = con.execute(f"SELECT id, name FROM {tbl}").fetchall()
-            except sqlite3.OperationalError:
-                continue
-            for row in rows:
-                if (row["name"] or "").strip() == group_name.strip():
-                    d = DATA_DIR / "groups" / str(row["id"])
-                    if d.exists():
-                        con.close()
-                        return d
-            break
-        con.close()
-    except Exception:
-        pass
-    return None
+def _group_dir(group_name: str) -> Optional[Path]:
+    """Dossier photos d'un groupe — rangé sous son nom à l'import (cf. zip_importer.py)."""
+    d = DATA_DIR / "groups" / _safe_folder_name(group_name)
+    return d if d.exists() else None
 
 
 @router.get("/groups/{group_name}/photos")
 async def group_photos(group_name: str, _: str = Depends(get_current_user)):
     """Liste les photos d'un groupe."""
-    d = await _legacy_group_dir(group_name)
+    d = _group_dir(group_name)
     if not d:
         return {"files": []}
     files = []
@@ -340,7 +299,7 @@ async def group_photo(group_name: str, filename: str, _: str = Depends(get_curre
     import mimetypes
     if ".." in filename or "/" in filename:
         raise HTTPException(400)
-    d = await _legacy_group_dir(group_name)
+    d = _group_dir(group_name)
     if not d:
         raise HTTPException(404)
     path = d / filename
