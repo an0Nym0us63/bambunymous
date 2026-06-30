@@ -84,7 +84,7 @@ function AMSOrderSection() {
         Glisse-dépose un AMS dans la position où tu veux le voir sur l'accueil.
       </p>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gridTemplateRows:"auto auto", gridAutoFlow:"column", gap:10, marginBottom:16 }}>
         {order.map((amsId, idx) => (
           <div key={idx}
             onDragOver={e => e.preventDefault()}
