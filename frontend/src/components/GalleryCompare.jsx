@@ -2,22 +2,28 @@ import React, { useState } from "react";
 import { X, ChevronLeft, ChevronRight, Check } from "lucide-react";
 
 /**
- * Galerie photo en tuiles avec sélection multiple et comparaison côte à côte.
+ * Galerie photo en tuiles avec carrousel multi-photos par item et comparaison.
  *
  * props:
- *  - items: liste d'objets
- *  - getId(item), getImage(item), getTitle(item), getSubtitle(item)
- *  - compareFields: [[label, fn(item)], ...] — lignes affichées dans la comparaison
- *  - maxCompare: nombre max d'éléments comparables (def 6)
- *  - emptyLabel: texte si aucun item
+ *  - items: liste d'objets (déjà l'ensemble complet — pas paginé côté appelant)
+ *  - getId(item), getCoverImage(item), getPhotos(item) → [{url,label}] ou [url,...]
+ *  - getTitle(item), getSubtitle(item)
+ *  - compareFields: [[label, fn(item)], ...]
+ *  - maxCompare: nombre max comparable (def 6)
+ *  - pageSize: nombre de tuiles affichées initialement, "Charger plus" ensuite (def 30)
  */
 export default function GalleryCompare({
-  items, getId, getImage, getTitle, getSubtitle, compareFields = [],
-  maxCompare = 6, emptyLabel = "Aucun élément",
+  items, getId, getCoverImage, getPhotos, getTitle, getSubtitle, compareFields = [],
+  maxCompare = 6, emptyLabel = "Aucun élément", pageSize = 30,
 }) {
   const [selected, setSelected]   = useState(new Map());
-  const [lightbox, setLightbox]   = useState(null); // { list, index }
+  const [carousel, setCarousel]   = useState(null); // { item, index }
   const [compareOpen, setCompareOpen] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(pageSize);
+
+  const normPhotos = (item) => (getPhotos(item) || []).map(p =>
+    typeof p === "string" ? { url: p, label: "" } : p
+  );
 
   const toggle = (item) => {
     const id = getId(item);
@@ -31,23 +37,30 @@ export default function GalleryCompare({
   };
 
   const selectedList = Array.from(selected.values());
-  const openLightbox = (list, index) => setLightbox({ list, index });
-  const move = (delta) => setLightbox(l => l && ({ ...l, index: (l.index + delta + l.list.length) % l.list.length }));
+  const openCarousel = (item, index = 0) => setCarousel({ item, index });
+  const move = (delta) => setCarousel(c => {
+    if (!c) return c;
+    const photos = normPhotos(c.item);
+    return { ...c, index: (c.index + delta + photos.length) % photos.length };
+  });
 
   if (!items?.length) {
     return <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>{emptyLabel}</p>;
   }
 
+  const visibleItems = items.slice(0, visibleCount);
+
   return (
     <div style={{ position:"relative" }}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))", gap:8,
         paddingBottom: selectedList.length ? 76 : 0 }}>
-        {items.map(item => {
+        {visibleItems.map(item => {
           const id = getId(item);
-          const img = getImage(item);
+          const img = getCoverImage(item);
           const checked = selected.has(id);
+          const photoCount = normPhotos(item).length;
           return (
-            <div key={id} onClick={() => openLightbox(items, items.indexOf(item))}
+            <div key={id} onClick={() => openCarousel(item, 0)}
               style={{ position:"relative", borderRadius:10, overflow:"hidden", cursor:"pointer",
                 aspectRatio:"1", background:"var(--surface2)", border: checked ? "2px solid #3b82f6" : "2px solid transparent" }}>
               {img ? (
@@ -56,6 +69,12 @@ export default function GalleryCompare({
               ) : (
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%",
                   color:"var(--muted)", fontSize:10, padding:6, textAlign:"center" }}>{getTitle(item)}</div>
+              )}
+              {photoCount > 1 && (
+                <span style={{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,0.6)", color:"white",
+                  fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:20 }}>
+                  {photoCount} 📷
+                </span>
               )}
               <button onClick={e => { e.stopPropagation(); toggle(item); }}
                 style={{ position:"absolute", top:6, left:6, width:20, height:20, borderRadius:6,
@@ -78,6 +97,15 @@ export default function GalleryCompare({
         })}
       </div>
 
+      {visibleCount < items.length && (
+        <button onClick={() => setVisibleCount(c => c + pageSize)}
+          style={{ width:"100%", marginTop:10, padding:"10px", borderRadius:10,
+            background:"var(--surface2)", border:"1px solid var(--border)",
+            color:"var(--muted)", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+          Charger plus ({items.length - visibleCount} restants)
+        </button>
+      )}
+
       {/* Tray flottant de sélection */}
       {selectedList.length > 0 && (
         <div style={{ position:"fixed", bottom:76, left:12, right:12, zIndex:500,
@@ -86,7 +114,7 @@ export default function GalleryCompare({
           <div style={{ display:"flex", gap:4, overflowX:"auto", flex:1 }}>
             {selectedList.map(item => (
               <div key={getId(item)} style={{ position:"relative", flexShrink:0 }}>
-                <img src={getImage(item)} alt="" style={{ width:32, height:32, borderRadius:6, objectFit:"cover" }}/>
+                <img src={getCoverImage(item)} alt="" style={{ width:32, height:32, borderRadius:6, objectFit:"cover" }}/>
                 <button onClick={() => toggle(item)}
                   style={{ position:"absolute", top:-4, right:-4, width:14, height:14, borderRadius:"50%",
                     background:"#ef4444", border:"none", color:"white", fontSize:9, cursor:"pointer",
@@ -131,8 +159,8 @@ export default function GalleryCompare({
               {selectedList.map(item => (
                 <div key={getId(item)} style={{ flexShrink:0, width:160, background:"var(--surface)",
                   border:"1px solid var(--border)", borderRadius:12, padding:10 }}>
-                  <img src={getImage(item)} alt={getTitle(item)}
-                    onClick={() => openLightbox(selectedList, selectedList.indexOf(item))}
+                  <img src={getCoverImage(item)} alt={getTitle(item)}
+                    onClick={() => openCarousel(item, 0)}
                     style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:8,
                       cursor:"pointer", marginBottom:8, background:"var(--surface2)" }}
                     onError={e => { e.currentTarget.style.display="none"; }}/>
@@ -153,42 +181,65 @@ export default function GalleryCompare({
         </div>
       )}
 
-      {/* Lightbox plein écran avec navigation */}
-      {lightbox && (
-        <div onClick={() => setLightbox(null)} style={{ position:"fixed", inset:0, zIndex:2000,
-          background:"rgba(0,0,0,0.9)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <button onClick={e => { e.stopPropagation(); setLightbox(null); }}
-            style={{ position:"absolute", top:16, right:16, background:"rgba(255,255,255,0.1)", border:"none",
-              borderRadius:"50%", width:32, height:32, color:"white", cursor:"pointer",
-              display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <X size={16}/>
-          </button>
-          {lightbox.list.length > 1 && (
-            <button onClick={e => { e.stopPropagation(); move(-1); }}
-              style={{ position:"absolute", left:8, background:"rgba(255,255,255,0.1)", border:"none",
-                borderRadius:"50%", width:36, height:36, color:"white", cursor:"pointer",
-                display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <ChevronLeft size={18}/>
-            </button>
-          )}
-          <div onClick={e => e.stopPropagation()} style={{ display:"flex", flexDirection:"column",
-            alignItems:"center", gap:10, maxWidth:"90vw" }}>
-            <img src={getImage(lightbox.list[lightbox.index])} alt=""
-              style={{ maxWidth:"90vw", maxHeight:"75vh", objectFit:"contain", borderRadius:10 }}/>
-            <p style={{ color:"white", fontSize:13, fontWeight:600, textAlign:"center" }}>
-              {getTitle(lightbox.list[lightbox.index])}
-            </p>
+      {/* Carrousel plein écran — photos du print/groupe/filament cliqué, vignettes en bas */}
+      {carousel && (() => {
+        const photos = normPhotos(carousel.item);
+        const current = photos[carousel.index];
+        if (!current) return null;
+        return (
+          <div onClick={() => setCarousel(null)} style={{ position:"fixed", inset:0, zIndex:2000,
+            background:"rgba(0,0,0,0.92)", display:"flex", flexDirection:"column" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 16px" }}>
+              <div>
+                <p style={{ color:"white", fontSize:14, fontWeight:700, margin:0 }}>{getTitle(carousel.item)}</p>
+                <p style={{ color:"rgba(255,255,255,0.6)", fontSize:11, margin:0 }}>
+                  {carousel.index + 1} / {photos.length}{current.label ? ` · ${current.label}` : ""}
+                </p>
+              </div>
+              <button onClick={e => { e.stopPropagation(); setCarousel(null); }}
+                style={{ background:"rgba(255,255,255,0.1)", border:"none", borderRadius:"50%",
+                  width:32, height:32, color:"white", cursor:"pointer",
+                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <X size={16}/>
+              </button>
+            </div>
+
+            <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", position:"relative", minHeight:0 }}
+              onClick={e => e.stopPropagation()}>
+              {photos.length > 1 && (
+                <button onClick={() => move(-1)}
+                  style={{ position:"absolute", left:8, background:"rgba(255,255,255,0.1)", border:"none",
+                    borderRadius:"50%", width:36, height:36, color:"white", cursor:"pointer",
+                    display:"flex", alignItems:"center", justifyContent:"center", zIndex:1 }}>
+                  <ChevronLeft size={18}/>
+                </button>
+              )}
+              <img src={current.url} alt={current.label}
+                style={{ maxWidth:"88vw", maxHeight:"100%", objectFit:"contain", borderRadius:10 }}/>
+              {photos.length > 1 && (
+                <button onClick={() => move(1)}
+                  style={{ position:"absolute", right:8, background:"rgba(255,255,255,0.1)", border:"none",
+                    borderRadius:"50%", width:36, height:36, color:"white", cursor:"pointer",
+                    display:"flex", alignItems:"center", justifyContent:"center", zIndex:1 }}>
+                  <ChevronRight size={18}/>
+                </button>
+              )}
+            </div>
+
+            {/* Vignettes en bas */}
+            {photos.length > 1 && (
+              <div onClick={e => e.stopPropagation()}
+                style={{ display:"flex", gap:6, overflowX:"auto", padding:"10px 16px calc(10px + env(safe-area-inset-bottom,0px))" }}>
+                {photos.map((p, i) => (
+                  <img key={i} src={p.url} alt={p.label} onClick={() => setCarousel(c => ({ ...c, index:i }))}
+                    style={{ width:48, height:48, objectFit:"cover", borderRadius:6, flexShrink:0, cursor:"pointer",
+                      border: i===carousel.index ? "2px solid #3b82f6" : "2px solid transparent", opacity: i===carousel.index ? 1 : 0.55 }}/>
+                ))}
+              </div>
+            )}
           </div>
-          {lightbox.list.length > 1 && (
-            <button onClick={e => { e.stopPropagation(); move(1); }}
-              style={{ position:"absolute", right:8, background:"rgba(255,255,255,0.1)", border:"none",
-                borderRadius:"50%", width:36, height:36, color:"white", cursor:"pointer",
-                display:"flex", alignItems:"center", justifyContent:"center" }}>
-              <ChevronRight size={18}/>
-            </button>
-          )}
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
