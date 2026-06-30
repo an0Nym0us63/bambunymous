@@ -261,7 +261,7 @@ async def run_import(src_path: str) -> dict:
                         db.add(PrintTag(print_id=new_pid, tag=tag))
                         stats["tags"] = stats.get("tags", 0) + 1
 
-            # ── GROUPES Spoolnymous → PrintTag "groupe:NomDuGroupe" ───
+            # ── GROUPES Spoolnymous → table "groups" BambuNymous (id propre) ───
             # Spoolnymous a une table "groups" + prints.group_id (FK)
             group_map: dict[int, str] = {}
             # Spoolnymous utilise "print_groups" comme nom de table
@@ -273,21 +273,27 @@ async def run_import(src_path: str) -> dict:
                     break
 
             if group_map:
-                from ..models.print_history import GroupRef
+                from ..models.print_history import Group
 
-                # Persister le mapping id Spoolnymous → nom de groupe (sert au matching photos)
+                # Un Group BambuNymous par groupe Spoolnymous (1:1 sur external_ref),
+                # jamais de déduplication par nom : deux groupes Spoolnymous distincts
+                # portant le même nom restent deux groupes BambuNymous distincts.
+                old_to_new_group: dict[int, int] = {}
                 for old_gid, gname in group_map.items():
-                    try:
-                        res = (await db.execute(
-                            text("SELECT id FROM group_refs WHERE external_ref=:e"),
-                            {"e": str(old_gid)}
-                        )).scalar_one_or_none()
-                        if not res:
-                            db.add(GroupRef(external_ref=str(old_gid), group_name=gname))
-                    except Exception as _gre:
-                        logger.debug(f"[IMPORT] group_ref {old_gid}: {_gre}")
+                    res = (await db.execute(
+                        text("SELECT id FROM groups WHERE external_ref=:e"),
+                        {"e": str(old_gid)}
+                    )).scalar_one_or_none()
+                    if res:
+                        old_to_new_group[old_gid] = res
+                        continue
+                    g = Group(name=gname, external_ref=str(old_gid))
+                    db.add(g)
+                    await db.flush()
+                    old_to_new_group[old_gid] = g.id
+                    stats["groups_created"] = stats.get("groups_created", 0) + 1
 
-                # Chercher group_id dans prints
+                # Rattacher chaque print importé à son groupe via group_id
                 for old_pid, new_pid in print_map.items():
                     try:
                         row = src.execute(
@@ -295,23 +301,19 @@ async def run_import(src_path: str) -> dict:
                         ).fetchone()
                         if not row or not row[0]:
                             continue
-                        group_name = group_map.get(row[0])
-                        if not group_name:
+                        new_gid = old_to_new_group.get(row[0])
+                        if not new_gid:
                             continue
-                        tag = f"groupe:{group_name}"
-                        res = (await db.execute(
-                            text("SELECT id FROM print_tags WHERE print_id=:p AND tag=:t"),
-                            {"p": new_pid, "t": tag}
-                        )).scalar_one_or_none()
-                        if not res:
-                            from ..models.print_history import PrintTag
-                            db.add(PrintTag(print_id=new_pid, tag=tag))
-                            stats["groups"] = stats.get("groups", 0) + 1
+                        await db.execute(
+                            text("UPDATE prints SET group_id=:g WHERE id=:p"),
+                            {"g": new_gid, "p": new_pid}
+                        )
+                        stats["groups"] = stats.get("groups", 0) + 1
                     except Exception as _ge:
                         logger.debug(f"[IMPORT] group for print {old_pid}: {_ge}")
 
             await db.commit()
-            logger.info(f"[IMPORT] Prints:{stats.get('prints',0)} usage:{stats.get('filament_usage',0)} tags:{stats.get('tags',0)} groupes:{stats.get('groups',0)}")
+            logger.info(f"[IMPORT] Prints:{stats.get('prints',0)} usage:{stats.get('filament_usage',0)} tags:{stats.get('tags',0)} groupes:{stats.get('groups',0)} (groupes créés:{stats.get('groups_created',0)})")
 
     src.close()
     logger.info(f"Import terminé: {stats}")
