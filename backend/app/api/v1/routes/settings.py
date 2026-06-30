@@ -14,8 +14,9 @@ router = APIRouter()
 @router.delete("/reset-all", tags=["settings"])
 async def reset_all_data(_: str = Depends(get_current_user)):
     """
-    Vide TOUTES les données : historique, filaments, bobines, snapshots, 3MF.
-    Garde les settings (IP, token…).
+    Vide TOUTES les données : historique, filaments, bobines, snapshots, 3MF,
+    ainsi que tous les fichiers images associés (prints, filaments, groupes, uploads, tmp).
+    Garde les settings (IP, token…) et la base settings elle-même.
     """
     import shutil, os
     from sqlalchemy import text
@@ -34,14 +35,15 @@ async def reset_all_data(_: str = Depends(get_current_user)):
                 pass
         await db.commit()
 
-    # Supprimer les fichiers prints (vignettes, snapshots, 3MF)
+    # Supprimer tous les fichiers/images associés (prints, filaments, groupes, uploads, tmp)
     data_dir = Path(os.getenv("DATA_DIR", "/data"))
-    prints_dir = data_dir / "prints"
-    if prints_dir.exists():
-        shutil.rmtree(prints_dir, ignore_errors=True)
-        prints_dir.mkdir(exist_ok=True)
+    for sub in ("prints", "filaments", "groups", "uploads", "tmp"):
+        d = data_dir / sub
+        if d.exists():
+            shutil.rmtree(d, ignore_errors=True)
+        d.mkdir(parents=True, exist_ok=True)
 
-    return {"ok": True, "message": "Toutes les données supprimées"}
+    return {"ok": True, "message": "Toutes les données et images supprimées"}
 
 
 class SettingsOut(BaseModel):
