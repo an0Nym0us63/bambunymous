@@ -247,6 +247,63 @@ async def list_prints(
             "prints": [_print_to_out(p) for p in rows]}
 
 
+@router.get("/gallery")
+async def prints_gallery(_: str = Depends(get_current_user)):
+    """
+    Galerie photo — INDÉPENDANTE de la pagination de /prints (parcourt tout
+    l'historique, pas seulement la page courante). Ne retourne que les prints
+    et groupes ayant de vraies photos (snapshots trigger='manual'), avec le
+    carrousel complet de photos pour chacun. Les photos du dossier groupe
+    lui-même (/data/groups/{id}/, uploads directs) sont aussi incluses.
+    """
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(Print).options(selectinload(Print.snapshots), selectinload(Print.group))
+        )).scalars().all()
+
+    items, group_acc = [], {}
+    for p in rows:
+        manual = [s for s in (p.snapshots or []) if s.trigger == "manual"]
+        photos = [
+            {"url": f"/api/v1/prints/{p.id}/file/{(s.file_path or '').split('/')[-1]}", "label": s.trigger}
+            for s in manual if s.file_path
+        ]
+        if p.group_id:
+            acc = group_acc.setdefault(p.group_id, {
+                "id": p.group_id, "name": (p.group.name if p.group else None) or f"Groupe #{p.group_id}",
+                "prints": 0, "photos": [], "total_weight_g": 0.0, "total_cost": 0.0, "duration_seconds": 0.0,
+                "latest_date": None,
+            })
+            acc["prints"] += 1
+            acc["photos"].extend(photos)
+            acc["total_weight_g"]    += p.total_weight_g or 0
+            acc["total_cost"]        += p.total_cost or 0
+            acc["duration_seconds"]  += p.duration_seconds or 0
+            if not acc["latest_date"] or (p.print_date and p.print_date > acc["latest_date"]):
+                acc["latest_date"] = p.print_date
+        elif photos:
+            items.append({
+                "id": p.id, "title": p.file_name or "Sans nom", "status": p.status,
+                "print_date": p.print_date, "duration_seconds": p.duration_seconds,
+                "total_weight_g": p.total_weight_g, "total_cost": p.total_cost,
+                "photos": photos,
+            })
+
+    # Photos uploadées directement dans le dossier du groupe (pas via un print précis)
+    groups_dir = DATA_DIR / "groups"
+    for gid, acc in group_acc.items():
+        d = groups_dir / str(gid)
+        if d.exists():
+            for f in sorted(d.iterdir()):
+                if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+                    acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{f.name}", "label": f.name})
+
+    groups = [g for g in group_acc.values() if g["photos"]]
+    items.sort(key=lambda it: it["print_date"] or "", reverse=True)
+    groups.sort(key=lambda g: g["latest_date"] or "", reverse=True)
+    return {"prints": items, "groups": groups}
+
+
 @router.get("/groups")
 async def list_groups(_: str = Depends(get_current_user)):
     """Retourne les groupes (id BambuNymous + nom)."""
