@@ -1,13 +1,17 @@
 """
 Matching AMS tray → bobine en DB.
 
-Priorité :
-1. RFID exact : tag_uid == spool.tag_number  → found_mode="rfid"
-2. Profile ID : tray_info_idx == filament.profile_id
-   → bobines actives du filament trouvé
-   → si une seule : direct            → found_mode="profile"
-   → si plusieurs : couleur la plus proche → found_mode="color"
-3. Aucun match                         → (None, None)
+Logique stricte en 3 étages (ne jamais mélanger) :
+1. RFID exact (tag_uid == spool.tag_number) → found_mode="rfid".
+   Si un RFID valide est présent mais qu'aucune bobine ne correspond, ON S'ARRÊTE
+   LÀ — pas de repli sur la couleur (le RFID est un identifiant précis ; deviner
+   par couleur quand un RFID existe risquerait un faux positif). → found_mode="notfound".
+2. Sinon (aucun RFID), matching par tray_info_idx (profil Bambu) :
+   bobines actives du filament dont le profil correspond, puis couleur la plus
+   proche si plusieurs candidates → found_mode="auto" (un seul niveau, qu'il y
+   ait eu 1 ou plusieurs candidates).
+3. Sinon (profil inconnu en base, ou aucune bobine active pour ce profil)
+   → found_mode="notfound".
 """
 import logging
 import re
@@ -45,7 +49,10 @@ async def match_spool(
     tray_color: str,
 ) -> Tuple[Optional[int], Optional[str]]:
     """
-    Retourne (spool_id, found_mode) ou (None, None).
+    Retourne (spool_id, found_mode).
+    found_mode ∈ {"rfid", "auto", "notfound", None}.
+    None uniquement si on n'a aucune info exploitable du tout (ni RFID, ni profil) —
+    le tray reste alors dans son état "manual" déjà déterminé en amont.
     """
     tag_uid       = (tag_uid or "").strip()
     tray_info_idx = (tray_info_idx or "").strip()
@@ -59,7 +66,7 @@ async def match_spool(
 
     async with AsyncSessionLocal() as db:
 
-        # ── 1. RFID exact ─────────────────────────────────────────────────
+        # ── 1. RFID strict — arrêt ici quoi qu'il arrive ────────────────────
         uid_valid = bool(tag_uid and tag_uid.replace("0","") and tag_uid != "0000000000000000")
         if uid_valid:
             result = await db.execute(
@@ -72,8 +79,10 @@ async def match_spool(
             if spool:
                 logger.info(f"[MATCH] RFID {tag_uid} → spool #{spool.id}")
                 return spool.id, "rfid"
+            logger.info(f"[MATCH] RFID {tag_uid} présent mais aucune bobine correspondante → notfound (pas de repli couleur)")
+            return None, "notfound"
 
-        # ── 2. Profile ID ─────────────────────────────────────────────────
+        # ── 2. Pas de RFID → profil + couleur la plus proche ────────────────
         if profile_id:
             fil_result = await db.execute(
                 select(Filament).where(Filament.profile_id == profile_id)
@@ -91,12 +100,12 @@ async def match_spool(
                 spools = spools_result.scalars().all()
 
                 if not spools:
-                    logger.debug(f"[MATCH] profile={profile_id} → aucune bobine active")
+                    logger.info(f"[MATCH] profile={profile_id} → aucune bobine active → notfound")
+                    return None, "notfound"
                 elif len(spools) == 1:
-                    logger.info(f"[MATCH] profile={profile_id} → spool #{spools[0].id} (unique)")
-                    return spools[0].id, "profile"
+                    logger.info(f"[MATCH] profile={profile_id} → spool #{spools[0].id} (unique) → auto")
+                    return spools[0].id, "auto"
                 else:
-                    # Plusieurs bobines → couleur la plus proche
                     if tray_color:
                         best = min(
                             spools,
@@ -106,12 +115,15 @@ async def match_spool(
                             )
                         )
                         dist = _color_distance(tray_color, (best.filament.color if best.filament else "") or "")
-                        logger.info(f"[MATCH] profile={profile_id} couleur={tray_color} → spool #{best.id} dist={dist:.1f}")
-                        return best.id, "color"
+                        logger.info(f"[MATCH] profile={profile_id} couleur={tray_color} → spool #{best.id} dist={dist:.1f} → auto")
+                        return best.id, "auto"
                     else:
-                        # Pas de couleur → prendre la plus récente
-                        logger.info(f"[MATCH] profile={profile_id} → spool #{spools[0].id} (plus récente, sans couleur)")
-                        return spools[0].id, "profile"
+                        logger.info(f"[MATCH] profile={profile_id} → spool #{spools[0].id} (plus récente, sans couleur) → auto")
+                        return spools[0].id, "auto"
+            else:
+                logger.info(f"[MATCH] profile={profile_id} inconnu en base (catalogue) → notfound")
+                return None, "notfound"
 
-        logger.debug(f"[MATCH] Aucun match tag={tag_uid!r} profile={profile_id!r}")
+        # ── 3. Aucune info exploitable (ni RFID, ni profil) ─────────────────
+        logger.debug(f"[MATCH] Aucune info exploitable tag={tag_uid!r} profile={profile_id!r}")
         return None, None
