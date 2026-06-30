@@ -679,7 +679,7 @@ function PrintDetail({ p, onClose, onDelete, onChanged }) {
 }
 
 // ── Galerie — indépendante de la pagination, parcourt tout l'historique ────
-function PrintsGalleryView() {
+function PrintsGalleryView({ search }) {
   const [data, setData] = useState(null); // { prints:[], groups:[] }
   const [loading, setLoading] = useState(true);
 
@@ -695,10 +695,14 @@ function PrintsGalleryView() {
 
   if (loading) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>;
 
-  const items = [
+  let items = [
     ...(data?.prints || []).map(p => ({ ...p, kind:"print" })),
     ...(data?.groups || []).map(g => ({ ...g, kind:"group", title: g.name, count: g.prints })),
   ];
+  if (search?.trim()) {
+    const q = search.trim().toLowerCase();
+    items = items.filter(it => (it.title || "").toLowerCase().includes(q));
+  }
   items.sort((a,b) => (b.print_date || b.latest_date || "").localeCompare(a.print_date || a.latest_date || ""));
 
   return (
@@ -709,7 +713,7 @@ function PrintsGalleryView() {
       getPhotos={it => it.photos}
       getTitle={it => it.title}
       getSubtitle={it => it.kind==="group" ? `📁 ${it.count} print${it.count>1?"s":""}` : fmtDate(it.print_date)}
-      emptyLabel="Aucune photo manuelle uploadée sur tes prints (hors milestones auto)"
+      emptyLabel={search?.trim() ? `Aucun résultat pour « ${search.trim()} »` : "Aucune photo manuelle uploadée sur tes prints (hors milestones auto)"}
       enableCompare={false}
     />
   );
@@ -886,7 +890,7 @@ export default function Prints() {
         </p>
       )}
 
-      {viewMode==="gallery" && <PrintsGalleryView/>}
+      {viewMode==="gallery" && <PrintsGalleryView search={search}/>}
 
       {!loading && !error && prints.length > 0 && viewMode==="list" && (() => {
         const onDelete = id => { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => t-1); };
