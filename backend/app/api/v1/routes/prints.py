@@ -13,7 +13,7 @@ from sqlalchemy import select, desc, func
 from sqlalchemy.orm import selectinload
 
 from .auth import get_current_user
-from ....models.print_history import Print, FilamentUsage, PrintSnapshot, PrintTag
+from ....models.print_history import Print, FilamentUsage, PrintSnapshot, PrintTag, Group
 from ....models.filament import Spool, Filament
 from ....db.session import AsyncSessionLocal
 
@@ -44,6 +44,8 @@ class PrintOut(BaseModel):
     number_of_items: int; sold_units: int
     sold_price_total: Optional[float]; margin: float
     plate_id: str; design_id: Optional[str]; printer_model: str
+    group_id: Optional[int] = None
+    group_name: Optional[str] = None
     filament_usage: List[FilamentOut] = []
     snapshots:      List[SnapshotOut] = []
     tags:           List[str] = []
@@ -82,6 +84,7 @@ def _print_to_out(p: Print) -> dict:
         for s in (p.snapshots or [])
     ]
     d["tags"] = [t.tag for t in (p.tags or [])]
+    d["group_name"] = p.group.name if p.group else None
     return d
 
 
@@ -170,12 +173,12 @@ def _apply_search(q, search: str):
 
 @router.get("")
 async def list_prints(
-    status:  Optional[str] = None,
-    search:  Optional[str] = None,
-    group:   Optional[str] = None,
-    tag:     Optional[str] = None,
-    limit:   int = Query(40, le=200),
-    offset:  int = 0,
+    status:   Optional[str] = None,
+    search:   Optional[str] = None,
+    group_id: Optional[int] = None,
+    tag:      Optional[str] = None,
+    limit:    int = Query(40, le=200),
+    offset:   int = 0,
     _: str = Depends(get_current_user),
 ):
     """
@@ -190,16 +193,18 @@ async def list_prints(
         q = (select(Print)
              .options(selectinload(Print.filament_usage),
                       selectinload(Print.snapshots),
-                      selectinload(Print.tags))
+                      selectinload(Print.tags),
+                      selectinload(Print.group))
              .order_by(desc(Print.print_date)))
         if status:
             q = q.where(Print.status == status)
         if search:
             q = _apply_search(q, search)
-        filter_tag = f"groupe:{group}" if group else tag
-        if filter_tag:
+        if group_id is not None:
+            q = q.where(Print.group_id == group_id)
+        elif tag:
             q = q.where(exists().where(
-                (_PT.print_id == Print.id) & (_PT.tag == filter_tag)
+                (_PT.print_id == Print.id) & (_PT.tag == tag)
             ))
 
         total = (await db.execute(
@@ -211,38 +216,24 @@ async def list_prints(
 
         # Compléter les groupes :
         # 1. Si un print de la page appartient à un groupe → ramener tous les prints du groupe
-        # 2. Si la recherche matche un nom de groupe → ramener tous les prints du groupe
+        # 2. Si la recherche matche un nom de groupe → ramener tous les prints des groupes matchés
         page_ids = {p.id for p in rows}
-        page_groups: set[str] = set()
+        page_group_ids = {p.group_id for p in rows if p.group_id}
 
-        for p in rows:
-            for t in (p.tags or []):
-                if t.tag.startswith("groupe:"):
-                    page_groups.add(t.tag)
-
-        # Si la recherche matche des noms de groupe → ajouter ces groupes aussi
         if search:
-            from sqlalchemy import distinct as _distinct
             grp_result = await db.execute(
-                select(_distinct(_PT.tag)).where(
-                    _PT.tag.like("groupe:%"),
-                    _PT.tag.ilike(f"%{search}%")
-                )
+                select(Group.id).where(Group.name.ilike(f"%{search}%"))
             )
             for row_g in grp_result.all():
-                page_groups.add(row_g[0])
+                page_group_ids.add(row_g[0])
 
-        if page_groups:
+        if page_group_ids:
             extra_q = (select(Print)
                 .options(selectinload(Print.filament_usage),
                          selectinload(Print.snapshots),
-                         selectinload(Print.tags))
-                .where(
-                    exists().where(
-                        (_PT.print_id == Print.id) &
-                        (_PT.tag.in_(list(page_groups)))
-                    )
-                )
+                         selectinload(Print.tags),
+                         selectinload(Print.group))
+                .where(Print.group_id.in_(list(page_group_ids)))
                 .where(Print.id.notin_(list(page_ids)))
                 .order_by(desc(Print.print_date)))
             extra = (await db.execute(extra_q)).scalars().all()
@@ -258,48 +249,39 @@ async def list_prints(
 
 @router.get("/groups")
 async def list_groups(_: str = Depends(get_current_user)):
-    """Retourne les groupes disponibles (tags préfixés 'groupe:')."""
-    from sqlalchemy import distinct
-    from ....models.print_history import PrintTag as _PT
+    """Retourne les groupes (id BambuNymous + nom)."""
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(distinct(_PT.tag)).where(_PT.tag.like("groupe:%")).order_by(_PT.tag)
-        )
-        groups = [r[0].replace("groupe:", "") for r in result.all()]
+        result = await db.execute(select(Group).order_by(Group.name))
+        groups = [{"id": g.id, "name": g.name} for g in result.scalars().all()]
     return {"groups": groups}
 
 
-def _safe_folder_name(name: str) -> str:
-    import re
-    return re.sub(r"[^a-zA-Z0-9._-]", "_", name)
-
-
-def _group_dir(group_name: str) -> Optional[Path]:
-    """Dossier photos d'un groupe — rangé sous son nom à l'import (cf. zip_importer.py)."""
-    d = DATA_DIR / "groups" / _safe_folder_name(group_name)
+def _group_dir(group_id: int) -> Optional[Path]:
+    """Dossier photos d'un groupe — rangé sous son id BambuNymous à l'import (cf. zip_importer.py)."""
+    d = DATA_DIR / "groups" / str(group_id)
     return d if d.exists() else None
 
 
-@router.get("/groups/{group_name}/photos")
-async def group_photos(group_name: str, _: str = Depends(get_current_user)):
+@router.get("/groups/{group_id}/photos")
+async def group_photos(group_id: int, _: str = Depends(get_current_user)):
     """Liste les photos d'un groupe."""
-    d = _group_dir(group_name)
+    d = _group_dir(group_id)
     if not d:
         return {"files": []}
     files = []
     for f in sorted(d.iterdir()):
         if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
-            files.append({"name": f.name, "url": f"/api/v1/prints/groups/{group_name}/photo/{f.name}"})
+            files.append({"name": f.name, "url": f"/api/v1/prints/groups/{group_id}/photo/{f.name}"})
     return {"files": files}
 
 
-@router.get("/groups/{group_name}/photo/{filename}")
-async def group_photo(group_name: str, filename: str, _: str = Depends(get_current_user)):
+@router.get("/groups/{group_id}/photo/{filename}")
+async def group_photo(group_id: int, filename: str, _: str = Depends(get_current_user)):
     """Sert une photo de groupe."""
     import mimetypes
     if ".." in filename or "/" in filename:
         raise HTTPException(400)
-    d = _group_dir(group_name)
+    d = _group_dir(group_id)
     if not d:
         raise HTTPException(404)
     path = d / filename
@@ -482,20 +464,35 @@ async def debug_prints():  # noqa — public debug route
 
 @router.post("/{print_id}/group")
 async def set_group(print_id: int, body: dict, _: str = Depends(get_current_user)):
-    """Assigne un print à un groupe (remplace l'ancien groupe si existant)."""
-    group = (body.get("group") or "").strip()
+    """
+    Assigne un print à un groupe.
+    body: {"group_id": 12} pour un groupe existant,
+          {"group_name": "Nouveau nom"} pour en créer un nouveau,
+          {} ou group_id=null pour retirer le print de son groupe.
+    """
+    group_id   = body.get("group_id")
+    group_name = (body.get("group_name") or "").strip()
+
     async with AsyncSessionLocal() as db:
-        # Supprimer l'ancien groupe
-        result = await db.execute(
-            select(PrintTag).where(PrintTag.print_id == print_id, PrintTag.tag.like("groupe:%"))
-        )
-        for old in result.scalars().all():
-            await db.delete(old)
-        # Ajouter le nouveau si non vide
-        if group:
-            db.add(PrintTag(print_id=print_id, tag=f"groupe:{group}"))
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404)
+
+        if group_id:
+            g = await db.get(Group, int(group_id))
+            if not g:
+                raise HTTPException(404, "Groupe introuvable")
+            p.group_id = g.id
+        elif group_name:
+            g = Group(name=group_name)
+            db.add(g)
+            await db.flush()
+            p.group_id = g.id
+        else:
+            p.group_id = None
+
         await db.commit()
-    return {"ok": True}
+    return {"ok": True, "group_id": p.group_id}
 
 
 @router.get("/stats/summary")
