@@ -28,15 +28,7 @@ const STATUS_CFG = {
 };
 
 
-function HMSBanner({ errors }) {
-  if (!errors?.length) return null;
-  return (
-    <p style={{ fontSize:12, color:"#f59e0b", padding:"4px 8px",
-      textAlign:"center", letterSpacing:"0.01em" }}>
-      ⚠ {errors.length} alerte{errors.length > 1 ? "s" : ""} HMS imprimante
-    </p>
-  );
-}
+// (alerte HMS désormais affichée en badge discret dans StatusBanner)
 
 
 function StatusBanner({ status }) {
@@ -112,8 +104,19 @@ function StatusBanner({ status }) {
   };
 
   return (
-    <div className="card" style={{ overflow:"hidden" }}>
+    <div className="card" style={{ overflow:"hidden", position:"relative" }}>
 
+      {/* Badge HMS discret, coin bas droite */}
+      {status.hms_errors?.length > 0 && (
+        <div title={`${status.hms_errors.length} alerte${status.hms_errors.length>1?"s":""} HMS imprimante`}
+          style={{ position:"absolute", bottom:8, right:8, zIndex:2,
+            width:20, height:20, borderRadius:"50%",
+            background:"rgba(245,158,11,0.15)", border:"1px solid rgba(245,158,11,0.45)",
+            display:"flex", alignItems:"center", justifyContent:"center",
+            fontSize:11, fontWeight:800, color:"#f59e0b" }}>
+          !
+        </div>
+      )}
 
       {/* Header cliquable */}
       <button onClick={() => setExpanded(e => !e)}
@@ -148,10 +151,11 @@ function StatusBanner({ status }) {
             {/* Barre de progression */}
             {isRunning && pct > 0 && (
               <div style={{ marginBottom:6 }}>
-                <div style={{ height:6, borderRadius:3, background:"var(--border)", overflow:"hidden" }}>
+                <div style={{ height:9, borderRadius:5, background:"var(--border)", overflow:"hidden" }}>
                   <div style={{ height:"100%", width:`${pct}%`,
                     background:`linear-gradient(90deg,${cfg.color},${cfg.color}cc)`,
-                    borderRadius:3, transition:"width 1s" }}/>
+                    boxShadow:`0 0 8px ${cfg.color}99`,
+                    borderRadius:5, transition:"width 1s" }}/>
                 </div>
               </div>
             )}
@@ -403,6 +407,7 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
   const selectedHotend  = current.kind === "hotend" ? slots.find(s => s.num === current.num) : null;
   const colA = uniqueAmsList.slice(0, 2);
   const amsC = uniqueAmsList[2] ?? null;
+  const amsD = uniqueAmsList[3] ?? null;
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
@@ -430,38 +435,48 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
                 </div>
               )}
 
-          {/* Colonne 2 : AMS-C, à côté de AMS-A */}
+          {/* Colonne 2 : AMS-C en haut, à côté de AMS-A — place libre en dessous pour un éventuel AMS-D */}
           {hasRack && amsC && (
-            <div style={{ gridColumn:2, gridRow:"1 / span 2", display:"flex", alignItems:"center" }}>
+            <div style={{ gridColumn:2, gridRow:1 }}>
               <AMSBox ams={amsC} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
                 isSelected={current.kind==="ams" && current.id===amsC.id}
                 onClick={() => setSel({ kind:"ams", id:amsC.id })}
                 spoolLookup={spoolLookup}/>
             </div>
           )}
+          {hasRack && amsD && (
+            <div style={{ gridColumn:2, gridRow:2 }}>
+              <AMSBox ams={amsD} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
+                isSelected={current.kind==="ams" && current.id===amsD.id}
+                onClick={() => setSel({ kind:"ams", id:amsD.id })}
+                spoolLookup={spoolLookup}/>
+            </div>
+          )}
 
-          {/* Colonne 3 : les 6 hotends du rack Vortek */}
+          {/* Colonne 3 : les 6 hotends du rack Vortek — libellé aligné en haut, slots centrés */}
           {hasRack && (
-            <div style={{ gridColumn:3, gridRow:"1 / span 2", display:"flex", flexDirection:"column", gap:6, justifyContent:"center" }}>
+            <div style={{ gridColumn:3, gridRow:"1 / span 2", display:"flex", flexDirection:"column", height:"100%" }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                <span style={{ fontSize:9, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>Rack Vortek</span>
-                <span style={{ fontSize:9, fontFamily:"monospace", color:"var(--muted)" }}>{filled}/6</span>
+                <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>Rack Vortek</span>
+                <span style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)" }}>{filled}/6</span>
               </div>
-              <div style={{ display:"flex", gap:5 }}>
-                {[slots[0], slots[2], slots[4]].map(({ slot, num, onHead }) => slot ? (
-                  <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
-                    headColor={onHead ? headSlot?.color : null}
-                    isSelected={current.kind==="hotend" && current.num===num}
-                    onClick={() => setSel({ kind:"hotend", num })}/>
-                ) : null)}
-              </div>
-              <div style={{ display:"flex", gap:5 }}>
-                {[slots[1], slots[3], slots[5]].map(({ slot, num, onHead }) => slot ? (
-                  <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
-                    headColor={onHead ? headSlot?.color : null}
-                    isSelected={current.kind==="hotend" && current.num===num}
-                    onClick={() => setSel({ kind:"hotend", num })}/>
-                ) : null)}
+              <div style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"center", gap:6 }}>
+                <div style={{ display:"flex", gap:5 }}>
+                  {[slots[0], slots[2], slots[4]].map(({ slot, num, onHead }) => slot ? (
+                    <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
+                      headColor={onHead ? headSlot?.color : null}
+                      isSelected={current.kind==="hotend" && current.num===num}
+                      onClick={() => setSel({ kind:"hotend", num })}/>
+                  ) : null)}
+                </div>
+                <div style={{ display:"flex", gap:5 }}>
+                  {[slots[1], slots[3], slots[5]].map(({ slot, num, onHead }) => slot ? (
+                    <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
+                      headColor={onHead ? headSlot?.color : null}
+                      isSelected={current.kind==="hotend" && current.num===num}
+                      onClick={() => setSel({ kind:"hotend", num })}/>
+                  ) : null)}
+                </div>
               </div>
             </div>
           )}
@@ -523,7 +538,6 @@ export default function Home() {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, maxWidth:640, margin:"0 auto" }}>
       <StatusBanner status={status} />
-      <HMSBanner errors={status?.hms_errors}/>
       <DeviceGrid
         amsList={status?.ams_list ?? []}
         activeAmsId={status?.active_ams_id ?? -1}
