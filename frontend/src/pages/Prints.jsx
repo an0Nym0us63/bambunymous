@@ -793,7 +793,7 @@ export default function Prints() {
         </div>
       )}
 
-      {!loading && !error && prints.length === 0 && (
+      {viewMode==="list" && !loading && !error && prints.length === 0 && (
         <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>
           Aucune impression — les prochains prints apparaîtront automatiquement.
         </p>
@@ -861,7 +861,7 @@ export default function Prints() {
         );
       })()}
 
-      {hasMore && !loading && (
+      {viewMode==="list" && hasMore && !loading && (
         <button onClick={loadMore} disabled={loadingMore}
           style={{ width:"100%", padding:"12px", marginTop:8,
             background:"var(--surface2)", border:"1px solid var(--border)",
