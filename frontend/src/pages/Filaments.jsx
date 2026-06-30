@@ -645,25 +645,25 @@ export default function Filaments() {
               ]}
             />
           ) : (
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(90px,1fr))", gap:8 }}>
-              {filaments.map(f => {
+            <GalleryCompare
+              items={filaments}
+              getId={f => f.id}
+              getTitle={f => f.name}
+              getSubtitle={f => [f.manufacturer, f.material].filter(Boolean).join(" · ")}
+              emptyLabel="Aucun filament"
+              renderCover={f => {
                 const colors = parseColorsList(f.color, f.colors_array);
-                return (
-                  <div key={f.id} title={`${f.name} — ${f.material || ""}`}
-                    style={{ position:"relative", aspectRatio:"1", borderRadius:10, overflow:"hidden",
-                      boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.1)", ...colorBg(colors, f.multicolor_type) }}>
-                    <div style={{ position:"absolute", bottom:0, left:0, right:0,
-                      background:"linear-gradient(transparent,rgba(0,0,0,0.65))", padding:"16px 6px 4px" }}>
-                      <p style={{ fontSize:9, color:"white", fontWeight:700, margin:0,
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</p>
-                    </div>
-                  </div>
-                );
-              })}
-              {!filaments.length && (
-                <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>
-              )}
-            </div>
+                return <div style={{ width:"100%", height:"100%", ...colorBg(colors, f.multicolor_type) }}/>;
+              }}
+              compareFields={[
+                ["Matière",   f => f.material],
+                ["Marque",    f => f.manufacturer],
+                ["Couleur",   f => f.color ? `#${f.color}` : null],
+                ["Poids",     f => f.filament_weight_g ? `${f.filament_weight_g}g` : null],
+                ["Prix",      f => f.price ? `${f.price}€` : null],
+                ["Bobines",   f => `${f.active_spool_count} active${f.active_spool_count!==1?"s":""} / ${f.spool_count}`],
+              ]}
+            />
           )}
         </>
       )}
