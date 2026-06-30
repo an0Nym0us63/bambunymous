@@ -37,6 +37,7 @@ class FilamentOut(BaseModel):
     spool_count: int = 0
     active_spool_count: int = 0
     photo_url: Optional[str] = None
+    photos: list[str] = []
 
 class FilamentCreate(BaseModel):
     name: str
@@ -249,26 +250,28 @@ async def _load_spool(db, sid):
     return result.scalar_one_or_none()
 
 
-def _fil_cover_photo(fid: int) -> Optional[str]:
-    """Première photo du dossier /data/filaments/{id}/ — sert de vignette de couverture."""
+def _fil_photos(fid: int) -> list[str]:
+    """Toutes les photos du dossier /data/filaments/{id}/."""
     d = DATA_DIR / "filaments" / str(fid)
     if not d.exists():
-        return None
-    for f in sorted(d.iterdir()):
-        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
-            return f"/api/v1/filaments/{fid}/photo/{f.name}"
-    return None
+        return []
+    return [
+        f"/api/v1/filaments/{fid}/photo/{f.name}"
+        for f in sorted(d.iterdir())
+        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif")
+    ]
 
 
 def _fil_out(f: Filament) -> FilamentOut:
     active = [s for s in f.spools if not s.archived]
+    photos = _fil_photos(f.id)
     return FilamentOut(
         id=f.id, name=f.name, manufacturer=f.manufacturer, material=f.material,
         color=f.color, multicolor_type=f.multicolor_type, colors_array=f.colors_array,
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
         profile_id=f.profile_id, swatch=f.swatch, transparent=f.transparent, to_order=f.to_order,
         spool_count=len(f.spools), active_spool_count=len(active),
-        photo_url=_fil_cover_photo(f.id),
+        photo_url=(photos[0] if photos else None), photos=photos,
     )
 
 
