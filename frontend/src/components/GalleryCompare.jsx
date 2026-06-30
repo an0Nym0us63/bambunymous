@@ -22,7 +22,7 @@ export default function GalleryCompare({
   const [compareOpen, setCompareOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(pageSize);
 
-  const normPhotos = (item) => (getPhotos(item) || []).map(p =>
+  const normPhotos = (item) => (getPhotos ? (getPhotos(item) || []) : []).map(p =>
     typeof p === "string" ? { url: p, label: "" } : p
   );
 
