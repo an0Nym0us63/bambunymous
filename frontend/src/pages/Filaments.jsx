@@ -506,30 +506,44 @@ function FilamentsView() {
       {loading ? (
         <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Chargement…</p>
       ) : (
-        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
-          {filaments.map(f => (
-            <div key={f.id} className="card-sm"
-              onClick={() => setSelectedFil(f)}
-              style={{ padding:"10px 14px", display:"flex", alignItems:"center",
-                gap:12, cursor:"pointer" }}>
-              <ColorDot color={f.color}/>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.name}</p>
-                <p style={{ fontSize:11, color:"var(--muted)" }}>{[f.manufacturer, f.material].filter(Boolean).join(" · ")}</p>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
+          {filaments.map(f => {
+            const colorHex = f.color ? `#${f.color.slice(0,6)}` : null;
+            return (
+              <div key={f.id} className="card-sm"
+                onClick={() => setSelectedFil(f)}
+                style={{ overflow:"hidden", cursor:"pointer", display:"flex", flexDirection:"column" }}>
+                {/* Bandeau couleur du filament */}
+                <div style={{ height:6, background: colorHex || "var(--border)", flexShrink:0 }}/>
+                <div style={{ padding:"10px 12px 12px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
+                  <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
+                    <ColorDot color={f.color} size={20}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden",
+                        textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:"16px" }}>{f.name}</p>
+                      <p style={{ fontSize:11, color:"var(--muted)", overflow:"hidden",
+                        textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {[f.manufacturer, f.material].filter(Boolean).join(" · ")}
+                      </p>
+                    </div>
+                  </div>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                    <span style={{
+                      fontSize:10, padding:"2px 8px", borderRadius:20, fontWeight:600,
+                      background: f.active_spool_count > 0 ? "rgba(34,197,94,0.12)" : "var(--surface2)",
+                      color: f.active_spool_count > 0 ? "#22c55e" : "var(--muted)",
+                    }}>
+                      {f.active_spool_count} bobine{f.active_spool_count!==1?"s":""}
+                    </span>
+                    {f.price && (
+                      <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"monospace" }}>{f.price}€</span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0 }}>
-                <span style={{
-                  fontSize:10, padding:"2px 8px", borderRadius:20, fontWeight:600,
-                  background: f.active_spool_count > 0 ? "rgba(34,197,94,0.12)" : "var(--surface2)",
-                  color: f.active_spool_count > 0 ? "#22c55e" : "var(--muted)",
-                }}>
-                  {f.active_spool_count} bobine{f.active_spool_count!==1?"s":""}
-                </span>
-                {f.price && <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"monospace" }}>{f.price}€</span>}
-              </div>
-            </div>
-          ))}
-          {!filaments.length && <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
+            );
+          })}
+          {!filaments.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
         </div>
       )}
       {selectedFil && <FilamentSheet f={selectedFil} onClose={() => setSelectedFil(null)}/>}
