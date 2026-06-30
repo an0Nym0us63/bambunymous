@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle } from "lucide-react";
+import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle, Calendar } from "lucide-react";
 import client from "../api/client";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
 
@@ -180,13 +180,13 @@ function StatusBanner({ status }) {
               <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
                 {remain && <span style={{ fontSize:11, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Clock size={10}/>{remain}</span>}
                 {status.total_layers > 0 && <span style={{ fontSize:11, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}><Layers size={10}/>{status.layer}/{status.total_layers}</span>}
-              </div>
-            )}
-            {isRunning && finish && (
-              <div style={{ display:"flex", alignItems:"center", gap:2, marginTop:3 }}>
-                <span style={{ fontSize:11, color:"var(--muted)" }}>Fin estimée : {finish.time}</span>
-                {finish.dayDiff > 0 && (
-                  <sup style={{ fontSize:9, fontWeight:800, color:cfg.color, marginLeft:1 }}>+{finish.dayDiff}</sup>
+                {finish && (
+                  <span style={{ fontSize:11, color:"var(--muted)", display:"flex", alignItems:"center", gap:3 }}>
+                    <Calendar size={10}/>{finish.time}
+                    {finish.dayDiff > 0 && (
+                      <sup style={{ fontSize:9, fontWeight:800, color:cfg.color, marginLeft:1 }}>+{finish.dayDiff}</sup>
+                    )}
+                  </span>
                 )}
               </div>
             )}
