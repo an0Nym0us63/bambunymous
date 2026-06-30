@@ -375,7 +375,10 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
   };
 
   const snapByName = {};
-  (snaps||[]).forEach(s => { snapByName["snapshot-" + s.trigger + ".jpg"] = s; });
+  (snaps||[]).forEach(s => {
+    const base = s.file_path ? s.file_path.split("/").pop() : ("snapshot-" + s.trigger + ".jpg");
+    snapByName[base] = s;
+  });
 
   const allItems = diskFiles.length > 0
     ? diskFiles.map(f => {
