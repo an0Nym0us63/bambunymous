@@ -90,12 +90,9 @@ function GroupBottomSheet({ groupId, name, prints, latestDate, onClose, onSelect
   });
   const filaments = Object.values(filAgg).sort((a,b) => b.grams - a.grams);
 
-  // Photos — d'abord celles du dossier groupe (legacy Spoolnymous), puis une vignette par print
-  const groupPhotoItems = groupPhotos.map(f => ({ url: f.url, label: f.name }));
-  const printPhotoItems = prints
-    .filter(p => p.plate_image)
-    .map(p => ({ url: "/api/v1/prints/" + p.id + "/image", label: p.file_name || "Sans nom", print: p }));
-  const photoItems = [...groupPhotoItems, ...printPhotoItems];
+  // Photos du dossier groupe uniquement — les vignettes des prints sont déjà
+  // affichées juste en dessous dans la grille "Prints", pas besoin de doublon
+  const photoItems = groupPhotos.map(f => ({ url: f.url, label: f.name }));
 
   return (
     <>
