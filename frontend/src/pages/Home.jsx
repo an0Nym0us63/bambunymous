@@ -2,7 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
 import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun } from "lucide-react";
 import client from "../api/client";
-import AMSSection from "../components/AMSSection";
+import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function hexCss(hex) {
@@ -242,10 +242,12 @@ function WearBar({ wear }) {
   );
 }
 
-function SlotMini({ slot, num, isOnHead, isSelected, onClick }) {
+function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor }) {
   const status = slotStatus(slot, isOnHead);
-  const color  = status === "loaded" ? `#${slot?.color?.slice(0,6)}` : null;
   const isHead = status === "head";
+  const color  = isHead
+    ? (headColor ? `#${headColor.slice(0,6)}` : null)
+    : (status === "loaded" ? `#${slot?.color?.slice(0,6)}` : null);
 
   return (
     <button onClick={onClick} style={{
@@ -256,12 +258,12 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick }) {
       alignItems:"center", cursor:"pointer", transition:"all 0.15s", minWidth:44,
       boxShadow: isHead ? "0 0 0 3px rgba(59,130,246,0.12)" : "none",
     }}>
-      {/* Couleur du slot — vide mais cerclé bleu si sur la tête */}
+      {/* Couleur du slot — couleur réelle même sur la tête, cerclé bleu si actif */}
       <div style={{ width:22, height:22, borderRadius:6,
-        backgroundColor: isHead ? "rgba(59,130,246,0.15)" : color || "var(--border)",
+        backgroundColor: color || (isHead ? "rgba(59,130,246,0.15)" : "var(--border)"),
         border: isHead ? "1.5px solid #3b82f6" : "1px solid rgba(255,255,255,0.1)",
         display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
-        {isHead && <span style={{ color:"#60a5fa", fontSize:9 }}>↑</span>}
+        {isHead && <span style={{ color:"white", fontSize:9, textShadow:"0 0 3px rgba(0,0,0,0.85)" }}>↑</span>}
         {status === "empty" && <span style={{ color:"var(--muted)", fontSize:8 }}>—</span>}
       </div>
       {slot?.match_mode && !isHead && status==="loaded" && (
@@ -373,84 +375,110 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
 }
 
 
-function VortekRack({ rack }) {
-  const [sel, setSel] = useState(0);
-  if (!rack?.hotends?.length) return null;
+function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup }) {
+  const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
+  const hasRack = (rack?.hotends?.length ?? 0) > 0;
+  const headId  = rack?.head_id ?? -1;
+  const headSlot = hasRack ? (rack.hotends.find(s => s.id === 0) ?? null) : null;
 
-  const h = rack.hotends;
-  const headId = rack.head_id ?? -1;
-
-  // Mapping physique confirmé:
-  // Slot 1→idx2, Slot 2→idx5, Slot 3→idx3, Slot 4→idx0, Slot 5→idx4, Slot 6→idx6
-  // IDs 16-21 = slots rack 1-6 (id - 15 = numéro de slot)
-  // id=0 = tête droite, id=1 = tête gauche
-  // src_id/head_id = slot actuellement sur la tête (ex: head_id=19 → slot 4)
-  const headSlotNum = headId >= 16 ? headId - 15 : -1; // numéro de slot 1-6
-
-  // Construire les 6 slots dans l'ordre physique
-  // Pour chaque slot 1-6, chercher l'hotend avec id = slot+15
-  // Si head_id correspond à ce slot → onHead=true, slot virtuellement vide
-  const slots = [1,2,3,4,5,6].map(num => {
-    const targetId = num + 15; // slot 1→id16, slot 4→id19, etc.
+  const slots = hasRack ? [1,2,3,4,5,6].map(num => {
+    const targetId = num + 15; // slot 1→id16 ... slot 6→id21
     const onHead   = headId === targetId;
-    const slot     = h.find(s => s.id === targetId) ?? null;
-    // Si onHead et slot null → créer un slot fantôme pour l'affichage
-    const displaySlot = slot ?? (onHead ? { id: targetId, filament_id: "", color: "", diameter: 0.4, nozzle_type: "HS01", wear: 0, print_time: 0, empty: true } : null);
+    const slot     = rack.hotends.find(s => s.id === targetId) ?? null;
+    const displaySlot = slot ?? (onHead ? { id: targetId, filament_id:"", color:"", diameter:0.4, nozzle_type:"HS01", wear:0, print_time:0, empty:true } : null);
     return { slot: displaySlot, num, onHead };
-  });
+  }) : [];
+  const filled = slots.filter(s => s.slot?.filament_id && !s.onHead).length;
 
-  const topSlots = [slots[0], slots[2], slots[4]];
-  const botSlots = [slots[1], slots[3], slots[5]];
-  const topSels  = [0, 2, 4];
-  const botSels  = [1, 3, 5];
-  const selEntry = slots[sel] ?? slots[0];
-  const filled   = slots.filter(s => s.slot?.filament_id && !s.onHead).length;
-  // headSlot = infos de l'hotend sur la tête (id=0 dans nozzle.info[] = tête droite)
-  const headSlot = h.find(s => s.id === 0) ?? null;
+  const autoAmsId = uniqueAmsList.length ? (activeAmsId >= 0 ? activeAmsId : uniqueAmsList[0]?.id ?? 0) : null;
+  const [sel, setSel] = useState(null); // {kind:'ams', id} | {kind:'hotend', num}
+  const [selectedTray, setSelectedTray] = useState(null);
+
+  if (!uniqueAmsList.length && !hasRack) return (
+    <div className="card" style={{ padding:24, textAlign:"center", color:"var(--muted)", fontSize:14 }}>Aucun AMS détecté</div>
+  );
+
+  const current = sel ?? (autoAmsId !== null ? { kind:"ams", id:autoAmsId } : { kind:"hotend", num:1 });
+  const selectedAms     = current.kind === "ams"    ? (uniqueAmsList.find(a => a.id === current.id) ?? uniqueAmsList[0]) : null;
+  const selectedHotend  = current.kind === "hotend" ? slots.find(s => s.num === current.num) : null;
+  const colA = uniqueAmsList.slice(0, 2);
+  const amsC = uniqueAmsList[2] ?? null;
 
   return (
-    <div className="card" style={{ padding:16 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-        <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em" }}>Rack Vortek</span>
-        <div style={{ display:"flex", gap:10, alignItems:"center" }}>
-          <span style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)" }}>{slots.filter(s=>s.slot?.filament_id && !s.onHead).length}/6 chargés</span>
-          {headId >= 16 && (
-            <span style={{ fontSize:10, color:"#60a5fa", fontFamily:"monospace" }}>
-              ● Buse droite : slot {headSlotNum}{headSlot ? ` — ${headSlot.filament_id} ${headSlot.diameter}mm` : ""}
-            </span>
+    <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      <div className="card" style={{ padding:12 }}>
+        <div style={{ display:"grid",
+          gridTemplateColumns: hasRack ? "1fr 1fr 1.5fr" : `repeat(${Math.min(uniqueAmsList.length,4)},1fr)`,
+          gap:10 }}>
+
+          {/* Colonne 1 : AMS-A au-dessus de AMS-B */}
+          {!hasRack
+            ? uniqueAmsList.map(ams => (
+                <AMSBox key={ams.id} ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
+                  isSelected={current.kind==="ams" && current.id===ams.id}
+                  onClick={() => setSel({ kind:"ams", id:ams.id })}
+                  spoolLookup={spoolLookup}/>
+              ))
+            : colA.length > 0 && (
+                <div style={{ gridColumn:1, gridRow:"1 / span 2", display:"flex", flexDirection:"column", gap:10 }}>
+                  {colA.map(ams => (
+                    <AMSBox key={ams.id} ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
+                      isSelected={current.kind==="ams" && current.id===ams.id}
+                      onClick={() => setSel({ kind:"ams", id:ams.id })}
+                      spoolLookup={spoolLookup}/>
+                  ))}
+                </div>
+              )}
+
+          {/* Colonne 2 : AMS-C, à côté de AMS-A */}
+          {hasRack && amsC && (
+            <div style={{ gridColumn:2, gridRow:"1 / span 2", display:"flex", alignItems:"center" }}>
+              <AMSBox ams={amsC} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
+                isSelected={current.kind==="ams" && current.id===amsC.id}
+                onClick={() => setSel({ kind:"ams", id:amsC.id })}
+                spoolLookup={spoolLookup}/>
+            </div>
+          )}
+
+          {/* Colonne 3 : les 6 hotends du rack Vortek */}
+          {hasRack && (
+            <div style={{ gridColumn:3, gridRow:"1 / span 2", display:"flex", flexDirection:"column", gap:6, justifyContent:"center" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <span style={{ fontSize:9, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>Rack Vortek</span>
+                <span style={{ fontSize:9, fontFamily:"monospace", color:"var(--muted)" }}>{filled}/6</span>
+              </div>
+              <div style={{ display:"flex", gap:5 }}>
+                {[slots[0], slots[2], slots[4]].map(({ slot, num, onHead }) => slot ? (
+                  <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
+                    headColor={onHead ? headSlot?.color : null}
+                    isSelected={current.kind==="hotend" && current.num===num}
+                    onClick={() => setSel({ kind:"hotend", num })}/>
+                ) : null)}
+              </div>
+              <div style={{ display:"flex", gap:5 }}>
+                {[slots[1], slots[3], slots[5]].map(({ slot, num, onHead }) => slot ? (
+                  <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
+                    headColor={onHead ? headSlot?.color : null}
+                    isSelected={current.kind==="hotend" && current.num===num}
+                    onClick={() => setSel({ kind:"hotend", num })}/>
+                ) : null)}
+              </div>
+            </div>
           )}
         </div>
       </div>
 
-      <div style={{ display:"flex", gap:12 }}>
-        <div style={{ display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
-          <div style={{ display:"flex", gap:6 }}>
-            {topSlots.map(({slot, num, onHead}, i) => slot ? (
-              <SlotMini key={num}
-                slot={slot} num={num} isOnHead={onHead}
-                isSelected={sel === topSels[i]}
-                onClick={() => setSel(topSels[i])} />
-            ) : null)}
-          </div>
-          <div style={{ display:"flex", gap:6 }}>
-            {botSlots.map(({slot, num, onHead}, i) => slot ? (
-              <SlotMini key={num}
-                slot={slot} num={num} isOnHead={onHead}
-                isSelected={sel === botSels[i]}
-                onClick={() => setSel(botSels[i])} />
-            ) : null)}
-          </div>
-        </div>
-
-        {selEntry?.slot && (
-          <SlotDetail
-            slot={selEntry.slot}
-            num={selEntry.num}
-            isOnHead={selEntry.onHead}
-            headSlot={selEntry.onHead ? headSlot : null}
-          />
-        )}
-      </div>
+      {/* Détail partagé — AMS (grille de trays) ou hotend rack (fiche) */}
+      {current.kind === "ams" && selectedAms && (
+        <AMSDetail ams={selectedAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
+          spoolLookup={spoolLookup} onTrayClick={setSelectedTray}/>
+      )}
+      {current.kind === "hotend" && selectedHotend?.slot && (
+        <SlotDetail slot={selectedHotend.slot} num={selectedHotend.num}
+          isOnHead={selectedHotend.onHead}
+          headSlot={selectedHotend.onHead ? headSlot : null}/>
+      )}
+      {selectedTray && <TrayBottomSheet tray={selectedTray.tray} amsLabel={selectedTray.amsLabel} onClose={()=>setSelectedTray(null)}/>}
     </div>
   );
 }
@@ -492,17 +520,15 @@ export default function Home() {
     return () => stopPolling();
   }, []);
 
-  const hasRack = (status?.hotend_rack?.hotends?.length ?? 0) > 0;
-
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, maxWidth:640, margin:"0 auto" }}>
       <StatusBanner status={status} />
       <HMSBanner errors={status?.hms_errors}/>
-      {hasRack && <VortekRack rack={status.hotend_rack} />}
-      <AMSSection
+      <DeviceGrid
         amsList={status?.ams_list ?? []}
         activeAmsId={status?.active_ams_id ?? -1}
         activeTrayId={status?.active_tray_id ?? -1}
+        rack={status?.hotend_rack}
         spoolLookup={spoolLookup}
       />
     </div>
