@@ -431,9 +431,21 @@ class MQTTManager:
             # mapping[0] encode l'AMS+tray actif: high byte = ams_id, low byte = tray_id
             if p["mapping"]:
                 v = p["mapping"][0]
-                state.active_ams_id  = (v >> 8) & 0xFF
-                state.active_tray_id = v & 0xFF
+                new_ams  = (v >> 8) & 0xFF
+                new_tray = v & 0xFF
+                if new_ams != state.active_ams_id or new_tray != state.active_tray_id:
+                    logger.info(f"[ACTIVE] mapping={p['mapping']} → active_ams_id {state.active_ams_id}→{new_ams} active_tray_id {state.active_tray_id}→{new_tray} (tray_now_local={state.active_tray_local})")
+                state.active_ams_id  = new_ams
+                state.active_tray_id = new_tray
             changed = True
+
+        # Diagnostic : log si tray_now (par-AMS) change pendant qu'aucun "mapping" n'arrive
+        # → permettrait de confirmer si tray_now est l'indicateur fiable de bascule couleur
+        if "ams" in ams_data:
+            _tn = ams_data.get("tray_now", None)
+            if _tn is not None and getattr(state, "_last_tray_now_logged", None) != _tn:
+                logger.info(f"[ACTIVE] ams.tray_now → {_tn} (active_ams_id={state.active_ams_id} active_tray_id={state.active_tray_id})")
+                state._last_tray_now_logged = _tn
 
         # ── Hotend Rack Vortek ───────────────────────────────────────────
         if device:
