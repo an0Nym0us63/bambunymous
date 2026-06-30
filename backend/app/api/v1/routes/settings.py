@@ -46,6 +46,30 @@ async def reset_all_data(_: str = Depends(get_current_user)):
     return {"ok": True, "message": "Toutes les données et images supprimées"}
 
 
+@router.get("/ams-order")
+async def get_ams_order(db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    """Ordre d'affichage personnalisé des AMS sur l'accueil (4 positions)."""
+    import json
+    raw = await get_setting(db, "AMS_ORDER")
+    try:
+        order = json.loads(raw) if raw else []
+    except Exception:
+        order = []
+    return {"order": order}
+
+
+@router.post("/ams-order")
+async def set_ams_order(body: dict, db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    """
+    body: {"order": [ams_id, ams_id, null, ams_id]} — 4 positions (A/B/C/D),
+    null pour une position vide. Sert à placer manuellement les AMS sur l'accueil.
+    """
+    import json
+    order = body.get("order", [])
+    await set_setting(db, "AMS_ORDER", json.dumps(order))
+    return {"ok": True, "order": order}
+
+
 class SettingsOut(BaseModel):
     PRINTER_IP: str = ""
     PRINTER_ID: str = ""
