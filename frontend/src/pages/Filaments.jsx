@@ -208,6 +208,9 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
             </div>
           </div>
 
+          {/* Photos du filament */}
+          <FilamentPhotos filamentId={spool.filament_id} />
+
           {/* Jauge restant */}
           <div style={{ marginBottom:24 }}>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
@@ -254,11 +257,6 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
           <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
           <Row label="Dernière util." value={spool.last_used_at?.slice(0,10)}/>
           <Row label="Commentaire"    value={spool.comment}/>
-
-
-
-          {/* Photos du filament */}
-          <FilamentPhotos filamentId={spool.filament_id} />
 
 
           {/* Actions */}
