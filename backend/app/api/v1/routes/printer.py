@@ -5,6 +5,38 @@ from ....core.mqtt import get_state
 from ....db.session import AsyncSessionLocal
 from .auth import get_current_user
 
+
+def _catalog_lookup(fila_id: str, color_hex: str) -> Optional[str]:
+    """Lookup nom FR dans le catalogue Bambu local. Retourne None si absent."""
+    if not fila_id:
+        return None
+    try:
+        from ....services.bambu_catalog import BambuCatalogSync
+        from ....core.config import settings
+        cat = BambuCatalogSync(data_dir=settings.DATA_DIR)
+        h = color_hex.replace("#","").lower()
+        h8 = h + "ff" if len(h) == 6 else h[:8]
+        import os, json as _j
+        path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
+        if not os.path.exists(path):
+            return None
+        data = _j.loads(open(path).read()).get("data", [])
+        en_to_fr = {e.get("fila_color_name",{}).get("en",""): e.get("fila_color_name",{}).get("fr","")
+                    for e in data if e.get("fila_color_name",{}).get("fr")}
+        for e in data:
+            if e.get("fila_id","").upper() != fila_id.upper():
+                continue
+            ec = (e.get("fila_color",[""])[0]).lstrip("#").lower()
+            ec8 = ec + "ff" if len(ec) == 6 else ec[:8]
+            if ec8 != h8:
+                continue
+            names = e.get("fila_color_name", {})
+            name_en = names.get("en","")
+            return names.get("fr") or en_to_fr.get(name_en) or name_en or None
+    except Exception:
+        pass
+    return None
+
 router = APIRouter()
 
 
@@ -44,7 +76,7 @@ class TrayOut(BaseModel):
     color: str
     filament_type: str
     tray_id_name: str
-    tray_info_idx: str = ""   # ex: GFA00 = profile_id Bambu
+    tray_info_idx: str = ""
     remain: int
     uuid: str
     tag_uid: str
@@ -54,6 +86,7 @@ class TrayOut(BaseModel):
     spool_id: Optional[int] = None
     match_mode: str = ""
     spool_info: Optional[SpoolInfoOut] = None
+    catalog_name: Optional[str] = None   # nom catalogue Bambu si tray non matché
 
 
 class AMSOut(BaseModel):
@@ -207,6 +240,11 @@ async def printer_status(_: str = Depends(get_current_user)):
                     spool_id=t.spool_id,
                     match_mode=getattr(t, "match_mode", ""),
                     spool_info=(lambda si: SpoolInfoOut(**si) if si else _spool_info(t.spool_id, _spools_map))(getattr(t, "_spool_info_cache", None)),
+                    catalog_name=(
+                        None if t.spool_id  # déjà matché → pas besoin
+                        else _catalog_lookup(getattr(t, "tray_info_idx", ""), t.color)
+                        if getattr(t, "tray_info_idx", "") else None
+                    ),
                 ) for t in a.trays],
                 humidity=a.humidity, temp=a.temp,
                 is_drying=a.dry_time > 0,

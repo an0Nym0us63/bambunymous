@@ -273,7 +273,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
   const empty = isEmptyTray(tray);
   const colors = parseColors(tray, spoolInfo);
   const c1 = colors?.[0];
-  const name = spoolInfo?.name ?? spoolInfo?.filament_name ?? null;
+  const name = spoolInfo?.name ?? spoolInfo?.filament_name ?? tray.catalog_name ?? null;
   const material = spoolInfo?.material ?? spoolInfo?.filament_material ?? tray.filament_type ?? null;
   const hasW = spoolInfo?.remaining_weight_g != null;
   const hasT = (spoolInfo?.initial_weight_g ?? spoolInfo?.filament_weight_g) != null;
