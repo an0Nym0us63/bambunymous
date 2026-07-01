@@ -513,6 +513,14 @@ class MQTTManager:
 
         # ── Hotend Rack Vortek ───────────────────────────────────────────
         if device:
+            # Log unique de toutes les clés du device pour trouver le rack
+            if not getattr(state, "_device_keys_logged", False):
+                logger.info(f"[RACK] device keys: {list(device.keys())}")
+                for k, v in device.items():
+                    if isinstance(v, dict):
+                        logger.info(f"[RACK] device.{k} keys: {list(v.keys())}")
+                state._device_keys_logged = True
+
             nozzle = device.get("nozzle", {})
             if "info" in nozzle:
                 src_id = int(nozzle.get("src_id", -1))
@@ -526,10 +534,7 @@ class MQTTManager:
                 rack.holder_stat = holder.get("stat", 0)
                 rack.holder_job = holder.get("job", 0)
                 exist_bits = nozzle.get("exist", 0)
-                # Log unique du contenu brut de nozzle.info pour diagnostiquer wear/tm
-                if not getattr(state, "_nozzle_info_logged", False):
-                    logger.info(f"[RACK] nozzle.info brut: {nozzle['info'][:3]}")  # premiers 3 slots
-                    state._nozzle_info_logged = True
+                logger.info(f"[RACK] nozzle.info brut: {nozzle['info'][:3]}")
                 for n in nozzle["info"]:
                     rack.hotends.append(HotendSlot(
                         id=int(n.get("id", 0)),
@@ -539,11 +544,9 @@ class MQTTManager:
                         nozzle_type=n.get("type", ""),
                         serial=n.get("sn", ""),
                         wear=float(n.get("wear", 0)),
-                        print_time=int(n.get("tm", 0)),  # 'tm' = temps en minutes (source: ha-bambulab), pas 'p_t'
+                        print_time=int(n.get("tm", 0)),
                         empty=not bool((n.get("fila_id") or "").strip()),
                     ))
-                # src_id = hotend actuellement sur la tête
-                # S'il n'est PAS dans exist_bits → il est sorti du rack (sur la tête)
                 src_in_rack = bool(exist_bits & (1 << src_id)) if 0 <= src_id < 64 else False
                 rack.head_id = src_id if not src_in_rack else -1
                 rack.head_in_rack_idx = next(

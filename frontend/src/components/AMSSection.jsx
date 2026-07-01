@@ -360,10 +360,10 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
               <span>🌡 Température : <b>{ams.dry_temperature}°C</b></span>
             )}
             {ams.dry_duration > 0 && (
-              <span>⏳ Durée : <b>{fmtDryTime(ams.dry_duration)}</b></span>
+              <span>⏳ Durée : <b>{ams.dry_duration}h</b></span>
             )}
             {ams.dry_time > 0 && (
-              <span>⏱ Restant : <b style={{ color:"#f97316" }}>{fmtDryTime(ams.dry_time)}</b></span>
+              <span>⏱ Restant : <b style={{ color:"#f97316" }}>{fmtMins(ams.dry_time)}</b></span>
             )}
             {ams.dry_filament && (
               <span>🧵 Filament : <b>{ams.dry_filament}</b></span>
