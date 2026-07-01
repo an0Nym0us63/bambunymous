@@ -324,22 +324,23 @@ async def map_tray_suggest(
         except: return (128,128,128)
     def dist(a, b): return math.sqrt(sum((x-y)**2 for x,y in zip(rgb(a), rgb(b))))
 
+    def no_rfid(tag: Optional[str]) -> bool:
+        t = (tag or "").strip()
+        return not t or t == "0" or all(c == "0" for c in t) or t.lower() in ("none", "null")
+
+    tray_color = (color or "").strip().lstrip("#")
+
     async with AsyncSessionLocal() as db:
-        # Ramener toutes les bobines actives, filtrage fin en Python
-        # (le filtre SQL IS NULL / = '' est fragile selon les imports Spoolnymous)
         q = select(Spool).options(selectinload(Spool.filament)).where(Spool.archived == False)
         all_spools = (await db.execute(q)).scalars().all()
 
-    def no_rfid(s: Spool) -> bool:
-        """Vrai si la bobine n'a pas de tag RFID réellement renseigné."""
-        t = (s.tag_number or "").strip()
-        return not t or t == "0" or all(c == "0" for c in t) or t.lower() in ("", "none", "null")
+        # Filtrage + tri DANS la session — les relations filament sont encore accessibles
+        candidates = [s for s in all_spools if no_rfid(s.tag_number)]
+        candidates.sort(key=lambda s: dist(tray_color, (s.filament.color or "") if s.filament else ""))
 
-    spools = [s for s in all_spools if no_rfid(s)]
+        result = [_spool_out(s) for s in candidates]
 
-    tray_color = (color or "").strip().lstrip("#")
-    spools.sort(key=lambda s: dist(tray_color, s.filament.color or "" if s.filament else ""))
-    return {"spools": [_spool_out(s) for s in spools]}
+    return {"spools": result}
 
 
 @router.post("/map-tray/link")
