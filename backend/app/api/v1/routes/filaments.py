@@ -366,10 +366,10 @@ async def map_tray_link(body: dict, _: str = Depends(get_current_user)):
     Mappe un tray non reconnu sur une bobine existante : renseigne tag_number
     et profile_id sur la bobine et son filament pour que les prochains matchings
     l'identifient automatiquement.
-    body: {spool_id, tag_uid, profile_id, color}
+    body: {spool_id, tray_uuid, profile_id, color}
     """
     spool_id  = body.get("spool_id")
-    tag_uid   = (body.get("tag_uid") or "").strip()
+    tag_uid   = (body.get("tray_uuid") or "").strip()
     prof      = (body.get("profile_id") or "").strip()
     color_hex = (body.get("color") or "").strip().lstrip("#")
 
@@ -428,9 +428,9 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
     """
     Crée un filament + une bobine à partir des infos MQTT d'un tray non reconnu,
     avec les champs nécessaires au matching automatique (profile_id, color, tag_uid).
-    body: {tag_uid, profile_id, color, material, name?, manufacturer?, weight?}
+    body: {tray_uuid, profile_id, color, material, name?, manufacturer?, weight?}
     """
-    tag_uid  = (body.get("tag_uid") or "").strip()
+    tag_uid  = (body.get("tray_uuid") or "").strip()
     prof     = (body.get("profile_id") or "").strip()
     # Normaliser la couleur : lowercase, 6 chars (MQTT envoie parfois 8 avec alpha)
     raw_color = (body.get("color") or "").strip().lstrip("#")

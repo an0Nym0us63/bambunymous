@@ -496,7 +496,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
   const [spools, setSpools] = React.useState([]);
   const [loading, setLoading] = React.useState(isBambu);
   const [saving, setSaving] = React.useState(false);
-  const hasRfid = Boolean(tray.tag_uid && !/^0+$/.test(tray.tag_uid));
+  const hasRfid = Boolean(tray.uuid && !/^0+$/.test(tray.uuid));
   const [form, setForm] = React.useState({
     name: "",
     material: (tray.filament_type || "PLA").replace(/\s.*/, ""),
@@ -520,7 +520,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
     setSaving(true);
     try {
       const r = await client.post("/filaments/map-tray/link", {
-        spool_id, tag_uid: tray.tag_uid, profile_id: tray.tray_info_idx, color: tray.color,
+        spool_id, tray_uuid: tray.uuid, profile_id: tray.tray_info_idx, color: tray.color,
       });
       setResult(r.data);
     } finally { setSaving(false); }
@@ -530,7 +530,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
     setSaving(true);
     try {
       const r = await client.post("/filaments/map-tray/create", {
-        tag_uid: tray.tag_uid, profile_id: tray.tray_info_idx, color: tray.color,
+        tray_uuid: tray.uuid, profile_id: tray.tray_info_idx, color: tray.color,
         material: form.material, name: form.name,
         manufacturer: form.manufacturer || undefined,
         weight: Number(form.weight) || 1000,
@@ -600,7 +600,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
             {tray.filament_type || "Type inconnu"}
             {tray.color ? ` · #${tray.color.slice(0,6)}` : ""}
             {tray.tray_info_idx ? ` · ${tray.tray_info_idx}` : ""}
-            {tray.tag_uid && !/^0+$/.test(tray.tag_uid) ? ` · 🔖 ${tray.tag_uid.slice(0,8)}…` : ""}
+            {tray.uuid && !/^0+$/.test(tray.uuid) ? ` · 🔖 ${tray.uuid.slice(0,8)}…` : ""}
           </p>
 
           {/* Toggle — seulement pour les Bambu */}
