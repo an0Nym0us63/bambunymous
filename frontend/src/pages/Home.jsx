@@ -375,7 +375,7 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
                 <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", marginTop:4 }}>{Math.round(headSlot.wear)}%</p>
               </div>
               {headSlot.print_time > 0 && (
-                <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{headSlot.print_time >= 60 ? Math.floor(headSlot.print_time/60)+"h" : ""}{headSlot.print_time % 60 > 0 ? " "+(headSlot.print_time%60)+"min" : ""} cumulées</p>
+                <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{Math.floor(headSlot.print_time/3600)}h{headSlot.print_time%3600>=60 ? " "+Math.floor((headSlot.print_time%3600)/60)+"min" : ""} cumulées</p>
               )}
             </>
           )}
@@ -402,7 +402,7 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
             <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", marginTop:4 }}>{Math.round(slot.wear)}%</p>
           </div>
           {slot.print_time > 0 && (
-            <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{slot.print_time >= 60 ? Math.floor(slot.print_time/60)+"h" : ""}{slot.print_time % 60 > 0 ? " "+(slot.print_time%60)+"min" : ""} cumulées</p>
+            <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{Math.floor(slot.print_time/3600)}h{slot.print_time%3600>=60 ? " "+Math.floor((slot.print_time%3600)/60)+"min" : ""} cumulées</p>
           )}
         </>
       )}

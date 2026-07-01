@@ -134,12 +134,6 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
   const isDrying = ams.is_drying || ams.dry_time > 0;
   const getInfo = t => t.spool_info ?? null;
 
-  const fmtDryTime = (secs) => {
-    if (!secs) return "";
-    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
-    return h > 0 ? `${h}h${m > 0 ? m+"m" : ""}` : `${m}min`;
-  };
-
   return (
     <button onClick={onClick} style={{
       display:"flex", flexDirection:"column", alignItems:"center", gap:6,
@@ -150,19 +144,12 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
           {AMS_NAMES[ams.id] ?? `AMS ${ams.id+1}`}
         </span>
         {isActive && <span style={{ width:6, height:6, borderRadius:"50%", backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
-        {isDrying && (
-          <span title={`Séchage en cours${ams.dry_temperature ? ` · ${ams.dry_temperature}°C` : ""}${ams.dry_time ? ` · ${fmtDryTime(ams.dry_time)} restant` : ""}`}
-            style={{ fontSize:8, padding:"1px 5px", borderRadius:4, fontWeight:700,
-              background:"rgba(249,115,22,0.15)", color:"#f97316", lineHeight:"14px" }}>
-            🌡 {ams.dry_temperature ? `${ams.dry_temperature}°` : ""}
-          </span>
-        )}
       </div>
       <div style={{
         width:"100%", borderRadius:12, padding:6, display:"flex", gap:4,
-        border:`1px solid ${isDrying ? "rgba(249,115,22,0.4)" : isActive ? "rgba(59,130,246,0.4)" : isSelected ? "rgba(255,255,255,0.2)" : "var(--border)"}`,
+        border:`1px solid ${isDrying ? "rgba(249,115,22,0.35)" : isActive ? "rgba(59,130,246,0.4)" : isSelected ? "rgba(255,255,255,0.2)" : "var(--border)"}`,
         background: isDrying ? "rgba(249,115,22,0.04)" : isActive ? "rgba(59,130,246,0.06)" : "var(--surface2)",
-        boxShadow: isDrying ? "0 4px 16px rgba(249,115,22,0.12)" : isActive ? "0 4px 16px rgba(59,130,246,0.15)" : "none",
+        boxShadow: isDrying ? "0 4px 12px rgba(249,115,22,0.10)" : isActive ? "0 4px 16px rgba(59,130,246,0.15)" : "none",
         transition:"all 0.2s",
       }}>
         {ams.trays.map(t => <ColorPill key={t.id} tray={t} spoolInfo={getInfo(t)} active={isActive && t.id===activeTrayId} />)}
@@ -170,11 +157,8 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
       <div style={{ display:"flex", gap:8, fontSize:9, color:"var(--muted)" }}>
         <span style={{ display:"flex", alignItems:"center", gap:2 }}><Droplets size={8}/>{ams.humidity}%</span>
         <span style={{ display:"flex", alignItems:"center", gap:2, color: isDrying ? "#f97316" : "var(--muted)" }}>
-          <Sun size={8}/>{ams.temp.toFixed(1)}°{isDrying ? ` → ${ams.dry_temperature}°C` : ""}
+          <Sun size={8} style={{ color: isDrying ? "#f97316" : undefined }}/>{(ams.temp ?? 0).toFixed(1)}°
         </span>
-        {isDrying && ams.dry_time > 0 && (
-          <span style={{ color:"#f97316" }}>⏱ {fmtDryTime(ams.dry_time)}</span>
-        )}
       </div>
       <div style={{ height:2, borderRadius:1, background: isSelected ? "#3b82f6" : "transparent", width: isSelected ? 32 : 8, transition:"all 0.3s" }} />
     </button>
