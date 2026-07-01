@@ -312,95 +312,134 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
 }
 
 function SlotDetail({ slot, num, isOnHead, headSlot }) {
-  const status = slotStatus(slot, isOnHead);
-  const color  = status === "loaded" ? `#${slot?.color?.slice(0,6)}` : null;
+  const status   = slotStatus(slot, isOnHead);
+  const rawColor = (slot?.color || "").replace(/^#/, "");
+  const cssColor = rawColor.length >= 6 ? `#${rawColor.slice(0,6)}` : null;
+  const [filInfo, setFilInfo] = React.useState(null);
+
+  // Chercher le filament dans notre BDD par profile_id + couleur
+  React.useEffect(() => {
+    const fid = ((isOnHead && headSlot ? headSlot.filament_id : slot?.filament_id) || "").toUpperCase();
+    const col  = rawColor.slice(0,6).toLowerCase();
+    if (!fid) { setFilInfo(null); return; }
+    client.get("/filaments/filaments")
+      .then(r => {
+        const fils = r.data || [];
+        // Match exact : profile_id + couleur
+        let match = fils.find(f =>
+          f.profile_id?.toUpperCase() === fid &&
+          (f.color || "").toLowerCase().slice(0,6) === col
+        );
+        // Fallback : juste le profile_id
+        if (!match) match = fils.find(f => f.profile_id?.toUpperCase() === fid);
+        setFilInfo(match || null);
+      }).catch(() => setFilInfo(null));
+  }, [slot?.filament_id, rawColor, headSlot?.filament_id]);
+
   if (!slot) return <div style={{ flex:1 }}/>;
 
-  const borderColor = status === "head" ? "rgba(59,130,246,0.5)" : "var(--border)";
-  const bg          = status === "head" ? "rgba(59,130,246,0.06)" : "var(--surface2)";
-
-  const statusBadge = {
-    head:    { label:"Buse droite", color:"#60a5fa", bg:"rgba(59,130,246,0.15)" },
-    no_fila: { label:"Non chargé",  color:"#f59e0b", bg:"rgba(245,158,11,0.12)" },
-    empty:   { label:"Vide",        color:"var(--muted)", bg:"var(--border)" },
-    loaded:  null,
-  }[status];
-
   const displaySlot = (status === "head" && headSlot) ? headSlot : slot;
+  const fid = displaySlot.filament_id || "";
+  const hours = displaySlot.print_time ? Math.floor(displaySlot.print_time / 3600) : 0;
+  const mins  = displaySlot.print_time ? Math.floor((displaySlot.print_time % 3600) / 60) : 0;
+  const timeStr = hours > 0 ? `${hours}h${mins > 0 ? ` ${mins}min` : ""}` : mins > 0 ? `${mins}min` : null;
+
+  const isHead = status === "head";
+  const borderColor = isHead ? "rgba(59,130,246,0.4)" : "var(--border)";
+  const bg = isHead ? "rgba(59,130,246,0.04)" : "var(--surface2)";
+
+  // Couleur swatch : colors_array de notre filament si dispo, sinon couleur du slot
+  const swatchHexes = filInfo?.colors_array
+    ? filInfo.colors_array.split(",").map(c => c.trim())
+    : cssColor ? [cssColor] : [];
+  const multiType = filInfo?.multicolor_type;
 
   return (
-    <div style={{ border:`2px solid ${borderColor}`, borderRadius:12, padding:16,
-      background:bg, display:"flex", flexDirection:"column", gap:12, flex:1,
-      boxShadow: status==="head" ? "0 0 0 4px rgba(59,130,246,0.10)" : "none" }}>
+    <div style={{ border:`1px solid ${borderColor}`, borderRadius:16, overflow:"hidden",
+      background: bg, flex:1,
+      boxShadow: isHead ? "0 0 0 2px rgba(59,130,246,0.12)" : "0 2px 8px rgba(0,0,0,0.06)" }}>
 
-      {/* En-tête */}
-      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        <div style={{ width:40, height:40, borderRadius:10, flexShrink:0,
-          backgroundColor: color || "var(--border)",
-          border: status==="head" ? "2px solid rgba(59,130,246,0.4)" : "1px solid rgba(255,255,255,0.1)" }} />
-        <div>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:2 }}>
-            <span style={{ fontWeight:700, fontSize:14, fontFamily:"monospace", color:"var(--text)" }}>Slot {num}</span>
-            {statusBadge && (
-              <span style={{ fontSize:9, background:statusBadge.bg, color:statusBadge.color,
-                padding:"2px 8px", borderRadius:20, fontWeight:600 }}>{statusBadge.label}</span>
-            )}
-            {slot?.match_mode && status==="loaded" && <MatchBadge mode={slot.match_mode}/>}
-          </div>
-          <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
-            {displaySlot.nozzle_type || "—"} · {displaySlot.diameter}mm
-          </p>
-        </div>
-      </div>
-
-      {/* Contenu selon status */}
-      {status === "empty" ? (
-        <p style={{ fontSize:12, color:"var(--muted)", fontStyle:"italic" }}>Aucun hotend installé</p>
-
-      ) : status === "head" ? (
-        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          <p style={{ fontSize:12, color:"#60a5fa" }}>
-            Hotend sorti du rack — monté sur la buse droite
-          </p>
-          {headSlot && (
-            <>
-              <div>
-                <p style={{ fontSize:10, color:"var(--muted)", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.05em" }}>Sur la tête</p>
-                <p style={{ fontSize:14, fontWeight:600, fontFamily:"monospace", color:"#60a5fa" }}>{headSlot.filament_id}</p>
-                <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{headSlot.nozzle_type} · {headSlot.diameter}mm</p>
-              </div>
-              <div>
-                <p style={{ fontSize:10, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Usure</p>
-              </div>
-              {headSlot.print_time > 0 && (
-                <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{Math.floor(headSlot.print_time/3600)}h cumulées</p>
-              )}
-            </>
-          )}
-        </div>
-
-      ) : status === "no_fila" ? (
-        <>
-          <p style={{ fontSize:12, color:"#f59e0b", fontStyle:"italic" }}>Hotend installé — filament non chargé</p>
-          <div>
-            <p style={{ fontSize:10, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Usure</p>
-          </div>
-        </>
-
-      ) : (
-        <>
-          <div>
-            <p style={{ fontSize:10, color:"var(--muted)", marginBottom:4, textTransform:"uppercase", letterSpacing:"0.05em" }}>Filament</p>
-            <p style={{ fontSize:14, fontWeight:600, fontFamily:"monospace", color:"var(--text)" }}>{slot.filament_id}</p>
-          </div>
-          <div>
-            <p style={{ fontSize:10, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Usure</p>
-          </div>
-          {slot.print_time > 0 && (
-            <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{Math.floor(slot.print_time/3600)}h cumulées</p>
-          )}
-        </>
+      {/* Bandeau couleur */}
+      {swatchHexes.length > 0 && (
+        <div style={{ height:6,
+          background: swatchHexes.length > 1
+            ? multiType === "gradient"
+              ? `linear-gradient(90deg, ${swatchHexes.join(",")})`
+              : `repeating-linear-gradient(90deg, ${swatchHexes.map((c,i,a) => `${c} ${i/a.length*100}%, ${c} ${(i+1)/a.length*100}%`).join(",")})`
+            : swatchHexes[0]
+        }}/>
       )}
+
+      <div style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:10 }}>
+        {/* En-tête */}
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          {/* Swatch couleur */}
+          <div style={{ width:44, height:44, borderRadius:12, flexShrink:0, overflow:"hidden",
+            border:"1px solid rgba(0,0,0,0.08)",
+            background: swatchHexes.length > 1
+              ? multiType === "gradient"
+                ? `linear-gradient(135deg, ${swatchHexes.join(",")})`
+                : `linear-gradient(90deg, ${swatchHexes.map((c,i,a) => `${c} ${i/a.length*100}%, ${c} ${(i+1)/a.length*100}%`).join(",")})`
+              : swatchHexes[0] || "var(--border)" }} />
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:3 }}>
+              <span style={{ fontWeight:800, fontSize:15, color:"var(--text)" }}>Slot {num}</span>
+              {isHead && (
+                <span style={{ fontSize:9, background:"rgba(59,130,246,0.12)", color:"#60a5fa",
+                  padding:"2px 8px", borderRadius:20, fontWeight:700 }}>Sur la tête</span>
+              )}
+              {status === "no_fila" && (
+                <span style={{ fontSize:9, background:"rgba(245,158,11,0.12)", color:"#f59e0b",
+                  padding:"2px 8px", borderRadius:20, fontWeight:700 }}>Sans filament</span>
+              )}
+              {status === "empty" && (
+                <span style={{ fontSize:9, background:"var(--border)", color:"var(--muted)",
+                  padding:"2px 8px", borderRadius:20, fontWeight:700 }}>Vide</span>
+              )}
+            </div>
+            <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace", margin:0 }}>
+              {displaySlot.nozzle_type || "—"} · {displaySlot.diameter}mm
+            </p>
+          </div>
+        </div>
+
+        {status !== "empty" && (
+          <>
+            {/* Filament identifié */}
+            <div style={{ padding:"10px 12px", borderRadius:10,
+              background:"var(--surface)", border:"1px solid var(--border)" }}>
+              {filInfo ? (
+                <>
+                  <p style={{ fontWeight:700, fontSize:13, color:"var(--text)", margin:"0 0 2px" }}>
+                    {filInfo.translated_name || filInfo.name}
+                  </p>
+                  {filInfo.translated_name && filInfo.translated_name !== filInfo.name && (
+                    <p style={{ fontSize:10, color:"var(--muted)", margin:"0 0 4px" }}>{filInfo.name}</p>
+                  )}
+                  <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+                    {[filInfo.manufacturer, filInfo.fila_type || filInfo.material].filter(Boolean).join(" · ")}
+                    {filInfo.fila_color_code && <span style={{ fontFamily:"monospace" }}> · {filInfo.fila_color_code}</span>}
+                  </p>
+                </>
+              ) : fid ? (
+                <p style={{ fontFamily:"monospace", fontSize:13, color:"var(--text)", margin:0 }}>{fid}</p>
+              ) : (
+                <p style={{ fontSize:12, color:"var(--muted)", fontStyle:"italic", margin:0 }}>Filament non identifié</p>
+              )}
+            </div>
+
+            {/* Durée usage */}
+            {timeStr && (
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <Clock size={13} style={{ color:"var(--muted)", flexShrink:0 }}/>
+                <span style={{ fontSize:12, color:"var(--muted)" }}>
+                  <b style={{ color:"var(--text)", fontFamily:"monospace" }}>{timeStr}</b> d'utilisation cumulées
+                </span>
+              </div>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }

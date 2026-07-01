@@ -364,7 +364,17 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
             {AMS_NAMES[ams.id] ?? `AMS ${ams.id+1}`}
           </span>
           {isActive && !isDrying && <span style={{ width:6, height:6, borderRadius:"50%", backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
-          {isDrying && <Thermometer size={12} style={{ color:"#f97316", animation:"dryGlow 2.5s ease-in-out infinite" }}/>}
+          {isDrying && (
+            <span style={{
+              display:"inline-flex", alignItems:"center", justifyContent:"center",
+              width:20, height:20, borderRadius:"50%",
+              background:"rgba(249,115,22,0.15)",
+              boxShadow:"0 0 0 0 rgba(249,115,22,0.4)",
+              animation:"dryPulse 2.5s ease-in-out infinite",
+            }}>
+              <Thermometer size={13} style={{ color:"#f97316" }}/>
+            </span>
+          )}
         </div>
         <div style={{ display:"flex", gap:12, fontSize:10, color:"var(--muted)" }}>
           <span style={{ display:"flex", alignItems:"center", gap:3 }}><Droplets size={10}/>{ams.humidity}%</span>
