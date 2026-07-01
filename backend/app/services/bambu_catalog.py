@@ -9,7 +9,8 @@ Stockés dans DATA_DIR/bambu_catalog/.
 from __future__ import annotations
 import os, json, time, hashlib, threading, logging
 from typing import Optional, Tuple
-import httpx
+import urllib.request
+import urllib.error
 
 log = logging.getLogger(__name__)
 
@@ -64,37 +65,41 @@ class BambuCatalogSync:
     # ── Fetch ─────────────────────────────────────────────────────────────
 
     def _fetch(self, url: str, fname: str) -> Tuple[bool, int]:
-        headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+        req_headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
         etag = self._load_etag(fname)
         if etag:
-            headers["If-None-Match"] = etag
+            req_headers["If-None-Match"] = etag
         try:
-            resp = httpx.get(url, headers=headers, timeout=TIMEOUT_SEC, follow_redirects=True)
+            request = urllib.request.Request(url, headers=req_headers)
+            try:
+                raw = urllib.request.urlopen(request, timeout=TIMEOUT_SEC)
+                status = raw.status
+                etag_resp = raw.headers.get("ETag") or raw.headers.get("etag")
+                body = raw.read()
+            except urllib.error.HTTPError as e:
+                if e.code == 304:
+                    log.info(f"[CATALOG] {fname} inchangé (304)")
+                    return False, 304
+                log.warning(f"[CATALOG] HTTP {e.code} pour {fname}")
+                return False, e.code
         except Exception as e:
             log.warning(f"[CATALOG] Erreur réseau {fname}: {e}")
             return False, 0
 
-        if resp.status_code == 304:
-            log.info(f"[CATALOG] {fname} inchangé (304)")
-            return False, 304
-        if resp.status_code != 200:
-            log.warning(f"[CATALOG] HTTP {resp.status_code} pour {fname}")
-            return False, resp.status_code
-
         try:
-            data = resp.json()
+            data = json.loads(body)
             pretty = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
         except Exception as e:
             log.warning(f"[CATALOG] JSON invalide pour {fname}: {e}")
-            return False, resp.status_code
+            return False, status
 
         written = self._write_if_changed(fname, pretty)
-        self._save_etag(fname, resp.headers.get("ETag") or resp.headers.get("etag"))
+        self._save_etag(fname, etag_resp)
         if written:
             log.info(f"[CATALOG] {fname} mis à jour ({len(pretty)} octets)")
         else:
             log.info(f"[CATALOG] {fname} identique (hash inchangé)")
-        return written, resp.status_code
+        return written, status
 
     # ── Public ─────────────────────────────────────────────────────────────
 
