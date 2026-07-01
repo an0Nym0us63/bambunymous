@@ -134,22 +134,43 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
   const isDrying = ams.is_drying || ams.dry_time > 0;
   const getInfo = t => t.spool_info ?? null;
 
+  // Couleur du pourtour : si les deux → double bordure (bleu + orange)
+  const borderColor = isDrying && isActive
+    ? "rgba(249,115,22,0.4)"        // orange prioritaire, bleu visible via boxShadow
+    : isDrying ? "rgba(249,115,22,0.35)"
+    : isActive ? "rgba(59,130,246,0.4)"
+    : isSelected ? "rgba(255,255,255,0.2)"
+    : "var(--border)";
+
+  const bg = isDrying ? "rgba(249,115,22,0.04)"
+    : isActive ? "rgba(59,130,246,0.06)"
+    : "var(--surface2)";
+
+  // Si actif+séchage : halo bleu fixe en box-shadow interne + dryPulse orange en animation
+  const boxShadow = isActive && !isDrying ? "0 4px 16px rgba(59,130,246,0.15)"
+    : !isDrying ? "none"
+    : isActive ? "0 0 0 1px rgba(59,130,246,0.35), 0 4px 12px rgba(249,115,22,0.10)"
+    : "0 4px 12px rgba(249,115,22,0.10)";
+
   return (
     <button onClick={onClick} style={{
       display:"flex", flexDirection:"column", alignItems:"center", gap:6,
       background:"none", border:"none", cursor:"pointer", width:"100%", padding:0,
     }}>
       <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-        <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.08em", color: isActive ? "#3b82f6" : isSelected ? "var(--text)" : "var(--muted)" }}>
+        <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.08em",
+          color: isActive ? "#3b82f6" : isSelected ? "var(--text)" : "var(--muted)" }}>
           {AMS_NAMES[ams.id] ?? `AMS ${ams.id+1}`}
         </span>
-        {isActive && <span style={{ width:6, height:6, borderRadius:"50%", backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
+        {/* Pastille bleue toujours visible si actif, même en séchage */}
+        {isActive && <span style={{ width:6, height:6, borderRadius:"50%",
+          backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
       </div>
       <div style={{
         width:"100%", borderRadius:12, padding:6, display:"flex", gap:4,
-        border:`1px solid ${isDrying ? "rgba(249,115,22,0.35)" : isActive ? "rgba(59,130,246,0.4)" : isSelected ? "rgba(255,255,255,0.2)" : "var(--border)"}`,
-        background: isDrying ? "rgba(249,115,22,0.04)" : isActive ? "rgba(59,130,246,0.06)" : "var(--surface2)",
-        boxShadow: isDrying ? "0 4px 12px rgba(249,115,22,0.10)" : isActive ? "0 4px 16px rgba(59,130,246,0.15)" : "none",
+        border:`1px solid ${borderColor}`,
+        background: bg,
+        boxShadow: boxShadow,
         animation: isDrying ? "dryPulse 2.5s ease-in-out infinite" : "none",
         transition:"all 0.2s",
       }}>
@@ -157,12 +178,15 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
       </div>
       <div style={{ display:"flex", gap:8, fontSize:9, color:"var(--muted)" }}>
         <span style={{ display:"flex", alignItems:"center", gap:2 }}><Droplets size={8}/>{ams.humidity}%</span>
-        <span style={{ display:"flex", alignItems:"center", gap:2, color: isDrying ? "#f97316" : "var(--muted)",
+        <span style={{ display:"flex", alignItems:"center", gap:2,
+          color: isDrying ? "#f97316" : "var(--muted)",
           animation: isDrying ? "dryGlow 2.5s ease-in-out infinite" : "none" }}>
           <Sun size={8} style={{ color: isDrying ? "#f97316" : undefined }}/>{(ams.temp ?? 0).toFixed(1)}°
         </span>
       </div>
-      <div style={{ height:2, borderRadius:1, background: isSelected ? "#3b82f6" : "transparent", width: isSelected ? 32 : 8, transition:"all 0.3s" }} />
+      <div style={{ height:2, borderRadius:1,
+        background: isSelected ? "#3b82f6" : "transparent",
+        width: isSelected ? 32 : 8, transition:"all 0.3s" }} />
     </button>
   );
 }
