@@ -322,10 +322,10 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
   const isDrying = ams.is_drying || ams.dry_time > 0;
   const getInfo = t => t.spool_info ?? null;
 
-  const fmtDryTime = (secs) => {
-    if (!secs) return "";
-    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
-    return h > 0 ? `${h}h${m > 0 ? " " + m + "min" : ""}` : `${m} min`;
+  const fmtMins = (mins) => {
+    if (!mins) return "";
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return h > 0 ? `${h}h${m > 0 ? " " + m + "min" : ""}` : `${m}min`;
   };
 
   return (
