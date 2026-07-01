@@ -91,7 +91,7 @@ async def run_import(src_path: str) -> dict:
             f = Filament(
                 id=old_id,
                 name=row.get("name") or "Filament",
-                translated_name=row.get("translated_name"),
+                # translated_name ignoré à l'import : sera renseigné par l'enrichissement catalogue Bambu
                 manufacturer=row.get("manufacturer"),
                 material=row.get("material") or "PLA",
                 color=row.get("color"),
