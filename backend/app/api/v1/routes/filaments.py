@@ -402,7 +402,9 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
                 skipped.append({"id": f.id, "name": f.name, "reason": "pas de couleur hex renseignée"})
                 continue
 
-            color_hex = (f.color or "").lower()[:8]
+            color_hex_raw = (f.color or "").lower().replace("#","")
+            # Si 6 chars en DB → ajouter ff (alpha opaque) pour comparer avec catalogue 8 chars
+            color_hex = color_hex_raw + "ff" if len(color_hex_raw) == 6 else color_hex_raw[:8]
             # Multicolore en base = filament avec colors_array ou multicolor_type != monochrome
             is_multi = (f.multicolor_type or "monochrome") != "monochrome"
 
