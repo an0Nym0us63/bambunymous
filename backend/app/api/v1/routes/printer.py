@@ -61,6 +61,11 @@ class AMSOut(BaseModel):
     trays: list[TrayOut]
     humidity: int
     temp: float
+    is_drying: bool = False     # vrai si dry_time > 0
+    dry_time: int = 0           # secondes restantes (0 = pas en séchage)
+    dry_temperature: int = 0    # °C cible
+    dry_duration: int = 0       # durée totale configurée (minutes)
+    dry_filament: str = ""      # type filament en séchage
 
 
 class HotendSlotOut(BaseModel):
@@ -204,6 +209,11 @@ async def printer_status(_: str = Depends(get_current_user)):
                     spool_info=(lambda si: SpoolInfoOut(**si) if si else _spool_info(t.spool_id, _spools_map))(getattr(t, "_spool_info_cache", None)),
                 ) for t in a.trays],
                 humidity=a.humidity, temp=a.temp,
+                is_drying=a.dry_time > 0,
+                dry_time=a.dry_time,
+                dry_temperature=a.dry_temperature,
+                dry_duration=a.dry_duration,
+                dry_filament=a.dry_filament,
             ) for a in s.ams_list
         ],
         ams_mapping=s.ams_mapping,

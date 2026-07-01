@@ -31,6 +31,11 @@ class AMS:
     trays: list[AMSTray] = field(default_factory=list)
     humidity: int = 0
     temp: float = 0.0
+    # Séchage AMS
+    dry_time: int = 0          # temps restant de séchage en secondes (0 = pas en séchage)
+    dry_temperature: int = 0   # température cible (°C)
+    dry_duration: int = 0      # durée totale configurée (minutes)
+    dry_filament: str = ""     # type de filament en cours de séchage
 
 
 @dataclass

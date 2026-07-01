@@ -131,7 +131,15 @@ function MatchIcon({ mode, size = 10 }) {
 // ── Boîtier AMS compact ─────────────────────────────────────────────────────
 function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup }) {
   const isActive = ams.id === activeAmsId;
+  const isDrying = ams.is_drying || ams.dry_time > 0;
   const getInfo = t => t.spool_info ?? null;
+
+  const fmtDryTime = (secs) => {
+    if (!secs) return "";
+    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+    return h > 0 ? `${h}h${m > 0 ? m+"m" : ""}` : `${m}min`;
+  };
+
   return (
     <button onClick={onClick} style={{
       display:"flex", flexDirection:"column", alignItems:"center", gap:6,
@@ -142,19 +150,31 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
           {AMS_NAMES[ams.id] ?? `AMS ${ams.id+1}`}
         </span>
         {isActive && <span style={{ width:6, height:6, borderRadius:"50%", backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
+        {isDrying && (
+          <span title={`Séchage en cours${ams.dry_temperature ? ` · ${ams.dry_temperature}°C` : ""}${ams.dry_time ? ` · ${fmtDryTime(ams.dry_time)} restant` : ""}`}
+            style={{ fontSize:8, padding:"1px 5px", borderRadius:4, fontWeight:700,
+              background:"rgba(249,115,22,0.15)", color:"#f97316", lineHeight:"14px" }}>
+            🌡 {ams.dry_temperature ? `${ams.dry_temperature}°` : ""}
+          </span>
+        )}
       </div>
       <div style={{
         width:"100%", borderRadius:12, padding:6, display:"flex", gap:4,
-        border:`1px solid ${isActive ? "rgba(59,130,246,0.4)" : isSelected ? "rgba(255,255,255,0.2)" : "var(--border)"}`,
-        background: isActive ? "rgba(59,130,246,0.06)" : "var(--surface2)",
-        boxShadow: isActive ? "0 4px 16px rgba(59,130,246,0.15)" : "none",
+        border:`1px solid ${isDrying ? "rgba(249,115,22,0.4)" : isActive ? "rgba(59,130,246,0.4)" : isSelected ? "rgba(255,255,255,0.2)" : "var(--border)"}`,
+        background: isDrying ? "rgba(249,115,22,0.04)" : isActive ? "rgba(59,130,246,0.06)" : "var(--surface2)",
+        boxShadow: isDrying ? "0 4px 16px rgba(249,115,22,0.12)" : isActive ? "0 4px 16px rgba(59,130,246,0.15)" : "none",
         transition:"all 0.2s",
       }}>
         {ams.trays.map(t => <ColorPill key={t.id} tray={t} spoolInfo={getInfo(t)} active={isActive && t.id===activeTrayId} />)}
       </div>
       <div style={{ display:"flex", gap:8, fontSize:9, color:"var(--muted)" }}>
         <span style={{ display:"flex", alignItems:"center", gap:2 }}><Droplets size={8}/>{ams.humidity}%</span>
-        <span style={{ display:"flex", alignItems:"center", gap:2 }}><Sun size={8}/>{ams.temp}°</span>
+        <span style={{ display:"flex", alignItems:"center", gap:2, color: isDrying ? "#f97316" : "var(--muted)" }}>
+          <Sun size={8}/>{ams.temp.toFixed(1)}°{isDrying ? ` → ${ams.dry_temperature}°C` : ""}
+        </span>
+        {isDrying && ams.dry_time > 0 && (
+          <span style={{ color:"#f97316" }}>⏱ {fmtDryTime(ams.dry_time)}</span>
+        )}
       </div>
       <div style={{ height:2, borderRadius:1, background: isSelected ? "#3b82f6" : "transparent", width: isSelected ? 32 : 8, transition:"all 0.3s" }} />
     </button>
@@ -315,21 +335,58 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
 // ── Détail AMS ─────────────────────────────────────────────────────────────
 function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick }) {
   const isActive = ams.id===activeAmsId;
+  const isDrying = ams.is_drying || ams.dry_time > 0;
   const getInfo = t => t.spool_info ?? null;
+
+  const fmtDryTime = (secs) => {
+    if (!secs) return "";
+    const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+    return h > 0 ? `${h}h${m > 0 ? " " + m + "min" : ""}` : `${m} min`;
+  };
+
   return (
-    <div className="card" style={{ padding:16, borderColor: isActive ? "rgba(59,130,246,0.3)" : undefined, boxShadow: isActive ? "0 0 0 1px rgba(59,130,246,0.1)" : undefined }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+    <div className="card" style={{ padding:16,
+      borderColor: isDrying ? "rgba(249,115,22,0.35)" : isActive ? "rgba(59,130,246,0.3)" : undefined,
+      boxShadow: isDrying ? "0 0 0 1px rgba(249,115,22,0.1)" : isActive ? "0 0 0 1px rgba(59,130,246,0.1)" : undefined }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: isDrying ? 10 : 16 }}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:12, fontWeight:700, letterSpacing:"0.06em", color: isActive?"#3b82f6":"var(--muted)" }}>
+          <span style={{ fontSize:12, fontWeight:700, letterSpacing:"0.06em", color: isDrying?"#f97316":isActive?"#3b82f6":"var(--muted)" }}>
             {AMS_NAMES[ams.id] ?? `AMS ${ams.id+1}`}
           </span>
-          {isActive && <span style={{ width:6, height:6, borderRadius:"50%", backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
+          {isActive && !isDrying && <span style={{ width:6, height:6, borderRadius:"50%", backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
+          {isDrying && <span style={{ fontSize:10, animation:"livePulse 2s infinite" }}>🌡</span>}
         </div>
         <div style={{ display:"flex", gap:12, fontSize:10, color:"var(--muted)" }}>
           <span style={{ display:"flex", alignItems:"center", gap:3 }}><Droplets size={10}/>{ams.humidity}%</span>
-          <span style={{ display:"flex", alignItems:"center", gap:3 }}><Sun size={10}/>{ams.temp}°C</span>
+          <span style={{ display:"flex", alignItems:"center", gap:3, color: isDrying ? "#f97316" : "var(--muted)" }}>
+            <Sun size={10}/>{ams.temp?.toFixed(1)}°C{isDrying && ams.dry_temperature ? ` → ${ams.dry_temperature}°C` : ""}
+          </span>
         </div>
       </div>
+
+      {/* Bandeau séchage */}
+      {isDrying && (
+        <div style={{ marginBottom:14, padding:"10px 12px", borderRadius:10,
+          background:"rgba(249,115,22,0.07)", border:"1px solid rgba(249,115,22,0.25)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+            <span style={{ fontSize:12, fontWeight:700, color:"#f97316" }}>Séchage en cours</span>
+          </div>
+          <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:11, color:"var(--text)" }}>
+            {ams.dry_temperature > 0 && (
+              <span>🌡 Température : <b>{ams.dry_temperature}°C</b></span>
+            )}
+            {ams.dry_duration > 0 && (
+              <span>⏳ Durée : <b>{ams.dry_duration} min</b></span>
+            )}
+            {ams.dry_time > 0 && (
+              <span>⏱ Restant : <b style={{ color:"#f97316" }}>{fmtDryTime(ams.dry_time)}</b></span>
+            )}
+            {ams.dry_filament && (
+              <span>🧵 Filament : <b>{ams.dry_filament}</b></span>
+            )}
+          </div>
+        </div>
+      )}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:4 }}>
         {ams.trays.map(t => (
           <TrayCard key={t.id} tray={t} amsId={ams.id}

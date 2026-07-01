@@ -343,7 +343,13 @@ class MQTTManager:
             for ams_raw in ams_data["ams"]:
                 ams = AMS(id=int(ams_raw.get("id", 0)),
                           humidity=int(ams_raw.get("humidity_raw", 0)),
-                          temp=float(ams_raw.get("temp", 0)))
+                          temp=float(ams_raw.get("temp", 0)),
+                          dry_time=int(ams_raw.get("dry_time", 0)))
+                dry_setting = ams_raw.get("dry_setting", {}) or {}
+                if dry_setting:
+                    ams.dry_temperature = max(int(dry_setting.get("dry_temperature", 0)), 0)
+                    ams.dry_duration    = max(int(dry_setting.get("dry_duration", 0)), 0)
+                    ams.dry_filament    = dry_setting.get("dry_filament", "")
                 for tr in ams_raw.get("tray", []):
                     t = AMSTray(id=int(tr.get("id", 0)))
                     t.color = (tr.get("tray_color") or "").rstrip("FF") or tr.get("tray_color", "")
