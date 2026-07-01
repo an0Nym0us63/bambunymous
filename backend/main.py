@@ -52,11 +52,16 @@ async def lifespan(app: FastAPI):
     from app.services.spool_location import _ensure_worker
     await _ensure_worker()
     await mqtt_manager.start()
-    # Vider le cache de matching au démarrage — la DB peut avoir changé depuis
-    # le dernier arrêt (nouvelles bobines, modifications, etc.)
+    # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
+    # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.
+    from app.services.bambu_catalog import BambuCatalogSync
+    catalog_sync = BambuCatalogSync(data_dir=settings.DATA_DIR)
+    catalog_sync.start()
+    # Vider le cache de matching au démarrage
     from app.core.mqtt import invalidate_tray_cache
     invalidate_tray_cache()
     yield
+    catalog_sync.stop()
     await mqtt_manager.stop()
 
 
