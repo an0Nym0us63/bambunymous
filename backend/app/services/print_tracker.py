@@ -353,10 +353,48 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float]):
             # Déduction poids bobines
             await _deduct_spool_weights(db, p)
             await db.commit()
-        logger.info(f"[FINAL] ✅ Print {pid} → {status} | poids={p.total_weight_g:.1f}g coût={p.total_cost:.2f}€")
+        # Logger APRÈS le with pour éviter TypeError si total_weight_g/total_cost est None
+        tw = p.total_weight_g or 0
+        tc = p.total_cost or 0
+        logger.info(f"[FINAL] ✅ Print {pid} → {status} | poids={tw:.1f}g coût={tc:.2f}€")
         with _LOCK: _JOBS.pop(job_id, None)
     except Exception as e:
-        logger.error(f"_finalize pid={pid}: {e}")
+        logger.error(f"_finalize pid={pid}: {e}", exc_info=True)
+
+
+async def _deduct_spool_weights(db, p: Print):
+    """Déduit les grammes utilisés de chaque bobine liée à ce print."""
+    try:
+        # Tous les usages avec spool_id pour ce print (sans filtre grams_used)
+        usages = (await db.execute(
+            select(FilamentUsage).where(
+                FilamentUsage.print_id == p.id,
+                FilamentUsage.spool_id.isnot(None),
+            )
+        )).scalars().all()
+
+        logger.info(f"[SPOOL] Déduction print #{p.id} : {len(usages)} usage(s) avec spool_id")
+
+        for u in usages:
+            logger.info(f"[SPOOL] Usage spool_id={u.spool_id} grams_used={u.grams_used}")
+            if not u.grams_used or u.grams_used <= 0:
+                logger.info(f"[SPOOL] Bobine #{u.spool_id} : grams_used={u.grams_used} → pas de déduction")
+                continue
+            spool = await db.get(Spool, u.spool_id)
+            if not spool:
+                logger.warning(f"[SPOOL] Bobine #{u.spool_id} introuvable en DB")
+                continue
+            if spool.remaining_weight_g is None:
+                logger.warning(f"[SPOOL] Bobine #{spool.id} : remaining_weight_g est None → skip")
+                continue
+            before = spool.remaining_weight_g
+            spool.remaining_weight_g = max(0.0, before - u.grams_used)
+            logger.info(
+                f"[SPOOL] ✅ Bobine #{spool.id} : {before:.0f}g → {spool.remaining_weight_g:.0f}g "
+                f"(- {u.grams_used:.1f}g print #{p.id})"
+            )
+    except Exception as e:
+        logger.error(f"_deduct_spool_weights print #{p.id}: {e}", exc_info=True)
 
 
 async def _deduct_spool_weights(db, p: Print):
