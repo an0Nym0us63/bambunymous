@@ -360,7 +360,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
               <span>🌡 Température : <b>{ams.dry_temperature}°C</b></span>
             )}
             {ams.dry_duration > 0 && (
-              <span>⏳ Durée : <b>{ams.dry_duration} min</b></span>
+              <span>⏳ Durée : <b>{fmtDryTime(ams.dry_duration)}</b></span>
             )}
             {ams.dry_time > 0 && (
               <span>⏱ Restant : <b style={{ color:"#f97316" }}>{fmtDryTime(ams.dry_time)}</b></span>
