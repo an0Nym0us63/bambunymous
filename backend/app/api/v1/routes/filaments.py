@@ -8,7 +8,7 @@ from typing import Optional
 from datetime import datetime
 import os
 from pathlib import Path
-from ....db.session import get_db
+from ....db.session import get_db, AsyncSessionLocal
 from ....models.filament import Filament, Spool
 from .auth import get_current_user
 
@@ -324,7 +324,7 @@ async def map_tray_suggest(
         except: return (128,128,128)
     def dist(a, b): return math.sqrt(sum((x-y)**2 for x,y in zip(rgb(a), rgb(b))))
 
-    def no_rfid(tag: Optional[str]) -> bool:
+    def no_rfid(tag) -> bool:
         t = (tag or "").strip()
         return not t or t == "0" or all(c == "0" for c in t) or t.lower() in ("none", "null")
 
