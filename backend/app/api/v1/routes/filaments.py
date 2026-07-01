@@ -306,6 +306,120 @@ def _spool_out(s: Spool) -> SpoolOut:
     )
 
 
+@router.get("/map-tray/suggest")
+async def map_tray_suggest(
+    profile_id: Optional[str] = None,
+    color: Optional[str] = None,
+    material: Optional[str] = None,
+    _: str = Depends(get_current_user),
+):
+    """
+    Suggestions de bobines pour mapper un tray non reconnu.
+    Retourne les bobines actives :
+    - du même matériau (si fourni)
+    - sans tag RFID ni profile_id renseigné (priorité : seraient mieux matchées par RFID mais pas encore configurées)
+    - d'une couleur proche (tri par distance RGB croissante)
+    """
+    import math
+    def rgb(h: str):
+        h = (h or "").lstrip("#")
+        try: return int(h[0:2],16), int(h[2:4],16), int(h[4:6],16)
+        except: return (128,128,128)
+    def dist(a, b): return math.sqrt(sum((x-y)**2 for x,y in zip(rgb(a), rgb(b))))
+
+    async with AsyncSessionLocal() as db:
+        q = select(Spool).options(selectinload(Spool.filament)).where(Spool.archived == False)
+        spools = (await db.execute(q)).scalars().all()
+
+    # Filtres
+    if material:
+        spools = [s for s in spools if s.filament and s.filament.material.upper() == material.upper()]
+
+    # Trier : d'abord sans RFID ni profile_id (plus utile à mapper), ensuite par couleur proche
+    def score(s):
+        has_rfid = bool(s.tag_number)
+        has_profile = bool(s.filament and s.filament.profile_id)
+        col = s.filament.color if s.filament else ""
+        return (has_rfid or has_profile, dist(color or "", col or ""))
+
+    spools.sort(key=score)
+    return {"spools": [_spool_out(s) for s in spools[:20]]}
+
+
+@router.post("/map-tray/link")
+async def map_tray_link(body: dict, _: str = Depends(get_current_user)):
+    """
+    Mappe un tray non reconnu sur une bobine existante : renseigne tag_number
+    et profile_id sur la bobine et son filament pour que les prochains matchings
+    l'identifient automatiquement.
+    body: {spool_id, tag_uid, profile_id, color}
+    """
+    spool_id  = body.get("spool_id")
+    tag_uid   = (body.get("tag_uid") or "").strip()
+    prof      = (body.get("profile_id") or "").strip()
+    color_hex = (body.get("color") or "").strip().lstrip("#")
+
+    if not spool_id:
+        raise HTTPException(400, "spool_id requis")
+
+    async with AsyncSessionLocal() as db:
+        s = await db.get(Spool, int(spool_id))
+        if not s: raise HTTPException(404, "Bobine introuvable")
+        if tag_uid: s.tag_number = tag_uid
+        f = await db.get(Filament, s.filament_id)
+        if f:
+            if prof and not f.profile_id: f.profile_id = prof
+            if color_hex and not f.color:  f.color = color_hex
+        await db.commit()
+        await db.refresh(s)
+    return _spool_out(s)
+
+
+@router.post("/map-tray/create")
+async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
+    """
+    Crée un filament + une bobine à partir des infos MQTT d'un tray non reconnu,
+    avec les champs nécessaires au matching automatique (profile_id, color, tag_uid).
+    body: {tag_uid, profile_id, color, material, name?, manufacturer?, weight?}
+    """
+    tag_uid  = (body.get("tag_uid") or "").strip()
+    prof     = (body.get("profile_id") or "").strip()
+    color    = (body.get("color") or "").strip().lstrip("#")
+    material = (body.get("material") or "PLA").strip()
+    name     = (body.get("name") or f"{material} {('#'+color) if color else ''}").strip()
+    manufacturer = (body.get("manufacturer") or "").strip() or None
+    weight   = float(body.get("weight") or 1000)
+
+    async with AsyncSessionLocal() as db:
+        # Réutiliser un filament existant si profile_id + couleur correspondent exactement
+        fil = None
+        if prof:
+            res = await db.execute(
+                select(Filament).where(Filament.profile_id == prof, Filament.color == color)
+            )
+            fil = res.scalar_one_or_none()
+
+        if not fil:
+            fil = Filament(
+                name=name, material=material, manufacturer=manufacturer,
+                color=color or None, profile_id=prof or None,
+                filament_weight_g=weight,
+            )
+            db.add(fil)
+            await db.flush()
+
+        spool = Spool(
+            filament_id=fil.id,
+            tag_number=tag_uid or None,
+            remaining_weight_g=weight,
+        )
+        db.add(spool)
+        await db.commit()
+        await db.refresh(spool)
+        await db.refresh(spool.filament)
+    return _spool_out(spool)
+
+
 @router.get("/{fid}/photos")
 async def filament_photos(fid: int):
     """Liste les photos d'un filament depuis /data/filaments/{id}/"""
