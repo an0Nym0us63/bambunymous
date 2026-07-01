@@ -42,15 +42,9 @@ def invalidate_tray_cache(tag_uid: str = "", profile_id: str = "") -> int:
     """
     invalidated = 0
     for cache in (_MATCH_CACHE, _MATCH_MODE_CACHE, _SPOOL_INFO_CACHE):
-        keys = list(cache.keys())
-        for k in keys:
-            if not tag_uid and not profile_id:
-                cache.pop(k, None)
-                invalidated += 1
-            elif any(str(v) in str(k) for v in [tag_uid, profile_id] if v):
-                cache.pop(k, None)
-                invalidated += 1
-    logger.info(f"[CACHE] {invalidated} entrées invalidées (tag={tag_uid!r} profil={profile_id!r}) → re-match au prochain tick")
+        invalidated += len(cache)
+        cache.clear()
+    logger.info(f"[CACHE] {invalidated} entrées vidées → re-match complet au prochain tick MQTT")
     return invalidated
 
 
