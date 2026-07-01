@@ -461,7 +461,10 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
 
                 updated.append({"id": f.id, "name": name_en, "changes": list(changed.keys())})
             else:
-                not_found.append({"id": f.id, "name": f.name, "profile_id": f.profile_id, "color": f.color})
+                # N'afficher comme "introuvable" que les filaments Bambu Lab
+                # (les filaments tiers ne sont pas dans ce catalogue)
+                if "bambu" in (f.manufacturer or "").lower():
+                    not_found.append({"id": f.id, "name": f.name, "profile_id": f.profile_id, "color": f.color})
 
         await db.commit()
 
