@@ -308,42 +308,32 @@ def _spool_out(s: Spool) -> SpoolOut:
 
 @router.get("/map-tray/suggest")
 async def map_tray_suggest(
-    profile_id: Optional[str] = None,
     color: Optional[str] = None,
-    material: Optional[str] = None,
     _: str = Depends(get_current_user),
 ):
     """
-    Suggestions de bobines pour mapper un tray non reconnu.
-    Retourne les bobines actives :
-    - du même matériau (si fourni)
-    - sans tag RFID ni profile_id renseigné (priorité : seraient mieux matchées par RFID mais pas encore configurées)
-    - d'une couleur proche (tri par distance RGB croissante)
+    Suggestions de bobines pour mapper un tray Bambu non reconnu.
+    Retourne TOUTES les bobines actives sans tag RFID renseigné,
+    triées par couleur la plus proche.
+    Pas de filtre sur la matière — l'utilisateur choisit visuellement.
     """
     import math
     def rgb(h: str):
-        h = (h or "").lstrip("#")
+        h = (h or "").strip().lstrip("#")
         try: return int(h[0:2],16), int(h[2:4],16), int(h[4:6],16)
         except: return (128,128,128)
     def dist(a, b): return math.sqrt(sum((x-y)**2 for x,y in zip(rgb(a), rgb(b))))
 
     async with AsyncSessionLocal() as db:
-        q = select(Spool).options(selectinload(Spool.filament)).where(Spool.archived == False)
+        q = (select(Spool)
+             .options(selectinload(Spool.filament))
+             .where(Spool.archived == False)
+             .where((Spool.tag_number == None) | (Spool.tag_number == "")))
         spools = (await db.execute(q)).scalars().all()
 
-    # Filtres
-    if material:
-        spools = [s for s in spools if s.filament and s.filament.material.upper() == material.upper()]
-
-    # Trier : d'abord sans RFID ni profile_id (plus utile à mapper), ensuite par couleur proche
-    def score(s):
-        has_rfid = bool(s.tag_number)
-        has_profile = bool(s.filament and s.filament.profile_id)
-        col = s.filament.color if s.filament else ""
-        return (has_rfid or has_profile, dist(color or "", col or ""))
-
-    spools.sort(key=score)
-    return {"spools": [_spool_out(s) for s in spools[:20]]}
+    tray_color = (color or "").strip().lstrip("#")
+    spools.sort(key=lambda s: dist(tray_color, s.filament.color or "" if s.filament else ""))
+    return {"spools": [_spool_out(s) for s in spools]}
 
 
 @router.post("/map-tray/link")
