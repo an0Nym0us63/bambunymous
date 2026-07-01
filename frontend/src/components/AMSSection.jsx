@@ -150,13 +150,15 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
         border:`1px solid ${isDrying ? "rgba(249,115,22,0.35)" : isActive ? "rgba(59,130,246,0.4)" : isSelected ? "rgba(255,255,255,0.2)" : "var(--border)"}`,
         background: isDrying ? "rgba(249,115,22,0.04)" : isActive ? "rgba(59,130,246,0.06)" : "var(--surface2)",
         boxShadow: isDrying ? "0 4px 12px rgba(249,115,22,0.10)" : isActive ? "0 4px 16px rgba(59,130,246,0.15)" : "none",
+        animation: isDrying ? "dryPulse 2.5s ease-in-out infinite" : "none",
         transition:"all 0.2s",
       }}>
         {ams.trays.map(t => <ColorPill key={t.id} tray={t} spoolInfo={getInfo(t)} active={isActive && t.id===activeTrayId} />)}
       </div>
       <div style={{ display:"flex", gap:8, fontSize:9, color:"var(--muted)" }}>
         <span style={{ display:"flex", alignItems:"center", gap:2 }}><Droplets size={8}/>{ams.humidity}%</span>
-        <span style={{ display:"flex", alignItems:"center", gap:2, color: isDrying ? "#f97316" : "var(--muted)" }}>
+        <span style={{ display:"flex", alignItems:"center", gap:2, color: isDrying ? "#f97316" : "var(--muted)",
+          animation: isDrying ? "dryGlow 2.5s ease-in-out infinite" : "none" }}>
           <Sun size={8} style={{ color: isDrying ? "#f97316" : undefined }}/>{(ams.temp ?? 0).toFixed(1)}°
         </span>
       </div>
