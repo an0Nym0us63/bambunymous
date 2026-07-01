@@ -259,7 +259,7 @@ function slotStatus(slot, isOnHead) {
 }
 
 function WearBar({ wear }) {
-  const filled = Math.min(5, Math.max(0, Math.round((wear / 100) * 5)));
+  const filled = Math.min(5, Math.max(0, Math.round((wear / 255) * 5)));
   const color  = filled <= 2 ? "#22c55e" : filled <= 3 ? "#f59e0b" : "#ef4444";
   return (
     <div style={{ display:"flex", gap:2 }}>
@@ -372,10 +372,10 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
               <div>
                 <p style={{ fontSize:10, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Usure</p>
                 <WearBar wear={headSlot.wear} />
-                <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", marginTop:4 }}>{Math.round(headSlot.wear)}%</p>
+                <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", marginTop:4 }}>{Math.round((headSlot.wear/255)*100)}%</p>
               </div>
               {headSlot.print_time > 0 && (
-                <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{Math.floor(headSlot.print_time/3600)}h{headSlot.print_time%3600>=60 ? " "+Math.floor((headSlot.print_time%3600)/60)+"min" : ""} cumulées</p>
+                <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{Math.floor(headSlot.print_time/3600)}h cumulées</p>
               )}
             </>
           )}
@@ -399,10 +399,10 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
           <div>
             <p style={{ fontSize:10, color:"var(--muted)", marginBottom:6, textTransform:"uppercase", letterSpacing:"0.05em" }}>Usure</p>
             <WearBar wear={slot.wear} />
-            <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", marginTop:4 }}>{Math.round(slot.wear)}%</p>
+            <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", marginTop:4 }}>{Math.round((slot.wear/255)*100)}%</p>
           </div>
           {slot.print_time > 0 && (
-            <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{Math.floor(slot.print_time/3600)}h{slot.print_time%3600>=60 ? " "+Math.floor((slot.print_time%3600)/60)+"min" : ""} cumulées</p>
+            <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--muted)" }}>{Math.floor(slot.print_time/3600)}h cumulées</p>
           )}
         </>
       )}

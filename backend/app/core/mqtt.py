@@ -544,7 +544,7 @@ class MQTTManager:
                         nozzle_type=n.get("type", ""),
                         serial=n.get("sn", ""),
                         wear=float(n.get("wear", 0)),
-                        print_time=int(n.get("tm", 0)),
+                        print_time=int(n.get("p_t", 0)),  # p_t en secondes (confirme log MQTT: p_t=61251 ≈ 17h)
                         empty=not bool((n.get("fila_id") or "").strip()),
                     ))
                 src_in_rack = bool(exist_bits & (1 << src_id)) if 0 <= src_id < 64 else False
