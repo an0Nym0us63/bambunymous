@@ -197,6 +197,18 @@ function EnrichFromCatalogSection() {
               ))}
             </div>
           )}
+          {result.details?.no_profile?.length > 0 && (
+            <div style={{ marginTop:8 }}>
+              <p style={{ color:"var(--muted)", margin:"0 0 4px", textTransform:"uppercase", fontSize:10, letterSpacing:"0.06em" }}>
+                Sans Profile ID — non enrichissables
+              </p>
+              {result.details.no_profile.map(f => (
+                <div key={f.id} style={{ fontSize:11, color:"var(--muted)", padding:"2px 0" }}>
+                  #{f.id} {f.name}{f.manufacturer ? ` · ${f.manufacturer}` : ""}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

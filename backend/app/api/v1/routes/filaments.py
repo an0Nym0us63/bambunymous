@@ -376,6 +376,17 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
         )
         filaments = result.scalars().all()
 
+        # Filaments sans profile_id (non enrichissables)
+        result_no_profile = await db.execute(
+            select(Filament).where(
+                (Filament.profile_id.is_(None)) | (Filament.profile_id == "")
+            )
+        )
+        no_profile = [
+            {"id": f.id, "name": f.name, "manufacturer": f.manufacturer}
+            for f in result_no_profile.scalars().all()
+        ]
+
     updated, not_found, skipped = [], [], []
 
     import os as _os, json as _json
@@ -479,7 +490,7 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
         "updated": len(updated),
         "not_found": len(not_found),
         "skipped": len(skipped),
-        "details": {"updated": updated, "not_found": not_found, "skipped": skipped},
+        "details": {"updated": updated, "not_found": not_found, "skipped": skipped, "no_profile": no_profile},
     }
 
 
