@@ -19,7 +19,7 @@ class Filament(Base):
     manufacturer: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     material: Mapped[str] = mapped_column(String, nullable=False, default="PLA")  # famille : PLA, PETG…
     fila_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # sous-type Bambu : PLA Basic, PLA Matte…
-    color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)   # hex sans #
+    color: Mapped[Optional[str]] = mapped_column(String(9), nullable=True)   # hex sans # — 6 chars (RGB) ou 8 chars (RGBA)
     multicolor_type: Mapped[str] = mapped_column(String, default="monochrome")
     colors_array: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV hex
     price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)       # €/bobine

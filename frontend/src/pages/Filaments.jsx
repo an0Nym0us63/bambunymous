@@ -15,13 +15,27 @@ const inpFocus = e => e.target.style.borderColor="#3b82f6";
 const inpBlur  = e => e.target.style.borderColor="var(--border)";
 
 // Parse "colors_array" (CSV hex, sans #) → liste de couleurs CSS, avec fallback sur color simple
+// Convertit hex 6 ou 8 chars → CSS color (rgba si alpha < FF)
+function hexToCss(hex) {
+  if (!hex) return null;
+  const h = hex.replace(/^#/, "").toLowerCase();
+  if (h.length === 8) {
+    const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16),
+          b=parseInt(h.slice(4,6),16), a=parseInt(h.slice(6,8),16);
+    if (a === 255) return `#${h.slice(0,6)}`;
+    return `rgba(${r},${g},${b},${(a/255).toFixed(3)})`;
+  }
+  if (h.length === 6) return `#${h}`;
+  return null;
+}
+
 function parseColorsList(color, colorsArray) {
   if (colorsArray) {
     const cols = colorsArray.split(",").map(c => c.trim()).filter(Boolean)
-      .map(c => `#${c.replace(/^#/, "").slice(0,6)}`);
+      .map(c => hexToCss(c)).filter(Boolean);
     if (cols.length > 1) return cols;
   }
-  return color ? [`#${color.replace(/^#/, "").slice(0,6)}`] : null;
+  return color ? [hexToCss(color)].filter(Boolean) : null;
 }
 function colorBg(colors, type) {
   if (!colors?.length) return { backgroundColor: "var(--border)" };
@@ -196,7 +210,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
     finally { setDeleting(false); }
   };
   if (!spool) return null;
-  const color = spool.filament_color ? `#${spool.filament_color.slice(0,6)}` : null;
+  const color = hexToCss(spool.filament_color);
   const colorsList = parseColorsList(spool.filament_color, spool.filament_colors_array);
   const total = spool.filament_weight_g || 1000;
   const remaining = spool.remaining_weight_g ?? total;
@@ -451,7 +465,7 @@ function SpoolsView({ filaments, showArchived }) {
 function FilamentSheet({ f, onClose, onDeleted }) {
   const [lightbox, setLightbox] = useState(null);
   const [deleting, setDeleting] = useState(false);
-  const color = f.color ? "#" + f.color.replace("#","").slice(0,6) : null;
+  const color = hexToCss(f.color);
   const colorsList = parseColorsList(f.color, f.colors_array);
 
   const handleDelete = async () => {
@@ -750,7 +764,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         manufacturer:      form.manufacturer || undefined,
         material:          form.fila_type || form.material || "PLA",
         fila_type:         form.fila_type || undefined,
-        color:             form.color ? form.color.replace("#","").slice(0,6) : undefined,
+        color:             form.color ? form.color.replace("#","").slice(0,8) : undefined,
         profile_id:        form.profile_id || undefined,
         fila_color_code:   form.fila_color_code || undefined,
         filament_weight_g: Number(form.weight) || 1000,
@@ -901,7 +915,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                 <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                   <input style={{ ...iStyle, flex:1 }} value={form.color}
                     placeholder="ffffff"
-                    onChange={e => setForm(f => ({...f, color: e.target.value.replace("#","").slice(0,6)}))}/>
+                    onChange={e => setForm(f => ({...f, color: e.target.value.replace("#","").slice(0,8)}))}/>
                   {form.color && (
                     <div style={{ width:28, height:28, borderRadius:6, flexShrink:0,
                       background:`#${form.color}`, border:"1px solid var(--border)" }}/>

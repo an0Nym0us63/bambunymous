@@ -155,13 +155,13 @@ async def create_filament(
 ):
     # Déduplication : si un filament avec le même profile_id ET la même couleur existe déjà, on le retourne
     if body.profile_id and body.color:
-        color_norm = body.color.lower().lstrip("#")[:6]
+        color_norm = body.color.lower().lstrip("#")[:8]
         existing = (await db.execute(
             select(Filament).options(selectinload(Filament.spools))
             .where(Filament.profile_id == body.profile_id)
         )).scalars().all()
         for candidate in existing:
-            if (candidate.color or "").lower()[:6] == color_norm:
+            if (candidate.color or "").lower()[:8] == color_norm or (candidate.color or "").lower()[:6] == color_norm[:6]:
                 raise HTTPException(409, detail={
                     "code": "DUPLICATE_FILAMENT",
                     "message": f"Un filament identique existe déjà : #{candidate.id} « {candidate.name} »",
@@ -402,7 +402,7 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
                 skipped.append({"id": f.id, "name": f.name, "reason": "pas de couleur hex renseignée"})
                 continue
 
-            color_hex = (f.color or "").lower()[:6]
+            color_hex = (f.color or "").lower()[:8]
             # Multicolore en base = filament avec colors_array ou multicolor_type != monochrome
             is_multi = (f.multicolor_type or "monochrome") != "monochrome"
 
@@ -419,7 +419,7 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
                 if is_multi != e_is_multi:
                     continue
 
-                ec = (e_colors[0]).lstrip("#").lower()[:6] if e_colors else ""
+                ec = (e_colors[0]).lstrip("#").lower()[:8] if e_colors else ""
                 if ec != color_hex:
                     continue
 
@@ -437,7 +437,7 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
                 names   = entry.get("fila_color_name", {})
                 name_en = names.get("en") or names.get("fr") or next(iter(names.values()),"")
                 name_fr = names.get("fr") or en_to_fr.get(name_en,"") or name_en
-                colors  = [c.lstrip("#")[:6] for c in entry.get("fila_color", [])]
+                colors  = [c.lstrip("#")[:8] for c in entry.get("fila_color", [])]
                 ctype   = COLOR_TYPE_FR.get(entry.get("fila_color_type",""), "monochrome")
                 fresh   = await db.get(Filament, f.id)
                 changed: dict = {}
@@ -567,8 +567,8 @@ async def catalog_search(
             "family":           type_to_family.get(ftype.lower(), ""),
             "name":             name_en,       # nom "officiel" non traduit (anglais)
             "name_fr":          name_fr,       # nom traduit français
-            "color_hex":        colors[0].lstrip("#")[:6] if colors else "",
-            "colors":           [c.lstrip("#")[:6] for c in colors],
+            "color_hex":        colors[0].lstrip("#")[:8] if colors else "",
+            "colors":           [c.lstrip("#")[:8] for c in colors],
             "color_type":       ctype_raw,
             "color_type_fr":    COLOR_TYPE_FR.get(ctype_raw, ctype_raw),
         })
@@ -704,7 +704,7 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
     prof     = (body.get("profile_id") or "").strip()
     # Normaliser la couleur : lowercase, 6 chars (MQTT envoie parfois 8 avec alpha)
     raw_color = (body.get("color") or "").strip().lstrip("#")
-    color    = raw_color[:6].lower() if raw_color else ""
+    color    = raw_color[:8].lower() if raw_color else ""
     material = (body.get("material") or "PLA").strip()
     name     = (body.get("name") or f"{material} {('#'+color) if color else ''}").strip()
     manufacturer = (body.get("manufacturer") or "").strip() or None

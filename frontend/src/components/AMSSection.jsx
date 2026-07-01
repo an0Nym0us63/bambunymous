@@ -3,14 +3,32 @@ import { Droplets, Sun } from "lucide-react";
 import client from "../api/client";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function hexCss(hex) {
+// Convertit un hex 6 ou 8 chars (avec ou sans #) en valeur CSS utilisable.
+// 8 chars = RRGGBBAA → si AA < FF → rgba(), sinon #rrggbb
+// 6 chars = RRGGBB → #rrggbb
+function hexToCss(hex) {
   if (!hex) return null;
-  const h = hex.replace(/^#/, "").slice(0, 6);
-  if (h.length < 6) return null;
-  // Ne pas filtrer le noir pur (#000000) — seulement les UUIDs vides type "000000"
-  // On filtre uniquement si la couleur EST exactement 000000 ET que c'est un uuid vide
-  return `#${h}`;
+  const h = hex.replace(/^#/, "").toLowerCase();
+  if (h.length === 8) {
+    const r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16),
+          b = parseInt(h.slice(4,6),16), a = parseInt(h.slice(6,8),16);
+    if (a === 255) return `#${h.slice(0,6)}`;
+    return `rgba(${r},${g},${b},${(a/255).toFixed(3)})`;
+  }
+  if (h.length === 6) return `#${h}`;
+  return null;
 }
+// Alias pour compatibilité avec l'ancien nom
+const hexCss = hexToCss;
+
+// Normalise un hex pour stockage (strip #, garder 6 ou 8 chars)
+function normalizeHex(raw) {
+  const h = (raw || "").replace(/^#/, "").toLowerCase();
+  if (h.length === 8 || h.length === 6) return h;
+  if (h.length === 3) return h.split("").map(c=>c+c).join("");
+  return "";
+}
+
 function isEmptyTray(tray) {
   if (tray.empty) return true;
   // Un tray est vide si uuid ET filament_type sont vides
@@ -35,10 +53,10 @@ function parseColors(tray, spoolInfo) {
   const arr = spoolInfo?.colors_array || tray?.colors_array;
   if (arr) {
     const cols = arr.split(",").map(c=>c.trim()).filter(Boolean);
-    if (cols.length > 1) return cols.map(c=>`#${c.replace(/^#/,"").slice(0,6)}`);
+    if (cols.length > 1) return cols.map(c => hexToCss(c)).filter(Boolean);
   }
   // 2. couleur simple
-  const single = hexCss(spoolInfo?.color || spoolInfo?.filament_color || tray?.color);
+  const single = hexToCss(spoolInfo?.color || spoolInfo?.filament_color || tray?.color);
   return single ? [single] : null;
 }
 
@@ -329,7 +347,7 @@ const MATCH_LABEL = {
 
 function TrayBottomSheet({ tray, amsLabel, onClose }) {
   if (!tray) return null;
-  const color  = tray.color ? `#${tray.color.slice(0,6)}` : null;
+  const color  = hexToCss(tray.color);
   const info   = tray.spool_info;
   const match  = MATCH_LABEL[tray.match_mode];
   const pct    = tray.remain ?? 0;
@@ -525,7 +543,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
     const catalogP = (tray.tray_info_idx && tray.color)
       ? client.get("/filaments/catalog/search", { params: { fila_type: tray.filament_type, lang:"fr" } })
           .then(r => {
-            const color6 = (tray.color || "").toLowerCase().slice(0,6);
+            const color6 = (tray.color || "").toLowerCase().slice(0,6); // 6 chars suffisent pour la recherche couleur
             const match = (r.data?.entries || []).find(e =>
               e.color_hex?.toLowerCase() === color6 || e.fila_id === tray.tray_info_idx
             );
@@ -628,7 +646,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
           </h3>
           <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 14px" }}>
             {tray.filament_type || "Type inconnu"}
-            {tray.color ? ` · #${tray.color.slice(0,6)}` : ""}
+            {tray.color ? ` · ${hexToCss(tray.color) || ('#'+tray.color)}` : ""}
             {tray.tray_info_idx ? ` · ${tray.tray_info_idx}` : ""}
             {tray.uuid && !/^0+$/.test(tray.uuid) ? ` · 🔖 ${tray.uuid.slice(0,8)}…` : ""}
           </p>
