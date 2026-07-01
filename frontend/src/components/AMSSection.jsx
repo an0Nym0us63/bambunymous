@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Droplets, Sun } from "lucide-react";
+import client from "../api/client";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function hexCss(hex) {
@@ -507,7 +508,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
     if (!isBambu) return;
     const params = new URLSearchParams();
     if (tray.color) params.set("color", tray.color);
-    import("../api/client").then(m => m.default.get("/filaments/map-tray/suggest?" + params))
+    client.get("/filaments/map-tray/suggest?" + params)
       .then(r => setSpools(r.data?.spools || []))
       .catch(() => setSpools([]))
       .finally(() => setLoading(false));
@@ -516,7 +517,6 @@ function MapTraySheet({ tray, onClose, onMapped }) {
   const link = async (spool_id) => {
     setSaving(true);
     try {
-      const { default: client } = await import("../api/client");
       await client.post("/filaments/map-tray/link", {
         spool_id,
         tag_uid: tray.tag_uid,
@@ -530,7 +530,6 @@ function MapTraySheet({ tray, onClose, onMapped }) {
   const create = async () => {
     setSaving(true);
     try {
-      const { default: client } = await import("../api/client");
       await client.post("/filaments/map-tray/create", {
         tag_uid: tray.tag_uid,
         profile_id: tray.tray_info_idx,
