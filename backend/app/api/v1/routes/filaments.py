@@ -325,11 +325,17 @@ async def map_tray_suggest(
     def dist(a, b): return math.sqrt(sum((x-y)**2 for x,y in zip(rgb(a), rgb(b))))
 
     async with AsyncSessionLocal() as db:
-        q = (select(Spool)
-             .options(selectinload(Spool.filament))
-             .where(Spool.archived == False)
-             .where((Spool.tag_number == None) | (Spool.tag_number == "")))
-        spools = (await db.execute(q)).scalars().all()
+        # Ramener toutes les bobines actives, filtrage fin en Python
+        # (le filtre SQL IS NULL / = '' est fragile selon les imports Spoolnymous)
+        q = select(Spool).options(selectinload(Spool.filament)).where(Spool.archived == False)
+        all_spools = (await db.execute(q)).scalars().all()
+
+    def no_rfid(s: Spool) -> bool:
+        """Vrai si la bobine n'a pas de tag RFID réellement renseigné."""
+        t = (s.tag_number or "").strip()
+        return not t or t == "0" or all(c == "0" for c in t) or t.lower() in ("", "none", "null")
+
+    spools = [s for s in all_spools if no_rfid(s)]
 
     tray_color = (color or "").strip().lstrip("#")
     spools.sort(key=lambda s: dist(tray_color, s.filament.color or "" if s.filament else ""))
