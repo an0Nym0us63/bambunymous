@@ -504,9 +504,11 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     manufacturer:     f.manufacturer || "",
     material:         f.material || "",
     fila_type:        f.fila_type || "",
-    color:            f.color || "",
+    // Champ unifié : si multi → toutes les couleurs CSV, si mono → juste la couleur principale
+    colors_input:     f.colors_array
+      ? f.colors_array.split(",").map(c=>c.trim().replace(/^#/,"")).join(", ")
+      : (f.color || ""),
     multicolor_type:  f.multicolor_type || "monochrome",
-    colors_array:     f.colors_array || "",
     profile_id:       f.profile_id || "",
     fila_color_code:  f.fila_color_code || "",
     filament_weight_g: f.filament_weight_g || 1000,
@@ -518,6 +520,23 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
   });
 
   const color = hexDisplay(f.color);
+
+  // Parse le champ unifié couleurs → color + colors_array + multicolor_type inféré
+  const parseColorsInput = (raw, currentType) => {
+    const parts = (raw||"").split(",").map(c=>c.trim().replace(/^#/,"")).filter(c=>c.length>=6);
+    if (parts.length === 0) return { color: null, colors_array: null, multicolor_type: "monochrome" };
+    if (parts.length === 1) return { color: parts[0], colors_array: null, multicolor_type: "monochrome" };
+    return {
+      color: parts[0],
+      colors_array: parts.map(c=>`#${c}`).join(","),
+      multicolor_type: currentType !== "monochrome" ? currentType : "coaxial",
+    };
+  };
+
+  // Swatches live du champ couleurs_input
+  const liveColors = (form.colors_input||"").split(",")
+    .map(c=>c.trim().replace(/^#/,"")).filter(c=>c.length>=6)
+    .map(c=>hexToCss(c)).filter(Boolean);
   const colorsList = parseColorsList(f.color, f.colors_array);
 
   const iStyle = { width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
@@ -526,6 +545,7 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
   const lStyle = { fontSize:11, color:"var(--muted)", margin:"0 0 4px", display:"block" };
 
   const handleSave = async () => {
+    const { color: col, colors_array: ca, multicolor_type: mct } = parseColorsInput(form.colors_input, form.multicolor_type);
     setSaving(true);
     try {
       await client.patch(`/filaments/filaments/${f.id}`, {
@@ -535,9 +555,9 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
         manufacturer:      form.manufacturer || undefined,
         material:          form.fila_type || form.material || "PLA",
         fila_type:         form.fila_type || undefined,
-        color:             form.color ? form.color.replace("#","").slice(0,8) : undefined,
-        multicolor_type:   form.multicolor_type || "monochrome",
-        colors_array:      form.colors_array || undefined,
+        color:             col || undefined,
+        colors_array:      ca || undefined,
+        multicolor_type:   mct,
         profile_id:        form.profile_id || undefined,
         fila_color_code:   form.fila_color_code || undefined,
         filament_weight_g: Number(form.filament_weight_g) || 1000,
@@ -635,22 +655,34 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               <F label="Marque"                     k="manufacturer"/>
               <F label="Sous-type (ex: PLA Basic)"  k="fila_type"/>
               <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Couleur (hex 6 ou 8 chars)</label>
-                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                  <input style={{ ...iStyle, flex:1 }} value={form.color}
-                    placeholder="rrggbb ou rrggbbaa"
-                    onChange={e => setForm(f=>({...f, color: e.target.value.replace("#","").slice(0,8)}))}/>
-                  {form.color && (
-                    <div style={{ width:28, height:28, borderRadius:6, flexShrink:0,
-                      background: hexToCss(form.color) || "#888", border:"1px solid var(--border)" }}/>
-                  )}
-                </div>
+                <label style={lStyle}>Couleur(s) — hex séparées par virgule si multi</label>
+                <input style={iStyle} value={form.colors_input}
+                  placeholder="ex: 0047bb  ou  0047bb, bb22a3"
+                  onChange={e => setForm(f=>({...f, colors_input: e.target.value}))}/>
+                {liveColors.length > 0 && (
+                  <div style={{ display:"flex", gap:4, marginTop:6, alignItems:"center" }}>
+                    {liveColors.map((c,i) => (
+                      <div key={i} style={{ width:24, height:24, borderRadius:5,
+                        background:c, border:"1px solid var(--border)" }}/>
+                    ))}
+                    {liveColors.length === 1
+                      ? <span style={{ fontSize:10, color:"var(--muted)", marginLeft:4 }}>Monochrome</span>
+                      : <span style={{ fontSize:10, color:"#3b82f6", marginLeft:4, fontWeight:600 }}>
+                          {liveColors.length} couleurs → {form.multicolor_type !== "monochrome" ? form.multicolor_type : "coaxial"}
+                        </span>
+                    }
+                  </div>
+                )}
               </div>
-              <F label="Type de couleur" k="multicolor_type" options={[
-                ["monochrome","Monochrome"],["gradient","Gradient"],["coaxial","Coaxial"]
-              ]}/>
-              {form.multicolor_type !== "monochrome" && (
-                <F label="Couleurs multiples (hex séparées par virgule)" k="colors_array"/>
+              {liveColors.length > 1 && (
+                <div style={{ marginBottom:10 }}>
+                  <label style={lStyle}>Type multicolore</label>
+                  <select style={iStyle} value={form.multicolor_type === "monochrome" ? "coaxial" : form.multicolor_type}
+                    onChange={e => setForm(f=>({...f, multicolor_type: e.target.value}))}>
+                    <option value="gradient">Gradient (dégradé)</option>
+                    <option value="coaxial">Coaxial (segments)</option>
+                  </select>
+                </div>
               )}
               <F label="Profile ID Bambu (ex: GFA00)"  k="profile_id"/>
               <F label="Code couleur Bambu (ex: 10600)" k="fila_color_code"/>
@@ -863,12 +895,30 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
 
   // Formulaire libre
   const [form, setForm] = useState(prefill || {
-    name:"", manufacturer:"Bambu Lab", material:"PLA Basic",
-    color:"", profile_id:"", weight:1000,
+    name:"", manufacturer:"", material:"PLA Basic",
+    colors_input:"", multicolor_type:"monochrome",
+    fila_type:"", profile_id:"", fila_color_code:"", weight:1000,
+    translated_name:"",
   });
   const iStyle = { width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
     borderRadius:8, padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none", boxSizing:"border-box" };
   const lStyle = { fontSize:11, color:"var(--muted)", margin:"0 0 4px", display:"block" };
+
+  // Parse colors_input → color + colors_array + multicolor_type
+  const parseColorsInput = (raw, currentType) => {
+    const parts = (raw||"").split(",").map(c=>c.trim().replace(/^#/,"")).filter(c=>c.length>=6);
+    if (parts.length === 0) return { color: null, colors_array: null, multicolor_type: "monochrome" };
+    if (parts.length === 1) return { color: parts[0], colors_array: null, multicolor_type: "monochrome" };
+    return {
+      color: parts[0],
+      colors_array: parts.map(c=>`#${c}`).join(","),
+      multicolor_type: currentType !== "monochrome" ? currentType : "coaxial",
+    };
+  };
+
+  const liveColors = (form.colors_input||"").split(",")
+    .map(c=>c.trim().replace(/^#/,"")).filter(c=>c.length>=6)
+    .map(c=>hexToCss(c)).filter(Boolean);
 
   // Charger les familles/types catalogue
   useEffect(() => {
@@ -914,18 +964,21 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
 
   const pickFromCatalog = (entry) => {
     setCatalogEntry(entry);
+    // Construire colors_input : si multi → toutes les couleurs CSV, si mono → juste la première
+    const colorsInput = entry.colors?.length > 1
+      ? entry.colors.join(", ")   // ex: "0047bb, bb22a3"
+      : (entry.color_hex || "");
     setForm({
-      name: entry.name,
-      manufacturer: "Bambu Lab",
-      material: entry.fila_type,
-      fila_type: entry.fila_type,
+      name:            entry.name,
+      manufacturer:    "Bambu Lab",
+      material:        entry.fila_type,
+      fila_type:       entry.fila_type,
       translated_name: entry.name_fr || "",
-      color: entry.color_hex,
-      profile_id: entry.fila_id,
-      fila_color_code: entry.fila_color_code || "",
-      colors_array: entry.colors?.length > 1 ? entry.colors.map(c=>`#${c}`).join(",") : "",
+      colors_input:    colorsInput,
       multicolor_type: entry.color_type_fr || "monochrome",
-      weight: 1000,
+      profile_id:      entry.fila_id,
+      fila_color_code: entry.fila_color_code || "",
+      weight:          1000,
     });
     setMode("free");
   };
@@ -933,6 +986,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
   const [duplicate, setDuplicate] = useState(null);
 
   const save = async () => {
+    const { color: col, colors_array: ca, multicolor_type: mct } = parseColorsInput(form.colors_input, form.multicolor_type);
     setSaving(true); setDuplicate(null);
     try {
       await client.post("/filaments/filaments", {
@@ -942,12 +996,12 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         manufacturer:      form.manufacturer || undefined,
         material:          form.fila_type || form.material || "PLA",
         fila_type:         form.fila_type || undefined,
-        color:             form.color ? form.color.replace("#","").slice(0,8) : undefined,
+        color:             col || undefined,
+        colors_array:      ca || undefined,
+        multicolor_type:   mct,
         profile_id:        form.profile_id || undefined,
         fila_color_code:   form.fila_color_code || undefined,
         filament_weight_g: Number(form.weight) || 1000,
-        multicolor_type:   form.multicolor_type || "monochrome",
-        colors_array:      form.colors_array || undefined,
       });
       onCreated();
     } catch(e) {
@@ -1089,32 +1143,33 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                   onChange={e => setForm(f => ({...f, fila_type: e.target.value}))}/>
               </div>
               <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Couleur (hex, sans #)</label>
-                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-                  <input style={{ ...iStyle, flex:1 }} value={form.color}
-                    placeholder="ffffff"
-                    onChange={e => setForm(f => ({...f, color: e.target.value.replace("#","").slice(0,8)}))}/>
-                  {form.color && (
-                    <div style={{ width:28, height:28, borderRadius:6, flexShrink:0,
-                      background:`#${form.color}`, border:"1px solid var(--border)" }}/>
-                  )}
-                </div>
+                <label style={lStyle}>Couleur(s) — hex séparées par virgule si multi</label>
+                <input style={iStyle} value={form.colors_input || ""}
+                  placeholder="ex: 0047bb  ou  0047bb, bb22a3"
+                  onChange={e => setForm(f => ({...f, colors_input: e.target.value}))}/>
+                {liveColors.length > 0 && (
+                  <div style={{ display:"flex", gap:4, marginTop:6, alignItems:"center" }}>
+                    {liveColors.map((c,i) => (
+                      <div key={i} style={{ width:24, height:24, borderRadius:5,
+                        background:c, border:"1px solid var(--border)" }}/>
+                    ))}
+                    {liveColors.length === 1
+                      ? <span style={{ fontSize:10, color:"var(--muted)", marginLeft:4 }}>Monochrome</span>
+                      : <span style={{ fontSize:10, color:"#3b82f6", marginLeft:4, fontWeight:600 }}>
+                          {liveColors.length} couleurs → {form.multicolor_type !== "monochrome" ? form.multicolor_type : "coaxial"}
+                        </span>
+                    }
+                  </div>
+                )}
               </div>
-              <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Type de couleur</label>
-                <select style={iStyle} value={form.multicolor_type || "monochrome"}
-                  onChange={e => setForm(f => ({...f, multicolor_type: e.target.value}))}>
-                  <option value="monochrome">Monochrome</option>
-                  <option value="gradient">Gradient (dégradé)</option>
-                  <option value="coaxial">Coaxial (bicolore segments)</option>
-                </select>
-              </div>
-              {form.multicolor_type && form.multicolor_type !== "monochrome" && (
+              {liveColors.length > 1 && (
                 <div style={{ marginBottom:10 }}>
-                  <label style={lStyle}>Couleurs (hex séparées par virgule, sans #)</label>
-                  <input style={iStyle} value={form.colors_array || ""}
-                    placeholder="ex: ff0000,ffffff"
-                    onChange={e => setForm(f => ({...f, colors_array: e.target.value}))}/>
+                  <label style={lStyle}>Type multicolore</label>
+                  <select style={iStyle} value={form.multicolor_type === "monochrome" ? "coaxial" : form.multicolor_type}
+                    onChange={e => setForm(f => ({...f, multicolor_type: e.target.value}))}>
+                    <option value="gradient">Gradient (dégradé)</option>
+                    <option value="coaxial">Coaxial (segments)</option>
+                  </select>
                 </div>
               )}
               <div style={{ marginBottom:10 }}>

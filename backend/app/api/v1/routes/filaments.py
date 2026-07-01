@@ -419,15 +419,23 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
                 if is_multi != e_is_multi:
                     continue
 
-                ec = (e_colors[0]).lstrip("#").lower()[:8] if e_colors else ""
-                if ec != color_hex:
-                    continue
+                # Monochromes : comparer la première couleur (avec alpha padding)
+                # Multicouleurs : ne PAS comparer la 1ère couleur seule — ordre catalogue peut différer
+                if not is_multi:
+                    ec = (e_colors[0]).lstrip("#").lower()[:8] if e_colors else ""
+                    if ec != color_hex:
+                        continue
 
-                # Pour les multicolores, vérifier aussi que toutes les couleurs correspondent
+                # Multicouleurs : comparer les sets de couleurs (ordre-indépendant, 6 chars RGB)
                 if is_multi and f.colors_array:
-                    db_cols = {c.lstrip("#").lower()[:6] for c in f.colors_array.split(",") if c}
+                    db_cols = {c.strip().lstrip("#").lower()[:6] for c in f.colors_array.split(",") if c.strip()}
                     cat_cols = {c.lstrip("#").lower()[:6] for c in e_colors}
-                    if db_cols and cat_cols and not db_cols.issubset(cat_cols) and not cat_cols.issubset(db_cols):
+                    if db_cols and cat_cols and not (db_cols <= cat_cols or cat_cols <= db_cols):
+                        continue
+                elif is_multi:
+                    # Pas de colors_array en DB : comparer uniquement la première couleur
+                    ec = (e_colors[0]).lstrip("#").lower()[:8] if e_colors else ""
+                    if ec != color_hex:
                         continue
 
                 entry = e
