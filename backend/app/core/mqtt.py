@@ -535,7 +535,7 @@ class MQTTManager:
                         nozzle_type=n.get("type", ""),
                         serial=n.get("sn", ""),
                         wear=float(n.get("wear", 0)),
-                        print_time=int(n.get("p_t", 0)),
+                        print_time=int(n.get("tm", 0)),  # 'tm' = temps en minutes (source: ha-bambulab), pas 'p_t'
                         empty=not bool((n.get("fila_id") or "").strip()),
                     ))
                 # src_id = hotend actuellement sur la tête
