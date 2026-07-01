@@ -370,18 +370,26 @@ async def _deduct_spool_weights(db, p: Print):
             )
         )).scalars().all()
 
+        logger.info(f"[SPOOL] Déduction print #{p.id} : {len(usages)} usage(s) avec spool_id et grams_used > 0")
+
         for u in usages:
+            logger.info(f"[SPOOL] Usage spool_id={u.spool_id} grams_used={u.grams_used}")
             spool = await db.get(Spool, u.spool_id)
-            if not spool: continue
-            if spool.remaining_weight_g is None: continue
+            if not spool:
+                logger.warning(f"[SPOOL] Bobine #{u.spool_id} introuvable")
+                continue
+            logger.info(f"[SPOOL] Bobine #{spool.id} remaining_weight_g={spool.remaining_weight_g}")
+            if spool.remaining_weight_g is None:
+                logger.warning(f"[SPOOL] Bobine #{spool.id} : remaining_weight_g est None, skip")
+                continue
             before = spool.remaining_weight_g
             spool.remaining_weight_g = max(0.0, before - u.grams_used)
             logger.info(
-                f"[SPOOL] Bobine #{spool.id} : {before:.0f}g → {spool.remaining_weight_g:.0f}g "
+                f"[SPOOL] ✅ Bobine #{spool.id} : {before:.0f}g → {spool.remaining_weight_g:.0f}g "
                 f"(- {u.grams_used:.1f}g print #{p.id})"
             )
     except Exception as e:
-        logger.debug(f"_deduct_spool_weights: {e}")
+        logger.error(f"_deduct_spool_weights print #{p.id}: {e}", exc_info=True)
 
 
 async def _costs(db, p: Print):
