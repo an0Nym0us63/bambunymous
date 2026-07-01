@@ -61,12 +61,33 @@ function colorBg(colors, type) {
   return { background: `linear-gradient(90deg, ${stops})` };
 }
 
-function ColorDot({ color, colorsArray, multicolorType, size=16 }) {
+// Détecte si une couleur hex 8 chars a de la transparence (alpha < FF)
+function hasTransparency(hex) {
+  const h = (hex||"").replace(/^#/,"").toLowerCase();
+  if (h.length === 8) return parseInt(h.slice(6,8),16) < 255;
+  return false;
+}
+
+// Swatch couleur avec damier visible si transparence
+function ColorSwatch({ color, colorsArray, multicolorType, size=40, radius=10 }) {
   const colors = parseColorsList(color, colorsArray);
+  const isTransparent = !colorsArray && hasTransparency(color);
   return (
-    <div style={{ width:size, height:size, borderRadius:4, flexShrink:0, overflow:"hidden",
-      boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.1)", ...colorBg(colors, multicolorType) }} />
+    <div style={{ position:"relative", width:size, height:size, borderRadius:radius,
+      flexShrink:0, overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.12)" }}>
+      {isTransparent && (
+        <div style={{ position:"absolute", inset:0,
+          backgroundImage:"repeating-conic-gradient(#aaa 0% 25%, #eee 0% 50%)",
+          backgroundSize:"8px 8px" }}/>
+      )}
+      <div style={{ position:"absolute", inset:0, ...colorBg(colors, multicolorType) }}/>
+    </div>
   );
+}
+
+function ColorDot({ color, colorsArray, multicolorType, size=16 }) {
+  return <ColorSwatch color={color} colorsArray={colorsArray} multicolorType={multicolorType}
+    size={size} radius={4}/>;
 }
 
 function RemainBar({ remaining, total=1000 }) {
@@ -762,32 +783,52 @@ function FilamentsView() {
             return (
               <div key={f.id} className="card-sm"
                 onClick={() => setSelectedFil(f)}
-                style={{ overflow:"hidden", cursor:"pointer", display:"flex", flexDirection:"column" }}>
-                {/* Bandeau couleur du filament */}
-                <div style={{ height:6, flexShrink:0, ...colorBg(colorsList, f.multicolor_type) }}/>
-                <div style={{ padding:"10px 12px 12px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
-                  <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
-                    <ColorDot color={f.color} colorsArray={f.colors_array} multicolorType={f.multicolor_type} size={20}/>
+                style={{ overflow:"hidden", cursor:"pointer", display:"flex",
+                  flexDirection:"column", padding:0, gap:0, position:"relative" }}>
+                {/* Bandeau couleur en haut — plus épais, plus lisible */}
+                <div style={{ height:8, flexShrink:0, position:"relative", overflow:"hidden" }}>
+                  {hasTransparency(f.color) && !f.colors_array && (
+                    <div style={{ position:"absolute", inset:0,
+                      backgroundImage:"repeating-conic-gradient(#aaa 0% 25%,#eee 0% 50%)",
+                      backgroundSize:"6px 6px" }}/>
+                  )}
+                  <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>
+                </div>
+                <div style={{ padding:"12px 12px 10px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
+                  {/* Swatch + nom */}
+                  <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
+                    <ColorSwatch color={f.color} colorsArray={f.colors_array}
+                      multicolorType={f.multicolor_type} size={36} radius={8}/>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden",
-                        textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:"16px" }}>{f.name}</p>
-                      <p style={{ fontSize:11, color:"var(--muted)", overflow:"hidden",
-                        textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        {[f.manufacturer, f.material].filter(Boolean).join(" · ")}
+                      {/* Nom FR (fallback EN) — affiché entier, wrap autorisé */}
+                      <p style={{ fontWeight:700, fontSize:12, color:"var(--text)",
+                        lineHeight:"1.3", margin:"0 0 2px", wordBreak:"break-word" }}>
+                        {f.translated_name || f.name}
                       </p>
+                      {/* Nom EN si différent du nom affiché */}
+                      {f.translated_name && f.translated_name !== f.name && (
+                        <p style={{ fontSize:10, color:"var(--muted)", margin:"0 0 2px",
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {f.name}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                  {/* Marque · Sous-type */}
+                  <p style={{ fontSize:10, color:"var(--muted)", margin:0,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {[f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
+                  </p>
+                  {/* Badge bobines */}
+                  <div>
                     <span style={{
+                      display:"inline-block",
                       fontSize:10, padding:"2px 8px", borderRadius:20, fontWeight:600,
                       background: f.active_spool_count > 0 ? "rgba(34,197,94,0.12)" : "var(--surface2)",
                       color: f.active_spool_count > 0 ? "#22c55e" : "var(--muted)",
                     }}>
                       {f.active_spool_count} bobine{f.active_spool_count!==1?"s":""}
                     </span>
-                    {f.price && (
-                      <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"monospace" }}>{f.price}€</span>
-                    )}
                   </div>
                 </div>
               </div>
