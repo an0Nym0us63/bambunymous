@@ -309,13 +309,15 @@ def _spool_out(s: Spool) -> SpoolOut:
 @router.get("/map-tray/suggest")
 async def map_tray_suggest(
     color: Optional[str] = None,
+    tray_has_rfid: bool = False,  # True si le tray a un tag RFID valide (= Bambu Lab)
     _: str = Depends(get_current_user),
 ):
     """
-    Suggestions de bobines pour mapper un tray Bambu non reconnu.
-    Retourne TOUTES les bobines actives sans tag RFID renseigné,
-    triées par couleur la plus proche.
-    Pas de filtre sur la matière — l'utilisateur choisit visuellement.
+    Suggestions de bobines pour mapper un tray non reconnu, sans tag RFID en base.
+    Si tray_has_rfid=true → le filament est Bambu Lab → on ne montre que les bobines
+    dont le filament associé a manufacturer='Bambu Lab' (ou sans marque renseignée).
+    Si tray_has_rfid=false → filament tiers → on exclut les bobines Bambu Lab.
+    Triées par couleur la plus proche.
     """
     import math
     def rgb(h: str):
@@ -328,14 +330,28 @@ async def map_tray_suggest(
         t = (tag or "").strip()
         return not t or t == "0" or all(c == "0" for c in t) or t.lower() in ("none", "null")
 
+    def is_bambu(spool) -> bool:
+        m = (spool.filament.manufacturer or "").strip().lower() if spool.filament else ""
+        return "bambu" in m
+
     tray_color = (color or "").strip().lstrip("#")
 
     async with AsyncSessionLocal() as db:
         q = select(Spool).options(selectinload(Spool.filament)).where(Spool.archived == False)
         all_spools = (await db.execute(q)).scalars().all()
 
-        # Filtrage + tri DANS la session — les relations filament sont encore accessibles
+        # 1. Garder uniquement les bobines sans RFID en base
         candidates = [s for s in all_spools if no_rfid(s.tag_number)]
+
+        # 2. Filtrer par marque selon la nature du tray
+        if tray_has_rfid:
+            # Tray Bambu → uniquement bobines Bambu Lab (ou sans marque)
+            candidates = [s for s in candidates if is_bambu(s) or not (s.filament and s.filament.manufacturer)]
+        else:
+            # Tray tiers → exclure les bobines Bambu Lab
+            candidates = [s for s in candidates if not is_bambu(s)]
+
+        # 3. Trier par couleur la plus proche
         candidates.sort(key=lambda s: dist(tray_color, (s.filament.color or "") if s.filament else ""))
 
         result = [_spool_out(s) for s in candidates]
