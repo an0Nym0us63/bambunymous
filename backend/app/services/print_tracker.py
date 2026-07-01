@@ -178,48 +178,21 @@ async def _apply_meta(pid: int, meta: dict, taskname: str):
         ))
 
         for slot, fil in meta.get("filaments", {}).items():
-            # tray_info_idx encode l'AMS et le slot physique
-            # Format: "A00-Y4" → AMS 0 (A=0,B=1,C=2), slot 0
-            # Format numérique possible: slot global 0-15 (ams*4 + tray)
+            # tray_info_idx est en réalité le CODE DE PROFIL Bambu (ex: "GFA00"),
+            # pas un encodage de position AMS/tray — le 3MF n'a aucune info de
+            # position physique. On matche donc comme pour le live (profil+couleur),
+            # via spool_matcher.match_spool() — pas de tag RFID disponible ici.
             tray_info = (fil.get("tray_info_idx") or "").strip()
-            spool_id  = None
-            ams_id_matched  = None
-            tray_id_matched = None
-
-            if tray_info:
-                # Parser le tray_info_idx pour trouver ams_id + tray_id
-                # Format lettres: "A00" → ams=0, tray=0 | "B02" → ams=1, tray=2
-                m = re.match(r"^([A-Z])([0-9]{2})", tray_info)
-                if m:
-                    ams_id_matched  = ord(m.group(1)) - ord("A")
-                    tray_id_matched = int(m.group(2))
+            spool_id = None
+            try:
+                from .spool_matcher import match_spool
+                spool_id, mode = await match_spool("", tray_info, fil.get("color", ""))
+                if spool_id:
+                    logger.info(f"[DB] ✅ Filament slot={slot} profil={tray_info!r} couleur={fil.get('color')!r} → spool_id={spool_id} ({mode})")
                 else:
-                    # Format numérique global: slot = ams*4 + tray
-                    try:
-                        global_slot = int(tray_info)
-                        ams_id_matched  = global_slot // 4
-                        tray_id_matched = global_slot % 4
-                    except ValueError:
-                        pass
-
-            if ams_id_matched is not None and tray_id_matched is not None:
-                # Chercher le spool_id dans l'état AMS en mémoire
-                from app.core.mqtt import get_state as _gs
-                try:
-                    state = _gs()
-                    for ams in state.ams_list:
-                        if ams.id == ams_id_matched:
-                            for tray in ams.trays:
-                                if tray.id == tray_id_matched and tray.spool_id:
-                                    spool_id = tray.spool_id
-                                    logger.info(f"[DB] ✅ Filament slot={slot} tray_info={tray_info!r} → AMS{ams_id_matched} tray{tray_id_matched} → spool_id={spool_id}")
-                                    break
-                            break
-                except Exception as _e:
-                    logger.debug(f"[DB] get_state failed: {_e}")
-
-            if spool_id is None:
-                logger.info(f"[DB] ⚠ Filament slot={slot} tray_info={tray_info!r} → spool non trouvé dans état AMS")
+                    logger.info(f"[DB] ⚠ Filament slot={slot} profil={tray_info!r} → {mode or 'non trouvé'}")
+            except Exception as _e:
+                logger.debug(f"[DB] match_spool failed: {_e}")
 
             db.add(FilamentUsage(
                 print_id=pid,
@@ -227,8 +200,6 @@ async def _apply_meta(pid: int, meta: dict, taskname: str):
                 color_hex=fil.get("color", ""),
                 grams_used=float(fil.get("used_g", 0)),
                 ams_slot=int(slot),
-                ams_id=ams_id_matched,
-                tray_id=tray_id_matched,
                 spool_id=spool_id,
             ))
         await db.commit()
@@ -258,42 +229,18 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
                 design_id=meta.get("design_id", ""),
             ))
             for slot, fil in meta.get("filaments", {}).items():
-                # tray_info_idx encode l'AMS et le slot physique (cf. _apply_meta)
+                # tray_info_idx = code profil Bambu (ex: "GFA00"), pas une position AMS
                 tray_info = (fil.get("tray_info_idx") or "").strip()
-                spool_id  = None
-                ams_id_matched  = None
-                tray_id_matched = None
-
-                if tray_info:
-                    m = re.match(r"^([A-Z])([0-9]{2})", tray_info)
-                    if m:
-                        ams_id_matched  = ord(m.group(1)) - ord("A")
-                        tray_id_matched = int(m.group(2))
+                spool_id = None
+                try:
+                    from .spool_matcher import match_spool
+                    spool_id, mode = await match_spool("", tray_info, fil.get("color", ""))
+                    if spool_id:
+                        logger.info(f"[DB] ✅ Filament slot={slot} profil={tray_info!r} couleur={fil.get('color')!r} → spool_id={spool_id} ({mode})")
                     else:
-                        try:
-                            global_slot = int(tray_info)
-                            ams_id_matched  = global_slot // 4
-                            tray_id_matched = global_slot % 4
-                        except ValueError:
-                            pass
-
-                if ams_id_matched is not None and tray_id_matched is not None:
-                    from app.core.mqtt import get_state as _gs
-                    try:
-                        state = _gs()
-                        for ams in state.ams_list:
-                            if ams.id == ams_id_matched:
-                                for tray in ams.trays:
-                                    if tray.id == tray_id_matched and tray.spool_id:
-                                        spool_id = tray.spool_id
-                                        logger.info(f"[DB] ✅ Filament slot={slot} tray_info={tray_info!r} → AMS{ams_id_matched} tray{tray_id_matched} → spool_id={spool_id}")
-                                        break
-                                break
-                    except Exception as _e:
-                        logger.debug(f"[DB] get_state failed: {_e}")
-
-                if spool_id is None:
-                    logger.info(f"[DB] ⚠ Filament slot={slot} tray_info={tray_info!r} → spool non trouvé dans état AMS")
+                        logger.info(f"[DB] ⚠ Filament slot={slot} profil={tray_info!r} → {mode or 'non trouvé'}")
+                except Exception as _e:
+                    logger.debug(f"[DB] match_spool failed: {_e}")
 
                 db.add(FilamentUsage(
                     print_id=pid,
@@ -301,8 +248,6 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
                     color_hex=fil.get("color", ""),
                     grams_used=float(fil.get("used_g", 0)),
                     ams_slot=int(slot),
-                    ams_id=ams_id_matched,
-                    tray_id=tray_id_matched,
                     spool_id=spool_id,
                 ))
             await db.commit()
