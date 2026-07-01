@@ -278,6 +278,38 @@ async def archive_spool(
     _clear_match_cache()
 
 
+class WeightAdjust(BaseModel):
+    mode:  str    # "set" | "add" | "sub"
+    value: float  # grammes
+
+
+@router.post("/spools/{sid}/weight", response_model=SpoolOut)
+async def adjust_spool_weight(
+    sid: int,
+    body: WeightAdjust,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """Réajuste le poids restant d'une bobine.
+    mode='set' → valeur absolue, 'add' → ajoute, 'sub' → soustrait.
+    """
+    s = await db.get(Spool, sid)
+    if not s:
+        raise HTTPException(404, "Bobine introuvable")
+    cur = s.remaining_weight_g or 0.0
+    if body.mode == "set":
+        s.remaining_weight_g = max(0.0, body.value)
+    elif body.mode == "add":
+        s.remaining_weight_g = max(0.0, cur + body.value)
+    elif body.mode == "sub":
+        s.remaining_weight_g = max(0.0, cur - body.value)
+    else:
+        raise HTTPException(400, "mode invalide (set/add/sub)")
+    await db.commit()
+    _clear_match_cache()
+    return _spool_out(await _load_spool(db, sid))
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 async def _load_spool(db, sid):

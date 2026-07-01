@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy import select, update
 
 from ..models.print_history import Print, FilamentUsage, PrintSnapshot
+from ..models.filament import Spool
 from ..db.session import AsyncSessionLocal
 from ..services.settings_service import get_setting
 from ..services.tmf_parser import extract_3mf, _clean_name
@@ -349,11 +350,38 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float]):
                     p.duration_seconds = real
             # Coûts
             await _costs(db, p)
+            # Déduction poids bobines
+            await _deduct_spool_weights(db, p)
             await db.commit()
         logger.info(f"[FINAL] ✅ Print {pid} → {status} | poids={p.total_weight_g:.1f}g coût={p.total_cost:.2f}€")
         with _LOCK: _JOBS.pop(job_id, None)
     except Exception as e:
         logger.error(f"_finalize pid={pid}: {e}")
+
+
+async def _deduct_spool_weights(db, p: Print):
+    """Déduit les grammes utilisés de chaque bobine liée à ce print."""
+    try:
+        usages = (await db.execute(
+            select(FilamentUsage).where(
+                FilamentUsage.print_id == p.id,
+                FilamentUsage.spool_id.isnot(None),
+                FilamentUsage.grams_used > 0,
+            )
+        )).scalars().all()
+
+        for u in usages:
+            spool = await db.get(Spool, u.spool_id)
+            if not spool: continue
+            if spool.remaining_weight_g is None: continue
+            before = spool.remaining_weight_g
+            spool.remaining_weight_g = max(0.0, before - u.grams_used)
+            logger.info(
+                f"[SPOOL] Bobine #{spool.id} : {before:.0f}g → {spool.remaining_weight_g:.0f}g "
+                f"(- {u.grams_used:.1f}g print #{p.id})"
+            )
+    except Exception as e:
+        logger.debug(f"_deduct_spool_weights: {e}")
 
 
 async def _costs(db, p: Print):
