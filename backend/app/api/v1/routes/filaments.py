@@ -7,6 +7,14 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime
 import os
+
+def _clear_match_cache():
+    """Vide le cache de matching MQTT après toute mutation de bobine."""
+    try:
+        from ....core.mqtt import invalidate_tray_cache
+        invalidate_tray_cache()
+    except Exception:
+        pass
 from pathlib import Path
 from ....db.session import get_db, AsyncSessionLocal
 from ....models.filament import Filament, Spool
@@ -210,6 +218,7 @@ async def create_spool(
     db.add(s)
     await db.commit()
     await db.refresh(s)
+    _clear_match_cache()
     return _spool_out(await _load_spool(db, s.id))
 
 
@@ -226,6 +235,7 @@ async def update_spool(
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(s, k, v)
     await db.commit()
+    _clear_match_cache()
     return _spool_out(await _load_spool(db, sid))
 
 
@@ -240,6 +250,7 @@ async def archive_spool(
         raise HTTPException(404, "Bobine introuvable")
     s.archived = True
     await db.commit()
+    _clear_match_cache()
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -540,6 +551,7 @@ async def delete_spool_permanent(sid: int, force: bool = False, _: str = Depends
         await db.delete(s)
         await db.commit()
 
+    _clear_match_cache()
     return {"ok": True, "usage_cleared": usage_count}
 
 
