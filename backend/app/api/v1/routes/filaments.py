@@ -405,10 +405,10 @@ async def map_tray_link(body: dict, _: str = Depends(get_current_user)):
     # Forcer un re-match au prochain tick MQTT — l'assignation vient d'être faite en DB,
     # le cache ne doit plus servir les anciennes valeurs (notfound → rfid/auto)
     try:
-        from ..core.mqtt import invalidate_tray_cache
+        from ....core.mqtt import invalidate_tray_cache
         invalidate_tray_cache(tag_uid=tag_uid, profile_id=prof)
-    except Exception as _e:
-        logger.debug(f"invalidate_tray_cache: {_e}")
+    except Exception:
+        pass  # non-bloquant
 
     return {
         "action": "mapped",
@@ -472,10 +472,10 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
         await db.refresh(spool.filament)
 
     try:
-        from ..core.mqtt import invalidate_tray_cache
+        from ....core.mqtt import invalidate_tray_cache
         invalidate_tray_cache(tag_uid=tag_uid, profile_id=prof)
-    except Exception as _e:
-        logger.debug(f"invalidate_tray_cache: {_e}")
+    except Exception:
+        pass  # non-bloquant
 
     changes = []
     if filament_created:
