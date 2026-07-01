@@ -29,6 +29,15 @@ function hexToCss(hex) {
   return null;
 }
 
+// Affichage texte d'une couleur : toujours en hex (#rrggbb ou #rrggbbaa)
+// hexToCss sert uniquement pour les background-color CSS
+function hexDisplay(hex) {
+  if (!hex) return null;
+  const h = hex.replace(/^#/, "").toLowerCase();
+  if (h.length === 6 || h.length === 8) return `#${h}`;
+  return null;
+}
+
 function parseColorsList(color, colorsArray) {
   if (colorsArray) {
     const cols = colorsArray.split(",").map(c => c.trim()).filter(Boolean)
@@ -210,7 +219,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
     finally { setDeleting(false); }
   };
   if (!spool) return null;
-  const color = hexToCss(spool.filament_color);
+  const color = hexDisplay(spool.filament_color);
   const colorsList = parseColorsList(spool.filament_color, spool.filament_colors_array);
   const total = spool.filament_weight_g || 1000;
   const remaining = spool.remaining_weight_g ?? total;
@@ -291,7 +300,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Nom traduit"    value={spool.filament_translated_name}/>
           <Row label="Marque"         value={spool.filament_manufacturer}/>
           <Row label="Matière"        value={spool.filament_material}/>
-          <Row label="Couleur"        value={colorsList?.length > 1 ? colorsList.join(" / ") : color} mono/>
+          <Row label="Couleur"        value={colorsList?.length > 1 ? (f?.colors_array||spool?.filament_colors_array||"").split(",").map(c=>hexDisplay(c)).filter(Boolean).join(" / ") : color} mono/>
           <Row label="Profile ID"     value={spool.filament_profile_id} mono/>
           <Row label="Multicolor"     value={spool.filament_multicolor_type !== "monochrome" ? spool.filament_multicolor_type : null}/>
           <Row label="Poids total"    value={spool.filament_weight_g ? `${spool.filament_weight_g}g` : null}/>
@@ -488,7 +497,7 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     to_order:         f.to_order || false,
   });
 
-  const color = hexToCss(f.color);
+  const color = hexDisplay(f.color);
   const colorsList = parseColorsList(f.color, f.colors_array);
 
   const iStyle = { width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
@@ -656,7 +665,7 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
                 letterSpacing:"0.08em", marginBottom:4 }}>Caractéristiques</p>
               <Row label="Marque"           value={f.manufacturer}/>
               <Row label="Matière"          value={f.material}/>
-              <Row label="Couleur"          value={colorsList?.length > 1 ? colorsList.join(" / ") : color} mono/>
+              <Row label="Couleur"          value={colorsList?.length > 1 ? (f?.colors_array||spool?.filament_colors_array||"").split(",").map(c=>hexDisplay(c)).filter(Boolean).join(" / ") : color} mono/>
               <Row label="Profile ID"       value={f.profile_id} mono/>
               <Row label="Code couleur Bambu" value={f.fila_color_code} mono/>
               <Row label="Poids bobine"     value={f.filament_weight_g ? f.filament_weight_g+"g" : null}/>

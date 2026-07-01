@@ -20,6 +20,13 @@ function hexToCss(hex) {
 }
 // Alias pour compatibilité avec l'ancien nom
 const hexCss = hexToCss;
+// Affichage texte d'une couleur — toujours en hex, jamais en rgba()
+const hexDisplay = (hex) => {
+  if (!hex) return null;
+  const h = hex.replace(/^#/, "").toLowerCase();
+  return (h.length === 6 || h.length === 8) ? `#${h}` : null;
+};
+
 
 // Normalise un hex pour stockage (strip #, garder 6 ou 8 chars)
 function normalizeHex(raw) {
@@ -347,7 +354,7 @@ const MATCH_LABEL = {
 
 function TrayBottomSheet({ tray, amsLabel, onClose }) {
   if (!tray) return null;
-  const color  = hexToCss(tray.color);
+  const color  = hexDisplay(tray.color);
   const info   = tray.spool_info;
   const match  = MATCH_LABEL[tray.match_mode];
   const pct    = tray.remain ?? 0;
@@ -447,7 +454,7 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
             <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
               letterSpacing:"0.08em", margin:"0 0 4px" }}>Données imprimante (temps réel)</p>
             <Row label="Type"          value={tray.filament_type}/>
-            <Row label="Couleur"       value={(() => { const cs = parseColors(tray, info); return cs?.length > 1 ? cs.join(" / ") : color; })()} mono/>
+            <Row label="Couleur"       value={(() => { const arr = (info?.colors_array||tray?.colors_array||"").split(",").filter(Boolean); return arr.length > 1 ? arr.map(hexDisplay).filter(Boolean).join(" / ") : color; })()} mono/>
             <Row label="Profile ID"    value={tray.tray_info_idx || tray.tray_id_name}/>
             <Row label="Tag UID (RFID)"value={tray.tag_uid && !tray.tag_uid.match(/^0+$/) ? tray.tag_uid : null} mono/>
             <Row label="Restant"       value={`${tray.remain}%`}/>
@@ -646,7 +653,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
           </h3>
           <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 14px" }}>
             {tray.filament_type || "Type inconnu"}
-            {tray.color ? ` · ${hexToCss(tray.color) || ('#'+tray.color)}` : ""}
+            {tray.color ? ` · ${hexDisplay(tray.color) || ('#'+tray.color)}` : ""}
             {tray.tray_info_idx ? ` · ${tray.tray_info_idx}` : ""}
             {tray.uuid && !/^0+$/.test(tray.uuid) ? ` · 🔖 ${tray.uuid.slice(0,8)}…` : ""}
           </p>
