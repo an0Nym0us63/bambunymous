@@ -32,6 +32,7 @@ class Filament(Base):
     reference_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     swatch: Mapped[bool] = mapped_column(Boolean, default=False)
+    transparent: Mapped[bool] = mapped_column(Boolean, default=False)  # conservé pour compatibilité DB (NOT NULL), non exposé dans les schémas
     to_order: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

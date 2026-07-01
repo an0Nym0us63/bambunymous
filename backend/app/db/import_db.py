@@ -105,6 +105,7 @@ async def run_import(src_path: str) -> dict:
                 reference_id=row.get("reference_id"),
                 comment=row.get("comment"),
                 swatch=bool(row.get("swatch", 0)),
+                transparent=False,  # colonne DB NOT NULL, champ plus utilisé mais toujours en DB
                 to_order=bool(row.get("to_order", 0)),
                 created_at=parse_dt(row.get("created_at")) or datetime.utcnow(),
                 updated_at=parse_dt(row.get("updated_at")) or datetime.utcnow(),
