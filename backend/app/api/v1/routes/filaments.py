@@ -318,6 +318,94 @@ def _spool_out(s: Spool) -> SpoolOut:
     )
 
 
+def _get_catalog():
+    """Récupère une instance du catalogue Bambu depuis les fichiers locaux."""
+    from ....services.bambu_catalog import BambuCatalogSync
+    from ....core.config import settings
+    return BambuCatalogSync(data_dir=settings.DATA_DIR)
+
+
+@router.get("/catalog/types")
+async def catalog_types(_: str = Depends(get_current_user)):
+    """Liste les types de filaments Bambu disponibles dans le catalogue local."""
+    cat = _get_catalog()
+    mapping = cat.type_mapping()
+    # mapping = {"PLA": ["PLA Basic", "PLA Matte"...], "PETG": [...], ...}
+    return {
+        "families": sorted(mapping.keys()),
+        "types": {k: sorted(v) for k, v in mapping.items()},
+    }
+
+
+@router.get("/catalog/search")
+async def catalog_search(
+    family: Optional[str] = None,   # ex: "PLA"
+    fila_type: Optional[str] = None, # ex: "PLA Basic"
+    q: Optional[str] = None,         # recherche dans le nom couleur
+    lang: str = "fr",
+    _: str = Depends(get_current_user),
+):
+    """
+    Recherche dans le catalogue filaments Bambu local.
+    Filtre par famille (PLA/PETG…), type détaillé, et/ou substring sur le nom couleur.
+    Retourne les entrées triées par type puis nom.
+    """
+    import os, json as _json, re as _re
+    from ....core.config import settings
+    path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
+    type_path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_type_mapping.json")
+    if not os.path.exists(path):
+        return {"entries": [], "available": False}
+
+    try:
+        data = _json.loads(open(path).read())
+    except Exception:
+        return {"entries": [], "available": False}
+
+    # Charger le mapping famille→types pour filtrer par famille
+    type_to_family: dict = {}
+    if os.path.exists(type_path):
+        try:
+            mapping = _json.loads(open(type_path).read())
+            for fam, types in mapping.items():
+                for t in types:
+                    type_to_family[t.lower()] = fam
+        except Exception:
+            pass
+
+    results = []
+    for entry in data.get("data", []):
+        ftype = entry.get("fila_type", "")
+        # Filtre famille
+        if family:
+            if type_to_family.get(ftype.lower(), "").lower() != family.lower():
+                continue
+        # Filtre type détaillé
+        if fila_type and ftype.lower() != fila_type.lower():
+            continue
+        # Nom couleur dans la langue demandée
+        names = entry.get("fila_color_name", {})
+        name = names.get(lang) or names.get("en") or names.get("fr") or next(iter(names.values()), "")
+        # Filtre recherche textuelle
+        if q and q.lower() not in name.lower():
+            continue
+        colors = entry.get("fila_color", [])
+        results.append({
+            "fila_id":         entry.get("fila_id", ""),
+            "fila_color_code": entry.get("fila_color_code", ""),
+            "color_code":      entry.get("color_code", ""),
+            "fila_type":       ftype,
+            "family":          type_to_family.get(ftype.lower(), ""),
+            "name":            name,
+            "color_hex":       colors[0].lstrip("#")[:6] if colors else "",
+            "colors":          [c.lstrip("#")[:6] for c in colors],
+            "color_type":      entry.get("fila_color_type", ""),
+        })
+
+    results.sort(key=lambda e: (e["fila_type"], e["name"]))
+    return {"entries": results, "available": True}
+
+
 @router.get("/map-tray/suggest")
 async def map_tray_suggest(
     color: Optional[str] = None,

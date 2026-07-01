@@ -571,6 +571,7 @@ function FilamentsView() {
   const [material, setMaterial] = useState("");
   const [loading, setLoading] = useState(true);
   const [selectedFil, setSelectedFil] = useState(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -595,6 +596,12 @@ function FilamentsView() {
           <option value="">Tous matériaux</option>
           {MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
+        <button onClick={() => setCreateOpen(true)}
+          style={{ padding:"8px 14px", borderRadius:10, background:"#3b82f6", border:"none",
+            color:"white", fontSize:13, fontWeight:700, cursor:"pointer",
+            display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+          <Plus size={14}/> Filament
+        </button>
       </div>
 
       {loading ? (
@@ -641,6 +648,248 @@ function FilamentsView() {
         </div>
       )}
       {selectedFil && <FilamentSheet f={selectedFil} onClose={() => setSelectedFil(null)} onDeleted={() => { setSelectedFil(null); load(); }}/>}
+      {createOpen && <FilamentCreateSheet onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); load(); }}/>}
+    </div>
+  );
+}
+
+// ── Création filament (saisie libre ou import catalogue Bambu) ─────────────
+function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
+  // prefill: objet pré-rempli depuis le catalogue ou un tray MQTT
+  const [mode, setMode] = useState(prefill ? "free" : "choose"); // "choose"|"catalog"|"free"
+  const [saving, setSaving] = useState(false);
+
+  // Catalogue Bambu
+  const [families, setFamilies] = useState([]);
+  const [typesByFamily, setTypesByFamily] = useState({});
+  const [selectedFamily, setSelectedFamily] = useState("");
+  const [selectedType, setSelectedType] = useState("");
+  const [catalogQ, setCatalogQ] = useState("");
+  const [catalogEntries, setCatalogEntries] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogEntry, setCatalogEntry] = useState(null); // entrée choisie
+
+  // Formulaire libre
+  const [form, setForm] = useState(prefill || {
+    name:"", manufacturer:"Bambu Lab", material:"PLA Basic",
+    color:"", profile_id:"", weight:1000,
+  });
+  const iStyle = { width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
+    borderRadius:8, padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none", boxSizing:"border-box" };
+  const lStyle = { fontSize:11, color:"var(--muted)", margin:"0 0 4px", display:"block" };
+
+  // Charger les familles/types catalogue
+  useEffect(() => {
+    if (mode !== "catalog") return;
+    client.get("/filaments/catalog/types").then(({ data }) => {
+      setFamilies(data.families || []);
+      setTypesByFamily(data.types || {});
+    }).catch(() => {});
+  }, [mode]);
+
+  // Chercher dans le catalogue
+  useEffect(() => {
+    if (mode !== "catalog") return;
+    setCatalogLoading(true);
+    const params = {};
+    if (selectedFamily) params.family = selectedFamily;
+    if (selectedType) params.fila_type = selectedType;
+    if (catalogQ.trim()) params.q = catalogQ.trim();
+    params.lang = "fr";
+    client.get("/filaments/catalog/search", { params })
+      .then(({ data }) => {
+        setCatalogEntries(data.entries || []);
+        if (!data.available) setCatalogEntries([]);
+      })
+      .catch(() => setCatalogEntries([]))
+      .finally(() => setCatalogLoading(false));
+  }, [mode, selectedFamily, selectedType, catalogQ]);
+
+  const pickFromCatalog = (entry) => {
+    setCatalogEntry(entry);
+    setForm({
+      name: entry.name,
+      manufacturer: "Bambu Lab",
+      material: entry.fila_type,
+      color: entry.color_hex,
+      profile_id: entry.fila_id,
+      weight: 1000,
+    });
+    setMode("free");
+  };
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await client.post("/filaments/filaments", {
+        name: form.name || "Sans nom",
+        manufacturer: form.manufacturer || undefined,
+        material: form.material || "PLA",
+        color: form.color ? form.color.replace("#","").slice(0,6) : undefined,
+        profile_id: form.profile_id || undefined,
+        filament_weight_g: Number(form.weight) || 1000,
+      });
+      onCreated();
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    finally { setSaving(false); }
+  };
+
+  const types = selectedFamily ? (typesByFamily[selectedFamily] || []) : Object.values(typesByFamily).flat();
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1200,
+      display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+        width:"100%", maxWidth:540, maxHeight:"92dvh", overflowY:"auto",
+        paddingBottom:"env(safe-area-inset-bottom,16px)", display:"flex", flexDirection:"column" }}>
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 4px" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+        </div>
+        <div style={{ padding:"12px 20px 24px" }}>
+          <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 16px" }}>
+            Nouveau filament
+          </h3>
+
+          {mode === "choose" && (
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              <button onClick={() => setMode("catalog")}
+                style={{ padding:"14px 16px", borderRadius:12, border:"1px solid var(--border)",
+                  background:"var(--surface2)", cursor:"pointer", textAlign:"left" }}>
+                <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 4px" }}>
+                  📦 Importer depuis le catalogue Bambu
+                </p>
+                <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+                  Type → Couleur → Préremplissage automatique (nom officiel, hex, profil…)
+                </p>
+              </button>
+              <button onClick={() => setMode("free")}
+                style={{ padding:"14px 16px", borderRadius:12, border:"1px solid var(--border)",
+                  background:"var(--surface2)", cursor:"pointer", textAlign:"left" }}>
+                <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 4px" }}>
+                  ✏️ Saisie libre
+                </p>
+                <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+                  Remplir manuellement tous les champs
+                </p>
+              </button>
+            </div>
+          )}
+
+          {mode === "catalog" && (
+            <div>
+              <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap" }}>
+                <select value={selectedFamily} onChange={e => { setSelectedFamily(e.target.value); setSelectedType(""); }}
+                  style={{ ...iStyle, flex:1, minWidth:120 }}>
+                  <option value="">Toutes familles</option>
+                  {families.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
+                <select value={selectedType} onChange={e => setSelectedType(e.target.value)}
+                  style={{ ...iStyle, flex:1, minWidth:140 }}>
+                  <option value="">Tous types</option>
+                  {types.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <input value={catalogQ} onChange={e => setCatalogQ(e.target.value)}
+                placeholder="Rechercher une couleur (Jade White, Orange…)"
+                style={{ ...iStyle, marginBottom:10 }}/>
+              <div style={{ maxHeight:300, overflowY:"auto" }}>
+                {catalogLoading && <p style={{ color:"var(--muted)", fontSize:12 }}>Recherche…</p>}
+                {!catalogLoading && catalogEntries.length === 0 &&
+                  <p style={{ color:"var(--muted)", fontSize:12 }}>
+                    {families.length === 0 ? "Catalogue non disponible (démarrage en cours…)" : "Aucun résultat"}
+                  </p>}
+                {catalogEntries.map((e,i) => (
+                  <button key={i} onClick={() => pickFromCatalog(e)}
+                    style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
+                      borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
+                      marginBottom:6, cursor:"pointer", textAlign:"left" }}>
+                    <div style={{ width:28, height:28, borderRadius:6, flexShrink:0,
+                      background: e.colors?.length > 1
+                        ? `linear-gradient(135deg, ${e.colors.map(c=>`#${c}`).join(",")})`
+                        : `#${e.color_hex || "888"}` }}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0,
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{e.name}</p>
+                      <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
+                        {e.fila_type} · {e.fila_id} · {e.color_code}
+                      </p>
+                    </div>
+                    <span style={{ fontSize:10, color:"#3b82f6", fontWeight:700, flexShrink:0 }}>→</span>
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setMode("choose")}
+                style={{ marginTop:10, padding:"7px 12px", borderRadius:8, fontSize:11,
+                  background:"none", border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>
+                ← Retour
+              </button>
+            </div>
+          )}
+
+          {mode === "free" && (
+            <>
+              {catalogEntry && (
+                <div style={{ marginBottom:14, padding:"8px 12px", borderRadius:10,
+                  background:"rgba(59,130,246,0.06)", border:"1px solid rgba(59,130,246,0.2)",
+                  fontSize:11, color:"#60a5fa" }}>
+                  📦 Pré-rempli depuis le catalogue Bambu · {catalogEntry.fila_type} · {catalogEntry.color_code}
+                </div>
+              )}
+              <div style={{ marginBottom:10 }}>
+                <label style={lStyle}>Nom de la couleur *</label>
+                <input style={iStyle} value={form.name} autoFocus placeholder="ex: Jade White"
+                  onChange={e => setForm(f => ({...f, name: e.target.value}))}/>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <label style={lStyle}>Marque</label>
+                <input style={iStyle} value={form.manufacturer}
+                  onChange={e => setForm(f => ({...f, manufacturer: e.target.value}))}/>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <label style={lStyle}>Type / Matière</label>
+                <input style={iStyle} value={form.material}
+                  onChange={e => setForm(f => ({...f, material: e.target.value}))}/>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <label style={lStyle}>Couleur (hex, sans #)</label>
+                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                  <input style={{ ...iStyle, flex:1 }} value={form.color}
+                    placeholder="ffffff"
+                    onChange={e => setForm(f => ({...f, color: e.target.value.replace("#","").slice(0,6)}))}/>
+                  {form.color && (
+                    <div style={{ width:28, height:28, borderRadius:6, flexShrink:0,
+                      background:`#${form.color}`, border:"1px solid var(--border)" }}/>
+                  )}
+                </div>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <label style={lStyle}>Profile ID Bambu (ex: GFA00)</label>
+                <input style={iStyle} value={form.profile_id}
+                  onChange={e => setForm(f => ({...f, profile_id: e.target.value}))}/>
+              </div>
+              <div style={{ marginBottom:16 }}>
+                <label style={lStyle}>Poids total (g)</label>
+                <input style={iStyle} type="number" value={form.weight}
+                  onChange={e => setForm(f => ({...f, weight: e.target.value}))}/>
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                {!prefill && (
+                  <button onClick={() => { setMode("choose"); setCatalogEntry(null); }}
+                    style={{ flex:1, padding:"10px", borderRadius:10, fontSize:13,
+                      background:"var(--surface2)", border:"1px solid var(--border)",
+                      color:"var(--muted)", cursor:"pointer" }}>← Retour</button>
+                )}
+                <button onClick={save} disabled={saving}
+                  style={{ flex:2, padding:"10px", borderRadius:10, fontSize:13, fontWeight:700,
+                    background: saving ? "var(--border)" : "#3b82f6",
+                    color:"white", border:"none", cursor: saving ? "default" : "pointer" }}>
+                  {saving ? "Création…" : "Créer le filament"}
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

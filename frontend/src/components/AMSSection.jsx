@@ -490,16 +490,16 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
 
 // ── Mapper / Créer une bobine pour un tray non reconnu ────────────────────
 function MapTraySheet({ tray, onClose, onMapped }) {
-  // Filament Bambu = a un profile_id renseigné dans le tray MQTT
   const isBambu = Boolean(tray.tray_info_idx);
   const [mode, setMode] = React.useState(isBambu ? "suggest" : "create");
   const [spools, setSpools] = React.useState([]);
-  const [loading, setLoading] = React.useState(isBambu);
+  const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const hasRfid = Boolean(tray.uuid && !/^0+$/.test(tray.uuid));
+  const [catalogInfo, setCatalogInfo] = React.useState(null); // entrée catalogue Bambu
   const [form, setForm] = React.useState({
     name: "",
-    material: (tray.filament_type || "PLA").replace(/\s.*/, ""),
+    material: tray.filament_type || "PLA Basic",
     manufacturer: (isBambu && hasRfid) ? "Bambu Lab" : "",
     weight: "1000",
   });
@@ -508,10 +508,40 @@ function MapTraySheet({ tray, onClose, onMapped }) {
     const params = new URLSearchParams();
     if (tray.color) params.set("color", tray.color);
     params.set("tray_has_rfid", hasRfid ? "true" : "false");
-    client.get("/filaments/map-tray/suggest?" + params)
+
+    const spoolsP = client.get("/filaments/map-tray/suggest?" + params)
       .then(r => setSpools(r.data?.spools || []))
-      .catch(() => setSpools([]))
-      .finally(() => setLoading(false));
+      .catch(() => setSpools([]));
+
+    // Rechercher dans le catalogue Bambu pour pré-remplir le formulaire de création
+    const catalogParams = {};
+    if (tray.tray_info_idx) catalogParams.fila_type = tray.filament_type;
+    if (tray.color) {
+      // Extraire le color_code depuis le tray (ex: depuis fila_color_code / tray_info)
+      // On cherche par type d'abord puis on filtre par couleur dans le résultat
+      catalogParams.fila_type = tray.filament_type;
+      catalogParams.lang = "fr";
+    }
+    const catalogP = (tray.tray_info_idx && tray.color)
+      ? client.get("/filaments/catalog/search", { params: { fila_type: tray.filament_type, lang:"fr" } })
+          .then(r => {
+            const color6 = (tray.color || "").toLowerCase().slice(0,6);
+            const match = (r.data?.entries || []).find(e =>
+              e.color_hex?.toLowerCase() === color6 || e.fila_id === tray.tray_info_idx
+            );
+            if (match) {
+              setCatalogInfo(match);
+              setForm(f => ({
+                ...f,
+                name: match.name,
+                material: match.fila_type,
+                manufacturer: "Bambu Lab",
+              }));
+            }
+          }).catch(() => {})
+      : Promise.resolve();
+
+    Promise.all([spoolsP, catalogP]).finally(() => setLoading(false));
   }, []);
 
   const [result, setResult] = React.useState(null); // réponse backend après action
@@ -651,6 +681,22 @@ function MapTraySheet({ tray, onClose, onMapped }) {
           )}
 
           {mode === "create" && (<>
+            {catalogInfo && (
+              <div style={{ marginBottom:12, padding:"8px 12px", borderRadius:10,
+                background:"rgba(59,130,246,0.06)", border:"1px solid rgba(59,130,246,0.2)",
+                display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ width:24, height:24, borderRadius:5, flexShrink:0,
+                  background: `#${catalogInfo.color_hex || "888"}` }}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ fontSize:12, fontWeight:700, color:"#60a5fa", margin:0 }}>
+                    📦 {catalogInfo.name} — {catalogInfo.fila_type}
+                  </p>
+                  <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
+                    {catalogInfo.fila_id} · {catalogInfo.color_code}
+                  </p>
+                </div>
+              </div>
+            )}
             <div style={{ marginBottom:10 }}>
               <label style={labelStyle}>Nom de la couleur</label>
               <input style={inputStyle} value={form.name} autoFocus placeholder="ex: Jade White"
