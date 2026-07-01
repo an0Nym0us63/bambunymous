@@ -705,14 +705,31 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
       .finally(() => setCatalogLoading(false));
   }, [mode, selectedFamily, selectedType, catalogQ]);
 
+  // Helper : affiche la couleur selon le type (gradient / coaxial / mono)
+  const colorSwatch = (e, size=28) => {
+    const cols = (e.colors || []).map(c => `#${c}`);
+    let bg;
+    if (e.color_type_fr === "gradient" && cols.length > 1) {
+      bg = `linear-gradient(135deg, ${cols.join(",")})`;
+    } else if (e.color_type_fr === "coaxial" && cols.length > 1) {
+      const pct = 100 / cols.length;
+      bg = `linear-gradient(90deg, ${cols.map((c,i)=>`${c} ${i*pct}%, ${c} ${(i+1)*pct}%`).join(",")})`;
+    } else {
+      bg = `#${e.color_hex || "888"}`;
+    }
+    return <div style={{ width:size, height:size, borderRadius:Math.round(size*0.22), flexShrink:0, background:bg }}/>;
+  };
+
   const pickFromCatalog = (entry) => {
     setCatalogEntry(entry);
     setForm({
-      name: entry.name,
+      name: entry.name,         // nom anglais (officiel Bambu)
       manufacturer: "Bambu Lab",
       material: entry.fila_type,
       color: entry.color_hex,
       profile_id: entry.fila_id,
+      colors_array: entry.colors?.length > 1 ? entry.colors.map(c=>`#${c}`).join(",") : "",
+      multicolor_type: entry.color_type_fr || "monochrome",
       weight: 1000,
     });
     setMode("free");
@@ -722,12 +739,14 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
     setSaving(true);
     try {
       await client.post("/filaments/filaments", {
-        name: form.name || "Sans nom",
-        manufacturer: form.manufacturer || undefined,
-        material: form.material || "PLA",
-        color: form.color ? form.color.replace("#","").slice(0,6) : undefined,
-        profile_id: form.profile_id || undefined,
+        name:              form.name || "Sans nom",
+        manufacturer:      form.manufacturer || undefined,
+        material:          form.material || "PLA",
+        color:             form.color ? form.color.replace("#","").slice(0,6) : undefined,
+        profile_id:        form.profile_id || undefined,
         filament_weight_g: Number(form.weight) || 1000,
+        multicolor_type:   form.multicolor_type || "monochrome",
+        colors_array:      form.colors_array || undefined,
       });
       onCreated();
     } catch(e) { alert(e.response?.data?.detail || e.message); }
@@ -803,15 +822,22 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                     style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
                       borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
                       marginBottom:6, cursor:"pointer", textAlign:"left" }}>
-                    <div style={{ width:28, height:28, borderRadius:6, flexShrink:0,
-                      background: e.colors?.length > 1
-                        ? `linear-gradient(135deg, ${e.colors.map(c=>`#${c}`).join(",")})`
-                        : `#${e.color_hex || "888"}` }}/>
+                    {colorSwatch(e, 30)}
                     <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0,
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{e.name}</p>
+                      <div style={{ display:"flex", alignItems:"center", gap:5, marginBottom:1 }}>
+                        <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0,
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{e.name}</p>
+                        {e.color_type_fr && e.color_type_fr !== "monochrome" && (
+                          <span style={{ fontSize:9, padding:"1px 5px", borderRadius:4, flexShrink:0,
+                            background: e.color_type_fr==="gradient" ? "rgba(139,92,246,0.15)" : "rgba(59,130,246,0.15)",
+                            color: e.color_type_fr==="gradient" ? "#8b5cf6" : "#3b82f6",
+                            fontWeight:700, textTransform:"uppercase" }}>
+                            {e.color_type_fr}
+                          </span>
+                        )}
+                      </div>
                       <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
-                        {e.fila_type} · {e.fila_id} · {e.color_code}
+                        {e.fila_type} · <span style={{ fontFamily:"monospace" }}>{e.fila_color_code}</span>
                       </p>
                     </div>
                     <span style={{ fontSize:10, color:"#3b82f6", fontWeight:700, flexShrink:0 }}>→</span>

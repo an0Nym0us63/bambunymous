@@ -150,21 +150,29 @@ class BambuCatalogSync:
         fila_id    = (fila_id or "").strip().upper()
         color_code = _normalize_color_code(color_code)
 
+        COLOR_TYPE_FR = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}
+
         for entry in data.get("data", []):
             if entry.get("fila_id", "").upper() != fila_id:
                 continue
             if _normalize_color_code(entry.get("color_code", "")) != color_code:
                 continue
             names = entry.get("fila_color_name", {})
-            name  = names.get(lang) or names.get("en") or names.get("fr") or next(iter(names.values()), "")
+            name    = names.get(lang) or names.get("en") or names.get("fr") or next(iter(names.values()), "")
+            name_en = names.get("en") or names.get("fr") or next(iter(names.values()), "")
             colors = entry.get("fila_color", [])
+            ctype  = entry.get("fila_color_type", "")
             return {
-                "name":       name,
-                "type":       entry.get("fila_type", ""),
-                "color_hex":  (colors[0].lstrip("#")[:6] if colors else ""),
-                "color_code": entry.get("color_code", ""),
-                "fila_id":    fila_id,
+                "name":           name,
+                "name_en":        name_en,
+                "type":           entry.get("fila_type", ""),
+                "color_hex":      (colors[0].lstrip("#")[:6] if colors else ""),
+                "colors":         [c.lstrip("#")[:6] for c in colors],
+                "color_code":     entry.get("color_code", ""),
+                "fila_id":        fila_id,
                 "fila_color_code": entry.get("fila_color_code", ""),
+                "color_type":     ctype,
+                "color_type_fr":  COLOR_TYPE_FR.get(ctype, ctype),
             }
         return None
 

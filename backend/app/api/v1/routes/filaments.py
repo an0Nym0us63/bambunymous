@@ -373,10 +373,11 @@ async def catalog_search(
         except Exception:
             pass
 
+    # Cohérence avec Spoolnymous : gradient / coaxial (pas dégradé/multicolore)
     COLOR_TYPE_FR = {
-        "单色": "Monochrome",
-        "渐变色": "Dégradé",
-        "多拼色": "Multicolore",
+        "单色":  "monochrome",
+        "渐变色": "gradient",
+        "多拼色": "coaxial",
     }
 
     results = []
@@ -389,24 +390,33 @@ async def catalog_search(
         # Filtre type détaillé
         if fila_type and ftype.lower() != fila_type.lower():
             continue
-        # Nom couleur dans la langue demandée
+        # Noms
         names = entry.get("fila_color_name", {})
-        name = names.get(lang) or names.get("en") or names.get("fr") or next(iter(names.values()), "")
-        # Filtre recherche textuelle
-        if q and q.lower() not in name.lower():
-            continue
+        name_fr  = names.get("fr") or names.get("en") or next(iter(names.values()), "")
+        name_en  = names.get("en") or names.get("fr") or next(iter(names.values()), "")
+        fila_cc  = entry.get("fila_color_code", "")
+        # Filtre recherche textuelle — insensible à la casse ET à la position
+        # cherche dans le nom français, anglais ET le code couleur Bambu
+        if q:
+            ql = q.strip().lower()
+            if (ql not in name_fr.lower() and
+                ql not in name_en.lower() and
+                ql not in fila_cc.lower()):
+                continue
         colors = entry.get("fila_color", [])
+        ctype_raw = entry.get("fila_color_type", "")
         results.append({
-            "fila_id":         entry.get("fila_id", ""),
-            "fila_color_code": entry.get("fila_color_code", ""),
-            "color_code":      entry.get("color_code", ""),
-            "fila_type":       ftype,
-            "family":          type_to_family.get(ftype.lower(), ""),
-            "name":            name,
-            "color_hex":       colors[0].lstrip("#")[:6] if colors else "",
-            "colors":          [c.lstrip("#")[:6] for c in colors],
-            "color_type":      entry.get("fila_color_type", ""),
-            "color_type_fr":   COLOR_TYPE_FR.get(entry.get("fila_color_type", ""), entry.get("fila_color_type", "")),
+            "fila_id":          entry.get("fila_id", ""),
+            "fila_color_code":  fila_cc,
+            "color_code":       entry.get("color_code", ""),
+            "fila_type":        ftype,
+            "family":           type_to_family.get(ftype.lower(), ""),
+            "name":             name_en,       # nom "officiel" non traduit (anglais)
+            "name_fr":          name_fr,       # nom traduit français
+            "color_hex":        colors[0].lstrip("#")[:6] if colors else "",
+            "colors":           [c.lstrip("#")[:6] for c in colors],
+            "color_type":       ctype_raw,
+            "color_type_fr":    COLOR_TYPE_FR.get(ctype_raw, ctype_raw),
         })
 
     results.sort(key=lambda e: (e["fila_type"], e["name"]))
