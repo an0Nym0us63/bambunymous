@@ -377,7 +377,10 @@ async def map_tray_link(body: dict, _: str = Depends(get_current_user)):
         raise HTTPException(400, "spool_id requis")
 
     async with AsyncSessionLocal() as db:
-        s = await db.get(Spool, int(spool_id))
+        res = await db.execute(
+            select(Spool).options(selectinload(Spool.filament)).where(Spool.id == int(spool_id))
+        )
+        s = res.scalar_one_or_none()
         if not s: raise HTTPException(404, "Bobine introuvable")
 
         changes = []
@@ -387,7 +390,7 @@ async def map_tray_link(body: dict, _: str = Depends(get_current_user)):
         elif tag_uid and s.tag_number:
             changes.append(f"Tag RFID déjà renseigné sur la bobine (inchangé)")
 
-        f = await db.get(Filament, s.filament_id)
+        f = s.filament
         filament_name = f.name if f else "?"
         if f:
             if prof and not f.profile_id:
@@ -400,22 +403,23 @@ async def map_tray_link(body: dict, _: str = Depends(get_current_user)):
                 changes.append(f"Couleur #{color_hex} ajoutée sur le filament")
 
         await db.commit()
-        await db.refresh(s)
 
-    # Forcer un re-match au prochain tick MQTT — l'assignation vient d'être faite en DB,
-    # le cache ne doit plus servir les anciennes valeurs (notfound → rfid/auto)
+        # Construire la réponse DANS la session pendant que la relation est encore accessible
+        spool_out = _spool_out(s)
+
+    # Forcer un re-match au prochain tick MQTT
     try:
         from ....core.mqtt import invalidate_tray_cache
         invalidate_tray_cache(tag_uid=tag_uid, profile_id=prof)
     except Exception:
-        pass  # non-bloquant
+        pass
 
     return {
         "action": "mapped",
         "spool_id": s.id,
         "filament_name": filament_name,
         "changes": changes,
-        "spool": _spool_out(s),
+        "spool": spool_out,
     }
 
 
@@ -470,27 +474,30 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
         await db.commit()
         await db.refresh(spool)
         await db.refresh(spool.filament)
+        # Construire la réponse DANS la session
+        spool_out = _spool_out(spool)
+        fil_name = fil.name
 
     try:
         from ....core.mqtt import invalidate_tray_cache
         invalidate_tray_cache(tag_uid=tag_uid, profile_id=prof)
     except Exception:
-        pass  # non-bloquant
+        pass
 
     changes = []
     if filament_created:
         changes.append(f"Filament créé : {name!r} ({material}{', ' + manufacturer if manufacturer else ''})")
     else:
-        changes.append(f"Filament existant réutilisé : {fil.name!r} (profil {prof} + couleur #{color})")
+        changes.append(f"Filament existant réutilisé : {fil_name!r} (profil {prof} + couleur #{color})")
     changes.append(f"Bobine créée (#{spool.id}){', tag RFID : ' + tag_uid[:8] + '…' if tag_uid else ''}")
 
     return {
         "action": "created",
         "spool_id": spool.id,
-        "filament_name": fil.name,
+        "filament_name": fil_name,
         "filament_created": filament_created,
         "changes": changes,
-        "spool": _spool_out(spool),
+        "spool": spool_out,
     }
 
 
