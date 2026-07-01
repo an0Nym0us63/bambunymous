@@ -40,6 +40,7 @@ class FilamentOut(BaseModel):
     filament_weight_g: float
     spool_weight_g: Optional[float]
     profile_id: Optional[str]
+    fila_color_code: Optional[str] = None
     swatch: bool
     transparent: bool
     to_order: bool
@@ -59,6 +60,7 @@ class FilamentCreate(BaseModel):
     filament_weight_g: float = 1000.0
     spool_weight_g: Optional[float] = None
     profile_id: Optional[str] = None
+    fila_color_code: Optional[str] = None
     swatch: bool = False
     transparent: bool = False
     to_order: bool = False
@@ -145,11 +147,30 @@ async def create_filament(
     db: AsyncSession = Depends(get_db),
     _: str = Depends(get_current_user),
 ):
+    # Déduplication : si un filament avec le même profile_id ET la même couleur existe déjà, on le retourne
+    if body.profile_id and body.color:
+        color_norm = body.color.lower().lstrip("#")[:6]
+        existing = (await db.execute(
+            select(Filament).options(selectinload(Filament.spools))
+            .where(Filament.profile_id == body.profile_id)
+        )).scalars().all()
+        for candidate in existing:
+            if (candidate.color or "").lower()[:6] == color_norm:
+                raise HTTPException(409, detail={
+                    "code": "DUPLICATE_FILAMENT",
+                    "message": f"Un filament identique existe déjà : #{candidate.id} « {candidate.name} »",
+                    "existing_id": candidate.id,
+                    "existing_name": candidate.name,
+                })
+
     f = Filament(**body.model_dump())
     db.add(f)
     await db.commit()
     await db.refresh(f)
-    return _fil_out(f)
+    result = (await db.execute(
+        select(Filament).options(selectinload(Filament.spools)).where(Filament.id == f.id)
+    )).scalar_one()
+    return _fil_out(result)
 
 
 @router.patch("/filaments/{fid}", response_model=FilamentOut)
@@ -281,7 +302,8 @@ def _fil_out(f: Filament) -> FilamentOut:
         id=f.id, name=f.name, manufacturer=f.manufacturer, material=f.material,
         color=f.color, multicolor_type=f.multicolor_type, colors_array=f.colors_array,
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
-        profile_id=f.profile_id, swatch=f.swatch, transparent=f.transparent, to_order=f.to_order,
+        profile_id=f.profile_id, fila_color_code=getattr(f, "fila_color_code", None),
+        swatch=f.swatch, transparent=f.transparent, to_order=f.to_order,
         spool_count=len(f.spools), active_spool_count=len(active),
         photo_url=(photos[0] if photos else None), photos=photos,
     )
@@ -323,6 +345,85 @@ def _get_catalog():
     from ....services.bambu_catalog import BambuCatalogSync
     from ....core.config import settings
     return BambuCatalogSync(data_dir=settings.DATA_DIR)
+
+
+@router.post("/filaments/enrich-from-catalog")
+async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
+    """
+    Pour tous les filaments Bambu Lab en base (ceux avec un profile_id),
+    cherche leur entrée dans le catalogue local (filaments_color_codes.json)
+    et met à jour : name, translated_name, material, color, multicolor_type,
+    colors_array, fila_color_code.
+    Retourne un bilan détaillé.
+    """
+    from ....services.bambu_catalog import BambuCatalogSync
+    from ....core.config import settings
+    cat = BambuCatalogSync(data_dir=settings.DATA_DIR)
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(Filament)
+            .options(selectinload(Filament.spools))
+            .where(Filament.profile_id.isnot(None))
+        )
+        filaments = result.scalars().all()
+
+    updated, not_found, skipped = [], [], []
+
+    async with AsyncSessionLocal() as db:
+        for f in filaments:
+            # Chercher dans le catalogue par profile_id + couleur
+            color_code_guess = None
+            # On essaie de trouver l'entrée par couleur hex si disponible
+            if f.color:
+                from ....services.bambu_catalog import _normalize_color_code
+                import os, json as _json
+                cat_path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
+                entry = None
+                if os.path.exists(cat_path):
+                    data = _json.loads(open(cat_path).read())
+                    color_hex = (f.color or "").lower()[:6]
+                    for e in data.get("data", []):
+                        if e.get("fila_id", "").upper() != (f.profile_id or "").upper():
+                            continue
+                        ec = (e.get("fila_color", [""])[0]).lstrip("#").lower()[:6]
+                        if ec == color_hex:
+                            entry = e
+                            color_code_guess = e.get("color_code","")
+                            break
+
+                if entry:
+                    COLOR_TYPE_FR = {"单色":"monochrome","渐变色":"gradient","多拼色":"coaxial"}
+                    names = entry.get("fila_color_name", {})
+                    name_en = names.get("en") or names.get("fr") or next(iter(names.values()),"")
+                    name_fr = names.get("fr") or names.get("en") or next(iter(names.values()),"")
+                    colors = [c.lstrip("#")[:6] for c in entry.get("fila_color", [])]
+                    ctype = COLOR_TYPE_FR.get(entry.get("fila_color_type",""), "monochrome")
+                    fresh = await db.get(Filament, f.id)
+                    changed = {}
+                    if fresh.name != name_en: changed["name"] = (fresh.name, name_en); fresh.name = name_en
+                    if fresh.translated_name != name_fr: changed["translated_name"] = name_fr; fresh.translated_name = name_fr
+                    if fresh.material != entry.get("fila_type",""): changed["material"] = entry.get("fila_type",""); fresh.material = entry.get("fila_type","")
+                    if getattr(fresh,"fila_color_code",None) != entry.get("fila_color_code"):
+                        changed["fila_color_code"] = entry.get("fila_color_code",""); fresh.fila_color_code = entry.get("fila_color_code","")
+                    if fresh.multicolor_type != ctype: changed["multicolor_type"] = ctype; fresh.multicolor_type = ctype
+                    if ctype != "monochrome" and len(colors) > 1:
+                        ca = ",".join(f"#{c}" for c in colors)
+                        if fresh.colors_array != ca: changed["colors_array"] = ca; fresh.colors_array = ca
+                    updated.append({"id": f.id, "name": name_en, "changes": list(changed.keys())})
+                else:
+                    not_found.append({"id": f.id, "name": f.name, "profile_id": f.profile_id, "color": f.color})
+            else:
+                skipped.append({"id": f.id, "name": f.name, "reason": "pas de couleur hex renseignée"})
+        await db.commit()
+
+    return {
+        "total_bambu": len(filaments),
+        "updated": len(updated),
+        "not_found": len(not_found),
+        "skipped": len(skipped),
+        "details": {"updated": updated, "not_found": not_found, "skipped": skipped},
+    }
 
 
 @router.get("/catalog/types")

@@ -514,15 +514,15 @@ function FilamentSheet({ f, onClose, onDeleted }) {
           {/* Infos */}
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:"0.08em", marginBottom:4 }}>Caractéristiques</p>
-          <Row label="Marque"        value={f.manufacturer}/>
-          <Row label="Matière"       value={f.material}/>
-          <Row label="Couleur"       value={colorsList?.length > 1 ? colorsList.join(" / ") : color} mono/>
-          <Row label="Profile ID"    value={f.profile_id} mono/>
-          <Row label="Poids bobine"  value={f.filament_weight_g ? f.filament_weight_g+"g" : null}/>
-          <Row label="Poids support" value={f.spool_weight_g ? f.spool_weight_g+"g" : null}/>
-          <Row label="Prix"          value={f.price ? f.price+"€" : null}/>
-          <Row label="Multicolor"    value={f.multicolor_type !== "monochrome" ? f.multicolor_type : null}/>
-          <Row label="Profile"       value={f.profile_id} mono/>
+          <Row label="Marque"           value={f.manufacturer}/>
+          <Row label="Matière"          value={f.material}/>
+          <Row label="Couleur"          value={colorsList?.length > 1 ? colorsList.join(" / ") : color} mono/>
+          <Row label="Profile ID"       value={f.profile_id} mono/>
+          <Row label="Code couleur Bambu" value={f.fila_color_code} mono/>
+          <Row label="Poids bobine"     value={f.filament_weight_g ? f.filament_weight_g+"g" : null}/>
+          <Row label="Poids support"    value={f.spool_weight_g ? f.spool_weight_g+"g" : null}/>
+          <Row label="Prix"             value={f.price ? f.price+"€" : null}/>
+          <Row label="Multicolor"       value={f.multicolor_type !== "monochrome" ? f.multicolor_type : null}/>
 
           {/* Bobines */}
           <div style={{ marginTop:16, display:"flex", alignItems:"center", gap:8 }}>
@@ -728,6 +728,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
       material: entry.fila_type,
       color: entry.color_hex,
       profile_id: entry.fila_id,
+      fila_color_code: entry.fila_color_code || "",
       colors_array: entry.colors?.length > 1 ? entry.colors.map(c=>`#${c}`).join(",") : "",
       multicolor_type: entry.color_type_fr || "monochrome",
       weight: 1000,
@@ -735,8 +736,10 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
     setMode("free");
   };
 
+  const [duplicate, setDuplicate] = useState(null);
+
   const save = async () => {
-    setSaving(true);
+    setSaving(true); setDuplicate(null);
     try {
       await client.post("/filaments/filaments", {
         name:              form.name || "Sans nom",
@@ -744,13 +747,18 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         material:          form.material || "PLA",
         color:             form.color ? form.color.replace("#","").slice(0,6) : undefined,
         profile_id:        form.profile_id || undefined,
+        fila_color_code:   form.fila_color_code || undefined,
         filament_weight_g: Number(form.weight) || 1000,
         multicolor_type:   form.multicolor_type || "monochrome",
         colors_array:      form.colors_array || undefined,
       });
       onCreated();
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
-    finally { setSaving(false); }
+    } catch(e) {
+      if (e.response?.status === 409) {
+        const d = e.response.data?.detail || {};
+        setDuplicate({ id: d.existing_id, name: d.existing_name, message: d.message });
+      } else { alert(e.response?.data?.detail || e.message); }
+    } finally { setSaving(false); }
   };
 
   const types = selectedFamily ? (typesByFamily[selectedFamily] || []) : Object.values(typesByFamily).flat();
@@ -898,6 +906,17 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                 <input style={iStyle} type="number" value={form.weight}
                   onChange={e => setForm(f => ({...f, weight: e.target.value}))}/>
               </div>
+              {duplicate && (
+                <div style={{ marginBottom:12, padding:"10px 14px", borderRadius:10,
+                  background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.35)" }}>
+                  <p style={{ fontSize:12, color:"#f59e0b", fontWeight:700, margin:"0 0 4px" }}>
+                    ⚠ Filament identique déjà en base
+                  </p>
+                  <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+                    {duplicate.message || `Filament #${duplicate.id} « ${duplicate.name} »`}
+                  </p>
+                </div>
+              )}
               <div style={{ display:"flex", gap:8 }}>
                 {!prefill && (
                   <button onClick={() => { setMode("choose"); setCatalogEntry(null); }}

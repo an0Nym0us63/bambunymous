@@ -24,6 +24,7 @@ class Filament(Base):
     filament_weight_g: Mapped[float] = mapped_column(Float, default=1000.0)
     spool_weight_g: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     profile_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # ex: GFA00
+    fila_color_code: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # ex: 10600 (code couleur catalogue Bambu)
     external_filament_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     translated_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # nom localisé
     reference_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)

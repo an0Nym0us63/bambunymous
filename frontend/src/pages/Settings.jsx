@@ -139,6 +139,70 @@ function AMSOrderSection() {
   );
 }
 
+function EnrichFromCatalogSection() {
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState(null);
+
+  const run = async () => {
+    setRunning(true); setResult(null);
+    try {
+      const { data } = await client.post("/filaments/filaments/enrich-from-catalog");
+      setResult(data);
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    finally { setRunning(false); }
+  };
+
+  return (
+    <div className="card" style={card}>
+      <p style={cardTitle}>Enrichissement catalogue Bambu</p>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 14px" }}>
+        Pour tous les filaments Bambu en base (avec Profile ID), cherche leur fiche officielle
+        dans le catalogue et met à jour : nom, code couleur, type multicolore, couleurs…
+      </p>
+      <button onClick={run} disabled={running}
+        style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 16px",
+          background: running ? "var(--border)" : "#3b82f6", border:"none", borderRadius:10,
+          color:"white", fontSize:13, fontWeight:700, cursor: running ? "not-allowed" : "pointer" }}>
+        {running ? <RefreshCw size={14} style={{ animation:"spin 1s linear infinite" }}/> : "🔍"}
+        {running ? "Recherche en cours…" : "Enrichir depuis le catalogue Bambu"}
+      </button>
+      {result && (
+        <div style={{ marginTop:14, padding:"10px 14px", borderRadius:10,
+          background:"var(--surface2)", border:"1px solid var(--border)", fontSize:12 }}>
+          <p style={{ fontWeight:700, color:"var(--text)", margin:"0 0 8px" }}>
+            Résultat — {result.total_bambu} filament(s) Bambu en base
+          </p>
+          <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:10 }}>
+            <span style={{ color:"#22c55e", fontWeight:700 }}>✓ {result.updated} mis à jour</span>
+            <span style={{ color:"#f59e0b", fontWeight:700 }}>⚠ {result.not_found} introuvables dans le catalogue</span>
+            <span style={{ color:"var(--muted)" }}>— {result.skipped} ignorés (sans couleur hex)</span>
+          </div>
+          {result.details?.updated?.length > 0 && (
+            <div>
+              <p style={{ color:"var(--muted)", margin:"0 0 4px", textTransform:"uppercase", fontSize:10, letterSpacing:"0.06em" }}>Mis à jour</p>
+              {result.details.updated.map(f => (
+                <div key={f.id} style={{ fontSize:11, color:"var(--text)", padding:"2px 0" }}>
+                  #{f.id} {f.name} → {f.changes.join(", ")}
+                </div>
+              ))}
+            </div>
+          )}
+          {result.details?.not_found?.length > 0 && (
+            <div style={{ marginTop:8 }}>
+              <p style={{ color:"var(--muted)", margin:"0 0 4px", textTransform:"uppercase", fontSize:10, letterSpacing:"0.06em" }}>Introuvables</p>
+              {result.details.not_found.map(f => (
+                <div key={f.id} style={{ fontSize:11, color:"#f59e0b", padding:"2px 0" }}>
+                  #{f.id} {f.name} (profil {f.profile_id}, couleur #{f.color})
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const { theme, toggle } = useTheme();
   const [ip,      setIp]      = useState("");
@@ -284,6 +348,8 @@ export default function Settings() {
       </form>
 
       <AMSOrderSection/>
+
+      <EnrichFromCatalogSection/>
 
       {/* Zone dangereuse */}
       <div style={{ marginTop:8, padding:16, borderRadius:12,
