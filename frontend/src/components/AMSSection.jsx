@@ -514,32 +514,28 @@ function MapTraySheet({ tray, onClose, onMapped }) {
       .finally(() => setLoading(false));
   }, []);
 
+  const [result, setResult] = React.useState(null); // réponse backend après action
+
   const link = async (spool_id) => {
     setSaving(true);
     try {
-      await client.post("/filaments/map-tray/link", {
-        spool_id,
-        tag_uid: tray.tag_uid,
-        profile_id: tray.tray_info_idx,
-        color: tray.color,
+      const r = await client.post("/filaments/map-tray/link", {
+        spool_id, tag_uid: tray.tag_uid, profile_id: tray.tray_info_idx, color: tray.color,
       });
-      onMapped();
+      setResult(r.data);
     } finally { setSaving(false); }
   };
 
   const create = async () => {
     setSaving(true);
     try {
-      await client.post("/filaments/map-tray/create", {
-        tag_uid: tray.tag_uid,
-        profile_id: tray.tray_info_idx,
-        color: tray.color,
-        material: form.material,
-        name: form.name,
+      const r = await client.post("/filaments/map-tray/create", {
+        tag_uid: tray.tag_uid, profile_id: tray.tray_info_idx, color: tray.color,
+        material: form.material, name: form.name,
         manufacturer: form.manufacturer || undefined,
         weight: Number(form.weight) || 1000,
       });
-      onMapped();
+      setResult(r.data);
     } finally { setSaving(false); }
   };
 
@@ -547,6 +543,45 @@ function MapTraySheet({ tray, onClose, onMapped }) {
     borderRadius:8, padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none",
     boxSizing:"border-box" };
   const labelStyle = { fontSize:11, color:"var(--muted)", margin:"0 0 4px", display:"block" };
+
+  if (result) return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1100,
+      display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+        width:"100%", maxWidth:540, paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 4px" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+        </div>
+        <div style={{ padding:"16px 20px 24px" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+            <div style={{ width:36, height:36, borderRadius:"50%", background:"rgba(34,197,94,0.12)",
+              border:"1px solid rgba(34,197,94,0.4)", display:"flex", alignItems:"center",
+              justifyContent:"center", fontSize:18, flexShrink:0 }}>✓</div>
+            <div>
+              <p style={{ fontSize:16, fontWeight:800, color:"var(--text)", margin:0 }}>
+                {result.action === "mapped" ? "Filament mappé" : "Bobine créée"}
+              </p>
+              <p style={{ fontSize:12, color:"var(--muted)", margin:0 }}>{result.filament_name}</p>
+            </div>
+          </div>
+          <div style={{ background:"var(--surface2)", borderRadius:10, padding:"10px 14px", marginBottom:18 }}>
+            {(result.changes || []).map((c, i) => (
+              <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:8, padding:"5px 0",
+                borderTop: i>0 ? "1px solid var(--border)" : "none" }}>
+                <span style={{ color:"#22c55e", fontSize:12, flexShrink:0, marginTop:1 }}>→</span>
+                <span style={{ fontSize:12, color:"var(--text)" }}>{c}</span>
+              </div>
+            ))}
+          </div>
+          <button onClick={onMapped}
+            style={{ width:"100%", padding:"11px", borderRadius:10, background:"#3b82f6",
+              color:"white", border:"none", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+            Fermer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1100,
