@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 from ....db.session import get_db, AsyncSessionLocal
 from ....models.filament import Filament, Spool
+from ....models.print_history import FilamentUsage
 from .auth import get_current_user
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
@@ -419,21 +420,28 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
     """
     tag_uid  = (body.get("tag_uid") or "").strip()
     prof     = (body.get("profile_id") or "").strip()
-    color    = (body.get("color") or "").strip().lstrip("#")
+    # Normaliser la couleur : lowercase, 6 chars (MQTT envoie parfois 8 avec alpha)
+    raw_color = (body.get("color") or "").strip().lstrip("#")
+    color    = raw_color[:6].lower() if raw_color else ""
     material = (body.get("material") or "PLA").strip()
     name     = (body.get("name") or f"{material} {('#'+color) if color else ''}").strip()
     manufacturer = (body.get("manufacturer") or "").strip() or None
     weight   = float(body.get("weight") or 1000)
 
     async with AsyncSessionLocal() as db:
-        # Réutiliser un filament existant si profile_id + couleur correspondent exactement
+        # Réutiliser un filament existant si profile_id + couleur correspondent
+        # (comparaison insensible à la casse, 6 chars)
         fil = None
         filament_created = False
         if prof:
             res = await db.execute(
-                select(Filament).where(Filament.profile_id == prof, Filament.color == color)
+                select(Filament).where(Filament.profile_id == prof)
             )
-            fil = res.scalar_one_or_none()
+            for candidate in res.scalars().all():
+                c = (candidate.color or "").lower()[:6]
+                if c == color:
+                    fil = candidate
+                    break
 
         if not fil:
             fil = Filament(
@@ -470,6 +478,74 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
         "changes": changes,
         "spool": _spool_out(spool),
     }
+
+
+@router.delete("/spools/{sid}")
+async def delete_spool(sid: int, force: bool = False, _: str = Depends(get_current_user)):
+    """
+    Supprime une bobine.
+    Si elle a des filament_usage liés, retourne un avertissement (force=false)
+    ou vide les filament_usage.spool_id (force=true).
+    """
+    async with AsyncSessionLocal() as db:
+        s = await db.get(Spool, sid)
+        if not s:
+            raise HTTPException(404, "Bobine introuvable")
+
+        # Compter les usages liés
+        usage_count = (await db.execute(
+            select(func.count()).where(FilamentUsage.spool_id == sid)
+        )).scalar() or 0
+
+        if usage_count and not force:
+            return {
+                "ok": False,
+                "confirm_required": True,
+                "usage_count": usage_count,
+                "message": f"Cette bobine est liée à {usage_count} utilisation(s) dans l'historique. "
+                           f"Les supprimer délie ces prints de la bobine (les prints restent, "
+                           f"juste le lien bobine est effacé). Confirmer avec force=true."
+            }
+
+        if usage_count:
+            await db.execute(
+                FilamentUsage.__table__.update()
+                .where(FilamentUsage.spool_id == sid)
+                .values(spool_id=None)
+            )
+
+        await db.delete(s)
+        await db.commit()
+
+    return {"ok": True, "usage_cleared": usage_count}
+
+
+@router.delete("/filaments/{fid}")
+async def delete_filament(fid: int, _: str = Depends(get_current_user)):
+    """
+    Supprime un filament — uniquement si aucune bobine n'y est rattachée
+    (archivées ou non). Sinon retourne une erreur 409.
+    """
+    async with AsyncSessionLocal() as db:
+        f = await db.get(Filament, fid)
+        if not f:
+            raise HTTPException(404, "Filament introuvable")
+
+        spool_count = (await db.execute(
+            select(func.count()).where(Spool.filament_id == fid)
+        )).scalar() or 0
+
+        if spool_count:
+            raise HTTPException(
+                409,
+                f"Impossible de supprimer ce filament : {spool_count} bobine(s) y sont rattachées "
+                f"(archivées ou non). Supprime ou déplace les bobines d'abord."
+            )
+
+        await db.delete(f)
+        await db.commit()
+
+    return {"ok": True}
 
 
 @router.get("/{fid}/photos")

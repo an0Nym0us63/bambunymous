@@ -626,12 +626,13 @@ function MapTraySheet({ tray, onClose, onMapped }) {
                     <span style={{ fontSize:11 }}>Passe en mode « Créer » pour en créer une.</span>
                   </p>
                 : spools.map(s => (
-                  <div key={s.id}
-                    onClick={() => !saving && link(s.id)}
-                    style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
+                  <button key={s.id}
+                    disabled={saving}
+                    onClick={() => link(s.id)}
+                    style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
                       borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
                       marginBottom:8, cursor: saving ? "default" : "pointer",
-                      opacity: saving ? 0.6 : 1 }}>
+                      opacity: saving ? 0.6 : 1, textAlign:"left" }}>
                     <div style={{ width:32, height:32, borderRadius:8, flexShrink:0,
                       backgroundColor: s.filament_color ? `#${s.filament_color}` : "var(--border)" }}/>
                     <div style={{ flex:1, minWidth:0 }}>
@@ -645,7 +646,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
                     <span style={{ fontSize:10, color:"#3b82f6", fontWeight:700, flexShrink:0 }}>
                       {saving ? "…" : "Associer →"}
                     </span>
-                  </div>
+                  </button>
                 ))
           )}
 

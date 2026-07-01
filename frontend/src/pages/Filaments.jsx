@@ -178,7 +178,23 @@ function FilamentPhotos({ filamentId, onLightbox }) {
 }
 
 
-function SpoolBottomSheet({ spool, onClose, onArchive }) {
+function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
+  const [confirmDelete, setConfirmDelete] = React.useState(null); // null | {usage_count}
+  const [deleting, setDeleting] = React.useState(false);
+
+  const handleDelete = async (force = false) => {
+    setDeleting(true);
+    try {
+      const r = await client.delete(`/filaments/spools/${spool.id}`, { params: { force } });
+      if (r.data.confirm_required) {
+        setConfirmDelete({ usage_count: r.data.usage_count, message: r.data.message });
+        return;
+      }
+      onDelete?.();
+      onClose();
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    finally { setDeleting(false); }
+  };
   if (!spool) return null;
   const color = spool.filament_color ? `#${spool.filament_color.slice(0,6)}` : null;
   const colorsList = parseColorsList(spool.filament_color, spool.filament_colors_array);
@@ -285,7 +301,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
 
 
           {/* Actions */}
-          <div style={{ display:"flex", gap:8, marginTop:20 }}>
+          <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap" }}>
             {!spool.archived && (
               <button onClick={async()=>{ await onArchive(spool.id); onClose(); }}
                 style={{ flex:1, padding:"10px", background:"var(--surface2)",
@@ -295,6 +311,13 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
                 <Archive size={14}/> Archiver
               </button>
             )}
+            <button onClick={() => handleDelete(false)} disabled={deleting}
+              style={{ flex:1, padding:"10px", background:"rgba(239,68,68,0.08)",
+                border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, cursor:"pointer",
+                color:"#ef4444", fontSize:13, display:"flex",
+                alignItems:"center", justifyContent:"center", gap:6 }}>
+              🗑 Supprimer
+            </button>
             <button onClick={onClose}
               style={{ flex:1, padding:"10px", background:"#3b82f6",
                 border:"none", borderRadius:10, cursor:"pointer",
@@ -302,6 +325,24 @@ function SpoolBottomSheet({ spool, onClose, onArchive }) {
               Fermer
             </button>
           </div>
+          {confirmDelete && (
+            <div style={{ marginTop:12, background:"rgba(239,68,68,0.06)", border:"1px solid rgba(239,68,68,0.25)",
+              borderRadius:10, padding:"12px 14px" }}>
+              <p style={{ fontSize:12, color:"#ef4444", margin:"0 0 10px" }}>{confirmDelete.message}</p>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={() => handleDelete(true)} disabled={deleting}
+                  style={{ flex:1, padding:"8px", background:"#ef4444", border:"none", borderRadius:8,
+                    color:"white", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                  Confirmer la suppression
+                </button>
+                <button onClick={() => setConfirmDelete(null)}
+                  style={{ flex:1, padding:"8px", background:"var(--surface2)", border:"1px solid var(--border)",
+                    borderRadius:8, color:"var(--muted)", fontSize:12, cursor:"pointer" }}>
+                  Annuler
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -398,6 +439,7 @@ function SpoolsView({ filaments, showArchived }) {
           spool={selected}
           onClose={()=>setSelected(null)}
           onArchive={async(id)=>{ await client.delete(`/filaments/spools/${id}`); load(); }}
+          onDelete={load}
         />
       )}
     </div>
@@ -406,10 +448,23 @@ function SpoolsView({ filaments, showArchived }) {
 
 // ── Vue Catalogue ──────────────────────────────────────────────────────────
 // ── Fiche filament catalogue ────────────────────────────────────────────────
-function FilamentSheet({ f, onClose }) {
+function FilamentSheet({ f, onClose, onDeleted }) {
   const [lightbox, setLightbox] = useState(null);
+  const [deleting, setDeleting] = useState(false);
   const color = f.color ? "#" + f.color.replace("#","").slice(0,6) : null;
   const colorsList = parseColorsList(f.color, f.colors_array);
+
+  const handleDelete = async () => {
+    if (!confirm(`Supprimer le filament "${f.name}" ?`)) return;
+    setDeleting(true);
+    try {
+      await client.delete(`/filaments/filaments/${f.id}`);
+      onDeleted?.();
+      onClose();
+    } catch(e) {
+      alert(e.response?.data?.detail || e.message);
+    } finally { setDeleting(false); }
+  };
 
   const Row = ({ label, value, mono }) => (!value && value !== 0) ? null : (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
@@ -478,6 +533,22 @@ function FilamentSheet({ f, onClose }) {
               color: f.active_spool_count > 0 ? "#22c55e" : "var(--muted)" }}>
               {f.active_spool_count || 0} active{f.active_spool_count !== 1 ? "s" : ""}
             </span>
+          </div>
+
+          <div style={{ display:"flex", gap:8, marginTop:20 }}>
+            <button onClick={handleDelete} disabled={deleting}
+              style={{ flex:1, padding:"10px", background:"rgba(239,68,68,0.08)",
+                border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, cursor:"pointer",
+                color:"#ef4444", fontSize:13, display:"flex",
+                alignItems:"center", justifyContent:"center", gap:6 }}>
+              🗑 Supprimer
+            </button>
+            <button onClick={onClose}
+              style={{ flex:2, padding:"10px", background:"#3b82f6",
+                border:"none", borderRadius:10, cursor:"pointer",
+                color:"white", fontSize:13, fontWeight:600 }}>
+              Fermer
+            </button>
           </div>
         </div>
       </div>
@@ -569,7 +640,7 @@ function FilamentsView() {
           {!filaments.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
         </div>
       )}
-      {selectedFil && <FilamentSheet f={selectedFil} onClose={() => setSelectedFil(null)}/>}
+      {selectedFil && <FilamentSheet f={selectedFil} onClose={() => setSelectedFil(null)} onDeleted={() => { setSelectedFil(null); load(); }}/>}
     </div>
   );
 }
