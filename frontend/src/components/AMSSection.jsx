@@ -489,50 +489,58 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
 
 // ── Mapper / Créer une bobine pour un tray non reconnu ────────────────────
 function MapTraySheet({ tray, onClose, onMapped }) {
-  const [mode, setMode] = React.useState("suggest"); // "suggest" | "create"
+  // Filament Bambu = a un profile_id renseigné dans le tray MQTT
+  const isBambu = Boolean(tray.tray_info_idx);
+  const [mode, setMode] = React.useState(isBambu ? "suggest" : "create");
   const [spools, setSpools] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [creating, setCreating] = React.useState(false);
+  const [loading, setLoading] = React.useState(isBambu);
+  const [saving, setSaving] = React.useState(false);
   const [form, setForm] = React.useState({
     name: tray.filament_type || "",
-    material: (tray.filament_type || "PLA").split(" ")[0],
+    material: (tray.filament_type || "PLA").replace(/\s.*/, ""),
     manufacturer: "",
-    weight: 1000,
+    weight: "1000",
   });
 
   React.useEffect(() => {
+    if (!isBambu) return;
     const params = new URLSearchParams();
-    if (tray.tray_info_idx) params.set("profile_id", tray.tray_info_idx);
     if (tray.color) params.set("color", tray.color);
-    if (tray.filament_type) params.set("material", tray.filament_type.split(" ")[0]);
-    fetch("/api/v1/filaments/map-tray/suggest?" + params, {
-      headers: { "Authorization": "Bearer " + (localStorage.getItem("token") || "") }
-    }).then(r => r.json()).then(d => setSpools(d.spools || [])).finally(() => setLoading(false));
+    import("../api/client").then(m => m.default.get("/filaments/map-tray/suggest?" + params))
+      .then(r => setSpools(r.data?.spools || []))
+      .catch(() => setSpools([]))
+      .finally(() => setLoading(false));
   }, []);
 
   const link = async (spool_id) => {
-    await fetch("/api/v1/filaments/map-tray/link", {
-      method:"POST",
-      headers: { "Content-Type":"application/json", "Authorization": "Bearer " + (localStorage.getItem("token") || "") },
-      body: JSON.stringify({ spool_id, tag_uid: tray.tag_uid, profile_id: tray.tray_info_idx, color: tray.color })
-    });
-    onMapped();
+    setSaving(true);
+    try {
+      const { default: client } = await import("../api/client");
+      await client.post("/filaments/map-tray/link", {
+        spool_id,
+        tag_uid: tray.tag_uid,
+        profile_id: tray.tray_info_idx,
+        color: tray.color,
+      });
+      onMapped();
+    } finally { setSaving(false); }
   };
 
   const create = async () => {
-    setCreating(true);
+    setSaving(true);
     try {
-      await fetch("/api/v1/filaments/map-tray/create", {
-        method:"POST",
-        headers: { "Content-Type":"application/json", "Authorization": "Bearer " + (localStorage.getItem("token") || "") },
-        body: JSON.stringify({
-          tag_uid: tray.tag_uid, profile_id: tray.tray_info_idx, color: tray.color,
-          material: form.material, name: form.name, manufacturer: form.manufacturer || undefined,
-          weight: Number(form.weight) || 1000,
-        })
+      const { default: client } = await import("../api/client");
+      await client.post("/filaments/map-tray/create", {
+        tag_uid: tray.tag_uid,
+        profile_id: tray.tray_info_idx,
+        color: tray.color,
+        material: form.material,
+        name: form.name,
+        manufacturer: form.manufacturer || undefined,
+        weight: Number(form.weight) || 1000,
       });
       onMapped();
-    } finally { setCreating(false); }
+    } finally { setSaving(false); }
   };
 
   const Field = ({ label, k, type="text" }) => (
@@ -555,60 +563,72 @@ function MapTraySheet({ tray, onClose, onMapped }) {
         </div>
         <div style={{ padding:"12px 20px 20px" }}>
           <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 4px" }}>
-            {mode === "suggest" ? "Associer à une bobine existante" : "Créer une nouvelle bobine"}
+            {isBambu ? "Mapper ce filament Bambu" : "Créer une bobine"}
           </h3>
           <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 14px" }}>
-            {tray.filament_type} · {tray.color ? `#${tray.color.slice(0,6)}` : "couleur inconnue"}
-            {tray.tray_info_idx ? ` · Profil ${tray.tray_info_idx}` : ""}
+            {tray.filament_type || "Type inconnu"}
+            {tray.color ? ` · #${tray.color.slice(0,6)}` : ""}
+            {tray.tray_info_idx ? ` · ${tray.tray_info_idx}` : ""}
+            {tray.tag_uid && !/^0+$/.test(tray.tag_uid) ? ` · 🔖 ${tray.tag_uid.slice(0,8)}…` : ""}
           </p>
 
-          {/* Toggle suggest / create */}
-          <div style={{ display:"flex", gap:6, marginBottom:16 }}>
-            {[["suggest","Choisir une bobine"],["create","Créer"]].map(([id,label]) => (
-              <button key={id} onClick={() => setMode(id)} style={{
-                padding:"6px 12px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer",
-                background: mode===id ? "#3b82f6" : "var(--surface2)",
-                color: mode===id ? "white" : "var(--muted)",
-                border:"1px solid var(--border)",
-              }}>{label}</button>
-            ))}
-          </div>
+          {/* Toggle — seulement pour les Bambu */}
+          {isBambu && (
+            <div style={{ display:"flex", gap:6, marginBottom:16 }}>
+              {[["suggest","Choisir une bobine existante"],["create","Créer"]].map(([id,label]) => (
+                <button key={id} onClick={() => setMode(id)} style={{
+                  padding:"6px 12px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer",
+                  background: mode===id ? "#3b82f6" : "var(--surface2)",
+                  color: mode===id ? "white" : "var(--muted)",
+                  border:"1px solid var(--border)", whiteSpace:"nowrap",
+                }}>{label}</button>
+              ))}
+            </div>
+          )}
 
           {mode === "suggest" && (
-            loading ? <p style={{ color:"var(--muted)", fontSize:13 }}>Recherche…</p>
-            : spools.length === 0
-              ? <p style={{ color:"var(--muted)", fontSize:13 }}>Aucune bobine compatible trouvée.</p>
-              : spools.map(s => (
-                <div key={s.id} onClick={() => link(s.id)}
-                  style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
-                    borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
-                    marginBottom:8, cursor:"pointer" }}>
-                  <div style={{ width:32, height:32, borderRadius:8, flexShrink:0,
-                    backgroundColor: s.filament_color ? `#${s.filament_color}` : "var(--border)" }}/>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0,
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.filament_name}</p>
-                    <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
-                      {[s.filament_manufacturer, s.filament_material].filter(Boolean).join(" · ")}
-                      {s.remaining_weight_g ? ` · ${Math.round(s.remaining_weight_g)}g` : ""}
-                      {s.filament_profile_id ? ` · ${s.filament_profile_id}` : ""}
-                    </p>
+            loading
+              ? <p style={{ color:"var(--muted)", fontSize:13 }}>Recherche des bobines sans RFID…</p>
+              : spools.length === 0
+                ? <p style={{ color:"var(--muted)", fontSize:13 }}>
+                    Aucune bobine sans tag RFID trouvée.<br/>
+                    <span style={{ fontSize:11 }}>Passe en mode « Créer » pour en créer une.</span>
+                  </p>
+                : spools.map(s => (
+                  <div key={s.id}
+                    onClick={() => !saving && link(s.id)}
+                    style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
+                      borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
+                      marginBottom:8, cursor: saving ? "default" : "pointer",
+                      opacity: saving ? 0.6 : 1 }}>
+                    <div style={{ width:32, height:32, borderRadius:8, flexShrink:0,
+                      backgroundColor: s.filament_color ? `#${s.filament_color}` : "var(--border)" }}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0,
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.filament_name}</p>
+                      <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
+                        {[s.filament_manufacturer, s.filament_material].filter(Boolean).join(" · ")}
+                        {s.remaining_weight_g ? ` · ${Math.round(s.remaining_weight_g)}g` : ""}
+                      </p>
+                    </div>
+                    <span style={{ fontSize:10, color:"#3b82f6", fontWeight:700, flexShrink:0 }}>
+                      {saving ? "…" : "Associer →"}
+                    </span>
                   </div>
-                  <span style={{ fontSize:10, color:"#3b82f6", fontWeight:700, flexShrink:0 }}>Associer →</span>
-                </div>
-              ))
+                ))
           )}
 
           {mode === "create" && (<>
             <Field label="Nom du filament" k="name"/>
-            <Field label="Matière (PLA, PETG…)" k="material"/>
+            <Field label="Matière (PLA, PETG, ABS…)" k="material"/>
             <Field label="Marque" k="manufacturer"/>
             <Field label="Poids total (g)" k="weight" type="number"/>
-            <button onClick={create} disabled={creating}
+            <button onClick={create} disabled={saving}
               style={{ width:"100%", padding:"11px", borderRadius:10, marginTop:4,
-                background: creating ? "var(--border)" : "#3b82f6",
-                color:"white", border:"none", fontSize:13, fontWeight:700, cursor: creating ? "default" : "pointer" }}>
-              {creating ? "Création…" : "Créer le filament et la bobine"}
+                background: saving ? "var(--border)" : "#3b82f6",
+                color:"white", border:"none", fontSize:13, fontWeight:700,
+                cursor: saving ? "default" : "pointer" }}>
+              {saving ? "Création…" : "Créer le filament et la bobine"}
             </button>
           </>)}
         </div>
