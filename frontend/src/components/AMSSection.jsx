@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Droplets, Sun } from "lucide-react";
+import { Droplets, Sun, Thermometer, Timer, Clock, Package } from "lucide-react";
 import client from "../api/client";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -364,7 +364,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
             {AMS_NAMES[ams.id] ?? `AMS ${ams.id+1}`}
           </span>
           {isActive && !isDrying && <span style={{ width:6, height:6, borderRadius:"50%", backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
-          {isDrying && <span style={{ fontSize:10, animation:"livePulse 2s infinite" }}>🌡</span>}
+          {isDrying && <Thermometer size={12} style={{ color:"#f97316", animation:"dryGlow 2.5s ease-in-out infinite" }}/>}
         </div>
         <div style={{ display:"flex", gap:12, fontSize:10, color:"var(--muted)" }}>
           <span style={{ display:"flex", alignItems:"center", gap:3 }}><Droplets size={10}/>{ams.humidity}%</span>
@@ -383,16 +383,16 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
           </div>
           <div style={{ display:"flex", gap:16, flexWrap:"wrap", fontSize:11, color:"var(--text)" }}>
             {ams.dry_temperature > 0 && (
-              <span>🌡 Température : <b>{ams.dry_temperature}°C</b></span>
+              <span style={{ display:"flex", alignItems:"center", gap:4 }}><Thermometer size={12} style={{ color:"#f97316", flexShrink:0 }}/> Température : <b>{ams.dry_temperature}°C</b></span>
             )}
             {ams.dry_duration > 0 && (
-              <span>⏳ Durée : <b>{ams.dry_duration}h</b></span>
+              <span style={{ display:"flex", alignItems:"center", gap:4 }}><Timer size={12} style={{ color:"var(--muted)", flexShrink:0 }}/> Durée : <b>{ams.dry_duration}h</b></span>
             )}
             {ams.dry_time > 0 && (
-              <span>⏱ Restant : <b style={{ color:"#f97316" }}>{fmtMins(ams.dry_time)}</b></span>
+              <span style={{ display:"flex", alignItems:"center", gap:4 }}><Clock size={12} style={{ color:"#f97316", flexShrink:0 }}/> Restant : <b style={{ color:"#f97316" }}>{fmtMins(ams.dry_time)}</b></span>
             )}
             {ams.dry_filament && (
-              <span>🧵 Filament : <b>{ams.dry_filament}</b></span>
+              <span style={{ display:"flex", alignItems:"center", gap:4 }}><Package size={12} style={{ color:"var(--muted)", flexShrink:0 }}/> Filament : <b>{ams.dry_filament}</b></span>
             )}
           </div>
         </div>
