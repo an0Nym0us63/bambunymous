@@ -378,14 +378,36 @@ async def map_tray_link(body: dict, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         s = await db.get(Spool, int(spool_id))
         if not s: raise HTTPException(404, "Bobine introuvable")
-        if tag_uid: s.tag_number = tag_uid
+
+        changes = []
+        if tag_uid and not s.tag_number:
+            s.tag_number = tag_uid
+            changes.append(f"Tag RFID ajouté sur la bobine #{s.id} ({tag_uid[:8]}…)")
+        elif tag_uid and s.tag_number:
+            changes.append(f"Tag RFID déjà renseigné sur la bobine (inchangé)")
+
         f = await db.get(Filament, s.filament_id)
+        filament_name = f.name if f else "?"
         if f:
-            if prof and not f.profile_id: f.profile_id = prof
-            if color_hex and not f.color:  f.color = color_hex
+            if prof and not f.profile_id:
+                f.profile_id = prof
+                changes.append(f"Profile ID {prof!r} ajouté sur le filament")
+            elif prof and f.profile_id:
+                changes.append(f"Profile ID déjà renseigné ({f.profile_id}) — inchangé")
+            if color_hex and not f.color:
+                f.color = color_hex
+                changes.append(f"Couleur #{color_hex} ajoutée sur le filament")
+
         await db.commit()
         await db.refresh(s)
-    return _spool_out(s)
+
+    return {
+        "action": "mapped",
+        "spool_id": s.id,
+        "filament_name": filament_name,
+        "changes": changes,
+        "spool": _spool_out(s),
+    }
 
 
 @router.post("/map-tray/create")
@@ -406,6 +428,7 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         # Réutiliser un filament existant si profile_id + couleur correspondent exactement
         fil = None
+        filament_created = False
         if prof:
             res = await db.execute(
                 select(Filament).where(Filament.profile_id == prof, Filament.color == color)
@@ -420,6 +443,7 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
             )
             db.add(fil)
             await db.flush()
+            filament_created = True
 
         spool = Spool(
             filament_id=fil.id,
@@ -430,7 +454,22 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
         await db.commit()
         await db.refresh(spool)
         await db.refresh(spool.filament)
-    return _spool_out(spool)
+
+    changes = []
+    if filament_created:
+        changes.append(f"Filament créé : {name!r} ({material}{', ' + manufacturer if manufacturer else ''})")
+    else:
+        changes.append(f"Filament existant réutilisé : {fil.name!r} (profil {prof} + couleur #{color})")
+    changes.append(f"Bobine créée (#{spool.id}){', tag RFID : ' + tag_uid[:8] + '…' if tag_uid else ''}")
+
+    return {
+        "action": "created",
+        "spool_id": spool.id,
+        "filament_name": fil.name,
+        "filament_created": filament_created,
+        "changes": changes,
+        "spool": _spool_out(spool),
+    }
 
 
 @router.get("/{fid}/photos")
