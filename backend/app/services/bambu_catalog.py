@@ -137,7 +137,10 @@ class BambuCatalogSync:
     def lookup(self, fila_id: str, color_code: str, lang: str = "fr") -> Optional[dict]:
         """
         Cherche un filament par fila_id (ex: GFA00) et color_code (ex: Y1 ou W1).
-        Retourne {name, type, color_hex, color_code, fila_id} ou None.
+        Retourne {name, name_en, name_fr, type, color_hex, colors, color_code, fila_id,
+                  fila_color_code, color_type, color_type_fr} ou None.
+        FR fallback : si l'entrée n'a pas de nom FR, cherche un autre enregistrement
+        du catalogue qui a le même nom EN et une traduction FR.
         """
         path = os.path.join(self.catalog_dir, FILAMENTS_FILE)
         if not os.path.exists(path):
@@ -147,32 +150,43 @@ class BambuCatalogSync:
         except Exception:
             return None
 
+        entries = data.get("data", [])
         fila_id    = (fila_id or "").strip().upper()
         color_code = _normalize_color_code(color_code)
 
         COLOR_TYPE_FR = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}
 
-        for entry in data.get("data", []):
+        # Pré-construire un dict en→fr à partir de toutes les entrées qui ont les deux
+        en_to_fr: dict = {}
+        for e in entries:
+            n = e.get("fila_color_name", {})
+            en, fr = n.get("en", ""), n.get("fr", "")
+            if en and fr:
+                en_to_fr[en] = fr
+
+        for entry in entries:
             if entry.get("fila_id", "").upper() != fila_id:
                 continue
             if _normalize_color_code(entry.get("color_code", "")) != color_code:
                 continue
-            names = entry.get("fila_color_name", {})
-            name    = names.get(lang) or names.get("en") or names.get("fr") or next(iter(names.values()), "")
+            names   = entry.get("fila_color_name", {})
             name_en = names.get("en") or names.get("fr") or next(iter(names.values()), "")
-            colors = entry.get("fila_color", [])
-            ctype  = entry.get("fila_color_type", "")
+            name_fr = names.get("fr") or en_to_fr.get(name_en, "") or name_en
+            name    = name_fr if lang == "fr" else name_en
+            colors  = entry.get("fila_color", [])
+            ctype   = entry.get("fila_color_type", "")
             return {
-                "name":           name,
-                "name_en":        name_en,
-                "type":           entry.get("fila_type", ""),
-                "color_hex":      (colors[0].lstrip("#")[:6] if colors else ""),
-                "colors":         [c.lstrip("#")[:6] for c in colors],
-                "color_code":     entry.get("color_code", ""),
-                "fila_id":        fila_id,
+                "name":            name,
+                "name_en":         name_en,
+                "name_fr":         name_fr,
+                "type":            entry.get("fila_type", ""),
+                "color_hex":       (colors[0].lstrip("#")[:6] if colors else ""),
+                "colors":          [c.lstrip("#")[:6] for c in colors],
+                "color_code":      entry.get("color_code", ""),
+                "fila_id":         fila_id,
                 "fila_color_code": entry.get("fila_color_code", ""),
-                "color_type":     ctype,
-                "color_type_fr":  COLOR_TYPE_FR.get(ctype, ctype),
+                "color_type":      ctype,
+                "color_type_fr":   COLOR_TYPE_FR.get(ctype, ctype),
             }
         return None
 

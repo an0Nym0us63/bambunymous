@@ -723,9 +723,11 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
   const pickFromCatalog = (entry) => {
     setCatalogEntry(entry);
     setForm({
-      name: entry.name,         // nom anglais (officiel Bambu)
+      name: entry.name,
       manufacturer: "Bambu Lab",
       material: entry.fila_type,
+      fila_type: entry.fila_type,
+      translated_name: entry.name_fr || "",
       color: entry.color_hex,
       profile_id: entry.fila_id,
       fila_color_code: entry.fila_color_code || "",
@@ -743,8 +745,11 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
     try {
       await client.post("/filaments/filaments", {
         name:              form.name || "Sans nom",
+        name_en:           form.name || undefined,
+        translated_name:   form.translated_name || undefined,
         manufacturer:      form.manufacturer || undefined,
-        material:          form.material || "PLA",
+        material:          form.fila_type || form.material || "PLA",
+        fila_type:         form.fila_type || undefined,
         color:             form.color ? form.color.replace("#","").slice(0,6) : undefined,
         profile_id:        form.profile_id || undefined,
         fila_color_code:   form.fila_color_code || undefined,
@@ -870,9 +875,15 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                 </div>
               )}
               <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Nom de la couleur *</label>
+                <label style={lStyle}>Nom de la couleur * (anglais / officiel)</label>
                 <input style={iStyle} value={form.name} autoFocus placeholder="ex: Jade White"
                   onChange={e => setForm(f => ({...f, name: e.target.value}))}/>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <label style={lStyle}>Nom traduit (français)</label>
+                <input style={iStyle} value={form.translated_name || ""}
+                  placeholder="ex: Blanc Jade"
+                  onChange={e => setForm(f => ({...f, translated_name: e.target.value}))}/>
               </div>
               <div style={{ marginBottom:10 }}>
                 <label style={lStyle}>Marque</label>
@@ -880,9 +891,10 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                   onChange={e => setForm(f => ({...f, manufacturer: e.target.value}))}/>
               </div>
               <div style={{ marginBottom:10 }}>
-                <label style={lStyle}>Type / Matière</label>
-                <input style={iStyle} value={form.material}
-                  onChange={e => setForm(f => ({...f, material: e.target.value}))}/>
+                <label style={lStyle}>Sous-type filament (ex: PLA Basic, PLA Matte…)</label>
+                <input style={iStyle} value={form.fila_type || ""}
+                  placeholder="ex: PLA Basic"
+                  onChange={e => setForm(f => ({...f, fila_type: e.target.value}))}/>
               </div>
               <div style={{ marginBottom:10 }}>
                 <label style={lStyle}>Couleur (hex, sans #)</label>
@@ -897,9 +909,31 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                 </div>
               </div>
               <div style={{ marginBottom:10 }}>
+                <label style={lStyle}>Type de couleur</label>
+                <select style={iStyle} value={form.multicolor_type || "monochrome"}
+                  onChange={e => setForm(f => ({...f, multicolor_type: e.target.value}))}>
+                  <option value="monochrome">Monochrome</option>
+                  <option value="gradient">Gradient (dégradé)</option>
+                  <option value="coaxial">Coaxial (bicolore segments)</option>
+                </select>
+              </div>
+              {form.multicolor_type && form.multicolor_type !== "monochrome" && (
+                <div style={{ marginBottom:10 }}>
+                  <label style={lStyle}>Couleurs (hex séparées par virgule, sans #)</label>
+                  <input style={iStyle} value={form.colors_array || ""}
+                    placeholder="ex: ff0000,ffffff"
+                    onChange={e => setForm(f => ({...f, colors_array: e.target.value}))}/>
+                </div>
+              )}
+              <div style={{ marginBottom:10 }}>
                 <label style={lStyle}>Profile ID Bambu (ex: GFA00)</label>
                 <input style={iStyle} value={form.profile_id}
                   onChange={e => setForm(f => ({...f, profile_id: e.target.value}))}/>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <label style={lStyle}>Code couleur Bambu (ex: 10600)</label>
+                <input style={iStyle} value={form.fila_color_code || ""}
+                  onChange={e => setForm(f => ({...f, fila_color_code: e.target.value}))}/>
               </div>
               <div style={{ marginBottom:16 }}>
                 <label style={lStyle}>Poids total (g)</label>

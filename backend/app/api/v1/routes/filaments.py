@@ -31,8 +31,11 @@ router = APIRouter()
 class FilamentOut(BaseModel):
     id: int
     name: str
+    name_en: Optional[str] = None
+    translated_name: Optional[str] = None
     manufacturer: Optional[str]
     material: str
+    fila_type: Optional[str] = None
     color: Optional[str]
     multicolor_type: str
     colors_array: Optional[str]
@@ -51,8 +54,11 @@ class FilamentOut(BaseModel):
 
 class FilamentCreate(BaseModel):
     name: str
+    name_en: Optional[str] = None
+    translated_name: Optional[str] = None
     manufacturer: Optional[str] = None
     material: str = "PLA"
+    fila_type: Optional[str] = None
     color: Optional[str] = None
     multicolor_type: str = "monochrome"
     colors_array: Optional[str] = None
@@ -299,7 +305,11 @@ def _fil_out(f: Filament) -> FilamentOut:
     active = [s for s in f.spools if not s.archived]
     photos = _fil_photos(f.id)
     return FilamentOut(
-        id=f.id, name=f.name, manufacturer=f.manufacturer, material=f.material,
+        id=f.id, name=f.name,
+        name_en=getattr(f,"name_en",None),
+        translated_name=getattr(f,"translated_name",None),
+        manufacturer=f.manufacturer, material=f.material,
+        fila_type=getattr(f,"fila_type",None),
         color=f.color, multicolor_type=f.multicolor_type, colors_array=f.colors_array,
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
         profile_id=f.profile_id, fila_color_code=getattr(f, "fila_color_code", None),
@@ -370,51 +380,87 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
 
     updated, not_found, skipped = [], [], []
 
+    import os as _os, json as _json
+    cat_path = _os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
+    if not _os.path.exists(cat_path):
+        return {"error": "Catalogue non disponible — démarrez l'app pour le télécharger", "total_bambu": 0}
+
+    cat_data = _json.loads(open(cat_path).read()).get("data", [])
+    COLOR_TYPE_FR = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}
+
+    # Dict en→fr pour fallback traduction
+    en_to_fr: dict = {}
+    for e in cat_data:
+        n = e.get("fila_color_name", {})
+        en, fr = n.get("en",""), n.get("fr","")
+        if en and fr:
+            en_to_fr[en] = fr
+
     async with AsyncSessionLocal() as db:
         for f in filaments:
-            # Chercher dans le catalogue par profile_id + couleur
-            color_code_guess = None
-            # On essaie de trouver l'entrée par couleur hex si disponible
-            if f.color:
-                from ....services.bambu_catalog import _normalize_color_code
-                import os, json as _json
-                cat_path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
-                entry = None
-                if os.path.exists(cat_path):
-                    data = _json.loads(open(cat_path).read())
-                    color_hex = (f.color or "").lower()[:6]
-                    for e in data.get("data", []):
-                        if e.get("fila_id", "").upper() != (f.profile_id or "").upper():
-                            continue
-                        ec = (e.get("fila_color", [""])[0]).lstrip("#").lower()[:6]
-                        if ec == color_hex:
-                            entry = e
-                            color_code_guess = e.get("color_code","")
-                            break
-
-                if entry:
-                    COLOR_TYPE_FR = {"单色":"monochrome","渐变色":"gradient","多拼色":"coaxial"}
-                    names = entry.get("fila_color_name", {})
-                    name_en = names.get("en") or names.get("fr") or next(iter(names.values()),"")
-                    name_fr = names.get("fr") or names.get("en") or next(iter(names.values()),"")
-                    colors = [c.lstrip("#")[:6] for c in entry.get("fila_color", [])]
-                    ctype = COLOR_TYPE_FR.get(entry.get("fila_color_type",""), "monochrome")
-                    fresh = await db.get(Filament, f.id)
-                    changed = {}
-                    if fresh.name != name_en: changed["name"] = (fresh.name, name_en); fresh.name = name_en
-                    if fresh.translated_name != name_fr: changed["translated_name"] = name_fr; fresh.translated_name = name_fr
-                    if fresh.material != entry.get("fila_type",""): changed["material"] = entry.get("fila_type",""); fresh.material = entry.get("fila_type","")
-                    if getattr(fresh,"fila_color_code",None) != entry.get("fila_color_code"):
-                        changed["fila_color_code"] = entry.get("fila_color_code",""); fresh.fila_color_code = entry.get("fila_color_code","")
-                    if fresh.multicolor_type != ctype: changed["multicolor_type"] = ctype; fresh.multicolor_type = ctype
-                    if ctype != "monochrome" and len(colors) > 1:
-                        ca = ",".join(f"#{c}" for c in colors)
-                        if fresh.colors_array != ca: changed["colors_array"] = ca; fresh.colors_array = ca
-                    updated.append({"id": f.id, "name": name_en, "changes": list(changed.keys())})
-                else:
-                    not_found.append({"id": f.id, "name": f.name, "profile_id": f.profile_id, "color": f.color})
-            else:
+            if not f.color:
                 skipped.append({"id": f.id, "name": f.name, "reason": "pas de couleur hex renseignée"})
+                continue
+
+            color_hex = (f.color or "").lower()[:6]
+            # Multicolore en base = filament avec colors_array ou multicolor_type != monochrome
+            is_multi = (f.multicolor_type or "monochrome") != "monochrome"
+
+            entry = None
+            for e in cat_data:
+                if e.get("fila_id","").upper() != (f.profile_id or "").upper():
+                    continue
+                e_colors = e.get("fila_color", [])
+                e_ctype  = COLOR_TYPE_FR.get(e.get("fila_color_type",""), "monochrome")
+                e_is_multi = e_ctype != "monochrome"
+
+                # Cohérence mono↔mono / multi↔multi — évite de mapper un filament
+                # monochrome sur une entrée bicolore qui aurait la même première couleur
+                if is_multi != e_is_multi:
+                    continue
+
+                ec = (e_colors[0]).lstrip("#").lower()[:6] if e_colors else ""
+                if ec != color_hex:
+                    continue
+
+                # Pour les multicolores, vérifier aussi que toutes les couleurs correspondent
+                if is_multi and f.colors_array:
+                    db_cols = {c.lstrip("#").lower()[:6] for c in f.colors_array.split(",") if c}
+                    cat_cols = {c.lstrip("#").lower()[:6] for c in e_colors}
+                    if db_cols and cat_cols and not db_cols.issubset(cat_cols) and not cat_cols.issubset(db_cols):
+                        continue
+
+                entry = e
+                break
+
+            if entry:
+                names   = entry.get("fila_color_name", {})
+                name_en = names.get("en") or names.get("fr") or next(iter(names.values()),"")
+                name_fr = names.get("fr") or en_to_fr.get(name_en,"") or name_en
+                colors  = [c.lstrip("#")[:6] for c in entry.get("fila_color", [])]
+                ctype   = COLOR_TYPE_FR.get(entry.get("fila_color_type",""), "monochrome")
+                fresh   = await db.get(Filament, f.id)
+                changed: dict = {}
+
+                def upd(attr, val):
+                    if getattr(fresh, attr, None) != val:
+                        setattr(fresh, attr, val)
+                        changed[attr] = val
+
+                upd("name",           name_en)
+                upd("name_en",        name_en)
+                upd("translated_name", name_fr)
+                upd("material",       entry.get("fila_type",""))
+                upd("fila_type",      entry.get("fila_type",""))
+                upd("fila_color_code", entry.get("fila_color_code",""))
+                upd("multicolor_type", ctype)
+                if ctype != "monochrome" and len(colors) > 1:
+                    upd("colors_array", ",".join(f"#{c}" for c in colors))
+
+                updated.append({"id": f.id, "name": name_en, "changes": list(changed.keys())})
+            else:
+                not_found.append({"id": f.id, "name": f.name, "profile_id": f.profile_id, "color": f.color})
+
         await db.commit()
 
     return {
@@ -474,12 +520,19 @@ async def catalog_search(
         except Exception:
             pass
 
-    # Cohérence avec Spoolnymous : gradient / coaxial (pas dégradé/multicolore)
     COLOR_TYPE_FR = {
         "单色":  "monochrome",
         "渐变色": "gradient",
         "多拼色": "coaxial",
     }
+
+    # Dict en→fr pour fallback traduction FR
+    en_to_fr: dict = {}
+    for e in data.get("data", []):
+        n = e.get("fila_color_name", {})
+        en, fr = n.get("en",""), n.get("fr","")
+        if en and fr:
+            en_to_fr[en] = fr
 
     results = []
     for entry in data.get("data", []):
@@ -493,7 +546,7 @@ async def catalog_search(
             continue
         # Noms
         names = entry.get("fila_color_name", {})
-        name_fr  = names.get("fr") or names.get("en") or next(iter(names.values()), "")
+        name_fr  = names.get("fr") or en_to_fr.get(names.get("en",""),"") or names.get("en") or next(iter(names.values()), "")
         name_en  = names.get("en") or names.get("fr") or next(iter(names.values()), "")
         fila_cc  = entry.get("fila_color_code", "")
         # Filtre recherche textuelle — insensible à la casse ET à la position

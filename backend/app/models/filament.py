@@ -15,8 +15,10 @@ class Filament(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
+    name_en: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # nom anglais officiel Bambu
     manufacturer: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    material: Mapped[str] = mapped_column(String, nullable=False, default="PLA")
+    material: Mapped[str] = mapped_column(String, nullable=False, default="PLA")  # famille : PLA, PETG…
+    fila_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # sous-type Bambu : PLA Basic, PLA Matte…
     color: Mapped[Optional[str]] = mapped_column(String(7), nullable=True)   # hex sans #
     multicolor_type: Mapped[str] = mapped_column(String, default="monochrome")
     colors_array: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV hex
