@@ -495,10 +495,11 @@ function MapTraySheet({ tray, onClose, onMapped }) {
   const [spools, setSpools] = React.useState([]);
   const [loading, setLoading] = React.useState(isBambu);
   const [saving, setSaving] = React.useState(false);
+  const hasRfid = Boolean(tray.tag_uid && !/^0+$/.test(tray.tag_uid));
   const [form, setForm] = React.useState({
-    name: tray.filament_type || "",
+    name: "",
     material: (tray.filament_type || "PLA").replace(/\s.*/, ""),
-    manufacturer: "",
+    manufacturer: (isBambu && hasRfid) ? "Bambu Lab" : "",
     weight: "1000",
   });
 
@@ -543,14 +544,10 @@ function MapTraySheet({ tray, onClose, onMapped }) {
     } finally { setSaving(false); }
   };
 
-  const Field = ({ label, k, type="text" }) => (
-    <div style={{ marginBottom:10 }}>
-      <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 4px" }}>{label}</p>
-      <input type={type} value={form[k]} onChange={e => setForm(f => ({...f, [k]: e.target.value}))}
-        style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
-          borderRadius:8, padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none" }}/>
-    </div>
-  );
+  const inputStyle = { width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
+    borderRadius:8, padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none",
+    boxSizing:"border-box" };
+  const labelStyle = { fontSize:11, color:"var(--muted)", margin:"0 0 4px", display:"block" };
 
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1100,
@@ -619,12 +616,28 @@ function MapTraySheet({ tray, onClose, onMapped }) {
           )}
 
           {mode === "create" && (<>
-            <Field label="Nom du filament" k="name"/>
-            <Field label="Matière (PLA, PETG, ABS…)" k="material"/>
-            <Field label="Marque" k="manufacturer"/>
-            <Field label="Poids total (g)" k="weight" type="number"/>
+            <div style={{ marginBottom:10 }}>
+              <label style={labelStyle}>Nom de la couleur</label>
+              <input style={inputStyle} value={form.name} autoFocus placeholder="ex: Jade White"
+                onChange={e => setForm(f => ({...f, name: e.target.value}))}/>
+            </div>
+            <div style={{ marginBottom:10 }}>
+              <label style={labelStyle}>Matière (PLA, PETG, ABS…)</label>
+              <input style={inputStyle} value={form.material}
+                onChange={e => setForm(f => ({...f, material: e.target.value}))}/>
+            </div>
+            <div style={{ marginBottom:10 }}>
+              <label style={labelStyle}>Marque</label>
+              <input style={inputStyle} value={form.manufacturer}
+                onChange={e => setForm(f => ({...f, manufacturer: e.target.value}))}/>
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <label style={labelStyle}>Poids total (g)</label>
+              <input style={inputStyle} type="number" value={form.weight}
+                onChange={e => setForm(f => ({...f, weight: e.target.value}))}/>
+            </div>
             <button onClick={create} disabled={saving}
-              style={{ width:"100%", padding:"11px", borderRadius:10, marginTop:4,
+              style={{ width:"100%", padding:"11px", borderRadius:10,
                 background: saving ? "var(--border)" : "#3b82f6",
                 color:"white", border:"none", fontSize:13, fontWeight:700,
                 cursor: saving ? "default" : "pointer" }}>
