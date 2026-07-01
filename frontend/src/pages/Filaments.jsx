@@ -462,11 +462,68 @@ function SpoolsView({ filaments, showArchived }) {
 
 // ── Vue Catalogue ──────────────────────────────────────────────────────────
 // ── Fiche filament catalogue ────────────────────────────────────────────────
-function FilamentSheet({ f, onClose, onDeleted }) {
+function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
   const [lightbox, setLightbox] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    name:             f.name || "",
+    name_en:          f.name_en || "",
+    translated_name:  f.translated_name || "",
+    manufacturer:     f.manufacturer || "",
+    material:         f.material || "",
+    fila_type:        f.fila_type || "",
+    color:            f.color || "",
+    multicolor_type:  f.multicolor_type || "monochrome",
+    colors_array:     f.colors_array || "",
+    profile_id:       f.profile_id || "",
+    fila_color_code:  f.fila_color_code || "",
+    filament_weight_g: f.filament_weight_g || 1000,
+    spool_weight_g:   f.spool_weight_g || "",
+    price:            f.price || "",
+    comment:          f.comment || "",
+    swatch:           f.swatch || false,
+    transparent:      f.transparent || false,
+    to_order:         f.to_order || false,
+  });
+
   const color = hexToCss(f.color);
   const colorsList = parseColorsList(f.color, f.colors_array);
+
+  const iStyle = { width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
+    borderRadius:8, padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none",
+    boxSizing:"border-box" };
+  const lStyle = { fontSize:11, color:"var(--muted)", margin:"0 0 4px", display:"block" };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await client.patch(`/filaments/filaments/${f.id}`, {
+        name:              form.name,
+        name_en:           form.name_en || undefined,
+        translated_name:   form.translated_name || undefined,
+        manufacturer:      form.manufacturer || undefined,
+        material:          form.fila_type || form.material || "PLA",
+        fila_type:         form.fila_type || undefined,
+        color:             form.color ? form.color.replace("#","").slice(0,8) : undefined,
+        multicolor_type:   form.multicolor_type || "monochrome",
+        colors_array:      form.colors_array || undefined,
+        profile_id:        form.profile_id || undefined,
+        fila_color_code:   form.fila_color_code || undefined,
+        filament_weight_g: Number(form.filament_weight_g) || 1000,
+        spool_weight_g:    form.spool_weight_g ? Number(form.spool_weight_g) : undefined,
+        price:             form.price ? Number(form.price) : undefined,
+        comment:           form.comment || undefined,
+        swatch:            form.swatch,
+        transparent:       form.transparent,
+        to_order:          form.to_order,
+      });
+      setEditing(false);
+      onUpdated?.();
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    finally { setSaving(false); }
+  };
 
   const handleDelete = async () => {
     if (!confirm(`Supprimer le filament "${f.name}" ?`)) return;
@@ -479,6 +536,20 @@ function FilamentSheet({ f, onClose, onDeleted }) {
       alert(e.response?.data?.detail || e.message);
     } finally { setDeleting(false); }
   };
+
+  const F = ({ label, k, type="text", options=null }) => (
+    <div style={{ marginBottom:10 }}>
+      <label style={lStyle}>{label}</label>
+      {options ? (
+        <select style={iStyle} value={form[k]} onChange={e => setForm(f=>({...f,[k]:e.target.value}))}>
+          {options.map(([v,l])=><option key={v} value={v}>{l}</option>)}
+        </select>
+      ) : (
+        <input style={iStyle} type={type} value={form[k]}
+          onChange={e => setForm(f=>({...f,[k]: type==="number"?e.target.value:e.target.value}))}/>
+      )}
+    </div>
+  );
 
   const Row = ({ label, value, mono }) => (!value && value !== 0) ? null : (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
@@ -496,7 +567,7 @@ function FilamentSheet({ f, onClose, onDeleted }) {
       zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e=>e.stopPropagation()}
         style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-          width:"100%", maxWidth:540, maxHeight:"90dvh", overflowY:"auto",
+          width:"100%", maxWidth:540, maxHeight:"92dvh", overflowY:"auto",
           paddingBottom:"env(safe-area-inset-bottom,20px)" }}>
 
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
@@ -520,43 +591,98 @@ function FilamentSheet({ f, onClose, onDeleted }) {
                 {[f.manufacturer, f.material].filter(Boolean).join(" · ")}
               </p>
             </div>
-          </div>
-
-          {/* Photos */}
-          <FilamentPhotos filamentId={f.id} onLightbox={setLightbox} />
-
-          {/* Infos */}
-          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:"0.08em", marginBottom:4 }}>Caractéristiques</p>
-          <Row label="Marque"           value={f.manufacturer}/>
-          <Row label="Matière"          value={f.material}/>
-          <Row label="Couleur"          value={colorsList?.length > 1 ? colorsList.join(" / ") : color} mono/>
-          <Row label="Profile ID"       value={f.profile_id} mono/>
-          <Row label="Code couleur Bambu" value={f.fila_color_code} mono/>
-          <Row label="Poids bobine"     value={f.filament_weight_g ? f.filament_weight_g+"g" : null}/>
-          <Row label="Poids support"    value={f.spool_weight_g ? f.spool_weight_g+"g" : null}/>
-          <Row label="Prix"             value={f.price ? f.price+"€" : null}/>
-          <Row label="Multicolor"       value={f.multicolor_type !== "monochrome" ? f.multicolor_type : null}/>
-
-          {/* Bobines */}
-          <div style={{ marginTop:16, display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em" }}>
-              Bobines
-            </span>
-            <span style={{ fontSize:12, fontWeight:700,
-              color: f.active_spool_count > 0 ? "#22c55e" : "var(--muted)" }}>
-              {f.active_spool_count || 0} active{f.active_spool_count !== 1 ? "s" : ""}
-            </span>
-          </div>
-
-          <div style={{ display:"flex", gap:8, marginTop:20 }}>
-            <button onClick={handleDelete} disabled={deleting}
-              style={{ flex:1, padding:"10px", background:"rgba(239,68,68,0.08)",
-                border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, cursor:"pointer",
-                color:"#ef4444", fontSize:13, display:"flex",
-                alignItems:"center", justifyContent:"center", gap:6 }}>
-              🗑 Supprimer
+            <button onClick={() => setEditing(e=>!e)}
+              style={{ padding:"6px 12px", borderRadius:8, fontSize:12, fontWeight:700,
+                background: editing ? "var(--surface2)" : "#3b82f6",
+                color: editing ? "var(--muted)" : "white",
+                border:"1px solid var(--border)", cursor:"pointer", flexShrink:0 }}>
+              {editing ? "Annuler" : "✏️ Éditer"}
             </button>
+          </div>
+
+          {editing ? (
+            <div>
+              <F label="Nom (anglais / officiel) *" k="name"/>
+              <F label="Nom traduit (français)"     k="translated_name"/>
+              <F label="Marque"                     k="manufacturer"/>
+              <F label="Sous-type (ex: PLA Basic)"  k="fila_type"/>
+              <div style={{ marginBottom:10 }}>
+                <label style={lStyle}>Couleur (hex 6 ou 8 chars)</label>
+                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                  <input style={{ ...iStyle, flex:1 }} value={form.color}
+                    placeholder="rrggbb ou rrggbbaa"
+                    onChange={e => setForm(f=>({...f, color: e.target.value.replace("#","").slice(0,8)}))}/>
+                  {form.color && (
+                    <div style={{ width:28, height:28, borderRadius:6, flexShrink:0,
+                      background: hexToCss(form.color) || "#888", border:"1px solid var(--border)" }}/>
+                  )}
+                </div>
+              </div>
+              <F label="Type de couleur" k="multicolor_type" options={[
+                ["monochrome","Monochrome"],["gradient","Gradient"],["coaxial","Coaxial"]
+              ]}/>
+              {form.multicolor_type !== "monochrome" && (
+                <F label="Couleurs multiples (hex séparées par virgule)" k="colors_array"/>
+              )}
+              <F label="Profile ID Bambu (ex: GFA00)"  k="profile_id"/>
+              <F label="Code couleur Bambu (ex: 10600)" k="fila_color_code"/>
+              <F label="Poids total (g)"  k="filament_weight_g" type="number"/>
+              <F label="Poids support (g)" k="spool_weight_g"   type="number"/>
+              <F label="Prix (€)"          k="price"            type="number"/>
+              <F label="Commentaire"       k="comment"/>
+              <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
+                {[["swatch","Échantillon"],["transparent","Transparent"],["to_order","À commander"]].map(([k,l])=>(
+                  <label key={k} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, cursor:"pointer" }}>
+                    <input type="checkbox" checked={!!form[k]}
+                      onChange={e => setForm(f=>({...f,[k]:e.target.checked}))}/>
+                    {l}
+                  </label>
+                ))}
+              </div>
+              <button onClick={handleSave} disabled={saving}
+                style={{ width:"100%", padding:"11px", borderRadius:10, fontSize:13, fontWeight:700,
+                  background: saving ? "var(--border)" : "#3b82f6",
+                  color:"white", border:"none", cursor: saving?"default":"pointer" }}>
+                {saving ? "Enregistrement…" : "Enregistrer"}
+              </button>
+            </div>
+          ) : (
+            <>
+              {/* Photos */}
+              <FilamentPhotos filamentId={f.id} onLightbox={setLightbox} />
+
+              {/* Infos */}
+              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+                letterSpacing:"0.08em", marginBottom:4 }}>Caractéristiques</p>
+              <Row label="Marque"           value={f.manufacturer}/>
+              <Row label="Matière"          value={f.material}/>
+              <Row label="Couleur"          value={colorsList?.length > 1 ? colorsList.join(" / ") : color} mono/>
+              <Row label="Profile ID"       value={f.profile_id} mono/>
+              <Row label="Code couleur Bambu" value={f.fila_color_code} mono/>
+              <Row label="Poids bobine"     value={f.filament_weight_g ? f.filament_weight_g+"g" : null}/>
+              <Row label="Poids support"    value={f.spool_weight_g ? f.spool_weight_g+"g" : null}/>
+              <Row label="Prix"             value={f.price ? f.price+"€" : null}/>
+              <Row label="Multicolor"       value={f.multicolor_type !== "monochrome" ? f.multicolor_type : null}/>
+
+              {/* Bobines */}
+              <div style={{ marginTop:16, display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em" }}>
+                  Bobines
+                </span>
+                <span style={{ fontSize:12, fontWeight:700,
+                  color: f.active_spool_count > 0 ? "#22c55e" : "var(--muted)" }}>
+                  {f.active_spool_count || 0} active{f.active_spool_count !== 1 ? "s" : ""}
+                </span>
+              </div>
+
+              <div style={{ display:"flex", gap:8, marginTop:20 }}>
+                <button onClick={handleDelete} disabled={deleting}
+                  style={{ flex:1, padding:"10px", background:"rgba(239,68,68,0.08)",
+                    border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, cursor:"pointer",
+                    color:"#ef4444", fontSize:13, display:"flex",
+                    alignItems:"center", justifyContent:"center", gap:6 }}>
+                  🗑 Supprimer
+                </button>
             <button onClick={onClose}
               style={{ flex:2, padding:"10px", background:"#3b82f6",
                 border:"none", borderRadius:10, cursor:"pointer",
@@ -564,6 +690,8 @@ function FilamentSheet({ f, onClose, onDeleted }) {
               Fermer
             </button>
           </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -661,7 +789,9 @@ function FilamentsView() {
           {!filaments.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
         </div>
       )}
-      {selectedFil && <FilamentSheet f={selectedFil} onClose={() => setSelectedFil(null)} onDeleted={() => { setSelectedFil(null); load(); }}/>}
+      {selectedFil && <FilamentSheet f={selectedFil} onClose={() => setSelectedFil(null)}
+        onDeleted={() => { setSelectedFil(null); load(); }}
+        onUpdated={load}/>}
       {createOpen && <FilamentCreateSheet onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); load(); }}/>}
     </div>
   );
