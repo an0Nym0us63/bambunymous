@@ -373,6 +373,12 @@ async def catalog_search(
         except Exception:
             pass
 
+    COLOR_TYPE_FR = {
+        "单色": "Monochrome",
+        "渐变色": "Dégradé",
+        "多拼色": "Multicolore",
+    }
+
     results = []
     for entry in data.get("data", []):
         ftype = entry.get("fila_type", "")
@@ -400,6 +406,7 @@ async def catalog_search(
             "color_hex":       colors[0].lstrip("#")[:6] if colors else "",
             "colors":          [c.lstrip("#")[:6] for c in colors],
             "color_type":      entry.get("fila_color_type", ""),
+            "color_type_fr":   COLOR_TYPE_FR.get(entry.get("fila_color_type", ""), entry.get("fila_color_type", "")),
         })
 
     results.sort(key=lambda e: (e["fila_type"], e["name"]))
