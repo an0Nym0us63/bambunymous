@@ -385,6 +385,7 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
         no_profile = [
             {"id": f.id, "name": f.name, "manufacturer": f.manufacturer}
             for f in result_no_profile.scalars().all()
+            if "bambu" in (f.manufacturer or "").lower()
         ]
 
     updated, not_found, skipped = [], [], []
