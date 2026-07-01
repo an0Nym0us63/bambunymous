@@ -185,7 +185,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   const handleDelete = async (force = false) => {
     setDeleting(true);
     try {
-      const r = await client.delete(`/filaments/spools/${spool.id}`, { params: { force } });
+      const r = await client.delete(`/filaments/spools/${spool.id}/permanent`, { params: { force } });
       if (r.data.confirm_required) {
         setConfirmDelete({ usage_count: r.data.usage_count, message: r.data.message });
         return;

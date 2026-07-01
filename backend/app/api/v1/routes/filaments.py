@@ -494,10 +494,12 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
     }
 
 
-@router.delete("/spools/{sid}")
-async def delete_spool(sid: int, force: bool = False, _: str = Depends(get_current_user)):
+@router.delete("/spools/{sid}/permanent")
+async def delete_spool_permanent(sid: int, force: bool = False, _: str = Depends(get_current_user)):
     """
-    Supprime une bobine.
+    Supprime définitivement une bobine (≠ archiver).
+    Si elle a des filament_usage liés, retourne un avertissement (force=false)
+    ou vide les filament_usage.spool_id (force=true).
     Si elle a des filament_usage liés, retourne un avertissement (force=false)
     ou vide les filament_usage.spool_id (force=true).
     """
