@@ -505,9 +505,9 @@ function MapTraySheet({ tray, onClose, onMapped }) {
   });
 
   React.useEffect(() => {
-    if (!isBambu) return;
     const params = new URLSearchParams();
     if (tray.color) params.set("color", tray.color);
+    params.set("tray_has_rfid", hasRfid ? "true" : "false");
     client.get("/filaments/map-tray/suggest?" + params)
       .then(r => setSpools(r.data?.spools || []))
       .catch(() => setSpools([]))
