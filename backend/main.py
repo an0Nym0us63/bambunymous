@@ -52,6 +52,10 @@ async def lifespan(app: FastAPI):
     from app.services.spool_location import _ensure_worker
     await _ensure_worker()
     await mqtt_manager.start()
+    # Vider le cache de matching au démarrage — la DB peut avoir changé depuis
+    # le dernier arrêt (nouvelles bobines, modifications, etc.)
+    from app.core.mqtt import invalidate_tray_cache
+    invalidate_tray_cache()
     yield
     await mqtt_manager.stop()
 
