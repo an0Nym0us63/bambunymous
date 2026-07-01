@@ -493,7 +493,6 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     price:            f.price || "",
     comment:          f.comment || "",
     swatch:           f.swatch || false,
-    transparent:      f.transparent || false,
     to_order:         f.to_order || false,
   });
 
@@ -525,7 +524,6 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
         price:             form.price ? Number(form.price) : undefined,
         comment:           form.comment || undefined,
         swatch:            form.swatch,
-        transparent:       form.transparent,
         to_order:          form.to_order,
       });
       setEditing(false);
@@ -640,7 +638,7 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               <F label="Prix (€)"          k="price"            type="number"/>
               <F label="Commentaire"       k="comment"/>
               <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
-                {[["swatch","Échantillon"],["transparent","Transparent"],["to_order","À commander"]].map(([k,l])=>(
+                {[["swatch","Échantillon"],["to_order","À commander"]].map(([k,l])=>(
                   <label key={k} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, cursor:"pointer" }}>
                     <input type="checkbox" checked={!!form[k]}
                       onChange={e => setForm(f=>({...f,[k]:e.target.checked}))}/>

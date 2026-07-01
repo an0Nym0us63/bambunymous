@@ -45,7 +45,6 @@ class FilamentOut(BaseModel):
     profile_id: Optional[str]
     fila_color_code: Optional[str] = None
     swatch: bool
-    transparent: bool
     to_order: bool
     spool_count: int = 0
     active_spool_count: int = 0
@@ -68,7 +67,6 @@ class FilamentCreate(BaseModel):
     profile_id: Optional[str] = None
     fila_color_code: Optional[str] = None
     swatch: bool = False
-    transparent: bool = False
     to_order: bool = False
     comment: Optional[str] = None
 
@@ -313,7 +311,7 @@ def _fil_out(f: Filament) -> FilamentOut:
         color=f.color, multicolor_type=f.multicolor_type, colors_array=f.colors_array,
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
         profile_id=f.profile_id, fila_color_code=getattr(f, "fila_color_code", None),
-        swatch=f.swatch, transparent=f.transparent, to_order=f.to_order,
+        swatch=f.swatch, to_order=f.to_order,
         spool_count=len(f.spools), active_spool_count=len(active),
         photo_url=(photos[0] if photos else None), photos=photos,
     )
