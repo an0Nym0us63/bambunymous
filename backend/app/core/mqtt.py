@@ -526,6 +526,10 @@ class MQTTManager:
                 rack.holder_stat = holder.get("stat", 0)
                 rack.holder_job = holder.get("job", 0)
                 exist_bits = nozzle.get("exist", 0)
+                # Log unique du contenu brut de nozzle.info pour diagnostiquer wear/tm
+                if not getattr(state, "_nozzle_info_logged", False):
+                    logger.info(f"[RACK] nozzle.info brut: {nozzle['info'][:3]}")  # premiers 3 slots
+                    state._nozzle_info_logged = True
                 for n in nozzle["info"]:
                     rack.hotends.append(HotendSlot(
                         id=int(n.get("id", 0)),
