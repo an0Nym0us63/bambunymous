@@ -432,76 +432,6 @@ const MATCH_LABEL = {
   manual:   { text:"Manuel",       color:"#94a3b8" },
 };
 
-function WeightAdjustRow({ spoolId, current, onUpdated }) {
-  const [open, setOpen] = React.useState(false);
-  const [mode, setMode] = React.useState("set");
-  const [val, setVal] = React.useState("");
-  const [saving, setSaving] = React.useState(false);
-
-  if (!spoolId) return null;
-
-  const save = async () => {
-    const n = parseFloat(val);
-    if (isNaN(n) || n < 0) return;
-    setSaving(true);
-    try {
-      await client.post(`/filaments/spools/${spoolId}/weight`, { mode, value: n });
-      setOpen(false); setVal("");
-      onUpdated?.();
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
-    finally { setSaving(false); }
-  };
-
-  return (
-    <div style={{ paddingTop:4 }}>
-      {!open ? (
-        <button onClick={() => setOpen(true)}
-          style={{ padding:"5px 12px", borderRadius:8, fontSize:11, fontWeight:600,
-            background:"rgba(59,130,246,0.08)", border:"1px solid rgba(59,130,246,0.2)",
-            color:"#60a5fa", cursor:"pointer" }}>
-          ⚖ Réajuster la quantité
-        </button>
-      ) : (
-        <div style={{ padding:"10px 12px", borderRadius:10, background:"var(--surface)",
-          border:"1px solid var(--border)", display:"flex", flexDirection:"column", gap:8 }}>
-          <div style={{ display:"flex", gap:6 }}>
-            {[["set","= Définir"],["add","+ Ajouter"],["sub","− Enlever"]].map(([m,l]) => (
-              <button key={m} onClick={() => setMode(m)}
-                style={{ flex:1, padding:"5px 0", borderRadius:7, fontSize:10, fontWeight:700, cursor:"pointer",
-                  background: mode===m ? "#3b82f6" : "var(--surface2)",
-                  color: mode===m ? "white" : "var(--muted)",
-                  border: mode===m ? "none" : "1px solid var(--border)" }}>
-                {l}
-              </button>
-            ))}
-          </div>
-          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-            <input type="number" min="0" value={val} autoFocus
-              onChange={e => setVal(e.target.value)}
-              placeholder={mode==="set" ? `Actuel : ${current!=null?Math.round(current)+"g":"?"}` : "g"}
-              style={{ flex:1, padding:"7px 10px", borderRadius:8, fontSize:13,
-                background:"var(--surface2)", border:"1px solid var(--border)",
-                color:"var(--text)", outline:"none" }}/>
-            <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
-          </div>
-          <div style={{ display:"flex", gap:6 }}>
-            <button onClick={() => setOpen(false)}
-              style={{ flex:1, padding:"7px", borderRadius:8, fontSize:12,
-                background:"var(--surface2)", border:"1px solid var(--border)",
-                color:"var(--muted)", cursor:"pointer" }}>Annuler</button>
-            <button onClick={save} disabled={saving || !val}
-              style={{ flex:2, padding:"7px", borderRadius:8, fontSize:12, fontWeight:700,
-                background: saving||!val ? "var(--border)" : "#3b82f6",
-                color:"white", border:"none", cursor: saving||!val ? "default" : "pointer" }}>
-              {saving ? "…" : "Enregistrer"}
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function TrayBottomSheet({ tray, amsLabel, onClose }) {
   if (!tray) return null;
   const color  = hexDisplay(tray.color);
@@ -623,7 +553,6 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
               <Row label="Poids bobine"    value={info.initial_weight_g ? `${info.initial_weight_g}g` : null}/>
               <Row label="Poids support"   value={info.spool_weight_g ? `${info.spool_weight_g}g` : null}/>
               <Row label="Restant"         value={info.remaining_weight_g != null ? `${Math.round(info.remaining_weight_g)}g` : null}/>
-              <WeightAdjustRow spoolId={tray.spool_id} current={info.remaining_weight_g} onUpdated={() => window.location.reload()}/>
               <Row label="Prix catalogue"  value={info.price ? `${Number(info.price).toFixed(2)}€` : null}/>
               <Row label="Prix achat"      value={info.price_override ? `${Number(info.price_override).toFixed(2)}€` : null}/>
               <Row label="Emplacement"     value={info.location}/>

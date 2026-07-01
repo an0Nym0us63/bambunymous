@@ -222,6 +222,75 @@ function FilamentPhotos({ filamentId, onLightbox }) {
 }
 
 
+function WeightAdjustInline({ spoolId, current, onUpdated }) {
+  const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState("set");
+  const [val, setVal] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const n = parseFloat(val);
+    if (isNaN(n) || n < 0) return;
+    setSaving(true);
+    try {
+      await client.post(`/filaments/spools/${spoolId}/weight`, { mode, value: n });
+      setOpen(false); setVal("");
+      onUpdated?.();
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    finally { setSaving(false); }
+  };
+
+  if (!open) return (
+    <div style={{ padding:"6px 0 4px" }}>
+      <button onClick={() => setOpen(true)}
+        style={{ padding:"5px 12px", borderRadius:8, fontSize:11, fontWeight:600,
+          background:"rgba(59,130,246,0.08)", border:"1px solid rgba(59,130,246,0.2)",
+          color:"#60a5fa", cursor:"pointer" }}>
+        ⚖ Réajuster la quantité
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{ margin:"6px 0", padding:"12px", borderRadius:10,
+      background:"var(--surface2)", border:"1px solid var(--border)",
+      display:"flex", flexDirection:"column", gap:8 }}>
+      <div style={{ display:"flex", gap:6 }}>
+        {[["set","= Définir"],["add","+ Ajouter"],["sub","− Enlever"]].map(([m,l]) => (
+          <button key={m} onClick={() => setMode(m)}
+            style={{ flex:1, padding:"5px 0", borderRadius:7, fontSize:10, fontWeight:700, cursor:"pointer",
+              background: mode===m ? "#3b82f6" : "var(--surface)",
+              color: mode===m ? "white" : "var(--muted)",
+              border: mode===m ? "none" : "1px solid var(--border)" }}>
+            {l}
+          </button>
+        ))}
+      </div>
+      <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+        <input type="number" min="0" value={val} autoFocus
+          onChange={e => setVal(e.target.value)}
+          placeholder={mode==="set" ? `${Math.round(current)}g actuellement` : "grammes"}
+          style={{ flex:1, padding:"8px 10px", borderRadius:8, fontSize:13,
+            background:"var(--surface)", border:"1px solid var(--border)",
+            color:"var(--text)", outline:"none" }}/>
+        <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
+      </div>
+      <div style={{ display:"flex", gap:6 }}>
+        <button onClick={() => { setOpen(false); setVal(""); }}
+          style={{ flex:1, padding:"8px", borderRadius:8, fontSize:12,
+            background:"var(--surface)", border:"1px solid var(--border)",
+            color:"var(--muted)", cursor:"pointer" }}>Annuler</button>
+        <button onClick={save} disabled={saving || !val}
+          style={{ flex:2, padding:"8px", borderRadius:8, fontSize:12, fontWeight:700,
+            background: saving||!val ? "var(--border)" : "#3b82f6",
+            color:"white", border:"none", cursor: saving||!val ? "default" : "pointer" }}>
+          {saving ? "Enregistrement…" : "Enregistrer"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   const [confirmDelete, setConfirmDelete] = React.useState(null); // null | {usage_count}
   const [deleting, setDeleting] = React.useState(false);
@@ -333,6 +402,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:"0.08em", margin:"16px 0 4px" }}>Bobine #{spool.id}</p>
           <Row label="Restant"        value={`${remaining.toFixed(0)}g`} accent={barColor}/>
+          <WeightAdjustInline spoolId={spool.id} current={remaining} onUpdated={onClose}/>
           <Row label="Prix achat"     value={spool.price_override ? `${Number(spool.price_override).toFixed(2)}€` : null}/>
           <Row label="Emplacement"    value={spool.location}/>
           <Row label="Tag NFC"        value={spool.tag_number} mono/>
