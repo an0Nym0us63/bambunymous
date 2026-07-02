@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select, desc, func
@@ -270,22 +270,33 @@ async def prints_gallery(_: str = Depends(get_current_user)):
         ]
         if p.group_id:
             acc = group_acc.setdefault(p.group_id, {
-                "id": p.group_id, "name": (p.group.name if p.group else None) or f"Groupe #{p.group_id}",
-                "prints": 0, "photos": [], "total_weight_g": 0.0, "total_cost": 0.0, "duration_seconds": 0.0,
+                "id": p.group_id,
+                "name": (p.group.name if p.group else None) or f"Groupe #{p.group_id}",
+                "number_of_items": (p.group.number_of_items if p.group else None) or 1,
+                "prints": 0, "photos": [],
+                "total_weight_g": 0.0, "total_cost_filament": 0.0,
+                "electric_cost": 0.0, "total_cost": 0.0, "duration_seconds": 0.0,
                 "latest_date": None,
             })
-            acc["prints"] += 1
+            acc["prints"]              += 1
             acc["photos"].extend(photos)
-            acc["total_weight_g"]    += p.total_weight_g or 0
-            acc["total_cost"]        += p.total_cost or 0
-            acc["duration_seconds"]  += p.duration_seconds or 0
+            acc["total_weight_g"]      += p.total_weight_g or 0
+            acc["total_cost_filament"] += p.total_cost_filament or 0
+            acc["electric_cost"]       += p.electric_cost or 0
+            acc["total_cost"]          += p.total_cost or 0
+            acc["duration_seconds"]    += p.duration_seconds or 0
             if not acc["latest_date"] or (p.print_date and p.print_date > acc["latest_date"]):
                 acc["latest_date"] = p.print_date
         elif photos:
+            nb = p.number_of_items or 1
+            tc = p.total_cost or 0
             items.append({
                 "id": p.id, "title": p.file_name or "Sans nom", "status": p.status,
                 "print_date": p.print_date, "duration_seconds": p.duration_seconds,
-                "total_weight_g": p.total_weight_g, "total_cost": p.total_cost,
+                "total_weight_g": p.total_weight_g, "total_cost_filament": p.total_cost_filament or 0,
+                "electric_cost": p.electric_cost or 0, "total_cost": tc,
+                "number_of_items": nb,
+                "cost_per_item": round(tc / nb, 2) if nb > 1 else None,
                 "photos": photos,
             })
 
@@ -298,7 +309,10 @@ async def prints_gallery(_: str = Depends(get_current_user)):
                 if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
                     acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{f.name}", "label": f.name})
 
-    groups = [g for g in group_acc.values() if g["photos"]]
+    groups = [
+        {**g, "cost_per_item": round(g["total_cost"] / g["number_of_items"], 2) if g.get("number_of_items", 1) > 1 else None}
+        for g in group_acc.values() if g["photos"]
+    ]
     items.sort(key=lambda it: it["print_date"] or "", reverse=True)
     groups.sort(key=lambda g: g["latest_date"] or "", reverse=True)
     return {"prints": items, "groups": groups}
@@ -358,6 +372,23 @@ async def group_photo(group_id: int, filename: str):
         raise HTTPException(404)
     mime = mimetypes.guess_type(str(path))[0] or "image/jpeg"
     return FileResponse(str(path), media_type=mime)
+
+
+@router.patch("/groups/{group_id}")
+async def patch_group(group_id: int, body: dict = Body({}), _: str = Depends(get_current_user)):
+    """Met à jour les champs éditables d'un groupe (name, number_of_items)."""
+    allowed = {"name", "number_of_items"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    if not updates:
+        raise HTTPException(400, "Aucun champ valide")
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        for k, v in updates.items():
+            setattr(g, k, v)
+        await db.commit()
+    return {"ok": True}
 
 
 

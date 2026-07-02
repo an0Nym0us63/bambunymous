@@ -287,7 +287,13 @@ async def run_import(src_path: str) -> dict:
                     if res:
                         old_to_new_group[old_gid] = res
                         continue
-                    g = Group(name=gname, external_ref=str(old_gid))
+                    # Récupérer number_of_items depuis Spoolnymous si dispo
+                    try:
+                        grow = src.execute("SELECT number_of_items FROM groups WHERE id=?", (int(old_gid),)).fetchone()
+                        nb_items = (grow[0] or 1) if grow else 1
+                    except Exception:
+                        nb_items = 1
+                    g = Group(name=gname, external_ref=str(old_gid), number_of_items=nb_items)
                     db.add(g)
                     await db.flush()
                     old_to_new_group[old_gid] = g.id

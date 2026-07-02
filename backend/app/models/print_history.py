@@ -130,10 +130,8 @@ class Group(Base):
 
     id           = Column(Integer, primary_key=True, autoincrement=True)
     name         = Column(String(256), nullable=False)
-    # id numérique Spoolnymous d'origine — sert uniquement à rattacher le
-    # dossier de photos importé (/data/groups/{old_id}/) au bon groupe lors
-    # de l'import ZIP, même rôle que Print.external_ref pour les prints.
     external_ref = Column(String(64), nullable=True)
+    number_of_items = Column(Integer, default=1)
     created_at   = Column(DateTime, default=datetime.utcnow)
 
     prints = relationship("Print", back_populates="group")

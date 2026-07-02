@@ -78,6 +78,7 @@ async def _migrate():
         ("filaments",      "fila_color_code",  "TEXT"),
         ("filaments",      "name_en",          "TEXT"),
         ("filaments",      "fila_type",        "TEXT"),
+        ("groups",         "number_of_items",  "INTEGER DEFAULT 1"),
     ]
     async with engine.connect() as conn:
         for table, col, col_type in migrations:

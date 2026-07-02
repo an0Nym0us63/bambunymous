@@ -62,10 +62,11 @@ function StatusBadge({ status }) {
 }
 
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
-function GroupBottomSheet({ groupId, name, prints, latestDate, onClose, onSelectPrint, onDelete, onUngroup }) {
+function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_items, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
   const [selectedPrint, setSelectedPrint] = useState(null);
   const [lightbox, setLightbox] = useState(null);
   const [groupPhotos, setGroupPhotos] = useState([]);
+  const [nbItems, setNbItems] = useState(number_of_items || 1);
 
   useEffect(() => {
     if (!groupId) { setGroupPhotos([]); return; }
@@ -75,9 +76,12 @@ function GroupBottomSheet({ groupId, name, prints, latestDate, onClose, onSelect
   }, [groupId]);
 
   // Stats agrégées
-  const totalWeight = prints.reduce((s, p) => s + (p.total_weight_g || 0), 0);
-  const totalCost   = prints.reduce((s, p) => s + (p.total_cost || 0), 0);
-  const totalDur    = prints.reduce((s, p) => s + (p.duration_seconds || p.estimated_seconds || 0), 0);
+  const totalWeight  = prints.reduce((s, p) => s + (p.total_weight_g || 0), 0);
+  const totalFil     = prints.reduce((s, p) => s + (p.total_cost_filament || 0), 0);
+  const totalElec    = prints.reduce((s, p) => s + (p.electric_cost || 0), 0);
+  const totalCost    = prints.reduce((s, p) => s + (p.total_cost || 0), 0);
+  const totalDur     = prints.reduce((s, p) => s + (p.duration_seconds || p.estimated_seconds || 0), 0);
+  const costPerItem  = nbItems > 1 ? totalCost / nbItems : null;
 
   // Agrégation filaments par couleur+type
   const filAgg = {};
@@ -144,21 +148,47 @@ function GroupBottomSheet({ groupId, name, prints, latestDate, onClose, onSelect
             )}
 
             {/* Stats globales */}
-            <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:16 }}>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:6, marginBottom:12 }}>
               {[
-                ["Poids total",   totalWeight > 0 ? totalWeight.toFixed(0)+"g" : "—"],
-                ["Coût total",    totalCost > 0   ? totalCost.toFixed(2)+"€"  : "—"],
-                ["Durée totale",  totalDur > 0    ? fmtDur(totalDur)          : "—"],
-              ].map(([label, val]) => (
+                ["Durée totale",       totalDur > 0     ? fmtDur(totalDur)          : null],
+                ["Poids filament",     totalWeight > 0  ? totalWeight.toFixed(0)+"g": null],
+                ["Coût filament",      totalFil > 0     ? totalFil.toFixed(2)+"€"   : null],
+                ["Coût électricité",   totalElec > 0    ? totalElec.toFixed(2)+"€"  : null],
+              ].filter(([,v]) => v).map(([label, val]) => (
                 <div key={label} style={{ background:"var(--surface2)",
                   border:"1px solid var(--border)", borderRadius:10, padding:"8px 10px" }}>
                   <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase",
                     letterSpacing:"0.06em", margin:"0 0 3px" }}>{label}</p>
-                  <p style={{ fontSize:14, fontWeight:700, color:"var(--text)",
+                  <p style={{ fontSize:13, fontWeight:700, color:"var(--text)",
                     margin:0, fontFamily:"monospace" }}>{val}</p>
                 </div>
               ))}
+              {totalCost > 0 && (
+                <div style={{ gridColumn:"1/-1", background:"rgba(59,130,246,0.06)",
+                  border:"1px solid rgba(59,130,246,0.2)", borderRadius:10, padding:"8px 12px",
+                  display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase",
+                    letterSpacing:"0.06em", margin:0 }}>Coût total</p>
+                  <p style={{ fontSize:16, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
+                    {totalCost.toFixed(2)}€
+                  </p>
+                </div>
+              )}
+              {costPerItem && (
+                <div style={{ gridColumn:"1/-1", background:"rgba(34,197,94,0.06)",
+                  border:"1px solid rgba(34,197,94,0.2)", borderRadius:10, padding:"8px 12px",
+                  display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase",
+                    letterSpacing:"0.06em", margin:0 }}>Coût / élément × {nbItems}</p>
+                  <p style={{ fontSize:16, fontWeight:800, color:"#22c55e", margin:0, fontFamily:"monospace" }}>
+                    {costPerItem.toFixed(2)}€
+                  </p>
+                </div>
+              )}
             </div>
+
+            <QuantityEditor id={groupId} type="group" value={nbItems}
+              onChange={n => setNbItems(n)}/>
 
             {/* Filaments agrégés */}
             {filaments.length > 0 && (
@@ -266,7 +296,7 @@ function GroupBottomSheet({ groupId, name, prints, latestDate, onClose, onSelect
   );
 }
 
-function GroupTile({ groupId, name, prints, latestDate, onSelectPrint, onDelete, onUngroup }) {
+function GroupTile({ groupId, name, prints, latestDate, number_of_items, onSelectPrint, onDelete, onUngroup }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const coverPrint = prints[0];
 
@@ -289,6 +319,13 @@ function GroupTile({ groupId, name, prints, latestDate, onSelectPrint, onDelete,
             fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>
             📁 {prints.length} print{prints.length>1?"s":""}
           </span>
+          {number_of_items > 1 && (
+            <span style={{ position:"absolute", top:6, right:6,
+              background:"rgba(59,130,246,0.85)", color:"white",
+              fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
+              ×{number_of_items}
+            </span>
+          )}
         </div>
         <div style={{ padding:"8px 10px" }}>
           <p style={{ fontWeight:700, fontSize:12, color:"#a78bfa", margin:"0 0 2px",
@@ -300,6 +337,7 @@ function GroupTile({ groupId, name, prints, latestDate, onSelectPrint, onDelete,
       {sheetOpen && (
         <GroupBottomSheet
           groupId={groupId} name={name} prints={prints} latestDate={latestDate}
+          number_of_items={number_of_items}
           onClose={() => setSheetOpen(false)}
           onSelectPrint={onSelectPrint}
           onUngroup={onUngroup}
@@ -309,6 +347,58 @@ function GroupTile({ groupId, name, prints, latestDate, onSelectPrint, onDelete,
   );
 }
 
+
+function QuantityEditor({ id, type, value, onChange }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(String(value));
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const n = parseInt(val);
+    if (isNaN(n) || n < 1) return;
+    setSaving(true);
+    try {
+      if (type === "print") await client.patch(`/prints/${id}`, { number_of_items: n });
+      else await client.patch(`/prints/groups/${id}`, { number_of_items: n });
+      onChange?.(n);
+      setEditing(false);
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ marginBottom:12, padding:"8px 12px", borderRadius:10,
+      background:"var(--surface2)", border:"1px solid var(--border)" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <span style={{ fontSize:11, color:"var(--muted)" }}>Nombre d'éléments imprimés</span>
+        {!editing && (
+          <button onClick={() => { setVal(String(value)); setEditing(true); }}
+            style={{ fontSize:11, color:"#60a5fa", background:"none", border:"none", cursor:"pointer" }}>
+            {value > 1 ? `× ${value} ✏️` : "Définir"}
+          </button>
+        )}
+      </div>
+      {editing && (
+        <div style={{ display:"flex", gap:6, marginTop:6, alignItems:"center" }}>
+          <input type="number" min="1" value={val} autoFocus
+            onChange={e => setVal(e.target.value)}
+            style={{ width:70, padding:"5px 8px", borderRadius:7, fontSize:13,
+              background:"var(--surface)", border:"1px solid var(--border)",
+              color:"var(--text)", outline:"none" }}/>
+          <button onClick={save} disabled={saving}
+            style={{ padding:"5px 12px", borderRadius:7, fontSize:12, fontWeight:700,
+              background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
+            {saving ? "…" : "OK"}
+          </button>
+          <button onClick={() => setEditing(false)}
+            style={{ padding:"5px 10px", borderRadius:7, fontSize:12,
+              background:"var(--surface)", border:"1px solid var(--border)",
+              color:"var(--muted)", cursor:"pointer" }}>✕</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect, onLongPress }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -367,7 +457,16 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
             {selected && <Check size={13} color="white" strokeWidth={3}/>}
           </div>
         )}
-        {/* Badge statut — fond opaque + contour pour lisibilité */}
+        {/* Badge quantité */}
+        {p.number_of_items > 1 && (
+          <span style={{ position:"absolute", top:6, right:6,
+            background:"rgba(59,130,246,0.85)", color:"white",
+            fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20,
+            boxShadow:"0 1px 4px rgba(0,0,0,0.4)" }}>
+            ×{p.number_of_items}
+          </span>
+        )}
+        {/* Badge statut */}
         {p.status !== "SUCCESS" && (
           <span style={{ position:"absolute", top:6, left:6,
             background: statusCfg.bg, color:"white",
@@ -581,22 +680,33 @@ function PrintDetail({ p, onClose, onDelete, onChanged }) {
           {/* Infos principales */}
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:14 }}>
             {[
-              ["Date",    fmtDate(p.print_date)],
-              ["Durée",   fmtDur(p.duration_seconds || p.estimated_seconds)],
-              ["Poids",   p.total_weight_g ? p.total_weight_g.toFixed(1)+"g" : "—"],
-              ["Coût",    p.total_cost ? p.total_cost.toFixed(2)+"€" : "—"],
-              ["Type",    p.print_type || "—"],
-              ["Plateau", p.plate_id || "1"],
-            ].map(([label, value]) => value && value !== "—" ? (
+              ["Date",         fmtDate(p.print_date)],
+              ["Durée",        fmtDur(p.duration_seconds || p.estimated_seconds)],
+              ["Poids filament", p.total_weight_g ? p.total_weight_g.toFixed(1)+"g" : null],
+              ["Coût filament",  p.total_cost_filament ? p.total_cost_filament.toFixed(2)+"€" : null],
+              ["Coût électricité", p.electric_cost ? p.electric_cost.toFixed(2)+"€" : null],
+              ["Coût total",   p.total_cost ? p.total_cost.toFixed(2)+"€" : null],
+              ["Éléments",     p.number_of_items > 1 ? `× ${p.number_of_items}` : null],
+              ["Coût/élément", p.number_of_items > 1 && p.total_cost ? (p.total_cost/p.number_of_items).toFixed(2)+"€" : null],
+              ["Type",         p.print_type || null],
+              ["Plateau",      p.plate_id || "1"],
+            ].filter(([,v]) => v).map(([label, value]) => (
               <div key={label} style={{ background:"var(--surface2)",
-                border:"1px solid var(--border)", borderRadius:8, padding:"6px 10px" }}>
+                border:"1px solid var(--border)", borderRadius:8, padding:"6px 10px",
+                ...(label==="Coût total" ? { gridColumn:"1/-1", background:"rgba(59,130,246,0.06)", borderColor:"rgba(59,130,246,0.2)" } : {}),
+                ...(label==="Coût/élément" ? { gridColumn:"1/-1", background:"rgba(34,197,94,0.06)", borderColor:"rgba(34,197,94,0.2)" } : {}),
+              }}>
                 <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase",
                   letterSpacing:"0.06em", margin:"0 0 2px" }}>{label}</p>
-                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:0,
-                  fontFamily:"monospace" }}>{value}</p>
+                <p style={{ fontSize:label==="Coût total"||label==="Coût/élément" ? 15 : 12,
+                  fontWeight:700, color:"var(--text)", margin:0, fontFamily:"monospace" }}>{value}</p>
               </div>
-            ) : null)}
+            ))}
           </div>
+
+          {/* Éditeur quantité */}
+          <QuantityEditor id={p.id} type="print" value={p.number_of_items||1}
+            onChange={nb => onUpdated?.({...p, number_of_items:nb})}/>
 
           {/* Filaments */}
           {p.filament_usage?.length > 0 && (
@@ -949,6 +1059,7 @@ export default function Prints() {
             ) : (
               <GroupTile key={item.groupId} groupId={item.groupId} name={item.name}
                 prints={item.prints} latestDate={item.latestDate}
+                number_of_items={item.number_of_items}
                 onSelectPrint={setSelected}
                 onUngroup={() => load()}
                 onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}/>
