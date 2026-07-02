@@ -27,10 +27,11 @@ class Print(Base):
     estimated_seconds   = Column(Float, nullable=True)
     duration_seconds    = Column(Float, nullable=True)
 
-    total_weight_g      = Column(Float, default=0.0)
-    total_cost_filament = Column(Float, default=0.0)
-    electric_cost       = Column(Float, default=0.0)
-    total_cost          = Column(Float, default=0.0)
+    total_weight_g              = Column(Float, default=0.0)
+    total_cost_filament         = Column(Float, default=0.0)  # prix bobine (override)
+    total_cost_filament_normal  = Column(Float, default=0.0)  # prix filament de base
+    electric_cost               = Column(Float, default=0.0)
+    total_cost                  = Column(Float, default=0.0)  # filament override + elec
 
     number_of_items     = Column(Integer, default=1)
     sold_units          = Column(Integer, default=0)

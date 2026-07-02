@@ -469,24 +469,81 @@ async def _deduct_spool_weights(db, p: Print):
 
 
 async def _costs(db, p: Print):
+    """Recalcule et stocke tous les coûts du print :
+    - cost (override) : grams × prix_bobine / poids_nominal
+    - normal_cost     : grams × prix_filament / poids_nominal
+    - electric_cost   : durée_h × COST_BY_HOUR
+    """
     try:
+        from ..services.settings_service import get_setting
+        from ..models.filament import Spool, Filament as FilamentModel
+        from sqlalchemy import select as _sel
+
         usages = (await db.execute(
             select(FilamentUsage).where(FilamentUsage.print_id == p.id)
         )).scalars().all()
-        total_w = sum(u.grams_used for u in usages)
-        total_c = sum(u.cost for u in usages)
 
-        from ..services.settings_service import get_setting
-        rate = float(await get_setting(db, "COST_BY_HOUR") or 0)
+        # Charger tous les spools + filaments en une fois
+        spool_ids = {u.spool_id for u in usages if u.spool_id}
+        spools, fils = {}, {}
+        if spool_ids:
+            sp_rows = (await db.execute(_sel(Spool).where(Spool.id.in_(spool_ids)))).scalars().all()
+            for sp in sp_rows:
+                spools[sp.id] = sp
+                if sp.filament_id:
+                    fi = await db.get(FilamentModel, sp.filament_id)
+                    if fi:
+                        fils[sp.filament_id] = fi
+
+        total_w  = 0.0
+        total_c  = 0.0   # prix override (bobine)
+        total_cn = 0.0   # prix normal (filament)
+
+        for u in usages:
+            g = u.grams_used or 0.0
+            total_w += g
+            sp = spools.get(u.spool_id)
+            fi = fils.get(sp.filament_id) if sp and sp.filament_id else None
+            w_ref = (fi.filament_weight_g if fi and fi.filament_weight_g else None) or 1000.0
+
+            # Coût override = prix de la bobine
+            price_sp = (sp.price_override or 0) if sp else 0
+            cost_ov  = round(g * price_sp / w_ref, 4) if price_sp else 0.0
+
+            # Coût normal = prix de référence du filament
+            price_fi = (fi.price or 0) if fi else 0
+            cost_no  = round(g * price_fi / w_ref, 4) if price_fi else 0.0
+
+            u.cost        = cost_ov
+            u.normal_cost = cost_no
+            total_c  += cost_ov
+            total_cn += cost_no
+
+        rate  = float(await get_setting(db, "COST_BY_HOUR") or 0)
         dur_h = (p.duration_seconds or p.estimated_seconds or 0) / 3600
-        elec  = dur_h * rate
+        elec  = round(dur_h * rate, 4)
 
-        p.total_weight_g      = total_w
-        p.total_cost_filament = total_c
-        p.electric_cost       = elec
-        p.total_cost          = total_c + elec
+        p.total_weight_g             = total_w
+        p.total_cost_filament        = round(total_c, 4)
+        p.total_cost_filament_normal = round(total_cn, 4)
+        p.electric_cost              = elec
+        p.total_cost                 = round(total_c + elec, 4)
+        logger.info(f"[COST] print #{p.id} : fil={total_c:.2f}€ fil_normal={total_cn:.2f}€ elec={elec:.2f}€ total={p.total_cost:.2f}€")
     except Exception as e:
-        logger.debug(f"_costs: {e}")
+        logger.error(f"_costs print #{getattr(p,'id','?')}: {e}", exc_info=True)
+
+
+async def recalculate_print(pid: int):
+    """Recalcule les coûts d'un print (appelé lors de changement de prix filament/bobine/élec)."""
+    try:
+        async with AsyncSessionLocal() as db:
+            p = await db.get(Print, pid)
+            if not p: return
+            await _costs(db, p)
+            await db.commit()
+        logger.info(f"[COST] ✅ Recalcul print #{pid} terminé")
+    except Exception as e:
+        logger.error(f"recalculate_print #{pid}: {e}", exc_info=True)
 
 
 # ── Import manuel (upload .3mf) ────────────────────────────────────────────

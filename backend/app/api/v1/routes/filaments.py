@@ -15,6 +15,50 @@ def _clear_match_cache():
         invalidate_tray_cache()
     except Exception:
         pass
+
+
+def _bg_recalc_by_filament(fid: int):
+    """Recalcule en arrière-plan tous les prints utilisant une bobine de ce filament."""
+    import threading, asyncio as _aio
+    def _run():
+        loop = _aio.new_event_loop()
+        async def _go():
+            from ....db.session import AsyncSessionLocal
+            from ....models.filament import Spool
+            from ....models.print_history import FilamentUsage
+            from sqlalchemy import select as _sel
+            from ....services.print_tracker import recalculate_print
+            async with AsyncSessionLocal() as db:
+                sp_ids = (await db.execute(_sel(Spool.id).where(Spool.filament_id == fid))).scalars().all()
+            if not sp_ids: return
+            async with AsyncSessionLocal() as db:
+                pids = (await db.execute(
+                    _sel(FilamentUsage.print_id).where(FilamentUsage.spool_id.in_(sp_ids)).distinct()
+                )).scalars().all()
+            for pid in pids: await recalculate_print(pid)
+        try: loop.run_until_complete(_go())
+        finally: loop.close()
+    threading.Thread(target=_run, daemon=True).start()
+
+
+def _bg_recalc_by_spool(sid: int):
+    """Recalcule en arrière-plan tous les prints utilisant cette bobine."""
+    import threading, asyncio as _aio
+    def _run():
+        loop = _aio.new_event_loop()
+        async def _go():
+            from ....db.session import AsyncSessionLocal
+            from ....models.print_history import FilamentUsage
+            from sqlalchemy import select as _sel
+            from ....services.print_tracker import recalculate_print
+            async with AsyncSessionLocal() as db:
+                pids = (await db.execute(
+                    _sel(FilamentUsage.print_id).where(FilamentUsage.spool_id == sid).distinct()
+                )).scalars().all()
+            for pid in pids: await recalculate_print(pid)
+        try: loop.run_until_complete(_go())
+        finally: loop.close()
+    threading.Thread(target=_run, daemon=True).start()
 from pathlib import Path
 from ....db.session import get_db, AsyncSessionLocal
 from ....models.filament import Filament, Spool
@@ -190,10 +234,14 @@ async def update_filament(
     f = result.scalar_one_or_none()
     if not f:
         raise HTTPException(404, "Filament introuvable")
+    changed_price = "price" in body.model_dump(exclude_none=True)
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(f, k, v)
     await db.commit()
-    _clear_match_cache()   # invalide le cache spool_info (nom/type/traduction)
+    _clear_match_cache()
+    if changed_price:
+        # Recalculer tous les prints qui utilisent une bobine de ce filament
+        _bg_recalc_by_filament(fid)
     return _fil_out(f)
 
 
@@ -258,10 +306,13 @@ async def update_spool(
     s = await _load_spool(db, sid)
     if not s:
         raise HTTPException(404, "Bobine introuvable")
+    changed_price = "price_override" in body.model_dump(exclude_none=True)
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(s, k, v)
     await db.commit()
     _clear_match_cache()
+    if changed_price:
+        _bg_recalc_by_spool(sid)
     return _spool_out(await _load_spool(db, sid))
 
 

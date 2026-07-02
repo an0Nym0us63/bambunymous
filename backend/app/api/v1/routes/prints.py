@@ -40,6 +40,7 @@ class PrintOut(BaseModel):
     plate_image: Optional[str]; model_3mf: Optional[str]
     estimated_seconds: Optional[float]; duration_seconds: Optional[float]
     total_weight_g: float; total_cost_filament: float
+    total_cost_filament_normal: float = 0.0
     electric_cost: float; total_cost: float
     number_of_items: int; sold_units: int
     sold_price_total: Optional[float]; margin: float

@@ -78,6 +78,7 @@ function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_items, 
   // Stats agrégées
   const totalWeight  = prints.reduce((s, p) => s + (p.total_weight_g || 0), 0);
   const totalFil     = prints.reduce((s, p) => s + (p.total_cost_filament || 0), 0);
+  const totalFilN    = prints.reduce((s, p) => s + (p.total_cost_filament_normal || 0), 0);
   const totalElec    = prints.reduce((s, p) => s + (p.electric_cost || 0), 0);
   const totalCost    = prints.reduce((s, p) => s + (p.total_cost || 0), 0);
   const totalDur     = prints.reduce((s, p) => s + (p.duration_seconds || p.estimated_seconds || 0), 0);
@@ -152,7 +153,8 @@ function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_items, 
               {[
                 ["Durée totale",       totalDur > 0     ? fmtDur(totalDur)          : null],
                 ["Poids filament",     totalWeight > 0  ? totalWeight.toFixed(0)+"g": null],
-                ["Coût filament",      totalFil > 0     ? totalFil.toFixed(2)+"€"   : null],
+                ["Coût fil. (bobine)",  totalFil > 0     ? totalFil.toFixed(2)+"€"   : null],
+                ["Coût fil. normal",   totalFilN > 0    ? totalFilN.toFixed(2)+"€"  : null],
                 ["Coût électricité",   totalElec > 0    ? totalElec.toFixed(2)+"€"  : null],
               ].filter(([,v]) => v).map(([label, val]) => (
                 <div key={label} style={{ background:"var(--surface2)",
@@ -697,8 +699,9 @@ function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
               ["Date",         fmtDate(p.print_date)],
               ["Durée",        fmtDur(p.duration_seconds || p.estimated_seconds)],
               ["Poids filament", p.total_weight_g ? p.total_weight_g.toFixed(1)+"g" : null],
-              ["Coût filament",  p.total_cost_filament ? p.total_cost_filament.toFixed(2)+"€" : null],
-              ["Coût électricité", p.electric_cost ? p.electric_cost.toFixed(2)+"€" : null],
+              ["Coût fil. (bobine)", p.total_cost_filament ? p.total_cost_filament.toFixed(2)+"€" : null],
+              ["Coût fil. normal",  p.total_cost_filament_normal ? p.total_cost_filament_normal.toFixed(2)+"€" : null],
+              ["Coût électricité",  p.electric_cost ? p.electric_cost.toFixed(2)+"€" : null],
               ["Coût total",   p.total_cost ? p.total_cost.toFixed(2)+"€" : null],
               ["Éléments",     p.number_of_items > 1 ? `× ${p.number_of_items}` : null],
               ["Coût/élément", p.number_of_items > 1 && p.total_cost ? (p.total_cost/p.number_of_items).toFixed(2)+"€" : null],

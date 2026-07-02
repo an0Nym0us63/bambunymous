@@ -109,20 +109,23 @@ async def update_settings(
     _: str = Depends(get_current_user),
 ):
     printer_changed = False
+    elec_changed = False
     data = body.model_dump(exclude_none=True)
 
     for field, value in data.items():
         if field == "ADMIN_PASSWORD":
-            if value:  # ne hash que si non vide
+            if value:
                 await set_setting(db, "ADMIN_PASSWORD_HASH", hash_password(value))
         elif field == "PRINTER_ACCESS_CODE":
-            if value:  # ne pas écraser si vide
+            if value:
                 await set_setting(db, field, value)
                 printer_changed = True
         else:
             await set_setting(db, field, value)
             if field in ("PRINTER_IP", "PRINTER_ID"):
                 printer_changed = True
+            if field == "COST_BY_HOUR":
+                elec_changed = True
 
     if printer_changed:
         ip   = await get_setting(db, "PRINTER_IP")
@@ -130,5 +133,22 @@ async def update_settings(
         code = await get_setting(db, "PRINTER_ACCESS_CODE")
         if ip and pid and code:
             mqtt_manager.reconnect(ip, pid, code)
+
+    if elec_changed:
+        # Recalcul de tous les prints en arrière-plan
+        import threading, asyncio as _aio
+        def _recalc_all():
+            loop = _aio.new_event_loop()
+            async def _go():
+                from ....db.session import AsyncSessionLocal
+                from ....models.print_history import Print
+                from sqlalchemy import select as _sel
+                from ....services.print_tracker import recalculate_print
+                async with AsyncSessionLocal() as db2:
+                    pids = (await db2.execute(_sel(Print.id).where(Print.status == "SUCCESS"))).scalars().all()
+                for pid in pids: await recalculate_print(pid)
+            try: loop.run_until_complete(_go())
+            finally: loop.close()
+        threading.Thread(target=_recalc_all, daemon=True).start()
 
     return {"ok": True}
