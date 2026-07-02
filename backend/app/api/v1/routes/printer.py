@@ -6,13 +6,10 @@ from ....db.session import AsyncSessionLocal
 from .auth import get_current_user
 
 
-def _catalog_lookup(fila_id: str, color_hex: str) -> Optional[str]:
-    """Lookup nom FR dans le catalogue Bambu local pour un tray non matché.
-    Cherche la couleur du tray dans TOUTES les positions de fila_color
-    (pas seulement la première), sans pré-filtrer par mono/multi.
-    Un profile GFA05 (Silk) n'a que des entrées bicolores → correct.
-    Un profile GFA00 (PLA Basic) n'a que des entrées mono → correct.
-    Retourne None si absent.
+def _catalog_lookup(fila_id: str, color_hex: str, cols: list = None) -> Optional[str]:
+    """Lookup nom FR dans le catalogue Bambu local.
+    cols = champ MQTT 'cols' du tray. Si len(cols) > 1 → multicolore, sinon mono.
+    Filtre les entrées catalogue selon ce type.
     """
     if not fila_id:
         return None
@@ -26,17 +23,30 @@ def _catalog_lookup(fila_id: str, color_hex: str) -> Optional[str]:
         en_to_fr = {e.get("fila_color_name",{}).get("en",""): e.get("fila_color_name",{}).get("fr","")
                     for e in data if e.get("fila_color_name",{}).get("en") and e.get("fila_color_name",{}).get("fr")}
 
-        h = color_hex.replace("#","").lower()
-        h8 = h + "ff" if len(h) == 6 else h[:8]
+        COLOR_TYPE = {"\u5355\u8272": "monochrome", "\u6e10\u53d8\u8272": "gradient", "\u591a\u62fc\u8272": "coaxial"}
+        tray_is_multi = bool(cols and len(cols) > 1)
+
+        def norm8(h):
+            h = h.replace("#","").lower()
+            return h + "ff" if len(h) == 6 else h[:8]
+
+        tray_hexes = {norm8(c) for c in cols} if tray_is_multi else {norm8(color_hex)}
 
         for e in data:
             if e.get("fila_id","").upper() != fila_id.upper():
                 continue
-            # Chercher la couleur du tray dans N'IMPORTE QUELLE position des couleurs de l'entrée
-            e_colors = [c.lstrip("#").lower() for c in e.get("fila_color", [])]
-            e_colors8 = [c + "ff" if len(c) == 6 else c[:8] for c in e_colors]
-            if h8 not in e_colors8:
+            e_is_multi = COLOR_TYPE.get(e.get("fila_color_type",""), "monochrome") != "monochrome"
+            if tray_is_multi != e_is_multi:
                 continue
+            e_hexes = {norm8(c) for c in e.get("fila_color", [])}
+            # Mono : tray_color dans les couleurs catalogue
+            # Multi : intersection non vide (couleurs communes)
+            if tray_is_multi:
+                if not (tray_hexes & e_hexes):
+                    continue
+            else:
+                if not (tray_hexes & e_hexes):
+                    continue
             names = e.get("fila_color_name", {})
             name_en = names.get("en", "")
             return names.get("fr") or en_to_fr.get(name_en) or name_en or None
@@ -93,7 +103,9 @@ class TrayOut(BaseModel):
     spool_id: Optional[int] = None
     match_mode: str = ""
     spool_info: Optional[SpoolInfoOut] = None
-    catalog_name: Optional[str] = None   # nom catalogue Bambu si tray non matché
+    catalog_name: Optional[str] = None
+    cols: list = []     # couleurs Bambu raw (champ 'cols' MQTT) — liste hex
+    ctype: str = ""     # type couleur Bambu ('gradient','coaxial'…)
 
 
 class AMSOut(BaseModel):
@@ -247,9 +259,15 @@ async def printer_status(_: str = Depends(get_current_user)):
                     spool_id=t.spool_id,
                     match_mode=getattr(t, "match_mode", ""),
                     spool_info=(lambda si: SpoolInfoOut(**si) if si else _spool_info(t.spool_id, _spools_map))(getattr(t, "_spool_info_cache", None)),
+                    cols=getattr(t, "cols", []) or [],
+                    ctype=getattr(t, "ctype", "") or "",
                     catalog_name=(
-                        None if t.spool_id  # déjà matché → pas besoin
-                        else _catalog_lookup(getattr(t, "tray_info_idx", ""), t.color)
+                        None if t.spool_id
+                        else _catalog_lookup(
+                            getattr(t, "tray_info_idx", ""),
+                            t.color,
+                            getattr(t, "cols", []) or []
+                        )
                         if getattr(t, "tray_info_idx", "") else None
                     ),
                 ) for t in a.trays],

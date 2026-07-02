@@ -380,6 +380,8 @@ class MQTTManager:
 
                     # Stocker tray_info_idx sur le tray pour l'API
                     t.tray_info_idx = _tray_info
+                    t.cols  = tr.get("cols", []) or []
+                    t.ctype = tr.get("ctype", "") or ""
 
                     # ── Log détaillé par slot (1 seul log à l'init du tray) ──
                     if not t.empty:

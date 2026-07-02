@@ -10,8 +10,10 @@ from typing import Optional
 class AMSTray:
     id: int
     color: str = ""
+    cols: list = field(default_factory=list)  # liste hex pour filaments multicolores (Bambu 'cols')
+    ctype: str = ""                            # type couleur Bambu ('gradient','coaxial',etc.)
     filament_type: str = ""
-    tray_id_name: str = ""   # ex: "A00-Y4" = nom catalogue Bambu
+    tray_id_name: str = ""
     remain: int = 0
     uuid: str = ""
     tag_uid: str = ""
@@ -21,8 +23,8 @@ class AMSTray:
     drying_time: int = 0
     total_len: int = 0
     spool_id: Optional[int] = None
-    _spool_info_cache: Optional[dict] = None  # cache dict de spool_info pour éviter re-query
-    match_mode: str = ""   # "rfid" | "color" | "manual" | ""
+    _spool_info_cache: Optional[dict] = None
+    match_mode: str = ""
 
 
 @dataclass
