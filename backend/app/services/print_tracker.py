@@ -367,6 +367,7 @@ async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str):
                         flat.append(t)
 
             idx = slot - 1  # slot 1-based → 0-based
+            logger.info(f"[SLOT] slot={slot} → flat size={len(flat)} idx={idx}")
             if 0 <= idx < len(flat):
                 t = flat[idx]
                 if t.spool_id:

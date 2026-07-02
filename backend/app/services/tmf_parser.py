@@ -142,19 +142,24 @@ def _parse_3mf(data: bytes, print_id: int) -> dict:
                     elif k == "prediction":
                         try: result["estimated_seconds"] = int(v)
                         except Exception: pass
-                slot = 1
+                _seq = 1  # fallback si pas d'attribut id
                 for plate in root.findall(".//plate"):
                     for fil in plate.findall(".//filament"):
                         try:
-                            result["filaments"][slot] = {
-                                "slot": slot,
+                            # L'attribut 'id' du 3MF est le numéro de slot AMS réel
+                            # (1=A1, 2=A2, 3=A3, 4=A4, 5=B1, 6=B2… etc.)
+                            # Ne pas utiliser un compteur séquentiel qui casse le mapping multi-AMS
+                            raw_id = fil.attrib.get("id")
+                            slot_key = int(raw_id) if raw_id and raw_id.isdigit() else _seq
+                            result["filaments"][slot_key] = {
+                                "slot": slot_key,
                                 "tray_info_idx": fil.attrib.get("tray_info_idx", ""),
                                 "type":  fil.attrib.get("type", ""),
                                 "color": fil.attrib.get("color", ""),
                                 "used_g": float(fil.attrib.get("used_g", 0)),
                                 "used_m": float(fil.attrib.get("used_m", 0)),
                             }
-                            slot += 1
+                            _seq += 1
                         except Exception: pass
 
             # Vignette
