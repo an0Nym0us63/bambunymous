@@ -258,7 +258,7 @@ async def printer_status(_: str = Depends(get_current_user)):
                     drying_temp=t.drying_temp, drying_time=t.drying_time,
                     spool_id=t.spool_id,
                     match_mode=getattr(t, "match_mode", ""),
-                    spool_info=(lambda si: SpoolInfoOut(**si) if si else _spool_info(t.spool_id, _spools_map))(getattr(t, "_spool_info_cache", None)),
+                    spool_info=_spool_info(t.spool_id, _spools_map),
                     cols=getattr(t, "cols", []) or [],
                     ctype=str(getattr(t, "ctype", "") or ""),
                     catalog_name=(
