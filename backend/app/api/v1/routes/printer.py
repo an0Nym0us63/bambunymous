@@ -8,7 +8,11 @@ from .auth import get_current_user
 
 def _catalog_lookup(fila_id: str, color_hex: str) -> Optional[str]:
     """Lookup nom FR dans le catalogue Bambu local pour un tray non matché.
-    Retourne None si absent. Vérifie la cohérence mono↔mono / multi↔multi.
+    Cherche la couleur du tray dans TOUTES les positions de fila_color
+    (pas seulement la première), sans pré-filtrer par mono/multi.
+    Un profile GFA05 (Silk) n'a que des entrées bicolores → correct.
+    Un profile GFA00 (PLA Basic) n'a que des entrées mono → correct.
+    Retourne None si absent.
     """
     if not fila_id:
         return None
@@ -21,25 +25,20 @@ def _catalog_lookup(fila_id: str, color_hex: str) -> Optional[str]:
         data = _j.loads(open(path).read()).get("data", [])
         en_to_fr = {e.get("fila_color_name",{}).get("en",""): e.get("fila_color_name",{}).get("fr","")
                     for e in data if e.get("fila_color_name",{}).get("en") and e.get("fila_color_name",{}).get("fr")}
-        COLOR_TYPE = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}
+
         h = color_hex.replace("#","").lower()
         h8 = h + "ff" if len(h) == 6 else h[:8]
 
         for e in data:
             if e.get("fila_id","").upper() != fila_id.upper():
                 continue
-            # Cohérence mono↔mono : le tray a UNE couleur → ne matcher que les entrées monochromes
-            e_ctype = COLOR_TYPE.get(e.get("fila_color_type",""), "monochrome")
-            e_is_multi = e_ctype != "monochrome"
-            # Le tray AMS n'a qu'une couleur → forcément mono
-            if e_is_multi:
-                continue
-            ec = (e.get("fila_color",[""])[0]).lstrip("#").lower()
-            ec8 = ec + "ff" if len(ec) == 6 else ec[:8]
-            if ec8 != h8:
+            # Chercher la couleur du tray dans N'IMPORTE QUELLE position des couleurs de l'entrée
+            e_colors = [c.lstrip("#").lower() for c in e.get("fila_color", [])]
+            e_colors8 = [c + "ff" if len(c) == 6 else c[:8] for c in e_colors]
+            if h8 not in e_colors8:
                 continue
             names = e.get("fila_color_name", {})
-            name_en = names.get("en","")
+            name_en = names.get("en", "")
             return names.get("fr") or en_to_fr.get(name_en) or name_en or None
     except Exception:
         pass
