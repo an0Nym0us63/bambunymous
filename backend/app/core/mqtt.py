@@ -205,14 +205,15 @@ class MQTTManager:
 
         # Cloud: command=project_file + url
         if p.get("command") == "project_file" and _url and _jid:
-            _u0, _t0, _j0 = _url, _task, _jid
-            def _cloud0(_u=_u0, _t=_t0, _j=_j0):
+            _am0 = p.get("ams_mapping2") or p.get("ams_mapping") or []
+            _u0, _t0, _j0, _am0 = _url, _task, _jid, _am0
+            def _cloud0(_u=_u0, _t=_t0, _j=_j0, _am=_am0):
                 lp = _pio.new_event_loop()
                 async def _go():
                     async with _PAS() as db:
                         ip   = await _PGS(db, "PRINTER_IP")
                         code = await _PGS(db, "PRINTER_ACCESS_CODE")
-                    await _cp(_j, _u, _t, "cloud", ip or "", code or "")
+                    await _cp(_j, _u, _t, "cloud", ip or "", code or "", ams_mapping=_am)
                 try:    lp.run_until_complete(_go())
                 finally: lp.close()
             _pth.Thread(target=_cloud0, daemon=True).start()
@@ -224,13 +225,14 @@ class MQTTManager:
             _u2 = "ftp://" + (p.get("gcode_file") or "")
             _t2 = p.get("subtask_name") or p.get("gcode_file") or ""
             _j2 = _jid
-            def _local2(_u=_u2, _t=_t2, _j=_j2):
+            _am2 = p.get("ams_mapping2") or p.get("ams_mapping") or []
+            def _local2(_u=_u2, _t=_t2, _j=_j2, _am=_am2):
                 lp = _pio.new_event_loop()
                 async def _go():
                     async with _PAS() as db:
                         ip   = await _PGS(db, "PRINTER_IP")
                         code = await _PGS(db, "PRINTER_ACCESS_CODE")
-                    await _cp(_j, _u, _t, "local", ip or "", code or "")
+                    await _cp(_j, _u, _t, "local", ip or "", code or "", ams_mapping=_am)
                 try:    lp.run_until_complete(_go())
                 finally: lp.close()
             _pth.Thread(target=_local2, daemon=True).start()
