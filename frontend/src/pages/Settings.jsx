@@ -215,6 +215,38 @@ function EnrichFromCatalogSection() {
   );
 }
 
+
+function RecalculateSection() {
+  const [loading, setLoading] = React.useState(false);
+  const [done, setDone] = React.useState(false);
+
+  const run = async () => {
+    setLoading(true); setDone(false);
+    try {
+      await client.post("/prints/recalculate-all");
+      setDone(true);
+      setTimeout(() => setDone(false), 5000);
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
+        Recalculer les coûts
+      </h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        Recalcule les coûts filament et électricité de tous les prints (utile après changement de prix ou d'import). Les groupes se mettent à jour automatiquement.
+      </p>
+      <button onClick={run} disabled={loading}
+        style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:loading?"wait":"pointer",
+          border:"none", background: done ? "#22c55e" : loading ? "var(--border)" : "#3b82f6",
+          color:"white", display:"flex", alignItems:"center", gap:8 }}>
+        {loading ? "Recalcul en cours…" : done ? "✓ Recalcul lancé" : "⟳ Recalculer tous les prints"}
+      </button>
+    </div>
+  );
+}
 export default function Settings() {
   const { theme, toggle } = useTheme();
   const [ip,      setIp]      = useState("");
@@ -362,6 +394,7 @@ export default function Settings() {
       <AMSOrderSection/>
 
       <EnrichFromCatalogSection/>
+        <RecalculateSection/>
 
       {/* Zone dangereuse */}
       <div style={{ marginTop:8, padding:16, borderRadius:12,
