@@ -201,6 +201,11 @@ async def _apply_meta(pid: int, meta: dict, taskname: str):
                 spool_id=spool_id,
             ))
         await db.commit()
+        # Déduire immédiatement les grammes des bobines — pas besoin d'attendre la fin
+        p_obj = await db.get(Print, pid)
+        if p_obj:
+            await _deduct_spool_weights(db, p_obj)
+            await db.commit()
     logger.info(f"[DB] ✅ Print {pid}: {name!r}, {len(meta.get('filaments',{}))} filaments")
 
 
@@ -249,6 +254,11 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
                     spool_id=spool_id,
                 ))
             await db.commit()
+            # Déduire immédiatement les grammes des bobines
+            p_obj = await db.get(Print, pid)
+            if p_obj:
+                await _deduct_spool_weights(db, p_obj)
+                await db.commit()
         logger.info(f"[DB] ✅ Print {pid} sauvegardé: {name!r} avec {len(meta.get('filaments', {}))} filaments")
     except Exception as e:
         logger.error(f"_enrich pid={pid}: {e}")
@@ -404,8 +414,7 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float]):
                     p.duration_seconds = real
             # Coûts
             await _costs(db, p)
-            # Déduction poids bobines
-            await _deduct_spool_weights(db, p)
+            # Note: déduction des bobines faite au démarrage dans _apply_meta/_enrich
             await db.commit()
         # Logger APRÈS le with pour éviter TypeError si total_weight_g/total_cost est None
         tw = p.total_weight_g or 0
@@ -440,39 +449,6 @@ async def _deduct_spool_weights(db, p: Print):
                 continue
             if spool.remaining_weight_g is None:
                 logger.warning(f"[SPOOL] Bobine #{spool.id} : remaining_weight_g est None → skip")
-                continue
-            before = spool.remaining_weight_g
-            spool.remaining_weight_g = max(0.0, before - u.grams_used)
-            logger.info(
-                f"[SPOOL] ✅ Bobine #{spool.id} : {before:.0f}g → {spool.remaining_weight_g:.0f}g "
-                f"(- {u.grams_used:.1f}g print #{p.id})"
-            )
-    except Exception as e:
-        logger.error(f"_deduct_spool_weights print #{p.id}: {e}", exc_info=True)
-
-
-async def _deduct_spool_weights(db, p: Print):
-    """Déduit les grammes utilisés de chaque bobine liée à ce print."""
-    try:
-        usages = (await db.execute(
-            select(FilamentUsage).where(
-                FilamentUsage.print_id == p.id,
-                FilamentUsage.spool_id.isnot(None),
-                FilamentUsage.grams_used > 0,
-            )
-        )).scalars().all()
-
-        logger.info(f"[SPOOL] Déduction print #{p.id} : {len(usages)} usage(s) avec spool_id et grams_used > 0")
-
-        for u in usages:
-            logger.info(f"[SPOOL] Usage spool_id={u.spool_id} grams_used={u.grams_used}")
-            spool = await db.get(Spool, u.spool_id)
-            if not spool:
-                logger.warning(f"[SPOOL] Bobine #{u.spool_id} introuvable")
-                continue
-            logger.info(f"[SPOOL] Bobine #{spool.id} remaining_weight_g={spool.remaining_weight_g}")
-            if spool.remaining_weight_g is None:
-                logger.warning(f"[SPOOL] Bobine #{spool.id} : remaining_weight_g est None, skip")
                 continue
             before = spool.remaining_weight_g
             spool.remaining_weight_g = max(0.0, before - u.grams_used)
