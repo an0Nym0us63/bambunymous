@@ -495,7 +495,15 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
           {p.file_name || "Sans nom"}
         </p>
-        <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>{fmtDate(p.print_date)}</p>
+        <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+          <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDate(p.print_date)}</span>
+          {p.duration_seconds > 0 && <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDur(p.duration_seconds)}</span>}
+          {p.total_cost > 0 && (
+            <span style={{ fontSize:10, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
+              {p.total_cost.toFixed(2)}€{p.number_of_items > 1 ? ` (${(p.total_cost/p.number_of_items).toFixed(2)}€/u)` : ""}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -597,15 +605,21 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
 }
 
 
-function PrintDetail({ p, onClose, onDelete, onChanged }) {
+function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
   const [ungrouped, setUngrouped] = useState(false);
+  const [p, setP] = useState(pProp);
 
+  // Refetcher le print complet (avec tous les champs coût) si nécessaire
   useEffect(() => {
-    if (p.snapshots?.length) {
-      setSnaps(p.snapshots.sort((a,b) => new Date(a.taken_at) - new Date(b.taken_at)));
+    if (pProp.total_cost_filament == null) {
+      client.get("/prints/" + pProp.id)
+        .then(r => setP(r.data))
+        .catch(() => setP(pProp));
+    } else {
+      setP(pProp);
     }
-  }, [p]);
+  }, [pProp.id]);
 
   const groupe = ungrouped ? null : p.group_name;
 
