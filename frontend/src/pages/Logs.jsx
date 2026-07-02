@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { RefreshCw, Trash2, Play, Square, Filter } from "lucide-react";
+import { RefreshCw, Trash2, Play, Square, Filter, Search } from "lucide-react";
 import client from "../api/client";
 
 const LEVEL_COLOR = { DEBUG:"#64748b", INFO:"#3b82f6", WARNING:"#f59e0b", ERROR:"#ef4444", CRITICAL:"#dc2626" };
@@ -13,42 +13,53 @@ export default function Logs() {
   const [live, setLive]         = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
   const [status, setStatus]     = useState("");
+  const [searching, setSearching] = useState(false);
+  const [fullSearch, setFullSearch] = useState(false);
+  const [fileMb, setFileMb]     = useState(null);
+  const [purged, setPurged]     = useState(false);
   const bottomRef   = useRef();
   const intervalRef = useRef();
+  const debounceRef = useRef();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (q = filter, level = minLevel) => {
     try {
-      const { data } = await client.get("/logs?limit=500");
+      if (q.trim()) setSearching(true);
+      const { data } = await client.get("/logs", { params: { limit:500, q: q.trim(), min_level: level } });
       setLogs(data.logs ?? []);
+      setFullSearch(data.full_search ?? false);
+      setFileMb(data.file_mb);
+      setPurged(data.purged ?? false);
       if (data.error) setStatus("⚠ " + data.error);
-      else setStatus(`${data.total ?? 0} entrées`);
+      else setStatus(`${data.total ?? 0} entrée${(data.total??0)!==1?"s":""}`);
     } catch(e) {
       setStatus("⚠ " + (e.response?.data?.detail || e.message));
+    } finally {
+      setSearching(false);
     }
-  }, []);
+  }, [filter, minLevel]);
 
-  useEffect(() => { load(); }, []);
+  // Chargement initial
+  useEffect(() => { load("", minLevel); }, []);
+
+  // Debounce sur la recherche
+  useEffect(() => {
+    clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => load(filter, minLevel), filter ? 600 : 0);
+    return () => clearTimeout(debounceRef.current);
+  }, [filter, minLevel]);
 
   useEffect(() => {
     if (autoScroll) bottomRef.current?.scrollIntoView({ behavior:"smooth" });
   }, [logs, autoScroll]);
 
-  const startLive = () => { setLive(true); intervalRef.current = setInterval(load, 2000); };
+  const startLive = () => { setLive(true); intervalRef.current = setInterval(() => load(filter, minLevel), 3000); };
   const stopLive  = () => { setLive(false); clearInterval(intervalRef.current); };
   useEffect(() => () => clearInterval(intervalRef.current), []);
 
   const clearLogs = async () => {
     await client.delete("/logs");
-    setLogs([]); setStatus("Vidé");
+    setLogs([]); setStatus("Vidé"); setFileMb(0);
   };
-
-  const minIdx = LEVEL_ORDER[minLevel] ?? 0;
-  const filtered = logs.filter(l => {
-    if ((LEVEL_ORDER[l.level] ?? 0) < minIdx) return false;
-    if (!filter) return true;
-    const q = filter.toLowerCase();
-    return l.msg?.toLowerCase().includes(q) || l.name?.toLowerCase().includes(q);
-  });
 
   const Btn = ({ onClick, children, active }) => (
     <button onClick={onClick} style={{
@@ -67,13 +78,16 @@ export default function Logs() {
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Journal</h1>
-          <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{status}</span>
+          <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
+            {status}{fileMb != null ? ` · ${fileMb} Mo` : ""}
+            {purged && <span style={{ color:"#f59e0b", marginLeft:6 }}>⚡ Purgé auto</span>}
+          </span>
           {live && <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"#22c55e" }}>
             <span style={{ width:6, height:6, borderRadius:"50%", background:"#22c55e", display:"inline-block", animation:"livePulse 2s infinite" }}/> Live
           </span>}
         </div>
         <div style={{ display:"flex", gap:6 }}>
-          <Btn onClick={load}><RefreshCw size={13}/> Actualiser</Btn>
+          <Btn onClick={() => load(filter, minLevel)}><RefreshCw size={13}/> Actualiser</Btn>
           {live ? <Btn onClick={stopLive} active><Square size={13}/> Stop</Btn>
                 : <Btn onClick={startLive}><Play size={13}/> Live</Btn>}
           <Btn onClick={clearLogs}><Trash2 size={13}/> Vider</Btn>
@@ -82,9 +96,18 @@ export default function Logs() {
 
       {/* Filtres */}
       <div className="card" style={{ padding:"10px 12px", display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
-        <Filter size={13} style={{ color:"var(--muted)" }}/>
-        <input value={filter} onChange={e=>setFilter(e.target.value)} placeholder="Filtrer…"
-          style={{ flex:1, minWidth:120, background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6, padding:"5px 10px", fontSize:12, color:"var(--text)", outline:"none" }}/>
+        <Filter size={13} style={{ color:"var(--muted)", flexShrink:0 }}/>
+        <div style={{ position:"relative", flex:1, minWidth:120 }}>
+          <input value={filter} onChange={e=>setFilter(e.target.value)}
+            placeholder="Rechercher dans tout le fichier…"
+            style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:6,
+              padding:"5px 32px 5px 10px", fontSize:12, color:"var(--text)", outline:"none", boxSizing:"border-box" }}/>
+          <div style={{ position:"absolute", right:8, top:"50%", transform:"translateY(-50%)" }}>
+            {searching
+              ? <RefreshCw size={11} style={{ color:"var(--muted)", animation:"spin 1s linear infinite" }}/>
+              : <Search size={11} style={{ color:"var(--muted)" }}/>}
+          </div>
+        </div>
         <div style={{ display:"flex", gap:3 }}>
           {LEVELS.map(l => (
             <button key={l} onClick={()=>setMinLevel(l)} style={{
@@ -94,17 +117,20 @@ export default function Logs() {
             }}>{l}</button>
           ))}
         </div>
-        <span style={{ fontSize:11, color:"var(--muted)" }}>{filtered.length}/{logs.length}</span>
-        <label style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"var(--muted)", cursor:"pointer" }}>
+        <span style={{ fontSize:11, color:"var(--muted)", flexShrink:0 }}>{logs.length}</span>
+        {fullSearch && <span style={{ fontSize:10, color:"#22c55e", fontWeight:600, flexShrink:0 }}>● fichier entier</span>}
+        <label style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"var(--muted)", cursor:"pointer", flexShrink:0 }}>
           <input type="checkbox" checked={autoScroll} onChange={e=>setAutoScroll(e.target.checked)}/>Auto-scroll
         </label>
       </div>
 
       {/* Logs */}
       <div className="card" style={{ flex:1, overflowY:"auto", padding:8, fontFamily:"JetBrains Mono, monospace", fontSize:11 }}>
-        {filtered.length === 0
-          ? <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0", fontSize:13 }}>Aucun log</p>
-          : filtered.map((l, i) => (
+        {logs.length === 0
+          ? <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0", fontSize:13 }}>
+              {searching ? "Recherche…" : "Aucun log"}
+            </p>
+          : logs.map((l, i) => (
             <div key={i} style={{
               display:"flex", gap:8, padding:"3px 6px", borderRadius:4, alignItems:"baseline",
               background: l.level==="ERROR"||l.level==="CRITICAL" ? "rgba(239,68,68,0.07)"
