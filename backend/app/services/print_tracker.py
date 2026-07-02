@@ -146,8 +146,8 @@ async def create_print(job_id: str, url: str, taskname: str,
     # URLs HTTP pre-signed (AWS S3) expirent en ~60s → lancer un thread immédiat
     if url.startswith("http"):
         import threading as _dlt, asyncio as _dla
-        _taskname, _url, _pid = taskname, url, pid
-        def _dl_now(_u=_url, _p=_pid, _t=_taskname):
+        _taskname, _url, _pid, _jid = taskname, url, pid, job_id
+        def _dl_now(_u=_url, _p=_pid, _t=_taskname, _j=_jid):
             lp = _dla.new_event_loop()
             async def _go():
                 from .tmf_parser import _download_http, _parse_3mf
@@ -155,7 +155,7 @@ async def create_print(job_id: str, url: str, taskname: str,
                     raw = await _download_http(_u)
                     logger.info(f"[PRINT] ✅ 3MF téléchargé {len(raw)} bytes")
                     meta = _parse_3mf(raw, _p)
-                    if meta: await _apply_meta(_p, meta, _t)
+                    if meta: await _apply_meta(_p, meta, _t, job_id=_j)
                     else: logger.error(f"[PRINT] ❌ _parse_3mf vide print_id={_p}")
                 except Exception as e:
                     import traceback as _tb
@@ -367,20 +367,32 @@ async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_i
         if am and state and state.ams_list:
             idx = slot - 1  # slot 3MF 1-based -> 0-based
             if 0 <= idx < len(am):
-                global_tray = am[idx]
-                ams_id  = global_tray // 4
-                tray_id = global_tray % 4
-                ams = next((a for a in state.ams_list if a.id == ams_id), None)
-                if ams:
-                    t = next((t for t in ams.trays if t.id == tray_id), None)
-                    if t and t.spool_id:
-                        logger.info(f"[SLOT] slot={slot} ams_mapping[{idx}]={global_tray} -> AMS{ams_id} tray{tray_id} spool_id={t.spool_id}")
-                        return t.spool_id, "live"
-                    logger.info(f"[SLOT] slot={slot} ams_mapping[{idx}]={global_tray} -> AMS{ams_id} tray{tray_id} pas de spool_id")
+                entry = am[idx]
+                # ams_mapping est une liste de dicts {'ams_id': X, 'slot_id': Y}
+                # ams_id=255 = slot non utilisé dans ce print
+                if isinstance(entry, dict):
+                    ams_id  = entry.get("ams_id",  255)
+                    tray_id = entry.get("slot_id", 255)
+                else:
+                    # Format entier legacy (au cas où)
+                    ams_id  = int(entry) // 4
+                    tray_id = int(entry) % 4
+                if ams_id == 255 or tray_id == 255:
+                    logger.info(f"[SLOT] slot={slot} ams_mapping[{idx}] → non utilisé (255)")
+                else:
+                    ams = next((a for a in state.ams_list if a.id == ams_id), None)
+                    if ams:
+                        t = next((t for t in ams.trays if t.id == tray_id), None)
+                        if t and t.spool_id:
+                            logger.info(f"[SLOT] slot={slot} → AMS{ams_id} tray{tray_id} spool_id={t.spool_id} ✅")
+                            return t.spool_id, "live"
+                        logger.info(f"[SLOT] slot={slot} → AMS{ams_id} tray{tray_id} pas de spool_id mappé")
+                    else:
+                        logger.info(f"[SLOT] slot={slot} → AMS{ams_id} introuvable dans l'état MQTT")
             else:
                 logger.info(f"[SLOT] slot={slot} hors plage ams_mapping (len={len(am)})")
         else:
-            logger.info(f"[SLOT] slot={slot} ams_mapping vide -> fallback match_spool")
+            logger.info(f"[SLOT] slot={slot} ams_mapping vide → fallback match_spool")
     except Exception as e:
         logger.warning(f"[SLOT] ams_mapping lookup failed slot={slot}: {e}")
 
