@@ -204,12 +204,15 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
                 ams_slot=int(slot),
                 spool_id=spool_id,
             ))
+            logger.info(f"[DB] FilamentUsage slot={slot} spool_id={spool_id} grams_used={fil.get('used_g',0)}")
         await db.commit()
-        # Déduire immédiatement les grammes des bobines — pas besoin d'attendre la fin
+        # Déduire immédiatement les grammes des bobines
+        logger.info(f"[SPOOL] ▶ Appel déduction pour print #{pid}")
         p_obj = await db.get(Print, pid)
         if p_obj:
             await _deduct_spool_weights(db, p_obj)
             await db.commit()
+            logger.info(f"[SPOOL] ✅ Déduction terminée print #{pid}")
     logger.info(f"[DB] ✅ Print {pid}: {name!r}, {len(meta.get('filaments',{}))} filaments")
 
 
