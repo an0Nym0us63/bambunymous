@@ -60,7 +60,21 @@ async def lifespan(app: FastAPI):
     # Vider le cache de matching au démarrage
     from app.core.mqtt import invalidate_tray_cache
     invalidate_tray_cache()
+
+    # Purge automatique du fichier log toutes les heures (seuil 500 Mo)
+    import threading as _th, time as _time
+    _stop_purge = _th.Event()
+    def _log_purge_loop():
+        from app.api.v1.routes.logs import _auto_purge, LOG_FILE
+        while not _stop_purge.wait(3600):   # toutes les heures
+            purged = _auto_purge(LOG_FILE)
+            if purged:
+                import logging as _lg
+                _lg.getLogger(__name__).info("[LOG] Purge automatique du fichier log effectuée")
+    _th.Thread(target=_log_purge_loop, name="LogPurge", daemon=True).start()
+
     yield
+    _stop_purge.set()
     catalog_sync.stop()
     await mqtt_manager.stop()
 
