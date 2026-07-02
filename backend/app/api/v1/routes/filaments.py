@@ -193,6 +193,7 @@ async def update_filament(
     for k, v in body.model_dump(exclude_none=True).items():
         setattr(f, k, v)
     await db.commit()
+    _clear_match_cache()   # invalide le cache spool_info (nom/type/traduction)
     return _fil_out(f)
 
 
@@ -894,6 +895,7 @@ async def delete_filament(fid: int, _: str = Depends(get_current_user)):
         await db.delete(f)
         await db.commit()
 
+    _clear_match_cache()
     return {"ok": True}
 
 
