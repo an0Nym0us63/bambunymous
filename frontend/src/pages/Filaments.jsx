@@ -1424,7 +1424,7 @@ function SwatchView({ filaments: allFilaments }) {
           </select>
           <select value={filterType} onChange={e=>{setFilterType(e.target.value); setFilterSub("");}}
             style={{ ...iStyle, flex:"1 1 100px" }}>
-            <option value="">Tous types</option>
+            <option value="">Tous matériaux</option>
             {types.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
           {subtypes.length > 1 && (
