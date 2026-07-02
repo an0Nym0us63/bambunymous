@@ -20,11 +20,13 @@ export default function GalleryCompare({
   const [selected, setSelected]   = useState(new Map());
   const [carousel, setCarousel]   = useState(null); // { item, index }
   const [compareOpen, setCompareOpen] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(pageSize);
+  // En mode swatch, tuiles légères → pas de pagination (tout charger d'un coup)
+  const effectivePageSize = swatchMode ? 9999 : pageSize;
+  const [visibleCount, setVisibleCount] = useState(effectivePageSize);
   const sentinelRef = useRef(null);
 
   // Reset la pagination si la liste source change (ex: changement d'onglet/filtre)
-  useEffect(() => { setVisibleCount(pageSize); }, [items, pageSize]);
+  useEffect(() => { setVisibleCount(effectivePageSize); }, [items, effectivePageSize]);
 
   // Lazy-load au scroll — charge le batch suivant quand la sentinelle approche du viewport
   useEffect(() => {
@@ -32,12 +34,12 @@ export default function GalleryCompare({
     if (!el) return;
     const obs = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting) {
-        setVisibleCount(c => Math.min(c + pageSize, items?.length || 0));
+        setVisibleCount(c => Math.min(c + effectivePageSize, items?.length || 0));
       }
     }, { rootMargin: "600px" });
     obs.observe(el);
     return () => obs.disconnect();
-  }, [pageSize, items]);
+  }, [effectivePageSize, items]);
 
   const normPhotos = (item) => (getPhotos ? (getPhotos(item) || []) : []).map(p =>
     typeof p === "string" ? { url: p, label: "" } : p
