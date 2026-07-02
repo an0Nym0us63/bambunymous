@@ -7,24 +7,32 @@ from .auth import get_current_user
 
 
 def _catalog_lookup(fila_id: str, color_hex: str) -> Optional[str]:
-    """Lookup nom FR dans le catalogue Bambu local. Retourne None si absent."""
+    """Lookup nom FR dans le catalogue Bambu local pour un tray non matché.
+    Retourne None si absent. Vérifie la cohérence mono↔mono / multi↔multi.
+    """
     if not fila_id:
         return None
     try:
-        from ....services.bambu_catalog import BambuCatalogSync
         from ....core.config import settings
-        cat = BambuCatalogSync(data_dir=settings.DATA_DIR)
-        h = color_hex.replace("#","").lower()
-        h8 = h + "ff" if len(h) == 6 else h[:8]
         import os, json as _j
         path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
         if not os.path.exists(path):
             return None
         data = _j.loads(open(path).read()).get("data", [])
         en_to_fr = {e.get("fila_color_name",{}).get("en",""): e.get("fila_color_name",{}).get("fr","")
-                    for e in data if e.get("fila_color_name",{}).get("fr")}
+                    for e in data if e.get("fila_color_name",{}).get("en") and e.get("fila_color_name",{}).get("fr")}
+        COLOR_TYPE = {"单色": "monochrome", "渐变色": "gradient", "多拼色": "coaxial"}
+        h = color_hex.replace("#","").lower()
+        h8 = h + "ff" if len(h) == 6 else h[:8]
+
         for e in data:
             if e.get("fila_id","").upper() != fila_id.upper():
+                continue
+            # Cohérence mono↔mono : le tray a UNE couleur → ne matcher que les entrées monochromes
+            e_ctype = COLOR_TYPE.get(e.get("fila_color_type",""), "monochrome")
+            e_is_multi = e_ctype != "monochrome"
+            # Le tray AMS n'a qu'une couleur → forcément mono
+            if e_is_multi:
                 continue
             ec = (e.get("fila_color",[""])[0]).lstrip("#").lower()
             ec8 = ec + "ff" if len(ec) == 6 else ec[:8]
