@@ -1367,6 +1367,13 @@ function SwatchView({ filaments: allFilaments }) {
 
   const SORTS = [["hue","Teinte"],["material","Matière"],["manufacturer","Marque"],["name","Nom"]];
 
+  // Extraire la famille (type) depuis fila_type ou material
+  // Ex: "PLA Basic" → "PLA", "PETG-HF" → "PETG", "TPU 95A" → "TPU"
+  const getFamily = (f) => {
+    const sub = (f.fila_type || f.material || "").trim();
+    return MATERIALS.find(m => sub === m || sub.startsWith(m + " ") || sub.startsWith(m + "-")) || sub.split(/[\s-]/)[0] || "";
+  };
+
   // Filtrages en cascade
   const afterEmpty = useMemo(() =>
     showEmpty ? allFilaments : allFilaments.filter(f => (f.active_spool_count||0) > 0)
@@ -1375,9 +1382,11 @@ function SwatchView({ filaments: allFilaments }) {
   const brands   = useMemo(() => [...new Set(afterEmpty.map(f=>f.manufacturer).filter(Boolean))].sort(), [afterEmpty]);
   const afterBrand = useMemo(() => filterBrand ? afterEmpty.filter(f=>f.manufacturer===filterBrand) : afterEmpty, [afterEmpty, filterBrand]);
 
-  const types    = useMemo(() => [...new Set(afterBrand.map(f=>f.material).filter(Boolean))].sort(), [afterBrand]);
-  const afterType = useMemo(() => filterType ? afterBrand.filter(f=>f.material===filterType) : afterBrand, [afterBrand, filterType]);
+  // Types = familles (PLA, PETG…) dérivées depuis fila_type/material
+  const types    = useMemo(() => [...new Set(afterBrand.map(f=>getFamily(f)).filter(Boolean))].sort(), [afterBrand]);
+  const afterType = useMemo(() => filterType ? afterBrand.filter(f=>getFamily(f)===filterType) : afterBrand, [afterBrand, filterType]);
 
+  // Sous-types = fila_type complet (PLA Basic, PLA Silk…)
   const subtypes = useMemo(() => [...new Set(afterType.map(f=>f.fila_type).filter(Boolean))].sort(), [afterType]);
   const afterSub = useMemo(() => filterSub ? afterType.filter(f=>f.fila_type===filterSub) : afterType, [afterType, filterSub]);
 
@@ -1418,9 +1427,9 @@ function SwatchView({ filaments: allFilaments }) {
             <option value="">Tous types</option>
             {types.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
-          {subtypes.length > 0 && (
+          {subtypes.length > 1 && (
             <select value={filterSub} onChange={e=>setFilterSub(e.target.value)}
-              style={{ ...iStyle, flex:"1 1 120px" }}>
+              style={{ ...iStyle, flex:"1 1 140px" }}>
               <option value="">Tous sous-types</option>
               {subtypes.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
