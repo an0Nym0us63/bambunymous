@@ -1344,6 +1344,71 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
 }
 
 // ── Page principale ────────────────────────────────────────────────────────
+function hexToHsl(hex) {
+  const h = (hex||"").replace(/^#/,"").toLowerCase().slice(0,6);
+  if (h.length < 6) return [0,0,100];
+  const r=parseInt(h.slice(0,2),16)/255, g=parseInt(h.slice(2,4),16)/255, b=parseInt(h.slice(4,6),16)/255;
+  const max=Math.max(r,g,b), min=Math.min(r,g,b), l=(max+min)/2;
+  if (max===min) return [0,0,Math.round(l*100)];
+  const d=max-min, s=l>0.5?d/(2-max-min):d/(max+min);
+  const hue = max===r?((g-b)/d+(g<b?6:0)):max===g?((b-r)/d+2):((r-g)/d+4);
+  return [Math.round(hue*60), Math.round(s*100), Math.round(l*100)];
+}
+
+function SwatchView({ filaments }) {
+  const [swatchSort, setSwatchSort] = useState("hue");
+  const SORTS = [["hue","Teinte"],["material","Matière"],["manufacturer","Marque"],["name","Nom"]];
+
+  const sorted = useMemo(() => [...filaments].sort((a,b) => {
+    if (swatchSort === "hue") {
+      const [ah,as_,al] = hexToHsl(a.color), [bh,bs,bl] = hexToHsl(b.color);
+      if (al > 90 && bl <= 90) return 1; if (bl > 90 && al <= 90) return -1;
+      if (al < 10 && bl >= 10) return 1; if (bl < 10 && al >= 10) return -1;
+      if (as_ < 15 && bs >= 15) return 1; if (bs < 15 && as_ >= 15) return -1;
+      return ah - bh || bl - al;
+    }
+    if (swatchSort === "material") return (a.material||"").localeCompare(b.material||"")||((a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||""));
+    if (swatchSort === "manufacturer") return (a.manufacturer||"").localeCompare(b.manufacturer||"")||(a.material||"").localeCompare(b.material||"");
+    return (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||"");
+  }), [filaments, swatchSort]);
+
+  return (
+    <>
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+        {SORTS.map(([id,label]) => (
+          <button key={id} onClick={()=>setSwatchSort(id)}
+            style={{ padding:"4px 10px", borderRadius:20, fontSize:10, fontWeight:600, cursor:"pointer",
+              background: swatchSort===id ? "#3b82f6" : "var(--surface2)",
+              color: swatchSort===id ? "white" : "var(--muted)",
+              border:"1px solid var(--border)" }}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <GalleryCompare
+        items={sorted}
+        getId={f => f.id}
+        getTitle={f => f.translated_name || f.name}
+        getSubtitle={f => [f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
+        emptyLabel="Aucun filament"
+        swatchMode={true}
+        renderCover={f => {
+          const colors = parseColorsList(f.color, f.colors_array);
+          return <div style={{ width:"100%", height:"100%", ...colorBg(colors, f.multicolor_type) }}/>;
+        }}
+        compareFields={[
+          ["Matière",  f => f.material],
+          ["Marque",   f => f.manufacturer],
+          ["Couleur",  f => f.color ? `#${f.color}` : null],
+          ["Poids",    f => f.filament_weight_g ? `${f.filament_weight_g}g` : null],
+          ["Prix",     f => f.price ? `${f.price}€` : null],
+          ["Bobines",  f => `${f.active_spool_count} active${f.active_spool_count!==1?"s":""}/${f.spool_count}`],
+        ]}
+      />
+    </>
+  );
+}
+
 export default function Filaments() {
   const [tab, setTab] = useState("spools");
   const [galleryMode, setGalleryMode] = useState("photos"); // "photos" | "swatch"
@@ -1413,27 +1478,8 @@ export default function Filaments() {
                 ["Bobines",   f => `${f.active_spool_count} active${f.active_spool_count!==1?"s":""} / ${f.spool_count}`],
               ]}
             />
-          ) : (
-            <GalleryCompare
-              items={filaments}
-              getId={f => f.id}
-              getTitle={f => f.name}
-              getSubtitle={f => [f.manufacturer, f.material].filter(Boolean).join(" · ")}
-              emptyLabel="Aucun filament"
-              renderCover={f => {
-                const colors = parseColorsList(f.color, f.colors_array);
-                return <div style={{ width:"100%", height:"100%", ...colorBg(colors, f.multicolor_type) }}/>;
-              }}
-              compareFields={[
-                ["Matière",   f => f.material],
-                ["Marque",    f => f.manufacturer],
-                ["Couleur",   f => f.color ? `#${f.color}` : null],
-                ["Poids",     f => f.filament_weight_g ? `${f.filament_weight_g}g` : null],
-                ["Prix",      f => f.price ? `${f.price}€` : null],
-                ["Bobines",   f => `${f.active_spool_count} active${f.active_spool_count!==1?"s":""} / ${f.spool_count}`],
-              ]}
-            />
-          )}
+          ) : null}
+          {galleryMode==="swatch" && <SwatchView filaments={filaments}/>}
         </>
       )}
       {(tab==="spools" || tab==="archived") && (

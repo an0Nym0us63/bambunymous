@@ -15,7 +15,7 @@ import { X, ChevronLeft, ChevronRight, Check } from "lucide-react";
 export default function GalleryCompare({
   items, getId, getCoverImage, getPhotos, getTitle, getSubtitle, compareFields = [],
   maxCompare = 6, emptyLabel = "Aucun élément", pageSize = 30,
-  enableCompare = true, renderCover = null,
+  enableCompare = true, renderCover = null, swatchMode = false,
 }) {
   const [selected, setSelected]   = useState(new Map());
   const [carousel, setCarousel]   = useState(null); // { item, index }
@@ -70,7 +70,9 @@ export default function GalleryCompare({
 
   return (
     <div style={{ position:"relative" }}>
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(110px,1fr))", gap:8,
+      <div style={{ display:"grid",
+        gridTemplateColumns: swatchMode ? "repeat(auto-fill,minmax(72px,1fr))" : "repeat(auto-fill,minmax(110px,1fr))",
+        gap: swatchMode ? 3 : 8,
         paddingBottom: (enableCompare && selectedList.length) ? 76 : 0 }}>
         {visibleItems.map(item => {
           const id = getId(item);
