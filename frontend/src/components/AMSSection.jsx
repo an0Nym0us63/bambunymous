@@ -273,7 +273,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
   const empty = isEmptyTray(tray);
   const colors = parseColors(tray, spoolInfo);
   const c1 = colors?.[0];
-  const name = spoolInfo?.name ?? spoolInfo?.filament_name ?? tray.catalog_name ?? null;
+  const name = spoolInfo?.translated_name ?? spoolInfo?.name ?? spoolInfo?.filament_name ?? tray.catalog_name ?? null;
   const material = spoolInfo?.material ?? spoolInfo?.filament_material ?? tray.filament_type ?? null;
   const hasW = spoolInfo?.remaining_weight_g != null;
   const hasT = (spoolInfo?.initial_weight_g ?? spoolInfo?.filament_weight_g) != null;
@@ -472,7 +472,7 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:19, fontWeight:800, color:"var(--text)", margin:0,
                 letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                {info?.name || tray.filament_type || "Slot vide"}
+                {info?.translated_name || info?.name || tray.filament_type || "Slot vide"}
               </p>
               <p style={{ fontSize:12, color:"var(--muted)", margin:"4px 0 0" }}>
                 {amsLabel} · Slot {tray.id + 1}
@@ -772,7 +772,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
                       backgroundColor: s.filament_color ? `#${s.filament_color}` : "var(--border)" }}/>
                     <div style={{ flex:1, minWidth:0 }}>
                       <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0,
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.filament_name}</p>
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.filament_translated_name || s.filament_name}</p>
                       <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
                         {[s.filament_manufacturer, s.filament_material].filter(Boolean).join(" · ")}
                         {s.remaining_weight_g ? ` · ${Math.round(s.remaining_weight_g)}g` : ""}

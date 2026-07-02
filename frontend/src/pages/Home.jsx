@@ -616,7 +616,7 @@ export default function Home() {
       spools.forEach(s => {
         const fil = filMap[s.filament_id] ?? {};
         const info = {
-          filament_name: s.filament_name,
+          filament_name: s.filament_translated_name || s.filament_name,  // FR prioritaire
           filament_manufacturer: s.filament_manufacturer,
           filament_material: s.filament_material,
           filament_color: s.filament_color,
