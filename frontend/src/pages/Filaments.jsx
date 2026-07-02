@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Plus, Search, Archive, X, Save, RefreshCw } from "lucide-react";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
@@ -464,6 +464,23 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
 }
 
 // ── Vue Bobines ────────────────────────────────────────────────────────────
+function KpiBar({ kpis }) {
+  return (
+    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+      {kpis.map(({ label, value, accent }) => (
+        <div key={label} style={{ flex:"1 1 100px", padding:"10px 14px", borderRadius:12,
+          background:"var(--surface2)", border:"1px solid var(--border)",
+          display:"flex", flexDirection:"column", gap:2 }}>
+          <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+            letterSpacing:"0.06em" }}>{label}</span>
+          <span style={{ fontSize:18, fontWeight:800, fontFamily:"JetBrains Mono,monospace",
+            color: accent || "var(--text)" }}>{value ?? "—"}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function SpoolsView({ filaments, showArchived }) {
   const [spools, setSpools] = useState([]);
   const [q, setQ] = useState("");
@@ -481,8 +498,29 @@ function SpoolsView({ filaments, showArchived }) {
 
   useEffect(() => { load(); }, [load]);
 
+  // KPIs dynamiques (recalculés à chaque changement de spools filtrés)
+  const kpis = useMemo(() => {
+    if (showArchived) {
+      const prixTotal = spools.reduce((s, b) => s + (b.price_override || 0), 0);
+      return [
+        { label:"Bobines", value: spools.length },
+        { label:"Valeur archivée", value: prixTotal > 0 ? `${prixTotal.toFixed(0)}€` : "—" },
+      ];
+    }
+    const marques = new Set(spools.map(b => b.filament_manufacturer).filter(Boolean)).size;
+    const poids = spools.reduce((s, b) => s + (b.remaining_weight_g ?? b.filament_weight_g ?? 0), 0);
+    const prix  = spools.reduce((s, b) => s + (b.price_override || 0), 0);
+    return [
+      { label:"Bobines",  value: spools.length, accent: spools.length > 0 ? "#22c55e" : undefined },
+      { label:"Marques",  value: marques },
+      { label:"En stock", value: poids > 0 ? `${(poids/1000).toFixed(2).replace(/\.?0+$/,"")} kg` : "—", accent:"#3b82f6" },
+      { label:"Valeur",   value: prix > 0 ? `${prix.toFixed(0)}€` : "—" },
+    ];
+  }, [spools, showArchived]);
+
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      <KpiBar kpis={kpis}/>
       {/* Barre de recherche + bouton */}
       <div style={{ display:"flex", gap:8 }}>
         <div style={{ position:"relative", flex:1 }}>
@@ -855,8 +893,23 @@ function FilamentsView() {
 
   useEffect(() => { load(); }, [load]);
 
+  const kpis = useMemo(() => {
+    const marques = new Set(filaments.map(f => f.manufacturer).filter(Boolean)).size;
+    const types   = new Set(filaments.map(f => f.fila_type || f.material).filter(Boolean)).size;
+    const aCommander = filaments.filter(f => f.to_order).length;
+    const avecBobines = filaments.filter(f => (f.active_spool_count || 0) > 0).length;
+    return [
+      { label:"Références",  value: filaments.length },
+      { label:"Marques",     value: marques },
+      { label:"Types",       value: types },
+      { label:"En stock",    value: avecBobines, accent:"#22c55e" },
+      ...(aCommander > 0 ? [{ label:"À commander", value: aCommander, accent:"#f59e0b" }] : []),
+    ];
+  }, [filaments]);
+
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+      <KpiBar kpis={kpis}/>
       <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
         <div style={{ position:"relative", flex:1, minWidth:180 }}>
           <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
@@ -1301,9 +1354,9 @@ export default function Filaments() {
   }, []);
 
   const tabs = [
-    { id:"spools",   label:"Bobines actives" },
+    { id:"spools",   label:"Stock" },
     { id:"archived", label:"Archivées" },
-    { id:"catalog",  label:"Catalogue" },
+    { id:"catalog",  label:"Filaments" },
     { id:"gallery",  label:"Galerie" },
   ];
 
