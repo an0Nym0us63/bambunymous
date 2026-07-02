@@ -105,7 +105,7 @@ class TrayOut(BaseModel):
     spool_info: Optional[SpoolInfoOut] = None
     catalog_name: Optional[str] = None
     cols: list = []     # couleurs Bambu raw (champ 'cols' MQTT) — liste hex
-    ctype: str = ""     # type couleur Bambu ('gradient','coaxial'…)
+    ctype: str = ""     # type couleur Bambu (int ou str selon firmware) ('gradient','coaxial'…)
 
 
 class AMSOut(BaseModel):
@@ -260,7 +260,7 @@ async def printer_status(_: str = Depends(get_current_user)):
                     match_mode=getattr(t, "match_mode", ""),
                     spool_info=(lambda si: SpoolInfoOut(**si) if si else _spool_info(t.spool_id, _spools_map))(getattr(t, "_spool_info_cache", None)),
                     cols=getattr(t, "cols", []) or [],
-                    ctype=getattr(t, "ctype", "") or "",
+                    ctype=str(getattr(t, "ctype", "") or ""),
                     catalog_name=(
                         None if t.spool_id
                         else _catalog_lookup(
