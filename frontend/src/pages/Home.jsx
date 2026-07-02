@@ -632,7 +632,8 @@ export default function Home() {
   useEffect(() => {
     startPolling(3000);
     fetchSpoolLookup();
-    return () => stopPolling();
+    const spoolInterval = setInterval(fetchSpoolLookup, 5000);
+    return () => { stopPolling(); clearInterval(spoolInterval); };
   }, []);
 
   return (
