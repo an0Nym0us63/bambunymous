@@ -179,21 +179,18 @@ async def _apply_meta(pid: int, meta: dict, taskname: str):
         ))
 
         for slot, fil in meta.get("filaments", {}).items():
-            # tray_info_idx est en réalité le CODE DE PROFIL Bambu (ex: "GFA00"),
-            # pas un encodage de position AMS/tray — le 3MF n'a aucune info de
-            # position physique. On matche donc comme pour le live (profil+couleur),
-            # via spool_matcher.match_spool() — pas de tag RFID disponible ici.
             tray_info = (fil.get("tray_info_idx") or "").strip()
             spool_id = None
             try:
-                from .spool_matcher import match_spool
-                spool_id, mode = await match_spool("", tray_info, fil.get("color", ""))
+                spool_id, mode = await _spool_from_slot_or_match(
+                    int(slot), tray_info, fil.get("color", "")
+                )
                 if spool_id:
-                    logger.info(f"[DB] ✅ Filament slot={slot} profil={tray_info!r} couleur={fil.get('color')!r} → spool_id={spool_id} ({mode})")
+                    logger.info(f"[DB] ✅ slot={slot} → spool_id={spool_id} ({mode}) profil={tray_info!r} couleur={fil.get('color')!r}")
                 else:
-                    logger.info(f"[DB] ⚠ Filament slot={slot} profil={tray_info!r} → {mode or 'non trouvé'}")
+                    logger.info(f"[DB] ⚠  slot={slot} profil={tray_info!r} → non trouvé ({mode})")
             except Exception as _e:
-                logger.debug(f"[DB] match_spool failed: {_e}")
+                logger.warning(f"[DB] slot={slot} matching error: {_e}")
 
             db.add(FilamentUsage(
                 print_id=pid,
@@ -230,18 +227,18 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
                 design_id=meta.get("design_id", ""),
             ))
             for slot, fil in meta.get("filaments", {}).items():
-                # tray_info_idx = code profil Bambu (ex: "GFA00"), pas une position AMS
                 tray_info = (fil.get("tray_info_idx") or "").strip()
                 spool_id = None
                 try:
-                    from .spool_matcher import match_spool
-                    spool_id, mode = await match_spool("", tray_info, fil.get("color", ""))
+                    spool_id, mode = await _spool_from_slot_or_match(
+                        int(slot), tray_info, fil.get("color", "")
+                    )
                     if spool_id:
-                        logger.info(f"[DB] ✅ Filament slot={slot} profil={tray_info!r} couleur={fil.get('color')!r} → spool_id={spool_id} ({mode})")
+                        logger.info(f"[DB] ✅ slot={slot} → spool_id={spool_id} ({mode}) profil={tray_info!r} couleur={fil.get('color')!r}")
                     else:
-                        logger.info(f"[DB] ⚠ Filament slot={slot} profil={tray_info!r} → {mode or 'non trouvé'}")
+                        logger.info(f"[DB] ⚠  slot={slot} profil={tray_info!r} → non trouvé ({mode})")
                 except Exception as _e:
-                    logger.debug(f"[DB] match_spool failed: {_e}")
+                    logger.warning(f"[DB] slot={slot} matching error: {_e}")
 
                 db.add(FilamentUsage(
                     print_id=pid,
@@ -337,7 +334,63 @@ def on_finish(job_id: str, gcode_state: str):
     _bg(_finalize(pid, job_id, final, st.get("start_time")))
 
 
+async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str):
+    """
+    Retourne (spool_id, mode) pour un slot 3MF.
+    Priorité 1 : lire le spool_id directement depuis l'état MQTT live
+      → slot 3MF (1-based) → index dans la liste ordonnée des trays AMS
+      → évite tout faux matching par profil+couleur
+    Priorité 2 : fallback match_spool par profil+couleur
+    """
+    try:
+        from ..core.mqtt import get_state
+        from ..services.settings_service import get_setting
+        from ..db.session import AsyncSessionLocal as _ASL
+        state = get_state()
+        if state and state.ams_list:
+            # Récupérer l'ordre AMS configuré (ex: [0,1,2] ou [2,0,1])
+            async with _ASL() as db:
+                raw_order = await get_setting(db, "AMS_ORDER")
+            try:
+                ams_order = [int(x) for x in (raw_order or "").split(",") if x.strip().isdigit()]
+            except Exception:
+                ams_order = []
+            if not ams_order:
+                ams_order = sorted([a.id for a in state.ams_list])
+
+            # Construire la liste aplatie des trays dans l'ordre configuré
+            flat: list = []
+            for ams_id in ams_order:
+                ams = next((a for a in state.ams_list if a.id == ams_id), None)
+                if ams:
+                    for t in sorted(ams.trays, key=lambda x: x.id):
+                        flat.append(t)
+
+            idx = slot - 1  # slot 1-based → 0-based
+            if 0 <= idx < len(flat):
+                t = flat[idx]
+                if t.spool_id:
+                    logger.info(f"[SLOT] slot={slot} → AMS{t.id} tray{t.id} → spool_id={t.spool_id} (live MQTT)")
+                    return t.spool_id, "live"
+                else:
+                    logger.info(f"[SLOT] slot={slot} → tray trouvé mais pas de spool_id en live")
+            else:
+                logger.info(f"[SLOT] slot={slot} hors plage (flat size={len(flat)})")
+    except Exception as e:
+        logger.warning(f"[SLOT] live lookup failed slot={slot}: {e}")
+
+    # Fallback : match par profil+couleur
+    try:
+        from .spool_matcher import match_spool
+        spool_id, mode = await match_spool("", tray_info, color)
+        return spool_id, mode or "notfound"
+    except Exception as e:
+        logger.debug(f"[SLOT] match_spool fallback failed: {e}")
+    return None, "notfound"
+
+
 async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float]):
+    logger.info(f"[FINAL] ▶ Démarrage finalisation print #{pid} → {status}")
     try:
         async with AsyncSessionLocal() as db:
             p = await db.get(Print, pid)
