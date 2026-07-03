@@ -22,6 +22,7 @@ ZIP_TYPES = {
     "uploads_prints":    "Snapshots milestones (Impression-50.jpg…)",
     "uploads_filaments": "Photos filaments (Photo-01.webp…)",
     "uploads_groups":    "Photos galeries groupes (Photo-01.webp…)",
+    "uploads_accessories": "Photos accessoires ({id}/image.ext)",
 }
 
 # Statuts en mémoire : {job_id: {...}}
@@ -106,12 +107,14 @@ async def _run_import(job_id: str, zip_type: str, tmp_path: Path):
         import_uploads_prints_zip,
         import_uploads_filaments_zip,
         import_uploads_groups_zip,
+        import_uploads_accessories_zip,
     )
     fn = {
         "prints":            import_prints_zip,
         "uploads_prints":    import_uploads_prints_zip,
         "uploads_filaments": import_uploads_filaments_zip,
         "uploads_groups":    import_uploads_groups_zip,
+        "uploads_accessories": import_uploads_accessories_zip,
     }[zip_type]
     try:
         logger.info(f"[ZIP] {zip_type} traitement démarré ({tmp_path})")

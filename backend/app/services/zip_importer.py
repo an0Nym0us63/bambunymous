@@ -379,3 +379,60 @@ async def import_uploads_groups_zip(zip_source) -> dict:
                 stats["errors"] += 1
     logger.info(f"[ZIP-GRP] {stats}")
     return stats
+
+
+async def import_uploads_accessories_zip(zip_source) -> dict:
+    """
+    Importe photos d'accessoires depuis un ZIP.
+    Structure attendue : {old_accessory_id}/image.ext  (ou à plat : {old_id}_nom.ext)
+    Résolution via Accessory.external_ref → id BambuNymous.
+    Stockage : DATA_DIR/accessories/{new_id}/
+    """
+    from ..models.object_history import Accessory
+
+    stats = {"copied": 0, "errors": 0, "skipped": 0}
+
+    ref_map: dict[str, int] = {}
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(Accessory).where(Accessory.external_ref.is_not(None)))
+            for a in result.scalars().all():
+                ref_map[str(a.external_ref)] = a.id
+    except Exception as e:
+        logger.debug(f"[ZIP-ACC] chargement Accessory: {e}")
+
+    with zipfile.ZipFile(zip_source) as z:
+        for name in z.namelist():
+            if name.endswith("/"): continue
+            parts = _normalize(name).split("/")
+            base = os.path.basename(parts[-1])
+            if not base or not _is_image(base): continue
+
+            # Chercher l'id Spoolnymous dans le chemin (dossier numérique)
+            old_acc_id = next((p for p in parts[:-1] if p.isdigit()), None)
+            # Fallback : si fichier à plat, extraire le préfixe numérique du nom
+            if not old_acc_id:
+                m = re.match(r"^(\d+)[_\-]", base)
+                old_acc_id = m.group(1) if m else None
+
+            if not old_acc_id:
+                stats["skipped"] += 1
+                continue
+
+            new_acc_id = ref_map.get(old_acc_id)
+            if not new_acc_id:
+                logger.debug(f"[ZIP-ACC] pas d'Accessory pour external_ref={old_acc_id} → {name} ignoré")
+                stats["skipped"] += 1
+                continue
+
+            dest_dir = DATA_DIR / "accessories" / str(new_acc_id)
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            try:
+                (dest_dir / _safe_name(base)).write_bytes(z.read(name))
+                stats["copied"] += 1
+            except Exception as e:
+                logger.error(f"[ZIP-ACC] {name}: {e}")
+                stats["errors"] += 1
+
+    logger.info(f"[ZIP-ACC] {stats}")
+    return stats
