@@ -540,74 +540,63 @@ function SpoolsView({ filaments, showArchived }) {
           {spools.map(s => {
             const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
             return (
-              <div key={s.id} onClick={()=>setSelected(s)} className="card-sm"
-                style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
-                  ...colorBg(colorsList, s.filament_multicolor_type) }}>
-                {/* Overlay sombre léger pour lisibilité sur couleurs claires */}
-                <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.18)", pointerEvents:"none" }}/>
-                <div style={{ position:"relative", padding:"10px 10px 10px", display:"flex", flexDirection:"column", gap:5 }}>
-                  {/* Bouton archiver discret */}
-                  {!showArchived && (
-                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:2 }}>
-                      <button onClick={async e => { e.stopPropagation(); await client.delete(`/filaments/spools/${s.id}`); load(); }}
-                        style={{ background:"rgba(0,0,0,0.25)", border:"none", cursor:"pointer",
-                          color:"white", borderRadius:6, padding:"2px 4px" }}
-                        onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,0.7)"}
-                        onMouseLeave={e=>e.currentTarget.style.background="rgba(0,0,0,0.25)"}>
-                        <Archive size={11}/>
-                      </button>
+              {(() => {
+                // Luminance perceptuelle → texte noir ou blanc
+                const hex = (s.filament_color||"888888").replace("#","").slice(0,6).padEnd(6,"0");
+                const r=parseInt(hex.slice(0,2),16)/255, g=parseInt(hex.slice(2,4),16)/255, b=parseInt(hex.slice(4,6),16)/255;
+                const lum = 0.2126*r + 0.7152*g + 0.0722*b;
+                const dark = lum > 0.45; // couleur claire → texte sombre
+                const txt = dark ? "rgba(0,0,0,0.85)" : "white";
+                const sub = dark ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.75)";
+                const shd = dark ? "none" : "0 1px 3px rgba(0,0,0,0.4)";
+                const barBg = dark ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.25)";
+                const barFg = dark ? "rgba(0,0,0,0.6)" : "white";
+                const pill  = dark ? "rgba(0,0,0,0.12)" : "rgba(0,0,0,0.25)";
+                return (
+                  <div key={s.id} onClick={()=>setSelected(s)} className="card-sm"
+                    style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
+                      ...colorBg(colorsList, s.filament_multicolor_type) }}>
+                    <div style={{ position:"relative", padding:"8px 10px 10px", display:"flex", flexDirection:"column", gap:5 }}>
+                      {!showArchived && (
+                        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:2 }}>
+                          <button onClick={async e => { e.stopPropagation(); await client.delete(`/filaments/spools/${s.id}`); load(); }}
+                            style={{ background:pill, border:"none", cursor:"pointer", color:txt, borderRadius:6, padding:"2px 4px" }}
+                            onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,0.6)"}
+                            onMouseLeave={e=>e.currentTarget.style.background=pill}>
+                            <Archive size={11}/>
+                          </button>
+                        </div>
+                      )}
+                      <p style={{ fontWeight:800, fontSize:13, color:txt, margin:0, lineHeight:"1.3",
+                        wordBreak:"break-word", textShadow:shd }}>
+                        {s.filament_translated_name || s.filament_name}
+                      </p>
+                      <p style={{ fontSize:10, color:sub, margin:0,
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {[s.filament_manufacturer, s.filament_material].filter(Boolean).join(" · ")}
+                      </p>
+                      <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:4 }}>
+                        <div style={{ flex:1, height:4, borderRadius:2, background:barBg, overflow:"hidden" }}>
+                          {(() => {
+                            const pct = s.remaining_weight_g != null
+                              ? Math.min(100, Math.round(s.remaining_weight_g/(s.filament_weight_g||1000)*100)) : 0;
+                            return <div style={{ width:`${pct}%`, height:"100%", background:barFg, borderRadius:2 }}/>;
+                          })()}
+                        </div>
+                        <span style={{ fontSize:10, fontFamily:"monospace", fontWeight:700, color:txt, flexShrink:0, textShadow:shd }}>
+                          {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)}g` : "—"}
+                        </span>
+                      </div>
+                      {s.location && (
+                        <span style={{ alignSelf:"flex-start", fontSize:10, background:pill,
+                          padding:"2px 8px", borderRadius:20, color:txt, fontWeight:500, marginTop:2 }}>
+                          {s.location}
+                        </span>
+                      )}
                     </div>
-                  )}
-                  {/* Nom */}
-                  <p style={{ fontWeight:800, fontSize:13, color:"white", margin:0, lineHeight:"1.3",
-                    wordBreak:"break-word", textShadow:"0 1px 3px rgba(0,0,0,0.5)" }}>
-                    {s.filament_translated_name || s.filament_name}
-                  </p>
-                  {/* Marque · type */}
-                  <p style={{ fontSize:10, color:"rgba(255,255,255,0.8)", margin:0,
-                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
-                    textShadow:"0 1px 2px rgba(0,0,0,0.4)" }}>
-                    {[s.filament_manufacturer, s.filament_material].filter(Boolean).join(" · ")}
-                  </p>
-                  {/* Barre + grammes */}
-                  <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:4 }}>
-                    <div style={{ flex:1, height:4, borderRadius:2, background:"rgba(255,255,255,0.25)",
-                      overflow:"hidden" }}>
-                      {(() => {
-                        const pct = s.remaining_weight_g != null
-                          ? Math.min(100, Math.round(s.remaining_weight_g / (s.filament_weight_g||1000) * 100)) : 0;
-                        return <div style={{ width:`${pct}%`, height:"100%", background:"white", borderRadius:2 }}/>;
-                      })()}
-                    </div>
-                    <span style={{ fontSize:10, fontFamily:"monospace", fontWeight:700,
-                      color:"white", flexShrink:0, textShadow:"0 1px 2px rgba(0,0,0,0.4)" }}>
-                      {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)}g` : "—"}
-                    </span>
                   </div>
-                  {/* Emplacement */}
-                  {s.location && (
-                    <span style={{ alignSelf:"flex-start", fontSize:10, background:"rgba(0,0,0,0.3)",
-                      padding:"2px 8px", borderRadius:20, color:"white", fontWeight:500,
-                      backdropFilter:"blur(4px)", marginTop:2 }}>{s.location}</span>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-          {!spools.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucune bobine</p>}
-        </div>
-      )}
-
-      {showAdd && <AddSpoolModal filaments={filaments} onSave={()=>{ setShowAdd(false); load(); }} onClose={()=>setShowAdd(false)}/>}
-      {selected && (
-        <SpoolBottomSheet
-          spool={selected}
-          onClose={()=>setSelected(null)}
-          onArchive={async(id)=>{ await client.delete(`/filaments/spools/${id}`); load(); }}
-          onDelete={load}
-        />
-      )}
-    </div>
+                );
+              })()}
   );
 }
 
