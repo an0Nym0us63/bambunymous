@@ -1245,57 +1245,44 @@ function FilamentsView() {
           {filaments.map(f => {
             const colorsList = parseColorsList(f.color, f.colors_array);
             return (
-              <div key={f.id} className="card-sm"
-                onClick={() => setSelectedFil(f)}
-                style={{ overflow:"hidden", cursor:"pointer", display:"flex",
-                  flexDirection:"column", padding:0, gap:0, position:"relative" }}>
-                {/* Bandeau couleur en haut — plus épais, plus lisible */}
-                <div style={{ height:8, flexShrink:0, position:"relative", overflow:"hidden" }}>
-                  {hasTransparency(f.color) && !f.colors_array && (
-                    <div style={{ position:"absolute", inset:0,
-                      backgroundImage:"repeating-conic-gradient(#aaa 0% 25%,#eee 0% 50%)",
-                      backgroundSize:"6px 6px" }}/>
-                  )}
-                  <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>
-                </div>
-                <div style={{ padding:"12px 12px 10px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
-                  {/* Swatch + nom */}
-                  <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
-                    <ColorSwatch color={f.color} colorsArray={f.colors_array}
-                      multicolorType={f.multicolor_type} size={36} radius={8}/>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      {/* Nom FR (fallback EN) — affiché entier, wrap autorisé */}
-                      <p style={{ fontWeight:700, fontSize:12, color:"var(--text)",
-                        lineHeight:"1.3", margin:"0 0 2px", wordBreak:"break-word" }}>
+              (() => {
+                const pct = f.active_spool_count > 0 ? Math.min(100, f.active_spool_count * 20) : 0;
+                const flt = "drop-shadow(0 1px 4px rgba(0,0,0,0.95)) drop-shadow(0 2px 10px rgba(0,0,0,0.6))";
+                const hasT = hasTransparency(f.color) && !f.colors_array;
+                return (
+                  <div key={f.id} onClick={() => setSelectedFil(f)} className="card-sm"
+                    style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
+                      ...colorBg(colorsList, f.multicolor_type),
+                      background: hasT ? "repeating-conic-gradient(#aaa 0% 25%,#eee 0% 50%)" : undefined,
+                      backgroundSize: hasT ? "6px 6px" : undefined }}>
+                    {hasT && <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>}
+                    <div style={{ position:"relative", padding:"8px 10px 28px", display:"flex", flexDirection:"column", gap:0 }}>
+                      <p style={{ fontWeight:600, fontSize:11, color:"white", margin:"0 0 7px",
+                        lineHeight:"1.35", height:"2.7em", overflow:"hidden",
+                        display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
+                        fontFamily:"'Inter','DM Sans','Segoe UI',system-ui,sans-serif",
+                        letterSpacing:"0.01em", filter:flt }}>
                         {f.translated_name || f.name}
                       </p>
-                      {/* Nom EN si différent du nom affiché */}
-                      {f.translated_name && f.translated_name !== f.name && (
-                        <p style={{ fontSize:10, color:"var(--muted)", margin:"0 0 2px",
-                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                          {f.name}
-                        </p>
-                      )}
+                      <div style={{ display:"flex", gap:3, flexWrap:"nowrap", overflow:"hidden", height:16, alignItems:"center", marginBottom:7 }}>
+                        {f.manufacturer && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", whiteSpace:"nowrap", flexShrink:0 }}>{f.manufacturer}</span>}
+                        {(f.fila_type||f.material) && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.20)", color:"rgba(255,255,255,0.75)", whiteSpace:"nowrap", flexShrink:0 }}>{f.fila_type||f.material}</span>}
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                        <div style={{ flex:1, height:5, borderRadius:3, background:"rgba(0,0,0,0.25)", border:"1px solid rgba(255,255,255,0.2)", overflow:"hidden" }}>
+                          <div style={{ width:`${Math.min(100,(f.active_spool_count||0)*25)}%`, height:"100%", background: f.active_spool_count>0?"#22c55e":"transparent", borderRadius:3 }}/>
+                        </div>
+                        <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700, color:"white", flexShrink:0, filter:flt, minWidth:28, textAlign:"right" }}>
+                          {f.active_spool_count||0}×
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                  {/* Marque · Sous-type */}
-                  <p style={{ fontSize:10, color:"var(--muted)", margin:0,
-                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                    {[f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
-                  </p>
-                  {/* Badge bobines */}
-                  <div>
-                    <span style={{
-                      display:"inline-block",
-                      fontSize:10, padding:"2px 8px", borderRadius:20, fontWeight:600,
-                      background: f.active_spool_count > 0 ? "rgba(34,197,94,0.12)" : "var(--surface2)",
-                      color: f.active_spool_count > 0 ? "#22c55e" : "var(--muted)",
-                    }}>
-                      {f.active_spool_count} bobine{f.active_spool_count!==1?"s":""}
+                    <span style={{ position:"absolute", bottom:6, left:8, fontSize:8, fontWeight:500, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", padding:"1px 7px", borderRadius:20 }}>
+                      {f.active_spool_count>0 ? `${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "aucune bobine"}
                     </span>
                   </div>
-                </div>
-              </div>
+                );
+              })()
             );
           })}
           {!filaments.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
