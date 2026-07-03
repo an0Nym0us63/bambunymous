@@ -606,17 +606,18 @@ function SpoolCard({ s, colorsList, onClick }) {
   const pct = s.remaining_weight_g != null
     ? Math.min(100, Math.round(s.remaining_weight_g / (s.filament_weight_g||1000) * 100)) : 0;
   const barColor = pct > 60 ? "#22c55e" : pct > 35 ? "#f59e0b" : pct > 15 ? "#f97316" : "#ef4444";
-  const shd = "0 1px 3px rgba(0,0,0,0.7)";
+  const shd = "0 1px 0 rgba(0,0,0,0.9), 0 2px 8px rgba(0,0,0,0.7), 0 0 16px rgba(0,0,0,0.4)";
   return (
     <div onClick={onClick} className="card-sm"
       style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
         ...colorBg(colorsList, s.filament_multicolor_type) }}>
       <div style={{ padding:"9px 10px 28px", display:"flex", flexDirection:"column", gap:0 }}>
         {/* Nom : toujours 2 lignes fixes */}
-        <p style={{ fontWeight:700, fontSize:11, color:"white", margin:"0 0 7px",
+        <p style={{ fontWeight:600, fontSize:11, color:"white", margin:"0 0 7px",
           lineHeight:"1.35", height:"2.7em", overflow:"hidden",
           display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
-          textShadow:shd }}>
+          fontFamily:"'Inter','DM Sans','Segoe UI',system-ui,sans-serif",
+          letterSpacing:"0.01em", textShadow:shd }}>
           {s.filament_translated_name || s.filament_name}
         </p>
         {/* Étiquettes marque + type — hauteur fixe */}
@@ -644,8 +645,9 @@ function SpoolCard({ s, colorsList, onClick }) {
             overflow:"hidden" }}>
             <div style={{ width:`${pct}%`, height:"100%", background:barColor, borderRadius:3 }}/>
           </div>
-          <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700, color:"white",
-            flexShrink:0, textShadow:shd, minWidth:28, textAlign:"right" }}>
+          <span style={{ fontSize:9, fontFamily:"'Inter','DM Sans',system-ui,sans-serif",
+            fontWeight:700, color:"white", flexShrink:0, textShadow:shd,
+            minWidth:28, textAlign:"right", letterSpacing:"0.02em" }}>
             {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)}g` : "—"}
           </span>
         </div>
