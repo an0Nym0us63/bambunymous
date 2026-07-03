@@ -6,6 +6,7 @@ import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Settings from "./pages/Settings";
 import Logs from "./pages/Logs";
+import Objects from "./pages/Objects";
 import Filaments from "./pages/Filaments";
 import Prints from "./pages/Prints";
 
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="settings" element={<Settings />} />
         <Route path="logs" element={<Logs />} />
         <Route path="prints" element={<Prints />} />
+        <Route path="objects" element={<Objects />} />
       </Route>
     </Routes>
   );
