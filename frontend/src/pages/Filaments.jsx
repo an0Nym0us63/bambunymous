@@ -1268,11 +1268,10 @@ function FilamentsView() {
                 const hasT = hasTransparency(f.color) && !f.colors_array;
                 return (
                   <div key={f.id} onClick={() => setSelectedFil(f)} className="card-sm"
-                    style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
-                      ...colorBg(colorsList, f.multicolor_type),
-                      background: hasT ? "repeating-conic-gradient(#aaa 0% 25%,#eee 0% 50%)" : undefined,
-                      backgroundSize: hasT ? "6px 6px" : undefined }}>
-                    {hasT && <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>}
+                    style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative" }}>
+                    {/* fond couleur pur + couche checker si transparent */}
+                    {hasT && <div style={{ position:"absolute", inset:0, backgroundImage:"repeating-conic-gradient(#aaa 0% 25%,#eee 0% 50%)", backgroundSize:"6px 6px" }}/>}
+                    <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>
                     <div style={{ position:"relative", padding:"8px 10px 28px", display:"flex", flexDirection:"column", gap:0 }}>
                       <p style={{ fontWeight:600, fontSize:11, color:"white", margin:"0 0 7px",
                         lineHeight:"1.35", height:"2.7em", overflow:"hidden",
@@ -1281,17 +1280,9 @@ function FilamentsView() {
                         letterSpacing:"0.01em", filter:flt }}>
                         {f.translated_name || f.name}
                       </p>
-                      <div style={{ display:"flex", gap:3, flexWrap:"nowrap", overflow:"hidden", height:16, alignItems:"center", marginBottom:7 }}>
+                      <div style={{ display:"flex", gap:3, flexWrap:"nowrap", overflow:"hidden", height:16, alignItems:"center" }}>
                         {f.manufacturer && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", whiteSpace:"nowrap", flexShrink:0 }}>{f.manufacturer}</span>}
                         {(f.fila_type||f.material) && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.20)", color:"rgba(255,255,255,0.75)", whiteSpace:"nowrap", flexShrink:0 }}>{f.fila_type||f.material}</span>}
-                      </div>
-                      <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                        <div style={{ flex:1, height:5, borderRadius:3, background:"rgba(0,0,0,0.25)", border:"1px solid rgba(255,255,255,0.2)", overflow:"hidden" }}>
-                          <div style={{ width:`${Math.min(100,(f.active_spool_count||0)*25)}%`, height:"100%", background: f.active_spool_count>0?"#22c55e":"transparent", borderRadius:3 }}/>
-                        </div>
-                        <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700, color:"white", flexShrink:0, filter:flt, minWidth:28, textAlign:"right" }}>
-                          {f.active_spool_count||0}×
-                        </span>
                       </div>
                     </div>
                     <span style={{ position:"absolute", bottom:6, left:8, fontSize:8, fontWeight:500, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", padding:"1px 7px", borderRadius:20 }}>
