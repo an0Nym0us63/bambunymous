@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Search, Archive, X, Save, RefreshCw } from "lucide-react";
+import { Plus, Search, Archive, X, Save, RefreshCw, Pencil } from "lucide-react";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
 
@@ -342,16 +342,16 @@ function WeightEditRow({ spoolId, current, onUpdated }) {
             {current != null ? `${Math.round(current)} g` : <span style={{color:"var(--muted)",fontWeight:400}}>—</span>}
           </span>
           <button onClick={() => { setVal(current != null ? String(Math.round(current)) : ""); setEditing(true); }}
-            style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2 }}
+            style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2, display:"flex" }}
             onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
-            onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>✏️</button>
+            onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}><Pencil size={13}/></button>
         </div>
       )}
     </div>
   );
 }
 
-function PriceEditRow({ spoolId, current, onUpdated }) {
+function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(current != null ? String(Number(current).toFixed(2)) : "");
   const [saving, setSaving] = useState(false);
@@ -393,14 +393,23 @@ function PriceEditRow({ spoolId, current, onUpdated }) {
         </div>
       ) : (
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:13, fontWeight:600, color:"var(--text)" }}>
-            {current != null ? `${Number(current).toFixed(2)} €` : <span style={{color:"var(--muted)",fontWeight:400}}>—</span>}
-          </span>
-          <button onClick={() => { setVal(current != null ? String(Number(current).toFixed(2)) : ""); setEditing(true); }}
-            style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2 }}
+          {current != null ? (
+            <span style={{ fontSize:13, fontWeight:600, fontFamily:"JetBrains Mono,monospace", color:"#22c55e" }}>
+              {Number(current).toFixed(2)} €
+            </span>
+          ) : filamentPrice != null ? (
+            <span style={{ fontSize:13, fontWeight:600, fontFamily:"JetBrains Mono,monospace", color:"#f59e0b" }}
+              title="Prix du filament (non personnalisé)">
+              {Number(filamentPrice).toFixed(2)} €
+            </span>
+          ) : (
+            <span style={{ fontSize:12, color:"var(--muted)", fontStyle:"italic" }}>non défini</span>
+          )}
+          <button onClick={() => { setVal(current != null ? String(Number(current).toFixed(2)) : filamentPrice != null ? String(Number(filamentPrice).toFixed(2)) : ""); setEditing(true); }}
+            style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2, display:"flex" }}
             onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
             onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
-            ✏️
+            <Pencil size={13}/>
           </button>
         </div>
       )}
@@ -505,7 +514,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
             letterSpacing:"0.08em", marginBottom:4 }}>Bobine #{spool.id}</p>
           <Row label="Emplacement"    value={spool.location}/>
           <WeightEditRow spoolId={spool.id} current={remaining} onUpdated={onClose}/>
-          <PriceEditRow spoolId={spool.id} current={spool.price_override} onUpdated={onClose}/>
+          <PriceEditRow spoolId={spool.id} current={spool.price_override} filamentPrice={spool.filament_price} onUpdated={onClose}/>
           <Row label="Tag NFC"        value={spool.tag_number} mono/>
           <Row label="Tray AMS"       value={spool.ams_tray}/>
           <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
