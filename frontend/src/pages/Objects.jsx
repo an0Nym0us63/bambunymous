@@ -171,11 +171,18 @@ export default function Objects() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null);
   const [filter, setFilter] = useState("all"); // all / available / sold / personal
+  const [groups, setGroups] = useState([]);
+  const [groupId, setGroupId] = useState(null);
+
+  useEffect(() => {
+    client.get("/objects/object-groups").then(r => setGroups(r.data || [])).catch(()=>{});
+  }, []);
 
   const loadObjects = useCallback(async () => {
     setLoading(true);
     try {
       const params = { q: q || undefined, limit: 200 };
+      if (groupId) params.group_id = groupId;
       if (filter === "available") params.available = true;
       if (filter === "sold") params.sold = true;
       if (filter === "personal") params.personal = true;
@@ -183,7 +190,7 @@ export default function Objects() {
       setObjects(data.items || []);
     } catch(e) { console.error(e); }
     finally { setLoading(false); }
-  }, [q, filter]);
+  }, [q, filter, groupId]);
 
   const loadAccessories = useCallback(async () => {
     setLoading(true);
@@ -197,7 +204,7 @@ export default function Objects() {
   useEffect(() => {
     if (tab === "objects") loadObjects();
     else loadAccessories();
-  }, [tab, q, filter]);
+  }, [tab, q, filter, groupId]);
 
   const FILTERS = [["all","Tous"],["available","Disponibles"],["sold","Vendus"],["personal","Perso"]];
 
@@ -229,6 +236,14 @@ export default function Objects() {
               background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
               fontSize:12, color:"var(--text)", outline:"none", boxSizing:"border-box" }}/>
         </div>
+        {tab === "objects" && groups.length > 0 && (
+          <select value={groupId || ""} onChange={e => setGroupId(e.target.value ? Number(e.target.value) : null)}
+            style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
+              background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)", outline:"none" }}>
+            <option value="">Tous les groupes</option>
+            {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+        )}
         {tab === "objects" && FILTERS.map(([id,label]) => (
           <button key={id} onClick={() => setFilter(id)}
             style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", border:"none",
