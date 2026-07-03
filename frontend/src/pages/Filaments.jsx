@@ -669,6 +669,7 @@ function SpoolCard({ s, colorsList, onClick }) {
 
 const SPOOL_SORTS = [
   ["recent",    "Plus récent"],
+  ["hue",       "Teinte"],
   ["name",      "Nom"],
   ["brand",     "Marque"],
   ["remaining", "Poids restant ↓"],
@@ -676,10 +677,11 @@ const SPOOL_SORTS = [
 ];
 
 function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose }) {
-  const [fb, setFb] = useState(filters.brand || "");
-  const [fm, setFm] = useState(filters.mat   || "");
-  const [fs, setFs] = useState(filters.sub   || "");
-  const [so, setSo] = useState(sort           || "recent");
+  const [fb, setFb] = useState(filters.brand  || "");
+  const [fm, setFm] = useState(filters.mat    || "");
+  const [fs, setFs] = useState(filters.sub    || "");
+  const [fst,setFst]= useState(filters.stock  || "all"); // all/instock/unavailable
+  const [so, setSo] = useState(sort            || "recent");
 
   // Options TOUJOURS depuis le dataset complet (pas filtré)
   const brands  = useMemo(() => [...new Set(allItems.map(s => s.filament_manufacturer || s.manufacturer).filter(Boolean))].sort(), [allItems]);
@@ -740,9 +742,18 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose 
               {subs.map(s=><option key={s} value={s}>{s}</option>)}
             </select>
           )}
+          <div style={{ display:"flex", gap:6 }}>
+            {[["all","Tous"],["instock","En stock"],["unavailable","Non disponible"]].map(([id,label])=>(
+              <button key={id} onClick={()=>setFst(id)}
+                style={{ flex:1, padding:"7px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer", border:"none",
+                  background:fst===id?"#3b82f6":"var(--surface2)", color:fst===id?"white":"var(--muted)" }}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        <button onClick={()=>onApply({brand:fb,mat:fm,sub:fs},so)}
+        <button onClick={()=>onApply({brand:fb,mat:fm,sub:fs,stock:fst},so)}
           style={{ padding:"12px", borderRadius:12, fontSize:14, fontWeight:700,
             background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
           Appliquer
@@ -792,13 +803,19 @@ function SpoolsView({ filaments, showArchived }) {
     if (filters.brand) res = res.filter(s => s.filament_manufacturer === filters.brand);
     if (filters.mat)   res = res.filter(s => getFamily(s) === filters.mat);
     if (filters.sub)   res = res.filter(s => (s.filament_material||"") === filters.sub);
+    if (filters.stock === "instock")     res = res.filter(s => (s.remaining_weight_g||0) > 0);
+    if (filters.stock === "unavailable") res = res.filter(s => !(s.remaining_weight_g > 0));
     // Tri
     res = [...res].sort((a,b) => {
+      if (sort==="hue") {
+        const hexToH = h => { h=(h||"888888").slice(0,6).padEnd(6,"0"); const r=parseInt(h.slice(0,2),16)/255,g=parseInt(h.slice(2,4),16)/255,b=parseInt(h.slice(4,6),16)/255,mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn,l=(mx+mn)/2; if(!d) return l>0.9?370:l<0.1?380:360; const H=mx===r?((g-b)/d+(g<b?6:0)):mx===g?((b-r)/d+2):((r-g)/d+4); const s=l>0.5?d/(2-mx-mn):d/(mx+mn); if(s<0.12) return l>0.85?370:380; return H*60; };
+        return hexToH(a.filament_color)-hexToH(b.filament_color);
+      }
       if (sort==="name")      return (a.filament_translated_name||a.filament_name||"").localeCompare(b.filament_translated_name||b.filament_name||"");
       if (sort==="brand")     return (a.filament_manufacturer||"").localeCompare(b.filament_manufacturer||"");
       if (sort==="remaining") return (b.remaining_weight_g||0)-(a.remaining_weight_g||0);
       if (sort==="fullest")   return (a.remaining_weight_g||0)-(b.remaining_weight_g||0);
-      return 0; // recent = default order from API
+      return 0;
     });
     return res;
   }, [allSpools, q, filters, sort]);
@@ -1713,16 +1730,6 @@ function SwatchView({ filaments: allFilaments }) {
     <>
       {/* Filtres */}
       <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap", flex:1 }}>
-          {SORTS.map(([id,label]) => (
-            <button key={id} onClick={()=>setSwatchSort(id)}
-              style={{ padding:"4px 10px", borderRadius:20, fontSize:10, fontWeight:600, cursor:"pointer",
-                background:swatchSort===id?"#3b82f6":"var(--surface2)",
-                color:swatchSort===id?"white":"var(--muted)", border:"1px solid var(--border)" }}>
-              {label}
-            </button>
-          ))}
-        </div>
         <button onClick={()=>setFilterOpen(true)}
           style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
             background:[filterBrand,filterType,filterSub].some(Boolean)?"#3b82f6":"var(--surface2)",
