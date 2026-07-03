@@ -273,7 +273,9 @@ async def list_spools(
     if needs_join:
         stmt = stmt.join(Filament)
     if q:
-        like = f"%{q}%"
+        q_clean  = q.lstrip("#")
+        like     = f"%{q}%"
+        like_hex = f"%{q_clean}%"
         stmt = stmt.where(or_(
             Filament.name.ilike(like),
             Filament.translated_name.ilike(like),
@@ -281,6 +283,7 @@ async def list_spools(
             Filament.material.ilike(like),
             Filament.fila_type.ilike(like),
             Filament.fila_color_code.ilike(like),
+            Filament.color.ilike(like_hex),
             Spool.location.ilike(like),
             Spool.tag_number.ilike(like),
         ))
