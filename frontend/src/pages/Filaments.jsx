@@ -1055,9 +1055,9 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
           {editing ? (
             <div>
               {F("Nom (anglais / officiel) *","name")}
-              <F label="Nom traduit (français)"     k="translated_name"/>
-              <F label="Marque"                     k="manufacturer"/>
-              <F label="Sous-type (ex: PLA Basic)"  k="fila_type"/>
+              {F("Nom traduit (français)","translated_name")}
+              {F("Marque","manufacturer")}
+              {F("Sous-type (ex: PLA Basic)","fila_type")}
               <div style={{ marginBottom:10 }}>
                 <label style={lStyle}>Couleur(s) — hex séparées par virgule si multi</label>
                 <input style={iStyle} value={form.colors_input}
@@ -1088,12 +1088,12 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
                   </select>
                 </div>
               )}
-              <F label="Profile ID Bambu (ex: GFA00)"  k="profile_id"/>
+              {F("Profile ID Bambu (ex: GFA00)","profile_id")}
               {F("Code couleur Bambu (ex: 10600)","fila_color_code")}
-              <F label="Poids total (g)"  k="filament_weight_g" type="number"/>
-              <F label="Poids support (g)" k="spool_weight_g"   type="number"/>
-              <F label="Prix (€)"          k="price"            type="number"/>
-              <F label="Commentaire"       k="comment"/>
+              {F("Poids total (g)","filament_weight_g","number")}
+              {F("Poids support (g)","spool_weight_g","number")}
+              {F("Prix (€)","price","number")}
+              {F("Commentaire","comment")}
               <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
                 {[["swatch","Échantillon"],["to_order","À commander"]].map(([k,l])=>(
                   <label key={k} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, cursor:"pointer" }}>
