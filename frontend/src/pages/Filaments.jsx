@@ -484,56 +484,59 @@ function KpiBar({ kpis }) {
 function SpoolCard({ s, colorsList, onClick }) {
   const pct = s.remaining_weight_g != null
     ? Math.min(100, Math.round(s.remaining_weight_g / (s.filament_weight_g||1000) * 100)) : 0;
-  // Couleur barre selon niveau
   const barColor = pct > 60 ? "#22c55e" : pct > 35 ? "#f59e0b" : pct > 15 ? "#f97316" : "#ef4444";
-  const shadow = "0 0 4px rgba(0,0,0,0.8), 0 1px 2px rgba(0,0,0,0.9)";
+  const shd = "0 1px 3px rgba(0,0,0,0.7)";
   return (
     <div onClick={onClick} className="card-sm"
-      style={{ overflow:"hidden", cursor:"pointer", padding:0,
+      style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
         ...colorBg(colorsList, s.filament_multicolor_type) }}>
-      <div style={{ padding:"10px 10px 10px", display:"flex", flexDirection:"column", gap:6 }}>
-        {/* Nom avec ombre pour lisibilité sur toute couleur */}
-        <p style={{ fontWeight:800, fontSize:13, color:"white", margin:0, lineHeight:"1.3",
-          wordBreak:"break-word", textShadow:shadow }}>
+      <div style={{ padding:"9px 10px 28px", display:"flex", flexDirection:"column", gap:0 }}>
+        {/* Nom : toujours 2 lignes fixes */}
+        <p style={{ fontWeight:700, fontSize:11, color:"white", margin:"0 0 7px",
+          lineHeight:"1.35", height:"2.7em", overflow:"hidden",
+          display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
+          textShadow:shd }}>
           {s.filament_translated_name || s.filament_name}
         </p>
-        {/* Marque + type en étiquettes */}
-        <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+        {/* Étiquettes marque + type — hauteur fixe */}
+        <div style={{ display:"flex", gap:3, flexWrap:"nowrap", overflow:"hidden",
+          height:16, alignItems:"center", marginBottom:7 }}>
           {s.filament_manufacturer && (
-            <span style={{ fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:4,
-              background:"rgba(0,0,0,0.55)", color:"white", backdropFilter:"blur(2px)" }}>
+            <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3,
+              background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)",
+              whiteSpace:"nowrap", flexShrink:0 }}>
               {s.filament_manufacturer}
             </span>
           )}
           {s.filament_material && (
-            <span style={{ fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:4,
-              background:"rgba(0,0,0,0.4)", color:"rgba(255,255,255,0.9)", backdropFilter:"blur(2px)" }}>
+            <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3,
+              background:"rgba(0,0,0,0.20)", color:"rgba(255,255,255,0.75)",
+              whiteSpace:"nowrap", flexShrink:0 }}>
               {s.filament_material}
             </span>
           )}
         </div>
-        {/* Barre + poids */}
-        <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:2 }}>
-          <div style={{ flex:1, height:6, borderRadius:3,
-            background:"rgba(0,0,0,0.35)", border:"1px solid rgba(255,255,255,0.25)",
+        {/* Barre + poids — hauteur fixe */}
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <div style={{ flex:1, height:5, borderRadius:3,
+            background:"rgba(0,0,0,0.25)", border:"1px solid rgba(255,255,255,0.2)",
             overflow:"hidden" }}>
-            <div style={{ width:`${pct}%`, height:"100%", background:barColor,
-              borderRadius:3, boxShadow:`0 0 4px ${barColor}` }}/>
+            <div style={{ width:`${pct}%`, height:"100%", background:barColor, borderRadius:3 }}/>
           </div>
-          <span style={{ fontSize:10, fontFamily:"monospace", fontWeight:800, color:"white",
-            flexShrink:0, textShadow:shadow }}>
+          <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700, color:"white",
+            flexShrink:0, textShadow:shd, minWidth:28, textAlign:"right" }}>
             {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)}g` : "—"}
           </span>
         </div>
-        {/* Emplacement */}
-        {s.location && (
-          <span style={{ alignSelf:"flex-start", fontSize:9, fontWeight:700,
-            background:"rgba(0,0,0,0.5)", color:"white", padding:"2px 8px",
-            borderRadius:20, backdropFilter:"blur(2px)", marginTop:2 }}>
-            {s.location}
-          </span>
-        )}
       </div>
+      {/* Emplacement : coin bas gauche absolu */}
+      {s.location && (
+        <span style={{ position:"absolute", bottom:6, left:8,
+          fontSize:8, fontWeight:500, background:"rgba(0,0,0,0.28)",
+          color:"rgba(255,255,255,0.85)", padding:"1px 7px", borderRadius:20 }}>
+          {s.location}
+        </span>
+      )}
     </div>
   );
 }
