@@ -542,40 +542,41 @@ function SpoolsView({ filaments, showArchived }) {
             return (
               <div key={s.id} onClick={()=>setSelected(s)} className="card-sm"
                 style={{ overflow:"hidden", cursor:"pointer", display:"flex", flexDirection:"column", padding:0 }}>
-                {/* Bandeau couleur plein */}
-                <div style={{ height:8, flexShrink:0, ...colorBg(colorsList, s.filament_multicolor_type) }}/>
-                <div style={{ padding:"10px 12px 10px", display:"flex", flexDirection:"column", gap:6, flex:1 }}>
-                  {/* Ligne 1 : pastille + nom */}
-                  <div style={{ display:"flex", alignItems:"center", gap:7 }}>
-                    <ColorDot color={s.filament_color} colorsArray={s.filament_colors_array} multicolorType={s.filament_multicolor_type} size={22}/>
-                    <p style={{ fontWeight:700, fontSize:13, color:"var(--text)", margin:0,
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>
-                      {s.filament_translated_name || s.filament_name}
-                    </p>
-                    {!showArchived && (
-                      <button onClick={async e => { e.stopPropagation(); await client.delete(`/filaments/spools/${s.id}`); load(); }}
-                        style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:0, flexShrink:0 }}
-                        onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
-                        onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
-                        <Archive size={12}/>
-                      </button>
-                    )}
-                  </div>
-                  {/* Ligne 2 : marque · sous-type */}
-                  <p style={{ fontSize:11, color:"var(--muted)", margin:0,
+                {/* Zone couleur pleine largeur */}
+                <div style={{ height:44, flexShrink:0, position:"relative",
+                  ...colorBg(colorsList, s.filament_multicolor_type) }}>
+                  {!showArchived && (
+                    <button onClick={async e => { e.stopPropagation(); await client.delete(`/filaments/spools/${s.id}`); load(); }}
+                      style={{ position:"absolute", top:4, right:4, background:"rgba(0,0,0,0.25)",
+                        border:"none", cursor:"pointer", color:"white", borderRadius:6, padding:"2px 4px" }}
+                      onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,0.7)"}
+                      onMouseLeave={e=>e.currentTarget.style.background="rgba(0,0,0,0.25)"}>
+                      <Archive size={11}/>
+                    </button>
+                  )}
+                </div>
+                <div style={{ padding:"8px 10px 10px", display:"flex", flexDirection:"column", gap:5, flex:1 }}>
+                  {/* Nom sur toute la largeur */}
+                  <p style={{ fontWeight:700, fontSize:12, color:"var(--text)", margin:0, lineHeight:"1.3",
+                    wordBreak:"break-word" }}>
+                    {s.filament_translated_name || s.filament_name}
+                  </p>
+                  {/* Marque · type */}
+                  <p style={{ fontSize:10, color:"var(--muted)", margin:0,
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {[s.filament_manufacturer, s.filament_material].filter(Boolean).join(" · ")}
                   </p>
-                  {/* Barre poids */}
-                  <RemainBar remaining={s.remaining_weight_g}/>
-                  {/* Poids en grammes */}
-                  <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--text)", margin:0, textAlign:"right" }}>
-                    {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)} g` : "—"}
-                  </p>
-                  {/* Emplacement */}
+                  {/* Barre + grammes inline */}
+                  <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:2 }}>
+                    <div style={{ flex:1 }}><RemainBar remaining={s.remaining_weight_g}/></div>
+                    <span style={{ fontSize:10, fontFamily:"monospace", fontWeight:600,
+                      color:"var(--text)", flexShrink:0 }}>
+                      {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)}g` : "—"}
+                    </span>
+                  </div>
                   {s.location && (
                     <span style={{ alignSelf:"flex-start", fontSize:10, background:"var(--surface)",
-                      border:"1px solid var(--border)", padding:"2px 8px", borderRadius:20,
+                      border:"1px solid var(--border)", padding:"2px 7px", borderRadius:20,
                       color:"var(--muted)", fontWeight:500 }}>{s.location}</span>
                   )}
                 </div>
