@@ -1802,12 +1802,36 @@ function SwatchView({ filaments: allFilaments }) {
 
 export default function Filaments() {
   const [tab, setTab] = useState("spools");
-  const [galleryMode, setGalleryMode] = useState("photos"); // "photos" | "swatch"
-  const [filaments, setFilaments] = useState([]);
+  const [galleryMode, setGalleryMode] = useState("photos");
+  const [allFilaments, setAllFilaments] = useState([]);
+  const [galQ, setGalQ] = useState("");
+  const [galFilterOpen, setGalFilterOpen] = useState(false);
+  const [galFilters, setGalFilters] = useState({ brand:"", mat:"", sub:"" });
+
+  const FAMILIES_G = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
+  const getFamilyG = f => {
+    const sub = f.fila_type || f.material || "";
+    return FAMILIES_G.find(m => sub===m||sub.startsWith(m+" ")||sub.startsWith(m+"-")) || sub.split(/[\s-]/)[0] || "";
+  };
 
   useEffect(() => {
-    client.get("/filaments/filaments").then(({ data }) => setFilaments(data));
+    client.get("/filaments/filaments").then(({ data }) => setAllFilaments(data));
   }, []);
+
+  // Filaments filtrés pour la galerie
+  const filaments = useMemo(() => {
+    let res = allFilaments;
+    if (galQ) {
+      const ql = galQ.toLowerCase();
+      res = res.filter(f => [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type].some(v=>v&&v.toLowerCase().includes(ql)));
+    }
+    if (galFilters.brand) res = res.filter(f => f.manufacturer === galFilters.brand);
+    if (galFilters.mat)   res = res.filter(f => getFamilyG(f) === galFilters.mat);
+    if (galFilters.sub)   res = res.filter(f => (f.fila_type||f.material||"") === galFilters.sub);
+    return res;
+  }, [allFilaments, galQ, galFilters]);
+
+  const galActiveFilters = [galFilters.brand,galFilters.mat,galFilters.sub].filter(Boolean).length;
 
   const tabs = [
     { id:"spools",   label:"Stock" },
@@ -1837,7 +1861,26 @@ export default function Filaments() {
       {tab==="catalog" && <FilamentsView/>}
       {tab==="gallery" && (
         <>
-          {/* Sous-mode : photos réelles vs nuancier de couleurs */}
+          {/* Barre recherche + filtres partagés Photos/Nuancier */}
+          <div style={{ display:"flex", gap:8 }}>
+            <div style={{ position:"relative", flex:1 }}>
+              <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
+              <input value={galQ} onChange={e=>setGalQ(e.target.value)} placeholder="Nom, marque, matériau…"
+                style={{ ...inp, paddingLeft:36 }} onFocus={inpFocus} onBlur={inpBlur}/>
+            </div>
+            <button onClick={()=>setGalFilterOpen(true)}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px",
+                background:galActiveFilters>0?"#3b82f6":"var(--surface2)", color:galActiveFilters>0?"white":"var(--text)",
+                border:"1px solid var(--border)", borderRadius:8, fontSize:12, cursor:"pointer", flexShrink:0 }}>
+              <SlidersHorizontal size={14}/>{galActiveFilters>0?` Filtres (${galActiveFilters})`:" Filtres"}
+            </button>
+          </div>
+          {galFilterOpen && (
+            <FilterSortSheet allItems={allFilaments} getFamily={getFamilyG} filters={galFilters} sort={null}
+              onApply={(f)=>{ setGalFilters(f); setGalFilterOpen(false); }}
+              onClose={()=>setGalFilterOpen(false)}/>
+          )}
+          {/* Switch Photos / Nuancier */}
           <div style={{ display:"flex", gap:6 }}>
             {[["photos","Photos"],["swatch","Nuancier"]].map(([id,label]) => (
               <button key={id} onClick={()=>setGalleryMode(id)} style={{
