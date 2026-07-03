@@ -481,59 +481,55 @@ function KpiBar({ kpis }) {
   );
 }
 
-function lumiText(hexColor) {
-  const hex = (hexColor||"888888").replace("#","").slice(0,6).padEnd(6,"0");
-  const r=parseInt(hex.slice(0,2),16)/255, g=parseInt(hex.slice(2,4),16)/255, b=parseInt(hex.slice(4,6),16)/255;
-  const lum = 0.2126*r + 0.7152*g + 0.0722*b;
-  const dark = lum > 0.45;
-  return {
-    txt:   dark ? "rgba(0,0,0,0.85)"  : "white",
-    sub:   dark ? "rgba(0,0,0,0.55)"  : "rgba(255,255,255,0.75)",
-    shd:   dark ? "none"              : "0 1px 3px rgba(0,0,0,0.4)",
-    barBg: dark ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.25)",
-    barFg: dark ? "rgba(0,0,0,0.6)"  : "white",
-    pill:  dark ? "rgba(0,0,0,0.12)" : "rgba(0,0,0,0.25)",
-  };
-}
-
-function SpoolCard({ s, showArchived, colorsList, onArchive, onClick }) {
-  const { txt, sub, shd, barBg, barFg, pill } = lumiText(s.filament_color);
+function SpoolCard({ s, colorsList, onClick }) {
   const pct = s.remaining_weight_g != null
     ? Math.min(100, Math.round(s.remaining_weight_g / (s.filament_weight_g||1000) * 100)) : 0;
+  // Couleur barre selon niveau
+  const barColor = pct > 60 ? "#22c55e" : pct > 35 ? "#f59e0b" : pct > 15 ? "#f97316" : "#ef4444";
+  const shadow = "0 0 4px rgba(0,0,0,0.8), 0 1px 2px rgba(0,0,0,0.9)";
   return (
     <div onClick={onClick} className="card-sm"
-      style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
+      style={{ overflow:"hidden", cursor:"pointer", padding:0,
         ...colorBg(colorsList, s.filament_multicolor_type) }}>
-      <div style={{ padding:"8px 10px 10px", display:"flex", flexDirection:"column", gap:5 }}>
-        {!showArchived && (
-          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:2 }}>
-            <button onClick={async e => { e.stopPropagation(); onArchive(); }}
-              style={{ background:pill, border:"none", cursor:"pointer", color:txt, borderRadius:6, padding:"2px 4px" }}
-              onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,0.6)"}
-              onMouseLeave={e=>e.currentTarget.style.background=pill}>
-              <Archive size={11}/>
-            </button>
-          </div>
-        )}
-        <p style={{ fontWeight:800, fontSize:13, color:txt, margin:0, lineHeight:"1.3",
-          wordBreak:"break-word", textShadow:shd }}>
+      <div style={{ padding:"10px 10px 10px", display:"flex", flexDirection:"column", gap:6 }}>
+        {/* Nom avec ombre pour lisibilité sur toute couleur */}
+        <p style={{ fontWeight:800, fontSize:13, color:"white", margin:0, lineHeight:"1.3",
+          wordBreak:"break-word", textShadow:shadow }}>
           {s.filament_translated_name || s.filament_name}
         </p>
-        <p style={{ fontSize:10, color:sub, margin:0,
-          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-          {[s.filament_manufacturer, s.filament_material].filter(Boolean).join(" · ")}
-        </p>
-        <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:4 }}>
-          <div style={{ flex:1, height:4, borderRadius:2, background:barBg, overflow:"hidden" }}>
-            <div style={{ width:`${pct}%`, height:"100%", background:barFg, borderRadius:2 }}/>
+        {/* Marque + type en étiquettes */}
+        <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+          {s.filament_manufacturer && (
+            <span style={{ fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:4,
+              background:"rgba(0,0,0,0.55)", color:"white", backdropFilter:"blur(2px)" }}>
+              {s.filament_manufacturer}
+            </span>
+          )}
+          {s.filament_material && (
+            <span style={{ fontSize:9, fontWeight:700, padding:"1px 6px", borderRadius:4,
+              background:"rgba(0,0,0,0.4)", color:"rgba(255,255,255,0.9)", backdropFilter:"blur(2px)" }}>
+              {s.filament_material}
+            </span>
+          )}
+        </div>
+        {/* Barre + poids */}
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:2 }}>
+          <div style={{ flex:1, height:6, borderRadius:3,
+            background:"rgba(0,0,0,0.35)", border:"1px solid rgba(255,255,255,0.25)",
+            overflow:"hidden" }}>
+            <div style={{ width:`${pct}%`, height:"100%", background:barColor,
+              borderRadius:3, boxShadow:`0 0 4px ${barColor}` }}/>
           </div>
-          <span style={{ fontSize:10, fontFamily:"monospace", fontWeight:700, color:txt, flexShrink:0, textShadow:shd }}>
+          <span style={{ fontSize:10, fontFamily:"monospace", fontWeight:800, color:"white",
+            flexShrink:0, textShadow:shadow }}>
             {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)}g` : "—"}
           </span>
         </div>
+        {/* Emplacement */}
         {s.location && (
-          <span style={{ alignSelf:"flex-start", fontSize:10, background:pill,
-            padding:"2px 8px", borderRadius:20, color:txt, fontWeight:500, marginTop:2 }}>
+          <span style={{ alignSelf:"flex-start", fontSize:9, fontWeight:700,
+            background:"rgba(0,0,0,0.5)", color:"white", padding:"2px 8px",
+            borderRadius:20, backdropFilter:"blur(2px)", marginTop:2 }}>
             {s.location}
           </span>
         )}
@@ -601,10 +597,7 @@ function SpoolsView({ filaments, showArchived }) {
           {spools.map(s => {
             const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
             return (
-              <SpoolCard key={s.id} s={s} showArchived={showArchived}
-                colorsList={colorsList}
-                onArchive={async()=>{ await client.delete(`/filaments/spools/${s.id}`); load(); }}
-                onClick={()=>setSelected(s)}/>
+              <SpoolCard key={s.id} s={s} colorsList={colorsList} onClick={()=>setSelected(s)}/>
             );
           })}
         </div>
