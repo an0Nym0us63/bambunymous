@@ -541,41 +541,42 @@ function SpoolsView({ filaments, showArchived }) {
             const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
             return (
               <div key={s.id} onClick={()=>setSelected(s)} className="card-sm"
-                style={{ overflow:"hidden", cursor:"pointer", display:"flex", flexDirection:"column" }}>
-                {/* Bandeau couleur du filament */}
-                <div style={{ height:6, flexShrink:0, ...colorBg(colorsList, s.filament_multicolor_type) }}/>
-                <div style={{ padding:"10px 12px 12px", display:"flex", flexDirection:"column", gap:8, flex:1 }}>
-                  <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
-                    <ColorDot color={s.filament_color} colorsArray={s.filament_colors_array} multicolorType={s.filament_multicolor_type} size={20}/>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ fontWeight:600, fontSize:13, color:"var(--text)", overflow:"hidden",
-                        textOverflow:"ellipsis", whiteSpace:"nowrap", lineHeight:"16px" }}>{s.filament_name}</p>
-                      <p style={{ fontSize:11, color:"var(--muted)", overflow:"hidden",
-                        textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        {s.filament_material}{s.filament_manufacturer ? ` · ${s.filament_manufacturer}` : ""}
-                      </p>
-                    </div>
+                style={{ overflow:"hidden", cursor:"pointer", display:"flex", flexDirection:"column", padding:0 }}>
+                {/* Bandeau couleur plein */}
+                <div style={{ height:8, flexShrink:0, ...colorBg(colorsList, s.filament_multicolor_type) }}/>
+                <div style={{ padding:"10px 12px 10px", display:"flex", flexDirection:"column", gap:6, flex:1 }}>
+                  {/* Ligne 1 : pastille + nom */}
+                  <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+                    <ColorDot color={s.filament_color} colorsArray={s.filament_colors_array} multicolorType={s.filament_multicolor_type} size={22}/>
+                    <p style={{ fontWeight:700, fontSize:13, color:"var(--text)", margin:0,
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>
+                      {s.filament_translated_name || s.filament_name}
+                    </p>
                     {!showArchived && (
                       <button onClick={async e => { e.stopPropagation(); await client.delete(`/filaments/spools/${s.id}`); load(); }}
-                        style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2, flexShrink:0 }}
+                        style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:0, flexShrink:0 }}
                         onMouseEnter={e=>e.currentTarget.style.color="#ef4444"}
                         onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
-                        <Archive size={13}/>
+                        <Archive size={12}/>
                       </button>
                     )}
                   </div>
+                  {/* Ligne 2 : marque · sous-type */}
+                  <p style={{ fontSize:11, color:"var(--muted)", margin:0,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {[s.filament_manufacturer, s.filament_material].filter(Boolean).join(" · ")}
+                  </p>
+                  {/* Barre poids */}
                   <RemainBar remaining={s.remaining_weight_g}/>
-                  {(s.location || s.comment) && (
-                    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-                      {s.location && (
-                        <span style={{ fontSize:10, background:"var(--surface)", border:"1px solid var(--border)",
-                          padding:"2px 7px", borderRadius:20, color:"var(--muted)" }}>{s.location}</span>
-                      )}
-                      {s.comment && (
-                        <span style={{ fontSize:10, color:"var(--muted)", overflow:"hidden",
-                          textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1, minWidth:0 }}>{s.comment}</span>
-                      )}
-                    </div>
+                  {/* Poids en grammes */}
+                  <p style={{ fontSize:11, fontFamily:"monospace", color:"var(--text)", margin:0, textAlign:"right" }}>
+                    {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)} g` : "—"}
+                  </p>
+                  {/* Emplacement */}
+                  {s.location && (
+                    <span style={{ alignSelf:"flex-start", fontSize:10, background:"var(--surface)",
+                      border:"1px solid var(--border)", padding:"2px 8px", borderRadius:20,
+                      color:"var(--muted)", fontWeight:500 }}>{s.location}</span>
                   )}
                 </div>
               </div>
