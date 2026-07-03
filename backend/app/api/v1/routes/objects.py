@@ -120,12 +120,27 @@ async def update_object(oid: int, body: ObjectUpdate, _: str = Depends(get_curre
 
 @router.get("/objects/{oid}/image")
 async def object_image(oid: int):
-    d = DATA_DIR / "accessories" / str(oid)  # objects use accessories dir? No:
-    d = DATA_DIR / "objects" / str(oid)
-    if not d.exists(): raise HTTPException(404)
-    for f in sorted(d.iterdir()):
-        if f.suffix.lower() in (".jpg",".jpeg",".png",".webp"):
-            return FileResponse(str(f))
+    IMG_EXT = {".jpg",".jpeg",".png",".webp"}
+
+    def _first_img(d: Path):
+        if d.exists():
+            for f in sorted(d.iterdir()):
+                if f.suffix.lower() in IMG_EXT:
+                    return f
+        return None
+
+    # 1. Photo uploadée de l'objet
+    img = _first_img(DATA_DIR / "objects" / str(oid))
+    if img: return FileResponse(str(img))
+
+    # 2. Photo du parent (print ou groupe)
+    async with AsyncSessionLocal() as db:
+        o = await db.get(Object, oid)
+    if o and o.parent_type and o.parent_id:
+        folder = "prints" if o.parent_type == "print" else "groups"
+        img = _first_img(DATA_DIR / folder / str(o.parent_id))
+        if img: return FileResponse(str(img))
+
     raise HTTPException(404)
 
 
