@@ -355,8 +355,6 @@ async def _enrich_bambu_filaments_after_import():
 
             enriched = 0
             for f in fils:
-                if f.translated_name:  # déjà enrichi
-                    continue
                 try:
                     from ..services.bambu_catalog import enrich_filament_from_catalog
                     changed = await enrich_filament_from_catalog(db, f)
