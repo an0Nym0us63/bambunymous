@@ -222,7 +222,7 @@ function FilamentPhotos({ filamentId, onLightbox }) {
 }
 
 
-function WeightAdjustInline({ spoolId, current, onUpdated }) {
+function WeightAdjustInline({ spoolId, current, onUpdated, isPrix = false }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState("set");
   const [val, setVal] = useState("");
@@ -233,7 +233,11 @@ function WeightAdjustInline({ spoolId, current, onUpdated }) {
     if (isNaN(n) || n < 0) return;
     setSaving(true);
     try {
-      await client.post(`/filaments/spools/${spoolId}/weight`, { mode, value: n });
+      if (isPrix) {
+        await client.patch(`/filaments/spools/${spoolId}`, { price_override: n });
+      } else {
+        await client.post(`/filaments/spools/${spoolId}/weight`, { mode, value: n });
+      }
       setOpen(false); setVal("");
       onUpdated?.();
     } catch(e) { alert(e.response?.data?.detail || e.message); }
@@ -246,7 +250,7 @@ function WeightAdjustInline({ spoolId, current, onUpdated }) {
         style={{ padding:"5px 12px", borderRadius:8, fontSize:11, fontWeight:600,
           background:"rgba(59,130,246,0.08)", border:"1px solid rgba(59,130,246,0.2)",
           color:"#60a5fa", cursor:"pointer" }}>
-        ⚖ Réajuster la quantité
+        {isPrix ? `💰 Prix achat : ${current != null ? Number(current).toFixed(2)+"€" : "non défini"}` : "⚖ Réajuster la quantité"}
       </button>
     </div>
   );
@@ -255,7 +259,7 @@ function WeightAdjustInline({ spoolId, current, onUpdated }) {
     <div style={{ margin:"6px 0", padding:"12px", borderRadius:10,
       background:"var(--surface2)", border:"1px solid var(--border)",
       display:"flex", flexDirection:"column", gap:8 }}>
-      <div style={{ display:"flex", gap:6 }}>
+      {!isPrix && <div style={{ display:"flex", gap:6 }}>
         {[["set","= Définir"],["add","+ Ajouter"],["sub","− Enlever"]].map(([m,l]) => (
           <button key={m} onClick={() => setMode(m)}
             style={{ flex:1, padding:"5px 0", borderRadius:7, fontSize:10, fontWeight:700, cursor:"pointer",
@@ -265,7 +269,7 @@ function WeightAdjustInline({ spoolId, current, onUpdated }) {
             {l}
           </button>
         ))}
-      </div>
+      </div>}
       <div style={{ display:"flex", gap:6, alignItems:"center" }}>
         <input type="number" min="0" value={val} autoFocus
           onChange={e => setVal(e.target.value)}
@@ -348,7 +352,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:20, fontWeight:800, color:"var(--text)", margin:0,
                 letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                {spool.filament_name}
+                {spool.filament_translated_name || spool.filament_name}
               </p>
               <p style={{ fontSize:13, color:"var(--muted)", margin:"4px 0 0" }}>
                 {spool.filament_material}
@@ -383,35 +387,31 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
             </div>
           </div>
 
-          {/* ── Filament (catalogue) ── */}
-          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:"0.08em", marginBottom:4 }}>Filament (catalogue)</p>
-          <Row label="Nom"            value={spool.filament_name}/>
-          <Row label="Nom traduit"    value={spool.filament_translated_name}/>
-          <Row label="Marque"         value={spool.filament_manufacturer}/>
-          <Row label="Matière"        value={spool.filament_material}/>
-          <Row label="Couleur"        value={colorsList?.length > 1 ? (f?.colors_array||spool?.filament_colors_array||"").split(",").map(c=>hexDisplay(c)).filter(Boolean).join(" / ") : color} mono/>
-          <Row label="Profile ID"     value={spool.filament_profile_id} mono/>
-          <Row label="Multicolor"     value={spool.filament_multicolor_type !== "monochrome" ? spool.filament_multicolor_type : null}/>
-          <Row label="Poids total"    value={spool.filament_weight_g ? `${spool.filament_weight_g}g` : null}/>
-          <Row label="Poids support"  value={spool.filament_spool_weight_g ? `${spool.filament_spool_weight_g}g` : null}/>
-          <Row label="Prix catalogue" value={spool.filament_price ? `${Number(spool.filament_price).toFixed(2)}€` : null}/>
-          <Row label="Réf. externe"   value={spool.filament_external_id} mono/>
-
           {/* ── Bobine physique ── */}
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:"0.08em", margin:"16px 0 4px" }}>Bobine #{spool.id}</p>
+            letterSpacing:"0.08em", marginBottom:4 }}>Bobine #{spool.id}</p>
           <Row label="Restant"        value={`${remaining.toFixed(0)}g`} accent={barColor}/>
           <WeightAdjustInline spoolId={spool.id} current={remaining} onUpdated={onClose}/>
-          <Row label="Prix achat"     value={spool.price_override ? `${Number(spool.price_override).toFixed(2)}€` : null}/>
+          <WeightAdjustInline spoolId={spool.id} current={spool.price_override} onUpdated={onClose} isPrix/>
           <Row label="Emplacement"    value={spool.location}/>
           <Row label="Tag NFC"        value={spool.tag_number} mono/>
           <Row label="Tray AMS"       value={spool.ams_tray}/>
-          <Row label="ID externe"     value={spool.external_spool_id} mono/>
-          <Row label="Mode détection" value={spool.found_mode}/>
           <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
           <Row label="Dernière util." value={spool.last_used_at?.slice(0,10)}/>
           <Row label="Commentaire"    value={spool.comment}/>
+
+          {/* ── Filament (catalogue) ── */}
+          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+            letterSpacing:"0.08em", margin:"16px 0 4px" }}>Filament (catalogue)</p>
+          <Row label="Nom"            value={spool.filament_translated_name || spool.filament_name}/>
+          {spool.filament_translated_name && spool.filament_name !== spool.filament_translated_name &&
+            <Row label="Nom EN"       value={spool.filament_name}/>}
+          <Row label="Marque"         value={spool.filament_manufacturer}/>
+          <Row label="Matière"        value={spool.filament_material}/>
+          <Row label="Couleur"        value={color} mono/>
+          {spool.filament_profile_id && <Row label="Code Bambu" value={spool.filament_profile_id} mono/>}
+          <Row label="Poids total"    value={spool.filament_weight_g ? `${spool.filament_weight_g}g` : null}/>
+          <Row label="Prix catalogue" value={spool.filament_price ? `${Number(spool.filament_price).toFixed(2)}€` : null}/>
 
 
           {/* Actions */}
