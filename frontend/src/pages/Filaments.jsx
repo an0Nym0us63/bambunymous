@@ -606,7 +606,8 @@ function SpoolCard({ s, colorsList, onClick }) {
   const pct = s.remaining_weight_g != null
     ? Math.min(100, Math.round(s.remaining_weight_g / (s.filament_weight_g||1000) * 100)) : 0;
   const barColor = pct > 60 ? "#22c55e" : pct > 35 ? "#f59e0b" : pct > 15 ? "#f97316" : "#ef4444";
-  const shd = "0 1px 0 rgba(0,0,0,0.9), 0 2px 8px rgba(0,0,0,0.7), 0 0 16px rgba(0,0,0,0.4)";
+  const shd = null; // remplacé par filter drop-shadow
+  const flt = "drop-shadow(0 1px 4px rgba(0,0,0,0.95)) drop-shadow(0 2px 10px rgba(0,0,0,0.6))";
   return (
     <div onClick={onClick} className="card-sm"
       style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
@@ -646,7 +647,7 @@ function SpoolCard({ s, colorsList, onClick }) {
             <div style={{ width:`${pct}%`, height:"100%", background:barColor, borderRadius:3 }}/>
           </div>
           <span style={{ fontSize:9, fontFamily:"'Inter','DM Sans',system-ui,sans-serif",
-            fontWeight:700, color:"white", flexShrink:0, textShadow:shd,
+            fontWeight:700, color:"white", flexShrink:0, filter:flt,
             minWidth:28, textAlign:"right", letterSpacing:"0.02em" }}>
             {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)}g` : "—"}
           </span>
