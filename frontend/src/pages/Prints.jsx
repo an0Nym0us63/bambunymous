@@ -17,7 +17,10 @@ function fmtDur(s) {
 }
 function fmtDate(d) {
   if (!d) return "—";
-  return new Date(d).toLocaleString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
+  // Les datetimes DB sont en UTC sans 'Z' → forcer UTC pour conversion correcte en heure locale
+  const s = typeof d === "string" && !d.includes("Z") && !d.includes("+")
+    ? d.replace(" ", "T") + "Z" : d;
+  return new Date(s).toLocaleString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric", hour:"2-digit", minute:"2-digit" });
 }
 function hexCss(h) {
   if (!h) return "#888";

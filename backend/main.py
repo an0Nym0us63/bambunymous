@@ -3,6 +3,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.encoders import jsonable_encoder
+from datetime import datetime
 from pathlib import Path
 import logging
 import os
@@ -78,6 +80,16 @@ async def lifespan(app: FastAPI):
     catalog_sync.stop()
     await mqtt_manager.stop()
 
+
+# Sérialiser les datetimes UTC avec suffixe Z pour que le navigateur les interprète correctement
+from fastapi import FastAPI as _FA
+import fastapi.encoders as _enc
+_orig_enc = _enc.jsonable_encoder
+def _patched_encoder(obj, *a, **kw):
+    if isinstance(obj, datetime) and obj.tzinfo is None:
+        return obj.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return _orig_enc(obj, *a, **kw)
+_enc.jsonable_encoder = _patched_encoder
 
 app = FastAPI(
     title="Bambunymous",
