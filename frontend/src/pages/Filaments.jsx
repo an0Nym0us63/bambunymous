@@ -295,6 +295,62 @@ function WeightAdjustInline({ spoolId, current, onUpdated, isPrix = false }) {
   );
 }
 
+function WeightEditRow({ spoolId, current, onUpdated }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(current != null ? String(Math.round(current)) : "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const n = parseFloat(val);
+    if (isNaN(n) || n < 0) return;
+    setSaving(true);
+    try {
+      await client.post(`/filaments/spools/${spoolId}/weight`, { mode:"set", value: n });
+      onUpdated?.();
+      setEditing(false);
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+      padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>Poids restant</span>
+      {editing ? (
+        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+          <input type="number" min="0" value={val} autoFocus
+            onChange={e => setVal(e.target.value)}
+            onKeyDown={e => { if(e.key==="Enter") save(); if(e.key==="Escape") setEditing(false); }}
+            style={{ width:80, padding:"4px 8px", borderRadius:7, fontSize:13,
+              background:"var(--surface2)", border:"1px solid var(--border)",
+              color:"var(--text)", outline:"none", textAlign:"right" }}/>
+          <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
+          <button onClick={save} disabled={saving}
+            style={{ padding:"4px 10px", borderRadius:7, fontSize:12, fontWeight:700,
+              background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
+            {saving ? "…" : "OK"}
+          </button>
+          <button onClick={() => setEditing(false)}
+            style={{ padding:"4px 8px", borderRadius:7, fontSize:12,
+              background:"var(--surface2)", border:"1px solid var(--border)",
+              color:"var(--muted)", cursor:"pointer" }}>✕</button>
+        </div>
+      ) : (
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:13, fontWeight:600, fontFamily:"JetBrains Mono,monospace",
+            color:"var(--text)" }}>
+            {current != null ? `${Math.round(current)} g` : <span style={{color:"var(--muted)",fontWeight:400}}>—</span>}
+          </span>
+          <button onClick={() => { setVal(current != null ? String(Math.round(current)) : ""); setEditing(true); }}
+            style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2 }}
+            onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
+            onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>✏️</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PriceEditRow({ spoolId, current, onUpdated }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(current != null ? String(Number(current).toFixed(2)) : "");
@@ -447,11 +503,9 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           {/* ── Bobine physique ── */}
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:"0.08em", marginBottom:4 }}>Bobine #{spool.id}</p>
-          <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:8 }}>
-            <WeightAdjustInline spoolId={spool.id} current={remaining} onUpdated={onClose}/>
-          </div>
-          <PriceEditRow spoolId={spool.id} current={spool.price_override} onUpdated={onClose}/>
           <Row label="Emplacement"    value={spool.location}/>
+          <WeightEditRow spoolId={spool.id} current={remaining} onUpdated={onClose}/>
+          <PriceEditRow spoolId={spool.id} current={spool.price_override} onUpdated={onClose}/>
           <Row label="Tag NFC"        value={spool.tag_number} mono/>
           <Row label="Tray AMS"       value={spool.ams_tray}/>
           <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
