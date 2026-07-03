@@ -75,24 +75,26 @@ export default function Logs({ embedded = false }) {
     <div style={{ maxWidth:1000, margin:"0 auto", display:"flex", flexDirection:"column", gap:12, height:"calc(100dvh - 100px)" }}>
 
       {/* Header */}
-      {!embedded && <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>}
-        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-          <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Journal</h1>
-          <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
-            {status}{fileMb != null ? ` · ${fileMb} Mo` : ""}
-            {purged && <span style={{ color:"#f59e0b", marginLeft:6 }}>⚡ Purgé auto</span>}
-          </span>
-          {live && <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"#22c55e" }}>
-            <span style={{ width:6, height:6, borderRadius:"50%", background:"#22c55e", display:"inline-block", animation:"livePulse 2s infinite" }}/> Live
-          </span>}
+      {!embedded && (
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Journal</h1>
+            <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
+              {status}{fileMb != null ? ` · ${fileMb} Mo` : ""}
+              {purged && <span style={{ color:"#f59e0b", marginLeft:6 }}>⚡ Purgé auto</span>}
+            </span>
+            {live && <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"#22c55e" }}>
+              <span style={{ width:6, height:6, borderRadius:"50%", background:"#22c55e", display:"inline-block", animation:"livePulse 2s infinite" }}/> Live
+            </span>}
+          </div>
+          <div style={{ display:"flex", gap:6 }}>
+            <Btn onClick={() => load(filter, minLevel)}><RefreshCw size={13}/> Actualiser</Btn>
+            {live ? <Btn onClick={stopLive} active><Square size={13}/> Stop</Btn>
+                  : <Btn onClick={startLive}><Play size={13}/> Live</Btn>}
+            <Btn onClick={clearLogs}><Trash2 size={13}/> Vider</Btn>
+          </div>
         </div>
-        <div style={{ display:"flex", gap:6 }}>
-          <Btn onClick={() => load(filter, minLevel)}><RefreshCw size={13}/> Actualiser</Btn>
-          {live ? <Btn onClick={stopLive} active><Square size={13}/> Stop</Btn>
-                : <Btn onClick={startLive}><Play size={13}/> Live</Btn>}
-          <Btn onClick={clearLogs}><Trash2 size={13}/> Vider</Btn>
-        </div>
-      </div>
+      )}
 
       {/* Filtres */}
       <div className="card" style={{ padding:"10px 12px", display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
