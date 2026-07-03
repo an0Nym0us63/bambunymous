@@ -531,7 +531,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Matière"        value={spool.filament_material}/>
           <Row label="Couleur"        value={color} mono/>
           {spool.filament_profile_id && <Row label="Code Bambu" value={spool.filament_profile_id} mono/>}
-          {spool.fila_color_code && <Row label="Code couleur" value={spool.fila_color_code} mono/>}
+          {spool.filament_fila_color_code && <Row label="Code couleur Bambu" value={spool.filament_fila_color_code} mono/>}
           <Row label="Poids total"    value={spool.filament_weight_g ? `${spool.filament_weight_g}g` : null}/>
           <Row label="Prix catalogue" value={spool.filament_price ? `${Number(spool.filament_price).toFixed(2)}€` : null}/>
 
