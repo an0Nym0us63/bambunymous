@@ -601,37 +601,24 @@ function SpoolsView({ filaments, showArchived }) {
           {spools.map(s => {
             const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
             return (
-              (() => {
-                // Luminance perceptuelle → texte noir ou blanc
-                const hex = (s.filament_color||"888888").replace("#","").slice(0,6).padEnd(6,"0");
-                const r=parseInt(hex.slice(0,2),16)/255, g=parseInt(hex.slice(2,4),16)/255, b=parseInt(hex.slice(4,6),16)/255;
-                const lum = 0.2126*r + 0.7152*g + 0.0722*b;
-                const dark = lum > 0.45; // couleur claire → texte sombre
-                const txt = dark ? "rgba(0,0,0,0.85)" : "white";
-                const sub = dark ? "rgba(0,0,0,0.55)" : "rgba(255,255,255,0.75)";
-                const shd = dark ? "none" : "0 1px 3px rgba(0,0,0,0.4)";
-                const barBg = dark ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.25)";
-                const barFg = dark ? "rgba(0,0,0,0.6)" : "white";
-                const pill  = dark ? "rgba(0,0,0,0.12)" : "rgba(0,0,0,0.25)";
-                return (
               <SpoolCard key={s.id} s={s} showArchived={showArchived}
-                colorsList={colorsList} onArchive={async()=>{ await client.delete(`/filaments/spools/${s.id}`); load(); }}
+                colorsList={colorsList}
+                onArchive={async()=>{ await client.delete(`/filaments/spools/${s.id}`); load(); }}
                 onClick={()=>setSelected(s)}/>
-                        </div>
-                        <span style={{ fontSize:10, fontFamily:"monospace", fontWeight:700, color:txt, flexShrink:0, textShadow:shd }}>
-                          {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)}g` : "—"}
-                        </span>
-                      </div>
-                      {s.location && (
-                        <span style={{ alignSelf:"flex-start", fontSize:10, background:pill,
-                          padding:"2px 8px", borderRadius:20, color:txt, fontWeight:500, marginTop:2 }}>
-                          {s.location}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
+            );
+          })}
+        </div>
+      )}
+      {showAdd && <AddSpoolModal filaments={filaments} onSave={()=>{ setShowAdd(false); load(); }} onClose={()=>setShowAdd(false)}/>}
+      {selected && (
+        <SpoolBottomSheet
+          spool={selected}
+          onClose={()=>setSelected(null)}
+          onArchive={async(id)=>{ await client.delete(`/filaments/spools/${id}`); load(); }}
+          onDelete={load}
+        />
+      )}
+    </div>
   );
 }
 
