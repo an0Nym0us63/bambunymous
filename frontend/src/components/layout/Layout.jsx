@@ -1,6 +1,6 @@
 import React from "react";
-import { ShoppingBag, Outlet, NavLink, useNavigate } from "react-router-dom";
-import { Home, Settings, LogOut, Box, Package, ScrollText, History } from "lucide-react";
+import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Home, Settings, LogOut, Box, Package, ScrollText, History, ShoppingBag } from "lucide-react";
 import { useAuth } from "../../store/auth";
 
 const nav = [
