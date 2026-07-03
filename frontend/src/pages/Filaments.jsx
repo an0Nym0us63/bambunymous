@@ -618,7 +618,7 @@ function SpoolCard({ s, colorsList, onClick }) {
           lineHeight:"1.35", height:"2.7em", overflow:"hidden",
           display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
           fontFamily:"'Inter','DM Sans','Segoe UI',system-ui,sans-serif",
-          letterSpacing:"0.01em", textShadow:shd }}>
+          letterSpacing:"0.01em", filter:flt }}>
           {s.filament_translated_name || s.filament_name}
         </p>
         {/* Étiquettes marque + type — hauteur fixe */}
