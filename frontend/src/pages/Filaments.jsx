@@ -541,43 +541,54 @@ function SpoolsView({ filaments, showArchived }) {
             const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
             return (
               <div key={s.id} onClick={()=>setSelected(s)} className="card-sm"
-                style={{ overflow:"hidden", cursor:"pointer", display:"flex", flexDirection:"column", padding:0 }}>
-                {/* Zone couleur pleine largeur */}
-                <div style={{ height:44, flexShrink:0, position:"relative",
+                style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
                   ...colorBg(colorsList, s.filament_multicolor_type) }}>
+                {/* Overlay sombre léger pour lisibilité sur couleurs claires */}
+                <div style={{ position:"absolute", inset:0, background:"rgba(0,0,0,0.18)", pointerEvents:"none" }}/>
+                <div style={{ position:"relative", padding:"10px 10px 10px", display:"flex", flexDirection:"column", gap:5 }}>
+                  {/* Bouton archiver discret */}
                   {!showArchived && (
-                    <button onClick={async e => { e.stopPropagation(); await client.delete(`/filaments/spools/${s.id}`); load(); }}
-                      style={{ position:"absolute", top:4, right:4, background:"rgba(0,0,0,0.25)",
-                        border:"none", cursor:"pointer", color:"white", borderRadius:6, padding:"2px 4px" }}
-                      onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,0.7)"}
-                      onMouseLeave={e=>e.currentTarget.style.background="rgba(0,0,0,0.25)"}>
-                      <Archive size={11}/>
-                    </button>
+                    <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:2 }}>
+                      <button onClick={async e => { e.stopPropagation(); await client.delete(`/filaments/spools/${s.id}`); load(); }}
+                        style={{ background:"rgba(0,0,0,0.25)", border:"none", cursor:"pointer",
+                          color:"white", borderRadius:6, padding:"2px 4px" }}
+                        onMouseEnter={e=>e.currentTarget.style.background="rgba(239,68,68,0.7)"}
+                        onMouseLeave={e=>e.currentTarget.style.background="rgba(0,0,0,0.25)"}>
+                        <Archive size={11}/>
+                      </button>
+                    </div>
                   )}
-                </div>
-                <div style={{ padding:"8px 10px 10px", display:"flex", flexDirection:"column", gap:5, flex:1 }}>
-                  {/* Nom sur toute la largeur */}
-                  <p style={{ fontWeight:700, fontSize:12, color:"var(--text)", margin:0, lineHeight:"1.3",
-                    wordBreak:"break-word" }}>
+                  {/* Nom */}
+                  <p style={{ fontWeight:800, fontSize:13, color:"white", margin:0, lineHeight:"1.3",
+                    wordBreak:"break-word", textShadow:"0 1px 3px rgba(0,0,0,0.5)" }}>
                     {s.filament_translated_name || s.filament_name}
                   </p>
                   {/* Marque · type */}
-                  <p style={{ fontSize:10, color:"var(--muted)", margin:0,
-                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  <p style={{ fontSize:10, color:"rgba(255,255,255,0.8)", margin:0,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                    textShadow:"0 1px 2px rgba(0,0,0,0.4)" }}>
                     {[s.filament_manufacturer, s.filament_material].filter(Boolean).join(" · ")}
                   </p>
-                  {/* Barre + grammes inline */}
-                  <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:2 }}>
-                    <div style={{ flex:1 }}><RemainBar remaining={s.remaining_weight_g}/></div>
-                    <span style={{ fontSize:10, fontFamily:"monospace", fontWeight:600,
-                      color:"var(--text)", flexShrink:0 }}>
+                  {/* Barre + grammes */}
+                  <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:4 }}>
+                    <div style={{ flex:1, height:4, borderRadius:2, background:"rgba(255,255,255,0.25)",
+                      overflow:"hidden" }}>
+                      {(() => {
+                        const pct = s.remaining_weight_g != null
+                          ? Math.min(100, Math.round(s.remaining_weight_g / (s.filament_weight_g||1000) * 100)) : 0;
+                        return <div style={{ width:`${pct}%`, height:"100%", background:"white", borderRadius:2 }}/>;
+                      })()}
+                    </div>
+                    <span style={{ fontSize:10, fontFamily:"monospace", fontWeight:700,
+                      color:"white", flexShrink:0, textShadow:"0 1px 2px rgba(0,0,0,0.4)" }}>
                       {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)}g` : "—"}
                     </span>
                   </div>
+                  {/* Emplacement */}
                   {s.location && (
-                    <span style={{ alignSelf:"flex-start", fontSize:10, background:"var(--surface)",
-                      border:"1px solid var(--border)", padding:"2px 7px", borderRadius:20,
-                      color:"var(--muted)", fontWeight:500 }}>{s.location}</span>
+                    <span style={{ alignSelf:"flex-start", fontSize:10, background:"rgba(0,0,0,0.3)",
+                      padding:"2px 8px", borderRadius:20, color:"white", fontWeight:500,
+                      backdropFilter:"blur(4px)", marginTop:2 }}>{s.location}</span>
                   )}
                 </div>
               </div>
