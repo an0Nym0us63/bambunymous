@@ -1,3 +1,4 @@
+import Logs from "./Logs";
 import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon } from "lucide-react";
 import client from "../api/client";
@@ -437,6 +438,16 @@ export default function Settings() {
             </button>
           </div>
         )}
+      </div>
+
+      {/* Journal intégré */}
+      <div className="card" style={{ padding:0, overflow:"hidden" }}>
+        <div style={{ padding:"12px 16px", borderBottom:"1px solid var(--border)" }}>
+          <h3 style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0 }}>Journal</h3>
+        </div>
+        <div style={{ padding:16, height:420, overflow:"hidden", display:"flex", flexDirection:"column" }}>
+          <Logs embedded={true}/>
+        </div>
       </div>
 
       {version && (

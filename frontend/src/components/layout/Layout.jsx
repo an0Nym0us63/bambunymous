@@ -1,15 +1,15 @@
 import React from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
-import { Home, Settings, LogOut, Box, Package, ScrollText, History, ShoppingBag } from "lucide-react";
+import { Home, Settings, LogOut, Package, History, ShoppingBag, BarChart2 } from "lucide-react";
 import { useAuth } from "../../store/auth";
 
 const nav = [
-  { to: "/",          icon: Home,     label: "Accueil"    },
-  { to: "/filaments", icon: Package,  label: "Filaments"  },
-  { to: "/settings",  icon: Settings, label: "Paramètres" },
-  { to: "/prints",     icon: History,   label: "Historique" },
-  { to: "/objects",    icon: ShoppingBag, label: "Objets" },
-  { to: "/logs",       icon: ScrollText,label: "Journal"    },
+  { to: "/",          icon: Home,       label: "Accueil"    },
+  { to: "/prints",    icon: History,    label: "Historique" },
+  { to: "/filaments", icon: Package,    label: "Filaments"  },
+  { to: "/objects",   icon: ShoppingBag,label: "Objets"     },
+  { to: "/stats",     icon: BarChart2,  label: "Stats"      },
+  { to: "/settings",  icon: Settings,   label: "Paramètres" },
 ];
 
 const S = {
@@ -50,7 +50,7 @@ export default function Layout() {
     <div style={S.app}>
       {/* Sidebar desktop */}
       <aside className="hidden-mobile" style={S.aside}>
-        <div style={S.logo}>
+        <div style={{...S.logo, cursor:"pointer"}} onClick={() => navigate("/")}>
           <img src="/icon-192.png" style={{ width:28, height:28, borderRadius:7, flexShrink:0 }} alt=""/>
           <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
             BambuNymous
@@ -69,7 +69,7 @@ export default function Layout() {
 
       <div style={S.main}>
         {/* Header mobile */}
-        <header className="show-mobile" style={S.header}>
+        <header className="show-mobile" style={{...S.header, cursor:"pointer"}} onClick={() => navigate("/")}>
           <img src="/icon-192.png" style={{ width:24, height:24, borderRadius:6, flexShrink:0 }} alt=""/>
           <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
             BambuNymous

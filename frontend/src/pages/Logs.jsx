@@ -6,7 +6,7 @@ const LEVEL_COLOR = { DEBUG:"#64748b", INFO:"#3b82f6", WARNING:"#f59e0b", ERROR:
 const LEVELS = ["DEBUG","INFO","WARNING","ERROR"];
 const LEVEL_ORDER = { DEBUG:0, INFO:1, WARNING:2, ERROR:3, CRITICAL:4 };
 
-export default function Logs() {
+export default function Logs({ embedded = false }) {
   const [logs, setLogs]         = useState([]);
   const [filter, setFilter]     = useState("");
   const [minLevel, setMinLevel] = useState("INFO");
@@ -75,7 +75,7 @@ export default function Logs() {
     <div style={{ maxWidth:1000, margin:"0 auto", display:"flex", flexDirection:"column", gap:12, height:"calc(100dvh - 100px)" }}>
 
       {/* Header */}
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
+      {!embedded && <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>}
         <div style={{ display:"flex", alignItems:"center", gap:10 }}>
           <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Journal</h1>
           <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
