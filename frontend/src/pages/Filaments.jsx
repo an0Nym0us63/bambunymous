@@ -540,7 +540,7 @@ function SpoolsView({ filaments, showArchived }) {
           {spools.map(s => {
             const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
             return (
-              {(() => {
+              (() => {
                 // Luminance perceptuelle → texte noir ou blanc
                 const hex = (s.filament_color||"888888").replace("#","").slice(0,6).padEnd(6,"0");
                 const r=parseInt(hex.slice(0,2),16)/255, g=parseInt(hex.slice(2,4),16)/255, b=parseInt(hex.slice(4,6),16)/255;
