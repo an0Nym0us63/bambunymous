@@ -1155,22 +1155,46 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
 }
 
 function FilamentsView() {
-  const [filaments, setFilaments] = useState([]);
+  const [allFilaments, setAllFilaments] = useState([]);
   const [q, setQ] = useState("");
-  const [material, setMaterial] = useState("");
   const [loading, setLoading] = useState(true);
   const [selectedFil, setSelectedFil] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filters, setFilters] = useState({ brand:"", mat:"", sub:"" });
+  const [sort, setSort] = useState("name");
+
+  const FAMILIES_F = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
+  const getFamilyF = f => {
+    const sub = f.fila_type || f.material || "";
+    return FAMILIES_F.find(m => sub === m || sub.startsWith(m+" ") || sub.startsWith(m+"-")) || sub.split(/[\s-]/)[0] || "";
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await client.get("/filaments/filaments", { params:{ q:q||undefined, material:material||undefined } });
-      setFilaments(data);
+      const { data } = await client.get("/filaments/filaments");
+      setAllFilaments(data);
     } finally { setLoading(false); }
-  }, [q, material]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  const filaments = useMemo(() => {
+    let res = allFilaments;
+    if (q) {
+      const ql = q.toLowerCase();
+      res = res.filter(f => [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type,f.fila_color_code].some(v=>v&&v.toLowerCase().includes(ql)));
+    }
+    if (filters.brand) res = res.filter(f => f.manufacturer === filters.brand);
+    if (filters.mat)   res = res.filter(f => getFamilyF(f) === filters.mat);
+    if (filters.sub)   res = res.filter(f => (f.fila_type||f.material||"") === filters.sub);
+    return [...res].sort((a,b) => sort==="brand"
+      ? (a.manufacturer||"").localeCompare(b.manufacturer||"")
+      : (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||""));
+  }, [allFilaments, q, filters, sort]);
+
+  const activeFilters = [filters.brand,filters.mat,filters.sub].filter(Boolean).length;
 
   const kpis = useMemo(() => {
     const marques = new Set(filaments.map(f => f.manufacturer).filter(Boolean)).size;
@@ -1189,17 +1213,18 @@ function FilamentsView() {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
       <KpiBar kpis={kpis}/>
-      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-        <div style={{ position:"relative", flex:1, minWidth:180 }}>
+      <div style={{ display:"flex", gap:8 }}>
+        <div style={{ position:"relative", flex:1 }}>
           <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Nom, fabricant…"
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Nom, marque, code couleur…"
             style={{ ...inp, paddingLeft:36 }} onFocus={inpFocus} onBlur={inpBlur}/>
         </div>
-        <select value={material} onChange={e=>setMaterial(e.target.value)}
-          style={{ ...inp, width:"auto", minWidth:140 }} onFocus={inpFocus} onBlur={inpBlur}>
-          <option value="">Tous matériaux</option>
-          {MATERIALS.map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
+        <button onClick={()=>setFilterOpen(true)}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px",
+            background:activeFilters>0?"#3b82f6":"var(--surface2)", color:activeFilters>0?"white":"var(--text)",
+            border:"1px solid var(--border)", borderRadius:8, fontSize:12, cursor:"pointer", flexShrink:0 }}>
+          <SlidersHorizontal size={14}/>{activeFilters>0?` Filtres (${activeFilters})`:" Filtres"}
+        </button>
         <button onClick={() => setCreateOpen(true)}
           style={{ padding:"8px 14px", borderRadius:10, background:"#3b82f6", border:"none",
             color:"white", fontSize:13, fontWeight:700, cursor:"pointer",
@@ -1207,6 +1232,11 @@ function FilamentsView() {
           <Plus size={14}/> Filament
         </button>
       </div>
+      {filterOpen && (
+        <FilterSortSheet allItems={allFilaments} getFamily={getFamilyF} filters={filters} sort={sort}
+          onApply={(f,s)=>{ setFilters(f); if(s) setSort(s); setFilterOpen(false); }}
+          onClose={()=>setFilterOpen(false)}/>
+      )}
 
       {loading ? (
         <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Chargement…</p>
