@@ -410,9 +410,12 @@ async def import_uploads_accessories_zip(zip_source) -> dict:
 
             # Chercher l'id Spoolnymous dans le chemin (dossier numérique)
             old_acc_id = next((p for p in parts[:-1] if p.isdigit()), None)
-            # Fallback : si fichier à plat, extraire le préfixe numérique du nom
+            # Fallback : fichier à plat — formats supportés :
+            #   acc_{id}_nom.ext   (Spoolnymous)
+            #   {id}_nom.ext
+            #   {id}-nom.ext
             if not old_acc_id:
-                m = re.match(r"^(\d+)[_\-]", base)
+                m = re.match(r"^acc_?(\d+)[_\-]", base, re.IGNORECASE) or re.match(r"^(\d+)[_\-]", base)
                 old_acc_id = m.group(1) if m else None
 
             if not old_acc_id:
