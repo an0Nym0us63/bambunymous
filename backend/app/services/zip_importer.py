@@ -383,52 +383,41 @@ async def import_uploads_groups_zip(zip_source) -> dict:
 
 async def import_uploads_accessories_zip(zip_source) -> dict:
     """
-    Importe photos d'accessoires depuis un ZIP.
-    Structure attendue : {old_accessory_id}/image.ext  (ou à plat : {old_id}_nom.ext)
-    Résolution via Accessory.external_ref → id BambuNymous.
-    Stockage : DATA_DIR/accessories/{new_id}/
+    Importe photos d'accessoires depuis un ZIP (fichiers à plat).
+    Matching : basename(ZIP) == basename(Accessory.image_path en DB).
+    Ex: ZIP "acc_3_shopping.png" → DB image_path="uploads/accessories/acc_3_shopping.png" → match.
+    Stockage : DATA_DIR/accessories/{id}/
     """
     from ..models.object_history import Accessory
 
     stats = {"copied": 0, "errors": 0, "skipped": 0}
 
-    ref_map: dict[str, int] = {}
+    # Index : basename(image_path) → accessory.id
+    img_index: dict[str, int] = {}
     try:
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(Accessory).where(Accessory.external_ref.is_not(None)))
+            result = await db.execute(select(Accessory))
             for a in result.scalars().all():
-                ref_map[str(a.external_ref)] = a.id
+                if a.image_path:
+                    img_index[os.path.basename(a.image_path)] = a.id
     except Exception as e:
         logger.debug(f"[ZIP-ACC] chargement Accessory: {e}")
+
+    logger.info(f"[ZIP-ACC] {len(img_index)} accessoires avec image_path indexés")
 
     with zipfile.ZipFile(zip_source) as z:
         for name in z.namelist():
             if name.endswith("/"): continue
-            parts = _normalize(name).split("/")
-            base = os.path.basename(parts[-1])
+            base = os.path.basename(_normalize(name))
             if not base or not _is_image(base): continue
 
-            # Chercher l'id Spoolnymous dans le chemin (dossier numérique)
-            old_acc_id = next((p for p in parts[:-1] if p.isdigit()), None)
-            # Fallback : fichier à plat — formats supportés :
-            #   acc_{id}_nom.ext   (Spoolnymous)
-            #   {id}_nom.ext
-            #   {id}-nom.ext
-            if not old_acc_id:
-                m = re.match(r"^acc_?(\d+)[_\-]", base, re.IGNORECASE) or re.match(r"^(\d+)[_\-]", base)
-                old_acc_id = m.group(1) if m else None
-
-            if not old_acc_id:
+            acc_id = img_index.get(base)
+            if not acc_id:
+                logger.debug(f"[ZIP-ACC] pas de match pour {base!r}")
                 stats["skipped"] += 1
                 continue
 
-            new_acc_id = ref_map.get(old_acc_id)
-            if not new_acc_id:
-                logger.debug(f"[ZIP-ACC] pas d'Accessory pour external_ref={old_acc_id} → {name} ignoré")
-                stats["skipped"] += 1
-                continue
-
-            dest_dir = DATA_DIR / "accessories" / str(new_acc_id)
+            dest_dir = DATA_DIR / "accessories" / str(acc_id)
             dest_dir.mkdir(parents=True, exist_ok=True)
             try:
                 (dest_dir / _safe_name(base)).write_bytes(z.read(name))
@@ -439,3 +428,4 @@ async def import_uploads_accessories_zip(zip_source) -> dict:
 
     logger.info(f"[ZIP-ACC] {stats}")
     return stats
+
