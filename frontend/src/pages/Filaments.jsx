@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
-import { Plus, Search, Archive, X, Save, RefreshCw, Pencil } from "lucide-react";
+import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal } from "lucide-react";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
 
@@ -666,30 +666,144 @@ function SpoolCard({ s, colorsList, onClick }) {
   );
 }
 
+
+const SPOOL_SORTS = [
+  ["recent",    "Plus récent"],
+  ["name",      "Nom"],
+  ["brand",     "Marque"],
+  ["remaining", "Poids restant ↓"],
+  ["fullest",   "Poids restant ↑"],
+];
+
+function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose }) {
+  const [fb, setFb] = useState(filters.brand || "");
+  const [fm, setFm] = useState(filters.mat   || "");
+  const [fs, setFs] = useState(filters.sub   || "");
+  const [so, setSo] = useState(sort           || "recent");
+
+  // Options TOUJOURS depuis le dataset complet (pas filtré)
+  const brands  = useMemo(() => [...new Set(allItems.map(s => s.filament_manufacturer || s.manufacturer).filter(Boolean))].sort(), [allItems]);
+  const fams    = useMemo(() => [...new Set(allItems.map(s => getFamily(s)).filter(Boolean))].sort(), [allItems]);
+  const subs    = useMemo(() => {
+    const base = !fm ? allItems : allItems.filter(s => getFamily(s) === fm);
+    return [...new Set(base.map(s => s.filament_material || s.fila_type || s.material).filter(Boolean))].sort();
+  }, [allItems, fm]);
+
+  const iStyle = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+    padding:"8px 10px", fontSize:12, color:"var(--text)", outline:"none", width:"100%" };
+
+  const activeCount = [fb,fm,fs].filter(Boolean).length;
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:300, display:"flex", alignItems:"flex-end" }}
+      onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", background:"var(--sheet-bg)",
+        borderRadius:"20px 20px 0 0", padding:"20px 16px 32px", display:"flex", flexDirection:"column", gap:14 }}>
+        <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 4px" }}/>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span style={{ fontWeight:700, fontSize:15, color:"var(--text)" }}>Filtres & tri</span>
+          {(fb||fm||fs) && <button onClick={()=>{setFb("");setFm("");setFs("");}}
+            style={{ fontSize:11, color:"#60a5fa", background:"none", border:"none", cursor:"pointer" }}>
+            Effacer filtres
+          </button>}
+        </div>
+
+        {/* Tri */}
+        <div>
+          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Trier par</p>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {SPOOL_SORTS.map(([id,label]) => (
+              <button key={id} onClick={()=>setSo(id)}
+                style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", border:"none",
+                  background:so===id?"#3b82f6":"var(--surface2)",
+                  color:so===id?"white":"var(--muted)" }}>
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Filtres */}
+        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>Filtrer</p>
+          <select value={fb} onChange={e=>setFb(e.target.value)} style={iStyle}>
+            <option value="">Toutes marques ({brands.length})</option>
+            {brands.map(b=><option key={b} value={b}>{b}</option>)}
+          </select>
+          <select value={fm} onChange={e=>{setFm(e.target.value);setFs("");}} style={iStyle}>
+            <option value="">Tous matériaux</option>
+            {fams.map(f=><option key={f} value={f}>{f}</option>)}
+          </select>
+          {subs.length > 1 && (
+            <select value={fs} onChange={e=>setFs(e.target.value)} style={iStyle}>
+              <option value="">Tous sous-types</option>
+              {subs.map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+        </div>
+
+        <button onClick={()=>onApply({brand:fb,mat:fm,sub:fs},so)}
+          style={{ padding:"12px", borderRadius:12, fontSize:14, fontWeight:700,
+            background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
+          Appliquer
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function SpoolsView({ filaments, showArchived }) {
-  const [spools, setSpools] = useState([]);
+  const [allSpools, setAllSpools] = useState([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filters, setFilters] = useState({ brand:"", mat:"", sub:"" });
+  const [sort, setSort] = useState("recent");
 
-  const [filterBrand, setFilterBrand] = useState("");
-  const [filterMat,   setFilterMat]   = useState("");
-  const [filterSub,   setFilterSub]   = useState("");
+  const FAMILIES = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
+  const getFamily = s => {
+    const sub = s.filament_material || s.filament_fila_type || "";
+    return FAMILIES.find(f => sub === f || sub.startsWith(f+" ") || sub.startsWith(f+"-")) || sub.split(/[\s-]/)[0] || "";
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params = { archived:showArchived, q:q||undefined };
-      if (filterBrand) params.manufacturer = filterBrand;
-      if (filterMat)   params.material = filterMat;
-      if (filterSub)   params.fila_type = filterSub;
-      const { data } = await client.get("/filaments/spools", { params });
-      setSpools(data);
+      const { data } = await client.get("/filaments/spools", { params:{ archived:showArchived } });
+      setAllSpools(data);
     } finally { setLoading(false); }
-  }, [showArchived, q, filterBrand, filterMat, filterSub]);
+  }, [showArchived]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Filtrage + recherche client-side (options depuis allSpools = pas de cascade cassée)
+  const spools = useMemo(() => {
+    let res = allSpools;
+    if (q) {
+      const ql = q.replace("#","").toLowerCase();
+      res = res.filter(s => [
+        s.filament_translated_name, s.filament_name, s.filament_manufacturer,
+        s.filament_material, (s.filament_color||"").replace("#",""),
+        s.filament_fila_color_code, s.location, s.tag_number,
+      ].some(v => v && v.toLowerCase().includes(ql)));
+    }
+    if (filters.brand) res = res.filter(s => s.filament_manufacturer === filters.brand);
+    if (filters.mat)   res = res.filter(s => getFamily(s) === filters.mat);
+    if (filters.sub)   res = res.filter(s => (s.filament_material||"") === filters.sub);
+    // Tri
+    res = [...res].sort((a,b) => {
+      if (sort==="name")      return (a.filament_translated_name||a.filament_name||"").localeCompare(b.filament_translated_name||b.filament_name||"");
+      if (sort==="brand")     return (a.filament_manufacturer||"").localeCompare(b.filament_manufacturer||"");
+      if (sort==="remaining") return (b.remaining_weight_g||0)-(a.remaining_weight_g||0);
+      if (sort==="fullest")   return (a.remaining_weight_g||0)-(b.remaining_weight_g||0);
+      return 0; // recent = default order from API
+    });
+    return res;
+  }, [allSpools, q, filters, sort]);
+
+  const activeFilters = [filters.brand, filters.mat, filters.sub].filter(Boolean).length;
 
   // KPIs dynamiques (recalculés à chaque changement de spools filtrés)
   const kpis = useMemo(() => {
@@ -714,60 +828,42 @@ function SpoolsView({ filaments, showArchived }) {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
       <KpiBar kpis={kpis}/>
-      {/* Barre de recherche + bouton */}
-      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-        <div style={{ position:"relative", flex:"1 1 200px" }}>
+      <div style={{ display:"flex", gap:8 }}>
+        <div style={{ position:"relative", flex:1 }}>
           <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Nom, marque, code couleur Bambu…"
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher par nom, marque, couleur hex, code Bambu…"
             style={{ ...inp, paddingLeft:36 }} onFocus={inpFocus} onBlur={inpBlur}/>
         </div>
-        {(() => {
-          const iStyle = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-            padding:"7px 10px", fontSize:12, color:"var(--text)", outline:"none" };
-          const brands  = [...new Set(spools.map(s=>s.filament_manufacturer).filter(Boolean))].sort();
-          // Familles depuis fila_type
-          const FAMILIES = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF"];
-          const fams = FAMILIES.filter(f => spools.some(s => (s.filament_material||"").startsWith(f) || (s.filament_fila_type||"").startsWith(f)));
-          const subs  = [...new Set(spools.filter(s=>!filterMat||(s.filament_material||"").startsWith(filterMat)||(s.filament_fila_type||"").startsWith(filterMat)).map(s=>s.filament_fila_type||s.filament_material).filter(Boolean))].sort();
-          return (<>
-            <select value={filterBrand} onChange={e=>{setFilterBrand(e.target.value);}} style={{...iStyle,flex:"0 1 140px"}}>
-              <option value="">Toutes marques</option>
-              {brands.map(b=><option key={b} value={b}>{b}</option>)}
-            </select>
-            <select value={filterMat} onChange={e=>{setFilterMat(e.target.value);setFilterSub("");}} style={{...iStyle,flex:"0 1 110px"}}>
-              <option value="">Matériau</option>
-              {fams.map(f=><option key={f} value={f}>{f}</option>)}
-            </select>
-            {subs.length > 1 && (
-              <select value={filterSub} onChange={e=>setFilterSub(e.target.value)} style={{...iStyle,flex:"0 1 130px"}}>
-                <option value="">Sous-type</option>
-                {subs.map(s=><option key={s} value={s}>{s}</option>)}
-              </select>
-            )}
-            {(filterBrand||filterMat||filterSub) && (
-              <button onClick={()=>{setFilterBrand("");setFilterMat("");setFilterSub("");}}
-                style={{ padding:"7px 10px", borderRadius:8, fontSize:12, background:"var(--surface2)",
-                  border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>✕</button>
-            )}
-          </>);
-        })()}
-        <button onClick={()=>setShowAdd(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"#3b82f6", color:"white", border:"none", borderRadius:8, fontSize:13, cursor:"pointer", flexShrink:0, marginLeft:"auto" }}>
+        <button onClick={()=>setFilterOpen(true)}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px",
+            background: activeFilters > 0 ? "#3b82f6" : "var(--surface2)",
+            color: activeFilters > 0 ? "white" : "var(--text)",
+            border:"1px solid var(--border)", borderRadius:8, fontSize:12, cursor:"pointer", flexShrink:0 }}>
+          <SlidersHorizontal size={14}/>
+          {activeFilters > 0 ? `Filtres (${activeFilters})` : "Filtres"}
+        </button>
+        <button onClick={()=>setShowAdd(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"#3b82f6", color:"white", border:"none", borderRadius:8, fontSize:13, cursor:"pointer", flexShrink:0 }}>
           <Plus size={14}/> Bobine
         </button>
       </div>
-
-      {loading ? (
-        <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Chargement…</p>
-      ) : (
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
-          {spools.map(s => {
-            const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
-            return (
-              <SpoolCard key={s.id} s={s} colorsList={colorsList} onClick={()=>setSelected(s)}/>
-            );
-          })}
-        </div>
+      {filterOpen && (
+        <FilterSortSheet
+          allItems={allSpools}
+          getFamily={getFamily}
+          filters={filters}
+          sort={sort}
+          onApply={(f,s)=>{ setFilters(f); setSort(s); setFilterOpen(false); }}
+          onClose={()=>setFilterOpen(false)}
+        />
       )}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
+        {spools.map(s => {
+          const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
+          return (
+            <SpoolCard key={s.id} s={s} colorsList={colorsList} onClick={()=>setSelected(s)}/>
+          );
+        })}
+      </div>
       {showAdd && <AddSpoolModal filaments={filaments} onSave={()=>{ setShowAdd(false); load(); }} onClose={()=>setShowAdd(false)}/>}
       {selected && (
         <SpoolBottomSheet
@@ -1539,22 +1635,24 @@ function hexToHsl(hex) {
 }
 
 function SwatchView({ filaments: allFilaments }) {
-  const [swatchSort, setSwatchSort]   = useState("hue");
-  const [filterBrand, setFilterBrand] = useState("");
-  const [filterType, setFilterType]   = useState("");
-  const [filterSub, setFilterSub]     = useState("");
-  const [showEmpty, setShowEmpty]     = useState(false); // archivés/sans stock
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filters, setFilters]       = useState({ brand:"", mat:"", sub:"" });
+  const [swatchSort, setSwatchSort] = useState("hue");
+  const [showEmpty, setShowEmpty]   = useState(false);
+  // compat aliases
+  const filterBrand = filters.brand;
+  const filterType  = filters.mat;
+  const filterSub   = filters.sub;
 
   const iStyle = { background:"var(--surface2)", border:"1px solid var(--border)",
     borderRadius:8, padding:"6px 10px", fontSize:12, color:"var(--text)", outline:"none" };
 
   const SORTS = [["hue","Teinte"],["material","Matière"],["manufacturer","Marque"],["name","Nom"]];
 
-  // Extraire la famille (type) depuis fila_type ou material
-  // Ex: "PLA Basic" → "PLA", "PETG-HF" → "PETG", "TPU 95A" → "TPU"
+  const FAMILIES_SW = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
   const getFamily = (f) => {
     const sub = (f.fila_type || f.material || "").trim();
-    return MATERIALS.find(m => sub === m || sub.startsWith(m + " ") || sub.startsWith(m + "-")) || sub.split(/[\s-]/)[0] || "";
+    return FAMILIES_SW.find(m => sub === m || sub.startsWith(m + " ") || sub.startsWith(m + "-")) || sub.split(/[\s-]/)[0] || "";
   };
 
   // Filtrages en cascade
@@ -1597,63 +1695,56 @@ function SwatchView({ filaments: allFilaments }) {
   return (
     <>
       {/* Filtres */}
-      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-        {/* Ligne 1 : sélecteurs */}
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-          <select value={filterBrand} onChange={e=>{setFilterBrand(e.target.value); setFilterType(""); setFilterSub("");}}
-            style={{ ...iStyle, flex:"1 1 120px" }}>
-            <option value="">Toutes marques{brands.length ? ` (${brands.length})` : ""}</option>
-            {brands.map(b => <option key={b} value={b}>{b}</option>)}
-          </select>
-          <select value={filterType} onChange={e=>{setFilterType(e.target.value); setFilterSub("");}}
-            style={{ ...iStyle, flex:"1 1 100px" }}>
-            <option value="">Tous matériaux</option>
-            {types.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-          {subtypes.length > 1 && (
-            <select value={filterSub} onChange={e=>setFilterSub(e.target.value)}
-              style={{ ...iStyle, flex:"1 1 140px" }}>
-              <option value="">Tous sous-types</option>
-              {subtypes.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          )}
-        </div>
-        {/* Ligne 2 : tri + switch archivé */}
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap", flex:1 }}>
           {SORTS.map(([id,label]) => (
             <button key={id} onClick={()=>setSwatchSort(id)}
               style={{ padding:"4px 10px", borderRadius:20, fontSize:10, fontWeight:600, cursor:"pointer",
-                background: swatchSort===id ? "#3b82f6" : "var(--surface2)",
-                color: swatchSort===id ? "white" : "var(--muted)",
-                border:"1px solid var(--border)" }}>
+                background:swatchSort===id?"#3b82f6":"var(--surface2)",
+                color:swatchSort===id?"white":"var(--muted)", border:"1px solid var(--border)" }}>
               {label}
             </button>
           ))}
-          <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:8 }}>
-            <span style={{ fontSize:11, color:"var(--muted)" }}>
-              Sans stock {emptyCount > 0 ? `(${emptyCount})` : ""}
-            </span>
-            <button onClick={()=>setShowEmpty(v=>!v)}
-              style={{ width:40, height:22, borderRadius:11, border:"none", cursor:"pointer",
-                background: showEmpty ? "#3b82f6" : "var(--border)",
-                position:"relative", flexShrink:0, transition:"background 0.2s" }}>
-              <span style={{ position:"absolute", top:3, left: showEmpty ? 20 : 3,
-                width:16, height:16, borderRadius:"50%", background:"white",
-                transition:"left 0.2s", boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/>
-            </button>
-          </div>
         </div>
-        {/* Résultat */}
-        {(filterBrand || filterType || filterSub) && (
-          <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
-            {sorted.length} filament{sorted.length!==1?"s":""} · 
-            <button onClick={()=>{setFilterBrand("");setFilterType("");setFilterSub("");}}
-              style={{ background:"none", border:"none", color:"#60a5fa", cursor:"pointer", fontSize:11, padding:"0 4px" }}>
-              Effacer filtres
-            </button>
-          </p>
-        )}
+        <button onClick={()=>setFilterOpen(true)}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
+            background:[filterBrand,filterType,filterSub].some(Boolean)?"#3b82f6":"var(--surface2)",
+            color:[filterBrand,filterType,filterSub].some(Boolean)?"white":"var(--text)",
+            border:"1px solid var(--border)", borderRadius:8, fontSize:11, cursor:"pointer", flexShrink:0 }}>
+          <SlidersHorizontal size={13}/>
+          {[filterBrand,filterType,filterSub].filter(Boolean).length > 0
+            ? `Filtres (${[filterBrand,filterType,filterSub].filter(Boolean).length})`
+            : "Filtres"}
+        </button>
+        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+          <span style={{ fontSize:10, color:"var(--muted)" }}>Sans stock{emptyCount>0?` (${emptyCount})`:""}</span>
+          <button onClick={()=>setShowEmpty(v=>!v)}
+            style={{ width:36, height:20, borderRadius:10, border:"none", cursor:"pointer", position:"relative",
+              background:showEmpty?"#3b82f6":"var(--border)", transition:"background 0.2s", flexShrink:0 }}>
+            <span style={{ position:"absolute", top:2, left:showEmpty?18:2, width:16, height:16,
+              borderRadius:"50%", background:"white", transition:"left 0.2s" }}/>
+          </button>
+        </div>
       </div>
+      {filterOpen && (
+        <FilterSortSheet
+          allItems={allFilaments}
+          getFamily={f => getFamily(f)}
+          filters={filters}
+          sort={null}
+          onApply={(f)=>{ setFilters(f); setFilterOpen(false); }}
+          onClose={()=>setFilterOpen(false)}
+        />
+      )}
+      {(filterBrand||filterType||filterSub) && (
+        <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+          {sorted.length} filament{sorted.length!==1?"s":""}
+          <button onClick={()=>setFilters({brand:"",mat:"",sub:""})}
+            style={{ background:"none", border:"none", color:"#60a5fa", cursor:"pointer", fontSize:11, padding:"0 4px" }}>
+            Effacer
+          </button>
+        </p>
+      )}
 
       <GalleryCompare
         items={sorted}
