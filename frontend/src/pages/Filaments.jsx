@@ -989,16 +989,16 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     } finally { setDeleting(false); }
   };
 
-  const F = ({ label, k, type="text", options=null }) => (
+  const F = (label, k, type="text", options=null) => (
     <div style={{ marginBottom:10 }}>
       <label style={lStyle}>{label}</label>
       {options ? (
-        <select style={iStyle} value={form[k]} onChange={e => setForm(f=>({...f,[k]:e.target.value}))}>
+        <select style={iStyle} value={form[k]} onChange={e => setForm(p=>({...p,[k]:e.target.value}))}>
           {options.map(([v,l])=><option key={v} value={v}>{l}</option>)}
         </select>
       ) : (
         <input style={iStyle} type={type} value={form[k]}
-          onChange={e => setForm(f=>({...f,[k]: type==="number"?e.target.value:e.target.value}))}/>
+          onChange={e => setForm(p=>({...p,[k]:e.target.value}))}/>
       )}
     </div>
   );
@@ -1054,7 +1054,7 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
 
           {editing ? (
             <div>
-              <F label="Nom (anglais / officiel) *" k="name"/>
+              {F("Nom (anglais / officiel) *","name")}
               <F label="Nom traduit (français)"     k="translated_name"/>
               <F label="Marque"                     k="manufacturer"/>
               <F label="Sous-type (ex: PLA Basic)"  k="fila_type"/>
@@ -1089,7 +1089,7 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
                 </div>
               )}
               <F label="Profile ID Bambu (ex: GFA00)"  k="profile_id"/>
-              <F label="Code couleur Bambu (ex: 10600)" k="fila_color_code"/>
+              {F("Code couleur Bambu (ex: 10600)","fila_color_code")}
               <F label="Poids total (g)"  k="filament_weight_g" type="number"/>
               <F label="Poids support (g)" k="spool_weight_g"   type="number"/>
               <F label="Prix (€)"          k="price"            type="number"/>
