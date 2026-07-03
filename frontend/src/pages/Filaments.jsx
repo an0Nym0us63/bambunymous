@@ -673,13 +673,21 @@ function SpoolsView({ filaments, showArchived }) {
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState(null);
 
+  const [filterBrand, setFilterBrand] = useState("");
+  const [filterMat,   setFilterMat]   = useState("");
+  const [filterSub,   setFilterSub]   = useState("");
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await client.get("/filaments/spools", { params:{ archived:showArchived, q:q||undefined } });
+      const params = { archived:showArchived, q:q||undefined };
+      if (filterBrand) params.manufacturer = filterBrand;
+      if (filterMat)   params.material = filterMat;
+      if (filterSub)   params.fila_type = filterSub;
+      const { data } = await client.get("/filaments/spools", { params });
       setSpools(data);
     } finally { setLoading(false); }
-  }, [showArchived, q]);
+  }, [showArchived, q, filterBrand, filterMat, filterSub]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -707,13 +715,43 @@ function SpoolsView({ filaments, showArchived }) {
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
       <KpiBar kpis={kpis}/>
       {/* Barre de recherche + bouton */}
-      <div style={{ display:"flex", gap:8 }}>
-        <div style={{ position:"relative", flex:1 }}>
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+        <div style={{ position:"relative", flex:"1 1 200px" }}>
           <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher…"
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Nom, marque, code couleur Bambu…"
             style={{ ...inp, paddingLeft:36 }} onFocus={inpFocus} onBlur={inpBlur}/>
         </div>
-        <button onClick={()=>setShowAdd(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"#3b82f6", color:"white", border:"none", borderRadius:8, fontSize:13, cursor:"pointer", flexShrink:0 }}>
+        {(() => {
+          const iStyle = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+            padding:"7px 10px", fontSize:12, color:"var(--text)", outline:"none" };
+          const brands  = [...new Set(spools.map(s=>s.filament_manufacturer).filter(Boolean))].sort();
+          // Familles depuis fila_type
+          const FAMILIES = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF"];
+          const fams = FAMILIES.filter(f => spools.some(s => (s.filament_material||"").startsWith(f) || (s.filament_fila_type||"").startsWith(f)));
+          const subs  = [...new Set(spools.filter(s=>!filterMat||(s.filament_material||"").startsWith(filterMat)||(s.filament_fila_type||"").startsWith(filterMat)).map(s=>s.filament_fila_type||s.filament_material).filter(Boolean))].sort();
+          return (<>
+            <select value={filterBrand} onChange={e=>{setFilterBrand(e.target.value);}} style={{...iStyle,flex:"0 1 140px"}}>
+              <option value="">Toutes marques</option>
+              {brands.map(b=><option key={b} value={b}>{b}</option>)}
+            </select>
+            <select value={filterMat} onChange={e=>{setFilterMat(e.target.value);setFilterSub("");}} style={{...iStyle,flex:"0 1 110px"}}>
+              <option value="">Matériau</option>
+              {fams.map(f=><option key={f} value={f}>{f}</option>)}
+            </select>
+            {subs.length > 1 && (
+              <select value={filterSub} onChange={e=>setFilterSub(e.target.value)} style={{...iStyle,flex:"0 1 130px"}}>
+                <option value="">Sous-type</option>
+                {subs.map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+            )}
+            {(filterBrand||filterMat||filterSub) && (
+              <button onClick={()=>{setFilterBrand("");setFilterMat("");setFilterSub("");}}
+                style={{ padding:"7px 10px", borderRadius:8, fontSize:12, background:"var(--surface2)",
+                  border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>✕</button>
+            )}
+          </>);
+        })()}
+        <button onClick={()=>setShowAdd(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"#3b82f6", color:"white", border:"none", borderRadius:8, fontSize:13, cursor:"pointer", flexShrink:0, marginLeft:"auto" }}>
           <Plus size={14}/> Bobine
         </button>
       </div>

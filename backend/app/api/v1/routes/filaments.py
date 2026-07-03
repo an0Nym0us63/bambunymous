@@ -254,9 +254,13 @@ async def list_spools(
     filament_id: Optional[int] = Query(None),
     location: Optional[str] = Query(None),
     q: Optional[str] = Query(None),
+    manufacturer: Optional[str] = Query(None),
+    material: Optional[str] = Query(None),
+    fila_type: Optional[str] = Query(None),
     db: AsyncSession = Depends(get_db),
     _: str = Depends(get_current_user),
 ):
+    needs_join = bool(q or manufacturer or material or fila_type)
     stmt = (
         select(Spool)
         .options(selectinload(Spool.filament))
@@ -266,14 +270,30 @@ async def list_spools(
         stmt = stmt.where(Spool.filament_id == filament_id)
     if location:
         stmt = stmt.where(Spool.location == location)
+    if needs_join:
+        stmt = stmt.join(Filament)
     if q:
         like = f"%{q}%"
-        stmt = stmt.join(Filament).where(or_(
+        stmt = stmt.where(or_(
             Filament.name.ilike(like),
+            Filament.translated_name.ilike(like),
+            Filament.manufacturer.ilike(like),
             Filament.material.ilike(like),
+            Filament.fila_type.ilike(like),
+            Filament.fila_color_code.ilike(like),
             Spool.location.ilike(like),
             Spool.tag_number.ilike(like),
         ))
+    if manufacturer:
+        stmt = stmt.where(Filament.manufacturer == manufacturer)
+    if material:
+        # material = famille (PLA, PETG…) → cherche dans fila_type qui commence par material
+        stmt = stmt.where(or_(
+            Filament.material == material,
+            Filament.fila_type.ilike(f"{material}%"),
+        ))
+    if fila_type:
+        stmt = stmt.where(Filament.fila_type == fila_type)
     stmt = stmt.order_by(Spool.last_used_at.desc().nullslast())
     result = await db.execute(stmt)
     return [_spool_out(s) for s in result.scalars().all()]
