@@ -18,6 +18,7 @@ export default function GalleryCompare({
   enableCompare = true, renderCover = null, swatchMode = false,
 }) {
   const [selected, setSelected]   = useState(new Map());
+  const [selectMode, setSelectMode] = useState(false);
   const [carousel, setCarousel]   = useState(null); // { item, index }
   const [compareOpen, setCompareOpen] = useState(false);
   // En mode swatch, tuiles légères → pas de pagination (tout charger d'un coup)
@@ -58,6 +59,13 @@ export default function GalleryCompare({
 
   const selectedList = Array.from(selected.values());
   const openCarousel = (item, index = 0) => setCarousel({ item, index });
+
+  // Long press → activer mode sélection
+  const pressTimer = React.useRef(null);
+  const startPress = (item) => {
+    pressTimer.current = setTimeout(() => { setSelectMode(true); toggle(item); }, 500);
+  };
+  const cancelPress = () => clearTimeout(pressTimer.current);
   const move = (delta) => setCarousel(c => {
     if (!c) return c;
     const photos = normPhotos(c.item);
@@ -72,6 +80,23 @@ export default function GalleryCompare({
 
   return (
     <div style={{ position:"relative" }}>
+      {enableCompare && (
+        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:6, gap:6 }}>
+          {selectMode ? (
+            <button onClick={()=>{ setSelectMode(false); setSelected(new Map()); }}
+              style={{ padding:"4px 10px", borderRadius:20, fontSize:11, border:"1px solid var(--border)",
+                background:"var(--surface2)", color:"var(--muted)", cursor:"pointer" }}>
+              Annuler
+            </button>
+          ) : (
+            <button onClick={()=>setSelectMode(true)}
+              style={{ padding:"4px 10px", borderRadius:20, fontSize:11, border:"1px solid var(--border)",
+                background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>
+              Sélectionner
+            </button>
+          )}
+        </div>
+      )}
       <div style={{ display:"grid",
         gridTemplateColumns: swatchMode ? "repeat(auto-fill,minmax(72px,1fr))" : "repeat(auto-fill,minmax(110px,1fr))",
         gap: swatchMode ? 3 : 8,
@@ -84,8 +109,12 @@ export default function GalleryCompare({
           const hasPhotos = photos.length > 0;
           return (
             <div key={id}
-              onClick={() => { if (hasPhotos) openCarousel(item, 0); else if (enableCompare) toggle(item); }}
-              style={{ position:"relative", borderRadius:10, overflow:"hidden", cursor: (hasPhotos || enableCompare) ? "pointer" : "default",
+              onClick={() => { if (selectMode && enableCompare) toggle(item); else if (hasPhotos) openCarousel(item, 0); }}
+              onMouseDown={() => enableCompare && startPress(item)}
+              onMouseUp={cancelPress} onMouseLeave={cancelPress}
+              onTouchStart={() => enableCompare && startPress(item)}
+              onTouchEnd={cancelPress}
+              style={{ position:"relative", borderRadius:10, overflow:"hidden", cursor:"pointer",
                 aspectRatio:"1", background:"var(--surface2)", border: checked ? "2px solid #3b82f6" : "2px solid transparent" }}>
               {renderCover ? renderCover(item) : img ? (
                 <img src={img} alt={getTitle(item)} style={{ width:"100%", height:"100%", objectFit:"cover" }}
@@ -100,9 +129,9 @@ export default function GalleryCompare({
                   {photos.length} 📷
                 </span>
               )}
-              {enableCompare && (
+              {enableCompare && selectMode && (
                 <button onClick={e => { e.stopPropagation(); toggle(item); }}
-                  style={{ position:"absolute", top:6, left:6, width:20, height:20, borderRadius:6,
+                  style={{ position:"absolute", top:6, left:6, width:22, height:22, borderRadius:6,
                     border: checked ? "none" : "1.5px solid rgba(255,255,255,0.7)",
                     background: checked ? "#3b82f6" : "rgba(0,0,0,0.35)",
                     display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0 }}>

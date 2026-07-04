@@ -1659,49 +1659,9 @@ function hexToHsl(hex) {
   return [Math.round(hue*60), Math.round(s*100), Math.round(l*100)];
 }
 
-function SwatchView({ filaments: allFilaments }) {
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [filters, setFilters]       = useState({ brand:"", mat:"", sub:"" });
-  const [swatchSort, setSwatchSort] = useState("hue");
-  const [showEmpty, setShowEmpty]   = useState(false);
-  // compat aliases
-  const filterBrand = filters.brand;
-  const filterType  = filters.mat;
-  const filterSub   = filters.sub;
-
-  const iStyle = { background:"var(--surface2)", border:"1px solid var(--border)",
-    borderRadius:8, padding:"6px 10px", fontSize:12, color:"var(--text)", outline:"none" };
-
-  const SORTS = [["hue","Teinte"],["material","Matière"],["manufacturer","Marque"],["name","Nom"]];
-
-  const FAMILIES_SW = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
-  const getFamily = (f) => {
-    const sub = (f.fila_type || f.material || "").trim();
-    return FAMILIES_SW.find(m => sub === m || sub.startsWith(m + " ") || sub.startsWith(m + "-")) || sub.split(/[\s-]/)[0] || "";
-  };
-
-  // Filtrages en cascade
-  const afterEmpty = useMemo(() =>
-    showEmpty ? allFilaments : allFilaments.filter(f => (f.active_spool_count||0) > 0)
-  , [allFilaments, showEmpty]);
-
-  const brands   = useMemo(() => [...new Set(afterEmpty.map(f=>f.manufacturer).filter(Boolean))].sort(), [afterEmpty]);
-  const afterBrand = useMemo(() => filterBrand ? afterEmpty.filter(f=>f.manufacturer===filterBrand) : afterEmpty, [afterEmpty, filterBrand]);
-
-  // Types = familles (PLA, PETG…) dérivées depuis fila_type/material
-  const types    = useMemo(() => [...new Set(afterBrand.map(f=>getFamily(f)).filter(Boolean))].sort(), [afterBrand]);
-  const afterType = useMemo(() => filterType ? afterBrand.filter(f=>getFamily(f)===filterType) : afterBrand, [afterBrand, filterType]);
-
-  // Sous-types = fila_type complet (PLA Basic, PLA Silk…)
-  const subtypes = useMemo(() => [...new Set(afterType.map(f=>f.fila_type).filter(Boolean))].sort(), [afterType]);
-  const afterSub = useMemo(() => filterSub ? afterType.filter(f=>f.fila_type===filterSub) : afterType, [afterType, filterSub]);
-
-  // Réinitialiser les filtres dépendants quand le parent change
-  useEffect(() => { if (filterBrand && !brands.includes(filterBrand)) setFilterBrand(""); }, [brands]);
-  useEffect(() => { if (filterType && !types.includes(filterType)) setFilterType(""); }, [types]);
-  useEffect(() => { if (filterSub && !subtypes.includes(filterSub)) setFilterSub(""); }, [subtypes]);
-
-  const sorted = useMemo(() => [...afterSub].sort((a,b) => {
+function SwatchView({ filaments: allFilaments, sort: swatchSort = "hue" }) {
+  // Tri uniquement — filtres et stock gérés par le parent (galerie)
+  const sorted = useMemo(() => [...allFilaments].sort((a,b) => {
     if (swatchSort === "hue") {
       const [ah,as_,al] = hexToHsl(a.color), [bh,bs,bl] = hexToHsl(b.color);
       if (al > 90 && bl <= 90) return 1; if (bl > 90 && al <= 90) return -1;
@@ -1714,53 +1674,10 @@ function SwatchView({ filaments: allFilaments }) {
     return (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||"");
   }), [afterSub, swatchSort]);
 
-  const activeCount = allFilaments.filter(f => (f.active_spool_count||0) > 0).length;
-  const emptyCount  = allFilaments.length - activeCount;
+
 
   return (
     <>
-      {/* Filtres */}
-      <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-        <button onClick={()=>setFilterOpen(true)}
-          style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
-            background:[filterBrand,filterType,filterSub].some(Boolean)?"#3b82f6":"var(--surface2)",
-            color:[filterBrand,filterType,filterSub].some(Boolean)?"white":"var(--text)",
-            border:"1px solid var(--border)", borderRadius:8, fontSize:11, cursor:"pointer", flexShrink:0 }}>
-          <SlidersHorizontal size={13}/>
-          {[filterBrand,filterType,filterSub].filter(Boolean).length > 0
-            ? `Filtres (${[filterBrand,filterType,filterSub].filter(Boolean).length})`
-            : "Filtres"}
-        </button>
-        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-          <span style={{ fontSize:10, color:"var(--muted)" }}>Sans stock{emptyCount>0?` (${emptyCount})`:""}</span>
-          <button onClick={()=>setShowEmpty(v=>!v)}
-            style={{ width:36, height:20, borderRadius:10, border:"none", cursor:"pointer", position:"relative",
-              background:showEmpty?"#3b82f6":"var(--border)", transition:"background 0.2s", flexShrink:0 }}>
-            <span style={{ position:"absolute", top:2, left:showEmpty?18:2, width:16, height:16,
-              borderRadius:"50%", background:"white", transition:"left 0.2s" }}/>
-          </button>
-        </div>
-      </div>
-      {filterOpen && (
-        <FilterSortSheet
-          allItems={allFilaments}
-          getFamily={f => getFamily(f)}
-          filters={filters}
-          sort={null}
-          onApply={(f)=>{ setFilters(f); setFilterOpen(false); }}
-          onClose={()=>setFilterOpen(false)}
-        />
-      )}
-      {(filterBrand||filterType||filterSub) && (
-        <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
-          {sorted.length} filament{sorted.length!==1?"s":""}
-          <button onClick={()=>setFilters({brand:"",mat:"",sub:""})}
-            style={{ background:"none", border:"none", color:"#60a5fa", cursor:"pointer", fontSize:11, padding:"0 4px" }}>
-            Effacer
-          </button>
-        </p>
-      )}
-
       <GalleryCompare
         items={sorted}
         getId={f => f.id}
@@ -1791,7 +1708,8 @@ export default function Filaments() {
   const [allFilaments, setAllFilaments] = useState([]);
   const [galQ, setGalQ] = useState("");
   const [galFilterOpen, setGalFilterOpen] = useState(false);
-  const [galFilters, setGalFilters] = useState({ brand:"", mat:"", sub:"" });
+  const [galFilters, setGalFilters] = useState({ brand:"", mat:"", sub:"", stock:"all" });
+  const [galSort, setGalSort] = useState("hue");
 
   const FAMILIES_G = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
   const getFamilyG = f => {
@@ -1898,7 +1816,7 @@ export default function Filaments() {
               ]}
             />
           ) : null}
-          {galleryMode==="swatch" && <SwatchView filaments={filaments}/>}
+          {galleryMode==="swatch" && <SwatchView filaments={filaments} sort={galSort}/>}
         </>
       )}
       {(tab==="spools" || tab==="archived") && (
