@@ -141,34 +141,55 @@ function Donut({ data, title }) {
   );
 }
 
-// Podium pour top 5
-function TopList({ title, items, valueKey, valueLabel, colorKey }) {
-  if (!items || items.length === 0) return null;
+function TopList({ title, prints, groups, valueKey, valueLabel, barColor="#3b82f6" }) {
+  const [mode, setMode] = useState("prints");
+  const items = mode === "groups" ? (groups||[]) : (prints||[]);
+  if (!prints?.length && !groups?.length) return null;
   const maxVal = Math.max(...items.map(i => Number(i[valueKey])||0), 1);
-  const MEDAL = ["🥇","🥈","🥉","4️⃣","5️⃣"];
+  const MEDAL = ["🥇","🥈","🥉"];
   return (
-    <div className="card" style={{ padding:"14px 16px" }}>
-      <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:"0 0 12px" }}>{title}</p>
-      {items.map((item, i) => (
-        <div key={item.id} style={{ marginBottom:i<items.length-1?8:0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
-            <span style={{ fontSize:14 }}>{MEDAL[i]}</span>
-            <span style={{ fontSize:11, color:"var(--text)", fontWeight:600, flex:1,
-              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {item.name}
-            </span>
-            <span style={{ fontSize:11, fontFamily:"JetBrains Mono,monospace",
-              color: colorKey || "var(--muted)", fontWeight:700, flexShrink:0 }}>
-              {valueLabel(item)}
-            </span>
+    <div className="card" style={{ padding:"14px 16px", display:"flex", flexDirection:"column" }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+        <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0 }}>{title}</p>
+        {groups?.length > 0 && (
+          <div style={{ display:"flex", gap:2, background:"var(--surface2)", borderRadius:20, padding:2 }}>
+            {[["prints","Prints"],["groups","Groupes"]].map(([id,label])=>(
+              <button key={id} onClick={()=>setMode(id)}
+                style={{ padding:"3px 10px", borderRadius:18, fontSize:10, fontWeight:600,
+                  cursor:"pointer", border:"none",
+                  background:mode===id?"#3b82f6":"transparent",
+                  color:mode===id?"white":"var(--muted)" }}>
+                {label}
+              </button>
+            ))}
           </div>
-          <div style={{ height:4, background:"var(--surface2)", borderRadius:2, overflow:"hidden" }}>
-            <div style={{ width:`${(item[valueKey]/maxVal)*100}%`, height:"100%",
-              background: i===0?"#f59e0b":i===1?"#94a3b8":i===2?"#cd7f32":"var(--border)",
-              borderRadius:2 }}/>
-          </div>
-        </div>
-      ))}
+        )}
+      </div>
+      <div style={{ overflowY:"auto", maxHeight:260 }}>
+        {items.map((item, i) => {
+          const pct = Math.max(2, (Number(item[valueKey])||0)/maxVal*100);
+          return (
+            <div key={item.id} style={{ marginBottom:10 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:3 }}>
+                <span style={{ fontSize:12, flexShrink:0 }}>{MEDAL[i]||`${i+1}`}</span>
+                <span style={{ fontSize:11, color:"var(--text)", fontWeight:600, flex:1,
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {mode==="groups" && item.nb > 1 && <span style={{ fontSize:9, color:"var(--muted)", marginRight:4 }}>×{item.nb}</span>}
+                  {item.name}
+                </span>
+                <span style={{ fontSize:11, fontFamily:"JetBrains Mono,monospace",
+                  color:barColor, fontWeight:700, flexShrink:0 }}>
+                  {valueLabel(item)}
+                </span>
+              </div>
+              <div style={{ height:4, background:"var(--surface2)", borderRadius:2, overflow:"hidden" }}>
+                <div style={{ width:`${pct}%`, height:"100%", borderRadius:2,
+                  background: i===0?"#f59e0b":i===1?"#94a3b8":i===2?"#cd7f32":barColor }}/>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -226,14 +247,16 @@ export default function Stats() {
       {/* Classements */}
       <Section title="Classements">
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
-          <TopList title="⏱ Prints les plus longs"
-            items={data?.top_duration||[]}
+          <TopList title="⏱ Les plus longs"
+            prints={data?.top_duration||[]}
+            groups={data?.top_groups_duration||[]}
             valueKey="duration_s"
             valueLabel={p => fmtH(p.duration_s)}/>
-          <TopList title="💰 Prints les plus chers"
-            items={data?.top_cost||[]}
+          <TopList title="💰 Les plus chers"
+            prints={data?.top_cost||[]}
+            groups={data?.top_groups_cost||[]}
             valueKey="cost"
-            colorKey="#22c55e"
+            barColor="#22c55e"
             valueLabel={p => `${p.cost.toFixed(2)} €`}/>
         </div>
       </Section>
