@@ -105,7 +105,7 @@ export default function GalleryCompare({
           const hasPhotos = photos.length > 0;
           return (
             <div key={id}
-              onClick={() => { if (selectMode && enableCompare) toggle(item); else if (onItemClick && !selectMode) onItemClick(item); else if (hasPhotos && !selectMode) openCarousel(item, 0); }}
+              onClick={() => { if (selectMode && enableCompare) toggle(item); else if (hasPhotos && !selectMode) openCarousel(item, 0); else if (onItemClick && !selectMode) onItemClick(item); }}
               onMouseDown={e => enableCompare && startPress(item, e.clientX, e.clientY)}
               onMouseMove={e => movePress(e.clientX, e.clientY)}
               onMouseUp={cancelPress} onMouseLeave={cancelPress}

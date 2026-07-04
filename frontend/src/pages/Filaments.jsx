@@ -183,13 +183,30 @@ function AddSpoolModal({ filaments, onSave, onClose }) {
 function FilamentPhotos({ filamentId, onLightbox }) {
   const [photos, setPhotos] = React.useState([]);
   const [lightbox, setLightbox] = React.useState(null);
+  const [photoMenu, setPhotoMenu] = React.useState(null);
 
-  React.useEffect(() => {
-    if (!filamentId) return;
-    client.get("/filaments/" + filamentId + "/photos")
-      .then(r => setPhotos(r.data.files || []))
-      .catch(() => {});
-  }, [filamentId]);
+  const reload = () => client.get("/filaments/" + filamentId + "/photos")
+    .then(r => setPhotos(r.data.files || [])).catch(() => {});
+
+  React.useEffect(() => { if (filamentId) reload(); }, [filamentId]);
+
+  const pressTimer = React.useRef(null);
+  const startPhotoPress = (photo, idx) => {
+    pressTimer.current = setTimeout(() => {
+      setPhotoMenu({ url: photo.url, filename: photo.url.split("/").pop(), index: idx });
+    }, 500);
+  };
+  const cancelPhotoPress = () => clearTimeout(pressTimer.current);
+
+  const deletePhoto = async () => {
+    if (!window.confirm("Supprimer cette photo ?")) return;
+    await client.delete(`/filaments/${filamentId}/photo/${photoMenu.filename}`);
+    setPhotoMenu(null); reload();
+  };
+  const setPrimary = async () => {
+    await client.post(`/filaments/${filamentId}/photo/${photoMenu.filename}/primary`);
+    setPhotoMenu(null); reload();
+  };
 
   if (!photos.length) return null;
 
@@ -198,29 +215,56 @@ function FilamentPhotos({ filamentId, onLightbox }) {
       <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
         letterSpacing:"0.06em", marginBottom:8 }}>Photos</p>
       <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
-        {photos.map((f, i) => (
-          <div key={i} onClick={() => onLightbox ? onLightbox(f.url) : setLightbox(f.url)}
-            style={{ flexShrink:0, cursor:"pointer", borderRadius:8, overflow:"hidden",
-              border:"1px solid var(--border)", width:90, height:90 }}>
-            <img src={f.url} alt={f.name}
-              style={{ width:"100%", height:"100%", objectFit:"cover" }}
+        {photos.map((photo, i) => (
+          <div key={i}
+            onClick={() => { if(!photoMenu) { onLightbox ? onLightbox(photo.url) : setLightbox(photo.url); }}}
+            onMouseDown={() => startPhotoPress(photo, i)}
+            onMouseUp={cancelPhotoPress} onMouseLeave={cancelPhotoPress}
+            onTouchStart={() => startPhotoPress(photo, i)} onTouchEnd={cancelPhotoPress}
+            onContextMenu={e => e.preventDefault()}
+            style={{ flexShrink:0, cursor:"pointer", borderRadius:8, overflow:"hidden", position:"relative",
+              border: i===0 ? "2px solid #22c55e" : "1px solid var(--border)", width:90, height:90 }}>
+            <img src={photo.url} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}
               onError={e => { e.currentTarget.style.display="none"; }}/>
+            {i===0 && <span style={{ position:"absolute", bottom:2, left:2, fontSize:7,
+              background:"rgba(34,197,94,0.85)", color:"white", padding:"1px 4px", borderRadius:4 }}>⭐</span>}
           </div>
         ))}
       </div>
+      {photoMenu && (
+        <div style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(0,0,0,0.5)" }}
+          onClick={() => setPhotoMenu(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0, right:0,
+            background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px 32px" }}>
+            <img src={photoMenu.url} alt="" style={{ width:"100%", maxHeight:180, objectFit:"contain", borderRadius:10, marginBottom:14 }}/>
+            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+              {photoMenu.index !== 0 && (
+                <button onClick={setPrimary} style={{ padding:"12px", borderRadius:10, border:"none",
+                  cursor:"pointer", background:"rgba(34,197,94,0.12)", color:"#22c55e", fontSize:14, fontWeight:700 }}>
+                  ⭐ Définir comme photo principale
+                </button>
+              )}
+              <button onClick={deletePhoto} style={{ padding:"12px", borderRadius:10, border:"none",
+                cursor:"pointer", background:"rgba(239,68,68,0.1)", color:"#ef4444", fontSize:14, fontWeight:700 }}>
+                🗑 Supprimer cette photo
+              </button>
+              <button onClick={()=>setPhotoMenu(null)} style={{ padding:"12px", borderRadius:10,
+                border:"1px solid var(--border)", cursor:"pointer", background:"var(--surface2)", color:"var(--muted)", fontSize:13 }}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {lightbox && (
-        <div onClick={() => setLightbox(null)}
-          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.88)",
-            zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <img src={lightbox} alt=""
-            style={{ maxWidth:"92vw", maxHeight:"92vh", borderRadius:12, objectFit:"contain" }}
-            onClick={e => e.stopPropagation()}/>
+        <div onClick={() => setLightbox(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.88)",
+          zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <img src={lightbox} alt="" style={{ maxWidth:"90vw", maxHeight:"90vh", objectFit:"contain", borderRadius:12 }}/>
         </div>
       )}
     </div>
   );
 }
-
 
 function WeightAdjustInline({ spoolId, current, onUpdated, isPrix = false }) {
   const [open, setOpen] = useState(false);
