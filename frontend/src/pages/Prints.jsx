@@ -1012,18 +1012,7 @@ export default function Prints() {
       <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
         <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Historique</h1>
         <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{total} impressions</span>
-        <div style={{ marginLeft:"auto", display:"flex", gap:6, alignItems:"center" }}>
-          {/* Switch Liste / Galerie */}
-          <div style={{ display:"flex", gap:2, background:"var(--surface2)", borderRadius:10, padding:3, border:"1px solid var(--border)" }}>
-            {[["list",<List size={13}/>,"Liste"],["gallery",<ImageIcon size={13}/>,"Galerie"]].map(([id,icon,label])=>(
-              <button key={id} onClick={()=>setViewMode(id)}
-                style={{ padding:"4px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer", border:"none",
-                  background:viewMode===id?"var(--text)":"transparent", color:viewMode===id?"var(--bg)":"var(--muted)",
-                  display:"flex", alignItems:"center", gap:4 }}>
-                {icon}{label}
-              </button>
-            ))}
-          </div>
+
           {/* Sélectionner */}
           {viewMode==="list" && (
             <button onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
@@ -1033,14 +1022,6 @@ export default function Prints() {
             </button>
           )}
           {/* Importer */}
-          <label style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer",
-            background:"var(--surface2)", color:"var(--muted)", display:"flex", alignItems:"center", gap:5 }}>
-            <Upload size={12}/>{importing ? "…" : ".3mf"}
-            <input type="file" accept=".3mf" onChange={handleImport} style={{ display:"none" }}/>
-          </label>
-        </div>
-      </div>
-
       <div style={{ display:"flex", gap:8 }}>
         <div style={{ position:"relative", flex:1 }}>
           <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
