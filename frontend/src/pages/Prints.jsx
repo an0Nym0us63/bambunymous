@@ -527,7 +527,7 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
       .catch(() => {});
   }, [printId]);
 
-  const LABELS = { layer1:"Couche 1", layer2:"Couche 2", pct50:"50%", pct99:"99%", pct100:"100%", manual:"Manuel" };
+  const LABELS = { layer1:"Fin couche 1", layer2:"Fin couche 2", pct50:"50%", pct99:"99%", pct100:"100%", manual:"Manuel" };
 
   const handleDelete = async (e, s) => {
     e.stopPropagation();
@@ -594,17 +594,52 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
     </div>
   );
 
+  const flatItems = [...photoItems, ...milestoneItems];
+  const lbIdx = lightbox ? flatItems.findIndex(i => i.url === lightbox.url) : -1;
+  const moveLb = (dir) => {
+    const ni = (lbIdx + dir + flatItems.length) % flatItems.length;
+    setLightbox(flatItems[ni]);
+  };
+
   return (
     <>
       <Row title="Photos"     items={photoItems}/>
       <Row title="Milestones" items={milestoneItems}/>
       {lightbox && (
         <div onClick={() => setLightbox(null)}
-          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:2000,
-            display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <img src={lightbox.url} alt={lightbox.label}
-            style={{ maxWidth:"90vw", maxHeight:"90vh", borderRadius:12, objectFit:"contain" }}
-            onClick={e => e.stopPropagation()}/>
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:2000,
+            display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+          {/* Titre */}
+          <p style={{ color:"rgba(255,255,255,0.7)", fontSize:12, margin:"0 0 10px",
+            fontWeight:600 }}>{lightbox.label}</p>
+          {/* Image + flèches */}
+          <div style={{ position:"relative", display:"flex", alignItems:"center", gap:12 }}
+            onClick={e => e.stopPropagation()}>
+            {flatItems.length > 1 && (
+              <button onClick={()=>moveLb(-1)}
+                style={{ background:"rgba(255,255,255,0.12)", border:"none", borderRadius:"50%",
+                  width:36, height:36, cursor:"pointer", color:"white", fontSize:20,
+                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                ‹
+              </button>
+            )}
+            <img src={lightbox.url} alt={lightbox.label}
+              style={{ maxWidth:"80vw", maxHeight:"80vh", borderRadius:12, objectFit:"contain" }}/>
+            {flatItems.length > 1 && (
+              <button onClick={()=>moveLb(1)}
+                style={{ background:"rgba(255,255,255,0.12)", border:"none", borderRadius:"50%",
+                  width:36, height:36, cursor:"pointer", color:"white", fontSize:20,
+                  display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                ›
+              </button>
+            )}
+          </div>
+          {/* Indicateur */}
+          {flatItems.length > 1 && (
+            <p style={{ color:"rgba(255,255,255,0.4)", fontSize:11, margin:"10px 0 0" }}>
+              {lbIdx + 1} / {flatItems.length}
+            </p>
+          )}
         </div>
       )}
     </>
