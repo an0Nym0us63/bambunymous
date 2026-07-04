@@ -1727,11 +1727,12 @@ export default function Filaments() {
     // Tri
     res = [...res].sort((a,b) => {
       if (galSort === "hue") {
-        const hexH = h => { h=(h||"888888").slice(0,6).padEnd(6,"0"); const r=parseInt(h.slice(0,2),16)/255,g=parseInt(h.slice(2,4),16)/255,bl=parseInt(h.slice(4,6),16)/255,mx=Math.max(r,g,bl),mn=Math.min(r,g,bl),d=mx-mn,l=(mx+mn)/2; if(!d) return l>0.9?370:l<0.1?380:360; const H=mx===r?((g-bl)/d+(g<bl?6:0)):mx===g?((bl-r)/d+2):((r-g)/d+4); const s=l>0.5?d/(2-mx-mn):d/(mx+mn); if(s<0.12) return l>0.85?370:380; return H*60; };
+        const hexH = h => { const hx=(h||"888888").replace("#","").slice(0,6).padEnd(6,"0"); const r=parseInt(hx.slice(0,2),16)/255,g=parseInt(hx.slice(2,4),16)/255,b2=parseInt(hx.slice(4,6),16)/255,mx=Math.max(r,g,b2),mn=Math.min(r,g,b2),d=mx-mn,l=(mx+mn)/2; if(!d) return l>0.9?370:l<0.1?380:360; const H=mx===r?((g-b2)/d+(g<b2?6:0)):mx===g?((b2-r)/d+2):((r-g)/d+4); const s=l>0.5?d/(2-mx-mn):d/(mx+mn); if(s<0.12) return l>0.85?370:380; return H*60; };
         return hexH(a.color)-hexH(b.color);
       }
-      if (galSort === "name")  return (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||"");
-      if (galSort === "brand") return (a.manufacturer||"").localeCompare(b.manufacturer||"");
+      if (galSort === "name")     return (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||"");
+      if (galSort === "brand")    return (a.manufacturer||"").localeCompare(b.manufacturer||"");
+      if (galSort === "recent")   return new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0);
       return 0;
     });
     return res;
