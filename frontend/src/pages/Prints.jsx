@@ -65,7 +65,7 @@ function StatusBadge({ status }) {
 }
 
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
-function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_items, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
+export function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_items, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
   const [selectedPrint, setSelectedPrint] = useState(null);
   const [lightbox, setLightbox] = useState(null);
   const [groupPhotos, setGroupPhotos] = useState([]);
@@ -660,7 +660,7 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
 }
 
 
-function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
+export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
   const [ungrouped, setUngrouped] = useState(false);
   const [p, setP] = useState(pProp);
