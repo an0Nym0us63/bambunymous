@@ -60,12 +60,20 @@ export default function GalleryCompare({
   const selectedList = Array.from(selected.values());
   const openCarousel = (item, index = 0) => setCarousel({ item, index });
 
-  // Long press → activer mode sélection
-  const pressTimer = React.useRef(null);
-  const startPress = (item) => {
-    pressTimer.current = setTimeout(() => { setSelectMode(true); toggle(item); }, 500);
+  // Long press → activer mode sélection (sans déclencher sur scroll ni menu contextuel)
+  const pressTimer  = React.useRef(null);
+  const pressOrigin = React.useRef(null);
+  const startPress  = (item, clientX, clientY) => {
+    pressOrigin.current = { x: clientX, y: clientY };
+    pressTimer.current  = setTimeout(() => { setSelectMode(true); toggle(item); }, 500);
   };
-  const cancelPress = () => clearTimeout(pressTimer.current);
+  const cancelPress = () => { clearTimeout(pressTimer.current); pressOrigin.current = null; };
+  const movePress   = (clientX, clientY) => {
+    if (!pressOrigin.current) return;
+    const dx = Math.abs(clientX - pressOrigin.current.x);
+    const dy = Math.abs(clientY - pressOrigin.current.y);
+    if (dx > 8 || dy > 8) cancelPress(); // scroll → annuler
+  };
   const move = (delta) => setCarousel(c => {
     if (!c) return c;
     const photos = normPhotos(c.item);
@@ -110,10 +118,13 @@ export default function GalleryCompare({
           return (
             <div key={id}
               onClick={() => { if (selectMode && enableCompare) toggle(item); else if (hasPhotos) openCarousel(item, 0); }}
-              onMouseDown={() => enableCompare && startPress(item)}
+              onMouseDown={e => enableCompare && startPress(item, e.clientX, e.clientY)}
+              onMouseMove={e => movePress(e.clientX, e.clientY)}
               onMouseUp={cancelPress} onMouseLeave={cancelPress}
-              onTouchStart={() => enableCompare && startPress(item)}
+              onTouchStart={e => { const t=e.touches[0]; enableCompare && startPress(item, t.clientX, t.clientY); }}
+              onTouchMove={e => { const t=e.touches[0]; movePress(t.clientX, t.clientY); }}
               onTouchEnd={cancelPress}
+              onContextMenu={e => e.preventDefault()}
               style={{ position:"relative", borderRadius:10, overflow:"hidden", cursor:"pointer",
                 aspectRatio:"1", background:"var(--surface2)", border: checked ? "2px solid #3b82f6" : "2px solid transparent" }}>
               {renderCover ? renderCover(item) : img ? (
