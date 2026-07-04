@@ -1783,8 +1783,8 @@ export default function Filaments() {
             </button>
           </div>
           {galFilterOpen && (
-            <FilterSortSheet allItems={allFilaments} getFamily={getFamilyG} filters={galFilters} sort={null}
-              onApply={(f)=>{ setGalFilters(f); setGalFilterOpen(false); }}
+            <FilterSortSheet allItems={allFilaments} getFamily={getFamilyG} filters={galFilters} sort={galSort}
+              onApply={(f,s)=>{ setGalFilters(f); if(s) setGalSort(s); setGalFilterOpen(false); }}
               onClose={()=>setGalFilterOpen(false)}/>
           )}
           {/* Switch Photos / Nuancier + bouton Sélectionner */}
