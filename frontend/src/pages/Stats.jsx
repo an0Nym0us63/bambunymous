@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+
 import { TrendingUp, Weight, Euro, Clock, Layers, Package, ShoppingBag, Trophy, BarChart2 } from "lucide-react";
 import client from "../api/client";
 
@@ -167,7 +167,9 @@ function TopList({ title, prints, groups, valueKey, valueLabel, barColor="#3b82f
           </div>
         )}
       </div>
-      <div style={{ overflowY:"auto", maxHeight:260 }}>
+      <div style={{ position:"relative" }}>
+      <div style={{ overflowY:"auto", maxHeight:240,
+        WebkitOverflowScrolling:"touch", overscrollBehavior:"contain" }}>
         {items.map((item, i) => {
           const pct = Math.max(2, (Number(item[valueKey])||0)/maxVal*100);
           return (
@@ -193,13 +195,18 @@ function TopList({ title, prints, groups, valueKey, valueLabel, barColor="#3b82f
           );
         })}
       </div>
+      {items.length > 5 && (
+        <div style={{ position:"absolute", bottom:0, left:0, right:0, height:40, pointerEvents:"none",
+          background:"linear-gradient(transparent, var(--bg))", borderRadius:"0 0 8px 8px" }}/>
+      )}
+      </div>
     </div>
   );
 }
 
 export default function Stats() {
-  const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [detail, setDetail] = useState(null); // { type:"print"|"group", data:{...} }
   const [filaments, setFilaments] = useState(null);
   const [spools, setSpools] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -216,6 +223,17 @@ export default function Stats() {
     }).finally(() => setLoading(false));
   }, []);
 
+  const openDetail = async (item, mode) => {
+    if (mode === "groups") {
+      setDetail({ type:"group", data:item });
+    } else {
+      try {
+        const r = await client.get(`/prints/${item.id}`);
+        setDetail({ type:"print", data:r.data });
+      } catch { setDetail({ type:"print", data:item }); }
+    }
+  };
+
   if (loading) return <p style={{ textAlign:"center", color:"var(--muted)", padding:60 }}>Chargement…</p>;
 
   const spoolsActive = (spools||[]).filter(s=>!s.archived);
@@ -227,6 +245,39 @@ export default function Stats() {
   return (
     <div style={{ maxWidth:960, margin:"0 auto", display:"flex", flexDirection:"column", gap:20 }}>
       <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Statistiques</h1>
+
+      {detail && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:300, display:"flex", alignItems:"flex-end" }}
+          onClick={()=>setDetail(null)}>
+          <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+            style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+              padding:"0 16px 32px", maxHeight:"70dvh", overflowY:"auto", position:"relative" }}>
+            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"12px auto 8px" }}/>
+            <button onClick={()=>setDetail(null)} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+            <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:"4px 0 14px",
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:36 }}>
+              {detail.data.name || detail.data.file_name || "?"}
+            </p>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              {[
+                ["Durée",     detail.data.duration_s > 0 ? fmtH(detail.data.duration_s)
+                              : detail.data.duration_seconds > 0 ? fmtH(detail.data.duration_seconds) : null],
+                ["Coût",      detail.data.cost > 0 ? `${detail.data.cost.toFixed(2)} €`
+                              : detail.data.total_cost > 0 ? `${detail.data.total_cost.toFixed(2)} €` : null],
+                ["Poids",     detail.data.total_weight_g > 0 ? `${detail.data.total_weight_g.toFixed(0)} g` : null],
+                ["Prints",    detail.data.nb > 1 ? `${detail.data.nb} prints` : null],
+              ].filter(([,v])=>v).map(([label,val])=>(
+                <div key={label} style={{ background:"var(--surface2)", border:"1px solid var(--border)",
+                  borderRadius:10, padding:"8px 12px" }}>
+                  <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase",
+                    letterSpacing:"0.06em", margin:"0 0 3px" }}>{label}</p>
+                  <p style={{ fontSize:14, fontWeight:700, fontFamily:"monospace", color:"var(--text)", margin:0 }}>{val}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* KPIs impressions */}
       <Section title="Impressions">
@@ -256,14 +307,14 @@ export default function Stats() {
             groups={data?.top_groups_duration||[]}
             valueKey="duration_s"
             valueLabel={p => fmtH(p.duration_s)}
-            onItemClick={(item,mode)=>navigate("/prints")}/>
+            onItemClick={(item,mode)=>openDetail(item,mode)}/>
           <TopList title="💰 Les plus chers"
             prints={data?.top_cost||[]}
             groups={data?.top_groups_cost||[]}
             valueKey="cost"
             barColor="#22c55e"
             valueLabel={p => `${p.cost.toFixed(2)} €`}
-            onItemClick={(item,mode)=>navigate("/prints")}/>
+            onItemClick={(item,mode)=>openDetail(item,mode)}/>
         </div>
       </Section>
 
