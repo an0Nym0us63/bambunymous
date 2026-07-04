@@ -561,38 +561,51 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
   const photoItems     = allItems.filter(i => !i.snap);
   const milestoneItems = allItems.filter(i => i.snap);
 
-  const Row = ({ title, items }) => items.length > 0 && (
-    <div style={{ marginBottom:12 }}>
-      <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:8 }}>
-        {title} ({items.length})
-      </p>
-      <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6, scrollbarWidth:"thin" }}>
-        {items.map((item, i) => (
-          <div key={i} onClick={() => setLightbox(item)}
-            style={{ position:"relative", flexShrink:0, cursor:"pointer" }}>
-            <img src={item.url} alt={item.label}
-              style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
-                border:"1px solid var(--border)", display:"block" }}
-              onError={e => { e.currentTarget.style.display="none"; }}/>
-            <span style={{ position:"absolute", bottom:4, left:4,
-              background:"rgba(0,0,0,0.65)", color:"white",
-              fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:4 }}>
-              {item.label}
-            </span>
-            {item.snap && (
-              <button onClick={e => handleDelete(e, item.snap)}
-                style={{ position:"absolute", top:4, right:4,
-                  background:"rgba(0,0,0,0.6)", border:"none", borderRadius:"50%",
-                  width:20, height:20, cursor:"pointer", color:"white", fontSize:11,
-                  display:"flex", alignItems:"center", justifyContent:"center" }}>
-                x
-              </button>
-            )}
-          </div>
-        ))}
+  const Row = ({ title, items, startIdx = 0 }) => {
+    const scrollRef = React.useRef(null);
+    if (!items.length) return null;
+    const scroll = (dir) => scrollRef.current?.scrollBy({ left: dir * 120, behavior: "smooth" });
+    return (
+      <div style={{ marginBottom:12 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+          <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", margin:0 }}>
+            {title} ({items.length})
+          </p>
+          {items.length > 2 && (
+            <div style={{ display:"flex", gap:4 }}>
+              <button onClick={()=>scroll(-1)} style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:"50%", width:22, height:22, cursor:"pointer", fontSize:14, color:"var(--text)", display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
+              <button onClick={()=>scroll(1)}  style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:"50%", width:22, height:22, cursor:"pointer", fontSize:14, color:"var(--text)", display:"flex", alignItems:"center", justifyContent:"center" }}>›</button>
+            </div>
+          )}
+        </div>
+        <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6, scrollbarWidth:"none" }}>
+          {items.map((item, i) => (
+            <div key={i} onClick={() => setLightbox(flatItems[startIdx + i])}
+              style={{ position:"relative", flexShrink:0, cursor:"pointer" }}>
+              <img src={item.url} alt={item.label}
+                style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
+                  border:"1px solid var(--border)", display:"block" }}
+                onError={e => { e.currentTarget.style.display="none"; }}/>
+              <span style={{ position:"absolute", bottom:4, left:4,
+                background:"rgba(0,0,0,0.65)", color:"white",
+                fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:4 }}>
+                {item.label}
+              </span>
+              {item.snap && (
+                <button onClick={e => handleDelete(e, item.snap)}
+                  style={{ position:"absolute", top:4, right:4,
+                    background:"rgba(0,0,0,0.6)", border:"none", borderRadius:"50%",
+                    width:20, height:20, cursor:"pointer", color:"white", fontSize:11,
+                    display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  ✕
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const flatItems = [...photoItems, ...milestoneItems];
   const lbIdx = lightbox ? flatItems.findIndex(i => i.url === lightbox.url) : -1;
@@ -603,8 +616,8 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
 
   return (
     <>
-      <Row title="Photos"     items={photoItems}/>
-      <Row title="Milestones" items={milestoneItems}/>
+      <Row title="Photos"     items={photoItems} startIdx={0}/>
+      <Row title="Milestones" items={milestoneItems} startIdx={photoItems.length}/>
       {lightbox && (
         <div onClick={() => setLightbox(null)}
           style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:2000,

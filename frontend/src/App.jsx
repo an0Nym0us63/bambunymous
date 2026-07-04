@@ -43,8 +43,16 @@ export default function App() {
   let startY = 0, el = null;
 
   // Bloquer pull-to-refresh natif quand un sheet est ouvert
+  // Mais seulement si le mouvement est majoritairement vertical (pas un scroll horizontal)
+  let _bx = 0, _by = 0;
+  document.addEventListener("touchstart", e => {
+    _bx = e.touches[0].clientX; _by = e.touches[0].clientY;
+  }, { passive: true });
   const blockRefresh = (e) => {
-    if (document.querySelector(".sheet-inner")) e.preventDefault();
+    if (!document.querySelector(".sheet-inner")) return;
+    const dx = Math.abs(e.touches[0].clientX - _bx);
+    const dy = Math.abs(e.touches[0].clientY - _by);
+    if (dy > dx) e.preventDefault(); // vertical → bloquer pull-to-refresh
   };
   document.addEventListener("touchmove", blockRefresh, { passive: false });
 
