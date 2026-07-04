@@ -711,8 +711,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
           <button onClick={onMapped}
             style={{ width:"100%", padding:"11px", borderRadius:10, background:"#3b82f6",
               color:"white", border:"none", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-            Fermer
-          </button>
+            ✕</button>
         </div>
       </div>
     </div>

@@ -666,8 +666,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
               style={{ flex:1, padding:"10px", background:"#3b82f6",
                 border:"none", borderRadius:10, cursor:"pointer",
                 color:"white", fontSize:13, fontWeight:600 }}>
-              Fermer
-            </button>
+              ✕</button>
           </div>
           {confirmDelete && (
             <div style={{ marginTop:12, background:"rgba(239,68,68,0.06)", border:"1px solid rgba(239,68,68,0.25)",
@@ -1259,8 +1258,7 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               style={{ flex:2, padding:"10px", background:"#3b82f6",
                 border:"none", borderRadius:10, cursor:"pointer",
                 color:"white", fontSize:13, fontWeight:600 }}>
-              Fermer
-            </button>
+              ✕</button>
           </div>
             </>
           )}

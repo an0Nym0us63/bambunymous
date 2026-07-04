@@ -41,22 +41,30 @@ export default function App() {
 ;(function setupGlobalSheetSwipe() {
   if (typeof window === "undefined") return;
   let startY = 0, el = null;
+
+  // Bloquer pull-to-refresh natif quand un sheet est ouvert
+  const blockRefresh = (e) => {
+    if (document.querySelector(".sheet-inner")) e.preventDefault();
+  };
+  document.addEventListener("touchmove", blockRefresh, { passive: false });
+
   document.addEventListener("touchstart", e => {
     const inner = e.target.closest(".sheet-inner");
     if (!inner) return;
     startY = e.touches[0].clientY;
     el = inner;
   }, { passive: true });
+
   document.addEventListener("touchmove", e => {
     if (!el) return;
     const dy = e.touches[0].clientY - startY;
     if (dy > 0) el.style.transform = `translateY(${Math.min(dy, 200)}px)`;
   }, { passive: true });
+
   document.addEventListener("touchend", e => {
     if (!el) return;
     const dy = e.changedTouches[0].clientY - startY;
     el.style.transform = "";
-    // Fermer : cliquer sur le backdrop (parent direct du sheet-inner)
     if (dy > 80) {
       const backdrop = el.parentElement;
       if (backdrop) backdrop.click();

@@ -68,3 +68,9 @@ body {
   transition: transform 0.15s ease;
   will-change: transform;
 }
+
+/* Empêcher pull-to-refresh sous les bottom sheets */
+.sheet-inner {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
