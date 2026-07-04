@@ -44,7 +44,16 @@ def invalidate_tray_cache(tag_uid: str = "", profile_id: str = "") -> int:
     for cache in (_MATCH_CACHE, _MATCH_MODE_CACHE, _SPOOL_INFO_CACHE):
         invalidated += len(cache)
         cache.clear()
-    logger.info(f"[CACHE] {invalidated} entrées vidées → re-match complet au prochain tick MQTT")
+    # Resetter _spool_info_cache sur tous les trays en mémoire
+    try:
+        s = get_state()
+        if s:
+            for a in (s.ams_list or []):
+                for t in (a.trays or []):
+                    t._spool_info_cache = None
+    except Exception:
+        pass
+    logger.info(f"[CACHE] {invalidated} entrées vidées + _spool_info_cache tray resetté")
     return invalidated
 
 
