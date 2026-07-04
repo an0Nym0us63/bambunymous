@@ -1002,3 +1002,31 @@ async def filament_photo(fid: int, filename: str):
         raise HTTPException(404)
     mime = mimetypes.guess_type(str(path))[0] or "image/jpeg"
     return FileResponse(str(path), media_type=mime)
+
+
+@router.delete("/{fid}/photo/{filename}")
+async def delete_filament_photo(fid: int, filename: str, _: str = Depends(get_current_user)):
+    if ".." in filename or "/" in filename:
+        raise HTTPException(400, "Nom invalide")
+    p = DATA_DIR / "filaments" / str(fid) / filename
+    if not p.exists():
+        raise HTTPException(404)
+    p.unlink()
+    return {"ok": True}
+
+
+@router.post("/{fid}/photo/{filename}/primary")
+async def set_primary_filament_photo(fid: int, filename: str, _: str = Depends(get_current_user)):
+    if ".." in filename or "/" in filename:
+        raise HTTPException(400, "Nom invalide")
+    d = DATA_DIR / "filaments" / str(fid)
+    p = d / filename
+    if not p.exists():
+        raise HTTPException(404)
+    # Retirer l'ancien préfixe 00_ si existant
+    for old in d.iterdir():
+        if old.name.startswith("00_") and old.name != filename:
+            old.rename(d / old.name[3:])
+    if not filename.startswith("00_"):
+        p.rename(d / f"00_{filename}")
+    return {"ok": True}
