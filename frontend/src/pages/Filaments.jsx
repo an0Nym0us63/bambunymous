@@ -1672,7 +1672,7 @@ function SwatchView({ filaments: allFilaments, sort: swatchSort = "hue" }) {
     if (swatchSort === "material") return (a.material||"").localeCompare(b.material||"")||((a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||""));
     if (swatchSort === "manufacturer") return (a.manufacturer||"").localeCompare(b.manufacturer||"")||(a.material||"").localeCompare(b.material||"");
     return (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||"");
-  }), [afterSub, swatchSort]);
+  }), [allFilaments, swatchSort]);
 
 
 
