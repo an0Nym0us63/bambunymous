@@ -1006,22 +1006,39 @@ export default function Prints() {
   const STATUS_LABELS = {"":"Tous","IN_PROGRESS":"En cours","SUCCESS":"Réussis","FAILED":"Échoués"};
 
   return (
-    <div style={{ maxWidth:900, margin:"0 auto", display:"flex", flexDirection:"column", gap:12 }}>
+    <div style={{ maxWidth:960, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
 
-      {/* Header */}
-      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-        <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Historique</h1>
-        <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{total} impressions</span>
+      {/* Titre */}
+      <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Historique</h1>
 
-          {/* Sélectionner */}
-          {viewMode==="list" && (
-            <button onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
-              style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", border:"none",
-                background: selectMode?"#3b82f6":"var(--surface2)", color:selectMode?"white":"var(--muted)" }}>
-              {selectMode ? "Annuler" : "Sélectionner"}
-            </button>
-          )}
-          {/* Importer */}
+      {/* Tabs Liste / Galerie */}
+      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
+        {[["list","Liste"],["gallery","Galerie"]].map(([id,label])=>(
+          <button key={id} onClick={()=>setViewMode(id)} style={{
+            flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
+            background: viewMode===id ? "#3b82f6" : "transparent",
+            color: viewMode===id ? "white" : "var(--muted)",
+            border:"none", transition:"all 0.15s",
+          }}>{label}</button>
+        ))}
+      </div>
+
+      {/* KPIs */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:10 }}>
+        {[
+          ["IMPRESSIONS", total, null],
+          ["EN COURS", prints.filter(p=>p.status==="IN_PROGRESS").length || null, null],
+          ["POIDS TOTAL", prints.reduce((s,p)=>s+(p.total_weight_g||0),0) > 0 ? `${(prints.reduce((s,p)=>s+(p.total_weight_g||0),0)/1000).toFixed(2)} kg` : null, null],
+          ["COÛT TOTAL", prints.reduce((s,p)=>s+(p.total_cost||0),0) > 0 ? `${prints.reduce((s,p)=>s+(p.total_cost||0),0).toFixed(2)} €` : null, null],
+        ].filter(([,v])=>v).map(([label,val])=>(
+          <div key={label} className="card" style={{ padding:"10px 14px" }}>
+            <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 4px" }}>{label}</p>
+            <p style={{ fontSize:16, fontWeight:700, color:"var(--text)", margin:0, fontFamily:"JetBrains Mono,monospace" }}>{val}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Recherche + Filtres + .3mf */}
       <div style={{ display:"flex", gap:8 }}>
         <div style={{ position:"relative", flex:1 }}>
           <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
@@ -1036,8 +1053,27 @@ export default function Prints() {
             color: (statusF||sortF!=="recent") ? "white" : "var(--text)",
             border:"1px solid var(--border)", borderRadius:10, fontSize:12, cursor:"pointer", flexShrink:0 }}>
           <SlidersHorizontal size={14}/>
-          {(statusF||sortF!=="recent") ? `Filtres (actifs)` : "Filtres"}
+          {(statusF||sortF!=="recent") ? "Filtres (actifs)" : "Filtres"}
         </button>
+        {viewMode==="list" && selectMode && (
+          <button onClick={exitSelectMode}
+            style={{ padding:"8px 12px", borderRadius:10, border:"none", background:"var(--surface2)",
+              color:"var(--muted)", fontSize:12, cursor:"pointer", flexShrink:0 }}>
+            Annuler
+          </button>
+        )}
+        {viewMode==="list" && !selectMode && (
+          <button onClick={()=>setSelectMode(true)}
+            style={{ padding:"8px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
+              color:"var(--muted)", fontSize:12, cursor:"pointer", flexShrink:0 }}>
+            Sélectionner
+          </button>
+        )}
+        <label style={{ padding:"8px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
+          color:"var(--muted)", fontSize:12, cursor:"pointer", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
+          <Upload size={13}/> .3mf
+          <input type="file" accept=".3mf" onChange={handleImport} style={{ display:"none" }}/>
+        </label>
       </div>
 
       {filterOpen && (
@@ -1089,7 +1125,6 @@ export default function Prints() {
           </div>
         </div>
       )}
-
 
       {loading && <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>}
 
