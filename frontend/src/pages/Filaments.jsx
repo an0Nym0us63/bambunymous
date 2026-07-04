@@ -254,6 +254,7 @@ function FilamentPhotos({ filamentId, onLightbox }) {
             background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px 32px" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
             <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"8px auto 0", flex:1 }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
           </div>
             <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:"0 0 16px" }}>Ajouter une photo</p>
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
@@ -572,6 +573,8 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
         {/* Handle */}
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
         </div>
 
         <div style={{ padding:"16px 20px 28px" }}>
@@ -1131,6 +1134,8 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
 
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
         </div>
 
         <div style={{ padding:"16px 20px 24px" }}>
@@ -1558,6 +1563,8 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
         paddingBottom:"env(safe-area-inset-bottom,16px)", display:"flex", flexDirection:"column" }}>
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 4px" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
         </div>
         <div style={{ padding:"12px 20px 24px" }}>
           <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 16px" }}>

@@ -74,3 +74,6 @@ body {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
 }
+
+/* Position relative sur les sheets pour le bouton ✕ absolu */
+.sheet-inner { position: relative; }

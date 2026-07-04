@@ -117,6 +117,8 @@ function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_items, 
           {/* Handle */}
           <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
             <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
           </div>
 
           <div style={{ padding:"16px 20px 20px" }}>
@@ -649,6 +651,8 @@ function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         {/* Handle */}
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
         </div>
 
         {/* Vignette pleine largeur — contain pour voir tout sans rogner */}
@@ -1171,6 +1175,8 @@ function GroupPickerSheet({ groups, onClose, onPick }) {
 
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
         </div>
 
         <div style={{ padding:"14px 18px 10px" }}>

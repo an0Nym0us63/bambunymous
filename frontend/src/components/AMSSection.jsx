@@ -462,6 +462,8 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
         {/* Handle */}
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
         </div>
         <div style={{ padding:"16px 20px 24px" }}>
           {/* En-tête */}
@@ -686,6 +688,8 @@ function MapTraySheet({ tray, onClose, onMapped }) {
         width:"100%", maxWidth:540, paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 4px" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
         </div>
         <div style={{ padding:"16px 20px 24px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
@@ -725,6 +729,8 @@ function MapTraySheet({ tray, onClose, onMapped }) {
         paddingBottom:"env(safe-area-inset-bottom,16px)", display:"flex", flexDirection:"column" }}>
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 4px" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
         </div>
         <div style={{ padding:"12px 20px 20px" }}>
           <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 4px" }}>
