@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { TrendingUp, Weight, Euro, Clock, Layers, Package, ShoppingBag, Trophy, BarChart2 } from "lucide-react";
 import client from "../api/client";
 
@@ -141,7 +142,7 @@ function Donut({ data, title }) {
   );
 }
 
-function TopList({ title, prints, groups, valueKey, valueLabel, barColor="#3b82f6" }) {
+function TopList({ title, prints, groups, valueKey, valueLabel, barColor="#3b82f6", onItemClick }) {
   const [mode, setMode] = useState("prints");
   const items = mode === "groups" ? (groups||[]) : (prints||[]);
   if (!prints?.length && !groups?.length) return null;
@@ -151,14 +152,15 @@ function TopList({ title, prints, groups, valueKey, valueLabel, barColor="#3b82f
     <div className="card" style={{ padding:"14px 16px", display:"flex", flexDirection:"column" }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
         <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0 }}>{title}</p>
-        {groups?.length > 0 && (
+        {(
           <div style={{ display:"flex", gap:2, background:"var(--surface2)", borderRadius:20, padding:2 }}>
             {[["prints","Prints"],["groups","Groupes"]].map(([id,label])=>(
-              <button key={id} onClick={()=>setMode(id)}
+              <button key={id} onClick={()=>id==="groups"&&!groups?.length?null:setMode(id)}
                 style={{ padding:"3px 10px", borderRadius:18, fontSize:10, fontWeight:600,
-                  cursor:"pointer", border:"none",
+                  cursor: id==="groups"&&!groups?.length?"default":"pointer", border:"none",
                   background:mode===id?"#3b82f6":"transparent",
-                  color:mode===id?"white":"var(--muted)" }}>
+                  color:mode===id?"white":id==="groups"&&!groups?.length?"var(--border)":"var(--muted)",
+                  opacity:id==="groups"&&!groups?.length?0.4:1 }}>
                 {label}
               </button>
             ))}
@@ -169,7 +171,8 @@ function TopList({ title, prints, groups, valueKey, valueLabel, barColor="#3b82f
         {items.map((item, i) => {
           const pct = Math.max(2, (Number(item[valueKey])||0)/maxVal*100);
           return (
-            <div key={item.id} style={{ marginBottom:10 }}>
+            <div key={item.id} style={{ marginBottom:10, cursor:"pointer" }}
+              onClick={()=>onItemClick?.(item, mode)}>
               <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:3 }}>
                 <span style={{ fontSize:12, flexShrink:0 }}>{MEDAL[i]||`${i+1}`}</span>
                 <span style={{ fontSize:11, color:"var(--text)", fontWeight:600, flex:1,
@@ -195,6 +198,7 @@ function TopList({ title, prints, groups, valueKey, valueLabel, barColor="#3b82f
 }
 
 export default function Stats() {
+  const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [filaments, setFilaments] = useState(null);
   const [spools, setSpools] = useState(null);
@@ -251,13 +255,15 @@ export default function Stats() {
             prints={data?.top_duration||[]}
             groups={data?.top_groups_duration||[]}
             valueKey="duration_s"
-            valueLabel={p => fmtH(p.duration_s)}/>
+            valueLabel={p => fmtH(p.duration_s)}
+            onItemClick={(item,mode)=>navigate("/prints")}/>
           <TopList title="💰 Les plus chers"
             prints={data?.top_cost||[]}
             groups={data?.top_groups_cost||[]}
             valueKey="cost"
             barColor="#22c55e"
-            valueLabel={p => `${p.cost.toFixed(2)} €`}/>
+            valueLabel={p => `${p.cost.toFixed(2)} €`}
+            onItemClick={(item,mode)=>navigate("/prints")}/>
         </div>
       </Section>
 
