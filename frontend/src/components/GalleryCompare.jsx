@@ -18,7 +18,9 @@ export default function GalleryCompare({
   enableCompare = true, renderCover = null, swatchMode = false,
 }) {
   const [selected, setSelected]   = useState(new Map());
-  const [selectMode, setSelectMode] = useState(false);
+  const [selectMode, setSelectMode] = useState(selectModeProp);
+  React.useEffect(() => { setSelectMode(selectModeProp); if (!selectModeProp) setSelected(new Map()); }, [selectModeProp]);
+  const changeSelectMode = (v) => { setSelectMode(v); onSelectModeChange?.(v); if (!v) setSelected(new Map()); };
   const [carousel, setCarousel]   = useState(null); // { item, index }
   const [compareOpen, setCompareOpen] = useState(false);
   // En mode swatch, tuiles légères → pas de pagination (tout charger d'un coup)
@@ -65,7 +67,7 @@ export default function GalleryCompare({
   const pressOrigin = React.useRef(null);
   const startPress  = (item, clientX, clientY) => {
     pressOrigin.current = { x: clientX, y: clientY };
-    pressTimer.current  = setTimeout(() => { setSelectMode(true); toggle(item); }, 500);
+    pressTimer.current  = setTimeout(() => { changeSelectMode(true); toggle(item); }, 500);
   };
   const cancelPress = () => { clearTimeout(pressTimer.current); pressOrigin.current = null; };
   const movePress   = (clientX, clientY) => {
@@ -88,23 +90,7 @@ export default function GalleryCompare({
 
   return (
     <div style={{ position:"relative" }}>
-      {enableCompare && (
-        <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:6, gap:6 }}>
-          {selectMode ? (
-            <button onClick={()=>{ setSelectMode(false); setSelected(new Map()); }}
-              style={{ padding:"4px 10px", borderRadius:20, fontSize:11, border:"1px solid var(--border)",
-                background:"var(--surface2)", color:"var(--muted)", cursor:"pointer" }}>
-              Annuler
-            </button>
-          ) : (
-            <button onClick={()=>setSelectMode(true)}
-              style={{ padding:"4px 10px", borderRadius:20, fontSize:11, border:"1px solid var(--border)",
-                background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>
-              Sélectionner
-            </button>
-          )}
-        </div>
-      )}
+
       <div style={{ display:"grid",
         gridTemplateColumns: swatchMode ? "repeat(auto-fill,minmax(72px,1fr))" : "repeat(auto-fill,minmax(110px,1fr))",
         gap: swatchMode ? 3 : 8,
@@ -117,7 +103,7 @@ export default function GalleryCompare({
           const hasPhotos = photos.length > 0;
           return (
             <div key={id}
-              onClick={() => { if (selectMode && enableCompare) toggle(item); else if (hasPhotos) openCarousel(item, 0); }}
+              onClick={() => { if (selectMode && enableCompare) toggle(item); else if (hasPhotos && !selectMode) openCarousel(item, 0); }}
               onMouseDown={e => enableCompare && startPress(item, e.clientX, e.clientY)}
               onMouseMove={e => movePress(e.clientX, e.clientY)}
               onMouseUp={cancelPress} onMouseLeave={cancelPress}

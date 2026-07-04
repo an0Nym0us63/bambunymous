@@ -1659,7 +1659,7 @@ function hexToHsl(hex) {
   return [Math.round(hue*60), Math.round(s*100), Math.round(l*100)];
 }
 
-function SwatchView({ filaments: allFilaments, sort: swatchSort = "hue" }) {
+function SwatchView({ filaments: allFilaments, sort: swatchSort = "hue", selectMode, onSelectModeChange }) {
   // Tri uniquement — filtres et stock gérés par le parent (galerie)
   const sorted = useMemo(() => [...allFilaments].sort((a,b) => {
     if (swatchSort === "hue") {
@@ -1680,6 +1680,8 @@ function SwatchView({ filaments: allFilaments, sort: swatchSort = "hue" }) {
     <>
       <GalleryCompare
         items={sorted}
+        selectMode={selectMode}
+        onSelectModeChange={onSelectModeChange}
         getId={f => f.id}
         getTitle={f => f.translated_name || f.name}
         getSubtitle={f => [f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
@@ -1710,6 +1712,7 @@ export default function Filaments() {
   const [galFilterOpen, setGalFilterOpen] = useState(false);
   const [galFilters, setGalFilters] = useState({ brand:"", mat:"", sub:"", stock:"all" });
   const [galSort, setGalSort] = useState("hue");
+  const [galSelectMode, setGalSelectMode] = useState(false);
 
   const FAMILIES_G = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
   const getFamilyG = f => {
@@ -1783,10 +1786,10 @@ export default function Filaments() {
               onApply={(f)=>{ setGalFilters(f); setGalFilterOpen(false); }}
               onClose={()=>setGalFilterOpen(false)}/>
           )}
-          {/* Switch Photos / Nuancier */}
-          <div style={{ display:"flex", gap:6 }}>
+          {/* Switch Photos / Nuancier + bouton Sélectionner */}
+          <div style={{ display:"flex", gap:6, alignItems:"center" }}>
             {[["photos","Photos"],["swatch","Nuancier"]].map(([id,label]) => (
-              <button key={id} onClick={()=>setGalleryMode(id)} style={{
+              <button key={id} onClick={()=>{ setGalleryMode(id); setGalSelectMode(false); }} style={{
                 padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer",
                 background: galleryMode===id ? "#3b82f6" : "var(--surface2)",
                 color: galleryMode===id ? "white" : "var(--muted)",
@@ -1795,11 +1798,28 @@ export default function Filaments() {
                 {label}
               </button>
             ))}
+            <div style={{ marginLeft:"auto" }}>
+              {galSelectMode ? (
+                <button onClick={()=>setGalSelectMode(false)}
+                  style={{ padding:"5px 12px", borderRadius:20, fontSize:11, border:"1px solid var(--border)",
+                    background:"var(--surface2)", color:"var(--muted)", cursor:"pointer" }}>
+                  Annuler
+                </button>
+              ) : (
+                <button onClick={()=>setGalSelectMode(true)}
+                  style={{ padding:"5px 12px", borderRadius:20, fontSize:11, border:"1px solid var(--border)",
+                    background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>
+                  Sélectionner
+                </button>
+              )}
+            </div>
           </div>
 
           {galleryMode==="photos" ? (
             <GalleryCompare
               items={filaments}
+              selectMode={galSelectMode}
+              onSelectModeChange={setGalSelectMode}
               getId={f => f.id}
               getCoverImage={f => f.photo_url}
               getPhotos={f => f.photos}
@@ -1816,7 +1836,7 @@ export default function Filaments() {
               ]}
             />
           ) : null}
-          {galleryMode==="swatch" && <SwatchView filaments={filaments} sort={galSort}/>}
+          {galleryMode==="swatch" && <SwatchView filaments={filaments} sort={galSort} selectMode={galSelectMode} onSelectModeChange={setGalSelectMode}/>}
         </>
       )}
       {(tab==="spools" || tab==="archived") && (
