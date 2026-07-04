@@ -1659,27 +1659,15 @@ function hexToHsl(hex) {
   return [Math.round(hue*60), Math.round(s*100), Math.round(l*100)];
 }
 
-function SwatchView({ filaments: allFilaments, sort: swatchSort = "hue", selectMode, onSelectModeChange }) {
-  // Tri uniquement — filtres et stock gérés par le parent (galerie)
-  const sorted = useMemo(() => [...allFilaments].sort((a,b) => {
-    if (swatchSort === "hue") {
-      const [ah,as_,al] = hexToHsl(a.color), [bh,bs,bl] = hexToHsl(b.color);
-      if (al > 90 && bl <= 90) return 1; if (bl > 90 && al <= 90) return -1;
-      if (al < 10 && bl >= 10) return 1; if (bl < 10 && al >= 10) return -1;
-      if (as_ < 15 && bs >= 15) return 1; if (bs < 15 && as_ >= 15) return -1;
-      return ah - bh || bl - al;
-    }
-    if (swatchSort === "material") return (a.material||"").localeCompare(b.material||"")||((a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||""));
-    if (swatchSort === "manufacturer") return (a.manufacturer||"").localeCompare(b.manufacturer||"")||(a.material||"").localeCompare(b.material||"");
-    return (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||"");
-  }), [allFilaments, swatchSort]);
+function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeChange }) {
+  // Filaments déjà filtrés ET triés par le parent
 
 
 
   return (
     <>
       <GalleryCompare
-        items={sorted}
+        items={allFilaments}
         selectMode={selectMode}
         onSelectModeChange={onSelectModeChange}
         getId={f => f.id}
@@ -1734,8 +1722,20 @@ export default function Filaments() {
     if (galFilters.brand) res = res.filter(f => f.manufacturer === galFilters.brand);
     if (galFilters.mat)   res = res.filter(f => getFamilyG(f) === galFilters.mat);
     if (galFilters.sub)   res = res.filter(f => (f.fila_type||f.material||"") === galFilters.sub);
+    if (galFilters.stock === "instock")     res = res.filter(f => (f.active_spool_count||0) > 0);
+    if (galFilters.stock === "unavailable") res = res.filter(f => !(f.active_spool_count > 0));
+    // Tri
+    res = [...res].sort((a,b) => {
+      if (galSort === "hue") {
+        const hexH = h => { h=(h||"888888").slice(0,6).padEnd(6,"0"); const r=parseInt(h.slice(0,2),16)/255,g=parseInt(h.slice(2,4),16)/255,bl=parseInt(h.slice(4,6),16)/255,mx=Math.max(r,g,bl),mn=Math.min(r,g,bl),d=mx-mn,l=(mx+mn)/2; if(!d) return l>0.9?370:l<0.1?380:360; const H=mx===r?((g-bl)/d+(g<bl?6:0)):mx===g?((bl-r)/d+2):((r-g)/d+4); const s=l>0.5?d/(2-mx-mn):d/(mx+mn); if(s<0.12) return l>0.85?370:380; return H*60; };
+        return hexH(a.color)-hexH(b.color);
+      }
+      if (galSort === "name")  return (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||"");
+      if (galSort === "brand") return (a.manufacturer||"").localeCompare(b.manufacturer||"");
+      return 0;
+    });
     return res;
-  }, [allFilaments, galQ, galFilters]);
+  }, [allFilaments, galQ, galFilters, galSort]);
 
   const galActiveFilters = [galFilters.brand,galFilters.mat,galFilters.sub].filter(Boolean).length;
 
