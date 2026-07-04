@@ -212,6 +212,11 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
         if p_obj:
             await _deduct_spool_weights(db, p_obj)
             await db.commit()
+            try:
+                from ..core.mqtt import invalidate_tray_cache
+                invalidate_tray_cache()
+            except Exception:
+                pass
             logger.info(f"[SPOOL] ✅ Déduction terminée print #{pid}")
     logger.info(f"[DB] ✅ Print {pid}: {name!r}, {len(meta.get('filaments',{}))} filaments")
 
@@ -266,6 +271,11 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
             if p_obj:
                 await _deduct_spool_weights(db, p_obj)
                 await db.commit()
+                try:
+                    from ..core.mqtt import invalidate_tray_cache
+                    invalidate_tray_cache()
+                except Exception:
+                    pass
         logger.info(f"[DB] ✅ Print {pid} sauvegardé: {name!r} avec {len(meta.get('filaments', {}))} filaments")
     except Exception as e:
         logger.error(f"_enrich pid={pid}: {e}")
