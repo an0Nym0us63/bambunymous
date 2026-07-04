@@ -237,7 +237,15 @@ export default function Stats() {
       try {
         const r = await client.get(`/prints/${item.id}`);
         setDetail({ type:"print", data:r.data });
-      } catch { setDetail({ type:"print", data:item }); }
+      } catch {
+        // fallback: mapper les champs stats → PrintOut
+        setDetail({ type:"print", data:{
+          ...item,
+          file_name: item.name,
+          duration_seconds: item.duration_s,
+          total_cost: item.cost,
+        }});
+      }
     }
   };
 
