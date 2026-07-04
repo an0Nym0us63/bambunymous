@@ -16,6 +16,7 @@ export default function GalleryCompare({
   items, getId, getCoverImage, getPhotos, getTitle, getSubtitle, compareFields = [],
   maxCompare = 6, emptyLabel = "Aucun élément", pageSize = 30,
   enableCompare = true, renderCover = null, swatchMode = false,
+  selectMode: selectModeProp = false, onSelectModeChange = null,
 }) {
   const [selected, setSelected]   = useState(new Map());
   const [selectMode, setSelectMode] = useState(selectModeProp);
