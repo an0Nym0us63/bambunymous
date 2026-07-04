@@ -456,7 +456,7 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
       zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+        className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
           width:"100%", maxWidth:540, maxHeight:"88dvh", overflowY:"auto",
           paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
         {/* Handle */}
@@ -682,7 +682,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
   if (result) return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1100,
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
         width:"100%", maxWidth:540, paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 4px" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
@@ -721,7 +721,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1100,
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
         width:"100%", maxWidth:540, maxHeight:"88dvh", overflowY:"auto",
         paddingBottom:"env(safe-area-inset-bottom,16px)", display:"flex", flexDirection:"column" }}>
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 4px" }}>

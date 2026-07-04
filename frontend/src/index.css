@@ -62,3 +62,9 @@ body {
   50% { box-shadow: 0 0 0 4px rgba(249,115,22,0.18); }
 }
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+
+/* Swipe-to-close animation */
+.sheet-inner {
+  transition: transform 0.15s ease;
+  will-change: transform;
+}

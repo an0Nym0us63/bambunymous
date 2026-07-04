@@ -252,7 +252,9 @@ function FilamentPhotos({ filamentId, onLightbox }) {
           onClick={() => setAddPhotoOpen(false)}>
           <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0, right:0,
             background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px 32px" }}>
-            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 16px" }}/>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
+            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"8px auto 0", flex:1 }}/>
+          </div>
             <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:"0 0 16px" }}>Ajouter une photo</p>
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               <button onClick={() => cameraRef.current?.click()}
@@ -563,7 +565,7 @@ function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
       zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+        className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
           width:"100%", maxWidth:540, maxHeight:"90dvh", overflowY:"auto",
           paddingBottom:"env(safe-area-inset-bottom,20px)" }}>
 
@@ -1124,7 +1126,7 @@ function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
       zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+        className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
           width:"100%", maxWidth:540, maxHeight:"92dvh", overflowY:"auto",
           paddingBottom:"env(safe-area-inset-bottom,20px)" }}>
 
@@ -1553,7 +1555,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:1200,
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
         width:"100%", maxWidth:540, maxHeight:"92dvh", overflowY:"auto",
         paddingBottom:"env(safe-area-inset-bottom,16px)", display:"flex", flexDirection:"column" }}>
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 4px" }}>

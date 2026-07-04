@@ -47,9 +47,10 @@ function ObjectSheet({ obj, onClose }) {
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-end" }}
       onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxHeight:"85vh", overflowY:"auto",
-        background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px" }}>
-        <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 16px" }}/>
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner" style={{ width:"100%", maxHeight:"85vh", overflowY:"auto", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
+            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"8px auto 0", flex:1 }}/>
+          </div>
         <div style={{ display:"flex", gap:12, marginBottom:16 }}>
           <div style={{ width:72, height:72, borderRadius:12, overflow:"hidden",
             background:"var(--surface2)", flexShrink:0 }}>
@@ -136,9 +137,10 @@ function ObjectGroupSheet({ group, objects, onClose, onSelectObj }) {
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-end" }}
       onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxHeight:"88vh", overflowY:"auto",
-        background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px" }}>
-        <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 16px" }}/>
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner" style={{ width:"100%", maxHeight:"88vh", overflowY:"auto", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
+            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"8px auto 0", flex:1 }}/>
+          </div>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14 }}>
           <div>
             <p style={{ fontWeight:800, fontSize:16, color:"#a78bfa", margin:"0 0 4px" }}>{group.name}</p>

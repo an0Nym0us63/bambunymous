@@ -36,3 +36,31 @@ export default function App() {
     </Routes>
   );
 }
+
+// ── Swipe-to-close global pour tous les bottom sheets ──────────────────────
+;(function setupGlobalSheetSwipe() {
+  if (typeof window === "undefined") return;
+  let startY = 0, el = null;
+  document.addEventListener("touchstart", e => {
+    const inner = e.target.closest(".sheet-inner");
+    if (!inner) return;
+    startY = e.touches[0].clientY;
+    el = inner;
+  }, { passive: true });
+  document.addEventListener("touchmove", e => {
+    if (!el) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 0) el.style.transform = `translateY(${Math.min(dy, 200)}px)`;
+  }, { passive: true });
+  document.addEventListener("touchend", e => {
+    if (!el) return;
+    const dy = e.changedTouches[0].clientY - startY;
+    el.style.transform = "";
+    // Fermer : cliquer sur le backdrop (parent direct du sheet-inner)
+    if (dy > 80) {
+      const backdrop = el.parentElement;
+      if (backdrop) backdrop.click();
+    }
+    el = null;
+  });
+})();

@@ -110,7 +110,7 @@ function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_items, 
         background:"rgba(0,0,0,0.55)", zIndex:1000,
         display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
         <div onClick={e => e.stopPropagation()}
-          style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+          className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
             width:"100%", maxWidth:640, maxHeight:"88dvh", overflowY:"auto",
             paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
 
@@ -642,7 +642,7 @@ function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}
       onClick={onClose}>
       <div onClick={e=>e.stopPropagation()}
-        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
+        className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
           maxWidth:640, maxHeight:"92dvh", overflowY:"auto",
           paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
 
@@ -799,9 +799,7 @@ function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           <button onClick={onClose}
             style={{ flex:2, padding:"10px", background:"#3b82f6",
               border:"none", borderRadius:10, color:"white",
-              fontSize:13, fontWeight:600, cursor:"pointer" }}>
-            Fermer
-          </button>
+              fontSize:13, fontWeight:600, cursor:"pointer" }}>✕</button>
         </div>
       </div>
     </div>
