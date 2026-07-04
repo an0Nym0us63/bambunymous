@@ -1206,9 +1206,12 @@ function FilamentsView() {
     if (filters.brand) res = res.filter(f => f.manufacturer === filters.brand);
     if (filters.mat)   res = res.filter(f => getFamilyF(f) === filters.mat);
     if (filters.sub)   res = res.filter(f => (f.fila_type||f.material||"") === filters.sub);
-    return [...res].sort((a,b) => sort==="brand"
-      ? (a.manufacturer||"").localeCompare(b.manufacturer||"")
-      : (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||""));
+    return [...res].sort((a,b) => {
+      if (sort==="brand")     return (a.manufacturer||"").localeCompare(b.manufacturer||"");
+      if (sort==="remaining") return (b.remaining_weight_total_g||0)-(a.remaining_weight_total_g||0);
+      if (sort==="fullest")   return (a.remaining_weight_total_g||0)-(b.remaining_weight_total_g||0);
+      return (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||"");
+    });
   }, [allFilaments, q, filters, sort]);
 
   const activeFilters = [filters.brand,filters.mat,filters.sub].filter(Boolean).length;
@@ -1659,7 +1662,7 @@ function hexToHsl(hex) {
   return [Math.round(hue*60), Math.round(s*100), Math.round(l*100)];
 }
 
-function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeChange }) {
+function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeChange, onItemClick }) {
   // Filaments déjà filtrés ET triés par le parent
 
 
@@ -1670,6 +1673,7 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
         items={allFilaments}
         selectMode={selectMode}
         onSelectModeChange={onSelectModeChange}
+        onItemClick={onItemClick}
         getId={f => f.id}
         getTitle={f => f.translated_name || f.name}
         getSubtitle={f => [f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
@@ -1701,6 +1705,7 @@ export default function Filaments() {
   const [galFilters, setGalFilters] = useState({ brand:"", mat:"", sub:"", stock:"all" });
   const [galSort, setGalSort] = useState("hue");
   const [galSelectMode, setGalSelectMode] = useState(false);
+  const [galSelected, setGalSelected] = useState(null);
 
   const FAMILIES_G = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
   const getFamilyG = f => {
@@ -1732,6 +1737,8 @@ export default function Filaments() {
       }
       if (galSort === "name")     return (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||"");
       if (galSort === "brand")    return (a.manufacturer||"").localeCompare(b.manufacturer||"");
+      if (galSort === "remaining") return (b.remaining_weight_total_g||0)-(a.remaining_weight_total_g||0);
+      if (galSort === "fullest")   return (a.remaining_weight_total_g||0)-(b.remaining_weight_total_g||0);
       if (galSort === "recent")   return new Date(b.updated_at||b.created_at||0)-new Date(a.updated_at||a.created_at||0);
       return 0;
     });
@@ -1837,7 +1844,8 @@ export default function Filaments() {
               ]}
             />
           ) : null}
-          {galleryMode==="swatch" && <SwatchView filaments={filaments} sort={galSort} selectMode={galSelectMode} onSelectModeChange={setGalSelectMode}/>}
+          {galSelected && <FilamentSheet f={galSelected} onClose={()=>setGalSelected(null)} onDeleted={()=>{setGalSelected(null); client.get("/filaments/filaments").then(r=>setAllFilaments(r.data));}} onUpdated={()=>client.get("/filaments/filaments").then(r=>setAllFilaments(r.data))}/>}
+          {galleryMode==="swatch" && <SwatchView filaments={filaments} sort={galSort} selectMode={galSelectMode} onSelectModeChange={setGalSelectMode} onItemClick={f=>setGalSelected(f)}/>}
         </>
       )}
       {(tab==="spools" || tab==="archived") && (

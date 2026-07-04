@@ -17,6 +17,7 @@ export default function GalleryCompare({
   maxCompare = 6, emptyLabel = "Aucun élément", pageSize = 30,
   enableCompare = true, renderCover = null, swatchMode = false,
   selectMode: selectModeProp = false, onSelectModeChange = null,
+  onItemClick = null,
 }) {
   const [selected, setSelected]   = useState(new Map());
   const [selectMode, setSelectMode] = useState(selectModeProp);
@@ -104,7 +105,7 @@ export default function GalleryCompare({
           const hasPhotos = photos.length > 0;
           return (
             <div key={id}
-              onClick={() => { if (selectMode && enableCompare) toggle(item); else if (hasPhotos && !selectMode) openCarousel(item, 0); }}
+              onClick={() => { if (selectMode && enableCompare) toggle(item); else if (onItemClick && !selectMode) onItemClick(item); else if (hasPhotos && !selectMode) openCarousel(item, 0); }}
               onMouseDown={e => enableCompare && startPress(item, e.clientX, e.clientY)}
               onMouseMove={e => movePress(e.clientX, e.clientY)}
               onMouseUp={cancelPress} onMouseLeave={cancelPress}
