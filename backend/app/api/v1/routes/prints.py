@@ -636,21 +636,91 @@ async def set_group(print_id: int, body: dict, _: str = Depends(get_current_user
 
 @router.get("/stats/summary")
 async def prints_stats(_: str = Depends(get_current_user)):
-    """Statistiques globales — compat Spoolnymous."""
+    from ....models.filament import Spool, Filament as _Fil
     async with AsyncSessionLocal() as db:
-        total   = (await db.execute(select(func.count()).where(Print.status.in_(["SUCCESS","FAILED"])))).scalar()
-        success = (await db.execute(select(func.count()).where(Print.status == "SUCCESS"))).scalar()
-        weight  = (await db.execute(select(func.sum(Print.total_weight_g)).where(Print.status == "SUCCESS"))).scalar() or 0
-        cost    = (await db.execute(select(func.sum(Print.total_cost)).where(Print.status == "SUCCESS"))).scalar() or 0
-        dur     = (await db.execute(select(func.sum(Print.duration_seconds)).where(Print.status == "SUCCESS"))).scalar() or 0
-    return {
-        "total_prints":   total,
-        "success_prints": success,
-        "failed_prints":  total - success,
-        "total_weight_g": round(weight, 1),
-        "total_cost":     round(cost, 2),
-        "total_hours":    round((dur or 0) / 3600, 1),
-    }
+        ok = Print.status == "SUCCESS"
+        total   = (await db.execute(select(func.count()).where(Print.status.in_(["SUCCESS","FAILED"])))).scalar() or 0
+        success = (await db.execute(select(func.count()).where(ok))).scalar() or 0
+        weight  = (await db.execute(select(func.sum(Print.total_weight_g)).where(ok))).scalar() or 0
+        cost    = (await db.execute(select(func.sum(Print.total_cost)).where(ok))).scalar() or 0
+        dur     = (await db.execute(select(func.sum(Print.duration_seconds)).where(ok))).scalar() or 0
+        dur_cnt = (await db.execute(select(func.count()).where(ok, Print.duration_seconds > 0))).scalar() or 0
+
+        # Durée avec fallback estimated_seconds
+        dur_col = func.coalesce(Print.duration_seconds, Print.estimated_seconds)
+        top_dur = (await db.execute(
+            select(Print.id, Print.file_name, dur_col.label("dur_s"), Print.total_cost, Print.print_date)
+            .where(ok).order_by(dur_col.desc()).limit(5)
+        )).all()
+
+        top_cost = (await db.execute(
+            select(Print.id, Print.file_name, Print.total_cost, dur_col.label("dur_s"), Print.print_date)
+            .where(ok, Print.total_cost > 0).order_by(Print.total_cost.desc()).limit(5)
+        )).all()
+
+        all_p = (await db.execute(
+            select(Print.print_date, Print.total_cost, Print.total_weight_g)
+            .where(ok, Print.print_date.isnot(None)).order_by(Print.print_date)
+        )).all()
+
+        monthly = {}
+        for row in all_p:
+            key = str(row.print_date)[:7]
+            if not key or key == "None": continue
+            if key not in monthly: monthly[key] = {"count":0,"cost":0.0,"weight_g":0.0}
+            monthly[key]["count"]    += 1
+            monthly[key]["cost"]     += float(row.total_cost or 0)
+            monthly[key]["weight_g"] += float(row.total_weight_g or 0)
+
+        mat_rows = (await db.execute(
+            select(_Fil.material, func.sum(FilamentUsage.grams_used).label("grams"))
+            .join(Spool, FilamentUsage.spool_id == Spool.id)
+            .join(_Fil, Spool.filament_id == _Fil.id)
+            .where(_Fil.material.isnot(None), FilamentUsage.grams_used > 0)
+            .group_by(_Fil.material).order_by(desc("grams")).limit(10)
+        )).all()
+
+        if not mat_rows:
+            mat_rows = (await db.execute(
+                select(FilamentUsage.filament_type, func.sum(FilamentUsage.grams_used).label("grams"))
+                .where(FilamentUsage.filament_type.isnot(None), FilamentUsage.grams_used > 0)
+                .group_by(FilamentUsage.filament_type).order_by(desc("grams")).limit(10)
+            )).all()
+
+        brand_rows = (await db.execute(
+            select(_Fil.manufacturer, func.sum(FilamentUsage.grams_used).label("grams"))
+            .join(Spool, FilamentUsage.spool_id == Spool.id)
+            .join(_Fil, Spool.filament_id == _Fil.id)
+            .where(_Fil.manufacturer.isnot(None), FilamentUsage.grams_used > 0)
+            .group_by(_Fil.manufacturer).order_by(desc("grams")).limit(8)
+        )).all()
+
+        def _p(r):
+            return {
+                "id": r.id,
+                "name": (r.file_name or "?").rstrip(".3mf").strip("."),
+                "duration_s": float(r.dur_s or 0),
+                "cost": round(float(r.total_cost or 0), 2),
+                "date": str(r.print_date)[:10] if r.print_date else None,
+            }
+
+        return {
+            "total_prints":   total,
+            "success_prints": success,
+            "failed_prints":  total - success,
+            "total_weight_g": round(float(weight), 1),
+            "total_cost":     round(float(cost), 2),
+            "total_hours":    round(float(dur or 0) / 3600, 1),
+            "avg_cost":       round(float(cost)/success, 2) if success else 0,
+            "avg_duration_h": round(float(dur)/dur_cnt/3600, 2) if dur and dur_cnt else 0,
+            "top_duration":   [_p(r) for r in top_dur],
+            "top_cost":       [_p(r) for r in top_cost],
+            "monthly":        {k: monthly[k] for k in sorted(monthly)[-24:]},
+            "materials":      [{"name": getattr(r,"material",None) or getattr(r,"filament_type","?"),
+                                "grams": round(float(r.grams or 0))} for r in mat_rows],
+            "brands":         [{"name": r.manufacturer,
+                                "grams": round(float(r.grams or 0))} for r in brand_rows],
+        }
 
 @router.post("/recalculate-all")
 async def recalculate_all_prints(_: str = Depends(get_current_user)):
