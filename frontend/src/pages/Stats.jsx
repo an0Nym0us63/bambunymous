@@ -144,7 +144,7 @@ function Donut({ data, title }) {
 // Podium pour top 5
 function TopList({ title, items, valueKey, valueLabel, colorKey }) {
   if (!items || items.length === 0) return null;
-  const maxVal = Math.max(...items.map(i => i[valueKey]), 1);
+  const maxVal = Math.max(...items.map(i => Number(i[valueKey])||0), 1);
   const MEDAL = ["🥇","🥈","🥉","4️⃣","5️⃣"];
   return (
     <div className="card" style={{ padding:"14px 16px" }}>
@@ -209,10 +209,10 @@ export default function Stats() {
           <KpiCard icon={Layers}     label="Total"          value={data?.total_prints}      color="#3b82f6"/>
           <KpiCard icon={TrendingUp} label="Réussies"       value={data?.success_prints}    color="#22c55e"/>
           <KpiCard icon={Clock}      label="Temps total"    value={fmtH((data?.total_hours||0)*3600)} color="#f59e0b"/>
-          <KpiCard icon={Clock}      label="Durée moyenne"  value={fmtH((data?.avg_duration_h||0)*3600)} color="#f59e0b" sub="par impression"/>
+          <KpiCard icon={Clock}      label="Durée moyenne"  value={data?.avg_duration_h > 0 ? fmtH(data.avg_duration_h*3600) : null} color="#f59e0b" sub="par impression"/>
           <KpiCard icon={Weight}     label="Filament utilisé" value={data?.total_weight_g ? `${(data.total_weight_g/1000).toFixed(2)} kg` : null} color="#8b5cf6"/>
           <KpiCard icon={Euro}       label="Coût total"     value={data?.total_cost ? `${data.total_cost.toFixed(2)} €` : null} color="#ef4444"/>
-          <KpiCard icon={Euro}       label="Coût moyen"     value={data?.avg_cost ? `${data.avg_cost.toFixed(2)} €` : null} color="#f97316" sub="par impression"/>
+          <KpiCard icon={Euro}       label="Coût moyen"     value={data?.avg_cost > 0 ? `${data.avg_cost.toFixed(2)} €` : null} color="#f97316" sub="par impression"/>
         </div>
       </Section>
 
