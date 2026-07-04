@@ -859,7 +859,7 @@ function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 }
 
 // ── Galerie — indépendante de la pagination, parcourt tout l'historique ────
-function PrintsGalleryView({ search }) {
+function PrintsGalleryView({ search, sortF = "recent" }) {
   const [data, setData] = useState(null); // { prints:[], groups:[] }
   const [loading, setLoading] = useState(true);
 
@@ -1128,7 +1128,7 @@ export default function Prints() {
         </p>
       )}
 
-      {viewMode==="gallery" && <PrintsGalleryView search={search}/>}
+      {viewMode==="gallery" && <PrintsGalleryView search={search} sortF={sortF}/>}
 
       {!loading && !error && prints.length > 0 && viewMode==="list" && (() => {
         const onDelete = id => { setPrints(ps => ps.filter(x => x.id !== id)); setTotal(t => t-1); };
