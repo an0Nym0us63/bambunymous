@@ -883,7 +883,13 @@ function PrintsGalleryView({ search }) {
     const q = search.trim().toLowerCase();
     items = items.filter(it => (it.title || "").toLowerCase().includes(q));
   }
-  items.sort((a,b) => (b.print_date || b.latest_date || "").localeCompare(a.print_date || a.latest_date || ""));
+  items.sort((a,b) => {
+    if (sortF === "oldest")   return (a.print_date||a.latest_date||"").localeCompare(b.print_date||b.latest_date||"");
+    if (sortF === "cost")     return (b.total_cost||0)-(a.total_cost||0);
+    if (sortF === "weight")   return (b.total_weight_g||0)-(a.total_weight_g||0);
+    if (sortF === "duration") return (b.duration_seconds||0)-(a.duration_seconds||0);
+    return (b.print_date||b.latest_date||"").localeCompare(a.print_date||a.latest_date||""); // recent
+  });
 
   return (
     <GalleryCompare
@@ -914,6 +920,8 @@ export default function Prints() {
   const [debugInfo, setDebugInfo] = useState("");
   const [groups, setGroups]   = useState([]);
   const [groupF, setGroupF]   = useState("");
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [sortF, setSortF]     = useState("recent");
   const [viewMode, setViewMode] = useState("list"); // "list" | "gallery"
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
@@ -1037,22 +1045,72 @@ export default function Prints() {
         </div>
       </div>
 
-      <div className="card" style={{ padding:"10px 12px", display:"flex", gap:10, alignItems:"center", flexWrap:"wrap" }}>
-        <Search size={13} style={{ color:"var(--muted)" }}/>
-        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher…"
-          style={{ flex:1, minWidth:120, background:"var(--surface2)", border:"1px solid var(--border)",
-            borderRadius:6, padding:"5px 10px", fontSize:12, color:"var(--text)", outline:"none" }}/>
-        <div style={{ display:"flex", gap:4 }}>
-          {STATUSES.map(s => (
-            <button key={s} onClick={()=>setStatusF(s)} style={{
-              padding:"3px 10px", borderRadius:20, fontSize:11, fontWeight:600,
-              cursor:"pointer", border:"none",
-              background: statusF===s ? "#3b82f6" : "var(--surface2)",
-              color: statusF===s ? "white" : "var(--muted)",
-            }}>{STATUS_LABELS[s]}</button>
-          ))}
+      <div style={{ display:"flex", gap:8 }}>
+        <div style={{ position:"relative", flex:1 }}>
+          <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un print…"
+            style={{ width:"100%", paddingLeft:36, padding:"8px 10px 8px 36px", boxSizing:"border-box",
+              background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10,
+              fontSize:12, color:"var(--text)", outline:"none" }}/>
         </div>
+        <button onClick={()=>setFilterOpen(true)}
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px",
+            background: (statusF||sortF!=="recent") ? "#3b82f6" : "var(--surface2)",
+            color: (statusF||sortF!=="recent") ? "white" : "var(--text)",
+            border:"1px solid var(--border)", borderRadius:10, fontSize:12, cursor:"pointer", flexShrink:0 }}>
+          <SlidersHorizontal size={14}/>
+          {(statusF||sortF!=="recent") ? `Filtres (actifs)` : "Filtres"}
+        </button>
       </div>
+
+      {filterOpen && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-end" }}
+          onClick={()=>setFilterOpen(false)}>
+          <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+            style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+              padding:"0 16px 32px", overflowY:"auto", maxHeight:"75dvh", position:"relative" }}>
+            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"12px auto 8px" }}/>
+            <button onClick={()=>setFilterOpen(false)} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+            <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:"0 0 16px" }}>Filtres & tri</p>
+            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Statut</p>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
+              {STATUSES.map(s => (
+                <button key={s} onClick={()=>setStatusF(s)}
+                  style={{ padding:"6px 14px", borderRadius:20, fontSize:12, fontWeight:600,
+                    cursor:"pointer", border:"none",
+                    background: statusF===s ? "#3b82f6" : "var(--surface2)",
+                    color: statusF===s ? "white" : "var(--muted)" }}>
+                  {STATUS_LABELS[s]}
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Trier par</p>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:24 }}>
+              {[["recent","Plus récent"],["oldest","Plus ancien"],["cost","Coût ↓"],["weight","Poids ↓"],["duration","Durée ↓"]].map(([id,label]) => (
+                <button key={id} onClick={()=>setSortF(id)}
+                  style={{ padding:"6px 14px", borderRadius:20, fontSize:12, fontWeight:600,
+                    cursor:"pointer", border:"none",
+                    background: sortF===id ? "#3b82f6" : "var(--surface2)",
+                    color: sortF===id ? "white" : "var(--muted)" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={()=>{ setStatusF(""); setSortF("recent"); }}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
+                  background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>
+                Effacer
+              </button>
+              <button onClick={()=>setFilterOpen(false)}
+                style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
+                  background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+                Appliquer
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
 
       {loading && <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>}
