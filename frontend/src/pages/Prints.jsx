@@ -1008,38 +1008,34 @@ export default function Prints() {
   return (
     <div style={{ maxWidth:900, margin:"0 auto", display:"flex", flexDirection:"column", gap:12 }}>
 
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Historique</h1>
-          <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{total} impressions</span>
-          {debugInfo && <span style={{ fontSize:10, color:"#f59e0b", fontFamily:"monospace" }}>[{debugInfo}]</span>}
-        </div>
-        <div style={{ display:"flex", gap:6 }}>
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+        <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Historique</h1>
+        <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{total} impressions</span>
+        <div style={{ marginLeft:"auto", display:"flex", gap:6, alignItems:"center" }}>
+          {/* Switch Liste / Galerie */}
+          <div style={{ display:"flex", gap:2, background:"var(--surface2)", borderRadius:10, padding:3, border:"1px solid var(--border)" }}>
+            {[["list",<List size={13}/>,"Liste"],["gallery",<ImageIcon size={13}/>,"Galerie"]].map(([id,icon,label])=>(
+              <button key={id} onClick={()=>setViewMode(id)}
+                style={{ padding:"4px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer", border:"none",
+                  background:viewMode===id?"var(--text)":"transparent", color:viewMode===id?"var(--bg)":"var(--muted)",
+                  display:"flex", alignItems:"center", gap:4 }}>
+                {icon}{label}
+              </button>
+            ))}
+          </div>
+          {/* Sélectionner */}
           {viewMode==="list" && (
             <button onClick={() => selectMode ? exitSelectMode() : setSelectMode(true)}
-              style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
-              borderRadius:8, fontSize:12, fontWeight: selectMode ? 700 : 400,
-              background: selectMode ? "#3b82f6" : "var(--surface2)",
-              border:"1px solid var(--border)",
-              color: selectMode ? "white" : "var(--text2)", cursor:"pointer" }}>
-              <Check size={13}/> {selectMode ? "Annuler" : "Sélectionner"}
+              style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", border:"none",
+                background: selectMode?"#3b82f6":"var(--surface2)", color:selectMode?"white":"var(--muted)" }}>
+              {selectMode ? "Annuler" : "Sélectionner"}
             </button>
           )}
-          <button onClick={() => setViewMode(v => v==="list" ? "gallery" : "list")}
-            style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
-            borderRadius:8, fontSize:12, background:"var(--surface2)", border:"1px solid var(--border)",
-            color:"var(--text2)", cursor:"pointer" }}>
-            {viewMode==="list" ? <><ImageIcon size={13}/> Galerie</> : <><List size={13}/> Liste</>}
-          </button>
-          <button onClick={load} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
-            borderRadius:8, fontSize:12, background:"var(--surface2)", border:"1px solid var(--border)",
-            color:"var(--text2)", cursor:"pointer" }}>
-            <RefreshCw size={13}/> Actualiser
-          </button>
-          <label style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 12px",
-            borderRadius:8, fontSize:12, background:"var(--surface2)", border:"1px solid var(--border)",
-            color:"var(--text2)", cursor:"pointer" }}>
-            <Upload size={13}/> {importing ? "Import…" : "Importer .3mf"}
+          {/* Importer */}
+          <label style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer",
+            background:"var(--surface2)", color:"var(--muted)", display:"flex", alignItems:"center", gap:5 }}>
+            <Upload size={12}/>{importing ? "…" : ".3mf"}
             <input type="file" accept=".3mf" onChange={handleImport} style={{ display:"none" }}/>
           </label>
         </div>
@@ -1071,7 +1067,15 @@ export default function Prints() {
               padding:"0 16px 32px", overflowY:"auto", maxHeight:"75dvh", position:"relative" }}>
             <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"12px auto 8px" }}/>
             <button onClick={()=>setFilterOpen(false)} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-            <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:"0 0 16px" }}>Filtres & tri</p>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+              <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:0 }}>Filtres & tri</p>
+              {(statusF||sortF!=="recent") && (
+                <button onClick={()=>{ setStatusF(""); setSortF("recent"); }}
+                  style={{ fontSize:11, color:"#60a5fa", background:"none", border:"none", cursor:"pointer" }}>
+                  Effacer filtres
+                </button>
+              )}
+            </div>
             <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Statut</p>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
               {STATUSES.map(s => (
@@ -1096,18 +1100,11 @@ export default function Prints() {
                 </button>
               ))}
             </div>
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={()=>{ setStatusF(""); setSortF("recent"); }}
-                style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
-                  background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>
-                Effacer
-              </button>
-              <button onClick={()=>setFilterOpen(false)}
-                style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
-                  background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-                Appliquer
-              </button>
-            </div>
+            <button onClick={()=>setFilterOpen(false)}
+              style={{ width:"100%", padding:"12px", borderRadius:10, border:"none",
+                background:"#3b82f6", color:"white", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+              Appliquer
+            </button>
           </div>
         </div>
       )}
@@ -1314,16 +1311,10 @@ function GroupPickerSheet({ groups, onClose, onPick }) {
 
           {filtered.map(g => (
             <button key={g.id} onClick={() => onPick({ group_id: g.id })}
-              style={{ width:"100%", display:"flex", alignItems:"center", justifyContent:"space-between",
-                gap:8, padding:"10px 12px", marginBottom:6, borderRadius:10,
-                background:"var(--surface2)", border:"1px solid var(--border)", cursor:"pointer", textAlign:"left" }}>
-              <div style={{ minWidth:0 }}>
-                <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0,
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>📁 {g.name}</p>
-                <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
-                  {fmtDate(g.latest_date)} · {g.print_count} print{g.print_count>1?"s":""}
-                </p>
-              </div>
+              style={{ width:"100%", padding:"12px 14px", textAlign:"left", background:"var(--surface2)",
+                border:"1px solid var(--border)", borderRadius:8, cursor:"pointer",
+                color:"var(--text)", fontSize:13 }}>
+              📁 {g.name}
             </button>
           ))}
         </div>
