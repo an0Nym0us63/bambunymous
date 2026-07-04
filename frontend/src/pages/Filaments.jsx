@@ -193,6 +193,7 @@ function FilamentPhotos({ filamentId, onLightbox }) {
   const fileRef = React.useRef(null);
   const cameraRef = React.useRef(null);
   const [uploading, setUploading] = React.useState(false);
+  const [addPhotoOpen, setAddPhotoOpen] = React.useState(false);
 
   const handleUpload = async (file) => {
     if (!file) return;
@@ -233,25 +234,48 @@ function FilamentPhotos({ filamentId, onLightbox }) {
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
         <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
           letterSpacing:"0.06em", margin:0 }}>Photos</p>
-        <div style={{ display:"flex", gap:6 }}>
-          {/* Caméra (mobile uniquement via capture) */}
-          <button onClick={() => cameraRef.current?.click()} disabled={uploading}
-            style={{ fontSize:11, padding:"3px 10px", borderRadius:20, border:"1px solid var(--border)",
-              background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>
-            📷 Appareil photo
-          </button>
-          <button onClick={() => fileRef.current?.click()} disabled={uploading}
-            style={{ fontSize:11, padding:"3px 10px", borderRadius:20, border:"1px solid var(--border)",
-              background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>
-            {uploading ? "…" : "📁 Fichier"}
-          </button>
-        </div>
+        <button onClick={() => setAddPhotoOpen(true)} disabled={uploading}
+          style={{ width:26, height:26, borderRadius:"50%", background:"#3b82f6", color:"white",
+            border:"none", cursor:"pointer", fontSize:18, lineHeight:1, display:"flex",
+            alignItems:"center", justifyContent:"center" }}>
+          +
+        </button>
       </div>
       {/* Inputs cachés */}
       <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display:"none" }}
-        onChange={e => handleUpload(e.target.files?.[0])}/>
+        onChange={e => { handleUpload(e.target.files?.[0]); setAddPhotoOpen(false); }}/>
       <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
-        onChange={e => handleUpload(e.target.files?.[0])}/>
+        onChange={e => { handleUpload(e.target.files?.[0]); setAddPhotoOpen(false); }}/>
+      {/* Bottom sheet ajout photo */}
+      {addPhotoOpen && (
+        <div style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(0,0,0,0.5)" }}
+          onClick={() => setAddPhotoOpen(false)}>
+          <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0, right:0,
+            background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px 32px" }}>
+            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 16px" }}/>
+            <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:"0 0 16px" }}>Ajouter une photo</p>
+            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              <button onClick={() => cameraRef.current?.click()}
+                style={{ padding:"14px", borderRadius:12, border:"none", cursor:"pointer",
+                  background:"var(--surface2)", color:"var(--text)", fontSize:14, fontWeight:600,
+                  display:"flex", alignItems:"center", gap:12 }}>
+                <span style={{ fontSize:22 }}>📷</span> Prendre une photo
+              </button>
+              <button onClick={() => fileRef.current?.click()}
+                style={{ padding:"14px", borderRadius:12, border:"none", cursor:"pointer",
+                  background:"var(--surface2)", color:"var(--text)", fontSize:14, fontWeight:600,
+                  display:"flex", alignItems:"center", gap:12 }}>
+                <span style={{ fontSize:22 }}>📁</span> Choisir depuis la galerie
+              </button>
+              <button onClick={() => setAddPhotoOpen(false)}
+                style={{ padding:"12px", borderRadius:12, border:"1px solid var(--border)", cursor:"pointer",
+                  background:"none", color:"var(--muted)", fontSize:13 }}>
+                Annuler
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
         {photos.map((photo, i) => (
           <div key={i}
