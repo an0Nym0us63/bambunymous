@@ -282,10 +282,44 @@ export default function GalleryCompare({
               )}
             </div>
 
+            {/* Bouton Fiche + actions photo */}
+            <div onClick={e=>e.stopPropagation()} style={{ display:"flex", justifyContent:"center",
+              gap:8, padding:"8px 16px 4px" }}>
+              {onItemClick && (
+                <button onClick={e=>{e.stopPropagation(); setCarousel(null); onItemClick(carousel.item);}}
+                  style={{ padding:"6px 20px", borderRadius:20, background:"#3b82f6", color:"white",
+                    border:"none", cursor:"pointer", fontSize:12, fontWeight:700 }}>
+                  Fiche
+                </button>
+              )}
+              {current.url && onItemClick && (() => {
+                const filename = current.url.split("/").pop();
+                const fid = carousel.item?.id;
+                return (<>
+                  <button onClick={async e=>{e.stopPropagation();
+                    if(!window.confirm("Supprimer cette photo ?")) return;
+                    await fetch(`/api/v1/filaments/${fid}/photo/${filename}`,{method:"DELETE",headers:{"Authorization":"Bearer "+localStorage.getItem("token")||""}});
+                    window.location.reload();}}
+                    style={{ padding:"6px 14px", borderRadius:20, background:"rgba(239,68,68,0.15)",
+                      color:"#ef4444", border:"1px solid rgba(239,68,68,0.3)", cursor:"pointer", fontSize:12 }}>
+                    🗑 Supprimer
+                  </button>
+                  {carousel.index !== 0 && (
+                    <button onClick={async e=>{e.stopPropagation();
+                      await fetch(`/api/v1/filaments/${fid}/photo/${filename}/primary`,{method:"POST",headers:{"Authorization":"Bearer "+localStorage.getItem("token")||""}});
+                      window.location.reload();}}
+                      style={{ padding:"6px 14px", borderRadius:20, background:"rgba(34,197,94,0.12)",
+                        color:"#22c55e", border:"1px solid rgba(34,197,94,0.25)", cursor:"pointer", fontSize:12 }}>
+                    ⭐ Photo principale
+                  </button>)}
+                </>);
+              })()}
+            </div>
+
             {/* Vignettes en bas */}
             {photos.length > 1 && (
               <div onClick={e => e.stopPropagation()}
-                style={{ display:"flex", gap:6, overflowX:"auto", padding:"10px 16px calc(10px + env(safe-area-inset-bottom,0px))" }}>
+                style={{ display:"flex", gap:6, overflowX:"auto", padding:"4px 16px calc(10px + env(safe-area-inset-bottom,0px))" }}>
                 {photos.map((p, i) => (
                   <img key={i} src={p.url} alt={p.label} onClick={() => setCarousel(c => ({ ...c, index:i }))}
                     style={{ width:48, height:48, objectFit:"cover", borderRadius:6, flexShrink:0, cursor:"pointer",

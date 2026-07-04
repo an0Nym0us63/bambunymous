@@ -1828,6 +1828,7 @@ export default function Filaments() {
               items={filaments}
               selectMode={galSelectMode}
               onSelectModeChange={setGalSelectMode}
+              onItemClick={f=>setGalSelected(f)}
               getId={f => f.id}
               getCoverImage={f => f.photo_url}
               getPhotos={f => f.photos}
