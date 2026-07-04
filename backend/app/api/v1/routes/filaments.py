@@ -1030,3 +1030,23 @@ async def set_primary_filament_photo(fid: int, filename: str, _: str = Depends(g
     if not filename.startswith("00_"):
         p.rename(d / f"00_{filename}")
     return {"ok": True}
+
+
+@router.post("/{fid}/photos/upload")
+async def upload_filament_photo(
+    fid: int,
+    file: UploadFile = File(...),
+    _: str = Depends(get_current_user),
+):
+    """Upload une photo pour un filament."""
+    import uuid as _uuid
+    from fastapi import UploadFile as _UF
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(400, "Fichier image requis")
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    d = DATA_DIR / "filaments" / str(fid)
+    d.mkdir(parents=True, exist_ok=True)
+    dest = d / f"{_uuid.uuid4().hex[:12]}.{ext}"
+    content = await file.read()
+    dest.write_bytes(content)
+    return {"ok": True, "filename": dest.name, "url": f"/api/v1/filaments/{fid}/photo/{dest.name}"}

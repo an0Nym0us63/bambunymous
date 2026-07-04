@@ -190,6 +190,24 @@ function FilamentPhotos({ filamentId, onLightbox }) {
 
   React.useEffect(() => { if (filamentId) reload(); }, [filamentId]);
 
+  const fileRef = React.useRef(null);
+  const cameraRef = React.useRef(null);
+  const [uploading, setUploading] = React.useState(false);
+
+  const handleUpload = async (file) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      await client.post(`/filaments/${filamentId}/photos/upload`, form, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      reload();
+    } catch(e) { alert(e.response?.data?.detail || "Erreur upload"); }
+    finally { setUploading(false); }
+  };
+
   const pressTimer = React.useRef(null);
   const startPhotoPress = (photo, idx) => {
     pressTimer.current = setTimeout(() => {
@@ -212,8 +230,28 @@ function FilamentPhotos({ filamentId, onLightbox }) {
 
   return (
     <div style={{ marginBottom:16 }}>
-      <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-        letterSpacing:"0.06em", marginBottom:8 }}>Photos</p>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+        <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+          letterSpacing:"0.06em", margin:0 }}>Photos</p>
+        <div style={{ display:"flex", gap:6 }}>
+          {/* Caméra (mobile uniquement via capture) */}
+          <button onClick={() => cameraRef.current?.click()} disabled={uploading}
+            style={{ fontSize:11, padding:"3px 10px", borderRadius:20, border:"1px solid var(--border)",
+              background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>
+            📷 Appareil photo
+          </button>
+          <button onClick={() => fileRef.current?.click()} disabled={uploading}
+            style={{ fontSize:11, padding:"3px 10px", borderRadius:20, border:"1px solid var(--border)",
+              background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>
+            {uploading ? "…" : "📁 Fichier"}
+          </button>
+        </div>
+      </div>
+      {/* Inputs cachés */}
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display:"none" }}
+        onChange={e => handleUpload(e.target.files?.[0])}/>
+      <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
+        onChange={e => handleUpload(e.target.files?.[0])}/>
       <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
         {photos.map((photo, i) => (
           <div key={i}
