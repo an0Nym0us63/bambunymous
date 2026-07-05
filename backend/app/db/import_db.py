@@ -206,20 +206,34 @@ async def run_import(src_path: str) -> dict:
 
             # ── GROUPES ────────────────────────────────────────────────
             group_map: dict[int, str] = {}
+            found_grp_table = None
             for grp_table in ("print_groups", "groups"):
                 if table_exists(src, grp_table):
                     for row in src.execute(f"SELECT id, name FROM {grp_table}").fetchall():
                         group_map[row[0]] = row[1] or f"Groupe {row[0]}"
+                    found_grp_table = grp_table
                     break
+
+            def _get_nb_items(old_gid):
+                for tbl in ([found_grp_table] if found_grp_table else []) + ["groups", "print_groups"]:
+                    try:
+                        cols = [r[1] for r in src.execute(f"PRAGMA table_info({tbl})").fetchall()]
+                        if "number_of_items" not in cols:
+                            continue
+                        grow = src.execute(f"SELECT number_of_items FROM {tbl} WHERE id=?", (int(old_gid),)).fetchone()
+                        return int(grow[0] or 1) if grow else 1
+                    except Exception:
+                        continue
+                return 1
 
             old_to_new_group: dict[int, int] = {}
             for old_gid, gname in group_map.items():
+                nb_items = _get_nb_items(old_gid)
                 res = (await db.execute(text("SELECT id FROM groups WHERE external_ref=:e"), {"e": str(old_gid)})).scalar_one_or_none()
-                if res: old_to_new_group[old_gid] = res; continue
-                try:
-                    grow = src.execute("SELECT number_of_items FROM groups WHERE id=?", (int(old_gid),)).fetchone()
-                    nb_items = (grow[0] or 1) if grow else 1
-                except: nb_items = 1
+                if res:
+                    await db.execute(text("UPDATE groups SET number_of_items=:n WHERE id=:id"), {"n": nb_items, "id": res})
+                    old_to_new_group[old_gid] = res
+                    continue
                 g = Group(name=gname, external_ref=str(old_gid), number_of_items=nb_items)
                 db.add(g); await db.flush()
                 old_to_new_group[old_gid] = g.id
