@@ -1,7 +1,7 @@
 """
 Import depuis Spoolnymous via sa route /api/export/bambunymous
 """
-import httpx, zipfile, io, shutil, asyncio
+import aiohttp, zipfile, io, shutil, asyncio
 from pathlib import Path
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from pydantic import BaseModel
@@ -30,10 +30,10 @@ async def _run_import(url: str):
 
         # 1. Ping
         _add_step("Connexion à Spoolnymous…")
-        async with httpx.AsyncClient(timeout=10) as c:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as c:
             try:
-                r = await c.get(f"{base_url}/api/export/status")
-                info = r.json()
+                async with c.get(f"{base_url}/api/export/status") as r:
+                    info = await r.json()
                 _add_step(f"Connecté · DB {info.get('db_size_mb',0)} Mo · {info.get('prints_files',0)} fichiers prints · {info.get('uploads_files',0)} fichiers uploads")
             except Exception as e:
                 _add_step(f"Impossible de joindre Spoolnymous : {e}", ok=False)
@@ -43,10 +43,10 @@ async def _run_import(url: str):
         # 2. Téléchargement du ZIP
         _add_step("Téléchargement du ZIP d'export (peut prendre du temps)…")
         try:
-            async with httpx.AsyncClient(timeout=300) as c:
-                r = await c.get(f"{base_url}/api/export/bambunymous")
-                r.raise_for_status()
-                zip_data = r.content
+            async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=300)) as c:
+                async with c.get(f"{base_url}/api/export/bambunymous") as r:
+                    r.raise_for_status()
+                    zip_data = await r.read()
             _add_step(f"ZIP reçu : {round(len(zip_data)/1024/1024, 1)} Mo")
         except Exception as e:
             _add_step(f"Erreur téléchargement : {e}", ok=False)
