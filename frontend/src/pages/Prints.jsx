@@ -77,6 +77,22 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   }, [pProp.id]);
 
   const groupe = ungrouped ? null : p.group_name;
+  const [editNb, setEditNb]   = useState(false);
+  const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
+  const [nbVal, setNbVal]     = useState(String(pProp.number_of_items || 1));
+  useEffect(() => { setLocalNb(p.number_of_items || 1); setNbVal(String(p.number_of_items || 1)); }, [p.number_of_items]);
+
+  const saveNb = async () => {
+    const n = parseInt(nbVal);
+    if (!isNaN(n) && n >= 1) {
+      try {
+        await client.patch(`/prints/${p.id}`, { number_of_items: n });
+        setLocalNb(n); onChanged?.({...p, number_of_items: n});
+      } catch {}
+    }
+    setEditNb(false);
+  };
+
   const SNAP_LABELS = {
     "snapshot-layer1":"Couche 1","snapshot-layer2":"Couche 2",
     "pct50":"50%","snapshot-pct50":"50%","pct99":"99%","snapshot-pct99":"99%",
@@ -224,9 +240,47 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             </div>
           </div>
 
-          {/* Nombre d'éléments */}
-          <QuantityEditor id={p.id} type="print" value={p.number_of_items||1}
-            onChange={nb => onChanged?.({...p, number_of_items:nb})}/>
+          {/* Nombre d'éléments — même UI que GroupBottomSheet */}
+          {totalBobine > 0 && (
+            <div style={{ background:"rgba(34,197,94,0.06)",
+              border:"1px solid rgba(34,197,94,0.2)", borderRadius:10,
+              padding:"8px 12px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <p style={{ fontSize:10, color:"#22c55e", fontWeight:700, margin:0,
+                  textTransform:"uppercase", letterSpacing:"0.04em" }}>Éléments imprimés</p>
+                {!editNb ? (
+                  <button onClick={()=>{setNbVal(String(localNb));setEditNb(true);}}
+                    style={{ fontSize:10, padding:"2px 8px", borderRadius:6,
+                      border:"1px solid rgba(34,197,94,0.3)", background:"none",
+                      color:"#22c55e", cursor:"pointer" }}>Modifier</button>
+                ) : (
+                  <div style={{ display:"flex", gap:5, alignItems:"center" }}>
+                    <input type="number" min="1" value={nbVal}
+                      onChange={e=>setNbVal(e.target.value)}
+                      style={{ width:55, padding:"3px 6px", borderRadius:6,
+                        border:"1px solid var(--border)", background:"var(--surface2)",
+                        color:"var(--text)", fontSize:12, fontFamily:"monospace" }} autoFocus/>
+                    <button onClick={saveNb}
+                      style={{ padding:"3px 10px", borderRadius:6, border:"none",
+                        background:"#22c55e", color:"white", fontSize:11, cursor:"pointer" }}>✓</button>
+                    <button onClick={()=>setEditNb(false)}
+                      style={{ padding:"3px 8px", borderRadius:6, border:"none",
+                        background:"var(--surface2)", color:"var(--muted)", fontSize:11, cursor:"pointer" }}>✕</button>
+                  </div>
+                )}
+              </div>
+              <div style={{ display:"flex", alignItems:"baseline", gap:10, marginTop:4 }}>
+                <span style={{ fontSize:20, fontWeight:900, color:"#22c55e", fontFamily:"monospace" }}>
+                  {localNb} élément{localNb>1?"s":""}
+                </span>
+                {localNb > 1 && (
+                  <span style={{ fontSize:13, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
+                    {(totalBobine/localNb).toFixed(2)}€/u
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Filaments utilisés */}
           {p.filament_usage?.length > 0 && (
