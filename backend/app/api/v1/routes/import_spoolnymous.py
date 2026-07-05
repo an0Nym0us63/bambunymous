@@ -138,15 +138,22 @@ async def _run_import(url: str):
                     break
                 except Exception as e: _add_step(f"Photos groupes erreur : {e}", ok=False)
 
-        # 5e. Photos accessoires → import_uploads_accessories_zip
-        zb = _make_zip(static_src / "uploads" / "accessoires")
-        if zb:
+        # 5e. Photos accessoires -> import_uploads_accessories_zip
+        _acc_zb = None
+        for _dn in ["accessories", "accessoires"]:
+            _acc_zb = _make_zip(static_src / "uploads" / _dn)
+            if _acc_zb:
+                break
+        if _acc_zb:
             try:
-                r = await import_uploads_accessories_zip(zb)
-                _add_step(f"Photos accessoires : {r.get('copied',0)} copiées")
-            except Exception as e: _add_step(f"Photos accessoires erreur : {e}", ok=False)
+                r = await import_uploads_accessories_zip(_acc_zb)
+                _add_step(f"Photos accessoires : {r.get('copied',0)} copiees")
+            except Exception as e:
+                _add_step(f"Photos accessoires erreur : {e}", ok=False)
+        else:
+            _add_step("Dossier accessories absent du ZIP", ok=False)
 
-        # 6. Nettoyage
+                # 6. Nettoyage
         shutil.rmtree(tmp, ignore_errors=True)
         _add_step("Import terminé ✓")
 
