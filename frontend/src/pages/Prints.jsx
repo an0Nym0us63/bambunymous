@@ -474,10 +474,15 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                     <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"monospace" }}>
                       {f.grams_used?.toFixed(0)}g
                     </span>
-                    {f.cost > 0 && (
-                      <span style={{ fontSize:10, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
-                        {f.cost.toFixed(2)}€
-                      </span>
+                    {(f.cost > 0 || f.normal_cost > 0) && (
+                      <div style={{ textAlign:"right" }}>
+                        <span style={{ fontSize:10, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
+                          {(f.cost || f.normal_cost || 0).toFixed(2)}€
+                        </span>
+                        {f.cost > 0 && f.normal_cost > 0 && f.cost !== f.normal_cost && (
+                          <p style={{ fontSize:8, color:"var(--muted)", margin:0 }}>({f.normal_cost.toFixed(2)}€)</p>
+                        )}
+                      </div>
                     )}
                   </div>
                 ))}
