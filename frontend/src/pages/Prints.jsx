@@ -665,243 +665,234 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [ungrouped, setUngrouped] = useState(false);
   const [p, setP] = useState(pProp);
 
-  // Refetcher le print complet (avec tous les champs coût) si nécessaire
   useEffect(() => {
     if (pProp.total_cost_filament == null) {
-      client.get("/prints/" + pProp.id)
-        .then(r => setP(r.data))
-        .catch(() => setP(pProp));
-    } else {
-      setP(pProp);
-    }
+      client.get("/prints/" + pProp.id).then(r => setP(r.data)).catch(() => setP(pProp));
+    } else { setP(pProp); }
   }, [pProp.id]);
 
   const groupe = ungrouped ? null : p.group_name;
+  const SNAP_LABELS = {
+    "snapshot-layer1":"Couche 1","snapshot-layer2":"Couche 2",
+    "pct50":"50%","snapshot-pct50":"50%","pct99":"99%","snapshot-pct99":"99%",
+    "pct100":"100%","snapshot-pct100":"100%","fail":"Échec","manual":"Manuel",
+  };
 
   const handleUngroup = async () => {
     if (!confirm("Retirer ce print de son groupe ?")) return;
-    try {
-      await client.post("/prints/" + p.id + "/group", {});
-      setUngrouped(true);
-      onChanged?.();
-    } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+    try { await client.post("/prints/" + p.id + "/group", {}); setUngrouped(true); onChanged?.(); }
+    catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
+
+  // Prix à afficher — si pas de prix bobine, fallback sur normal
+  const costBobine  = p.total_cost_filament || 0;
+  const costNormal  = p.total_cost_filament_normal || 0;
+  const costElec    = p.electric_cost || 0;
+  const totalBobine = costBobine + costElec;
+  const totalNormal = costNormal + costElec;
+  const nb          = p.number_of_items || 1;
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000,
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }}
-      onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()}
-        className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
+      display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
           maxWidth:640, maxHeight:"92dvh", overflowY:"auto",
           paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
 
-        {/* Handle */}
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
+        {/* Handle + ✕ */}
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0", position:"relative" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <button onClick={onClose} style={{ position:"absolute", top:10, right:12, width:28, height:28,
+            borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer",
+            color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
         </div>
 
-        {/* Vignette pleine largeur — contain pour voir tout sans rogner */}
+        {/* Image vignette */}
         <div style={{ width:"100%", background:"var(--surface2)", position:"relative",
-          minHeight:180, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          minHeight:160, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <img src={"/api/v1/prints/" + p.id + "/image"} alt=""
-            style={{ width:"100%", maxHeight:320, objectFit:"contain",
-              imageRendering:"auto" }}
-            onError={e => { e.currentTarget.parentElement.style.display="none"; }}/>
-          <button onClick={onClose}
-            style={{ position:"absolute", top:8, right:8, background:"rgba(0,0,0,0.5)",
-              border:"none", borderRadius:"50%", width:28, height:28, cursor:"pointer",
-              color:"white", fontSize:16, display:"flex", alignItems:"center", justifyContent:"center" }}>
-            ✕
-          </button>
+            style={{ width:"100%", maxHeight:280, objectFit:"contain" }}
+            onError={e => { e.currentTarget.parentElement.style.minHeight=0; e.currentTarget.style.display="none"; }}/>
         </div>
 
-        <div style={{ padding:"0 20px 12px" }}>
-          <SnapshotGallery snaps={snaps} printId={p.id}
-            onDelete={sid => setSnaps(ss => ss.filter(s => s.id !== sid))}/>
+        <div style={{ padding:"0 16px 12px" }}>
+          {/* Galerie snapshots avec bons labels */}
+          <SnapshotGallery snaps={snaps.map(s=>({...s,
+            label: SNAP_LABELS[s.trigger] || SNAP_LABELS[s.filename?.replace(/\.(jpg|png|webp)$/,"")] || s.trigger || s.filename
+          }))} printId={p.id} onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))}/>
         </div>
 
-        <div style={{ padding:"16px 20px 8px" }}>
-          {/* Titre + groupe */}
-          <h2 style={{ fontSize:16, fontWeight:800, color:"var(--text)", margin:"0 0 4px",
-            letterSpacing:"-0.01em" }}>
+        <div style={{ padding:"0 16px 16px" }}>
+          {/* Titre */}
+          <h2 style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:"0 0 4px", letterSpacing:"-0.01em" }}>
             {p.file_name || "Sans nom"}
           </h2>
           {p.original_name && p.original_name !== p.file_name && (
-            <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 4px" }}>{p.original_name}</p>
+            <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 6px" }}>{p.original_name}</p>
           )}
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:12, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16, flexWrap:"wrap" }}>
             <StatusBadge status={p.status}/>
             {groupe && (
               <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:10,
-                background:"rgba(167,139,250,0.15)",
-                color:"#a78bfa", padding:"2px 6px 2px 8px", borderRadius:20, fontWeight:700 }}>
+                background:"rgba(167,139,250,0.15)", color:"#a78bfa",
+                padding:"2px 6px 2px 8px", borderRadius:20, fontWeight:700 }}>
                 📁 {groupe}
-                <button onClick={handleUngroup} title="Retirer du groupe"
-                  style={{ background:"none", border:"none", color:"#a78bfa", cursor:"pointer",
-                    padding:0, display:"flex", alignItems:"center", opacity:0.8 }}>
+                <button onClick={handleUngroup} style={{ background:"none", border:"none",
+                  color:"#a78bfa", cursor:"pointer", padding:0, display:"flex" }}>
                   <X size={11}/>
                 </button>
               </span>
             )}
           </div>
 
-          {/* Infos principales */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:14 }}>
+          {/* Date + Durée + Poids sur une ligne */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:12 }}>
             {[
-              ["Date",         fmtDate(p.print_date)],
-              ["Durée",        fmtDur(p.duration_seconds || p.estimated_seconds)],
-              ["Poids filament", p.total_weight_g ? p.total_weight_g.toFixed(1)+"g" : null],
-              ["Coût fil. (bobine)", p.total_cost_filament ? p.total_cost_filament.toFixed(2)+"€" : null],
-              ["Coût fil. normal",  p.total_cost_filament_normal ? p.total_cost_filament_normal.toFixed(2)+"€" : null],
-              ["Coût électricité",  p.electric_cost ? p.electric_cost.toFixed(2)+"€" : null],
-              ["Coût total",   p.total_cost ? p.total_cost.toFixed(2)+"€" : null],
-              ["Éléments",     p.number_of_items > 1 ? `× ${p.number_of_items}` : null],
-              ["Coût/élément", p.number_of_items > 1 && p.total_cost ? (p.total_cost/p.number_of_items).toFixed(2)+"€" : null],
-              ["Type",         p.print_type || null],
-              ["Plateau",      p.plate_id || "1"],
-            ].filter(([,v]) => v).map(([label, value]) => (
-              <div key={label} style={{ background:"var(--surface2)",
-                border:"1px solid var(--border)", borderRadius:8, padding:"6px 10px",
-                ...(label==="Coût total" ? { gridColumn:"1/-1", background:"rgba(59,130,246,0.06)", borderColor:"rgba(59,130,246,0.2)" } : {}),
-                ...(label==="Coût/élément" ? { gridColumn:"1/-1", background:"rgba(34,197,94,0.06)", borderColor:"rgba(34,197,94,0.2)" } : {}),
-              }}>
-                <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase",
-                  letterSpacing:"0.06em", margin:"0 0 2px" }}>{label}</p>
-                <p style={{ fontSize:label==="Coût total"||label==="Coût/élément" ? 15 : 12,
-                  fontWeight:700, color:"var(--text)", margin:0, fontFamily:"monospace" }}>{value}</p>
+              ["📅 Date",    fmtDate(p.print_date)],
+              ["⏱ Durée",   fmtDur(p.duration_seconds||p.estimated_seconds)],
+              ["⚖ Filament", p.total_weight_g ? p.total_weight_g.toFixed(1)+"g" : null],
+            ].filter(([,v])=>v).map(([label,val])=>(
+              <div key={label} style={{ background:"var(--surface2)", borderRadius:10,
+                padding:"8px 10px", border:"1px solid var(--border)" }}>
+                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px", letterSpacing:"0.04em" }}>{label}</p>
+                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:0, fontFamily:"monospace" }}>{val}</p>
               </div>
             ))}
           </div>
 
-          {/* Éditeur quantité */}
-          <QuantityEditor id={p.id} type="print" value={p.number_of_items||1}
-            onChange={nb => onUpdated?.({...p, number_of_items:nb})}/>
+          {/* Coûts — bloc principal */}
+          <div style={{ background:"linear-gradient(135deg,rgba(59,130,246,0.06),rgba(139,92,246,0.06))",
+            border:"1px solid rgba(59,130,246,0.15)", borderRadius:14, padding:"14px 16px", marginBottom:12 }}>
+            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+              letterSpacing:"0.06em", margin:"0 0 10px" }}>Coûts</p>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+              {/* Filament */}
+              <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
+                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>Filament</p>
+                <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
+                  {(costBobine||costNormal).toFixed(2)}€
+                </p>
+                {costNormal > 0 && costBobine !== costNormal && (
+                  <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
+                    ({costNormal.toFixed(2)}€ normal)
+                  </p>
+                )}
+              </div>
+              {/* Électricité */}
+              <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
+                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>Électricité</p>
+                <p style={{ fontSize:15, fontWeight:800, color:"#f59e0b", margin:0, fontFamily:"monospace" }}>
+                  {costElec.toFixed(2)}€
+                </p>
+              </div>
+            </div>
+            {/* Total */}
+            <div style={{ marginTop:8, padding:"10px 12px", borderRadius:10,
+              background:"rgba(59,130,246,0.1)", border:"1px solid rgba(59,130,246,0.2)" }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <p style={{ fontSize:10, color:"#60a5fa", fontWeight:700,
+                  textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>Total</p>
+                <div style={{ textAlign:"right" }}>
+                  <span style={{ fontSize:20, fontWeight:900, color:"var(--text)",
+                    fontFamily:"monospace" }}>
+                    {totalBobine.toFixed(2)}€
+                  </span>
+                  {totalNormal !== totalBobine && totalNormal > 0 && (
+                    <span style={{ fontSize:11, color:"var(--muted)", marginLeft:8 }}>
+                      ({totalNormal.toFixed(2)}€)
+                    </span>
+                  )}
+                </div>
+              </div>
+              {nb > 1 && (
+                <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
+                  <p style={{ fontSize:10, color:"#22c55e", margin:0 }}>× {nb} éléments</p>
+                  <p style={{ fontSize:13, fontWeight:700, color:"#22c55e", margin:0, fontFamily:"monospace" }}>
+                    {(totalBobine/nb).toFixed(2)}€/u
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
 
-          {/* Filaments */}
+          {/* Nombre d'éléments */}
+          <QuantityEditor id={p.id} type="print" value={p.number_of_items||1}
+            onChange={nb => onChanged?.({...p, number_of_items:nb})}/>
+
+          {/* Filaments utilisés */}
           {p.filament_usage?.length > 0 && (
             <div style={{ marginBottom:14 }}>
               <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.06em", marginBottom:6 }}>Filaments utilisés</p>
-              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                letterSpacing:"0.06em", marginBottom:8 }}>Filaments utilisés</p>
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                 {p.filament_usage.map((f,i) => (
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:10,
                     background:"var(--surface2)",
-                    border:"1px solid " + (f.spool_id ? "rgba(34,197,94,0.3)" : "var(--border)"),
-                    borderRadius:8, padding:"6px 10px" }}>
-                    <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
+                    border:"1px solid " + (f.spool_id ? "rgba(34,197,94,0.25)" : "var(--border)"),
+                    borderRadius:10, padding:"8px 12px" }}>
+                    <div style={{ width:22, height:22, borderRadius:"50%", flexShrink:0,
                       backgroundColor:hexCss(f.color_hex),
-                      border: f.spool_id ? "2px solid #22c55e" : "1px solid rgba(255,255,255,0.2)" }}/>
+                      border:f.spool_id?"2px solid #22c55e":"1px solid rgba(255,255,255,0.15)" }}/>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0 }}>
+                      <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                         {f.filament_name || f.filament_type || "Inconnu"}
                         {f.spool_id && <span style={{ fontSize:9, color:"#22c55e", marginLeft:6 }}>✓ #{f.spool_id}</span>}
                       </p>
-                      <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
-                        {[f.filament_brand, f.filament_type, f.color_hex, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
+                      <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
+                        {f.filament_manufacturer && `${f.filament_manufacturer} · `}{f.color_hex && `#${f.color_hex} · `}{f.grams_used?.toFixed(1)}g
                       </p>
                     </div>
+                    {(f.cost > 0 || f.normal_cost > 0) && (
+                      <div style={{ textAlign:"right", flexShrink:0 }}>
+                        <p style={{ fontSize:12, fontWeight:700, color:"var(--text)",
+                          margin:0, fontFamily:"monospace" }}>
+                          {(f.cost||f.normal_cost||0).toFixed(2)}€
+                        </p>
+                        {f.cost > 0 && f.normal_cost > 0 && f.cost !== f.normal_cost && (
+                          <p style={{ fontSize:9, color:"var(--muted)", margin:0 }}>
+                            ({f.normal_cost.toFixed(2)}€)
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Identifiants — utiles pour recherche / debug */}
-          <details style={{ marginBottom:12 }}>
-            <summary style={{ fontSize:10, color:"var(--muted)", cursor:"pointer",
-              textTransform:"uppercase", letterSpacing:"0.06em", userSelect:"none" }}>
-              Identifiants
-            </summary>
-            <div style={{ marginTop:6, display:"flex", flexDirection:"column", gap:3 }}>
-              {[
-                ["ID BambuNymous", p.id],
-                ["Job ID",         p.job_id],
-                ["External ref",   p.external_ref],
-                ["Design ID",      p.design_id],
-                ["Modèle printer", p.printer_model],
-                ["Groupe",         p.group_id ? `#${p.group_id} — ${p.group_name || ""}` : null],
-              ].filter(([,v]) => v).map(([label, value]) => (
-                <div key={label} style={{ display:"flex", gap:8, alignItems:"baseline" }}>
-                  <span style={{ fontSize:10, color:"var(--muted)", flexShrink:0, minWidth:100 }}>{label}</span>
-                  <span style={{ fontSize:11, fontFamily:"monospace", color:"var(--text)",
-                    wordBreak:"break-all" }}>{value}</span>
-                </div>
-              ))}
-            </div>
-          </details>
-        </div>
+          {/* Identifiants (sans printer_model) */}
+          {(p.job_id || p.design_id) && (
+            <details style={{ marginBottom:12 }}>
+              <summary style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+                letterSpacing:"0.06em", cursor:"pointer", userSelect:"none" }}>
+                Identifiants
+              </summary>
+              <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:4 }}>
+                {p.job_id && <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", margin:0 }}>Job: {p.job_id}</p>}
+                {p.design_id && <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", margin:0 }}>Design: {p.design_id}</p>}
+              </div>
+            </details>
+          )}
 
-        {/* Actions */}
-        <div style={{ padding:"0 20px 20px", display:"flex", gap:8 }}>
-          <button onClick={async () => {
-            if (!window.confirm("Supprimer ce print ?")) return;
-            try {
-              await client.delete("/prints/" + p.id);
-              onDelete(p.id);
-              onClose();
-            } catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
-          }} style={{ flex:1, padding:"10px", background:"rgba(239,68,68,0.1)",
-            border:"1px solid rgba(239,68,68,0.3)", borderRadius:10,
-            color:"#ef4444", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-            🗑 Supprimer
-          </button>
-          <button onClick={onClose}
-            style={{ flex:2, padding:"10px", background:"#3b82f6",
-              border:"none", borderRadius:10, color:"white",
-              fontSize:13, fontWeight:600, cursor:"pointer" }}>✕</button>
+          {/* Actions */}
+          <div style={{ display:"flex", gap:8, marginTop:8 }}>
+            <button onClick={() => {
+              if (confirm("Supprimer ce print ?")) { onDelete?.(p.id); onClose(); }
+            }} style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid rgba(239,68,68,0.3)",
+              background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:13, fontWeight:700,
+              cursor:"pointer" }}>🗑 Supprimer</button>
+            <button onClick={onClose}
+              style={{ flex:2, padding:"11px", borderRadius:12, border:"none",
+                background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+              ✕
+            </button>
+          </div>
         </div>
       </div>
     </div>
-  );
-}
-
-// ── Galerie — indépendante de la pagination, parcourt tout l'historique ────
-function PrintsGalleryView({ search, sortF = "recent" }) {
-  const [data, setData] = useState(null); // { prints:[], groups:[] }
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    client.get("/prints/gallery")
-      .then(r => { if (!cancelled) setData(r.data); })
-      .catch(() => { if (!cancelled) setData({ prints:[], groups:[] }); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
-
-  if (loading) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0" }}>Chargement…</p>;
-
-  let items = [
-    ...(data?.prints || []).map(p => ({ ...p, kind:"print" })),
-    ...(data?.groups || []).map(g => ({ ...g, kind:"group", title: g.name, count: g.prints })),
-  ];
-  if (search?.trim()) {
-    const q = search.trim().toLowerCase();
-    items = items.filter(it => (it.title || "").toLowerCase().includes(q));
-  }
-  items.sort((a,b) => {
-    if (sortF === "oldest")   return (a.print_date||a.latest_date||"").localeCompare(b.print_date||b.latest_date||"");
-    if (sortF === "cost")     return (b.total_cost||0)-(a.total_cost||0);
-    if (sortF === "weight")   return (b.total_weight_g||0)-(a.total_weight_g||0);
-    if (sortF === "duration") return (b.duration_seconds||0)-(a.duration_seconds||0);
-    return (b.print_date||b.latest_date||"").localeCompare(a.print_date||a.latest_date||""); // recent
-  });
-
-  return (
-    <GalleryCompare
-      items={items}
-      getId={it => it.kind + it.id}
-      getCoverImage={it => it.photos?.[0]?.url}
-      getPhotos={it => it.photos}
-      getTitle={it => it.title}
-      getSubtitle={it => it.kind==="group" ? `📁 ${it.count} print${it.count>1?"s":""}` : fmtDate(it.print_date)}
-      emptyLabel={search?.trim() ? `Aucun résultat pour « ${search.trim()} »` : "Aucune photo manuelle uploadée sur tes prints (hors milestones auto)"}
-      enableCompare={false}
-    />
   );
 }
 
