@@ -75,7 +75,7 @@ async def _run_import(url: str):
             try:
                 db_dest = DATA_DIR / "_import_spoolnymous.db"
                 shutil.copy2(db_src, db_dest)
-                from ....db.import_db import import_from_db
+                from ....db.import_db import run_import as import_from_db
                 from ....db.session import AsyncSessionLocal
                 summary = await import_from_db(str(db_dest))
                 _add_step(f"DB importée · {summary.get('prints',0)} prints · {summary.get('filaments',0)} filaments · {summary.get('groups',0)} groupes · {summary.get('spools',0)} bobines")
@@ -106,13 +106,13 @@ async def _run_import(url: str):
             if uploads_src.exists():
                 uploads_dst = DATA_DIR / "filaments"  # filaments
                 counts = {}
-                for cat in ["filaments", "prints", "groupes", "groups", "accessoires"]:
+                for cat in ["filaments", "prints", "groupes", "groups", "accessoires", "objects"]:
                     cat_src = uploads_src / cat
                     if not cat_src.exists(): continue
                     # Map cat → dossier BambuNymous
                     cat_map = {"filaments": "filaments", "prints": "prints",
                                "groupes": "groups", "groups": "groups",
-                               "accessoires": "objects"}
+                               "accessoires": "objects", "objects": "objects"}
                     dst_folder = DATA_DIR / cat_map.get(cat, cat)
                     dst_folder.mkdir(parents=True, exist_ok=True)
                     n = 0
