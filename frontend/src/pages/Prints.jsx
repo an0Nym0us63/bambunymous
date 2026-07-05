@@ -211,15 +211,14 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                 </p>
               </div>
             </div>
-            {/* Total */}
+            {/* Total + éléments intégrés */}
             <div style={{ marginTop:8, padding:"10px 12px", borderRadius:10,
               background:"rgba(59,130,246,0.1)", border:"1px solid rgba(59,130,246,0.2)" }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                 <p style={{ fontSize:10, color:"#60a5fa", fontWeight:700,
                   textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>Total</p>
                 <div style={{ textAlign:"right" }}>
-                  <span style={{ fontSize:20, fontWeight:900, color:"var(--text)",
-                    fontFamily:"monospace" }}>
+                  <span style={{ fontSize:20, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
                     {totalBobine.toFixed(2)}€
                   </span>
                   {totalNormal !== totalBobine && totalNormal > 0 && (
@@ -229,25 +228,19 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                   )}
                 </div>
               </div>
-              {nb > 1 && (
-                <div style={{ display:"flex", justifyContent:"space-between", marginTop:4 }}>
-                  <p style={{ fontSize:10, color:"#22c55e", margin:0 }}>× {nb} éléments</p>
-                  <p style={{ fontSize:13, fontWeight:700, color:"#22c55e", margin:0, fontFamily:"monospace" }}>
-                    {(totalBobine/nb).toFixed(2)}€/u
-                  </p>
+              {/* Éléments — intégré dans le bloc total */}
+              <div style={{ marginTop:8, paddingTop:8, borderTop:"1px solid rgba(59,130,246,0.15)",
+                display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:"#22c55e" }}>
+                    {localNb} élément{localNb>1?"s":""}
+                  </span>
+                  {localNb > 1 && (
+                    <span style={{ fontSize:12, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
+                      · {(totalBobine/localNb).toFixed(2)}€/u
+                    </span>
+                  )}
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Nombre d'éléments — même UI que GroupBottomSheet */}
-          {totalBobine > 0 && (
-            <div style={{ background:"rgba(34,197,94,0.06)",
-              border:"1px solid rgba(34,197,94,0.2)", borderRadius:10,
-              padding:"8px 12px", marginBottom:14 }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                <p style={{ fontSize:10, color:"#22c55e", fontWeight:700, margin:0,
-                  textTransform:"uppercase", letterSpacing:"0.04em" }}>Éléments imprimés</p>
                 {!editNb ? (
                   <button onClick={()=>{setNbVal(String(localNb));setEditNb(true);}}
                     style={{ fontSize:10, padding:"2px 8px", borderRadius:6,
@@ -255,8 +248,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                       color:"#22c55e", cursor:"pointer" }}>Modifier</button>
                 ) : (
                   <div style={{ display:"flex", gap:5, alignItems:"center" }}>
-                    <input type="number" min="1" value={nbVal}
-                      onChange={e=>setNbVal(e.target.value)}
+                    <input type="number" min="1" value={nbVal} onChange={e=>setNbVal(e.target.value)}
                       style={{ width:55, padding:"3px 6px", borderRadius:6,
                         border:"1px solid var(--border)", background:"var(--surface2)",
                         color:"var(--text)", fontSize:12, fontFamily:"monospace" }} autoFocus/>
@@ -269,18 +261,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                   </div>
                 )}
               </div>
-              <div style={{ display:"flex", alignItems:"baseline", gap:10, marginTop:4 }}>
-                <span style={{ fontSize:20, fontWeight:900, color:"#22c55e", fontFamily:"monospace" }}>
-                  {localNb} élément{localNb>1?"s":""}
-                </span>
-                {localNb > 1 && (
-                  <span style={{ fontSize:13, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
-                    {(totalBobine/localNb).toFixed(2)}€/u
-                  </span>
-                )}
-              </div>
             </div>
-          )}
+          </div>
 
           {/* Filaments utilisés */}
           {p.filament_usage?.length > 0 && (
@@ -555,9 +537,18 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
           </p>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:8, marginBottom:16 }}>
             {localPrints.map(p => (
-              <div key={p.id} onClick={()=>setSelectedPrint(p)} style={{
-                borderRadius:10, overflow:"hidden", cursor:"pointer", position:"relative",
+              <div key={p.id} style={{
+                borderRadius:10, overflow:"hidden", position:"relative",
                 background:"var(--surface2)", border:"1px solid var(--border)" }}>
+                {/* Bouton retirer du groupe */}
+                <button onClick={async e=>{ e.stopPropagation();
+                  if(!confirm(`Retirer "${p.file_name||"ce print"}" du groupe ?`)) return;
+                  try { await client.post("/prints/"+p.id+"/group", {}); setLocalPrints(ps=>ps.filter(x=>x.id!==p.id)); } catch{}
+                }} style={{ position:"absolute", top:4, right:4, zIndex:2, width:20, height:20,
+                  borderRadius:"50%", background:"rgba(0,0,0,0.55)", border:"none",
+                  cursor:"pointer", color:"white", fontSize:11,
+                  display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                <div onClick={()=>setSelectedPrint(p)} style={{ cursor:"pointer" }}>
                 <div style={{ position:"relative", paddingTop:"75%", background:"var(--surface2)" }}>
                   <img src={"/api/v1/prints/"+p.id+"/image"} alt="" style={{
                     position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
@@ -573,6 +564,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                     {fmtDate(p.print_date)}
                     {p.total_cost>0&&<span style={{ color:"var(--text)", fontWeight:600, marginLeft:6 }}>{p.total_cost.toFixed(2)}€</span>}
                   </p>
+                </div>
                 </div>
               </div>
             ))}
