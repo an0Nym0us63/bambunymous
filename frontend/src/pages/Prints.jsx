@@ -460,19 +460,25 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   {totalCost.toFixed(2)}€
                 </span>
               </div>
-              {/* Nombre d'éléments éditables */}
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
-                background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.2)",
-                borderRadius:8, padding:"6px 10px" }}>
-                <p style={{ fontSize:10, color:"#22c55e", margin:0, fontWeight:700 }}>
-                  {nbItems} élément{nbItems>1?"s":""}
-                </p>
+              {/* Éléments — même style que PrintDetail */}
+              <div style={{ marginTop:8, paddingTop:8, borderTop:"1px solid rgba(59,130,246,0.15)",
+                display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:"#22c55e" }}>
+                    {nbItems} élément{nbItems>1?"s":""}
+                  </span>
+                  {nbItems > 1 && (
+                    <span style={{ fontSize:12, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
+                      · {(totalCost/nbItems).toFixed(2)}€/u
+                    </span>
+                  )}
+                </div>
                 {editNb ? (
-                  <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                  <div style={{ display:"flex", gap:5, alignItems:"center" }}>
                     <input type="number" min="1" value={nbVal} onChange={e=>setNbVal(e.target.value)}
-                      style={{ width:60, padding:"3px 6px", borderRadius:6, border:"1px solid var(--border)",
-                        background:"var(--surface2)", color:"var(--text)", fontSize:12, fontFamily:"monospace" }}
-                      autoFocus/>
+                      style={{ width:55, padding:"3px 6px", borderRadius:6,
+                        border:"1px solid var(--border)", background:"var(--surface2)",
+                        color:"var(--text)", fontSize:12, fontFamily:"monospace" }} autoFocus/>
                     <button onClick={saveNbItems}
                       style={{ padding:"3px 10px", borderRadius:6, border:"none",
                         background:"#22c55e", color:"white", fontSize:11, cursor:"pointer" }}>✓</button>
@@ -481,14 +487,10 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                         background:"var(--surface2)", color:"var(--muted)", fontSize:11, cursor:"pointer" }}>✕</button>
                   </div>
                 ) : (
-                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-                    <span style={{ fontSize:13, fontWeight:800, color:"#22c55e", fontFamily:"monospace" }}>
-                      {(totalCost/nbItems).toFixed(2)}€/u
-                    </span>
-                    <button onClick={()=>{setNbVal(String(nbItems));setEditNb(true);}}
-                      style={{ fontSize:10, padding:"2px 8px", borderRadius:6, border:"1px solid rgba(34,197,94,0.3)",
-                        background:"none", color:"#22c55e", cursor:"pointer" }}>Modifier</button>
-                  </div>
+                  <button onClick={()=>{setNbVal(String(nbItems));setEditNb(true);}}
+                    style={{ fontSize:10, padding:"2px 8px", borderRadius:6,
+                      border:"1px solid rgba(34,197,94,0.3)", background:"none",
+                      color:"#22c55e", cursor:"pointer" }}>Modifier</button>
                 )}
               </div>
             </div>
