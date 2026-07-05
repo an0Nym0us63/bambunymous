@@ -112,7 +112,7 @@ async def _run_import(url: str):
                     # Map cat → dossier BambuNymous
                     cat_map = {"filaments": "filaments", "prints": "prints",
                                "groupes": "groups", "groups": "groups",
-                               "accessoires": "objects", "objects": "objects"}
+                               "accessoires": "accessories", "objects": "objects"}
                     dst_folder = DATA_DIR / cat_map.get(cat, cat)
                     dst_folder.mkdir(parents=True, exist_ok=True)
                     n = 0

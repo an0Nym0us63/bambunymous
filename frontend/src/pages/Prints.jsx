@@ -968,6 +968,76 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
 }
 
 
+
+function PrintsGalleryView({ search, sortF = "recent" }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedPrint, setSelectedPrint] = useState(null);
+  const [selectedGroup, setSelectedGroup] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    client.get("/prints/gallery")
+      .then(r => { if (!cancelled) setData(r.data); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"40px 0" }}>Chargement…</p>;
+  if (!data) return null;
+
+  let items = [
+    ...(data.prints||[]).map(p => ({ ...p, kind:"print", title:p.title||p.file_name, count:1 })),
+    ...(data.groups||[]).map(g => ({ ...g, kind:"group", title:g.name, count:g.prints })),
+  ];
+  if (search?.trim()) {
+    const q = search.trim().toLowerCase();
+    items = items.filter(it => (it.title||"").toLowerCase().includes(q));
+  }
+  items.sort((a,b) => {
+    if (sortF==="oldest")   return (a.print_date||a.latest_date||"").localeCompare(b.print_date||b.latest_date||"");
+    if (sortF==="cost")     return (b.total_cost||0)-(a.total_cost||0);
+    if (sortF==="weight")   return (b.total_weight_g||0)-(a.total_weight_g||0);
+    if (sortF==="duration") return (b.duration_seconds||0)-(a.duration_seconds||0);
+    return (b.print_date||b.latest_date||"").localeCompare(a.print_date||a.latest_date||"");
+  });
+
+  return (
+    <>
+    <GalleryCompare
+      items={items}
+      getId={it => `${it.kind}-${it.id}`}
+      getCoverImage={it => it.photos?.[0]?.url || null}
+      getPhotos={it => it.photos||[]}
+      getTitle={it => it.title||"Sans nom"}
+      getSubtitle={it => it.kind==="group" ? `📁 ${it.count} prints` : fmtDate(it.print_date)}
+      emptyLabel="Aucune photo disponible"
+      onItemClick={it => {
+        if (it.kind==="group") setSelectedGroup(it);
+        else setSelectedPrint(it);
+      }}
+      compareFields={[
+        ["Coût",   it => it.total_cost ? `${it.total_cost.toFixed(2)}€` : null],
+        ["Durée",  it => fmtDur(it.duration_seconds)],
+        ["Poids",  it => it.total_weight_g ? `${it.total_weight_g.toFixed(0)}g` : null],
+      ]}
+    />
+    {selectedPrint && (
+      <PrintDetail p={selectedPrint} onClose={()=>setSelectedPrint(null)}
+        onDelete={()=>setSelectedPrint(null)} onChanged={()=>{}}/>
+    )}
+    {selectedGroup && (
+      <GroupBottomSheet
+        groupId={selectedGroup.id} name={selectedGroup.name}
+        prints={[]} number_of_items={selectedGroup.number_of_items||1}
+        onClose={()=>setSelectedGroup(null)}
+        onSelectPrint={()=>{}} onDelete={()=>{}} onUngroup={()=>{}}/>
+    )}
+    </>
+  );
+}
+
 export default function Prints() {
   const [prints, setPrints]   = useState([]);
   const [total, setTotal]     = useState(0);

@@ -38,7 +38,7 @@ async def reset_all_data(_: str = Depends(get_current_user)):
 
     # Supprimer tous les fichiers/images associés (prints, filaments, groupes, uploads, tmp)
     data_dir = Path(os.getenv("DATA_DIR", "/data"))
-    for sub in ("prints", "filaments", "groups", "uploads", "tmp", "objects"):
+    for sub in ("prints", "filaments", "groups", "uploads", "tmp", "objects", "accessories"):
         d = data_dir / sub
         if d.exists():
             shutil.rmtree(d, ignore_errors=True)
