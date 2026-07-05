@@ -470,6 +470,7 @@ function SpoolnymousImport() {
   const [steps, setSteps] = React.useState([]);
   const [done, setDone] = React.useState(false);
   const [pingInfo, setPingInfo] = React.useState(null);
+  const [doReset, setDoReset] = React.useState(true);
   const pollRef = React.useRef(null);
 
   const ping = async () => {
@@ -484,6 +485,7 @@ function SpoolnymousImport() {
     if (!url) return;
     localStorage.setItem("spoolnymous_url", url);
     setRunning(true); setDone(false); setSteps([]);
+    if (doReset) { try { await client.delete('/settings/reset-all'); setSteps(prev=>[...prev,{msg:'BambuNymous vidé',ok:true}]); } catch{} }
     await client.post("/import/spoolnymous", { url });
     // Polling toutes les 800ms
     pollRef.current = setInterval(async () => {
@@ -523,6 +525,15 @@ function SpoolnymousImport() {
           ✓ Connecté · DB {pingInfo.db_size_mb} Mo · {pingInfo.prints_files} vignettes · {pingInfo.uploads_files} uploads
         </div>
       )}
+
+      <div style={{ background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.2)",
+        borderRadius:8, padding:"8px 12px", marginBottom:10, fontSize:11, color:"#ef4444" }}>
+        ⚠️ <strong>Recommandé :</strong> Vider BambuNymous avant l'import pour éviter les conflits d'IDs.
+        <label style={{ display:"flex", alignItems:"center", gap:6, marginTop:6, cursor:"pointer" }}>
+          <input type="checkbox" checked={doReset} onChange={e=>setDoReset(e.target.checked)}/>
+          <span>Vider automatiquement avant l'import</span>
+        </label>
+      </div>
 
       <button onClick={start} disabled={running || !url}
         style={{ width:"100%", padding:"10px", borderRadius:10, border:"none", cursor:running?"wait":"pointer",
