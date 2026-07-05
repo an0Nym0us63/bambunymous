@@ -303,13 +303,13 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
 
 export function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_items, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
-  const [localPrints, setLocalPrints] = useState(prints || []);
+  const [localPrints, setLocalPrints] = useState(Array.isArray(prints) ? prints : []);
   const [selectedPrint, setSelectedPrint] = useState(null);
 
   useEffect(() => {
     if (groupId) {
       client.get("/prints", { params:{ group_id:groupId, limit:200 } })
-        .then(r => setLocalPrints(r.data?.items || r.data || []))
+        .then(r => { const d = r.data; setLocalPrints(Array.isArray(d) ? d : Array.isArray(d?.items) ? d.items : []); })
         .catch(() => {});
     }
   }, [groupId]);
