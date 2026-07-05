@@ -59,12 +59,16 @@ export default function App() {
   document.addEventListener("touchstart", e => {
     const inner = e.target.closest(".sheet-inner");
     if (!inner) return;
+    // Seulement si le sheet est scrollé tout en haut
+    if (inner.scrollTop > 2) return;
     startY = e.touches[0].clientY;
     el = inner;
   }, { passive: true });
 
   document.addEventListener("touchmove", e => {
     if (!el) return;
+    // Annuler si le sheet a scrollé depuis le touchstart
+    if (el.scrollTop > 2) { el = null; return; }
     const dy = e.touches[0].clientY - startY;
     if (dy > 0) el.style.transform = `translateY(${Math.min(dy, 200)}px)`;
   }, { passive: true });
@@ -73,7 +77,7 @@ export default function App() {
     if (!el) return;
     const dy = e.changedTouches[0].clientY - startY;
     el.style.transform = "";
-    if (dy > 80) {
+    if (dy > 80 && el.scrollTop <= 2) {
       const backdrop = el.parentElement;
       if (backdrop) backdrop.click();
     }
