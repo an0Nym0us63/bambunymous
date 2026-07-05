@@ -302,22 +302,50 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 }
 
 
-export function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_items, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
-  const [localPrints, setLocalPrints] = useState(Array.isArray(prints) ? prints : []);
+export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate, number_of_items: nbItemsProp, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
+  const [localPrints, setLocalPrints] = useState([]);
+  const [nbItems, setNbItems]         = useState(nbItemsProp || 1);
+  const [editNb, setEditNb]           = useState(false);
+  const [nbVal, setNbVal]             = useState(String(nbItemsProp || 1));
   const [selectedPrint, setSelectedPrint] = useState(null);
 
   useEffect(() => {
-    if (groupId) {
-      client.get("/prints", { params:{ group_id:groupId, limit:200 } })
-        .then(r => { const d = r.data; setLocalPrints(Array.isArray(d) ? d : Array.isArray(d?.prints) ? d.prints : Array.isArray(d?.items) ? d.items : []); })
-        .catch(() => {});
-    }
+    if (!groupId) return;
+    client.get("/prints", { params:{ group_id:groupId, limit:200 } })
+      .then(r => {
+        const d = r.data;
+        const arr = Array.isArray(d) ? d : Array.isArray(d?.prints) ? d.prints : [];
+        setLocalPrints(arr);
+      }).catch(() => {});
   }, [groupId]);
 
   const totalDur  = localPrints.reduce((s,p) => s + (p.duration_seconds || p.estimated_seconds || 0), 0);
   const totalCost = localPrints.reduce((s,p) => s + (p.total_cost || 0), 0);
   const totalW    = localPrints.reduce((s,p) => s + (p.total_weight_g || 0), 0);
-  const nbItems   = number_of_items || localPrints.reduce((s,p)=>s+(p.number_of_items||1),0);
+
+  // Agrégation filaments
+  const filsMap = {};
+  localPrints.forEach(p => {
+    (p.filament_usage || []).forEach(f => {
+      const key = f.spool_id || f.color_hex || f.filament_name || "?";
+      if (!filsMap[key]) filsMap[key] = { ...f, grams_used:0, cost:0, normal_cost:0 };
+      filsMap[key].grams_used  += f.grams_used || 0;
+      filsMap[key].cost        += f.cost || 0;
+      filsMap[key].normal_cost += f.normal_cost || 0;
+    });
+  });
+  const filaments = Object.values(filsMap).sort((a,b) => (b.grams_used||0)-(a.grams_used||0));
+
+  const saveNbItems = async () => {
+    const n = parseInt(nbVal);
+    if (!isNaN(n) && n >= 1) {
+      try {
+        await client.patch(`/prints/groups/${groupId}`, { number_of_items: n });
+        setNbItems(n); onUpdated?.();
+      } catch(e) {}
+    }
+    setEditNb(false);
+  };
 
   const handleDelete = async () => {
     if (!confirm(`Supprimer le groupe "${name}" et ses ${localPrints.length} prints ?`)) return;
@@ -352,85 +380,136 @@ export function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_
             color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
         </div>
 
-        <div style={{ padding:"16px 16px 8px" }}>
-          {/* Titre groupe */}
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16 }}>
+        <div style={{ padding:"14px 16px 16px" }}>
+          {/* Titre */}
+          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
             <span style={{ fontSize:22 }}>📁</span>
-            <div style={{ flex:1 }}>
+            <div>
               <h2 style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:"0 0 2px" }}>
                 {name || "Groupe sans nom"}
               </h2>
               <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
-                {localPrints.length} print{localPrints.length>1?"s":""} · {nbItems > localPrints.length ? `${nbItems} éléments` : ""}
+                {localPrints.length} print{localPrints.length>1?"s":""}
               </p>
             </div>
           </div>
 
-          {/* KPIs groupe */}
+          {/* KPIs */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:12 }}>
-            {[
-              ["⏱ Durée", fmtDur(totalDur)],
-              ["⚖ Filament", totalW > 0 ? totalW.toFixed(0)+"g" : null],
-              ["💰 Coût", totalCost > 0 ? totalCost.toFixed(2)+"€" : null],
-            ].filter(([,v])=>v).map(([label,val])=>(
+            {[["⏱", "Durée",    fmtDur(totalDur)],
+              ["⚖", "Filament", totalW>0?totalW.toFixed(0)+"g":null],
+              ["💰","Coût",     totalCost>0?totalCost.toFixed(2)+"€":null],
+            ].filter(([,,v])=>v).map(([ic,label,val])=>(
               <div key={label} style={{ background:"var(--surface2)", borderRadius:10,
                 padding:"8px 10px", border:"1px solid var(--border)" }}>
-                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>{label}</p>
+                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>{ic} {label}</p>
                 <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:0, fontFamily:"monospace" }}>{val}</p>
               </div>
             ))}
           </div>
 
-          {/* Total coût en grand */}
+          {/* Bloc coût + éléments */}
           {totalCost > 0 && (
             <div style={{ background:"linear-gradient(135deg,rgba(59,130,246,0.06),rgba(139,92,246,0.06))",
-              border:"1px solid rgba(59,130,246,0.15)", borderRadius:14, padding:"12px 14px", marginBottom:16 }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                <p style={{ fontSize:10, color:"#60a5fa", fontWeight:700,
-                  textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>Coût total</p>
+              border:"1px solid rgba(59,130,246,0.15)", borderRadius:14, padding:"12px 14px", marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                <p style={{ fontSize:10, color:"#60a5fa", fontWeight:700, textTransform:"uppercase",
+                  letterSpacing:"0.06em", margin:0 }}>Coût total</p>
                 <span style={{ fontSize:22, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
                   {totalCost.toFixed(2)}€
                 </span>
               </div>
-              {nbItems > 1 && (
-                <p style={{ fontSize:11, color:"#22c55e", margin:"4px 0 0", textAlign:"right", fontWeight:700 }}>
-                  {(totalCost/nbItems).toFixed(2)}€/u · {nbItems} éléments
+              {/* Nombre d'éléments éditables */}
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.2)",
+                borderRadius:8, padding:"6px 10px" }}>
+                <p style={{ fontSize:10, color:"#22c55e", margin:0, fontWeight:700 }}>
+                  {nbItems} élément{nbItems>1?"s":""}
                 </p>
-              )}
+                {editNb ? (
+                  <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                    <input type="number" min="1" value={nbVal} onChange={e=>setNbVal(e.target.value)}
+                      style={{ width:60, padding:"3px 6px", borderRadius:6, border:"1px solid var(--border)",
+                        background:"var(--surface2)", color:"var(--text)", fontSize:12, fontFamily:"monospace" }}
+                      autoFocus/>
+                    <button onClick={saveNbItems}
+                      style={{ padding:"3px 10px", borderRadius:6, border:"none",
+                        background:"#22c55e", color:"white", fontSize:11, cursor:"pointer" }}>✓</button>
+                    <button onClick={()=>setEditNb(false)}
+                      style={{ padding:"3px 8px", borderRadius:6, border:"none",
+                        background:"var(--surface2)", color:"var(--muted)", fontSize:11, cursor:"pointer" }}>✕</button>
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                    <span style={{ fontSize:13, fontWeight:800, color:"#22c55e", fontFamily:"monospace" }}>
+                      {(totalCost/nbItems).toFixed(2)}€/u
+                    </span>
+                    <button onClick={()=>{setNbVal(String(nbItems));setEditNb(true);}}
+                      style={{ fontSize:10, padding:"2px 8px", borderRadius:6, border:"1px solid rgba(34,197,94,0.3)",
+                        background:"none", color:"#22c55e", cursor:"pointer" }}>Modifier</button>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
-          {/* Liste des prints */}
+          {/* Filaments agrégés */}
+          {filaments.length > 0 && (
+            <div style={{ marginBottom:14 }}>
+              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+                letterSpacing:"0.06em", margin:"0 0 8px" }}>Filaments</p>
+              <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+                {filaments.map((f,i) => (
+                  <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
+                    background:"var(--surface2)", border:"1px solid var(--border)",
+                    borderRadius:8, padding:"6px 10px" }}>
+                    <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
+                      backgroundColor:hexCss(f.color_hex),
+                      border:"1px solid rgba(255,255,255,0.15)" }}/>
+                    <span style={{ fontSize:11, fontWeight:600, color:"var(--text)", flex:1,
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {f.filament_name || f.filament_type || "Inconnu"}
+                    </span>
+                    <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"monospace" }}>
+                      {f.grams_used?.toFixed(0)}g
+                    </span>
+                    {f.cost > 0 && (
+                      <span style={{ fontSize:10, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
+                        {f.cost.toFixed(2)}€
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Prints en tuiles */}
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:"0.06em", margin:"0 0 8px" }}>
             Prints ({localPrints.length})
           </p>
-          <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:16 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:8, marginBottom:16 }}>
             {localPrints.map(p => (
-              <div key={p.id} onClick={()=>setSelectedPrint(p)}
-                style={{ display:"flex", alignItems:"center", gap:10, cursor:"pointer",
-                  background:"var(--surface2)", border:"1px solid var(--border)",
-                  borderRadius:10, padding:"8px 12px", transition:"opacity 0.15s" }}>
-                <img src={"/api/v1/prints/"+p.id+"/image"} alt="" style={{
-                  width:40, height:40, objectFit:"cover", borderRadius:6, flexShrink:0 }}
-                  onError={e=>{e.currentTarget.style.display="none"}}/>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
+              <div key={p.id} onClick={()=>setSelectedPrint(p)} style={{
+                borderRadius:10, overflow:"hidden", cursor:"pointer", position:"relative",
+                background:"var(--surface2)", border:"1px solid var(--border)" }}>
+                <div style={{ position:"relative", paddingTop:"75%", background:"var(--surface2)" }}>
+                  <img src={"/api/v1/prints/"+p.id+"/image"} alt="" style={{
+                    position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
+                    onError={e=>{e.currentTarget.style.display="none"}}/>
+                  <StatusBadge status={p.status} style={{ position:"absolute", bottom:4, right:4 }}/>
+                </div>
+                <div style={{ padding:"6px 8px" }}>
+                  <p style={{ fontSize:10, fontWeight:600, color:"var(--text)", margin:0,
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {p.file_name || "Sans nom"}
                   </p>
-                  <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
+                  <p style={{ fontSize:9, color:"var(--muted)", margin:"1px 0 0" }}>
                     {fmtDate(p.print_date)}
-                    {p.duration_seconds > 0 && ` · ${fmtDur(p.duration_seconds)}`}
+                    {p.total_cost>0&&<span style={{ color:"var(--text)", fontWeight:600, marginLeft:6 }}>{p.total_cost.toFixed(2)}€</span>}
                   </p>
                 </div>
-                {p.total_cost > 0 && (
-                  <span style={{ fontSize:11, fontWeight:700, color:"var(--text)",
-                    fontFamily:"monospace", flexShrink:0 }}>
-                    {p.total_cost.toFixed(2)}€
-                  </span>
-                )}
-                <StatusBadge status={p.status}/>
               </div>
             ))}
           </div>
@@ -438,19 +517,19 @@ export function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_
           {/* Actions */}
           <div style={{ display:"flex", gap:8 }}>
             <button onClick={handleDelete}
-              style={{ flex:1, padding:"11px", borderRadius:12,
+              style={{ flex:1, padding:"10px", borderRadius:12,
                 border:"1px solid rgba(239,68,68,0.3)", background:"rgba(239,68,68,0.06)",
                 color:"#ef4444", fontSize:12, fontWeight:700, cursor:"pointer" }}>
               🗑 Supprimer
             </button>
             <button onClick={handleUngroup}
-              style={{ flex:1, padding:"11px", borderRadius:12,
+              style={{ flex:1, padding:"10px", borderRadius:12,
                 border:"1px solid rgba(167,139,250,0.3)", background:"rgba(167,139,250,0.06)",
                 color:"#a78bfa", fontSize:12, fontWeight:700, cursor:"pointer" }}>
               📤 Dégrouper
             </button>
             <button onClick={onClose}
-              style={{ flex:2, padding:"11px", borderRadius:12, border:"none",
+              style={{ flex:2, padding:"10px", borderRadius:12, border:"none",
                 background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
               ✕
             </button>
