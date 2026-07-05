@@ -440,6 +440,10 @@ export default function Settings() {
         )}
       </div>
 
+
+      {/* ── Import depuis Spoolnymous ───────────────────────────────── */}
+      <SpoolnymousImport/>
+
       {/* Journal intégré */}
       <div className="card" style={{ padding:0, overflow:"hidden" }}>
         <div style={{ padding:"12px 16px", borderBottom:"1px solid var(--border)" }}>
@@ -455,6 +459,92 @@ export default function Settings() {
           textAlign:"center", marginTop:8 }}>
           v{version.commit?.slice(0,8) || "dev"} · {version.build_date?.slice(0,10) || "?"}
         </p>
+      )}
+    </div>
+  );
+}
+
+function SpoolnymousImport() {
+  const [url, setUrl] = React.useState(localStorage.getItem("spoolnymous_url") || "");
+  const [running, setRunning] = React.useState(false);
+  const [steps, setSteps] = React.useState([]);
+  const [done, setDone] = React.useState(false);
+  const [pingInfo, setPingInfo] = React.useState(null);
+  const pollRef = React.useRef(null);
+
+  const ping = async () => {
+    if (!url) return;
+    try {
+      const r = await fetch(`${url.replace(/\/$/,"")}/api/export/status`);
+      const d = await r.json();
+      setPingInfo(d);
+    } catch { setPingInfo(null); }
+  };
+
+  const start = async () => {
+    if (!url) return;
+    localStorage.setItem("spoolnymous_url", url);
+    setRunning(true); setDone(false); setSteps([]);
+    await client.post("/import/spoolnymous", { url });
+    // Polling toutes les 800ms
+    pollRef.current = setInterval(async () => {
+      const r = await client.get("/import/spoolnymous/status");
+      setSteps(r.data.steps || []);
+      if (r.data.done) {
+        setRunning(false); setDone(true);
+        clearInterval(pollRef.current);
+      }
+    }, 800);
+  };
+
+  React.useEffect(() => () => clearInterval(pollRef.current), []);
+
+  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
+
+  return (
+    <div className="card" style={{ padding:"16px" }}>
+      <h3 style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:"0 0 12px" }}>
+        📦 Importer depuis Spoolnymous
+      </h3>
+
+      <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+        <input value={url} onChange={e=>setUrl(e.target.value)} placeholder="http://192.168.1.42:7913"
+          style={{ ...inp, flex:1 }}/>
+        <button onClick={ping}
+          style={{ padding:"8px 14px", borderRadius:8, border:"1px solid var(--border)",
+            background:"var(--surface2)", color:"var(--text)", fontSize:12, cursor:"pointer", flexShrink:0 }}>
+          Ping
+        </button>
+      </div>
+
+      {pingInfo && (
+        <div style={{ background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.2)",
+          borderRadius:8, padding:"8px 12px", marginBottom:10, fontSize:11, color:"#22c55e" }}>
+          ✓ Connecté · DB {pingInfo.db_size_mb} Mo · {pingInfo.prints_files} vignettes · {pingInfo.uploads_files} uploads
+        </div>
+      )}
+
+      <button onClick={start} disabled={running || !url}
+        style={{ width:"100%", padding:"10px", borderRadius:10, border:"none", cursor:running?"wait":"pointer",
+          background: running ? "var(--surface2)" : "#3b82f6",
+          color: running ? "var(--muted)" : "white", fontSize:13, fontWeight:700 }}>
+        {running ? "Import en cours…" : "🚀 Lancer l'import complet"}
+      </button>
+
+      {(steps.length > 0) && (
+        <div style={{ marginTop:12, background:"var(--surface2)", borderRadius:8,
+          padding:"10px 12px", fontSize:12, fontFamily:"monospace",
+          maxHeight:280, overflowY:"auto" }}>
+          {steps.map((s, i) => (
+            <div key={i} style={{ display:"flex", gap:8, marginBottom:3, color: s.ok ? "var(--text)" : "#ef4444" }}>
+              <span>{s.ok ? "✓" : "✗"}</span>
+              <span>{s.msg}</span>
+            </div>
+          ))}
+          {running && <div style={{ color:"var(--muted)", marginTop:4 }}>⏳ En attente…</div>}
+          {done && <div style={{ color:"#22c55e", fontWeight:700, marginTop:6 }}>✅ Import terminé !</div>}
+        </div>
       )}
     </div>
   );
