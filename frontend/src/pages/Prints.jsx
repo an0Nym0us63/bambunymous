@@ -106,12 +106,14 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           maxWidth:640, maxHeight:"92dvh", overflowY:"auto",
           paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
 
-        {/* Handle + ✕ */}
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0", position:"relative" }}>
+        {/* Handle + ✕ — sticky pour rester au-dessus du visuel */}
+        <div style={{ position:"sticky", top:0, zIndex:10, background:"var(--sheet-bg)",
+          display:"flex", justifyContent:"center", padding:"12px 0 8px" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
           <button onClick={onClose} style={{ position:"absolute", top:10, right:12, width:28, height:28,
-            borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer",
-            color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+            borderRadius:"50%", background:"var(--surface2)", border:"1px solid var(--border)",
+            cursor:"pointer", color:"var(--muted)", fontSize:15,
+            display:"flex", alignItems:"center", justifyContent:"center", zIndex:11 }}>✕</button>
         </div>
 
         {/* Image vignette */}
@@ -373,12 +375,14 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
           maxWidth:640, maxHeight:"92dvh", overflowY:"auto",
           paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
 
-        {/* Handle + ✕ */}
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0", position:"relative" }}>
+        {/* Handle + ✕ — sticky */}
+        <div style={{ position:"sticky", top:0, zIndex:10, background:"var(--sheet-bg)",
+          display:"flex", justifyContent:"center", padding:"12px 0 8px" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
           <button onClick={onClose} style={{ position:"absolute", top:10, right:12, width:28, height:28,
-            borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer",
-            color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+            borderRadius:"50%", background:"var(--surface2)", border:"1px solid var(--border)",
+            cursor:"pointer", color:"var(--muted)", fontSize:15,
+            display:"flex", alignItems:"center", justifyContent:"center", zIndex:11 }}>✕</button>
         </div>
 
         <div style={{ padding:"14px 16px 16px" }}>
