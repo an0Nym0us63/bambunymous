@@ -475,10 +475,9 @@ function SpoolnymousImport() {
   const ping = async () => {
     if (!url) return;
     try {
-      const r = await fetch(`${url.replace(/\/$/,"")}/api/export/status`);
-      const d = await r.json();
-      setPingInfo(d);
-    } catch { setPingInfo(null); }
+      const r = await client.get("/import/spoolnymous/ping", { params:{ url } });
+      setPingInfo(r.data);
+    } catch { setPingInfo(null); alert("Impossible de joindre Spoolnymous — vérifie l\'URL et que Spoolnymous est démarré."); }
   };
 
   const start = async () => {
