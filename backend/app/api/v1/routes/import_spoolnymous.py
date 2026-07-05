@@ -84,48 +84,67 @@ async def _run_import(url: str):
         else:
             _add_step("Pas de DB dans le ZIP", ok=False)
 
-        # 5. Copie des fichiers statiques
-        static_src = tmp / "static"
-        if static_src.exists():
-            # Prints (thumbnails)
-            prints_src = static_src / "prints"
-            if prints_src.exists():
-                prints_dst = DATA_DIR.parent / "static" / "prints"
-                prints_dst.mkdir(parents=True, exist_ok=True)
-                copied = 0
-                for f in prints_src.rglob("*"):
-                    if f.is_file():
-                        dst = prints_dst / f.relative_to(prints_src)
-                        dst.parent.mkdir(parents=True, exist_ok=True)
-                        if not dst.exists():
-                            shutil.copy2(f, dst); copied += 1
-                _add_step(f"Vignettes prints copiées : {copied} fichiers")
+        # 5. Réutiliser exactement les mêmes importers que l'import manuel par ZIP
+        from ....services.zip_importer import (
+            import_prints_zip, import_uploads_prints_zip,
+            import_uploads_filaments_zip, import_uploads_groups_zip,
+            import_uploads_accessories_zip,
+        )
 
-            # Uploads (filaments, groups, prints uploads, accessoires)
-            uploads_src = static_src / "uploads"
-            if uploads_src.exists():
-                uploads_dst = DATA_DIR / "filaments"  # filaments
-                counts = {}
-                for cat in ["filaments", "prints", "groupes", "groups", "accessoires", "objects"]:
-                    cat_src = uploads_src / cat
-                    if not cat_src.exists(): continue
-                    # Map cat → dossier BambuNymous
-                    cat_map = {"filaments": "filaments", "prints": "prints",
-                               "groupes": "groups", "groups": "groups",
-                               "accessoires": "accessories", "objects": "objects"}
-                    dst_folder = DATA_DIR / cat_map.get(cat, cat)
-                    dst_folder.mkdir(parents=True, exist_ok=True)
-                    n = 0
-                    for f in cat_src.rglob("*"):
-                        if f.is_file():
-                            dst = dst_folder / f.relative_to(cat_src)
-                            dst.parent.mkdir(parents=True, exist_ok=True)
-                            if not dst.exists():
-                                shutil.copy2(f, dst); n += 1
-                    if n: counts[cat] = n
-                _add_step(f"Uploads copiés : " + " · ".join(f"{v} {k}" for k,v in counts.items()))
-        else:
-            _add_step("Pas de fichiers statiques dans le ZIP", ok=False)
+        static_src = tmp / "static"
+
+        def _make_zip(src_dir: Path):
+            """Crée un ZIP en mémoire depuis un dossier (arcnames en string)."""
+            if not src_dir or not src_dir.exists(): return None
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+                for f in src_dir.rglob("*"):
+                    if f.is_file():
+                        zf.write(str(f), str(f.relative_to(src_dir)))
+            buf.seek(0)
+            return buf
+
+        # 5a. Vignettes prints → import_prints_zip (même logique que l'import manuel)
+        zb = _make_zip(static_src / "prints")
+        if zb:
+            try:
+                r = await import_prints_zip(zb)
+                _add_step(f"Vignettes prints : {r.get('matched',0)} liées, {r.get('unmatched',0)} non trouvées")
+            except Exception as e: _add_step(f"Vignettes prints erreur : {e}", ok=False)
+
+        # 5b. Photos uploads/prints → import_uploads_prints_zip
+        zb = _make_zip(static_src / "uploads" / "prints")
+        if zb:
+            try:
+                r = await import_uploads_prints_zip(zb)
+                _add_step(f"Photos prints : {r.get('copied',0)} copiées")
+            except Exception as e: _add_step(f"Photos prints erreur : {e}", ok=False)
+
+        # 5c. Photos filaments → import_uploads_filaments_zip
+        zb = _make_zip(static_src / "uploads" / "filaments")
+        if zb:
+            try:
+                r = await import_uploads_filaments_zip(zb)
+                _add_step(f"Photos filaments : {r.get('copied',0)} copiées")
+            except Exception as e: _add_step(f"Photos filaments erreur : {e}", ok=False)
+
+        # 5d. Photos groupes → import_uploads_groups_zip
+        for gdir in ["groupes", "groups"]:
+            zb = _make_zip(static_src / "uploads" / gdir)
+            if zb:
+                try:
+                    r = await import_uploads_groups_zip(zb)
+                    _add_step(f"Photos groupes : {r.get('copied',0)} copiées")
+                    break
+                except Exception as e: _add_step(f"Photos groupes erreur : {e}", ok=False)
+
+        # 5e. Photos accessoires → import_uploads_accessories_zip
+        zb = _make_zip(static_src / "uploads" / "accessoires")
+        if zb:
+            try:
+                r = await import_uploads_accessories_zip(zb)
+                _add_step(f"Photos accessoires : {r.get('copied',0)} copiées")
+            except Exception as e: _add_step(f"Photos accessoires erreur : {e}", ok=False)
 
         # 6. Nettoyage
         shutil.rmtree(tmp, ignore_errors=True)
