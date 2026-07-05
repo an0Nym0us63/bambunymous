@@ -93,7 +93,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const costBobine  = p.total_cost_filament || 0;
   const costNormal  = p.total_cost_filament_normal || 0;
   const costElec    = p.electric_cost || 0;
-  const totalBobine = costBobine + costElec;
+  const costFil     = costBobine || costNormal; // fallback si pas de prix bobine
+  const totalBobine = costFil + costElec;
   const totalNormal = costNormal + costElec;
   const nb          = p.number_of_items || 1;
 
@@ -176,9 +177,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
               <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
                 <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>Filament</p>
                 <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
-                  {(costBobine||costNormal).toFixed(2)}€
+                  {costFil.toFixed(2)}€
                 </p>
-                {costNormal > 0 && costBobine !== costNormal && (
+                {costNormal > 0 && costBobine > 0 && costBobine !== costNormal && (
                   <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
                     ({costNormal.toFixed(2)}€ normal)
                   </p>
