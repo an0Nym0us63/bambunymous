@@ -309,7 +309,7 @@ export function GroupBottomSheet({ groupId, name, prints, latestDate, number_of_
   useEffect(() => {
     if (groupId) {
       client.get("/prints", { params:{ group_id:groupId, limit:200 } })
-        .then(r => { const d = r.data; setLocalPrints(Array.isArray(d) ? d : Array.isArray(d?.items) ? d.items : []); })
+        .then(r => { const d = r.data; setLocalPrints(Array.isArray(d) ? d : Array.isArray(d?.prints) ? d.prints : Array.isArray(d?.items) ? d.items : []); })
         .catch(() => {});
     }
   }, [groupId]);
