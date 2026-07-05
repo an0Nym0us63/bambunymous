@@ -1,4 +1,3 @@
-import Logs from "./Logs";
 import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon } from "lucide-react";
 import client from "../api/client";
