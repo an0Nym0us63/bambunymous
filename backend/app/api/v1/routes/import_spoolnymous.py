@@ -1,13 +1,14 @@
 """
 Import depuis Spoolnymous via sa route /api/export/bambunymous
 """
-import aiohttp, zipfile, io, shutil, asyncio
+import aiohttp, zipfile, io, shutil, asyncio, os
 from pathlib import Path
+DATA_DIR = Path(os.getenv('DATA_DIR', '/data'))
 from fastapi import APIRouter, Depends, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from typing import Optional
-from ....auth import get_current_user
-from ....core.config import DATA_DIR
+from .auth import get_current_user
+from pathlib import Path as _Path
 
 router = APIRouter(prefix="/import/spoolnymous", tags=["import"])
 
