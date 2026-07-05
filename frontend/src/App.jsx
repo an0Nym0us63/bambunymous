@@ -38,49 +38,4 @@ export default function App() {
 }
 
 // ── Swipe-to-close global pour tous les bottom sheets ──────────────────────
-;(function setupGlobalSheetSwipe() {
-  if (typeof window === "undefined") return;
-  let startY = 0, el = null;
 
-  // Bloquer pull-to-refresh natif quand un sheet est ouvert
-  // Mais seulement si le mouvement est majoritairement vertical (pas un scroll horizontal)
-  let _bx = 0, _by = 0;
-  document.addEventListener("touchstart", e => {
-    _bx = e.touches[0].clientX; _by = e.touches[0].clientY;
-  }, { passive: true });
-  const blockRefresh = (e) => {
-    if (!document.querySelector(".sheet-inner")) return;
-    const dx = Math.abs(e.touches[0].clientX - _bx);
-    const dy = Math.abs(e.touches[0].clientY - _by);
-    if (dy > dx) e.preventDefault(); // vertical → bloquer pull-to-refresh
-  };
-  document.addEventListener("touchmove", blockRefresh, { passive: false });
-
-  document.addEventListener("touchstart", e => {
-    const inner = e.target.closest(".sheet-inner");
-    if (!inner) return;
-    // Seulement si le sheet est scrollé tout en haut
-    if (inner.scrollTop > 2) return;
-    startY = e.touches[0].clientY;
-    el = inner;
-  }, { passive: true });
-
-  document.addEventListener("touchmove", e => {
-    if (!el) return;
-    // Annuler si le sheet a scrollé depuis le touchstart
-    if (el.scrollTop > 2) { el = null; return; }
-    const dy = e.touches[0].clientY - startY;
-    if (dy > 0) el.style.transform = `translateY(${Math.min(dy, 200)}px)`;
-  }, { passive: true });
-
-  document.addEventListener("touchend", e => {
-    if (!el) return;
-    const dy = e.changedTouches[0].clientY - startY;
-    el.style.transform = "";
-    if (dy > 80 && el.scrollTop <= 2) {
-      const backdrop = el.parentElement;
-      if (backdrop) backdrop.click();
-    }
-    el = null;
-  });
-})();
