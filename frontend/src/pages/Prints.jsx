@@ -264,6 +264,25 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             </div>
           </div>
 
+          {/* Créer objet depuis ce print */}
+          <button onClick={async () => {
+            const n = parseInt(prompt(`Créer combien d'objets depuis ce print ?
+(Max restant calculé automatiquement)`, "1"));
+            if (!n || isNaN(n)) return;
+            try {
+              const r = await client.post("/objects/objects", {
+                parent_type: "print", parent_id: p.id,
+                name: p.file_name || "Sans nom", qty: n,
+                cost_fabrication: totalBobine,
+              });
+              alert(`✅ ${r.data.created} objet(s) créé(s)`);
+            } catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
+          }} style={{ width:"100%", padding:"10px", borderRadius:10, marginBottom:14,
+            border:"1px solid rgba(34,197,94,0.3)", background:"rgba(34,197,94,0.06)",
+            color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+            📦 Créer un objet depuis ce print
+          </button>
+
           {/* Filaments utilisés */}
           {p.filament_usage?.length > 0 && (
             <div style={{ marginBottom:14 }}>
@@ -533,6 +552,25 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
           )}
 
           {/* Prints en tuiles */}
+          {/* Créer objet depuis ce groupe */}
+          <button onClick={async () => {
+            const n = parseInt(prompt(`Créer combien d'objets depuis ce groupe ?
+(Max restant calculé automatiquement)`, "1"));
+            if (!n || isNaN(n)) return;
+            try {
+              const r = await client.post("/objects/objects", {
+                parent_type: "group", parent_id: groupId,
+                name: name, qty: n,
+                cost_fabrication: totalCost / nbItems,
+              });
+              alert(`✅ ${r.data.created} objet(s) créé(s)`);
+            } catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
+          }} style={{ width:"100%", padding:"10px", borderRadius:10, marginBottom:14,
+            border:"1px solid rgba(34,197,94,0.3)", background:"rgba(34,197,94,0.06)",
+            color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+            📦 Créer un objet depuis ce groupe
+          </button>
+
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:"0.06em", margin:"0 0 8px" }}>
             Prints ({localPrints.length})

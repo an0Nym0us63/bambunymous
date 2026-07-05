@@ -182,3 +182,206 @@ async def accessory_image(aid: int):
         if f.suffix.lower() in (".jpg",".jpeg",".png",".webp"):
             return FileResponse(str(f))
     raise HTTPException(404)
+
+
+# ── Créer un objet (depuis un print ou groupe) ───────────────────────────────
+class ObjectCreate(BaseModel):
+    parent_type: str          # "print" | "group"
+    parent_id: int
+    name: str
+    translated_name: str = ""
+    qty: int = 1              # nombre d'objets à créer
+    cost_fabrication: float = 0.0
+    cost_accessory: float = 0.0
+    available: bool = True
+    group_id: Optional[int] = None
+    comment: Optional[str] = None
+
+@router.post("/objects")
+async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        from ..models.object_history import ObjectGroup
+        # Vérifier la dispo (number_of_items - déjà créés)
+        from sqlalchemy import select, func
+        already = (await db.execute(
+            select(func.count()).select_from(Object)
+            .where(Object.parent_type == body.parent_type, Object.parent_id == body.parent_id)
+        )).scalar() or 0
+        # Récupérer number_of_items depuis Print ou Group
+        from ..models.print_history import Print, Group as PGroup
+        if body.parent_type == "print":
+            src = await db.get(Print, body.parent_id)
+            nb_items = src.number_of_items if src else 1
+            cost_fab = body.cost_fabrication or (src.total_cost or 0)
+        else:
+            src = await db.get(PGroup, body.parent_id)
+            nb_items = src.number_of_items if src else 1
+            cost_fab = body.cost_fabrication
+        
+        n = min(body.qty, max(0, nb_items - already))
+        if n <= 0:
+            return {"created": 0, "message": f"Quota atteint ({already}/{nb_items})"}
+        
+        created_ids = []
+        for _ in range(n):
+            obj = Object(
+                parent_type=body.parent_type,
+                parent_id=body.parent_id,
+                name=body.name,
+                translated_name=body.translated_name or body.name,
+                cost_fabrication=cost_fab,
+                cost_accessory=body.cost_accessory,
+                cost_total=cost_fab + body.cost_accessory,
+                available=body.available,
+                group_id=body.group_id,
+                comment=body.comment,
+            )
+            db.add(obj)
+            await db.flush()
+            created_ids.append(obj.id)
+        await db.commit()
+        return {"created": n, "ids": created_ids}
+
+
+# ── Supprimer un objet ───────────────────────────────────────────────────────
+@router.delete("/objects/{oid}")
+async def delete_object(oid: int, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        obj = await db.get(Object, oid)
+        if not obj:
+            raise HTTPException(404)
+        await db.delete(obj)
+        await db.commit()
+        return {"ok": True}
+
+
+# ── Accessoires d'un objet ───────────────────────────────────────────────────
+@router.get("/objects/{oid}/accessories")
+async def list_object_accessories(oid: int, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(ObjectAccessory, Accessory)
+            .join(Accessory, ObjectAccessory.accessory_id == Accessory.id)
+            .where(ObjectAccessory.object_id == oid)
+        )).all()
+        return [{"link_id": oa.id, "qty": oa.qty,
+                 "accessory_id": a.id, "name": a.name,
+                 "unit_price": a.unit_price, "image_path": a.image_path}
+                for oa, a in rows]
+
+
+class LinkAccessory(BaseModel):
+    accessory_id: int
+    qty: int = 1
+
+@router.post("/objects/{oid}/accessories")
+async def link_accessory_to_object(oid: int, body: LinkAccessory, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        obj = await db.get(Object, oid)
+        if not obj: raise HTTPException(404)
+        acc = await db.get(Accessory, body.accessory_id)
+        if not acc: raise HTTPException(404, "Accessoire introuvable")
+        # Vérifier si déjà lié
+        existing = (await db.execute(
+            select(ObjectAccessory)
+            .where(ObjectAccessory.object_id == oid, ObjectAccessory.accessory_id == body.accessory_id)
+        )).scalar_one_or_none()
+        if existing:
+            existing.qty += body.qty
+        else:
+            db.add(ObjectAccessory(object_id=oid, accessory_id=body.accessory_id, qty=body.qty))
+        # Recalcul coût accessoires
+        all_links = (await db.execute(
+            select(ObjectAccessory, Accessory)
+            .join(Accessory, ObjectAccessory.accessory_id == Accessory.id)
+            .where(ObjectAccessory.object_id == oid)
+        )).all()
+        cost_acc = sum((oa.qty * a.unit_price) for oa, a in all_links)
+        obj.cost_accessory = cost_acc
+        obj.cost_total = (obj.cost_fabrication or 0) + cost_acc
+        await db.commit()
+        return {"ok": True}
+
+
+@router.delete("/objects/{oid}/accessories/{aid}")
+async def unlink_accessory(oid: int, aid: int, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        lnk = (await db.execute(
+            select(ObjectAccessory)
+            .where(ObjectAccessory.object_id == oid, ObjectAccessory.accessory_id == aid)
+        )).scalar_one_or_none()
+        if not lnk: raise HTTPException(404)
+        await db.delete(lnk)
+        # Recalcul coût
+        obj = await db.get(Object, oid)
+        all_links = (await db.execute(
+            select(ObjectAccessory, Accessory)
+            .join(Accessory, ObjectAccessory.accessory_id == Accessory.id)
+            .where(ObjectAccessory.object_id == oid)
+        )).all()
+        obj.cost_accessory = sum((oa.qty * a.unit_price) for oa, a in all_links)
+        obj.cost_total = (obj.cost_fabrication or 0) + obj.cost_accessory
+        await db.commit()
+        return {"ok": True}
+
+
+# ── Créer / supprimer un accessoire ─────────────────────────────────────────
+class AccessoryCreate(BaseModel):
+    name: str
+    quantity: int = 0
+    unit_price: float = 0.0
+
+@router.post("/accessories")
+async def create_accessory(body: AccessoryCreate, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        acc = Accessory(name=body.name, quantity=body.quantity, unit_price=body.unit_price)
+        db.add(acc); await db.flush(); await db.commit()
+        return {"id": acc.id, "name": acc.name}
+
+@router.delete("/accessories/{aid}")
+async def delete_accessory(aid: int, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        acc = await db.get(Accessory, aid)
+        if not acc: raise HTTPException(404)
+        await db.delete(acc); await db.commit()
+        return {"ok": True}
+
+# ── Stock accessoire ─────────────────────────────────────────────────────────
+class StockAdjust(BaseModel):
+    qty: int
+    total_price: float = 0.0  # coût du lot ajouté (recalcule unit_price moyen)
+
+@router.post("/accessories/{aid}/stock")
+async def adjust_accessory_stock(aid: int, body: StockAdjust, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        acc = await db.get(Accessory, aid)
+        if not acc: raise HTTPException(404)
+        if body.qty > 0 and body.total_price > 0:
+            # Prix moyen pondéré
+            old_total = acc.quantity * acc.unit_price
+            new_qty = acc.quantity + body.qty
+            acc.unit_price = (old_total + body.total_price) / new_qty
+        acc.quantity = max(0, acc.quantity + body.qty)
+        await db.commit()
+        return {"id": acc.id, "quantity": acc.quantity, "unit_price": acc.unit_price}
+
+# ── Créer groupe d'objets ────────────────────────────────────────────────────
+class ObjectGroupCreate(BaseModel):
+    name: str
+
+@router.post("/object-groups")
+async def create_object_group(body: ObjectGroupCreate, _: str = Depends(get_current_user)):
+    from ..models.object_history import ObjectGroup
+    async with AsyncSessionLocal() as db:
+        g = ObjectGroup(name=body.name)
+        db.add(g); await db.flush(); await db.commit()
+        return {"id": g.id, "name": g.name}
+
+@router.delete("/object-groups/{gid}")
+async def delete_object_group(gid: int, _: str = Depends(get_current_user)):
+    from ..models.object_history import ObjectGroup
+    async with AsyncSessionLocal() as db:
+        g = await db.get(ObjectGroup, gid)
+        if not g: raise HTTPException(404)
+        await db.delete(g); await db.commit()
+        return {"ok": True}
