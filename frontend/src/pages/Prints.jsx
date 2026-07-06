@@ -675,7 +675,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
         <div style={{ padding:"8px 10px" }}>
           <p style={{ fontWeight:700, fontSize:12, color:"#a78bfa", margin:"0 0 2px",
             overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</p>
-          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
             <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDate(latestDate)}</span>
             {duration_seconds > 0 && <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDur(duration_seconds)}</span>}
           </div>
@@ -843,10 +843,9 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
           {p.file_name || "Sans nom"}
         </p>
-        <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDate(p.print_date)}</span>
           {p.duration_seconds > 0 && <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDur(p.duration_seconds)}</span>}
-
         </div>
       </div>
     </div>
