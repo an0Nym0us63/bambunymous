@@ -609,6 +609,13 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, act
 export default function Home() {
   const { status, startPolling, stopPolling } = usePrinter();
   const [spoolLookup, setSpoolLookup] = useState({});
+  const isRunning = status?.status === "RUNNING" || status?.status === "PAUSED";
+  const [visKey, setVisKey] = useState(0);
+  useEffect(() => {
+    const fn = () => { if (!document.hidden) setVisKey(k => k+1); };
+    document.addEventListener("visibilitychange", fn);
+    return () => document.removeEventListener("visibilitychange", fn);
+  }, []);
 
   const fetchSpoolLookup = useCallback(async () => {
     try {
@@ -645,7 +652,7 @@ export default function Home() {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, maxWidth:640, margin:"0 auto" }}>
       <StatusBanner status={status} />
-      {(isRunning || status?.status === "PAUSED") && <DeviceGrid key={visKey}
+      {isRunning && <DeviceGrid key={visKey}
         amsList={status?.ams_list ?? []}
         activeAmsId={status?.active_ams_id ?? -1}
         activeTrayId={status?.active_tray_id ?? -1}
