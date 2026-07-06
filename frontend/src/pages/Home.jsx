@@ -68,6 +68,12 @@ function StatusBanner({ status }) {
   };
 
   const isRunning = status?.status === "RUNNING";
+  const [visKey, setVisKey] = React.useState(0);
+  React.useEffect(() => {
+    const onVisible = () => { if (!document.hidden) setVisKey(k => k+1); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, []);
   // Déplier possible même hors impression (pour voir temps, températures)
   useEffect(() => {
     if (expanded) startCam(); else stopCam();
@@ -639,14 +645,14 @@ export default function Home() {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, maxWidth:640, margin:"0 auto" }}>
       <StatusBanner status={status} />
-      <DeviceGrid
+      {(isRunning || status?.status === "PAUSED") && <DeviceGrid key={visKey}
         amsList={status?.ams_list ?? []}
         activeAmsId={status?.active_ams_id ?? -1}
         activeTrayId={status?.active_tray_id ?? -1}
         rack={status?.hotend_rack}
         spoolLookup={spoolLookup}
         activeNozzleId={status?.nozzles?.find(n => n.active)?.id ?? null}
-      />
+      />}
     </div>
   );
 }
