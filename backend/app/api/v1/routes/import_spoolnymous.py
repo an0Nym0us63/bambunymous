@@ -171,7 +171,7 @@ async def _run_import(url: str):
                     if not await _gs(_db2, _k):
                         await _ss(_db2, _k, str(_v)); _imported.append(_k)
                 await _db2.commit()
-                        if _imported:                _vals = {'PRINTER_IP': spoolnymous_settings.get('printer_ip'), 'PRINTER_ACCESS_CODE': '***', 'PRINTER_DISPLAY_NAME': spoolnymous_settings.get('printer_name'), 'COST_BY_HOUR': spoolnymous_settings.get('electricity_kwh')}                _add_step('Paramètres importés : ' + ' · '.join(f'{k}={_vals.get(k,"?")}'  for k in _imported))            else:                _add_step('Paramètres : déjà renseignés')
+                        if _imported:                _vals = {'PRINTER_IP': spoolnymous_settings.get('printer_ip'), 'PRINTER_ACCESS_CODE': spoolnymous_settings.get('printer_code'), 'PRINTER_DISPLAY_NAME': spoolnymous_settings.get('printer_name'), 'COST_BY_HOUR': spoolnymous_settings.get('electricity_kwh')}                _add_step('Paramètres importés : ' + ' · '.join(f'{k}={_vals.get(k,"?")}'  for k in _imported))            else:                _add_step('Paramètres : déjà renseignés')
         except Exception as e:
             _add_step(f"Paramètres erreur : {e}", ok=False)
 
