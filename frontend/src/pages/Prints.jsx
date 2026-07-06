@@ -109,7 +109,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const costBobine  = p.total_cost_filament || 0;
   const costNormal  = p.total_cost_filament_normal || 0;
   const costElec    = p.electric_cost || 0;
-  const costFil     = costBobine || costNormal; // fallback si pas de prix bobine
+  const costFil     = costBobine > 0 ? costBobine : costNormal; // si pas de prix bobine, prendre normal
   const totalBobine = costFil + costElec;
   const totalNormal = costNormal + costElec;
   const nb          = p.number_of_items || 1;
@@ -197,9 +197,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                 <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
                   {costFil.toFixed(2)}€
                 </p>
-                {costNormal > 0 && costBobine > 0 && costBobine !== costNormal && (
+                {costBobine > 0 && costNormal > 0 && costBobine !== costNormal && (
                   <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
-                    ({costNormal.toFixed(2)}€ normal)
+                    ({costNormal.toFixed(2)}€ sans bobine)
                   </p>
                 )}
               </div>
