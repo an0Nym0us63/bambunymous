@@ -398,8 +398,14 @@ export default function Settings() {
       {/* ── Import depuis Spoolnymous ───────────────────────────────── */}
       <SpoolnymousImport/>
 
-      {/* Journal intégré */}
-
+      {/* Journal — lien vers la page dédiée */}
+      <button onClick={()=>window.location.href="/logs"}
+        style={{ width:"100%", padding:"14px 16px", borderRadius:12,
+          background:"var(--surface2)", border:"1px solid var(--border)",
+          cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <span style={{ fontSize:13, fontWeight:600, color:"var(--text)" }}>📋 Journal des logs</span>
+        <span style={{ fontSize:12, color:"var(--muted)" }}>Voir avec filtres →</span>
+      </button>
 
       {version && (
         <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace",
