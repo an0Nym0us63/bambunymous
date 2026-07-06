@@ -29,12 +29,14 @@ async def _run_import(url: str):
     try:
         base_url = url.rstrip("/")
 
-        # 1. Ping
+        # 1. Ping + récupération settings
         _add_step("Connexion à Spoolnymous…")
+        spoolnymous_settings = {}
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=10)) as c:
             try:
                 async with c.get(f"{base_url}/api/export/status") as r:
                     info = await r.json()
+                spoolnymous_settings = info.get("settings", {})
                 _add_step(f"Connecté · DB {info.get('db_size_mb',0)} Mo · {info.get('prints_files',0)} fichiers prints · {info.get('uploads_files',0)} fichiers uploads")
             except Exception as e:
                 _add_step(f"Impossible de joindre Spoolnymous : {e}", ok=False)
@@ -153,7 +155,27 @@ async def _run_import(url: str):
         else:
             _add_step("Dossier accessories absent du ZIP", ok=False)
 
-                # 6. Nettoyage
+        # 7. Import settings imprimante et électricité (si non renseignés)
+        from ....services.settings_service import get_setting as _gs, set_setting as _ss
+        from ....db.session import AsyncSessionLocal as _ASL2
+        _imported = []
+        try:
+            async with _ASL2() as _db2:
+                for _k, _v in {
+                    "PRINTER_IP":          spoolnymous_settings.get("printer_ip"),
+                    "PRINTER_ACCESS_CODE": spoolnymous_settings.get("printer_code"),
+                    "PRINTER_DISPLAY_NAME":spoolnymous_settings.get("printer_name"),
+                    "COST_BY_HOUR":        str(spoolnymous_settings.get("electricity_kwh") or "") or None,
+                }.items():
+                    if not _v: continue
+                    if not await _gs(_db2, _k):
+                        await _ss(_db2, _k, str(_v)); _imported.append(_k)
+                await _db2.commit()
+            _add_step(f"Paramètres : {', '.join(_imported) if _imported else 'déjà renseignés'}")
+        except Exception as e:
+            _add_step(f"Paramètres erreur : {e}", ok=False)
+
+        # 8. Nettoyage
         shutil.rmtree(tmp, ignore_errors=True)
         _add_step("Import terminé ✓")
 
