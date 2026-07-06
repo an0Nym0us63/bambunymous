@@ -1331,10 +1331,11 @@ export default function Prints() {
         const groupMap = {};   // group_id → { name, prints[], latestDate }
         prints.forEach(p => {
           if (!p.group_id) return;
-          if (!groupMap[p.group_id]) groupMap[p.group_id] = { name: p.group_name, prints:[], latestDate:"" };
+          if (!groupMap[p.group_id]) groupMap[p.group_id] = { name: p.group_name, prints:[], latestDate:"", duration_seconds:0, number_of_items:p.group_number_of_items||1 };
           groupMap[p.group_id].prints.push(p);
           if (!groupMap[p.group_id].latestDate || p.print_date > groupMap[p.group_id].latestDate)
             groupMap[p.group_id].latestDate = p.print_date;
+          groupMap[p.group_id].duration_seconds = (groupMap[p.group_id].duration_seconds||0) + (p.duration_seconds||0);
         });
 
         // Construire la liste d'items : soit un print solo, soit un groupe entier
