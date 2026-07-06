@@ -602,7 +602,6 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   </p>
                   <p style={{ fontSize:9, color:"var(--muted)", margin:"1px 0 0" }}>
                     {fmtDate(p.print_date)}
-                    {p.total_cost>0&&<span style={{ color:"var(--text)", fontWeight:600, marginLeft:6 }}>{p.total_cost.toFixed(2)}€</span>}
                   </p>
                 </div>
                 </div>
@@ -844,11 +843,7 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
         <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
           <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDate(p.print_date)}</span>
           {p.duration_seconds > 0 && <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDur(p.duration_seconds)}</span>}
-          {p.total_cost > 0 && (
-            <span style={{ fontSize:10, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
-              {p.total_cost.toFixed(2)}€{p.number_of_items > 1 ? ` (${(p.total_cost/p.number_of_items).toFixed(2)}€/u)` : ""}
-            </span>
-          )}
+
         </div>
       </div>
     </div>
