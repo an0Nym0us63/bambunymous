@@ -641,7 +641,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   );
 }
 
-function GroupTile({ groupId, name, prints, latestDate, number_of_items, onSelectPrint, onDelete, onUngroup }) {
+function GroupTile({ groupId, name, prints, latestDate, number_of_items, duration_seconds, onSelectPrint, onDelete, onUngroup }) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const coverPrint = prints[0];
 
@@ -675,7 +675,10 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, onSelec
         <div style={{ padding:"8px 10px" }}>
           <p style={{ fontWeight:700, fontSize:12, color:"#a78bfa", margin:"0 0 2px",
             overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{name}</p>
-          <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>{fmtDate(latestDate)}</p>
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDate(latestDate)}</span>
+            {duration_seconds > 0 && <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDur(duration_seconds)}</span>}
+          </div>
         </div>
       </div>
 
@@ -1367,6 +1370,7 @@ export default function Prints() {
               <GroupTile key={item.groupId} groupId={item.groupId} name={item.name}
                 prints={item.prints} latestDate={item.latestDate}
                 number_of_items={item.number_of_items}
+                duration_seconds={item.duration_seconds}
                 onSelectPrint={setSelected}
                 onUngroup={() => load()}
                 onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}/>
