@@ -659,7 +659,7 @@ export default function Home() {
         rack={status?.hotend_rack}
         spoolLookup={spoolLookup}
         activeNozzleId={status?.nozzles?.find(n => n.active)?.id ?? null}
-      />}
+      />
     </div>
   );
 }
