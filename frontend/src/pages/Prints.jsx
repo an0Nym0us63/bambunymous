@@ -1127,7 +1127,7 @@ export default function Prints() {
     setLoading(false);
   }, [search, statusF, groupF]);
 
-  const loadMore = async () => {
+  const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore) return;
     setLoadingMore(true);
     try {
@@ -1144,7 +1144,7 @@ export default function Prints() {
       setHasMore(data.has_more ?? false);
     } catch(e) {}
     setLoadingMore(false);
-  };
+  }, [loadingMore, hasMore, offset, statusF, search, groupF]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -1152,7 +1152,7 @@ export default function Prints() {
     const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) loadMore(); }, { rootMargin:"300px" });
     io.observe(el);
     return () => io.disconnect();
-  });
+  }, [loadMore, hasMore]);
 
   const loadGroups = useCallback(async () => {
     try {
