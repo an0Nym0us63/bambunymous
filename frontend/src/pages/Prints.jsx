@@ -1147,11 +1147,14 @@ export default function Prints() {
   }, [loadingMore, hasMore, offset, statusF, search, groupF]);
 
   useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el || !hasMore) return;
-    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) loadMore(); }, { rootMargin:"300px" });
-    io.observe(el);
-    return () => io.disconnect();
+    const container = document.querySelector(".page-content");
+    if (!container || !hasMore) return;
+    const onScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      if (scrollHeight - scrollTop - clientHeight < 400) loadMore();
+    };
+    container.addEventListener("scroll", onScroll, { passive: true });
+    return () => container.removeEventListener("scroll", onScroll);
   }, [loadMore, hasMore]);
 
   const loadGroups = useCallback(async () => {
