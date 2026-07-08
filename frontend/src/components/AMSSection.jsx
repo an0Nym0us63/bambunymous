@@ -573,15 +573,23 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
               </p>
             )}
 
-            {/* Séchage */}
-            {tray.drying_temp > 0 && (
+            {/* Séchage depuis AMS + données catalogue */}
+            {(tray.drying_temp > 0 || tray.spool_info?.filament_material) && (
               <div style={{ marginTop:14, padding:"10px 14px", borderRadius:10,
                 background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.25)" }}>
                 <p style={{ fontSize:11, color:"#f59e0b", fontWeight:700, margin:"0 0 4px",
                   textTransform:"uppercase", letterSpacing:"0.05em" }}>🌡 Séchage</p>
-                <p style={{ fontSize:12, color:"var(--text)", margin:0 }}>
-                  {tray.drying_temp}°C · {tray.drying_time}min
-                </p>
+                {tray.drying_temp > 0 && (
+                  <p style={{ fontSize:12, color:"var(--text)", margin:0 }}>
+                    {tray.drying_temp}°C · {tray.drying_time}h
+                  </p>
+                )}
+                {tray.spool_info?.filament_material && (
+                  <p style={{ fontSize:11, color:"var(--muted)", margin:"4px 0 0" }}>
+                    Matériau : {tray.spool_info.filament_material}
+                    {tray.spool_info.filament_type && ` — ${tray.spool_info.filament_type}`}
+                  </p>
+                )}
               </div>
             )}
           </>)}
