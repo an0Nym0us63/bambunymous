@@ -1146,6 +1146,13 @@ export default function Prints() {
     setLoadingMore(false);
   };
 
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !hasMore) return;
+    const io = new IntersectionObserver(([e]) => { if (e.isIntersecting) loadMore(); }, { rootMargin:"300px" });
+    io.observe(el);
+    return () => io.disconnect();
+  });
 
   const loadGroups = useCallback(async () => {
     try {
@@ -1372,15 +1379,7 @@ export default function Prints() {
         );
       })()}
 
-      {viewMode==="list" && hasMore && !loading && (
-        <button onClick={loadMore} disabled={loadingMore}
-          style={{ width:"100%", padding:"12px", marginTop:8,
-            background:"var(--surface2)", border:"1px solid var(--border)",
-            borderRadius:10, cursor:loadingMore?"not-allowed":"pointer",
-            color:"var(--muted)", fontSize:13, fontWeight:600 }}>
-          {loadingMore ? "Chargement…" : "Charger plus (" + (total - prints.length) + " restants)"}
-        </button>
-      )}
+
 
       {selected && <PrintDetail p={selected} onClose={()=>setSelected(null)}
         onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}
