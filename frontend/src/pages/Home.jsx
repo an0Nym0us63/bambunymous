@@ -652,10 +652,10 @@ export default function Home() {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, maxWidth:640, margin:"0 auto" }}>
       <StatusBanner status={status} />
-      {isRunning && <DeviceGrid key={visKey}
+      <DeviceGrid key={visKey}
         amsList={status?.ams_list ?? []}
-        activeAmsId={status?.active_ams_id ?? -1}
-        activeTrayId={status?.active_tray_id ?? -1}
+        activeAmsId={isRunning ? (status?.active_ams_id ?? -1) : -1}
+        activeTrayId={isRunning ? (status?.active_tray_id ?? -1) : -1}
         rack={status?.hotend_rack}
         spoolLookup={spoolLookup}
         activeNozzleId={status?.nozzles?.find(n => n.active)?.id ?? null}
