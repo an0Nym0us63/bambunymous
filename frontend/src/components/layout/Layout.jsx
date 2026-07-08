@@ -19,7 +19,7 @@ const S = {
   logoBox: { width:28, height:28, borderRadius:8, overflow:"hidden" },
   nav:     { flex:1, padding:"0 8px", display:"flex", flexDirection:"column", gap:2 },
   main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
-  page:    { flex:1, overflowY:"auto", padding:16, background:"var(--bg)" },
+  page:    { flex:1, overflowY:"auto", padding:16, paddingTop:"calc(16px + env(safe-area-inset-top, 0px))", background:"var(--bg)" },
   // Mobile
   header:  { display:"flex", alignItems:"center", gap:8, padding:"12px 16px", background:"var(--sidebar)", borderBottom:"1px solid var(--border)" },
   bottomNav: { display:"flex", background:"var(--sidebar)", borderTop:"1px solid var(--border)",
