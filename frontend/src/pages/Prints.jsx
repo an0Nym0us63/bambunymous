@@ -1080,6 +1080,7 @@ export default function Prints() {
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset]   = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef(null);
   const [search, setSearch]   = useState("");
   const [statusF, setStatusF] = useState("");
   const [selected, setSelected] = useState(null);
@@ -1191,19 +1192,11 @@ export default function Prints() {
         ))}
       </div>
 
-      {/* KPIs */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:10 }}>
-        {[
-          ["IMPRESSIONS", total, null],
-          ["EN COURS", prints.filter(p=>p.status==="IN_PROGRESS").length || null, null],
-          ["POIDS TOTAL", prints.reduce((s,p)=>s+(p.total_weight_g||0),0) > 0 ? `${(prints.reduce((s,p)=>s+(p.total_weight_g||0),0)/1000).toFixed(2)} kg` : null, null],
-          ["COÛT TOTAL", prints.reduce((s,p)=>s+(p.total_cost||0),0) > 0 ? `${prints.reduce((s,p)=>s+(p.total_cost||0),0).toFixed(2)} €` : null, null],
-        ].filter(([,v])=>v).map(([label,val])=>(
-          <div key={label} className="card" style={{ padding:"10px 14px" }}>
-            <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 4px" }}>{label}</p>
-            <p style={{ fontSize:16, fontWeight:700, color:"var(--text)", margin:0, fontFamily:"JetBrains Mono,monospace" }}>{val}</p>
-          </div>
-        ))}
+      {/* KPIs — bande compacte */}
+      <div style={{ display:"flex", gap:12, flexWrap:"wrap", fontSize:12, color:"var(--muted)" }}>
+        <span><b style={{ color:"var(--text)", fontFamily:"monospace" }}>{total}</b> impressions</span>
+        {prints.reduce((s,p)=>s+(p.total_weight_g||0),0)>0 && <span><b style={{ color:"var(--text)", fontFamily:"monospace" }}>{(prints.reduce((s,p)=>s+(p.total_weight_g||0),0)/1000).toFixed(2)} kg</b> filament</span>}
+        {prints.reduce((s,p)=>s+(p.total_cost||0),0)>0 && <span><b style={{ color:"var(--text)", fontFamily:"monospace" }}>{prints.reduce((s,p)=>s+(p.total_cost||0),0).toFixed(2)} €</b></span>}
       </div>
 
       {/* Recherche + Filtres + .3mf */}
