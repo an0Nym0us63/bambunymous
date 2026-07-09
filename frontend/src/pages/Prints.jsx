@@ -328,6 +328,17 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             </div>
           </div>
 
+          {/* Bouton MakerWorld si design_id disponible */}
+          {p.design_id && (
+            <a href={`https://makerworld.com/en/models/${p.design_id}`} target="_blank" rel="noopener noreferrer"
+              style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                width:"100%", padding:"8px", borderRadius:10, marginBottom:14,
+                border:"1px solid rgba(59,130,246,0.3)", background:"rgba(59,130,246,0.06)",
+                color:"#3b82f6", fontSize:12, fontWeight:700, textDecoration:"none" }}>
+              🌐 Voir sur MakerWorld
+            </a>
+          )}
+
           {/* Créer objet depuis ce print */}
           <button onClick={async () => {
             const n = parseInt(prompt(`Créer combien d'objets depuis ce print ?
