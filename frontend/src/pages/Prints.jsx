@@ -127,6 +127,121 @@ function FilamentAccordion({ filaments, onSpoolClick }) {
   );
 }
 
+function PrintEditSheet({ p, onClose, onSaved }) {
+  const [form, setForm] = useState({
+    file_name:     p.file_name || "",
+    original_name: p.original_name || "",
+    print_date:    (p.print_date || "").slice(0,16),
+    status:        p.status || "SUCCESS",
+    status_note:   p.status_note || "",
+    design_id:     p.design_id || "",
+    plate_id:      p.plate_id || "1",
+    print_type:    p.print_type || "cloud",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const set = (k,v) => setForm(f=>({...f,[k]:v}));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await client.patch(`/prints/${p.id}`, form);
+      onSaved(form);
+    } catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
+    setSaving(false);
+  };
+
+  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none",
+    width:"100%", boxSizing:"border-box" };
+  const sel = { ...inp, cursor:"pointer" };
+  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+    letterSpacing:"0.05em", marginBottom:4, display:"block" };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:2000,
+      display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
+          maxWidth:640, maxHeight:"90dvh", overflowY:"auto",
+          padding:"0 16px 24px", paddingBottom:"env(safe-area-inset-bottom,24px)" }}>
+
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 8px", position:"relative" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:10, right:0, width:28, height:28,
+            borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer",
+            color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+        </div>
+
+        <h3 style={{ fontSize:15, fontWeight:800, margin:"0 0 16px", color:"var(--text)" }}>
+          ✏️ Éditer le print
+        </h3>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <div>
+            <label style={lbl}>Nom affiché</label>
+            <input style={inp} value={form.file_name} onChange={e=>set("file_name",e.target.value)}/>
+          </div>
+          <div>
+            <label style={lbl}>Nom original</label>
+            <input style={inp} value={form.original_name} onChange={e=>set("original_name",e.target.value)}/>
+          </div>
+          <div>
+            <label style={lbl}>Date et heure</label>
+            <input type="datetime-local" style={inp} value={form.print_date} onChange={e=>set("print_date",e.target.value)}/>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+            <div>
+              <label style={lbl}>Statut</label>
+              <select style={sel} value={form.status} onChange={e=>set("status",e.target.value)}>
+                <option value="SUCCESS">Réussi</option>
+                <option value="FAILED">Échoué</option>
+                <option value="IN_PROGRESS">En cours</option>
+              </select>
+            </div>
+            <div>
+              <label style={lbl}>Type</label>
+              <select style={sel} value={form.print_type} onChange={e=>set("print_type",e.target.value)}>
+                <option value="cloud">Cloud</option>
+                <option value="local">Local</option>
+              </select>
+            </div>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+            <div>
+              <label style={lbl}>Plateau</label>
+              <input style={inp} value={form.plate_id} onChange={e=>set("plate_id",e.target.value)}/>
+            </div>
+            <div>
+              <label style={lbl}>Note statut</label>
+              <input style={inp} value={form.status_note} onChange={e=>set("status_note",e.target.value)}/>
+            </div>
+          </div>
+          <div>
+            <label style={lbl}>ID MakerWorld (design_id)</label>
+            <input style={inp} value={form.design_id} onChange={e=>set("design_id",e.target.value)}
+              placeholder="ex: 123456"/>
+          </div>
+        </div>
+
+        <div style={{ display:"flex", gap:8, marginTop:20 }}>
+          <button onClick={onClose}
+            style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid var(--border)",
+              background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>
+            Annuler
+          </button>
+          <button onClick={save} disabled={saving}
+            style={{ flex:2, padding:"11px", borderRadius:12, border:"none",
+              background:"#3b82f6", color:"white", fontSize:13, fontWeight:700,
+              cursor:saving?"not-allowed":"pointer", opacity:saving?0.7:1 }}>
+            {saving ? "Enregistrement…" : "💾 Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
   const [ungrouped, setUngrouped] = useState(false);
@@ -377,6 +492,11 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
           {/* Actions */}
           <div style={{ display:"flex", gap:8, marginTop:8 }}>
+            <button onClick={()=>setEditMode(true)}
+              style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid var(--border)",
+                background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+              ✏️ Éditer
+            </button>
             <button onClick={() => {
               if (confirm("Supprimer ce print ?")) {
                 client.delete("/prints/" + p.id)
