@@ -414,6 +414,33 @@ async def patch_group(group_id: int, body: dict = Body({}), _: str = Depends(get
 
 
 
+
+@router.get("/kpis")
+async def prints_kpis(
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    group_id: Optional[int] = None,
+    _: str = Depends(get_current_user),
+):
+    async with AsyncSessionLocal() as db:
+        from sqlalchemy import or_ as _or
+        q = select(
+            func.count(Print.id).label("count"),
+            func.sum(func.coalesce(Print.duration_seconds, 0)).label("duration"),
+            func.sum(func.coalesce(Print.total_weight_g, 0)).label("weight"),
+            func.sum(func.coalesce(Print.total_cost, 0)).label("cost"),
+        ).where(Print.status != "IN_PROGRESS")
+        if status:   q = q.where(Print.status == status)
+        if group_id: q = q.where(Print.group_id == group_id)
+        if search:
+            q = q.where(_or(
+                Print.file_name.ilike(f"%{search}%"),
+                Print.original_name.ilike(f"%{search}%"),
+            ))
+        r = (await db.execute(q)).one()
+        return {"count": r.count or 0, "duration": int(r.duration or 0),
+                "weight_g": float(r.weight or 0), "cost": round(float(r.cost or 0), 2)}
+
 @router.get("/{print_id}")
 async def get_print(print_id: int, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:

@@ -66,9 +66,8 @@ function StatusBadge({ status }) {
 }
 
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
-function FilamentAccordion({ filaments }) {
+function FilamentAccordion({ filaments, onSpoolClick }) {
   const [open, setOpen] = useState(false);
-  const [selSpool, setSelSpool] = useState(null);
   return (
     <>
     <div style={{ marginBottom:14, border:"1px solid var(--border)", borderRadius:10 }}>
@@ -92,7 +91,7 @@ function FilamentAccordion({ filaments }) {
       {open && (
         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
           {filaments.map((f,i) => (
-            <div key={i} onClick={e=>{e.stopPropagation();console.log("[FILAMENT CLICK]",f);setSelSpool({filId:f.bam_filament_id||null,spoolId:f.spool_id||null,hex:f.color_hex||null});}}
+            <div key={i} onClick={e=>{e.stopPropagation();console.log("[FILAMENT CLICK]",f);onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id||null,hex:f.color_hex||null});}}
               style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px 12px", background:"var(--bg)",
               borderTop:"1px solid var(--border)", cursor:"pointer" }}>
@@ -124,7 +123,6 @@ function FilamentAccordion({ filaments }) {
         </div>
       )}
     </div>
-    {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)}/>}
     </>
   );
 }
@@ -142,6 +140,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
   const groupe = ungrouped ? null : p.group_name;
   const [editNb, setEditNb]   = useState(false);
+  const [selSpool, setSelSpool] = useState(null);
   const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
   const [nbVal, setNbVal]     = useState(String(pProp.number_of_items || 1));
   useEffect(() => { setLocalNb(p.number_of_items || 1); setNbVal(String(p.number_of_items || 1)); }, [p.number_of_items]);
@@ -179,6 +178,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const nb          = p.number_of_items || 1;
 
   return (
+    <>
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000,
       display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} className="sheet-inner"
@@ -348,7 +348,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           </button>
 
           {/* Filaments — accordéon */}
-          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage}/>}
+          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool}/>}
 
           {/* Identifiants (sans printer_model) */}
           {(p.job_id || p.design_id) && (
@@ -384,6 +384,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         </div>
       </div>
     </div>
+    {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)}/>}
   );
 }
 
