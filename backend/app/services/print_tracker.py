@@ -120,7 +120,7 @@ async def _snap(print_id: int, trigger: str):
 async def create_print(job_id: str, url: str, taskname: str,
                         print_type: str = "cloud",
                         printer_ip: str = "", printer_code: str = "",
-                        ams_mapping: list = None) -> Optional[int]:
+                        ams_mapping: list = None, design_id: str = "") -> Optional[int]:
     async with AsyncSessionLocal() as db:
         existing = (await db.execute(select(Print).where(Print.job_id == str(job_id)))).scalar_one_or_none()
         if existing:
@@ -133,6 +133,7 @@ async def create_print(job_id: str, url: str, taskname: str,
             original_name=taskname,
             print_type=print_type,
             status="IN_PROGRESS",
+            design_id=design_id or None,
         )
         db.add(p); await db.flush()
         pid = p.id; await db.commit()
