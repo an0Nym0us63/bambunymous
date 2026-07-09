@@ -242,6 +242,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
   const [ungrouped, setUngrouped] = useState(false);
   const [editMode, setEditMode] = useState(false);
+  const [userPhotos, setUserPhotos] = useState([]);
+  const loadUserPhotos = () => client.get(`/prints/${pProp.id}/photos`).then(r=>setUserPhotos(r.data||[])).catch(()=>{});
+  useEffect(() => { loadUserPhotos(); }, [pProp.id]);
+  const uploadPhoto = async (file) => { const fd = new FormData(); fd.append("file", file); await client.post(`/prints/${pProp.id}/photos/upload`, fd, { headers:{"Content-Type":"multipart/form-data"} }); loadUserPhotos(); };
   const [p, setP] = useState(pProp);
 
   useEffect(() => {
