@@ -484,12 +484,14 @@ async def delete_print(print_id: int, _: str = Depends(get_current_user)):
 
 
 
+
 @router.get("/{print_id}/photos")
 async def list_print_photos(print_id: int, _: str = Depends(get_current_user)):
-    d = DATA_DIR / "prints" / str(print_id) / "uploads"
+    d = DATA_DIR / "prints" / str(print_id)
     if not d.exists(): return []
-    return [{"filename": f.name, "url": f"/api/v1/prints/{print_id}/upload/{f.name}"}
-            for f in sorted(d.iterdir()) if f.suffix.lower() in (".jpg",".jpeg",".png",".webp")]
+    return [{"filename": f.name, "url": f"/api/v1/prints/{print_id}/file/{f.name}"}
+            for f in sorted(d.iterdir())
+            if f.name.startswith("Photo-") and f.suffix.lower() in (".jpg",".jpeg",".png",".webp")]
 
 @router.post("/{print_id}/photos/upload")
 async def upload_print_photo(
@@ -497,28 +499,30 @@ async def upload_print_photo(
     file: UploadFile = File(...),
     _: str = Depends(get_current_user),
 ):
-    import uuid as _uuid, subprocess as _sp, tempfile as _tf, os as _os
+    import subprocess as _sp, tempfile as _tf, os as _os
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(400, "Fichier image requis")
-    d = DATA_DIR / "prints" / str(print_id) / "uploads"
+    d = DATA_DIR / "prints" / str(print_id)
     d.mkdir(parents=True, exist_ok=True)
     raw = await file.read()
     orig_ext = (file.filename or "photo.jpg").rsplit(".", 1)[-1].lower()
-    name = f"{_uuid.uuid4().hex[:12]}.webp"
+    existing = list(d.glob("Photo-*.webp")) + list(d.glob("Photo-*.jpg"))
+    n_photos = len(existing) + 1
+    name = f"Photo-{n_photos:02d}.webp"
     dest = d / name
     try:
         with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
             tmp.write(raw); tmp_path = tmp.name
         _sp.run([
             "ffmpeg", "-y", "-i", tmp_path,
-            "-vf", "scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
+            "-vf", "scale=\'min(800,iw)\':'min(800,ih)\':force_original_aspect_ratio=decrease",
             "-quality", "80", "-compression_level", "6", str(dest)
         ], check=True, capture_output=True, timeout=30)
         _os.unlink(tmp_path)
     except Exception:
-        dest = d / f"{_uuid.uuid4().hex[:12]}.{orig_ext}"
+        dest = d / f"Photo-{n_photos:02d}.{orig_ext}"
         dest.write_bytes(raw)
-    return {"ok": True, "filename": dest.name, "url": f"/api/v1/prints/{print_id}/upload/{dest.name}"}
+    return {"ok": True, "filename": dest.name, "url": f"/api/v1/prints/{print_id}/file/{dest.name}"}
 
 @router.get("/{print_id}/image")
 async def print_image(print_id: int):
