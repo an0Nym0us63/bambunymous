@@ -324,18 +324,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           {/* Galerie snapshots avec bons labels */}
           <SnapshotGallery snaps={snaps.map(s=>({...s,
             label: SNAP_LABELS[s.trigger] || SNAP_LABELS[s.filename?.replace(/\.(jpg|png|webp)$/,"")] || s.trigger || s.filename
-          }))} printId={p.id} onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))} onUpload={uploadPhoto}/>
+          }))} printId={p.id} userPhotos={userPhotos} onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))} onUpload={uploadPhoto}/>
         </div>
 
-        {/* Photos utilisateur */}
-        {Array.isArray(userPhotos) && userPhotos.length > 0 && (
-          <div style={{ padding:"0 16px 8px", display:"flex", gap:8, overflowX:"auto" }}>
-            {userPhotos.map((ph,i)=>(
-              <img key={i} src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover",
-                borderRadius:8, flexShrink:0 }}/>
-            ))}
-          </div>
-        )}
 
         <div style={{ padding:"0 16px 16px" }}>
           {/* Titre */}
@@ -1006,7 +997,7 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
 }
 
 
-function SnapshotGallery({ snaps, printId, onDelete, onUpload }) {
+function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [] }) {
   const [lightbox, setLightbox] = useState(null);
   const [diskFiles, setDiskFiles] = useState([]);
 
@@ -1033,7 +1024,9 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload }) {
     snapByName[base] = s;
   });
 
-  const allItems = diskFiles.length > 0
+  // Fusionner photos disk + photos uploadées manuellement
+  const extraPhotos = (userPhotos||[]).map(ph => ({ url: ph.url, name: ph.filename, label: "Photo", snap: null }));
+  const baseItems = diskFiles.length > 0
     ? diskFiles.map(f => {
         const s = snapByName[f.name] || null;
         const FNAME_LABELS = {
@@ -1051,6 +1044,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload }) {
         label: LABELS[s.trigger] || s.trigger,
       }));
 
+  const allItems = [...baseItems, ...extraPhotos];
   if (!allItems.length) return null;
 
   // Photos = fichiers manuels (pas un snapshot milestone connu) ; Milestones = snapshots auto pct/layer
@@ -1069,9 +1063,9 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload }) {
               {title} ({items.length})
             </p>
             {onAdd && (
-              <label style={{ width:20, height:20, borderRadius:"50%", background:"var(--surface2)",
-                border:"1px solid var(--border)", cursor:"pointer", display:"flex",
-                alignItems:"center", justifyContent:"center", fontSize:14, color:"var(--muted)" }}>
+              <label style={{ width:20, height:20, borderRadius:"50%", background:"#3b82f6",
+                border:"none", cursor:"pointer", display:"flex",
+                alignItems:"center", justifyContent:"center", fontSize:14, color:"white", fontWeight:700 }}>
                 +
                 <input type="file" accept="image/*" capture="environment" style={{ display:"none" }}
                   onChange={e=>e.target.files[0]&&onAdd(e.target.files[0])}/>
