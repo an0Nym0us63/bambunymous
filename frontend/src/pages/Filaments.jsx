@@ -1006,7 +1006,7 @@ function SpoolsView({ filaments, showArchived }) {
 
 // ── Vue Catalogue ──────────────────────────────────────────────────────────
 // ── Fiche filament catalogue ────────────────────────────────────────────────
-function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
+export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
   const [lightbox, setLightbox] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -1807,6 +1807,19 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
       />
     </>
   );
+}
+
+
+export function FilamentSheetFromSpool({ spoolId, onClose }) {
+  const [fil, setFil] = React.useState(null);
+  React.useEffect(() => {
+    client.get("/filaments/spools/" + spoolId)
+      .then(r => client.get("/filaments/filaments/" + r.data.filament_id))
+      .then(r => setFil(r.data))
+      .catch(() => {});
+  }, [spoolId]);
+  if (!fil) return null;
+  return <FilamentSheet f={fil} onClose={onClose} onDeleted={onClose} onUpdated={()=>{}}/>;
 }
 
 export default function Filaments() {

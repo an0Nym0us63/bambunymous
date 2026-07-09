@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal } from "lucide-react";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
+import { FilamentSheetFromSpool } from "./Filaments";
 
 const STATUS_CFG = {
   IN_PROGRESS: { label:"En cours", color:"#3b82f6", bg:"rgba(59,130,246,0.75)",  icon:Loader },
@@ -48,6 +49,7 @@ function FilamentDots({ filaments }) {
           )}
         </div>
       ))}
+    {selSpool && <FilamentSheetFromSpool spoolId={selSpool} onClose={()=>setSelSpool(null)}/>}
     </div>
   );
 }
@@ -67,6 +69,7 @@ function StatusBadge({ status }) {
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
 function FilamentAccordion({ filaments }) {
   const [open, setOpen] = useState(false);
+  const [selSpool, setSelSpool] = useState(null);
   return (
     <div style={{ marginBottom:14, border:"1px solid var(--border)", borderRadius:10, overflow:"hidden" }}>
       {/* Header cliquable */}
