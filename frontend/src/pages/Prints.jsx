@@ -1108,6 +1108,7 @@ export default function Prints() {
   const [hasMore, setHasMore] = useState(false);
   const [offset, setOffset]   = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [kpis, setKpis] = useState(null);
   const sentinelRef = useRef(null);
   const [search, setSearch]   = useState("");
   const [statusF, setStatusF] = useState("");
@@ -1134,6 +1135,19 @@ export default function Prints() {
   const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
 
   const LIMIT = 40;
+
+  const loadKpis = useCallback(async () => {
+    const p = new URLSearchParams();
+    if (search)   p.set("search", search);
+    if (statusF)  p.set("status", statusF);
+    if (groupF)   p.set("group_id", groupF);
+    try {
+      const { data } = await client.get("/prints/kpis?" + p);
+      setKpis(data);
+    } catch {}
+  }, [search, statusF, groupF]);
+
+  useEffect(() => { loadKpis(); }, [loadKpis]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1230,20 +1244,23 @@ export default function Prints() {
         ))}
       </div>
 
-      {/* KPIs — badges compacts */}
-      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-        {[
-          [`${total}`, "impressions", "#3b82f6"],
-          prints.reduce((s,p)=>s+(p.total_weight_g||0),0)>0 ? [`${(prints.reduce((s,p)=>s+(p.total_weight_g||0),0)/1000).toFixed(2)} kg`, "filament", "#8b5cf6"] : null,
-          prints.reduce((s,p)=>s+(p.total_cost||0),0)>0 ? [`${prints.reduce((s,p)=>s+(p.total_cost||0),0).toFixed(2)} €`, null, "#22c55e"] : null,
-        ].filter(Boolean).map(([val, label, color])=>(
-          <div key={val} style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 10px",
-            borderRadius:20, background:`${color}18`, border:`1px solid ${color}30` }}>
-            <span style={{ fontSize:12, fontWeight:700, color, fontFamily:"monospace" }}>{val}</span>
-            {label && <span style={{ fontSize:11, color:"var(--muted)" }}>{label}</span>}
-          </div>
-        ))}
-      </div>
+      {/* KPIs — données complètes depuis API (pas juste les éléments chargés) */}
+      {kpis && (
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {[
+            [`${kpis.count}`, "prints", "#3b82f6"],
+            kpis.duration > 0 ? [fmtDur(kpis.duration), null, "#8b5cf6"] : null,
+            kpis.weight_g > 0 ? [`${(kpis.weight_g/1000).toFixed(2)} kg`, null, "#f59e0b"] : null,
+            kpis.cost > 0 ? [`${kpis.cost.toFixed(2)} €`, null, "#22c55e"] : null,
+          ].filter(Boolean).map(([val, label, color])=>(
+            <div key={val} style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 10px",
+              borderRadius:20, background:`${color}18`, border:`1px solid ${color}30` }}>
+              <span style={{ fontSize:12, fontWeight:700, color, fontFamily:"monospace" }}>{val}</span>
+              {label && <span style={{ fontSize:11, color:"var(--muted)" }}>{label}</span>}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Recherche + Filtres + .3mf */}
       <div style={{ display:"flex", gap:8 }}>
