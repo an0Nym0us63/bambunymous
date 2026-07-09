@@ -98,11 +98,11 @@ function FilamentAccordion({ filaments }) {
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {f.filament_translated_name || f.filament_name || "Inconnu"}
+                  {f.filament_translated_name || f.filament_fila_type || f.filament_name || "Inconnu"}
                   {f.spool_id && <span style={{ fontSize:9, color:"#22c55e", marginLeft:5 }}>✓#{f.spool_id}</span>}
                 </p>
                 <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
-                  {[f.filament_brand, f.filament_type, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
+                  {[f.filament_brand, f.filament_fila_type || f.filament_type, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
                 </p>
               </div>
               {(f.cost > 0 || f.normal_cost > 0) && (
