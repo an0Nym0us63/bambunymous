@@ -100,13 +100,11 @@ function StatusBanner({ status }) {
   const pct    = status.progress ?? 0;
   const remain = fmtTime(status.remaining_minutes);
   const finish = fmtFinishTime(status.remaining_minutes);
-  // H2D est la seule imprimante Bambu avec double buse (pour l'instant)
-  const isDualNozzle = (status.model_id || "").toUpperCase().includes("C12") ||
-                       (status.printer_model || "").toUpperCase().includes("H2D");
+  // Double buse si le MQTT remonte 2 buses (H2C, H2D, X2D...)
+  const isDualNozzle = (status.nozzle_count ?? (status.nozzles?.length ?? 0)) >= 2;
   const _allNozzles = status.nozzles || [];
   const nozzle0 = _allNozzles.find(n => n.id === 0);
   const nozzle1 = _allNozzles.find(n => n.id === 1);
-  // Pour H2D : gauche=id1, droite=id0. Pour les autres : une seule buse
   const left   = isDualNozzle ? nozzle1 : (nozzle1 || nozzle0);
   const right  = isDualNozzle ? nozzle0 : null;
 
