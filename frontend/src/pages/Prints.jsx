@@ -366,8 +366,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           <div style={{ display:"flex", gap:8, marginTop:8 }}>
             <button onClick={() => {
               if (confirm("Supprimer ce print ?")) {
-                try { await client.delete("/prints/" + p.id); } catch(e) { alert("Erreur suppression"); return; }
-                onDelete?.(p.id); onClose();
+                client.delete("/prints/" + p.id)
+                  .then(()=>{ onDelete?.(p.id); onClose(); })
+                  .catch(()=>alert("Erreur suppression"));
               }
             }} style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid rgba(239,68,68,0.3)",
               background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:13, fontWeight:700,
