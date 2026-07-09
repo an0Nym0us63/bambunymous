@@ -243,7 +243,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [ungrouped, setUngrouped] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [userPhotos, setUserPhotos] = useState([]);
-  const loadUserPhotos = () => client.get(`/prints/${pProp.id}/photos`).then(r=>setUserPhotos(r.data||[])).catch(()=>{});
+  const loadUserPhotos = () => client.get(`/prints/${pProp.id}/photos`).then(r=>setUserPhotos(Array.isArray(r.data)?r.data:[])).catch(()=>{});
   useEffect(() => { loadUserPhotos(); }, [pProp.id]);
   const uploadPhoto = async (file) => { const fd = new FormData(); fd.append("file", file); await client.post(`/prints/${pProp.id}/photos/upload`, fd, { headers:{"Content-Type":"multipart/form-data"} }); loadUserPhotos(); };
   const [p, setP] = useState(pProp);
@@ -328,7 +328,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         </div>
 
         {/* Photos utilisateur */}
-        {userPhotos.length > 0 && (
+        {Array.isArray(userPhotos) && userPhotos.length > 0 && (
           <div style={{ padding:"0 16px 8px", display:"flex", gap:8, overflowX:"auto" }}>
             {userPhotos.map((ph,i)=>(
               <img key={i} src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover",
