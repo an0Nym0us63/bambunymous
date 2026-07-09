@@ -218,8 +218,11 @@ function StatusBanner({ status }) {
           <div style={{ padding:12, display:"flex", flexDirection:"column", gap:10 }}>
             {/* Buses */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-              {left  && <TempChip label="Buse Gauche" current={left.temp}  target={left.target}  active={left.active}/>}
+              {left  && <TempChip label={right ? "Buse Gauche" : "Buse"} current={left.temp}  target={left.target}  active={left.active}/>}
               {right && <TempChip label="Buse Droite" current={right.temp} target={right.target} active={right.active}/>}
+              {!left && !right && status.nozzles?.length > 0 && (
+                <TempChip label="Buse" current={status.nozzles[0].temp} target={status.nozzles[0].target} active={status.nozzles[0].active}/>
+              )}
               <TempChip label="Plateau" current={status.bed_temp}     target={status.target_bed_temp} accent="#ef4444" />
               <TempChip label="Chambre" current={status.chamber_temp} target={0} />
             </div>
