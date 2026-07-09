@@ -179,7 +179,6 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
   return (
     <>
-    <>
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000,
       display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} className="sheet-inner"
