@@ -1810,13 +1810,20 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
 }
 
 
-export function FilamentSheetFromSpool({ spoolId, onClose }) {
+export function FilamentSheetFromSpool({ spoolId, filamentColorHex, onClose }) {
   const [fil, setFil] = React.useState(null);
   React.useEffect(() => {
-    client.get("/filaments/spools/" + spoolId)
-      .then(r => client.get("/filaments/filaments/" + r.data.filament_id))
-      .then(r => setFil(r.data))
-      .catch(() => {});
+    // Chercher le filament associé à cette bobine
+    client.get("/filaments/spools", { params:{ limit:1000 } })
+      .then(r => {
+        const spool = (r.data || []).find(s => s.id === spoolId);
+        if (spool?.filament_id)
+          return client.get("/filaments/filaments/" + spool.filament_id).then(r2 => setFil(r2.data));
+        // Fallback: chercher par couleur
+        if (filamentColorHex)
+          return client.get("/filaments/filaments", { params:{ search: filamentColorHex } })
+            .then(r2 => { if (r2.data?.[0]) setFil(r2.data[0]); });
+      }).catch(() => {});
   }, [spoolId]);
   if (!fil) return null;
   return <FilamentSheet f={fil} onClose={onClose} onDeleted={onClose} onUpdated={()=>{}}/>;

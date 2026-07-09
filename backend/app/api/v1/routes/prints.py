@@ -108,12 +108,27 @@ async def _enrich_filament_usage(db, prints):
     fils_r = await db.execute(select(Filament).where(Filament.id.in_(fil_ids)))
     fils = {f.id: f for f in fils_r.scalars().all()}
 
+    # Charger aussi les filaments par couleur+type pour les usages sans spool_id
+    all_fils_r = await db.execute(select(Filament))
+    all_fils = all_fils_r.scalars().all()
+    # Index par couleur hex (sans #, lowercase)
+    fil_by_color = {}
+    for f in all_fils:
+        if f.color:
+            key = str(f.color).lstrip("#").lower()
+            fil_by_color[key] = f
+
     for p in prints:
         for u in (p.filament_usage or []):
-            if not u.spool_id: continue
-            spool = spools.get(u.spool_id)
-            if not spool: continue
-            fil = fils.get(spool.filament_id)
+            fil = None
+            if u.spool_id:
+                spool = spools.get(u.spool_id)
+                if spool:
+                    fil = fils.get(spool.filament_id)
+            if not fil and u.color_hex:
+                # Fallback: chercher par couleur
+                key = str(u.color_hex).lstrip("#").lower()
+                fil = fil_by_color.get(key)
             if not fil: continue
             if not u.color_hex and fil.color:
                 u.color_hex = f"#{fil.color}" if not str(fil.color).startswith("#") else fil.color
