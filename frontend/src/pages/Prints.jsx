@@ -1302,14 +1302,14 @@ export default function Prints() {
 
   useEffect(() => {
     const container = document.querySelector(".page-content");
-    if (!container || !hasMore) return;
+    if (!container || !hasMore || viewMode !== "list") return;
     const onScroll = () => {
       const { scrollTop, scrollHeight, clientHeight } = container;
       if (scrollHeight - scrollTop - clientHeight < 400) loadMore();
     };
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => container.removeEventListener("scroll", onScroll);
-  }, [loadMore, hasMore]);
+  }, [loadMore, hasMore, viewMode]);
 
   const loadGroups = useCallback(async () => {
     try {
