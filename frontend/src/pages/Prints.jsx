@@ -1312,7 +1312,7 @@ export default function Prints() {
       if (statusF) params.set("status", statusF);
       if (groupF)  params.set("group_id", groupF);
       const { data } = await client.get("/prints?" + params);
-      const existingIds = new Set(prints.map(p => p.id));
+      const existingIds = new Set((prints||[]).map(p => p.id));
       const fresh = (data.prints || []).filter(p => !existingIds.has(p.id));
       setPrints(prev => [...prev, ...fresh]);
       setOffset(next);
