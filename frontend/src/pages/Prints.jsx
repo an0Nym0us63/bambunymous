@@ -1241,18 +1241,7 @@ export default function Prints() {
             Annuler
           </button>
         )}
-        {viewMode==="list" && !selectMode && (
-          <button onClick={()=>setSelectMode(true)}
-            style={{ padding:"8px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
-              color:"var(--muted)", fontSize:12, cursor:"pointer", flexShrink:0 }}>
-            Sélectionner
-          </button>
-        )}
-        <label style={{ padding:"8px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
-          color:"var(--muted)", fontSize:12, cursor:"pointer", display:"flex", alignItems:"center", gap:5, flexShrink:0 }}>
-          <Upload size={13}/> .3mf
-          <input type="file" accept=".3mf" onChange={handleImport} style={{ display:"none" }}/>
-        </label>
+
       </div>
 
       {filterOpen && (
