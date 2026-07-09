@@ -242,7 +242,8 @@ class MQTTManager:
                     async with _PAS() as db:
                         ip   = await _PGS(db, "PRINTER_IP")
                         code = await _PGS(db, "PRINTER_ACCESS_CODE")
-                    await _cp(_j, _u, _t, "local", ip or "", code or "", ams_mapping=_am)
+                    _did2 = str(p.get("design_id", "") or state.design_id or "")
+                    await _cp(_j, _u, _t, "local", ip or "", code or "", ams_mapping=_am, design_id=_did2)
                 try:    lp.run_until_complete(_go())
                 finally: lp.close()
             _pth.Thread(target=_local2, daemon=True).start()
