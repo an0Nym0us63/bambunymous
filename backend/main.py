@@ -178,5 +178,8 @@ if STATIC_DIR.exists():
     async def spa_fallback(full_path: str):
         index = STATIC_DIR / "index.html"
         if index.exists():
-            return FileResponse(str(index))
+            return FileResponse(str(index), headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache", "Expires": "0",
+            })
         return JSONResponse({"error": "Frontend not built"}, status_code=503)
