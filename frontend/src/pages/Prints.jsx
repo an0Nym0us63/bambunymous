@@ -1496,8 +1496,11 @@ export default function Prints() {
 
         // Agréger les groupes par id (et non par nom — deux groupes distincts peuvent
         // porter le même nom, ex. import Spoolnymous à des dates différentes)
+        // Déduplication (lazy load peut introduire des doublons)
+        const seenIds = new Set();
+        const uniquePrints = prints.filter(p => { if (seenIds.has(p.id)) return false; seenIds.add(p.id); return true; });
         const groupMap = {};   // group_id → { name, prints[], latestDate }
-        prints.forEach(p => {
+        uniquePrints.forEach(p => {
           if (!p.group_id) return;
           if (!groupMap[p.group_id]) groupMap[p.group_id] = { name: p.group_name, prints:[], latestDate:"", duration_seconds:0, number_of_items:p.group_number_of_items||1 };
           groupMap[p.group_id].prints.push(p);
@@ -1509,7 +1512,7 @@ export default function Prints() {
         // Construire la liste d'items : soit un print solo, soit un groupe entier
         const items = [];
         const addedGroups = new Set();
-        prints.forEach(p => {
+        uniquePrints.forEach(p => {
           if (!p.group_id) {
             // Print solo → item individuel
             items.push({ type:"print", p, date: p.print_date });
