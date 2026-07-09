@@ -500,29 +500,42 @@ async def upload_print_photo(
     _: str = Depends(get_current_user),
 ):
     import subprocess as _sp, tempfile as _tf, os as _os
+    from ....models.print_history import PrintSnapshot as _PS
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(400, "Fichier image requis")
     d = DATA_DIR / "prints" / str(print_id)
     d.mkdir(parents=True, exist_ok=True)
     raw = await file.read()
     orig_ext = (file.filename or "photo.jpg").rsplit(".", 1)[-1].lower()
-    existing = list(d.glob("Photo-*.webp")) + list(d.glob("Photo-*.jpg"))
-    n_photos = len(existing) + 1
-    name = f"Photo-{n_photos:02d}.webp"
-    dest = d / name
+    # Numéroter Photo-01, 02... (même convention que zip_importer)
+    idx = 1
+    while (d / f"Photo-{idx:02d}.webp").exists() or (d / f"Photo-{idx:02d}.{orig_ext}").exists():
+        idx += 1
+    dest = d / f"Photo-{idx:02d}.webp"
     try:
         with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
             tmp.write(raw); tmp_path = tmp.name
         _sp.run([
             "ffmpeg", "-y", "-i", tmp_path,
-            "-vf", "scale=\'min(800,iw)\':'min(800,ih)\':force_original_aspect_ratio=decrease",
+            "-vf", "scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
             "-quality", "80", "-compression_level", "6", str(dest)
         ], check=True, capture_output=True, timeout=30)
         _os.unlink(tmp_path)
     except Exception:
-        dest = d / f"Photo-{n_photos:02d}.{orig_ext}"
+        dest = d / f"Photo-{idx:02d}.{orig_ext}"
         dest.write_bytes(raw)
+    # Créer PrintSnapshot en DB (trigger=manual) pour apparaître dans la galerie
+    rel_path = f"prints/{print_id}/{dest.name}"
+    async with AsyncSessionLocal() as db:
+        from sqlalchemy import select as _sel
+        existing = (await db.execute(
+            _sel(_PS).where(_PS.print_id == print_id, _PS.file_path == rel_path)
+        )).scalar_one_or_none()
+        if not existing:
+            db.add(_PS(print_id=print_id, trigger="manual", file_path=rel_path))
+            await db.commit()
     return {"ok": True, "filename": dest.name, "url": f"/api/v1/prints/{print_id}/file/{dest.name}"}
+
 
 @router.get("/{print_id}/image")
 async def print_image(print_id: int):
