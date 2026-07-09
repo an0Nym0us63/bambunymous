@@ -399,7 +399,7 @@ async def group_photo(group_id: int, filename: str):
 @router.patch("/groups/{group_id}")
 async def patch_group(group_id: int, body: dict = Body({}), _: str = Depends(get_current_user)):
     """Met à jour les champs éditables d'un groupe (name, number_of_items)."""
-    allowed = {"name", "number_of_items"}
+    allowed = {"name", "number_of_items", "cover_print_id"}
     updates = {k: v for k, v in body.items() if k in allowed}
     if not updates:
         raise HTTPException(400, "Aucun champ valide")

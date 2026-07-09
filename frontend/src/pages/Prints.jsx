@@ -406,6 +406,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   const [editNb, setEditNb]           = useState(false);
   const [nbVal, setNbVal]             = useState(String(nbItemsProp || 1));
   const [selectedPrint, setSelectedPrint] = useState(null);
+  const [selSpoolG, setSelSpoolG] = useState(null);
 
   useEffect(() => {
     if (!groupId) return;
@@ -494,16 +495,17 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
             </div>
           </div>
 
-          {/* KPIs */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:12 }}>
-            {[["⏱", "Durée",    fmtDur(totalDur)],
-              ["⚖", "Filament", totalW>0?totalW.toFixed(0)+"g":null],
-              ["💰","Coût",     totalCost>0?totalCost.toFixed(2)+"€":null],
-            ].filter(([,,v])=>v).map(([ic,label,val])=>(
-              <div key={label} style={{ background:"var(--surface2)", borderRadius:10,
-                padding:"8px 10px", border:"1px solid var(--border)" }}>
-                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>{ic} {label}</p>
-                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:0, fontFamily:"monospace" }}>{val}</p>
+          {/* KPIs — badges */}
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:12 }}>
+            {[
+              totalDur>0 && ["⏱", fmtDur(totalDur), "#8b5cf6"],
+              totalW>0   && ["⚖", totalW.toFixed(0)+"g", "#f59e0b"],
+              totalCost>0 && ["💰", totalCost.toFixed(2)+"€", "#22c55e"],
+            ].filter(Boolean).map(([ic,val,color])=>(
+              <div key={ic} style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 10px",
+                borderRadius:20, background:`${color}18`, border:`1px solid ${color}30` }}>
+                <span style={{ fontSize:11 }}>{ic}</span>
+                <span style={{ fontSize:11, fontWeight:700, color, fontFamily:"monospace" }}>{val}</span>
               </div>
             ))}
           </div>
@@ -555,41 +557,8 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
             </div>
           )}
 
-          {/* Filaments agrégés */}
-          {filaments.length > 0 && (
-            <div style={{ marginBottom:14 }}>
-              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.06em", margin:"0 0 8px" }}>Filaments</p>
-              <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
-                {filaments.map((f,i) => (
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:8,
-                    background:"var(--surface2)", border:"1px solid var(--border)",
-                    borderRadius:8, padding:"6px 10px" }}>
-                    <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
-                      backgroundColor:hexCss(f.color_hex),
-                      border:"1px solid rgba(255,255,255,0.15)" }}/>
-                    <span style={{ fontSize:11, fontWeight:600, color:"var(--text)", flex:1,
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {f.filament_name || f.filament_type || "Inconnu"}
-                    </span>
-                    <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"monospace" }}>
-                      {f.grams_used?.toFixed(0)}g
-                    </span>
-                    {(f.cost > 0 || f.normal_cost > 0) && (
-                      <div style={{ textAlign:"right" }}>
-                        <span style={{ fontSize:10, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
-                          {(f.cost || f.normal_cost || 0).toFixed(2)}€
-                        </span>
-                        {f.cost > 0 && f.normal_cost > 0 && f.cost !== f.normal_cost && (
-                          <p style={{ fontSize:8, color:"var(--muted)", margin:0 }}>({f.normal_cost.toFixed(2)}€)</p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Filaments agrégés — accordéon */}
+          {filaments.length > 0 && <FilamentAccordion filaments={filaments} onSpoolClick={setSelSpoolG}/>}
 
           {/* Prints en tuiles */}
           {/* Créer objet depuis ce groupe */}
@@ -628,6 +597,16 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   borderRadius:"50%", background:"rgba(0,0,0,0.55)", border:"none",
                   cursor:"pointer", color:"white", fontSize:11,
                   display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                {/* Bouton étoile = définir comme référence visuelle */}
+                <button onClick={async e=>{ e.stopPropagation();
+                  try { await client.patch("/prints/groups/"+groupId, { cover_print_id: p.id });
+                  setLocalPrints(ps=>[...ps]); } catch{} // force re-render
+                }} title="Définir comme référence visuelle"
+                  style={{ position:"absolute", top:4, left:4, zIndex:2, width:20, height:20,
+                  borderRadius:"50%", background:"rgba(0,0,0,0.5)", border:"none",
+                  cursor:"pointer", color:"#f59e0b", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  ★
+                </button>
                 <div onClick={()=>setSelectedPrint(p)} style={{ cursor:"pointer" }}>
                 <div style={{ position:"relative", paddingTop:"75%", background:"var(--surface2)" }}>
                   <img src={"/api/v1/prints/"+p.id+"/image"} alt="" style={{
@@ -672,6 +651,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
         </div>
       </div>
     </div>
+    {selSpoolG && <FilamentSheetFromSpool filamentId={selSpoolG.filId} spoolId={selSpoolG.spoolId} filamentColorHex={selSpoolG.hex} onClose={()=>setSelSpoolG(null)} zIndex={2000}/>}
     {selectedPrint && (
       <PrintDetail p={selectedPrint} onClose={()=>setSelectedPrint(null)}
         onDelete={()=>{ setSelectedPrint(null); setLocalPrints(ps=>ps.filter(p=>p.id!==selectedPrint.id)); }}
@@ -1098,6 +1078,7 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
         ["Poids",  it => it.total_weight_g ? `${it.total_weight_g.toFixed(0)}g` : null],
       ]}
     />
+    {selSpoolG && <FilamentSheetFromSpool filamentId={selSpoolG.filId} spoolId={selSpoolG.spoolId} filamentColorHex={selSpoolG.hex} onClose={()=>setSelSpoolG(null)} zIndex={2000}/>}
     {selectedPrint && (
       <PrintDetail p={selectedPrint} onClose={()=>setSelectedPrint(null)}
         onDelete={()=>setSelectedPrint(null)} onChanged={()=>{}}/>

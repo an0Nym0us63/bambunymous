@@ -132,7 +132,8 @@ class Group(Base):
     id           = Column(Integer, primary_key=True, autoincrement=True)
     name         = Column(String(256), nullable=False)
     external_ref = Column(String(64), nullable=True)
-    number_of_items = Column(Integer, default=1)
+    number_of_items  = Column(Integer, default=1)
+    cover_print_id   = Column(Integer, nullable=True)  # print de référence pour la vignette
     created_at   = Column(DateTime, default=datetime.utcnow)
 
     prints = relationship("Print", back_populates="group")
