@@ -456,7 +456,7 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
 
 function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId }) {
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
-  const hasRack = (rack?.hotends?.length ?? 0) > 0;
+  const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
   const headId  = rack?.head_id ?? -1;
   const headSlot = hasRack ? (rack.hotends.find(s => s.id === 0) ?? null) : null;
   // Couleur réelle du filament en train d'être extrudé (le champ color du headSlot
@@ -655,14 +655,14 @@ export default function Home() {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, maxWidth:640, margin:"0 auto" }}>
       <StatusBanner status={status} />
-      <DeviceGrid key={visKey}
+      {(status?.status === "RUNNING" || status?.status === "PAUSED" || (status?.ams_list?.length > 0)) && <DeviceGrid key={visKey}
         amsList={status?.ams_list ?? []}
         activeAmsId={isRunning ? (status?.active_ams_id ?? -1) : -1}
         activeTrayId={isRunning ? (status?.active_tray_id ?? -1) : -1}
         rack={status?.hotend_rack}
         spoolLookup={spoolLookup}
         activeNozzleId={status?.nozzles?.find(n => n.active)?.id ?? null}
-      />
+      />}
     </div>
   );
 }
