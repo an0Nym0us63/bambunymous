@@ -102,7 +102,7 @@ function FilamentAccordion({ filaments }) {
                   {f.spool_id && <span style={{ fontSize:9, color:"#22c55e", marginLeft:5 }}>✓#{f.spool_id}</span>}
                 </p>
                 <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
-                  {[f.filament_manufacturer, f.filament_type, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
+                  {[f.filament_brand, f.filament_type, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
                 </p>
               </div>
               {(f.cost > 0 || f.normal_cost > 0) && (
