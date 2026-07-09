@@ -218,6 +218,8 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
                 invalidate_tray_cache()
             except Exception:
                 pass
+            await _costs(db, p_obj)
+            await db.commit()
             logger.info(f"[SPOOL] ✅ Déduction terminée print #{pid}")
     logger.info(f"[DB] ✅ Print {pid}: {name!r}, {len(meta.get('filaments',{}))} filaments")
 
