@@ -526,7 +526,7 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
   );
 }
 
-function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
+export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   const [confirmDelete, setConfirmDelete] = React.useState(null); // null | {usage_count}
   const [deleting, setDeleting] = React.useState(false);
 
@@ -1811,11 +1811,17 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
 
 
 export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, onClose }) {
-  const [fil, setFil] = React.useState(null);
+  const [spool, setSpool] = React.useState(null);
   React.useEffect(() => {
     const load = async () => {
       try {
         console.log('[FSheet]',{filamentId,spoolId,filamentColorHex});
+        // Chercher la bobine directement
+        if (spoolId) {
+          const r = await client.get("/filaments/spools", { params:{ limit:2000, archived:true } });
+          const found = (r.data||[]).find(s => s.id === spoolId);
+          if (found) { setSpool(found); return; }
+        }
         if (filamentId) {
           const r = await client.get("/filaments/filaments/" + filamentId);
           setFil(r.data); return;
@@ -1839,8 +1845,8 @@ export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, 
     };
     load();
   }, [spoolId, filamentColorHex]);
-  if (!fil) return null;
-  return <FilamentSheet f={fil} onClose={onClose} onDeleted={onClose} onUpdated={()=>{}}/>;
+  if (!spool) return null;
+  return <SpoolBottomSheet spool={spool} onClose={onClose} onArchive={onClose} onDelete={onClose}/>;
 }
 
 export default function Filaments() {
