@@ -92,9 +92,10 @@ function FilamentAccordion({ filaments }) {
       {open && (
         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
           {filaments.map((f,i) => (
-            <div key={i} style={{ display:"flex", alignItems:"center", gap:10,
+            <div key={i} onClick={e=>{e.stopPropagation();setSelSpool({filId:f.bam_filament_id||null,spoolId:f.spool_id||null,hex:f.color_hex||null});}}
+              style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px 12px", background:"var(--bg)",
-              borderTop:"1px solid var(--border)" }}>
+              borderTop:"1px solid var(--border)", cursor:"pointer" }}>
               <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
                 backgroundColor:hexCss(f.color_hex),
                 border:f.spool_id?"2px solid #22c55e":"1px solid rgba(255,255,255,0.15)" }}/>
