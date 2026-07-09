@@ -1234,13 +1234,23 @@ export default function Prints() {
           <SlidersHorizontal size={14}/>
           {(statusF||sortF!=="recent") ? "Filtres (actifs)" : "Filtres"}
         </button>
-        {viewMode==="list" && selectMode && (
-          <button onClick={exitSelectMode}
-            style={{ padding:"8px 12px", borderRadius:10, border:"none", background:"var(--surface2)",
-              color:"var(--muted)", fontSize:12, cursor:"pointer", flexShrink:0 }}>
-            Annuler
+        {viewMode==="list" && (
+          <button onClick={()=>selectMode?exitSelectMode():setSelectMode(true)}
+            title={selectMode?"Annuler sélection":"Sélectionner"}
+            style={{ width:36, height:36, borderRadius:10, border:"1px solid var(--border)",
+              background:selectMode?"rgba(59,130,246,0.1)":"var(--surface2)",
+              color:selectMode?"#3b82f6":"var(--muted)", cursor:"pointer",
+              display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+            <Check size={14}/>
           </button>
         )}
+        <label title="Importer .3mf"
+          style={{ width:36, height:36, borderRadius:10, border:"1px solid var(--border)",
+            background:"var(--surface2)", color:"var(--muted)", cursor:"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <Upload size={14}/>
+          <input type="file" accept=".3mf" onChange={handleImport} style={{ display:"none" }}/>
+        </label>
 
       </div>
 
