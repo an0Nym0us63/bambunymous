@@ -1818,8 +1818,10 @@ export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, 
         console.log('[FSheet]',{filamentId,spoolId,filamentColorHex});
         // Chercher la bobine directement
         if (spoolId) {
-          const r = await client.get("/filaments/spools", { params:{ limit:2000, archived:true } });
-          const found = (r.data||[]).find(s => s.id === spoolId);
+          const r = await client.get("/filaments/spools", { params:{ limit:2000, archived:false } });
+          const r2 = await client.get("/filaments/spools", { params:{ limit:2000, archived:true } });
+          const allSpools = [...(r.data||[]), ...(r2.data||[])];
+          const found = allSpools.find(s => s.id === spoolId);
           if (found) { setSpool(found); return; }
         }
         if (filamentId) {
