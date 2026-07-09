@@ -100,8 +100,10 @@ function StatusBanner({ status }) {
   const pct    = status.progress ?? 0;
   const remain = fmtTime(status.remaining_minutes);
   const finish = fmtFinishTime(status.remaining_minutes);
-  const left   = status.nozzles?.find(n => n.id === 1);
-  const right  = status.nozzles?.find(n => n.id === 0);
+  const _allNozzles = status.nozzles || [];
+  // Ignorer les buses sans température réelle (X1C envoie 2 slots mais 1 seul actif)
+  const left   = _allNozzles.find(n => n.id === 1 && (n.temp > 5 || n.target > 0 || n.active));
+  const right  = _allNozzles.find(n => n.id === 0 && (n.temp > 5 || n.target > 0 || n.active));
 
 
 
