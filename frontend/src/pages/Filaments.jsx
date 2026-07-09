@@ -1810,11 +1810,15 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
 }
 
 
-export function FilamentSheetFromSpool({ spoolId, filamentColorHex, onClose }) {
+export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, onClose }) {
   const [fil, setFil] = React.useState(null);
   React.useEffect(() => {
     const load = async () => {
       try {
+        if (filamentId) {
+          const r = await client.get("/filaments/filaments/" + filamentId);
+          setFil(r.data); return;
+        }
         if (spoolId) {
           const spools = await client.get("/filaments/spools", { params:{ limit:1000 } });
           const spool = (spools.data || []).find(s => s.id === spoolId);
