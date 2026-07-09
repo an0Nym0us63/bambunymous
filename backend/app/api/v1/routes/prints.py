@@ -488,7 +488,7 @@ async def delete_print(print_id: int, _: str = Depends(get_current_user)):
 async def list_print_photos(print_id: int, _: str = Depends(get_current_user)):
     d = DATA_DIR / "prints" / str(print_id) / "uploads"
     if not d.exists(): return []
-    return [{"filename": f.name, "url": f"/api/v1/prints/{print_id}/file/uploads/{f.name}"}
+    return [{"filename": f.name, "url": f"/api/v1/prints/{print_id}/upload/{f.name}"}
             for f in sorted(d.iterdir()) if f.suffix.lower() in (".jpg",".jpeg",".png",".webp")]
 
 @router.post("/{print_id}/photos/upload")
@@ -518,7 +518,7 @@ async def upload_print_photo(
     except Exception:
         dest = d / f"{_uuid.uuid4().hex[:12]}.{orig_ext}"
         dest.write_bytes(raw)
-    return {"ok": True, "filename": dest.name, "url": f"/api/v1/prints/{print_id}/file/uploads/{dest.name}"}
+    return {"ok": True, "filename": dest.name, "url": f"/api/v1/prints/{print_id}/upload/{dest.name}"}
 
 @router.get("/{print_id}/image")
 async def print_image(print_id: int):
@@ -537,6 +537,18 @@ async def print_image(print_id: int):
             return FileResponse(str(f), media_type=mime)
     raise HTTPException(404)
 
+
+
+@router.get("/{print_id}/upload/{filename}")
+async def print_upload_file(print_id: int, filename: str):
+    """Sert les fichiers uploadés du dossier uploads d'un print."""
+    import mimetypes
+    if ".." in filename or "/" in filename:
+        raise HTTPException(400)
+    path = DATA_DIR / "prints" / str(print_id) / "uploads" / filename
+    if not path.exists(): raise HTTPException(404)
+    mime = mimetypes.guess_type(str(path))[0] or "image/webp"
+    return FileResponse(str(path), media_type=mime)
 
 @router.get("/{print_id}/file/{filename}")
 async def print_file(print_id: int, filename: str):
