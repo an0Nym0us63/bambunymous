@@ -245,6 +245,7 @@ function PrintEditSheet({ p, onClose, onSaved }) {
 export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
   const [ungrouped, setUngrouped] = useState(false);
+  const [editMode, setEditMode] = useState(false);
   const [p, setP] = useState(pProp);
 
   useEffect(() => {
