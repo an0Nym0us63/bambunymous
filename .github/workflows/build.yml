@@ -47,3 +47,8 @@ jobs:
             BUILD_BRANCH=master
             COMMIT_SHA=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+      - name: Deploy to Portainer
+        if: success()
+        run: |
+          curl -s -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}" || true
