@@ -107,19 +107,39 @@ def _grab_tls6000(ip: str, code: str, timeout_s: float = 8.0) -> bytes:
         except Exception: pass
 
 
-def _select_grab(model: str):
-    """Retourne la fonction de capture adaptée au modèle."""
+
+
+
+# Codes Bambu Lab → méthode caméra
+_BAMBU_CODES = {
+    "BL-P001": "rtsp",  # X1 Carbon
+    "BL-P002": "rtsp",  # X1
+    "C11": "rtsp",      # X1 Carbon alt
+    "C12": "rtsp",      # H2D
+    "C13": "tls",       # P1S
+    "C21": "tls",       # A1
+    "C20": "tls",       # A1 Mini
+    "C24": "tls",       # P1P → None (pas de camera)
+}
+
+def _select_grab(model: str, model_id: str = ""):
+    """Retourne la méthode de capture adaptée au modèle."""
+    mid = (model_id or "").upper()
+    if mid and mid.startswith("C24"):  # P1P
+        return None
+    if mid in _BAMBU_CODES:
+        return _BAMBU_CODES[mid]
     m = (model or "").upper()
     if "P1P" in m:
-        return None  # pas de caméra chambre
-    if any(x in m for x in ["H2D", "X1", "X1C", "X1 CARBON", "X1E"]):
+        return None
+    if any(x in m for x in ["H2D", "H2C", "X1", "X1C", "X1 CARBON", "X1E"]):
         return "rtsp"
     if any(x in m for x in ["P1S", "A1", "A1 MINI", "A1M"]):
         return "tls"
-    return "both"  # essaie RTSP puis TLS
+    return "both"
 
 
-async def _serve(ip: str, code: str, model: str) -> Response:
+async def _serve(ip: str, code: str, model: str, model_id: str = "") -> Response:
     now = time.monotonic()
     with _LOCK:
         if _CACHE["ok"] and _CACHE["data"] and (now - _CACHE["ts"]) < _TTL_OK:
@@ -130,7 +150,7 @@ async def _serve(ip: str, code: str, model: str) -> Response:
                            headers={"Cache-Control": "no-store", "X-Camera-Status": "stale"})
         _CACHE["ts"] = now
 
-    mode = _select_grab(model)
+    mode = _select_grab(model, model_id)
     if mode is None:
         return Response(status_code=503, content=b"Pas de camera chambre sur ce modele")
 
@@ -176,6 +196,7 @@ async def camera_snapshot():
     try:
         state = get_state()
         model = getattr(state, "printer_model", "") or ""
+        model_id = getattr(state, "model_id", "") or ""
     except Exception:
-        model = ""
-    return await _serve(ip, code, model)
+        model = ""; model_id = ""
+    return await _serve(ip, code, model, model_id)
