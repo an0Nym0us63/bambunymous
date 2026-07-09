@@ -49,8 +49,9 @@ function FilamentDots({ filaments }) {
           )}
         </div>
       ))}
-    {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)}/>}
     </div>
+    {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)}/>}
+  </>
   );
 }
 
@@ -71,7 +72,8 @@ function FilamentAccordion({ filaments }) {
   const [open, setOpen] = useState(false);
   const [selSpool, setSelSpool] = useState(null);
   return (
-    <div style={{ marginBottom:14, border:"1px solid var(--border)", borderRadius:10, overflow:"hidden" }}>
+    <>
+    <div style={{ marginBottom:14, border:"1px solid var(--border)", borderRadius:10 }}>
       {/* Header cliquable */}
       <button onClick={()=>setOpen(o=>!o)}
         style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"8px 12px",
