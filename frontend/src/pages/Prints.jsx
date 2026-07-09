@@ -1224,6 +1224,7 @@ export default function Prints() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [kpis, setKpis] = useState(null);
   const sentinelRef = useRef(null);
+  const loadingMoreRef = useRef(false);
   const [search, setSearch]   = useState("");
   const [statusF, setStatusF] = useState("");
   const [selected, setSelected] = useState(null);
@@ -1284,7 +1285,8 @@ export default function Prints() {
   }, [search, statusF, groupF]);
 
   const loadMore = useCallback(async () => {
-    if (loadingMore || !hasMore) return;
+    if (loadingMore || !hasMore || loadingMoreRef.current) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const next = offset + LIMIT;
@@ -1300,6 +1302,7 @@ export default function Prints() {
       setHasMore(data.has_more ?? false);
     } catch(e) {}
     setLoadingMore(false);
+    loadingMoreRef.current = false;
   }, [loadingMore, hasMore, offset, statusF, search, groupF]);
 
   useEffect(() => {
