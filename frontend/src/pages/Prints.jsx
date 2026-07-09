@@ -50,8 +50,6 @@ function FilamentDots({ filaments }) {
         </div>
       ))}
     </div>
-    {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)}/>}
-    </>
   );
 }
 
@@ -126,6 +124,8 @@ function FilamentAccordion({ filaments }) {
         </div>
       )}
     </div>
+    {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)}/>}
+    </>
   );
 }
 
