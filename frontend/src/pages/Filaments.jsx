@@ -1815,6 +1815,7 @@ export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, 
   React.useEffect(() => {
     const load = async () => {
       try {
+        console.log('[FSheet]',{filamentId,spoolId,filamentColorHex});
         if (filamentId) {
           const r = await client.get("/filaments/filaments/" + filamentId);
           setFil(r.data); return;
