@@ -51,7 +51,7 @@ function FilamentDots({ filaments }) {
       ))}
     </div>
     {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)}/>}
-  </>
+    </>
   );
 }
 
