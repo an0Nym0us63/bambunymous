@@ -1078,7 +1078,6 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
         ["Poids",  it => it.total_weight_g ? `${it.total_weight_g.toFixed(0)}g` : null],
       ]}
     />
-    {selSpoolG && <FilamentSheetFromSpool filamentId={selSpoolG.filId} spoolId={selSpoolG.spoolId} filamentColorHex={selSpoolG.hex} onClose={()=>setSelSpoolG(null)} zIndex={2000}/>}
     {selectedPrint && (
       <PrintDetail p={selectedPrint} onClose={()=>setSelectedPrint(null)}
         onDelete={()=>setSelectedPrint(null)} onChanged={()=>{}}/>
