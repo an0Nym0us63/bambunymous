@@ -130,6 +130,7 @@ def _parse_3mf(data: bytes, print_id: int) -> dict:
                             k = meta.attrib.get("name", "").lower()
                             if k == "title":    result["title"]     = (meta.text or "").strip()
                             if k == "design_id": result["design_id"] = (meta.text or "").strip()
+                            logger.debug(f"[3MF] metadata k={k!r} v={(meta.text or "").strip()!r}")
                 except Exception as e: logger.debug(f"3dmodel parse: {e}")
 
             # slice_info.config
