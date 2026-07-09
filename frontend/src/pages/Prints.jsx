@@ -65,6 +65,64 @@ function StatusBadge({ status }) {
 }
 
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
+function FilamentAccordion({ filaments }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginBottom:14, border:"1px solid var(--border)", borderRadius:10, overflow:"hidden" }}>
+      {/* Header cliquable */}
+      <button onClick={()=>setOpen(o=>!o)}
+        style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"8px 12px",
+          background:"var(--surface2)", border:"none", cursor:"pointer", textAlign:"left" }}>
+        <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+          letterSpacing:"0.06em", flex:1 }}>Filaments ({filaments.length})</span>
+        {/* Pastilles de couleur */}
+        <div style={{ display:"flex", gap:4, flexWrap:"wrap", justifyContent:"flex-end" }}>
+          {filaments.map((f,i) => (
+            <div key={i} style={{ width:16, height:16, borderRadius:"50%",
+              backgroundColor:hexCss(f.color_hex),
+              border:"1px solid rgba(255,255,255,0.2)", flexShrink:0 }}/>
+          ))}
+        </div>
+        <span style={{ color:"var(--muted)", fontSize:12 }}>{open?"▲":"▼"}</span>
+      </button>
+      {/* Détail déplié */}
+      {open && (
+        <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
+          {filaments.map((f,i) => (
+            <div key={i} style={{ display:"flex", alignItems:"center", gap:10,
+              padding:"8px 12px", background:"var(--bg)",
+              borderTop:"1px solid var(--border)" }}>
+              <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
+                backgroundColor:hexCss(f.color_hex),
+                border:f.spool_id?"2px solid #22c55e":"1px solid rgba(255,255,255,0.15)" }}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {f.filament_name || "Inconnu"}
+                  {f.spool_id && <span style={{ fontSize:9, color:"#22c55e", marginLeft:5 }}>✓#{f.spool_id}</span>}
+                </p>
+                <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
+                  {[f.filament_manufacturer, f.filament_type, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
+                </p>
+              </div>
+              {(f.cost > 0 || f.normal_cost > 0) && (
+                <div style={{ textAlign:"right", flexShrink:0 }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
+                    {(f.cost||f.normal_cost||0).toFixed(2)}€
+                  </span>
+                  {f.cost > 0 && f.normal_cost > 0 && f.cost !== f.normal_cost && (
+                    <p style={{ fontSize:9, color:"var(--muted)", margin:0 }}>({f.normal_cost.toFixed(2)}€)</p>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
   const [ungrouped, setUngrouped] = useState(false);
@@ -171,18 +229,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           </div>
 
           {/* Date + Durée + Poids sur une ligne */}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:12 }}>
-            {[
-              ["📅 Date",    fmtDate(p.print_date)],
-              ["⏱ Durée",   fmtDur(p.duration_seconds||p.estimated_seconds)],
-              ["⚖ Filament", p.total_weight_g ? p.total_weight_g.toFixed(1)+"g" : null],
-            ].filter(([,v])=>v).map(([label,val])=>(
-              <div key={label} style={{ background:"var(--surface2)", borderRadius:10,
-                padding:"8px 10px", border:"1px solid var(--border)" }}>
-                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px", letterSpacing:"0.04em" }}>{label}</p>
-                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:0, fontFamily:"monospace" }}>{val}</p>
-              </div>
-            ))}
+          <div style={{ display:"flex", gap:12, flexWrap:"wrap", marginBottom:14, fontSize:12 }}>
+            {fmtDate(p.print_date) && <span style={{ color:"var(--muted)" }}>📅 <b style={{ color:"var(--text)" }}>{fmtDate(p.print_date)}</b></span>}
+            {(p.duration_seconds||p.estimated_seconds) > 0 && <span style={{ color:"var(--muted)" }}>⏱ <b style={{ color:"var(--text)", fontFamily:"monospace" }}>{fmtDur(p.duration_seconds||p.estimated_seconds)}</b></span>}
+            {p.total_weight_g > 0 && <span style={{ color:"var(--muted)" }}>⚖ <b style={{ color:"var(--text)", fontFamily:"monospace" }}>{p.total_weight_g.toFixed(1)}g</b></span>}
           </div>
 
           {/* Coûts — bloc principal */}
@@ -283,48 +333,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             📦 Créer un objet depuis ce print
           </button>
 
-          {/* Filaments utilisés */}
-          {p.filament_usage?.length > 0 && (
-            <div style={{ marginBottom:14 }}>
-              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.06em", marginBottom:8 }}>Filaments utilisés</p>
-              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                {p.filament_usage.map((f,i) => (
-                  <div key={i} style={{ display:"flex", alignItems:"center", gap:10,
-                    background:"var(--surface2)",
-                    border:"1px solid " + (f.spool_id ? "rgba(34,197,94,0.25)" : "var(--border)"),
-                    borderRadius:10, padding:"8px 12px" }}>
-                    <div style={{ width:22, height:22, borderRadius:"50%", flexShrink:0,
-                      backgroundColor:hexCss(f.color_hex),
-                      border:f.spool_id?"2px solid #22c55e":"1px solid rgba(255,255,255,0.15)" }}/>
-                    <div style={{ flex:1, minWidth:0 }}>
-                      <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
-                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        {f.filament_name || f.filament_type || "Inconnu"}
-                        {f.spool_id && <span style={{ fontSize:9, color:"#22c55e", marginLeft:6 }}>✓ #{f.spool_id}</span>}
-                      </p>
-                      <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
-                        {f.filament_manufacturer && `${f.filament_manufacturer} · `}{f.color_hex && `#${f.color_hex} · `}{f.grams_used?.toFixed(1)}g
-                      </p>
-                    </div>
-                    {(f.cost > 0 || f.normal_cost > 0) && (
-                      <div style={{ textAlign:"right", flexShrink:0 }}>
-                        <p style={{ fontSize:12, fontWeight:700, color:"var(--text)",
-                          margin:0, fontFamily:"monospace" }}>
-                          {(f.cost||f.normal_cost||0).toFixed(2)}€
-                        </p>
-                        {f.cost > 0 && f.normal_cost > 0 && f.cost !== f.normal_cost && (
-                          <p style={{ fontSize:9, color:"var(--muted)", margin:0 }}>
-                            ({f.normal_cost.toFixed(2)}€)
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          {/* Filaments — accordéon */}
+          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage}/>}
 
           {/* Identifiants (sans printer_model) */}
           {(p.job_id || p.design_id) && (
