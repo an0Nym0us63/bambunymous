@@ -41,8 +41,6 @@ jobs:
           file: docker/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           build-args: |
             BUILD_BRANCH=master
             COMMIT_SHA=${{ github.sha }}
