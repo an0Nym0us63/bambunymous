@@ -1813,18 +1813,27 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
 export function FilamentSheetFromSpool({ spoolId, filamentColorHex, onClose }) {
   const [fil, setFil] = React.useState(null);
   React.useEffect(() => {
-    // Chercher le filament associé à cette bobine
-    client.get("/filaments/spools", { params:{ limit:1000 } })
-      .then(r => {
-        const spool = (r.data || []).find(s => s.id === spoolId);
-        if (spool?.filament_id)
-          return client.get("/filaments/filaments/" + spool.filament_id).then(r2 => setFil(r2.data));
-        // Fallback: chercher par couleur
-        if (filamentColorHex)
-          return client.get("/filaments/filaments", { params:{ search: filamentColorHex } })
-            .then(r2 => { if (r2.data?.[0]) setFil(r2.data[0]); });
-      }).catch(() => {});
-  }, [spoolId]);
+    const load = async () => {
+      try {
+        if (spoolId) {
+          const spools = await client.get("/filaments/spools", { params:{ limit:1000 } });
+          const spool = (spools.data || []).find(s => s.id === spoolId);
+          if (spool?.filament_id) {
+            const r = await client.get("/filaments/filaments/" + spool.filament_id);
+            setFil(r.data); return;
+          }
+        }
+        if (filamentColorHex) {
+          const hex = filamentColorHex.replace("#","");
+          const r = await client.get("/filaments/filaments", { params:{ search: hex, limit:5 } });
+          const list = r.data || [];
+          const match = list.find(f => (f.color||"").toLowerCase().replace("#","") === hex.toLowerCase());
+          if (match || list[0]) setFil(match || list[0]);
+        }
+      } catch {}
+    };
+    load();
+  }, [spoolId, filamentColorHex]);
   if (!fil) return null;
   return <FilamentSheet f={fil} onClose={onClose} onDeleted={onClose} onUpdated={()=>{}}/>;
 }
