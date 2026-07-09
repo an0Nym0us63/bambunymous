@@ -128,6 +128,8 @@ function FilamentAccordion({ filaments, onSpoolClick }) {
 }
 
 function PrintEditSheet({ p, onClose, onSaved }) {
+  const durToMin = s => s ? Math.round(s/60) : "";
+  const minToDur = m => parseInt(m)*60 || 0;
   const [form, setForm] = useState({
     file_name:     p.file_name || "",
     original_name: p.original_name || "",
@@ -135,8 +137,7 @@ function PrintEditSheet({ p, onClose, onSaved }) {
     status:        p.status || "SUCCESS",
     status_note:   p.status_note || "",
     design_id:     p.design_id || "",
-    plate_id:      p.plate_id || "1",
-    print_type:    p.print_type || "cloud",
+    duration_min:  durToMin(p.duration_seconds || p.estimated_seconds),
   });
   const [saving, setSaving] = useState(false);
 
@@ -145,7 +146,10 @@ function PrintEditSheet({ p, onClose, onSaved }) {
   const save = async () => {
     setSaving(true);
     try {
-      await client.patch(`/prints/${p.id}`, form);
+      const payload = {...form};
+      if (payload.duration_min !== undefined) { payload.duration_seconds = minToDur(payload.duration_min); delete payload.duration_min; }
+      delete payload.original_name;
+      await client.patch(`/prints/${p.id}`, payload);
       onSaved(form);
     } catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
     setSaving(false);
@@ -183,39 +187,31 @@ function PrintEditSheet({ p, onClose, onSaved }) {
             <input style={inp} value={form.file_name} onChange={e=>set("file_name",e.target.value)}/>
           </div>
           <div>
-            <label style={lbl}>Nom original</label>
-            <input style={inp} value={form.original_name} onChange={e=>set("original_name",e.target.value)}/>
+            <label style={lbl}>Nom original (lecture seule)</label>
+            <input style={{...inp, color:"var(--muted)", cursor:"default"}} value={form.original_name} readOnly/>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+            <div>
+              <label style={lbl}>Date et heure</label>
+              <input type="datetime-local" style={inp} value={form.print_date} onChange={e=>set("print_date",e.target.value)}/>
+            </div>
+            <div>
+              <label style={lbl}>Durée (minutes)</label>
+              <input type="number" min="0" style={inp} value={form.duration_min} onChange={e=>set("duration_min",e.target.value)} placeholder="ex: 125"/>
+            </div>
           </div>
           <div>
-            <label style={lbl}>Date et heure</label>
-            <input type="datetime-local" style={inp} value={form.print_date} onChange={e=>set("print_date",e.target.value)}/>
+            <label style={lbl}>Statut</label>
+            <select style={sel} value={form.status} onChange={e=>set("status",e.target.value)}>
+              <option value="SUCCESS">Réussi</option>
+              <option value="FAILED">Échoué</option>
+              <option value="IN_PROGRESS">En cours</option>
+            </select>
           </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-            <div>
-              <label style={lbl}>Statut</label>
-              <select style={sel} value={form.status} onChange={e=>set("status",e.target.value)}>
-                <option value="SUCCESS">Réussi</option>
-                <option value="FAILED">Échoué</option>
-                <option value="IN_PROGRESS">En cours</option>
-              </select>
-            </div>
-            <div>
-              <label style={lbl}>Type</label>
-              <select style={sel} value={form.print_type} onChange={e=>set("print_type",e.target.value)}>
-                <option value="cloud">Cloud</option>
-                <option value="local">Local</option>
-              </select>
-            </div>
-          </div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-            <div>
-              <label style={lbl}>Plateau</label>
-              <input style={inp} value={form.plate_id} onChange={e=>set("plate_id",e.target.value)}/>
-            </div>
-            <div>
-              <label style={lbl}>Note statut</label>
-              <input style={inp} value={form.status_note} onChange={e=>set("status_note",e.target.value)}/>
-            </div>
+          <div>
+            <label style={lbl}>Note de statut</label>
+            <textarea style={{...inp, minHeight:80, resize:"vertical"}} value={form.status_note}
+              onChange={e=>set("status_note",e.target.value)} placeholder="Détails sur l'impression…"/>
           </div>
           <div>
             <label style={lbl}>ID MakerWorld (design_id)</label>
@@ -326,6 +322,16 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             label: SNAP_LABELS[s.trigger] || SNAP_LABELS[s.filename?.replace(/\.(jpg|png|webp)$/,"")] || s.trigger || s.filename
           }))} printId={p.id} onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))}/>
         </div>
+
+        {/* Photos utilisateur */}
+        {userPhotos.length > 0 && (
+          <div style={{ padding:"0 16px 8px", display:"flex", gap:8, overflowX:"auto" }}>
+            {userPhotos.map((ph,i)=>(
+              <img key={i} src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover",
+                borderRadius:8, flexShrink:0 }}/>
+            ))}
+          </div>
+        )}
 
         <div style={{ padding:"0 16px 16px" }}>
           {/* Titre */}
@@ -498,6 +504,13 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                 background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
               ✏️ Éditer
             </button>
+            <label style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid var(--border)",
+              background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700,
+              cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+              📷
+              <input type="file" accept="image/*" capture="environment" style={{ display:"none" }}
+                onChange={e=>e.target.files[0]&&uploadPhoto(e.target.files[0])}/>
+            </label>
             <button onClick={() => {
               if (confirm("Supprimer ce print ?")) {
                 client.delete("/prints/" + p.id)
