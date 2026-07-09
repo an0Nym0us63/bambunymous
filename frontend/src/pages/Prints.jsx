@@ -179,6 +179,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
   return (
     <>
+    <>
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000,
       display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} className="sheet-inner"
@@ -384,8 +385,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         </div>
       </div>
     </div>
-    {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)}/>}
-  );
+    {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)} zIndex={2000}/>}
+  </>);
 }
 
 
