@@ -324,7 +324,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           {/* Galerie snapshots avec bons labels */}
           <SnapshotGallery snaps={snaps.map(s=>({...s,
             label: SNAP_LABELS[s.trigger] || SNAP_LABELS[s.filename?.replace(/\.(jpg|png|webp)$/,"")] || s.trigger || s.filename
-          }))} printId={p.id} onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))}/>
+          }))} printId={p.id} onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))} onUpload={uploadPhoto}/>
         </div>
 
         {/* Photos utilisateur */}
@@ -508,13 +508,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                 background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
               ✏️ Éditer
             </button>
-            <label style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid var(--border)",
-              background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700,
-              cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-              📷
-              <input type="file" accept="image/*" capture="environment" style={{ display:"none" }}
-                onChange={e=>e.target.files[0]&&uploadPhoto(e.target.files[0])}/>
-            </label>
+
             <button onClick={() => {
               if (confirm("Supprimer ce print ?")) {
                 client.delete("/prints/" + p.id)
@@ -1012,7 +1006,7 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
 }
 
 
-function SnapshotGallery({ snaps, printId, onDelete }) {
+function SnapshotGallery({ snaps, printId, onDelete, onUpload }) {
   const [lightbox, setLightbox] = useState(null);
   const [diskFiles, setDiskFiles] = useState([]);
 
@@ -1063,16 +1057,27 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
   const photoItems     = allItems.filter(i => !i.snap);
   const milestoneItems = allItems.filter(i => i.snap);
 
-  const Row = ({ title, items, startIdx = 0 }) => {
+  const Row = ({ title, items, startIdx = 0, onAdd }) => {
     const scrollRef = React.useRef(null);
     if (!items.length) return null;
     const scroll = (dir) => scrollRef.current?.scrollBy({ left: dir * 120, behavior: "smooth" });
     return (
       <div style={{ marginBottom:12 }}>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-          <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", margin:0 }}>
-            {title} ({items.length})
-          </p>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <p style={{ fontSize:11, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", margin:0 }}>
+              {title} ({items.length})
+            </p>
+            {onAdd && (
+              <label style={{ width:20, height:20, borderRadius:"50%", background:"var(--surface2)",
+                border:"1px solid var(--border)", cursor:"pointer", display:"flex",
+                alignItems:"center", justifyContent:"center", fontSize:14, color:"var(--muted)" }}>
+                +
+                <input type="file" accept="image/*" capture="environment" style={{ display:"none" }}
+                  onChange={e=>e.target.files[0]&&onAdd(e.target.files[0])}/>
+              </label>
+            )}
+          </div>
           {items.length > 2 && (
             <div style={{ display:"flex", gap:4 }}>
               <button onClick={()=>scroll(-1)} style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:"50%", width:22, height:22, cursor:"pointer", fontSize:14, color:"var(--text)", display:"flex", alignItems:"center", justifyContent:"center" }}>‹</button>
@@ -1118,7 +1123,7 @@ function SnapshotGallery({ snaps, printId, onDelete }) {
 
   return (
     <>
-      <Row title="Photos"     items={photoItems} startIdx={0}/>
+      <Row title="Photos" items={photoItems} startIdx={0} onAdd={onUpload}/>
       <Row title="Milestones" items={milestoneItems} startIdx={photoItems.length}/>
       {lightbox && (
         <div onClick={() => setLightbox(null)}
