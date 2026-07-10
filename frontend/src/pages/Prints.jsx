@@ -1596,6 +1596,13 @@ export default function Prints() {
   const [groups, setGroups]   = useState([]);
   const [groupF, setGroupF]   = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
+  const [materialF, setMaterialF] = useState("");
+  const [filaTypeF, setFilaTypeF] = useState("");
+  const [filamentIdF, setFilamentIdF] = useState("");
+  const [allFilaments, setAllFilaments] = useState([]);
+  const [allMaterials, setAllMaterials] = useState([]);
+  const [allFilaTypes, setAllFilaTypes] = useState([]);
+  const [filSearch, setFilSearch] = useState("");
   const [sortF, setSortF]     = useState("recent");
   const [viewMode, setViewMode] = useState("list"); // "list" | "gallery"
   const [selectMode, setSelectMode] = useState(false);
@@ -1615,16 +1622,29 @@ export default function Prints() {
 
   const loadKpis = useCallback(async () => {
     const p = new URLSearchParams();
-    if (search)   p.set("search", search);
-    if (statusF)  p.set("status", statusF);
-    if (groupF)   p.set("group_id", groupF);
+    if (search)      p.set("search", search);
+    if (statusF)     p.set("status", statusF);
+    if (groupF)      p.set("group_id", groupF);
+    if (materialF)   p.set("material", materialF);
+    if (filaTypeF)   p.set("fila_type", filaTypeF);
+    if (filamentIdF) p.set("filament_id", filamentIdF);
     try {
       const { data } = await client.get("/prints/kpis?" + p);
       setKpis(data);
     } catch {}
-  }, [search, statusF, groupF]);
+  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF]);
 
   useEffect(() => { loadKpis(); }, [loadKpis]);
+
+  // Charger les options de filtres filament
+  useEffect(() => {
+    client.get("/filaments/filaments", { params:{ limit:2000, archived_too:true } }).then(r=>{
+      const fils = r.data || [];
+      setAllFilaments(fils);
+      setAllMaterials([...new Set(fils.map(f=>f.material).filter(Boolean))].sort());
+      setAllFilaTypes([...new Set(fils.map(f=>f.fila_type).filter(Boolean))].sort());
+    }).catch(()=>{});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1632,9 +1652,12 @@ export default function Prints() {
     setOffset(0);
     try {
       const params = new URLSearchParams({ limit: LIMIT, offset: 0 });
-      if (search)  params.set("search", search);
-      if (statusF) params.set("status", statusF);
-      if (groupF)  params.set("group_id", groupF);
+      if (search)      params.set("search", search);
+      if (statusF)     params.set("status", statusF);
+      if (groupF)      params.set("group_id", groupF);
+      if (materialF)   params.set("material", materialF);
+      if (filaTypeF)   params.set("fila_type", filaTypeF);
+      if (filamentIdF) params.set("filament_id", filamentIdF);
       const { data } = await client.get("/prints?" + params);
       setDebugInfo("total=" + data.total + " prints=" + (data.prints||[]).length);
       setPrints(data.prints ?? []);
@@ -1653,9 +1676,12 @@ export default function Prints() {
     try {
       const next = offset + LIMIT;
       const params = new URLSearchParams({ limit: LIMIT, offset: next });
-      if (search)  params.set("search", search);
-      if (statusF) params.set("status", statusF);
-      if (groupF)  params.set("group_id", groupF);
+      if (search)      params.set("search", search);
+      if (statusF)     params.set("status", statusF);
+      if (groupF)      params.set("group_id", groupF);
+      if (materialF)   params.set("material", materialF);
+      if (filaTypeF)   params.set("fila_type", filaTypeF);
+      if (filamentIdF) params.set("filament_id", filamentIdF);
       const { data } = await client.get("/prints?" + params);
       const existingIds = new Set((prints||[]).map(p => p.id));
       const fresh = (data.prints || []).filter(p => !existingIds.has(p.id));
@@ -1665,7 +1691,7 @@ export default function Prints() {
     } catch(e) {}
     setLoadingMore(false);
     loadingMoreRef.current = false;
-  }, [loadingMore, hasMore, offset, statusF, search, groupF]);
+  }, [loadingMore, hasMore, offset, statusF, search, groupF, materialF, filaTypeF, filamentIdF]);
 
   useEffect(() => {
     const container = document.querySelector(".page-content");
@@ -1756,7 +1782,7 @@ export default function Prints() {
             color: (statusF||sortF!=="recent") ? "white" : "var(--text)",
             border:"1px solid var(--border)", borderRadius:10, fontSize:12, cursor:"pointer", flexShrink:0 }}>
           <SlidersHorizontal size={14}/>
-          {(statusF||sortF!=="recent") ? "Filtres (actifs)" : "Filtres"}
+          {[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF].filter(Boolean).length > 0 ? `Filtres (${[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF].filter(Boolean).length})` : "Filtres"}
         </button>
         {viewMode==="list" && (
           <button onClick={()=>selectMode?exitSelectMode():setSelectMode(true)}
@@ -1788,8 +1814,8 @@ export default function Prints() {
             <button onClick={()=>setFilterOpen(false)} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
               <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:0 }}>Filtres & tri</p>
-              {(statusF||sortF!=="recent") && (
-                <button onClick={()=>{ setStatusF(""); setSortF("recent"); }}
+              {(statusF||sortF!=="recent"||materialF||filaTypeF||filamentIdF) && (
+                <button onClick={()=>{ setStatusF(""); setSortF("recent"); setMaterialF(""); setFilaTypeF(""); setFilamentIdF(""); setFilSearch(""); }}
                   style={{ fontSize:11, color:"#60a5fa", background:"none", border:"none", cursor:"pointer" }}>
                   Effacer filtres
                 </button>
@@ -1819,9 +1845,42 @@ export default function Prints() {
                 </button>
               ))}
             </div>
-            <button onClick={()=>setFilterOpen(false)}
-              style={{ width:"100%", padding:"12px", borderRadius:10, border:"none",
-                background:"#3b82f6", color:"white", fontSize:14, fontWeight:700, cursor:"pointer" }}>
+            {/* Filtre matériau */}
+            {allMaterials.length > 0 && (<>
+              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Matériau</p>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
+                <button onClick={()=>setMaterialF("")} style={{ padding:"6px 14px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer", border:"none", background:!materialF?"#3b82f6":"var(--surface2)", color:!materialF?"white":"var(--muted)" }}>Tous</button>
+                {allMaterials.map(m=>(
+                  <button key={m} onClick={()=>setMaterialF(materialF===m?"":m)} style={{ padding:"6px 14px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer", border:"none", background:materialF===m?"#8b5cf6":"var(--surface2)", color:materialF===m?"white":"var(--muted)" }}>{m}</button>
+                ))}
+              </div>
+            </>)}
+
+            {/* Filtre type filament */}
+            {allFilaTypes.length > 0 && (<>
+              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Type de filament</p>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
+                {(materialF ? allFilaTypes.filter(t=>allFilaments.some(f=>f.material===materialF&&f.fila_type===t)) : allFilaTypes).map(t=>(
+                  <button key={t} onClick={()=>setFilaTypeF(filaTypeF===t?"":t)} style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", border:"none", background:filaTypeF===t?"#8b5cf6":"var(--surface2)", color:filaTypeF===t?"white":"var(--muted)" }}>{t}</button>
+                ))}
+              </div>
+            </>)}
+
+            {/* Filtre filament exact */}
+            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Filament exact</p>
+            <input value={filSearch} onChange={e=>setFilSearch(e.target.value)} placeholder="Rechercher un filament…"
+              style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontSize:12, outline:"none", marginBottom:6 }}/>
+            <div style={{ maxHeight:140, overflowY:"auto", display:"flex", flexDirection:"column", gap:4, marginBottom:16 }}>
+              {filamentIdF && <button onClick={()=>setFilamentIdF("")} style={{ padding:"5px 12px", borderRadius:8, fontSize:11, background:"rgba(239,68,68,0.1)", color:"#ef4444", border:"none", cursor:"pointer", textAlign:"left" }}>✕ Effacer filament sélectionné</button>}
+              {allFilaments.filter(f=>!filSearch || (f.name||"").toLowerCase().includes(filSearch.toLowerCase()) || (f.translated_name||"").toLowerCase().includes(filSearch.toLowerCase()) || (f.manufacturer||"").toLowerCase().includes(filSearch.toLowerCase())).slice(0,30).map(f=>(
+                <button key={f.id} onClick={()=>{ setFilamentIdF(filamentIdF===String(f.id)?"":String(f.id)); setFilSearch(""); }} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 10px", borderRadius:8, border:"none", cursor:"pointer", textAlign:"left", background:filamentIdF===String(f.id)?"rgba(59,130,246,0.15)":"var(--surface2)" }}>
+                  <div style={{ width:12, height:12, borderRadius:"50%", flexShrink:0, backgroundColor:`#${f.color||"ccc"}` }}/>
+                  <span style={{ fontSize:11, color:"var(--text)" }}>{f.translated_name||f.name} <span style={{ color:"var(--muted)" }}>· {f.manufacturer}</span></span>
+                </button>
+              ))}
+            </div>
+
+            <button onClick={()=>setFilterOpen(false)} style={{ width:"100%", padding:"12px", borderRadius:10, border:"none", background:"#3b82f6", color:"white", fontSize:14, fontWeight:700, cursor:"pointer" }}>
               Appliquer
             </button>
           </div>

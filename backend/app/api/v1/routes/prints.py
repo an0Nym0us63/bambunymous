@@ -201,6 +201,9 @@ async def list_prints(
     search:   Optional[str] = None,
     group_id: Optional[int] = None,
     tag:      Optional[str] = None,
+    material:    Optional[str] = None,
+    fila_type:   Optional[str] = None,
+    filament_id: Optional[int] = None,
     limit:    int = Query(40, le=200),
     offset:   int = 0,
     _: str = Depends(get_current_user),
@@ -226,6 +229,17 @@ async def list_prints(
             q = _apply_search(q, search)
         if group_id is not None:
             q = q.where(Print.group_id == group_id)
+        # Filtres filament via FilamentUsage→Spool→Filament
+        if material or fila_type or filament_id:
+            from ....models.filament import Spool as _Spool, Filament as _FilCat
+            fu_q = select(_FU.print_id)
+            if filament_id:
+                fu_q = fu_q.join(_Spool, _FU.spool_id == _Spool.id).where(_Spool.filament_id == filament_id)
+            else:
+                fu_q = fu_q.join(_Spool, _FU.spool_id == _Spool.id).join(_FilCat, _Spool.filament_id == _FilCat.id)
+                if material:  fu_q = fu_q.where(_FilCat.material == material)
+                if fila_type: fu_q = fu_q.where(_FilCat.fila_type == fila_type)
+            q = q.where(Print.id.in_(fu_q))
         elif tag:
             q = q.where(exists().where(
                 (_PT.print_id == Print.id) & (_PT.tag == tag)
