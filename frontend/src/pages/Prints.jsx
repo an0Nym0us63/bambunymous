@@ -1421,7 +1421,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
             <div key={i} style={{ position:"relative", flexShrink:0 }}>
               {onDeleteItem && item.name && !item.snap && (
                 <button onClick={e=>{ e.stopPropagation();
-                  if(confirm(`Supprimer "${item.label || item.name}" ?`)){onDeleteItem(item.name);}
+                  setPhotoToDelete(item);
                 }} style={{ position:"absolute", top:4, right:4, zIndex:2, width:22, height:22,
                   borderRadius:"50%", background:"rgba(0,0,0,0.6)", border:"none",
                   cursor:"pointer", color:"white", fontSize:14,
@@ -1505,7 +1505,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
     {photoToDelete && <PhotoDeleteConfirm
       label={photoToDelete.label||photoToDelete.name}
       onCancel={()=>setPhotoToDelete(null)}
-      onConfirm={()=>{ onDeleteItem&&onDeleteItem(photoToDelete.name); setPhotoToDelete(null); }}/> }
+      onConfirm={()=>{ onDeleteUpload&&onDeleteUpload(photoToDelete.name); setPhotoToDelete(null); }}/> }
     </>
   );
 }
