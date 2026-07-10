@@ -567,6 +567,27 @@ async def print_upload_file(print_id: int, filename: str):
     mime = mimetypes.guess_type(str(path))[0] or "image/webp"
     return FileResponse(str(path), media_type=mime)
 
+@router.delete("/{print_id}/upload/{filename}")
+async def delete_print_upload(print_id: int, filename: str, _: str = Depends(get_current_user)):
+    """Supprime une photo uploadée (Photo-*.webp) + son PrintSnapshot en DB."""
+    from ....models.print_history import PrintSnapshot as _PS
+    from sqlalchemy import select as _sel
+    if ".." in filename or "/" in filename or not filename.startswith("Photo-"):
+        raise HTTPException(400)
+    path = DATA_DIR / "prints" / str(print_id) / filename
+    if not path.exists():
+        raise HTTPException(404)
+    path.unlink()
+    rel_path = f"prints/{print_id}/{filename}"
+    async with AsyncSessionLocal() as db:
+        snap = (await db.execute(
+            _sel(_PS).where(_PS.print_id == print_id, _PS.file_path == rel_path)
+        )).scalar_one_or_none()
+        if snap:
+            await db.delete(snap)
+            await db.commit()
+    return {"ok": True}
+
 @router.get("/{print_id}/file/{filename}")
 async def print_file(print_id: int, filename: str):
     """Sert n'importe quel fichier du dossier d'un print."""
