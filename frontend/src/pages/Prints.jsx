@@ -1324,6 +1324,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
   const [lightbox, setLightbox] = useState(null);
   const [diskFiles, setDiskFiles] = useState([]);
   const [photoToDelete, setPhotoToDelete] = useState(null);
+  const [deletedNames, setDeletedNames] = useState(new Set());
 
   useEffect(() => {
     client.get("/prints/" + printId + "/snapshots")
@@ -1368,13 +1369,20 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
         label: LABELS[s.trigger] || s.trigger,
       }));
 
-  const allItems = [...baseItems, ...extraPhotos];
+  const allItems = [...baseItems, ...extraPhotos].filter(i => !deletedNames.has(i.name));
   useEffect(()=>{ onCountChange?.(allItems.length); }, [allItems.length]);
 
   // Photos = fichiers manuels (pas un snapshot milestone connu) ; Milestones = snapshots auto pct/layer
   const photoItems     = allItems.filter(i => !i.snap);
   // Milestones triés: 100% → 99% → 50% → Couche2 → Couche1
-  const MILE_ORDER = { pct100:1, pct99:2, pct50:3, layer2:4, couche2:4, layer1:5, couche1:5, manual:0 };
+  const MILE_ORDER = {
+    "snapshot-pct100":1,"pct100":1,
+    "snapshot-pct99":2,"pct99":2,
+    "snapshot-pct50":3,"pct50":3,
+    "snapshot-layer2":4,"layer2":4,
+    "snapshot-layer1":5,"layer1":5,
+    "manual":6,
+  };
   const milestoneItems = allItems.filter(i => i.snap).sort((a,b)=>{
     const oa = MILE_ORDER[a.snap?.trigger] ?? 9;
     const ob = MILE_ORDER[b.snap?.trigger] ?? 9;
@@ -1498,7 +1506,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
     {photoToDelete && <PhotoDeleteConfirm
       label={photoToDelete.label||photoToDelete.name}
       onCancel={()=>setPhotoToDelete(null)}
-      onConfirm={()=>{ onDeleteUpload&&onDeleteUpload(photoToDelete.name); setPhotoToDelete(null); }}/> }
+      onConfirm={()=>{ setDeletedNames(prev=>new Set([...prev,photoToDelete.name])); onDeleteUpload&&onDeleteUpload(photoToDelete.name); setPhotoToDelete(null); }}/> }
     </>
   );
 }
