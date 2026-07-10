@@ -297,6 +297,10 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
         </div>
       )}
     </div>
+    {photoToDelete && <PhotoDeleteConfirm
+      label={photoToDelete.label||photoToDelete.name}
+      onCancel={()=>setPhotoToDelete(null)}
+      onConfirm={()=>{ onDeleteItem&&onDeleteItem(photoToDelete.name); setPhotoToDelete(null); }}/> }
     </>
   );
 }
@@ -703,10 +707,6 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
       </div>
     </div>
     {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{ setSpoolPicker(null); window.location.reload(); }}/> }
-    {photoToDelete && <PhotoDeleteConfirm
-      label={photoToDelete.label||photoToDelete.name}
-      onCancel={()=>setPhotoToDelete(null)}
-      onConfirm={()=>{ onDeleteItem&&onDeleteItem(photoToDelete.name); setPhotoToDelete(null); }}/> }
     {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)} zIndex={2000}/>}
     {editMode && <PrintEditSheet p={p} onClose={()=>setEditMode(false)} onSaved={updated=>{ setP(prev=>({...prev,...updated})); setEditMode(false); onChanged?.(); }}/>}
     {showDeleteConfirm && <DeletePrintConfirm
