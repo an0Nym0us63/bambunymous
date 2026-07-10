@@ -953,19 +953,21 @@ async def restore_spool_weights(
     body: { "fraction": 1.0 }  (1.0 = 100%, 0.5 = 50%)
     """
     from ....models.filament import Spool
-    fraction = float(body.get("fraction", 1.0))
-    fraction = max(0.0, min(1.0, fraction))
+    fracs = body.get("fracs", {})
     restored = []
     async with AsyncSessionLocal() as db:
         usages = (await db.execute(
             select(_FU).where(_FU.print_id == print_id, _FU.spool_id.isnot(None))
         )).scalars().all()
         for fu in usages:
+            fraction = float(fracs.get(str(fu.id), fracs.get(fu.id, 0)))
+            fraction = max(0.0, min(1.0, fraction))
+            if fraction <= 0: continue
             spool = await db.get(Spool, fu.spool_id)
-            if not spool or spool.archived:
-                continue
-            add_g = round(fu.grams_used * fraction, 1)
+            if not spool or spool.archived: continue
+            add_g = round((fu.grams_used or 0) * fraction, 1)
             spool.remaining_weight_g = round((spool.remaining_weight_g or 0) + add_g, 1)
-            restored.append({"spool_id": fu.spool_id, "added_g": add_g})
+            fu.grams_used = round(max(0, (fu.grams_used or 0) - add_g), 1)
+            restored.append({"spool_id": fu.spool_id, "added_g": add_g, "usage_id": fu.id})
         await db.commit()
     return {"ok": True, "restored": restored}
