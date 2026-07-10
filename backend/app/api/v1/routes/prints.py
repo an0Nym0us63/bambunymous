@@ -917,3 +917,55 @@ async def delete_group_photo_ep(group_id: int, filename: str, _: str = Depends(g
     path = DATA_DIR / "groups" / str(group_id) / filename
     if not path.exists(): raise HTTPException(404)
     path.unlink(); return {"ok": True}
+
+
+# ── Filament Usage — mapping bobine et ajustement poids ─────────────────────
+from ....models.print_history import FilamentUsage as _FU
+
+@router.patch("/{print_id}/filament-usage/{usage_id}")
+async def patch_filament_usage(
+    print_id: int, usage_id: int,
+    body: dict = Body({}),
+    _: str = Depends(get_current_user),
+):
+    """Mettre à jour spool_id ou grams_used d'un FilamentUsage."""
+    allowed = {"spool_id", "grams_used"}
+    updates = {k: v for k, v in body.items() if k in allowed}
+    async with AsyncSessionLocal() as db:
+        fu = (await db.execute(
+            select(_FU).where(_FU.id == usage_id, _FU.print_id == print_id)
+        )).scalar_one_or_none()
+        if not fu: raise HTTPException(404)
+        for k, v in updates.items():
+            setattr(fu, k, v)
+        await db.commit()
+    return {"ok": True}
+
+
+@router.post("/{print_id}/restore-weights")
+async def restore_spool_weights(
+    print_id: int,
+    body: dict = Body({}),
+    _: str = Depends(get_current_user),
+):
+    """
+    Restitue tout ou partie des grammes consommés aux bobines non archivées.
+    body: { "fraction": 1.0 }  (1.0 = 100%, 0.5 = 50%)
+    """
+    from ....models.filament import Spool
+    fraction = float(body.get("fraction", 1.0))
+    fraction = max(0.0, min(1.0, fraction))
+    restored = []
+    async with AsyncSessionLocal() as db:
+        usages = (await db.execute(
+            select(_FU).where(_FU.print_id == print_id, _FU.spool_id.isnot(None))
+        )).scalars().all()
+        for fu in usages:
+            spool = await db.get(Spool, fu.spool_id)
+            if not spool or spool.archived:
+                continue
+            add_g = round(fu.grams_used * fraction, 1)
+            spool.remaining_weight_g = round((spool.remaining_weight_g or 0) + add_g, 1)
+            restored.append({"spool_id": fu.spool_id, "added_g": add_g})
+        await db.commit()
+    return {"ok": True, "restored": restored}

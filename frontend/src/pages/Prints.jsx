@@ -66,6 +66,134 @@ function StatusBadge({ status }) {
 }
 
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
+function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onMapped }) {
+  const [spools, setSpools] = useState([]);
+  const [search, setSearch] = useState(filamentType || "");
+
+  useEffect(() => {
+    client.get("/filaments/spools", { params:{ limit:500 } })
+      .then(r => setSpools(r.data || []))
+      .catch(() => {});
+  }, []);
+
+  const filtered = spools.filter(s => !s.archived && (
+    !search || (s.filament_name||"").toLowerCase().includes(search.toLowerCase()) ||
+    (s.filament_manufacturer||"").toLowerCase().includes(search.toLowerCase())
+  ));
+
+  const map = async (spoolId) => {
+    await client.patch(`/prints/${printId}/filament-usage/${usageId}`, { spool_id: spoolId });
+    onMapped?.();
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:3000,
+      display:"flex", alignItems:"flex-end" }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
+          maxWidth:640, maxHeight:"80dvh", overflowY:"auto", padding:"0 16px 24px" }}>
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 8px", position:"relative" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:10, right:0, width:28, height:28,
+            borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer",
+            color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+          <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
+            backgroundColor:hexCss(colorHex), border:"1px solid rgba(255,255,255,0.2)" }}/>
+          <h3 style={{ fontSize:14, fontWeight:800, color:"var(--text)", margin:0 }}>
+            Associer une bobine
+          </h3>
+        </div>
+        <input value={search} onChange={e=>setSearch(e.target.value)}
+          placeholder="Rechercher..." style={{ width:"100%", boxSizing:"border-box",
+            padding:"8px 12px", borderRadius:8, border:"1px solid var(--border)",
+            background:"var(--surface2)", color:"var(--text)", fontSize:13, outline:"none",
+            marginBottom:10 }}/>
+        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+          {filtered.map(s => (
+            <button key={s.id} onClick={()=>map(s.id)}
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
+                background:"var(--surface2)", border:"1px solid var(--border)",
+                borderRadius:8, cursor:"pointer", textAlign:"left" }}>
+              <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
+                backgroundColor:hexCss(s.color_hex || s.filament_color),
+                border:"1px solid rgba(255,255,255,0.15)" }}/>
+              <div style={{ flex:1, minWidth:0 }}>
+                <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {s.filament_name || "Bobine #"+s.id}
+                </p>
+                <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
+                  {s.filament_manufacturer} · #{s.id} · {s.remaining_weight_g?.toFixed(0)}g restants
+                </p>
+              </div>
+            </button>
+          ))}
+          {filtered.length === 0 && <p style={{ color:"var(--muted)", fontSize:12, textAlign:"center", padding:"20px 0" }}>Aucune bobine trouvée</p>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
+  const hasMapped = (p.filament_usage || []).some(f => f.spool_id);
+  const totalG = (p.filament_usage || []).filter(f => f.spool_id).reduce((s,f)=>s+(f.grams_used||0),0);
+  const [fraction, setFraction] = useState(hasMapped ? 1.0 : 0);
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:3000,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:16,
+        width:"100%", maxWidth:380, padding:20, border:"1px solid var(--border)" }}>
+        <h3 style={{ fontSize:16, fontWeight:800, color:"var(--text)", margin:"0 0 8px" }}>
+          {restoreOnly ? "⚖ Restituer les grammes" : "🗑 Supprimer ce print ?"}
+        </h3>
+        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 16px" }}>
+          {p.file_name || "Sans nom"}
+        </p>
+        {hasMapped && totalG > 0 && (
+          <div style={{ background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.2)",
+            borderRadius:10, padding:"12px 14px", marginBottom:16 }}>
+            <p style={{ fontSize:12, fontWeight:700, color:"#22c55e", margin:"0 0 10px" }}>
+              Restituer les grammes aux bobines ?
+            </p>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {[0, 0.25, 0.5, 0.75, 1.0].map(f => (
+                <button key={f} onClick={()=>setFraction(f)}
+                  style={{ padding:"5px 12px", borderRadius:20, border:"none", cursor:"pointer",
+                    fontWeight:600, fontSize:12,
+                    background: fraction===f ? "#22c55e" : "var(--surface2)",
+                    color: fraction===f ? "white" : "var(--muted)" }}>
+                  {f === 0 ? "Non" : f === 1 ? "100%" : `${f*100}%`}
+                </button>
+              ))}
+            </div>
+            {fraction > 0 && (
+              <p style={{ fontSize:11, color:"#22c55e", margin:"8px 0 0" }}>
+                → +{(totalG * fraction).toFixed(1)}g restitués aux bobines
+              </p>
+            )}
+          </div>
+        )}
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={onCancel}
+            style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
+              background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>
+            Annuler
+          </button>
+          <button onClick={()=>onConfirm(fraction)}
+            style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
+              background:restoreOnly?"#22c55e":"#ef4444", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+            {restoreOnly ? "✓ Restituer" : "Supprimer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FilamentAccordion({ filaments, onSpoolClick }) {
   const [open, setOpen] = useState(false);
   return (
@@ -256,6 +384,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
   const groupe = ungrouped ? null : p.group_name;
   const [editNb, setEditNb]   = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selSpool, setSelSpool] = useState(null);
   const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
   const [nbVal, setNbVal]     = useState(String(pProp.number_of_items || 1));
@@ -476,7 +605,17 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           </button>
 
           {/* Filaments — accordéon */}
-          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool}/>}
+          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} printId={p.id}/>}
+
+          {/* Commentaire */}
+          {p.status_note && (
+            <div style={{ marginBottom:14, padding:"10px 14px", borderRadius:10,
+              background:"rgba(168,85,247,0.06)", border:"1px solid rgba(168,85,247,0.2)" }}>
+              <p style={{ fontSize:9, color:"#a78bfa", textTransform:"uppercase",
+                letterSpacing:"0.06em", margin:"0 0 6px", fontWeight:700 }}>💬 Commentaire</p>
+              <p style={{ fontSize:13, color:"var(--text)", margin:0, lineHeight:1.5 }}>{p.status_note}</p>
+            </div>
+          )}
 
           {/* Identifiants (sans printer_model) */}
           {(p.job_id || p.design_id) && (
@@ -499,13 +638,16 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                 background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
               ✏️ Éditer
             </button>
+            {(p.filament_usage||[]).some(f=>f.spool_id) && (
+              <button onClick={()=>setShowDeleteConfirm("restore")}
+                style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid rgba(34,197,94,0.3)",
+                  background:"rgba(34,197,94,0.06)", color:"#22c55e", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                ⚖ Restituer
+              </button>
+            )}
 
             <button onClick={() => {
-              if (confirm("Supprimer ce print ?")) {
-                client.delete("/prints/" + p.id)
-                  .then(()=>{ onDelete?.(p.id); onClose(); })
-                  .catch(()=>alert("Erreur suppression"));
-              }
+              setShowDeleteConfirm(true);
             }} style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid rgba(239,68,68,0.3)",
               background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:13, fontWeight:700,
               cursor:"pointer" }}>🗑 Supprimer</button>
@@ -518,6 +660,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         </div>
       </div>
     </div>
+    {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={printId} colorHex={spoolPicker.colorHex} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{ setSpoolPicker(null); window.location.reload(); }}/> }
     {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)} zIndex={2000}/>}
     {editMode && <PrintEditSheet p={p} onClose={()=>setEditMode(false)} onSaved={updated=>{ setP(prev=>({...prev,...updated})); setEditMode(false); onChanged?.(); }}/>}
   </>);
