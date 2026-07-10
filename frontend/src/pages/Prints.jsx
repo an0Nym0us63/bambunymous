@@ -1350,7 +1350,8 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
   });
 
   // Fusionner photos disk + photos uploadées manuellement
-  const extraPhotos = (userPhotos||[]).map(ph => ({ url: ph.url, name: ph.filename, label: "Photo", snap: null }));
+  // userPhotos ignorés : déjà couverts par diskFiles via PrintSnapshot(trigger=manual)
+  const extraPhotos = [];
   const baseItems = diskFiles.length > 0
     ? diskFiles.map(f => {
         const s = snapByName[f.name] || null;
@@ -1373,7 +1374,8 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
   useEffect(()=>{ onCountChange?.(allItems.length); }, [allItems.length]);
 
   // Photos = fichiers manuels (pas un snapshot milestone connu) ; Milestones = snapshots auto pct/layer
-  const photoItems     = allItems.filter(i => !i.snap);
+  // Photos = non-snap + manual snaps (uploaded)
+  const photoItems     = allItems.filter(i => !i.snap || i.snap?.trigger === "manual");
   // Milestones triés: 100% → 99% → 50% → Couche2 → Couche1
   const MILE_ORDER = {
     "snapshot-pct100":1,"pct100":1,
@@ -1383,7 +1385,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
     "snapshot-layer1":5,"layer1":5,
     "manual":6,
   };
-  const milestoneItems = allItems.filter(i => i.snap).sort((a,b)=>{
+  const milestoneItems = allItems.filter(i => i.snap && i.snap?.trigger !== "manual").sort((a,b)=>{
     const oa = MILE_ORDER[a.snap?.trigger] ?? 9;
     const ob = MILE_ORDER[b.snap?.trigger] ?? 9;
     return oa - ob;
