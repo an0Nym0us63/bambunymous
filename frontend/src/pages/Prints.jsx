@@ -432,6 +432,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [editNb, setEditNb]   = useState(false);
   const [spoolPicker, setSpoolPicker] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [photoCount, setPhotoCount] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selSpool, setSelSpool] = useState(null);
   const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
@@ -621,7 +622,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           <div style={{ marginBottom:14 }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
               <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.06em", margin:0 }}>Photos ({snaps.length + userPhotos.length})</p>
+                letterSpacing:"0.06em", margin:0 }}>Photos ({photoCount})</p>
               <label style={{ width:20, height:20, borderRadius:"50%", background:"#3b82f6",
                 border:"none", cursor:"pointer", display:"flex", alignItems:"center",
                 justifyContent:"center", fontSize:14, color:"white", fontWeight:700 }}>
@@ -629,14 +630,13 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                   onChange={e=>e.target.files[0]&&uploadPhoto(e.target.files[0])}/>
               </label>
             </div>
-            {(snaps.length > 0 || userPhotos.length > 0) && (
-              <SnapshotGallery snaps={snaps.map(s=>({...s,
+            <SnapshotGallery snaps={snaps.map(s=>({...s,
                 label: SNAP_LABELS[s.trigger] || SNAP_LABELS[s.filename?.replace(/\.(jpg|png|webp)$/,"")] || s.trigger || s.filename
               }))} printId={p.id} userPhotos={userPhotos}
                 onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))}
                 onUpload={uploadPhoto}
-                onDeleteUpload={async(filename)=>{ await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}/>
-            )}
+                onDeleteUpload={async(filename)=>{ await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}
+                onCountChange={setPhotoCount}/>
           </div>
 
           {/* Bouton MakerWorld si design_id disponible */}
@@ -1332,7 +1332,7 @@ function PhotoDeleteConfirm({ label, onCancel, onConfirm }) {
   );
 }
 
-function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], onDeleteUpload }) {
+function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], onDeleteUpload, onCountChange }) {
   const [lightbox, setLightbox] = useState(null);
   const [diskFiles, setDiskFiles] = useState([]);
   const [photoToDelete, setPhotoToDelete] = useState(null);
@@ -1381,6 +1381,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
       }));
 
   const allItems = [...baseItems, ...extraPhotos];
+  useEffect(()=>{ onCountChange?.(allItems.length); }, [allItems.length]);
   if (!allItems.length) return null;
 
   // Photos = fichiers manuels (pas un snapshot milestone connu) ; Milestones = snapshots auto pct/layer
