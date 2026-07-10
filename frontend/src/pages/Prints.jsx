@@ -894,9 +894,6 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
           position:"relative", padding:0, cursor:"pointer" }}>
         <div style={{ position:"relative", paddingTop:"75%",
           background:"var(--surface2)", overflow:"hidden" }}>
-          {cover_print_id && (
-            <span style={{ position:"absolute", bottom:6, right:6, zIndex:1, fontSize:14, filter:"drop-shadow(0 1px 2px rgba(0,0,0,0.5))" }}>⭐</span>
-          )}
           {coverImgId && (
             <img src={"/api/v1/prints/" + coverImgId + "/image"} alt=""
               style={{ position:"absolute", inset:0, width:"100%", height:"100%",
@@ -931,6 +928,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
         <GroupBottomSheet
           groupId={groupId} name={name} prints={prints} latestDate={latestDate}
           number_of_items={number_of_items}
+          cover_print_id={cover_print_id}
           onClose={() => setSheetOpen(false)}
           onSelectPrint={onSelectPrint}
           onUngroup={onUngroup}
