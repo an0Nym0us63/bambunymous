@@ -227,9 +227,26 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
 
 async def _enrich(pid: int, job_id: str, url: str, taskname: str,
                    printer_ip: str, printer_code: str):
+    MAX_ATTEMPTS = 5
+    DELAYS       = [15, 30, 60, 120, 180]
+    meta = None
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        try:
+            logger.info(f"[3MF] ▶ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} url={url[:60]!r}")
+            meta = await extract_3mf(url, taskname, pid, printer_ip, printer_code)
+            if not meta:
+                raise ValueError("extraction vide")
+            logger.info(f"[3MF] ✅ Tentative {attempt} OK - titre={meta.get('title')!r} filaments={len(meta.get('filaments',{}))}")
+            break
+        except Exception as _e3:
+            logger.error(f"[3MF] ❌ Échec tentative {attempt}/{MAX_ATTEMPTS}: {_e3}")
+            if attempt < MAX_ATTEMPTS:
+                import asyncio as _aio3; await _aio3.sleep(DELAYS[attempt-1])
+            else:
+                logger.error(f"[3MF] ❌ Abandon print_id={pid} après {MAX_ATTEMPTS} tentatives")
+                return
+    if not meta: return
     try:
-        logger.info(f"[3MF] ▶ Téléchargement 3MF pour print_id={pid} url={url[:60]!r}")
-        meta = await extract_3mf(url, taskname, pid, printer_ip, printer_code)
         if not meta:
             logger.error(f"[3MF] ❌ Extraction vide pour print_id={pid}")
             return
