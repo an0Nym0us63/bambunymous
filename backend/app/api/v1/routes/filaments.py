@@ -13,6 +13,7 @@ def _clear_match_cache():
     try:
         from ....core.mqtt import invalidate_tray_cache
         invalidate_tray_cache()
+        force_rematch_all_trays()
     except Exception:
         pass
 

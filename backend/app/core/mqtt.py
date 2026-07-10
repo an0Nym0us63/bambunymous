@@ -606,3 +606,35 @@ class MQTTManager:
 
 
 mqtt_manager = MQTTManager()
+
+
+def force_rematch_all_trays():
+    """Relance le matching spool sur tous les trays connus en mémoire (après invalidation cache)."""
+    import threading as _th
+    try:
+        s = get_state()
+        if not s: return
+        for ams in (s.ams_list or []):
+            for t in (ams.trays or []):
+                if getattr(t, "empty", True): continue
+                _tinfo = getattr(t, "tray_info_idx", "") or ""
+                _color = getattr(t, "color_hex", "") or ""
+                _tag   = getattr(t, "tag_uid", "") or ""
+                _tuuid = getattr(t, "tray_uuid", "") or ""
+                def _rematch(_t=t, _ti=_tinfo, _c=_color, _tg=_tag, _tu=_tuuid):
+                    try:
+                        from ..services.print_tracker import _spool_from_slot_or_match as _sfm
+                        import asyncio as _aio
+                        loop = _aio.new_event_loop()
+                        try:
+                            sid, mode = loop.run_until_complete(
+                                _sfm(int(getattr(_t, "id", 0) or 0), _ti, _c, tag_uid=_tg, tray_uuid=_tu)
+                            )
+                            _t.spool_id   = sid
+                            _t.match_mode = mode or ""
+                            _t._spool_info_cache = None
+                        finally: loop.close()
+                    except Exception: pass
+                _th.Thread(target=_rematch, daemon=True).start()
+    except Exception:
+        pass
