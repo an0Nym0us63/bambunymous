@@ -696,7 +696,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         const hasRestore = Object.values(fracs).some(v=>v>0);
         if (hasRestore) await client.post("/prints/"+p.id+"/restore-weights", {fracs}).catch(()=>{});
         if (showDeleteConfirm !== "restore") { client.delete("/prints/"+p.id).then(()=>{ onDelete?.(p.id); onClose(); }).catch(()=>alert("Erreur")); }
-        else { setShowDeleteConfirm(false); onChanged?.(); }
+        else { setShowDeleteConfirm(false); client.get("/prints/"+p.id).then(r=>setP(r.data)).catch(()=>{}); onChanged?.(); }
       }}/>}
   </>);
 }
