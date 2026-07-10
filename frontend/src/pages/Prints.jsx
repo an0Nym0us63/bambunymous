@@ -138,55 +138,78 @@ function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onM
 }
 
 function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
-  const hasMapped = (p.filament_usage || []).some(f => f.spool_id);
-  const totalG = (p.filament_usage || []).filter(f => f.spool_id).reduce((s,f)=>s+(f.grams_used||0),0);
-  const [fraction, setFraction] = useState(hasMapped ? 1.0 : 0);
+  const mapped = (p.filament_usage || []).filter(f => f.spool_id && f.grams_used > 0);
+  const [fracs, setFracs] = useState(() => Object.fromEntries(mapped.map(f=>[f.id, 1.0])));
+  const OPTS = [0, 0.25, 0.5, 0.75, 1.0];
+  const setAll = (v) => setFracs(Object.fromEntries(mapped.map(f=>[f.id,v])));
+  const setOne = (id, v) => setFracs(prev=>({...prev,[id]:v}));
+  const allSame = OPTS.find(o => mapped.every(f=>(fracs[f.id]??0)===o));
+  const totalAdded = mapped.reduce((s,f)=>s+(f.grams_used||0)*(fracs[f.id]??0),0);
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:3000,
-      display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:16,
-        width:"100%", maxWidth:380, padding:20, border:"1px solid var(--border)" }}>
-        <h3 style={{ fontSize:16, fontWeight:800, color:"var(--text)", margin:"0 0 8px" }}>
+      display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onCancel}>
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
+          maxWidth:640, maxHeight:"85dvh", overflowY:"auto", padding:"0 16px 24px",
+          paddingBottom:"env(safe-area-inset-bottom,24px)" }}>
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 8px" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+        </div>
+        <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 4px" }}>
           {restoreOnly ? "⚖ Restituer les grammes" : "🗑 Supprimer ce print ?"}
         </h3>
-        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 16px" }}>
-          {p.file_name || "Sans nom"}
-        </p>
-        {hasMapped && totalG > 0 && (
-          <div style={{ background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.2)",
-            borderRadius:10, padding:"12px 14px", marginBottom:16 }}>
-            <p style={{ fontSize:12, fontWeight:700, color:"#22c55e", margin:"0 0 10px" }}>
-              Restituer les grammes aux bobines ?
-            </p>
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {[0, 0.25, 0.5, 0.75, 1.0].map(f => (
-                <button key={f} onClick={()=>setFraction(f)}
-                  style={{ padding:"5px 12px", borderRadius:20, border:"none", cursor:"pointer",
-                    fontWeight:600, fontSize:12,
-                    background: fraction===f ? "#22c55e" : "var(--surface2)",
-                    color: fraction===f ? "white" : "var(--muted)" }}>
-                  {f === 0 ? "Non" : f === 1 ? "100%" : `${f*100}%`}
-                </button>
-              ))}
-            </div>
-            {fraction > 0 && (
-              <p style={{ fontSize:11, color:"#22c55e", margin:"8px 0 0" }}>
-                → +{(totalG * fraction).toFixed(1)}g restitués aux bobines
-              </p>
-            )}
+        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>{p.file_name || "Sans nom"}</p>
+        {mapped.length > 0 && (<>
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:10 }}>
+            <span style={{ fontSize:11, color:"var(--muted)", flex:1 }}>Tous :</span>
+            {OPTS.map(o=>(
+              <button key={o} onClick={()=>setAll(o)} style={{ padding:"4px 10px", borderRadius:20,
+                border:"none", cursor:"pointer", fontWeight:600, fontSize:11,
+                background:allSame===o?"#22c55e":"var(--surface2)",
+                color:allSame===o?"white":"var(--muted)" }}>
+                {o===0?"Non":o===1?"100%":`${o*100}%`}
+              </button>
+            ))}
           </div>
-        )}
+          <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
+            {mapped.map(f=>(
+              <div key={f.id} style={{ background:"var(--surface2)", borderRadius:10,
+                padding:"10px 12px", border:"1px solid var(--border)" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                  <div style={{ width:16, height:16, borderRadius:"50%", flexShrink:0,
+                    backgroundColor:hexCss(f.color_hex), border:"1px solid rgba(255,255,255,0.15)" }}/>
+                  <span style={{ fontSize:12, fontWeight:600, color:"var(--text)", flex:1 }}>
+                    {f.filament_translated_name||f.filament_fila_type||f.filament_type||"Filament"}
+                  </span>
+                  <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>{f.grams_used?.toFixed(1)}g</span>
+                </div>
+                <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
+                  {OPTS.map(o=>(
+                    <button key={o} onClick={()=>setOne(f.id,o)} style={{ padding:"4px 9px",
+                      borderRadius:20, border:"none", cursor:"pointer", fontWeight:600, fontSize:11,
+                      background:(fracs[f.id]??0)===o?"#22c55e":"var(--bg)",
+                      color:(fracs[f.id]??0)===o?"white":"var(--muted)" }}>
+                      {o===0?"Non":o===1?"100%":`${o*100}%`}
+                    </button>
+                  ))}
+                  {(fracs[f.id]??0)>0 && (
+                    <span style={{ fontSize:10, color:"#22c55e", marginLeft:4 }}>+{(f.grams_used*(fracs[f.id]??0)).toFixed(1)}g</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+          {totalAdded>0 && <p style={{ fontSize:12, color:"#22c55e", fontWeight:700, textAlign:"center", margin:"0 0 14px" }}>Total : +{totalAdded.toFixed(1)}g restitués</p>}
+        </>)}
         <div style={{ display:"flex", gap:8 }}>
-          <button onClick={onCancel}
-            style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
-              background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>
-            Annuler
-          </button>
-          <button onClick={()=>onConfirm(fraction)}
-            style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
-              background:restoreOnly?"#22c55e":"#ef4444", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-            {restoreOnly ? "✓ Restituer" : "Supprimer"}
+          <button onClick={onCancel} style={{ flex:1, padding:"11px", borderRadius:12,
+            border:"1px solid var(--border)", background:"var(--surface2)",
+            color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
+          <button onClick={()=>onConfirm(fracs)} style={{ flex:2, padding:"11px", borderRadius:12,
+            border:"none", background:restoreOnly?"#22c55e":"#ef4444", color:"white",
+            fontSize:13, fontWeight:700, cursor:"pointer" }}>
+            {restoreOnly?"✓ Restituer":"Supprimer"}
           </button>
         </div>
       </div>
@@ -668,8 +691,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
       p={p}
       restoreOnly={showDeleteConfirm==="restore"}
       onCancel={()=>setShowDeleteConfirm(false)}
-      onConfirm={async(restoreFraction)=>{
-        if (restoreFraction > 0) await client.post("/prints/"+p.id+"/restore-weights", {fraction: restoreFraction}).catch(()=>{});
+      onConfirm={async(fracs)=>{
+        // fracs = {usageId: fraction, ...}
+        const hasRestore = Object.values(fracs).some(v=>v>0);
+        if (hasRestore) await client.post("/prints/"+p.id+"/restore-weights", {fracs}).catch(()=>{});
         if (showDeleteConfirm !== "restore") { client.delete("/prints/"+p.id).then(()=>{ onDelete?.(p.id); onClose(); }).catch(()=>alert("Erreur")); }
         else { setShowDeleteConfirm(false); onChanged?.(); }
       }}/>}
