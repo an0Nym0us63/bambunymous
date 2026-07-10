@@ -422,6 +422,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const groupe = ungrouped ? null : p.group_name;
   const [editNb, setEditNb]   = useState(false);
   const [spoolPicker, setSpoolPicker] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selSpool, setSelSpool] = useState(null);
   const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
@@ -643,7 +644,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           </button>
 
           {/* Filaments — accordéon */}
-          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')}/>}
+          {p.filament_usage?.length > 0 && <FilamentAccordion key={refreshKey} filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')}/>}
 
           {/* Commentaire */}
           {p.status_note && (
@@ -704,7 +705,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         const hasRestore = Object.values(fracs).some(v=>v>0);
         if (hasRestore) await client.post("/prints/"+p.id+"/restore-weights", {fracs}).catch(()=>{});
         if (showDeleteConfirm !== "restore") { client.delete("/prints/"+p.id).then(()=>{ onDelete?.(p.id); onClose(); }).catch(()=>alert("Erreur")); }
-        else { setShowDeleteConfirm(false); client.get("/prints/"+p.id).then(r=>setP(r.data)).catch(()=>{}); onChanged?.(); }
+        else { setShowDeleteConfirm(false); client.get("/prints/"+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }
       }}/>}
   </>);
 }
