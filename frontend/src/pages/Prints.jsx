@@ -128,8 +128,6 @@ function FilamentAccordion({ filaments, onSpoolClick }) {
 }
 
 function PrintEditSheet({ p, onClose, onSaved }) {
-  const durToMin = s => s ? Math.round(s/60) : "";
-  const minToDur = m => parseInt(m)*60 || 0;
   const [form, setForm] = useState({
     file_name:     p.file_name || "",
     original_name: p.original_name || "",
@@ -137,7 +135,8 @@ function PrintEditSheet({ p, onClose, onSaved }) {
     status:        p.status || "SUCCESS",
     status_note:   p.status_note || "",
     design_id:     p.design_id || "",
-    duration_min:  durToMin(p.duration_seconds || p.estimated_seconds),
+    duration_h: Math.floor((p.duration_seconds||p.estimated_seconds||0)/3600),
+    duration_m: Math.floor(((p.duration_seconds||p.estimated_seconds||0)%3600)/60),
   });
   const [saving, setSaving] = useState(false);
 
@@ -147,7 +146,8 @@ function PrintEditSheet({ p, onClose, onSaved }) {
     setSaving(true);
     try {
       const payload = {...form};
-      if (payload.duration_min !== undefined) { payload.duration_seconds = minToDur(payload.duration_min); delete payload.duration_min; }
+      payload.duration_seconds = ((parseInt(payload.duration_h)||0)*3600) + ((parseInt(payload.duration_m)||0)*60);
+      delete payload.duration_h; delete payload.duration_m;
       delete payload.original_name;
       await client.patch(`/prints/${p.id}`, payload);
       onSaved(form);
