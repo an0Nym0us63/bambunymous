@@ -184,6 +184,7 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
         ))
 
         for slot, fil in meta.get("filaments", {}).items():
+            if float(fil.get("used_g", 0)) <= 0: continue
             tray_info = (fil.get("tray_info_idx") or "").strip()
             spool_id = None
             try:
@@ -584,6 +585,7 @@ async def create_manual_print(local_path: str, print_date: datetime) -> Optional
                 design_id=meta.get("design_id", ""),
             ))
             for slot, fil in meta.get("filaments", {}).items():
+                if float(fil.get("used_g", 0)) <= 0: continue
                 db.add(FilamentUsage(
                     print_id=pid, filament_type=fil.get("type", ""),
                     color_hex=fil.get("color", ""), grams_used=float(fil.get("used_g", 0)),
