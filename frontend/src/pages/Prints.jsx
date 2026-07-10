@@ -579,7 +579,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   const [editGroup, setEditGroup] = useState(false);
   const [groupPhotos, setGroupPhotos] = useState([]);
 
-  const loadGroupPhotos = () => client.get(`/prints/groups/${groupId}/photos`).then(r=>setGroupPhotos(r.data||[])).catch(()=>{});
+  const loadGroupPhotos = () => client.get(`/prints/groups/${groupId}/photos`).then(r=>setGroupPhotos(r.data?.files||[])).catch(()=>{});
   useEffect(() => { if(groupId) loadGroupPhotos(); }, [groupId]);
   const uploadGroupPhoto = async (file) => {
     const fd = new FormData(); fd.append('file', file);

@@ -295,6 +295,7 @@ async def prints_gallery(_: str = Depends(get_current_user)):
                 "id": p.group_id,
                 "name": (p.group.name if p.group else None) or f"Groupe #{p.group_id}",
                 "number_of_items": (p.group.number_of_items if p.group else None) or 1,
+                "cover_print_id":  p.group.cover_print_id if p.group else None,
                 "prints": 0, "photos": [],
                 "total_weight_g": 0.0, "total_cost_filament": 0.0,
                 "electric_cost": 0.0, "total_cost": 0.0, "duration_seconds": 0.0,
