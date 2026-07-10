@@ -618,26 +618,14 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             </div>
           </div>
 
-          {/* Section Photos — toujours visible avec header + bouton + */}
-          <div style={{ marginBottom:14 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.06em", margin:0 }}>Photos ({photoCount})</p>
-              <label style={{ width:20, height:20, borderRadius:"50%", background:"#3b82f6",
-                border:"none", cursor:"pointer", display:"flex", alignItems:"center",
-                justifyContent:"center", fontSize:14, color:"white", fontWeight:700 }}>
-                +<input type="file" accept="image/*" capture="environment" style={{ display:"none" }}
-                  onChange={e=>e.target.files[0]&&uploadPhoto(e.target.files[0])}/>
-              </label>
-            </div>
-            <SnapshotGallery snaps={snaps.map(s=>({...s,
-                label: SNAP_LABELS[s.trigger] || SNAP_LABELS[s.filename?.replace(/\.(jpg|png|webp)$/,"")] || s.trigger || s.filename
-              }))} printId={p.id} userPhotos={userPhotos}
-                onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))}
-                onUpload={uploadPhoto}
-                onDeleteUpload={async(filename)=>{ await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}
-                onCountChange={setPhotoCount}/>
-          </div>
+          {/* Section Photos */}
+          <SnapshotGallery snaps={snaps.map(s=>({...s,
+            label: SNAP_LABELS[s.trigger] || SNAP_LABELS[s.filename?.replace(/\.(jpg|png|webp)$/,"")] || s.trigger || s.filename
+          }))} printId={p.id} userPhotos={userPhotos}
+            onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))}
+            onUpload={uploadPhoto}
+            onDeleteUpload={async(filename)=>{ await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}
+            onCountChange={setPhotoCount}/>
 
           {/* Bouton MakerWorld si design_id disponible */}
           {p.design_id && (
