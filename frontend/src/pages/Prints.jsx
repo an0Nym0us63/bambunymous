@@ -194,7 +194,8 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
   );
 }
 
-function FilamentAccordion({ filaments, onSpoolClick }) {
+function FilamentAccordion({ filaments, onSpoolClick, printId }) {
+  const [spoolPicker, setSpoolPicker] = useState(null);
   const [open, setOpen] = useState(false);
   return (
     <>
