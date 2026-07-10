@@ -1373,7 +1373,13 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
 
   // Photos = fichiers manuels (pas un snapshot milestone connu) ; Milestones = snapshots auto pct/layer
   const photoItems     = allItems.filter(i => !i.snap);
-  const milestoneItems = allItems.filter(i => i.snap);
+  // Milestones triés: 100% → 99% → 50% → Couche2 → Couche1
+  const MILE_ORDER = { pct100:1, pct99:2, pct50:3, layer2:4, couche2:4, layer1:5, couche1:5, manual:0 };
+  const milestoneItems = allItems.filter(i => i.snap).sort((a,b)=>{
+    const oa = MILE_ORDER[a.snap?.trigger] ?? 9;
+    const ob = MILE_ORDER[b.snap?.trigger] ?? 9;
+    return oa - ob;
+  });
 
   const Row = ({ title, items, startIdx = 0, onAdd, onDeleteItem }) => {
     const scrollRef = React.useRef(null);
@@ -1406,7 +1412,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
         <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6, scrollbarWidth:"none" }}>
           {items.map((item, i) => (
             <div key={i} style={{ position:"relative", flexShrink:0 }}>
-              {onDeleteItem && item.name && item.name.startsWith("Photo-") && (
+              {onDeleteItem && item.name && (
                 <button onClick={e=>{ e.stopPropagation();
                   setPhotoToDelete(item);
                 }} style={{ position:"absolute", top:4, right:4, zIndex:2, width:22, height:22,
@@ -1441,7 +1447,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
     );
   };
 
-  const flatItems = [...photoItems, ...milestoneItems];
+  const flatItems = [...photoItems, ...milestoneItems];  // Photos → 100% → 99% → 50% → Couche2 → Couche1
   const lbIdx = lightbox ? flatItems.findIndex(i => i.url === lightbox.url) : -1;
   const moveLb = (dir) => {
     const ni = (lbIdx + dir + flatItems.length) % flatItems.length;
