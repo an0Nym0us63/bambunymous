@@ -1370,7 +1370,6 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
 
   const allItems = [...baseItems, ...extraPhotos];
   useEffect(()=>{ onCountChange?.(allItems.length); }, [allItems.length]);
-  if (!allItems.length) return null;
 
   // Photos = fichiers manuels (pas un snapshot milestone connu) ; Milestones = snapshots auto pct/layer
   const photoItems     = allItems.filter(i => !i.snap);
