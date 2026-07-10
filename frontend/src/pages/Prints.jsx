@@ -705,7 +705,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         const hasRestore = Object.values(fracs).some(v=>v>0);
         if (hasRestore) await client.post("/prints/"+p.id+"/restore-weights", {fracs}).catch(()=>{});
         if (showDeleteConfirm !== "restore") { client.delete("/prints/"+p.id).then(()=>{ onDelete?.(p.id); onClose(); }).catch(()=>alert("Erreur")); }
-        else { setShowDeleteConfirm(false); client.get("/prints/"+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }
+        else { setShowDeleteConfirm(false); client.get("/prints/"+p.id).then(r=>{ console.log('[RESTORE REFRESH] grams_used:', r.data?.filament_usage?.map(f=>({id:f.id, g:f.grams_used}))); setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }
       }}/>}
   </>);
 }
