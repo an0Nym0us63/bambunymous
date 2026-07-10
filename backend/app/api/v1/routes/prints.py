@@ -452,7 +452,8 @@ async def get_print(print_id: int, _: str = Depends(get_current_user)):
             .where(Print.id == print_id)
             .options(selectinload(Print.filament_usage),
                      selectinload(Print.snapshots),
-                     selectinload(Print.tags))
+                     selectinload(Print.tags),
+                     selectinload(Print.group))
         )).scalar_one_or_none()
     if not p: raise HTTPException(404, "Print introuvable")
     async with AsyncSessionLocal() as db2:
