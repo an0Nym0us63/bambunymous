@@ -83,6 +83,12 @@ function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onM
 
   const map = async (spoolId) => {
     await client.patch(`/prints/${printId}/filament-usage/${usageId}`, { spool_id: spoolId });
+    // Déduire les grammes de la bobine
+    const usage = (await client.get(`/prints/${printId}`).catch(()=>({data:{}}))).data;
+    const fu = (usage.filament_usage||[]).find(f=>f.id===usageId);
+    if (fu?.grams_used > 0) {
+      await client.post(`/filaments/spools/${spoolId}/weight`, { delta: -fu.grams_used }).catch(()=>{});
+    }
     onMapped?.();
   };
 
@@ -217,7 +223,7 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
   );
 }
 
-function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId }) {
+function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRestore }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -236,6 +242,11 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId }) {
               border:"1px solid rgba(255,255,255,0.2)", flexShrink:0 }}/>
           ))}
         </div>
+        {onRestore && filaments.some(f=>f.spool_id) && (
+          <span onClick={e=>{e.stopPropagation();onRestore();}}
+            style={{ fontSize:13, cursor:"pointer", padding:"2px 4px",
+              color:"#22c55e", flexShrink:0 }} title="Restituer grammes">⚖</span>
+        )}
         <span style={{ color:"var(--muted)", fontSize:12 }}>{open?"▲":"▼"}</span>
       </button>
       {/* Détail déplié */}
@@ -245,7 +256,8 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId }) {
             <div key={i} onClick={e=>{e.stopPropagation();console.log("[FILAMENT CLICK]",f);onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id||null,hex:f.color_hex||null});}}
               style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px 12px", background:"var(--bg)",
-              borderTop:"1px solid var(--border)", cursor:"pointer" }}>
+              borderTop:"1px solid var(--border)", cursor:"pointer",
+              opacity: f.spool_id ? 1 : 0.85 }}>
               <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
                 backgroundColor:hexCss(f.color_hex),
                 border:f.spool_id?"2px solid #22c55e":"1px solid rgba(255,255,255,0.15)" }}/>
@@ -254,6 +266,8 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId }) {
                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {f.filament_translated_name || f.filament_fila_type || f.filament_name || "Inconnu"}
                   {f.spool_id && <span style={{ fontSize:9, color:"#22c55e", marginLeft:5 }}>✓#{f.spool_id}</span>}
+                  {!f.spool_id && <span style={{ fontSize:9, color:"#f59e0b", marginLeft:5,
+                    background:"rgba(245,158,11,0.12)", padding:"1px 5px", borderRadius:6 }}>▸ Mapper</span>}
                 </p>
                 <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
                   {[f.filament_brand, f.filament_fila_type || f.filament_type, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
@@ -629,7 +643,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           </button>
 
           {/* Filaments — accordéon */}
-          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id}/>}
+          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')}/>}
 
           {/* Commentaire */}
           {p.status_note && (
@@ -662,13 +676,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                 background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
               ✏️ Éditer
             </button>
-            {(p.filament_usage||[]).some(f=>f.spool_id) && (
-              <button onClick={()=>setShowDeleteConfirm("restore")}
-                style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid rgba(34,197,94,0.3)",
-                  background:"rgba(34,197,94,0.06)", color:"#22c55e", fontSize:11, fontWeight:700, cursor:"pointer" }}>
-                ⚖ Restituer
-              </button>
-            )}
+
 
             <button onClick={() => {
               setShowDeleteConfirm(true);
