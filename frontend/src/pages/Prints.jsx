@@ -497,12 +497,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             onError={e => { e.currentTarget.parentElement.style.minHeight=0; e.currentTarget.style.display="none"; }}/>
         </div>
 
-        <div style={{ padding:"0 16px 12px" }}>
-          {/* Galerie snapshots avec bons labels */}
-          <SnapshotGallery snaps={snaps.map(s=>({...s,
-            label: SNAP_LABELS[s.trigger] || SNAP_LABELS[s.filename?.replace(/\.(jpg|png|webp)$/,"")] || s.trigger || s.filename
-          }))} printId={p.id} userPhotos={userPhotos} onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))} onUpload={uploadPhoto} onDeleteUpload={async(filename)=>{ await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}/>
-        </div>
+
 
 
         <div style={{ padding:"0 16px 16px" }}>
@@ -620,6 +615,28 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Section Photos — toujours visible avec header + bouton + */}
+          <div style={{ marginBottom:14 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+                letterSpacing:"0.06em", margin:0 }}>Photos ({snaps.length + userPhotos.length})</p>
+              <label style={{ width:20, height:20, borderRadius:"50%", background:"#3b82f6",
+                border:"none", cursor:"pointer", display:"flex", alignItems:"center",
+                justifyContent:"center", fontSize:14, color:"white", fontWeight:700 }}>
+                +<input type="file" accept="image/*" capture="environment" style={{ display:"none" }}
+                  onChange={e=>e.target.files[0]&&uploadPhoto(e.target.files[0])}/>
+              </label>
+            </div>
+            {(snaps.length > 0 || userPhotos.length > 0) && (
+              <SnapshotGallery snaps={snaps.map(s=>({...s,
+                label: SNAP_LABELS[s.trigger] || SNAP_LABELS[s.filename?.replace(/\.(jpg|png|webp)$/,"")] || s.trigger || s.filename
+              }))} printId={p.id} userPhotos={userPhotos}
+                onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))}
+                onUpload={uploadPhoto}
+                onDeleteUpload={async(filename)=>{ await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}/>
+            )}
           </div>
 
           {/* Bouton MakerWorld si design_id disponible */}
