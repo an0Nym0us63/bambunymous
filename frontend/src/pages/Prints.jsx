@@ -623,7 +623,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             label: SNAP_LABELS[s.trigger] || SNAP_LABELS[s.filename?.replace(/\.(jpg|png|webp)$/,"")] || s.trigger || s.filename
           }))} printId={p.id} userPhotos={userPhotos}
             onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))}
-            onUpload={uploadPhoto}
+            onUpload={async(f)=>{ await uploadPhoto(f); }}
             onDeleteUpload={async(filename)=>{ await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}
             onCountChange={setPhotoCount}/>
 
@@ -1326,11 +1326,11 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
   const [photoToDelete, setPhotoToDelete] = useState(null);
   const [deletedNames, setDeletedNames] = useState(new Set());
 
-  useEffect(() => {
-    client.get("/prints/" + printId + "/snapshots")
+  const reloadDiskFiles = () => client.get("/prints/" + printId + "/snapshots")
       .then(r => setDiskFiles(r.data.files || []))
       .catch(() => {});
-  }, [printId]);
+
+  useEffect(() => { reloadDiskFiles(); }, [printId]);
 
   const LABELS = { layer1:"Couche 1", layer2:"Couche 2", pct50:"50%", pct99:"99%", pct100:"100%", manual:"Manuel" };
 
@@ -1377,14 +1377,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
   // Photos = non-snap + manual snaps (uploaded)
   const photoItems     = allItems.filter(i => !i.snap || i.snap?.trigger === "manual");
   // Milestones triés: 100% → 99% → 50% → Couche2 → Couche1
-  const MILE_ORDER = {
-    "snapshot-pct100":1,"pct100":1,
-    "snapshot-pct99":2,"pct99":2,
-    "snapshot-pct50":3,"pct50":3,
-    "snapshot-layer2":4,"layer2":4,
-    "snapshot-layer1":5,"layer1":5,
-    "manual":6,
-  };
+  const MILE_ORDER = { "pct100":1, "pct99":2, "pct50":3, "layer2":4, "layer1":5 };
   const milestoneItems = allItems.filter(i => i.snap && i.snap?.trigger !== "manual").sort((a,b)=>{
     const oa = MILE_ORDER[a.snap?.trigger] ?? 9;
     const ob = MILE_ORDER[b.snap?.trigger] ?? 9;
@@ -1466,7 +1459,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
 
   return (
     <>
-      <Row title="Photos" items={photoItems} startIdx={0} onAdd={onUpload} onDeleteItem={onDeleteUpload}/>
+      <Row title="Photos" items={photoItems} startIdx={0} onAdd={async(f)=>{ await onUpload?.(f); reloadDiskFiles(); }} onDeleteItem={onDeleteUpload}/>
       <Row title="Milestones" items={milestoneItems} startIdx={photoItems.length}/>
       {lightbox && (
         <div onClick={() => setLightbox(null)}
