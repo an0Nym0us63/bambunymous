@@ -27,7 +27,7 @@ def col_exists(conn, table, col):
     return col in cols
 
 
-async def run_import(src_path: str) -> dict:
+async def run_import(src_path: str, local_to_utc: bool = False) -> dict:
     from ..db.session import AsyncSessionLocal, init_db
     await init_db()
 
@@ -139,7 +139,7 @@ async def run_import(src_path: str) -> dict:
                 p = PrintModel(
                     id=old_pid,
                     job_id=job_id or None,
-                    print_date=parse_dt(row.get("print_date") or row.get("created_at")) or datetime.utcnow(),
+                    print_date=parse_dt(row.get("print_date") or row.get("created_at"), local_to_utc=local_to_utc) or datetime.utcnow(),
                     file_name=row.get("file_name") or row.get("original_name") or "Import",
                     original_name=row.get("original_name"),
                     print_type=row.get("print_type") or "cloud",

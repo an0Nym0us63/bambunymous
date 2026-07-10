@@ -79,7 +79,7 @@ async def _run_import(url: str):
                 shutil.copy2(db_src, db_dest)
                 from ....db.import_db import run_import as import_from_db
                 from ....db.session import AsyncSessionLocal
-                summary = await import_from_db(str(db_dest))
+                summary = await import_from_db(str(db_dest), local_to_utc=True)
                 _add_step(f"DB importée · {summary.get('prints',0)} prints · {summary.get('filaments',0)} filaments · {summary.get('groups',0)} groupes · {summary.get('spools',0)} bobines")
             except Exception as e:
                 _add_step(f"Erreur import DB : {e}", ok=False)
