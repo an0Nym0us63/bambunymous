@@ -232,21 +232,30 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
       <button onClick={()=>setOpen(o=>!o)}
         style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"8px 12px",
           background:"var(--surface2)", border:"none", cursor:"pointer", textAlign:"left" }}>
-        <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-          letterSpacing:"0.06em", flex:1 }}>Filaments ({filaments.length})</span>
+        <div style={{ display:"flex", alignItems:"center", gap:6, flex:1, minWidth:0 }}>
+          <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+            letterSpacing:"0.06em", whiteSpace:"nowrap" }}>Filaments ({filaments.length})</span>
+          {onRestore && filaments.some(f=>f.spool_id) && (
+            <span onClick={e=>{e.stopPropagation();onRestore();}}
+              style={{ fontSize:10, fontWeight:700, cursor:"pointer",
+                padding:"2px 8px", borderRadius:20, whiteSpace:"nowrap",
+                background:"rgba(34,197,94,0.15)", color:"#22c55e",
+                border:"1px solid rgba(34,197,94,0.3)" }}>⚖ Restituer</span>
+          )}
+        </div>
         {/* Pastilles de couleur */}
         <div style={{ display:"flex", gap:4, flexWrap:"wrap", justifyContent:"flex-end" }}>
           {filaments.map((f,i) => (
-            <div key={i} style={{ width:16, height:16, borderRadius:"50%",
-              backgroundColor:hexCss(f.color_hex),
-              border:"1px solid rgba(255,255,255,0.2)", flexShrink:0 }}/>
+            <div key={i} style={{ position:"relative", flexShrink:0 }}>
+              <div style={{ width:16, height:16, borderRadius:"50%",
+                backgroundColor:hexCss(f.color_hex),
+                border:"1px solid rgba(255,255,255,0.2)" }}/>
+              {!f.spool_id && <span style={{ position:"absolute", top:-3, right:-3,
+                width:8, height:8, borderRadius:"50%", background:"#f59e0b",
+                border:"1px solid var(--bg)" }}/>}
+            </div>
           ))}
         </div>
-        {onRestore && filaments.some(f=>f.spool_id) && (
-          <span onClick={e=>{e.stopPropagation();onRestore();}}
-            style={{ fontSize:13, cursor:"pointer", padding:"2px 4px",
-              color:"#22c55e", flexShrink:0 }} title="Restituer grammes">⚖</span>
-        )}
         <span style={{ color:"var(--muted)", fontSize:12 }}>{open?"▲":"▼"}</span>
       </button>
       {/* Détail déplié */}
