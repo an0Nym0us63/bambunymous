@@ -524,13 +524,68 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 }
 
 
-export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate, number_of_items: nbItemsProp, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
+function GroupEditSheet({ groupId, name, onClose, onSaved }) {
+  const [form, setForm] = useState({ name: name || "" });
+  const [saving, setSaving] = useState(false);
+  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
+  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginBottom:4, display:"block" };
+  const save = async () => {
+    setSaving(true);
+    try { await client.patch(`/prints/groups/${groupId}`, form); onSaved(form.name); }
+    catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
+    setSaving(false);
+  };
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:2000,
+      display:"flex", alignItems:"flex-end" }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
+          maxWidth:640, padding:"0 16px 24px", paddingBottom:"env(safe-area-inset-bottom,24px)" }}>
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 8px", position:"relative" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:10, right:0, width:28, height:28,
+            borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer",
+            color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+        </div>
+        <h3 style={{ fontSize:15, fontWeight:800, margin:"0 0 16px", color:"var(--text)" }}>✏️ Éditer le groupe</h3>
+        <div>
+          <label style={lbl}>Nom du groupe</label>
+          <input style={inp} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/>
+        </div>
+        <div style={{ display:"flex", gap:8, marginTop:20 }}>
+          <button onClick={onClose} style={{ flex:1, padding:"11px", borderRadius:12,
+            border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>
+            Annuler
+          </button>
+          <button onClick={save} disabled={saving} style={{ flex:2, padding:"11px", borderRadius:12,
+            border:"none", background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+            {saving ? "…" : "💾 Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
   const [localPrints, setLocalPrints] = useState([]);
   const [nbItems, setNbItems]         = useState(nbItemsProp || 1);
   const [editNb, setEditNb]           = useState(false);
   const [nbVal, setNbVal]             = useState(String(nbItemsProp || 1));
   const [selectedPrint, setSelectedPrint] = useState(null);
   const [selSpoolG, setSelSpoolG] = useState(null);
+  const [coverPrintId, setCoverPrintId] = useState(coverPrintIdProp||null);
+  const [editGroup, setEditGroup] = useState(false);
+  const [groupPhotos, setGroupPhotos] = useState([]);
+
+  const loadGroupPhotos = () => client.get(`/prints/groups/${groupId}/photos`).then(r=>setGroupPhotos(r.data||[])).catch(()=>{});
+  useEffect(() => { if(groupId) loadGroupPhotos(); }, [groupId]);
+  const uploadGroupPhoto = async (file) => {
+    const fd = new FormData(); fd.append('file', file);
+    await client.post(`/prints/groups/${groupId}/photos/upload`, fd, {headers:{'Content-Type':'multipart/form-data'}});
+    loadGroupPhotos();
+  };
 
   useEffect(() => {
     if (!groupId) return;
@@ -681,6 +736,39 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
             </div>
           )}
 
+          {/* Photos du groupe */}
+          {(groupPhotos.length > 0 || true) && (
+            <div style={{ marginBottom:14 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+                <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>
+                  Photos ({groupPhotos.length})
+                </p>
+                <label style={{ width:20, height:20, borderRadius:"50%", background:"#3b82f6",
+                  border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                  fontSize:14, color:"white", fontWeight:700 }}>
+                  +<input type="file" accept="image/*" capture="environment" style={{ display:"none" }}
+                    onChange={e=>e.target.files[0]&&uploadGroupPhoto(e.target.files[0])}/>
+                </label>
+              </div>
+              {groupPhotos.length > 0 && (
+                <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
+                  {groupPhotos.map((ph,i)=>(
+                    <div key={i} style={{ position:"relative", flexShrink:0 }}>
+                      <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover", borderRadius:8 }}/>
+                      <button onClick={async()=>{ if(confirm(`Supprimer cette photo ?`)){
+                        await client.delete(`/prints/groups/${groupId}/photo/${ph.name}`);
+                        loadGroupPhotos();
+                      }}} style={{ position:"absolute", top:2, right:2, width:18, height:18,
+                        borderRadius:"50%", background:"rgba(0,0,0,0.6)", border:"none",
+                        cursor:"pointer", color:"white", fontSize:12,
+                        display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Filaments agrégés — accordéon */}
           {filaments.length > 0 && <FilamentAccordion filaments={filaments} onSpoolClick={setSelSpoolG}/>}
 
@@ -723,12 +811,15 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
                 {/* Bouton étoile = définir comme référence visuelle */}
                 <button onClick={async e=>{ e.stopPropagation();
-                  try { await client.patch("/prints/groups/"+groupId, { cover_print_id: p.id });
-                  setLocalPrints(ps=>[...ps]); } catch{} // force re-render
+                  try {
+                    await client.patch("/prints/groups/"+groupId, { cover_print_id: p.id });
+                    setCoverPrintId(p.id);
+                  } catch{}
                 }} title="Définir comme référence visuelle"
                   style={{ position:"absolute", top:4, left:4, zIndex:2, width:20, height:20,
-                  borderRadius:"50%", background:"rgba(0,0,0,0.5)", border:"none",
-                  cursor:"pointer", color:"#f59e0b", fontSize:13, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  borderRadius:"50%", background: coverPrintId===p.id ? "#f59e0b" : "rgba(0,0,0,0.5)",
+                  border:"none", cursor:"pointer", color:"white", fontSize:11,
+                  display:"flex", alignItems:"center", justifyContent:"center" }}>
                   ★
                 </button>
                 <div onClick={()=>setSelectedPrint(p)} style={{ cursor:"pointer" }}>
@@ -754,6 +845,11 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
 
           {/* Actions */}
           <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>setEditGroup(true)}
+              style={{ flex:1, padding:"10px", borderRadius:12, border:"1px solid var(--border)",
+                background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+              ✏️ Éditer
+            </button>
             <button onClick={handleDelete}
               style={{ flex:1, padding:"10px", borderRadius:12,
                 border:"1px solid rgba(239,68,68,0.3)", background:"rgba(239,68,68,0.06)",
@@ -775,6 +871,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
         </div>
       </div>
     </div>
+    {editGroup && <GroupEditSheet groupId={groupId} name={name} onClose={()=>setEditGroup(false)} onSaved={()=>{ setEditGroup(false); onUpdated?.(); }}/>}
     {selSpoolG && <FilamentSheetFromSpool filamentId={selSpoolG.filId} spoolId={selSpoolG.spoolId} filamentColorHex={selSpoolG.hex} onClose={()=>setSelSpoolG(null)} zIndex={2000}/>}
     {selectedPrint && (
       <PrintDetail p={selectedPrint} onClose={()=>setSelectedPrint(null)}
@@ -785,9 +882,9 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   );
 }
 
-function GroupTile({ groupId, name, prints, latestDate, number_of_items, duration_seconds, onSelectPrint, onDelete, onUngroup }) {
+function GroupTile({ groupId, name, prints, latestDate, number_of_items, duration_seconds, cover_print_id, onSelectPrint, onDelete, onUngroup }) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const coverPrint = prints[0];
+  const coverPrint = cover_print_id ? (prints.find(p=>p.id===cover_print_id) || prints[0]) : prints[0];
 
   return (
     <>
@@ -796,6 +893,9 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
           position:"relative", padding:0, cursor:"pointer" }}>
         <div style={{ position:"relative", paddingTop:"75%",
           background:"var(--surface2)", overflow:"hidden" }}>
+          {cover_print_id && (
+            <span style={{ position:"absolute", bottom:6, right:6, zIndex:1, fontSize:14, filter:"drop-shadow(0 1px 2px rgba(0,0,0,0.5))" }}>⭐</span>
+          )}
           {coverPrint && (
             <img src={"/api/v1/prints/" + coverPrint.id + "/image"} alt=""
               style={{ position:"absolute", inset:0, width:"100%", height:"100%",
@@ -1530,7 +1630,7 @@ export default function Prints() {
         const groupMap = {};   // group_id → { name, prints[], latestDate }
         uniquePrints.forEach(p => {
           if (!p.group_id) return;
-          if (!groupMap[p.group_id]) groupMap[p.group_id] = { name: p.group_name, prints:[], latestDate:"", duration_seconds:0, number_of_items:p.group_number_of_items||1 };
+          if (!groupMap[p.group_id]) groupMap[p.group_id] = { name: p.group_name, prints:[], latestDate:"", duration_seconds:0, number_of_items:p.group_number_of_items||1, cover_print_id:p.group_cover_print_id||null };
           groupMap[p.group_id].prints.push(p);
           if (!groupMap[p.group_id].latestDate || p.print_date > groupMap[p.group_id].latestDate)
             groupMap[p.group_id].latestDate = p.print_date;
@@ -1571,6 +1671,7 @@ export default function Prints() {
                 prints={item.prints} latestDate={item.latestDate}
                 number_of_items={item.number_of_items}
                 duration_seconds={item.duration_seconds}
+                cover_print_id={item.cover_print_id}
                 onSelectPrint={setSelected}
                 onUngroup={() => load()}
                 onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}/>
