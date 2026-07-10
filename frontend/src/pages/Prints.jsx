@@ -297,10 +297,6 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
         </div>
       )}
     </div>
-    {photoToDelete && <PhotoDeleteConfirm
-      label={photoToDelete.label||photoToDelete.name}
-      onCancel={()=>setPhotoToDelete(null)}
-      onConfirm={()=>{ onDeleteItem&&onDeleteItem(photoToDelete.name); setPhotoToDelete(null); }}/> }
     </>
   );
 }
@@ -1488,6 +1484,10 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
           )}
         </div>
       )}
+    {photoToDelete && <PhotoDeleteConfirm
+      label={photoToDelete.label||photoToDelete.name}
+      onCancel={()=>setPhotoToDelete(null)}
+      onConfirm={()=>{ onDeleteItem&&onDeleteItem(photoToDelete.name); setPhotoToDelete(null); }}/> }
     </>
   );
 }
