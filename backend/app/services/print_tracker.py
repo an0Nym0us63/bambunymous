@@ -248,6 +248,7 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
                 design_id=meta.get("design_id", ""),
             ))
             for slot, fil in meta.get("filaments", {}).items():
+                if float(fil.get("used_g", 0)) <= 0: continue
                 tray_info = (fil.get("tray_info_idx") or "").strip()
                 spool_id = None
                 try:
