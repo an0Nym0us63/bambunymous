@@ -90,6 +90,8 @@ def _print_to_out(p: Print) -> dict:
     ]
     d["tags"] = [t.tag for t in (p.tags or [])]
     d["group_name"] = p.group.name if p.group else None
+    d["group_cover_print_id"] = p.group.cover_print_id if p.group else None
+    d["group_number_of_items"] = p.group.number_of_items if p.group else 1
     return d
 
 
@@ -881,3 +883,37 @@ async def recalculate_all_prints(_: str = Depends(get_current_user)):
         finally: loop.close()
     threading.Thread(target=_run, daemon=True).start()
     return {"ok": True, "message": "Recalcul lancé en arrière-plan"}
+
+
+@router.post("/groups/{group_id}/photos/upload")
+async def upload_group_photo(
+    group_id: int, file: UploadFile = File(...), _: str = Depends(get_current_user),
+):
+    import subprocess as _sp, tempfile as _tf, os as _os
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(400, "Fichier image requis")
+    d = DATA_DIR / "groups" / str(group_id)
+    d.mkdir(parents=True, exist_ok=True)
+    raw = await file.read()
+    orig_ext = (file.filename or "photo.jpg").rsplit(".", 1)[-1].lower()
+    n = len(list(d.glob("Photo-*"))) + 1
+    dest = d / f"Photo-{n:02d}.webp"
+    try:
+        with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
+            tmp.write(raw); tmp_path = tmp.name
+        _sp.run(["ffmpeg","-y","-i",tmp_path,
+                 "-vf","scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
+                 "-quality","80","-compression_level","6",str(dest)],
+                check=True, capture_output=True, timeout=30)
+        _os.unlink(tmp_path)
+    except Exception:
+        dest = d / f"Photo-{n:02d}.{orig_ext}"; dest.write_bytes(raw)
+    return {"ok": True, "name": dest.name, "url": f"/api/v1/prints/groups/{group_id}/photo/{dest.name}"}
+
+
+@router.delete("/groups/{group_id}/photo/{filename}")
+async def delete_group_photo_ep(group_id: int, filename: str, _: str = Depends(get_current_user)):
+    if ".." in filename or "/" in filename: raise HTTPException(400)
+    path = DATA_DIR / "groups" / str(group_id) / filename
+    if not path.exists(): raise HTTPException(404)
+    path.unlink(); return {"ok": True}
