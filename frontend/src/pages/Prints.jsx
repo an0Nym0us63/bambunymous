@@ -814,6 +814,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   try {
                     await client.patch("/prints/groups/"+groupId, { cover_print_id: p.id });
                     setCoverPrintId(p.id);
+                    onUpdated?.();
                   } catch{}
                 }} title="Définir comme référence visuelle"
                   style={{ position:"absolute", top:4, left:4, zIndex:2, width:20, height:20,
@@ -884,7 +885,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
 
 function GroupTile({ groupId, name, prints, latestDate, number_of_items, duration_seconds, cover_print_id, onSelectPrint, onDelete, onUngroup }) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const coverPrint = cover_print_id ? (prints.find(p=>p.id===cover_print_id) || prints[0]) : prints[0];
+  const coverImgId = cover_print_id || (prints[0]?.id ?? null);
 
   return (
     <>
@@ -896,8 +897,8 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
           {cover_print_id && (
             <span style={{ position:"absolute", bottom:6, right:6, zIndex:1, fontSize:14, filter:"drop-shadow(0 1px 2px rgba(0,0,0,0.5))" }}>⭐</span>
           )}
-          {coverPrint && (
-            <img src={"/api/v1/prints/" + coverPrint.id + "/image"} alt=""
+          {coverImgId && (
+            <img src={"/api/v1/prints/" + coverImgId + "/image"} alt=""
               style={{ position:"absolute", inset:0, width:"100%", height:"100%",
                 objectFit:"contain" }}
               onError={e => { e.currentTarget.style.display="none"; }}/>
