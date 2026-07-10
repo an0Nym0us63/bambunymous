@@ -262,7 +262,7 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
       {open && (
         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
           {filaments.map((f,i) => (
-            <div key={i} onClick={e=>{e.stopPropagation();console.log("[FILAMENT CLICK]",f);onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id||null,hex:f.color_hex||null});}}
+            <div key={i} onClick={e=>{e.stopPropagation();console.log("[FILAMENT CLICK]",f); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else{onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,filamentType:f.filament_fila_type||f.filament_type});}}}
               style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px 12px", background:"var(--bg)",
               borderTop:"1px solid var(--border)", cursor:"pointer",
@@ -653,7 +653,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           </button>
 
           {/* Filaments — accordéon */}
-          {p.filament_usage?.length > 0 && <FilamentAccordion key={refreshKey} filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')}/>}
+          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')}/>}
 
           {/* Commentaire */}
           {p.status_note && (
@@ -703,6 +703,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
       </div>
     </div>
     {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{ setSpoolPicker(null); window.location.reload(); }}/> }
+    {photoToDelete && <PhotoDeleteConfirm
+      label={photoToDelete.label||photoToDelete.name}
+      onCancel={()=>setPhotoToDelete(null)}
+      onConfirm={()=>{ onDeleteItem&&onDeleteItem(photoToDelete.name); setPhotoToDelete(null); }}/> }
     {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)} zIndex={2000}/>}
     {editMode && <PrintEditSheet p={p} onClose={()=>setEditMode(false)} onSaved={updated=>{ setP(prev=>({...prev,...updated})); setEditMode(false); onChanged?.(); }}/>}
     {showDeleteConfirm && <DeletePrintConfirm
@@ -772,6 +776,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   const [selectedPrint, setSelectedPrint] = useState(null);
   const [selSpoolG, setSelSpoolG] = useState(null);
   const [coverPrintId, setCoverPrintId] = useState(coverPrintIdProp||null);
+  const [groupPhotoToDelete, setGroupPhotoToDelete] = useState(null);
   const [editGroup, setEditGroup] = useState(false);
   const [groupPhotos, setGroupPhotos] = useState([]);
 
@@ -951,7 +956,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   {groupPhotos.map((ph,i)=>(
                     <div key={i} style={{ position:"relative", flexShrink:0 }}>
                       <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover", borderRadius:8 }}/>
-                      <button onClick={async()=>{ if(confirm(`Supprimer cette photo ?`)){
+                      <button onClick={async()=>{ if(window._confirmedDeletePhoto){
                         await client.delete(`/prints/groups/${groupId}/photo/${ph.name}`);
                         loadGroupPhotos();
                       }}} style={{ position:"absolute", top:2, right:2, width:18, height:18,
@@ -1068,6 +1073,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
         </div>
       </div>
     </div>
+    {groupPhotoToDelete && <PhotoDeleteConfirm label={groupPhotoToDelete.name} onCancel={()=>setGroupPhotoToDelete(null)} onConfirm={async()=>{ await client.delete(`/prints/groups/${groupId}/photo/${groupPhotoToDelete.name}`); setGroupPhotoToDelete(null); loadGroupPhotos(); }}/>}
     {editGroup && <GroupEditSheet groupId={groupId} name={name} onClose={()=>setEditGroup(false)} onSaved={()=>{ setEditGroup(false); onUpdated?.(); }}/>}
     {selSpoolG && <FilamentSheetFromSpool filamentId={selSpoolG.filId} spoolId={selSpoolG.spoolId} filamentColorHex={selSpoolG.hex} onClose={()=>setSelSpoolG(null)} zIndex={2000}/>}
     {selectedPrint && (
@@ -1292,9 +1298,31 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
 }
 
 
+function PhotoDeleteConfirm({ label, onCancel, onConfirm }) {
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:4000,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:16,
+        width:"100%", maxWidth:340, padding:20, border:"1px solid var(--border)" }}>
+        <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Supprimer la photo ?</p>
+        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 18px" }}>{label}</p>
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={onCancel} style={{ flex:1, padding:"10px", borderRadius:10,
+            border:"1px solid var(--border)", background:"var(--surface2)",
+            color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
+          <button onClick={onConfirm} style={{ flex:2, padding:"10px", borderRadius:10,
+            border:"none", background:"#ef4444", color:"white", fontSize:13,
+            fontWeight:700, cursor:"pointer" }}>Supprimer</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], onDeleteUpload }) {
   const [lightbox, setLightbox] = useState(null);
   const [diskFiles, setDiskFiles] = useState([]);
+  const [photoToDelete, setPhotoToDelete] = useState(null);
 
   useEffect(() => {
     client.get("/prints/" + printId + "/snapshots")
