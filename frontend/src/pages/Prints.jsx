@@ -1406,7 +1406,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
         <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6, scrollbarWidth:"none" }}>
           {items.map((item, i) => (
             <div key={i} style={{ position:"relative", flexShrink:0 }}>
-              {onDeleteItem && item.name && !item.snap && (
+              {onDeleteItem && item.name && item.name.startsWith("Photo-") && (
                 <button onClick={e=>{ e.stopPropagation();
                   setPhotoToDelete(item);
                 }} style={{ position:"absolute", top:4, right:4, zIndex:2, width:22, height:22,
