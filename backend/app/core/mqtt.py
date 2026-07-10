@@ -14,6 +14,8 @@ _listeners: list[Callable] = []
 # Cache matching AMS: (ams_id, tray_id, uuid_or_profile) → spool_id|-1
 # Évite de relancer un thread de matching à chaque tick MQTT (toutes les 2s)
 _MATCH_CACHE: dict = {}
+_CACHE_TS:    dict = {}   # timestamp de mise en cache par clé
+_CACHE_TTL = 60            # expiration auto 60s
 _MATCH_MODE_CACHE: dict = {}  # même clé → "rfid"/"auto"/"notfound" (persiste même sans spool_id)
 _SPOOL_INFO_CACHE: dict = {}  # même clé → dict spool_info
 
@@ -41,7 +43,7 @@ def invalidate_tray_cache(tag_uid: str = "", profile_id: str = "") -> int:
     un re-match sur tous les trays au prochain tick).
     """
     invalidated = 0
-    for cache in (_MATCH_CACHE, _MATCH_MODE_CACHE, _SPOOL_INFO_CACHE):
+    for cache in (_MATCH_CACHE, _MATCH_MODE_CACHE, _SPOOL_INFO_CACHE, _CACHE_TS):
         invalidated += len(cache)
         cache.clear()
     # Resetter _spool_info_cache sur tous les trays en mémoire
@@ -423,7 +425,8 @@ class MQTTManager:
                         import threading as _mth, asyncio as _mio
                         _cache_key = (ams.id, t.id, _tray_uuid or _tray_info or "")
                         _cached_id = _MATCH_CACHE.get(_cache_key)
-                        if _cached_id is not None:
+                        _cached_age = __import__('time').time() - _CACHE_TS.get(_cache_key, 0)
+                        if _cached_id is not None and _cached_age < _CACHE_TTL:
                             # Cache hit — restaurer spool_id, match_mode et spool_info
                             t.spool_id = _cached_id if _cached_id != -1 else None
                             if _cache_key in _MATCH_MODE_CACHE:
@@ -440,6 +443,7 @@ class MQTTManager:
                                     from ..services.spool_matcher import match_spool
                                     spool_id, mode = await match_spool(_tag, _tinfo, _tc)
                                     _MATCH_CACHE[_key] = spool_id if spool_id else -1
+                                    _CACHE_TS[_key] = __import__('time').time()
                                     # mode est mis en cache même sans spool_id (ex: "notfound")
                                     # pour ne pas revenir au mode provisoire "rfid"/"auto" au tick suivant
                                     if mode:
