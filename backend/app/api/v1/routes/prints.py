@@ -576,7 +576,7 @@ async def delete_print_upload(print_id: int, filename: str, _: str = Depends(get
     """Supprime une photo uploadée (Photo-*.webp) + son PrintSnapshot en DB."""
     from ....models.print_history import PrintSnapshot as _PS
     from sqlalchemy import select as _sel
-    if ".." in filename or "/" in filename or not filename.startswith("Photo-"):
+    if ".." in filename or "/" in filename:
         raise HTTPException(400)
     path = DATA_DIR / "prints" / str(print_id) / filename
     if not path.exists():
