@@ -384,6 +384,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
   const groupe = ungrouped ? null : p.group_name;
   const [editNb, setEditNb]   = useState(false);
+  const [spoolPicker, setSpoolPicker] = useState(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selSpool, setSelSpool] = useState(null);
   const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
