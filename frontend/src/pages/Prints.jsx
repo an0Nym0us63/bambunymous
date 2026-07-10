@@ -194,8 +194,7 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
   );
 }
 
-function FilamentAccordion({ filaments, onSpoolClick, printId }) {
-  const [spoolPicker, setSpoolPicker] = useState(null);
+function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -606,7 +605,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           </button>
 
           {/* Filaments — accordéon */}
-          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} printId={p.id}/>}
+          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id}/>}
 
           {/* Commentaire */}
           {p.status_note && (
