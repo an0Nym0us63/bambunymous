@@ -12,10 +12,16 @@ from ..models.object_history import Object, ObjectGroup, Accessory, ObjectAccess
 logger = logging.getLogger(__name__)
 
 
-def parse_dt(val):
+def parse_dt(val, local_to_utc: bool = False):
     if not val: return None
     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
-        try: return datetime.strptime(str(val).strip(), fmt)
+        try:
+            dt = datetime.strptime(str(val).strip(), fmt)
+            if local_to_utc:
+                import time as _t, calendar as _cal
+                ts = _t.mktime(dt.timetuple())
+                dt = datetime.utcfromtimestamp(ts - (_t.mktime(_t.gmtime(ts)) - _cal.timegm(_t.gmtime(ts))))
+            return dt
         except: continue
     return None
 
