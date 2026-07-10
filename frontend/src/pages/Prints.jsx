@@ -524,17 +524,17 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             )}
           </div>
 
-          {/* Date + Durée + Poids — badges */}
+          {/* Date + Durée + Poids — badges colorés */}
           <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:14 }}>
             {[
-              fmtDate(p.print_date) && ["📅", fmtDate(p.print_date)],
-              (p.duration_seconds||p.estimated_seconds)>0 && ["⏱", fmtDur(p.duration_seconds||p.estimated_seconds)],
-              p.total_weight_g>0 && ["⚖", p.total_weight_g.toFixed(1)+"g"],
-            ].filter(Boolean).map(([ic,val])=>(
+              fmtDate(p.print_date) && ["📅", fmtDate(p.print_date), "#3b82f6"],
+              (p.duration_seconds||p.estimated_seconds)>0 && ["⏱", fmtDur(p.duration_seconds||p.estimated_seconds), "#8b5cf6"],
+              p.total_weight_g>0 && ["⚖", p.total_weight_g.toFixed(1)+"g", "#f59e0b"],
+            ].filter(Boolean).map(([ic,val,color])=>(
               <div key={ic} style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 10px",
-                borderRadius:20, background:"var(--surface2)", border:"1px solid var(--border)" }}>
+                borderRadius:20, background:`${color}18`, border:`1px solid ${color}30` }}>
                 <span style={{ fontSize:11 }}>{ic}</span>
-                <span style={{ fontSize:11, fontWeight:600, color:"var(--text)", fontFamily:"monospace" }}>{val}</span>
+                <span style={{ fontSize:11, fontWeight:700, color, fontFamily:"monospace" }}>{val}</span>
               </div>
             ))}
           </div>
