@@ -664,6 +664,15 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
     {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{ setSpoolPicker(null); window.location.reload(); }}/> }
     {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)} zIndex={2000}/>}
     {editMode && <PrintEditSheet p={p} onClose={()=>setEditMode(false)} onSaved={updated=>{ setP(prev=>({...prev,...updated})); setEditMode(false); onChanged?.(); }}/>}
+    {showDeleteConfirm && <DeletePrintConfirm
+      p={p}
+      restoreOnly={showDeleteConfirm==="restore"}
+      onCancel={()=>setShowDeleteConfirm(false)}
+      onConfirm={async(restoreFraction)=>{
+        if (restoreFraction > 0) await client.post("/prints/"+p.id+"/restore-weights", {fraction: restoreFraction}).catch(()=>{});
+        if (showDeleteConfirm !== "restore") { client.delete("/prints/"+p.id).then(()=>{ onDelete?.(p.id); onClose(); }).catch(()=>alert("Erreur")); }
+        else { setShowDeleteConfirm(false); onChanged?.(); }
+      }}/>}
   </>);
 }
 
