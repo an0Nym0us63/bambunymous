@@ -203,22 +203,28 @@ function SpoolSVG({ colors, empty, size=68, active, type }) {
   const ringColor = dark ? "rgba(255,255,255,0.15)" : "rgba(0,0,0,0.15)";
   const hubColor  = dark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.20)";
   const spokeColor= dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.10)";
-  const fill = empty ? "#2a2a2a" : c1;
+  const fill = empty ? "none" : c1;
+  const patId = `pat${uid}`;
 
   return (
     <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
       {/* Ombre portée */}
       <ellipse cx="40" cy="75" rx="22" ry="3" fill="rgba(0,0,0,0.20)"/>
 
-      {isGradient && (
-        <defs>
+      <defs>
+        {empty && (
+          <pattern id={patId} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+            <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(148,163,184,0.25)" strokeWidth="3"/>
+          </pattern>
+        )}
+        {isGradient && (
           <linearGradient id={uid} x1="10" y1="40" x2="70" y2="40" gradientUnits="userSpaceOnUse">
             {colors.map((cl, i) => (
               <stop key={i} offset={`${Math.round(i/(colors.length-1)*100)}%`} stopColor={cl}/>
             ))}
           </linearGradient>
-        </defs>
-      )}
+        )}
+      </defs>
 
       {/* Disque principal — couleur exacte, dégradé lisse, ou secteurs selon le type */}
       {!empty && isGradient ? (
@@ -241,7 +247,7 @@ function SpoolSVG({ colors, empty, size=68, active, type }) {
           );
         })
       ) : (
-        <circle cx="40" cy="40" r="30" fill={fill}/>
+        <circle cx="40" cy="40" r="30" fill={empty ? `url(#${patId})` : fill}/>
       )}
 
       {/* Anneau extérieur (léger contour) */}
