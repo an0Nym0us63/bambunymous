@@ -1,3 +1,4 @@
+import React, { createPortal as _portal } from 'react';
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal } from "lucide-react";
 import client from "../api/client";
@@ -695,7 +696,8 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
               ✕</button>
           </div>
           {showUsage && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:3000,
+        {React.createPortal(
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:9999,
           display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={()=>setShowUsage(false)}>
           <div onClick={e=>e.stopPropagation()} className="sheet-inner"
             style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
@@ -750,7 +752,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
               color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>Fermer</button>
           </div>
         </div>
-      )}
+        , document.body)}
       {confirmDelete && (
             <div style={{ marginTop:12, background:"rgba(239,68,68,0.06)", border:"1px solid rgba(239,68,68,0.25)",
               borderRadius:10, padding:"12px 14px" }}>
