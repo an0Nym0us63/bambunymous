@@ -385,9 +385,8 @@ function UnmapFilamentConfirm({ f, printId, onClose, onDone }) {
   );
 }
 
-function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRestore, onUnmapped }) {
+function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRestore, onUnmapped, onUnmap }) {
   const [open, setOpen] = useState(false);
-  const [unmapping, setUnmapping] = useState(null); // filament à démapper
   const [dissociate, setDissociate] = useState(null); // filament usage à dissocier
   return (
     <>
@@ -428,8 +427,8 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
           {filaments.map((f,i) => (
             <div key={i}
               onClick={e=>{e.stopPropagation(); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else{onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,filamentType:f.filament_fila_type||f.filament_type});}}}
-              onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(f.spool_id)setUnmapping(f);}}
-              onPointerDown={e=>{ if(!f.spool_id) return; const t=setTimeout(()=>{setUnmapping(f); navigator.vibrate&&navigator.vibrate(20);},600); e.currentTarget._lpt=t; }}
+              onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(f.spool_id)onUnmap&&onUnmap(f);}}
+              onPointerDown={e=>{ if(!f.spool_id) return; const t=setTimeout(()=>{navigator.vibrate&&navigator.vibrate(20); onUnmap&&onUnmap(f);},600); e.currentTarget._lpt=t; }}
               onPointerUp={e=>clearTimeout(e.currentTarget._lpt)}
               onPointerLeave={e=>clearTimeout(e.currentTarget._lpt)}
               onPointerCancel={e=>clearTimeout(e.currentTarget._lpt)}
@@ -467,7 +466,6 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
         </div>
       )}
     </div>
-    {unmapping && <UnmapFilamentConfirm f={unmapping} printId={printId} onClose={()=>setUnmapping(null)} onDone={()=>{ setUnmapping(null); onUnmapped?.(); }}/>}
     </>
   );
 }
@@ -603,6 +601,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [editNb, setEditNb]   = useState(false);
   const [spoolPicker, setSpoolPicker] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [unmapping, setUnmapping] = useState(null);
   const [photoCount, setPhotoCount] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selSpool, setSelSpool] = useState(null);
@@ -829,7 +828,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           </button>
 
           {/* Filaments — accordéon */}
-          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')} onUnmapped={()=>{ client.get('/prints/'+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }}/>}
+          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')} onUnmap={setUnmapping} onUnmapped={()=>{ client.get('/prints/'+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }}/>}
 
           {/* Commentaire */}
           {p.status_note && (
@@ -881,6 +880,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
     {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{ setSpoolPicker(null); window.location.reload(); }}/> }
     {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)} zIndex={2000}/>}
     {editMode && <PrintEditSheet p={p} onClose={()=>setEditMode(false)} onSaved={updated=>{ setP(prev=>({...prev,...updated})); setEditMode(false); onChanged?.(); }}/>}
+    {unmapping && <UnmapFilamentConfirm f={unmapping} printId={p.id} onClose={()=>setUnmapping(null)} onDone={()=>{ setUnmapping(null); client.get('/prints/'+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }}/>}
     {showDeleteConfirm && <DeletePrintConfirm
       p={p}
       restoreOnly={showDeleteConfirm==="restore"}
