@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, createPortal } from "react";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal } from "lucide-react";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
@@ -694,7 +694,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                 color:"white", fontSize:13, fontWeight:600 }}>
               ✕</button>
           </div>
-          {showUsage && React.createPortal(
+          {showUsage && createPortal(
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:9999,
           display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={()=>setShowUsage(false)}>
           <div onClick={e=>e.stopPropagation()} className="sheet-inner"
