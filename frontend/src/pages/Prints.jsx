@@ -264,8 +264,70 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
   );
 }
 
-function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRestore }) {
+function DissociateDialog({ usage, printId, onClose, onDone }) {
+  const [restore, setRestore] = useState(true);
+  const [loading, setLoading] = useState(false);
+
+  const confirm = async () => {
+    setLoading(true);
+    try {
+      if (restore && usage.grams_used > 0 && usage.spool_id) {
+        await client.post(`/filaments/spools/${usage.spool_id}/weight`,
+          { mode: "add", value: usage.grams_used }).catch(()=>{});
+      }
+      await client.patch(`/prints/${printId}/filament-usage/${usage.id}`, { spool_id: null });
+      await client.post(`/prints/${printId}/recalc-costs`).catch(()=>{});
+      onDone?.();
+    } catch(e) { alert("Erreur: " + e.message); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:4000,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:20 }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:16,
+        width:"100%", maxWidth:360, padding:20, border:"1px solid var(--border)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+          <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
+            backgroundColor:hexCss(usage.color_hex), border:"1px solid rgba(255,255,255,0.15)" }}/>
+          <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0 }}>Dissocier la bobine</p>
+        </div>
+        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+          {usage.filament_translated_name||usage.filament_fila_type||usage.filament_type} · {usage.grams_used?.toFixed(1)}g · bobine #{usage.spool_id}
+        </p>
+        {usage.grams_used > 0 && (
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16,
+            padding:"10px 12px", borderRadius:10,
+            background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.2)", cursor:"pointer" }}
+            onClick={()=>setRestore(r=>!r)}>
+            <div style={{ width:20, height:20, borderRadius:4, border:"2px solid #22c55e",
+              background:restore?"#22c55e":"transparent", flexShrink:0,
+              display:"flex", alignItems:"center", justifyContent:"center" }}>
+              {restore && <span style={{ color:"white", fontSize:13 }}>✓</span>}
+            </div>
+            <span style={{ fontSize:12, color:"var(--text)" }}>
+              Remettre <b>{usage.grams_used?.toFixed(1)}g</b> dans la bobine
+            </span>
+          </div>
+        )}
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={onClose} style={{ flex:1, padding:"10px", borderRadius:10,
+            border:"1px solid var(--border)", background:"var(--surface2)",
+            color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
+          <button onClick={confirm} disabled={loading} style={{ flex:2, padding:"10px",
+            borderRadius:10, border:"none", background:"#ef4444", color:"white",
+            fontSize:13, fontWeight:700, cursor:"pointer", opacity:loading?0.7:1 }}>
+            {loading?"…":"Dissocier"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRestore, onUnmapped }) {
   const [open, setOpen] = useState(false);
+  const [dissociate, setDissociate] = useState(null); // filament usage à dissocier
   return (
     <>
     <div style={{ marginBottom:14, border:"1px solid var(--border)", borderRadius:10 }}>
@@ -303,7 +365,11 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
       {open && (
         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
           {filaments.map((f,i) => (
-            <div key={i} onClick={e=>{e.stopPropagation();console.log("[FILAMENT CLICK]",f); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else{onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,filamentType:f.filament_fila_type||f.filament_type});}}}
+            <div key={i} onClick={e=>{e.stopPropagation(); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else{onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,filamentType:f.filament_fila_type||f.filament_type});}}}
+              onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(f.spool_id)setDissociate(f);}}
+              onPointerDown={e=>{ if(!f.spool_id) return; const t=setTimeout(()=>setDissociate(f),600); e.currentTarget._lpt=t; }}
+              onPointerUp={e=>{ clearTimeout(e.currentTarget._lpt); }}
+              onPointerLeave={e=>{ clearTimeout(e.currentTarget._lpt); }}
               style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px 12px", background:"var(--bg)",
               borderTop:"1px solid var(--border)", cursor:"pointer",
@@ -699,7 +765,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           </button>
 
           {/* Filaments — accordéon */}
-          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')}/>}
+          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')} onUnmapped={()=>{ client.get('/prints/'+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }}/>}
 
           {/* Commentaire */}
           {p.status_note && (
