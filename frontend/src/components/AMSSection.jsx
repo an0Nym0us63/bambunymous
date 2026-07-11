@@ -93,10 +93,12 @@ const AMS_NAMES = ["AMS-A","AMS-B","AMS-C","AMS-D"];
 function ColorPill({ tray, spoolInfo, active }) {
   const colors = parseColors(tray, spoolInfo);
   const c1 = colors?.[0];
-  const bg = colorBg(colors, multicolorType(tray, spoolInfo));
-  // Contour léger pour les couleurs claires/blanches
+  const isEmpty = isEmptyTray(tray);
+  const bg = isEmpty
+    ? { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.18) 0px, rgba(148,163,184,0.18) 2px, transparent 2px, transparent 6px)" }
+    : colorBg(colors, multicolorType(tray, spoolInfo));
   const lum = luminance((c1||"").replace("#",""));
-  const ringColor = active ? "#3b82f6" : lum > 200 ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.1)";
+  const ringColor = active ? "#3b82f6" : isEmpty ? "rgba(148,163,184,0.2)" : lum > 200 ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.1)";
   return (
     <div style={{ flex:1, height:28, borderRadius:6, transition:"all 0.2s",
       boxShadow: active ? `0 0 0 2px ${ringColor}` : `0 0 0 1px ${ringColor}`,
