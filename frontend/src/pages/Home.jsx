@@ -580,22 +580,22 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, act
               </div>
               <div style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"center", alignItems:"center", gap:6 }}>
                 <div style={{ display:"flex", gap:5, justifyContent:"center" }}>
-                  {[slots[0], slots[2], slots[4]].map(({ slot, num, onHead }) => slot ? (
+                  {[slots[0], slots[2], slots[4]].map(({ slot, num, onHead }) => (
                     <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
                       headColor={onHead ? headColorValue : null}
                       isSelected={current.kind==="hotend" && current.num===num}
                       activeNozzleId={activeNozzleId}
                       onClick={() => setSel({ kind:"hotend", num })}/>
-                  ) : null)}
+                  ))}
                 </div>
                 <div style={{ display:"flex", gap:5, justifyContent:"center" }}>
-                  {[slots[1], slots[3], slots[5]].map(({ slot, num, onHead }) => slot ? (
+                  {[slots[1], slots[3], slots[5]].map(({ slot, num, onHead }) => (
                     <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
                       headColor={onHead ? headColorValue : null}
                       isSelected={current.kind==="hotend" && current.num===num}
                       activeNozzleId={activeNozzleId}
                       onClick={() => setSel({ kind:"hotend", num })}/>
-                  ) : null)}
+                  ))}
                 </div>
               </div>
             </div>
