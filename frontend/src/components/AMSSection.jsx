@@ -332,7 +332,8 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
           </span>
         )}
       </div>
-      <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace" }}>
+      <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace", height:14,
+        display:"flex", alignItems:"center", justifyContent:"center" }}>
         {empty ? "" : wLabel}
       </p>
       <p style={{ fontSize:9, color:"var(--text2)", textAlign:"center",
