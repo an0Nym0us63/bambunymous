@@ -1060,19 +1060,22 @@ async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
     from ....models.print_history import FilamentUsage as _FU, Print as _P
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(
-            _sel(_FU, _P.file_name, _P.print_date, _P.status)
+            _sel(
+                _FU.print_id, _FU.grams_used, _FU.cost,
+                _P.file_name, _P.print_date, _P.status
+            )
             .join(_P, _FU.print_id == _P.id)
             .where(_FU.spool_id == sid)
             .order_by(_P.print_date.desc())
         )).all()
     return [
         {
-            "print_id":    r._FU.print_id,
-            "file_name":   r.file_name,
+            "print_id":   r.print_id,
+            "file_name":  r.file_name,
             "print_date":  r.print_date.isoformat() if r.print_date else None,
             "status":      r.status,
-            "grams_used":  r._FU.grams_used,
-            "cost":        r._FU.cost,
+            "grams_used": r.grams_used,
+            "cost":       r.cost,
         }
         for r in rows
     ]
