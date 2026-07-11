@@ -69,11 +69,19 @@ function StatusBadge({ status }) {
 function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onMapped }) {
   const [spools, setSpools] = useState([]);
   const [search, setSearch] = useState(filamentType || "");
+  const [viewH, setViewH] = useState(null);
+  const [confirmSpool, setConfirmSpool] = useState(null); // {spool, grams_used}
 
   useEffect(() => {
     client.get("/filaments/spools", { params:{ limit:500 } })
       .then(r => setSpools(r.data || []))
       .catch(() => {});
+    // Adapter hauteur au clavier mobile via visualViewport
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => setViewH(vv.height);
+    vv.addEventListener("resize", onResize);
+    return () => vv.removeEventListener("resize", onResize);
   }, []);
 
   const filtered = spools.filter(s => {
@@ -88,23 +96,26 @@ function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onM
     return words.every(w => haystack.includes(w));
   });
 
-  const map = async (spoolId) => {
-    await client.patch(`/prints/${printId}/filament-usage/${usageId}`, { spool_id: spoolId });
-    // Déduire les grammes de la bobine
-    const usage = (await client.get(`/prints/${printId}`).catch(()=>({data:{}}))).data;
-    const fu = (usage.filament_usage||[]).find(f=>f.id===usageId);
+  const selectSpool = async (spool) => {
+    await client.patch(`/prints/${printId}/filament-usage/${usageId}`, { spool_id: spool.id });
+    // Récupérer les grammes utilisés pour proposer la déduction
+    const resp = await client.get(`/prints/${printId}`).catch(()=>({data:{}}));
+    const fu = (resp.data?.filament_usage||[]).find(f=>f.id===usageId);
     if (fu?.grams_used > 0) {
-      await client.post(`/filaments/spools/${spoolId}/weight`, { delta: -fu.grams_used }).catch(()=>{});
+      setConfirmSpool({ spool, grams_used: fu.grams_used });
+    } else {
+      onMapped?.();
     }
-    onMapped?.();
   };
+
+  const sheetStyle = viewH ? { height: viewH * 0.85 + "px", maxHeight: viewH * 0.85 + "px" } : { maxHeight:"70dvh" };
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:3000,
       display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} className="sheet-inner"
         style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
-          maxWidth:640, maxHeight:"70dvh", overflowY:"auto", padding:"0 16px env(safe-area-inset-bottom,24px)" }}>
+          maxWidth:640, ...sheetStyle, overflowY:"auto", padding:"0 16px 24px" }}>
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 8px", position:"relative" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
           <button onClick={onClose} style={{ position:"absolute", top:10, right:0, width:28, height:28,
@@ -125,7 +136,7 @@ function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onM
             marginBottom:10 }}/>
         <div style={{ display:"flex", flexDirection:"column", gap:5, paddingBottom:80 }}>
           {filtered.map(s => (
-            <button key={s.id} onClick={()=>map(s.id)}
+            <button key={s.id} onClick={()=>selectSpool(s)}
               style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
                 background:"var(--surface2)", border:"1px solid var(--border)",
                 borderRadius:8, cursor:"pointer", textAlign:"left" }}>
@@ -135,11 +146,14 @@ function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onM
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {s.filament_name || "Bobine #"+s.id}
+                  {s.filament_translated_name || s.filament_name || "Bobine #"+s.id}
                 </p>
-                <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
-                  {s.filament_manufacturer} · #{s.id} · {s.remaining_weight_g?.toFixed(0)}g restants
+                <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
+                  {[s.filament_manufacturer, s.filament_fila_type||s.filament_material, `${s.remaining_weight_g?.toFixed(0)}g restants`].filter(Boolean).join(" · ")}
                 </p>
+                {s.filament_translated_name && s.filament_name && s.filament_translated_name!==s.filament_name && (
+                  <p style={{ fontSize:9, color:"var(--muted)", margin:0, opacity:0.7 }}>{s.filament_name}</p>
+                )}
               </div>
             </button>
           ))}
@@ -714,6 +728,28 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         </div>
       </div>
     </div>
+    {confirmSpool && (
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:4000,
+        display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+        <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:16,
+          width:"100%", maxWidth:360, padding:20, border:"1px solid var(--border)" }}>
+          <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Décompter les grammes ?</p>
+          <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 16px" }}>
+            Bobine mappée. Déduire <b style={{color:"var(--text)"}}>{confirmSpool.grams_used?.toFixed(1)}g</b> de <b style={{color:"var(--text)"}}>{confirmSpool.spool?.filament_translated_name||confirmSpool.spool?.filament_name}</b> ?
+          </p>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={async()=>{ setConfirmSpool(null); onMapped?.(); }}
+              style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
+                background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Non</button>
+            <button onClick={async()=>{
+              await client.post(`/filaments/spools/${confirmSpool.spool.id}/weight`, { delta: -confirmSpool.grams_used }).catch(()=>{});
+              setConfirmSpool(null); onMapped?.();
+            }} style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
+              background:"#22c55e", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>Oui, déduire</button>
+          </div>
+        </div>
+      </div>
+    )}
     {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{ setSpoolPicker(null); window.location.reload(); }}/> }
     {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)} zIndex={2000}/>}
     {editMode && <PrintEditSheet p={p} onClose={()=>setEditMode(false)} onSaved={updated=>{ setP(prev=>({...prev,...updated})); setEditMode(false); onChanged?.(); }}/>}
