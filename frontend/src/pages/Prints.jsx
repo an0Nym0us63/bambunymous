@@ -2291,7 +2291,17 @@ export default function Prints() {
         );
       })()}
 
-
+      {/* Filet de sécurité : si l'amorçage auto échoue, on garde une action explicite */}
+      {viewMode==="list" && !loading && !error && hasMore && (
+        <div style={{ display:"flex", justifyContent:"center", padding:"16px 0 8px" }}>
+          <button onClick={loadMore} disabled={loadingMore}
+            style={{ padding:"9px 18px", borderRadius:20, fontSize:12, fontWeight:700,
+              border:"1px solid var(--border)", background:"var(--surface2)",
+              color:"var(--muted)", cursor: loadingMore ? "default" : "pointer" }}>
+            {loadingMore ? "Chargement…" : `Charger plus (${prints.length}/${total})`}
+          </button>
+        </div>
+      )}
 
       {selected && <PrintDetail p={selected} onClose={()=>setSelected(null)}
         onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}
