@@ -1918,6 +1918,20 @@ export default function Prints() {
     return () => container.removeEventListener("scroll", onScroll);
   }, [loadMore, hasMore, viewMode]);
 
+  // Le lazy load ci-dessus est piloté par le scroll : si le contenu ne déborde
+  // pas de l'écran, il ne se déclenche jamais. Cas typique d'un tri par
+  // coût/durée où une page entière de prints tient dans un ou deux groupes,
+  // repliés en autant de cartes. On amorce donc explicitement.
+  useEffect(() => {
+    if (viewMode !== "list" || !hasMore || loading || loadingMore) return;
+    const container = document.querySelector(".page-content");
+    if (!container) return;
+    if (container.scrollHeight <= container.clientHeight + 40) {
+      const t = setTimeout(() => loadMore(), 80);
+      return () => clearTimeout(t);
+    }
+  }, [prints, hasMore, loading, loadingMore, viewMode, loadMore]);
+
   const loadGroups = useCallback(async () => {
     try {
       const { data } = await client.get("/prints/groups");
