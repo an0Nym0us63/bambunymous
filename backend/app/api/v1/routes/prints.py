@@ -228,14 +228,51 @@ def _filament_filter_subq(material, fila_type, filament_id, color=None):
 
 
 # Tris disponibles pour l'historique
-_SORTS = {
-    "recent":   lambda: desc(Print.print_date),
-    "oldest":   lambda: Print.print_date.asc(),
-    "cost":     lambda: desc(func.coalesce(Print.total_cost, 0)),
-    "weight":   lambda: desc(func.coalesce(Print.total_weight_g, 0)),
-    "duration": lambda: desc(func.coalesce(Print.duration_seconds,
-                                           Print.estimated_seconds, 0)),
-}
+SORTS = ("recent", "oldest", "cost", "weight", "duration")
+
+_PRINT_DURATION = func.coalesce(Print.duration_seconds, Print.estimated_seconds, 0)
+
+
+def _group_aggregates():
+    """
+    Agrégats par groupe : un groupe est une entité d'affichage, il doit donc
+    être trié sur SA valeur (somme des coûts / poids / durées de ses prints),
+    pas sur celle d'un de ses membres.
+    """
+    return (select(
+                Print.group_id.label("gid"),
+                func.sum(func.coalesce(Print.total_cost, 0)).label("g_cost"),
+                func.sum(func.coalesce(Print.total_weight_g, 0)).label("g_weight"),
+                func.sum(func.coalesce(Print.duration_seconds,
+                                       Print.estimated_seconds, 0)).label("g_duration"),
+                func.max(Print.print_date).label("g_max_date"),
+                func.min(Print.print_date).label("g_min_date"),
+            )
+            .where(Print.group_id.isnot(None))
+            .group_by(Print.group_id)
+            .subquery())
+
+
+def _order_clauses(sort: str, g):
+    """
+    Clauses ORDER BY. La clé est celle du groupe si le print en a un, sinon la
+    sienne (coalesce) : tous les prints d'un même groupe partagent donc la même
+    clé et restent contigus malgré la pagination.
+    """
+    if sort == "oldest":
+        return [func.coalesce(g.c.g_min_date, Print.print_date).asc(),
+                Print.print_date.asc()]
+    if sort == "cost":
+        return [desc(func.coalesce(g.c.g_cost, Print.total_cost, 0)),
+                desc(Print.print_date)]
+    if sort == "weight":
+        return [desc(func.coalesce(g.c.g_weight, Print.total_weight_g, 0)),
+                desc(Print.print_date)]
+    if sort == "duration":
+        return [desc(func.coalesce(g.c.g_duration, _PRINT_DURATION, 0)),
+                desc(Print.print_date)]
+    return [desc(func.coalesce(g.c.g_max_date, Print.print_date)),
+            desc(Print.print_date)]
 
 
 @router.get("")
@@ -262,13 +299,16 @@ async def list_prints(
     from ....models.print_history import PrintTag as _PT
 
     async with AsyncSessionLocal() as db:
-        order_by = _SORTS.get(sort, _SORTS["recent"])()
+        if sort not in SORTS:
+            sort = "recent"
+        g = _group_aggregates()
         q = (select(Print)
+             .outerjoin(g, Print.group_id == g.c.gid)
              .options(selectinload(Print.filament_usage),
                       selectinload(Print.snapshots),
                       selectinload(Print.tags),
                       selectinload(Print.group))
-             .order_by(order_by))
+             .order_by(*_order_clauses(sort, g)))
         if status:
             q = q.where(Print.status == status)
         if search:

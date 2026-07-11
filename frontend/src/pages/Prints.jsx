@@ -2206,11 +2206,15 @@ export default function Prints() {
         const groupMap = {};   // group_id → { name, prints[], latestDate }
         uniquePrints.forEach(p => {
           if (!p.group_id) return;
-          if (!groupMap[p.group_id]) groupMap[p.group_id] = { name: p.group_name, prints:[], latestDate:"", duration_seconds:0, number_of_items:p.group_number_of_items||1, cover_print_id:p.group_cover_print_id||null };
-          groupMap[p.group_id].prints.push(p);
-          if (!groupMap[p.group_id].latestDate || p.print_date > groupMap[p.group_id].latestDate)
-            groupMap[p.group_id].latestDate = p.print_date;
-          groupMap[p.group_id].duration_seconds = (groupMap[p.group_id].duration_seconds||0) + (p.duration_seconds||0);
+          if (!groupMap[p.group_id]) groupMap[p.group_id] = { name: p.group_name, prints:[], latestDate:"", earliestDate:"", duration_seconds:0, total_cost:0, total_weight_g:0, number_of_items:p.group_number_of_items||1, cover_print_id:p.group_cover_print_id||null };
+          const g = groupMap[p.group_id];
+          g.prints.push(p);
+          if (!g.latestDate   || p.print_date > g.latestDate)   g.latestDate   = p.print_date;
+          if (!g.earliestDate || p.print_date < g.earliestDate) g.earliestDate = p.print_date;
+          // Un groupe est trié sur SA valeur agrégée, pas sur celle d'un membre
+          g.duration_seconds = (g.duration_seconds||0) + (p.duration_seconds || p.estimated_seconds || 0);
+          g.total_cost       = (g.total_cost||0)       + (p.total_cost || 0);
+          g.total_weight_g   = (g.total_weight_g||0)   + (p.total_weight_g || 0);
         });
 
         // Construire la liste d'items : soit un print solo, soit un groupe entier
@@ -2227,8 +2231,25 @@ export default function Prints() {
           }
         });
 
-        // Trier par date décroissante (groupes à la date de leur print le plus récent)
-        items.sort((a,b) => (b.date||b.latestDate||"").localeCompare(a.date||a.latestDate||""));
+        // Trier selon le filtre actif, avec les mêmes clés que le backend :
+        // un groupe est classé sur sa valeur agrégée, un print solo sur la sienne.
+        const keyOf = (it) => {
+          const isG = it.type === "group";
+          switch (sortF) {
+            case "oldest":   return isG ? (it.earliestDate||"") : (it.p.print_date||"");
+            case "cost":     return isG ? (it.total_cost||0)     : (it.p.total_cost||0);
+            case "weight":   return isG ? (it.total_weight_g||0) : (it.p.total_weight_g||0);
+            case "duration": return isG ? (it.duration_seconds||0)
+                                        : (it.p.duration_seconds || it.p.estimated_seconds || 0);
+            default:         return isG ? (it.latestDate||"") : (it.p.print_date||"");
+          }
+        };
+        const asc = sortF === "oldest";
+        items.sort((a,b) => {
+          const ka = keyOf(a), kb = keyOf(b);
+          const cmp = typeof ka === "string" ? ka.localeCompare(kb) : (ka - kb);
+          return asc ? cmp : -cmp;
+        });
 
         // Grille responsive : 2 cols mobile, 3-4 cols desktop
         const GRID = "repeat(auto-fill, minmax(160px, 1fr))";
