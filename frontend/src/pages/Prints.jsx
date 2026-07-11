@@ -2020,7 +2020,7 @@ export default function Prints() {
         if (groupF) {
           return (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(160px, 1fr))", gap:10 }}>
-              {prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete}/>)}
+              {prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete} onLongPress={id=>{ setSelectMode(true); setSelectedIds(new Set([id])); }}/>)}
             </div>
           );
         }
