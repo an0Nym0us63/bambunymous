@@ -527,8 +527,21 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
 }
 
 export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
-  const [confirmDelete, setConfirmDelete] = React.useState(null); // null | {usage_count}
+  const [confirmDelete, setConfirmDelete] = React.useState(null);
   const [deleting, setDeleting] = React.useState(false);
+  const [showUsage, setShowUsage] = React.useState(false);
+  const [usageHistory, setUsageHistory] = React.useState([]);
+  const [loadingUsage, setLoadingUsage] = React.useState(false);
+
+  const loadUsage = async () => {
+    setLoadingUsage(true);
+    try {
+      const r = await client.get(`/filaments/spools/${spool.id}/usage`);
+      setUsageHistory(r.data || []);
+      setShowUsage(true);
+    } catch(e) { alert('Erreur: ' + e.message); }
+    setLoadingUsage(false);
+  };
 
   const handleDelete = async (force = false) => {
     setDeleting(true);
@@ -647,8 +660,17 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Prix catalogue" value={spool.filament_price ? `${Number(spool.filament_price).toFixed(2)}€` : null}/>
 
 
+          {/* Historique utilisation */}
+          <button onClick={loadUsage} disabled={loadingUsage}
+            style={{ width:"100%", marginTop:16, padding:"10px", background:"var(--surface2)",
+              border:"1px solid var(--border)", borderRadius:10, cursor:"pointer",
+              color:"var(--text)", fontSize:13, fontWeight:600,
+              display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+            📋 {loadingUsage ? "Chargement…" : "Voir l'historique d'utilisation"}
+          </button>
+
           {/* Actions */}
-          <div style={{ display:"flex", gap:8, marginTop:20, flexWrap:"wrap" }}>
+          <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap" }}>
             {!spool.archived && (
               <button onClick={async()=>{ await onArchive(spool.id); onClose(); }}
                 style={{ flex:1, padding:"10px", background:"var(--surface2)",
@@ -671,7 +693,63 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                 color:"white", fontSize:13, fontWeight:600 }}>
               ✕</button>
           </div>
-          {confirmDelete && (
+          {showUsage && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:2000,
+          display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={()=>setShowUsage(false)}>
+          <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+            style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
+              maxWidth:640, maxHeight:"80dvh", overflowY:"auto", padding:"0 16px 24px" }}>
+            <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 10px" }}>
+              <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+            </div>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+              <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0 }}>
+                📋 Historique bobine #{spool.id}
+              </h3>
+              <span style={{ fontSize:12, color:"var(--muted)" }}>
+                {usageHistory.length} print{usageHistory.length!==1?"s":""}
+              </span>
+            </div>
+            {usageHistory.length === 0 && (
+              <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"24px 0" }}>
+                Aucune utilisation enregistrée
+              </p>
+            )}
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              {usageHistory.map((u,i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:10,
+                  padding:"10px 12px", background:"var(--surface2)",
+                  borderRadius:10, border:"1px solid var(--border)" }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ fontSize:13, fontWeight:600, color:"var(--text)", margin:0,
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {u.file_name || "Print #"+u.print_id}
+                    </p>
+                    <p style={{ fontSize:11, color:"var(--muted)", margin:"2px 0 0" }}>
+                      {u.print_date ? new Date(u.print_date).toLocaleDateString("fr-FR", {day:"2-digit",month:"2-digit",year:"numeric"}) : ""}
+                      {u.status === "SUCCESS" ? " · ✅" : u.status === "FAILED" ? " · ❌" : ""}
+                    </p>
+                  </div>
+                  <div style={{ textAlign:"right", flexShrink:0 }}>
+                    <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
+                      {u.grams_used?.toFixed(1)}g
+                    </p>
+                    {u.cost > 0 && (
+                      <p style={{ fontSize:10, color:"var(--muted)", margin:0, fontFamily:"monospace" }}>
+                        {u.cost.toFixed(2)}€
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={()=>setShowUsage(false)} style={{ width:"100%", marginTop:16,
+              padding:"11px", borderRadius:12, border:"none", background:"#3b82f6",
+              color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>Fermer</button>
+          </div>
+        </div>
+      )}
+      {confirmDelete && (
             <div style={{ marginTop:12, background:"rgba(239,68,68,0.06)", border:"1px solid rgba(239,68,68,0.25)",
               borderRadius:10, padding:"12px 14px" }}>
               <p style={{ fontSize:12, color:"#ef4444", margin:"0 0 10px" }}>{confirmDelete.message}</p>

@@ -1051,3 +1051,28 @@ async def upload_filament_photo(
     content = await file.read()
     dest.write_bytes(content)
     return {"ok": True, "filename": dest.name, "url": f"/api/v1/filaments/{fid}/photo/{dest.name}"}
+
+
+@router.get("/spools/{sid}/usage")
+async def spool_usage_history(sid: int, _: str = Depends(get_current_user)):
+    """Retourne tous les FilamentUsage liés à cette bobine, avec infos du print."""
+    from sqlalchemy import select as _sel
+    from ....models.print_history import FilamentUsage as _FU, Print as _P
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            _sel(_FU, _P.file_name, _P.print_date, _P.status)
+            .join(_P, _FU.print_id == _P.id)
+            .where(_FU.spool_id == sid)
+            .order_by(_P.print_date.desc())
+        )).all()
+    return [
+        {
+            "print_id":    r._FU.print_id,
+            "file_name":   r.file_name,
+            "print_date":  r.print_date.isoformat() if r.print_date else None,
+            "status":      r.status,
+            "grams_used":  r._FU.grams_used,
+            "cost":        r._FU.cost,
+        }
+        for r in rows
+    ]
