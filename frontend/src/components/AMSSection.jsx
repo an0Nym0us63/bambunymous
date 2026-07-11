@@ -332,13 +332,11 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
           </span>
         )}
       </div>
-      <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace",
-        height:12, display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace" }}>
         {empty ? "" : wLabel}
       </p>
       <p style={{ fontSize:9, color:"var(--text2)", textAlign:"center",
-        whiteSpace:"normal", wordBreak:"break-word", maxWidth:80, lineHeight:"12px",
-        height:24, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+        whiteSpace:"normal", wordBreak:"break-word", maxWidth:80, lineHeight:"12px" }}>
         {empty ? "Vide" : (name || "")}
       </p>
     </div>
