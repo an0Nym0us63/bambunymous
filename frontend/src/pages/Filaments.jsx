@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback, useMemo, createPortal } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal } from "lucide-react";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
