@@ -739,11 +739,16 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                     </p>
 
                   </div>
-                  {u.cost > 0 && (
-                    <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)", fontFamily:"monospace", flexShrink:0 }}>
-                      {u.cost.toFixed(2)}€
-                    </span>
-                  )}
+                  <div style={{ textAlign:"right", flexShrink:0 }}>
+                    <p style={{ fontSize:13, fontWeight:700, color:"#ef4444", margin:0, fontFamily:"monospace" }}>
+                      -{u.grams_used?.toFixed(1)}g
+                    </p>
+                    {u.cost > 0 && (
+                      <p style={{ fontSize:10, color:"var(--muted)", margin:0, fontFamily:"monospace" }}>
+                        {u.cost.toFixed(2)}€
+                      </p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
