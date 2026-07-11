@@ -569,6 +569,12 @@ class MQTTManager:
                     ))
                 src_in_rack = bool(exist_bits & (1 << src_id)) if 0 <= src_id < 64 else False
                 rack.head_id = src_id if not src_in_rack else -1
+                # Compléter les 6 slots manquants
+                existing_ids = {h.id for h in rack.hotends}
+                for _mid in range(6):
+                    if _mid not in existing_ids:
+                        rack.hotends.append(HotendSlot(id=_mid, empty=True))
+                rack.hotends.sort(key=lambda h: h.id)
                 rack.head_in_rack_idx = next(
                     (idx for idx, hh in enumerate(rack.hotends) if hh.id == src_id), -1
                 ) if src_in_rack else -1
