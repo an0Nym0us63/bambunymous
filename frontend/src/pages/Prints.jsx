@@ -225,7 +225,7 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
                 padding:"10px 12px", border:"1px solid var(--border)" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
                   <div style={{ width:16, height:16, borderRadius:"50%", flexShrink:0,
-                    backgroundColor:hexCss(f.color_hex), border:"1px solid rgba(255,255,255,0.15)" }}/>
+                    background:swatchBg(f.color_hex,f.filament_colors_array,f.filament_multicolor_type), border:"1px solid rgba(255,255,255,0.15)" }}/>
                   <span style={{ fontSize:12, fontWeight:600, color:"var(--text)", flex:1 }}>
                     {f.filament_translated_name||f.filament_fila_type||f.filament_type||"Filament"}
                   </span>
@@ -349,7 +349,7 @@ function UnmapFilamentConfirm({ f, printId, onClose, onDone }) {
         width:"100%", maxWidth:380, padding:20, border:"1px solid var(--border)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
           <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
-            backgroundColor:hexCss(f.color_hex), border:"1px solid rgba(255,255,255,0.15)" }}/>
+            background:swatchBg(f.color_hex,f.filament_colors_array,f.filament_multicolor_type), border:"1px solid rgba(255,255,255,0.15)" }}/>
           <p style={{ fontSize:14, fontWeight:800, color:"var(--text)", margin:0 }}>
             {f.filament_translated_name||f.filament_fila_type||"Filament"}
           </p>
