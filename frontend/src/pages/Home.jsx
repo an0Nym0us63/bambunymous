@@ -295,7 +295,7 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
   return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
       <button onClick={onClick} style={{
-        border: isHead ? `1.5px ${headBorderStyle} rgba(59,130,246,0.6)` : isSelected ? "1.5px solid rgba(255,255,255,0.2)" : status === "empty" ? "1.5px dashed rgba(148,163,184,0.3)" : "1.5px solid var(--border)",
+        border: isHead ? `1.5px ${headBorderStyle} rgba(59,130,246,0.6)` : isSelected ? "1.5px solid rgba(255,255,255,0.2)" : status === "empty" ? "1.5px dashed rgba(148,163,184,0.5)" : "1.5px solid var(--border)",
         borderRadius:10, padding:8,
         background: isHead ? "rgba(59,130,246,0.06)" : "var(--surface2)",
         display:"flex", flexDirection:"column", gap:4,
@@ -309,12 +309,12 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
             : isHead ? "rgba(59,130,246,0.15)"
             // Hotend présent mais pas de filament → hachures -45° (même sens que AMS)
             : status === "no_fila" ? "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0px, rgba(148,163,184,0.25) 2px, transparent 2px, transparent 6px)"
-            // Pas de hotend du tout → fond transparent (croix affichée séparément)
-            : status === "empty" ? "transparent"
+            // Pas de hotend du tout → fond gris très léger
+            : status === "empty" ? "rgba(148,163,184,0.08)"
             : "var(--border)",
           border: isHead ? `1.5px ${headBorderStyle} #3b82f6` : "1px solid rgba(255,255,255,0.1)",
           display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
-          {status === "empty" && <span style={{ fontSize:10, color:"rgba(148,163,184,0.45)", lineHeight:1, fontWeight:300 }}>✕</span>}
+          {status === "empty" && <span style={{ fontSize:13, color:"rgba(148,163,184,0.6)", lineHeight:1, fontWeight:400 }}>✕</span>}
         </div>
         {slot?.match_mode && !isHead && status==="loaded" && (
           <span style={{ position:"absolute", top:-2, right:-2, zIndex:1 }}><MatchBadge mode={slot.match_mode}/></span>
