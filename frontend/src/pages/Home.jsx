@@ -306,9 +306,10 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
         <div style={{ width:22, height:22, borderRadius:6,
           background: color
             ? color
-            : (isHead ? "rgba(59,130,246,0.15)"
-            : status === "empty" ? "repeating-linear-gradient(45deg, var(--border) 0px, var(--border) 2px, transparent 2px, transparent 6px)"
-            : "var(--border)"),
+            : isHead ? "rgba(59,130,246,0.15)"
+            : (status === "empty" || status === "no_fila")
+              ? "repeating-linear-gradient(45deg, var(--border) 0px, var(--border) 2px, transparent 2px, transparent 6px)"
+              : "var(--border)",
           border: isHead ? `1.5px ${headBorderStyle} #3b82f6` : "1px solid rgba(255,255,255,0.1)",
           display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
           {status === "empty" && <span style={{ fontSize:7, color:"var(--muted)", opacity:0.4 }}>▪</span>}
