@@ -78,7 +78,7 @@ function StatusBadge({ status }) {
 }
 
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
-function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onMapped }) {
+function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorType, filamentType, onClose, onMapped }) {
   const [spools, setSpools] = useState([]);
   const [search, setSearch] = useState(filamentType || "");
   const [confirmSpool, setConfirmSpool] = useState(null);
@@ -124,7 +124,7 @@ function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onM
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 10px" }}/>
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
             <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
-              backgroundColor:hexCss(colorHex), border:"1px solid rgba(255,255,255,0.2)" }}/>
+              background:swatchBg(colorHex, colorsArray, multicolorType), border:"1px solid rgba(255,255,255,0.2)" }}/>
             <h3 style={{ fontSize:14, fontWeight:800, color:"var(--text)", margin:0, flex:1 }}>Associer une bobine</h3>
             <button onClick={onClose} style={{ width:26, height:26, borderRadius:"50%",
               background:"var(--surface2)", border:"none", cursor:"pointer",
@@ -139,7 +139,7 @@ function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onM
                 background:"var(--surface2)", border:"1px solid var(--border)",
                 borderRadius:8, cursor:"pointer", textAlign:"left", marginBottom:6 }}>
               <div style={{ width:16, height:16, borderRadius:"50%", flexShrink:0,
-                backgroundColor:hexCss(s.color_hex||s.filament_color), border:"1px solid rgba(255,255,255,0.15)" }}/>
+                background:swatchBg(s.color_hex||s.filament_color, s.filament_colors_array, s.filament_multicolor_type), border:"1px solid rgba(255,255,255,0.15)" }}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -438,7 +438,7 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
           {filaments.map((f,i) => (
             <div key={i}
-              onClick={e=>{e.stopPropagation(); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else{onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,filamentType:f.filament_fila_type||f.filament_type});}}}
+              onClick={e=>{e.stopPropagation(); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else{onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,colorsArray:f.filament_colors_array,multicolorType:f.filament_multicolor_type,filamentType:f.filament_fila_type||f.filament_type});}}}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(f.spool_id)onUnmap&&onUnmap(f);}}
               onPointerDown={e=>{ if(!f.spool_id) return; const t=setTimeout(()=>{navigator.vibrate&&navigator.vibrate(20); onUnmap&&onUnmap(f);},600); e.currentTarget._lpt=t; }}
               onPointerUp={e=>clearTimeout(e.currentTarget._lpt)}
@@ -889,7 +889,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         </div>
       </div>
     </div>
-    {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{ setSpoolPicker(null); window.location.reload(); }}/> }
+    {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} colorsArray={spoolPicker.colorsArray} multicolorType={spoolPicker.multicolorType} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{ setSpoolPicker(null); window.location.reload(); }}/> }
     {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)} zIndex={2000}/>}
     {editMode && <PrintEditSheet p={p} onClose={()=>setEditMode(false)} onSaved={updated=>{ setP(prev=>({...prev,...updated})); setEditMode(false); onChanged?.(); }}/>}
     {unmapping && <UnmapFilamentConfirm f={unmapping} printId={p.id} onClose={()=>setUnmapping(null)} onDone={()=>{ setUnmapping(null); client.get('/prints/'+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }}/>}
