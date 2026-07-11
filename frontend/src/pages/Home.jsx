@@ -307,14 +307,14 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
           background: color
             ? color
             : isHead ? "rgba(59,130,246,0.15)"
-            // Hotend présent mais pas de filament → hachures fines
-            : status === "no_fila" ? "repeating-linear-gradient(45deg, var(--border) 0px, var(--border) 2px, transparent 2px, transparent 6px)"
-            // Pas de hotend du tout → vide total, fond transparent avec contour pointillé (géré par border)
+            // Hotend présent mais pas de filament → hachures -45° (même sens que AMS)
+            : status === "no_fila" ? "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0px, rgba(148,163,184,0.25) 2px, transparent 2px, transparent 6px)"
+            // Pas de hotend du tout → fond transparent (croix affichée séparément)
             : status === "empty" ? "transparent"
             : "var(--border)",
           border: isHead ? `1.5px ${headBorderStyle} #3b82f6` : "1px solid rgba(255,255,255,0.1)",
           display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
-          {status === "empty" && <span style={{ fontSize:7, color:"var(--muted)", opacity:0.4 }}>▪</span>}
+          {status === "empty" && <span style={{ fontSize:10, color:"rgba(148,163,184,0.45)", lineHeight:1, fontWeight:300 }}>✕</span>}
         </div>
         {slot?.match_mode && !isHead && status==="loaded" && (
           <span style={{ position:"absolute", top:-2, right:-2, zIndex:1 }}><MatchBadge mode={slot.match_mode}/></span>
