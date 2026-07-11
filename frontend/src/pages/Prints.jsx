@@ -76,10 +76,17 @@ function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onM
       .catch(() => {});
   }, []);
 
-  const filtered = spools.filter(s => !s.archived && (
-    !search || (s.filament_name||"").toLowerCase().includes(search.toLowerCase()) ||
-    (s.filament_manufacturer||"").toLowerCase().includes(search.toLowerCase())
-  ));
+  const filtered = spools.filter(s => {
+    if (s.archived) return false;
+    if (!search.trim()) return true;
+    const words = search.trim().toLowerCase().split(/\s+/);
+    const haystack = [
+      s.filament_name, s.filament_translated_name, s.filament_manufacturer,
+      s.filament_color, s.color_hex, s.filament_material, s.filament_fila_type,
+      "#" + (s.id||""),
+    ].filter(Boolean).join(" ").toLowerCase();
+    return words.every(w => haystack.includes(w));
+  });
 
   const map = async (spoolId) => {
     await client.patch(`/prints/${printId}/filament-usage/${usageId}`, { spool_id: spoolId });
@@ -94,10 +101,10 @@ function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onM
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:3000,
-      display:"flex", alignItems:"flex-end" }} onClick={onClose}>
+      display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} className="sheet-inner"
         style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
-          maxWidth:640, maxHeight:"80dvh", overflowY:"auto", padding:"0 16px 24px" }}>
+          maxWidth:640, maxHeight:"70dvh", overflowY:"auto", padding:"0 16px env(safe-area-inset-bottom,24px)" }}>
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 8px", position:"relative" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
           <button onClick={onClose} style={{ position:"absolute", top:10, right:0, width:28, height:28,
@@ -116,7 +123,7 @@ function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onM
             padding:"8px 12px", borderRadius:8, border:"1px solid var(--border)",
             background:"var(--surface2)", color:"var(--text)", fontSize:13, outline:"none",
             marginBottom:10 }}/>
-        <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:5, paddingBottom:80 }}>
           {filtered.map(s => (
             <button key={s.id} onClick={()=>map(s.id)}
               style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
