@@ -28,6 +28,18 @@ function hexCss(h) {
   return h.startsWith("#") ? h.slice(0,7) : `#${h.slice(0,6)}`;
 }
 
+
+function swatchBg(colorHex, colorsArray, multicolorType) {
+  try {
+    const cols = colorsArray ? colorsArray.split(',').map(c=>`#${c.trim().replace(/^#/,'').slice(0,6)}`).filter(c=>c.length===7) : null;
+    if (cols && cols.length > 1) {
+      if (multicolorType === 'gradient') return `linear-gradient(135deg, ${cols.join(',')})`;
+      return `linear-gradient(90deg, ${cols.map((c,i,a)=>`${c} ${i/a.length*100}%, ${c} ${(i+1)/a.length*100}%`).join(',')})`;
+    }
+  } catch(e) {}
+  return hexCss(colorHex);
+}
+
 function FilamentDots({ filaments }) {
   if (!filaments?.length) return null;
   return (
