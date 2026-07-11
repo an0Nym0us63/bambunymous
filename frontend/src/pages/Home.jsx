@@ -295,7 +295,7 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
   return (
     <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
       <button onClick={onClick} style={{
-        border: `1.5px ${headBorderStyle} ${isHead ? "rgba(59,130,246,0.6)" : isSelected ? "rgba(255,255,255,0.2)" : "var(--border)"}`,
+        border: isHead ? `1.5px ${headBorderStyle} rgba(59,130,246,0.6)` : isSelected ? "1.5px solid rgba(255,255,255,0.2)" : status === "empty" ? "1.5px dashed rgba(148,163,184,0.3)" : "1.5px solid var(--border)",
         borderRadius:10, padding:8,
         background: isHead ? "rgba(59,130,246,0.06)" : "var(--surface2)",
         display:"flex", flexDirection:"column", gap:4,
@@ -307,9 +307,11 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
           background: color
             ? color
             : isHead ? "rgba(59,130,246,0.15)"
-            : (status === "empty" || status === "no_fila")
-              ? "repeating-linear-gradient(45deg, var(--border) 0px, var(--border) 2px, transparent 2px, transparent 6px)"
-              : "var(--border)",
+            // Hotend présent mais pas de filament → hachures fines
+            : status === "no_fila" ? "repeating-linear-gradient(45deg, var(--border) 0px, var(--border) 2px, transparent 2px, transparent 6px)"
+            // Pas de hotend du tout → vide total, fond transparent avec contour pointillé (géré par border)
+            : status === "empty" ? "transparent"
+            : "var(--border)",
           border: isHead ? `1.5px ${headBorderStyle} #3b82f6` : "1px solid rgba(255,255,255,0.1)",
           display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
           {status === "empty" && <span style={{ fontSize:7, color:"var(--muted)", opacity:0.4 }}>▪</span>}
