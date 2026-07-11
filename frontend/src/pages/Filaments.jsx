@@ -538,16 +538,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
     try {
       const r = await client.get(`/filaments/spools/${spool.id}/usage`);
       // Calculer poids avant/après chaque print (chronologique)
-      const rows = (r.data || []).slice().reverse(); // ancien→récent
-      let running = (spool.remaining_weight_g || 0);
-      // On part du poids actuel et on remonte
-      const withWeight = rows.map(u => {
-        const before = running + (u.grams_used || 0);
-        const after = running;
-        running = before;
-        return { ...u, weight_before: before, weight_after: after };
-      }).reverse(); // retour ordre chronologique desc
-      setUsageHistory(withWeight);
+      setUsageHistory(r.data || []);
       setShowUsage(true);
     } catch(e) { alert('Erreur: ' + e.message); }
     setLoadingUsage(false);
@@ -744,10 +735,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                       {u.print_date ? new Date(u.print_date).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"}) : ""}
                       {u.status==="SUCCESS"?" · ✅":u.status==="FAILED"?" · ❌":""}
                     </p>
-                    {/* Poids avant → après */}
-                    <p style={{ fontSize:10, color:"#22c55e", margin:"2px 0 0", fontFamily:"monospace" }}>
-                      {u.weight_before?.toFixed(0)}g → <span style={{color:"#ef4444"}}>-{u.grams_used?.toFixed(1)}g</span> → {u.weight_after?.toFixed(0)}g
-                    </p>
+
                   </div>
                   {u.cost > 0 && (
                     <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)", fontFamily:"monospace", flexShrink:0 }}>
