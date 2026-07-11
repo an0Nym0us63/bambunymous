@@ -284,12 +284,17 @@ async def printer_status(_: str = Depends(get_current_user)):
         active_tray_id=s.active_tray_id,
         active_tray_local=s.active_tray_local,
         hotend_rack=HotendRackOut(
-            hotends=[HotendSlotOut(
-                id=h.id, color=h.color, filament_id=h.filament_id,
-                diameter=h.diameter, nozzle_type=h.nozzle_type,
-                serial=h.serial, wear=h.wear, print_time=h.print_time,
-                empty=h.empty, spool_id=h.spool_id,
-            ) for h in s.hotend_rack.hotends],
+            hotends=[
+                next(
+                    (HotendSlotOut(id=h.id, color=h.color, filament_id=h.filament_id,
+                     diameter=h.diameter, nozzle_type=h.nozzle_type,
+                     serial=h.serial, wear=h.wear, print_time=h.print_time,
+                     empty=h.empty, spool_id=h.spool_id)
+                     for h in s.hotend_rack.hotends if h.id == sid),
+                    HotendSlotOut(id=sid, color='', filament_id='', diameter=0.4,
+                     nozzle_type='', serial='', wear=0.0, print_time=0, empty=True, spool_id=None)
+                ) for sid in range(6)
+            ],
             active_id=s.hotend_rack.active_id,
             target_id=s.hotend_rack.target_id,
             state=s.hotend_rack.state,
