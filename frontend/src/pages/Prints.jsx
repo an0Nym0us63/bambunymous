@@ -949,6 +949,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   const [selSpoolG, setSelSpoolG] = useState(null);
   const [coverPrintId, setCoverPrintId] = useState(coverPrintIdProp||null);
   const [groupPhotoToDelete, setGroupPhotoToDelete] = useState(null);
+  const [unmappingG, setUnmappingG] = useState(null);
   const [editGroup, setEditGroup] = useState(false);
   const [groupPhotos, setGroupPhotos] = useState([]);
 
@@ -1143,7 +1144,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
           )}
 
           {/* Filaments agrégés — accordéon */}
-          {filaments.length > 0 && <FilamentAccordion filaments={filaments} onSpoolClick={setSelSpoolG}/>}
+          {filaments.length > 0 && <FilamentAccordion filaments={filaments} onSpoolClick={setSelSpoolG} onUnmap={setUnmappingG}/>}
 
           {/* Prints en tuiles */}
           {/* Créer objet depuis ce groupe */}
@@ -1245,6 +1246,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
         </div>
       </div>
     </div>
+    {unmappingG && <UnmapFilamentConfirm f={unmappingG} printId={unmappingG.print_id} onClose={()=>setUnmappingG(null)} onDone={()=>{ setUnmappingG(null); onUpdated?.(); }}/>}
     {groupPhotoToDelete && <PhotoDeleteConfirm label={groupPhotoToDelete.name} onCancel={()=>setGroupPhotoToDelete(null)} onConfirm={async()=>{ await client.delete(`/prints/groups/${groupId}/photo/${groupPhotoToDelete.name}`); setGroupPhotoToDelete(null); loadGroupPhotos(); }}/>}
     {editGroup && <GroupEditSheet groupId={groupId} name={name} onClose={()=>setEditGroup(false)} onSaved={()=>{ setEditGroup(false); onUpdated?.(); }}/>}
     {selSpoolG && <FilamentSheetFromSpool filamentId={selSpoolG.filId} spoolId={selSpoolG.spoolId} filamentColorHex={selSpoolG.hex} onClose={()=>setSelSpoolG(null)} zIndex={2000}/>}
