@@ -1,4 +1,3 @@
-import React, { createPortal as _portal } from 'react';
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal } from "lucide-react";
 import client from "../api/client";
