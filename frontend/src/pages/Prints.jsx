@@ -38,7 +38,7 @@ function FilamentDots({ filaments }) {
           style={{ position:"relative", flexShrink:0 }}>
           <div style={{
             width:14, height:14, borderRadius:"50%",
-            backgroundColor: hexCss(f.color_hex),
+            background: swatchBg(f.color_hex, f.filament_colors_array, f.filament_multicolor_type),
             border: f.spool_id
               ? "2px solid #22c55e"
               : "1px solid rgba(255,255,255,0.15)",
@@ -289,7 +289,7 @@ function DissociateDialog({ usage, printId, onClose, onDone }) {
         width:"100%", maxWidth:360, padding:20, border:"1px solid var(--border)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
           <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
-            backgroundColor:hexCss(usage.color_hex), border:"1px solid rgba(255,255,255,0.15)" }}/>
+            background:swatchBg(usage.color_hex, usage.filament_colors_array, usage.filament_multicolor_type), border:"1px solid rgba(255,255,255,0.15)" }}/>
           <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0 }}>Dissocier la bobine</p>
         </div>
         <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
@@ -411,7 +411,7 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
           {filaments.map((f,i) => (
             <div key={i} style={{ position:"relative", flexShrink:0 }}>
               <div style={{ width:16, height:16, borderRadius:"50%",
-                backgroundColor:hexCss(f.color_hex),
+                background:swatchBg(f.color_hex, f.filament_colors_array, f.filament_multicolor_type),
                 border:"1px solid rgba(255,255,255,0.2)" }}/>
               {!f.spool_id && <span style={{ position:"absolute", top:-3, right:-3,
                 width:8, height:8, borderRadius:"50%", background:"#f59e0b",
@@ -437,7 +437,7 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
               borderTop:"1px solid var(--border)", cursor:"pointer",
               opacity: f.spool_id ? 1 : 0.85 }}>
               <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
-                backgroundColor:hexCss(f.color_hex),
+                background:swatchBg(f.color_hex, f.filament_colors_array, f.filament_multicolor_type),
                 border:f.spool_id?"2px solid #22c55e":"1px solid rgba(255,255,255,0.15)" }}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
@@ -1448,7 +1448,7 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
           <div style={{ position:"absolute", bottom:6, left:6, display:"flex", gap:3 }}>
             {p.filament_usage.map((f,i) => (
               <div key={i} style={{ width:12, height:12, borderRadius:"50%",
-                backgroundColor: hexCss(f.color_hex),
+                background: swatchBg(f.color_hex, f.filament_colors_array, f.filament_multicolor_type),
                 border:"1.5px solid rgba(255,255,255,0.8)", flexShrink:0,
                 boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/>
             ))}
