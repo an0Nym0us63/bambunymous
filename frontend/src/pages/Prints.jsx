@@ -728,28 +728,6 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         </div>
       </div>
     </div>
-    {confirmSpool && (
-      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:4000,
-        display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
-        <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:16,
-          width:"100%", maxWidth:360, padding:20, border:"1px solid var(--border)" }}>
-          <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Décompter les grammes ?</p>
-          <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 16px" }}>
-            Bobine mappée. Déduire <b style={{color:"var(--text)"}}>{confirmSpool.grams_used?.toFixed(1)}g</b> de <b style={{color:"var(--text)"}}>{confirmSpool.spool?.filament_translated_name||confirmSpool.spool?.filament_name}</b> ?
-          </p>
-          <div style={{ display:"flex", gap:8 }}>
-            <button onClick={async()=>{ setConfirmSpool(null); onMapped?.(); }}
-              style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
-                background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Non</button>
-            <button onClick={async()=>{
-              await client.post(`/filaments/spools/${confirmSpool.spool.id}/weight`, { delta: -confirmSpool.grams_used }).catch(()=>{});
-              setConfirmSpool(null); onMapped?.();
-            }} style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
-              background:"#22c55e", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>Oui, déduire</button>
-          </div>
-        </div>
-      </div>
-    )}
     {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{ setSpoolPicker(null); window.location.reload(); }}/> }
     {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)} zIndex={2000}/>}
     {editMode && <PrintEditSheet p={p} onClose={()=>setEditMode(false)} onSaved={updated=>{ setP(prev=>({...prev,...updated})); setEditMode(false); onChanged?.(); }}/>}
