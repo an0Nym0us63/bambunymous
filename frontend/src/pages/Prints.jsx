@@ -1843,6 +1843,7 @@ export default function Prints() {
       if (materialF)   params.set("material", materialF);
       if (filaTypeF)   params.set("fila_type", filaTypeF);
       if (filamentIdF) params.set("filament_id", filamentIdF);
+      if (sortF)       params.set("sort", sortF);
       const { data } = await client.get("/prints?" + params);
       setDebugInfo("total=" + data.total + " prints=" + (data.prints||[]).length);
       setPrints(data.prints ?? []);
@@ -1852,7 +1853,7 @@ export default function Prints() {
       setError(e.response?.data?.detail || e.message || "Erreur");
     }
     setLoading(false);
-  }, [search, statusF, groupF]);
+  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF, sortF]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || loadingMoreRef.current) return;
@@ -1867,6 +1868,7 @@ export default function Prints() {
       if (materialF)   params.set("material", materialF);
       if (filaTypeF)   params.set("fila_type", filaTypeF);
       if (filamentIdF) params.set("filament_id", filamentIdF);
+      if (sortF)       params.set("sort", sortF);
       const { data } = await client.get("/prints?" + params);
       const existingIds = new Set((prints||[]).map(p => p.id));
       const fresh = (data.prints || []).filter(p => !existingIds.has(p.id));
@@ -1876,7 +1878,7 @@ export default function Prints() {
     } catch(e) {}
     setLoadingMore(false);
     loadingMoreRef.current = false;
-  }, [loadingMore, hasMore, offset, statusF, search, groupF, materialF, filaTypeF, filamentIdF]);
+  }, [loadingMore, hasMore, offset, statusF, search, groupF, materialF, filaTypeF, filamentIdF, sortF]);
 
   useEffect(() => {
     const container = document.querySelector(".page-content");

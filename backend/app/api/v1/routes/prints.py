@@ -201,6 +201,29 @@ def _apply_search(q, search: str):
 
 # ── Routes ─────────────────────────────────────────────────────────────────
 
+def _filament_filter_subq(material, fila_type, filament_id):
+    """Sous-requête des print_id matchant les filtres filament (via Spool→Filament)."""
+    from ....models.filament import Spool as _Spool, Filament as _FilCat
+    fu_q = (select(_FU.print_id)
+            .join(_Spool, _FU.spool_id == _Spool.id)
+            .join(_FilCat, _Spool.filament_id == _FilCat.id))
+    if filament_id: fu_q = fu_q.where(_FilCat.id == filament_id)
+    if material:    fu_q = fu_q.where(_FilCat.material == material)
+    if fila_type:   fu_q = fu_q.where(_FilCat.fila_type == fila_type)
+    return fu_q
+
+
+# Tris disponibles pour l'historique
+_SORTS = {
+    "recent":   lambda: desc(Print.print_date),
+    "oldest":   lambda: Print.print_date.asc(),
+    "cost":     lambda: desc(func.coalesce(Print.total_cost, 0)),
+    "weight":   lambda: desc(func.coalesce(Print.total_weight_g, 0)),
+    "duration": lambda: desc(func.coalesce(Print.duration_seconds,
+                                           Print.estimated_seconds, 0)),
+}
+
+
 @router.get("")
 async def list_prints(
     status:   Optional[str] = None,
@@ -210,6 +233,7 @@ async def list_prints(
     material:    Optional[str] = None,
     fila_type:   Optional[str] = None,
     filament_id: Optional[int] = None,
+    sort:     str = "recent",
     limit:    int = Query(40, le=200),
     offset:   int = 0,
     _: str = Depends(get_current_user),
@@ -223,12 +247,13 @@ async def list_prints(
     from ....models.print_history import PrintTag as _PT
 
     async with AsyncSessionLocal() as db:
+        order_by = _SORTS.get(sort, _SORTS["recent"])()
         q = (select(Print)
              .options(selectinload(Print.filament_usage),
                       selectinload(Print.snapshots),
                       selectinload(Print.tags),
                       selectinload(Print.group))
-             .order_by(desc(Print.print_date)))
+             .order_by(order_by))
         if status:
             q = q.where(Print.status == status)
         if search:
@@ -237,16 +262,8 @@ async def list_prints(
             q = q.where(Print.group_id == group_id)
         # Filtres filament via FilamentUsage→Spool→Filament
         if material or fila_type or filament_id:
-            from ....models.filament import Spool as _Spool, Filament as _FilCat
-            fu_q = select(_FU.print_id)
-            if filament_id:
-                fu_q = fu_q.join(_Spool, _FU.spool_id == _Spool.id).where(_Spool.filament_id == filament_id)
-            else:
-                fu_q = fu_q.join(_Spool, _FU.spool_id == _Spool.id).join(_FilCat, _Spool.filament_id == _FilCat.id)
-                if material:  fu_q = fu_q.where(_FilCat.material == material)
-                if fila_type: fu_q = fu_q.where(_FilCat.fila_type == fila_type)
-            q = q.where(Print.id.in_(fu_q))
-        elif tag:
+            q = q.where(Print.id.in_(_filament_filter_subq(material, fila_type, filament_id)))
+        if tag:
             q = q.where(exists().where(
                 (_PT.print_id == Print.id) & (_PT.tag == tag)
             ))
@@ -443,6 +460,9 @@ async def prints_kpis(
     status: Optional[str] = None,
     search: Optional[str] = None,
     group_id: Optional[int] = None,
+    material:    Optional[str] = None,
+    fila_type:   Optional[str] = None,
+    filament_id: Optional[int] = None,
     _: str = Depends(get_current_user),
 ):
     async with AsyncSessionLocal() as db:
@@ -460,6 +480,8 @@ async def prints_kpis(
                 Print.file_name.ilike(f"%{search}%"),
                 Print.original_name.ilike(f"%{search}%"),
             ))
+        if material or fila_type or filament_id:
+            q = q.where(Print.id.in_(_filament_filter_subq(material, fila_type, filament_id)))
         r = (await db.execute(q)).one()
         return {"count": r.count or 0, "duration": int(r.duration or 0),
                 "weight_g": float(r.weight or 0), "cost": round(float(r.cost or 0), 2)}
