@@ -304,10 +304,11 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
       }}>
         {/* Couleur du slot — couleur réelle même sur la tête */}
         <div style={{ width:22, height:22, borderRadius:6,
-          backgroundColor: color || (isHead ? "rgba(59,130,246,0.15)" : "var(--border)"),
+          backgroundColor: color || (isHead ? "rgba(59,130,246,0.15)" : "transparent"),
+          background: (!color && status === "empty") ? "repeating-linear-gradient(45deg, var(--border) 0px, var(--border) 2px, transparent 2px, transparent 6px)" : undefined,
           border: isHead ? `1.5px ${headBorderStyle} #3b82f6` : "1px solid rgba(255,255,255,0.1)",
           display:"flex", alignItems:"center", justifyContent:"center", fontSize:10 }}>
-          {status === "empty" && <span style={{ color:"var(--muted)", fontSize:8 }}>—</span>}
+          {status === "empty" && <span style={{ fontSize:7, color:"var(--muted)", opacity:0.4 }}>▪</span>}
         </div>
         {slot?.match_mode && !isHead && status==="loaded" && (
           <span style={{ position:"absolute", top:-2, right:-2, zIndex:1 }}><MatchBadge mode={slot.match_mode}/></span>
@@ -324,7 +325,9 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
 
 function SlotDetail({ slot, num, isOnHead, headSlot }) {
   const status   = slotStatus(slot, isOnHead);
-  const rawColor = (slot?.color || "").replace(/^#/, "");
+  // Quand sur la tête, utiliser la couleur du headSlot
+  const _colorSrc = (status === "head" && headSlot) ? headSlot : slot;
+  const rawColor = (_colorSrc?.color || "").replace(/^#/, "");
   const cssColor = rawColor.length >= 6 ? `#${rawColor.slice(0,6)}` : null;
   const [filInfo, setFilInfo] = React.useState(null);
 
