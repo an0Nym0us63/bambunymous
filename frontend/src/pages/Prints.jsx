@@ -467,6 +467,7 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
         </div>
       )}
     </div>
+    {unmapping && <UnmapFilamentConfirm f={unmapping} printId={printId} onClose={()=>setUnmapping(null)} onDone={()=>{ setUnmapping(null); onUnmapped?.(); }}/>}
     </>
   );
 }
