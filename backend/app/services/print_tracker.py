@@ -152,15 +152,26 @@ async def create_print(job_id: str, url: str, taskname: str,
             lp = _dla.new_event_loop()
             async def _go():
                 from .tmf_parser import _download_http, _parse_3mf
-                try:
-                    raw = await _download_http(_u)
-                    logger.info(f"[PRINT] ✅ 3MF téléchargé {len(raw)} bytes")
-                    meta = _parse_3mf(raw, _p)
-                    if meta: await _apply_meta(_p, meta, _t, job_id=_j)
-                    else: logger.error(f"[PRINT] ❌ _parse_3mf vide print_id={_p}")
-                except Exception as e:
-                    import traceback as _tb
-                    logger.error(f"[PRINT] ❌ 3MF failed: {e}\n{_tb.format_exc()}")
+                MAX_ATT = 5
+                DELS    = [15, 30, 60, 120, 180]
+                for _att in range(1, MAX_ATT+1):
+                    try:
+                        logger.info(f"[3MF] ▶ Tentative {_att}/{MAX_ATT} local print_id={_p} url={_u[:50]!r}")
+                        raw = await _download_http(_u)
+                        logger.info(f"[3MF] ✅ Téléchargé {len(raw)} bytes tentative {_att}")
+                        meta = _parse_3mf(raw, _p)
+                        if meta:
+                            await _apply_meta(_p, meta, _t, job_id=_j)
+                            break
+                        else:
+                            raise ValueError("_parse_3mf vide")
+                    except Exception as e:
+                        import traceback as _tb
+                        logger.error(f"[3MF] ❌ Échec tentative {_att}/{MAX_ATT}: {type(e).__name__}: {e}")
+                        if _att < MAX_ATT:
+                            import asyncio as _aio_l; await _aio_l.sleep(DELS[_att-1])
+                        else:
+                            logger.error(f"[3MF] ❌ Abandon local print_id={_p}\n{_tb.format_exc()}")
             try: lp.run_until_complete(_go())
             finally: lp.close()
         _dlt.Thread(target=_dl_now, daemon=True).start()
