@@ -78,6 +78,10 @@ def _usage_to_dict(u) -> dict:
         d["filament_translated_name"] = u._filament_translated
     if hasattr(u, "_filament_fila_type"):
         d["filament_fila_type"] = u._filament_fila_type
+    if hasattr(u, "_filament_colors_array"):
+        d["filament_colors_array"] = u._filament_colors_array
+    if hasattr(u, "_filament_multicolor_type"):
+        d["filament_multicolor_type"] = u._filament_multicolor_type
     return d
 
 
@@ -140,6 +144,8 @@ async def _enrich_filament_usage(db, prints):
             u._filament_brand = fil.manufacturer
             u._filament_translated = fil.translated_name
             u._filament_fila_type  = fil.fila_type
+            u._filament_colors_array    = fil.colors_array
+            u._filament_multicolor_type = fil.multicolor_type
 
 
 def _apply_search(q, search: str):
