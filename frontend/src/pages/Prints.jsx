@@ -168,7 +168,11 @@ function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onM
               style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
                 background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Non</button>
             <button onClick={async()=>{
-              await client.post(`/filaments/spools/${confirmSpool.spool.id}/weight`, { delta: -confirmSpool.grams_used }).catch(()=>{});
+              // Déduire les grammes (mode sub) + recalculer les coûts du print
+              await client.post(`/filaments/spools/${confirmSpool.spool.id}/weight`,
+                { mode: "sub", value: confirmSpool.grams_used }).catch(e=>console.error("weight err:", e));
+              // Recalculer les coûts du print
+              await client.post(`/prints/${printId}/recalc-costs`).catch(()=>{});
               setConfirmSpool(null); onMapped?.();
             }} style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
               background:"#22c55e", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>Oui, déduire</button>

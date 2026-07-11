@@ -986,3 +986,19 @@ async def restore_spool_weights(
             restored.append({"spool_id": fu.spool_id, "added_g": add_g, "usage_id": fu.id})
         await db.commit()
     return {"ok": True, "restored": restored}
+
+
+@router.post("/{print_id}/recalc-costs")
+async def recalc_print_costs(print_id: int, _: str = Depends(get_current_user)):
+    """Recalcule les coûts filament + électricité d'un print."""
+    from ....services.print_tracker import _costs as _calc_costs
+    async with AsyncSessionLocal() as db:
+        from sqlalchemy.orm import selectinload as _sil
+        p = (await db.execute(
+            select(Print).where(Print.id == print_id)
+            .options(_sil(Print.filament_usage))
+        )).scalar_one_or_none()
+        if not p: raise HTTPException(404)
+        await _calc_costs(db, p)
+        await db.commit()
+    return {"ok": True}
