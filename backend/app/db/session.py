@@ -40,6 +40,7 @@ async def init_db():
     await _migrate()
     # Backfill des colonnes calculées
     await _backfill_color_buckets()
+    await _backfill_material_family()
 
 
 async def _migrate():
@@ -125,3 +126,34 @@ async def _backfill_color_buckets():
             print(f"[migrate] color_bucket calculé pour {n} filament(s)")
     except Exception as e:
         print(f"[migrate] backfill color_bucket échoué : {e}")
+
+
+async def _backfill_material_family():
+    """
+    Répare Filament.material : enrich-from-catalog y écrivait le sous-type
+    ("PLA Basic") au lieu de la famille ("PLA"). On ne touche qu'aux lignes
+    dont le material n'est pas une famille connue. Idempotent.
+    """
+    from sqlalchemy import text as _text
+    from ..core.materials import family_of, is_family
+    try:
+        async with engine.begin() as conn:
+            rows = (await conn.execute(_text(
+                "SELECT id, material, fila_type FROM filaments"
+            ))).all()
+            n = 0
+            for fid, material, fila_type in rows:
+                if is_family(material):
+                    continue
+                fam = family_of(material, None) or family_of(fila_type, None)
+                if not fam or fam == material:
+                    continue
+                await conn.execute(
+                    _text("UPDATE filaments SET material = :m WHERE id = :i"),
+                    {"m": fam, "i": fid},
+                )
+                n += 1
+        if n:
+            print(f"[migrate] material (famille) corrigé pour {n} filament(s)")
+    except Exception as e:
+        print(f"[migrate] backfill material échoué : {e}")

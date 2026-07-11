@@ -9,6 +9,7 @@ from datetime import datetime
 import os
 
 from ....core.colors import buckets_for, all_buckets
+from ....core.materials import family_of, is_family
 
 def _clear_match_cache():
     """Vide le cache de matching MQTT après toute mutation de bobine."""
@@ -590,8 +591,10 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
                 upd("name",           name_en)
                 upd("name_en",        name_en)
                 upd("translated_name", name_fr)
-                upd("material",       entry.get("fila_type",""))
-                upd("fila_type",      entry.get("fila_type",""))
+                # material = famille (PLA), fila_type = variante (PLA Basic)
+                _ft = entry.get("fila_type","")
+                upd("material",       family_of(_ft, f.material))
+                upd("fila_type",      _ft)
                 upd("fila_color_code", entry.get("fila_color_code",""))
                 upd("multicolor_type", ctype)
                 if ctype != "monochrome" and len(colors) > 1:

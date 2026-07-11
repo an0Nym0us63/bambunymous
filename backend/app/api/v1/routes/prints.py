@@ -9,7 +9,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, or_
 from sqlalchemy.orm import selectinload
 
 from .auth import get_current_user
