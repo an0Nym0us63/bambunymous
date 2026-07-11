@@ -69,98 +69,114 @@ function StatusBadge({ status }) {
 function SpoolMapPicker({ usageId, printId, colorHex, filamentType, onClose, onMapped }) {
   const [spools, setSpools] = useState([]);
   const [search, setSearch] = useState(filamentType || "");
-  const [viewH, setViewH] = useState(null);
-  const [confirmSpool, setConfirmSpool] = useState(null); // {spool, grams_used}
+  const [confirmSpool, setConfirmSpool] = useState(null);
 
   useEffect(() => {
     client.get("/filaments/spools", { params:{ limit:500 } })
       .then(r => setSpools(r.data || []))
       .catch(() => {});
-    // Adapter hauteur au clavier mobile via visualViewport
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const onResize = () => setViewH(vv.height);
-    vv.addEventListener("resize", onResize);
-    return () => vv.removeEventListener("resize", onResize);
   }, []);
 
   const filtered = spools.filter(s => {
     if (s.archived) return false;
     if (!search.trim()) return true;
     const words = search.trim().toLowerCase().split(/\s+/);
-    const haystack = [
-      s.filament_name, s.filament_translated_name, s.filament_manufacturer,
-      s.filament_color, s.color_hex, s.filament_material, s.filament_fila_type,
-      "#" + (s.id||""),
+    const hay = [s.filament_name, s.filament_translated_name, s.filament_manufacturer,
+      s.color_hex, s.filament_material, s.filament_fila_type, "#"+(s.id||"")
     ].filter(Boolean).join(" ").toLowerCase();
-    return words.every(w => haystack.includes(w));
+    return words.every(w => hay.includes(w));
   });
 
   const selectSpool = async (spool) => {
-    await client.patch(`/prints/${printId}/filament-usage/${usageId}`, { spool_id: spool.id });
-    // Récupérer les grammes utilisés pour proposer la déduction
-    const resp = await client.get(`/prints/${printId}`).catch(()=>({data:{}}));
-    const fu = (resp.data?.filament_usage||[]).find(f=>f.id===usageId);
-    if (fu?.grams_used > 0) {
-      setConfirmSpool({ spool, grams_used: fu.grams_used });
-    } else {
-      onMapped?.();
-    }
+    try {
+      await client.patch(`/prints/${printId}/filament-usage/${usageId}`, { spool_id: spool.id });
+      const resp = await client.get(`/prints/${printId}`).catch(()=>({data:{}}));
+      const fu = (resp.data?.filament_usage||[]).find(f=>f.id===usageId);
+      if (fu?.grams_used > 0) {
+        setConfirmSpool({ spool, grams_used: fu.grams_used });
+      } else {
+        onMapped?.();
+      }
+    } catch(e) { alert("Erreur: " + e.message); }
   };
 
-  const sheetStyle = viewH ? { height: viewH * 0.85 + "px", maxHeight: viewH * 0.85 + "px" } : { maxHeight:"70dvh" };
-
   return (
+    <>
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:3000,
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
-          maxWidth:640, ...sheetStyle, overflowY:"auto", padding:"0 16px 24px" }}>
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 8px", position:"relative" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:10, right:0, width:28, height:28,
-            borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer",
-            color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+      display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"flex-end" }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)",
+        borderRadius:"20px 20px 0 0", width:"100%", maxWidth:640,
+        display:"flex", flexDirection:"column", maxHeight:"80dvh" }}>
+        {/* Handle + titre */}
+        <div style={{ padding:"12px 16px 8px", flexShrink:0 }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 10px" }}/>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+            <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
+              backgroundColor:hexCss(colorHex), border:"1px solid rgba(255,255,255,0.2)" }}/>
+            <h3 style={{ fontSize:14, fontWeight:800, color:"var(--text)", margin:0, flex:1 }}>Associer une bobine</h3>
+            <button onClick={onClose} style={{ width:26, height:26, borderRadius:"50%",
+              background:"var(--surface2)", border:"none", cursor:"pointer",
+              color:"var(--muted)", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          </div>
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-          <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
-            backgroundColor:hexCss(colorHex), border:"1px solid rgba(255,255,255,0.2)" }}/>
-          <h3 style={{ fontSize:14, fontWeight:800, color:"var(--text)", margin:0 }}>
-            Associer une bobine
-          </h3>
-        </div>
-        <input value={search} onChange={e=>setSearch(e.target.value)}
-          placeholder="Rechercher..." style={{ width:"100%", boxSizing:"border-box",
-            padding:"8px 12px", borderRadius:8, border:"1px solid var(--border)",
-            background:"var(--surface2)", color:"var(--text)", fontSize:13, outline:"none",
-            marginBottom:10 }}/>
-        <div style={{ display:"flex", flexDirection:"column", gap:5, paddingBottom:80 }}>
+        {/* Liste scrollable */}
+        <div style={{ flex:1, overflowY:"auto", padding:"0 16px" }}>
           {filtered.map(s => (
             <button key={s.id} onClick={()=>selectSpool(s)}
-              style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
+              style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", width:"100%",
                 background:"var(--surface2)", border:"1px solid var(--border)",
-                borderRadius:8, cursor:"pointer", textAlign:"left" }}>
-              <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
-                backgroundColor:hexCss(s.color_hex || s.filament_color),
-                border:"1px solid rgba(255,255,255,0.15)" }}/>
+                borderRadius:8, cursor:"pointer", textAlign:"left", marginBottom:6 }}>
+              <div style={{ width:16, height:16, borderRadius:"50%", flexShrink:0,
+                backgroundColor:hexCss(s.color_hex||s.filament_color), border:"1px solid rgba(255,255,255,0.15)" }}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {s.filament_translated_name || s.filament_name || "Bobine #"+s.id}
+                  {s.filament_translated_name||s.filament_name||"Bobine #"+s.id}
                 </p>
                 <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
-                  {[s.filament_manufacturer, s.filament_fila_type||s.filament_material, `${s.remaining_weight_g?.toFixed(0)}g restants`].filter(Boolean).join(" · ")}
+                  {[s.filament_manufacturer, s.filament_fila_type||s.filament_material,
+                    s.remaining_weight_g?.toFixed(0)+"g"].filter(Boolean).join(" · ")}
                 </p>
-                {s.filament_translated_name && s.filament_name && s.filament_translated_name!==s.filament_name && (
-                  <p style={{ fontSize:9, color:"var(--muted)", margin:0, opacity:0.7 }}>{s.filament_name}</p>
-                )}
               </div>
             </button>
           ))}
           {filtered.length === 0 && <p style={{ color:"var(--muted)", fontSize:12, textAlign:"center", padding:"20px 0" }}>Aucune bobine trouvée</p>}
         </div>
+        {/* Search sticky en bas au dessus du clavier */}
+        <div style={{ padding:"10px 16px", borderTop:"1px solid var(--border)", flexShrink:0,
+          background:"var(--sheet-bg)", paddingBottom:"env(safe-area-inset-bottom,10px)" }}>
+          <input value={search} onChange={e=>setSearch(e.target.value)}
+            placeholder="Rechercher (PLA matte bambu…)"
+            autoComplete="off"
+            style={{ width:"100%", boxSizing:"border-box", padding:"10px 14px", borderRadius:10,
+              border:"1px solid var(--border)", background:"var(--surface2)",
+              color:"var(--text)", fontSize:13, outline:"none" }}/>
+        </div>
       </div>
     </div>
+    {confirmSpool && (
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:4000,
+        display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+        <div style={{ background:"var(--sheet-bg)", borderRadius:16, width:"100%",
+          maxWidth:360, padding:20, border:"1px solid var(--border)" }}>
+          <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Décompter les grammes ?</p>
+          <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 16px" }}>
+            Déduire <b style={{color:"var(--text)"}}>{confirmSpool.grams_used?.toFixed(1)}g</b> de <b style={{color:"var(--text)"}}>{confirmSpool.spool?.filament_translated_name||confirmSpool.spool?.filament_name}</b> ?
+          </p>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>{ setConfirmSpool(null); onMapped?.(); }}
+              style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
+                background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Non</button>
+            <button onClick={async()=>{
+              await client.post(`/filaments/spools/${confirmSpool.spool.id}/weight`, { delta: -confirmSpool.grams_used }).catch(()=>{});
+              setConfirmSpool(null); onMapped?.();
+            }} style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
+              background:"#22c55e", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>Oui, déduire</button>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
