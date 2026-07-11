@@ -325,8 +325,69 @@ function DissociateDialog({ usage, printId, onClose, onDone }) {
   );
 }
 
+function UnmapFilamentConfirm({ f, printId, onClose, onDone }) {
+  const [fraction, setFraction] = useState(1.0);
+  const OPTS = [0, 0.25, 0.5, 0.75, 1.0];
+
+  const confirm = async () => {
+    // 1. Restituer les grammes à la bobine si demandé et si non archivée
+    if (fraction > 0 && f.spool_id) {
+      await client.post(`/filaments/spools/${f.spool_id}/weight`,
+        { mode:"add", value: (f.grams_used||0)*fraction }).catch(()=>{});
+    }
+    // 2. Démapper le filament
+    await client.patch(`/prints/${printId}/filament-usage/${f.id}`, { spool_id: null }).catch(()=>{});
+    // 3. Recalculer les coûts
+    await client.post(`/prints/${printId}/recalc-costs`).catch(()=>{});
+    onDone?.();
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:4000,
+      display:"flex", alignItems:"center", justifyContent:"center", padding:20 }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:16,
+        width:"100%", maxWidth:380, padding:20, border:"1px solid var(--border)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+          <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
+            backgroundColor:hexCss(f.color_hex), border:"1px solid rgba(255,255,255,0.15)" }}/>
+          <p style={{ fontSize:14, fontWeight:800, color:"var(--text)", margin:0 }}>
+            {f.filament_translated_name||f.filament_fila_type||"Filament"}
+          </p>
+        </div>
+        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+          Démapper ce filament de la bobine #{f.spool_id}. Restituer les grammes ?
+        </p>
+        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:14 }}>
+          <span style={{ fontSize:11, color:"var(--muted)", flex:1 }}>Restituer {f.grams_used?.toFixed(1)}g :</span>
+          {OPTS.map(o=>(
+            <button key={o} onClick={()=>setFraction(o)}
+              style={{ padding:"4px 9px", borderRadius:20, border:"none", cursor:"pointer",
+                fontWeight:600, fontSize:11,
+                background:fraction===o?"#22c55e":"var(--surface2)",
+                color:fraction===o?"white":"var(--muted)" }}>
+              {o===0?"Non":o===1?"100%":`${o*100}%`}
+            </button>
+          ))}
+        </div>
+        {fraction>0 && <p style={{ fontSize:11, color:"#22c55e", margin:"0 0 14px" }}>
+          +{((f.grams_used||0)*fraction).toFixed(1)}g restitués à la bobine
+        </p>}
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={onClose} style={{ flex:1, padding:"10px", borderRadius:10,
+            border:"1px solid var(--border)", background:"var(--surface2)",
+            color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
+          <button onClick={confirm} style={{ flex:2, padding:"10px", borderRadius:10,
+            border:"none", background:"#ef4444", color:"white",
+            fontSize:13, fontWeight:700, cursor:"pointer" }}>Démapper</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRestore, onUnmapped }) {
   const [open, setOpen] = useState(false);
+  const [unmapping, setUnmapping] = useState(null); // filament à démapper
   const [dissociate, setDissociate] = useState(null); // filament usage à dissocier
   return (
     <>
@@ -365,7 +426,12 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
       {open && (
         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
           {filaments.map((f,i) => (
-            <div key={i} onClick={e=>{e.stopPropagation(); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else{onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,filamentType:f.filament_fila_type||f.filament_type});}}}
+            <div key={i}
+              onClick={e=>{e.stopPropagation(); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else{onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,filamentType:f.filament_fila_type||f.filament_type});}}}
+              onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(f.spool_id)setUnmapping(f);}}
+              onTouchStart={e=>{if(!f.spool_id)return;const t=setTimeout(()=>setUnmapping(f),600);e.currentTarget._lpt=t;}}
+              onTouchEnd={e=>{clearTimeout(e.currentTarget._lpt);}}
+              onTouchMove={e=>{clearTimeout(e.currentTarget._lpt);}}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(f.spool_id)setDissociate(f);}}
               onPointerDown={e=>{ if(!f.spool_id) return; const t=setTimeout(()=>setDissociate(f),600); e.currentTarget._lpt=t; }}
               onPointerUp={e=>{ clearTimeout(e.currentTarget._lpt); }}
