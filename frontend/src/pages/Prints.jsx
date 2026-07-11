@@ -51,7 +51,7 @@ function FilamentDots({ filaments }) {
           <div style={{
             width:14, height:14, borderRadius:"50%",
             background: swatchBg(f.color_hex, f.filament_colors_array, f.filament_multicolor_type),
-            border: f.spool_id
+            boxSizing:"border-box", backgroundClip:"padding-box", border: f.spool_id
               ? "2px solid #22c55e"
               : "1px solid rgba(255,255,255,0.15)",
           }}/>
@@ -124,7 +124,7 @@ function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorTyp
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 10px" }}/>
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
             <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
-              background:swatchBg(colorHex, colorsArray, multicolorType), border:"1px solid rgba(255,255,255,0.2)" }}/>
+              background:swatchBg(colorHex, colorsArray, multicolorType), boxSizing:"border-box", backgroundClip:"padding-box", border:"1px solid rgba(255,255,255,0.2)" }}/>
             <h3 style={{ fontSize:14, fontWeight:800, color:"var(--text)", margin:0, flex:1 }}>Associer une bobine</h3>
             <button onClick={onClose} style={{ width:26, height:26, borderRadius:"50%",
               background:"var(--surface2)", border:"none", cursor:"pointer",
@@ -139,7 +139,7 @@ function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorTyp
                 background:"var(--surface2)", border:"1px solid var(--border)",
                 borderRadius:8, cursor:"pointer", textAlign:"left", marginBottom:6 }}>
               <div style={{ width:16, height:16, borderRadius:"50%", flexShrink:0,
-                background:swatchBg(s.color_hex||s.filament_color, s.filament_colors_array, s.filament_multicolor_type), border:"1px solid rgba(255,255,255,0.15)" }}/>
+                background:swatchBg(s.color_hex||s.filament_color, s.filament_colors_array, s.filament_multicolor_type), boxSizing:"border-box", backgroundClip:"padding-box", border:"1px solid rgba(255,255,255,0.15)" }}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -237,7 +237,7 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
                 padding:"10px 12px", border:"1px solid var(--border)" }}>
                 <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
                   <div style={{ width:16, height:16, borderRadius:"50%", flexShrink:0,
-                    background:swatchBg(f.color_hex,f.filament_colors_array,f.filament_multicolor_type), border:"1px solid rgba(255,255,255,0.15)" }}/>
+                    background:swatchBg(f.color_hex,f.filament_colors_array,f.filament_multicolor_type), boxSizing:"border-box", backgroundClip:"padding-box", border:"1px solid rgba(255,255,255,0.15)" }}/>
                   <span style={{ fontSize:12, fontWeight:600, color:"var(--text)", flex:1 }}>
                     {f.filament_translated_name||f.filament_fila_type||f.filament_type||"Filament"}
                   </span>
@@ -301,7 +301,7 @@ function DissociateDialog({ usage, printId, onClose, onDone }) {
         width:"100%", maxWidth:360, padding:20, border:"1px solid var(--border)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
           <div style={{ width:18, height:18, borderRadius:"50%", flexShrink:0,
-            background:swatchBg(usage.color_hex, usage.filament_colors_array, usage.filament_multicolor_type), border:"1px solid rgba(255,255,255,0.15)" }}/>
+            background:swatchBg(usage.color_hex, usage.filament_colors_array, usage.filament_multicolor_type), boxSizing:"border-box", backgroundClip:"padding-box", border:"1px solid rgba(255,255,255,0.15)" }}/>
           <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0 }}>Dissocier la bobine</p>
         </div>
         <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
@@ -361,7 +361,7 @@ function UnmapFilamentConfirm({ f, printId, onClose, onDone }) {
         width:"100%", maxWidth:380, padding:20, border:"1px solid var(--border)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
           <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
-            background:swatchBg(f.color_hex,f.filament_colors_array,f.filament_multicolor_type), border:"1px solid rgba(255,255,255,0.15)" }}/>
+            background:swatchBg(f.color_hex,f.filament_colors_array,f.filament_multicolor_type), boxSizing:"border-box", backgroundClip:"padding-box", border:"1px solid rgba(255,255,255,0.15)" }}/>
           <p style={{ fontSize:14, fontWeight:800, color:"var(--text)", margin:0 }}>
             {f.filament_translated_name||f.filament_fila_type||"Filament"}
           </p>
@@ -424,7 +424,7 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
             <div key={i} style={{ position:"relative", flexShrink:0 }}>
               <div style={{ width:16, height:16, borderRadius:"50%",
                 background:swatchBg(f.color_hex, f.filament_colors_array, f.filament_multicolor_type),
-                border:"1px solid rgba(255,255,255,0.2)" }}/>
+                boxSizing:"border-box", backgroundClip:"padding-box", border:"1px solid rgba(255,255,255,0.2)" }}/>
               {!f.spool_id && <span style={{ position:"absolute", top:-3, right:-3,
                 width:8, height:8, borderRadius:"50%", background:"#f59e0b",
                 border:"1px solid var(--bg)" }}/>}
@@ -450,7 +450,7 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
               opacity: f.spool_id ? 1 : 0.85 }}>
               <div style={{ width:20, height:20, borderRadius:"50%", flexShrink:0,
                 background:swatchBg(f.color_hex, f.filament_colors_array, f.filament_multicolor_type),
-                border:f.spool_id?"2px solid #22c55e":"1px solid rgba(255,255,255,0.15)" }}/>
+                boxSizing:"border-box", backgroundClip:"padding-box", border:f.spool_id?"2px solid #22c55e":"1px solid rgba(255,255,255,0.15)" }}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -1461,7 +1461,7 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
             {p.filament_usage.map((f,i) => (
               <div key={i} style={{ width:12, height:12, borderRadius:"50%",
                 background: swatchBg(f.color_hex, f.filament_colors_array, f.filament_multicolor_type),
-                border:"1.5px solid rgba(255,255,255,0.8)", flexShrink:0,
+                boxSizing:"border-box", backgroundClip:"padding-box", border:"1.5px solid rgba(255,255,255,0.8)", flexShrink:0,
                 boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/>
             ))}
           </div>
