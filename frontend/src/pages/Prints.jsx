@@ -1559,7 +1559,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
 
   const Row = ({ title, items, startIdx = 0, onAdd, onDeleteItem }) => {
     const scrollRef = React.useRef(null);
-    if (!items.length) return null;
+    if (!items.length && !onAdd) return null;
     const scroll = (dir) => scrollRef.current?.scrollBy({ left: dir * 120, behavior: "smooth" });
     return (
       <div style={{ marginBottom:12 }}>
