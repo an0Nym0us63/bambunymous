@@ -891,6 +891,7 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
                 color=color or None, profile_id=prof or None,
                 filament_weight_g=weight,
             )
+            fil.color_bucket = buckets_for(fil.color, fil.colors_array)
             db.add(fil)
             await db.flush()
             filament_created = True

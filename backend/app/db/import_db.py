@@ -5,6 +5,7 @@ import re, os, sqlite3, logging
 from datetime import datetime
 from sqlalchemy import text
 from ..models.filament import Filament, Spool
+from ..core.colors import buckets_for
 from ..models.setting import Setting
 from ..models.print_history import Print as PrintModel, FilamentUsage, PrintTag, Group
 from ..models.object_history import Object, ObjectGroup, Accessory, ObjectAccessory
@@ -78,6 +79,7 @@ async def run_import(src_path: str, local_to_utc: bool = False) -> dict:
                 color=row.get("color"),
                 multicolor_type=row.get("multicolor_type") or "monochrome",
                 colors_array=row.get("colors_array"),
+                color_bucket=buckets_for(row.get("color"), row.get("colors_array")),
                 price=row.get("price"),
                 filament_weight_g=row.get("filament_weight_g") or 1000.0,
                 spool_weight_g=row.get("spool_weight_g"),
