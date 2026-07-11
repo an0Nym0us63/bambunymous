@@ -429,13 +429,10 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
             <div key={i}
               onClick={e=>{e.stopPropagation(); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else{onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,filamentType:f.filament_fila_type||f.filament_type});}}}
               onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(f.spool_id)setUnmapping(f);}}
-              onTouchStart={e=>{if(!f.spool_id)return;const t=setTimeout(()=>setUnmapping(f),600);e.currentTarget._lpt=t;}}
-              onTouchEnd={e=>{clearTimeout(e.currentTarget._lpt);}}
-              onTouchMove={e=>{clearTimeout(e.currentTarget._lpt);}}
-              onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(f.spool_id)setDissociate(f);}}
-              onPointerDown={e=>{ if(!f.spool_id) return; const t=setTimeout(()=>setDissociate(f),600); e.currentTarget._lpt=t; }}
-              onPointerUp={e=>{ clearTimeout(e.currentTarget._lpt); }}
-              onPointerLeave={e=>{ clearTimeout(e.currentTarget._lpt); }}
+              onPointerDown={e=>{ if(!f.spool_id) return; const t=setTimeout(()=>{setUnmapping(f); navigator.vibrate&&navigator.vibrate(20);},600); e.currentTarget._lpt=t; }}
+              onPointerUp={e=>clearTimeout(e.currentTarget._lpt)}
+              onPointerLeave={e=>clearTimeout(e.currentTarget._lpt)}
+              onPointerCancel={e=>clearTimeout(e.currentTarget._lpt)}
               style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px 12px", background:"var(--bg)",
               borderTop:"1px solid var(--border)", cursor:"pointer",
