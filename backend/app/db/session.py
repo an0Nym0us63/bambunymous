@@ -38,6 +38,8 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
     # Migration automatique : ADD COLUMN si manquant
     await _migrate()
+    # Backfill des colonnes calculées
+    await _backfill_color_buckets()
 
 
 async def _migrate():
@@ -78,6 +80,7 @@ async def _migrate():
         ("filaments",      "fila_color_code",  "TEXT"),
         ("filaments",      "name_en",          "TEXT"),
         ("filaments",      "fila_type",        "TEXT"),
+        ("filaments",      "color_bucket",     "TEXT"),
         ("groups",         "number_of_items",          "INTEGER DEFAULT 1"),
         ("groups",         "cover_print_id",             "INTEGER"),
         ("prints",         "total_cost_filament_normal","REAL DEFAULT 0.0"),
@@ -93,3 +96,32 @@ async def _migrate():
                 await conn.commit()
             except Exception:
                 pass  # colonne déjà existante → ignorer
+
+
+async def _backfill_color_buckets():
+    """
+    Calcule Filament.color_bucket pour les lignes qui n'en ont pas encore.
+    Idempotent : ne touche que les NULL, donc sans effet aux démarrages suivants.
+    """
+    from sqlalchemy import text as _text
+    from ..core.colors import buckets_for
+    try:
+        async with engine.begin() as conn:
+            rows = (await conn.execute(_text(
+                "SELECT id, color, colors_array FROM filaments "
+                "WHERE color_bucket IS NULL OR color_bucket = ''"
+            ))).all()
+            n = 0
+            for fid, color, colors_array in rows:
+                b = buckets_for(color, colors_array)
+                if not b:
+                    continue
+                await conn.execute(
+                    _text("UPDATE filaments SET color_bucket = :b WHERE id = :i"),
+                    {"b": b, "i": fid},
+                )
+                n += 1
+        if n:
+            print(f"[migrate] color_bucket calculé pour {n} filament(s)")
+    except Exception as e:
+        print(f"[migrate] backfill color_bucket échoué : {e}")

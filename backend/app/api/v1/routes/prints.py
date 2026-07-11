@@ -201,7 +201,20 @@ def _apply_search(q, search: str):
 
 # ── Routes ─────────────────────────────────────────────────────────────────
 
-def _filament_filter_subq(material, fila_type, filament_id):
+def _color_bucket_match(col, slug: str):
+    """
+    color_bucket est un CSV ("bleu,rose"). On matche le jeton exact pour éviter
+    qu'une teinte soit trouvée comme sous-chaîne d'une autre.
+    """
+    return or_(
+        col == slug,
+        col.like(f"{slug},%"),
+        col.like(f"%,{slug}"),
+        col.like(f"%,{slug},%"),
+    )
+
+
+def _filament_filter_subq(material, fila_type, filament_id, color=None):
     """Sous-requête des print_id matchant les filtres filament (via Spool→Filament)."""
     from ....models.filament import Spool as _Spool, Filament as _FilCat
     fu_q = (select(_FU.print_id)
@@ -210,6 +223,7 @@ def _filament_filter_subq(material, fila_type, filament_id):
     if filament_id: fu_q = fu_q.where(_FilCat.id == filament_id)
     if material:    fu_q = fu_q.where(_FilCat.material == material)
     if fila_type:   fu_q = fu_q.where(_FilCat.fila_type == fila_type)
+    if color:       fu_q = fu_q.where(_color_bucket_match(_FilCat.color_bucket, color))
     return fu_q
 
 
@@ -233,6 +247,7 @@ async def list_prints(
     material:    Optional[str] = None,
     fila_type:   Optional[str] = None,
     filament_id: Optional[int] = None,
+    color:       Optional[str] = None,
     sort:     str = "recent",
     limit:    int = Query(40, le=200),
     offset:   int = 0,
@@ -261,8 +276,8 @@ async def list_prints(
         if group_id is not None:
             q = q.where(Print.group_id == group_id)
         # Filtres filament via FilamentUsage→Spool→Filament
-        if material or fila_type or filament_id:
-            q = q.where(Print.id.in_(_filament_filter_subq(material, fila_type, filament_id)))
+        if material or fila_type or filament_id or color:
+            q = q.where(Print.id.in_(_filament_filter_subq(material, fila_type, filament_id, color)))
         if tag:
             q = q.where(exists().where(
                 (_PT.print_id == Print.id) & (_PT.tag == tag)
@@ -463,6 +478,7 @@ async def prints_kpis(
     material:    Optional[str] = None,
     fila_type:   Optional[str] = None,
     filament_id: Optional[int] = None,
+    color:       Optional[str] = None,
     _: str = Depends(get_current_user),
 ):
     async with AsyncSessionLocal() as db:
@@ -480,8 +496,8 @@ async def prints_kpis(
                 Print.file_name.ilike(f"%{search}%"),
                 Print.original_name.ilike(f"%{search}%"),
             ))
-        if material or fila_type or filament_id:
-            q = q.where(Print.id.in_(_filament_filter_subq(material, fila_type, filament_id)))
+        if material or fila_type or filament_id or color:
+            q = q.where(Print.id.in_(_filament_filter_subq(material, fila_type, filament_id, color)))
         r = (await db.execute(q)).one()
         return {"count": r.count or 0, "duration": int(r.duration or 0),
                 "weight_g": float(r.weight or 0), "cost": round(float(r.cost or 0), 2)}

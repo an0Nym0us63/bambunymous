@@ -8,6 +8,8 @@ from typing import Optional
 from datetime import datetime
 import os
 
+from ....core.colors import buckets_for, all_buckets
+
 def _clear_match_cache():
     """Vide le cache de matching MQTT après toute mutation de bobine."""
     try:
@@ -84,6 +86,7 @@ class FilamentOut(BaseModel):
     color: Optional[str]
     multicolor_type: str
     colors_array: Optional[str]
+    color_bucket: Optional[str] = None
     price: Optional[float]
     filament_weight_g: float
     spool_weight_g: Optional[float]
@@ -130,6 +133,7 @@ class SpoolOut(BaseModel):
     filament_profile_id: Optional[str] = None
     filament_multicolor_type: Optional[str] = None
     filament_colors_array: Optional[str] = None
+    filament_color_bucket: Optional[str] = None
     filament_external_id: Optional[str] = None
     filament_fila_color_code: Optional[str] = None
     # Bobine physique
@@ -214,6 +218,7 @@ async def create_filament(
                 })
 
     f = Filament(**body.model_dump())
+    f.color_bucket = buckets_for(f.color, f.colors_array)
     db.add(f)
     await db.commit()
     await db.refresh(f)
@@ -236,9 +241,12 @@ async def update_filament(
     f = result.scalar_one_or_none()
     if not f:
         raise HTTPException(404, "Filament introuvable")
-    changed_price = "price" in body.model_dump(exclude_none=True)
-    for k, v in body.model_dump(exclude_none=True).items():
+    payload = body.model_dump(exclude_none=True)
+    changed_price = "price" in payload
+    for k, v in payload.items():
         setattr(f, k, v)
+    if "color" in payload or "colors_array" in payload:
+        f.color_bucket = buckets_for(f.color, f.colors_array)
     await db.commit()
     _clear_match_cache()
     if changed_price:
@@ -418,6 +426,7 @@ def _fil_out(f: Filament) -> FilamentOut:
         manufacturer=f.manufacturer, material=f.material,
         fila_type=getattr(f,"fila_type",None),
         color=f.color, multicolor_type=f.multicolor_type, colors_array=f.colors_array,
+        color_bucket=getattr(f, "color_bucket", None),
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
         profile_id=f.profile_id, fila_color_code=getattr(f, "fila_color_code", None),
         swatch=f.swatch, to_order=f.to_order,
@@ -442,6 +451,7 @@ def _spool_out(s: Spool) -> SpoolOut:
         filament_fila_color_code=getattr(f, "fila_color_code", None) if f else None,
         filament_multicolor_type=f.multicolor_type if f else None,
         filament_colors_array=f.colors_array if f else None,
+        filament_color_bucket=getattr(f, "color_bucket", None) if f else None,
         filament_external_id=f.external_filament_id if f else None,
         remaining_weight_g=s.remaining_weight_g,
         price_override=s.price_override,
@@ -586,6 +596,7 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
                 upd("multicolor_type", ctype)
                 if ctype != "monochrome" and len(colors) > 1:
                     upd("colors_array", ",".join(f"#{c}" for c in colors))
+                f.color_bucket = buckets_for(f.color, f.colors_array)
 
                 updated.append({"id": f.id, "name": name_en, "changes": list(changed.keys())})
             else:
@@ -603,6 +614,22 @@ async def enrich_filaments_from_catalog(_: str = Depends(get_current_user)):
         "skipped": len(skipped),
         "details": {"updated": updated, "not_found": not_found, "skipped": skipped, "no_profile": no_profile},
     }
+
+
+@router.get("/color-buckets")
+async def color_buckets(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """Palette des teintes + nombre de filaments par teinte."""
+    rows = (await db.execute(select(Filament.color_bucket))).scalars().all()
+    counts: dict[str, int] = {}
+    for cb in rows:
+        for t in (cb or "").split(","):
+            t = t.strip()
+            if t:
+                counts[t] = counts.get(t, 0) + 1
+    return [{**b, "count": counts.get(b["slug"], 0)} for b in all_buckets()]
 
 
 @router.get("/catalog/types")

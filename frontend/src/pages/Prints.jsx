@@ -1784,6 +1784,8 @@ export default function Prints() {
   const [materialF, setMaterialF] = useState("");
   const [filaTypeF, setFilaTypeF] = useState("");
   const [filamentIdF, setFilamentIdF] = useState("");
+  const [colorF, setColorF] = useState("");
+  const [colorBuckets, setColorBuckets] = useState([]);
   const [allFilaments, setAllFilaments] = useState([]);
   const [allMaterials, setAllMaterials] = useState([]);
   const [allFilaTypes, setAllFilaTypes] = useState([]);
@@ -1813,13 +1815,21 @@ export default function Prints() {
     if (materialF)   p.set("material", materialF);
     if (filaTypeF)   p.set("fila_type", filaTypeF);
     if (filamentIdF) p.set("filament_id", filamentIdF);
+    if (colorF)      p.set("color", colorF);
     try {
       const { data } = await client.get("/prints/kpis?" + p);
       setKpis(data);
     } catch {}
-  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF]);
+  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF]);
 
   useEffect(() => { loadKpis(); }, [loadKpis]);
+
+  // Charger la palette de teintes (n'affiche que celles réellement utilisées)
+  useEffect(() => {
+    client.get("/filaments/color-buckets")
+      .then(r => setColorBuckets((r.data||[]).filter(b => b.count > 0)))
+      .catch(()=>{});
+  }, []);
 
   // Charger les options de filtres filament
   useEffect(() => {
@@ -1843,6 +1853,7 @@ export default function Prints() {
       if (materialF)   params.set("material", materialF);
       if (filaTypeF)   params.set("fila_type", filaTypeF);
       if (filamentIdF) params.set("filament_id", filamentIdF);
+      if (colorF)      params.set("color", colorF);
       if (sortF)       params.set("sort", sortF);
       const { data } = await client.get("/prints?" + params);
       setDebugInfo("total=" + data.total + " prints=" + (data.prints||[]).length);
@@ -1853,7 +1864,7 @@ export default function Prints() {
       setError(e.response?.data?.detail || e.message || "Erreur");
     }
     setLoading(false);
-  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF, sortF]);
+  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, sortF]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || loadingMoreRef.current) return;
@@ -1868,6 +1879,7 @@ export default function Prints() {
       if (materialF)   params.set("material", materialF);
       if (filaTypeF)   params.set("fila_type", filaTypeF);
       if (filamentIdF) params.set("filament_id", filamentIdF);
+      if (colorF)      params.set("color", colorF);
       if (sortF)       params.set("sort", sortF);
       const { data } = await client.get("/prints?" + params);
       const existingIds = new Set((prints||[]).map(p => p.id));
@@ -1878,7 +1890,7 @@ export default function Prints() {
     } catch(e) {}
     setLoadingMore(false);
     loadingMoreRef.current = false;
-  }, [loadingMore, hasMore, offset, statusF, search, groupF, materialF, filaTypeF, filamentIdF, sortF]);
+  }, [loadingMore, hasMore, offset, statusF, search, groupF, materialF, filaTypeF, filamentIdF, colorF, sortF]);
 
   useEffect(() => {
     const container = document.querySelector(".page-content");
@@ -1969,7 +1981,7 @@ export default function Prints() {
             color: (statusF||sortF!=="recent") ? "white" : "var(--text)",
             border:"1px solid var(--border)", borderRadius:10, fontSize:12, cursor:"pointer", flexShrink:0 }}>
           <SlidersHorizontal size={14}/>
-          {[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF].filter(Boolean).length > 0 ? `Filtres (${[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF].filter(Boolean).length})` : "Filtres"}
+          {[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF, colorF].filter(Boolean).length > 0 ? `Filtres (${[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF, colorF].filter(Boolean).length})` : "Filtres"}
         </button>
         {viewMode==="list" && (
           <button onClick={()=>selectMode?exitSelectMode():setSelectMode(true)}
@@ -2001,8 +2013,8 @@ export default function Prints() {
             <button onClick={()=>setFilterOpen(false)} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
               <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:0 }}>Filtres & tri</p>
-              {(statusF||sortF!=="recent"||materialF||filaTypeF||filamentIdF) && (
-                <button onClick={()=>{ setStatusF(""); setSortF("recent"); setMaterialF(""); setFilaTypeF(""); setFilamentIdF(""); setFilSearch(""); }}
+              {(statusF||sortF!=="recent"||materialF||filaTypeF||filamentIdF||colorF) && (
+                <button onClick={()=>{ setStatusF(""); setSortF("recent"); setMaterialF(""); setFilaTypeF(""); setFilamentIdF(""); setColorF(""); setFilSearch(""); }}
                   style={{ fontSize:11, color:"#60a5fa", background:"none", border:"none", cursor:"pointer" }}>
                   Effacer filtres
                 </button>
@@ -2053,18 +2065,86 @@ export default function Prints() {
               </div>
             </>)}
 
+            {/* Filtre teinte */}
+            {colorBuckets.length > 0 && (<>
+              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>
+                Teinte <span style={{ textTransform:"none", letterSpacing:0 }}>— prints utilisant un filament contenant cette couleur</span>
+              </p>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
+                {colorBuckets.map(b => {
+                  const on = colorF === b.slug;
+                  return (
+                    <button key={b.slug} onClick={()=>setColorF(on ? "" : b.slug)}
+                      style={{ display:"flex", alignItems:"center", gap:6, padding:"5px 12px 5px 6px",
+                        borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", border:"none",
+                        background: on ? "#3b82f6" : "var(--surface2)",
+                        color: on ? "white" : "var(--muted)" }}>
+                      <span style={{ width:14, height:14, borderRadius:"50%", flexShrink:0,
+                        boxSizing:"border-box", backgroundClip:"padding-box",
+                        background:b.hex, border:"1px solid rgba(128,128,128,0.35)" }}/>
+                      {b.label}
+                      <span style={{ opacity:0.6, fontSize:10 }}>{b.count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </>)}
+
             {/* Filtre filament exact */}
             <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Filament exact</p>
-            <input value={filSearch} onChange={e=>setFilSearch(e.target.value)} placeholder="Rechercher un filament…"
+            <input value={filSearch} onChange={e=>setFilSearch(e.target.value)} placeholder="Nom, marque, matériau, type…"
               style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontSize:12, outline:"none", marginBottom:6 }}/>
-            <div style={{ maxHeight:140, overflowY:"auto", display:"flex", flexDirection:"column", gap:4, marginBottom:16 }}>
-              {filamentIdF && <button onClick={()=>setFilamentIdF("")} style={{ padding:"5px 12px", borderRadius:8, fontSize:11, background:"rgba(239,68,68,0.1)", color:"#ef4444", border:"none", cursor:"pointer", textAlign:"left" }}>✕ Effacer filament sélectionné</button>}
-              {allFilaments.filter(f=>!filSearch || (f.name||"").toLowerCase().includes(filSearch.toLowerCase()) || (f.translated_name||"").toLowerCase().includes(filSearch.toLowerCase()) || (f.manufacturer||"").toLowerCase().includes(filSearch.toLowerCase())).slice(0,30).map(f=>(
-                <button key={f.id} onClick={()=>{ setFilamentIdF(filamentIdF===String(f.id)?"":String(f.id)); setFilSearch(""); }} style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 10px", borderRadius:8, border:"none", cursor:"pointer", textAlign:"left", background:filamentIdF===String(f.id)?"rgba(59,130,246,0.15)":"var(--surface2)" }}>
-                  <div style={{ width:12, height:12, borderRadius:"50%", flexShrink:0, backgroundColor:`#${f.color||"ccc"}` }}/>
-                  <span style={{ fontSize:11, color:"var(--text)" }}>{f.translated_name||f.name} <span style={{ color:"var(--muted)" }}>· {f.manufacturer}</span></span>
-                </button>
-              ))}
+            <div style={{ maxHeight:220, overflowY:"auto", display:"flex", flexDirection:"column", gap:2, marginBottom:16 }}>
+              {filamentIdF && <button onClick={()=>setFilamentIdF("")} style={{ padding:"5px 12px", borderRadius:8, fontSize:11, background:"rgba(239,68,68,0.1)", color:"#ef4444", border:"none", cursor:"pointer", textAlign:"left", marginBottom:4 }}>✕ Effacer filament sélectionné</button>}
+              {(() => {
+                // Cohérent avec les autres filtres : on n'affiche que les filaments
+                // compatibles avec matériau / type / teinte déjà sélectionnés.
+                const words = filSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+                const list = allFilaments.filter(f => {
+                  if (materialF && f.material !== materialF) return false;
+                  if (filaTypeF && f.fila_type !== filaTypeF) return false;
+                  if (colorF && !(f.color_bucket||"").split(",").map(t=>t.trim()).includes(colorF)) return false;
+                  if (!words.length) return true;
+                  const hay = [f.translated_name, f.name, f.name_en, f.manufacturer,
+                    f.material, f.fila_type, f.color_bucket, "#"+f.id].filter(Boolean).join(" ").toLowerCase();
+                  return words.every(w => hay.includes(w));
+                });
+                if (!list.length) return (
+                  <p style={{ fontSize:11, color:"var(--muted)", padding:"8px 4px", margin:0 }}>Aucun filament ne correspond.</p>
+                );
+                // Groupé par matériau, trié alphabétiquement (liste complète, pas de troncature)
+                const byMat = {};
+                list.forEach(f => { (byMat[f.material||"Autre"] ||= []).push(f); });
+                return Object.keys(byMat).sort().map(mat => (
+                  <div key={mat}>
+                    <p style={{ fontSize:9, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
+                      letterSpacing:"0.06em", margin:"8px 0 3px", position:"sticky", top:0,
+                      background:"var(--sheet-bg)", padding:"2px 0" }}>
+                      {mat} <span style={{ opacity:0.6 }}>({byMat[mat].length})</span>
+                    </p>
+                    {byMat[mat]
+                      .sort((a,b)=>(a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||""))
+                      .map(f => (
+                      <button key={f.id} onClick={()=>{ setFilamentIdF(filamentIdF===String(f.id)?"":String(f.id)); }}
+                        style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", width:"100%",
+                          borderRadius:8, border:"none", cursor:"pointer", textAlign:"left", marginBottom:2,
+                          background: filamentIdF===String(f.id) ? "rgba(59,130,246,0.15)" : "var(--surface2)" }}>
+                        <div style={{ width:14, height:14, borderRadius:"50%", flexShrink:0,
+                          boxSizing:"border-box", backgroundClip:"padding-box",
+                          background: swatchBg(f.color, f.colors_array, f.multicolor_type),
+                          border:"1px solid rgba(128,128,128,0.3)" }}/>
+                        <span style={{ flex:1, minWidth:0, fontSize:11, color:"var(--text)",
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {f.translated_name||f.name}
+                          <span style={{ color:"var(--muted)" }}>
+                            {" · "}{[f.manufacturer, f.fila_type].filter(Boolean).join(" · ")}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ));
+              })()}
             </div>
 
             <button onClick={()=>setFilterOpen(false)} style={{ width:"100%", padding:"12px", borderRadius:10, border:"none", background:"#3b82f6", color:"white", fontSize:14, fontWeight:700, cursor:"pointer" }}>
