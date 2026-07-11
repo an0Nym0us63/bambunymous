@@ -537,7 +537,17 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
     setLoadingUsage(true);
     try {
       const r = await client.get(`/filaments/spools/${spool.id}/usage`);
-      setUsageHistory(r.data || []);
+      // Calculer poids avant/après chaque print (chronologique)
+      const rows = (r.data || []).slice().reverse(); // ancien→récent
+      let running = (spool.remaining_weight_g || 0);
+      // On part du poids actuel et on remonte
+      const withWeight = rows.map(u => {
+        const before = running + (u.grams_used || 0);
+        const after = running;
+        running = before;
+        return { ...u, weight_before: before, weight_after: after };
+      }).reverse(); // retour ordre chronologique desc
+      setUsageHistory(withWeight);
       setShowUsage(true);
     } catch(e) { alert('Erreur: ' + e.message); }
     setLoadingUsage(false);
@@ -694,7 +704,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
               ✕</button>
           </div>
           {showUsage && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:2000,
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:3000,
           display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={()=>setShowUsage(false)}>
           <div onClick={e=>e.stopPropagation()} className="sheet-inner"
             style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
@@ -718,28 +728,32 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
             <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
               {usageHistory.map((u,i) => (
                 <div key={i} style={{ display:"flex", alignItems:"center", gap:10,
-                  padding:"10px 12px", background:"var(--surface2)",
+                  padding:"8px 10px", background:"var(--surface2)",
                   borderRadius:10, border:"1px solid var(--border)" }}>
+                  {/* Vignette */}
+                  <img src={`/api/v1/prints/${u.print_id}/image`} alt=""
+                    style={{ width:44, height:44, objectFit:"cover", borderRadius:6, flexShrink:0 }}
+                    onError={e=>e.currentTarget.style.display="none"}/>
+                  {/* Infos */}
                   <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontSize:13, fontWeight:600, color:"var(--text)", margin:0,
+                    <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
                       overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                       {u.file_name || "Print #"+u.print_id}
                     </p>
-                    <p style={{ fontSize:11, color:"var(--muted)", margin:"2px 0 0" }}>
-                      {u.print_date ? new Date(u.print_date).toLocaleDateString("fr-FR", {day:"2-digit",month:"2-digit",year:"numeric"}) : ""}
-                      {u.status === "SUCCESS" ? " · ✅" : u.status === "FAILED" ? " · ❌" : ""}
+                    <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
+                      {u.print_date ? new Date(u.print_date).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"}) : ""}
+                      {u.status==="SUCCESS"?" · ✅":u.status==="FAILED"?" · ❌":""}
+                    </p>
+                    {/* Poids avant → après */}
+                    <p style={{ fontSize:10, color:"#22c55e", margin:"2px 0 0", fontFamily:"monospace" }}>
+                      {u.weight_before?.toFixed(0)}g → <span style={{color:"#ef4444"}}>-{u.grams_used?.toFixed(1)}g</span> → {u.weight_after?.toFixed(0)}g
                     </p>
                   </div>
-                  <div style={{ textAlign:"right", flexShrink:0 }}>
-                    <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
-                      {u.grams_used?.toFixed(1)}g
-                    </p>
-                    {u.cost > 0 && (
-                      <p style={{ fontSize:10, color:"var(--muted)", margin:0, fontFamily:"monospace" }}>
-                        {u.cost.toFixed(2)}€
-                      </p>
-                    )}
-                  </div>
+                  {u.cost > 0 && (
+                    <span style={{ fontSize:11, fontWeight:700, color:"var(--muted)", fontFamily:"monospace", flexShrink:0 }}>
+                      {u.cost.toFixed(2)}€
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
