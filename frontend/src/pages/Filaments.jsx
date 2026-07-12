@@ -1341,6 +1341,14 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
                   color: f.active_spool_count > 0 ? "#22c55e" : "var(--muted)" }}>
                   {f.active_spool_count || 0} active{f.active_spool_count !== 1 ? "s" : ""}
                 </span>
+                {f.active_spool_count > 0 && f.remaining_weight_total_g > 0 && (
+                  <span style={{ fontSize:12, fontWeight:700, fontFamily:"JetBrains Mono,monospace",
+                    color:"var(--text)" }}>
+                    · {f.remaining_weight_total_g >= 1000
+                        ? `${(f.remaining_weight_total_g/1000).toFixed(2)} kg`
+                        : `${Math.round(f.remaining_weight_total_g)} g`} restants
+                  </span>
+                )}
               </div>
 
               <div style={{ display:"flex", gap:8, marginTop:20 }}>

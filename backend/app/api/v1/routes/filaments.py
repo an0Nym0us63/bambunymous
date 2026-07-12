@@ -97,6 +97,7 @@ class FilamentOut(BaseModel):
     to_order: bool
     spool_count: int = 0
     active_spool_count: int = 0
+    remaining_weight_total_g: float = 0   # somme du restant sur les bobines actives
     photo_url: Optional[str] = None
     photos: list[str] = []
 
@@ -450,6 +451,12 @@ def _fil_out(f: Filament) -> FilamentOut:
         profile_id=f.profile_id, fila_color_code=getattr(f, "fila_color_code", None),
         swatch=f.swatch, to_order=f.to_order,
         spool_count=len(f.spools), active_spool_count=len(active),
+        # Une bobine dont on n'a jamais pese le restant est supposee pleine.
+        remaining_weight_total_g=round(sum(
+            (s.remaining_weight_g if s.remaining_weight_g is not None
+             else (f.filament_weight_g or 0))
+            for s in active
+        ), 1),
         photo_url=(photos[0] if photos else None), photos=photos,
     )
 
