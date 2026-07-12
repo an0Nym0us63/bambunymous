@@ -229,13 +229,13 @@ function FilamentPhotos({ filamentId, onLightbox }) {
     setPhotoMenu(null); reload();
   };
 
-  if (!photos.length) return null;
-
   return (
     <div style={{ marginBottom:16 }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
         <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-          letterSpacing:"0.06em", margin:0 }}>Photos</p>
+          letterSpacing:"0.06em", margin:0 }}>
+          Photos{photos.length ? ` (${photos.length})` : ""}
+        </p>
         <button onClick={() => setAddPhotoOpen(true)} disabled={uploading}
           style={{ width:26, height:26, borderRadius:"50%", background:"#3b82f6", color:"white",
             border:"none", cursor:"pointer", fontSize:18, lineHeight:1, display:"flex",
@@ -256,7 +256,7 @@ function FilamentPhotos({ filamentId, onLightbox }) {
             background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px 32px" }}>
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
             <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"8px auto 0", flex:1 }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+          <button onClick={() => setAddPhotoOpen(false)} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
           </div>
             <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:"0 0 16px" }}>Ajouter une photo</p>
             <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
