@@ -621,6 +621,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
   const [saving, setSaving] = React.useState(false);
   const hasRfid = Boolean(tray.uuid && !/^0+$/.test(tray.uuid));
   const [catalogInfo, setCatalogInfo] = React.useState(null); // entrée catalogue Bambu
+  const [source, setSource] = React.useState("catalog");      // "catalog" | "free"
   const [form, setForm] = React.useState({
     name: "",
     material: tray.filament_type || "PLA Basic",
@@ -637,28 +638,39 @@ function MapTraySheet({ tray, onClose, onMapped }) {
       .then(r => setSpools(r.data?.spools || []))
       .catch(() => setSpools([]));
 
-    // Rechercher dans le catalogue Bambu pour pré-remplir le formulaire de création
-    const catalogParams = {};
-    if (tray.tray_info_idx) catalogParams.fila_type = tray.filament_type;
-    if (tray.color) {
-      // Extraire le color_code depuis le tray (ex: depuis fila_color_code / tray_info)
-      // On cherche par type d'abord puis on filtre par couleur dans le résultat
-      catalogParams.fila_type = tray.filament_type;
-      catalogParams.lang = "fr";
-    }
-    const catalogP = (tray.tray_info_idx && tray.color)
-      ? client.get("/filaments/catalog/search", { params: { fila_type: tray.filament_type, lang:"fr" } })
+    // Rechercher dans le catalogue Bambu pour pré-remplir le formulaire de création.
+    //
+    // Le tray MQTT donne la FAMILLE ("PLA"), pas la variante ("PLA Basic").
+    // Or le filtre `fila_type` de /catalog/search fait une egalite STRICTE sur le
+    // type detaille du catalogue : envoyer "PLA" ne matchait donc jamais rien et
+    // le bandeau catalogue n'apparaissait plus. C'est `family` qu'il faut passer.
+    const FAMILIES = ["PLA-CF","PETG-CF","PA-CF","PPS","PETG","PLA","ABS","ASA","TPU","PVA","PC","PA"];
+    const rawType = (tray.filament_type || "").trim();
+    const family = FAMILIES.find(m => rawType.toUpperCase() === m
+      || rawType.toUpperCase().startsWith(m + " ")
+      || rawType.toUpperCase().startsWith(m + "-")) || rawType;
+
+    // Le catalogue renvoie color_hex sur 8 caracteres (alpha compris) : on
+    // compare donc les 6 premiers des deux cotes.
+    const hex6 = h => (h || "").replace(/^#/, "").toLowerCase().slice(0, 6);
+
+    const catalogP = (tray.tray_info_idx && tray.color && family)
+      ? client.get("/filaments/catalog/search", { params: { family, lang: "fr" } })
           .then(r => {
-            const color6 = (tray.color || "").toLowerCase().slice(0,6); // 6 chars suffisent pour la recherche couleur
-            const match = (r.data?.entries || []).find(e =>
-              e.color_hex?.toLowerCase() === color6 || e.fila_id === tray.tray_info_idx
-            );
+            const target = hex6(tray.color);
+            const entries = r.data?.entries || [];
+            // 1) couleur exacte ET meme reference RFID  2) couleur exacte  3) reference RFID
+            const match =
+              entries.find(e => hex6(e.color_hex) === target && e.fila_id === tray.tray_info_idx)
+              || entries.find(e => hex6(e.color_hex) === target)
+              || entries.find(e => e.fila_id === tray.tray_info_idx);
             if (match) {
               setCatalogInfo(match);
               setForm(f => ({
                 ...f,
-                name: match.name,
-                material: match.fila_type,
+                name: match.name_fr || match.name,
+                // material = famille, fila_type = variante
+                material: match.family || family,
                 manufacturer: "Bambu Lab",
               }));
             }
@@ -680,15 +692,34 @@ function MapTraySheet({ tray, onClose, onMapped }) {
     } finally { setSaving(false); }
   };
 
+  const useCatalog = !!catalogInfo && source === "catalog";
+
   const create = async () => {
     setSaving(true);
     try {
-      const r = await client.post("/filaments/map-tray/create", {
+      const body = {
         tray_uuid: tray.uuid, profile_id: tray.tray_info_idx, color: tray.color,
         material: form.material, name: form.name,
         manufacturer: form.manufacturer || undefined,
         weight: Number(form.weight) || 1000,
-      });
+      };
+      // Import catalogue : on transmet la variante, le nom FR, les couleurs et le
+      // code Bambu, sinon la fiche creee serait plus pauvre que la meme reference
+      // importee par ailleurs.
+      if (useCatalog) {
+        Object.assign(body, {
+          name:            catalogInfo.name_fr || catalogInfo.name,
+          name_en:         catalogInfo.name,
+          translated_name: catalogInfo.name_fr || undefined,
+          material:        catalogInfo.family || form.material,
+          fila_type:       catalogInfo.fila_type,
+          fila_color_code: catalogInfo.fila_color_code || undefined,
+          multicolor_type: catalogInfo.color_type_fr || undefined,
+          colors:          catalogInfo.colors || undefined,
+          manufacturer:    "Bambu Lab",
+        });
+      }
+      const r = await client.post("/filaments/map-tray/create", body);
       setResult(r.data);
     } finally { setSaving(false); }
   };
@@ -808,37 +839,60 @@ function MapTraySheet({ tray, onClose, onMapped }) {
           )}
 
           {mode === "create" && (<>
+            {/* Le catalogue Bambu connait cette reference : on laisse le choix
+                explicite entre l'import (fiche complete) et la creation libre. */}
             {catalogInfo && (
-              <div style={{ marginBottom:12, padding:"8px 12px", borderRadius:10,
-                background:"rgba(59,130,246,0.06)", border:"1px solid rgba(59,130,246,0.2)",
-                display:"flex", alignItems:"center", gap:10 }}>
-                <div style={{ width:24, height:24, borderRadius:5, flexShrink:0,
-                  background: `#${catalogInfo.color_hex || "888"}` }}/>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <p style={{ fontSize:12, fontWeight:700, color:"#60a5fa", margin:0 }}>
-                    📦 {catalogInfo.name} — {catalogInfo.fila_type}
-                  </p>
-                  <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
-                    {catalogInfo.fila_id} · {catalogInfo.color_code}
-                  </p>
+              <div style={{ marginBottom:12 }}>
+                <div style={{ display:"flex", gap:2, background:"var(--surface2)",
+                  borderRadius:10, padding:3, marginBottom:8 }}>
+                  {[["catalog","📦 Depuis le catalogue"],["free","✏️ Création libre"]].map(([id,label]) => (
+                    <button key={id} onClick={() => setSource(id)}
+                      style={{ flex:1, padding:"7px 8px", borderRadius:8, fontSize:11, fontWeight:700,
+                        border:"none", cursor:"pointer",
+                        background: source===id ? "#3b82f6" : "transparent",
+                        color: source===id ? "white" : "var(--muted)" }}>
+                      {label}
+                    </button>
+                  ))}
                 </div>
+                {source === "catalog" && (
+                  <div style={{ padding:"8px 12px", borderRadius:10,
+                    background:"rgba(59,130,246,0.06)", border:"1px solid rgba(59,130,246,0.2)",
+                    display:"flex", alignItems:"center", gap:10 }}>
+                    <div style={{ width:24, height:24, borderRadius:5, flexShrink:0,
+                      background: `#${(catalogInfo.color_hex || "888").slice(0,6)}` }}/>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <p style={{ fontSize:12, fontWeight:700, color:"#60a5fa", margin:0,
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {catalogInfo.name_fr || catalogInfo.name} — {catalogInfo.fila_type}
+                      </p>
+                      <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>
+                        {catalogInfo.fila_id} · {catalogInfo.fila_color_code || catalogInfo.color_code}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
-            <div style={{ marginBottom:10 }}>
-              <label style={labelStyle}>Nom de la couleur</label>
-              <input style={inputStyle} value={form.name} autoFocus placeholder="ex: Jade White"
-                onChange={e => setForm(f => ({...f, name: e.target.value}))}/>
-            </div>
-            <div style={{ marginBottom:10 }}>
-              <label style={labelStyle}>Matière (PLA, PETG, ABS…)</label>
-              <input style={inputStyle} value={form.material}
-                onChange={e => setForm(f => ({...f, material: e.target.value}))}/>
-            </div>
-            <div style={{ marginBottom:10 }}>
-              <label style={labelStyle}>Marque</label>
-              <input style={inputStyle} value={form.manufacturer}
-                onChange={e => setForm(f => ({...f, manufacturer: e.target.value}))}/>
-            </div>
+            {/* En import catalogue, ces champs sont ignores : les afficher
+                editables laisserait croire le contraire. */}
+            {!useCatalog && (<>
+              <div style={{ marginBottom:10 }}>
+                <label style={labelStyle}>Nom de la couleur</label>
+                <input style={inputStyle} value={form.name} autoFocus placeholder="ex: Jade White"
+                  onChange={e => setForm(f => ({...f, name: e.target.value}))}/>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <label style={labelStyle}>Matière (PLA, PETG, ABS…)</label>
+                <input style={inputStyle} value={form.material}
+                  onChange={e => setForm(f => ({...f, material: e.target.value}))}/>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <label style={labelStyle}>Marque</label>
+                <input style={inputStyle} value={form.manufacturer}
+                  onChange={e => setForm(f => ({...f, manufacturer: e.target.value}))}/>
+              </div>
+            </>)}
             <div style={{ marginBottom:12 }}>
               <label style={labelStyle}>Poids total (g)</label>
               <input style={inputStyle} type="number" value={form.weight}
@@ -849,7 +903,9 @@ function MapTraySheet({ tray, onClose, onMapped }) {
                 background: saving ? "var(--border)" : "#3b82f6",
                 color:"white", border:"none", fontSize:13, fontWeight:700,
                 cursor: saving ? "default" : "pointer" }}>
-              {saving ? "Création…" : "Créer le filament et la bobine"}
+              {saving ? "Création…"
+                : useCatalog ? "Importer depuis le catalogue"
+                : "Créer le filament et la bobine"}
             </button>
           </>)}
         </div>

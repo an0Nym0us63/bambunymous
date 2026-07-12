@@ -898,6 +898,17 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
     manufacturer = (body.get("manufacturer") or "").strip() or None
     weight   = float(body.get("weight") or 1000)
 
+    # Champs optionnels issus du catalogue Bambu (import) — absents en creation libre.
+    fila_type        = (body.get("fila_type") or "").strip() or None
+    name_en          = (body.get("name_en") or "").strip() or None
+    translated_name  = (body.get("translated_name") or "").strip() or None
+    fila_color_code  = (body.get("fila_color_code") or "").strip() or None
+    multicolor_type  = (body.get("multicolor_type") or "").strip() or None
+    cat_colors       = body.get("colors") or []
+    colors_array = None
+    if isinstance(cat_colors, list) and len(cat_colors) > 1:
+        colors_array = ",".join("#" + str(c).lstrip("#")[:6] for c in cat_colors)
+
     async with AsyncSessionLocal() as db:
         # Réutiliser un filament existant si profile_id + couleur correspondent
         # (comparaison insensible à la casse, 6 chars)
@@ -915,10 +926,19 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
 
         if not fil:
             fil = Filament(
-                name=name, material=material, manufacturer=manufacturer,
+                name=name_en or name, material=material, manufacturer=manufacturer,
                 color=color or None, profile_id=prof or None,
                 filament_weight_g=weight,
             )
+            # Import catalogue : on enregistre aussi la variante, le nom FR, les
+            # couleurs multiples et le code Bambu — sinon la fiche creee depuis
+            # l'AMS etait plus pauvre que la meme reference importee ailleurs.
+            fil.fila_type       = fila_type
+            fil.translated_name = translated_name
+            fil.fila_color_code = fila_color_code
+            fil.colors_array    = colors_array
+            if multicolor_type:
+                fil.multicolor_type = multicolor_type
             fil.color_bucket = buckets_for(fil.color, fil.colors_array)
             db.add(fil)
             await db.flush()
