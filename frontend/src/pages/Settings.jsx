@@ -246,6 +246,31 @@ function RecalculateSection() {
     </div>
   );
 }
+// Pastille couleur — degrade sur un calque interne d'un conteneur overflow:hidden
+// et anneau en box-shadow : un border sur un element peint laisse transparaitre
+// le fond et cree un halo.
+function ColorDot({ f, size = 14 }) {
+  const cols = (f.colors_array || "")
+    .split(",").map(c => `#${c.trim().replace(/^#/, "").slice(0, 6)}`)
+    .filter(c => c.length === 7);
+  let bg = f.color
+    ? (String(f.color).startsWith("#") ? String(f.color).slice(0, 7) : `#${String(f.color).slice(0, 6)}`)
+    : "#888";
+  if (cols.length > 1) {
+    bg = f.multicolor_type === "gradient"
+      ? `linear-gradient(135deg, ${cols.join(",")})`
+      : `linear-gradient(90deg, ${cols.map((c, i, a) =>
+          `${c} ${i / a.length * 100}%, ${c} ${(i + 1) / a.length * 100}%`).join(",")})`;
+  }
+  return (
+    <div style={{ width:size, height:size, borderRadius:"50%", flexShrink:0,
+      position:"relative", overflow:"hidden",
+      boxShadow:"inset 0 0 0 1px rgba(128,128,128,0.35)" }}>
+      <div style={{ position:"absolute", inset:0, background:bg }}/>
+    </div>
+  );
+}
+
 // ── Étiquettes filaments (PDF) ─────────────────────────────────────────────
 function LabelsCard({ card, cardTitle }) {
   const [open, setOpen] = React.useState(false);
@@ -268,7 +293,8 @@ function LabelsCard({ card, cardTitle }) {
 
   const shown = fils.filter(f => {
     if (!q.trim()) return true;
-    const hay = [String(f.id), f.translated_name, f.name, f.manufacturer, f.material]
+    const hay = [String(f.id), f.translated_name, f.name, f.manufacturer,
+                 f.material, f.fila_type, f.color_bucket]
       .filter(Boolean).join(" ").toLowerCase();
     return q.trim().toLowerCase().split(/\s+/).every(w => hay.includes(w));
   });
@@ -338,7 +364,7 @@ function LabelsCard({ card, cardTitle }) {
             </div>
 
             <div style={{ padding:"0 16px 8px" }}>
-              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filtrer…"
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filtrer : nom, marque, matière, teinte…"
                 style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
                   border:"1px solid var(--border)", background:"var(--surface2)",
                   color:"var(--text)", fontSize:13, outline:"none" }}/>
@@ -349,12 +375,15 @@ function LabelsCard({ card, cardTitle }) {
                 <label key={f.id} style={{ display:"flex", alignItems:"center", gap:10,
                   padding:"7px 8px", borderRadius:8, cursor:"pointer" }}>
                   <input type="checkbox" checked={sel.has(f.id)} onChange={() => toggle(f.id)}/>
+                  <ColorDot f={f}/>
                   <span style={{ fontFamily:"JetBrains Mono,monospace", fontWeight:800,
                     fontSize:12, color:"#60a5fa", minWidth:34 }}>#{f.id}</span>
                   <span style={{ flex:1, minWidth:0, fontSize:12, color:"var(--text)",
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {f.translated_name || f.name}
-                    <span style={{ color:"var(--muted)" }}> · {f.material}</span>
+                    <span style={{ color:"var(--muted)" }}>
+                      {" · "}{[f.manufacturer, f.material].filter(Boolean).join(" · ")}
+                    </span>
                   </span>
                 </label>
               ))}
