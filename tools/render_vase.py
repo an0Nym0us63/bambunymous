@@ -13,11 +13,14 @@ def rot(p, a):
 def sdf(p):
     """Cube arrondi torsadé autour de Y, legerement bombé."""
     y = p[..., 1]
-    a = 1.9 * y                       # torsion
+    a = 1.5 * y                       # torsion
     q = rot(p, a)
     # renflement : plus large au centre
-    bulge = 1.0 + 0.16 * np.cos(np.clip(y, -1, 1) * 1.35)
-    b = np.array([0.62, 0.72, 0.62]) * np.stack([bulge, np.ones_like(bulge), bulge], -1)
+    bulge = 1.0 + 0.08 * np.cos(np.clip(y, -1, 1) * 1.35)
+    # Proportions calees sur la reference Bambu : bbox ~carree (h/l = 1.03)
+    # occupant ~65% du cadre. La version precedente (0.62/0.72) donnait
+    # 95% de large pour 72% de haut -> objet ecrase et colle aux bords.
+    b = np.array([0.52, 0.82, 0.52]) * np.stack([bulge, np.ones_like(bulge), bulge], -1)
     r = 0.20                          # rayon d'arrondi
     d = np.abs(q) - b
     outside = np.linalg.norm(np.maximum(d, 0), axis=-1)
@@ -33,8 +36,8 @@ def normal(p):
     return n / (np.linalg.norm(n, axis=-1, keepdims=True) + 1e-9)
 
 # Camera orthographique, legerement de trois-quarts
-xs = np.linspace(-1.25, 1.25, S)
-ys = np.linspace(1.25, -1.25, S)
+xs = np.linspace(-1.50, 1.50, S)   # marge autour de l'objet
+ys = np.linspace(1.50, -1.50, S)
 X, Y = np.meshgrid(xs, ys)
 ro = np.stack([X, Y, np.full_like(X, -3.0)], -1)
 rd = np.array([0.0, 0.0, 1.0])
@@ -59,7 +62,7 @@ ndh = np.clip((nrm * H).sum(-1), 0, 1)
 
 # occlusion douce vers le bas + rim
 rim = np.clip(1.0 - np.abs((nrm * V).sum(-1)), 0, 1) ** 2.2
-ao  = np.clip(0.55 + 0.45 * (Y + 0.9), 0.45, 1.0)
+ao  = np.clip(0.58 + 0.42 * (Y + 1.1), 0.48, 1.0)
 
 # Calque MULTIPLY : ombrage matte (PLA), toujours <= 1
 shade = (0.42 + 0.58 * ndl) * ao

@@ -122,7 +122,7 @@ export default function GalleryCompare({
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%",
                   color:"var(--muted)", fontSize:10, padding:6, textAlign:"center" }}>{getTitle(item)}</div>
               )}
-              {photos.length > 1 && (
+              {photos.length > 1 && !swatchMode && (
                 <span style={{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,0.6)", color:"white",
                   fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:20 }}>
                   {photos.length} 📷
@@ -137,15 +137,19 @@ export default function GalleryCompare({
                   {checked && <Check size={13} color="white" strokeWidth={3}/>}
                 </button>
               )}
-              <div style={{ position:"absolute", bottom:0, left:0, right:0,
-                background:"linear-gradient(transparent,rgba(0,0,0,0.78))", padding:"18px 6px 4px" }}>
-                <p style={{ fontSize:10, color:"white", fontWeight:700, margin:0,
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getTitle(item)}</p>
-                {getSubtitle && (
-                  <p style={{ fontSize:9, color:"rgba(255,255,255,0.7)", margin:0,
-                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getSubtitle(item)}</p>
-                )}
-              </div>
+              {/* Un nuancier montre des couleurs : pas de voile sombre ni de texte
+                  par-dessus, qui fausseraient la lecture de la teinte. */}
+              {!swatchMode && (
+                <div style={{ position:"absolute", bottom:0, left:0, right:0,
+                  background:"linear-gradient(transparent,rgba(0,0,0,0.78))", padding:"18px 6px 4px" }}>
+                  <p style={{ fontSize:10, color:"white", fontWeight:700, margin:0,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getTitle(item)}</p>
+                  {getSubtitle && (
+                    <p style={{ fontSize:9, color:"rgba(255,255,255,0.7)", margin:0,
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getSubtitle(item)}</p>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
