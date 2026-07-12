@@ -185,6 +185,22 @@ if STATIC_DIR.exists():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
+        # Tout fichier reellement present a la racine du build (les fichiers de
+        # frontend/public : icones, manifest, textures...) doit etre servi tel
+        # quel. Sans ca, il tombait dans le fallback et le navigateur recevait
+        # index.html a la place de l'image -> asset "casse" et masque CSS KO.
+        # Auparavant chaque fichier devait etre declare a la main dans une liste
+        # de routes explicites : tout nouvel asset etait casse en silence.
+        if full_path and not full_path.startswith("api/"):
+            candidate = (STATIC_DIR / full_path).resolve()
+            try:
+                # garde-fou : interdit de sortir de STATIC_DIR (../..)
+                candidate.relative_to(STATIC_DIR.resolve())
+            except ValueError:
+                candidate = None
+            if candidate and candidate.is_file():
+                return FileResponse(str(candidate))
+
         index = STATIC_DIR / "index.html"
         if index.exists():
             return FileResponse(str(index), headers={
