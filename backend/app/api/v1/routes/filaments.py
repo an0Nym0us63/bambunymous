@@ -196,6 +196,24 @@ async def list_filaments(
     return [_fil_out(f) for f in filaments]
 
 
+@router.get("/filaments/{fid}", response_model=FilamentOut)
+async def get_filament(
+    fid: int,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """Fiche filament par ID — permet un lien direct (QR code sur un swatch, etc.)."""
+    # selectinload obligatoire : _fil_out lit f.spools, et un lazy load
+    # relationnel leverait MissingGreenlet en async.
+    stmt = (select(Filament)
+            .options(selectinload(Filament.spools))
+            .where(Filament.id == fid))
+    f = (await db.execute(stmt)).scalar_one_or_none()
+    if not f:
+        raise HTTPException(404, "Filament introuvable")
+    return _fil_out(f)
+
+
 @router.post("/filaments", response_model=FilamentOut, status_code=201)
 async def create_filament(
     body: FilamentCreate,
