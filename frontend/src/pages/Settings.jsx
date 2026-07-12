@@ -259,7 +259,7 @@ function LabelsCard({ card, cardTitle }) {
     if (!open) return;
     client.get("/filaments/filaments")
       .then(r => {
-        const list = (r.data || []).filter(f => f.code);
+        const list = r.data || [];
         setFils(list);
         setSel(new Set(list.map(f => f.id)));   // tout coché par défaut
       })
@@ -268,7 +268,7 @@ function LabelsCard({ card, cardTitle }) {
 
   const shown = fils.filter(f => {
     if (!q.trim()) return true;
-    const hay = [f.code, f.translated_name, f.name, f.manufacturer, f.material]
+    const hay = [String(f.id), f.translated_name, f.name, f.manufacturer, f.material]
       .filter(Boolean).join(" ").toLowerCase();
     return q.trim().toLowerCase().split(/\s+/).every(w => hay.includes(w));
   });
@@ -305,8 +305,9 @@ function LabelsCard({ card, cardTitle }) {
     <div className="card" style={card}>
       <div style={cardTitle}>Étiquettes filaments</div>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
-        Planche d'étiquettes 10 × 10 mm à coller sur les échantillons : le code
-        court (#AA) et la matière. C'est ce code que lit le bouton Scanner.
+        Planche d'étiquettes à coller sur les échantillons : un QR code de 9 × 9 mm
+        encodant l'ID du filament, et l'ID en clair juste en dessous pour pouvoir
+        le saisir à la main. C'est ce QR que lit le bouton Scanner.
       </p>
       <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
         <button type="button" disabled={busy} onClick={() => download(null)} style={btn("#3b82f6")}>
@@ -349,7 +350,7 @@ function LabelsCard({ card, cardTitle }) {
                   padding:"7px 8px", borderRadius:8, cursor:"pointer" }}>
                   <input type="checkbox" checked={sel.has(f.id)} onChange={() => toggle(f.id)}/>
                   <span style={{ fontFamily:"JetBrains Mono,monospace", fontWeight:800,
-                    fontSize:12, color:"#60a5fa", minWidth:30 }}>#{f.code}</span>
+                    fontSize:12, color:"#60a5fa", minWidth:34 }}>#{f.id}</span>
                   <span style={{ flex:1, minWidth:0, fontSize:12, color:"var(--text)",
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {f.translated_name || f.name}

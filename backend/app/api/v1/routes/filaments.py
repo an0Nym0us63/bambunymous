@@ -10,7 +10,6 @@ import os
 
 from ....core.colors import buckets_for, all_buckets
 from ....core.materials import family_of, is_family
-from ....core.codes import next_free, normalize as norm_code
 
 def _clear_match_cache():
     """Vide le cache de matching MQTT après toute mutation de bobine."""
@@ -89,7 +88,6 @@ class FilamentOut(BaseModel):
     multicolor_type: str
     colors_array: Optional[str]
     color_bucket: Optional[str] = None
-    code: Optional[str] = None          # code court AA..ZZ (étiquettes / scan)
     price: Optional[float]
     filament_weight_g: float
     spool_weight_g: Optional[float]
@@ -173,14 +171,6 @@ class SpoolUpdate(BaseModel):
 
 # ── Filaments ─────────────────────────────────────────────────────────────────
 
-async def _assign_code(db, fil) -> None:
-    """Attribue le premier code court libre. Silencieux si le catalogue est plein."""
-    if getattr(fil, "code", None):
-        return
-    used = (await db.execute(select(Filament.code))).scalars().all()
-    fil.code = next_free(used)
-
-
 @router.get("/filaments", response_model=list[FilamentOut])
 async def list_filaments(
     q: Optional[str] = Query(None),
@@ -214,31 +204,37 @@ async def filament_labels_pdf(
     _: str = Depends(get_current_user),
 ):
     """
-    Planche d'etiquettes 10x10 mm a coller sur les echantillons.
-    body: {ids: [1,2,3]} — ou {} / {"ids": null} pour tous les filaments codes.
+    Planche d'etiquettes a coller sur les echantillons : un QR code de 9x9 mm
+    encodant l'ID du filament, et l'ID en clair juste en dessous pour pouvoir le
+    saisir a la main si le scan echoue.
+    body: {ids: [1,2,3]} — ou {} / {"ids": null} pour tous les filaments.
     """
     import io as _io
+    import qrcode
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas as _canvas
     from fastapi.responses import StreamingResponse
 
     ids = body.get("ids")
-    stmt = select(Filament).where(Filament.code.isnot(None))
+    stmt = select(Filament)
     if ids:
         stmt = stmt.where(Filament.id.in_(ids))
-    stmt = stmt.order_by(Filament.code)
+    stmt = stmt.order_by(Filament.id)
     fils = (await db.execute(stmt)).scalars().all()
     if not fils:
-        raise HTTPException(404, "Aucun filament à imprimer (code court manquant)")
+        raise HTTPException(404, "Aucun filament à imprimer")
 
-    SIZE = 10 * mm          # etiquette
-    GAP  = 4 * mm           # espace entre etiquettes (place pour la decoupe)
-    MARG = 12 * mm
+    QR    = 9 * mm            # QR code
+    TEXT  = 3.2 * mm          # bandeau de l'ID sous le QR
+    CELLW = QR
+    CELLH = QR + TEXT
+    GAP   = 3.5 * mm
+    MARG  = 10 * mm
     W, H = A4
 
-    cols = int((W - 2*MARG + GAP) // (SIZE + GAP))
-    rows = int((H - 2*MARG + GAP) // (SIZE + GAP))
+    cols = int((W - 2*MARG + GAP) // (CELLW + GAP))
+    rows = int((H - 2*MARG + GAP) // (CELLH + GAP))
     per_page = cols * rows
 
     buf = _io.BytesIO()
@@ -250,25 +246,49 @@ async def filament_labels_pdf(
             c.showPage()
         k = i % per_page
         col, row = k % cols, k // cols
-        x = MARG + col * (SIZE + GAP)
-        y = H - MARG - SIZE - row * (SIZE + GAP)
+        x = MARG + col * (CELLW + GAP)
+        y = H - MARG - CELLH - row * (CELLH + GAP)
 
-        # Cadre de decoupe
-        c.setLineWidth(0.3)
-        c.setStrokeColorRGB(0.75, 0.75, 0.75)
-        c.rect(x, y, SIZE, SIZE)
+        # Reperes de decoupe : des marques d'angle, PAS un cadre autour du QR.
+        # Un QR exige une "quiet zone" blanche autour de lui ; un trait colle au
+        # code degrade la lecture. Ici c'est l'espace entre etiquettes qui la
+        # fournit.
+        c.setLineWidth(0.25)
+        c.setStrokeColorRGB(0.80, 0.80, 0.80)
+        tick = 1.2 * mm
+        for (cx, cy, dx, dy) in [
+            (x, y, 1, 1), (x + CELLW, y, -1, 1),
+            (x, y + CELLH, 1, -1), (x + CELLW, y + CELLH, -1, -1),
+        ]:
+            c.line(cx, cy, cx + dx*tick, cy)
+            c.line(cx, cy, cx, cy + dy*tick)
 
-        # Code, bien lisible : c'est lui que l'on scanne
+        # QR : on dessine la matrice en rectangles plutot que de passer par une
+        # image -> pas de dependance a Pillow, et le rendu reste net a l'impression.
+        qr = qrcode.QRCode(
+            version=1,
+            error_correction=qrcode.constants.ERROR_CORRECT_M,
+            box_size=1, border=0,
+        )
+        qr.add_data(str(f.id))
+        qr.make(fit=True)
+        matrix = qr.get_matrix()
+        n = len(matrix)
+        module = QR / n          # 9 mm / 21 = 0.43 mm : le maximum tenable ici
         c.setFillColorRGB(0, 0, 0)
-        c.setFont("Helvetica-Bold", 13)
-        c.drawCentredString(x + SIZE/2, y + SIZE/2 - 0.2*mm, f"#{f.code}")
+        qx = x
+        qy = y + TEXT
+        for r_i, line in enumerate(matrix):
+            for c_i, on in enumerate(line):
+                if on:
+                    c.rect(qx + c_i*module,
+                           qy + QR - (r_i + 1)*module,
+                           module, module, stroke=0, fill=1)
 
-        # Matiere en petit, sous le code
-        mat = (f.material or "")[:8]
-        if mat:
-            c.setFont("Helvetica", 4.6)
-            c.setFillColorRGB(0.35, 0.35, 0.35)
-            c.drawCentredString(x + SIZE/2, y + 1.4*mm, mat)
+        # ID en clair, pour la saisie manuelle
+        c.setFont("Helvetica-Bold", 6)
+        c.setFillColorRGB(0.15, 0.15, 0.15)
+        c.drawCentredString(x + CELLW/2, y + 1.0*mm, f"#{f.id}")
 
     c.showPage()
     c.save()
@@ -277,25 +297,6 @@ async def filament_labels_pdf(
         buf, media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="etiquettes-filaments.pdf"'},
     )
-
-
-@router.get("/filaments/by-code/{code}", response_model=FilamentOut)
-async def get_filament_by_code(
-    code: str,
-    db: AsyncSession = Depends(get_db),
-    _: str = Depends(get_current_user),
-):
-    """Fiche filament par code court (#AA) — cible du scan."""
-    c = norm_code(code)
-    if not c:
-        raise HTTPException(400, "Code invalide (attendu : deux lettres, ex. AB)")
-    stmt = (select(Filament)
-            .options(selectinload(Filament.spools))
-            .where(Filament.code == c))
-    f = (await db.execute(stmt)).scalar_one_or_none()
-    if not f:
-        raise HTTPException(404, f"Aucun filament #{c}")
-    return _fil_out(f)
 
 
 @router.get("/filaments/{fid}", response_model=FilamentOut)
@@ -340,7 +341,6 @@ async def create_filament(
 
     f = Filament(**body.model_dump())
     f.color_bucket = buckets_for(f.color, f.colors_array)
-    await _assign_code(db, f)
     db.add(f)
     await db.commit()
     await db.refresh(f)
@@ -549,7 +549,6 @@ def _fil_out(f: Filament) -> FilamentOut:
         fila_type=getattr(f,"fila_type",None),
         color=f.color, multicolor_type=f.multicolor_type, colors_array=f.colors_array,
         color_bucket=getattr(f, "color_bucket", None),
-        code=getattr(f, "code", None),
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
         profile_id=f.profile_id, fila_color_code=getattr(f, "fila_color_code", None),
         swatch=f.swatch, to_order=f.to_order,
@@ -1043,7 +1042,6 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
             if multicolor_type:
                 fil.multicolor_type = multicolor_type
             fil.color_bucket = buckets_for(fil.color, fil.colors_array)
-            await _assign_code(db, fil)
             db.add(fil)
             await db.flush()
             filament_created = True

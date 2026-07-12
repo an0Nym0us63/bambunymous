@@ -1322,16 +1322,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
 
               {/* Infos */}
               <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.08em", marginBottom:4 }}>
-                Filament #{f.id}
-                {f.code && (
-                  <span style={{ marginLeft:8, padding:"1px 6px", borderRadius:5,
-                    background:"rgba(59,130,246,0.14)", color:"#60a5fa", fontWeight:800,
-                    fontFamily:"JetBrains Mono,monospace", letterSpacing:"0.08em" }}>
-                    #{f.code}
-                  </span>
-                )}
-              </p>
+                letterSpacing:"0.08em", marginBottom:4 }}>Filament #{f.id}</p>
               <Row label="Marque"           value={f.manufacturer}/>
               <Row label="Matière"          value={f.material}/>
               <Row label="Couleur"          value={colorsList?.length > 1 ? (f?.colors_array||spool?.filament_colors_array||"").split(",").map(c=>hexDisplay(c)).filter(Boolean).join(" / ") : color} mono/>
@@ -1978,34 +1969,29 @@ export default function Filaments() {
   // Lien direct /filaments?id=XXX -> ouvre la fiche du filament (scan QR d'un
   // swatch, marque-page, etc.). On passe par l'API plutot que par la liste
   // deja chargee : le filament peut etre absent du filtre/onglet courant.
-  const deepId   = searchParams.get("id");
-  const deepCode = searchParams.get("code");
-  const deepKey  = deepId || deepCode;
+  const deepId = searchParams.get("id");
   useEffect(() => {
-    if (!deepKey) { setDeepFil(null); setDeepErr(null); return; }
+    if (!deepId) { setDeepFil(null); setDeepErr(null); return; }
     let cancelled = false;
-    const url = deepId
-      ? `/filaments/filaments/${deepId}`
-      : `/filaments/filaments/by-code/${deepCode}`;
-    client.get(url)
+    client.get(`/filaments/filaments/${deepId}`)
       .then(r => { if (!cancelled) { setDeepFil(r.data); setDeepErr(null); } })
-      .catch(() => { if (!cancelled) { setDeepFil(null); setDeepErr(deepId ? `#${deepId}` : `#${deepCode}`); } });
+      .catch(() => { if (!cancelled) { setDeepFil(null); setDeepErr(`#${deepId}`); } });
     return () => { cancelled = true; };
-  }, [deepKey, deepId, deepCode]);
+  }, [deepId]);
 
   const closeDeep = () => {
     setDeepFil(null); setDeepErr(null);
     const next = new URLSearchParams(searchParams);
-    next.delete("id"); next.delete("code");
+    next.delete("id");
     setSearchParams(next, { replace: true });
   };
 
-  // Scan : on passe par l'URL, donc le lien est partageable et le retour arriere
-  // referme naturellement la fiche.
+  // Scan : le QR encode l'ID, on passe par l'URL — le lien reste partageable et
+  // le retour arriere referme naturellement la fiche.
   const [scanOpen, setScanOpen] = useState(false);
-  const onScanned = (code) => {
+  const onScanned = (id) => {
     setScanOpen(false);
-    setSearchParams({ code }, { replace: false });
+    setSearchParams({ id }, { replace: false });
   };
 
   const FAMILIES_G = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
@@ -2165,7 +2151,7 @@ export default function Filaments() {
 
       {scanOpen && <ScanSheet onDetect={onScanned} onClose={() => setScanOpen(false)}/>}
 
-      {/* Fiche ouverte via lien direct ?id=XXX ou ?code=AA */}
+      {/* Fiche ouverte via lien direct ?id=XXX (scan QR ou URL) */}
       {deepFil && (
         <FilamentSheet f={deepFil} onClose={closeDeep}
           onDeleted={() => { closeDeep(); client.get("/filaments/filaments").then(({data}) => setAllFilaments(data)).catch(()=>{}); }}

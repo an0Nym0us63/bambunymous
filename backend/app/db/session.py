@@ -41,7 +41,6 @@ async def init_db():
     # Backfill des colonnes calculées
     await _backfill_color_buckets()
     await _backfill_material_family()
-    await _backfill_codes()
 
 
 async def _migrate():
@@ -159,35 +158,3 @@ async def _backfill_material_family():
             print(f"[migrate] material (famille) corrigé pour {n} filament(s)")
     except Exception as e:
         print(f"[migrate] backfill material échoué : {e}")
-
-
-async def _backfill_codes():
-    """
-    Attribue un code court (AA..ZZ) aux filaments qui n'en ont pas, par ordre de
-    creation. Idempotent : ne touche qu'aux NULL.
-    """
-    from sqlalchemy import text as _text
-    from ..core.codes import next_free, normalize
-    try:
-        async with engine.begin() as conn:
-            rows = (await conn.execute(_text(
-                "SELECT id, code FROM filaments ORDER BY id"
-            ))).all()
-            used = [normalize(c) for _, c in rows]
-            todo = [fid for fid, c in rows if not normalize(c)]
-            n = 0
-            for fid in todo:
-                code = next_free(used)
-                if not code:
-                    print("[migrate] ⚠ plus de code court disponible (676 max)")
-                    break
-                await conn.execute(
-                    _text("UPDATE filaments SET code = :c WHERE id = :i"),
-                    {"c": code, "i": fid},
-                )
-                used.append(code)
-                n += 1
-        if n:
-            print(f"[migrate] code court attribué à {n} filament(s)")
-    except Exception as e:
-        print(f"[migrate] backfill code échoué : {e}")
