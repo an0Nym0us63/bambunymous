@@ -1875,73 +1875,38 @@ function hexToHsl(hex) {
   return [Math.round(hue*60), Math.round(s*100), Math.round(l*100)];
 }
 
-// ── Nuancier : rendu "vase torsadé" facon Bambu ────────────────────────────
-// La couleur du filament remplit la silhouette ; tout l'ombrage (lumiere,
-// torsion, occlusion, ombre portee) est pose PAR-DESSUS en noir/blanc
-// semi-transparent. Le rendu s'adapte donc a n'importe quelle teinte, et les
-// multicolores passent par le meme degrade que les pastilles.
-const VASE_SIL   = "M50 14 C66 14 81 27 82 44 C83 58 77 69 66 76 C58 81 42 81 34 76 "
-                 + "C23 69 17 58 18 44 C19 27 34 14 50 14 Z";
-// Bande de torsion : la "vague" en S qui traverse l'objet
-const VASE_TWIST = "M50 14 C40 26 34 38 40 50 C47 63 60 68 66 76 "
-                 + "C77 69 83 58 82 44 C81 27 66 14 50 14 Z";
-// Liseré lumineux en haut a gauche
-const VASE_RIM   = "M50 14 C36 14 21 26 19 42 C24 28 36 19 50 18 Z";
+// ── Nuancier : rendu "vase torsadé" ───────────────────────────────────────
+// Le modele 3D est pre-calcule UNE fois en niveaux de gris (ray-marching d'un
+// cube arrondi torsade) et livre en deux calques : l'ombrage (multiply) et les
+// reflets (screen). La couleur du filament est peinte dessous, masquee par la
+// silhouette. On obtient donc une forme et un eclairage 3D corrects pour
+// n'importe quelle teinte, sans stocker une image par coloris.
+const VASE_SHADE = "/vase-shade.png";
+const VASE_SPEC  = "/vase-spec.png";
 
-function FilamentVase({ colors, type, uid }) {
-  const cols = (colors && colors.length ? colors : ["#888888"]).map(
-    c => (String(c).startsWith("#") ? c : `#${c}`).slice(0, 7)
-  );
-  const gid = `vase-${uid}`;
-  const multi = cols.length > 1;
+const MASK = {
+  WebkitMaskImage: `url(${VASE_SHADE})`,  maskImage: `url(${VASE_SHADE})`,
+  WebkitMaskSize: "contain",              maskSize: "contain",
+  WebkitMaskRepeat: "no-repeat",          maskRepeat: "no-repeat",
+  WebkitMaskPosition: "center",           maskPosition: "center",
+};
 
-  // monochrome -> aplat ; gradient -> fondu ; coaxial/autre -> tranches nettes
-  let stops = null;
-  if (multi) {
-    stops = type === "gradient"
-      ? cols.map((c, i) => <stop key={i} offset={`${i / (cols.length - 1) * 100}%`} stopColor={c}/>)
-      : cols.flatMap((c, i) => [
-          <stop key={`${i}a`} offset={`${i / cols.length * 100}%`} stopColor={c}/>,
-          <stop key={`${i}b`} offset={`${(i + 1) / cols.length * 100}%`} stopColor={c}/>,
-        ]);
-  }
-
+function FilamentVase({ colors, type }) {
+  const cols = (colors && colors.length ? colors : ["#888888"]);
   return (
-    <svg viewBox="0 0 100 100" width="100%" height="100%"
-      style={{ display: "block" }} preserveAspectRatio="xMidYMid meet">
-      <defs>
-        {multi && (
-          <linearGradient id={gid} x1="0%" y1="0%" x2="100%" y2="0%">{stops}</linearGradient>
-        )}
-        <linearGradient id={`${gid}-light`} x1="15%" y1="0%" x2="70%" y2="90%">
-          <stop offset="0%"   stopColor="#fff" stopOpacity="0.42"/>
-          <stop offset="55%"  stopColor="#fff" stopOpacity="0.06"/>
-          <stop offset="100%" stopColor="#fff" stopOpacity="0"/>
-        </linearGradient>
-        <linearGradient id={`${gid}-dark`} x1="40%" y1="20%" x2="85%" y2="100%">
-          <stop offset="0%"   stopColor="#000" stopOpacity="0"/>
-          <stop offset="60%"  stopColor="#000" stopOpacity="0.10"/>
-          <stop offset="100%" stopColor="#000" stopOpacity="0.30"/>
-        </linearGradient>
-        <radialGradient id={`${gid}-ground`} cx="50%" cy="50%" r="50%">
-          <stop offset="0%"   stopColor="#000" stopOpacity="0.20"/>
-          <stop offset="100%" stopColor="#000" stopOpacity="0"/>
-        </radialGradient>
-      </defs>
-
-      {/* Ombre portee */}
-      <ellipse cx="50" cy="84" rx="30" ry="6" fill={`url(#${gid}-ground)`}/>
-
-      {/* Corps */}
-      <path d={VASE_SIL} fill={multi ? `url(#${gid})` : cols[0]}/>
-      {/* Torsion (creux) */}
-      <path d={VASE_TWIST} fill="#000" opacity="0.11"/>
-      {/* Lumiere + ombre de volume */}
-      <path d={VASE_SIL} fill={`url(#${gid}-light)`}/>
-      <path d={VASE_SIL} fill={`url(#${gid}-dark)`}/>
-      {/* Lisere lumineux */}
-      <path d={VASE_RIM} fill="#fff" opacity="0.30"/>
-    </svg>
+    <div style={{ position:"relative", width:"100%", height:"100%",
+      isolation:"isolate" /* confine les blend modes a ce bloc */ }}>
+      {/* Couleur du filament, decoupee a la silhouette */}
+      <div style={{ position:"absolute", inset:0, ...colorBg(cols, type), ...MASK }}/>
+      {/* Ombrage : assombrit la couleur */}
+      <img src={VASE_SHADE} alt="" aria-hidden style={{ position:"absolute", inset:0,
+        width:"100%", height:"100%", objectFit:"contain",
+        mixBlendMode:"multiply", pointerEvents:"none" }}/>
+      {/* Reflets : eclaircit sans delaver la teinte */}
+      <img src={VASE_SPEC} alt="" aria-hidden style={{ position:"absolute", inset:0,
+        width:"100%", height:"100%", objectFit:"contain",
+        mixBlendMode:"screen", pointerEvents:"none" }}/>
+    </div>
   );
 }
 
@@ -1965,10 +1930,8 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
         renderCover={f => {
           const colors = parseColorsList(f.color, f.colors_array);
           return (
-            <div style={{ width:"100%", height:"100%", display:"flex",
-              alignItems:"center", justifyContent:"center",
-              background:"var(--surface2)", padding:"6%", boxSizing:"border-box" }}>
-              <FilamentVase colors={colors} type={f.multicolor_type} uid={f.id}/>
+            <div style={{ width:"100%", height:"100%", background:"var(--surface2)" }}>
+              <FilamentVase colors={colors} type={f.multicolor_type}/>
             </div>
           );
         }}
