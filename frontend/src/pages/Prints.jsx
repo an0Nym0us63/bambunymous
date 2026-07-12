@@ -823,7 +823,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))}
             onUpload={async(f)=>{ await uploadPhoto(f); }}
             onDeleteUpload={async(filename)=>{ await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}
-            onCountChange={setPhotoCount}/>
+            onCountChange={setPhotoCount}
+            coverPhoto={p.cover_photo}
+            onCoverChange={(name)=>{ setP(prev=>({ ...prev, cover_photo:name })); onChanged?.(); }}/>
 
           {/* Bouton MakerWorld si design_id disponible */}
           {p.design_id && (
@@ -1520,11 +1522,31 @@ function PhotoDeleteConfirm({ label, onCancel, onConfirm }) {
   );
 }
 
-function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], onDeleteUpload, onCountChange }) {
+function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], onDeleteUpload,
+                           onCountChange, coverPhoto, onCoverChange }) {
   const [lightbox, setLightbox] = useState(null);
   const [diskFiles, setDiskFiles] = useState([]);
   const [photoToDelete, setPhotoToDelete] = useState(null);
   const [deletedNames, setDeletedNames] = useState(new Set());
+
+  // Appui long -> menu (meme geste que les photos de filament). La croix de
+  // suppression sur chaque vignette encombrait et se declenchait par erreur.
+  const [photoMenu, setPhotoMenu] = useState(null);   // { item, canCover }
+  const pressTimer = React.useRef(null);
+  const startPress = (item, canCover) => {
+    pressTimer.current = setTimeout(() => setPhotoMenu({ item, canCover }), 500);
+  };
+  const cancelPress = () => clearTimeout(pressTimer.current);
+
+  const setAsCover = async () => {
+    const name = photoMenu?.item?.name;
+    if (!name) return;
+    try {
+      await client.post(`/prints/${printId}/photo/${name}/primary`);
+      onCoverChange?.(name);
+    } catch (e) { alert("Erreur : " + (e.response?.data?.detail || e.message)); }
+    setPhotoMenu(null);
+  };
 
   const reloadDiskFiles = () => client.get("/prints/" + printId + "/snapshots")
       .then(r => setDiskFiles(r.data.files || []))
@@ -1584,7 +1606,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
     return oa - ob;
   });
 
-  const Row = ({ title, items, startIdx = 0, onAdd, onDeleteItem }) => {
+  const Row = ({ title, items, startIdx = 0, onAdd, onDeleteItem, canCover = false }) => {
     const scrollRef = React.useRef(null);
     if (!items.length && !onAdd) return null;
     const scroll = (dir) => scrollRef.current?.scrollBy({ left: dir * 120, behavior: "smooth" });
@@ -1614,34 +1636,29 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
         </div>
         <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6, scrollbarWidth:"none" }}>
           {items.map((item, i) => (
-            <div key={i} style={{ position:"relative", flexShrink:0 }}>
-              {onDeleteItem && item.name && (
-                <button onClick={e=>{ e.stopPropagation();
-                  setPhotoToDelete(item);
-                }} style={{ position:"absolute", top:4, right:4, zIndex:2, width:22, height:22,
-                  borderRadius:"50%", background:"rgba(0,0,0,0.6)", border:"none",
-                  cursor:"pointer", color:"white", fontSize:14,
-                  display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-              )}
-              <div onClick={() => setLightbox(flatItems[startIdx + i])} style={{ cursor:"pointer" }}>
-              <img src={item.url} alt={item.label}
-                style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
-                  border:"1px solid var(--border)", display:"block" }}
-                onError={e => { e.currentTarget.style.display="none"; }}/>
+            <div key={i} style={{ position:"relative", flexShrink:0 }}
+              onMouseDown={() => startPress(item, canCover)}
+              onMouseUp={cancelPress} onMouseLeave={cancelPress}
+              onTouchStart={() => startPress(item, canCover)} onTouchEnd={cancelPress}
+              onContextMenu={e => e.preventDefault()}>
+              <div onClick={() => { if (!photoMenu) setLightbox(flatItems[startIdx + i]); }}
+                style={{ cursor:"pointer" }}>
+                <img src={item.url} alt={item.label}
+                  style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
+                    border: item.name && item.name === coverPhoto
+                      ? "2px solid #22c55e" : "1px solid var(--border)",
+                    display:"block" }}
+                  onError={e => { e.currentTarget.style.display="none"; }}/>
               </div>
               <span style={{ position:"absolute", bottom:4, left:4,
                 background:"rgba(0,0,0,0.65)", color:"white",
                 fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:4 }}>
                 {item.label}
               </span>
-              {item.snap && (
-                <button onClick={e => handleDelete(e, item.snap)}
-                  style={{ position:"absolute", top:4, right:4,
-                    background:"rgba(0,0,0,0.6)", border:"none", borderRadius:"50%",
-                    width:20, height:20, cursor:"pointer", color:"white", fontSize:11,
-                    display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  ✕
-                </button>
+              {item.name && item.name === coverPhoto && (
+                <span style={{ position:"absolute", top:4, right:4, fontSize:9,
+                  background:"rgba(34,197,94,0.9)", color:"white",
+                  padding:"1px 5px", borderRadius:4 }}>⭐</span>
               )}
             </div>
           ))}
@@ -1659,7 +1676,8 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
 
   return (
     <>
-      <Row title="Photos" items={photoItems} startIdx={0} onAdd={async(f)=>{ await onUpload?.(f); reloadDiskFiles(); }} onDeleteItem={onDeleteUpload}/>
+      <Row title="Photos" items={photoItems} startIdx={0} canCover
+        onAdd={async(f)=>{ await onUpload?.(f); reloadDiskFiles(); }} onDeleteItem={onDeleteUpload}/>
       <Row title="Milestones" items={milestoneItems} startIdx={photoItems.length}/>
       {lightbox && (
         <div onClick={() => setLightbox(null)}
@@ -1698,6 +1716,46 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
           )}
         </div>
       )}
+    {photoMenu && (
+      <div style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(0,0,0,0.5)" }}
+        onClick={() => setPhotoMenu(null)}>
+        <div onClick={e => e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0,
+          right:0, background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+          padding:"20px 16px 32px" }}>
+          <img src={photoMenu.item.url} alt="" style={{ width:"100%", maxHeight:180,
+            objectFit:"contain", borderRadius:10, marginBottom:14 }}/>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {/* Vignette de la galerie : reservee aux vraies photos (les milestones
+                sont des captures automatiques, pas des cliches a mettre en avant). */}
+            {photoMenu.canCover && photoMenu.item.name && photoMenu.item.name !== coverPhoto && (
+              <button onClick={setAsCover} style={{ padding:"12px", borderRadius:10, border:"none",
+                cursor:"pointer", background:"rgba(34,197,94,0.12)", color:"#22c55e",
+                fontSize:14, fontWeight:700 }}>
+                ⭐ Définir comme photo principale
+              </button>
+            )}
+            <button onClick={() => {
+                const it = photoMenu.item;
+                setPhotoMenu(null);
+                if (it.snap) {
+                  handleDelete({ stopPropagation(){} }, it.snap);
+                } else {
+                  setPhotoToDelete(it);
+                }
+              }}
+              style={{ padding:"12px", borderRadius:10, border:"none", cursor:"pointer",
+                background:"rgba(239,68,68,0.12)", color:"#ef4444", fontSize:14, fontWeight:700 }}>
+              🗑 Supprimer
+            </button>
+            <button onClick={() => setPhotoMenu(null)}
+              style={{ padding:"12px", borderRadius:10, border:"1px solid var(--border)",
+                cursor:"pointer", background:"none", color:"var(--muted)", fontSize:13 }}>
+              Annuler
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     {photoToDelete && <PhotoDeleteConfirm
       label={photoToDelete.label||photoToDelete.name}
       onCancel={()=>setPhotoToDelete(null)}

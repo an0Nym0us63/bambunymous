@@ -45,6 +45,7 @@ class PrintOut(BaseModel):
     number_of_items: int; sold_units: int
     sold_price_total: Optional[float]; margin: float
     plate_id: str; design_id: Optional[str]; printer_model: str
+    cover_photo: Optional[str] = None   # photo mise en avant (vignette galerie)
     group_id: Optional[int] = None
     group_name: Optional[str] = None
     filament_usage: List[FilamentOut] = []
@@ -381,9 +382,13 @@ async def prints_gallery(_: str = Depends(get_current_user)):
     for p in rows:
         manual = [s for s in (p.snapshots or []) if s.trigger == "manual"]
         photos = [
-            {"url": f"/api/v1/prints/{p.id}/file/{(s.file_path or '').split('/')[-1]}", "label": s.trigger}
+            {"url": f"/api/v1/prints/{p.id}/file/{(s.file_path or '').split('/')[-1]}",
+             "name": (s.file_path or "").split("/")[-1], "label": s.trigger}
             for s in manual if s.file_path
         ]
+        # La vignette de la galerie est photos[0] : on remonte la photo choisie.
+        if p.cover_photo:
+            photos.sort(key=lambda ph: ph["name"] != p.cover_photo)
         if p.group_id:
             acc = group_acc.setdefault(p.group_id, {
                 "id": p.group_id,
@@ -850,6 +855,22 @@ async def delete_print(print_id: int, _: str = Depends(get_current_user)):
     return {"ok": True}
 
 
+
+
+@router.post("/{print_id}/photo/{filename}/primary")
+async def set_print_cover_photo(print_id: int, filename: str,
+                                _: str = Depends(get_current_user)):
+    """Definit la photo mise en avant (vignette de la galerie)."""
+    d = DATA_DIR / "prints" / str(print_id)
+    if not (d / filename).is_file():
+        raise HTTPException(404, "Photo introuvable")
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Print introuvable")
+        p.cover_photo = filename
+        await db.commit()
+    return {"ok": True, "cover_photo": filename}
 
 
 @router.get("/{print_id}/photos")
