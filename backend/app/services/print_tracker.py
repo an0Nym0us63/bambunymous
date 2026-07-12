@@ -324,6 +324,18 @@ def on_finish(job_id: str, gcode_state: str):
         pct = int(st.get("last_pct", 0))
         logger.info(f"[MILESTONE] 📸 Snapshot échec à {pct}% print_id={pid}")
         _bg(_snap(pid, f"fail-{pct}pct"))
+    else:
+        # Filet : si l'imprimante n'a jamais publie mc_percent=100 (le dernier
+        # rapport peut sauter la progression), on prend quand meme le cliche de
+        # fin. Sans ca, le milestone 100% pouvait etre manque silencieusement.
+        fire_100 = False
+        with _LOCK:
+            if not st.get("m100"):
+                st["m100"] = True
+                fire_100 = True
+        if fire_100:
+            logger.info(f"[MILESTONE] 📸 Snapshot pct100 (fallback fin de print) print_id={pid}")
+            _bg(_snap(pid, "pct100"))
     _bg(_finalize(pid, job_id, final, st.get("start_time")))
 
 

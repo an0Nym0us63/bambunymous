@@ -208,9 +208,15 @@ class MQTTManager:
         from app.services.settings_service import get_setting as _PGS
 
         _jid  = str(p.get("job_id", "")) if p.get("job_id") else ""
-        _gst  = p.get("gcode_state", "")
-        _pct  = float(p.get("mc_percent", 0) or 0)
-        _lay  = int(p.get("layer_num", 0) or 0)
+        # Les rapports MQTT sont des DELTAS : un payload peut tres bien ne pas
+        # contenir gcode_state / mc_percent / layer_num. On lit donc l'etat
+        # FUSIONNE (deja mis a jour plus haut), jamais le delta brut.
+        # Avant, `float(p.get("mc_percent", 0) or 0)` donnait 0 sur un delta sans
+        # progression, ce qui declenchait le detecteur de regression d'on_progress
+        # et remettait a zero les flags de milestones en plein print.
+        _gst  = p.get("gcode_state", "") or (state.status or "")
+        _pct  = float(state.progress or 0)
+        _lay  = int(state.layer or 0)
         _task = p.get("subtask_name", "")
         _url  = p.get("url", "")
 
@@ -251,7 +257,11 @@ class MQTTManager:
             _pth.Thread(target=_local2, daemon=True).start()
 
         # Milestones
-        if _jid and _gst == "RUNNING":
+        # FINISH inclus : l'imprimante bascule gcode_state en FINISH dans le
+        # meme rapport que mc_percent=100. En n'ecoutant que RUNNING, le
+        # franchissement du palier 100% n'etait jamais evalue et le snapshot
+        # pct100 ne partait jamais.
+        if _jid and _gst in ("RUNNING", "FINISH"):
             _op(_jid, _pct, _lay)
         # Fin
         if _jid and _gst in ("FINISH", "FAILED"):
