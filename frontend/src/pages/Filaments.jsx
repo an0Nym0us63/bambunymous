@@ -782,19 +782,20 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
 }
 
 // ── Vue Bobines ────────────────────────────────────────────────────────────
+// Pastilles compactes — meme langage visuel que les KPIs de l'Historique.
 function KpiBar({ kpis }) {
   return (
-    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-      {kpis.map(({ label, value, accent }) => (
-        <div key={label} style={{ flex:"1 1 100px", padding:"10px 14px", borderRadius:12,
-          background:"var(--surface2)", border:"1px solid var(--border)",
-          display:"flex", flexDirection:"column", gap:2 }}>
-          <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:"0.06em" }}>{label}</span>
-          <span style={{ fontSize:18, fontWeight:800, fontFamily:"JetBrains Mono,monospace",
-            color: accent || "var(--text)" }}>{value ?? "—"}</span>
-        </div>
-      ))}
+    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+      {kpis.filter(k => k && k.value !== "—" && k.value != null).map(({ label, value, accent }) => {
+        const color = accent || "#94a3b8";
+        return (
+          <div key={label} style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 10px",
+            borderRadius:20, background:`${color}18`, border:`1px solid ${color}30` }}>
+            <span style={{ fontSize:12, fontWeight:700, color, fontFamily:"monospace" }}>{value}</span>
+            <span style={{ fontSize:11, color:"var(--muted)" }}>{label}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1023,18 +1024,18 @@ function SpoolsView({ filaments, showArchived }) {
     if (showArchived) {
       const prixTotal = spools.reduce((s, b) => s + (b.price_override || 0), 0);
       return [
-        { label:"Bobines", value: spools.length },
-        { label:"Valeur archivée", value: prixTotal > 0 ? `${prixTotal.toFixed(0)}€` : "—" },
+        { label:"archivées", value: spools.length, accent:"#94a3b8" },
+        { label:"valeur",    value: prixTotal > 0 ? `${prixTotal.toFixed(0)} €` : null, accent:"#94a3b8" },
       ];
     }
     const marques = new Set(spools.map(b => b.filament_manufacturer).filter(Boolean)).size;
     const poids = spools.reduce((s, b) => s + (b.remaining_weight_g ?? b.filament_weight_g ?? 0), 0);
     const prix  = spools.reduce((s, b) => s + (b.price_override || 0), 0);
     return [
-      { label:"Bobines",  value: spools.length, accent: spools.length > 0 ? "#22c55e" : undefined },
-      { label:"Marques",  value: marques },
-      { label:"En stock", value: poids > 0 ? `${(poids/1000).toFixed(2).replace(/\.?0+$/,"")} kg` : "—", accent:"#3b82f6" },
-      { label:"Valeur",   value: prix > 0 ? `${prix.toFixed(0)}€` : "—" },
+      { label:"bobines",  value: spools.length, accent:"#3b82f6" },
+      { label:"marques",  value: marques || null, accent:"#8b5cf6" },
+      { label:"en stock", value: poids > 0 ? `${(poids/1000).toFixed(2)} kg` : null, accent:"#f59e0b" },
+      { label:"valeur",   value: prix > 0 ? `${prix.toFixed(0)} €` : null, accent:"#22c55e" },
     ];
   }, [spools, showArchived]);
 
@@ -1419,11 +1420,11 @@ function FilamentsView() {
     const aCommander = filaments.filter(f => f.to_order).length;
     const avecBobines = filaments.filter(f => (f.active_spool_count || 0) > 0).length;
     return [
-      { label:"Références",  value: filaments.length },
-      { label:"Marques",     value: marques },
-      { label:"Types",       value: types },
-      { label:"En stock",    value: avecBobines, accent:"#22c55e" },
-      ...(aCommander > 0 ? [{ label:"À commander", value: aCommander, accent:"#f59e0b" }] : []),
+      { label:"références",  value: filaments.length, accent:"#3b82f6" },
+      { label:"marques",     value: marques || null,  accent:"#8b5cf6" },
+      { label:"types",       value: types || null,    accent:"#06b6d4" },
+      { label:"en stock",    value: avecBobines || null, accent:"#22c55e" },
+      ...(aCommander > 0 ? [{ label:"à commander", value: aCommander, accent:"#f59e0b" }] : []),
     ];
   }, [filaments]);
 
