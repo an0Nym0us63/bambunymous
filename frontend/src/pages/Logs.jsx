@@ -78,7 +78,7 @@ export default function Logs({ embedded = false }) {
       {!embedded && (
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:8 }}>
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Journal</h1>
+            <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Journal</h1>
             <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>
               {status}{fileMb != null ? ` · ${fileMb} Mo` : ""}
               {purged && <span style={{ color:"#f59e0b", marginLeft:6 }}>⚡ Purgé auto</span>}

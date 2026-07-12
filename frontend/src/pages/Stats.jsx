@@ -310,8 +310,8 @@ export default function Stats() {
   );
 
   const header = (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-      <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", margin: 0 }}>Statistiques</h1>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
+      <h1 className="page-title" style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", margin: 0, marginRight: "auto" }}>Statistiques</h1>
       {periodSel}
     </div>
   );

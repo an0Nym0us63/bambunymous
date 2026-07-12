@@ -318,8 +318,8 @@ export default function Settings() {
 
   return (
     <div style={{ maxWidth:640, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-        <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Paramètres</h1>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end" }}>
+        <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0, marginRight:"auto" }}>Paramètres</h1>
         <button onClick={()=>window.location.href="/logs"}
           style={{ padding:"6px 14px", borderRadius:20, border:"1px solid var(--border)",
             background:"var(--surface2)", cursor:"pointer", display:"flex", alignItems:"center", gap:6,

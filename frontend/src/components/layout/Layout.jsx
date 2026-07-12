@@ -1,5 +1,5 @@
 import React from "react";
-import { Outlet, NavLink, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { Home, Settings, LogOut, Package, History, ShoppingBag, BarChart2 } from "lucide-react";
 import { useAuth } from "../../store/auth";
 
@@ -11,6 +11,17 @@ const nav = [
   { to: "/stats",     icon: BarChart2,  label: "Stats"      },
   { to: "/settings",  icon: Settings,   label: "Paramètres" },
 ];
+
+// Titre affiche dans le header mobile : evite de redonder le <h1> de chaque page.
+const TITLES = {
+  "/":          null,            // l'accueil n'a pas de titre propre
+  "/prints":    "Historique",
+  "/filaments": "Filaments",
+  "/objects":   "Objets & Accessoires",
+  "/stats":     "Statistiques",
+  "/settings":  "Paramètres",
+  "/logs":      "Journal",
+};
 
 const S = {
   app:     { display:"flex", height:"100dvh", overflow:"hidden", background:"var(--bg)" },
@@ -45,6 +56,8 @@ function NavItem({ to, icon: Icon, label }) {
 export default function Layout() {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const title = TITLES[pathname] ?? null;
 
   return (
     <div style={S.app}>
@@ -69,11 +82,22 @@ export default function Layout() {
 
       <div style={S.main}>
         {/* Header mobile */}
-        <header className="show-mobile" style={{...S.header, cursor:"pointer"}} onClick={() => navigate("/")}>
-          <img src="/icon-192.png" style={{ width:24, height:24, borderRadius:6, flexShrink:0 }} alt=""/>
-          <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
-            BambuNymous
-          </span>
+        <header className="show-mobile" style={S.header}>
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0, cursor:"pointer" }}
+            onClick={() => navigate("/")}>
+            <img src="/icon-192.png" style={{ width:24, height:24, borderRadius:6, flexShrink:0 }} alt=""/>
+            {!title && (
+              <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
+                BambuNymous
+              </span>
+            )}
+          </div>
+          {title && (
+            <h1 style={{ fontSize:15, fontWeight:700, color:"var(--text)", margin:0,
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {title}
+            </h1>
+          )}
         </header>
 
         <main className="page-content" style={S.page}><Outlet /></main>
@@ -98,6 +122,8 @@ export default function Layout() {
           .hidden-mobile { display:none!important; }
           .show-mobile { display:flex!important; }
           .page-content { padding-bottom: calc(76px + env(safe-area-inset-bottom,0px)) !important; }
+          /* Le titre est deja dans le header mobile : on evite de le repeter. */
+          .page-title { display:none!important; }
         }
       `}</style>
     </div>

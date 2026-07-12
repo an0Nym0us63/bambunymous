@@ -362,7 +362,7 @@ export default function Objects() {
   return (
     <div style={{ maxWidth:900, margin:"0 auto", display:"flex", flexDirection:"column", gap:12 }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
-        <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Objets & Accessoires</h1>
+        <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Objets & Accessoires</h1>
         <div style={{ marginLeft:"auto", display:"flex", gap:2, background:"var(--surface2)",
           borderRadius:10, padding:3, border:"1px solid var(--border)" }}>
           {[["objects","Objets"],["accessories","Accessoires"]].map(([id,label]) => (
