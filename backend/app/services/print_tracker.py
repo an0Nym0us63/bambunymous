@@ -9,7 +9,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Optional, Dict, Any
 
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete
 
 from ..models.print_history import Print, FilamentUsage, PrintSnapshot
 from ..models.filament import Spool
@@ -144,39 +144,13 @@ async def create_print(job_id: str, url: str, taskname: str,
         st["print_id"]    = pid
         st["start_time"]  = time.time()
         st["ams_mapping"] = ams_mapping or []
-    # URLs HTTP pre-signed (AWS S3) expirent en ~60s → lancer un thread immédiat
-    if url.startswith("http"):
-        import threading as _dlt, asyncio as _dla
-        _taskname, _url, _pid, _jid = taskname, url, pid, job_id
-        def _dl_now(_u=_url, _p=_pid, _t=_taskname, _j=_jid):
-            lp = _dla.new_event_loop()
-            async def _go():
-                from .tmf_parser import _download_http, _parse_3mf
-                MAX_ATT = 5
-                DELS    = [15, 30, 60, 120, 180]
-                for _att in range(1, MAX_ATT+1):
-                    try:
-                        logger.info(f"[3MF] ▶ Tentative {_att}/{MAX_ATT} local print_id={_p} url={_u[:50]!r}")
-                        raw = await _download_http(_u)
-                        logger.info(f"[3MF] ✅ Téléchargé {len(raw)} bytes tentative {_att}")
-                        meta = _parse_3mf(raw, _p)
-                        if meta:
-                            await _apply_meta(_p, meta, _t, job_id=_j)
-                            break
-                        else:
-                            raise ValueError("_parse_3mf vide")
-                    except Exception as e:
-                        import traceback as _tb
-                        logger.error(f"[3MF] ❌ Échec tentative {_att}/{MAX_ATT}: {type(e).__name__}: {e}")
-                        if _att < MAX_ATT:
-                            import asyncio as _aio_l; await _aio_l.sleep(DELS[_att-1])
-                        else:
-                            logger.error(f"[3MF] ❌ Abandon local print_id={_p}\n{_tb.format_exc()}")
-            try: lp.run_until_complete(_go())
-            finally: lp.close()
-        _dlt.Thread(target=_dl_now, daemon=True).start()
-    else:
-        _bg(_enrich(pid, job_id, url, taskname, printer_ip, printer_code))
+    # Un seul chemin d'enrichissement (HTTP et FTP) : _enrich -> _apply_meta.
+    # Avant, le HTTP passait par un thread dedie qui dupliquait la logique, et
+    # le FTP par un _enrich qui reimplementait _apply_meta en ligne mais SANS
+    # jamais appeler _costs : les prints FTP n'avaient pas de cout a l'arrivee.
+    # _bg() lance deja un thread avec sa propre boucle : rien n'est bloque, les
+    # URLs pre-signees (~60s de validite) sont attaquees immediatement.
+    _bg(_enrich(pid, job_id, url, taskname, printer_ip, printer_code))
 
 
 async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
@@ -186,6 +160,9 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
     if plate_id != "1": name += " — Plateau " + plate_id
     logger.info(f"[DB] ▶ Sauvegarde print_id={pid} nom={name!r}")
     async with AsyncSessionLocal() as db:
+        # Idempotence : une tentative precedente a pu inserer des usages avant
+        # d'echouer plus loin. On repart proprement.
+        await db.execute(delete(FilamentUsage).where(FilamentUsage.print_id == pid))
         await db.execute(update(Print).where(Print.id == pid).values(
             file_name=name, plate_id=plate_id,
             estimated_seconds=meta.get("estimated_seconds"),
@@ -238,80 +215,36 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
 
 async def _enrich(pid: int, job_id: str, url: str, taskname: str,
                    printer_ip: str, printer_code: str):
-    MAX_ATTEMPTS = 5
-    DELAYS       = [15, 30, 60, 120, 180]
-    meta = None
+    """
+    Recupere et applique le 3MF. extract_3mf leve desormais Invalid3MF sur tout
+    resultat inexploitable (archive tronquee, ZIP corrompu, slice_info absent,
+    aucun filament) : un telechargement partiel declenche donc un vrai retry au
+    lieu de produire silencieusement un print vide.
+
+    Retries volontairement longs : sur un gros print, le fichier peut mettre du
+    temps a apparaitre / se stabiliser dans /cache. Couverture ~35 min.
+    """
+    DELAYS = [10, 20, 45, 90, 180, 300, 600, 900]
+    MAX_ATTEMPTS = len(DELAYS) + 1
+
     for attempt in range(1, MAX_ATTEMPTS + 1):
         try:
             logger.info(f"[3MF] ▶ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} url={url[:60]!r}")
             meta = await extract_3mf(url, taskname, pid, printer_ip, printer_code)
             if not meta:
                 raise ValueError("extraction vide")
-            logger.info(f"[3MF] ✅ Tentative {attempt} OK - titre={meta.get('title')!r} filaments={len(meta.get('filaments',{}))}")
-            break
-        except Exception as _e3:
-            logger.error(f"[3MF] ❌ Échec tentative {attempt}/{MAX_ATTEMPTS}: {_e3}")
-            if attempt < MAX_ATTEMPTS:
-                import asyncio as _aio3; await _aio3.sleep(DELAYS[attempt-1])
-            else:
-                logger.error(f"[3MF] ❌ Abandon print_id={pid} après {MAX_ATTEMPTS} tentatives")
-                return
-    if not meta: return
-    try:
-        if not meta:
-            logger.error(f"[3MF] ❌ Extraction vide pour print_id={pid}")
+            await _apply_meta(pid, meta, taskname, job_id=job_id)
+            logger.info(f"[3MF] ✅ print_id={pid} enrichi à la tentative {attempt}")
             return
-        logger.info(f"[3MF] ✅ titre={meta.get('title')!r} plateau={meta.get('plate_id')} durée={meta.get('estimated_seconds')}s")
-        logger.info(f"[3MF] ✅ vignette={meta.get('plate_image')} fichiers={meta.get('model_3mf')}")
-        logger.info(f"[3MF] ✅ {len(meta.get('filaments', {}))} filaments: " + str({k: f"{v['type']} {v['color']} {v['used_g']}g" for k,v in meta.get('filaments',{}).items()}))
-        name = _clean_name(meta.get("title") or meta.get("file") or taskname)
-        plate_id = meta.get("plate_id", "1")
-        if plate_id != "1": name += " — Plateau " + plate_id
-        async with AsyncSessionLocal() as db:
-            await db.execute(update(Print).where(Print.id == pid).values(
-                file_name=name, plate_id=meta.get("plate_id", "1"),
-                estimated_seconds=meta.get("estimated_seconds"),
-                plate_image=meta.get("plate_image"),
-                model_3mf=meta.get("model_3mf"),
-                design_id=meta.get("design_id", ""),
-            ))
-            for slot, fil in meta.get("filaments", {}).items():
-                if float(fil.get("used_g", 0)) <= 0: continue
-                tray_info = (fil.get("tray_info_idx") or "").strip()
-                spool_id = None
-                try:
-                    spool_id, mode = await _spool_from_slot_or_match(
-                        int(slot), tray_info, fil.get("color", ""), job_id=job_id
-                    )
-                    if spool_id:
-                        logger.info(f"[DB] ✅ slot={slot} → spool_id={spool_id} ({mode}) profil={tray_info!r} couleur={fil.get('color')!r}")
-                    else:
-                        logger.info(f"[DB] ⚠  slot={slot} profil={tray_info!r} → non trouvé ({mode})")
-                except Exception as _e:
-                    logger.warning(f"[DB] slot={slot} matching error: {_e}")
+        except Exception as e:
+            logger.error(f"[3MF] ❌ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} : "
+                         f"{type(e).__name__}: {e}")
+            if attempt < MAX_ATTEMPTS:
+                await asyncio.sleep(DELAYS[attempt - 1])
 
-                db.add(FilamentUsage(
-                    print_id=pid,
-                    filament_type=fil.get("type", ""),
-                    color_hex=fil.get("color", ""),
-                    grams_used=float(fil.get("used_g", 0)),
-                    ams_slot=int(slot),
-                    spool_id=spool_id,
-                ))
-            await db.commit()
-            # Déduire immédiatement les grammes des bobines
-            p_obj = await db.get(Print, pid)
-            if p_obj:
-                await _deduct_spool_weights(db, p_obj)
-                await db.commit()
-                try:
-                    from ..core.mqtt import invalidate_tray_cache
-                    invalidate_tray_cache()
-                except Exception:
-                    pass
-        logger.info(f"[DB] ✅ Print {pid} sauvegardé: {name!r} avec {len(meta.get('filaments', {}))} filaments")
-    except Exception as e:
-        logger.error(f"_enrich pid={pid}: {e}")
+    logger.error(f"[3MF] ❌ ABANDON print_id={pid} après {MAX_ATTEMPTS} tentatives "
+                 f"(~{sum(DELAYS)//60} min). Le print reste sans métadonnées ; "
+                 f"un ré-import manuel du 3MF est possible.")
 
 
 # ── Milestones ─────────────────────────────────────────────────────────────
@@ -599,7 +532,7 @@ async def create_manual_print(local_path: str, print_date: datetime) -> Optional
             p = Print(print_date=print_date, file_name="import", print_type="manual", status="SUCCESS")
             db.add(p); await db.flush(); pid = p.id; await db.commit()
         from ..services.tmf_parser import _parse_3mf, _clean_name
-        meta = _parse_3mf(data, pid)
+        meta = _parse_3mf(data, pid, strict=False)
         name = _clean_name(meta.get("title") or meta.get("file") or Path(local_path).stem)
         plate_id2 = meta.get("plate_id", "1")
         if plate_id2 != "1": name += " — Plateau " + plate_id2
