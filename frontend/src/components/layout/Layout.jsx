@@ -98,6 +98,11 @@ export default function Layout() {
               {title}
             </h1>
           )}
+          {/* Emplacement d'actions : les pages y injectent leurs boutons par
+              portail (cf. Filaments -> Scanner). Sur mobile, cela evite qu'une
+              barre d'actions occupe une ligne entiere sous le header. */}
+          <div id="header-actions" style={{ marginLeft:"auto", display:"flex",
+            alignItems:"center", gap:6, flexShrink:0 }}/>
         </header>
 
         <main className="page-content" style={S.page}><Outlet /></main>

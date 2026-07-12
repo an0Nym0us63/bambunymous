@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import ScanSheet from "../components/ScanSheet";
+import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine } from "lucide-react";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
@@ -2043,7 +2044,19 @@ export default function Filaments() {
 
   return (
     <div style={{ maxWidth:960, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:10 }}>
+      {/* Mobile : le bouton part dans le header (une ligne de gagnee).
+          Desktop : le header mobile n'existe pas, on le garde dans le flux. */}
+      <HeaderAction>
+        <button onClick={() => setScanOpen(true)} aria-label="Scanner un échantillon"
+          style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px",
+            borderRadius:20, border:"none", cursor:"pointer",
+            background:"#3b82f6", color:"white", fontSize:12, fontWeight:700 }}>
+          <ScanLine size={14}/> Scanner
+        </button>
+      </HeaderAction>
+
+      <div className="hidden-mobile" style={{ display:"none", alignItems:"center",
+        justifyContent:"flex-end", gap:10 }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)",
           margin:0, marginRight:"auto" }}>Filaments</h1>
         <button onClick={() => setScanOpen(true)}
