@@ -39,6 +39,49 @@ def _job(job_id: str) -> dict:
         return _JOBS[job_id]
 
 
+async def resume_enrichment():
+    """
+    Relance l'enrichissement des prints restes sans 3MF.
+
+    _enrich tourne dans un thread (_bg) et ses retries ne vivent qu'en memoire :
+    un redemarrage du container pendant la fenetre de retry (~35 min) faisait
+    perdre le 3MF DEFINITIVEMENT — pas de vignette, pas de filament, pas de cout,
+    et aucune trace du probleme. C'est arrive au print 1677.
+
+    Au demarrage, on rejoue donc les prints recents qui n'ont pas de model_3mf.
+    On passe par le FTP de l'imprimante et non par l'URL cloud stockee : celle-ci
+    est pre-signee et a toutes les chances d'avoir expire. Le fichier, lui, reste
+    dans /cache de l'imprimante.
+    """
+    from datetime import timedelta
+    try:
+        async with AsyncSessionLocal() as db:
+            ip   = await get_setting(db, "PRINTER_IP")
+            code = await get_setting(db, "PRINTER_ACCESS_CODE")
+            cutoff = datetime.utcnow() - timedelta(days=3)
+            rows = (await db.execute(
+                select(Print).where(
+                    Print.model_3mf.is_(None),
+                    Print.task_name.isnot(None),
+                    Print.print_date >= cutoff,
+                )
+            )).scalars().all()
+
+        if not rows:
+            return
+        logger.info(f"[RESUME] {len(rows)} print(s) sans 3MF — reprise de l'enrichissement")
+        for p in rows:
+            # FTP d'abord : l'URL cloud pre-signee est probablement expiree.
+            url = "ftp://" if (ip and code) else (p.model_url or "")
+            if not url:
+                logger.warning(f"[RESUME] print_id={p.id} : ni FTP ni URL, abandon")
+                continue
+            logger.info(f"[RESUME] ▶ print_id={p.id} taskname={p.task_name!r} via {url[:8]}")
+            _bg(_enrich(p.id, p.job_id or "", url, p.task_name, ip or "", code or ""))
+    except Exception as e:
+        logger.error(f"[RESUME] Erreur resume_enrichment: {e}")
+
+
 async def restore_in_progress():
     """
     Au démarrage du container, recharge les prints IN_PROGRESS depuis la DB
@@ -134,6 +177,10 @@ async def create_print(job_id: str, url: str, taskname: str,
             print_type=print_type,
             status="IN_PROGRESS",
             design_id=design_id or None,
+            # Persistes pour pouvoir REPRENDRE l'enrichissement apres un
+            # redemarrage : le thread _enrich meurt avec le process.
+            task_name=taskname or None,
+            model_url=url or None,
         )
         db.add(p); await db.flush()
         pid = p.id; await db.commit()

@@ -81,6 +81,8 @@ async def _migrate():
         ("filaments",      "fila_color_code",  "TEXT"),
         ("filaments",      "name_en",          "TEXT"),
         ("filaments",      "fila_type",        "TEXT"),
+        ("prints",         "task_name",        "TEXT"),
+        ("prints",         "model_url",        "TEXT"),
         ("filaments",      "color_bucket",     "TEXT"),
         ("filaments",      "code",             "TEXT"),
         ("groups",         "number_of_items",          "INTEGER DEFAULT 1"),

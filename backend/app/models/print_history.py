@@ -23,6 +23,10 @@ class Print(Base):
     plate_image         = Column(String(512), nullable=True)
     external_ref        = Column(String(256), nullable=True)  # stem fichier Spoolnymous ex: 20250807163605_19b0e749
     model_3mf           = Column(String(512), nullable=True)
+    # Necessaires pour REPRENDRE l'enrichissement apres un redemarrage : sans eux,
+    # un restart pendant la fenetre de retry perdait le 3MF definitivement.
+    task_name           = Column(String(512), nullable=True)
+    model_url           = Column(String(1024), nullable=True)
 
     estimated_seconds   = Column(Float, nullable=True)
     duration_seconds    = Column(Float, nullable=True)

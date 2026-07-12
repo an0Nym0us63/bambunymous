@@ -743,6 +743,38 @@ async def prints_stats(
         }
 
 
+@router.post("/{print_id}/reenrich")
+async def reenrich_print(print_id: int, _: str = Depends(get_current_user)):
+    """
+    Relance manuellement la recuperation du 3MF (vignette, filaments, couts).
+    Utile quand l'enrichissement a ete perdu — redemarrage pendant la fenetre de
+    retry, imprimante injoignable, 3MF pas encore ecrit dans /cache…
+    """
+    from ....services.print_tracker import _enrich, _bg
+    from ....services.settings_service import get_setting
+
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Print introuvable")
+        if not p.task_name:
+            raise HTTPException(
+                400,
+                "Ce print n'a pas de nom de tache enregistre : il est anterieur au "
+                "suivi de reprise, ou a ete cree manuellement. Import du 3MF a la main.",
+            )
+        ip   = await get_setting(db, "PRINTER_IP")
+        code = await get_setting(db, "PRINTER_ACCESS_CODE")
+
+    # FTP prioritaire : l'URL cloud est pre-signee et expire vite.
+    url = "ftp://" if (ip and code) else (p.model_url or "")
+    if not url:
+        raise HTTPException(400, "Ni FTP configure, ni URL enregistree")
+
+    _bg(_enrich(print_id, p.job_id or "", url, p.task_name, ip or "", code or ""))
+    return {"ok": True, "message": "Enrichissement relancé en arrière-plan"}
+
+
 @router.get("/kpis")
 async def prints_kpis(
     status: Optional[str] = None,
