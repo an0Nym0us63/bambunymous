@@ -114,7 +114,15 @@ export default function GalleryCompare({
               onTouchEnd={cancelPress}
               onContextMenu={e => e.preventDefault()}
               style={{ position:"relative", borderRadius:10, overflow:"hidden", cursor:"pointer",
-                aspectRatio:"1", background:"var(--surface2)", border: checked ? "2px solid #3b82f6" : "2px solid transparent" }}>
+                aspectRatio:"1", background:"var(--surface2)",
+                border: checked ? "2px solid #3b82f6" : "2px solid transparent",
+                // Liseré du nuancier : inset box-shadow et NON un border. Une
+                // bordure translucide sur un element peint laisse transparaitre
+                // ce qu'il y a derriere (halo) ; l'ombre interne se peint
+                // par-dessus la couleur et reste lisible du blanc au noir.
+                boxShadow: (swatchMode && !checked)
+                  ? "inset 0 0 0 1px rgba(128,128,128,0.30)"
+                  : undefined }}>
               {renderCover ? renderCover(item) : img ? (
                 <img src={img} alt={getTitle(item)} style={{ width:"100%", height:"100%", objectFit:"cover" }}
                   onError={e => { e.currentTarget.style.display="none"; }}/>
