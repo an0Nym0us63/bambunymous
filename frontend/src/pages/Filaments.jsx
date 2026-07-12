@@ -1875,41 +1875,6 @@ function hexToHsl(hex) {
   return [Math.round(hue*60), Math.round(s*100), Math.round(l*100)];
 }
 
-// ── Nuancier : rendu "vase torsadé" ───────────────────────────────────────
-// Le modele 3D est pre-calcule UNE fois en niveaux de gris (ray-marching d'un
-// cube arrondi torsade) et livre en deux calques : l'ombrage (multiply) et les
-// reflets (screen). La couleur du filament est peinte dessous, masquee par la
-// silhouette. On obtient donc une forme et un eclairage 3D corrects pour
-// n'importe quelle teinte, sans stocker une image par coloris.
-const VASE_SHADE = "/vase-shade.png";
-const VASE_SPEC  = "/vase-spec.png";
-
-const MASK = {
-  WebkitMaskImage: `url(${VASE_SHADE})`,  maskImage: `url(${VASE_SHADE})`,
-  WebkitMaskSize: "contain",              maskSize: "contain",
-  WebkitMaskRepeat: "no-repeat",          maskRepeat: "no-repeat",
-  WebkitMaskPosition: "center",           maskPosition: "center",
-};
-
-function FilamentVase({ colors, type }) {
-  const cols = (colors && colors.length ? colors : ["#888888"]);
-  return (
-    <div style={{ position:"relative", width:"100%", height:"100%",
-      isolation:"isolate" /* confine les blend modes a ce bloc */ }}>
-      {/* Couleur du filament, decoupee a la silhouette */}
-      <div style={{ position:"absolute", inset:0, ...colorBg(cols, type), ...MASK }}/>
-      {/* Ombrage : assombrit la couleur */}
-      <img src={VASE_SHADE} alt="" aria-hidden style={{ position:"absolute", inset:0,
-        width:"100%", height:"100%", objectFit:"contain",
-        mixBlendMode:"multiply", pointerEvents:"none" }}/>
-      {/* Reflets : eclaircit sans delaver la teinte */}
-      <img src={VASE_SPEC} alt="" aria-hidden style={{ position:"absolute", inset:0,
-        width:"100%", height:"100%", objectFit:"contain",
-        mixBlendMode:"screen", pointerEvents:"none" }}/>
-    </div>
-  );
-}
-
 function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeChange, onItemClick }) {
   // Filaments déjà filtrés ET triés par le parent
 
@@ -1929,11 +1894,7 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
         swatchMode={true}
         renderCover={f => {
           const colors = parseColorsList(f.color, f.colors_array);
-          return (
-            <div style={{ width:"100%", height:"100%", background:"var(--surface2)" }}>
-              <FilamentVase colors={colors} type={f.multicolor_type}/>
-            </div>
-          );
+          return <div style={{ width:"100%", height:"100%", ...colorBg(colors, f.multicolor_type) }}/>;
         }}
         compareFields={[
           ["Matière",  f => f.material],
