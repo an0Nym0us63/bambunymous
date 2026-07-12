@@ -337,14 +337,9 @@ function LabelsCard({ card, cardTitle }) {
         encodant l'ID du filament, et l'ID en clair juste en dessous pour pouvoir
         le saisir à la main. C'est ce QR que lit le bouton Scanner.
       </p>
-      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-        <button type="button" disabled={busy} onClick={() => download(null)} style={btn("#3b82f6")}>
-          {busy ? "Génération…" : "Tous les filaments"}
-        </button>
-        <button type="button" onClick={() => setOpen(true)} style={btn("#8b5cf6")}>
-          Choisir…
-        </button>
-      </div>
+      <button type="button" onClick={() => setOpen(true)} style={btn("#3b82f6")}>
+        Générer les étiquettes…
+      </button>
       {err && <p style={{ fontSize:12, color:"#ef4444", margin:"8px 0 0" }}>⚠ {err}</p>}
 
       {open && (
@@ -508,8 +503,6 @@ export default function Settings() {
 
       <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
-        <LabelsCard card={card} cardTitle={cardTitle}/>
-
         {/* Thème */}
         <div className="card" style={card}>
           <div style={cardTitle}>Apparence</div>
@@ -582,6 +575,9 @@ export default function Settings() {
 
 
 
+
+      {/* ── Étiquettes filaments ───────────────────────────────────── */}
+      <LabelsCard card={card} cardTitle={cardTitle}/>
 
       {/* ── Import depuis Spoolnymous ───────────────────────────────── */}
       <SpoolnymousImport/>
