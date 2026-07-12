@@ -217,6 +217,8 @@ async def filament_labels_pdf(
     from fastapi.responses import StreamingResponse
 
     ids = body.get("ids")
+    # Toute l'etiquette (QR + ligne de l'ID) tient dans ce carre.
+    size_mm = float(body.get("size_mm") or 9)
     stmt = select(Filament)
     if ids:
         stmt = stmt.where(Filament.id.in_(ids))
@@ -225,17 +227,28 @@ async def filament_labels_pdf(
     if not fils:
         raise HTTPException(404, "Aucun filament à imprimer")
 
-    QR    = 9 * mm            # QR code
-    TEXT  = 3.2 * mm          # bandeau de l'ID sous le QR
-    CELLW = QR
-    CELLH = QR + TEXT
-    GAP   = 3.5 * mm
-    MARG  = 10 * mm
+    # L'etiquette COMPLETE (QR + ligne de l'ID) tient dans CELL x CELL. 9 mm est
+    # une contrainte dure : tout se joue a l'interieur.
+    #
+    # Un QR ne descend pas sous 21x21 modules (version 1, minimum du format), donc
+    # module = QR / 21. Le module decide de la lisibilite : on donne au QR tout ce
+    # que le texte ne prend pas, et on ramene le texte a sa hauteur minimale
+    # lisible (2 mm -> police ~5.9 pt, hauteur de capitale 1.5 mm).
+    #
+    #   9 mm  ->  texte 2.0 mm  |  QR 7.0 mm  ->  module 0.333 mm
+    #
+    # 0.33 mm est le plancher realiste pour un scan au telephone. En dessous, la
+    # lecture devient aleatoire ; c'est le prix du format 9 mm impose.
+    CELL = size_mm * mm
+    TEXT = 2.0 * mm                 # hauteur mini lisible pour l'ID
+    QR   = CELL - TEXT              # tout le reste au QR
+    GAP  = 3.5 * mm                 # sert aussi de quiet zone au QR
+    MARG = 10 * mm
     W, H = A4
 
-    cols = int((W - 2*MARG + GAP) // (CELLW + GAP))
-    rows = int((H - 2*MARG + GAP) // (CELLH + GAP))
-    per_page = cols * rows
+    cols = int((W - 2*MARG + GAP) // (CELL + GAP))
+    rows = int((H - 2*MARG + GAP) // (CELL + GAP))
+    per_page = max(1, cols * rows)
 
     buf = _io.BytesIO()
     c = _canvas.Canvas(buf, pagesize=A4)
@@ -246,8 +259,8 @@ async def filament_labels_pdf(
             c.showPage()
         k = i % per_page
         col, row = k % cols, k // cols
-        x = MARG + col * (CELLW + GAP)
-        y = H - MARG - CELLH - row * (CELLH + GAP)
+        x = MARG + col * (CELL + GAP)
+        y = H - MARG - CELL - row * (CELL + GAP)
 
         # Reperes de decoupe : des marques d'angle, PAS un cadre autour du QR.
         # Un QR exige une "quiet zone" blanche autour de lui ; un trait colle au
@@ -255,10 +268,10 @@ async def filament_labels_pdf(
         # fournit.
         c.setLineWidth(0.25)
         c.setStrokeColorRGB(0.80, 0.80, 0.80)
-        tick = 1.2 * mm
+        tick = 1.0 * mm
         for (cx, cy, dx, dy) in [
-            (x, y, 1, 1), (x + CELLW, y, -1, 1),
-            (x, y + CELLH, 1, -1), (x + CELLW, y + CELLH, -1, -1),
+            (x, y, 1, 1), (x + CELL, y, -1, 1),
+            (x, y + CELL, 1, -1), (x + CELL, y + CELL, -1, -1),
         ]:
             c.line(cx, cy, cx + dx*tick, cy)
             c.line(cx, cy, cx, cy + dy*tick)
@@ -274,9 +287,9 @@ async def filament_labels_pdf(
         qr.make(fit=True)
         matrix = qr.get_matrix()
         n = len(matrix)
-        module = QR / n          # 9 mm / 21 = 0.43 mm : le maximum tenable ici
+        module = QR / n
         c.setFillColorRGB(0, 0, 0)
-        qx = x
+        qx = x + (CELL - QR) / 2      # QR centre horizontalement dans l'etiquette
         qy = y + TEXT
         for r_i, line in enumerate(matrix):
             for c_i, on in enumerate(line):
@@ -285,10 +298,14 @@ async def filament_labels_pdf(
                            qy + QR - (r_i + 1)*module,
                            module, module, stroke=0, fill=1)
 
-        # ID en clair, pour la saisie manuelle
-        c.setFont("Helvetica-Bold", 6)
-        c.setFillColorRGB(0.15, 0.15, 0.15)
-        c.drawCentredString(x + CELLW/2, y + 1.0*mm, f"#{f.id}")
+        # ID en clair, pour la saisie manuelle si le scan echoue.
+        # Cap height d'Helvetica ~= 0.72 * corps. On vise 1.5 mm de haut dans la
+        # bande de 2 mm, soit ~5.9 pt.
+        cap_mm  = (TEXT / mm) * 0.75
+        font_pt = cap_mm * 2.83465 / 0.72
+        c.setFont("Helvetica-Bold", font_pt)
+        c.setFillColorRGB(0, 0, 0)
+        c.drawCentredString(x + CELL/2, y + (TEXT - cap_mm*mm) / 2, f"#{f.id}")
 
     c.showPage()
     c.save()
