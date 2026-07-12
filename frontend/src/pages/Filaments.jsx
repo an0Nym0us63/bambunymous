@@ -109,9 +109,21 @@ function RemainBar({ remaining, total=1000 }) {
 }
 
 // ── Modal ajout bobine ─────────────────────────────────────────────────────
-function AddSpoolModal({ filaments, onSave, onClose }) {
-  const [form, setForm] = useState({ filament_id:"", remaining_weight_g:"", price_override:"", location:"", tag_number:"", comment:"" });
+function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect }) {
+  const [form, setForm] = useState({ filament_id: preselect ? String(preselect) : "",
+    remaining_weight_g:"", price_override:"", location:"", tag_number:"", comment:"" });
   const [saving, setSaving] = useState(false);
+  const [q, setQ] = useState("");
+
+  // Ouvrable depuis la fiche filament, qui ne connait pas la liste complete.
+  const [fetched, setFetched] = useState(null);
+  useEffect(() => {
+    if (filamentsProp) return;
+    client.get("/filaments/filaments").then(r => setFetched(r.data || [])).catch(() => setFetched([]));
+  }, [filamentsProp]);
+  const filaments = filamentsProp || fetched || [];
+
+  const selected = filaments.find(f => String(f.id) === String(form.filament_id));
 
   const handleSave = async () => {
     if (!form.filament_id) return;
@@ -143,11 +155,78 @@ function AddSpoolModal({ filaments, onSave, onClose }) {
 
         <div>
           <Label>Filament *</Label>
-          <select value={form.filament_id} onChange={e => setForm(f=>({...f,filament_id:e.target.value}))}
-            style={{ ...inp }} onFocus={inpFocus} onBlur={inpBlur}>
-            <option value="">— Choisir un filament —</option>
-            {filaments.map(f => <option key={f.id} value={f.id}>{f.manufacturer} — {f.name} ({f.material})</option>)}
-          </select>
+
+          {/* Un <select> natif avec des centaines de references, en vrac et sans
+              couleur, etait inutilisable : liste cherchable, groupee par matiere,
+              avec la pastille. */}
+          {selected ? (
+            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 10px",
+              borderRadius:8, background:"rgba(59,130,246,0.10)",
+              border:"1px solid rgba(59,130,246,0.25)" }}>
+              <ColorDot color={selected.color} colorsArray={selected.colors_array}
+                multicolorType={selected.multicolor_type} size={16}/>
+              <span style={{ flex:1, minWidth:0, fontSize:12, color:"var(--text)", fontWeight:600,
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                {selected.translated_name || selected.name}
+                <span style={{ color:"var(--muted)", fontWeight:400 }}>
+                  {" · "}{[selected.manufacturer, selected.fila_type || selected.material].filter(Boolean).join(" · ")}
+                </span>
+              </span>
+              <button onClick={() => { setForm(f => ({...f, filament_id:""})); setQ(""); }}
+                style={{ background:"none", border:"none", cursor:"pointer",
+                  color:"var(--muted)", fontSize:14 }}>✕</button>
+            </div>
+          ) : (<>
+            <input value={q} onChange={e => setQ(e.target.value)} autoFocus
+              placeholder="Rechercher : nom, marque, matière, teinte…"
+              style={{ ...inp, marginBottom:6 }} onFocus={inpFocus} onBlur={inpBlur}/>
+            <div style={{ maxHeight:200, overflowY:"auto", display:"flex",
+              flexDirection:"column", gap:2 }}>
+              {(() => {
+                const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+                const list = filaments.filter(f => {
+                  if (!words.length) return true;
+                  const hay = [f.translated_name, f.name, f.manufacturer, f.material,
+                    f.fila_type, f.color_bucket, "#" + f.id].filter(Boolean).join(" ").toLowerCase();
+                  return words.every(w => hay.includes(w));
+                });
+                if (!list.length) return (
+                  <p style={{ fontSize:11, color:"var(--muted)", padding:8, margin:0 }}>
+                    Aucun filament ne correspond.
+                  </p>
+                );
+                const byMat = {};
+                list.forEach(f => { (byMat[f.material || "Autre"] ||= []).push(f); });
+                return Object.keys(byMat).sort().map(mat => (
+                  <div key={mat}>
+                    <p style={{ fontSize:9, fontWeight:700, color:"var(--muted)",
+                      textTransform:"uppercase", letterSpacing:"0.06em", margin:"6px 0 3px",
+                      position:"sticky", top:0, background:"var(--sheet-bg)", padding:"2px 0" }}>
+                      {mat} <span style={{ opacity:0.6 }}>({byMat[mat].length})</span>
+                    </p>
+                    {byMat[mat]
+                      .sort((a,b) => (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||""))
+                      .map(f => (
+                      <button key={f.id} onClick={() => setForm(fm => ({...fm, filament_id:String(f.id)}))}
+                        style={{ display:"flex", alignItems:"center", gap:8, width:"100%",
+                          padding:"6px 8px", borderRadius:8, border:"none", cursor:"pointer",
+                          textAlign:"left", marginBottom:2, background:"var(--surface2)" }}>
+                        <ColorDot color={f.color} colorsArray={f.colors_array}
+                          multicolorType={f.multicolor_type} size={14}/>
+                        <span style={{ flex:1, minWidth:0, fontSize:11, color:"var(--text)",
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {f.translated_name || f.name}
+                          <span style={{ color:"var(--muted)" }}>
+                            {" · "}{[f.manufacturer, f.fila_type].filter(Boolean).join(" · ")}
+                          </span>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                ));
+              })()}
+            </div>
+          </>)}
         </div>
 
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
@@ -1101,6 +1180,7 @@ function SpoolsView({ filaments, showArchived }) {
 // ── Vue Catalogue ──────────────────────────────────────────────────────────
 // ── Fiche filament catalogue ────────────────────────────────────────────────
 export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
+  const [addSpool, setAddSpool] = useState(false);
   const [lightbox, setLightbox] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -1351,7 +1431,20 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
                         : `${Math.round(f.remaining_weight_total_g)} g`} restants
                   </span>
                 )}
+                <button onClick={() => setAddSpool(true)}
+                  style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:5,
+                    padding:"5px 12px", borderRadius:20, border:"none", cursor:"pointer",
+                    background:"rgba(34,197,94,0.12)", color:"#22c55e",
+                    fontSize:11, fontWeight:700 }}>
+                  <Plus size={13}/> Créer une bobine
+                </button>
               </div>
+
+              {addSpool && (
+                <AddSpoolModal preselect={f.id}
+                  onClose={() => setAddSpool(false)}
+                  onSave={() => { setAddSpool(false); onUpdated?.(); }}/>
+              )}
 
               <div style={{ display:"flex", gap:8, marginTop:20 }}>
                 <button onClick={handleDelete} disabled={deleting}
