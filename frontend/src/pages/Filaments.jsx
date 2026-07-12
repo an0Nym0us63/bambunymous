@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal } from "lucide-react";
+import ScanSheet from "../components/ScanSheet";
+import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine } from "lucide-react";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
 
@@ -1321,7 +1322,16 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
 
               {/* Infos */}
               <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.08em", marginBottom:4 }}>Filament #{f.id}</p>
+                letterSpacing:"0.08em", marginBottom:4 }}>
+                Filament #{f.id}
+                {f.code && (
+                  <span style={{ marginLeft:8, padding:"1px 6px", borderRadius:5,
+                    background:"rgba(59,130,246,0.14)", color:"#60a5fa", fontWeight:800,
+                    fontFamily:"JetBrains Mono,monospace", letterSpacing:"0.08em" }}>
+                    #{f.code}
+                  </span>
+                )}
+              </p>
               <Row label="Marque"           value={f.manufacturer}/>
               <Row label="Matière"          value={f.material}/>
               <Row label="Couleur"          value={colorsList?.length > 1 ? (f?.colors_array||spool?.filament_colors_array||"").split(",").map(c=>hexDisplay(c)).filter(Boolean).join(" / ") : color} mono/>
@@ -1968,21 +1978,34 @@ export default function Filaments() {
   // Lien direct /filaments?id=XXX -> ouvre la fiche du filament (scan QR d'un
   // swatch, marque-page, etc.). On passe par l'API plutot que par la liste
   // deja chargee : le filament peut etre absent du filtre/onglet courant.
-  const deepId = searchParams.get("id");
+  const deepId   = searchParams.get("id");
+  const deepCode = searchParams.get("code");
+  const deepKey  = deepId || deepCode;
   useEffect(() => {
-    if (!deepId) { setDeepFil(null); setDeepErr(null); return; }
+    if (!deepKey) { setDeepFil(null); setDeepErr(null); return; }
     let cancelled = false;
-    client.get(`/filaments/filaments/${deepId}`)
+    const url = deepId
+      ? `/filaments/filaments/${deepId}`
+      : `/filaments/filaments/by-code/${deepCode}`;
+    client.get(url)
       .then(r => { if (!cancelled) { setDeepFil(r.data); setDeepErr(null); } })
-      .catch(() => { if (!cancelled) { setDeepFil(null); setDeepErr(deepId); } });
+      .catch(() => { if (!cancelled) { setDeepFil(null); setDeepErr(deepId ? `#${deepId}` : `#${deepCode}`); } });
     return () => { cancelled = true; };
-  }, [deepId]);
+  }, [deepKey, deepId, deepCode]);
 
   const closeDeep = () => {
     setDeepFil(null); setDeepErr(null);
     const next = new URLSearchParams(searchParams);
-    next.delete("id");
+    next.delete("id"); next.delete("code");
     setSearchParams(next, { replace: true });
+  };
+
+  // Scan : on passe par l'URL, donc le lien est partageable et le retour arriere
+  // referme naturellement la fiche.
+  const [scanOpen, setScanOpen] = useState(false);
+  const onScanned = (code) => {
+    setScanOpen(false);
+    setSearchParams({ code }, { replace: false });
   };
 
   const FAMILIES_G = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
@@ -2034,7 +2057,16 @@ export default function Filaments() {
 
   return (
     <div style={{ maxWidth:960, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
-      <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)" }}>Filaments</h1>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end", gap:10 }}>
+        <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)",
+          margin:0, marginRight:"auto" }}>Filaments</h1>
+        <button onClick={() => setScanOpen(true)}
+          style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
+            borderRadius:20, border:"none", cursor:"pointer",
+            background:"#3b82f6", color:"white", fontSize:12, fontWeight:700 }}>
+          <ScanLine size={14}/> Scanner
+        </button>
+      </div>
 
       {/* Tabs */}
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
@@ -2131,7 +2163,9 @@ export default function Filaments() {
         <SpoolsView filaments={filaments} showArchived={tab==="archived"}/>
       )}
 
-      {/* Fiche ouverte via lien direct ?id=XXX */}
+      {scanOpen && <ScanSheet onDetect={onScanned} onClose={() => setScanOpen(false)}/>}
+
+      {/* Fiche ouverte via lien direct ?id=XXX ou ?code=AA */}
       {deepFil && (
         <FilamentSheet f={deepFil} onClose={closeDeep}
           onDeleted={() => { closeDeep(); client.get("/filaments/filaments").then(({data}) => setAllFilaments(data)).catch(()=>{}); }}
@@ -2142,7 +2176,7 @@ export default function Filaments() {
         <div style={{ padding:"12px 16px", borderRadius:10,
           background:"rgba(239,68,68,0.1)", border:"1px solid rgba(239,68,68,0.3)",
           color:"#ef4444", fontSize:13, display:"flex", alignItems:"center", gap:10 }}>
-          <span style={{ flex:1 }}>Aucun filament #{deepErr}.</span>
+          <span style={{ flex:1 }}>Aucun filament {deepErr}.</span>
           <button onClick={closeDeep} style={{ background:"none", border:"none",
             color:"#ef4444", cursor:"pointer", fontWeight:700 }}>Fermer</button>
         </div>

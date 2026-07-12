@@ -246,6 +246,138 @@ function RecalculateSection() {
     </div>
   );
 }
+// ── Étiquettes filaments (PDF) ─────────────────────────────────────────────
+function LabelsCard({ card, cardTitle }) {
+  const [open, setOpen] = React.useState(false);
+  const [fils, setFils] = React.useState([]);
+  const [sel, setSel] = React.useState(new Set());
+  const [q, setQ] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    client.get("/filaments/filaments")
+      .then(r => {
+        const list = (r.data || []).filter(f => f.code);
+        setFils(list);
+        setSel(new Set(list.map(f => f.id)));   // tout coché par défaut
+      })
+      .catch(() => setErr("Chargement impossible"));
+  }, [open]);
+
+  const shown = fils.filter(f => {
+    if (!q.trim()) return true;
+    const hay = [f.code, f.translated_name, f.name, f.manufacturer, f.material]
+      .filter(Boolean).join(" ").toLowerCase();
+    return q.trim().toLowerCase().split(/\s+/).every(w => hay.includes(w));
+  });
+
+  const toggle = (id) => setSel(prev => {
+    const n = new Set(prev);
+    n.has(id) ? n.delete(id) : n.add(id);
+    return n;
+  });
+
+  const download = async (ids) => {
+    setBusy(true); setErr(null);
+    try {
+      // responseType blob : sans ca axios renvoie une chaine et le PDF est corrompu
+      const r = await client.post("/filaments/labels/pdf", { ids: ids || null },
+        { responseType: "blob" });
+      const url = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = "etiquettes-filaments.pdf";
+      a.click();
+      URL.revokeObjectURL(url);
+      setOpen(false);
+    } catch {
+      setErr("Génération impossible");
+    } finally { setBusy(false); }
+  };
+
+  const btn = (bg) => ({ padding:"8px 14px", borderRadius:8, border:"none", cursor:"pointer",
+    background:bg, color:"white", fontSize:12, fontWeight:700 });
+
+  return (
+    <div className="card" style={card}>
+      <div style={cardTitle}>Étiquettes filaments</div>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
+        Planche d'étiquettes 10 × 10 mm à coller sur les échantillons : le code
+        court (#AA) et la matière. C'est ce code que lit le bouton Scanner.
+      </p>
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+        <button type="button" disabled={busy} onClick={() => download(null)} style={btn("#3b82f6")}>
+          {busy ? "Génération…" : "Tous les filaments"}
+        </button>
+        <button type="button" onClick={() => setOpen(true)} style={btn("#8b5cf6")}>
+          Choisir…
+        </button>
+      </div>
+      {err && <p style={{ fontSize:12, color:"#ef4444", margin:"8px 0 0" }}>⚠ {err}</p>}
+
+      {open && (
+        <div onClick={() => setOpen(false)} style={{ position:"fixed", inset:0, zIndex:9999,
+          background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center",
+          justifyContent:"center", padding:16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:520,
+            maxHeight:"84vh", display:"flex", flexDirection:"column",
+            background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
+
+            <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
+              <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>
+                Étiquettes — {sel.size} / {fils.length}
+              </p>
+              <button type="button" onClick={() => setSel(new Set(fils.map(f => f.id)))}
+                style={{ ...btn("var(--surface2)"), color:"var(--muted)" }}>Tout cocher</button>
+              <button type="button" onClick={() => setSel(new Set())}
+                style={{ ...btn("var(--surface2)"), color:"var(--muted)" }}>Tout décocher</button>
+            </div>
+
+            <div style={{ padding:"0 16px 8px" }}>
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Filtrer…"
+                style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
+                  border:"1px solid var(--border)", background:"var(--surface2)",
+                  color:"var(--text)", fontSize:13, outline:"none" }}/>
+            </div>
+
+            <div style={{ flex:1, overflowY:"auto", padding:"0 8px" }}>
+              {shown.map(f => (
+                <label key={f.id} style={{ display:"flex", alignItems:"center", gap:10,
+                  padding:"7px 8px", borderRadius:8, cursor:"pointer" }}>
+                  <input type="checkbox" checked={sel.has(f.id)} onChange={() => toggle(f.id)}/>
+                  <span style={{ fontFamily:"JetBrains Mono,monospace", fontWeight:800,
+                    fontSize:12, color:"#60a5fa", minWidth:30 }}>#{f.code}</span>
+                  <span style={{ flex:1, minWidth:0, fontSize:12, color:"var(--text)",
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {f.translated_name || f.name}
+                    <span style={{ color:"var(--muted)" }}> · {f.material}</span>
+                  </span>
+                </label>
+              ))}
+              {!shown.length && (
+                <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>
+                  Aucun filament.
+                </p>
+              )}
+            </div>
+
+            <div style={{ padding:"12px 16px", display:"flex", gap:8 }}>
+              <button type="button" onClick={() => setOpen(false)}
+                style={{ ...btn("var(--surface2)"), color:"var(--muted)", flex:1 }}>Annuler</button>
+              <button type="button" disabled={!sel.size || busy}
+                onClick={() => download([...sel])}
+                style={{ ...btn(sel.size ? "#3b82f6" : "var(--border)"), flex:2 }}>
+                {busy ? "Génération…" : `Générer (${sel.size})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Settings() {
   const { theme, toggle } = useTheme();
   const [ip,      setIp]      = useState("");
@@ -329,6 +461,8 @@ export default function Settings() {
       </div>
 
       <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
+
+        <LabelsCard card={card} cardTitle={cardTitle}/>
 
         {/* Thème */}
         <div className="card" style={card}>

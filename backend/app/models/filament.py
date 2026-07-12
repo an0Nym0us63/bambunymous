@@ -23,6 +23,7 @@ class Filament(Base):
     multicolor_type: Mapped[str] = mapped_column(String, default="monochrome")
     colors_array: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # CSV hex
     color_bucket: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # CSV teintes ("bleu,rose") — cf. core/colors.py
+    code: Mapped[Optional[str]] = mapped_column(String(2), nullable=True, unique=True)  # AA..ZZ, cf. core/codes.py
     price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)       # €/bobine
     filament_weight_g: Mapped[float] = mapped_column(Float, default=1000.0)
     spool_weight_g: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
@@ -45,6 +46,7 @@ class Filament(Base):
         Index("idx_filaments_manufacturer", "manufacturer"),
         Index("idx_filaments_profile_id", "profile_id"),
         Index("idx_filaments_color_bucket", "color_bucket"),
+        Index("idx_filaments_code", "code"),
     )
 
 

@@ -6,6 +6,7 @@ from datetime import datetime
 from sqlalchemy import text
 from ..models.filament import Filament, Spool
 from ..core.colors import buckets_for
+# le code court est attribue au demarrage par _backfill_codes()
 from ..models.setting import Setting
 from ..models.print_history import Print as PrintModel, FilamentUsage, PrintTag, Group
 from ..models.object_history import Object, ObjectGroup, Accessory, ObjectAccessory

@@ -10,6 +10,7 @@ import os
 
 from ....core.colors import buckets_for, all_buckets
 from ....core.materials import family_of, is_family
+from ....core.codes import next_free, normalize as norm_code
 
 def _clear_match_cache():
     """Vide le cache de matching MQTT après toute mutation de bobine."""
@@ -88,6 +89,7 @@ class FilamentOut(BaseModel):
     multicolor_type: str
     colors_array: Optional[str]
     color_bucket: Optional[str] = None
+    code: Optional[str] = None          # code court AA..ZZ (étiquettes / scan)
     price: Optional[float]
     filament_weight_g: float
     spool_weight_g: Optional[float]
@@ -171,6 +173,14 @@ class SpoolUpdate(BaseModel):
 
 # ── Filaments ─────────────────────────────────────────────────────────────────
 
+async def _assign_code(db, fil) -> None:
+    """Attribue le premier code court libre. Silencieux si le catalogue est plein."""
+    if getattr(fil, "code", None):
+        return
+    used = (await db.execute(select(Filament.code))).scalars().all()
+    fil.code = next_free(used)
+
+
 @router.get("/filaments", response_model=list[FilamentOut])
 async def list_filaments(
     q: Optional[str] = Query(None),
@@ -195,6 +205,97 @@ async def list_filaments(
     result = await db.execute(stmt)
     filaments = result.scalars().all()
     return [_fil_out(f) for f in filaments]
+
+
+@router.post("/filaments/labels/pdf")
+async def filament_labels_pdf(
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """
+    Planche d'etiquettes 10x10 mm a coller sur les echantillons.
+    body: {ids: [1,2,3]} — ou {} / {"ids": null} pour tous les filaments codes.
+    """
+    import io as _io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas as _canvas
+    from fastapi.responses import StreamingResponse
+
+    ids = body.get("ids")
+    stmt = select(Filament).where(Filament.code.isnot(None))
+    if ids:
+        stmt = stmt.where(Filament.id.in_(ids))
+    stmt = stmt.order_by(Filament.code)
+    fils = (await db.execute(stmt)).scalars().all()
+    if not fils:
+        raise HTTPException(404, "Aucun filament à imprimer (code court manquant)")
+
+    SIZE = 10 * mm          # etiquette
+    GAP  = 4 * mm           # espace entre etiquettes (place pour la decoupe)
+    MARG = 12 * mm
+    W, H = A4
+
+    cols = int((W - 2*MARG + GAP) // (SIZE + GAP))
+    rows = int((H - 2*MARG + GAP) // (SIZE + GAP))
+    per_page = cols * rows
+
+    buf = _io.BytesIO()
+    c = _canvas.Canvas(buf, pagesize=A4)
+    c.setTitle("BambuNymous — étiquettes filaments")
+
+    for i, f in enumerate(fils):
+        if i and i % per_page == 0:
+            c.showPage()
+        k = i % per_page
+        col, row = k % cols, k // cols
+        x = MARG + col * (SIZE + GAP)
+        y = H - MARG - SIZE - row * (SIZE + GAP)
+
+        # Cadre de decoupe
+        c.setLineWidth(0.3)
+        c.setStrokeColorRGB(0.75, 0.75, 0.75)
+        c.rect(x, y, SIZE, SIZE)
+
+        # Code, bien lisible : c'est lui que l'on scanne
+        c.setFillColorRGB(0, 0, 0)
+        c.setFont("Helvetica-Bold", 13)
+        c.drawCentredString(x + SIZE/2, y + SIZE/2 - 0.2*mm, f"#{f.code}")
+
+        # Matiere en petit, sous le code
+        mat = (f.material or "")[:8]
+        if mat:
+            c.setFont("Helvetica", 4.6)
+            c.setFillColorRGB(0.35, 0.35, 0.35)
+            c.drawCentredString(x + SIZE/2, y + 1.4*mm, mat)
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return StreamingResponse(
+        buf, media_type="application/pdf",
+        headers={"Content-Disposition": 'attachment; filename="etiquettes-filaments.pdf"'},
+    )
+
+
+@router.get("/filaments/by-code/{code}", response_model=FilamentOut)
+async def get_filament_by_code(
+    code: str,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """Fiche filament par code court (#AA) — cible du scan."""
+    c = norm_code(code)
+    if not c:
+        raise HTTPException(400, "Code invalide (attendu : deux lettres, ex. AB)")
+    stmt = (select(Filament)
+            .options(selectinload(Filament.spools))
+            .where(Filament.code == c))
+    f = (await db.execute(stmt)).scalar_one_or_none()
+    if not f:
+        raise HTTPException(404, f"Aucun filament #{c}")
+    return _fil_out(f)
 
 
 @router.get("/filaments/{fid}", response_model=FilamentOut)
@@ -239,6 +340,7 @@ async def create_filament(
 
     f = Filament(**body.model_dump())
     f.color_bucket = buckets_for(f.color, f.colors_array)
+    await _assign_code(db, f)
     db.add(f)
     await db.commit()
     await db.refresh(f)
@@ -447,6 +549,7 @@ def _fil_out(f: Filament) -> FilamentOut:
         fila_type=getattr(f,"fila_type",None),
         color=f.color, multicolor_type=f.multicolor_type, colors_array=f.colors_array,
         color_bucket=getattr(f, "color_bucket", None),
+        code=getattr(f, "code", None),
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
         profile_id=f.profile_id, fila_color_code=getattr(f, "fila_color_code", None),
         swatch=f.swatch, to_order=f.to_order,
@@ -940,6 +1043,7 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
             if multicolor_type:
                 fil.multicolor_type = multicolor_type
             fil.color_bucket = buckets_for(fil.color, fil.colors_array)
+            await _assign_code(db, fil)
             db.add(fil)
             await db.flush()
             filament_created = True
