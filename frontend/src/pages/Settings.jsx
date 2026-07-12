@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import client from "../api/client";
+import HeaderAction from "../components/HeaderAction";
 import { usePrinter } from "../store/printer";
 import { useTheme } from "../useTheme";
 
@@ -411,6 +413,7 @@ function LabelsCard({ card, cardTitle }) {
 }
 
 export default function Settings() {
+  const navigate = useNavigate();
   const { theme, toggle } = useTheme();
   const [ip,      setIp]      = useState("");
   const [serial,  setSerial]  = useState("");
@@ -482,9 +485,20 @@ export default function Settings() {
 
   return (
     <div style={{ maxWidth:640, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"flex-end" }}>
+      {/* Mobile : le bouton part dans le header (une ligne de gagnee).
+          Desktop : le header mobile n'existe pas, on le garde dans le flux. */}
+      <HeaderAction>
+        <button onClick={() => navigate("/logs")} aria-label="Journal"
+          style={{ padding:"5px 12px", borderRadius:20, border:"1px solid var(--border)",
+            background:"var(--surface2)", cursor:"pointer", display:"flex",
+            alignItems:"center", gap:5, color:"var(--muted)", fontSize:12 }}>
+          📋 Journal
+        </button>
+      </HeaderAction>
+
+      <div className="hidden-mobile" style={{ display:"none", alignItems:"center", justifyContent:"flex-end" }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0, marginRight:"auto" }}>Paramètres</h1>
-        <button onClick={()=>window.location.href="/logs"}
+        <button onClick={() => navigate("/logs")}
           style={{ padding:"6px 14px", borderRadius:20, border:"1px solid var(--border)",
             background:"var(--surface2)", cursor:"pointer", display:"flex", alignItems:"center", gap:6,
             color:"var(--muted)", fontSize:12 }}>
