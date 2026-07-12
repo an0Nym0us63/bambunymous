@@ -39,8 +39,8 @@ body {
 }
 #root { min-height: 100dvh; display: flex; flex-direction: column; }
 
-.card    { background: var(--surface);  border: 1px solid var(--border); border-radius: var(--r); background-clip: padding-box; }
-.card-sm { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); background-clip: padding-box; }
+.card    { background: var(--surface);  border: 1px solid var(--border); border-radius: var(--r); }
+.card-sm { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); }
 
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }

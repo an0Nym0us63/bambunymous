@@ -809,7 +809,11 @@ function SpoolCard({ s, colorsList, onClick }) {
   return (
     <div onClick={onClick} className="card-sm"
       style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
-        ...colorBg(colorsList, s.filament_multicolor_type) }}>
+        ...colorBg(colorsList, s.filament_multicolor_type),
+        // Une bordure translucide sur un fond peint laisse transparaitre le fond
+        // de page (liseré clair) : on la remplace par un liseré en inset shadow.
+        border:"none",
+        boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.18), 0 1px 3px rgba(0,0,0,0.12)" }}>
       <div style={{ padding:"9px 10px 28px", display:"flex", flexDirection:"column", gap:0 }}>
         {/* Nom : toujours 2 lignes fixes */}
         <p style={{ fontWeight:600, fontSize:11, color:"white", margin:"0 0 7px",
