@@ -115,20 +115,22 @@ export default function GalleryCompare({
               onContextMenu={e => e.preventDefault()}
               style={{ position:"relative", borderRadius:10, overflow:"hidden", cursor:"pointer",
                 aspectRatio:"1", background:"var(--surface2)",
-                border: checked ? "2px solid #3b82f6" : "2px solid transparent",
-                // Liseré du nuancier : inset box-shadow et NON un border. Une
-                // bordure translucide sur un element peint laisse transparaitre
-                // ce qu'il y a derriere (halo) ; l'ombre interne se peint
-                // par-dessus la couleur et reste lisible du blanc au noir.
-                boxShadow: (swatchMode && !checked)
-                  ? "inset 0 0 0 1px rgba(128,128,128,0.30)"
-                  : undefined }}>
+                border: checked ? "2px solid #3b82f6" : "2px solid transparent" }}>
               {renderCover ? renderCover(item) : img ? (
                 <img src={img} alt={getTitle(item)} style={{ width:"100%", height:"100%", objectFit:"cover" }}
                   onError={e => { e.currentTarget.style.display="none"; }}/>
               ) : (
                 <div style={{ display:"flex", alignItems:"center", justifyContent:"center", height:"100%",
                   color:"var(--muted)", fontSize:10, padding:6, textAlign:"center" }}>{getTitle(item)}</div>
+              )}
+              {/* Liseré du nuancier : en surimpression, sinon le calque de couleur
+                  (enfant) recouvre l'ombre interne posee sur le conteneur.
+                  Pas un border : sur un element peint, une bordure translucide
+                  laisse transparaitre le fond (halo). */}
+              {swatchMode && !checked && (
+                <div style={{ position:"absolute", inset:0, borderRadius:8,
+                  pointerEvents:"none",
+                  boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.22)" }}/>
               )}
               {photos.length > 1 && !swatchMode && (
                 <span style={{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,0.6)", color:"white",
