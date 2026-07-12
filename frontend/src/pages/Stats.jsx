@@ -1,140 +1,198 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 
-import { TrendingUp, Weight, Euro, Clock, Layers, Package, ShoppingBag, Trophy, BarChart2 } from "lucide-react";
+import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2 } from "lucide-react";
 import client from "../api/client";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 
-const fmtH = s => { const h=Math.floor((s||0)/3600),m=Math.floor(((s||0)%3600)/60); return h>0?`${h}h${m>0?` ${m}min`:""}`:m>0?`${m}min`:"—"; };
-const fmtDate = d => d ? new Date(d.includes("T")?d:d+"T00:00:00").toLocaleDateString("fr-FR",{month:"short",year:"numeric"}) : "";
+const fmtH = s => {
+  const t = Math.round(s || 0);
+  const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60);
+  return h > 0 ? `${h}h${m > 0 ? ` ${m}min` : ""}` : m > 0 ? `${m}min` : "—";
+};
+const fmtKg  = g => `${((g || 0) / 1000).toFixed(2)} kg`;
+const fmtEur = c => `${(c || 0).toFixed(2)} €`;
+
+// Pastille couleur : dégradé sur un calque interne d'un conteneur overflow:hidden,
+// anneau en box-shadow. Aucun border sur l'élément peint → pas de halo.
+function Dot({ hex, colors, multicolor, size = 12 }) {
+  let bg = hex
+    ? (String(hex).startsWith("#") ? String(hex).slice(0, 7) : `#${String(hex).slice(0, 6)}`)
+    : "#888";
+  const cols = colors
+    ? String(colors).split(",").map(c => `#${c.trim().replace(/^#/, "").slice(0, 6)}`).filter(c => c.length === 7)
+    : null;
+  if (cols && cols.length > 1) {
+    bg = multicolor === "gradient"
+      ? `linear-gradient(135deg, ${cols.join(",")})`
+      : `linear-gradient(90deg, ${cols.map((c, i, a) => `${c} ${i / a.length * 100}%, ${c} ${(i + 1) / a.length * 100}%`).join(",")})`;
+  }
+  return (
+    <div style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0,
+      position: "relative", overflow: "hidden",
+      boxShadow: "inset 0 0 0 1px rgba(128,128,128,0.35)" }}>
+      <div style={{ position: "absolute", inset: 0, background: bg }}/>
+    </div>
+  );
+}
 
 function Section({ title, children }) {
   return (
     <section>
-      <p style={{ fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
-        letterSpacing:"0.08em", margin:"0 0 12px" }}>{title}</p>
+      <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase",
+        letterSpacing: "0.08em", margin: "0 0 12px" }}>{title}</p>
       {children}
     </section>
   );
 }
 
-function KpiCard({ icon: Icon, label, value, sub, color="#3b82f6" }) {
+function KpiCard({ icon: Icon, label, value, sub, color = "#3b82f6" }) {
   return (
-    <div className="card" style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:5 }}>
-      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-        <div style={{ width:28, height:28, borderRadius:8, background:`${color}20`,
-          display:"flex", alignItems:"center", justifyContent:"center" }}>
+    <div className="card" style={{ padding: "14px 16px", display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ width: 28, height: 28, borderRadius: 8, background: `${color}20`,
+          display: "flex", alignItems: "center", justifyContent: "center" }}>
           <Icon size={14} style={{ color }}/>
         </div>
-        <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>{label}</span>
+        <span style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>{label}</span>
       </div>
-      <p style={{ fontSize:20, fontWeight:800, fontFamily:"JetBrains Mono,monospace",
-        color:"var(--text)", margin:0, lineHeight:1 }}>{value ?? "—"}</p>
-      {sub && <p style={{ fontSize:10, color:"var(--muted)", margin:0 }}>{sub}</p>}
+      <p style={{ fontSize: 20, fontWeight: 800, fontFamily: "JetBrains Mono,monospace",
+        color: "var(--text)", margin: 0, lineHeight: 1 }}>{value ?? "—"}</p>
+      {sub && <p style={{ fontSize: 10, color: "var(--muted)", margin: 0 }}>{sub}</p>}
     </div>
   );
 }
 
-// Barre horizontale CSS
-function Bar({ label, value, max, color="#3b82f6", sublabel, badge }) {
-  const pct = max > 0 ? Math.max(2, (value/max)*100) : 0;
+function Bar({ label, value, max, color = "#3b82f6", sublabel, dot }) {
+  const pct = max > 0 ? Math.max(2, (value / max) * 100) : 0;
   return (
-    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0",
-      borderBottom:"1px solid var(--border)" }}>
-      <div style={{ width:140, fontSize:11, color:"var(--text)", fontWeight:600,
-        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flexShrink:0 }}>
-        {badge && <span style={{ display:"inline-block", width:10, height:10, borderRadius:"50%",
-          background:badge, marginRight:6, flexShrink:0 }}/>}
-        {label}
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0",
+      borderBottom: "1px solid var(--border)" }}>
+      <div style={{ width: 130, fontSize: 11, color: "var(--text)", fontWeight: 600, flexShrink: 0,
+        display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
+        {dot}
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{label}</span>
       </div>
-      <div style={{ flex:1, height:8, background:"var(--surface2)", borderRadius:4, overflow:"hidden" }}>
-        <div style={{ width:`${pct}%`, height:"100%", background:color, borderRadius:4,
-          transition:"width 0.5s ease" }}/>
+      <div style={{ flex: 1, height: 8, background: "var(--surface2)", borderRadius: 4, overflow: "hidden" }}>
+        <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 4,
+          transition: "width 0.5s ease" }}/>
       </div>
-      <span style={{ fontSize:11, fontFamily:"JetBrains Mono,monospace", color:"var(--muted)",
-        minWidth:60, textAlign:"right", flexShrink:0 }}>{sublabel}</span>
+      <span style={{ fontSize: 11, fontFamily: "JetBrains Mono,monospace", color: "var(--muted)",
+        minWidth: 64, textAlign: "right", flexShrink: 0 }}>{sublabel}</span>
     </div>
   );
 }
 
-// Graphe barres vertical — évolution mensuelle
-function TimeChart({ data, mode = "count" }) {
-  if (!data || Object.keys(data).length === 0) return null;
-  const keys = Object.keys(data).slice(-18); // 18 derniers mois max
-  const values = keys.map(k => mode==="cost" ? data[k].cost : mode==="weight" ? data[k].weight_g/1000 : data[k].count);
-  const maxVal = Math.max(...values, 1);
+// ── Évolution mensuelle
+function TimeChart({ data }) {
   const [tab, setTab] = useState("count");
-  const currentValues = keys.map(k => tab==="cost" ? data[k].cost : tab==="weight" ? data[k].weight_g/1000 : data[k].count);
-  const currentMax = Math.max(...currentValues, 1);
-  const colors = { count:"#3b82f6", cost:"#22c55e", weight:"#8b5cf6" };
+  const keys = Object.keys(data || {}).slice(-18);
+  if (!keys.length) return null;
+
+  const pick = (k) => {
+    const d = data[k];
+    switch (tab) {
+      case "cost":     return d.cost;
+      case "weight":   return (d.weight_g || 0) / 1000;
+      case "duration": return (d.duration_s || 0) / 3600;
+      default:         return d.count;
+    }
+  };
+  const values = keys.map(pick);
+  const max = Math.max(...values, 1);
+  const colors = { count: "#3b82f6", cost: "#22c55e", weight: "#8b5cf6", duration: "#f59e0b" };
+  const unit = v => tab === "count" ? `${v} prints`
+    : tab === "cost" ? `${v.toFixed(2)}€`
+    : tab === "weight" ? `${v.toFixed(2)}kg`
+    : fmtH(v * 3600);
 
   return (
-    <div className="card" style={{ padding:"16px 16px 10px" }}>
-      {/* Tabs */}
-      <div style={{ display:"flex", gap:6, marginBottom:16 }}>
-        {[["count","Impressions"],["cost","Coût (€)"],["weight","Filament (kg)"]].map(([id,label])=>(
-          <button key={id} onClick={()=>setTab(id)}
-            style={{ padding:"4px 10px", borderRadius:20, fontSize:10, fontWeight:600, cursor:"pointer", border:"none",
-              background:tab===id?colors[id]:"var(--surface2)", color:tab===id?"white":"var(--muted)" }}>
+    <div className="card" style={{ padding: "16px 16px 10px" }}>
+      <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
+        {[["count", "Impressions"], ["cost", "Coût"], ["weight", "Filament"], ["duration", "Durée"]].map(([id, label]) => (
+          <button key={id} onClick={() => setTab(id)}
+            style={{ padding: "4px 10px", borderRadius: 20, fontSize: 10, fontWeight: 600, cursor: "pointer", border: "none",
+              background: tab === id ? colors[id] : "var(--surface2)", color: tab === id ? "white" : "var(--muted)" }}>
             {label}
           </button>
         ))}
       </div>
-      {/* Barres */}
-      <div style={{ display:"flex", gap:3, alignItems:"flex-end", height:100, overflowX:"auto" }}>
+      <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 110, overflowX: "auto" }}>
         {keys.map((k, i) => {
-          const v = currentValues[i];
-          const h = Math.max(2, (v/currentMax)*100);
+          const v = values[i];
+          const failed = data[k].failed || 0;
+          const failPct = tab === "count" && data[k].count > 0 ? (failed / data[k].count) * 100 : 0;
           return (
-            <div key={k} title={`${k}: ${tab==="count"?v+" prints":tab==="cost"?v.toFixed(2)+"€":v.toFixed(2)+"kg"}`}
-              style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, flex:"0 0 auto", width:26 }}>
-              <div style={{ width:"100%", height:`${h}%`, background:colors[tab], borderRadius:"3px 3px 0 0",
-                minHeight:2, transition:"height 0.4s ease" }}/>
-              <span style={{ fontSize:7, color:"var(--muted)", transform:"rotate(-45deg)",
-                transformOrigin:"top center", whiteSpace:"nowrap", marginTop:6 }}>
+            <div key={k} title={`${k} — ${unit(v)}${failed ? ` (${failed} échec${failed > 1 ? "s" : ""})` : ""}`}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: "0 0 auto", width: 26 }}>
+              <div style={{ width: "100%", height: `${Math.max(2, (v / max) * 100)}%`,
+                background: colors[tab], borderRadius: "3px 3px 0 0", minHeight: 2,
+                position: "relative", overflow: "hidden", transition: "height 0.4s ease" }}>
+                {failPct > 0 && (
+                  <div style={{ position: "absolute", bottom: 0, left: 0, right: 0,
+                    height: `${failPct}%`, background: "#ef4444", opacity: 0.75 }}/>
+                )}
+              </div>
+              <span style={{ fontSize: 7, color: "var(--muted)", transform: "rotate(-45deg)",
+                transformOrigin: "top center", whiteSpace: "nowrap", marginTop: 6 }}>
                 {k.slice(5)}
               </span>
             </div>
           );
         })}
       </div>
+      {tab === "count" && (
+        <p style={{ fontSize: 9, color: "var(--muted)", margin: "10px 0 0", textAlign: "right" }}>
+          <span style={{ display: "inline-block", width: 8, height: 8, background: "#ef4444",
+            opacity: 0.75, borderRadius: 2, marginRight: 4 }}/>
+          part d'échecs
+        </p>
+      )}
     </div>
   );
 }
 
-// Camembert SVG simple
-function Donut({ data, title }) {
-  if (!data || data.length === 0) return null;
-  const total = data.reduce((s,d) => s+d.value, 0);
+// ── Donut
+function Donut({ data, title, palette }) {
+  const total = (data || []).reduce((s, d) => s + d.value, 0);
   if (!total) return null;
-  const COLORS = ["#3b82f6","#22c55e","#f59e0b","#ef4444","#8b5cf6","#f97316","#06b6d4","#84cc16","#ec4899","#a78bfa"];
+  const COLORS = ["#3b82f6", "#22c55e", "#f59e0b", "#ef4444", "#8b5cf6", "#f97316", "#06b6d4", "#84cc16", "#ec4899", "#a78bfa"];
+  const items = data.slice(0, 10);
+  const r = 45, cx = 60, cy = 60;
+
   let cum = 0;
-  const slices = data.slice(0,10).map((d,i) => {
+  const slices = items.map((d, i) => {
     const pct = d.value / total;
     const start = cum; cum += pct;
-    const a1 = start * 2 * Math.PI - Math.PI/2;
-    const a2 = cum  * 2 * Math.PI - Math.PI/2;
-    const r = 45, cx = 60, cy = 60;
-    const x1=cx+r*Math.cos(a1),y1=cy+r*Math.sin(a1),x2=cx+r*Math.cos(a2),y2=cy+r*Math.sin(a2);
-    const large = pct > 0.5 ? 1 : 0;
-    return { path:`M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${large},1 ${x2},${y2} Z`,
-      color:COLORS[i%COLORS.length], label:d.name, pct:Math.round(pct*100) };
+    const a1 = start * 2 * Math.PI - Math.PI / 2;
+    const a2 = cum * 2 * Math.PI - Math.PI / 2;
+    const x1 = cx + r * Math.cos(a1), y1 = cy + r * Math.sin(a1);
+    const x2 = cx + r * Math.cos(a2), y2 = cy + r * Math.sin(a2);
+    return {
+      path: `M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${pct > 0.5 ? 1 : 0},1 ${x2},${y2} Z`,
+      color: (palette && d.hex) || COLORS[i % COLORS.length],
+      label: d.name, pct: Math.round(pct * 100),
+    };
   });
+  // Une seule part = cercle complet : l'arc SVG dégénère (départ == arrivée)
+  const single = items.length === 1;
 
   return (
-    <div className="card" style={{ padding:"16px" }}>
-      <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:"0 0 12px" }}>{title}</p>
-      <div style={{ display:"flex", gap:16, alignItems:"flex-start", flexWrap:"wrap" }}>
+    <div className="card" style={{ padding: 16 }}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: "0 0 12px" }}>{title}</p>
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
         <svg width={120} height={120} viewBox="0 0 120 120">
-          {slices.map((s,i) => <path key={i} d={s.path} fill={s.color} stroke="var(--bg)" strokeWidth={1.5}/>)}
-          <circle cx={60} cy={60} r={22} fill="var(--bg)"/>
+          {single
+            ? <circle cx={cx} cy={cy} r={r} fill={slices[0].color}/>
+            : slices.map((s, i) => <path key={i} d={s.path} fill={s.color} stroke="var(--bg)" strokeWidth={1.5}/>)}
+          <circle cx={cx} cy={cy} r={22} fill="var(--bg)"/>
         </svg>
-        <div style={{ flex:1, display:"flex", flexDirection:"column", gap:5 }}>
-          {slices.map((s,i) => (
-            <div key={i} style={{ display:"flex", alignItems:"center", gap:6 }}>
-              <div style={{ width:10, height:10, borderRadius:"50%", background:s.color, flexShrink:0 }}/>
-              <span style={{ fontSize:11, color:"var(--text)", flex:1,
-                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.label}</span>
-              <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"monospace" }}>{s.pct}%</span>
+        <div style={{ flex: 1, minWidth: 140, display: "flex", flexDirection: "column", gap: 5 }}>
+          {slices.map((s, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: s.color, flexShrink: 0 }}/>
+              <span style={{ fontSize: 11, color: "var(--text)", flex: 1,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.label}</span>
+              <span style={{ fontSize: 10, color: "var(--muted)", fontFamily: "monospace" }}>{s.pct}%</span>
             </div>
           ))}
         </div>
@@ -143,126 +201,154 @@ function Donut({ data, title }) {
   );
 }
 
-function TopList({ title, prints, groups, valueKey, valueLabel, barColor="#3b82f6", onItemClick }) {
+// ── Classement prints / groupes
+function TopList({ title, prints, groups, valueKey, valueLabel, barColor = "#3b82f6", onItemClick }) {
   const [mode, setMode] = useState("prints");
-  const items = mode === "groups" ? (groups||[]) : (prints||[]);
-  if (!prints?.length && !groups?.length) return null;
-  const maxVal = Math.max(...items.map(i => Number(i[valueKey])||0), 1);
-  const MEDAL = ["🥇","🥈","🥉"];
+  const hasGroups = (groups || []).length > 0;
+  const items = mode === "groups" ? (groups || []) : (prints || []);
+  if (!prints?.length && !hasGroups) return null;
+  const max = Math.max(...items.map(i => Number(i[valueKey]) || 0), 1);
+  const MEDAL = ["🥇", "🥈", "🥉"];
+
   return (
-    <div className="card" style={{ padding:"14px 16px", display:"flex", flexDirection:"column" }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-        <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:0 }}>{title}</p>
-        {(
-          <div style={{ display:"flex", gap:2, background:"var(--surface2)", borderRadius:20, padding:2 }}>
-            {[["prints","Prints"],["groups","Groupes"]].map(([id,label])=>(
-              <button key={id} onClick={()=>id==="groups"&&!groups?.length?null:setMode(id)}
-                style={{ padding:"3px 10px", borderRadius:18, fontSize:10, fontWeight:600,
-                  cursor: id==="groups"&&!groups?.length?"default":"pointer", border:"none",
-                  background:mode===id?"#3b82f6":"transparent",
-                  color:mode===id?"white":id==="groups"&&!groups?.length?"var(--border)":"var(--muted)",
-                  opacity:id==="groups"&&!groups?.length?0.4:1 }}>
+    <div className="card" style={{ padding: "14px 16px" }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: 0 }}>{title}</p>
+        <div style={{ display: "flex", gap: 2, background: "var(--surface2)", borderRadius: 20, padding: 2 }}>
+          {[["prints", "Prints"], ["groups", "Groupes"]].map(([id, label]) => {
+            const disabled = id === "groups" && !hasGroups;
+            return (
+              <button key={id} disabled={disabled} onClick={() => !disabled && setMode(id)}
+                style={{ padding: "3px 10px", borderRadius: 18, fontSize: 10, fontWeight: 600,
+                  cursor: disabled ? "default" : "pointer", border: "none",
+                  background: mode === id ? "#3b82f6" : "transparent",
+                  color: mode === id ? "white" : "var(--muted)", opacity: disabled ? 0.4 : 1 }}>
                 {label}
               </button>
-            ))}
-          </div>
-        )}
+            );
+          })}
+        </div>
       </div>
-      <div style={{ position:"relative" }}>
-      <div style={{ overflowY:"auto", maxHeight:240,
-        WebkitOverflowScrolling:"touch", overscrollBehavior:"contain" }}>
-        {items.map((item, i) => {
-          const pct = Math.max(2, (Number(item[valueKey])||0)/maxVal*100);
-          return (
-            <div key={item.id} style={{ marginBottom:10, cursor:"pointer" }}
-              onClick={()=>onItemClick?.(item, mode)}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:3 }}>
-                <span style={{ fontSize:12, flexShrink:0 }}>{MEDAL[i]||`${i+1}`}</span>
-                <span style={{ fontSize:11, color:"var(--text)", fontWeight:600, flex:1,
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {mode==="groups" && item.nb > 1 && <span style={{ fontSize:9, color:"var(--muted)", marginRight:4 }}>×{item.nb}</span>}
-                  {item.name}
-                </span>
-                <span style={{ fontSize:11, fontFamily:"JetBrains Mono,monospace",
-                  color:barColor, fontWeight:700, flexShrink:0 }}>
-                  {valueLabel(item)}
-                </span>
-              </div>
-              <div style={{ height:4, background:"var(--surface2)", borderRadius:2, overflow:"hidden" }}>
-                <div style={{ width:`${pct}%`, height:"100%", borderRadius:2,
-                  background: i===0?"#f59e0b":i===1?"#94a3b8":i===2?"#cd7f32":barColor }}/>
-              </div>
+      <div style={{ overflowY: "auto", maxHeight: 260, overscrollBehavior: "contain" }}>
+        {items.map((item, i) => (
+          <div key={`${mode}-${item.id}`} style={{ marginBottom: 10, cursor: "pointer" }}
+            onClick={() => onItemClick?.(item, mode)}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
+              <span style={{ fontSize: 12, flexShrink: 0, width: 16 }}>{MEDAL[i] || `${i + 1}`}</span>
+              <span style={{ fontSize: 11, color: "var(--text)", fontWeight: 600, flex: 1,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {mode === "groups" && item.nb > 1 &&
+                  <span style={{ fontSize: 9, color: "var(--muted)", marginRight: 4 }}>×{item.nb}</span>}
+                {item.name}
+              </span>
+              <span style={{ fontSize: 11, fontFamily: "JetBrains Mono,monospace",
+                color: barColor, fontWeight: 700, flexShrink: 0 }}>
+                {valueLabel(item)}
+              </span>
             </div>
-          );
-        })}
-      </div>
-      {items.length > 5 && (
-        <div style={{ position:"absolute", bottom:0, left:0, right:0, height:40, pointerEvents:"none",
-          background:"linear-gradient(transparent, var(--bg))", borderRadius:"0 0 8px 8px" }}/>
-      )}
+            <div style={{ height: 4, background: "var(--surface2)", borderRadius: 2, overflow: "hidden" }}>
+              <div style={{ width: `${Math.max(2, (Number(item[valueKey]) || 0) / max * 100)}%`, height: "100%",
+                borderRadius: 2, background: i === 0 ? "#f59e0b" : i === 1 ? "#94a3b8" : i === 2 ? "#cd7f32" : barColor }}/>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
+const PERIODS = [[0, "Tout"], [365, "12 mois"], [90, "90 j"], [30, "30 j"]];
+
 export default function Stats() {
   const [data, setData] = useState(null);
+  const [days, setDays] = useState(0);
   const [detail, setDetail] = useState(null);
   const [groupPrints, setGroupPrints] = useState([]);
-  const [filaments, setFilaments] = useState(null);
-  const [spools, setSpools] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    Promise.all([
-      client.get("/prints/stats/summary"),
-      client.get("/filaments/filaments"),
-      client.get("/filaments/spools", { params:{ archived:false } }),
-    ]).then(([r1,r2,r3]) => {
-      setData(r1.data);
-      setFilaments(r2.data);
-      setSpools(r3.data);
-    }).finally(() => setLoading(false));
-  }, []);
+    setLoading(true);
+    client.get("/prints/stats/summary", { params: { days } })
+      .then(r => { setData(r.data); setError(null); })
+      .catch(e => setError(e.response?.data?.detail || e.message || "Erreur"))
+      .finally(() => setLoading(false));
+  }, [days]);
 
   const openDetail = async (item, mode) => {
     if (mode === "groups") {
       try {
-        const r = await client.get("/prints", { params:{ group_id: item.id, limit:100 } });
-        const gp = r.data?.items || r.data || [];
-        setGroupPrints(gp);
-        setDetail({ type:"group", data:item });
-      } catch { setGroupPrints([]); setDetail({ type:"group", data:item }); }
+        const r = await client.get("/prints", { params: { group_id: item.id, limit: 200 } });
+        // L'API renvoie { total, prints } — et non { items }
+        setGroupPrints(r.data?.prints || []);
+      } catch { setGroupPrints([]); }
+      setDetail({ type: "group", data: item });
     } else {
       try {
         const r = await client.get(`/prints/${item.id}`);
-        setDetail({ type:"print", data:r.data });
-      } catch {
-        // fallback: mapper les champs stats → PrintOut
-        setDetail({ type:"print", data:{
-          ...item,
-          file_name: item.name,
-          duration_seconds: item.duration_s,
-          total_cost: item.cost,
-        }});
-      }
+        setDetail({ type: "print", data: r.data });
+      } catch { /* print supprimé entre-temps */ }
     }
   };
 
-  if (loading) return <p style={{ textAlign:"center", color:"var(--muted)", padding:60 }}>Chargement…</p>;
+  const matData   = useMemo(() => (data?.materials  || []).map(m => ({ name: m.name, value: m.grams })), [data]);
+  const brandData = useMemo(() => (data?.brands     || []).map(b => ({ name: b.name, value: b.grams })), [data]);
+  const typeData  = useMemo(() => (data?.fila_types || []).map(t => ({ name: t.name, value: t.grams })), [data]);
+  const colorData = useMemo(() => (data?.colors     || []).map(c => ({ name: c.name, value: c.grams, hex: c.hex })), [data]);
 
-  const spoolsActive = (spools||[]).filter(s=>!s.archived);
-  const poidsStock   = spoolsActive.reduce((s,b)=>s+(b.remaining_weight_g||0),0);
-  const filsStock    = (filaments||[]).filter(f=>(f.active_spool_count||0)>0).length;
-  const matData      = (data?.materials||[]).map(m=>({name:m.name, value:m.grams}));
-  const brandData    = (data?.brands||[]).map(b=>({name:b.name, value:b.grams}));
+  const periodSel = (
+    <div style={{ display: "flex", gap: 2, background: "var(--surface2)", borderRadius: 20, padding: 2 }}>
+      {PERIODS.map(([d, label]) => (
+        <button key={d} onClick={() => setDays(d)}
+          style={{ padding: "4px 10px", borderRadius: 18, fontSize: 10, fontWeight: 600, cursor: "pointer",
+            border: "none", background: days === d ? "#3b82f6" : "transparent",
+            color: days === d ? "white" : "var(--muted)" }}>
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const header = (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <h1 style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", margin: 0 }}>Statistiques</h1>
+      {periodSel}
+    </div>
+  );
+
+  if (loading) return (
+    <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+      {header}
+      <p style={{ textAlign: "center", color: "var(--muted)", padding: 60 }}>Chargement…</p>
+    </div>
+  );
+
+  if (error) return (
+    <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+      {header}
+      <div style={{ padding: "12px 16px", background: "rgba(239,68,68,0.1)",
+        border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#ef4444", fontSize: 13 }}>
+        ⚠ {error}
+      </div>
+    </div>
+  );
+
+  if (!data || !data.total_prints) return (
+    <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+      {header}
+      <p style={{ textAlign: "center", color: "var(--muted)", padding: 60 }}>
+        Aucune impression terminée sur cette période.
+      </p>
+    </div>
+  );
 
   return (
-    <div style={{ maxWidth:960, margin:"0 auto", display:"flex", flexDirection:"column", gap:20 }}>
-      <h1 style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Statistiques</h1>
+    <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+      {header}
 
-      {detail?.type === "print" && detail.data.id && (
-        <PrintDetail p={detail.data} onClose={()=>setDetail(null)} onDelete={()=>setDetail(null)} onChanged={()=>{}}/>
+      {detail?.type === "print" && detail.data?.id && (
+        <PrintDetail p={detail.data} onClose={() => setDetail(null)}
+          onDelete={() => setDetail(null)} onChanged={() => {}}/>
       )}
       {detail?.type === "group" && (
         <GroupBottomSheet
@@ -270,93 +356,116 @@ export default function Stats() {
           name={detail.data.name}
           prints={groupPrints}
           latestDate={null}
-          number_of_items={detail.data.nb||1}
-          onClose={()=>setDetail(null)}
-          onSelectPrint={()=>{}}
-          onDelete={()=>{}}
-          onUngroup={()=>{}}
+          number_of_items={detail.data.nb || 1}
+          onClose={() => setDetail(null)}
+          onSelectPrint={() => {}}
+          onDelete={() => {}}
+          onUngroup={() => {}}
         />
       )}
 
-      {/* KPIs impressions */}
       <Section title="Impressions">
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
-          <KpiCard icon={Layers}     label="Total"          value={data?.total_prints}      color="#3b82f6"/>
-          <KpiCard icon={TrendingUp} label="Réussies"       value={data?.success_prints}    color="#22c55e"/>
-          <KpiCard icon={Clock}      label="Temps total"    value={fmtH((data?.total_hours||0)*3600)} color="#f59e0b"/>
-          <KpiCard icon={Clock}      label="Durée moyenne"  value={data?.avg_duration_h > 0 ? fmtH(data.avg_duration_h*3600) : null} color="#f59e0b" sub="par impression"/>
-          <KpiCard icon={Weight}     label="Filament utilisé" value={data?.total_weight_g ? `${(data.total_weight_g/1000).toFixed(2)} kg` : null} color="#8b5cf6"/>
-          <KpiCard icon={Euro}       label="Coût total"     value={data?.total_cost ? `${data.total_cost.toFixed(2)} €` : null} color="#ef4444"/>
-          <KpiCard icon={Euro}       label="Coût moyen"     value={data?.avg_cost > 0 ? `${data.avg_cost.toFixed(2)} €` : null} color="#f97316" sub="par impression"/>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+          <KpiCard icon={Layers} label="Terminées" value={data.total_prints} color="#3b82f6"
+            sub={`${data.failed_prints} échec${data.failed_prints > 1 ? "s" : ""}`}/>
+          <KpiCard icon={CheckCircle2} label="Taux de réussite" value={`${data.success_rate} %`} color="#22c55e"
+            sub={`${data.success_prints} réussies`}/>
+          <KpiCard icon={Clock} label="Temps total" value={fmtH(data.total_hours * 3600)} color="#f59e0b"
+            sub={data.avg_duration_h > 0 ? `moy. ${fmtH(data.avg_duration_h * 3600)}` : null}/>
+          <KpiCard icon={Weight} label="Filament" value={fmtKg(data.total_weight_g)} color="#8b5cf6"
+            sub={data.avg_weight_g > 0 ? `moy. ${data.avg_weight_g} g` : null}/>
+          <KpiCard icon={Euro} label="Coût total" value={fmtEur(data.total_cost)} color="#ef4444"
+            sub={data.avg_cost > 0 ? `moy. ${fmtEur(data.avg_cost)}` : null}/>
         </div>
       </Section>
 
-      {/* Évolution temporelle */}
-      {data?.monthly && Object.keys(data.monthly).length > 2 && (
+      {data.failed_prints > 0 && (
+        <Section title="Perdu sur les échecs">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+            <KpiCard icon={AlertTriangle} label="Échecs" value={data.failed_prints} color="#ef4444"/>
+            <KpiCard icon={Weight} label="Filament" value={fmtKg(data.failed_weight_g)} color="#ef4444"/>
+            <KpiCard icon={Euro} label="Coût" value={fmtEur(data.failed_cost)} color="#ef4444"/>
+            <KpiCard icon={Clock} label="Temps" value={fmtH(data.failed_hours * 3600)} color="#ef4444"/>
+          </div>
+        </Section>
+      )}
+
+      {Object.keys(data.monthly || {}).length > 1 && (
         <Section title="Évolution dans le temps">
           <TimeChart data={data.monthly}/>
         </Section>
       )}
 
-      {/* Classements */}
       <Section title="Classements">
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
-          <TopList title="⏱ Les plus longs"
-            prints={data?.top_duration||[]}
-            groups={data?.top_groups_duration||[]}
-            valueKey="duration_s"
-            valueLabel={p => fmtH(p.duration_s)}
-            onItemClick={(item,mode)=>openDetail(item,mode)}/>
-          <TopList title="💰 Les plus chers"
-            prints={data?.top_cost||[]}
-            groups={data?.top_groups_cost||[]}
-            valueKey="cost"
-            barColor="#22c55e"
-            valueLabel={p => `${p.cost.toFixed(2)} €`}
-            onItemClick={(item,mode)=>openDetail(item,mode)}/>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
+          <TopList title="⏱ Les plus longs" barColor="#f59e0b"
+            prints={data.top_duration} groups={data.top_groups_duration}
+            valueKey="duration_s" valueLabel={p => fmtH(p.duration_s)}
+            onItemClick={openDetail}/>
+          <TopList title="💰 Les plus chers" barColor="#22c55e"
+            prints={data.top_cost} groups={data.top_groups_cost}
+            valueKey="cost" valueLabel={p => fmtEur(p.cost)}
+            onItemClick={openDetail}/>
+          <TopList title="⚖ Les plus lourds" barColor="#8b5cf6"
+            prints={data.top_weight} groups={data.top_groups_weight}
+            valueKey="weight_g" valueLabel={p => `${Math.round(p.weight_g)} g`}
+            onItemClick={openDetail}/>
         </div>
       </Section>
 
-      {/* Matériaux */}
-      {matData.length > 0 && (
-        <Section title="Matériaux utilisés">
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
-            <Donut data={matData} title="Répartition par matériau (grammes)"/>
-            <div className="card" style={{ padding:"14px 16px" }}>
-              <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:"0 0 8px" }}>Détail</p>
-              {matData.map(m => (
-                <Bar key={m.name} label={m.name}
-                  value={m.value} max={matData[0].value}
-                  sublabel={`${(m.value/1000).toFixed(2)} kg`}
-                  color="#3b82f6"/>
-              ))}
-            </div>
+      {(matData.length > 0 || colorData.length > 0) && (
+        <Section title="Filament consommé">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
+            {matData.length > 0 && <Donut data={matData} title="Par matériau"/>}
+            {colorData.length > 0 && <Donut data={colorData} title="Par teinte" palette/>}
+
+            {typeData.length > 0 && (
+              <div className="card" style={{ padding: "14px 16px" }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: "0 0 8px" }}>Par type</p>
+                {typeData.map(t => (
+                  <Bar key={t.name} label={t.name} value={t.value} max={typeData[0].value}
+                    sublabel={fmtKg(t.value)} color="#06b6d4"/>
+                ))}
+              </div>
+            )}
+
+            {brandData.length > 0 && (
+              <div className="card" style={{ padding: "14px 16px" }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: "0 0 8px" }}>Par marque</p>
+                {brandData.map(b => (
+                  <Bar key={b.name} label={b.name} value={b.value} max={brandData[0].value}
+                    sublabel={fmtKg(b.value)} color="#8b5cf6"/>
+                ))}
+              </div>
+            )}
+
+            {(data.top_filaments || []).length > 0 && (
+              <div className="card" style={{ padding: "14px 16px" }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: "0 0 8px" }}>
+                  Filaments les plus utilisés
+                </p>
+                {data.top_filaments.map(f => (
+                  <Bar key={f.id} label={f.name}
+                    value={f.grams} max={data.top_filaments[0].grams}
+                    sublabel={`${f.grams} g`} color="#3b82f6"
+                    dot={<Dot hex={f.color} colors={f.colors_array} multicolor={f.multicolor_type} size={10}/>}/>
+                ))}
+              </div>
+            )}
           </div>
         </Section>
       )}
 
-      {/* Marques */}
-      {brandData.length > 0 && (
-        <Section title="Marques (grammes imprimés)">
-          <div className="card" style={{ padding:"14px 16px" }}>
-            {brandData.map(b => (
-              <Bar key={b.name} label={b.name}
-                value={b.value} max={brandData[0].value}
-                sublabel={`${(b.value/1000).toFixed(2)} kg`}
-                color="#8b5cf6"/>
-            ))}
-          </div>
-        </Section>
-      )}
-
-      {/* Stock filaments */}
-      <Section title="Stock & Filaments">
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
-          <KpiCard icon={Package}     label="Références"      value={filaments?.length}        color="#3b82f6"/>
-          <KpiCard icon={Package}     label="En stock"        value={filsStock}                color="#22c55e"/>
-          <KpiCard icon={Package}     label="Bobines actives" value={spoolsActive.length}      color="#8b5cf6"/>
-          <KpiCard icon={Weight}      label="Poids en stock"  value={poidsStock>0?`${(poidsStock/1000).toFixed(2)} kg`:null} color="#f59e0b"/>
+      <Section title="Stock actuel">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+          <KpiCard icon={Package} label="Références" value={data.stock?.references} color="#3b82f6"/>
+          <KpiCard icon={Package} label="Bobines actives" value={data.stock?.spools} color="#22c55e"/>
+          <KpiCard icon={Weight} label="Poids en stock" value={fmtKg(data.stock?.weight_g)} color="#f59e0b"/>
+          <KpiCard icon={Euro} label="Valeur du stock" value={fmtEur(data.stock?.value)} color="#8b5cf6"/>
         </div>
+        <p style={{ fontSize: 10, color: "var(--muted)", margin: "8px 0 0" }}>
+          Le stock ne dépend pas de la période sélectionnée.
+        </p>
       </Section>
     </div>
   );
