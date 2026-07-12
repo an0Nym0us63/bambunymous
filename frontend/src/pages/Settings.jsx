@@ -283,7 +283,9 @@ function LabelsCard({ card, cardTitle }) {
     setBusy(true); setErr(null);
     try {
       // responseType blob : sans ca axios renvoie une chaine et le PDF est corrompu
-      const r = await client.post("/filaments/labels/pdf", { ids: ids || null },
+      // NB : le routeur a le prefixe /filaments ET la route est declaree
+      // "/filaments/labels/pdf" -> le doublon est normal (cf. /filaments/filaments).
+      const r = await client.post("/filaments/filaments/labels/pdf", { ids: ids || null },
         { responseType: "blob" });
       const url = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" }));
       const a = document.createElement("a");
