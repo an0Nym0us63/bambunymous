@@ -21,6 +21,11 @@ class Print(Base):
     status_note         = Column(Text,        nullable=True)
 
     plate_image         = Column(String(512), nullable=True)
+    # Photo mise en avant (vignette de la galerie). Etait presente puis a disparu
+    # du modele lors d'un ecrasement de fichier : prints.py la lit a 7 endroits
+    # (PrintOut, tri de la galerie, endpoint /photo/{f}/primary) et le service
+    # d'alertes aussi -> AttributeError a l'execution.
+    cover_photo         = Column(String(256), nullable=True)
     external_ref        = Column(String(256), nullable=True)  # stem fichier Spoolnymous ex: 20250807163605_19b0e749
     model_3mf           = Column(String(512), nullable=True)
     # Necessaires pour REPRENDRE l'enrichissement apres un redemarrage : sans eux,

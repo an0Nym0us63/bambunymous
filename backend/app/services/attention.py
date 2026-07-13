@@ -45,7 +45,7 @@ def _has_photo(fid: int) -> bool:
 
 def _print_image(p) -> Optional[str]:
     """Vignette du print : photo mise en avant, sinon l'image du plateau."""
-    name = p.cover_photo or (p.plate_image or "").split("/")[-1]
+    name = getattr(p, "cover_photo", None) or (p.plate_image or "").split("/")[-1]
     return f"/api/v1/prints/{p.id}/file/{name}" if name else None
 
 
