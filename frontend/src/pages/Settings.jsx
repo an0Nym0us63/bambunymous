@@ -339,24 +339,23 @@ function CategoriesModal({ onClose }) {
    *    d'une hauteur supposee uniforme : les libelles passent a la ligne, donc
    *    les hauteurs different.
    */
-  const startDrag = (e, i) => {
-    e.preventDefault();
+  const startDrag = (clientY0, i) => {
     dragRef.current = i;
     setDragIdx(i);
 
-    const onMove = (ev) => {
+    const moveTo = (y) => {
       const from = dragRef.current;
       const list = listRef.current;
       const cur = rowsRef.current;
       if (from == null || !list || !cur) return;
 
-      const y = ev.clientY;
       let to = from;
-      for (let k = 0; k < list.children.length; k++) {
+      const n = list.children.length;
+      for (let k = 0; k < n; k++) {
         const r = list.children[k].getBoundingClientRect();
         if (y >= r.top && y <= r.bottom) { to = k; break; }
         if (k === 0 && y < r.top) { to = 0; break; }
-        if (k === list.children.length - 1 && y > r.bottom) { to = k; break; }
+        if (k === n - 1 && y > r.bottom) { to = k; break; }
       }
       if (to === from) return;
 
@@ -370,17 +369,41 @@ function CategoriesModal({ onClose }) {
       setDirty(true);
     };
 
-    const onUp = () => {
-      dragRef.current = null;
-      setDragIdx(null);
-      document.removeEventListener("pointermove", onMove);
-      document.removeEventListener("pointerup", onUp);
-      document.removeEventListener("pointercancel", onUp);
+    const onPointerMove = (ev) => moveTo(ev.clientY);
+
+    // Le tactile est traite EN PLUS des pointer events. Sur mobile, le navigateur
+    // demarre un defilement des que le doigt bouge et emet alors un pointercancel :
+    // le drag mourait aussitot. touchAction:none ne suffisait pas. Ici on ecoute
+    // touchmove en NON PASSIF pour pouvoir appeler preventDefault() et empecher
+    // reellement le defilement pendant le geste.
+    const onTouchMove = (ev) => {
+      if (ev.cancelable) ev.preventDefault();
+      const t = ev.touches[0];
+      if (t) moveTo(t.clientY);
     };
 
-    document.addEventListener("pointermove", onMove);
-    document.addEventListener("pointerup", onUp);
-    document.addEventListener("pointercancel", onUp);
+    const stop = () => {
+      dragRef.current = null;
+      setDragIdx(null);
+      document.removeEventListener("pointermove", onPointerMove);
+      document.removeEventListener("pointerup", stop);
+      document.removeEventListener("touchmove", onTouchMove);
+      document.removeEventListener("touchend", stop);
+      document.removeEventListener("touchcancel", stop);
+      document.body.style.overflow = prevOverflow;
+    };
+
+    // Verrouiller le defilement de la page pendant le geste
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    document.addEventListener("pointermove", onPointerMove);
+    document.addEventListener("pointerup", stop);
+    document.addEventListener("touchmove", onTouchMove, { passive: false });
+    document.addEventListener("touchend", stop);
+    document.addEventListener("touchcancel", stop);
+
+    if (clientY0 != null) moveTo(clientY0);
   };
 
   const toggleHidden = (cat) => {
@@ -448,9 +471,17 @@ function CategoriesModal({ onClose }) {
               {/* touchAction:none est indispensable : sans lui le navigateur
                   interprete le geste comme un defilement et le drag ne demarre
                   jamais au doigt. */}
-              <span onPointerDown={e => startDrag(e, i)}
+              {/* Poignee : on ecoute le pointeur ET le tactile. Le pointercancel
+                  emis par le navigateur au demarrage d'un defilement tuait le
+                  drag sur mobile ; le chemin tactile, lui, bloque le defilement.
+                  Zone de touche elargie (padding) pour etre attrapable au doigt. */}
+              <span
+                onPointerDown={e => { if (e.pointerType !== "touch") startDrag(e.clientY, i); }}
+                onTouchStart={e => startDrag(e.touches[0]?.clientY, i)}
                 style={{ cursor:"grab", touchAction:"none", color:"var(--muted)",
-                  fontSize:15, flexShrink:0, padding:"0 4px", userSelect:"none" }}>⠿</span>
+                  fontSize:16, flexShrink:0, padding:"6px 8px", margin:"-6px 0",
+                  userSelect:"none", WebkitUserSelect:"none",
+                  WebkitTouchCallout:"none" }}>⠿</span>
 
               <span style={{ fontSize:13, flexShrink:0 }}>{r.icon}</span>
 
