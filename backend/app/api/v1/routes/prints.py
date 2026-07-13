@@ -862,7 +862,14 @@ async def set_print_cover_photo(print_id: int, filename: str,
                                 _: str = Depends(get_current_user)):
     """Definit la photo mise en avant (vignette de la galerie)."""
     d = DATA_DIR / "prints" / str(print_id)
-    if not (d / filename).is_file():
+    # Garde-fou : sans lui, un filename du type "../../x" sortait du dossier du
+    # print et se retrouvait stocke tel quel dans cover_photo.
+    target = (d / filename).resolve()
+    try:
+        target.relative_to(d.resolve())
+    except ValueError:
+        raise HTTPException(400, "Nom de fichier invalide")
+    if not target.is_file():
         raise HTTPException(404, "Photo introuvable")
     async with AsyncSessionLocal() as db:
         p = await db.get(Print, print_id)

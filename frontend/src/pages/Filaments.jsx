@@ -5,6 +5,7 @@ import ScanSheet from "../components/ScanSheet";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine } from "lucide-react";
 import client from "../api/client";
+import { colorBg, parseColorsList } from "../utils/colors";
 import GalleryCompare from "../components/GalleryCompare";
 
 const MATERIALS = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","BVOH","PLA-CF","PETG-CF","PA-CF","PPS"];
@@ -42,28 +43,6 @@ function hexDisplay(hex) {
   return null;
 }
 
-function parseColorsList(color, colorsArray) {
-  if (colorsArray) {
-    const cols = colorsArray.split(",").map(c => c.trim()).filter(Boolean)
-      .map(c => hexToCss(c)).filter(Boolean);
-    if (cols.length > 1) return cols;
-  }
-  return color ? [hexToCss(color)].filter(Boolean) : null;
-}
-function colorBg(colors, type) {
-  if (!colors?.length) return { backgroundColor: "var(--border)" };
-  if (colors.length === 1) return { backgroundColor: colors[0] };
-  if (type === "gradient") {
-    // Fondu lisse entre les couleurs
-    return { background: `linear-gradient(90deg, ${colors.join(", ")})` };
-  }
-  // Autres types (coaxial, etc.) : séparation nette
-  const stops = colors.map((c,i) => {
-    const a = Math.round(i/colors.length*100), b = Math.round((i+1)/colors.length*100);
-    return `${c} ${a}%, ${c} ${b}%`;
-  }).join(", ");
-  return { background: `linear-gradient(90deg, ${stops})` };
-}
 
 // Détecte si une couleur hex 8 chars a de la transparence (alpha < FF)
 function hasTransparency(hex) {
@@ -1970,7 +1949,7 @@ function hexToHsl(hex) {
   return [Math.round(hue*60), Math.round(s*100), Math.round(l*100)];
 }
 
-function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeChange, onItemClick }) {
+function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeChange, onItemClick, onReload }) {
   // Filaments déjà filtrés ET triés par le parent
 
 
@@ -1979,6 +1958,11 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
     <>
       <GalleryCompare
         items={allFilaments}
+        onDeletePhoto={async (item, filename) =>
+          client.delete(`/filaments/${item.id}/photo/${filename}`)}
+        onSetPrimaryPhoto={async (item, filename) =>
+          client.post(`/filaments/${item.id}/photo/${filename}/primary`)}
+        onPhotosChanged={() => onReload?.()}
         selectMode={selectMode}
         onSelectModeChange={onSelectModeChange}
         onItemClick={onItemClick}
@@ -2010,7 +1994,6 @@ export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, 
   React.useEffect(() => {
     const load = async () => {
       try {
-        console.log('[FSheet]',{filamentId,spoolId,filamentColorHex});
         // Chercher la bobine directement
         if (spoolId) {
           const r = await client.get("/filaments/spools", { params:{ limit:2000, archived:false } });
@@ -2228,6 +2211,12 @@ export default function Filaments() {
           {galleryMode==="photos" ? (
             <GalleryCompare
               items={filaments}
+              onDeletePhoto={async (item, filename) =>
+                client.delete(`/filaments/${item.id}/photo/${filename}`)}
+              onSetPrimaryPhoto={async (item, filename) =>
+                client.post(`/filaments/${item.id}/photo/${filename}/primary`)}
+              onPhotosChanged={() => client.get("/filaments/filaments")
+                .then(r => setAllFilaments(r.data || [])).catch(()=>{})}
               selectMode={galSelectMode}
               onSelectModeChange={setGalSelectMode}
               onItemClick={f=>setGalSelected(f)}
@@ -2248,7 +2237,8 @@ export default function Filaments() {
             />
           ) : null}
           {galSelected && <FilamentSheet f={galSelected} onClose={()=>setGalSelected(null)} onDeleted={()=>{setGalSelected(null); client.get("/filaments/filaments").then(r=>setAllFilaments(r.data));}} onUpdated={()=>client.get("/filaments/filaments").then(r=>setAllFilaments(r.data))}/>}
-          {galleryMode==="swatch" && <SwatchView filaments={filaments} sort={galSort} selectMode={galSelectMode} onSelectModeChange={setGalSelectMode} onItemClick={f=>setGalSelected(f)}/>}
+          {galleryMode==="swatch" && <SwatchView filaments={filaments} sort={galSort} selectMode={galSelectMode} onSelectModeChange={setGalSelectMode} onItemClick={f=>setGalSelected(f)}
+            onReload={() => client.get("/filaments/filaments").then(r => setAllFilaments(r.data || [])).catch(()=>{})}/>}
         </>
       )}
       {(tab==="spools" || tab==="archived") && (

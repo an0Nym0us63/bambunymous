@@ -92,6 +92,8 @@ class FilamentUsage(Base):
 
     __table_args__ = (
         Index("idx_filament_usage_print", "print_id"),
+        # spool_id est joint par les stats et les filtres : sans index, scan complet.
+        Index("idx_filament_usage_spool", "spool_id"),
     )
 
 

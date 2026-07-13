@@ -39,6 +39,7 @@ async def init_db():
     # Migration automatique : ADD COLUMN si manquant
     await _migrate()
     # Backfill des colonnes calculées
+    await _ensure_indexes()
     await _backfill_color_buckets()
     await _backfill_material_family()
 
@@ -160,3 +161,22 @@ async def _backfill_material_family():
             print(f"[migrate] material (famille) corrigé pour {n} filament(s)")
     except Exception as e:
         print(f"[migrate] backfill material échoué : {e}")
+
+
+async def _ensure_indexes():
+    """
+    create_all() ne cree pas d'index sur une table qui existe deja : les index
+    ajoutes apres coup doivent l'etre explicitement.
+    """
+    from sqlalchemy import text as _text
+    idx = [
+        ("idx_filament_usage_spool", "filament_usage", "spool_id"),
+    ]
+    try:
+        async with engine.begin() as conn:
+            for name, table, col in idx:
+                await conn.execute(_text(
+                    f"CREATE INDEX IF NOT EXISTS {name} ON {table} ({col})"
+                ))
+    except Exception as e:
+        print(f"[migrate] création d'index échouée : {e}")

@@ -13,6 +13,7 @@ import { X, ChevronLeft, ChevronRight, Check } from "lucide-react";
  *  - pageSize: nombre de tuiles affichées initialement, "Charger plus" ensuite (def 30)
  */
 export default function GalleryCompare({
+  onDeletePhoto, onSetPrimaryPhoto, onPhotosChanged,
   items, getId, getCoverImage, getPhotos, getTitle, getSubtitle, compareFields = [],
   maxCompare = 6, emptyLabel = "Aucun élément", pageSize = 30,
   enableCompare = true, renderCover = null, swatchMode = false,
@@ -306,26 +307,32 @@ export default function GalleryCompare({
                   Fiche
                 </button>
               )}
-              {current.url && onItemClick && (() => {
+              {/* Actions photo : elles etaient cablees en dur sur
+                  /api/v1/filaments/{id}/photo/... et s'affichaient des que
+                  onItemClick etait fourni -- y compris dans la galerie des PRINTS,
+                  ou supprimer une photo supprimait celle du FILAMENT portant le
+                  meme id. Elles sont desormais fournies par l'appelant, donc
+                  absentes la ou elles n'ont pas de sens. */}
+              {current.url && onDeletePhoto && (() => {
                 const filename = current.url.split("/").pop();
-                const fid = carousel.item?.id;
                 return (<>
-                  <button onClick={async e=>{e.stopPropagation();
-                    if(!window.confirm("Supprimer cette photo ?")) return;
-                    await fetch(`/api/v1/filaments/${fid}/photo/${filename}`,{method:"DELETE",headers:{"Authorization":"Bearer "+localStorage.getItem("token")||""}});
-                    window.location.reload();}}
+                  <button onClick={async e => { e.stopPropagation();
+                    if (!window.confirm("Supprimer cette photo ?")) return;
+                    await onDeletePhoto(carousel.item, filename);
+                    setCarousel(null); onPhotosChanged?.(); }}
                     style={{ padding:"6px 14px", borderRadius:20, background:"rgba(239,68,68,0.15)",
-                      color:"#ef4444", border:"1px solid rgba(239,68,68,0.3)", cursor:"pointer", fontSize:12 }}>
+                      color:"#ef4444", border:"1px solid rgba(239,68,68,0.3)", cursor:"pointer", fontSize:12, fontWeight:700 }}>
                     🗑 Supprimer
                   </button>
-                  {carousel.index !== 0 && (
-                    <button onClick={async e=>{e.stopPropagation();
-                      await fetch(`/api/v1/filaments/${fid}/photo/${filename}/primary`,{method:"POST",headers:{"Authorization":"Bearer "+localStorage.getItem("token")||""}});
-                      window.location.reload();}}
+                  {onSetPrimaryPhoto && carousel.index !== 0 && (
+                    <button onClick={async e => { e.stopPropagation();
+                      await onSetPrimaryPhoto(carousel.item, filename);
+                      setCarousel(null); onPhotosChanged?.(); }}
                       style={{ padding:"6px 14px", borderRadius:20, background:"rgba(34,197,94,0.12)",
-                        color:"#22c55e", border:"1px solid rgba(34,197,94,0.25)", cursor:"pointer", fontSize:12 }}>
-                    ⭐ Photo principale
-                  </button>)}
+                        color:"#22c55e", border:"1px solid rgba(34,197,94,0.25)", cursor:"pointer", fontSize:12, fontWeight:700 }}>
+                      ⭐ Principale
+                    </button>
+                  )}
                 </>);
               })()}
             </div>

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Droplets, Sun, Thermometer, Timer, Clock, Package } from "lucide-react";
 import client from "../api/client";
+import { colorBg } from "../utils/colors";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 // Convertit un hex 6 ou 8 chars (avec ou sans #) en valeur CSS utilisable.
@@ -68,21 +69,6 @@ function parseColors(tray, spoolInfo) {
 }
 
 // Génère le style background pour n couleurs
-function colorBg(colors, type) {
-  if (!colors?.length) return { backgroundColor: "var(--border)" };
-  if (colors.length === 1) return { backgroundColor: colors[0] };
-  if (type === "gradient") {
-    // Fondu lisse entre les couleurs
-    return { background: `linear-gradient(90deg, ${colors.join(", ")})` };
-  }
-  // Autres types (coaxial, etc.) : séparation nette
-  const stops = colors.map((c,i)=>{
-    const a = Math.round(i/colors.length*100);
-    const b = Math.round((i+1)/colors.length*100);
-    return `${c} ${a}%, ${c} ${b}%`;
-  }).join(", ");
-  return { background: `linear-gradient(90deg, ${stops})` };
-}
 function multicolorType(tray, spoolInfo) {
   return spoolInfo?.multicolor_type || tray?.multicolor_type || null;
 }

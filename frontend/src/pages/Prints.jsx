@@ -907,7 +907,12 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         </div>
       </div>
     </div>
-    {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} colorsArray={spoolPicker.colorsArray} multicolorType={spoolPicker.multicolorType} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{ setSpoolPicker(null); window.location.reload(); }}/> }
+    {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} colorsArray={spoolPicker.colorsArray} multicolorType={spoolPicker.multicolorType} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{
+      // Rechargeait toute l'application (bundle re-telecharge, etat perdu).
+      setSpoolPicker(null);
+      client.get("/prints/" + p.id).then(r => { setP(r.data); setRefreshKey(k => k + 1); }).catch(()=>{});
+      onChanged?.();
+    }}/> }
     {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)} zIndex={2000}/>}
     {editMode && <PrintEditSheet p={p} onClose={()=>setEditMode(false)} onSaved={updated=>{ setP(prev=>({...prev,...updated})); setEditMode(false); onChanged?.(); }}/>}
     {unmapping && <UnmapFilamentConfirm f={unmapping} printId={p.id} onClose={()=>setUnmapping(null)} onDone={()=>{ setUnmapping(null); client.get('/prints/'+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }}/>}
@@ -920,7 +925,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         const hasRestore = Object.values(fracs).some(v=>v>0);
         if (hasRestore) await client.post("/prints/"+p.id+"/restore-weights", {fracs}).catch(()=>{});
         if (showDeleteConfirm !== "restore") { client.delete("/prints/"+p.id).then(()=>{ onDelete?.(p.id); onClose(); }).catch(()=>alert("Erreur")); }
-        else { setShowDeleteConfirm(false); client.get("/prints/"+p.id).then(r=>{ console.log('[RESTORE REFRESH] grams_used:', r.data?.filament_usage?.map(f=>({id:f.id, g:f.grams_used}))); setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }
+        else { setShowDeleteConfirm(false); client.get("/prints/"+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }
       }}/>}
   </>);
 }
@@ -1850,7 +1855,6 @@ export default function Prints() {
   const [selected, setSelected] = useState(null);
   const [importing, setImporting] = useState(false);
   const [error, setError]     = useState(null);
-  const [debugInfo, setDebugInfo] = useState("");
   const [groups, setGroups]   = useState([]);
   const [groupF, setGroupF]   = useState("");
   const [filterOpen, setFilterOpen] = useState(false);
@@ -1929,7 +1933,6 @@ export default function Prints() {
       if (colorF)      params.set("color", colorF);
       if (sortF)       params.set("sort", sortF);
       const { data } = await client.get("/prints?" + params);
-      setDebugInfo("total=" + data.total + " prints=" + (data.prints||[]).length);
       setPrints(data.prints ?? []);
       setTotal(data.total ?? 0);
       setHasMore(data.has_more ?? false);
@@ -1993,7 +1996,6 @@ export default function Prints() {
   const loadGroups = useCallback(async () => {
     try {
       const { data } = await client.get("/prints/groups");
-      console.log("[GROUPES]", data.groups);
       setGroups(data.groups || []);
     } catch(e) { console.error("[GROUPES] erreur", e); }
   }, []);
