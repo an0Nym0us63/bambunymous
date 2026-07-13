@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import AllAlertsModal from "./AllAlertsModal";
+import { ChevronDown, ChevronRight, List } from "lucide-react";
 import { colorBg, parseColorsList } from "../utils/colors";
 import { FilamentSheet, FilamentSheetFromSpool } from "../pages/Filaments";
 import { PrintDetail } from "../pages/Prints";
@@ -67,6 +68,7 @@ export default function AttentionSection() {
     () => localStorage.getItem("attention_collapsed") === "0"
   );
   const [sheet, setSheet] = useState(null); // fiche ouverte SUR PLACE
+  const [allOpen, setAllOpen] = useState(false);   // fenêtre "toutes les alertes"
 
   const toggle = () => {
     setOpen(o => {
@@ -178,6 +180,15 @@ export default function AttentionSection() {
           background: "var(--surface2)", padding: "1px 7px", borderRadius: 8 }}>
           {cats.reduce((n, c) => n + c.total, 0)}
         </span>
+
+        {/* Acces direct a la liste complete : sans lui, il fallait passer par
+            les Parametres pour voir autre chose que l'echantillon. */}
+        <button onClick={e => { e.stopPropagation(); setAllOpen(true); }}
+          aria-label="Voir toutes les alertes" title="Voir toutes les alertes"
+          style={{ background:"none", border:"none", cursor:"pointer", padding:2,
+            display:"flex", color:"var(--muted)", flexShrink:0 }}>
+          <List size={13}/>
+        </button>
       </div>
 
       {!open ? null : (<>
@@ -254,6 +265,10 @@ export default function AttentionSection() {
         ))}
       </div>
       </>)}
+
+      {allOpen && (
+        <AllAlertsModal onClose={() => setAllOpen(false)} onChanged={load}/>
+      )}
 
       {/* Feuilles ouvertes SUR PLACE — on ne quitte pas l'accueil. */}
       {sheet?.kind === "filament" && (
