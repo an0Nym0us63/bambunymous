@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { colorBg, parseColorsList } from "../utils/colors";
+import { FilamentSheet, FilamentSheetFromSpool } from "../pages/Filaments";
+import { PrintDetail } from "../pages/Prints";
 
 /** Pastille : dégradé sur un calque interne, anneau en inset box-shadow. */
 function Dot({ a, size = 26 }) {
@@ -36,6 +39,40 @@ export default function AttentionSection() {
   const [cats, setCats] = useState(null);
   const [err, setErr]   = useState(null);
   const [menu, setMenu] = useState(null);   // alerte dont le menu est ouvert
+  const [open, setOpen] = useState(
+    () => localStorage.getItem("attention_collapsed") !== "1"
+  );
+  const [sheet, setSheet] = useState(null); // fiche ouverte SUR PLACE
+
+  const toggle = () => {
+    setOpen(o => {
+      localStorage.setItem("attention_collapsed", o ? "1" : "0");
+      return !o;
+    });
+  };
+
+  /**
+   * Ouvre la fiche correspondante sans quitter l'accueil : naviguer vers
+   * /filaments ou /prints obligeait a revenir en arriere entre chaque alerte.
+   */
+  const openAlert = async (a) => {
+    try {
+      if (a.entity === "filament") {
+        const r = await client.get(`/filaments/filaments/${a.entity_id}`);
+        setSheet({ kind: "filament", data: r.data });
+      } else if (a.entity === "spool") {
+        setSheet({ kind: "spool", spoolId: a.entity_id, filamentId: a.filament_id,
+                   hex: a.color });
+      } else if (a.entity === "print") {
+        const r = await client.get(`/prints/${a.entity_id}`);
+        setSheet({ kind: "print", data: r.data });
+      } else if (a.link) {
+        navigate(a.link);
+      }
+    } catch {
+      if (a.link) navigate(a.link);   // repli : la page saura se debrouiller
+    }
+  };
 
   const load = () => {
     client.get("/attention")
@@ -59,11 +96,12 @@ export default function AttentionSection() {
 
   const dismiss = async (alert, days) => {
     setMenu(null);
-    // Retrait optimiste : la liste est de toute facon recalculee au prochain chargement.
+    // On retire l'alerte de la liste : la suivante de la reserve prend sa place
+    // automatiquement (le rendu affiche les `shown` premieres). Pas de rechargement.
     setCats(cs => cs
       .map(c => ({ ...c,
         alerts: c.alerts.filter(a => a.key !== alert.key),
-        total: c.total - 1 }))
+        total: Math.max(0, c.total - 1) }))
       .filter(c => c.alerts.length));
     try {
       await client.post("/attention/dismiss", { key: alert.key, days: days ?? null });
@@ -103,10 +141,22 @@ export default function AttentionSection() {
 
   return (
     <div className="card" style={{ padding: 14 }}>
-      <p style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase",
-        letterSpacing: "0.08em", margin: "0 0 10px" }}>
-        Points d'attention
-      </p>
+      <div onClick={toggle}
+        style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer",
+          marginBottom: open ? 10 : 0, userSelect:"none" }}>
+        {open ? <ChevronDown size={13} color="var(--muted)"/>
+              : <ChevronRight size={13} color="var(--muted)"/>}
+        <p style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase",
+          letterSpacing: "0.08em", margin: 0, flex: 1 }}>
+          Points d'attention
+        </p>
+        <span style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)",
+          background: "var(--surface2)", padding: "1px 7px", borderRadius: 8 }}>
+          {cats.reduce((n, c) => n + c.total, 0)}
+        </span>
+      </div>
+
+      {!open ? null : (<>
       {errBox}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -119,18 +169,19 @@ export default function AttentionSection() {
               </span>
               <span style={{ fontSize: 10, color: "var(--muted)", background: "var(--surface2)",
                 padding: "1px 6px", borderRadius: 8 }}>
-                {c.total > c.alerts.length ? `${c.alerts.length} / ${c.total}` : c.total}
+                {(() => { const n = Math.min(c.shown ?? 3, c.alerts.length);
+                  return c.total > n ? `${n} / ${c.total}` : c.total; })()}
               </span>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-              {c.alerts.map(a => (
+              {c.alerts.slice(0, c.shown ?? 3).map(a => (
                 <div key={a.key}
-                  onClick={() => a.link && navigate(a.link)}
+                  onClick={() => openAlert(a)}
                   style={{ display: "flex", alignItems: "center", gap: 10,
                     padding: "8px 10px", borderRadius: 10,
                     background: "var(--surface2)",
-                    cursor: a.link ? "pointer" : "default" }}>
+                    cursor: "pointer" }}>
 
                   <Dot a={a}/>
 
@@ -178,6 +229,23 @@ export default function AttentionSection() {
           </div>
         ))}
       </div>
+      </>)}
+
+      {/* Feuilles ouvertes SUR PLACE — on ne quitte pas l'accueil. */}
+      {sheet?.kind === "filament" && (
+        <FilamentSheet f={sheet.data} onClose={() => setSheet(null)}
+          onDeleted={() => { setSheet(null); load(); }}
+          onUpdated={() => load()}/>
+      )}
+      {sheet?.kind === "spool" && (
+        <FilamentSheetFromSpool filamentId={sheet.filamentId} spoolId={sheet.spoolId}
+          filamentColorHex={sheet.hex} onClose={() => { setSheet(null); load(); }}/>
+      )}
+      {sheet?.kind === "print" && (
+        <PrintDetail p={sheet.data} onClose={() => setSheet(null)}
+          onDelete={() => { setSheet(null); load(); }}
+          onChanged={() => load()}/>
+      )}
 
       {menu && (
         <div onClick={() => setMenu(null)}
@@ -199,8 +267,8 @@ export default function AttentionSection() {
               </div>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {menu.link && (
-                <button onClick={() => { const l = menu.link; setMenu(null); navigate(l); }}
+              {(menu.entity || menu.link) && (
+                <button onClick={() => { const a = menu; setMenu(null); openAlert(a); }}
                   style={{ padding: 12, borderRadius: 10, border: "none", cursor: "pointer",
                     background: "#3b82f6", color: "white", fontSize: 14, fontWeight: 700 }}>
                   Voir

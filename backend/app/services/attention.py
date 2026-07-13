@@ -51,6 +51,13 @@ class Alert:
     # faisait tronquer sur mobile. Le front l'affiche a droite, sans troncature.
     value: Optional[str] = None
 
+    # Cible : permet d'ouvrir la fiche SUR PLACE (feuille de detail) au lieu de
+    # naviguer vers une autre page — sans quoi il fallait revenir a l'accueil
+    # entre chaque alerte.
+    entity: Optional[str] = None       # "filament" | "spool" | "print"
+    entity_id: Optional[int] = None
+    filament_id: Optional[int] = None  # pour les alertes de bobine
+
 
 def _fil_visual(f) -> dict:
     """Champs d'affichage communs a toutes les alertes portant sur un filament."""
@@ -97,6 +104,7 @@ async def _filaments_without_spool(db) -> list[Alert]:
             detail="",
             severity="info",
             link=f"/filaments?id={f.id}",
+            entity="filament", entity_id=f.id,
             **_fil_visual(f),
         )
         for f in rows
@@ -127,6 +135,7 @@ async def _spools_low(db) -> list[Alert]:
             value=f"{int(s.remaining_weight_g)} g · {pct} %",
             severity="warn",
             link=f"/filaments?id={f.id}",
+            entity="spool", entity_id=s.id, filament_id=f.id,
             **_fil_visual(f),
         ))
     return out
@@ -155,6 +164,7 @@ async def _prints_without_mapping(db) -> list[Alert]:
             value=p.print_date.strftime("%d/%m") if p.print_date else None,
             severity="warn",
             link=f"/prints?id={p.id}",
+            entity="print", entity_id=p.id,
         )
         for p in rows
     ]
@@ -183,6 +193,7 @@ async def _prints_without_photo(db) -> list[Alert]:
             value=p.print_date.strftime("%d/%m") if p.print_date else None,
             severity="info",
             link=f"/prints?id={p.id}",
+            entity="print", entity_id=p.id,
         )
         for p in rows
     ]
@@ -214,6 +225,7 @@ async def _prints_without_3mf(db) -> list[Alert]:
             value=p.print_date.strftime("%d/%m") if p.print_date else None,
             severity="warn",
             link=f"/prints?id={p.id}",
+            entity="print", entity_id=p.id,
         )
         for p in rows
     ]
@@ -238,6 +250,7 @@ async def _filaments_without_profile(db) -> list[Alert]:
             detail="",
             severity="info",
             link=f"/filaments?id={f.id}",
+            entity="filament", entity_id=f.id,
             **_fil_visual(f),
         )
         for f in rows
@@ -265,6 +278,7 @@ async def _bambu_without_color_code(db) -> list[Alert]:
             detail="",
             severity="info",
             link=f"/filaments?id={f.id}",
+            entity="filament", entity_id=f.id,
             **_fil_visual(f),
         )
         for f in rows
@@ -294,6 +308,7 @@ async def _bambu_spools_without_rfid(db) -> list[Alert]:
             detail=f"Bobine #{s.id}",
             severity="info",
             link=f"/filaments?id={f.id}",
+            entity="spool", entity_id=s.id, filament_id=f.id,
             **_fil_visual(f),
         )
         for s, f in rows
@@ -340,12 +355,16 @@ async def build_attention(db, per_category: int = 3) -> tuple[list[dict], list[d
         alerts = [a for a in alerts if a.key not in dismissed]
         if not alerts:
             continue
-        sample = random.sample(alerts, min(per_category, len(alerts)))
+        # On renvoie plus d'alertes que ce qui sera affiche : le front garde le
+        # surplus en reserve et remplace instantanement une alerte masquee, sans
+        # rappeler l'API.
+        sample = random.sample(alerts, min(per_category * 4, len(alerts)))
         out.append({
             "category": cat,
             "label": label,
             "icon": icon,
             "total": len(alerts),
+            "shown": per_category,          # combien en afficher
             "alerts": [a.__dict__ for a in sample],
         })
     return out, errors
