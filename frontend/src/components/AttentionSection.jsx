@@ -1,6 +1,24 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
+import { colorBg, parseColorsList } from "../utils/colors";
+
+/** Pastille : dégradé sur un calque interne, anneau en inset box-shadow. */
+function Dot({ a, size = 26 }) {
+  const cols = parseColorsList(a.color, a.colors_array);
+  return (
+    <div style={{ width:size, height:size, borderRadius:8, flexShrink:0,
+      position:"relative", overflow:"hidden",
+      boxShadow:"inset 0 0 0 1px rgba(128,128,128,0.30)" }}>
+      <div style={{ position:"absolute", inset:0, ...colorBg(cols, a.multicolor_type) }}/>
+    </div>
+  );
+}
+
+const Chip = ({ children }) => (
+  <span style={{ fontSize:10, color:"var(--muted)", background:"var(--surface2)",
+    padding:"1px 6px", borderRadius:5, whiteSpace:"nowrap" }}>{children}</span>
+);
 
 /**
  * Points d'attention.
@@ -67,14 +85,14 @@ export default function AttentionSection() {
 
   if (!cats) return null;                      // premier chargement
   if (!cats.length) {
-    if (err) return <div style={{ marginBottom:20 }}>{errBox}</div>;
+    if (err) return <div className="card" style={{ padding:14 }}>{errBox}</div>;
     // Etat explicite : "rien a signaler" n'est pas la meme chose que "ca n'a pas
     // charge", et on ne pouvait pas les distinguer.
     return (
-      <div style={{ marginBottom:20 }}>
+      <div className="card" style={{ padding:14 }}>
         <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-          letterSpacing:"0.08em", margin:"0 0 8px" }}>Points d'attention</p>
-        <div style={{ padding:"12px", borderRadius:10, background:"var(--surface2)",
+          letterSpacing:"0.08em", margin:"0 0 10px" }}>Points d'attention</p>
+        <div style={{ padding:"10px 12px", borderRadius:10, background:"var(--surface2)",
           display:"flex", alignItems:"center", gap:8 }}>
           <span>✅</span>
           <span style={{ fontSize:12, color:"var(--muted)" }}>Rien à signaler.</span>
@@ -84,9 +102,9 @@ export default function AttentionSection() {
   }
 
   return (
-    <div style={{ marginBottom: 20 }}>
+    <div className="card" style={{ padding: 14 }}>
       <p style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase",
-        letterSpacing: "0.08em", margin: "0 0 8px" }}>
+        letterSpacing: "0.08em", margin: "0 0 10px" }}>
         Points d'attention
       </p>
       {errBox}
@@ -95,41 +113,54 @@ export default function AttentionSection() {
         {cats.map(c => (
           <div key={c.category}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-              <span style={{ fontSize: 13 }}>{c.icon}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text)" }}>
+              <span style={{ fontSize: 12 }}>{c.icon}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text)" }}>
                 {c.label}
               </span>
-              {c.total > c.alerts.length && (
-                <span style={{ fontSize: 10, color: "var(--muted)" }}>
-                  {c.alerts.length} sur {c.total}
-                </span>
-              )}
+              <span style={{ fontSize: 10, color: "var(--muted)", background: "var(--surface2)",
+                padding: "1px 6px", borderRadius: 8 }}>
+                {c.total > c.alerts.length ? `${c.alerts.length} / ${c.total}` : c.total}
+              </span>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {c.alerts.map(a => (
                 <div key={a.key}
+                  onClick={() => a.link && navigate(a.link)}
                   style={{ display: "flex", alignItems: "center", gap: 10,
-                    padding: "9px 12px", borderRadius: 10,
+                    padding: "8px 10px", borderRadius: 10,
                     background: "var(--surface2)",
-                    borderLeft: `3px solid ${a.severity === "warn" ? "#f59e0b" : "#3b82f6"}` }}>
+                    cursor: a.link ? "pointer" : "default" }}>
 
-                  <div onClick={() => a.link && navigate(a.link)}
-                    style={{ flex: 1, minWidth: 0, cursor: a.link ? "pointer" : "default" }}>
+                  <Dot a={a}/>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: "var(--text)",
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {a.title}
                     </p>
-                    <p style={{ margin: 0, fontSize: 11, color: "var(--muted)",
-                      overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {a.detail}
-                    </p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2,
+                      overflow: "hidden" }}>
+                      {a.brand && <Chip>{a.brand}</Chip>}
+                      {a.material && <Chip>{a.material}</Chip>}
+                      <span style={{ fontSize: 11, color: "var(--muted)",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {a.detail}
+                      </span>
+                    </div>
                   </div>
 
-                  <button onClick={() => setMenu(menu?.key === a.key ? null : a)}
-                    aria-label="Ignorer"
+                  {/* Pastille de severite : discrete, mais elle distingue un
+                      "a surveiller" d'un "a corriger". */}
+                  {a.severity === "warn" && (
+                    <span style={{ width: 6, height: 6, borderRadius: "50%",
+                      background: "#f59e0b", flexShrink: 0 }}/>
+                  )}
+
+                  <button onClick={e => { e.stopPropagation(); setMenu(a); }}
+                    aria-label="Options"
                     style={{ background: "none", border: "none", cursor: "pointer",
-                      color: "var(--muted)", fontSize: 16, padding: "0 4px", flexShrink: 0 }}>
+                      color: "var(--muted)", fontSize: 15, padding: "0 2px", flexShrink: 0 }}>
                     ⋯
                   </button>
                 </div>
@@ -146,12 +177,18 @@ export default function AttentionSection() {
             style={{ position: "absolute", bottom: 0, left: 0, right: 0,
               background: "var(--sheet-bg)", borderRadius: "20px 20px 0 0",
               padding: "20px 16px 32px" }}>
-            <p style={{ margin: "0 0 4px", fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
-              {menu.title}
-            </p>
-            <p style={{ margin: "0 0 16px", fontSize: 11, color: "var(--muted)" }}>
-              {menu.detail}
-            </p>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+              <Dot a={menu} size={34}/>
+              <div style={{ minWidth:0 }}>
+                <p style={{ margin: 0, fontSize: 13, fontWeight: 700, color: "var(--text)" }}>
+                  {menu.title}
+                </p>
+                <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--muted)" }}>
+                  {[menu.brand, menu.material].filter(Boolean).join(" · ")}
+                  {menu.brand || menu.material ? " — " : ""}{menu.detail}
+                </p>
+              </div>
+            </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {menu.link && (
                 <button onClick={() => { const l = menu.link; setMenu(null); navigate(l); }}

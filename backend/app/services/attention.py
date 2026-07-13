@@ -38,6 +38,29 @@ class Alert:
     severity: str = "info"         # info | warn
     link: Optional[str] = None     # route front, ex. "/filaments?id=106"
 
+    # Identite visuelle, portee par l'alerte elle-meme : sans elle, le front
+    # devrait recharger tout le catalogue pour retrouver la couleur d'un filament.
+    color: Optional[str] = None
+    colors_array: Optional[str] = None
+    multicolor_type: Optional[str] = None
+    brand: Optional[str] = None
+    material: Optional[str] = None
+
+
+def _fil_visual(f) -> dict:
+    """Champs d'affichage communs a toutes les alertes portant sur un filament."""
+    return {
+        "color": f.color,
+        "colors_array": f.colors_array,
+        "multicolor_type": f.multicolor_type,
+        "brand": f.manufacturer,
+        "material": f.fila_type or f.material,
+    }
+
+
+def _fil_title(f) -> str:
+    return f.translated_name or f.name or f"Filament #{f.id}"
+
 
 # ── Registre ───────────────────────────────────────────────────────────────
 CHECKS: list[tuple[str, str, str, Callable]] = []   # (cat_key, label, icone, fn)
@@ -65,10 +88,11 @@ async def _filaments_without_spool(db) -> list[Alert]:
         Alert(
             key=f"no_spool:filament:{f.id}",
             category="no_spool",
-            title=f.translated_name or f.name or f"Filament #{f.id}",
-            detail=f"{f.manufacturer or '—'} · {f.material or '—'} — plus aucune bobine",
+            title=_fil_title(f),
+            detail="Plus aucune bobine en stock",
             severity="info",
             link=f"/filaments?id={f.id}",
+            **_fil_visual(f),
         )
         for f in rows
     ]
@@ -93,10 +117,11 @@ async def _spools_low(db) -> list[Alert]:
         out.append(Alert(
             key=f"low_spool:spool:{s.id}",
             category="low_spool",
-            title=f.translated_name or f.name or f"Filament #{f.id}",
-            detail=f"Bobine #{s.id} — il reste {int(s.remaining_weight_g)} g ({pct} %)",
+            title=_fil_title(f),
+            detail=f"Bobine #{s.id} — {int(s.remaining_weight_g)} g restants ({pct} %)",
             severity="warn",
             link=f"/filaments?id={f.id}",
+            **_fil_visual(f),
         ))
     return out
 
@@ -182,6 +207,87 @@ async def _prints_without_3mf(db) -> list[Alert]:
             link=f"/prints?id={p.id}",
         )
         for p in rows
+    ]
+
+
+@check("no_profile", "Filaments sans profil d'impression", "🎛")
+async def _filaments_without_profile(db) -> list[Alert]:
+    """
+    profile_id absent : l'imprimante ne peut pas retrouver le profil du filament,
+    et l'association automatique depuis l'AMS ne fonctionne pas.
+    """
+    rows = (await db.execute(
+        select(Filament).where(
+            or_(Filament.profile_id.is_(None), Filament.profile_id == "")
+        )
+    )).scalars().all()
+    return [
+        Alert(
+            key=f"no_profile:filament:{f.id}",
+            category="no_profile",
+            title=_fil_title(f),
+            detail="Aucun profil d'impression (profile_id)",
+            severity="info",
+            link=f"/filaments?id={f.id}",
+            **_fil_visual(f),
+        )
+        for f in rows
+    ]
+
+
+@check("no_color_code", "Filaments Bambu sans code couleur", "🎨")
+async def _bambu_without_color_code(db) -> list[Alert]:
+    """
+    Filament Bambu sans fila_color_code : le rapprochement avec le catalogue
+    officiel (et donc l'enrichissement automatique) ne peut pas se faire.
+    Verification limitee aux filaments Bambu — les autres marques n'ont pas ce code.
+    """
+    rows = (await db.execute(
+        select(Filament).where(
+            Filament.manufacturer.ilike("%bambu%"),
+            or_(Filament.fila_color_code.is_(None), Filament.fila_color_code == ""),
+        )
+    )).scalars().all()
+    return [
+        Alert(
+            key=f"no_color_code:filament:{f.id}",
+            category="no_color_code",
+            title=_fil_title(f),
+            detail="Filament Bambu sans code couleur officiel",
+            severity="info",
+            link=f"/filaments?id={f.id}",
+            **_fil_visual(f),
+        )
+        for f in rows
+    ]
+
+
+@check("no_rfid", "Bobines Bambu sans RFID", "📡")
+async def _bambu_spools_without_rfid(db) -> list[Alert]:
+    """
+    Bobine Bambu active sans tag RFID : l'AMS ne la reconnaitra pas toute seule,
+    il faudra l'associer a la main a chaque changement.
+    """
+    rows = (await db.execute(
+        select(Spool, Filament)
+        .join(Filament, Filament.id == Spool.filament_id)
+        .where(
+            Spool.archived.is_(False),
+            Filament.manufacturer.ilike("%bambu%"),
+            or_(Spool.tag_number.is_(None), Spool.tag_number == ""),
+        )
+    )).all()
+    return [
+        Alert(
+            key=f"no_rfid:spool:{s.id}",
+            category="no_rfid",
+            title=_fil_title(f),
+            detail=f"Bobine #{s.id} — aucun tag RFID",
+            severity="info",
+            link=f"/filaments?id={f.id}",
+            **_fil_visual(f),
+        )
+        for s, f in rows
     ]
 
 
