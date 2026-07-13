@@ -30,8 +30,13 @@ export default function Logs({ embedded = false }) {
   const [status, setStatus]     = useState("");
   const [searching, setSearching] = useState(false);
   const [fileMb, setFileMb]     = useState(null);
-  const [truncated, setTruncated] = useState(false);
   const [scannedMb, setScannedMb] = useState(null);
+  // Curseur : offset (en octets) du debut de la plus ancienne ligne affichee.
+  // "Lire plus loin" repart de la, donc ni doublon ni trou.
+  const [cursor, setCursor]     = useState(0);
+  const [hasMore, setHasMore]   = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const skipScrollRef = useRef(false);   // ne pas sauter en bas apres un "lire plus loin"
   const bottomRef   = useRef();
   const intervalRef = useRef();
   const debounceRef = useRef();
@@ -42,8 +47,9 @@ export default function Logs({ embedded = false }) {
       const { data } = await client.get("/logs", { params: { limit:500, q: q.trim(), min_level: level } });
       setLogs(data.logs ?? []);
       setFileMb(data.file_mb);
-      setTruncated(data.truncated ?? false);
       setScannedMb(data.scanned_mb ?? null);
+      setCursor(data.next_offset ?? 0);
+      setHasMore(!!data.has_more);
       if (data.error) setStatus("⚠ " + data.error);
       else setStatus(`${data.total ?? 0} entrée${(data.total??0)!==1?"s":""}`);
     } catch(e) {
@@ -52,6 +58,24 @@ export default function Logs({ embedded = false }) {
       setSearching(false);
     }
   }, [filter, minLevel]);
+
+  const loadMore = async () => {
+    if (!hasMore || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const { data } = await client.get("/logs", { params: {
+        limit: 500, q: filter.trim(), min_level: minLevel, before: cursor,
+      }});
+      // Les lignes remontees sont PLUS ANCIENNES : elles vont en tete.
+      skipScrollRef.current = true;
+      setLogs(prev => [...(data.logs ?? []), ...prev]);
+      setCursor(data.next_offset ?? 0);
+      setHasMore(!!data.has_more);
+      setScannedMb(data.scanned_mb ?? null);
+    } catch (e) {
+      setStatus("⚠ " + (e.response?.data?.detail || e.message));
+    } finally { setLoadingMore(false); }
+  };
 
   // Chargement initial
   useEffect(() => { load("", minLevel); }, []);
@@ -66,6 +90,9 @@ export default function Logs({ embedded = false }) {
   }, [filter, minLevel]);
 
   useEffect(() => {
+    // On ajoute des lignes PLUS ANCIENNES en tete : sauter en bas ferait perdre
+    // la position de lecture, exactement ce qu'on venait chercher.
+    if (skipScrollRef.current) { skipScrollRef.current = false; return; }
     if (autoScroll) bottomRef.current?.scrollIntoView({ behavior:"smooth" });
   }, [logs, autoScroll]);
 
@@ -139,10 +166,10 @@ export default function Logs({ embedded = false }) {
           ))}
         </div>
         <span style={{ fontSize:11, color:"var(--muted)", flexShrink:0 }}>{logs.length}</span>
-        {truncated && (
-          <span title="Le journal est trop volumineux : la recherche s'est arrêtée avant le début du fichier."
+        {hasMore && (
+          <span title="La recherche s'est arrêtée avant le début du fichier — utilise « Lire plus loin »."
             style={{ fontSize:10, color:"#f59e0b", fontWeight:600, flexShrink:0 }}>
-            ⚠ recherche partielle
+            ⚠ partielle
           </span>
         )}
         <label style={{ display:"flex", alignItems:"center", gap:4, fontSize:11, color:"var(--muted)", cursor:"pointer", flexShrink:0 }}>
@@ -152,6 +179,15 @@ export default function Logs({ embedded = false }) {
 
       {/* Logs */}
       <div className="card" style={{ flex:1, overflowY:"auto", padding:8, fontFamily:"JetBrains Mono, monospace", fontSize:11 }}>
+        {hasMore && (
+          <button onClick={loadMore} disabled={loadingMore}
+            style={{ width:"100%", padding:"8px", marginBottom:6, borderRadius:6,
+              border:"1px dashed var(--border)", background:"var(--surface2)",
+              color:"var(--muted)", cursor: loadingMore ? "default" : "pointer",
+              fontSize:11, fontFamily:"inherit" }}>
+            {loadingMore ? "Lecture…" : "↑ Lire plus loin dans le journal"}
+          </button>
+        )}
         {logs.length === 0
           ? <p style={{ textAlign:"center", color:"var(--muted)", padding:"48px 0", fontSize:13 }}>
               {searching ? "Recherche…" : "Aucun log"}

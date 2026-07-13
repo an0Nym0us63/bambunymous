@@ -35,17 +35,21 @@ def _parse(line: str):
     return {"ts": dt[11:19], "date": dt[:10], "level": level, "name": name.split(".")[-1], "msg": msg}
 
 
-def _scan_backwards(filepath: str, limit: int, q: str, min_level: str):
+def _scan_backwards(filepath: str, limit: int, q: str, min_level: str,
+                    before: int | None = None):
     """
     Parcourt le fichier A REBOURS et s'arrete des qu'on a `limit` resultats.
 
     L'ancienne recherche relisait TOUT le fichier depuis le debut pour n'en garder
-    que les N dernieres correspondances : sur un log de plusieurs centaines de Mo,
-    chaque frappe relisait tout. Or ce qu'on cherche est presque toujours recent.
-    Ici, une recherche qui trouve ses resultats dans les dernieres lignes ne lit
-    que quelques kilo-octets.
+    que les N dernieres correspondances : sur un gros log, chaque frappe relisait
+    tout. Or ce qu'on cherche est presque toujours recent.
 
-    Renvoie (resultats du plus ancien au plus recent, octets lus, scan tronque).
+    `before` : n'examiner que ce qui precede cet offset. C'est le curseur de
+    pagination -- il vaut l'offset EXACT du debut de la plus ancienne ligne deja
+    renvoyee, ce qui garantit l'absence de doublon et de trou entre deux pages.
+
+    Renvoie (lignes du plus ancien au plus recent, octets lus, next_offset).
+    next_offset = 0 -> on a atteint le debut du fichier, il n'y a plus rien.
     """
     CHUNK = 256 * 1024
     ql = q.strip().lower()
@@ -53,30 +57,45 @@ def _scan_backwards(filepath: str, limit: int, q: str, min_level: str):
 
     found: list[dict] = []
     scanned = 0
-    truncated = False
-    buf = b""
+    carry = b""          # debut de ligne incomplet, appartenant au bloc precedent
 
     with open(filepath, "rb") as f:
         f.seek(0, 2)
-        pos = f.tell()
+        size = f.tell()
+        pos = size if before is None else max(0, min(before, size))
+        next_offset = pos
+
         while pos > 0 and len(found) < limit:
             if scanned >= MAX_SCAN_BYTES:
-                truncated = True
-                break
+                break            # plafond atteint : next_offset reste sur pos
             read = min(CHUNK, pos)
             pos -= read
             f.seek(pos)
             chunk = f.read(read)
             scanned += read
-            buf = chunk + buf
-            parts = buf.split(b"\n")
-            # La premiere tranche est peut-etre coupee au milieu d'une ligne :
-            # on la garde pour le tour suivant.
-            buf = parts[0] if pos > 0 else b""
-            head = parts[1:] if pos > 0 else parts
 
-            for raw in reversed(head):
-                p = _parse(raw.decode("utf-8", errors="replace"))
+            data = chunk + carry
+            parts = data.split(b"\n")
+            # parts[0] commence AVANT pos : on le garde pour le tour suivant
+            # (sauf si on est au debut du fichier, ou il est complet).
+            if pos > 0:
+                carry = parts[0]
+                complete = parts[1:]
+                first_off = pos + len(parts[0]) + 1
+            else:
+                carry = b""
+                complete = parts
+                first_off = 0
+
+            # Offset de debut de chaque ligne complete
+            offsets = []
+            o = first_off
+            for ln in complete:
+                offsets.append(o)
+                o += len(ln) + 1
+
+            for ln, off in zip(reversed(complete), reversed(offsets)):
+                p = _parse(ln.decode("utf-8", errors="replace"))
                 if not p:
                     continue
                 if LEVEL_ORDER.get(p["level"], 0) < min_idx:
@@ -84,11 +103,20 @@ def _scan_backwards(filepath: str, limit: int, q: str, min_level: str):
                 if ql and ql not in p["msg"].lower() and ql not in p["name"].lower():
                     continue
                 found.append(p)
+                next_offset = off      # debut de la plus ancienne ligne retenue
                 if len(found) >= limit:
                     break
+            else:
+                # Bloc entierement consomme sans atteindre la limite
+                next_offset = pos
+                continue
+            break
 
-    found.reverse()   # du plus ancien au plus recent
-    return found, scanned, truncated
+        if pos <= 0 and len(found) < limit:
+            next_offset = 0            # on a lu jusqu'au debut du fichier
+
+    found.reverse()                    # du plus ancien au plus recent
+    return found, scanned, next_offset
 
 
 def _auto_purge(filepath: str) -> bool:
@@ -114,21 +142,24 @@ async def get_logs(
     limit: int     = Query(500, le=2000),
     q: str         = Query("", alias="q"),
     min_level: str = Query("INFO"),
+    before: int    = Query(0, ge=0),   # curseur : ne lire que ce qui precede cet offset
     _: str = Depends(get_current_user),
 ):
     if not os.path.exists(LOG_FILE):
         return {"logs": [], "total": 0, "error": f"Fichier {LOG_FILE} introuvable"}
     try:
         size_mb = round(os.path.getsize(LOG_FILE) / 1024 / 1024, 1)
-        logs, scanned, truncated = _scan_backwards(
-            LOG_FILE, limit=limit, q=q, min_level=min_level
+        logs, scanned, next_offset = _scan_backwards(
+            LOG_FILE, limit=limit, q=q, min_level=min_level,
+            before=(before or None),
         )
         return {
             "logs": logs,
             "total": len(logs),
             "file_mb": size_mb,
             "scanned_mb": round(scanned / 1024 / 1024, 2),
-            "truncated": truncated,   # le scan s'est arrete avant le debut du fichier
+            "next_offset": next_offset,      # curseur a repasser pour lire plus loin
+            "has_more": next_offset > 0,     # il reste du fichier avant ce point
         }
     except Exception as e:
         return {"logs": [], "total": 0, "error": str(e)}
