@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import { colorBg, parseColorsList } from "../utils/colors";
+import { FilamentSheet, FilamentSheetFromSpool } from "../pages/Filaments";
+import { PrintDetail } from "../pages/Prints";
 
 /**
  * Toutes les alertes, filtrables.
@@ -40,6 +42,25 @@ export default function AllAlertsModal({ onClose, onChanged }) {
   const [q, setQ]       = useState("");
   const [showDis, setShowDis] = useState(false);
   const [err, setErr]   = useState(null);
+  const [sheet, setSheet] = useState(null);   // fiche ouverte par-dessus la liste
+
+  // Meme comportement que sur l'accueil : la liste ne servait a rien si on ne
+  // pouvait pas ouvrir ce qu'elle signale.
+  const openAlert = async (a) => {
+    try {
+      if (a.entity === "filament") {
+        const r = await client.get(`/filaments/filaments/${a.entity_id}`);
+        setSheet({ kind:"filament", data:r.data });
+      } else if (a.entity === "spool") {
+        setSheet({ kind:"spool", spoolId:a.entity_id, filamentId:a.filament_id, hex:a.color });
+      } else if (a.entity === "print") {
+        const r = await client.get(`/prints/${a.entity_id}`);
+        setSheet({ kind:"print", data:r.data });
+      }
+    } catch (e) {
+      setErr("Impossible d'ouvrir la fiche : " + (e.response?.data?.detail || e.message));
+    }
+  };
 
   const load = () => {
     setErr(null);
@@ -139,17 +160,26 @@ export default function AllAlertsModal({ onClose, onChanged }) {
           ) : shown.map(a => (
             <div key={a.key} style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px", borderRadius:8, opacity: a.dismissed ? 0.45 : 1 }}>
-              <Dot a={a}/>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ margin:0, fontSize:12, fontWeight:600, color:"var(--text)",
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {a.title}
-                </p>
-                <p style={{ margin:0, fontSize:10, color:"var(--muted)",
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {a.cat_icon} {a.cat_label}
-                  {a.brand ? ` · ${a.brand}` : ""}{a.detail ? ` · ${a.detail}` : ""}
-                </p>
+              <div onClick={() => a.entity && openAlert(a)}
+                style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0,
+                  cursor: a.entity ? "pointer" : "default" }}>
+                <Dot a={a}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ margin:0, fontSize:12, fontWeight:600, color:"var(--text)",
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {a.title}
+                  </p>
+                  {/* Marque et matiere manquaient : deux alertes sur le meme nom de
+                      teinte etaient impossibles a distinguer. */}
+                  <p style={{ margin:0, fontSize:10, color:"var(--muted)",
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {[a.brand, a.material, a.detail].filter(Boolean).join(" · ") || "—"}
+                  </p>
+                  <p style={{ margin:0, fontSize:9, color:"var(--muted)", opacity:0.75,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    {a.cat_icon} {a.cat_label}
+                  </p>
+                </div>
               </div>
               {a.value && (
                 <span style={{ flexShrink:0, fontSize:10, fontWeight:700,
@@ -171,6 +201,23 @@ export default function AllAlertsModal({ onClose, onChanged }) {
           ))}
         </div>
       </div>
+
+      {/* Fiches ouvertes par-dessus la liste — on ne perd pas ses filtres. */}
+      {sheet?.kind === "filament" && (
+        <FilamentSheet f={sheet.data} onClose={() => setSheet(null)}
+          onDeleted={() => { setSheet(null); load(); onChanged?.(); }}
+          onUpdated={() => { load(); onChanged?.(); }}/>
+      )}
+      {sheet?.kind === "spool" && (
+        <FilamentSheetFromSpool filamentId={sheet.filamentId} spoolId={sheet.spoolId}
+          filamentColorHex={sheet.hex}
+          onClose={() => { setSheet(null); load(); onChanged?.(); }}/>
+      )}
+      {sheet?.kind === "print" && (
+        <PrintDetail p={sheet.data} onClose={() => setSheet(null)}
+          onDelete={() => { setSheet(null); load(); onChanged?.(); }}
+          onChanged={() => { load(); onChanged?.(); }}/>
+      )}
     </div>,
     document.body
   );

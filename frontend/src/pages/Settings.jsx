@@ -474,6 +474,8 @@ function DismissedModal({ onClose }) {
   const [rows, setRows] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [err, setErr]   = React.useState(null);
+  const [q, setQ]       = React.useState("");
+  const [cat, setCat]   = React.useState("");
 
   const load = () => {
     setErr(null);
@@ -497,6 +499,24 @@ function DismissedModal({ onClose }) {
     finally { setBusy(false); }
   };
 
+  // Memes filtres que la liste complete : au-dela de quelques lignes, une liste
+  // sans filtre n'est plus consultable.
+  const all = rows || [];
+  const counts = {};
+  all.forEach(r => { counts[r.category] = (counts[r.category] || 0) + 1; });
+  const cats = Object.keys(counts).map(c => {
+    const r = all.find(x => x.category === c);
+    return { category:c, label:r?.label || c, icon:r?.icon || "•" };
+  }).sort((a,b) => a.label.localeCompare(b.label));
+
+  const shown = all.filter(r => {
+    if (cat && r.category !== cat) return false;
+    if (!q.trim()) return true;
+    const hay = [r.title, r.brand, r.material, r.detail, r.label]
+      .filter(Boolean).join(" ").toLowerCase();
+    return q.trim().toLowerCase().split(/\s+/).every(w => hay.includes(w));
+  });
+
   const fmt = (r) => {
     if (r.forever) return "Définitivement";
     if (!r.until)  return "—";
@@ -515,7 +535,7 @@ function DismissedModal({ onClose }) {
 
         <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
           <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>
-            Alertes ignorées{rows ? ` (${rows.length})` : ""}
+            Alertes ignorées{rows ? ` (${shown.length})` : ""}
           </p>
           <button type="button" onClick={onClose}
             style={{ background:"none", border:"none", color:"var(--muted)",
@@ -524,14 +544,35 @@ function DismissedModal({ onClose }) {
 
         {err && <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"#ef4444" }}>⚠ {err}</p>}
 
+        {!!all.length && (
+          <div style={{ padding:"0 16px 10px", display:"flex", flexDirection:"column", gap:8 }}>
+            <input value={q} onChange={e => setQ(e.target.value)}
+              placeholder="Filtrer : nom, marque, matière…"
+              style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
+                border:"1px solid var(--border)", background:"var(--surface2)",
+                color:"var(--text)", fontSize:13, outline:"none" }}/>
+            <select value={cat} onChange={e => setCat(e.target.value)}
+              style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
+                border:"1px solid var(--border)", background:"var(--surface2)",
+                color:"var(--text)", fontSize:13, outline:"none" }}>
+              <option value="">Toutes les catégories ({all.length})</option>
+              {cats.map(c => (
+                <option key={c.category} value={c.category}>
+                  {c.icon} {c.label} ({counts[c.category]})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
         <div style={{ flex:1, overflowY:"auto", padding:"0 8px 8px" }}>
           {!rows ? (
             <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>Chargement…</p>
-          ) : !rows.length ? (
+          ) : !shown.length ? (
             <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>
-              Aucune alerte ignorée.
+              {all.length ? "Aucune alerte ne correspond." : "Aucune alerte ignorée."}
             </p>
-          ) : rows.map(r => (
+          ) : shown.map(r => (
             <div key={r.key} style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px", borderRadius:8 }}>
               <ColorDot f={r} size={22}/>
@@ -542,7 +583,11 @@ function DismissedModal({ onClose }) {
                 </p>
                 <p style={{ margin:0, fontSize:10, color:"var(--muted)",
                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {r.icon} {r.label}{r.detail ? ` · ${r.detail}` : ""}
+                  {[r.brand, r.material, r.detail].filter(Boolean).join(" · ") || "—"}
+                </p>
+                <p style={{ margin:0, fontSize:9, color:"var(--muted)", opacity:0.75,
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                  {r.icon} {r.label}
                 </p>
               </div>
               <span style={{ flexShrink:0, fontSize:10, fontWeight:700,
