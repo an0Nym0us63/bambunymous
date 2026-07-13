@@ -30,6 +30,51 @@ async def get_attention(
     return {"categories": cats, "errors": errors}
 
 
+@router.get("/debug")
+async def debug_attention(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """
+    Comptages bruts, check par check, AVANT filtrage des mises en sourdine.
+    Sert a comprendre un "Rien a signaler" suspect : on voit tout de suite si
+    c'est le check qui ne trouve rien, ou la sourdine qui masque tout.
+    """
+    from sqlalchemy import func
+    from ....models.filament import Filament, Spool
+    from ....models.print_history import Print, FilamentUsage, PrintSnapshot
+    from ....services.attention import CHECKS, _dismissed_keys
+
+    async def count(model):
+        return (await db.execute(select(func.count()).select_from(model))).scalar()
+
+    checks = []
+    for cat, label, icon, fn in CHECKS:
+        try:
+            alerts = await fn(db)
+            checks.append({"category": cat, "label": label,
+                           "found": len(alerts),
+                           "sample": [a.key for a in alerts[:3]]})
+        except Exception as e:
+            checks.append({"category": cat, "label": label,
+                           "error": f"{type(e).__name__}: {e}"})
+
+    return {
+        "tables": {
+            "filaments":      await count(Filament),
+            "bobines":        await count(Spool),
+            "bobines_actives": (await db.execute(
+                select(func.count()).select_from(Spool).where(Spool.archived.is_(False))
+            )).scalar(),
+            "prints":         await count(Print),
+            "filament_usage": await count(FilamentUsage),
+            "snapshots":      await count(PrintSnapshot),
+        },
+        "checks": checks,
+        "dismissed": sorted(await _dismissed_keys(db)),
+    }
+
+
 @router.post("/dismiss")
 async def dismiss_alert(
     body: DismissIn,
