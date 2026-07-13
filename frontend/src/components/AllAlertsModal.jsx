@@ -36,11 +36,13 @@ function Dot({ a, size = 22 }) {
   );
 }
 
-export default function AllAlertsModal({ onClose, onChanged }) {
+export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" }) {
+  const [tab, setTab]   = useState(initialTab);   // "all" | "dismissed"
   const [data, setData] = useState(null);
+  const [dis, setDis]   = useState(null);         // sourdines, avec leur duree
   const [cat, setCat]   = useState("");
   const [q, setQ]       = useState("");
-  const [showDis, setShowDis] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState(null);
   const [sheet, setSheet] = useState(null);   // fiche ouverte par-dessus la liste
 
@@ -64,25 +66,57 @@ export default function AllAlertsModal({ onClose, onChanged }) {
 
   const load = () => {
     setErr(null);
+    // Les deux onglets viennent de sources differentes : /all recalcule les
+    // alertes, /dismissed porte la DUREE de chaque sourdine (que /all ignore).
     client.get("/attention/all")
       .then(r => setData(r.data))
+      .catch(e => setErr(e.response?.data?.detail || e.message));
+    client.get("/attention/dismissed")
+      .then(r => setDis(r.data?.dismissed || []))
       .catch(e => setErr(e.response?.data?.detail || e.message));
   };
   useEffect(load, []);
 
-  const alerts = data?.alerts || [];
-  const visible = alerts.filter(a => showDis || !a.dismissed);
+  // Onglet courant -> jeu de donnees. Le reste (filtres, lignes) est mutualise :
+  // les deux fenetres separees affichaient deja la meme chose.
+  const source = tab === "all"
+    ? (data?.alerts || []).filter(a => !a.dismissed)
+    : (dis || []);
 
   const counts = {};
-  visible.forEach(a => { counts[a.category] = (counts[a.category] || 0) + 1; });
+  source.forEach(a => { counts[a.category] = (counts[a.category] || 0) + 1; });
 
-  const shown = visible.filter(a => {
+  const catList = tab === "all"
+    ? (data?.categories || []).filter(c => counts[c.category])
+    : Object.keys(counts).map(c => {
+        const r = source.find(x => x.category === c);
+        return { category:c, label:r?.label || c, icon:r?.icon || "•" };
+      }).sort((a, b) => a.label.localeCompare(b.label));
+
+  const match = (a) => {
     if (cat && a.category !== cat) return false;
     if (!q.trim()) return true;
-    const hay = [a.title, a.brand, a.material, a.detail, a.value, a.cat_label]
+    const hay = [a.title, a.brand, a.material, a.detail, a.value, a.cat_label, a.label]
       .filter(Boolean).join(" ").toLowerCase();
     return q.trim().toLowerCase().split(/\s+/).every(w => hay.includes(w));
-  });
+  };
+  const shown = source.filter(match);
+
+  const fmtUntil = (r) => {
+    if (r.forever) return "Définitivement";
+    if (!r.until)  return "—";
+    if (r.expired) return "Expiré";
+    const days = Math.max(0, Math.ceil((new Date(r.until) - new Date()) / 86400000));
+    return `Encore ${days} j`;
+  };
+
+  const clearAll = async () => {
+    if (!window.confirm("Remettre en circulation TOUTES les alertes ignorées ?")) return;
+    setBusy(true);
+    try { await client.delete("/attention/dismissed"); setDis([]); load(); onChanged?.(); }
+    catch (e) { setErr(e.response?.data?.detail || e.message); }
+    finally { setBusy(false); }
+  };
 
   const mark = (key, dismissed) =>
     setData(d => ({ ...d, alerts: d.alerts.map(x =>
@@ -90,13 +124,18 @@ export default function AllAlertsModal({ onClose, onChanged }) {
 
   const dismiss = async (a, days) => {
     mark(a.key, true);
-    try { await client.post("/attention/dismiss", { key: a.key, days: days ?? null }); onChanged?.(); }
-    catch { load(); }
+    try {
+      await client.post("/attention/dismiss", { key: a.key, days: days ?? null });
+      load(); onChanged?.();          // l'onglet "ignorees" doit refleter le changement
+    } catch { load(); }
   };
   const restore = async (a) => {
     mark(a.key, false);
-    try { await client.delete(`/attention/dismiss/${encodeURIComponent(a.key)}`); onChanged?.(); }
-    catch { load(); }
+    setDis(ds => (ds || []).filter(d => d.key !== a.key));
+    try {
+      await client.delete(`/attention/dismiss/${encodeURIComponent(a.key)}`);
+      load(); onChanged?.();
+    } catch { load(); }
   };
 
   const iconBtn = (color) => ({ flexShrink:0, background:"none", border:"none",
@@ -110,13 +149,29 @@ export default function AllAlertsModal({ onClose, onChanged }) {
         maxHeight:"88vh", display:"flex", flexDirection:"column",
         background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
 
-        <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
+        <div style={{ padding:"12px 16px 0", display:"flex", alignItems:"center", gap:10 }}>
           <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>
-            Alertes ({shown.length})
+            Points d'attention
           </p>
           <button type="button" onClick={onClose}
             style={{ background:"none", border:"none", color:"var(--muted)",
               fontSize:18, cursor:"pointer" }}>✕</button>
+        </div>
+
+        {/* Deux onglets plutot que deux fenetres : elles affichaient deja les
+            memes lignes, avec les memes filtres. */}
+        <div style={{ display:"flex", gap:4, padding:"10px 16px 0" }}>
+          {[["all", "Toutes", (data?.alerts || []).filter(a => !a.dismissed).length],
+            ["dismissed", "Ignorées", (dis || []).length]].map(([k, lbl, n]) => (
+            <button key={k} type="button"
+              onClick={() => { setTab(k); setCat(""); }}
+              style={{ flex:1, padding:"7px 10px", borderRadius:8, border:"none",
+                cursor:"pointer", fontSize:12, fontWeight:700,
+                background: tab === k ? "#3b82f6" : "var(--surface2)",
+                color: tab === k ? "white" : "var(--muted)" }}>
+              {lbl} ({n})
+            </button>
+          ))}
         </div>
 
         {err && <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"#ef4444" }}>⚠ {err}</p>}
@@ -134,32 +189,27 @@ export default function AllAlertsModal({ onClose, onChanged }) {
             style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
               border:"1px solid var(--border)", background:"var(--surface2)",
               color:"var(--text)", fontSize:13, outline:"none" }}>
-            <option value="">Toutes les catégories ({visible.length})</option>
-            {(data?.categories || [])
-              .filter(c => counts[c.category])
-              .map(c => (
-                <option key={c.category} value={c.category}>
-                  {c.icon} {c.label} ({counts[c.category]})
-                </option>
-              ))}
+            <option value="">Toutes les catégories ({source.length})</option>
+            {catList.map(c => (
+              <option key={c.category} value={c.category}>
+                {c.icon} {c.label} ({counts[c.category]})
+              </option>
+            ))}
           </select>
 
-          <label style={{ display:"flex", alignItems:"center", gap:6,
-            fontSize:11, color:"var(--muted)", cursor:"pointer" }}>
-            <input type="checkbox" checked={showDis}
-              onChange={e => setShowDis(e.target.checked)}/>
-            Afficher aussi les alertes ignorées
-          </label>
         </div>
 
         <div style={{ flex:1, overflowY:"auto", padding:"0 8px 12px" }}>
-          {!data ? (
+          {(tab === "all" ? !data : !dis) ? (
             <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>Chargement…</p>
           ) : !shown.length ? (
-            <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>Aucune alerte.</p>
+            <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>
+              {source.length ? "Aucune alerte ne correspond."
+                : tab === "all" ? "Aucune alerte." : "Aucune alerte ignorée."}
+            </p>
           ) : shown.map(a => (
             <div key={a.key} style={{ display:"flex", alignItems:"center", gap:10,
-              padding:"8px", borderRadius:8, opacity: a.dismissed ? 0.45 : 1 }}>
+              padding:"8px", borderRadius:8 }}>
               <div onClick={() => a.entity && openAlert(a)}
                 style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0,
                   cursor: a.entity ? "pointer" : "default" }}>
@@ -177,21 +227,26 @@ export default function AllAlertsModal({ onClose, onChanged }) {
                   </p>
                   <p style={{ margin:0, fontSize:9, color:"var(--muted)", opacity:0.75,
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                    {a.cat_icon} {a.cat_label}
+                    {a.cat_icon || a.icon} {a.cat_label || a.label}
                   </p>
                 </div>
               </div>
-              {a.value && (
+              {tab === "dismissed" ? (<>
                 <span style={{ flexShrink:0, fontSize:10, fontWeight:700,
                   fontFamily:"JetBrains Mono,monospace",
-                  color: a.severity === "warn" ? "#f59e0b" : "var(--muted)" }}>
-                  {a.value}
+                  color: a.forever ? "#ef4444" : a.expired ? "var(--muted)" : "#f59e0b" }}>
+                  {fmtUntil(a)}
                 </span>
-              )}
-              {a.dismissed ? (
                 <button type="button" onClick={() => restore(a)} title="Remettre en circulation"
                   style={iconBtn("var(--muted)")}>↩</button>
-              ) : (<>
+              </>) : (<>
+                {a.value && (
+                  <span style={{ flexShrink:0, fontSize:10, fontWeight:700,
+                    fontFamily:"JetBrains Mono,monospace",
+                    color: a.severity === "warn" ? "#f59e0b" : "var(--muted)" }}>
+                    {a.value}
+                  </span>
+                )}
                 <button type="button" onClick={() => dismiss(a, 7)} title="Ignorer 7 jours"
                   style={iconBtn("var(--muted)")}>7j</button>
                 <button type="button" onClick={() => dismiss(a, null)} title="Ne plus jamais afficher"
@@ -200,6 +255,17 @@ export default function AllAlertsModal({ onClose, onChanged }) {
             </div>
           ))}
         </div>
+
+        {tab === "dismissed" && !!(dis || []).length && (
+          <div style={{ padding:"10px 16px" }}>
+            <button type="button" disabled={busy} onClick={clearAll}
+              style={{ width:"100%", padding:"9px", borderRadius:8, border:"none",
+                background:"rgba(239,68,68,0.12)", color:"#ef4444",
+                fontSize:12, fontWeight:700, cursor:"pointer" }}>
+              {busy ? "…" : "Tout remettre en circulation"}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Fiches ouvertes par-dessus la liste — on ne perd pas ses filtres. */}

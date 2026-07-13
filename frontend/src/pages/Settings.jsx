@@ -293,8 +293,8 @@ function AttentionCard({ card, cardTitle }) {
     <div className="card" style={card}>
       <div style={cardTitle}>Points d'attention</div>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
-        L'accueil n'affiche que quelques alertes par catégorie. Ici, tu vois tout,
-        tu choisis l'ordre des catégories, et tu gères ce que tu as masqué.
+        L'accueil n'affiche que quelques alertes par catégorie. Ici, tu vois tout —
+        y compris ce que tu as ignoré — et tu choisis l'ordre des catégories.
       </p>
       <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
         <button type="button" onClick={() => setModal("all")} style={btn("#3b82f6","white")}>
@@ -304,15 +304,10 @@ function AttentionCard({ card, cardTitle }) {
           style={btn("var(--surface2)","var(--text)")}>
           Organiser les catégories de l'accueil…
         </button>
-        <button type="button" onClick={() => setModal("dismissed")}
-          style={btn("var(--surface2)","var(--text)")}>
-          Alertes ignorées…
-        </button>
       </div>
 
       {modal === "all"       && <AllAlertsModal onClose={() => setModal(null)}/>}
       {modal === "cats"      && <CategoriesModal onClose={() => setModal(null)}/>}
-      {modal === "dismissed" && <DismissedModal onClose={() => setModal(null)}/>}
     </div>
   );
 }
@@ -469,158 +464,6 @@ function CategoriesModal({ onClose }) {
 }
 
 
-/** Les alertes mises en sourdine, avec leur durée restante. */
-function DismissedModal({ onClose }) {
-  const [rows, setRows] = React.useState(null);
-  const [busy, setBusy] = React.useState(false);
-  const [err, setErr]   = React.useState(null);
-  const [q, setQ]       = React.useState("");
-  const [cat, setCat]   = React.useState("");
-
-  const load = () => {
-    setErr(null);
-    client.get("/attention/dismissed")
-      .then(r => setRows(r.data?.dismissed || []))
-      .catch(e => setErr(e.response?.data?.detail || e.message));
-  };
-  React.useEffect(load, []);
-
-  const remove = async (key) => {
-    setRows(rs => rs.filter(r => r.key !== key));       // optimiste
-    try { await client.delete(`/attention/dismiss/${encodeURIComponent(key)}`); }
-    catch { load(); }
-  };
-
-  const clearAll = async () => {
-    if (!window.confirm("Remettre en circulation TOUTES les alertes ignorées ?")) return;
-    setBusy(true);
-    try { await client.delete("/attention/dismissed"); setRows([]); }
-    catch (e) { setErr(e.response?.data?.detail || e.message); }
-    finally { setBusy(false); }
-  };
-
-  // Memes filtres que la liste complete : au-dela de quelques lignes, une liste
-  // sans filtre n'est plus consultable.
-  const all = rows || [];
-  const counts = {};
-  all.forEach(r => { counts[r.category] = (counts[r.category] || 0) + 1; });
-  const cats = Object.keys(counts).map(c => {
-    const r = all.find(x => x.category === c);
-    return { category:c, label:r?.label || c, icon:r?.icon || "•" };
-  }).sort((a,b) => a.label.localeCompare(b.label));
-
-  const shown = all.filter(r => {
-    if (cat && r.category !== cat) return false;
-    if (!q.trim()) return true;
-    const hay = [r.title, r.brand, r.material, r.detail, r.label]
-      .filter(Boolean).join(" ").toLowerCase();
-    return q.trim().toLowerCase().split(/\s+/).every(w => hay.includes(w));
-  });
-
-  const fmt = (r) => {
-    if (r.forever) return "Définitivement";
-    if (!r.until)  return "—";
-    if (r.expired) return "Expiré";
-    const days = Math.max(0, Math.ceil((new Date(r.until) - new Date()) / 86400000));
-    return `Encore ${days} j`;
-  };
-
-  return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9999,
-      background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center",
-      justifyContent:"center", padding:16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:520,
-        maxHeight:"84vh", display:"flex", flexDirection:"column",
-        background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
-
-        <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
-          <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>
-            Alertes ignorées{rows ? ` (${shown.length})` : ""}
-          </p>
-          <button type="button" onClick={onClose}
-            style={{ background:"none", border:"none", color:"var(--muted)",
-              fontSize:18, cursor:"pointer" }}>✕</button>
-        </div>
-
-        {err && <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"#ef4444" }}>⚠ {err}</p>}
-
-        {!!all.length && (
-          <div style={{ padding:"0 16px 10px", display:"flex", flexDirection:"column", gap:8 }}>
-            <input value={q} onChange={e => setQ(e.target.value)}
-              placeholder="Filtrer : nom, marque, matière…"
-              style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
-                border:"1px solid var(--border)", background:"var(--surface2)",
-                color:"var(--text)", fontSize:13, outline:"none" }}/>
-            <select value={cat} onChange={e => setCat(e.target.value)}
-              style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
-                border:"1px solid var(--border)", background:"var(--surface2)",
-                color:"var(--text)", fontSize:13, outline:"none" }}>
-              <option value="">Toutes les catégories ({all.length})</option>
-              {cats.map(c => (
-                <option key={c.category} value={c.category}>
-                  {c.icon} {c.label} ({counts[c.category]})
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
-
-        <div style={{ flex:1, overflowY:"auto", padding:"0 8px 8px" }}>
-          {!rows ? (
-            <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>Chargement…</p>
-          ) : !shown.length ? (
-            <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>
-              {all.length ? "Aucune alerte ne correspond." : "Aucune alerte ignorée."}
-            </p>
-          ) : shown.map(r => (
-            <div key={r.key} style={{ display:"flex", alignItems:"center", gap:10,
-              padding:"8px", borderRadius:8 }}>
-              <ColorDot f={r} size={22}/>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ margin:0, fontSize:12, fontWeight:600, color:"var(--text)",
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {r.title}
-                </p>
-                <p style={{ margin:0, fontSize:10, color:"var(--muted)",
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {[r.brand, r.material, r.detail].filter(Boolean).join(" · ") || "—"}
-                </p>
-                <p style={{ margin:0, fontSize:9, color:"var(--muted)", opacity:0.75,
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {r.icon} {r.label}
-                </p>
-              </div>
-              <span style={{ flexShrink:0, fontSize:10, fontWeight:700,
-                fontFamily:"JetBrains Mono,monospace",
-                color: r.forever ? "#ef4444" : r.expired ? "var(--muted)" : "#f59e0b" }}>
-                {fmt(r)}
-              </span>
-              <button type="button" onClick={() => remove(r.key)}
-                title="Remettre en circulation"
-                style={{ flexShrink:0, background:"none", border:"none", cursor:"pointer",
-                  color:"var(--muted)", fontSize:14 }}>↩</button>
-            </div>
-          ))}
-        </div>
-
-        <div style={{ padding:"12px 16px", display:"flex", gap:8 }}>
-          <button type="button" onClick={onClose}
-            style={{ flex:1, padding:"9px", borderRadius:8, border:"1px solid var(--border)",
-              background:"none", color:"var(--muted)", fontSize:12, cursor:"pointer" }}>
-            Fermer
-          </button>
-          <button type="button" disabled={!rows?.length || busy} onClick={clearAll}
-            style={{ flex:2, padding:"9px", borderRadius:8, border:"none",
-              background: rows?.length ? "rgba(239,68,68,0.12)" : "var(--border)",
-              color: rows?.length ? "#ef4444" : "var(--muted)",
-              fontSize:12, fontWeight:700, cursor: rows?.length ? "pointer" : "default" }}>
-            {busy ? "…" : "Tout remettre en circulation"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // ── Étiquettes filaments (PDF) ─────────────────────────────────────────────
 function LabelsCard({ card, cardTitle }) {
