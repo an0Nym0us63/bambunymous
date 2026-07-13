@@ -26,7 +26,8 @@ async def get_attention(
     db: AsyncSession = Depends(get_db),
     _: str = Depends(get_current_user),
 ):
-    return {"categories": await build_attention(db, per_category=per_category)}
+    cats, errors = await build_attention(db, per_category=per_category)
+    return {"categories": cats, "errors": errors}
 
 
 @router.post("/dismiss")

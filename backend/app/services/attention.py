@@ -197,20 +197,30 @@ async def _dismissed_keys(db) -> set[str]:
     return set(rows)
 
 
-async def build_attention(db, per_category: int = 3) -> list[dict]:
+async def build_attention(db, per_category: int = 3) -> tuple[list[dict], list[dict]]:
     """
-    Renvoie les categories non vides, chacune avec un echantillon ALEATOIRE
-    d'alertes. L'aleatoire est volontaire : avec 40 filaments sans bobine, un tri
-    fixe montrerait eternellement les 3 memes et les autres resteraient invisibles.
+    Renvoie (categories, erreurs).
+
+    Les categories non vides, chacune avec un echantillon ALEATOIRE d'alertes.
+    L'aleatoire est volontaire : avec 40 filaments sans bobine, un tri fixe
+    montrerait eternellement les 3 memes et les autres resteraient invisibles.
     Le total reel est renvoye a cote.
+
+    Les erreurs de check sont REMONTEES et non plus seulement journalisees :
+    si les cinq checks echouaient, l'ecran affichait "Rien a signaler" sans le
+    moindre indice, ce qui rendait la panne invisible.
     """
     dismissed = await _dismissed_keys(db)
-    out = []
+    out: list[dict] = []
+    errors: list[dict] = []
+
     for cat, label, icon, fn in CHECKS:
         try:
             alerts = await fn(db)
         except Exception as e:
-            logger.error(f"[ATTENTION] check {cat} a échoué : {e}")
+            logger.exception(f"[ATTENTION] check {cat} a échoué")
+            errors.append({"category": cat, "label": label,
+                           "error": f"{type(e).__name__}: {e}"})
             continue
         alerts = [a for a in alerts if a.key not in dismissed]
         if not alerts:
@@ -223,4 +233,4 @@ async def build_attention(db, per_category: int = 3) -> list[dict]:
             "total": len(alerts),
             "alerts": [a.__dict__ for a in sample],
         })
-    return out
+    return out, errors

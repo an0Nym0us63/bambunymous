@@ -21,7 +21,13 @@ export default function AttentionSection() {
 
   const load = () => {
     client.get("/attention")
-      .then(r => { setCats(r.data?.categories || []); setErr(null); })
+      .then(r => {
+        setCats(r.data?.categories || []);
+        const es = r.data?.errors || [];
+        setErr(es.length
+          ? es.map(e => `${e.label} : ${e.error}`).join("\n")
+          : null);
+      })
       .catch(e => {
         // Se taire sur une erreur rendait la section invisible et le probleme
         // indebuggable : on l'affiche.
@@ -48,20 +54,20 @@ export default function AttentionSection() {
     }
   };
 
-  if (err) {
-    return (
-      <div style={{ marginBottom:20, padding:"10px 12px", borderRadius:10,
-        background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)" }}>
-        <p style={{ margin:0, fontSize:12, fontWeight:700, color:"#ef4444" }}>
-          Points d'attention indisponibles
-        </p>
-        <p style={{ margin:"2px 0 0", fontSize:11, color:"var(--muted)",
-          fontFamily:"JetBrains Mono,monospace" }}>{err}</p>
-      </div>
-    );
-  }
+  const errBox = err && (
+    <div style={{ marginBottom:10, padding:"10px 12px", borderRadius:10,
+      background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)" }}>
+      <p style={{ margin:0, fontSize:12, fontWeight:700, color:"#ef4444" }}>
+        Certaines vérifications ont échoué
+      </p>
+      <pre style={{ margin:"4px 0 0", fontSize:10, color:"var(--muted)",
+        fontFamily:"JetBrains Mono,monospace", whiteSpace:"pre-wrap" }}>{err}</pre>
+    </div>
+  );
+
   if (!cats) return null;                      // premier chargement
   if (!cats.length) {
+    if (err) return <div style={{ marginBottom:20 }}>{errBox}</div>;
     // Etat explicite : "rien a signaler" n'est pas la meme chose que "ca n'a pas
     // charge", et on ne pouvait pas les distinguer.
     return (
@@ -83,6 +89,7 @@ export default function AttentionSection() {
         letterSpacing: "0.08em", margin: "0 0 8px" }}>
         Points d'attention
       </p>
+      {errBox}
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {cats.map(c => (
