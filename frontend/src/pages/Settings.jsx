@@ -2,7 +2,6 @@ import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
-import AllAlertsModal from "../components/AllAlertsModal";
 import HeaderAction from "../components/HeaderAction";
 import { usePrinter } from "../store/printer";
 import { useTheme } from "../useTheme";
@@ -283,31 +282,22 @@ function ColorDot({ f, size = 14 }) {
  * en trois cartes distinctes alors qu'ils traitent du même sujet.
  */
 function AttentionCard({ card, cardTitle }) {
-  const [modal, setModal] = React.useState(null);   // "all" | "cats" | "dismissed"
-
-  const btn = (bg, color) => ({ padding:"9px 14px", borderRadius:8, border:"none",
-    cursor:"pointer", background:bg, color, fontSize:12, fontWeight:700,
-    textAlign:"left" });
+  const [open, setOpen] = React.useState(false);
 
   return (
     <div className="card" style={card}>
       <div style={cardTitle}>Points d'attention</div>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
-        L'accueil n'affiche que quelques alertes par catégorie. Ici, tu vois tout —
-        y compris ce que tu as ignoré — et tu choisis l'ordre des catégories.
+        Choisis l'ordre des catégories sur l'accueil, et masque celles qui ne
+        t'intéressent pas. La liste des alertes, elle, s'ouvre depuis l'accueil.
       </p>
-      <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-        <button type="button" onClick={() => setModal("all")} style={btn("#3b82f6","white")}>
-          Voir toutes les alertes…
-        </button>
-        <button type="button" onClick={() => setModal("cats")}
-          style={btn("var(--surface2)","var(--text)")}>
-          Organiser les catégories de l'accueil…
-        </button>
-      </div>
+      <button type="button" onClick={() => setOpen(true)}
+        style={{ padding:"9px 14px", borderRadius:8, border:"none", cursor:"pointer",
+          background:"#3b82f6", color:"white", fontSize:12, fontWeight:700 }}>
+        Organiser les catégories…
+      </button>
 
-      {modal === "all"       && <AllAlertsModal onClose={() => setModal(null)}/>}
-      {modal === "cats"      && <CategoriesModal onClose={() => setModal(null)}/>}
+      {open && <CategoriesModal onClose={() => setOpen(false)}/>}
     </div>
   );
 }
@@ -328,43 +318,82 @@ function CategoriesModal({ onClose }) {
   const [dragIdx, setDragIdx] = React.useState(null);
 
   const listRef = React.useRef(null);
-  const dragRef = React.useRef(null);   // { index, itemH }
+  const dragRef = React.useRef(null);   // index en cours de deplacement
+  const rowsRef = React.useRef(null);   // dernier etat, lisible depuis les listeners
 
   React.useEffect(() => {
     client.get("/attention/categories")
       .then(r => setRows(r.data?.categories || []))
       .catch(e => setErr(e.response?.data?.detail || e.message));
   }, []);
+  React.useEffect(() => { rowsRef.current = rows; }, [rows]);
 
-  const onPointerDown = (e, i) => {
-    const el = listRef.current?.children?.[i];
-    dragRef.current = { index: i, itemH: el ? el.offsetHeight : 44 };
+  /**
+   * Reordonnancement au pointeur.
+   *
+   * Deux pieges evites ici :
+   *  - les listeners sont poses sur le DOCUMENT, pas sur la liste : pendant le
+   *    geste, React reordonne les noeuds, et un handler attache a la ligne
+   *    deplacee peut cesser de recevoir les evenements.
+   *  - la cible est calculee a partir des rectangles REELS de chaque ligne, pas
+   *    d'une hauteur supposee uniforme : les libelles passent a la ligne, donc
+   *    les hauteurs different.
+   */
+  const startDrag = (e, i) => {
+    e.preventDefault();
+    dragRef.current = i;
     setDragIdx(i);
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-  };
 
-  const onPointerMove = (e) => {
-    const d = dragRef.current;
-    if (!d || !listRef.current || !rows) return;
-    const top = listRef.current.getBoundingClientRect().top;
-    let target = Math.floor((e.clientY - top) / d.itemH);
-    target = Math.max(0, Math.min(rows.length - 1, target));
-    if (target === d.index) return;
-    setRows(rs => {
-      const next = [...rs];
-      const [it] = next.splice(d.index, 1);
-      next.splice(target, 0, it);
-      return next;
-    });
-    d.index = target;
-    setDragIdx(target);
-    setDirty(true);
-  };
+    const onMove = (ev) => {
+      const from = dragRef.current;
+      const list = listRef.current;
+      const cur = rowsRef.current;
+      if (from == null || !list || !cur) return;
 
-  const endDrag = () => { dragRef.current = null; setDragIdx(null); };
+      const y = ev.clientY;
+      let to = from;
+      for (let k = 0; k < list.children.length; k++) {
+        const r = list.children[k].getBoundingClientRect();
+        if (y >= r.top && y <= r.bottom) { to = k; break; }
+        if (k === 0 && y < r.top) { to = 0; break; }
+        if (k === list.children.length - 1 && y > r.bottom) { to = k; break; }
+      }
+      if (to === from) return;
+
+      const next = [...cur];
+      const [it] = next.splice(from, 1);
+      next.splice(to, 0, it);
+      rowsRef.current = next;
+      setRows(next);
+      dragRef.current = to;
+      setDragIdx(to);
+      setDirty(true);
+    };
+
+    const onUp = () => {
+      dragRef.current = null;
+      setDragIdx(null);
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      document.removeEventListener("pointercancel", onUp);
+    };
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onUp);
+  };
 
   const toggleHidden = (cat) => {
     setRows(rs => rs.map(r => r.category === cat ? { ...r, hidden: !r.hidden } : r));
+    setDirty(true);
+  };
+
+  const move = (i, dir) => {
+    const j = i + dir;
+    if (!rows || j < 0 || j >= rows.length) return;
+    const next = [...rows];
+    [next[i], next[j]] = [next[j], next[i]];
+    setRows(next);
     setDirty(true);
   };
 
@@ -398,41 +427,52 @@ function CategoriesModal({ onClose }) {
               fontSize:18, cursor:"pointer" }}>✕</button>
         </div>
         <p style={{ margin:0, padding:"0 16px 10px", fontSize:11, color:"var(--muted)" }}>
-          Fais glisser la poignée pour réordonner. L'œil masque une catégorie de
-          l'accueil — elle reste consultable dans « toutes les alertes ».
+          Fais glisser la poignée (ou utilise les flèches) pour réordonner. L'œil
+          masque une catégorie de l'accueil — elle reste consultable dans la liste
+          des alertes.
         </p>
 
         {err && <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"#ef4444" }}>⚠ {err}</p>}
 
-        <div ref={listRef} onPointerMove={onPointerMove} onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          style={{ flex:1, overflowY:"auto", padding:"0 12px 8px" }}>
+        <div ref={listRef} style={{ flex:1, overflowY:"auto", padding:"0 12px 8px" }}>
           {!rows ? (
             <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>Chargement…</p>
           ) : rows.map((r, i) => (
             <div key={r.category}
-              style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 8px",
+              style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 8px",
                 borderRadius:8, marginBottom:4,
-                background: dragIdx === i ? "rgba(59,130,246,0.16)" : "var(--surface2)",
+                background: dragIdx === i ? "rgba(59,130,246,0.18)" : "var(--surface2)",
                 opacity: r.hidden ? 0.45 : 1,
-                boxShadow: dragIdx === i ? "0 4px 14px rgba(0,0,0,0.25)" : "none" }}>
+                boxShadow: dragIdx === i ? "0 4px 14px rgba(0,0,0,0.28)" : "none" }}>
 
-              {/* Seule la poignée est saisissable : le reste de la ligne garde ses
-                  clics, et la liste reste défilable au doigt. touchAction:none est
-                  indispensable, sinon le navigateur interprète le geste comme un
-                  défilement et le drag ne démarre jamais. */}
-              <span onPointerDown={e => onPointerDown(e, i)}
+              {/* touchAction:none est indispensable : sans lui le navigateur
+                  interprete le geste comme un defilement et le drag ne demarre
+                  jamais au doigt. */}
+              <span onPointerDown={e => startDrag(e, i)}
                 style={{ cursor:"grab", touchAction:"none", color:"var(--muted)",
                   fontSize:15, flexShrink:0, padding:"0 4px", userSelect:"none" }}>⠿</span>
 
               <span style={{ fontSize:13, flexShrink:0 }}>{r.icon}</span>
 
-              {/* Le libellé n'est PAS tronqué : c'est la seule chose qui permet de
-                  savoir ce qu'on déplace. Il passe à la ligne si besoin. */}
+              {/* Libelle jamais tronque : c'est la seule chose qui dit ce qu'on deplace. */}
               <span style={{ flex:1, fontSize:12, fontWeight:600, color:"var(--text)",
                 whiteSpace:"normal", wordBreak:"break-word", lineHeight:1.3 }}>
                 {r.label}
               </span>
+
+              {/* Fleches conservees : sur certains navigateurs mobiles le drag
+                  reste capricieux, et il faut toujours un moyen sur d'y arriver. */}
+              <div style={{ display:"flex", flexDirection:"column", flexShrink:0 }}>
+                <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
+                  style={{ background:"none", border:"none", cursor: i === 0 ? "default" : "pointer",
+                    color: i === 0 ? "var(--border)" : "var(--muted)", fontSize:9,
+                    lineHeight:1, padding:"1px 3px" }}>▲</button>
+                <button type="button" onClick={() => move(i, 1)} disabled={i === rows.length - 1}
+                  style={{ background:"none", border:"none",
+                    cursor: i === rows.length - 1 ? "default" : "pointer",
+                    color: i === rows.length - 1 ? "var(--border)" : "var(--muted)", fontSize:9,
+                    lineHeight:1, padding:"1px 3px" }}>▼</button>
+              </div>
 
               <button type="button" onClick={() => toggleHidden(r.category)}
                 title={r.hidden ? "Afficher sur l'accueil" : "Masquer de l'accueil"}
