@@ -188,6 +188,15 @@ if STATIC_DIR.exists():
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def spa_fallback(full_path: str):
+        # Une route d'API inexistante tombait ici et renvoyait index.html : le
+        # navigateur affichait une PAGE BLANCHE au lieu d'un 404, et un POST vers
+        # une URL absente donnait un 405 (le chemin matche ce catch-all, pas la
+        # methode). Deux faux diagnostics qui nous ont deja coute du temps.
+        if full_path.startswith("api/"):
+            return JSONResponse(
+                {"detail": f"Route inconnue : /{full_path}"}, status_code=404
+            )
+
         # Tout fichier reellement present a la racine du build (les fichiers de
         # frontend/public : icones, manifest, textures...) doit etre servi tel
         # quel. Sans ca, il tombait dans le fallback et le navigateur recevait
