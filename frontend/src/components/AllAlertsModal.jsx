@@ -166,7 +166,7 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
 
         {/* Deux onglets plutot que deux fenetres : elles affichaient deja les
             memes lignes, avec les memes filtres. */}
-        <div style={{ display:"flex", gap:4, padding:"10px 16px 0" }}>
+        <div style={{ display:"flex", gap:4, padding:"10px 16px 14px" }}>
           {[["all", "Toutes", (data?.alerts || []).filter(a => !a.dismissed).length],
             ["dismissed", "Ignorées", (dis || []).length]].map(([k, lbl, n]) => (
             <button key={k} type="button"
