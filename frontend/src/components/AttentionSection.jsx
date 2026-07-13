@@ -134,6 +134,9 @@ export default function AttentionSection() {
 
                   <Dot a={a}/>
 
+                  {/* minWidth:0 est indispensable : sans lui, un flex enfant refuse
+                      de retrecir sous sa largeur de contenu et pousse la metrique
+                      hors de l'ecran. */}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <p style={{ margin: 0, fontSize: 12, fontWeight: 600, color: "var(--text)",
                       overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -143,18 +146,24 @@ export default function AttentionSection() {
                       overflow: "hidden" }}>
                       {a.brand && <Chip>{a.brand}</Chip>}
                       {a.material && <Chip>{a.material}</Chip>}
-                      <span style={{ fontSize: 11, color: "var(--muted)",
-                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {a.detail}
-                      </span>
+                      {a.detail && (
+                        <span style={{ fontSize: 11, color: "var(--muted)",
+                          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {a.detail}
+                        </span>
+                      )}
                     </div>
                   </div>
 
-                  {/* Pastille de severite : discrete, mais elle distingue un
-                      "a surveiller" d'un "a corriger". */}
-                  {a.severity === "warn" && (
-                    <span style={{ width: 6, height: 6, borderRadius: "50%",
-                      background: "#f59e0b", flexShrink: 0 }}/>
+                  {/* La metrique (poids restant...) est l'info la plus utile de
+                      l'alerte : flexShrink 0, elle ne peut PAS etre tronquee.
+                      Noyee dans le texte, elle disparaissait sur mobile. */}
+                  {a.value && (
+                    <span style={{ flexShrink: 0, fontSize: 11, fontWeight: 700,
+                      fontFamily: "JetBrains Mono, monospace", whiteSpace: "nowrap",
+                      color: a.severity === "warn" ? "#f59e0b" : "var(--muted)" }}>
+                      {a.value}
+                    </span>
                   )}
 
                   <button onClick={e => { e.stopPropagation(); setMenu(a); }}
@@ -184,8 +193,8 @@ export default function AttentionSection() {
                   {menu.title}
                 </p>
                 <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--muted)" }}>
-                  {[menu.brand, menu.material].filter(Boolean).join(" · ")}
-                  {menu.brand || menu.material ? " — " : ""}{menu.detail}
+                  {[menu.brand, menu.material, menu.detail, menu.value]
+                    .filter(Boolean).join(" · ")}
                 </p>
               </div>
             </div>

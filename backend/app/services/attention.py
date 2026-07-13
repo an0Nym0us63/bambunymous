@@ -46,6 +46,11 @@ class Alert:
     brand: Optional[str] = None
     material: Optional[str] = None
 
+    # Metrique cle de l'alerte (poids restant, date...). Separee du detail parce
+    # que c'est l'information la PLUS utile : noyee dans une phrase, elle se
+    # faisait tronquer sur mobile. Le front l'affiche a droite, sans troncature.
+    value: Optional[str] = None
+
 
 def _fil_visual(f) -> dict:
     """Champs d'affichage communs a toutes les alertes portant sur un filament."""
@@ -89,7 +94,7 @@ async def _filaments_without_spool(db) -> list[Alert]:
             key=f"no_spool:filament:{f.id}",
             category="no_spool",
             title=_fil_title(f),
-            detail="Plus aucune bobine en stock",
+            detail="",
             severity="info",
             link=f"/filaments?id={f.id}",
             **_fil_visual(f),
@@ -118,7 +123,8 @@ async def _spools_low(db) -> list[Alert]:
             key=f"low_spool:spool:{s.id}",
             category="low_spool",
             title=_fil_title(f),
-            detail=f"Bobine #{s.id} — {int(s.remaining_weight_g)} g restants ({pct} %)",
+            detail=f"Bobine #{s.id}",
+            value=f"{int(s.remaining_weight_g)} g · {pct} %",
             severity="warn",
             link=f"/filaments?id={f.id}",
             **_fil_visual(f),
@@ -145,7 +151,8 @@ async def _prints_without_mapping(db) -> list[Alert]:
             key=f"no_mapping:print:{p.id}",
             category="no_mapping",
             title=p.file_name or f"Impression #{p.id}",
-            detail="Filament consommé mais aucune bobine associée — coût incomplet",
+            detail="",
+            value=p.print_date.strftime("%d/%m") if p.print_date else None,
             severity="warn",
             link=f"/prints?id={p.id}",
         )
@@ -172,7 +179,8 @@ async def _prints_without_photo(db) -> list[Alert]:
             key=f"no_photo:print:{p.id}",
             category="no_photo",
             title=p.file_name or f"Impression #{p.id}",
-            detail="Aucune photo ni vignette",
+            detail="",
+            value=p.print_date.strftime("%d/%m") if p.print_date else None,
             severity="info",
             link=f"/prints?id={p.id}",
         )
@@ -202,7 +210,8 @@ async def _prints_without_3mf(db) -> list[Alert]:
             key=f"no_3mf:print:{p.id}",
             category="no_3mf",
             title=p.file_name or f"Impression #{p.id}",
-            detail="3MF non récupéré — relance possible depuis la fiche",
+            detail="Relance possible depuis la fiche",
+            value=p.print_date.strftime("%d/%m") if p.print_date else None,
             severity="warn",
             link=f"/prints?id={p.id}",
         )
@@ -226,7 +235,7 @@ async def _filaments_without_profile(db) -> list[Alert]:
             key=f"no_profile:filament:{f.id}",
             category="no_profile",
             title=_fil_title(f),
-            detail="Aucun profil d'impression (profile_id)",
+            detail="",
             severity="info",
             link=f"/filaments?id={f.id}",
             **_fil_visual(f),
@@ -253,7 +262,7 @@ async def _bambu_without_color_code(db) -> list[Alert]:
             key=f"no_color_code:filament:{f.id}",
             category="no_color_code",
             title=_fil_title(f),
-            detail="Filament Bambu sans code couleur officiel",
+            detail="",
             severity="info",
             link=f"/filaments?id={f.id}",
             **_fil_visual(f),
@@ -282,7 +291,7 @@ async def _bambu_spools_without_rfid(db) -> list[Alert]:
             key=f"no_rfid:spool:{s.id}",
             category="no_rfid",
             title=_fil_title(f),
-            detail=f"Bobine #{s.id} — aucun tag RFID",
+            detail=f"Bobine #{s.id}",
             severity="info",
             link=f"/filaments?id={f.id}",
             **_fil_visual(f),
