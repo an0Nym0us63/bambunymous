@@ -431,6 +431,140 @@ function AllAlertsCard({ card, cardTitle }) {
   );
 }
 
+// ── Organisation des catégories d'alertes ──────────────────────────────────
+function CategoriesCard({ card, cardTitle }) {
+  const [open, setOpen] = React.useState(false);
+  const [rows, setRows] = React.useState(null);
+  const [dirty, setDirty] = React.useState(false);
+  const [busy, setBusy]   = React.useState(false);
+  const [err, setErr]     = React.useState(null);
+
+  const load = () => {
+    setErr(null); setDirty(false);
+    client.get("/attention/categories")
+      .then(r => setRows(r.data?.categories || []))
+      .catch(e => setErr(e.response?.data?.detail || e.message));
+  };
+  React.useEffect(() => { if (open) load(); }, [open]);
+
+  // Fleches plutot que glisser-deposer : fiable au doigt sur mobile, et sans
+  // dependance supplementaire.
+  const move = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= rows.length) return;
+    const next = [...rows];
+    [next[i], next[j]] = [next[j], next[i]];
+    setRows(next); setDirty(true);
+  };
+  const toggle = (i) => {
+    const next = [...rows];
+    next[i] = { ...next[i], hidden: !next[i].hidden };
+    setRows(next); setDirty(true);
+  };
+
+  const save = async () => {
+    setBusy(true); setErr(null);
+    try {
+      await client.put("/attention/categories", {
+        order:  rows.map(r => r.category),
+        hidden: rows.filter(r => r.hidden).map(r => r.category),
+      });
+      setDirty(false);
+      setOpen(false);
+    } catch (e) { setErr(e.response?.data?.detail || e.message); }
+    finally { setBusy(false); }
+  };
+
+  const btn = (bg, color) => ({ padding:"8px 14px", borderRadius:8, border:"none",
+    cursor:"pointer", background:bg, color, fontSize:12, fontWeight:700 });
+
+  return (
+    <div className="card" style={card}>
+      <div style={cardTitle}>Catégories d'alertes</div>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
+        Choisis l'ordre d'apparition sur l'accueil, et masque les catégories qui
+        ne t'intéressent pas. Elles restent consultables dans « Voir toutes les
+        alertes ».
+      </p>
+      <button type="button" onClick={() => setOpen(true)} style={btn("#8b5cf6","white")}>
+        Organiser les catégories…
+      </button>
+
+      {open && (
+        <div onClick={() => setOpen(false)} style={{ position:"fixed", inset:0, zIndex:9999,
+          background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center",
+          justifyContent:"center", padding:16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:520,
+            maxHeight:"86vh", display:"flex", flexDirection:"column",
+            background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
+
+            <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
+              <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>
+                Catégories d'alertes
+              </p>
+              <button type="button" onClick={() => setOpen(false)}
+                style={{ background:"none", border:"none", color:"var(--muted)",
+                  fontSize:18, cursor:"pointer" }}>✕</button>
+            </div>
+
+            {err && <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"#ef4444" }}>⚠ {err}</p>}
+
+            <div style={{ flex:1, overflowY:"auto", padding:"0 12px 8px" }}>
+              {!rows ? (
+                <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>Chargement…</p>
+              ) : rows.map((r, i) => (
+                <div key={r.category} style={{ display:"flex", alignItems:"center", gap:8,
+                  padding:"9px 10px", borderRadius:10, marginBottom:5,
+                  background:"var(--surface2)", opacity: r.hidden ? 0.5 : 1 }}>
+
+                  <span style={{ fontSize:10, color:"var(--muted)",
+                    fontFamily:"JetBrains Mono,monospace", width:16 }}>{i + 1}</span>
+                  <span style={{ fontSize:13 }}>{r.icon}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ margin:0, fontSize:12, fontWeight:600, color:"var(--text)",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap",
+                      textDecoration: r.hidden ? "line-through" : "none" }}>
+                      {r.label}
+                    </p>
+                    <p style={{ margin:0, fontSize:10, color:"var(--muted)" }}>
+                      {r.shown} affichée{r.shown > 1 ? "s" : ""} sur l'accueil
+                    </p>
+                  </div>
+
+                  <button type="button" onClick={() => toggle(i)}
+                    title={r.hidden ? "Afficher sur l'accueil" : "Masquer de l'accueil"}
+                    style={{ background:"none", border:"none", cursor:"pointer",
+                      color: r.hidden ? "var(--muted)" : "#22c55e", fontSize:14, padding:2 }}>
+                    {r.hidden ? "🚫" : "👁"}
+                  </button>
+                  <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
+                    style={{ background:"none", border:"none", padding:2, fontSize:12,
+                      cursor: i === 0 ? "default" : "pointer",
+                      color: i === 0 ? "var(--border)" : "var(--muted)" }}>▲</button>
+                  <button type="button" onClick={() => move(i, 1)} disabled={i === rows.length - 1}
+                    style={{ background:"none", border:"none", padding:2, fontSize:12,
+                      cursor: i === rows.length - 1 ? "default" : "pointer",
+                      color: i === rows.length - 1 ? "var(--border)" : "var(--muted)" }}>▼</button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding:"12px 16px", display:"flex", gap:8 }}>
+              <button type="button" onClick={() => setOpen(false)}
+                style={{ ...btn("var(--surface2)","var(--muted)"), flex:1 }}>Annuler</button>
+              <button type="button" disabled={!dirty || busy} onClick={save}
+                style={{ ...btn(dirty ? "#3b82f6" : "var(--border)",
+                  dirty ? "white" : "var(--muted)"), flex:2 }}>
+                {busy ? "…" : "Enregistrer"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Alertes ignorées ───────────────────────────────────────────────────────
 function DismissedCard({ card, cardTitle }) {
   const [open, setOpen] = React.useState(false);
@@ -862,6 +996,9 @@ export default function Settings() {
 
       {/* ── Points d'attention ─────────────────────────────────────── */}
       <AllAlertsCard card={card} cardTitle={cardTitle}/>
+
+      {/* ── Catégories d'alertes ───────────────────────────────────── */}
+      <CategoriesCard card={card} cardTitle={cardTitle}/>
 
       {/* ── Alertes ignorées ───────────────────────────────────────── */}
       <DismissedCard card={card} cardTitle={cardTitle}/>

@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Callable, Optional
 
+import json as _json
 import os
 from pathlib import Path
 
@@ -416,6 +417,52 @@ async def _filaments_unused(db) -> list[Alert]:
     return out
 
 
+# ── Preferences d'affichage ────────────────────────────────────────────────
+PREF_KEY = "ATTENTION_PREFS"   # {"order": [...], "hidden": [...]}
+
+
+async def get_prefs(db) -> dict:
+    """Ordre d'affichage et categories masquees. Tolerant : une preference qui
+    reference une categorie disparue est simplement ignoree."""
+    from .settings_service import get_setting
+    raw = await get_setting(db, PREF_KEY, "")
+    try:
+        p = _json.loads(raw) if raw else {}
+    except Exception:
+        p = {}
+    known = [c["category"] for c in CHECKS]
+    order = [c for c in (p.get("order") or []) if c in known]
+    order += [c for c in known if c not in order]      # nouvelles categories a la fin
+    hidden = [c for c in (p.get("hidden") or []) if c in known]
+    return {"order": order, "hidden": hidden}
+
+
+async def set_prefs(db, order: list[str], hidden: list[str]) -> dict:
+    from .settings_service import set_setting
+    known = {c["category"] for c in CHECKS}
+    payload = {
+        "order":  [c for c in order if c in known],
+        "hidden": [c for c in hidden if c in known],
+    }
+    await set_setting(db, PREF_KEY, _json.dumps(payload))
+    return await get_prefs(db)
+
+
+async def ordered_checks(db, include_hidden: bool = False) -> list[dict]:
+    """Les checks, dans l'ordre choisi, masquees exclues."""
+    prefs = await get_prefs(db)
+    by_cat = {c["category"]: c for c in CHECKS}
+    out = []
+    for cat in prefs["order"]:
+        c = by_cat.get(cat)
+        if not c:
+            continue
+        if not include_hidden and cat in prefs["hidden"]:
+            continue
+        out.append(c)
+    return out
+
+
 # ── Assemblage ─────────────────────────────────────────────────────────────
 async def _dismissed_keys(db) -> set[str]:
     """Cles actuellement en sourdine (definitivement, ou dont le delai court encore)."""
@@ -505,7 +552,8 @@ async def build_attention(db, per_category: int = 3) -> tuple[list[dict], list[d
     out: list[dict] = []
     errors: list[dict] = []
 
-    for c in CHECKS:
+    # Ordre choisi par l'utilisateur, categories masquees exclues.
+    for c in await ordered_checks(db):
         cat, label, icon, fn = c["category"], c["label"], c["icon"], c["fn"]
         try:
             alerts = await fn(db)
@@ -550,7 +598,9 @@ async def all_alerts(db) -> tuple[list[dict], list[dict]]:
     dismissed = await _dismissed_keys(db)
     out: list[dict] = []
     errors: list[dict] = []
-    for c in CHECKS:
+    # include_hidden : l'ecran complet doit montrer meme les categories masquees
+    # de l'accueil, sinon elles deviendraient inaccessibles.
+    for c in await ordered_checks(db, include_hidden=True):
         cat, label, icon, fn = c["category"], c["label"], c["icon"], c["fn"]
         try:
             alerts = await fn(db)

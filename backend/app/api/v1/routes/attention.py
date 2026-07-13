@@ -10,9 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .auth import get_current_user
 from ....db.session import get_db
 from ....models.attention import AttentionDismissal
-from ....services.attention import CATEGORIES, all_alerts, build_attention, list_dismissed
+from ....services.attention import (CATEGORIES, CHECKS, all_alerts, build_attention,
+                                    get_prefs, list_dismissed, set_prefs)
 
 router = APIRouter()
+
+
+class PrefsIn(BaseModel):
+    order: list[str] = []
+    hidden: list[str] = []
 
 
 class DismissIn(BaseModel):
@@ -28,6 +34,38 @@ async def get_attention(
 ):
     cats, errors = await build_attention(db, per_category=per_category)
     return {"categories": cats, "errors": errors}
+
+
+@router.get("/categories")
+async def get_categories(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """Toutes les categories du systeme, dans l'ordre choisi, avec leur etat."""
+    prefs = await get_prefs(db)
+    by_cat = {c["category"]: c for c in CHECKS}
+    return {
+        "categories": [
+            {
+                "category": cat,
+                "label": by_cat[cat]["label"],
+                "icon": by_cat[cat]["icon"],
+                "shown": by_cat[cat]["shown"],
+                "hidden": cat in prefs["hidden"],
+            }
+            for cat in prefs["order"] if cat in by_cat
+        ]
+    }
+
+
+@router.put("/categories")
+async def put_categories(
+    body: PrefsIn,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """Enregistre l'ordre d'affichage et les categories masquees sur l'accueil."""
+    return await set_prefs(db, body.order, body.hidden)
 
 
 @router.get("/all")
