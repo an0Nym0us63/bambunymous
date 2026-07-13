@@ -12,8 +12,13 @@ _RE = re.compile(r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})[,.]\d+ (\w+) (\S+) (.*
 _EXCLUDE = ("/api/v1/logs", "/api/v1/printer", "/healthz", "/favicon", "/assets/")
 _EXCLUDE_NAMES = ("aiosqlite", "NullPool", "Engine", "sqlalchemy")
 
-LOG_MAX_BYTES   = 500 * 1024 * 1024   # Purge auto au-delà de 500 Mo
-LOG_KEEP_BYTES  =  50 * 1024 * 1024   # On conserve les 50 derniers Mo après purge
+# 500 Mo etait demesure pour un log applicatif : le fichier pouvait devenir plus
+# gros que toute la base, et chaque recherche le relisait en entier.
+LOG_MAX_BYTES   = 40 * 1024 * 1024   # purge auto au-dela de 40 Mo
+LOG_KEEP_BYTES  = 10 * 1024 * 1024   # on conserve les 10 derniers Mo
+# Plafond de lecture d'une recherche : au-dela, on s'arrete et on le DIT, plutot
+# que de faire ramer l'appli en silence.
+MAX_SCAN_BYTES  = 24 * 1024 * 1024
 
 LEVEL_ORDER = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 4}
 
@@ -30,49 +35,60 @@ def _parse(line: str):
     return {"ts": dt[11:19], "date": dt[:10], "level": level, "name": name.split(".")[-1], "msg": msg}
 
 
-def _tail_lines(filepath: str, n: int) -> list[str]:
-    """Lit les n dernières lignes du fichier efficacement."""
-    CHUNK = 65536
-    lines: deque = deque()
-    count = 0
+def _scan_backwards(filepath: str, limit: int, q: str, min_level: str):
+    """
+    Parcourt le fichier A REBOURS et s'arrete des qu'on a `limit` resultats.
+
+    L'ancienne recherche relisait TOUT le fichier depuis le debut pour n'en garder
+    que les N dernieres correspondances : sur un log de plusieurs centaines de Mo,
+    chaque frappe relisait tout. Or ce qu'on cherche est presque toujours recent.
+    Ici, une recherche qui trouve ses resultats dans les dernieres lignes ne lit
+    que quelques kilo-octets.
+
+    Renvoie (resultats du plus ancien au plus recent, octets lus, scan tronque).
+    """
+    CHUNK = 256 * 1024
+    ql = q.strip().lower()
+    min_idx = LEVEL_ORDER.get(min_level, 0)
+
+    found: list[dict] = []
+    scanned = 0
+    truncated = False
+    buf = b""
+
     with open(filepath, "rb") as f:
         f.seek(0, 2)
         pos = f.tell()
-        buf = b""
-        while pos > 0 and count < n:
+        while pos > 0 and len(found) < limit:
+            if scanned >= MAX_SCAN_BYTES:
+                truncated = True
+                break
             read = min(CHUNK, pos)
             pos -= read
             f.seek(pos)
             chunk = f.read(read)
+            scanned += read
             buf = chunk + buf
             parts = buf.split(b"\n")
-            buf = parts[0]
-            for part in reversed(parts[1:]):
-                lines.appendleft(part.decode("utf-8", errors="replace"))
-                count += 1
-                if count >= n:
+            # La premiere tranche est peut-etre coupee au milieu d'une ligne :
+            # on la garde pour le tour suivant.
+            buf = parts[0] if pos > 0 else b""
+            head = parts[1:] if pos > 0 else parts
+
+            for raw in reversed(head):
+                p = _parse(raw.decode("utf-8", errors="replace"))
+                if not p:
+                    continue
+                if LEVEL_ORDER.get(p["level"], 0) < min_idx:
+                    continue
+                if ql and ql not in p["msg"].lower() and ql not in p["name"].lower():
+                    continue
+                found.append(p)
+                if len(found) >= limit:
                     break
-        if buf:
-            lines.appendleft(buf.decode("utf-8", errors="replace"))
-    return list(lines)
 
-
-def _search_full_file(filepath: str, q: str, min_level: str, limit: int) -> list[dict]:
-    """Scanne TOUT le fichier — retourne les N dernières correspondances."""
-    ql = q.lower()
-    min_idx = LEVEL_ORDER.get(min_level, 0)
-    results: deque = deque(maxlen=limit)
-    with open(filepath, "r", errors="replace") as f:
-        for line in f:
-            p = _parse(line)
-            if not p:
-                continue
-            if LEVEL_ORDER.get(p["level"], 0) < min_idx:
-                continue
-            if ql and ql not in p["msg"].lower() and ql not in p["name"].lower():
-                continue
-            results.append(p)
-    return list(results)
+    found.reverse()   # du plus ancien au plus recent
+    return found, scanned, truncated
 
 
 def _auto_purge(filepath: str) -> bool:
@@ -103,25 +119,16 @@ async def get_logs(
     if not os.path.exists(LOG_FILE):
         return {"logs": [], "total": 0, "error": f"Fichier {LOG_FILE} introuvable"}
     try:
-        purged  = _auto_purge(LOG_FILE)
         size_mb = round(os.path.getsize(LOG_FILE) / 1024 / 1024, 1)
-        min_idx = LEVEL_ORDER.get(min_level, 0)
-
-        if q.strip():
-            # Recherche full-fichier
-            parsed = _search_full_file(LOG_FILE, q.strip(), min_level, limit)
-        else:
-            # Sans recherche : tail des dernières lignes
-            raw    = _tail_lines(LOG_FILE, limit * 4)
-            parsed = [p for l in raw if (p := _parse(l)) and LEVEL_ORDER.get(p["level"], 0) >= min_idx]
-            parsed = parsed[-limit:]
-
+        logs, scanned, truncated = _scan_backwards(
+            LOG_FILE, limit=limit, q=q, min_level=min_level
+        )
         return {
-            "logs": parsed,
-            "total": len(parsed),
+            "logs": logs,
+            "total": len(logs),
             "file_mb": size_mb,
-            "purged": purged,
-            "full_search": bool(q.strip()),
+            "scanned_mb": round(scanned / 1024 / 1024, 2),
+            "truncated": truncated,   # le scan s'est arrete avant le debut du fichier
         }
     except Exception as e:
         return {"logs": [], "total": 0, "error": str(e)}
