@@ -273,6 +273,164 @@ function ColorDot({ f, size = 14 }) {
   );
 }
 
+// ── Toutes les alertes ─────────────────────────────────────────────────────
+function AllAlertsCard({ card, cardTitle }) {
+  const [open, setOpen]   = React.useState(false);
+  const [data, setData]   = React.useState(null);
+  const [cat, setCat]     = React.useState("");
+  const [q, setQ]         = React.useState("");
+  const [showDis, setShowDis] = React.useState(false);
+  const [err, setErr]     = React.useState(null);
+
+  const load = () => {
+    setErr(null);
+    client.get("/attention/all")
+      .then(r => setData(r.data))
+      .catch(e => setErr(e.response?.data?.detail || e.message));
+  };
+  React.useEffect(() => { if (open) load(); }, [open]);
+
+  const alerts = data?.alerts || [];
+  const shown = alerts.filter(a => {
+    if (!showDis && a.dismissed) return false;
+    if (cat && a.category !== cat) return false;
+    if (!q.trim()) return true;
+    const hay = [a.title, a.brand, a.material, a.detail, a.value, a.cat_label]
+      .filter(Boolean).join(" ").toLowerCase();
+    return q.trim().toLowerCase().split(/\s+/).every(w => hay.includes(w));
+  });
+
+  // Categories reellement presentes, avec leur compte
+  const counts = {};
+  alerts.forEach(a => { if (showDis || !a.dismissed) counts[a.category] = (counts[a.category] || 0) + 1; });
+  const cats = (data?.categories || []).filter(c => counts[c.category]);
+
+  const dismiss = async (a, days) => {
+    setData(d => ({ ...d, alerts: d.alerts.map(x =>
+      x.key === a.key ? { ...x, dismissed: true } : x) }));
+    try { await client.post("/attention/dismiss", { key: a.key, days: days ?? null }); }
+    catch { load(); }
+  };
+  const restore = async (a) => {
+    setData(d => ({ ...d, alerts: d.alerts.map(x =>
+      x.key === a.key ? { ...x, dismissed: false } : x) }));
+    try { await client.delete(`/attention/dismiss/${encodeURIComponent(a.key)}`); }
+    catch { load(); }
+  };
+
+  const btn = (bg, color) => ({ padding:"8px 14px", borderRadius:8, border:"none",
+    cursor:"pointer", background:bg, color, fontSize:12, fontWeight:700 });
+
+  return (
+    <div className="card" style={card}>
+      <div style={cardTitle}>Points d'attention</div>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
+        L'accueil n'en affiche que quelques-uns par catégorie. Ici, tout est
+        visible, filtrable et masquable.
+      </p>
+      <button type="button" onClick={() => setOpen(true)} style={btn("#3b82f6","white")}>
+        Voir toutes les alertes…
+      </button>
+
+      {open && (
+        <div onClick={() => setOpen(false)} style={{ position:"fixed", inset:0, zIndex:9999,
+          background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center",
+          justifyContent:"center", padding:16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:600,
+            maxHeight:"88vh", display:"flex", flexDirection:"column",
+            background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
+
+            <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
+              <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>
+                Alertes ({shown.length})
+              </p>
+              <button type="button" onClick={() => setOpen(false)}
+                style={{ background:"none", border:"none", color:"var(--muted)",
+                  fontSize:18, cursor:"pointer" }}>✕</button>
+            </div>
+
+            {err && <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"#ef4444" }}>⚠ {err}</p>}
+
+            <div style={{ padding:"0 16px 8px" }}>
+              <input value={q} onChange={e => setQ(e.target.value)}
+                placeholder="Filtrer : nom, marque, matière…"
+                style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
+                  border:"1px solid var(--border)", background:"var(--surface2)",
+                  color:"var(--text)", fontSize:13, outline:"none", marginBottom:8 }}/>
+              <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+                <button type="button" onClick={() => setCat("")}
+                  style={{ ...btn(cat === "" ? "#3b82f6" : "var(--surface2)",
+                    cat === "" ? "white" : "var(--muted)"), padding:"4px 10px", fontSize:11 }}>
+                  Tout ({alerts.filter(a => showDis || !a.dismissed).length})
+                </button>
+                {cats.map(c => (
+                  <button key={c.category} type="button" onClick={() => setCat(c.category)}
+                    style={{ ...btn(cat === c.category ? "#3b82f6" : "var(--surface2)",
+                      cat === c.category ? "white" : "var(--muted)"), padding:"4px 10px", fontSize:11 }}>
+                    {c.icon} {c.label} ({counts[c.category]})
+                  </button>
+                ))}
+              </div>
+              <label style={{ display:"flex", alignItems:"center", gap:6, marginTop:8,
+                fontSize:11, color:"var(--muted)", cursor:"pointer" }}>
+                <input type="checkbox" checked={showDis} onChange={e => setShowDis(e.target.checked)}/>
+                Afficher aussi les alertes ignorées
+              </label>
+            </div>
+
+            <div style={{ flex:1, overflowY:"auto", padding:"0 8px 8px" }}>
+              {!data ? (
+                <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>Chargement…</p>
+              ) : !shown.length ? (
+                <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>
+                  Aucune alerte.
+                </p>
+              ) : shown.map(a => (
+                <div key={a.key} style={{ display:"flex", alignItems:"center", gap:10,
+                  padding:"8px", borderRadius:8, opacity: a.dismissed ? 0.45 : 1 }}>
+                  <ColorDot f={a} size={22}/>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ margin:0, fontSize:12, fontWeight:600, color:"var(--text)",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {a.title}
+                    </p>
+                    <p style={{ margin:0, fontSize:10, color:"var(--muted)",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {a.cat_icon} {a.cat_label}
+                      {a.brand ? ` · ${a.brand}` : ""}{a.detail ? ` · ${a.detail}` : ""}
+                    </p>
+                  </div>
+                  {a.value && (
+                    <span style={{ flexShrink:0, fontSize:10, fontWeight:700,
+                      fontFamily:"JetBrains Mono,monospace",
+                      color: a.severity === "warn" ? "#f59e0b" : "var(--muted)" }}>
+                      {a.value}
+                    </span>
+                  )}
+                  {a.dismissed ? (
+                    <button type="button" onClick={() => restore(a)} title="Remettre en circulation"
+                      style={{ flexShrink:0, background:"none", border:"none", cursor:"pointer",
+                        color:"var(--muted)", fontSize:14 }}>↩</button>
+                  ) : (
+                    <>
+                      <button type="button" onClick={() => dismiss(a, 7)} title="Ignorer 7 jours"
+                        style={{ flexShrink:0, background:"none", border:"none", cursor:"pointer",
+                          color:"var(--muted)", fontSize:12 }}>7j</button>
+                      <button type="button" onClick={() => dismiss(a, null)} title="Ne plus jamais afficher"
+                        style={{ flexShrink:0, background:"none", border:"none", cursor:"pointer",
+                          color:"#ef4444", fontSize:13 }}>✕</button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Alertes ignorées ───────────────────────────────────────────────────────
 function DismissedCard({ card, cardTitle }) {
   const [open, setOpen] = React.useState(false);
@@ -701,6 +859,9 @@ export default function Settings() {
 
       {/* ── Étiquettes filaments ───────────────────────────────────── */}
       <LabelsCard card={card} cardTitle={cardTitle}/>
+
+      {/* ── Points d'attention ─────────────────────────────────────── */}
+      <AllAlertsCard card={card} cardTitle={cardTitle}/>
 
       {/* ── Alertes ignorées ───────────────────────────────────────── */}
       <DismissedCard card={card} cardTitle={cardTitle}/>

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .auth import get_current_user
 from ....db.session import get_db
 from ....models.attention import AttentionDismissal
-from ....services.attention import build_attention, list_dismissed
+from ....services.attention import CATEGORIES, all_alerts, build_attention, list_dismissed
 
 router = APIRouter()
 
@@ -28,6 +28,25 @@ async def get_attention(
 ):
     cats, errors = await build_attention(db, per_category=per_category)
     return {"categories": cats, "errors": errors}
+
+
+@router.get("/all")
+async def get_all_alerts(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """
+    Toutes les alertes, sans echantillonnage : l'ecran de l'accueil n'en montre
+    que quelques-unes par categorie. Les alertes en sourdine sont MARQUEES
+    (dismissed: true) et non retirees : on veut pouvoir les voir et les reactiver.
+    """
+    alerts, errors = await all_alerts(db)
+    return {
+        "alerts": alerts,
+        "errors": errors,
+        "categories": [{"category": k, "label": v[0], "icon": v[1]}
+                       for k, v in CATEGORIES.items()],
+    }
 
 
 @router.get("/debug")

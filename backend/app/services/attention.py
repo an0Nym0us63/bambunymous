@@ -82,6 +82,9 @@ class Alert:
     # print — c'est le visuel de la piece qu'on veut reconnaitre.
     image: Optional[str] = None
 
+    # Urgence, pour les categories triees (rank croissant = plus urgent).
+    rank: Optional[float] = None
+
 
 def _fil_visual(f) -> dict:
     """Champs d'affichage communs a toutes les alertes portant sur un filament."""
@@ -99,13 +102,24 @@ def _fil_title(f) -> str:
 
 
 # ── Registre ───────────────────────────────────────────────────────────────
-CHECKS: list[tuple[str, str, str, Callable]] = []   # (cat_key, label, icone, fn)
+CHECKS: list[dict] = []
 
 
-def check(category: str, label: str, icon: str = "•"):
-    """Enregistre une verification. Signature attendue : async fn(db) -> list[Alert]."""
+def check(category: str, label: str, icon: str = "•",
+          shown: int = 3, random_sample: bool = True):
+    """
+    Enregistre une verification. Signature attendue : async fn(db) -> list[Alert].
+
+    shown         : combien d'alertes afficher pour cette categorie.
+    random_sample : True  -> echantillon aleatoire (evite de montrer eternellement
+                             les 3 memes parmi 40).
+                    False -> tri par urgence (Alert.rank croissant). Pour les
+                             bobines presque vides, l'aleatoire n'a aucun sens :
+                             c'est la plus vide qu'on veut voir en premier.
+    """
     def deco(fn):
-        CHECKS.append((category, label, icon, fn))
+        CHECKS.append({"category": category, "label": label, "icon": icon,
+                       "fn": fn, "shown": shown, "random": random_sample})
         return fn
     return deco
 
@@ -138,7 +152,8 @@ async def _filaments_without_spool(db) -> list[Alert]:
 LOW_SPOOL_PCT = 25          # seuil d'alerte, en % du poids nominal
 
 
-@check("low_spool", f"Bobines sous {LOW_SPOOL_PCT} %", "🪫")
+@check("low_spool", f"Bobines sous {LOW_SPOOL_PCT} %", "🪫",
+       shown=5, random_sample=False)
 async def _spools_low(db) -> list[Alert]:
     """Bobine sous le seuil : penser a racheter, ou a lancer ce qui l'utilise."""
     rows = (await db.execute(
@@ -160,6 +175,7 @@ async def _spools_low(db) -> list[Alert]:
             title=_fil_title(f),
             detail=f"Bobine #{s.id}",
             value=f"{int(s.remaining_weight_g)} g · {pct} %",
+            rank=pct,                       # la plus vide en premier
             severity="warn",
             link=f"/filaments?id={f.id}",
             entity="spool", entity_id=s.id, filament_id=f.id,
@@ -412,7 +428,7 @@ async def _dismissed_keys(db) -> set[str]:
     return set(rows)
 
 
-CATEGORIES = {cat: (label, icon) for cat, label, icon, _ in CHECKS}
+CATEGORIES = {c["category"]: (c["label"], c["icon"]) for c in CHECKS}
 
 
 async def list_dismissed(db) -> list[dict]:
@@ -489,7 +505,8 @@ async def build_attention(db, per_category: int = 3) -> tuple[list[dict], list[d
     out: list[dict] = []
     errors: list[dict] = []
 
-    for cat, label, icon, fn in CHECKS:
+    for c in CHECKS:
+        cat, label, icon, fn = c["category"], c["label"], c["icon"], c["fn"]
         try:
             alerts = await fn(db)
         except Exception as e:
@@ -500,16 +517,54 @@ async def build_attention(db, per_category: int = 3) -> tuple[list[dict], list[d
         alerts = [a for a in alerts if a.key not in dismissed]
         if not alerts:
             continue
+
+        shown = c["shown"]
         # On renvoie plus d'alertes que ce qui sera affiche : le front garde le
         # surplus en reserve et remplace instantanement une alerte masquee, sans
         # rappeler l'API.
-        sample = random.sample(alerts, min(per_category * 4, len(alerts)))
+        keep = min(shown * 4, len(alerts))
+        if c["random"]:
+            sample = random.sample(alerts, keep)
+        else:
+            # Tri par urgence, pas d'aleatoire : la reserve reste ordonnee, donc
+            # masquer la plus vide fait bien remonter la SUIVANTE plus vide.
+            sample = sorted(alerts, key=lambda a: (a.rank if a.rank is not None else 0))[:keep]
+
         out.append({
             "category": cat,
             "label": label,
             "icon": icon,
             "total": len(alerts),
-            "shown": per_category,          # combien en afficher
+            "shown": shown,
             "alerts": [a.__dict__ for a in sample],
         })
+    return out, errors
+
+
+async def all_alerts(db) -> tuple[list[dict], list[dict]]:
+    """
+    TOUTES les alertes, sans echantillonnage — pour l'ecran de consultation
+    complet (Parametres). Les mises en sourdine sont marquees, pas retirees :
+    on veut pouvoir les voir et les reactiver.
+    """
+    dismissed = await _dismissed_keys(db)
+    out: list[dict] = []
+    errors: list[dict] = []
+    for c in CHECKS:
+        cat, label, icon, fn = c["category"], c["label"], c["icon"], c["fn"]
+        try:
+            alerts = await fn(db)
+        except Exception as e:
+            logger.exception(f"[ATTENTION] check {cat} a échoué")
+            errors.append({"category": cat, "label": label,
+                           "error": f"{type(e).__name__}: {e}"})
+            continue
+        if not c["random"]:
+            alerts.sort(key=lambda a: (a.rank if a.rank is not None else 0))
+        for a in alerts:
+            d = a.__dict__.copy()
+            d["dismissed"] = a.key in dismissed
+            d["cat_label"] = label
+            d["cat_icon"] = icon
+            out.append(d)
     return out, errors
