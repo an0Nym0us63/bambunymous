@@ -135,9 +135,12 @@ async def _filaments_without_spool(db) -> list[Alert]:
     ]
 
 
-@check("low_spool", "Bobines bientôt vides", "🪫")
+LOW_SPOOL_PCT = 25          # seuil d'alerte, en % du poids nominal
+
+
+@check("low_spool", f"Bobines sous {LOW_SPOOL_PCT} %", "🪫")
 async def _spools_low(db) -> list[Alert]:
-    """Bobine sous 15 % : penser a lancer les impressions qui l'utilisent, ou racheter."""
+    """Bobine sous le seuil : penser a racheter, ou a lancer ce qui l'utilise."""
     rows = (await db.execute(
         select(Spool, Filament)
         .join(Filament, Filament.id == Spool.filament_id)
@@ -145,7 +148,7 @@ async def _spools_low(db) -> list[Alert]:
             Spool.archived.is_(False),
             Spool.remaining_weight_g.isnot(None),
             Filament.filament_weight_g > 0,
-            Spool.remaining_weight_g < Filament.filament_weight_g * 0.15,
+            Spool.remaining_weight_g < Filament.filament_weight_g * (LOW_SPOOL_PCT / 100.0),
         )
     )).all()
     out = []
