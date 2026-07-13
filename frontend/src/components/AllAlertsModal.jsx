@@ -48,7 +48,13 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
 
   // Meme comportement que sur l'accueil : la liste ne servait a rien si on ne
   // pouvait pas ouvrir ce qu'elle signale.
+  // Une alerte n'est ouvrable que si sa CIBLE est complete. Sans ce garde-fou, une
+  // entite supprimee (ou une cle mal formee) partait chercher /prints/undefined.
+  const canOpen = (a) => !!a?.entity && a.entity_id != null
+    && (a.entity !== "spool" || a.filament_id != null);
+
   const openAlert = async (a) => {
+    if (!canOpen(a)) return;
     try {
       if (a.entity === "filament") {
         const r = await client.get(`/filaments/filaments/${a.entity_id}`);
@@ -210,9 +216,9 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
           ) : shown.map(a => (
             <div key={a.key} style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px", borderRadius:8 }}>
-              <div onClick={() => a.entity && openAlert(a)}
+              <div onClick={() => openAlert(a)}
                 style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0,
-                  cursor: a.entity ? "pointer" : "default" }}>
+                  cursor: canOpen(a) ? "pointer" : "default" }}>
                 <Dot a={a}/>
                 <div style={{ flex:1, minWidth:0 }}>
                   <p style={{ margin:0, fontSize:12, fontWeight:600, color:"var(--text)",

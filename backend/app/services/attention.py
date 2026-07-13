@@ -514,22 +514,40 @@ async def list_dismissed(db) -> list[dict]:
             "title": d.key,
         }
 
-        # Reconstitution de l'entite
+        # Reconstitution de la CIBLE.
+        #
+        # entity seul ne suffit pas : le front a besoin de entity_id (et de
+        # filament_id pour une bobine) pour ouvrir la fiche. Sans eux, le clic
+        # partait sur des identifiants undefined.
+        #
+        # Si l'entite a disparu entre-temps, on ne pose PAS entity : la ligne
+        # reste affichee (on peut lever la sourdine) mais n'est pas cliquable.
         f = None
         if entity == "filament" and eid:
             f = await db.get(Filament, eid)
+            if f is not None:
+                item["entity"] = "filament"
+                item["entity_id"] = f.id
         elif entity == "spool" and eid:
             sp = await db.get(Spool, eid)
             if sp:
                 f = await db.get(Filament, sp.filament_id)
                 item["detail"] = f"Bobine #{sp.id}"
+                item["entity"] = "spool"
+                item["entity_id"] = sp.id
+                item["filament_id"] = sp.filament_id
         elif entity == "print" and eid:
             p = await db.get(Print, eid)
-            item["title"] = (p.file_name if p else None) or f"Impression #{eid}"
-            item["entity"] = "print"
+            if p is not None:
+                item["title"] = p.file_name or f"Impression #{eid}"
+                item["entity"] = "print"
+                item["entity_id"] = p.id
+                item["image"] = _print_image(p)
+            else:
+                item["title"] = f"Impression #{eid} (supprimée)"
+
         if f is not None:
             item["title"] = _fil_title(f)
-            item["entity"] = entity
             item.update(_fil_visual(f))
         out.append(item)
     return out
