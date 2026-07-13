@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .auth import get_current_user
 from ....db.session import get_db
 from ....models.attention import AttentionDismissal
-from ....services.attention import build_attention
+from ....services.attention import build_attention, list_dismissed
 
 router = APIRouter()
 
@@ -73,6 +73,26 @@ async def debug_attention(
         "checks": checks,
         "dismissed": sorted(await _dismissed_keys(db)),
     }
+
+
+@router.get("/dismissed")
+async def get_dismissed(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """Les alertes en sourdine, avec leur cible reconstituee."""
+    return {"dismissed": await list_dismissed(db)}
+
+
+@router.delete("/dismissed")
+async def clear_dismissed(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """Remet TOUTES les alertes en circulation."""
+    res = await db.execute(delete(AttentionDismissal))
+    await db.commit()
+    return {"ok": True, "removed": res.rowcount or 0}
 
 
 @router.post("/dismiss")

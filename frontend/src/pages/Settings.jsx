@@ -273,6 +273,129 @@ function ColorDot({ f, size = 14 }) {
   );
 }
 
+// ── Alertes ignorées ───────────────────────────────────────────────────────
+function DismissedCard({ card, cardTitle }) {
+  const [open, setOpen] = React.useState(false);
+  const [rows, setRows] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr]   = React.useState(null);
+
+  const load = () => {
+    setErr(null);
+    client.get("/attention/dismissed")
+      .then(r => setRows(r.data?.dismissed || []))
+      .catch(e => setErr(e.response?.data?.detail || e.message));
+  };
+  React.useEffect(() => { if (open) load(); }, [open]);
+
+  const remove = async (key) => {
+    setRows(rs => rs.filter(r => r.key !== key));   // optimiste
+    try { await client.delete(`/attention/dismiss/${encodeURIComponent(key)}`); }
+    catch { load(); }
+  };
+
+  const clearAll = async () => {
+    if (!window.confirm("Remettre en circulation TOUTES les alertes ignorées ?")) return;
+    setBusy(true);
+    try { await client.delete("/attention/dismissed"); setRows([]); }
+    catch (e) { setErr(e.response?.data?.detail || e.message); }
+    finally { setBusy(false); }
+  };
+
+  const fmt = (r) => {
+    if (r.forever) return "Définitivement";
+    if (!r.until) return "—";
+    const d = new Date(r.until);
+    if (r.expired) return "Expiré";
+    const days = Math.max(0, Math.ceil((d - new Date()) / 86400000));
+    return `Encore ${days} j`;
+  };
+
+  const btn = (bg, color) => ({ padding:"8px 14px", borderRadius:8, border:"none",
+    cursor:"pointer", background:bg, color, fontSize:12, fontWeight:700 });
+
+  return (
+    <div className="card" style={card}>
+      <div style={cardTitle}>Alertes ignorées</div>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
+        Les points d'attention que tu as masqués — pour 7 jours ou définitivement.
+        Tu peux les remettre en circulation ici.
+      </p>
+      <button type="button" onClick={() => setOpen(true)} style={btn("#3b82f6","white")}>
+        Voir les alertes ignorées…
+      </button>
+
+      {open && (
+        <div onClick={() => setOpen(false)} style={{ position:"fixed", inset:0, zIndex:9999,
+          background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center",
+          justifyContent:"center", padding:16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:520,
+            maxHeight:"84vh", display:"flex", flexDirection:"column",
+            background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
+
+            <div style={{ padding:"12px 16px", display:"flex", alignItems:"center", gap:10 }}>
+              <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>
+                Alertes ignorées{rows ? ` (${rows.length})` : ""}
+              </p>
+              <button type="button" onClick={() => setOpen(false)}
+                style={{ background:"none", border:"none", color:"var(--muted)",
+                  fontSize:18, cursor:"pointer" }}>✕</button>
+            </div>
+
+            {err && (
+              <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"#ef4444" }}>⚠ {err}</p>
+            )}
+
+            <div style={{ flex:1, overflowY:"auto", padding:"0 8px 8px" }}>
+              {!rows ? (
+                <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>Chargement…</p>
+              ) : !rows.length ? (
+                <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>
+                  Aucune alerte ignorée.
+                </p>
+              ) : rows.map(r => (
+                <div key={r.key} style={{ display:"flex", alignItems:"center", gap:10,
+                  padding:"8px", borderRadius:8 }}>
+                  <ColorDot f={r} size={22}/>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ margin:0, fontSize:12, fontWeight:600, color:"var(--text)",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {r.title}
+                    </p>
+                    <p style={{ margin:0, fontSize:10, color:"var(--muted)",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {r.icon} {r.label}{r.detail ? ` · ${r.detail}` : ""}
+                    </p>
+                  </div>
+                  <span style={{ flexShrink:0, fontSize:10, fontWeight:700,
+                    fontFamily:"JetBrains Mono,monospace",
+                    color: r.forever ? "#ef4444" : r.expired ? "var(--muted)" : "#f59e0b" }}>
+                    {fmt(r)}
+                  </span>
+                  <button type="button" onClick={() => remove(r.key)}
+                    title="Remettre en circulation"
+                    style={{ flexShrink:0, background:"none", border:"none", cursor:"pointer",
+                      color:"var(--muted)", fontSize:14, padding:"0 2px" }}>↩</button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ padding:"12px 16px", display:"flex", gap:8 }}>
+              <button type="button" onClick={() => setOpen(false)}
+                style={{ ...btn("var(--surface2)","var(--muted)"), flex:1 }}>Fermer</button>
+              <button type="button" disabled={!rows?.length || busy} onClick={clearAll}
+                style={{ ...btn(rows?.length ? "rgba(239,68,68,0.12)" : "var(--border)",
+                  rows?.length ? "#ef4444" : "var(--muted)"), flex:2 }}>
+                {busy ? "…" : "Tout remettre en circulation"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Étiquettes filaments (PDF) ─────────────────────────────────────────────
 function LabelsCard({ card, cardTitle }) {
   const [open, setOpen] = React.useState(false);
@@ -578,6 +701,9 @@ export default function Settings() {
 
       {/* ── Étiquettes filaments ───────────────────────────────────── */}
       <LabelsCard card={card} cardTitle={cardTitle}/>
+
+      {/* ── Alertes ignorées ───────────────────────────────────────── */}
+      <DismissedCard card={card} cardTitle={cardTitle}/>
 
       {/* ── Import depuis Spoolnymous ───────────────────────────────── */}
       <SpoolnymousImport/>

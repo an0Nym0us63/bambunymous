@@ -409,6 +409,66 @@ async def _dismissed_keys(db) -> set[str]:
     return set(rows)
 
 
+CATEGORIES = {cat: (label, icon) for cat, label, icon, _ in CHECKS}
+
+
+async def list_dismissed(db) -> list[dict]:
+    """
+    Les alertes en sourdine, rendues LISIBLES.
+
+    Une cle brute ("no_spool:filament:106") ne dit rien a l'utilisateur : on la
+    decompose et on va rechercher l'entite pour reconstituer le nom, la couleur
+    et la marque.
+    """
+    rows = (await db.execute(
+        select(AttentionDismissal).order_by(AttentionDismissal.created_at.desc())
+    )).scalars().all()
+
+    out = []
+    now = datetime.utcnow()
+    for d in rows:
+        parts = (d.key or "").split(":")
+        cat = parts[0] if parts else ""
+        entity = parts[1] if len(parts) > 2 else None
+        try:
+            eid = int(parts[2]) if len(parts) > 2 else None
+        except ValueError:
+            eid = None
+
+        label, icon = CATEGORIES.get(cat, (cat or "Inconnu", "•"))
+        item = {
+            "key": d.key,
+            "category": cat,
+            "label": label,
+            "icon": icon,
+            "until": d.until.isoformat() if d.until else None,
+            "forever": d.until is None,
+            "expired": bool(d.until and d.until <= now),
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+            "title": d.key,
+        }
+
+        # Reconstitution de l'entite
+        f = None
+        if entity == "filament" and eid:
+            f = await db.get(Filament, eid)
+        elif entity == "spool" and eid:
+            sp = await db.get(Spool, eid)
+            if sp:
+                f = await db.get(Filament, sp.filament_id)
+                item["detail"] = f"Bobine #{sp.id}"
+        elif entity == "print" and eid:
+            p = await db.get(Print, eid)
+            item["title"] = (p.file_name if p else None) or f"Impression #{eid}"
+            item["entity"] = "print"
+        if f is not None:
+            item["title"] = _fil_title(f)
+            item["entity"] = entity
+            item.update(_fil_visual(f))
+        out.append(item)
+    return out
+
+
 async def build_attention(db, per_category: int = 3) -> tuple[list[dict], list[dict]]:
     """
     Renvoie (categories, erreurs).
