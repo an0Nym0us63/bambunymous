@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ....core.security import get_current_user
+from .auth import get_current_user
 from ....db.session import get_db
 from ....models.attention import AttentionDismissal
 from ....services.attention import build_attention
