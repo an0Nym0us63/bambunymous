@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal } from "lucide-react";
+import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
@@ -701,10 +701,22 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
 
         <div style={{ padding:"0 16px 16px" }}>
-          {/* Titre */}
-          <h2 style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:"0 0 4px", letterSpacing:"-0.01em" }}>
-            {p.file_name || "Sans nom"}
-          </h2>
+          {/* Titre — le bouton Éditer existait, mais tout en bas de la fiche,
+              apres les photos et les filaments : introuvable en pratique. On le
+              remet aussi ici, comme sur la fiche filament. */}
+          <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
+            <h2 style={{ flex:1, minWidth:0, fontSize:17, fontWeight:800, color:"var(--text)",
+              margin:"0 0 4px", letterSpacing:"-0.01em" }}>
+              {p.file_name || "Sans nom"}
+            </h2>
+            <button onClick={()=>setEditMode(true)} aria-label="Éditer"
+              style={{ flexShrink:0, background:"none", border:"none", cursor:"pointer",
+                color:"var(--muted)", padding:4, display:"flex" }}
+              onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
+              onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
+              <Pencil size={16}/>
+            </button>
+          </div>
           {p.original_name && p.original_name !== p.file_name && (
             <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 6px" }}>{p.original_name}</p>
           )}

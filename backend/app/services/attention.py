@@ -20,6 +20,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Callable, Optional
 
+import os
+from pathlib import Path
+
 from sqlalchemy import and_, func, or_, select
 
 from ..models.attention import AttentionDismissal
@@ -27,6 +30,17 @@ from ..models.filament import Filament, Spool
 from ..models.print_history import Print, FilamentUsage, PrintSnapshot
 
 logger = logging.getLogger(__name__)
+
+DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
+PHOTO_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif")
+
+
+def _has_photo(fid: int) -> bool:
+    """Les photos de filament vivent sur le disque, pas en base."""
+    d = DATA_DIR / "filaments" / str(fid)
+    if not d.is_dir():
+        return False
+    return any(f.suffix.lower() in PHOTO_EXT for f in d.iterdir())
 
 
 def _print_image(p) -> Optional[str]:
@@ -181,35 +195,6 @@ async def _prints_without_mapping(db) -> list[Alert]:
     ]
 
 
-@check("no_photo", "Impressions sans photo", "📷")
-async def _prints_without_photo(db) -> list[Alert]:
-    """Impression reussie dont il ne reste aucune trace visuelle."""
-    snap = select(PrintSnapshot.print_id).distinct()
-    rows = (await db.execute(
-        select(Print)
-        .where(
-            Print.status == "SUCCESS",
-            Print.id.notin_(snap),
-            Print.plate_image.is_(None),
-        )
-        .order_by(Print.print_date.desc())
-        .limit(60)
-    )).scalars().all()
-    return [
-        Alert(
-            key=f"no_photo:print:{p.id}",
-            category="no_photo",
-            title=p.file_name or f"Impression #{p.id}",
-            detail="",
-            value=p.print_date.strftime("%d/%m") if p.print_date else None,
-            severity="info",
-            link=f"/prints?id={p.id}",
-            entity="print", entity_id=p.id,
-        )
-        for p in rows
-    ]
-
-
 @check("no_3mf", "Impressions sans métadonnées", "🧩")
 async def _prints_without_3mf(db) -> list[Alert]:
     """
@@ -325,6 +310,91 @@ async def _bambu_spools_without_rfid(db) -> list[Alert]:
         )
         for s, f in rows
     ]
+
+
+@check("fil_no_photo", "Filaments sans photo", "📷")
+async def _filaments_without_photo(db) -> list[Alert]:
+    """
+    Aucune photo : impossible de reconnaitre le rendu reel de la teinte, qui ne
+    correspond jamais tout a fait au code couleur.
+    """
+    rows = (await db.execute(select(Filament))).scalars().all()
+    return [
+        Alert(
+            key=f"fil_no_photo:filament:{f.id}",
+            category="fil_no_photo",
+            title=_fil_title(f),
+            detail="",
+            severity="info",
+            link=f"/filaments?id={f.id}",
+            entity="filament", entity_id=f.id,
+            **_fil_visual(f),
+        )
+        for f in rows if not _has_photo(f.id)
+    ]
+
+
+@check("to_order", "Filaments à commander", "🛒")
+async def _filaments_to_order(db) -> list[Alert]:
+    """Marques \"a commander\" a la main (champ to_order)."""
+    rows = (await db.execute(
+        select(Filament).where(Filament.to_order.is_(True))
+    )).scalars().all()
+    return [
+        Alert(
+            key=f"to_order:filament:{f.id}",
+            category="to_order",
+            title=_fil_title(f),
+            detail="",
+            severity="warn",
+            link=f"/filaments?id={f.id}",
+            entity="filament", entity_id=f.id,
+            **_fil_visual(f),
+        )
+        for f in rows
+    ]
+
+
+UNUSED_DAYS = 180
+
+
+@check("unused", f"Filaments inutilisés depuis {UNUSED_DAYS // 30} mois", "🕸")
+async def _filaments_unused(db) -> list[Alert]:
+    """
+    Du stock qui dort. On ne regarde que les filaments AYANT des bobines actives :
+    ceux qui n'en ont plus sont deja couverts par \"Filaments sans bobine\", les
+    signaler deux fois ne servirait a rien.
+    """
+    cutoff = datetime.utcnow() - timedelta(days=UNUSED_DAYS)
+    rows = (await db.execute(
+        select(Filament, func.max(Spool.last_used_at).label("last"))
+        .join(Spool, Spool.filament_id == Filament.id)
+        .where(Spool.archived.is_(False))
+        .group_by(Filament.id)
+        .having(or_(
+            func.max(Spool.last_used_at).is_(None),
+            func.max(Spool.last_used_at) < cutoff,
+        ))
+    )).all()
+    out = []
+    for f, last in rows:
+        if last:
+            days = (datetime.utcnow() - last).days
+            value = f"{days // 30} mois"
+        else:
+            value = "jamais"
+        out.append(Alert(
+            key=f"unused:filament:{f.id}",
+            category="unused",
+            title=_fil_title(f),
+            detail="",
+            value=value,
+            severity="info",
+            link=f"/filaments?id={f.id}",
+            entity="filament", entity_id=f.id,
+            **_fil_visual(f),
+        ))
+    return out
 
 
 # ── Assemblage ─────────────────────────────────────────────────────────────
