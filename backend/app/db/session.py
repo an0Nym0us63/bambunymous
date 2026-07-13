@@ -30,6 +30,7 @@ async def get_db():
 async def init_db():
     from ..models import setting, printer  # noqa - import pour créer les tables
     from ..models import filament, print_history, object_history  # noqa
+    from ..models import attention  # noqa - table des mises en sourdine
     async with engine.begin() as conn:
         # WAL mode : permet lectures concurrentes, évite les database locked
         await conn.execute(__import__("sqlalchemy").text("PRAGMA journal_mode=WAL"))

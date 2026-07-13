@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
@@ -1841,6 +1842,7 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
 }
 
 export default function Prints() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [prints, setPrints]   = useState([]);
   const [total, setTotal]     = useState(0);
   const [loading, setLoading] = useState(true);
@@ -1848,6 +1850,24 @@ export default function Prints() {
   const [offset, setOffset]   = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [kpis, setKpis] = useState(null);
+
+  // Lien direct /prints?id=XXX (points d'attention, favoris…). On interroge l'API
+  // plutot que la liste chargee : le print peut etre hors de la page courante ou
+  // exclu par les filtres.
+  const deepId = searchParams.get("id");
+  useEffect(() => {
+    if (!deepId) return;
+    client.get(`/prints/${deepId}`)
+      .then(r => setSelected(r.data))
+      .catch(() => {});
+  }, [deepId]);
+
+  const closeDeep = () => {
+    if (!searchParams.get("id")) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("id");
+    setSearchParams(next, { replace: true });
+  };
   const sentinelRef = useRef(null);
   const loadingMoreRef = useRef(false);
   const [search, setSearch]   = useState("");
@@ -2363,7 +2383,7 @@ export default function Prints() {
         </div>
       )}
 
-      {selected && <PrintDetail p={selected} onClose={()=>setSelected(null)}
+      {selected && <PrintDetail p={selected} onClose={()=>{ setSelected(null); closeDeep(); }}
         onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}
         onChanged={() => { load(); loadGroups(); }}/>}
 

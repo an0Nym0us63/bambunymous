@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .routes import auth, printer, settings, filaments, import_db, logs, camera, prints, import_zip, objects, import_spoolnymous
+from .routes import attention, auth, printer, settings, filaments, import_db, logs, camera, prints, import_zip, objects, import_spoolnymous
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth.router,      prefix="/auth",      tags=["auth"])

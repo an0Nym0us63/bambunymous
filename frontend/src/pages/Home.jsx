@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
 import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle, Calendar } from "lucide-react";
 import client from "../api/client";
+import AttentionSection from "../components/AttentionSection";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -674,6 +675,7 @@ export default function Home() {
         spoolLookup={spoolLookup}
         activeNozzleId={status?.nozzles?.find(n => n.active)?.id ?? null}
       />}
+      <AttentionSection/>
     </div>
   );
 }
