@@ -12,5 +12,6 @@ router.include_router(camera.router,    prefix="/camera",    tags=["camera"])
 router.include_router(prints.router,    prefix="/prints",    tags=["prints"])
 router.include_router(import_zip.router, prefix="/import-zip",  tags=["import-zip"])
 router.include_router(objects.router,    prefix="/objects",     tags=["objects"])
+router.include_router(attention.router,  prefix="/attention",   tags=["attention"])
 
 router.include_router(import_spoolnymous.router)
