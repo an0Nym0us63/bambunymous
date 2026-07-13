@@ -29,6 +29,12 @@ from ..models.print_history import Print, FilamentUsage, PrintSnapshot
 logger = logging.getLogger(__name__)
 
 
+def _print_image(p) -> Optional[str]:
+    """Vignette du print : photo mise en avant, sinon l'image du plateau."""
+    name = p.cover_photo or (p.plate_image or "").split("/")[-1]
+    return f"/api/v1/prints/{p.id}/file/{name}" if name else None
+
+
 @dataclass
 class Alert:
     key: str                       # identifiant stable — sert a la mise en sourdine
@@ -57,6 +63,10 @@ class Alert:
     entity: Optional[str] = None       # "filament" | "spool" | "print"
     entity_id: Optional[int] = None
     filament_id: Optional[int] = None  # pour les alertes de bobine
+
+    # Vignette (impressions) : une pastille de couleur n'a aucun sens pour un
+    # print — c'est le visuel de la piece qu'on veut reconnaitre.
+    image: Optional[str] = None
 
 
 def _fil_visual(f) -> dict:
@@ -165,6 +175,7 @@ async def _prints_without_mapping(db) -> list[Alert]:
             severity="warn",
             link=f"/prints?id={p.id}",
             entity="print", entity_id=p.id,
+            image=_print_image(p),
         )
         for p in rows
     ]
@@ -226,6 +237,7 @@ async def _prints_without_3mf(db) -> list[Alert]:
             severity="warn",
             link=f"/prints?id={p.id}",
             entity="print", entity_id=p.id,
+            image=_print_image(p),
         )
         for p in rows
     ]

@@ -6,13 +6,34 @@ import { colorBg, parseColorsList } from "../utils/colors";
 import { FilamentSheet, FilamentSheetFromSpool } from "../pages/Filaments";
 import { PrintDetail } from "../pages/Prints";
 
-/** Pastille : dégradé sur un calque interne, anneau en inset box-shadow. */
+/**
+ * Visuel de l'alerte : la VIGNETTE pour une impression (une pastille de couleur
+ * n'aurait aucun sens : c'est la pièce qu'on veut reconnaître), la pastille
+ * couleur pour un filament ou une bobine.
+ */
 function Dot({ a, size = 26 }) {
+  const box = { width:size, height:size, borderRadius:8, flexShrink:0,
+    position:"relative", overflow:"hidden",
+    boxShadow:"inset 0 0 0 1px rgba(128,128,128,0.30)" };
+
+  if (a.entity === "print") {
+    return (
+      <div style={{ ...box, background:"var(--surface)" }}>
+        {a.image ? (
+          <img src={a.image} alt="" style={{ width:"100%", height:"100%",
+            objectFit:"cover", display:"block" }}
+            onError={e => { e.currentTarget.style.display = "none"; }}/>
+        ) : (
+          <span style={{ position:"absolute", inset:0, display:"flex",
+            alignItems:"center", justifyContent:"center", fontSize:size * 0.5 }}>🖨</span>
+        )}
+      </div>
+    );
+  }
+
   const cols = parseColorsList(a.color, a.colors_array);
   return (
-    <div style={{ width:size, height:size, borderRadius:8, flexShrink:0,
-      position:"relative", overflow:"hidden",
-      boxShadow:"inset 0 0 0 1px rgba(128,128,128,0.30)" }}>
+    <div style={box}>
       <div style={{ position:"absolute", inset:0, ...colorBg(cols, a.multicolor_type) }}/>
     </div>
   );
@@ -39,8 +60,11 @@ export default function AttentionSection() {
   const [cats, setCats] = useState(null);
   const [err, setErr]   = useState(null);
   const [menu, setMenu] = useState(null);   // alerte dont le menu est ouvert
+  // Repliee PAR DEFAUT : la section ne doit pas pousser l'imprimante hors de
+  // l'ecran a chaque ouverture de l'accueil. On ne l'ouvre que si l'utilisateur
+  // l'a explicitement depliee auparavant.
   const [open, setOpen] = useState(
-    () => localStorage.getItem("attention_collapsed") !== "1"
+    () => localStorage.getItem("attention_collapsed") === "0"
   );
   const [sheet, setSheet] = useState(null); // fiche ouverte SUR PLACE
 
