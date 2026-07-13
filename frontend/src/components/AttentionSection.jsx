@@ -16,12 +16,20 @@ import client from "../api/client";
 export default function AttentionSection() {
   const navigate = useNavigate();
   const [cats, setCats] = useState(null);
+  const [err, setErr]   = useState(null);
   const [menu, setMenu] = useState(null);   // alerte dont le menu est ouvert
 
   const load = () => {
     client.get("/attention")
-      .then(r => setCats(r.data?.categories || []))
-      .catch(() => setCats([]));
+      .then(r => { setCats(r.data?.categories || []); setErr(null); })
+      .catch(e => {
+        // Se taire sur une erreur rendait la section invisible et le probleme
+        // indebuggable : on l'affiche.
+        setCats([]);
+        setErr(e.response?.status
+          ? `${e.response.status} — ${e.response.data?.detail || "erreur serveur"}`
+          : e.message);
+      });
   };
   useEffect(load, []);
 
@@ -40,7 +48,34 @@ export default function AttentionSection() {
     }
   };
 
-  if (!cats || !cats.length) return null;
+  if (err) {
+    return (
+      <div style={{ marginBottom:20, padding:"10px 12px", borderRadius:10,
+        background:"rgba(239,68,68,0.08)", border:"1px solid rgba(239,68,68,0.25)" }}>
+        <p style={{ margin:0, fontSize:12, fontWeight:700, color:"#ef4444" }}>
+          Points d'attention indisponibles
+        </p>
+        <p style={{ margin:"2px 0 0", fontSize:11, color:"var(--muted)",
+          fontFamily:"JetBrains Mono,monospace" }}>{err}</p>
+      </div>
+    );
+  }
+  if (!cats) return null;                      // premier chargement
+  if (!cats.length) {
+    // Etat explicite : "rien a signaler" n'est pas la meme chose que "ca n'a pas
+    // charge", et on ne pouvait pas les distinguer.
+    return (
+      <div style={{ marginBottom:20 }}>
+        <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+          letterSpacing:"0.08em", margin:"0 0 8px" }}>Points d'attention</p>
+        <div style={{ padding:"12px", borderRadius:10, background:"var(--surface2)",
+          display:"flex", alignItems:"center", gap:8 }}>
+          <span>✅</span>
+          <span style={{ fontSize:12, color:"var(--muted)" }}>Rien à signaler.</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ marginBottom: 20 }}>
