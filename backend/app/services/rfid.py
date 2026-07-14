@@ -39,6 +39,13 @@ def normalize_scan(payload: dict) -> dict:
     """Extrait du JSON du tag les seuls champs qui nous servent."""
     ci = payload.get("color_info") or {}
     specs = payload.get("technical_specs") or {}
+
+    # Le tag expose la couleur sous deux noms selon la version du lecteur :
+    # color_hex ou color_rgba. Les deux valent RRGGBBAA. Ne lire qu'un seul des
+    # deux faisait echouer le repli couleur en silence.
+    color = payload.get("color_hex") or payload.get("color_rgba")
+    second = ci.get("second_color_rgba") or payload.get("second_color_rgba")
+
     return {
         "tray_uid":     (payload.get("tray_uid") or "").strip().upper(),
         "uid":          (payload.get("uid") or "").strip(),
@@ -46,8 +53,8 @@ def normalize_scan(payload: dict) -> dict:
         "variant_id":   (payload.get("material_variant_id") or "").strip().upper(),  # A00-B5
         "family":       (payload.get("filament_type") or "").strip(),            # PLA
         "fila_type":    (payload.get("detailed_filament_type") or "").strip(),   # PLA Basic
-        "color_hex":    _hex8(payload.get("color_hex")),
-        "second_color": _hex8(ci.get("second_color_rgba")),
+        "color_hex":    _hex8(color),
+        "second_color": _hex8(second),
         "color_count":  int(ci.get("color_count") or 1),
         "spool_weight_g": float(payload.get("spool_weight_g") or 1000),
         "diameter_mm":  payload.get("diameter_mm"),
