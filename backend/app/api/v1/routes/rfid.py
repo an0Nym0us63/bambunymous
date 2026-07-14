@@ -90,6 +90,27 @@ async def _find_filament(db, scan: dict, match: Optional[dict]) -> Optional[Fila
     return None
 
 
+@router.get("/status")
+async def rfid_status(db: AsyncSession = Depends(get_db)):
+    """
+    Verification, en GET, que le routeur RFID est bien en place.
+
+    /rfid/scan est en POST : l'ouvrir dans un navigateur (donc en GET) tombe dans
+    le catch-all et renvoie un 404 -- ce qui est le comportement attendu, mais
+    indiscernable d'un routeur absent. D'ou cette route.
+    """
+    token = (await get_setting(db, RFID_TOKEN_KEY, "") or "").strip()
+    return {
+        "ok": True,
+        "token_configured": bool(token),
+        "hint": ("Envoyer le JSON du tag en POST sur /api/v1/rfid/scan, "
+                 "avec l'en-tête X-Rfid-Token."
+                 if token else
+                 "Aucun RFID_TOKEN défini : l'application Android sera refusée. "
+                 "Définis ce réglage, et mets la même valeur dans l'app."),
+    }
+
+
 @router.post("/scan")
 async def rfid_scan(
     payload: dict,
