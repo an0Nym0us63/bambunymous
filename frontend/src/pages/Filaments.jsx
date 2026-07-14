@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import ScanSheet from "../components/ScanSheet";
+import RfidSheet from "../components/RfidSheet";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine } from "lucide-react";
 import client from "../api/client";
@@ -2059,8 +2060,30 @@ export default function Filaments() {
   const closeDeep = () => {
     setDeepFil(null); setDeepErr(null);
     const next = new URLSearchParams(searchParams);
-    next.delete("id");
+    next.delete("id"); next.delete("spool");
     setSearchParams(next, { replace: true });
+  };
+
+  // ── Scan RFID ────────────────────────────────────────────────────────────
+  // L'application Android POSTe le tag au backend, qui repond par une URL :
+  //   bobine connue   -> /filaments?id=..&spool=..   (fiche ouverte directement)
+  //   bobine inconnue -> /filaments?rfid=<scan_id>   (creation guidee)
+  const rfidId = searchParams.get("rfid");
+  const closeRfid = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("rfid");
+    setSearchParams(next, { replace: true });
+  };
+  const onRfidCreated = (res) => {
+    // On enchaine sur la fiche du filament fraichement cree.
+    setSearchParams(
+      { id: String(res.filament_id), ...(res.spool_id ? { spool: String(res.spool_id) } : {}) },
+      { replace: true },
+    );
+    // Rafraichir la galerie : la nouvelle reference doit y apparaitre sans recharger.
+    client.get("/filaments/filaments")
+      .then(r => setAllFilaments(r.data || []))
+      .catch(() => {});
   };
 
   // Scan : le QR encode l'ID, on passe par l'URL — le lien reste partageable et
@@ -2246,6 +2269,10 @@ export default function Filaments() {
       )}
 
       {scanOpen && <ScanSheet onDetect={onScanned} onClose={() => setScanOpen(false)}/>}
+
+      {rfidId && (
+        <RfidSheet scanId={rfidId} onClose={closeRfid} onCreated={onRfidCreated}/>
+      )}
 
       {/* Fiche ouverte via lien direct ?id=XXX (scan QR ou URL) */}
       {deepFil && (
