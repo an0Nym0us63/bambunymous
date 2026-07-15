@@ -480,16 +480,19 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
                   {[f.filament_brand, f.filament_fila_type || f.filament_type, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
                 </p>
               </div>
-              {(f.cost > 0 || f.normal_cost > 0) && (
-                <div style={{ textAlign:"right", flexShrink:0 }}>
-                  <span style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
-                    {(f.cost||f.normal_cost||0).toFixed(2)}€
-                  </span>
-                  {f.cost > 0 && f.normal_cost > 0 && f.cost !== f.normal_cost && (
-                    <p style={{ fontSize:9, color:"var(--muted)", margin:0 }}>({f.normal_cost.toFixed(2)}€)</p>
-                  )}
-                </div>
-              )}
+              <div style={{ textAlign:"right", flexShrink:0 }}>
+                {/* Le cout principal est TOUJOURS affiche, meme a 0 (bobine
+                    gratuite : c'est une info, pas une absence). f.cost peut
+                    valoir 0 legitimement -> on ne bascule PAS sur normal_cost. */}
+                <span style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
+                  {(f.cost || 0).toFixed(2)}€
+                </span>
+                {/* Parenthese des que le cout catalogue DIFFERE du principal,
+                    independamment du fait que le principal soit nul. */}
+                {Math.abs((f.normal_cost || 0) - (f.cost || 0)) > 0.005 && (
+                  <p style={{ fontSize:9, color:"var(--muted)", margin:0 }}>({(f.normal_cost || 0).toFixed(2)}€)</p>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -764,7 +767,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                 <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
                   {costFil.toFixed(2)}€
                 </p>
-                {costNormal > 0 && costFil !== costNormal && (
+                {Math.abs(costNormal - costFil) > 0.005 && (
                   <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
                     ({costNormal.toFixed(2)}€ sans bobine)
                   </p>
@@ -788,7 +791,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                   <span style={{ fontSize:20, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
                     {totalBobine.toFixed(2)}€
                   </span>
-                  {totalNormal !== totalBobine && totalNormal > 0 && (
+                  {Math.abs(totalNormal - totalBobine) > 0.005 && (
                     <span style={{ fontSize:11, color:"var(--muted)", marginLeft:8 }}>
                       ({totalNormal.toFixed(2)}€)
                     </span>
@@ -1126,7 +1129,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   letterSpacing:"0.06em", margin:0 }}>Coût total</p>
                 <span style={{ fontSize:22, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
                   {totalCost.toFixed(2)}€
-                  {totalNormal > 0 && Math.abs(totalNormal - totalCost) > 0.005 && (
+                  {Math.abs(totalNormal - totalCost) > 0.005 && (
                     <span style={{ fontSize:13, fontWeight:700, color:"var(--muted)", marginLeft:6 }}>
                       ({totalNormal.toFixed(2)}€)
                     </span>
@@ -1143,7 +1146,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   {nbItems > 1 && (
                     <span style={{ fontSize:12, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
                       · {(totalCost/nbItems).toFixed(2)}€/u
-                      {totalNormal > 0 && Math.abs(totalNormal - totalCost) > 0.005 &&
+                      {Math.abs(totalNormal - totalCost) > 0.005 &&
                         ` (${(totalNormal/nbItems).toFixed(2)}€/u)`}
                     </span>
                   )}
