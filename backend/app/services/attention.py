@@ -361,6 +361,66 @@ async def _bambu_without_color_code(db) -> list[Alert]:
     ]
 
 
+@check("spool_no_price", "Bobines sans prix", "🏷")
+async def _spools_without_price(db) -> list[Alert]:
+    """
+    Bobine active sans prix propre (price_override NULL).
+
+    On distingue NULL (jamais renseigne) de 0 : une bobine a 0 est un prix
+    ASSUME (recue en cadeau) et ne doit PAS etre signalee. Le cout du print
+    retombera de toute facon sur le prix du filament, puis sur 20 €/kg — mais
+    tant que rien n'est saisi, autant le rappeler.
+    """
+    rows = (await db.execute(
+        select(Spool, Filament)
+        .join(Filament, Filament.id == Spool.filament_id)
+        .where(
+            Spool.archived.is_(False),
+            Spool.price_override.is_(None),
+        )
+    )).all()
+    return [
+        Alert(
+            key=f"spool_no_price:spool:{s.id}",
+            category="spool_no_price",
+            title=_fil_title(f),
+            detail=f"Bobine #{s.id}",
+            severity="info",
+            link=f"/filaments?id={f.id}",
+            entity="spool", entity_id=s.id, filament_id=f.id,
+            **_fil_visual(f),
+        )
+        for s, f in rows
+    ]
+
+
+@check("fil_no_price", "Filaments sans prix", "🏷")
+async def _filaments_without_price(db) -> list[Alert]:
+    """
+    Filament sans prix de reference (price NULL).
+
+    Meme distinction : NULL seulement, pas 0. Ce prix sert de repli au cout d'un
+    print quand la bobine n'a pas de prix propre ; sans lui, on tombe sur le
+    defaut 20 €/kg, potentiellement faux.
+    """
+    rows = (await db.execute(
+        select(Filament).where(Filament.price.is_(None))
+    )).scalars().all()
+    return [
+        Alert(
+            key=f"fil_no_price:filament:{f.id}",
+            category="fil_no_price",
+            title=_fil_title(f),
+            detail=None,
+            severity="info",
+            link=f"/filaments?id={f.id}",
+            entity="filament", entity_id=f.id, filament_id=f.id,
+            **_fil_visual(f),
+        )
+        for f in rows
+    ]
+
+
 @check("no_rfid", "Bobines Bambu sans RFID", "📡")
 async def _bambu_spools_without_rfid(db) -> list[Alert]:
     """
