@@ -661,11 +661,13 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
     catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
 
-  // Prix à afficher — si pas de prix bobine, fallback sur normal
-  const costBobine  = p.total_cost_filament || 0;
-  const costNormal  = p.total_cost_filament_normal || 0;
+  // Les deux coûts viennent du backend, qui applique deja la cascade (bobine ->
+  // filament -> 20 €/kg pour le principal ; filament -> 20 €/kg pour l'autre).
+  // Le front ne refait PLUS de fallback : il ne faisait que dupliquer -- et
+  // desormais contredire -- cette logique.
+  const costFil     = p.total_cost_filament || 0;          // coût principal
+  const costNormal  = p.total_cost_filament_normal || 0;   // coût entre parenthèses
   const costElec    = p.electric_cost || 0;
-  const costFil     = costBobine > 0 ? costBobine : costNormal; // si pas de prix bobine, prendre normal
   const totalBobine = costFil + costElec;
   const totalNormal = costNormal + costElec;
   const nb          = p.number_of_items || 1;
@@ -762,7 +764,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                 <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
                   {costFil.toFixed(2)}€
                 </p>
-                {costBobine > 0 && costNormal > 0 && costBobine !== costNormal && (
+                {costNormal > 0 && costFil !== costNormal && (
                   <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
                     ({costNormal.toFixed(2)}€ sans bobine)
                   </p>
@@ -1020,8 +1022,12 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   }, [groupId]);
 
   const totalDur  = localPrints.reduce((s,p) => s + (p.duration_seconds || p.estimated_seconds || 0), 0);
-  const totalCost = localPrints.reduce((s,p) => s + (p.total_cost || 0), 0);
   const totalW    = localPrints.reduce((s,p) => s + (p.total_weight_g || 0), 0);
+  // Deux coûts, comme pour un print : le principal (total_cost) et celui entre
+  // parenthèses (filament au tarif catalogue + électricité). On somme les prints.
+  const totalCost   = localPrints.reduce((s,p) => s + (p.total_cost || 0), 0);
+  const totalNormal = localPrints.reduce((s,p) =>
+    s + (p.total_cost_filament_normal || 0) + (p.electric_cost || 0), 0);
 
   // Agrégation filaments
   const filsMap = {};
@@ -1120,6 +1126,11 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   letterSpacing:"0.06em", margin:0 }}>Coût total</p>
                 <span style={{ fontSize:22, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
                   {totalCost.toFixed(2)}€
+                  {totalNormal > 0 && Math.abs(totalNormal - totalCost) > 0.005 && (
+                    <span style={{ fontSize:13, fontWeight:700, color:"var(--muted)", marginLeft:6 }}>
+                      ({totalNormal.toFixed(2)}€)
+                    </span>
+                  )}
                 </span>
               </div>
               {/* Éléments — même style que PrintDetail */}
@@ -1132,6 +1143,8 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   {nbItems > 1 && (
                     <span style={{ fontSize:12, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
                       · {(totalCost/nbItems).toFixed(2)}€/u
+                      {totalNormal > 0 && Math.abs(totalNormal - totalCost) > 0.005 &&
+                        ` (${(totalNormal/nbItems).toFixed(2)}€/u)`}
                     </span>
                   )}
                 </div>

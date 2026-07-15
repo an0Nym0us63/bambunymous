@@ -534,6 +534,11 @@ async def _costs(db, p: Print):
         total_c  = 0.0   # prix override (bobine)
         total_cn = 0.0   # prix normal (filament)
 
+        # Prix par defaut quand ni la bobine ni le filament n'en portent : 20 €/kg.
+        # Sans ce repli, une bobine sans prix comptait pour ZERO et faussait tout
+        # le total du print.
+        DEFAULT_PRICE_PER_KG = 20.0
+
         for u in usages:
             g = u.grams_used or 0.0
             total_w += g
@@ -541,13 +546,17 @@ async def _costs(db, p: Print):
             fi = fils.get(sp.filament_id) if sp and sp.filament_id else None
             w_ref = (fi.filament_weight_g if fi and fi.filament_weight_g else None) or 1000.0
 
-            # Coût override = prix de la bobine
-            price_sp = (sp.price_override or 0) if sp else 0
-            cost_ov  = round(g * price_sp / w_ref, 4) if price_sp else 0.0
+            price_sp = (sp.price_override or 0) if sp else 0      # prix de LA bobine
+            price_fi = (fi.price or 0) if fi else 0               # prix du filament (reference)
 
-            # Coût normal = prix de référence du filament
-            price_fi = (fi.price or 0) if fi else 0
-            cost_no  = round(g * price_fi / w_ref, 4) if price_fi else 0.0
+            # Coût 1 (principal) : bobine -> sinon filament -> sinon 20 €/kg.
+            price_ov = price_sp or price_fi or DEFAULT_PRICE_PER_KG
+            cost_ov  = round(g * price_ov / w_ref, 4)
+
+            # Coût 2 (entre parenthèses) : filament -> sinon 20 €/kg. Il ignore
+            # volontairement le prix de la bobine : c'est le coût "au tarif catalogue".
+            price_no = price_fi or DEFAULT_PRICE_PER_KG
+            cost_no  = round(g * price_no / w_ref, 4)
 
             u.cost        = cost_ov
             u.normal_cost = cost_no
