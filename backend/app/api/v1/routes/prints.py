@@ -601,16 +601,47 @@ async def prints_stats(
         top_g_cost   = await _top_groups(func.sum(func.coalesce(Print.total_cost, 0)))
         top_g_weight = await _top_groups(func.sum(func.coalesce(Print.total_weight_g, 0)))
 
-        # ── Évolution mensuelle (succès + échecs)
+        # ── Évolution dans le temps (succès + échecs)
+        #
+        # L'agregation s'adapte a la periode : un bucketing mensuel sur "30 jours"
+        # ne donnait qu'une ou deux barres (d'ou un graphe vide, la condition front
+        # exigeant > 1 point). On choisit donc le grain selon l'etendue reelle.
         rows = (await db.execute(
             select(Print.print_date, Print.total_cost, Print.total_weight_g, Print.status, DUR.label("dur_s"))
             .where(*W(), Print.print_date.isnot(None)).order_by(Print.print_date)
         )).all()
+
+        # Etendue effective des donnees (en jours), pour choisir le grain meme en
+        # mode "Tout".
+        span_days = days
+        if rows:
+            first = rows[0].print_date
+            last  = rows[-1].print_date
+            try:
+                span_days = max(span_days, (last - first).days + 1)
+            except Exception:
+                pass
+
+        if span_days and span_days <= 45:
+            bucket = "day"       # YYYY-MM-DD
+        elif span_days and span_days <= 120:
+            bucket = "week"      # YYYY-Www (annee + numero de semaine ISO)
+        else:
+            bucket = "month"     # YYYY-MM
+
+        def _bucket_key(dt):
+            if bucket == "day":
+                return str(dt)[:10]
+            if bucket == "week":
+                iso = dt.isocalendar()          # (year, week, weekday)
+                return f"{iso[0]}-W{iso[1]:02d}"
+            return str(dt)[:7]
+
         monthly = {}
         for r in rows:
-            key = str(r.print_date)[:7]
-            if not key or key == "None":
+            if not r.print_date:
                 continue
+            key = _bucket_key(r.print_date)
             m = monthly.setdefault(key, {"count": 0, "failed": 0, "cost": 0.0,
                                          "weight_g": 0.0, "duration_s": 0.0})
             m["count"]      += 1
@@ -724,7 +755,11 @@ async def prints_stats(
             "top_groups_duration": top_g_dur,
             "top_groups_cost":     top_g_cost,
             "top_groups_weight":   top_g_weight,
-            "monthly":        {k: monthly[k] for k in sorted(monthly)[-24:]},
+            # timeline remplace "monthly" ; on garde "monthly" en alias pour ne rien
+            # casser d'existant. On limite le nombre de points selon le grain.
+            "timeline_bucket": bucket,
+            "timeline":        {k: monthly[k] for k in sorted(monthly)[-60:]},
+            "monthly":         {k: monthly[k] for k in sorted(monthly)[-60:]},
             "materials":      _b(mat_rows),
             "fila_types":     _b(type_rows),
             "brands":         _b(brand_rows),

@@ -83,9 +83,24 @@ function Bar({ label, value, max, color = "#3b82f6", sublabel, dot }) {
 }
 
 // ── Évolution mensuelle
-function TimeChart({ data }) {
+// Etiquette d'axe adaptee au grain : jour -> "07/16", semaine -> "S29",
+// mois -> "07/26".
+function fmtBucketLabel(k, bucket) {
+  if (bucket === "day") {        // YYYY-MM-DD
+    const [, mo, da] = k.split("-");
+    return `${da}/${mo}`;
+  }
+  if (bucket === "week") {       // YYYY-Www
+    return "S" + k.split("-W")[1];
+  }
+  const [y, mo] = k.split("-");  // YYYY-MM
+  return `${mo}/${(y || "").slice(2)}`;
+}
+
+function TimeChart({ data, bucket = "month" }) {
   const [tab, setTab] = useState("count");
-  const keys = Object.keys(data || {}).slice(-18);
+  // Jour : on affiche plus de barres (un mois ~30) ; sinon 18 suffisent.
+  const keys = Object.keys(data || {}).slice(bucket === "day" ? -45 : -18);
   if (!keys.length) return null;
 
   const pick = (k) => {
@@ -122,7 +137,7 @@ function TimeChart({ data }) {
           const failed = data[k].failed || 0;
           const failPct = tab === "count" && data[k].count > 0 ? (failed / data[k].count) * 100 : 0;
           return (
-            <div key={k} title={`${k} — ${unit(v)}${failed ? ` (${failed} échec${failed > 1 ? "s" : ""})` : ""}`}
+            <div key={k} title={`${fmtBucketLabel(k, bucket)} — ${unit(v)}${failed ? ` (${failed} échec${failed > 1 ? "s" : ""})` : ""}`}
               style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: "0 0 auto", width: 26 }}>
               <div style={{ width: "100%", height: `${Math.max(2, (v / max) * 100)}%`,
                 background: colors[tab], borderRadius: "3px 3px 0 0", minHeight: 2,
@@ -134,7 +149,7 @@ function TimeChart({ data }) {
               </div>
               <span style={{ fontSize: 7, color: "var(--muted)", transform: "rotate(-45deg)",
                 transformOrigin: "top center", whiteSpace: "nowrap", marginTop: 6 }}>
-                {k.slice(5)}
+                {fmtBucketLabel(k, bucket)}
               </span>
             </div>
           );
@@ -390,9 +405,9 @@ export default function Stats() {
         </Section>
       )}
 
-      {Object.keys(data.monthly || {}).length > 1 && (
+      {Object.keys(data.timeline || data.monthly || {}).length > 0 && (
         <Section title="Évolution dans le temps">
-          <TimeChart data={data.monthly}/>
+          <TimeChart data={data.timeline || data.monthly} bucket={data.timeline_bucket || "month"}/>
         </Section>
       )}
 
