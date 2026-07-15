@@ -32,7 +32,13 @@ const S = {
   main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
   page:    { flex:1, overflowY:"auto", padding:16, paddingTop:"calc(16px + env(safe-area-inset-top, 0px))", background:"var(--bg)" },
   // Mobile
-  header:  { display:"flex", alignItems:"center", gap:8, padding:"12px 16px", background:"var(--sidebar)", borderBottom:"1px solid var(--border)" },
+  // Le header est colle en haut de l'ecran. En PWA installee edge-to-edge et en
+  // WebView, la barre d'etat (heure, wifi) passe PAR-DESSUS s'il ne reserve pas la
+  // safe-area : le titre se retrouvait sous l'heure. Dans un navigateur classique,
+  // env(safe-area-inset-top) vaut 0, donc rien ne change la-bas.
+  header:  { display:"flex", alignItems:"center", gap:8,
+    padding:"12px 16px", paddingTop:"calc(12px + env(safe-area-inset-top, 0px))",
+    background:"var(--sidebar)", borderBottom:"1px solid var(--border)" },
   bottomNav: { display:"flex", background:"var(--sidebar)", borderTop:"1px solid var(--border)",
     position:"fixed", left:0, right:0, bottom:0, zIndex:50,
     paddingBottom:"env(safe-area-inset-bottom,0px)" },
@@ -127,6 +133,10 @@ export default function Layout() {
           .hidden-mobile { display:none!important; }
           .show-mobile { display:flex!important; }
           .page-content { padding-bottom: calc(76px + env(safe-area-inset-bottom,0px)) !important; }
+          /* En mobile, la safe-area du HAUT est portee par le header (il est colle
+             sous la barre d'etat). La page ne doit donc PAS la reserver en plus,
+             sinon l'espace serait compte deux fois. */
+          .page-content { padding-top: 16px !important; }
           /* Le titre est deja dans le header mobile : on evite de le repeter. */
           .page-title { display:none!important; }
         }
