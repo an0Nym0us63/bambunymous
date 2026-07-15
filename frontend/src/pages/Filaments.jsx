@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
+import { useNativeScan } from "../hooks/useNativeScan";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine } from "lucide-react";
 import client from "../api/client";
@@ -2074,6 +2075,17 @@ export default function Filaments() {
     next.delete("rfid");
     setSearchParams(next, { replace: true });
   };
+  // Écoute NFC continue via le shell WebView (absente en PWA pure).
+  const onNativeScan = React.useCallback((detail) => {
+    if (detail.error) { setDeepErr(detail.error); return; }
+    const redirect = detail.redirect || "/";
+    // On ne navigue pas hors de l'app : on rejoue le lien interne, comme le POST
+    // Android le faisait via l'URL. La feuille (fiche ou création) s'ouvre par-dessus.
+    const qs = redirect.split("?")[1] || "";
+    setSearchParams(new URLSearchParams(qs), { replace: true });
+  }, [setSearchParams]);
+  const rfidScan = useNativeScan(onNativeScan);
+
   const onRfidCreated = (res) => {
     // On enchaine sur la fiche du filament fraichement cree.
     setSearchParams(
@@ -2146,6 +2158,16 @@ export default function Filaments() {
       {/* Mobile : le bouton part dans le header (une ligne de gagnee).
           Desktop : le header mobile n'existe pas, on le garde dans le flux. */}
       <HeaderAction>
+        {rfidScan.available && (
+          <button onClick={rfidScan.toggle} aria-label="Scan RFID en continu"
+            style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px",
+              borderRadius:20, border:"none", cursor:"pointer",
+              background: rfidScan.listening ? "#22c55e" : "var(--surface2)",
+              color: rfidScan.listening ? "white" : "var(--text)",
+              fontSize:12, fontWeight:700 }}>
+            📡 {rfidScan.listening ? "Scan actif" : "Scan RFID"}
+          </button>
+        )}
         <button onClick={() => setScanOpen(true)} aria-label="Scanner un échantillon"
           style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px",
             borderRadius:20, border:"none", cursor:"pointer",
@@ -2158,6 +2180,16 @@ export default function Filaments() {
         justifyContent:"flex-end", gap:10 }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)",
           margin:0, marginRight:"auto" }}>Filaments</h1>
+        {rfidScan.available && (
+          <button onClick={rfidScan.toggle}
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
+              borderRadius:20, border:"none", cursor:"pointer",
+              background: rfidScan.listening ? "#22c55e" : "var(--surface2)",
+              color: rfidScan.listening ? "white" : "var(--text)",
+              fontSize:12, fontWeight:700 }}>
+            📡 {rfidScan.listening ? "Scan actif" : "Scan RFID"}
+          </button>
+        )}
         <button onClick={() => setScanOpen(true)}
           style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
             borderRadius:20, border:"none", cursor:"pointer",
