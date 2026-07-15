@@ -153,7 +153,7 @@ async def _filaments_without_spool(db) -> list[Alert]:
 LOW_SPOOL_PCT = 25          # seuil d'alerte, en % du poids nominal
 
 
-@check("low_spool", f"Bobines sous {LOW_SPOOL_PCT} %", "🪫",
+@check("low_spool", f"Bobines à finir (sous {LOW_SPOOL_PCT} %)", "🪫",
        shown=5, random_sample=False)
 async def _spools_low(db) -> list[Alert]:
     """Bobine sous le seuil : penser a racheter, ou a lancer ce qui l'utilise."""
@@ -180,6 +180,62 @@ async def _spools_low(db) -> list[Alert]:
             severity="warn",
             link=f"/filaments?id={f.id}",
             entity="spool", entity_id=s.id, filament_id=f.id,
+            **_fil_visual(f),
+        ))
+    return out
+
+
+@check("last_spool_low", f"Filaments en fin de stock (sous {LOW_SPOOL_PCT} %)", "📉",
+       shown=5, random_sample=False)
+async def _last_spool_low(db) -> list[Alert]:
+    """
+    Meme seuil que "Bobines a finir", mais on ne signale QUE si c'est la DERNIERE
+    bobine active du filament.
+
+    Difference d'intention :
+    - low_spool  : une bobine presque vide parmi d'autres -> la finir pour liberer
+      un emplacement. Pas urgent a racheter.
+    - ici        : la seule bobine restante passe sous le seuil -> c'est vraiment
+      la fin du stock, il faut RACHETER.
+
+    Un filament peut donc apparaitre dans les deux si sa derniere bobine est aussi
+    presque vide : c'est voulu, les deux messages ne disent pas la meme chose.
+    """
+    from sqlalchemy import func as _func
+
+    # Nombre de bobines actives par filament
+    counts = dict((fid, n) for fid, n in (await db.execute(
+        select(Spool.filament_id, _func.count(Spool.id))
+        .where(Spool.archived.is_(False))
+        .group_by(Spool.filament_id)
+    )).all())
+
+    rows = (await db.execute(
+        select(Spool, Filament)
+        .join(Filament, Filament.id == Spool.filament_id)
+        .where(
+            Spool.archived.is_(False),
+            Spool.remaining_weight_g.isnot(None),
+            Filament.filament_weight_g > 0,
+            Spool.remaining_weight_g < Filament.filament_weight_g * (LOW_SPOOL_PCT / 100.0),
+        )
+    )).all()
+
+    out = []
+    for s, f in rows:
+        if counts.get(f.id, 0) != 1:        # pas la derniere bobine -> ignore
+            continue
+        pct = round(s.remaining_weight_g / f.filament_weight_g * 100)
+        out.append(Alert(
+            key=f"last_spool_low:filament:{f.id}",
+            category="last_spool_low",
+            title=_fil_title(f),
+            detail="Dernière bobine",
+            value=f"{int(s.remaining_weight_g)} g · {pct} %",
+            rank=pct,
+            severity="warn",
+            link=f"/filaments?id={f.id}",
+            entity="filament", entity_id=f.id, filament_id=f.id,
             **_fil_visual(f),
         ))
     return out
