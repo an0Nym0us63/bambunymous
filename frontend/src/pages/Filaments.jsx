@@ -666,7 +666,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                 {spool.filament_translated_name || spool.filament_name}
               </p>
               <p style={{ fontSize:13, color:"var(--muted)", margin:"4px 0 0" }}>
-                {spool.filament_material}
+                {spool.filament_fila_type || spool.filament_material}
                 {spool.filament_manufacturer ? ` · ${spool.filament_manufacturer}` : ""}
               </p>
               {spool.archived && (
@@ -718,6 +718,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
             <Row label="Nom EN"       value={spool.filament_name}/>}
           <Row label="Marque"         value={spool.filament_manufacturer}/>
           <Row label="Matière"        value={spool.filament_material}/>
+          <Row label="Sous-type"      value={spool.filament_fila_type}/>
           <Row label="Couleur"        value={color} mono/>
           {spool.filament_profile_id && <Row label="Code Bambu" value={spool.filament_profile_id} mono/>}
           {spool.filament_fila_color_code && <Row label="Code couleur Bambu" value={spool.filament_fila_color_code} mono/>}
@@ -896,11 +897,11 @@ function SpoolCard({ s, colorsList, onClick }) {
               {s.filament_manufacturer}
             </span>
           )}
-          {s.filament_material && (
+          {(s.filament_fila_type || s.filament_material) && (
             <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3,
               background:"rgba(0,0,0,0.20)", color:"rgba(255,255,255,0.75)",
               whiteSpace:"nowrap", flexShrink:0 }}>
-              {s.filament_material}
+              {s.filament_fila_type || s.filament_material}
             </span>
           )}
         </div>
@@ -952,7 +953,7 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose 
   const fams    = useMemo(() => [...new Set(allItems.map(s => getFamily(s)).filter(Boolean))].sort(), [allItems]);
   const subs    = useMemo(() => {
     const base = !fm ? allItems : allItems.filter(s => getFamily(s) === fm);
-    return [...new Set(base.map(s => s.filament_material || s.fila_type || s.material).filter(Boolean))].sort();
+    return [...new Set(base.map(s => s.filament_fila_type || s.filament_material || s.fila_type || s.material).filter(Boolean))].sort();
   }, [allItems, fm]);
 
   const iStyle = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
@@ -1066,7 +1067,7 @@ function SpoolsView({ filaments, showArchived }) {
     }
     if (filters.brand) res = res.filter(s => s.filament_manufacturer === filters.brand);
     if (filters.mat)   res = res.filter(s => getFamily(s) === filters.mat);
-    if (filters.sub)   res = res.filter(s => (s.filament_material||"") === filters.sub);
+    if (filters.sub)   res = res.filter(s => (s.filament_fila_type || s.filament_material || "") === filters.sub);
     if (filters.stock === "instock")     res = res.filter(s => (s.remaining_weight_g||0) > 0);
     if (filters.stock === "unavailable") res = res.filter(s => !(s.remaining_weight_g > 0));
     // Tri

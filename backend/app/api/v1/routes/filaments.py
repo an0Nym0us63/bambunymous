@@ -128,6 +128,7 @@ class SpoolOut(BaseModel):
     filament_translated_name: Optional[str] = None
     filament_manufacturer: Optional[str] = None
     filament_material: str
+    filament_fila_type: Optional[str] = None   # sous-type (PLA Basic, PLA Wood…)
     filament_color: Optional[str] = None
     filament_weight_g: Optional[float] = None
     filament_spool_weight_g: Optional[float] = None
@@ -588,6 +589,7 @@ def _spool_out(s: Spool) -> SpoolOut:
         filament_translated_name=getattr(f, "translated_name", None) if f else None,
         filament_manufacturer=f.manufacturer if f else None,
         filament_material=f.material if f else "?",
+        filament_fila_type=(f.fila_type if f else None),
         filament_color=f.color if f else None,
         filament_weight_g=f.filament_weight_g if f else None,
         filament_spool_weight_g=f.spool_weight_g if f else None,
