@@ -1519,7 +1519,12 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
         </p>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
           <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDate(p.print_date)}</span>
-          {p.duration_seconds > 0 && <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDur(p.duration_seconds)}</span>}
+          {/* Repli sur estimated_seconds, comme la fiche : sans ca, un print dont
+              la duree REELLE n'a pas ete captee (coupure MQTT, import) mais qui a
+              une estimation 3MF n'affichait rien sur la tuile alors que sa fiche,
+              elle, montrait la duree. */}
+          {(p.duration_seconds || p.estimated_seconds) > 0 &&
+            <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtDur(p.duration_seconds || p.estimated_seconds)}</span>}
         </div>
       </div>
     </div>
