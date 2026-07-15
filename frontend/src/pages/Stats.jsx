@@ -131,24 +131,31 @@ function TimeChart({ data, bucket = "month" }) {
           </button>
         ))}
       </div>
-      <div style={{ display: "flex", gap: 3, alignItems: "flex-end", height: 110, overflowX: "auto" }}>
+      <div style={{ display: "flex", gap: 3, alignItems: "stretch", height: 130, overflowX: "auto" }}>
         {keys.map((k, i) => {
           const v = values[i];
           const failed = data[k].failed || 0;
           const failPct = tab === "count" && data[k].count > 0 ? (failed / data[k].count) * 100 : 0;
           return (
             <div key={k} title={`${fmtBucketLabel(k, bucket)} — ${unit(v)}${failed ? ` (${failed} échec${failed > 1 ? "s" : ""})` : ""}`}
-              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, flex: "0 0 auto", width: 26 }}>
-              <div style={{ width: "100%", height: `${Math.max(2, (v / max) * 100)}%`,
-                background: colors[tab], borderRadius: "3px 3px 0 0", minHeight: 2,
-                position: "relative", overflow: "hidden", transition: "height 0.4s ease" }}>
-                {failPct > 0 && (
-                  <div style={{ position: "absolute", bottom: 0, left: 0, right: 0,
-                    height: `${failPct}%`, background: "#ef4444", opacity: 0.75 }}/>
-                )}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center",
+                flex: "0 0 auto", width: 26, height: "100%" }}>
+              {/* Zone barre : c'est ELLE qui doit avoir une hauteur fixe, sinon le
+                  pourcentage de la barre se calcule sur une hauteur nulle et tout
+                  s'ecrase a 2px -- le bug des barres plates. */}
+              <div style={{ flex: 1, width: "100%", display: "flex", alignItems: "flex-end",
+                minHeight: 0 }}>
+                <div style={{ width: "100%", height: `${Math.max(3, (v / max) * 100)}%`,
+                  background: colors[tab], borderRadius: "3px 3px 0 0", minHeight: v > 0 ? 3 : 0,
+                  position: "relative", overflow: "hidden", transition: "height 0.4s ease" }}>
+                  {failPct > 0 && (
+                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0,
+                      height: `${failPct}%`, background: "#ef4444", opacity: 0.75 }}/>
+                  )}
+                </div>
               </div>
               <span style={{ fontSize: 7, color: "var(--muted)", transform: "rotate(-45deg)",
-                transformOrigin: "top center", whiteSpace: "nowrap", marginTop: 6 }}>
+                transformOrigin: "top center", whiteSpace: "nowrap", marginTop: 8, flexShrink: 0 }}>
                 {fmtBucketLabel(k, bucket)}
               </span>
             </div>
