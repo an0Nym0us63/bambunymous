@@ -150,7 +150,10 @@ async def _filaments_without_spool(db) -> list[Alert]:
     ]
 
 
-LOW_SPOOL_PCT = 25          # seuil d'alerte, en % du poids nominal
+LOW_SPOOL_PCT  = 15   # "bobine a finir" : plus tolerant, le but est de liberer un
+                      # emplacement -- ca peut attendre.
+STOCK_LOW_PCT  = 25   # "fin de stock" (derniere bobine) : plus tot, car il faut
+                      # avoir le temps de RACHETER avant la panne seche.
 
 
 @check("low_spool", f"Bobines à finir (sous {LOW_SPOOL_PCT} %)", "🪫",
@@ -185,7 +188,7 @@ async def _spools_low(db) -> list[Alert]:
     return out
 
 
-@check("last_spool_low", f"Filaments en fin de stock (sous {LOW_SPOOL_PCT} %)", "📉",
+@check("last_spool_low", f"Filaments en fin de stock (sous {STOCK_LOW_PCT} %)", "📉",
        shown=5, random_sample=False)
 async def _last_spool_low(db) -> list[Alert]:
     """
@@ -217,7 +220,7 @@ async def _last_spool_low(db) -> list[Alert]:
             Spool.archived.is_(False),
             Spool.remaining_weight_g.isnot(None),
             Filament.filament_weight_g > 0,
-            Spool.remaining_weight_g < Filament.filament_weight_g * (LOW_SPOOL_PCT / 100.0),
+            Spool.remaining_weight_g < Filament.filament_weight_g * (STOCK_LOW_PCT / 100.0),
         )
     )).all()
 
