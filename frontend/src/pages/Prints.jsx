@@ -2440,6 +2440,14 @@ export default function Prints() {
   );
 }
 
+// Date courte et lisible pour distinguer les groupes homonymes.
+function fmtGroupDate(d) {
+  if (!d) return "—";
+  const date = new Date(d);
+  if (isNaN(date)) return "—";
+  return date.toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"2-digit" });
+}
+
 // ── Sélecteur de groupe — recherche substring + création ───────────────────
 function GroupPickerSheet({ groups, onClose, onPick }) {
   const [q, setQ] = useState("");
@@ -2457,6 +2465,9 @@ function GroupPickerSheet({ groups, onClose, onPick }) {
   const filtered = q.trim()
     ? groups.filter(g => g.name.toLowerCase().includes(q.trim().toLowerCase()))
     : groups;
+  // Un homonyme exact ne bloque PLUS la création : plusieurs groupes peuvent
+  // porter le même nom (deux lots distincts d'un même modèle, par ex.). On propose
+  // donc toujours de créer, tout en listant les groupes existants juste dessous.
   const exactNameExists = groups.some(g => g.name.toLowerCase() === q.trim().toLowerCase());
 
   return (
@@ -2485,14 +2496,19 @@ function GroupPickerSheet({ groups, onClose, onPick }) {
         </div>
 
         <div style={{ overflowY:"auto", padding:"0 18px 16px", flex:1 }}>
-          {q.trim() && !exactNameExists && (
+          {q.trim() && (
             <button onClick={() => onPick({ group_name: q.trim() })}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
-                marginBottom:8, borderRadius:10, background:"rgba(59,130,246,0.12)",
+                marginBottom: exactNameExists ? 4 : 8, borderRadius:10, background:"rgba(59,130,246,0.12)",
                 border:"1px solid rgba(59,130,246,0.35)", color:"#3b82f6", fontSize:13, fontWeight:700,
                 cursor:"pointer", textAlign:"left" }}>
-              <FolderPlus size={15}/> Créer le groupe « {q.trim()} »
+              <FolderPlus size={15}/> Créer un nouveau groupe « {q.trim()} »
             </button>
+          )}
+          {q.trim() && exactNameExists && (
+            <p style={{ margin:"0 0 10px", fontSize:11, color:"var(--muted)", padding:"0 2px" }}>
+              Un groupe porte déjà ce nom. Tu peux le rejoindre ci-dessous, ou en créer un nouveau.
+            </p>
           )}
 
           {filtered.length === 0 && !q.trim() && (
@@ -2503,10 +2519,20 @@ function GroupPickerSheet({ groups, onClose, onPick }) {
 
           {filtered.map(g => (
             <button key={g.id} onClick={() => onPick({ group_id: g.id })}
-              style={{ width:"100%", padding:"12px 14px", textAlign:"left", background:"var(--surface2)",
+              style={{ width:"100%", padding:"10px 14px", textAlign:"left", background:"var(--surface2)",
                 border:"1px solid var(--border)", borderRadius:8, cursor:"pointer",
-                color:"var(--text)", fontSize:13 }}>
-              📁 {g.name}
+                color:"var(--text)", fontSize:13, marginBottom:6,
+                display:"flex", alignItems:"center", gap:10 }}>
+              <span style={{ fontSize:15, flexShrink:0 }}>📁</span>
+              <span style={{ flex:1, minWidth:0, fontWeight:600, overflow:"hidden",
+                textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.name}</span>
+              {/* Date du print le plus récent + nombre : c'est ce qui permet de
+                  distinguer deux groupes de même nom. */}
+              <span style={{ flexShrink:0, fontSize:10, color:"var(--muted)",
+                fontFamily:"JetBrains Mono, monospace", textAlign:"right", lineHeight:1.35 }}>
+                {fmtGroupDate(g.latest_date)}<br/>
+                {g.print_count} print{g.print_count > 1 ? "s" : ""}
+              </span>
             </button>
           ))}
         </div>
