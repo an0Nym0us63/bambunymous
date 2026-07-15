@@ -487,11 +487,9 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
                 <span style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
                   {(f.cost || 0).toFixed(2)}€
                 </span>
-                {/* Parenthese des que le cout catalogue DIFFERE du principal,
-                    independamment du fait que le principal soit nul. */}
-                {Math.abs((f.normal_cost || 0) - (f.cost || 0)) > 0.005 && (
-                  <p style={{ fontSize:9, color:"var(--muted)", margin:0 }}>({(f.normal_cost || 0).toFixed(2)}€)</p>
-                )}
+                {/* Toujours les DEUX couts, meme identiques : la parenthese
+                    confirme le cout catalogue, son absence laisserait un doute. */}
+                <p style={{ fontSize:9, color:"var(--muted)", margin:0 }}>({(f.normal_cost || 0).toFixed(2)}€)</p>
               </div>
             </div>
           ))}
@@ -767,11 +765,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                 <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
                   {costFil.toFixed(2)}€
                 </p>
-                {Math.abs(costNormal - costFil) > 0.005 && (
-                  <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
-                    ({costNormal.toFixed(2)}€ sans bobine)
-                  </p>
-                )}
+                <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
+                  ({costNormal.toFixed(2)}€ sans bobine)
+                </p>
               </div>
               {/* Électricité */}
               <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
@@ -791,11 +787,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                   <span style={{ fontSize:20, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
                     {totalBobine.toFixed(2)}€
                   </span>
-                  {Math.abs(totalNormal - totalBobine) > 0.005 && (
-                    <span style={{ fontSize:11, color:"var(--muted)", marginLeft:8 }}>
-                      ({totalNormal.toFixed(2)}€)
-                    </span>
-                  )}
+                  <span style={{ fontSize:11, color:"var(--muted)", marginLeft:8 }}>
+                    ({totalNormal.toFixed(2)}€)
+                  </span>
                 </div>
               </div>
               {/* Éléments — intégré dans le bloc total */}
@@ -808,6 +802,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                   {localNb > 1 && (
                     <span style={{ fontSize:12, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
                       · {(totalBobine/localNb).toFixed(2)}€/u
+                      {` (${(totalNormal/localNb).toFixed(2)}€/u)`}
                     </span>
                   )}
                 </div>
@@ -1129,11 +1124,9 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   letterSpacing:"0.06em", margin:0 }}>Coût total</p>
                 <span style={{ fontSize:22, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
                   {totalCost.toFixed(2)}€
-                  {Math.abs(totalNormal - totalCost) > 0.005 && (
-                    <span style={{ fontSize:13, fontWeight:700, color:"var(--muted)", marginLeft:6 }}>
-                      ({totalNormal.toFixed(2)}€)
-                    </span>
-                  )}
+                  <span style={{ fontSize:13, fontWeight:700, color:"var(--muted)", marginLeft:6 }}>
+                    ({totalNormal.toFixed(2)}€)
+                  </span>
                 </span>
               </div>
               {/* Éléments — même style que PrintDetail */}
@@ -1146,8 +1139,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   {nbItems > 1 && (
                     <span style={{ fontSize:12, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
                       · {(totalCost/nbItems).toFixed(2)}€/u
-                      {Math.abs(totalNormal - totalCost) > 0.005 &&
-                        ` (${(totalNormal/nbItems).toFixed(2)}€/u)`}
+                      {` (${(totalNormal/nbItems).toFixed(2)}€/u)`}
                     </span>
                   )}
                 </div>
