@@ -20,7 +20,6 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
 
   const [spoolPrice, setSpoolPrice] = useState("");
   const [filPrice, setFilPrice]     = useState("");
-  const [location, setLocation]     = useState("");
   // "create" = nouvelle bobine ; "map" = completer une bobine existante.
   const [mode, setMode]             = useState("create");
   const [mapSpoolId, setMapSpoolId] = useState(null);
@@ -44,7 +43,6 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
     const sp = data.mappable_spools.find(s => s.id === mapSpoolId);
     if (!sp) return;
     setSpoolPrice(sp.price_override != null ? String(sp.price_override) : "");
-    setLocation(sp.location || "");
   }, [mode, mapSpoolId, data]);
 
   const create = async () => {
@@ -54,7 +52,6 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
         spool_id: mode === "map" ? mapSpoolId : null,
         spool_price: spoolPrice === "" ? null : Number(spoolPrice),
         filament_price: filPrice === "" ? null : Number(filPrice),
-        location: location || null,
       });
       onCreated?.(r.data);
     } catch (e) {
@@ -210,12 +207,6 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
                 onChange={e => setSpoolPrice(e.target.value)} style={inp}/>
             </div>
 
-            <div>
-              <label style={lbl}>Emplacement (optionnel)</label>
-              <input value={location} placeholder="Étagère A"
-                onChange={e => setLocation(e.target.value)}
-                style={{ ...inp, fontFamily:"inherit" }}/>
-            </div>
           </div>
 
           <button onClick={create} disabled={busy}

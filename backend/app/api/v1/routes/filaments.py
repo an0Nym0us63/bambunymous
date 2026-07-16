@@ -461,7 +461,12 @@ async def create_spool(
     fil = await db.get(Filament, body.filament_id)
     if not fil:
         raise HTTPException(404, "Filament introuvable")
-    s = Spool(**body.model_dump())
+    data = body.model_dump()
+    # location est gere automatiquement (Tiroir / AMS xxx) par le worker
+    # spool_location ; l'utilisateur n'y touche pas. Defaut "Tiroir" a la creation.
+    if not data.get("location"):
+        data["location"] = "Tiroir"
+    s = Spool(**data)
     db.add(s)
     await db.commit()
     await db.refresh(s)

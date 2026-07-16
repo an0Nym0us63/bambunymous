@@ -92,7 +92,7 @@ function RemainBar({ remaining, total=1000 }) {
 // ── Modal ajout bobine ─────────────────────────────────────────────────────
 function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect }) {
   const [form, setForm] = useState({ filament_id: preselect ? String(preselect) : "",
-    remaining_weight_g:"", price_override:"", location:"", tag_number:"", comment:"" });
+    remaining_weight_g:"", price_override:"", tag_number:"", comment:"" });
   const [saving, setSaving] = useState(false);
   const [q, setQ] = useState("");
 
@@ -114,7 +114,6 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
         filament_id: parseInt(form.filament_id),
         remaining_weight_g: form.remaining_weight_g ? parseFloat(form.remaining_weight_g) : null,
         price_override: form.price_override ? parseFloat(form.price_override) : null,
-        location: form.location || null,
         tag_number: form.tag_number || null,
         comment: form.comment || null,
       });
@@ -221,7 +220,9 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
           ))}
         </div>
 
-        {[["Emplacement","location","text","AMS 1, Tiroir..."],["Tag NFC","tag_number","text","UUID"],["Commentaire","comment","text",""]].map(([l,n,t,p])=>(
+        {/* location n'est PAS editable : geree automatiquement (Tiroir / AMS xxx)
+            par le worker spool_location selon la presence en AMS. */}
+        {[["Tag NFC","tag_number","text","UUID"],["Commentaire","comment","text",""]].map(([l,n,t,p])=>(
           <div key={n}>
             <Label>{l}</Label>
             <input type={t} value={form[n]||""} placeholder={p}

@@ -56,7 +56,6 @@ class CreateIn(BaseModel):
     spool_price: Optional[float] = None
     filament_price: Optional[float] = None
     remaining_weight_g: Optional[float] = None
-    location: Optional[str] = None
     comment: Optional[str] = None
 
 
@@ -325,8 +324,8 @@ async def rfid_create(
             spool.remaining_weight_g = body.remaining_weight_g
         elif spool.remaining_weight_g is None:
             spool.remaining_weight_g = scan["spool_weight_g"]
-        if body.location and not spool.location:
-            spool.location = body.location
+        # location est gere automatiquement (Tiroir / AMS xxx) par le worker
+        # spool_location : on n'y touche pas ici.
         if body.comment and not spool.comment:
             spool.comment = body.comment
 
@@ -350,7 +349,9 @@ async def rfid_create(
         remaining_weight_g=(body.remaining_weight_g
                             if body.remaining_weight_g is not None
                             else scan["spool_weight_g"]),
-        location=body.location,
+        # location par defaut ; le worker spool_location la basculera en "AMS xxx"
+        # si la bobine est vue dans un AMS. L'utilisateur n'y touche jamais.
+        location="Tiroir",
         comment=body.comment,
     )
     db.add(spool)
