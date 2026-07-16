@@ -218,10 +218,12 @@ async def filament_labels_pdf(
     from fastapi.responses import StreamingResponse
 
     ids = body.get("ids")
-    # Etiquette rectangulaire 12 x 21 mm. QR pleine largeur au centre ; 2 lignes
-    # au-dessus (numero, sous-type) et 2 en dessous (marque, nom).
+    # Etiquette rectangulaire 12 x 18.75 mm. QR pleine largeur au centre ;
+    # 2 lignes au-dessus (numero, sous-type) et 1 en dessous (marque).
+    # Sous-type et marque prennent la plus grande police possible (jusqu'a PT_MAX)
+    # pour maximiser la lisibilite.
     W_mm = float(body.get("w_mm") or 12)
-    H_mm = float(body.get("h_mm") or 21)
+    H_mm = float(body.get("h_mm") or 18.75)
     stmt = select(Filament)
     if ids:
         stmt = stmt.where(Filament.id.in_(ids))
@@ -245,11 +247,12 @@ async def filament_labels_pdf(
     MARG   = 10 * mm
     W, H = A4
 
-    # Les 4 lignes se partagent la hauteur restante (2 au-dessus, 2 en dessous).
+    # 3 lignes : 2 au-dessus (numero, sous-type), 1 en dessous (marque).
     text_h  = CELL_H - QR
-    LINE    = text_h / 4               # hauteur d'une bande de texte
-    PT_CAP  = 0.78                     # part de la bande occupee par la capitale
-    PT_MAX  = 7.5                      # plafond de police (homogeneite)
+    LINE    = text_h / 3               # hauteur d'une bande de texte
+    PT_CAP  = 0.82                     # part de la bande occupee par la capitale
+    PT_MAX  = 9.0                      # plafond haut : les lignes "adaptables"
+                                       # (sous-type, marque) remplissent la largeur
 
     cols = int((W - 2*MARG + GAP) // (CELL_W + GAP))
     rows = int((H - 2*MARG + GAP) // (CELL_H + GAP))
@@ -313,9 +316,8 @@ async def filament_labels_pdf(
             c.drawCentredString(cx, cy_top - LINE + (LINE - cap_mm*mm)/2, txt)
 
         sub  = (f.fila_type or f.material or "").strip()
-        name = (getattr(f, "translated_name", None) or f.name or "").strip()
 
-        # 2 lignes au-dessus du QR (haut de l'etiquette)
+        # 2 lignes au-dessus du QR (numero + sous-type)
         top = y + CELL_H
         _line(top,        f"#{f.id}", True)
         _line(top - LINE, sub,       False)
@@ -333,7 +335,7 @@ async def filament_labels_pdf(
         module = QR / n
         c.setFillColorRGB(0, 0, 0)
         qx = x                              # pleine largeur
-        qy = y + 2*LINE                     # au-dessus des 2 lignes du bas
+        qy = y + 1*LINE                     # au-dessus de la ligne du bas (marque)
         for r_i, line in enumerate(matrix):
             for c_i, on in enumerate(line):
                 if on:
@@ -341,9 +343,8 @@ async def filament_labels_pdf(
                            qy + QR - (r_i + 1)*module,
                            module, module, stroke=0, fill=1)
 
-        # 2 lignes en dessous du QR (bas de l'etiquette)
-        _line(y + 2*LINE, f.manufacturer or "", False)
-        _line(y + 1*LINE, name,                 False)
+        # 1 ligne en dessous du QR : la marque.
+        _line(y + 1*LINE, f.manufacturer or "", False)
 
     c.showPage()
     c.save()
