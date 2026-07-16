@@ -45,6 +45,11 @@ export default function ScanSheet({ onDetect, onClose }) {
   const [camId, setCamId]     = useState(null);
   const [zoomCap, setZoomCap] = useState(null);   // {min,max,step}
   const [zoom, setZoom]       = useState(1);
+  // Zoom NUMERIQUE (CSS) : filet de secours quand le zoom optique n'est pas
+  // expose (cas de la WebView Android). Il grossit l'affichage ET recadre la zone
+  // analysee par jsQR, pour qu'un petit QR occupe plus de pixels utiles.
+  const [cssZoom, setCssZoom] = useState(1);
+  const cssZoomRef = useRef(1);
 
   useEffect(() => {
     aliveRef.current = true;
@@ -93,6 +98,8 @@ export default function ScanSheet({ onDetect, onClose }) {
     })();
 
     switchRef.current = async (id) => {
+      // Nouveau capteur -> on repart d'un zoom neutre (crop coherent).
+      setCssZoom(1); cssZoomRef.current = 1;
       try { await start(id); } catch { /* objectif indisponible : on garde l'actuel */ }
     };
 
@@ -100,9 +107,14 @@ export default function ScanSheet({ onDetect, onClose }) {
       if (!aliveRef.current) return;
       const v = videoRef.current, c = canvasRef.current;
       if (v && c && v.readyState === v.HAVE_ENOUGH_DATA) {
+        // Zoom numerique : on ne dessine QUE la region centrale de la video,
+        // agrandie a la taille du canvas. jsQR analyse alors un QR plus gros.
+        const z = cssZoomRef.current || 1;
+        const sw = v.videoWidth / z, sh = v.videoHeight / z;
+        const sx = (v.videoWidth - sw) / 2, sy = (v.videoHeight - sh) / 2;
         c.width = v.videoWidth; c.height = v.videoHeight;
         const ctx = c.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(v, 0, 0, c.width, c.height);
+        ctx.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
         const img = ctx.getImageData(0, 0, c.width, c.height);
         const res = jsQR(img.data, img.width, img.height, { inversionAttempts: "attemptBoth" });
         const id = res && parseId(res.data);
@@ -129,6 +141,13 @@ export default function ScanSheet({ onDetect, onClose }) {
     } catch { /* certains navigateurs refusent : sans effet, pas grave */ }
   };
 
+  // Zoom numerique : on garde state (pour l'UI) et ref (pour la boucle tick, qui
+  // tourne dans un closure et ne verrait pas le state a jour) synchronises.
+  const applyCssZoom = (z) => {
+    setCssZoom(z);
+    cssZoomRef.current = z;
+  };
+
   const submitManual = () => {
     const id = parseId(manual);
     if (id) onDetect(id);
@@ -153,7 +172,9 @@ export default function ScanSheet({ onDetect, onClose }) {
         {!error && (
           <div style={{ position:"relative", background:"#000", aspectRatio:"1" }}>
             <video ref={videoRef} playsInline muted
-              style={{ width:"100%", height:"100%", objectFit:"cover" }}/>
+              style={{ width:"100%", height:"100%", objectFit:"cover",
+                transform:`scale(${cssZoom})`, transformOrigin:"center",
+                transition:"transform 0.12s ease-out" }}/>
             <div style={{ position:"absolute", top:"25%", left:"25%", width:"50%", height:"50%",
               border:"2px solid #3b82f6", borderRadius:10,
               boxShadow:"0 0 0 9999px rgba(0,0,0,0.4)" }}/>
@@ -164,7 +185,8 @@ export default function ScanSheet({ onDetect, onClose }) {
           </div>
         )}
 
-        {!error && (cams.length > 1 || zoomCap) && (
+        {!error && (
+          <>
           <div style={{ padding:"10px 16px 0", display:"flex", flexDirection:"column", gap:8 }}>
             {cams.length > 1 && (
               <div style={{ display:"flex", gap:6, overflowX:"auto" }}>
@@ -179,7 +201,7 @@ export default function ScanSheet({ onDetect, onClose }) {
                 ))}
               </div>
             )}
-            {zoomCap && (
+            {zoomCap ? (
               <div style={{ display:"flex", alignItems:"center", gap:10 }}>
                 <span style={{ fontSize:11, color:"var(--muted)" }}>Zoom</span>
                 <input type="range" style={{ flex:1 }}
@@ -190,8 +212,21 @@ export default function ScanSheet({ onDetect, onClose }) {
                   ×{Number(zoom).toFixed(1)}
                 </span>
               </div>
+            ) : (
+              // Pas de zoom optique (ex. WebView) : zoom numerique de secours.
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <span style={{ fontSize:11, color:"var(--muted)" }}>Zoom</span>
+                <input type="range" style={{ flex:1 }}
+                  min={1} max={4} step={0.1} value={cssZoom}
+                  onChange={e => applyCssZoom(Number(e.target.value))}/>
+                <span style={{ fontSize:11, color:"var(--text)", minWidth:34,
+                  textAlign:"right", fontFamily:"JetBrains Mono,monospace" }}>
+                  ×{cssZoom.toFixed(1)}
+                </span>
+              </div>
             )}
           </div>
+          </>
         )}
         <canvas ref={canvasRef} style={{ display:"none" }}/>
 
