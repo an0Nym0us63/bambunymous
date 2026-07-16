@@ -5,7 +5,7 @@ import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
 import { useNativeScan } from "../hooks/useNativeScan";
 import HeaderAction from "../components/HeaderAction";
-import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine } from "lucide-react";
+import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets } from "lucide-react";
 import client from "../api/client";
 import { colorBg, parseColorsList } from "../utils/colors";
 import GalleryCompare from "../components/GalleryCompare";
@@ -592,6 +592,13 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
 
 export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   const [confirmDelete, setConfirmDelete] = React.useState(null);
+  const [filSheet, setFilSheet] = React.useState(null);   // fiche filament ouverte par-dessus
+  const openFilament = async () => {
+    try {
+      const r = await client.get(`/filaments/filaments/${spool.filament_id}`);
+      setFilSheet(r.data);
+    } catch (e) { alert(e.response?.data?.detail || e.message); }
+  };
   const [deleting, setDeleting] = React.useState(false);
   const [showUsage, setShowUsage] = React.useState(false);
   const [usageHistory, setUsageHistory] = React.useState([]);
@@ -711,8 +718,21 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Commentaire"    value={spool.comment}/>
 
           {/* ── Filament (catalogue) ── */}
-          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:"0.08em", margin:"16px 0 4px" }}>Filament (catalogue)</p>
+          <div style={{ display:"flex", alignItems:"center", gap:8, margin:"16px 0 4px" }}>
+            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+              letterSpacing:"0.08em", margin:0 }}>Filament (catalogue)</p>
+            {spool.filament_id && (
+              <button
+                onClick={openFilament}
+                title="Ouvrir la fiche du filament"
+                style={{ display:"inline-flex", alignItems:"center", justifyContent:"center",
+                  width:22, height:22, borderRadius:6, cursor:"pointer",
+                  background:"var(--surface2)", border:"1px solid var(--border)",
+                  color:"var(--accent, #6366f1)", padding:0, flexShrink:0 }}>
+                <Droplets size={13}/>
+              </button>
+            )}
+          </div>
           <Row label="Nom"            value={spool.filament_translated_name || spool.filament_name}/>
           {spool.filament_translated_name && spool.filament_name !== spool.filament_translated_name &&
             <Row label="Nom EN"       value={spool.filament_name}/>}
@@ -821,6 +841,10 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           </div>
         </div>
         , document.body)}
+      {filSheet && createPortal(
+        <FilamentSheet f={filSheet} onClose={() => setFilSheet(null)}/>,
+        document.body
+      )}
       {confirmDelete && (
             <div style={{ marginTop:12, background:"rgba(239,68,68,0.06)", border:"1px solid rgba(239,68,68,0.25)",
               borderRadius:10, padding:"12px 14px" }}>
