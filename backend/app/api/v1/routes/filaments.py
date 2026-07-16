@@ -218,8 +218,8 @@ async def filament_labels_pdf(
     from fastapi.responses import StreamingResponse
 
     ids = body.get("ids")
-    # Toute l'etiquette (QR + ligne de l'ID) tient dans ce carre.
-    size_mm = float(body.get("size_mm") or 9)
+    # Etiquette 14x14 mm : QR en haut, puis numero + sous-type + marque + nom.
+    size_mm = float(body.get("size_mm") or 14)
     stmt = select(Filament)
     if ids:
         stmt = stmt.where(Filament.id.in_(ids))
@@ -228,28 +228,40 @@ async def filament_labels_pdf(
     if not fils:
         raise HTTPException(404, "Aucun filament à imprimer")
 
-    # L'etiquette COMPLETE (QR + ligne de l'ID) tient dans CELL x CELL. 9 mm est
-    # une contrainte dure : tout se joue a l'interieur.
-    #
-    # Un QR ne descend pas sous 21x21 modules (version 1, minimum du format), donc
-    # module = QR / 21. Le module decide de la lisibilite : on donne au QR tout ce
-    # que le texte ne prend pas, et on ramene le texte a sa hauteur minimale
-    # lisible (2 mm -> police ~5.9 pt, hauteur de capitale 1.5 mm).
-    #
-    #   9 mm  ->  texte 2.0 mm  |  QR 7.0 mm  ->  module 0.333 mm
-    #
-    # 0.33 mm est le plancher realiste pour un scan au telephone. En dessous, la
-    # lecture devient aleatoire ; c'est le prix du format 9 mm impose.
-    CELL = size_mm * mm
-    TEXT = 2.0 * mm                 # hauteur mini lisible pour l'ID
-    QR   = CELL - TEXT              # tout le reste au QR
-    GAP  = 3.5 * mm                 # sert aussi de quiet zone au QR
-    MARG = 10 * mm
+    # Disposition verticale dans le carre :
+    #   [ QR centre ]        -> ~8 mm, largement au-dessus du plancher de scan
+    #   #123                 -> numero, gras
+    #   PLA Basic            -> sous-type (fila_type, repli materiau)
+    #   Bambu Lab            -> marque
+    #   Bleu cyan            -> nom (traduit si dispo)
+    # A 14 mm on a la place ; le QR reste confortable et le texte lisible.
+    CELL   = size_mm * mm
+    PAD    = 0.45 * mm                 # marge interne (haut/bas/cotes du texte)
+    QR     = 7.0 * mm                  # module = 7/21 = 0.333 mm (plancher de scan)
+    QGAP   = 0.35 * mm                 # petit espace QR <-> texte
+    LINE_N = 1.8 * mm                  # bande du numero (gras, un peu plus grande)
+    LINE_T = 1.45 * mm                 # bande des 3 lignes de texte
+    GAP    = 3.5 * mm                  # espace entre etiquettes = quiet zone
+    MARG   = 10 * mm
     W, H = A4
 
     cols = int((W - 2*MARG + GAP) // (CELL + GAP))
     rows = int((H - 2*MARG + GAP) // (CELL + GAP))
     per_page = max(1, cols * rows)
+
+    # Tronque un texte pour qu'il tienne dans une largeur donnee a une taille de
+    # police donnee (ajoute une ellipse si besoin).
+    def _fit(text, max_w, font, pt):
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        text = (text or "").strip()
+        if not text:
+            return ""
+        if stringWidth(text, font, pt) <= max_w:
+            return text
+        ell = "…"
+        while text and stringWidth(text + ell, font, pt) > max_w:
+            text = text[:-1]
+        return (text + ell) if text else ""
 
     buf = _io.BytesIO()
     c = _canvas.Canvas(buf, pagesize=A4)
@@ -263,10 +275,8 @@ async def filament_labels_pdf(
         x = MARG + col * (CELL + GAP)
         y = H - MARG - CELL - row * (CELL + GAP)
 
-        # Reperes de decoupe : des marques d'angle, PAS un cadre autour du QR.
-        # Un QR exige une "quiet zone" blanche autour de lui ; un trait colle au
-        # code degrade la lecture. Ici c'est l'espace entre etiquettes qui la
-        # fournit.
+        # Reperes de decoupe : marques d'angle (pas de cadre : le QR veut sa
+        # quiet zone, fournie par l'espace inter-etiquettes).
         c.setLineWidth(0.25)
         c.setStrokeColorRGB(0.80, 0.80, 0.80)
         tick = 1.0 * mm
@@ -277,8 +287,7 @@ async def filament_labels_pdf(
             c.line(cx, cy, cx + dx*tick, cy)
             c.line(cx, cy, cx, cy + dy*tick)
 
-        # QR : on dessine la matrice en rectangles plutot que de passer par une
-        # image -> pas de dependance a Pillow, et le rendu reste net a l'impression.
+        # QR en haut, centre horizontalement.
         qr = qrcode.QRCode(
             version=1,
             error_correction=qrcode.constants.ERROR_CORRECT_M,
@@ -290,8 +299,8 @@ async def filament_labels_pdf(
         n = len(matrix)
         module = QR / n
         c.setFillColorRGB(0, 0, 0)
-        qx = x + (CELL - QR) / 2      # QR centre horizontalement dans l'etiquette
-        qy = y + TEXT
+        qx = x + (CELL - QR) / 2
+        qy = y + CELL - PAD - QR                 # colle en haut (sous le PAD)
         for r_i, line in enumerate(matrix):
             for c_i, on in enumerate(line):
                 if on:
@@ -299,14 +308,31 @@ async def filament_labels_pdf(
                            qy + QR - (r_i + 1)*module,
                            module, module, stroke=0, fill=1)
 
-        # ID en clair, pour la saisie manuelle si le scan echoue.
-        # Cap height d'Helvetica ~= 0.72 * corps. On vise 1.5 mm de haut dans la
-        # bande de 2 mm, soit ~5.9 pt.
-        cap_mm  = (TEXT / mm) * 0.75
-        font_pt = cap_mm * 2.83465 / 0.72
-        c.setFont("Helvetica-Bold", font_pt)
-        c.setFillColorRGB(0, 0, 0)
-        c.drawCentredString(x + CELL/2, y + (TEXT - cap_mm*mm) / 2, f"#{f.id}")
+        # Lignes de texte, du haut vers le bas, sous le QR.
+        inner_w = CELL - 2*PAD
+        cx = x + CELL/2
+
+        def _line(cy_top, band_mm, text, bold):
+            """Ecrit une ligne centree dans une bande de hauteur band_mm."""
+            if not text:
+                return
+            cap_ratio = 0.72
+            cap_mm  = (band_mm / mm) * 0.80
+            font_pt = cap_mm * 2.83465 / cap_ratio
+            font = "Helvetica-Bold" if bold else "Helvetica"
+            txt = _fit(text, inner_w, font, font_pt)
+            c.setFont(font, font_pt)
+            c.setFillColorRGB(0, 0, 0)
+            # baseline : bas de bande + petit centrage vertical
+            c.drawCentredString(cx, cy_top - band_mm + (band_mm - cap_mm*mm)/2, txt)
+
+        sub  = (f.fila_type or f.material or "").strip()
+        name = (getattr(f, "translated_name", None) or f.name or "").strip()
+        cursor = qy - QGAP                       # sous le QR
+        _line(cursor, LINE_N, f"#{f.id}", True);            cursor -= LINE_N
+        _line(cursor, LINE_T, sub, False);                  cursor -= LINE_T
+        _line(cursor, LINE_T, f.manufacturer or "", False); cursor -= LINE_T
+        _line(cursor, LINE_T, name, False)
 
     c.showPage()
     c.save()
