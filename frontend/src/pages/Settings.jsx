@@ -578,9 +578,28 @@ function LabelsCard({ card, cardTitle }) {
       // "/filaments/labels/pdf" -> le doublon est normal (cf. /filaments/filaments).
       const r = await client.post("/filaments/filaments/labels/pdf", { ids: ids || null },
         { responseType: "blob" });
-      const url = URL.createObjectURL(new Blob([r.data], { type: "application/pdf" }));
+      const blob = new Blob([r.data], { type: "application/pdf" });
+      const fileName = "etiquettes-filaments.pdf";
+
+      // Dans la WebView Android, le telechargement d'une blob: URL echoue (le
+      // DownloadManager ne sait pas les traiter). On passe alors le PDF au pont
+      // natif, qui l'enregistre dans les Telechargements et l'ouvre. En navigateur
+      // classique, window.BambuScan n'existe pas -> comportement standard inchange.
+      if (window.BambuScan?.savePdf) {
+        const b64 = await new Promise((resolve, reject) => {
+          const fr = new FileReader();
+          fr.onload = () => resolve(String(fr.result).split(",")[1] || "");
+          fr.onerror = reject;
+          fr.readAsDataURL(blob);
+        });
+        window.BambuScan.savePdf(b64, fileName);
+        setOpen(false);
+        return;
+      }
+
+      const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
-      a.href = url; a.download = "etiquettes-filaments.pdf";
+      a.href = url; a.download = fileName;
       a.click();
       URL.revokeObjectURL(url);
       setOpen(false);
