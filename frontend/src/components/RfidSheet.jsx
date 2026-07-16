@@ -21,17 +21,37 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
   const [spoolPrice, setSpoolPrice] = useState("");
   const [filPrice, setFilPrice]     = useState("");
   const [location, setLocation]     = useState("");
+  // "create" = nouvelle bobine ; "map" = completer une bobine existante.
+  const [mode, setMode]             = useState("create");
+  const [mapSpoolId, setMapSpoolId] = useState(null);
 
   useEffect(() => {
     client.get(`/rfid/scan/${scanId}`)
-      .then(r => setData(r.data))
+      .then(r => {
+        setData(r.data);
+        // S'il existe des bobines a completer, on preselectionne ce mode : le cas
+        // "j'avais deja la bobine, je lui pose enfin son tag" est le plus courant.
+        const ms = r.data?.mappable_spools || [];
+        if (ms.length > 0) { setMode("map"); setMapSpoolId(ms[0].id); }
+      })
       .catch(e => setErr(e.response?.data?.detail || e.message));
   }, [scanId]);
+
+  // En mode "completer", on prerempli les champs avec ce que la bobine a deja,
+  // pour ne pas ecraser par du vide et eviter une re-saisie.
+  useEffect(() => {
+    if (mode !== "map" || !data?.mappable_spools) return;
+    const sp = data.mappable_spools.find(s => s.id === mapSpoolId);
+    if (!sp) return;
+    setSpoolPrice(sp.price_override != null ? String(sp.price_override) : "");
+    setLocation(sp.location || "");
+  }, [mode, mapSpoolId, data]);
 
   const create = async () => {
     setBusy(true); setErr(null);
     try {
       const r = await client.post(`/rfid/scan/${scanId}/create`, {
+        spool_id: mode === "map" ? mapSpoolId : null,
         spool_price: spoolPrice === "" ? null : Number(spoolPrice),
         filament_price: filPrice === "" ? null : Number(filPrice),
         location: location || null,
@@ -115,12 +135,58 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
             </span>
           </p>
 
-          {fil ? (
-            <p style={{ margin:"0 0 14px", padding:"8px 10px", borderRadius:8, fontSize:12,
+          {fil ? (<>
+            <p style={{ margin:"0 0 10px", padding:"8px 10px", borderRadius:8, fontSize:12,
               background:"rgba(34,197,94,0.10)", color:"#22c55e" }}>
-              Le filament existe déjà (#{fil.id}) — seule la bobine sera créée.
+              Le filament existe déjà (#{fil.id}){data.mappable_spools?.length
+                ? " — choisis quoi faire de la bobine :" : " — seule la bobine sera créée."}
             </p>
-          ) : (
+
+            {/* Choix : creer une nouvelle bobine, ou completer une bobine existante
+                (meme filament, active, sans tag). Ce second cas pose le tag NFC sur
+                une bobine qu'on avait deja saisie a la main. */}
+            {data.mappable_spools?.length > 0 && (
+              <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:14 }}>
+                {[["map","🔗 Compléter une bobine existante"],
+                  ["create","➕ Créer une nouvelle bobine"]].map(([m,label]) => (
+                  <button key={m} onClick={() => setMode(m)}
+                    style={{ display:"flex", alignItems:"center", gap:10, padding:"11px 12px",
+                      borderRadius:10, cursor:"pointer", textAlign:"left", fontSize:13, fontWeight:600,
+                      border:`1px solid ${mode===m ? "#3b82f6" : "var(--border)"}`,
+                      background: mode===m ? "rgba(59,130,246,0.10)" : "var(--surface2)",
+                      color: mode===m ? "#60a5fa" : "var(--text)" }}>
+                    <span style={{ width:16, height:16, borderRadius:"50%", flexShrink:0,
+                      border:`2px solid ${mode===m ? "#3b82f6" : "var(--muted)"}`,
+                      background: mode===m ? "#3b82f6" : "transparent",
+                      boxShadow: mode===m ? "inset 0 0 0 2px var(--sheet-bg)" : "none" }}/>
+                    {label}
+                  </button>
+                ))}
+
+                {/* Liste des bobines a completer */}
+                {mode === "map" && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:2,
+                    paddingLeft:4 }}>
+                    {data.mappable_spools.map(sp => (
+                      <button key={sp.id} onClick={() => setMapSpoolId(sp.id)}
+                        style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                          gap:10, padding:"9px 11px", borderRadius:8, cursor:"pointer", fontSize:12,
+                          border:`1px solid ${mapSpoolId===sp.id ? "#3b82f6" : "var(--border)"}`,
+                          background: mapSpoolId===sp.id ? "rgba(59,130,246,0.12)" : "transparent",
+                          color:"var(--text)" }}>
+                        <span style={{ fontWeight:700 }}>Bobine #{sp.id}</span>
+                        <span style={{ fontSize:11, color:"var(--muted)",
+                          fontFamily:"JetBrains Mono,monospace" }}>
+                          {sp.remaining_weight_g != null ? `${Math.round(sp.remaining_weight_g)} g` : "—"}
+                          {sp.location ? ` · ${sp.location}` : ""}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </>) : (
             <p style={{ margin:"0 0 14px", padding:"8px 10px", borderRadius:8, fontSize:12,
               background:"rgba(59,130,246,0.10)", color:"#60a5fa" }}>
               Le filament sera créé, puis la bobine.
@@ -139,7 +205,7 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
             )}
 
             <div>
-              <label style={lbl}>Prix de cette bobine (€)</label>
+              <label style={lbl}>{mode === "map" ? "Prix de la bobine (€)" : "Prix de cette bobine (€)"}</label>
               <input value={spoolPrice} inputMode="decimal" placeholder="21.90" autoFocus
                 onChange={e => setSpoolPrice(e.target.value)} style={inp}/>
             </div>
@@ -156,8 +222,10 @@ export default function RfidSheet({ scanId, onClose, onCreated }) {
             style={{ width:"100%", marginTop:18, padding:"13px", borderRadius:12,
               border:"none", cursor: busy ? "default" : "pointer",
               background:"#3b82f6", color:"white", fontSize:14, fontWeight:800 }}>
-            {busy ? "Création…"
-              : fil ? "Créer la bobine" : "Créer le filament et la bobine"}
+            {busy ? "Enregistrement…"
+              : !fil ? "Créer le filament et la bobine"
+              : mode === "map" ? `Compléter la bobine #${mapSpoolId ?? ""}`
+              : "Créer une nouvelle bobine"}
           </button>
         </>)}
       </div>

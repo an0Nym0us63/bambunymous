@@ -5,7 +5,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import get_current_user
@@ -50,6 +50,9 @@ async def _auth_scanner(
 
 
 class CreateIn(BaseModel):
+    # Si fourni : on MAPPE cette bobine existante (on lui pose le tag NFC) au lieu
+    # d'en creer une nouvelle. La bobine doit appartenir au meme filament.
+    spool_id: Optional[int] = None
     spool_price: Optional[float] = None
     filament_price: Optional[float] = None
     remaining_weight_g: Optional[float] = None
@@ -62,6 +65,21 @@ async def _find_spool_by_tag(db, tray_uid: str) -> Optional[Spool]:
         return None
     res = await db.execute(select(Spool).where(Spool.tag_number == tray_uid))
     return res.scalars().first()
+
+
+async def _mappable_spools(db, filament_id: int) -> list[Spool]:
+    """
+    Bobines du meme filament, actives, sans tag NFC : candidates a recevoir le
+    tag qu'on vient de scanner plutot que d'en creer une nouvelle.
+    """
+    res = await db.execute(
+        select(Spool).where(
+            Spool.filament_id == filament_id,
+            Spool.archived.is_(False),
+            or_(Spool.tag_number.is_(None), Spool.tag_number == ""),
+        ).order_by(Spool.id)
+    )
+    return list(res.scalars().all())
 
 
 async def _find_filament(db, scan: dict, match: Optional[dict]) -> Optional[Filament]:
@@ -197,7 +215,42 @@ async def rfid_scan_detail(
         # Le prix du filament n'est demande que s'il faut le CREER : sur un
         # filament existant, il est deja connu.
         "needs_filament_price": fil is None,
+        # Si le filament existe, on propose de completer une bobine existante
+        # (meme filament, active, sans tag) plutot que d'en creer une nouvelle.
+        "mappable_spools": ([
+            {"id": sp.id,
+             "remaining_weight_g": sp.remaining_weight_g,
+             "location": sp.location,
+             "comment": sp.comment,
+             "price_override": sp.price_override}
+            for sp in await _mappable_spools(db, fil.id)
+        ] if fil else []),
     }
+
+
+def _complete_filament(fil: Filament, scan: dict, match: Optional[dict]) -> bool:
+    """
+    Complete les champs VIDES du filament a partir du tag/catalogue, sans jamais
+    ecraser une valeur deja saisie. Le plus important est profile_id (GFA00...) et
+    fila_color_code, qui manquent souvent aux filaments crees a la main.
+    Retourne True si quelque chose a change.
+    """
+    changed = False
+    def setif(attr, value):
+        nonlocal changed
+        if value and not getattr(fil, attr, None):
+            setattr(fil, attr, value)
+            changed = True
+
+    setif("profile_id",      scan.get("material_id"))
+    setif("fila_color_code", (match or {}).get("fila_color_code") or scan.get("variant_id"))
+    setif("fila_type",       (match or {}).get("fila_type") or scan.get("fila_type"))
+    setif("color",           (match or {}).get("color_hex") or scan.get("color_hex"))
+    setif("multicolor_type", (match or {}).get("multicolor_type"))
+    setif("translated_name", (match or {}).get("name_fr"))
+    if not fil.filament_weight_g and scan.get("spool_weight_g"):
+        fil.filament_weight_g = scan["spool_weight_g"]; changed = True
+    return changed
 
 
 @router.post("/scan/{scan_id}/create")
@@ -249,8 +302,46 @@ async def rfid_create(
         db.add(fil)
         await db.flush()
         filament_created = True
-    elif body.filament_price is not None and fil.price is None:
-        fil.price = body.filament_price
+    else:
+        # Filament existant : on complete ses infos manquantes depuis le tag
+        # (profile_id/GFA00, fila_color_code, etc.) et le prix s'il manque.
+        _complete_filament(fil, scan, match)
+        if body.filament_price is not None and fil.price is None:
+            fil.price = body.filament_price
+
+    # ── Deux voies : mapper une bobine existante, ou en creer une ──
+    if body.spool_id is not None:
+        # Mapping : on pose le tag sur une bobine existante et on complete ses infos.
+        spool = await db.get(Spool, body.spool_id)
+        if spool is None or spool.filament_id != fil.id:
+            raise HTTPException(400, "Bobine invalide pour ce filament")
+        if spool.tag_number:
+            raise HTTPException(409, "Cette bobine a deja un tag NFC")
+
+        spool.tag_number = tray_uid                       # l'essentiel : le tag
+        if body.spool_price is not None:
+            spool.price_override = body.spool_price
+        if body.remaining_weight_g is not None:
+            spool.remaining_weight_g = body.remaining_weight_g
+        elif spool.remaining_weight_g is None:
+            spool.remaining_weight_g = scan["spool_weight_g"]
+        if body.location and not spool.location:
+            spool.location = body.location
+        if body.comment and not spool.comment:
+            spool.comment = body.comment
+
+        await db.commit()
+        await db.refresh(spool)
+        logger.info(f"[RFID] bobine existante #{spool.id} mappee (tag {tray_uid}, "
+                    f"filament #{fil.id})")
+        return {
+            "created": False,
+            "mapped": True,
+            "filament_created": filament_created,
+            "filament_id": fil.id,
+            "spool_id": spool.id,
+            "redirect": f"/filaments?id={fil.id}&spool={spool.id}",
+        }
 
     spool = Spool(
         filament_id=fil.id,
@@ -271,6 +362,7 @@ async def rfid_create(
 
     return {
         "created": True,
+        "mapped": False,
         "filament_created": filament_created,
         "filament_id": fil.id,
         "spool_id": spool.id,
