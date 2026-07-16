@@ -2071,18 +2071,25 @@ export default function Filaments() {
   const [galSelectMode, setGalSelectMode] = useState(false);
   const [galSelected, setGalSelected] = useState(null);
 
-  // Lien direct /filaments?id=XXX -> ouvre la fiche du filament (scan QR d'un
-  // swatch, marque-page, etc.). On passe par l'API plutot que par la liste
-  // deja chargee : le filament peut etre absent du filtre/onglet courant.
-  const deepId = searchParams.get("id");
+  // Liens directs :
+  //   /filaments?spool=YY[&id=XX] -> ouvre la fiche BOBINE (scan RFID, creation).
+  //   /filaments?id=XX (sans spool) -> ouvre la fiche FILAMENT (scan QR d'un
+  //     swatch, marque-page…).
+  // La fiche bobine a la priorite : un scan de bobine doit montrer LA bobine, pas
+  // son filament. On passe par l'API plutot que par la liste deja chargee : la
+  // cible peut etre absente du filtre/onglet courant.
+  const deepId    = searchParams.get("id");
+  const deepSpool = searchParams.get("spool");
+
   useEffect(() => {
-    if (!deepId) { setDeepFil(null); setDeepErr(null); return; }
+    // Fiche filament uniquement si on N'ouvre PAS une bobine.
+    if (!deepId || deepSpool) { setDeepFil(null); setDeepErr(null); return; }
     let cancelled = false;
     client.get(`/filaments/filaments/${deepId}`)
       .then(r => { if (!cancelled) { setDeepFil(r.data); setDeepErr(null); } })
       .catch(() => { if (!cancelled) { setDeepFil(null); setDeepErr(`#${deepId}`); } });
     return () => { cancelled = true; };
-  }, [deepId]);
+  }, [deepId, deepSpool]);
 
   const closeDeep = () => {
     setDeepFil(null); setDeepErr(null);
@@ -2338,6 +2345,12 @@ export default function Filaments() {
           onDeleted={() => { closeDeep(); client.get("/filaments/filaments").then(({data}) => setAllFilaments(data)).catch(()=>{}); }}
           onUpdated={() => client.get(`/filaments/filaments/${deepId}`)
             .then(r => setDeepFil(r.data)).catch(()=>{})}/>
+      )}
+      {deepSpool && (
+        <FilamentSheetFromSpool
+          spoolId={Number(deepSpool)}
+          filamentId={deepId ? Number(deepId) : undefined}
+          onClose={closeDeep}/>
       )}
       {deepErr && (
         <div style={{ padding:"12px 16px", borderRadius:10,
