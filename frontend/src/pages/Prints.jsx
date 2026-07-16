@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
+import PhotoAddButton from "../components/PhotoAddButton";
 
 const STATUS_CFG = {
   IN_PROGRESS: { label:"En cours", color:"#3b82f6", bg:"rgba(59,130,246,0.75)",  icon:Loader },
@@ -1173,12 +1174,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                 <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>
                   Photos ({groupPhotos.length})
                 </p>
-                <label style={{ width:20, height:20, borderRadius:"50%", background:"#3b82f6",
-                  border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-                  fontSize:14, color:"white", fontWeight:700 }}>
-                  +<input type="file" accept="image/*" capture="environment" style={{ display:"none" }}
-                    onChange={e=>e.target.files[0]&&uploadGroupPhoto(e.target.files[0])}/>
-                </label>
+                <PhotoAddButton onPick={(f)=>uploadGroupPhoto(f)}/>
               </div>
               {groupPhotos.length > 0 && (
                 <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
@@ -1649,13 +1645,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
               {title} ({items.length})
             </p>
             {onAdd && (
-              <label style={{ width:20, height:20, borderRadius:"50%", background:"#3b82f6",
-                border:"none", cursor:"pointer", display:"flex",
-                alignItems:"center", justifyContent:"center", fontSize:14, color:"white", fontWeight:700 }}>
-                +
-                <input type="file" accept="image/*" capture="environment" style={{ display:"none" }}
-                  onChange={e=>e.target.files[0]&&onAdd(e.target.files[0])}/>
-              </label>
+              <PhotoAddButton onPick={(f)=>onAdd(f)}/>
             )}
           </div>
           {items.length > 2 && (

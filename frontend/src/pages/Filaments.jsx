@@ -257,6 +257,16 @@ function FilamentPhotos({ filamentId, onLightbox }) {
 
   const fileRef = React.useRef(null);
   const cameraRef = React.useRef(null);
+  // Dans la WebView Android, le sélecteur natif propose DEJA "Appareil photo" +
+  // "Galerie" -> notre propre popup ferait doublon. On declenche alors directement
+  // l'input sans capture (Android affiche son choix). En navigateur, on garde le
+  // popup : selon la plateforme, <input capture> ouvre soit la camera seule soit
+  // l'explorateur, et c'est ce popup qui laisse l'utilisateur choisir.
+  const isWebView = typeof window !== "undefined" && !!window.BambuScan;
+  const onAddPhoto = () => {
+    if (isWebView) fileRef.current?.click();
+    else setAddPhotoOpen(true);
+  };
   const [uploading, setUploading] = React.useState(false);
   const [addPhotoOpen, setAddPhotoOpen] = React.useState(false);
 
@@ -299,7 +309,7 @@ function FilamentPhotos({ filamentId, onLightbox }) {
           letterSpacing:"0.06em", margin:0 }}>
           Photos{photos.length ? ` (${photos.length})` : ""}
         </p>
-        <button onClick={() => setAddPhotoOpen(true)} disabled={uploading}
+        <button onClick={onAddPhoto} disabled={uploading}
           style={{ width:26, height:26, borderRadius:"50%", background:"#3b82f6", color:"white",
             border:"none", cursor:"pointer", fontSize:18, lineHeight:1, display:"flex",
             alignItems:"center", justifyContent:"center" }}>
