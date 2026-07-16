@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Droplets, Sun, Thermometer, Timer, Clock, Package } from "lucide-react";
 import client from "../api/client";
 import { colorBg } from "../utils/colors";
@@ -428,6 +429,7 @@ const MATCH_LABEL = {
 };
 
 function TrayBottomSheet({ tray, amsLabel, onClose }) {
+  const navigate = useNavigate();
   if (!tray) return null;
   const color  = hexDisplay(tray.color);
   const info   = tray.spool_info;
@@ -568,7 +570,32 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
               </p>
             )}
 
-            {/* Séchage depuis AMS + données catalogue */}
+            {/* Acces direct aux fiches — comme sur la fiche bobine on peut ouvrir
+                le filament, ici on ouvre la bobine liee et/ou son filament. */}
+            {tray.spool_id && (
+              <div style={{ display:"flex", gap:8, marginTop:16 }}>
+                <button
+                  onClick={() => { onClose?.(); navigate(`/filaments?id=${info?.filament_id || ""}&spool=${tray.spool_id}`); }}
+                  style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+                    padding:"11px 12px", borderRadius:11, cursor:"pointer",
+                    background:"linear-gradient(135deg,#3b82f6,#6366f1)", color:"#fff",
+                    border:"none", fontSize:13, fontWeight:700 }}>
+                  <Package size={15}/> Fiche bobine
+                </button>
+                {info?.filament_id && (
+                  <button
+                    onClick={() => { onClose?.(); navigate(`/filaments?id=${info.filament_id}`); }}
+                    style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:7,
+                      padding:"11px 12px", borderRadius:11, cursor:"pointer",
+                      background:"var(--surface2)", color:"var(--text)",
+                      border:"1px solid var(--border)", fontSize:13, fontWeight:700 }}>
+                    <Droplets size={15}/> Fiche filament
+                  </button>
+                )}
+              </div>
+            )}
+
+                        {/* Séchage depuis AMS + données catalogue */}
             {(tray.drying_temp > 0 || tray.spool_info?.filament_material) && (
               <div style={{ marginTop:14, padding:"10px 14px", borderRadius:10,
                 background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.25)" }}>

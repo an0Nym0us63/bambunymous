@@ -473,6 +473,7 @@ class MQTTManager:
                                             if _sp2:
                                                 _info = {
                                                     "id": _sp2.id,
+                                                    "filament_id": (_fi2.id if _fi2 else (_sp2.filament_id if _sp2 else None)),
                                                     "name": _fi2.name if _fi2 else None,
                                                     "translated_name": getattr(_fi2, "translated_name", None) if _fi2 else None,
                                                     "color": f"#{_fi2.color}" if _fi2 and _fi2.color else None,

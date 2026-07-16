@@ -66,6 +66,7 @@ class NozzleTempOut(BaseModel):
 
 class SpoolInfoOut(BaseModel):
     id: int
+    filament_id: Optional[int] = None   # pour ouvrir la fiche filament depuis un slot AMS
     name: Optional[str] = None
     translated_name: Optional[str] = None
     color: Optional[str] = None
@@ -182,6 +183,7 @@ def _spool_info(spool_id, spools_map):
     s, f = spools_map[spool_id]
     return SpoolInfoOut(
         id=s.id,
+        filament_id=(f.id if f else (s.filament_id if s else None)),
         name=f.name if f else None,
         translated_name=getattr(f, "translated_name", None) if f else None,
         color=f"#{f.color}" if (f and f.color) else None,
