@@ -478,6 +478,7 @@ class MQTTManager:
                                                     "translated_name": getattr(_fi2, "translated_name", None) if _fi2 else None,
                                                     "color": f"#{_fi2.color}" if _fi2 and _fi2.color else None,
                                                     "material": _fi2.material if _fi2 else None,
+                                                    "fila_type": (_fi2.fila_type if _fi2 else None),
                                                     "brand": _fi2.manufacturer if _fi2 else None,
                                                     "remaining_weight_g": _sp2.remaining_weight_g,
                                                     "initial_weight_g": _fi2.filament_weight_g if _fi2 else None,

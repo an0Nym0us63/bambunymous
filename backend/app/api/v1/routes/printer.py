@@ -71,6 +71,7 @@ class SpoolInfoOut(BaseModel):
     translated_name: Optional[str] = None
     color: Optional[str] = None
     material: Optional[str] = None
+    fila_type: Optional[str] = None   # sous-type complet (PLA Basic, PETG-HF…)
     brand: Optional[str] = None
     profile_id: Optional[str] = None
     multicolor_type: Optional[str] = None
@@ -188,6 +189,7 @@ def _spool_info(spool_id, spools_map):
         translated_name=getattr(f, "translated_name", None) if f else None,
         color=f"#{f.color}" if (f and f.color) else None,
         material=f.material if f else None,
+        fila_type=(f.fila_type if f else None),
         brand=f.manufacturer if f else None,
         profile_id=f.profile_id if f else None,
         multicolor_type=f.multicolor_type if f else None,

@@ -270,7 +270,9 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
   const colors = parseColors(tray, spoolInfo);
   const c1 = colors?.[0];
   const name = spoolInfo?.translated_name ?? spoolInfo?.name ?? spoolInfo?.filament_name ?? tray.catalog_name ?? null;
-  const material = spoolInfo?.material ?? spoolInfo?.filament_material ?? tray.filament_type ?? null;
+  // Sous-type complet en priorite (PLA Basic, PETG-HF…), repli sur la famille.
+  const material = spoolInfo?.fila_type ?? spoolInfo?.filament_fila_type
+    ?? spoolInfo?.material ?? spoolInfo?.filament_material ?? tray.filament_type ?? null;
   const hasW = spoolInfo?.remaining_weight_g != null;
   const hasT = (spoolInfo?.initial_weight_g ?? spoolInfo?.filament_weight_g) != null;
   const pct = hasW && hasT
