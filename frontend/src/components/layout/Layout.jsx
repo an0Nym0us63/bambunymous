@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { Home, Settings, LogOut, Package, History, ShoppingBag, BarChart2 } from "lucide-react";
 import { useAuth } from "../../store/auth";
@@ -30,14 +30,14 @@ const S = {
   logoBox: { width:28, height:28, borderRadius:8, overflow:"hidden" },
   nav:     { flex:1, padding:"0 8px", display:"flex", flexDirection:"column", gap:2 },
   main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
-  page:    { flex:1, overflowY:"auto", padding:16, paddingTop:"calc(16px + env(safe-area-inset-top, 0px))", background:"var(--bg)" },
+  page:    { flex:1, overflowY:"auto", padding:16, paddingTop:"calc(16px + var(--sat, env(safe-area-inset-top, 0px)))", background:"var(--bg)" },
   // Mobile
   // Le header est colle en haut de l'ecran. En PWA installee edge-to-edge et en
   // WebView, la barre d'etat (heure, wifi) passe PAR-DESSUS s'il ne reserve pas la
   // safe-area : le titre se retrouvait sous l'heure. Dans un navigateur classique,
   // env(safe-area-inset-top) vaut 0, donc rien ne change la-bas.
   header:  { display:"flex", alignItems:"center", gap:8,
-    padding:"12px 16px", paddingTop:"calc(12px + env(safe-area-inset-top, 0px))",
+    padding:"12px 16px", paddingTop:"calc(12px + var(--sat, env(safe-area-inset-top, 0px)))",
     background:"var(--sidebar)", borderBottom:"1px solid var(--border)" },
   bottomNav: { display:"flex", background:"var(--sidebar)", borderTop:"1px solid var(--border)",
     position:"fixed", left:0, right:0, bottom:0, zIndex:50,
@@ -65,6 +65,16 @@ export default function Layout() {
   const { pathname } = useLocation();
   const title = TITLES[pathname] ?? null;
 
+  // Dans la coquille WebView, une bande coloree (scrim natif) occupe DEJA la place
+  // de la barre de statut. Le header ne doit donc pas reserver en plus la
+  // safe-area du haut, sinon l'espace est double. On marque <html> pour permettre
+  // au CSS ci-dessous de neutraliser cette safe-area, uniquement en WebView.
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.BambuScan) {
+      document.documentElement.classList.add("in-webview");
+    }
+  }, []);
+
   return (
     <div style={S.app}>
       {/* Sidebar desktop */}
@@ -88,7 +98,7 @@ export default function Layout() {
 
       <div style={S.main}>
         {/* Header mobile */}
-        <header className="show-mobile" style={S.header}>
+        <header className="show-mobile app-header" style={S.header}>
           <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0, cursor:"pointer" }}
             onClick={() => navigate("/")}>
             <img src="/icon-192.png" style={{ width:24, height:24, borderRadius:6, flexShrink:0 }} alt=""/>
@@ -140,6 +150,11 @@ export default function Layout() {
           /* Le titre est deja dans le header mobile : on evite de le repeter. */
           .page-title { display:none!important; }
         }
+        /* WebView : le scrim natif occupe deja la barre de statut. On force donc
+           la safe-area top a 0 (sinon l'espace serait double sous la barre
+           violette). --sat est utilisee par le header et la page a la place de
+           env(safe-area-inset-top). */
+        html.in-webview { --sat: 0px; }
       `}</style>
     </div>
   );
