@@ -473,6 +473,30 @@ async def _filaments_without_photo(db) -> list[Alert]:
     ]
 
 
+@check("fil_no_swatch", "Filaments sans échantillon", "🎨")
+async def _filaments_without_swatch(db) -> list[Alert]:
+    """
+    Filaments dont l'echantillon (nuancier) n'est pas marque. Utile pour savoir
+    lesquels imprimer / referencer physiquement.
+    """
+    rows = (await db.execute(
+        select(Filament).where(Filament.swatch.is_(False))
+    )).scalars().all()
+    return [
+        Alert(
+            key=f"fil_no_swatch:filament:{f.id}",
+            category="fil_no_swatch",
+            title=_fil_title(f),
+            detail="",
+            severity="info",
+            link=f"/filaments?id={f.id}",
+            entity="filament", entity_id=f.id,
+            **_fil_visual(f),
+        )
+        for f in rows
+    ]
+
+
 @check("to_order", "Filaments à commander", "🛒")
 async def _filaments_to_order(db) -> list[Alert]:
     """Marques \"a commander\" a la main (champ to_order)."""

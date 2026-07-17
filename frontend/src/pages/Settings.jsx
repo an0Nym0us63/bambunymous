@@ -217,6 +217,59 @@ function EnrichFromCatalogSection() {
 }
 
 
+function MaintenanceSection() {
+  const [loading, setLoading] = React.useState(false);
+  const [confirm, setConfirm] = React.useState(false);
+  const [result, setResult] = React.useState(null);
+
+  const run = async () => {
+    setLoading(true); setResult(null);
+    try {
+      const r = await client.post("/filaments/clear-swatches");
+      setResult(r.data?.cleared ?? 0);
+      setConfirm(false);
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
+        Vider tous les échantillons
+      </h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        Décoche l'échantillon (nuancier) sur tous les filaments. N'affecte rien d'autre :
+        ni les photos, ni les autres informations. Action ponctuelle pour repartir de zéro.
+      </p>
+      {result != null && (
+        <p style={{ fontSize:12, color:"#22c55e", margin:"0 0 12px" }}>
+          ✓ {result} filament{result>1?"s":""} remis sans échantillon.
+        </p>
+      )}
+      {!confirm ? (
+        <button onClick={()=>setConfirm(true)} disabled={loading}
+          style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer",
+            border:"1px solid rgba(239,68,68,0.3)", background:"rgba(239,68,68,0.06)", color:"#ef4444" }}>
+          🎨 Vider tous les échantillons
+        </button>
+      ) : (
+        <div style={{ display:"flex", gap:8 }}>
+          <button onClick={run} disabled={loading}
+            style={{ padding:"8px 16px", borderRadius:10, fontSize:13, fontWeight:700, cursor:loading?"wait":"pointer",
+              border:"none", background:"#ef4444", color:"white" }}>
+            {loading ? "En cours…" : "Confirmer — tout décocher"}
+          </button>
+          <button onClick={()=>setConfirm(false)} disabled={loading}
+            style={{ padding:"8px 16px", borderRadius:10, fontSize:13, fontWeight:600, cursor:"pointer",
+              border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--muted)" }}>
+            Annuler
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RecalculateSection() {
   const [loading, setLoading] = React.useState(false);
   const [done, setDone] = React.useState(false);
@@ -889,6 +942,7 @@ export default function Settings() {
 
       <EnrichFromCatalogSection/>
         <RecalculateSection/>
+      <MaintenanceSection/>
 
 
 

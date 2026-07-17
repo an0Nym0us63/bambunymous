@@ -1,7 +1,7 @@
 from fastapi.responses import FileResponse
 from fastapi import APIRouter, Depends, Query, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, or_
+from sqlalchemy import select, func, or_, update
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import Optional
@@ -488,6 +488,25 @@ async def list_spools(
     stmt = stmt.order_by(Spool.last_used_at.desc().nullslast())
     result = await db.execute(stmt)
     return [_spool_out(s) for s in result.scalars().all()]
+
+
+@router.post("/filaments/clear-swatches")
+async def clear_all_swatches(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """
+    Action ponctuelle d'aide : decoche l'echantillon (swatch=False) sur TOUS les
+    filaments, sans rien toucher d'autre (ni photos, ni autres champs). Renvoie le
+    nombre de filaments concernes (ceux qui etaient coches).
+    """
+    # Compter d'abord ceux qui etaient coches, pour un retour utile.
+    n = (await db.execute(
+        select(func.count()).select_from(Filament).where(Filament.swatch.is_(True))
+    )).scalar_one()
+    await db.execute(update(Filament).values(swatch=False))
+    await db.commit()
+    return {"ok": True, "cleared": int(n or 0)}
 
 
 @router.post("/spools", response_model=SpoolOut, status_code=201)
