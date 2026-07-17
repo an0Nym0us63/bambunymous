@@ -225,7 +225,7 @@ function MaintenanceSection() {
   const run = async () => {
     setLoading(true); setResult(null);
     try {
-      const r = await client.post("/filaments/clear-swatches");
+      const r = await client.post("/filaments/filaments/clear-swatches");
       setResult(r.data?.cleared ?? 0);
       setConfirm(false);
     } catch(e) { alert(e.response?.data?.detail || e.message); }
