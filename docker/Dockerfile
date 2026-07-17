@@ -9,13 +9,16 @@ RUN npm run build
 # Stage 2 : Python deps
 FROM python:3.12-slim AS py-builder
 WORKDIR /install
+# pycurl est compile : il lui faut les entetes de libcurl + un compilateur.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc libcurl4-openssl-dev libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir --prefix=/pkg -r requirements.txt
 
 # Stage 3 : Image finale
 FROM python:3.12-slim
 LABEL org.opencontainers.image.source="https://github.com/an0Nym0us63/bambunymous"
-RUN apt-get update && apt-get install -y --no-install-recommends libssl-dev curl ffmpeg && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends libssl-dev libcurl4 curl ffmpeg && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=py-builder /pkg /usr/local
 COPY backend/ ./
