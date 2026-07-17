@@ -174,12 +174,12 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
                 <span style={{ fontSize:20, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
                   {fmtPrice(obj.cost_total)}
                 </span>
-                {/* Total au prix normal = cout normal (catalogue) + accessoires. */}
-                {obj.normal_cost_unit > 0 && obj.normal_cost_unit !== obj.cost_fabrication && (
-                  <span style={{ fontSize:11, color:"var(--muted)", marginLeft:8 }}>
-                    ({fmtPrice((obj.normal_cost_unit || 0) + (obj.cost_accessory || 0))})
-                  </span>
-                )}
+                {/* Total au prix normal (catalogue) + accessoires, toujours affiche
+                    comme sur la fiche print. Repli sur le cout de fabrication si le
+                    cout normal n'est pas renseigne. */}
+                <span style={{ fontSize:11, color:"var(--muted)", marginLeft:8 }}>
+                  ({fmtPrice((obj.normal_cost_unit || obj.cost_fabrication || 0) + (obj.cost_accessory || 0))})
+                </span>
               </div>
             </div>
             {obj.desired_price > 0 && (
