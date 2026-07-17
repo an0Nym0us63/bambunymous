@@ -2207,8 +2207,8 @@ export default function Filaments() {
             title={rfidScan.listening ? "Scan RFID actif" : "Scan RFID"}
             style={{ display:"flex", alignItems:"center", justifyContent:"center",
               width:34, height:34, borderRadius:"50%", border:"none", cursor:"pointer",
-              background: rfidScan.listening ? "#22c55e" : "var(--surface2)",
-              color: rfidScan.listening ? "white" : "var(--text)",
+              background: rfidScan.listening ? "#22c55e" : "rgba(249,168,89,0.22)",
+              color: rfidScan.listening ? "white" : "#e07b00",
               boxShadow: rfidScan.listening ? "0 0 0 3px rgba(34,197,94,0.25)" : "none",
               transition:"all 0.15s" }}>
             <Nfc size={17}/>
@@ -2231,8 +2231,8 @@ export default function Filaments() {
             aria-label="Scan RFID en continu" title={rfidScan.listening ? "Scan RFID actif" : "Scan RFID"}
             style={{ display:"flex", alignItems:"center", justifyContent:"center",
               width:38, height:38, borderRadius:"50%", border:"none", cursor:"pointer",
-              background: rfidScan.listening ? "#22c55e" : "var(--surface2)",
-              color: rfidScan.listening ? "white" : "var(--text)",
+              background: rfidScan.listening ? "#22c55e" : "rgba(249,168,89,0.22)",
+              color: rfidScan.listening ? "white" : "#e07b00",
               boxShadow: rfidScan.listening ? "0 0 0 3px rgba(34,197,94,0.25)" : "none",
               transition:"all 0.15s" }}>
             <Nfc size={18}/>
