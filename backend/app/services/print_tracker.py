@@ -159,6 +159,17 @@ async def _snap(print_id: int, trigger: str):
         logger.warning(f"Snapshot {trigger} print={print_id}: {e}")
 
 
+# ── MakerWorld design_id ─────────────────────────────────────────────────────
+def _clean_design_id(raw) -> str | None:
+    """Normalise l'ID MakerWorld recu du MQTT. On ignore les valeurs vides ET les
+    zeros ("0", 0), que la machine renvoie parfois quand il n'y a pas de modele
+    MakerWorld associe -- sinon on stocke un lien casse (.../models/0)."""
+    s = str(raw or "").strip()
+    if not s or s == "0":
+        return None
+    return s
+
+
 # ── Création ───────────────────────────────────────────────────────────────
 async def create_print(job_id: str, url: str, taskname: str,
                         print_type: str = "cloud",
@@ -176,7 +187,7 @@ async def create_print(job_id: str, url: str, taskname: str,
             original_name=taskname,
             print_type=print_type,
             status="IN_PROGRESS",
-            design_id=design_id or None,
+            design_id=_clean_design_id(design_id),
             # Persistes pour pouvoir REPRENDRE l'enrichissement apres un
             # redemarrage : le thread _enrich meurt avec le process.
             task_name=taskname or None,
@@ -216,13 +227,9 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
             plate_image=meta.get("plate_image"),
             model_3mf=meta.get("model_3mf"),
         ))
-        # design_id (ID MakerWorld) : le 3MF ne le contient PAS toujours (impressions
-        # locales, modeles hors MakerWorld). Il a deja ete pose a la creation depuis
-        # le MQTT. On ne l'ecrase donc QUE si le 3MF en fournit un non vide, sinon on
-        # garde la valeur existante.
-        _mw = (meta.get("design_id") or "").strip()
-        if _mw:
-            await db.execute(update(Print).where(Print.id == pid).values(design_id=_mw))
+        # NB: on ne touche PAS a design_id ici. Il est pose une seule fois a la
+        # creation depuis le MQTT (comme Spoolnymous). Le 3MF ne contient pas cette
+        # metadonnee de facon fiable, donc on ne la ré-ecrit jamais depuis le 3MF.
 
         for slot, fil in meta.get("filaments", {}).items():
             if float(fil.get("used_g", 0)) <= 0: continue
@@ -625,10 +632,6 @@ async def create_manual_print(local_path: str, print_date: datetime) -> Optional
                 plate_image=meta.get("plate_image"),
                 model_3mf=meta.get("model_3mf"),
             ))
-            # design_id seulement si present dans le 3MF (ne pas ecraser un id deja pose).
-            _mw2 = (meta.get("design_id") or "").strip()
-            if _mw2:
-                await db.execute(update(Print).where(Print.id == pid).values(design_id=_mw2))
             for slot, fil in meta.get("filaments", {}).items():
                 if float(fil.get("used_g", 0)) <= 0: continue
                 db.add(FilamentUsage(
