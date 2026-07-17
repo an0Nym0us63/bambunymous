@@ -150,11 +150,9 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
               <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
                 {fmtPrice(obj.cost_fabrication)}
               </p>
-              {obj.normal_cost_unit > 0 && obj.normal_cost_unit !== obj.cost_fabrication && (
-                <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
-                  ({fmtPrice(obj.normal_cost_unit)} au prix normal)
-                </p>
-              )}
+              <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
+                ({fmtPrice(obj.normal_cost_unit || obj.cost_fabrication)} au prix normal)
+              </p>
             </div>
             {/* Accessoires */}
             <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
@@ -437,16 +435,21 @@ export default function Objects() {
     <div style={{ maxWidth:900, margin:"0 auto", display:"flex", flexDirection:"column", gap:12 }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Objets & Accessoires</h1>
-        <div style={{ marginLeft:"auto", display:"flex", gap:2, background:"var(--surface2)",
-          borderRadius:10, padding:3, border:"1px solid var(--border)" }}>
-          {[["objects","Objets"],["accessories","Accessoires"]].map(([id,label]) => (
-            <button key={id} onClick={() => { setTab(id); setQ(""); }}
-              style={{ padding:"5px 14px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer", border:"none",
-                background:tab===id?"var(--text)":"transparent", color:tab===id?"var(--bg)":"var(--muted)" }}>
-              {label}
-            </button>
-          ))}
-        </div>
+      </div>
+
+      {/* Onglets Objets / Accessoires — meme composant visuel que Filaments/Historique. */}
+      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12,
+        padding:4, border:"1px solid var(--border)" }}>
+        {[["objects","Objets"],["accessories","Accessoires"]].map(([id,label]) => (
+          <button key={id} onClick={() => { setTab(id); setQ(""); }} style={{
+            flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
+            background: tab===id ? "#3b82f6" : "transparent",
+            color: tab===id ? "white" : "var(--muted)",
+            border:"none", transition:"all 0.15s",
+          }}>
+            {label}
+          </button>
+        ))}
       </div>
 
       <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>

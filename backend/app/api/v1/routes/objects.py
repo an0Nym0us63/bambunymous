@@ -136,10 +136,28 @@ async def object_image(oid: int):
     # 2. Photo du parent (print ou groupe)
     async with AsyncSessionLocal() as db:
         o = await db.get(Object, oid)
-    if o and o.parent_type and o.parent_id:
-        folder = "prints" if o.parent_type == "print" else "groups"
-        img = _first_img(DATA_DIR / folder / str(o.parent_id))
-        if img: return FileResponse(str(img))
+        if o and o.parent_type and o.parent_id:
+            folder = "prints" if o.parent_type == "print" else "groups"
+            img = _first_img(DATA_DIR / folder / str(o.parent_id))
+            if img: return FileResponse(str(img))
+
+            # 3. Groupe sans photo -> on retombe sur la vignette d'un print du groupe :
+            #    d'abord le print de couverture (cover_print_id), sinon le plus recent.
+            if o.parent_type == "group":
+                from ..models.print_history import Group as PGroup, Print
+                grp = await db.get(PGroup, o.parent_id)
+                cover_id = getattr(grp, "cover_print_id", None) if grp else None
+                if cover_id:
+                    img = _first_img(DATA_DIR / "prints" / str(cover_id))
+                    if img: return FileResponse(str(img))
+                # print le plus recent du groupe
+                recent = (await db.execute(
+                    select(Print).where(Print.group_id == o.parent_id)
+                    .order_by(Print.print_date.desc()).limit(1)
+                )).scalar_one_or_none()
+                if recent:
+                    img = _first_img(DATA_DIR / "prints" / str(recent.id))
+                    if img: return FileResponse(str(img))
 
     raise HTTPException(404)
 
