@@ -8,6 +8,7 @@
   --text2:   #94a3b8;
   --muted:   #7c8ba1;
   --sidebar: #0a0d13;
+  --glass: rgba(10,13,19,0.72);   /* header/footer verre depoli (sombre) */
   --sheet-bg: #1a1d27;
   --r: 1rem;
   --r-sm: 0.75rem;
@@ -23,6 +24,7 @@
   --text2:   #334155;
   --muted:   #64748b;
   --sidebar: #e8edf3;
+  --glass: rgba(240,244,248,0.72); /* header/footer verre depoli (clair) */
   --sheet-bg: #ffffff;
 }
 

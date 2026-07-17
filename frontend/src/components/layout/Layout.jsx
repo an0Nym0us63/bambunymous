@@ -38,8 +38,19 @@ const S = {
   // env(safe-area-inset-top) vaut 0, donc rien ne change la-bas.
   header:  { display:"flex", alignItems:"center", gap:8,
     padding:"12px 16px", paddingTop:"calc(12px + var(--sat, env(safe-area-inset-top, 0px)))",
-    background:"var(--sidebar)", borderBottom:"1px solid var(--border)" },
-  bottomNav: { display:"flex", background:"var(--sidebar)", borderTop:"1px solid var(--border)",
+    // Verre depoli : fond translucide + flou de ce qui scrolle derriere. Fixed
+    // en haut pour que le contenu passe DESSOUS (sinon rien a flouter). La
+    // compensation d'espace est faite en CSS (.page-content padding-top).
+    position:"fixed", top:0, left:0, right:0, zIndex:50,
+    background:"var(--glass)",
+    backdropFilter:"blur(12px) saturate(140%)",
+    WebkitBackdropFilter:"blur(12px) saturate(140%)",
+    borderBottom:"1px solid var(--border)" },
+  bottomNav: { display:"flex",
+    background:"var(--glass)",
+    backdropFilter:"blur(12px) saturate(140%)",
+    WebkitBackdropFilter:"blur(12px) saturate(140%)",
+    borderTop:"1px solid var(--border)",
     position:"fixed", left:0, right:0, bottom:0, zIndex:50,
     paddingBottom:"env(safe-area-inset-bottom,0px)" },
 };
@@ -143,10 +154,10 @@ export default function Layout() {
           .hidden-mobile { display:none!important; }
           .show-mobile { display:flex!important; }
           .page-content { padding-bottom: calc(76px + env(safe-area-inset-bottom,0px)) !important; }
-          /* En mobile, la safe-area du HAUT est portee par le header (il est colle
-             sous la barre d'etat). La page ne doit donc PAS la reserver en plus,
-             sinon l'espace serait compte deux fois. */
-          .page-content { padding-top: 16px !important; }
+          /* Header en verre depoli = fixed : il chevauche le contenu (pour qu'on
+             voie le scroll flou derriere). On pousse donc le contenu dessous de la
+             hauteur du header (~48px) + la safe-area du haut portee par le header. */
+          .page-content { padding-top: calc(60px + var(--sat, env(safe-area-inset-top,0px))) !important; }
           /* Le titre est deja dans le header mobile : on evite de le repeter. */
           .page-title { display:none!important; }
         }
