@@ -54,8 +54,10 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
         const r = await client.get(`/prints/${obj.parent_id}`);
         setParentPrint(r.data);
       } else if (obj.parent_type === "group") {
+        // /prints/groups renvoie { groups: [...] }, pas un tableau direct.
         const r = await client.get("/prints/groups");
-        const g = (r.data || []).find(x => x.id === obj.parent_id);
+        const list = r.data?.groups || r.data || [];
+        const g = list.find(x => Number(x.id) === Number(obj.parent_id));
         if (g) setParentGroup(g);
       }
     } catch { /* parent introuvable : rien */ }
