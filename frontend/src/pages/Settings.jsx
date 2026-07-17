@@ -270,6 +270,86 @@ function MaintenanceSection() {
   );
 }
 
+function RfidDebugSection() {
+  // Visible seulement dans la coquille WebView (window.BambuScan present).
+  const isWebView = typeof window !== "undefined" && !!window.BambuScan;
+  const [data, setData] = React.useState(null);
+  const [loading, setLoading] = React.useState(false);
+  const [err, setErr] = React.useState(null);
+
+  if (!isWebView) return null;
+
+  const load = async () => {
+    setLoading(true); setErr(null);
+    try {
+      const r = await client.get("/rfid/scan/last-debug");
+      setData(r.data);
+    } catch(e) {
+      setErr(e.response?.status === 404
+        ? "Aucun scan en mémoire. Scannez un tag d'abord (via le scanner), puis revenez ici."
+        : (e.response?.data?.detail || e.message));
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
+        Débug RFID
+      </h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        Affiche le détail brut du dernier tag scanné (payload, champs parsés,
+        correspondance catalogue, profil résolu). Utile pour vérifier un profil
+        quand un scan ouvre directement la fiche d'une bobine existante. Scannez un
+        tag, puis appuyez ici.
+      </p>
+      <button onClick={load} disabled={loading}
+        style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:loading?"wait":"pointer",
+          border:"none", background:"#3b82f6", color:"white" }}>
+        {loading ? "Lecture…" : "Voir le dernier scan"}
+      </button>
+
+      {err && <p style={{ fontSize:12, color:"#ef4444", margin:"12px 0 0" }}>{err}</p>}
+
+      {data && (
+        <div style={{ marginTop:14 }}>
+          {/* Résumé lisible des champs utiles */}
+          <div style={{ background:"var(--surface2)", borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+            {[
+              ["Tag UID", data.normalized?.tray_uid],
+              ["Material ID", data.normalized?.material_id],
+              ["Variant ID", data.normalized?.variant_id],
+              ["Profil résolu", data.resolved_filament?.profile_id],
+              ["Filament", data.resolved_filament?.name],
+              ["Matière", data.resolved_filament?.material],
+              ["Sous-type", data.resolved_filament?.fila_type],
+              ["Catalogue", data.catalog_match ? "trouvé" : "aucun"],
+              ["Bobine liée", data.already_linked_spool ? `#${data.already_linked_spool.spool_id}` : "non"],
+            ].map(([k,v]) => (
+              <div key={k} style={{ display:"flex", justifyContent:"space-between", padding:"3px 0",
+                fontSize:12, borderBottom:"1px solid var(--border)" }}>
+                <span style={{ color:"var(--muted)" }}>{k}</span>
+                <span style={{ color:"var(--text)", fontFamily:"monospace", textAlign:"right", maxWidth:"60%",
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{v || "—"}</span>
+              </div>
+            ))}
+          </div>
+          {/* JSON brut complet, repliable */}
+          <details>
+            <summary style={{ fontSize:12, color:"#60a5fa", cursor:"pointer", marginBottom:8 }}>
+              Données brutes (JSON)
+            </summary>
+            <pre style={{ fontSize:10, color:"var(--text)", background:"var(--bg)", padding:12,
+              borderRadius:8, overflow:"auto", maxHeight:300, margin:0,
+              fontFamily:"JetBrains Mono, monospace", whiteSpace:"pre-wrap", wordBreak:"break-all" }}>
+{JSON.stringify(data, null, 2)}
+            </pre>
+          </details>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RecalculateSection() {
   const [loading, setLoading] = React.useState(false);
   const [done, setDone] = React.useState(false);
@@ -943,6 +1023,7 @@ export default function Settings() {
       <EnrichFromCatalogSection/>
         <RecalculateSection/>
       <MaintenanceSection/>
+      <RfidDebugSection/>
 
 
 

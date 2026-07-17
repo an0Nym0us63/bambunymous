@@ -17,6 +17,10 @@ from ....models.rfid import RfidScan
 from ....services.rfid import catalog_match, normalize_scan
 from ....services.settings_service import get_setting
 
+# Dernier tag scanne (payload brut), garde en memoire pour le debug WebView.
+# Ecrase a chaque scan ; volatil (perdu au redemarrage). Aucun effet de bord.
+_LAST_SCAN_PAYLOAD: dict | None = None
+
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
@@ -144,6 +148,10 @@ async def rfid_scan(
     """
     await _auth_scanner(db, x_rfid_token, authorization)
 
+    # Memoriser le dernier tag brut pour le debug (aucune incidence sur le flux).
+    global _LAST_SCAN_PAYLOAD
+    _LAST_SCAN_PAYLOAD = payload
+
     scan = normalize_scan(payload)
     if not scan["tray_uid"]:
         raise HTTPException(400, "tray_uid manquant : ce n'est pas un tag Bambu valide")
@@ -174,6 +182,46 @@ async def rfid_scan(
         "catalog_match": bool(match),
         "filament_exists": bool(fil),
         "redirect": f"/filaments?rfid={row.id}",
+    }
+
+
+@router.get("/scan/last-debug")
+async def rfid_scan_last_debug(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """
+    DEBUG : renvoie le detail du DERNIER tag scanne (payload brut, champs
+    normalises, correspondance catalogue, filament resolu, bobine deja liee) SANS
+    rien creer. Permet de verifier le profil apres un scan, meme quand la bobine
+    existe deja et que le flux ouvre directement sa fiche.
+    """
+    payload = _LAST_SCAN_PAYLOAD
+    if payload is None:
+        raise HTTPException(404, "Aucun scan en memoire. Scannez un tag d'abord.")
+
+    scan = normalize_scan(payload)
+    match = catalog_match(scan)
+    fil = await _find_filament(db, scan, match) if scan.get("tray_uid") else None
+    spool = await _find_spool_by_tag(db, scan["tray_uid"]) if scan.get("tray_uid") else None
+
+    return {
+        "raw_payload": payload,
+        "normalized": scan,
+        "catalog_match": match,
+        "resolved_filament": ({
+            "id": fil.id,
+            "name": fil.translated_name or fil.name,
+            "manufacturer": fil.manufacturer,
+            "material": fil.material,
+            "fila_type": fil.fila_type,
+            "profile_id": fil.profile_id,
+            "color": fil.color,
+        } if fil else None),
+        "already_linked_spool": ({
+            "spool_id": spool.id,
+            "filament_id": spool.filament_id,
+        } if spool else None),
     }
 
 
