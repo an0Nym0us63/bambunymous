@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Search, Package, ShoppingBag } from "lucide-react";
+import { Search, Package, ShoppingBag, ExternalLink } from "lucide-react";
 import client from "../api/client";
+import { PrintDetail, GroupBottomSheet } from "./Prints";
 
 function fmtPrice(v) { return v != null ? `${Number(v).toFixed(2)} €` : "—"; }
 
@@ -37,10 +38,28 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
   const [addingAcc, setAddingAcc] = React.useState(false);
   const [allAccs, setAllAccs] = React.useState([]);
   const [deleting, setDeleting] = React.useState(false);
+  // Ouverture en overlay du print / groupe parent (sans navigation).
+  const [parentPrint, setParentPrint] = React.useState(null);
+  const [parentGroup, setParentGroup] = React.useState(null);
 
   React.useEffect(() => {
     client.get(`/objects/objects/${obj.id}/accessories`).then(r=>setAccessories(r.data)).catch(()=>{});
   }, [obj.id]);
+
+  // Ouvre la fiche du parent (print ou groupe) par-dessus, en la chargeant.
+  const openParent = async () => {
+    if (!obj.parent_type || !obj.parent_id) return;
+    try {
+      if (obj.parent_type === "print") {
+        const r = await client.get(`/prints/${obj.parent_id}`);
+        setParentPrint(r.data);
+      } else if (obj.parent_type === "group") {
+        const r = await client.get("/prints/groups");
+        const g = (r.data || []).find(x => x.id === obj.parent_id);
+        if (g) setParentGroup(g);
+      }
+    } catch { /* parent introuvable : rien */ }
+  };
 
   const isSold = obj.sold_price > 0;
 
@@ -105,6 +124,15 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
               {!obj.available && !isSold && <span style={{ fontSize:10, background:"rgba(239,68,68,0.1)", color:"#ef4444", padding:"2px 8px", borderRadius:20 }}>Non disponible</span>}
               {obj.personal && <span style={{ fontSize:10, background:"rgba(168,85,247,0.1)", color:"#a78bfa", padding:"2px 8px", borderRadius:20 }}>Perso</span>}
             </div>
+            {(obj.parent_type === "print" || obj.parent_type === "group") && obj.parent_id && (
+              <button onClick={openParent}
+                style={{ marginTop:8, display:"inline-flex", alignItems:"center", gap:6,
+                  padding:"5px 10px", borderRadius:8, cursor:"pointer", fontSize:11, fontWeight:600,
+                  border:"1px solid var(--border)", background:"var(--surface2)", color:"#60a5fa" }}>
+                <ExternalLink size={13}/>
+                {obj.parent_type === "print" ? "Voir l'impression" : "Voir le groupe"}
+              </button>
+            )}
           </div>
         </div>
 
@@ -202,6 +230,17 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
             {allAccs.length === 0 && <p style={{ color:"var(--muted)", fontSize:12 }}>Aucun accessoire disponible</p>}
           </div>
         </div>
+      )}
+
+      {parentPrint && (
+        <PrintDetail p={parentPrint} onClose={()=>setParentPrint(null)}
+          onDelete={()=>setParentPrint(null)} onChanged={()=>{}}/>
+      )}
+      {parentGroup && (
+        <GroupBottomSheet groupId={parentGroup.id} name={parentGroup.name}
+          prints={[]} number_of_items={parentGroup.number_of_items||1}
+          onClose={()=>setParentGroup(null)}
+          onSelectPrint={()=>{}} onDelete={()=>{}} onUngroup={()=>{}}/>
       )}
     </div>
   );
