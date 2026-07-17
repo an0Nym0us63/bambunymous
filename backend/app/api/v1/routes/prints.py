@@ -1277,6 +1277,20 @@ async def patch_filament_usage(
         if not fu: raise HTTPException(404)
         for k, v in updates.items():
             setattr(fu, k, v)
+
+        # Mapper une bobine sur ce print, c'est declarer qu'elle a servi : on met a
+        # jour sa date d'utilisation (last_used_at / first_used_at) avec la date du
+        # print. On ne touche PAS au poids ici (comportement inchange).
+        if updates.get("spool_id"):
+            from ....models.filament import Spool
+            spool = await db.get(Spool, updates["spool_id"])
+            pr = await db.get(Print, print_id)
+            used_dt = (pr.print_date if pr and pr.print_date else datetime.utcnow())
+            if spool:
+                if spool.first_used_at is None or used_dt < spool.first_used_at:
+                    spool.first_used_at = used_dt
+                if spool.last_used_at is None or used_dt > spool.last_used_at:
+                    spool.last_used_at = used_dt
         await db.commit()
     return {"ok": True}
 

@@ -495,9 +495,15 @@ async def _deduct_spool_weights(db, p: Print):
                 continue
             before = spool.remaining_weight_g
             spool.remaining_weight_g = max(0.0, before - u.grams_used)
+            # Date d'utilisation de la bobine : ce print vient de la consommer.
+            used_dt = p.print_date or datetime.utcnow()
+            if spool.first_used_at is None or used_dt < spool.first_used_at:
+                spool.first_used_at = used_dt
+            if spool.last_used_at is None or used_dt > spool.last_used_at:
+                spool.last_used_at = used_dt
             logger.info(
                 f"[SPOOL] ✅ Bobine #{spool.id} : {before:.0f}g → {spool.remaining_weight_g:.0f}g "
-                f"(- {u.grams_used:.1f}g print #{p.id})"
+                f"(- {u.grams_used:.1f}g print #{p.id}, utilisée le {used_dt:%Y-%m-%d})"
             )
     except Exception as e:
         logger.error(f"_deduct_spool_weights print #{p.id}: {e}", exc_info=True)
