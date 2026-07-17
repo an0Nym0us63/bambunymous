@@ -867,12 +867,21 @@ async def get_print(print_id: int, _: str = Depends(get_current_user)):
 @router.patch("/{print_id}")
 async def update_print(print_id: int, body: dict, _: str = Depends(get_current_user)):
     allowed = {"file_name","status","status_note","number_of_items",
-                "sold_units","sold_price_total","margin","notes"}
+                "sold_units","sold_price_total","margin","notes",
+                "design_id","duration_seconds","print_date"}
     async with AsyncSessionLocal() as db:
         p = await db.get(Print, print_id)
         if not p: raise HTTPException(404)
         for k, v in body.items():
-            if k in allowed: setattr(p, k, v)
+            if k not in allowed:
+                continue
+            if k == "design_id":
+                # Saisie manuelle de l'ID MakerWorld : chaine vide -> NULL (effacer),
+                # "0" ignore comme partout ailleurs (id bidon).
+                s = str(v or "").strip()
+                p.design_id = None if (not s or s == "0") else s
+            else:
+                setattr(p, k, v)
         p.updated_at = datetime.utcnow()
         await db.commit()
     return {"ok": True}
