@@ -323,6 +323,12 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
           {accessories.map(a => (
             <div key={a.accessory_id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px",
               background:"var(--surface2)", borderRadius:8, marginBottom:5, border:"1px solid var(--border)" }}>
+              <div style={{ width:28, height:28, borderRadius:6, overflow:"hidden", flexShrink:0,
+                background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <img src={`/api/v1/objects/accessories/${a.accessory_id}/image`} alt=""
+                  style={{ width:"100%", height:"100%", objectFit:"cover" }}
+                  onError={e=>e.currentTarget.style.display="none"}/>
+              </div>
               <span style={{ fontSize:12, flex:1 }}>{a.name}</span>
               <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>×{a.qty}</span>
               <span style={{ fontSize:11, color:"var(--text)", fontFamily:"monospace" }}>{fmtPrice(a.unit_price * a.qty)}</span>
