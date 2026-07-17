@@ -1337,10 +1337,10 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:18, fontWeight:800, color:"var(--text)", margin:0,
                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                {f.name}
+                {f.translated_name || f.name}
               </p>
               {f.translated_name && f.translated_name !== f.name && (
-                <p style={{ fontSize:11, color:"var(--muted)", margin:"2px 0 0" }}>{f.translated_name}</p>
+                <p style={{ fontSize:11, color:"var(--muted)", margin:"2px 0 0" }}>{f.name}</p>
               )}
               <p style={{ fontSize:12, color:"var(--muted)", margin:"4px 0 0" }}>
                 {[f.manufacturer, f.material].filter(Boolean).join(" · ")}
