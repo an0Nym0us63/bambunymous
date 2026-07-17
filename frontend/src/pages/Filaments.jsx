@@ -5,7 +5,7 @@ import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
 import { useNativeScan } from "../hooks/useNativeScan";
 import HeaderAction from "../components/HeaderAction";
-import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets } from "lucide-react";
+import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc } from "lucide-react";
 import client from "../api/client";
 import { colorBg, parseColorsList } from "../utils/colors";
 import GalleryCompare from "../components/GalleryCompare";
@@ -2204,19 +2204,21 @@ export default function Filaments() {
       <HeaderAction>
         {rfidScan.available && (
           <button onClick={rfidScan.toggle} aria-label="Scan RFID en continu"
-            style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px",
-              borderRadius:20, border:"none", cursor:"pointer",
+            title={rfidScan.listening ? "Scan RFID actif" : "Scan RFID"}
+            style={{ display:"flex", alignItems:"center", justifyContent:"center",
+              width:34, height:34, borderRadius:"50%", border:"none", cursor:"pointer",
               background: rfidScan.listening ? "#22c55e" : "var(--surface2)",
               color: rfidScan.listening ? "white" : "var(--text)",
-              fontSize:12, fontWeight:700 }}>
-            📡 {rfidScan.listening ? "Scan actif" : "Scan RFID"}
+              boxShadow: rfidScan.listening ? "0 0 0 3px rgba(34,197,94,0.25)" : "none",
+              transition:"all 0.15s" }}>
+            <Nfc size={17}/>
           </button>
         )}
-        <button onClick={() => setScanOpen(true)} aria-label="Scanner un échantillon"
-          style={{ display:"flex", alignItems:"center", gap:5, padding:"5px 12px",
-            borderRadius:20, border:"none", cursor:"pointer",
-            background:"#3b82f6", color:"white", fontSize:12, fontWeight:700 }}>
-          <ScanLine size={14}/> Scanner
+        <button onClick={() => setScanOpen(true)} aria-label="Scanner un échantillon" title="Scanner un échantillon"
+          style={{ display:"flex", alignItems:"center", justifyContent:"center",
+            width:34, height:34, borderRadius:"50%", border:"none", cursor:"pointer",
+            background:"#3b82f6", color:"white" }}>
+          <ScanLine size={17}/>
         </button>
       </HeaderAction>
 
@@ -2226,19 +2228,22 @@ export default function Filaments() {
           margin:0, marginRight:"auto" }}>Filaments</h1>
         {rfidScan.available && (
           <button onClick={rfidScan.toggle}
-            style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
-              borderRadius:20, border:"none", cursor:"pointer",
+            aria-label="Scan RFID en continu" title={rfidScan.listening ? "Scan RFID actif" : "Scan RFID"}
+            style={{ display:"flex", alignItems:"center", justifyContent:"center",
+              width:38, height:38, borderRadius:"50%", border:"none", cursor:"pointer",
               background: rfidScan.listening ? "#22c55e" : "var(--surface2)",
               color: rfidScan.listening ? "white" : "var(--text)",
-              fontSize:12, fontWeight:700 }}>
-            📡 {rfidScan.listening ? "Scan actif" : "Scan RFID"}
+              boxShadow: rfidScan.listening ? "0 0 0 3px rgba(34,197,94,0.25)" : "none",
+              transition:"all 0.15s" }}>
+            <Nfc size={18}/>
           </button>
         )}
         <button onClick={() => setScanOpen(true)}
-          style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 14px",
-            borderRadius:20, border:"none", cursor:"pointer",
-            background:"#3b82f6", color:"white", fontSize:12, fontWeight:700 }}>
-          <ScanLine size={14}/> Scanner
+          aria-label="Scanner un échantillon" title="Scanner un échantillon"
+          style={{ display:"flex", alignItems:"center", justifyContent:"center",
+            width:38, height:38, borderRadius:"50%", border:"none", cursor:"pointer",
+            background:"#3b82f6", color:"white" }}>
+          <ScanLine size={18}/>
         </button>
       </div>
 
