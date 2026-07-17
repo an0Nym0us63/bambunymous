@@ -32,6 +32,118 @@ function AccessoryCard({ acc }) {
 }
 
 // ── Object Detail Sheet ───────────────────────────────────────────────────
+
+// ── Sélecteur d'accessoire ────────────────────────────────────────────────
+// Recherche filtrée en direct, vignette, choix de quantité borne au stock,
+// estimation du restant. Inspiré de Spoolnymous.
+function AccessoryPicker({ accessories, onClose, onConfirm }) {
+  const [q, setQ] = React.useState("");
+  const [sel, setSel] = React.useState(null);   // accessoire choisi
+  const [qty, setQty] = React.useState(1);
+
+  const filtered = React.useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return accessories;
+    return accessories.filter(a => (a.name || "").toLowerCase().includes(t));
+  }, [q, accessories]);
+
+  const stock = sel ? Number(sel.quantity || 0) : 0;
+  const qn = Math.max(1, Number(qty || 1));
+  const tooMuch = sel && qn > stock;
+  const remaining = sel ? stock - qn : 0;
+
+  const confirm = () => {
+    if (!sel || tooMuch || qn < 1) return;
+    onConfirm(sel.id, qn);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:300, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end" }}
+      onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+        style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+          padding:"16px 16px 32px", maxHeight:"80vh", overflowY:"auto" }}>
+        <p style={{ fontWeight:700, fontSize:14, margin:"0 0 12px" }}>Ajouter un accessoire</p>
+
+        {/* Recherche */}
+        <div style={{ position:"relative", marginBottom:10 }}>
+          <Search size={14} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)", color:"var(--muted)" }}/>
+          <input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher un accessoire…"
+            style={{ width:"100%", padding:"9px 10px 9px 32px", background:"var(--surface2)",
+              border:"1px solid var(--border)", borderRadius:8, color:"var(--text)", fontSize:13, boxSizing:"border-box" }}/>
+        </div>
+
+        {/* Résultats filtrés avec vignette */}
+        <div style={{ maxHeight:"32vh", overflowY:"auto", marginBottom:12 }}>
+          {filtered.length === 0 && <p style={{ color:"var(--muted)", fontSize:12 }}>Aucun accessoire</p>}
+          {filtered.map(a => {
+            const active = sel?.id === a.id;
+            return (
+              <button key={a.id} onClick={()=>{ setSel(a); setQty(1); }}
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"8px 10px", marginBottom:6,
+                  textAlign:"left", cursor:"pointer", borderRadius:8,
+                  background: active ? "rgba(59,130,246,0.12)" : "var(--surface2)",
+                  border: active ? "1px solid #3b82f6" : "1px solid var(--border)" }}>
+                <div style={{ width:36, height:36, borderRadius:6, overflow:"hidden", flexShrink:0,
+                  background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <img src={`/api/v1/objects/accessories/${a.id}/image`} alt=""
+                    style={{ width:"100%", height:"100%", objectFit:"cover" }}
+                    onError={e=>e.currentTarget.style.display="none"}/>
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <p style={{ fontSize:13, fontWeight:600, color:"var(--text)", margin:0,
+                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.name}</p>
+                  <p style={{ fontSize:11, color:"var(--muted)", margin:"2px 0 0" }}>
+                    Stock : {a.quantity} · {fmtPrice(a.unit_price)}/u
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Quantité + estimation (visible une fois un accessoire choisi) */}
+        {sel && (
+          <div style={{ borderTop:"1px solid var(--border)", paddingTop:12 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+              <span style={{ fontSize:13, fontWeight:600 }}>{sel.name}</span>
+              <span style={{ fontSize:11, color:"var(--muted)" }}>Stock dispo : {stock}</span>
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
+              <span style={{ fontSize:12, color:"var(--muted)" }}>Quantité</span>
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <button onClick={()=>setQty(Math.max(1, qn-1))}
+                  style={{ width:28, height:28, borderRadius:6, border:"1px solid var(--border)",
+                    background:"var(--surface2)", color:"var(--text)", cursor:"pointer", fontSize:16 }}>−</button>
+                <input type="number" min={1} max={stock} value={qty}
+                  onChange={e=>{ let v=Math.max(1, Number(e.target.value||1)); if(v>stock) v=stock; setQty(v); }}
+                  style={{ width:56, textAlign:"center", padding:"6px", background:"var(--surface2)",
+                    border:"1px solid var(--border)", borderRadius:6, color:"var(--text)", fontSize:13 }}/>
+                <button onClick={()=>setQty(Math.min(stock, qn+1))}
+                  style={{ width:28, height:28, borderRadius:6, border:"1px solid var(--border)",
+                    background:"var(--surface2)", color:"var(--text)", cursor:"pointer", fontSize:16 }}>+</button>
+              </div>
+            </div>
+            {/* Estimation du restant */}
+            <p style={{ fontSize:11, color: tooMuch ? "#ef4444" : "var(--muted)", margin:"0 0 12px" }}>
+              {tooMuch
+                ? `Stock insuffisant : maximum ${stock} disponible${stock>1?"s":""}.`
+                : `Après ajout, il restera ${remaining} en stock · coût ${fmtPrice((sel.unit_price||0)*qn)}.`}
+            </p>
+            <button onClick={confirm} disabled={tooMuch || qn<1}
+              style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", fontSize:13, fontWeight:700,
+                cursor: (tooMuch||qn<1) ? "not-allowed" : "pointer",
+                background: (tooMuch||qn<1) ? "var(--surface2)" : "#3b82f6",
+                color: (tooMuch||qn<1) ? "var(--muted)" : "white" }}>
+              Ajouter {qn > 1 ? `×${qn}` : ""}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ObjectSheet({ obj, onClose, onUpdated }) {
   if (!obj) return null;
   const [accessories, setAccessories] = React.useState([]);
@@ -70,10 +182,8 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
     setAllAccs(r.data); setAddingAcc(true);
   };
 
-  const linkAcc = async (acc) => {
-    const qty = parseInt(prompt(`Lier "${acc.name}" à cet objet — quelle quantité ?`, "1"));
-    if (!qty || isNaN(qty)) return;
-    await client.post(`/objects/objects/${obj.id}/accessories`, { accessory_id: acc.id, qty });
+  const linkAcc = async (accId, qty) => {
+    await client.post(`/objects/objects/${obj.id}/accessories`, { accessory_id: accId, qty });
     const r = await client.get(`/objects/objects/${obj.id}/accessories`);
     setAccessories(r.data); setAddingAcc(false); onUpdated?.();
   };
@@ -244,25 +354,9 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
         </div>
       </div>
 
-      {/* Picker accessoire */}
+      {/* Picker accessoire — recherche filtrée, vignette, quantité bornee au stock */}
       {addingAcc && (
-        <div style={{ position:"fixed", inset:0, zIndex:300, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end" }}
-          onClick={()=>setAddingAcc(false)}>
-          <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-            style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-              padding:"16px 16px 32px", maxHeight:"60vh", overflowY:"auto" }}>
-            <p style={{ fontWeight:700, fontSize:14, margin:"0 0 12px" }}>Choisir un accessoire</p>
-            {allAccs.map(a => (
-              <button key={a.id} onClick={()=>linkAcc(a)}
-                style={{ width:"100%", padding:"10px 12px", marginBottom:6, textAlign:"left",
-                  background:"var(--surface2)", border:"1px solid var(--border)",
-                  borderRadius:8, cursor:"pointer", color:"var(--text)", fontSize:13 }}>
-                {a.name} — {a.quantity} en stock · {fmtPrice(a.unit_price)}/u
-              </button>
-            ))}
-            {allAccs.length === 0 && <p style={{ color:"var(--muted)", fontSize:12 }}>Aucun accessoire disponible</p>}
-          </div>
-        </div>
+        <AccessoryPicker accessories={allAccs} onClose={()=>setAddingAcc(false)} onConfirm={linkAcc}/>
       )}
 
       {parentPrint && (
