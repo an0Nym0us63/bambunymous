@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 
-import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag } from "lucide-react";
 import client from "../api/client";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 
@@ -32,6 +32,59 @@ function Dot({ hex, colors, multicolor, size = 12 }) {
       boxShadow: "inset 0 0 0 1px rgba(128,128,128,0.35)" }}>
       <div style={{ position: "absolute", inset: 0, background: bg }}/>
     </div>
+  );
+}
+
+function ObjectsStats({ stats, onOpen }) {
+  if (!stats) return (
+    <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>
+      Chargement des statistiques objets…
+    </p>
+  );
+  if (stats.total === 0) return (
+    <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>
+      Aucun objet pour le moment.
+    </p>
+  );
+  const marginColor = stats.margin >= 0 ? "#22c55e" : "#ef4444";
+  return (
+    <>
+      <Section title="Inventaire">
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
+          <KpiCard icon={ShoppingBag} label="Objets" value={stats.total} color="#3b82f6"
+            sub={`${stats.personal} perso`}/>
+          <KpiCard icon={Package} label="Disponibles" value={stats.available} color="#22c55e"/>
+          <KpiCard icon={Tag} label="Vendus" value={stats.sold} color="#f59e0b"/>
+          <KpiCard icon={Euro} label="Coût du stock" value={fmtEur(stats.stock_cost)} color="#8b5cf6"
+            sub={stats.potential_value > 0 ? `désiré ${fmtEur(stats.potential_value)}` : null}/>
+        </div>
+      </Section>
+
+      <Section title="Ventes">
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
+          <KpiCard icon={Euro} label="Chiffre d'affaires" value={fmtEur(stats.revenue)} color="#22c55e"/>
+          <KpiCard icon={Euro} label="Coût des vendus" value={fmtEur(stats.cost_sold)} color="#ef4444"/>
+          <KpiCard icon={TrendingUp} label="Marge" value={fmtEur(stats.margin)} color={marginColor}
+            sub={stats.margin_pct ? `${stats.margin_pct} %` : null}/>
+        </div>
+      </Section>
+
+      {(stats.top_margin || []).length > 0 && (
+        <Section title="Meilleures marges">
+          <div className="card" style={{ padding:"14px 16px" }}>
+            {stats.top_margin.map(o => {
+              const max = stats.top_margin[0].margin || 1;
+              return (
+                <Bar key={o.id} label={o.name}
+                  value={Math.max(0, o.margin)} max={max}
+                  sublabel={`${fmtEur(o.margin)} (vendu ${fmtEur(o.sold_price)})`}
+                  color={o.margin >= 0 ? "#22c55e" : "#ef4444"}/>
+              );
+            })}
+          </div>
+        </Section>
+      )}
+    </>
   );
 }
 
@@ -288,6 +341,8 @@ export default function Stats() {
   const [groupPrints, setGroupPrints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [tab, setTab] = useState("prints");     // prints | filaments | objects
+  const [objStats, setObjStats] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -296,6 +351,13 @@ export default function Stats() {
       .catch(e => setError(e.response?.data?.detail || e.message || "Erreur"))
       .finally(() => setLoading(false));
   }, [days]);
+
+  // Stats objets (independantes de la periode).
+  useEffect(() => {
+    client.get("/objects/objects/stats")
+      .then(r => setObjStats(r.data))
+      .catch(() => setObjStats(null));
+  }, []);
 
   const openDetail = async (item, mode) => {
     if (mode === "groups") {
@@ -355,18 +417,25 @@ export default function Stats() {
     </div>
   );
 
-  if (!data || !data.total_prints) return (
-    <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
-      {header}
-      <p style={{ textAlign: "center", color: "var(--muted)", padding: 60 }}>
-        Aucune impression terminée sur cette période.
-      </p>
-    </div>
-  );
+  const tabs = [["prints","Prints"],["filaments","Filaments"],["objects","Objets"]];
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
       {header}
+
+      {/* Onglets */}
+      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12,
+        padding:4, border:"1px solid var(--border)" }}>
+        {tabs.map(([id,label]) => (
+          <button key={id} onClick={()=>setTab(id)} style={{
+            flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
+            background: tab===id ? "#3b82f6" : "transparent",
+            color: tab===id ? "white" : "var(--muted)",
+            border:"none", transition:"all 0.15s" }}>
+            {label}
+          </button>
+        ))}
+      </div>
 
       {detail?.type === "print" && detail.data?.id && (
         <PrintDetail p={detail.data} onClose={() => setDetail(null)}
@@ -386,6 +455,11 @@ export default function Stats() {
         />
       )}
 
+      {tab === "prints" && (!data || !data.total_prints ? (
+        <p style={{ textAlign:"center", color:"var(--muted)", padding:60 }}>
+          Aucune impression terminée sur cette période.
+        </p>
+      ) : (<>
       <Section title="Impressions">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
           <KpiCard icon={Layers} label="Terminées" value={data.total_prints} color="#3b82f6"
@@ -435,6 +509,9 @@ export default function Stats() {
         </div>
       </Section>
 
+      </>))}
+
+      {tab === "filaments" && (<>
       {(matData.length > 0 || colorData.length > 0) && (
         <Section title="Filament consommé">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
@@ -489,6 +566,11 @@ export default function Stats() {
           Le stock ne dépend pas de la période sélectionnée.
         </p>
       </Section>
+      </>)}
+
+      {tab === "objects" && (
+        <ObjectsStats stats={objStats} onOpen={openDetail}/>
+      )}
     </div>
   );
 }

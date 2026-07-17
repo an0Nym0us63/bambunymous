@@ -78,6 +78,46 @@ def _obj_out(o: Object) -> ObjectOut:
 
 # ── Objets ────────────────────────────────────────────────────────────────────
 
+@router.get("/objects/stats")
+async def objects_stats(_: str = Depends(get_current_user)):
+    """Statistiques agregees sur les objets : inventaire, ventes, marge."""
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Object))).scalars().all()
+
+    total = len(rows)
+    sold = [o for o in rows if (o.sold_price or 0) > 0]
+    available = [o for o in rows if o.available and (o.sold_price or 0) <= 0]
+    personal = [o for o in rows if o.personal]
+
+    revenue = sum((o.sold_price or 0) for o in sold)
+    cost_sold = sum((o.cost_total or 0) for o in sold)
+    margin = revenue - cost_sold
+    stock_cost = sum((o.cost_total or 0) for o in available)
+    potential = sum((o.desired_price or 0) for o in available)
+
+    # Top objets par marge (vendus).
+    def _m(o): return (o.sold_price or 0) - (o.cost_total or 0)
+    top_margin = sorted(sold, key=_m, reverse=True)[:5]
+
+    return {
+        "total": total,
+        "available": len(available),
+        "sold": len(sold),
+        "personal": len(personal),
+        "revenue": round(revenue, 2),
+        "cost_sold": round(cost_sold, 2),
+        "margin": round(margin, 2),
+        "margin_pct": round((margin / cost_sold * 100), 1) if cost_sold > 0 else 0,
+        "stock_cost": round(stock_cost, 2),
+        "potential_value": round(potential, 2),
+        "top_margin": [
+            {"id": o.id, "name": o.translated_name or o.name,
+             "margin": round(_m(o), 2), "sold_price": o.sold_price}
+            for o in top_margin
+        ],
+    }
+
+
 @router.get("/objects")
 async def list_objects(
     q: str = Query(""), group_id: Optional[int] = None,
