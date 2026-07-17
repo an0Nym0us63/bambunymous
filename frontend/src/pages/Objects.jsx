@@ -138,27 +138,52 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
           </div>
         </div>
 
-        {/* Coûts */}
+        {/* Coûts — meme presentation que la fiche print/groupe */}
         <div style={{ background:"linear-gradient(135deg,rgba(59,130,246,0.06),rgba(139,92,246,0.06))",
-          border:"1px solid rgba(59,130,246,0.15)", borderRadius:12, padding:"12px 14px", marginBottom:14 }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
-            {[["Fabrication", obj.cost_fabrication], ["Accessoires", obj.cost_accessory],
-              ["Prix désiré", obj.desired_price], ["Normal/u", obj.normal_cost_unit]
-            ].filter(([,v])=>v>0).map(([l,v])=>(
-              <div key={l} style={{ padding:"6px 10px", borderRadius:8, background:"var(--surface2)" }}>
-                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 2px" }}>{l}</p>
-                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:0, fontFamily:"monospace" }}>{fmtPrice(v)}</p>
-              </div>
-            ))}
-          </div>
-          <div style={{ marginTop:8, padding:"8px 10px", borderRadius:8,
-            background:"rgba(59,130,246,0.1)", border:"1px solid rgba(59,130,246,0.2)" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-              <span style={{ fontSize:10, color:"#60a5fa", fontWeight:700 }}>TOTAL</span>
-              <span style={{ fontSize:18, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>{fmtPrice(obj.cost_total)}</span>
+          border:"1px solid rgba(59,130,246,0.15)", borderRadius:14, padding:"14px 16px", marginBottom:14 }}>
+          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+            letterSpacing:"0.06em", margin:"0 0 10px" }}>Coûts</p>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+            {/* Fabrication (avec le prix normal catalogue entre parentheses) */}
+            <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
+              <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>Fabrication</p>
+              <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
+                {fmtPrice(obj.cost_fabrication)}
+              </p>
+              {obj.normal_cost_unit > 0 && obj.normal_cost_unit !== obj.cost_fabrication && (
+                <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
+                  ({fmtPrice(obj.normal_cost_unit)} au prix normal)
+                </p>
+              )}
             </div>
+            {/* Accessoires */}
+            <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
+              <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>Accessoires</p>
+              <p style={{ fontSize:15, fontWeight:800, color:"#a78bfa", margin:0, fontFamily:"monospace" }}>
+                {fmtPrice(obj.cost_accessory)}
+              </p>
+            </div>
+          </div>
+          {/* Total */}
+          <div style={{ marginTop:8, padding:"10px 12px", borderRadius:10,
+            background:"rgba(59,130,246,0.1)", border:"1px solid rgba(59,130,246,0.2)" }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ fontSize:10, color:"#60a5fa", fontWeight:700,
+                textTransform:"uppercase", letterSpacing:"0.06em" }}>Total</span>
+              <span style={{ fontSize:20, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
+                {fmtPrice(obj.cost_total)}
+              </span>
+            </div>
+            {obj.desired_price > 0 && (
+              <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span style={{ fontSize:10, color:"var(--muted)" }}>Prix désiré</span>
+                <span style={{ fontSize:13, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
+                  {fmtPrice(obj.desired_price)}
+                </span>
+              </div>
+            )}
             {isSold && (
-              <div style={{ marginTop:4, display:"flex", justifyContent:"space-between" }}>
+              <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <span style={{ fontSize:10, color:"#22c55e" }}>Vendu</span>
                 <span style={{ fontSize:14, fontWeight:700, color:"#22c55e", fontFamily:"monospace" }}>
                   {fmtPrice(obj.sold_price)}
