@@ -215,8 +215,14 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
             estimated_seconds=meta.get("estimated_seconds"),
             plate_image=meta.get("plate_image"),
             model_3mf=meta.get("model_3mf"),
-            design_id=meta.get("design_id", ""),
         ))
+        # design_id (ID MakerWorld) : le 3MF ne le contient PAS toujours (impressions
+        # locales, modeles hors MakerWorld). Il a deja ete pose a la creation depuis
+        # le MQTT. On ne l'ecrase donc QUE si le 3MF en fournit un non vide, sinon on
+        # garde la valeur existante.
+        _mw = (meta.get("design_id") or "").strip()
+        if _mw:
+            await db.execute(update(Print).where(Print.id == pid).values(design_id=_mw))
 
         for slot, fil in meta.get("filaments", {}).items():
             if float(fil.get("used_g", 0)) <= 0: continue
@@ -618,8 +624,11 @@ async def create_manual_print(local_path: str, print_date: datetime) -> Optional
                 duration_seconds=meta.get("estimated_seconds"),  # estimé = réel pour import manuel
                 plate_image=meta.get("plate_image"),
                 model_3mf=meta.get("model_3mf"),
-                design_id=meta.get("design_id", ""),
             ))
+            # design_id seulement si present dans le 3MF (ne pas ecraser un id deja pose).
+            _mw2 = (meta.get("design_id") or "").strip()
+            if _mw2:
+                await db.execute(update(Print).where(Print.id == pid).values(design_id=_mw2))
             for slot, fil in meta.get("filaments", {}).items():
                 if float(fil.get("used_g", 0)) <= 0: continue
                 db.add(FilamentUsage(
