@@ -144,7 +144,7 @@ async def object_image(oid: int):
             # 3. Groupe sans photo -> on retombe sur la vignette d'un print du groupe :
             #    d'abord le print de couverture (cover_print_id), sinon le plus recent.
             if o.parent_type == "group":
-                from ..models.print_history import Group as PGroup, Print
+                from ....models.print_history import Group as PGroup, Print
                 grp = await db.get(PGroup, o.parent_id)
                 cover_id = getattr(grp, "cover_print_id", None) if grp else None
                 if cover_id:
@@ -218,7 +218,7 @@ class ObjectCreate(BaseModel):
 @router.post("/objects")
 async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
-        from ..models.object_history import ObjectGroup
+        from ....models.object_history import ObjectGroup
         # Vérifier la dispo (number_of_items - déjà créés)
         from sqlalchemy import select, func
         already = (await db.execute(
@@ -226,7 +226,7 @@ async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user))
             .where(Object.parent_type == body.parent_type, Object.parent_id == body.parent_id)
         )).scalar() or 0
         # Récupérer number_of_items depuis Print ou Group
-        from ..models.print_history import Print, Group as PGroup
+        from ....models.print_history import Print, Group as PGroup
         if body.parent_type == "print":
             src = await db.get(Print, body.parent_id)
             nb_items = src.number_of_items if src else 1
@@ -393,7 +393,7 @@ class ObjectGroupCreate(BaseModel):
 
 @router.post("/object-groups")
 async def create_object_group(body: ObjectGroupCreate, _: str = Depends(get_current_user)):
-    from ..models.object_history import ObjectGroup
+    from ....models.object_history import ObjectGroup
     async with AsyncSessionLocal() as db:
         g = ObjectGroup(name=body.name)
         db.add(g); await db.flush(); await db.commit()
@@ -401,7 +401,7 @@ async def create_object_group(body: ObjectGroupCreate, _: str = Depends(get_curr
 
 @router.delete("/object-groups/{gid}")
 async def delete_object_group(gid: int, _: str = Depends(get_current_user)):
-    from ..models.object_history import ObjectGroup
+    from ....models.object_history import ObjectGroup
     async with AsyncSessionLocal() as db:
         g = await db.get(ObjectGroup, gid)
         if not g: raise HTTPException(404)
