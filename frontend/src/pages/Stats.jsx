@@ -69,6 +69,24 @@ function ObjectsStats({ stats, onOpen }) {
         </div>
       </Section>
 
+      <Section title="Ratios">
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
+          {stats.total > 0 && (
+            <KpiCard icon={Tag} label="Taux de vente"
+              value={`${Math.round(stats.sold / stats.total * 100)} %`} color="#f59e0b"
+              sub={`${stats.sold} / ${stats.total}`}/>
+          )}
+          {stats.sold > 0 && (
+            <KpiCard icon={Euro} label="Panier moyen"
+              value={fmtEur(stats.revenue / stats.sold)} color="#22c55e"/>
+          )}
+          {stats.sold > 0 && (
+            <KpiCard icon={TrendingUp} label="Marge moyenne"
+              value={fmtEur(stats.margin / stats.sold)} color={marginColor}/>
+          )}
+        </div>
+      </Section>
+
       {(stats.top_margin || []).length > 0 && (
         <Section title="Meilleures marges">
           <div className="card" style={{ padding:"14px 16px" }}>
@@ -475,6 +493,22 @@ export default function Stats() {
         </div>
       </Section>
 
+      <Section title="Moyennes par impression">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+          <KpiCard icon={Euro} label="Coût moyen" value={fmtEur(data.avg_cost)} color="#ef4444"/>
+          <KpiCard icon={Clock} label="Durée moyenne" value={fmtH(data.avg_duration_h * 3600)} color="#f59e0b"/>
+          <KpiCard icon={Weight} label="Poids moyen" value={`${data.avg_weight_g} g`} color="#8b5cf6"/>
+          {data.total_weight_g > 0 && (
+            <KpiCard icon={Euro} label="Coût / kg"
+              value={fmtEur((data.total_cost || 0) / (data.total_weight_g / 1000))} color="#06b6d4"/>
+          )}
+          {data.total_hours > 0 && (
+            <KpiCard icon={Euro} label="Coût / heure"
+              value={fmtEur((data.total_cost || 0) / data.total_hours)} color="#a78bfa"/>
+          )}
+        </div>
+      </Section>
+
       {data.failed_prints > 0 && (
         <Section title="Perdu sur les échecs">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
@@ -512,8 +546,44 @@ export default function Stats() {
       </>))}
 
       {tab === "filaments" && (<>
+      {/* KPIs stock en tete */}
+      <Section title="Stock actuel">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+          <KpiCard icon={Package} label="Références" value={data.stock?.references} color="#3b82f6"/>
+          <KpiCard icon={Package} label="Bobines actives" value={data.stock?.spools} color="#22c55e"/>
+          <KpiCard icon={Weight} label="Poids en stock" value={fmtKg(data.stock?.weight_g)} color="#f59e0b"/>
+          <KpiCard icon={Euro} label="Valeur du stock" value={fmtEur(data.stock?.value)} color="#8b5cf6"/>
+          {data.stock?.spools > 0 && (
+            <KpiCard icon={Euro} label="Valeur / bobine"
+              value={fmtEur((data.stock?.value || 0) / data.stock.spools)} color="#06b6d4"/>
+          )}
+          {data.stock?.weight_g > 0 && (
+            <KpiCard icon={Weight} label="Poids / bobine"
+              value={`${Math.round((data.stock?.weight_g || 0) / data.stock.spools)} g`} color="#a78bfa"/>
+          )}
+        </div>
+        <p style={{ fontSize: 10, color: "var(--muted)", margin: "8px 0 0" }}>
+          Le stock ne dépend pas de la période sélectionnée.
+        </p>
+      </Section>
+
+      {/* Consommation sur la periode */}
+      <Section title="Consommé sur la période">
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+          <KpiCard icon={Weight} label="Filament utilisé" value={fmtKg(data.total_weight_g)} color="#8b5cf6"/>
+          <KpiCard icon={Euro} label="Coût filament" value={fmtEur(data.total_cost)} color="#ef4444"/>
+          {data.total_weight_g > 0 && (
+            <KpiCard icon={Euro} label="Coût moyen / kg"
+              value={fmtEur((data.total_cost || 0) / (data.total_weight_g / 1000))} color="#f59e0b"/>
+          )}
+          {(data.materials || []).length > 0 && (
+            <KpiCard icon={Layers} label="Matériaux utilisés" value={data.materials.length} color="#3b82f6"/>
+          )}
+        </div>
+      </Section>
+
       {(matData.length > 0 || colorData.length > 0) && (
-        <Section title="Filament consommé">
+        <Section title="Répartition de la consommation">
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
             {matData.length > 0 && <Donut data={matData} title="Par matériau"/>}
             {colorData.length > 0 && <Donut data={colorData} title="Par teinte" palette/>}
@@ -555,17 +625,6 @@ export default function Stats() {
         </Section>
       )}
 
-      <Section title="Stock actuel">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
-          <KpiCard icon={Package} label="Références" value={data.stock?.references} color="#3b82f6"/>
-          <KpiCard icon={Package} label="Bobines actives" value={data.stock?.spools} color="#22c55e"/>
-          <KpiCard icon={Weight} label="Poids en stock" value={fmtKg(data.stock?.weight_g)} color="#f59e0b"/>
-          <KpiCard icon={Euro} label="Valeur du stock" value={fmtEur(data.stock?.value)} color="#8b5cf6"/>
-        </div>
-        <p style={{ fontSize: 10, color: "var(--muted)", margin: "8px 0 0" }}>
-          Le stock ne dépend pas de la période sélectionnée.
-        </p>
-      </Section>
       </>)}
 
       {tab === "objects" && (
