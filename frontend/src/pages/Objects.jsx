@@ -170,9 +170,17 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <span style={{ fontSize:10, color:"#60a5fa", fontWeight:700,
                 textTransform:"uppercase", letterSpacing:"0.06em" }}>Total</span>
-              <span style={{ fontSize:20, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
-                {fmtPrice(obj.cost_total)}
-              </span>
+              <div style={{ textAlign:"right" }}>
+                <span style={{ fontSize:20, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
+                  {fmtPrice(obj.cost_total)}
+                </span>
+                {/* Total au prix normal = cout normal (catalogue) + accessoires. */}
+                {obj.normal_cost_unit > 0 && obj.normal_cost_unit !== obj.cost_fabrication && (
+                  <span style={{ fontSize:11, color:"var(--muted)", marginLeft:8 }}>
+                    ({fmtPrice((obj.normal_cost_unit || 0) + (obj.cost_accessory || 0))})
+                  </span>
+                )}
+              </div>
             </div>
             {obj.desired_price > 0 && (
               <div style={{ marginTop:6, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
