@@ -878,8 +878,20 @@ async def update_print(print_id: int, body: dict, _: str = Depends(get_current_u
             if k == "design_id":
                 # Saisie manuelle de l'ID MakerWorld : chaine vide -> NULL (effacer),
                 # "0" ignore comme partout ailleurs (id bidon).
-                s = str(v or "").strip()
-                p.design_id = None if (not s or s == "0") else s
+                sd = str(v or "").strip()
+                p.design_id = None if (not sd or sd == "0") else sd
+            elif k == "print_date":
+                # Le front envoie une chaine ISO ("2026-07-17T14:30") ; SQLite exige
+                # un objet datetime. On parse, on ignore si vide/invalide.
+                if isinstance(v, datetime):
+                    p.print_date = v
+                else:
+                    sv = str(v or "").strip()
+                    if sv:
+                        try:
+                            p.print_date = datetime.fromisoformat(sv)
+                        except ValueError:
+                            pass  # format inattendu -> on ne touche pas
             else:
                 setattr(p, k, v)
         p.updated_at = datetime.utcnow()
