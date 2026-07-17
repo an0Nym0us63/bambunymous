@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil } from "lucide-react";
+import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import GalleryCompare from "../components/GalleryCompare";
@@ -1907,6 +1907,8 @@ export default function Prints() {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);  // 1er clic -> confirme
+  const [deleting, setDeleting] = useState(false);
 
   const toggleSelect = (id) => {
     setSelectedIds(prev => {
@@ -1915,7 +1917,20 @@ export default function Prints() {
       return next;
     });
   };
-  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); setConfirmDelete(false); };
+
+  // Suppression des prints selectionnes (pas d'endpoint bulk -> un par un, comme
+  // ailleurs dans le code). Confirmation a deux temps dans la barre.
+  const deleteSelected = async () => {
+    setDeleting(true);
+    try {
+      await Promise.all(Array.from(selectedIds).map(id => client.delete("/prints/" + id)));
+      exitSelectMode();
+      await Promise.all([load(), loadGroups()]);
+    } catch (err) {
+      alert("Erreur: " + (err.response?.data?.detail || err.message));
+    } finally { setDeleting(false); }
+  };
 
   const LIMIT = 40;
 
@@ -2416,6 +2431,21 @@ export default function Prints() {
               fontSize:12, fontWeight:700, background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
             <FolderPlus size={14}/> Grouper
           </button>
+          {confirmDelete ? (
+            <button onClick={deleteSelected} disabled={deleting}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8,
+                fontSize:12, fontWeight:700, background:"#ef4444", color:"white", border:"none",
+                cursor:"pointer", opacity: deleting?0.6:1 }}>
+              <Trash2 size={14}/> {deleting ? "Suppression…" : "Confirmer ?"}
+            </button>
+          ) : (
+            <button onClick={() => setConfirmDelete(true)}
+              style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8,
+                fontSize:12, fontWeight:700, background:"rgba(239,68,68,0.12)", color:"#ef4444",
+                border:"none", cursor:"pointer" }}>
+              <Trash2 size={14}/> Supprimer
+            </button>
+          )}
           <button onClick={exitSelectMode}
             style={{ padding:"7px 10px", borderRadius:8, fontSize:12, background:"none",
               border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>
