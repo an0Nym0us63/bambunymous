@@ -36,6 +36,133 @@ function AccessoryCard({ acc }) {
 // ── Sélecteur d'accessoire ────────────────────────────────────────────────
 // Recherche filtrée en direct, vignette, choix de quantité borne au stock,
 // estimation du restant. Inspiré de Spoolnymous.
+
+// ── Édition d'un objet ────────────────────────────────────────────────────
+// Formulaire complet : nom FR, commentaire, perso, disponibilité, prix desire,
+// vente (prix + date) et annulation de vente.
+function ObjectEditSheet({ obj, onClose, onSaved }) {
+  const [form, setForm] = React.useState({
+    translated_name: obj.translated_name || obj.name || "",
+    comment:         obj.comment || "",
+    personal:        !!obj.personal,
+    available:       !!obj.available,
+    desired_price:   obj.desired_price != null ? String(obj.desired_price) : "",
+    sold_price:      obj.sold_price != null && obj.sold_price > 0 ? String(obj.sold_price) : "",
+    sold_date:       obj.sold_date ? String(obj.sold_date).slice(0,10) : "",
+  });
+  const [saving, setSaving] = React.useState(false);
+  const set = (k,v) => setForm(f => ({ ...f, [k]: v }));
+  const wasSold = obj.sold_price != null && obj.sold_price > 0;
+
+  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
+  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+    letterSpacing:"0.05em", marginBottom:4, display:"block" };
+
+  const save = async (extra={}) => {
+    setSaving(true);
+    try {
+      const payload = { ...extra };
+      if (!("unsell" in extra)) {
+        payload.translated_name = form.translated_name;
+        payload.comment = form.comment;
+        payload.personal = form.personal;
+        payload.available = form.available;
+        payload.desired_price = form.desired_price === "" ? 0 : parseFloat(form.desired_price);
+        if (form.sold_price !== "") {
+          payload.sold_price = parseFloat(form.sold_price);
+          if (form.sold_date) payload.sold_date = form.sold_date;
+        }
+      }
+      await client.patch(`/objects/objects/${obj.id}`, payload);
+      onSaved();
+    } catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:320, background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end" }}
+      onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+        style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+          padding:"16px 16px 32px", maxHeight:"85vh", overflowY:"auto" }}>
+        <p style={{ fontWeight:700, fontSize:15, margin:"0 0 16px" }}>Modifier l'objet</p>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <div>
+            <label style={lbl}>Nom</label>
+            <input style={inp} value={form.translated_name} onChange={e=>set("translated_name",e.target.value)}/>
+          </div>
+
+          <div>
+            <label style={lbl}>Commentaire</label>
+            <textarea style={{ ...inp, minHeight:60, resize:"vertical", fontFamily:"inherit" }}
+              value={form.comment} onChange={e=>set("comment",e.target.value)}/>
+          </div>
+
+          {/* Toggles Perso / Disponible */}
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>set("personal",!form.personal)}
+              style={{ flex:1, padding:"10px", borderRadius:10, cursor:"pointer", fontSize:12, fontWeight:700,
+                border:"1px solid " + (form.personal ? "#a78bfa" : "var(--border)"),
+                background: form.personal ? "rgba(168,85,247,0.12)" : "var(--surface2)",
+                color: form.personal ? "#a78bfa" : "var(--muted)" }}>
+              {form.personal ? "✓ " : ""}Perso
+            </button>
+            <button onClick={()=>set("available",!form.available)}
+              style={{ flex:1, padding:"10px", borderRadius:10, cursor:"pointer", fontSize:12, fontWeight:700,
+                border:"1px solid " + (form.available ? "#22c55e" : "var(--border)"),
+                background: form.available ? "rgba(34,197,94,0.12)" : "var(--surface2)",
+                color: form.available ? "#22c55e" : "var(--muted)" }}>
+              {form.available ? "✓ Disponible" : "Indisponible"}
+            </button>
+          </div>
+
+          <div>
+            <label style={lbl}>Prix désiré (€)</label>
+            <input style={inp} type="number" step="0.01" value={form.desired_price}
+              onChange={e=>set("desired_price",e.target.value)} placeholder="—"/>
+          </div>
+
+          {/* Vente */}
+          <div style={{ borderTop:"1px solid var(--border)", paddingTop:12 }}>
+            <label style={lbl}>Vente</label>
+            <div style={{ display:"flex", gap:8 }}>
+              <input style={{ ...inp, flex:1 }} type="number" step="0.01" value={form.sold_price}
+                onChange={e=>set("sold_price",e.target.value)} placeholder="Prix de vente"/>
+              <input style={{ ...inp, flex:1 }} type="date" value={form.sold_date}
+                onChange={e=>set("sold_date",e.target.value)}/>
+            </div>
+            {wasSold && (
+              <button onClick={()=>save({ unsell:true })} disabled={saving}
+                style={{ marginTop:8, width:"100%", padding:"9px", borderRadius:8, cursor:"pointer",
+                  fontSize:12, fontWeight:700, border:"1px solid rgba(239,68,68,0.3)",
+                  background:"rgba(239,68,68,0.06)", color:"#ef4444" }}>
+                Annuler la vente (remettre disponible)
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{ display:"flex", gap:8, marginTop:20 }}>
+          <button onClick={onClose}
+            style={{ flex:1, padding:"11px", borderRadius:10, border:"1px solid var(--border)",
+              background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>
+            Annuler
+          </button>
+          <button onClick={()=>save()} disabled={saving}
+            style={{ flex:2, padding:"11px", borderRadius:10, border:"none",
+              background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer",
+              opacity: saving?0.6:1 }}>
+            {saving ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AccessoryPicker({ accessories, onClose, onConfirm }) {
   const [q, setQ] = React.useState("");
   const [sel, setSel] = React.useState(null);   // accessoire choisi
@@ -153,6 +280,7 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
   // Ouverture en overlay du print / groupe parent (sans navigation).
   const [parentPrint, setParentPrint] = React.useState(null);
   const [parentGroup, setParentGroup] = React.useState(null);
+  const [editing, setEditing] = React.useState(false);
 
   React.useEffect(() => {
     client.get(`/objects/objects/${obj.id}/accessories`).then(r=>setAccessories(r.data)).catch(()=>{});
@@ -191,13 +319,6 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
   const unlinkAcc = async (aid) => {
     await client.delete(`/objects/objects/${obj.id}/accessories/${aid}`);
     setAccessories(a => a.filter(x => x.accessory_id !== aid));
-    onUpdated?.();
-  };
-
-  const markSold = async () => {
-    const price = parseFloat(prompt("Prix de vente (€) :", obj.sold_price || (obj.cost_total||0).toFixed(2)));
-    if (isNaN(price)) return;
-    await client.patch(`/objects/objects/${obj.id}`, { sold_price: price, available: false });
     onUpdated?.();
   };
 
@@ -344,11 +465,11 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
 
         {/* Actions */}
         <div style={{ display:"flex", gap:8 }}>
-          {!isSold && <button onClick={markSold}
-            style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid rgba(34,197,94,0.3)",
-              background:"rgba(34,197,94,0.06)", color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-            💰 Marquer vendu
-          </button>}
+          <button onClick={()=>setEditing(true)}
+            style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
+              background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+            ✏️ Modifier
+          </button>
           <button onClick={handleDelete}
             style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid rgba(239,68,68,0.3)",
               background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:12, fontWeight:700, cursor:"pointer" }}>
@@ -363,6 +484,18 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
       {/* Picker accessoire — recherche filtrée, vignette, quantité bornee au stock */}
       {addingAcc && (
         <AccessoryPicker accessories={allAccs} onClose={()=>setAddingAcc(false)} onConfirm={linkAcc}/>
+      )}
+
+      {/* Édition complete de l'objet */}
+      {editing && (
+        <ObjectEditSheet obj={obj} onClose={()=>setEditing(false)}
+          onSaved={async ()=>{
+            setEditing(false);
+            try {
+              const r = await client.get(`/objects/objects/${obj.id}`);
+              onUpdated?.(r.data);   // remonte l'objet mis a jour au parent
+            } catch { onUpdated?.(); }
+          }}/>
       )}
 
       {parentPrint && (
@@ -478,7 +611,8 @@ function ObjectGroupTile({ group, objects }) {
     </div>
     {open && <ObjectGroupSheet group={group} objects={objects} onClose={() => setOpen(false)}
       onSelectObj={o => setSelected(o)}/>}
-    {selected && <ObjectSheet obj={selected} onClose={() => setSelected(null)}/>}
+    {selected && <ObjectSheet obj={selected} onClose={() => setSelected(null)}
+      onUpdated={(updated) => { if (updated) setSelected(updated); }}/>}
   </>);
 }
 
@@ -587,7 +721,8 @@ export default function Objects() {
             </div>
       )}
 
-      {selected && <ObjectSheet obj={selected} onClose={() => setSelected(null)}/>}
+      {selected && <ObjectSheet obj={selected} onClose={() => setSelected(null)}
+        onUpdated={(updated) => { if (updated) setSelected(updated); loadObjects(); }}/>}
     </div>
   );
 }

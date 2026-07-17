@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 from typing import Optional, List
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -34,6 +35,9 @@ class ObjectUpdate(BaseModel):
     comment: Optional[str] = None; group_id: Optional[int] = None
     available: Optional[bool] = None; personal: Optional[bool] = None
     sold_price: Optional[float] = None; desired_price: Optional[float] = None
+    sold_date: Optional[str] = None
+    # Action explicite d'annulation de vente (remet dispo, efface prix + date).
+    unsell: Optional[bool] = None
 
 class AccessoryOut(BaseModel):
     id: int; external_ref: Optional[str]; name: str
@@ -113,7 +117,42 @@ async def update_object(oid: int, body: ObjectUpdate, _: str = Depends(get_curre
     async with AsyncSessionLocal() as db:
         o = await db.get(Object, oid)
         if not o: raise HTTPException(404)
-        for k, v in body.model_dump(exclude_none=True).items(): setattr(o, k, v)
+
+        data = body.model_dump(exclude_none=True)
+
+        # Annulation de vente : efface prix + date, remet disponible. Prioritaire.
+        if data.pop("unsell", False):
+            o.sold_price = None
+            o.sold_date = None
+            o.available = True
+
+        # sold_date : chaine ISO -> datetime (SQLite exige un datetime).
+        if "sold_date" in data:
+            sd = str(data.pop("sold_date") or "").strip()
+            if sd:
+                try:
+                    o.sold_date = datetime.fromisoformat(sd)
+                except ValueError:
+                    pass
+
+        # Vendre : si un prix de vente est fourni (>0), on date la vente si absente
+        # et on rend l'objet indisponible.
+        if "sold_price" in data:
+            sp = data["sold_price"]
+            if sp and sp > 0:
+                o.sold_price = sp
+                o.available = False
+                if o.sold_date is None:
+                    o.sold_date = datetime.utcnow()
+            else:
+                o.sold_price = None  # 0 = pas vendu
+            data.pop("sold_price")
+
+        # Champs simples restants (name, translated_name, comment, group_id,
+        # available, personal, desired_price).
+        for k, v in data.items():
+            setattr(o, k, v)
+
         await db.commit()
     return {"ok": True}
 
