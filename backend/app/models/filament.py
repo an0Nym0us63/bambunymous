@@ -68,6 +68,7 @@ class Spool(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     first_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_dried_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)  # dernier sechage AMS
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     filament: Mapped["Filament"] = relationship("Filament", back_populates="spools")

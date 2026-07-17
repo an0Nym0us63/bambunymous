@@ -18,6 +18,29 @@ _CACHE_TS:    dict = {}   # timestamp de mise en cache par clé
 _CACHE_TTL = 60            # expiration auto 60s
 _MATCH_MODE_CACHE: dict = {}  # même clé → "rfid"/"auto"/"notfound" (persiste même sans spool_id)
 _SPOOL_INFO_CACHE: dict = {}  # même clé → dict spool_info
+_DRYING_AMS: set = set()      # ams_id actuellement en séchage (détection de transition)
+
+def _persist_last_dried(spool_ids: list):
+    """Pose last_dried_at = maintenant sur les bobines données (thread dédié)."""
+    import asyncio
+    from datetime import datetime as _dt
+    async def _run():
+        from ..db.session import AsyncSessionLocal as _ASL
+        from ..models.filament import Spool as _Sp
+        now = _dt.utcnow()
+        async with _ASL() as _db:
+            for sid in spool_ids:
+                sp = await _db.get(_Sp, sid)
+                if sp and not sp.archived:
+                    sp.last_dried_at = now
+            await _db.commit()
+    try:
+        lp = asyncio.new_event_loop()
+        try: lp.run_until_complete(_run())
+        finally: lp.close()
+    except Exception as e:
+        logger.error(f"[DRY] persist last_dried_at: {e}")
+
 
 
 def get_state() -> PrinterState:
@@ -502,6 +525,22 @@ class MQTTManager:
 
                     ams.trays.append(t)
                 state.ams_list.append(ams)
+
+                # ── Séchage : à la TRANSITION "pas séchage -> séchage" de cet AMS,
+                # on date les bobines qui y sont (last_dried_at). On ne persiste
+                # qu'une fois par cycle grâce au cache _DRYING_AMS.
+                _is_drying = (getattr(ams, "dry_time", 0) or 0) > 0
+                _was_drying = ams.id in _DRYING_AMS
+                if _is_drying and not _was_drying:
+                    _DRYING_AMS.add(ams.id)
+                    _sids = [t.spool_id for t in ams.trays if getattr(t, "spool_id", None)]
+                    if _sids:
+                        logger.info(f"[DRY] AMS {ams.id} en séchage → date sur bobines {_sids}")
+                        import threading as _dth
+                        _dth.Thread(target=_persist_last_dried, args=(list(_sids),),
+                                    daemon=True).start()
+                elif not _is_drying and _was_drying:
+                    _DRYING_AMS.discard(ams.id)
 
             # Retrait AMS : supprimer du cache les trays qui ne sont plus présents
             # → sera mis en Tiroir au prochain tick via spool_location

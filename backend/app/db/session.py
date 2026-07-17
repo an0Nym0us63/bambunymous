@@ -64,6 +64,7 @@ async def _migrate():
         ("bobines",   "ams_tray",             "TEXT"),
         ("bobines",   "external_spool_id",    "TEXT"),
         ("bobines",   "first_used_at",        "TEXT"),
+        ("bobines",   "last_dried_at",        "TEXT"),
         ("prints",    "number_of_items",      "INTEGER DEFAULT 1"),
         ("prints",    "sold_units",           "INTEGER DEFAULT 0"),
         ("prints",    "sold_price_total",     "REAL"),

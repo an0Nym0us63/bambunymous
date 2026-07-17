@@ -151,6 +151,7 @@ class SpoolOut(BaseModel):
     found_mode: Optional[str] = None
     first_used_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
+    last_dried_at: Optional[datetime] = None
     created_at: datetime
 
 class SpoolCreate(BaseModel):
@@ -654,6 +655,7 @@ def _spool_out(s: Spool) -> SpoolOut:
         found_mode=getattr(s, "found_mode", None),
         first_used_at=s.first_used_at,
         last_used_at=s.last_used_at,
+        last_dried_at=s.last_dried_at,
         created_at=s.created_at,
     )
 

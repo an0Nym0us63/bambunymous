@@ -726,6 +726,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Tray AMS"       value={spool.ams_tray}/>
           <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
           <Row label="Dernière util." value={spool.last_used_at?.slice(0,10)}/>
+          <Row label="Dernier séchage" value={spool.last_dried_at?.slice(0,10)}/>
           <Row label="Commentaire"    value={spool.comment}/>
 
           {/* ── Filament (catalogue) ── */}
