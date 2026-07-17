@@ -264,9 +264,11 @@ async def list_object_accessories(oid: int, _: str = Depends(get_current_user)):
             .join(Accessory, ObjectAccessory.accessory_id == Accessory.id)
             .where(ObjectAccessory.object_id == oid)
         )).all()
-        return [{"link_id": oa.id, "qty": oa.qty,
+        return [{"link_id": oa.id, "qty": oa.quantity,
                  "accessory_id": a.id, "name": a.name,
-                 "unit_price": a.unit_price, "image_path": a.image_path}
+                 "unit_price": a.unit_price,
+                 "unit_price_at_link": oa.unit_price_at_link,
+                 "image_path": a.image_path}
                 for oa, a in rows]
 
 
@@ -287,16 +289,18 @@ async def link_accessory_to_object(oid: int, body: LinkAccessory, _: str = Depen
             .where(ObjectAccessory.object_id == oid, ObjectAccessory.accessory_id == body.accessory_id)
         )).scalar_one_or_none()
         if existing:
-            existing.qty += body.qty
+            existing.quantity += body.qty
         else:
-            db.add(ObjectAccessory(object_id=oid, accessory_id=body.accessory_id, qty=body.qty))
-        # Recalcul coût accessoires
+            # Prix fige au moment du lien (comme Spoolnymous : unit_price_at_link).
+            db.add(ObjectAccessory(object_id=oid, accessory_id=body.accessory_id,
+                                   quantity=body.qty,
+                                   unit_price_at_link=acc.unit_price or 0.0))
+        # Recalcul coût accessoires sur le PRIX FIGE de chaque lien.
         all_links = (await db.execute(
-            select(ObjectAccessory, Accessory)
-            .join(Accessory, ObjectAccessory.accessory_id == Accessory.id)
+            select(ObjectAccessory)
             .where(ObjectAccessory.object_id == oid)
-        )).all()
-        cost_acc = sum((oa.qty * a.unit_price) for oa, a in all_links)
+        )).scalars().all()
+        cost_acc = sum((oa.quantity * (oa.unit_price_at_link or 0)) for oa in all_links)
         obj.cost_accessory = cost_acc
         obj.cost_total = (obj.cost_fabrication or 0) + cost_acc
         await db.commit()
@@ -319,7 +323,7 @@ async def unlink_accessory(oid: int, aid: int, _: str = Depends(get_current_user
             .join(Accessory, ObjectAccessory.accessory_id == Accessory.id)
             .where(ObjectAccessory.object_id == oid)
         )).all()
-        obj.cost_accessory = sum((oa.qty * a.unit_price) for oa, a in all_links)
+        obj.cost_accessory = sum((oa.quantity * (oa.unit_price_at_link or 0)) for oa, a in all_links)
         obj.cost_total = (obj.cost_fabrication or 0) + obj.cost_accessory
         await db.commit()
         return {"ok": True}
