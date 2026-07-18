@@ -1,5 +1,5 @@
 import axios from "axios";
-import { currentDetail, registerBeacon } from "../utils/track";
+import { currentDetail, registerBeacon, isActive } from "../utils/track";
 
 const client = axios.create({ baseURL: "/api/v1" });
 
@@ -20,6 +20,9 @@ client.interceptors.request.use((config) => {
     // accents. Le serveur decode et ne journalise qu'au changement.
     const d = currentDetail();
     if (d) config.headers["X-App-Detail"] = encodeURIComponent(d);
+    // Marque les requetes emises alors que quelqu'un est reellement devant :
+    // le serveur ne rafraichit last_seen que sur celles-la.
+    if (isActive()) config.headers["X-App-Active"] = "1";
   }
   return config;
 });

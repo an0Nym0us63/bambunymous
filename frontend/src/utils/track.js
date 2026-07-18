@@ -30,6 +30,35 @@ let timer   = null;
  */
 export function registerBeacon(fn) { beacon = fn; }
 
+/* ── Présence réelle ─────────────────────────────────────────────────────
+ * `last_seen` se rafraîchissait à chaque appel authentifié, or le statut de
+ * l'imprimante est sondé en continu : une fenêtre laissée ouverte en arrière-
+ * plan passait pour un compte actif, indéfiniment. On distingue donc « des
+ * requêtes partent » de « quelqu'un est devant ».
+ *
+ * Deux conditions, cumulatives : l'onglet est au premier plan, et il y a eu un
+ * geste récent. La première seule ne suffit pas — un écran resté allumé sur
+ * l'application est visible sans que personne ne la regarde. */
+const ACTIVE_WINDOW_MS = 5 * 60 * 1000;
+let lastInput = Date.now();
+
+if (typeof window !== "undefined") {
+  const touch = () => { lastInput = Date.now(); };
+  // En capture et passifs : on observe sans jamais gêner le comportement des
+  // composants, ni retarder le défilement.
+  ["pointerdown", "keydown", "wheel", "touchstart"].forEach(ev =>
+    window.addEventListener(ev, touch, { passive: true, capture: true }));
+  // Revenir sur l'onglet est en soi une interaction.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") touch();
+  });
+}
+
+export function isActive() {
+  if (typeof document !== "undefined" && document.visibilityState === "hidden") return false;
+  return Date.now() - lastInput < ACTIVE_WINDOW_MS;
+}
+
 export function currentDetail() { return current; }
 
 function recompute() {
