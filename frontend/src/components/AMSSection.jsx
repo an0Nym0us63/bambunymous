@@ -4,6 +4,7 @@ import client from "../api/client";
 import { colorBg } from "../utils/colors";
 import { createPortal } from "react-dom";
 import { FilamentSheetFromSpool } from "../pages/Filaments";
+import AdminOnly from "./AdminOnly";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 // Convertit un hex 6 ou 8 chars (avec ou sans #) en valeur CSS utilisable.
@@ -523,11 +524,11 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
                   )}
                 </span>
                 {tray.match_mode === "notfound" && (
-                  <button onClick={() => setMapOpen(true)}
+                  <AdminOnly><button onClick={() => setMapOpen(true)}
                     style={{ marginLeft:"auto", padding:"5px 10px", borderRadius:8, fontSize:11,
                       fontWeight:700, background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
                     Mapper / Créer
-                  </button>
+                  </button></AdminOnly>
                 )}
               </div>
             )}
