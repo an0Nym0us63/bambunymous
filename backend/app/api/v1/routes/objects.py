@@ -284,6 +284,61 @@ async def update_accessory(aid: int, body: AccessoryUpdate, _: str = Depends(get
     return {"ok": True}
 
 
+@router.get("/accessories/{aid}/detail")
+async def accessory_detail(aid: int, _: str = Depends(get_current_user)):
+    """Fiche accessoire : infos + objets qui l'utilisent."""
+    async with AsyncSessionLocal() as db:
+        a = await db.get(Accessory, aid)
+        if not a: raise HTTPException(404)
+        links = (await db.execute(
+            select(ObjectAccessory, Object)
+            .join(Object, Object.id == ObjectAccessory.object_id)
+            .where(ObjectAccessory.accessory_id == aid)
+        )).all()
+    used_qty = sum((oa.quantity or 0) for oa, _o in links)
+    out = _acc_out(a).model_dump()
+    out.update({
+        "created_at": str(a.created_at) if a.created_at else None,
+        "updated_at": str(a.updated_at) if a.updated_at else None,
+        "stock_value": round((a.quantity or 0) * (a.unit_price or 0), 2),
+        "used_in_objects": len(links),
+        "used_quantity": used_qty,
+        "objects": [
+            {"id": o.id, "name": o.translated_name or o.name,
+             "quantity": oa.quantity,
+             "unit_price_at_link": oa.unit_price_at_link}
+            for oa, o in links
+        ],
+    })
+    return out
+
+
+@router.post("/accessories/{aid}/photo/upload")
+async def upload_accessory_photo(
+    aid: int,
+    file: UploadFile = File(...),
+    _: str = Depends(get_current_user),
+):
+    """Remplace la photo d'un accessoire (une seule photo par accessoire)."""
+    import uuid as _uuid
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(400, "Fichier image requis")
+    async with AsyncSessionLocal() as db:
+        if not await db.get(Accessory, aid):
+            raise HTTPException(404)
+    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
+    d = DATA_DIR / "accessories" / str(aid)
+    d.mkdir(parents=True, exist_ok=True)
+    # Une seule image par accessoire : on purge les anciennes.
+    for f in list(d.iterdir()):
+        if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
+            try: f.unlink()
+            except Exception: pass
+    dest = d / f"{_uuid.uuid4().hex[:12]}.{ext}"
+    dest.write_bytes(await file.read())
+    return {"ok": True, "filename": dest.name}
+
+
 @router.get("/accessories/{aid}/image")
 async def accessory_image(aid: int):
     d = DATA_DIR / "accessories" / str(aid)

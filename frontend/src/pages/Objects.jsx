@@ -1,19 +1,333 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { Search, Package, ShoppingBag, ExternalLink } from "lucide-react";
+import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
 import client from "../api/client";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 
 function fmtPrice(v) { return v != null ? `${Number(v).toFixed(2)} €` : "—"; }
 
 // ── Accessory Card ────────────────────────────────────────────────────────
-function AccessoryCard({ acc }) {
+
+// ── Fiche accessoire ──────────────────────────────────────────────────────
+// Consultation (photo, stock, valeur, objets qui l'utilisent), edition,
+// reapprovisionnement (prix moyen pondere), photo et suppression.
+function AccessorySheet({ accId, onClose, onChanged }) {
+  const [d, setD] = React.useState(null);
+  const [mode, setMode] = React.useState("view");     // view | edit | restock
+  const [form, setForm] = React.useState({ name:"", quantity:"", unit_price:"" });
+  const [restock, setRestock] = React.useState({ qty:"", total_price:"" });
+  const [busy, setBusy] = React.useState(false);
+  const [confirmDel, setConfirmDel] = React.useState(false);
+  const fileRef = React.useRef(null);
+  const [imgV, setImgV] = React.useState(0);          // cache-buster photo
+
+  const load = React.useCallback(async () => {
+    try {
+      const r = await client.get(`/objects/accessories/${accId}/detail`);
+      setD(r.data);
+      setForm({
+        name: r.data.name || "",
+        quantity: String(r.data.quantity ?? 0),
+        unit_price: String(r.data.unit_price ?? 0),
+      });
+    } catch { setD(null); }
+  }, [accId]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await client.patch(`/objects/accessories/${accId}`, {
+        name: form.name,
+        quantity: parseInt(form.quantity || "0", 10),
+        unit_price: parseFloat(form.unit_price || "0"),
+      });
+      setMode("view"); await load(); onChanged?.();
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    setBusy(false);
+  };
+
+  const doRestock = async () => {
+    const qty = parseInt(restock.qty || "0", 10);
+    if (!qty) return;
+    setBusy(true);
+    try {
+      await client.post(`/objects/accessories/${accId}/stock`, {
+        qty, total_price: parseFloat(restock.total_price || "0"),
+      });
+      setRestock({ qty:"", total_price:"" }); setMode("view");
+      await load(); onChanged?.();
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    setBusy(false);
+  };
+
+  const upload = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const fd = new FormData(); fd.append("file", file);
+      await client.post(`/objects/accessories/${accId}/photo/upload`, fd,
+        { headers: { "Content-Type": "multipart/form-data" } });
+      setImgV(v => v + 1); await load(); onChanged?.();
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    setBusy(false);
+  };
+
+  const remove = async () => {
+    setBusy(true);
+    try {
+      await client.delete(`/objects/accessories/${accId}`);
+      onChanged?.(); onClose();
+    } catch(e) {
+      alert(e.response?.data?.detail || "Suppression impossible (accessoire peut-être lié à des objets).");
+      setBusy(false); setConfirmDel(false);
+    }
+  };
+
+  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
+  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+    letterSpacing:"0.05em", marginBottom:4, display:"block" };
+
+  // Prix moyen estime apres reappro (meme calcul que le backend).
+  const newAvg = (() => {
+    if (!d) return null;
+    const q = parseInt(restock.qty || "0", 10);
+    const tp = parseFloat(restock.total_price || "0");
+    if (!q || !tp) return null;
+    return ((d.quantity * d.unit_price) + tp) / (d.quantity + q);
+  })();
+
   return (
-    <div className="card" style={{ padding:0, overflow:"hidden" }}>
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:340,
+      background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end" }}>
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+        style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+          padding:"16px 16px 32px", maxHeight:"88vh", overflowY:"auto" }}>
+
+        {!d ? <p style={{ color:"var(--muted)", fontSize:13, padding:20, textAlign:"center" }}>Chargement…</p> : (<>
+
+          {/* En-tete : photo + nom */}
+          <div style={{ display:"flex", gap:14, alignItems:"flex-start", marginBottom:16 }}>
+            <div style={{ width:88, height:88, borderRadius:12, flexShrink:0, overflow:"hidden",
+              background:"var(--surface2)", border:"1px solid var(--border)", padding:6,
+              display:"flex", alignItems:"center", justifyContent:"center", boxSizing:"border-box" }}>
+              {d.has_image
+                ? <img src={`/api/v1/objects/accessories/${accId}/image?v=${imgV}`} alt=""
+                    style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}/>
+                : <Package size={30} style={{ color:"var(--muted)" }}/>}
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <p style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:0,
+                wordBreak:"break-word" }}>{d.name}</p>
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:8 }}>
+                <span style={{ fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:20,
+                  background: d.quantity > 0 ? "rgba(34,197,94,0.12)" : "rgba(239,68,68,0.12)",
+                  color: d.quantity > 0 ? "#22c55e" : "#ef4444" }}>
+                  Stock : {d.quantity}
+                </span>
+                {d.used_in_objects > 0 && (
+                  <span style={{ fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:20,
+                    background:"rgba(139,92,246,0.12)", color:"#a78bfa" }}>
+                    Utilisé × {d.used_quantity}
+                  </span>
+                )}
+              </div>
+              <button onClick={()=>fileRef.current?.click()} disabled={busy}
+                style={{ marginTop:8, display:"inline-flex", alignItems:"center", gap:5,
+                  padding:"4px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
+                  border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)" }}>
+                <ImageIcon size={12}/> {d.has_image ? "Changer la photo" : "Ajouter une photo"}
+              </button>
+              <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
+                onChange={e => { upload(e.target.files?.[0]); e.target.value=""; }}/>
+            </div>
+          </div>
+
+          {/* KPIs */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:16 }}>
+            {[["Stock", String(d.quantity)],
+              ["Prix unitaire", fmtPrice(d.unit_price)],
+              ["Valeur", fmtPrice(d.stock_value)]].map(([k,v]) => (
+              <div key={k} style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
+                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>{k}</p>
+                <p style={{ fontSize:14, fontWeight:800, color:"var(--text)", margin:0,
+                  fontFamily:"monospace" }}>{v}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Mode edition */}
+          {mode === "edit" && (
+            <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
+              <div><label style={lbl}>Nom</label>
+                <input style={inp} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
+              <div style={{ display:"flex", gap:8 }}>
+                <div style={{ flex:1 }}><label style={lbl}>Stock</label>
+                  <input style={inp} type="number" value={form.quantity}
+                    onChange={e=>setForm(f=>({...f,quantity:e.target.value}))}/></div>
+                <div style={{ flex:1 }}><label style={lbl}>Prix unitaire (€)</label>
+                  <input style={inp} type="number" step="0.01" value={form.unit_price}
+                    onChange={e=>setForm(f=>({...f,unit_price:e.target.value}))}/></div>
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={()=>{ setMode("view"); load(); }}
+                  style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
+                    background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
+                <button onClick={save} disabled={busy}
+                  style={{ flex:2, padding:"10px", borderRadius:10, border:"none", background:"#3b82f6",
+                    color:"white", fontSize:13, fontWeight:700, cursor:"pointer", opacity:busy?0.6:1 }}>
+                  {busy ? "Enregistrement…" : "Enregistrer"}</button>
+              </div>
+            </div>
+          )}
+
+          {/* Mode reapprovisionnement */}
+          {mode === "restock" && (
+            <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
+              <div style={{ display:"flex", gap:8 }}>
+                <div style={{ flex:1 }}><label style={lbl}>Quantité reçue</label>
+                  <input style={inp} type="number" min={1} value={restock.qty} autoFocus
+                    onChange={e=>setRestock(r=>({...r,qty:e.target.value}))}/></div>
+                <div style={{ flex:1 }}><label style={lbl}>Coût du lot (€)</label>
+                  <input style={inp} type="number" step="0.01" value={restock.total_price}
+                    onChange={e=>setRestock(r=>({...r,total_price:e.target.value}))}/></div>
+              </div>
+              <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+                {newAvg != null
+                  ? `Nouveau stock : ${d.quantity + parseInt(restock.qty||"0",10)} · prix moyen ${fmtPrice(newAvg)}/u`
+                  : "Laisser le coût vide pour ajouter du stock sans changer le prix unitaire."}
+              </p>
+              <div style={{ display:"flex", gap:8 }}>
+                <button onClick={()=>setMode("view")}
+                  style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
+                    background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
+                <button onClick={doRestock} disabled={busy || !restock.qty}
+                  style={{ flex:2, padding:"10px", borderRadius:10, border:"none", background:"#22c55e",
+                    color:"white", fontSize:13, fontWeight:700, cursor:"pointer",
+                    opacity:(busy||!restock.qty)?0.6:1 }}>Ajouter au stock</button>
+              </div>
+            </div>
+          )}
+
+          {/* Objets qui utilisent l'accessoire */}
+          {(d.objects || []).length > 0 && (
+            <div style={{ marginBottom:16 }}>
+              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+                letterSpacing:"0.06em", margin:"0 0 8px" }}>
+                Utilisé dans {d.used_in_objects} objet{d.used_in_objects>1?"s":""}
+              </p>
+              {d.objects.slice(0,20).map(o => (
+                <div key={o.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px",
+                  background:"var(--surface2)", borderRadius:8, marginBottom:5,
+                  border:"1px solid var(--border)" }}>
+                  <span style={{ fontSize:12, flex:1, overflow:"hidden", textOverflow:"ellipsis",
+                    whiteSpace:"nowrap" }}>{o.name}</span>
+                  <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>×{o.quantity}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Actions */}
+          {mode === "view" && (
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={()=>setMode("edit")}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
+                  background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700,
+                  cursor:"pointer" }}>✏️ Modifier</button>
+              <button onClick={()=>setMode("restock")}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid rgba(34,197,94,0.3)",
+                  background:"rgba(34,197,94,0.06)", color:"#22c55e", fontSize:12, fontWeight:700,
+                  cursor:"pointer" }}>+ Stock</button>
+              <button onClick={()=> confirmDel ? remove() : setConfirmDel(true)} disabled={busy}
+                style={{ padding:"10px 14px", borderRadius:10, border:"1px solid rgba(239,68,68,0.3)",
+                  background: confirmDel ? "#ef4444" : "rgba(239,68,68,0.06)",
+                  color: confirmDel ? "white" : "#ef4444", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                {confirmDel ? "Confirmer ?" : "🗑"}
+              </button>
+            </div>
+          )}
+        </>)}
+      </div>
+    </div>
+  );
+}
+
+// ── Creation d'un accessoire ──────────────────────────────────────────────
+function AccessoryCreateSheet({ onClose, onCreated }) {
+  const [form, setForm] = React.useState({ name:"", quantity:"0", unit_price:"0" });
+  const [busy, setBusy] = React.useState(false);
+  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
+  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+    letterSpacing:"0.05em", marginBottom:4, display:"block" };
+
+  const create = async () => {
+    if (!form.name.trim()) return;
+    setBusy(true);
+    try {
+      const r = await client.post("/objects/accessories", {
+        name: form.name.trim(),
+        quantity: parseInt(form.quantity || "0", 10),
+        unit_price: parseFloat(form.unit_price || "0"),
+      });
+      onCreated?.(r.data?.id);
+    } catch(e) {
+      alert(e.response?.data?.detail || "Création impossible (nom déjà utilisé ?)");
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:340,
+      background:"rgba(0,0,0,0.5)", display:"flex", alignItems:"flex-end" }}>
+      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
+        style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+          padding:"16px 16px 32px", maxHeight:"80vh", overflowY:"auto" }}>
+        <p style={{ fontWeight:700, fontSize:15, margin:"0 0 16px" }}>Nouvel accessoire</p>
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <div><label style={lbl}>Nom</label>
+            <input style={inp} autoFocus value={form.name} placeholder="Ex : Aimant 10×3"
+              onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
+          <div style={{ display:"flex", gap:8 }}>
+            <div style={{ flex:1 }}><label style={lbl}>Stock initial</label>
+              <input style={inp} type="number" value={form.quantity}
+                onChange={e=>setForm(f=>({...f,quantity:e.target.value}))}/></div>
+            <div style={{ flex:1 }}><label style={lbl}>Prix unitaire (€)</label>
+              <input style={inp} type="number" step="0.01" value={form.unit_price}
+                onChange={e=>setForm(f=>({...f,unit_price:e.target.value}))}/></div>
+          </div>
+          <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+            La photo pourra être ajoutée depuis la fiche, juste après la création.
+          </p>
+        </div>
+        <div style={{ display:"flex", gap:8, marginTop:20 }}>
+          <button onClick={onClose}
+            style={{ flex:1, padding:"11px", borderRadius:10, border:"1px solid var(--border)",
+              background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
+          <button onClick={create} disabled={busy || !form.name.trim()}
+            style={{ flex:2, padding:"11px", borderRadius:10, border:"none", background:"#3b82f6",
+              color:"white", fontSize:13, fontWeight:700,
+              cursor:(busy||!form.name.trim())?"not-allowed":"pointer",
+              opacity:(busy||!form.name.trim())?0.6:1 }}>
+            {busy ? "Création…" : "Créer"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccessoryCard({ acc, onClick }) {
+  return (
+    <div className="card" onClick={onClick}
+      style={{ padding:0, overflow:"hidden", cursor: onClick ? "pointer" : "default" }}>
       <div style={{ height:120, background:"var(--surface2)", display:"flex",
-        alignItems:"center", justifyContent:"center", overflow:"hidden" }}>
+        alignItems:"center", justifyContent:"center", overflow:"hidden", padding:8,
+        boxSizing:"border-box" }}>
         {acc.has_image
           ? <img src={`/api/v1/objects/accessories/${acc.id}/image`} alt={acc.name}
-              style={{ width:"100%", height:"100%", objectFit:"cover" }}
+              // contain : l'image entiere est visible, plus de rognage.
+              style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}
               onError={e => e.currentTarget.style.display="none"}/>
           : <Package size={36} style={{ color:"var(--muted)" }}/>}
       </div>
@@ -624,6 +938,8 @@ export default function Objects() {
   const [accessories, setAccessories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null);
+  const [selectedAcc, setSelectedAcc] = useState(null);   // fiche accessoire
+  const [creatingAcc, setCreatingAcc] = useState(false);  // creation accessoire
   const [filter, setFilter] = useState("all");
 
   const loadObjects = useCallback(async () => {
@@ -669,6 +985,14 @@ export default function Objects() {
     <div style={{ maxWidth:900, margin:"0 auto", display:"flex", flexDirection:"column", gap:12 }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Objets & Accessoires</h1>
+        {tab === "accessories" && (
+          <button onClick={()=>setCreatingAcc(true)}
+            style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:5,
+              padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer",
+              background:"#3b82f6", color:"white", fontSize:12, fontWeight:700 }}>
+            <Plus size={14}/> Accessoire
+          </button>
+        )}
       </div>
 
       {/* Onglets Objets / Accessoires — meme composant visuel que Filaments/Historique. */}
@@ -717,12 +1041,21 @@ export default function Objects() {
         accessories.length === 0
           ? <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>Aucun accessoire</p>
           : <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
-              {accessories.map(a => <AccessoryCard key={a.id} acc={a}/>)}
+              {accessories.map(a => <AccessoryCard key={a.id} acc={a} onClick={()=>setSelectedAcc(a.id)}/>)}
             </div>
       )}
 
       {selected && <ObjectSheet obj={selected} onClose={() => setSelected(null)}
         onUpdated={(updated) => { if (updated) setSelected(updated); loadObjects(); }}/>}
+
+      {selectedAcc && (
+        <AccessorySheet accId={selectedAcc} onClose={()=>setSelectedAcc(null)}
+          onChanged={loadAccessories}/>
+      )}
+      {creatingAcc && (
+        <AccessoryCreateSheet onClose={()=>setCreatingAcc(false)}
+          onCreated={(id)=>{ setCreatingAcc(false); loadAccessories(); if (id) setSelectedAcc(id); }}/>
+      )}
     </div>
   );
 }
