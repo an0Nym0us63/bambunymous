@@ -495,11 +495,13 @@ const METHOD_STYLE = {
   DELETE: ["#ef4444", "rgba(239,68,68,0.12)"],
 };
 const ACT_PAGE = 50;
+const ACT_KINDS = [["", "Tout"], ["action", "Actions"], ["visite", "Visites"]];
 
 function ActivitySection() {
   const isAdmin = useIsAdmin();
   const [days,  setDays]  = React.useState(7);
   const [who,   setWho]   = React.useState("");
+  const [kind,  setKind]  = React.useState("");
   const [items, setItems] = React.useState(null);
   const [total, setTotal] = React.useState(0);
   const [names, setNames] = React.useState([]);
@@ -510,7 +512,8 @@ function ActivitySection() {
     setBusy(true); setErr(null);
     try {
       const { data } = await client.get("/users/activity", {
-        params: { days, username: who || undefined, limit: ACT_PAGE, offset },
+        params: { days, username: who || undefined, kind: kind || undefined,
+                  limit: ACT_PAGE, offset },
       });
       setTotal(data.total || 0);
       // offset 0 = nouveau filtre, on repart de zero ; sinon on empile.
@@ -520,7 +523,7 @@ function ActivitySection() {
       if (offset === 0) setItems([]);
     }
     setBusy(false);
-  }, [days, who]);
+  }, [days, who, kind]);
 
   React.useEffect(() => { if (isAdmin) load(0); }, [isAdmin, load]);
   React.useEffect(() => {
@@ -546,10 +549,16 @@ function ActivitySection() {
         <Activity size={15}/> Activité
       </h3>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
-        Journal des <b>actions</b> : créations, modifications, suppressions. Les simples
-        consultations n'y figurent pas — elles se lisent dans la dernière utilisation de
-        chaque compte, ci-dessus. Le journal est purgé au-delà de 7 jours.
+        <b>Actions</b> : créations, modifications, suppressions. <b>Visites</b> : arrivée
+        sur une page de l'application, enregistrée au changement de page seulement.
+        Le journal est purgé au-delà de 7 jours.
       </p>
+
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:8 }}>
+        {ACT_KINDS.map(([k,l]) => (
+          <button key={k} onClick={()=>setKind(k)} style={chip(kind===k)}>{l}</button>
+        ))}
+      </div>
 
       <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
         {[[1,"24 h"],[7,"7 jours"],[30,"30 jours"]].map(([d,l]) => (
@@ -573,7 +582,10 @@ function ActivitySection() {
           <div style={{ display:"flex", flexDirection:"column", gap:4,
             maxHeight:420, overflowY:"auto" }}>
             {items.map(it => {
-              const [fg, bg] = METHOD_STYLE[it.method] || ["#94a3b8","rgba(148,163,184,0.15)"];
+              const visit = it.kind === "visite";
+              const [fg, bg] = visit
+                ? ["#a78bfa", "rgba(167,139,250,0.12)"]
+                : (METHOD_STYLE[it.method] || ["#94a3b8","rgba(148,163,184,0.15)"]);
               const ko = it.status >= 400;
               return (
                 <div key={it.id} style={{ display:"flex", alignItems:"flex-start", gap:8,
@@ -582,13 +594,18 @@ function ActivitySection() {
                   <span style={{ fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:6,
                     background:bg, color:fg, flexShrink:0, marginTop:1 }}>{it.method}</span>
                   <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ margin:0, fontSize:12, color:"var(--text)", fontWeight:600 }}>
-                      {it.label || it.path}
+                    <p style={{ margin:0, fontSize:12, fontWeight:600,
+                      color: visit ? "var(--text2)" : "var(--text)" }}>
+                      {visit ? `Page ${it.label}` : (it.label || it.path)}
                     </p>
-                    <p style={{ margin:"1px 0 0", fontSize:10, color:"var(--muted)",
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {it.path}{ko ? ` · échec ${it.status}` : ""}
-                    </p>
+                    {/* Le chemin n'apprend rien sur une visite : le libelle de
+                        page dit deja tout, l'afficher ferait du bruit. */}
+                    {!visit && (
+                      <p style={{ margin:"1px 0 0", fontSize:10, color:"var(--muted)",
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                        {it.path}{ko ? ` · échec ${it.status}` : ""}
+                      </p>
+                    )}
                   </div>
                   <div style={{ textAlign:"right", flexShrink:0 }}>
                     <p style={{ margin:0, fontSize:11, fontWeight:600, color:"var(--text2)" }}>
