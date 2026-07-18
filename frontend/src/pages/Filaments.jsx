@@ -9,6 +9,8 @@ import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, S
 import client from "../api/client";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
+import PhotoAddButton from "../components/PhotoAddButton";
+import { useIsAdmin } from "../store/auth";
 import { colorBg, parseColorsList } from "../utils/colors";
 import GalleryCompare from "../components/GalleryCompare";
 
@@ -257,20 +259,8 @@ function FilamentPhotos({ filamentId, onLightbox }) {
 
   React.useEffect(() => { if (filamentId) reload(); }, [filamentId]);
 
-  const fileRef = React.useRef(null);
-  const cameraRef = React.useRef(null);
-  // Dans la WebView Android, le sélecteur natif propose DEJA "Appareil photo" +
-  // "Galerie" -> notre propre popup ferait doublon. On declenche alors directement
-  // l'input sans capture (Android affiche son choix). En navigateur, on garde le
-  // popup : selon la plateforme, <input capture> ouvre soit la camera seule soit
-  // l'explorateur, et c'est ce popup qui laisse l'utilisateur choisir.
-  const isWebView = typeof window !== "undefined" && !!window.BambuScan;
-  const onAddPhoto = () => {
-    if (isWebView) fileRef.current?.click();
-    else setAddPhotoOpen(true);
-  };
+  const isAdmin = useIsAdmin();
   const [uploading, setUploading] = React.useState(false);
-  const [addPhotoOpen, setAddPhotoOpen] = React.useState(false);
 
   const handleUpload = async (file) => {
     if (!file) return;
@@ -288,6 +278,7 @@ function FilamentPhotos({ filamentId, onLightbox }) {
 
   const pressTimer = React.useRef(null);
   const startPhotoPress = (photo, idx) => {
+    if (!isAdmin) return;   // le menu ne propose que photo principale / suppression
     pressTimer.current = setTimeout(() => {
       setPhotoMenu({ url: photo.url, filename: photo.url.split("/").pop(), index: idx });
     }, 500);
@@ -311,51 +302,8 @@ function FilamentPhotos({ filamentId, onLightbox }) {
           letterSpacing:"0.06em", margin:0 }}>
           Photos{photos.length ? ` (${photos.length})` : ""}
         </p>
-        <button onClick={onAddPhoto} disabled={uploading}
-          style={{ width:26, height:26, borderRadius:"50%", background:"#3b82f6", color:"white",
-            border:"none", cursor:"pointer", fontSize:18, lineHeight:1, display:"flex",
-            alignItems:"center", justifyContent:"center" }}>
-          +
-        </button>
+        <PhotoAddButton onPick={handleUpload} size={26}/>
       </div>
-      {/* Inputs cachés */}
-      <input ref={cameraRef} type="file" accept="image/*" capture="environment" style={{ display:"none" }}
-        onChange={e => { handleUpload(e.target.files?.[0]); setAddPhotoOpen(false); }}/>
-      <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
-        onChange={e => { handleUpload(e.target.files?.[0]); setAddPhotoOpen(false); }}/>
-      {/* Bottom sheet ajout photo */}
-      {addPhotoOpen && (
-        <div style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(0,0,0,0.5)" }}
-          onClick={() => setAddPhotoOpen(false)}>
-          <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0, right:0,
-            background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px 32px" }}>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:12 }}>
-            <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"8px auto 0", flex:1 }}/>
-          <button onClick={() => setAddPhotoOpen(false)} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-          </div>
-            <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:"0 0 16px" }}>Ajouter une photo</p>
-            <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-              <button onClick={() => cameraRef.current?.click()}
-                style={{ padding:"14px", borderRadius:12, border:"none", cursor:"pointer",
-                  background:"var(--surface2)", color:"var(--text)", fontSize:14, fontWeight:600,
-                  display:"flex", alignItems:"center", gap:12 }}>
-                <span style={{ fontSize:22 }}>📷</span> Prendre une photo
-              </button>
-              <button onClick={() => fileRef.current?.click()}
-                style={{ padding:"14px", borderRadius:12, border:"none", cursor:"pointer",
-                  background:"var(--surface2)", color:"var(--text)", fontSize:14, fontWeight:600,
-                  display:"flex", alignItems:"center", gap:12 }}>
-                <span style={{ fontSize:22 }}>📁</span> Choisir depuis la galerie
-              </button>
-              <button onClick={() => setAddPhotoOpen(false)}
-                style={{ padding:"12px", borderRadius:12, border:"1px solid var(--border)", cursor:"pointer",
-                  background:"none", color:"var(--muted)", fontSize:13 }}>
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
         {photos.map((photo, i) => (
           <div key={i}
