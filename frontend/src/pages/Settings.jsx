@@ -496,6 +496,10 @@ const METHOD_STYLE = {
 };
 const ACT_PAGE = 50;
 const ACT_KINDS = [["", "Tout"], ["action", "Actions"], ["visite", "Visites"]];
+// Fenetres proposees. Celles qui depassent la duree de conservation renvoyee
+// par l'API sont retirees : promettre 30 jours quand la purge en garde 7
+// n'aurait affiche que du vide.
+const ACT_WINDOWS = [[1,"24 h"],[7,"7 jours"],[30,"30 jours"],[90,"90 jours"]];
 
 function ActivitySection() {
   const isAdmin = useIsAdmin();
@@ -504,6 +508,7 @@ function ActivitySection() {
   const [kind,  setKind]  = React.useState("");
   const [items, setItems] = React.useState(null);
   const [total, setTotal] = React.useState(0);
+  const [keep,  setKeep]  = React.useState(null);   // duree de conservation
   const [names, setNames] = React.useState([]);
   const [busy,  setBusy]  = React.useState(false);
   const [err,   setErr]   = React.useState(null);
@@ -516,6 +521,7 @@ function ActivitySection() {
                   limit: ACT_PAGE, offset },
       });
       setTotal(data.total || 0);
+      if (data.retention_days) setKeep(data.retention_days);
       // offset 0 = nouveau filtre, on repart de zero ; sinon on empile.
       setItems(prev => offset === 0 ? (data.items || []) : [...(prev || []), ...(data.items || [])]);
     } catch (e) {
@@ -551,7 +557,7 @@ function ActivitySection() {
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
         <b>Actions</b> : créations, modifications, suppressions. <b>Visites</b> : arrivée
         sur une page de l'application, enregistrée au changement de page seulement.
-        Le journal est purgé au-delà de 7 jours.
+        {keep ? ` Le journal est purgé au-delà de ${keep} jours.` : ""}
       </p>
 
       <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:8 }}>
@@ -561,7 +567,7 @@ function ActivitySection() {
       </div>
 
       <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
-        {[[1,"24 h"],[7,"7 jours"],[30,"30 jours"]].map(([d,l]) => (
+        {ACT_WINDOWS.filter(([d]) => !keep || d <= keep).map(([d,l]) => (
           <button key={d} onClick={()=>setDays(d)} style={chip(days===d)}>{l}</button>
         ))}
         <select value={who} onChange={e=>setWho(e.target.value)}

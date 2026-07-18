@@ -127,6 +127,12 @@ async def _migrate_last_seen():
         print(f"[migration] last_seen ignoree : {e}")
 
 
+# Duree de conservation du journal d'activite. Valeur unique : l'interface la
+# lit via l'API pour construire ses filtres, sinon les deux finissent par se
+# contredire -- un filtre 30 jours coexistait avec une purge a 7.
+ACTIVITY_RETENTION_DAYS = 30
+
+
 async def _migrate_activity_kind():
     """
     Ajoute activity_log.kind sur une base existante. Les lignes deja presentes
@@ -146,7 +152,7 @@ async def _migrate_activity_kind():
         print(f"[migration] activity_log.kind ignoree : {e}")
 
 
-async def _purge_activity_log(days: int = 7):
+async def _purge_activity_log(days: int = ACTIVITY_RETENTION_DAYS):
     """
     Le journal ne sert qu'a un historique glissant : au-dela on supprime. Evite
     que la table grossisse indefiniment. Appele a chaque demarrage.

@@ -6,7 +6,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import require_admin, get_current_role, get_current_user
-from ....db.session import get_db
+from ....db.session import get_db, ACTIVITY_RETENTION_DAYS
 from ....core.security import hash_password
 from ....models.user import User, ROLE_ADMIN, ROLE_READONLY, ROLES
 from ....models.activity import ActivityLog
@@ -93,12 +93,13 @@ async def activity(
     _: str = Depends(require_admin),
 ):
     """
-    Journal des actions sur une fenetre glissante (7 jours par defaut).
-    Seules les ecritures sont journalisees ; la simple consultation est reflete
-    par users.last_seen.
+    Journal sur une fenetre glissante. Le plafond est la duree de conservation
+    reelle : proposer plus large que ce que la purge laisse en base n'aurait
+    fait que promettre des donnees supprimees.
     """
     from datetime import datetime, timedelta
-    since = datetime.utcnow() - timedelta(days=max(1, min(days, 90)))
+    since = datetime.utcnow() - timedelta(
+        days=max(1, min(days, ACTIVITY_RETENTION_DAYS)))
     q = select(ActivityLog).where(ActivityLog.created_at >= since)
     if username:
         q = q.where(ActivityLog.username == username)
@@ -112,6 +113,7 @@ async def activity(
          .limit(max(1, min(limit, 500))).offset(max(0, offset))
     )).scalars().all()
     return {
+        "retention_days": ACTIVITY_RETENTION_DAYS,   # borne les filtres du front
         "total": total,
         "items": [{
             "id": r.id, "username": r.username, "method": r.method,
