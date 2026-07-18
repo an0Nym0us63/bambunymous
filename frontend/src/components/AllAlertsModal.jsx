@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
+import AdminOnly from "./AdminOnly";
 import { colorBg, parseColorsList } from "../utils/colors";
 import { FilamentSheet, FilamentSheetFromSpool } from "../pages/Filaments";
 import { PrintDetail } from "../pages/Prints";
@@ -243,8 +244,8 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
                   color: a.forever ? "#ef4444" : a.expired ? "var(--muted)" : "#f59e0b" }}>
                   {fmtUntil(a)}
                 </span>
-                <button type="button" onClick={() => restore(a)} title="Remettre en circulation"
-                  style={iconBtn("var(--muted)")}>↩</button>
+                <AdminOnly><button type="button" onClick={() => restore(a)} title="Remettre en circulation"
+                  style={iconBtn("var(--muted)")}>↩</button></AdminOnly>
               </>) : (<>
                 {a.value && (
                   <span style={{ flexShrink:0, fontSize:10, fontWeight:700,
@@ -253,10 +254,10 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
                     {a.value}
                   </span>
                 )}
-                <button type="button" onClick={() => dismiss(a, 7)} title="Ignorer 7 jours"
+                <AdminOnly><button type="button" onClick={() => dismiss(a, 7)} title="Ignorer 7 jours"
                   style={iconBtn("var(--muted)")}>7j</button>
                 <button type="button" onClick={() => dismiss(a, null)} title="Ne plus jamais afficher"
-                  style={iconBtn("#ef4444")}>✕</button>
+                  style={iconBtn("#ef4444")}>✕</button></AdminOnly>
               </>)}
             </div>
           ))}
@@ -264,12 +265,12 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
 
         {tab === "dismissed" && !!(dis || []).length && (
           <div style={{ padding:"10px 16px" }}>
-            <button type="button" disabled={busy} onClick={clearAll}
+            <AdminOnly><button type="button" disabled={busy} onClick={clearAll}
               style={{ width:"100%", padding:"9px", borderRadius:8, border:"none",
                 background:"rgba(239,68,68,0.12)", color:"#ef4444",
                 fontSize:12, fontWeight:700, cursor:"pointer" }}>
               {busy ? "…" : "Tout remettre en circulation"}
-            </button>
+            </button></AdminOnly>
           </div>
         )}
       </div>

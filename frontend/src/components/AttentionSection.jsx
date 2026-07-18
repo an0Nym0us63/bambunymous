@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
+import AdminOnly from "./AdminOnly";
 import AllAlertsModal from "./AllAlertsModal";
 import { ChevronDown, ChevronRight, List } from "lucide-react";
 import { colorBg, parseColorsList } from "../utils/colors";
@@ -313,6 +314,7 @@ export default function AttentionSection() {
                   Voir
                 </button>
               )}
+              <AdminOnly>
               <button onClick={() => dismiss(menu, 7)}
                 style={{ padding: 12, borderRadius: 10, border: "none", cursor: "pointer",
                   background: "var(--surface2)", color: "var(--text)", fontSize: 14 }}>
@@ -323,6 +325,7 @@ export default function AttentionSection() {
                   background: "rgba(239,68,68,0.12)", color: "#ef4444", fontSize: 14, fontWeight: 700 }}>
                 Ne plus jamais afficher
               </button>
+              </AdminOnly>
               <button onClick={() => setMenu(null)}
                 style={{ padding: 12, borderRadius: 10, border: "1px solid var(--border)",
                   cursor: "pointer", background: "none", color: "var(--muted)", fontSize: 13 }}>

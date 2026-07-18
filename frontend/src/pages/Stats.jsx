@@ -221,7 +221,11 @@ function TimeChart({ data, bucket = "month" }) {
   return (
     <div className="card" style={{ padding: "16px 16px 10px" }}>
       <div style={{ display: "flex", gap: 6, marginBottom: 16, flexWrap: "wrap" }}>
-        {[["count", "Impressions"], ["cost", "Coût"], ["weight", "Filament"], ["duration", "Durée"]].map(([id, label]) => (
+        {[["count", "Impressions"], ["cost", "Coût"], ["weight", "Filament"], ["duration", "Durée"]]
+          // Le graphe laisserait deviner les montants malgre le masquage des
+          // valeurs : on retire carrement la serie pour un compte en lecture seule.
+          .filter(([id]) => !(id === "cost" && isMoneyHidden()))
+          .map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)}
             style={{ padding: "4px 10px", borderRadius: 20, fontSize: 10, fontWeight: 600, cursor: "pointer", border: "none",
               background: tab === id ? colors[id] : "var(--surface2)", color: tab === id ? "white" : "var(--muted)" }}>
@@ -621,10 +625,12 @@ export default function Stats() {
             prints={data.top_duration} groups={data.top_groups_duration}
             valueKey="duration_s" valueLabel={p => fmtH(p.duration_s)}
             onItemClick={openDetail}/>
-          <TopList title="💰 Les plus chers" barColor="#22c55e"
-            prints={data.top_cost} groups={data.top_groups_cost}
-            valueKey="cost" valueLabel={p => fmtEur(p.cost)}
-            onItemClick={openDetail}/>
+          {!isMoneyHidden() && (
+            <TopList title="💰 Les plus chers" barColor="#22c55e"
+              prints={data.top_cost} groups={data.top_groups_cost}
+              valueKey="cost" valueLabel={p => fmtEur(p.cost)}
+              onItemClick={openDetail}/>
+          )}
           <TopList title="⚖ Les plus lourds" barColor="#8b5cf6"
             prints={data.top_weight} groups={data.top_groups_weight}
             valueKey="weight_g" valueLabel={p => `${Math.round(p.weight_g)} g`}

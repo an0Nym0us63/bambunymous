@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .auth import require_admin, get_current_role
+from .auth import require_admin, get_current_role, get_current_user
 from ....db.session import get_db
 from ....core.security import hash_password
 from ....models.user import User, ROLE_ADMIN, ROLE_READONLY, ROLES
@@ -18,6 +18,7 @@ class UserOut(BaseModel):
     username: str
     role: str
     active: bool
+    protected: bool = False   # compte admin d'origine : non modifiable
 
 
 class UserCreate(BaseModel):
@@ -32,14 +33,27 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
 
 
-def _out(u: User) -> UserOut:
-    return UserOut(id=u.id, username=u.username, role=u.role, active=u.active)
+def _out(u: User, protected: bool = False) -> UserOut:
+    return UserOut(id=u.id, username=u.username, role=u.role, active=u.active,
+                   protected=protected)
+
+
+async def _root_admin_id(db: AsyncSession) -> Optional[int]:
+    """
+    Compte administrateur d'origine : le plus ancien. Il ne peut etre ni
+    supprime, ni desactive, ni retrograde -- seul son mot de passe est
+    modifiable. Garantit qu'il reste toujours un acces administrateur.
+    """
+    return (await db.execute(
+        select(User.id).where(User.role == ROLE_ADMIN).order_by(User.id).limit(1)
+    )).scalar_one_or_none()
 
 
 @router.get("", response_model=List[UserOut])
 async def list_users(db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
     rows = (await db.execute(select(User).order_by(User.username))).scalars().all()
-    return [_out(u) for u in rows]
+    root = await _root_admin_id(db)
+    return [_out(u, protected=(u.id == root)) for u in rows]
 
 
 @router.post("", response_model=UserOut, status_code=201)
@@ -71,10 +85,19 @@ async def update_user(
     body: UserUpdate,
     db: AsyncSession = Depends(get_db),
     _: str = Depends(require_admin),
+    me: str = Depends(get_current_user),
 ):
     u = await db.get(User, uid)
     if not u:
         raise HTTPException(404, "Utilisateur introuvable")
+
+    changing_status = (body.role is not None) or (body.active is not None)
+    # Le compte administrateur d'origine n'est ni retrograde ni desactive.
+    if changing_status and u.id == await _root_admin_id(db):
+        raise HTTPException(400, "Compte administrateur principal : seul le mot de passe est modifiable")
+    # On ne modifie pas son propre role ni son propre etat (risque de s'exclure).
+    if changing_status and u.username == me:
+        raise HTTPException(400, "Vous ne pouvez pas modifier votre propre role ou statut")
 
     # Garde-fou : ne pas se retrouver sans aucun administrateur actif.
     if (body.role and body.role != ROLE_ADMIN) or (body.active is False):
@@ -106,10 +129,15 @@ async def delete_user(
     uid: int,
     db: AsyncSession = Depends(get_db),
     _: str = Depends(require_admin),
+    me: str = Depends(get_current_user),
 ):
     u = await db.get(User, uid)
     if not u:
         raise HTTPException(404, "Utilisateur introuvable")
+    if u.id == await _root_admin_id(db):
+        raise HTTPException(400, "Le compte administrateur principal ne peut pas etre supprime")
+    if u.username == me:
+        raise HTTPException(400, "Vous ne pouvez pas supprimer votre propre compte")
     if u.role == ROLE_ADMIN and u.active:
         others = (await db.execute(
             select(func.count()).select_from(User)

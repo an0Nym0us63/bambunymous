@@ -346,12 +346,19 @@ function UsersSection() {
                   color: u.role === ROLE_ADMIN ? "#60a5fa" : "#94a3b8" }}>
                   {u.role === ROLE_ADMIN ? "Admin" : "Lecture seule"}
                 </span>
+                {u.protected && (
+                  <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
+                    background:"rgba(245,158,11,0.12)", color:"#f59e0b" }}>Principal</span>
+                )}
                 {!u.active && (
                   <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
                     background:"rgba(239,68,68,0.12)", color:"#ef4444" }}>Désactivé</span>
                 )}
               </div>
               <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+                {/* Le compte principal et le sien propre ne sont pas modifiables
+                    (hors mot de passe) : on evite de se couper l'acces. */}
+                {!u.protected && u.username !== meName && (<>
                 <button disabled={busy} onClick={()=>act(()=>client.patch(`/users/${u.id}`, {
                     role: u.role === ROLE_ADMIN ? ROLE_READONLY : ROLE_ADMIN }))}
                   style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
@@ -363,11 +370,6 @@ function UsersSection() {
                     border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
                   {u.active ? "Désactiver" : "Réactiver"}
                 </button>
-                <button disabled={busy} onClick={()=>{ setPwdFor(pwdFor===u.id?null:u.id); setPwdVal(""); }}
-                  style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
-                    border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
-                  Mot de passe
-                </button>
                 <button disabled={busy}
                   onClick={()=> confirmDel === u.id
                     ? act(async ()=>{ await client.delete(`/users/${u.id}`); setConfirmDel(null); })
@@ -377,6 +379,12 @@ function UsersSection() {
                     background: confirmDel === u.id ? "#ef4444" : "rgba(239,68,68,0.06)",
                     color: confirmDel === u.id ? "white" : "#ef4444" }}>
                   {confirmDel === u.id ? "Confirmer ?" : <Trash2 size={12}/>}
+                </button>
+                </>)}
+                <button disabled={busy} onClick={()=>{ setPwdFor(pwdFor===u.id?null:u.id); setPwdVal(""); }}
+                  style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
+                    border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
+                  Mot de passe
                 </button>
               </div>
               {pwdFor === u.id && (
@@ -1070,40 +1078,40 @@ export default function Settings() {
       {/* Mobile : le bouton part dans le header (une ligne de gagnee).
           Desktop : le header mobile n'existe pas, on le garde dans le flux. */}
       <HeaderAction>
-        <button onClick={() => navigate("/logs")} aria-label="Journal"
+        <AdminOnly><button onClick={() => navigate("/logs")} aria-label="Journal"
           style={{ padding:"5px 12px", borderRadius:20, border:"1px solid var(--border)",
             background:"var(--surface2)", cursor:"pointer", display:"flex",
             alignItems:"center", gap:5, color:"var(--muted)", fontSize:12 }}>
           📋 Journal
-        </button>
+        </button></AdminOnly>
       </HeaderAction>
 
       <div className="hidden-mobile" style={{ display:"none", alignItems:"center", justifyContent:"flex-end" }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0, marginRight:"auto" }}>Paramètres</h1>
-        <button onClick={() => navigate("/logs")}
+        <AdminOnly><button onClick={() => navigate("/logs")}
           style={{ padding:"6px 14px", borderRadius:20, border:"1px solid var(--border)",
             background:"var(--surface2)", cursor:"pointer", display:"flex", alignItems:"center", gap:6,
             color:"var(--muted)", fontSize:12 }}>
           📋 Journal
-        </button>
+        </button></AdminOnly>
+      </div>
+
+      {/* Thème */}
+      <div className="card" style={card}>
+        <div style={cardTitle}>Apparence</div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontSize:14, color:"var(--text2)" }}>Thème</span>
+          <button type="button" onClick={toggle}
+            style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px",
+            borderRadius:20, border:"1px solid var(--border)", background:"var(--surface2)",
+            color:"var(--text)", fontSize:13, cursor:"pointer" }}>
+            {theme === "dark" ? <><Moon size={14}/> Sombre</> : <><Sun size={14}/> Clair</>}
+          </button>
+        </div>
       </div>
 
       <AdminOnly>
       <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
-
-        {/* Thème */}
-        <div className="card" style={card}>
-          <div style={cardTitle}>Apparence</div>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <span style={{ fontSize:14, color:"var(--text2)" }}>Thème</span>
-            <button type="button" onClick={toggle}
-              style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 16px",
-                borderRadius:20, border:"1px solid var(--border)", background:"var(--surface2)",
-                color:"var(--text)", fontSize:13, cursor:"pointer" }}>
-              {theme === "dark" ? <><Moon size={14}/> Sombre</> : <><Sun size={14}/> Clair</>}
-            </button>
-          </div>
-        </div>
 
         {/* Application native (WebView) : rouvrir les reglages URL + jeton RFID.
             Visible uniquement dans la coquille Android (window.BambuScan). */}

@@ -1,5 +1,6 @@
 import React from "react";
 import { createPortal } from "react-dom";
+import { useIsAdmin } from "../store/auth";
 
 /**
  * Bouton "+" d'ajout de photo, avec le meme comportement partout (fiche filament,
@@ -14,9 +15,15 @@ import { createPortal } from "react-dom";
  * onPick(file) est appele avec le fichier choisi.
  */
 export default function PhotoAddButton({ onPick, size = 20, title = "Ajouter une photo" }) {
+  // Ajout de photo = action : masque pour les comptes en lecture seule.
+  // Le garde est place APRES les hooks (regles des hooks).
+  const isAdmin = useIsAdmin();
+
   const camRef = React.useRef(null);
   const fileRef = React.useRef(null);
   const [open, setOpen] = React.useState(false);
+
+  if (!isAdmin) return null;
 
   const isWebView = typeof window !== "undefined" && !!window.BambuScan;
 
