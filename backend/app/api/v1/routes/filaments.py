@@ -207,9 +207,9 @@ async def filament_labels_pdf(
     _: str = Depends(get_current_user),
 ):
     """
-    Planche d'etiquettes a coller sur les echantillons : un QR code de 9x9 mm
-    encodant l'ID du filament, et l'ID en clair juste en dessous pour pouvoir le
-    saisir a la main si le scan echoue.
+    Planche d'etiquettes a coller sur les echantillons : un QR code encodant
+    l'ID du filament, et l'ID en clair au-dessus pour pouvoir le saisir a la
+    main si le scan echoue.
     body: {ids: [1,2,3]} — ou {} / {"ids": null} pour tous les filaments.
     """
     import io as _io
@@ -221,9 +221,9 @@ async def filament_labels_pdf(
 
     ids = body.get("ids")
     # Etiquette rectangulaire 12 x 18.75 mm. QR pleine largeur au centre ;
-    # 2 lignes au-dessus (numero, sous-type) et 1 en dessous (marque).
-    # Sous-type et marque prennent la plus grande police possible (jusqu'a PT_MAX)
-    # pour maximiser la lisibilite.
+    # 2 lignes au-dessus (numero + marque, puis sous-type) et 2 en dessous
+    # (le nom, replie si besoin). Chaque ligne prend la plus grande police
+    # possible (jusqu'a PT_MAX) pour maximiser la lisibilite.
     W_mm = float(body.get("w_mm") or 12)
     H_mm = float(body.get("h_mm") or 18.75)
     stmt = select(Filament)
@@ -237,11 +237,10 @@ async def filament_labels_pdf(
     from reportlab.pdfbase.pdfmetrics import stringWidth
 
     # Disposition verticale dans le rectangle :
-    #   #123            numero (gras)
+    #   123.Bambu Lab   numero (gras, cale a gauche) + marque a sa suite
     #   PLA Basic       sous-type (repli materiau)
     #   [ QR ]          pleine largeur -> module ~0.57 mm (tres lisible)
-    #   Bambu Lab       marque
-    #   Bleu cyan       nom (traduit si dispo)
+    #   Bleu cyan       nom (traduit si dispo), sur 2 lignes au besoin
     CELL_W = W_mm * mm
     CELL_H = H_mm * mm
     QR     = CELL_W                    # QR sur toute la largeur
@@ -249,9 +248,12 @@ async def filament_labels_pdf(
     MARG   = 10 * mm
     W, H = A4
 
-    # 3 lignes : 2 au-dessus (numero, sous-type), 1 en dessous (marque).
+    # 4 bandes : 2 au-dessus (numero+marque, sous-type), 2 en dessous pour le
+    # nom. Le nom a droit a deux bandes parce que c'est le libelle le plus long
+    # et le seul qu'on ne puisse pas deviner : le tronquer coute plus cher que
+    # de le replier.
     text_h  = CELL_H - QR
-    LINE    = text_h / 3               # hauteur d'une bande de texte
+    LINE    = text_h / 4               # hauteur d'une bande de texte
     PT_CAP  = 0.82                     # part de la bande occupee par la capitale
     PT_MAX  = 9.0                      # plafond haut : les lignes "adaptables"
                                        # (sous-type, marque) remplissent la largeur
@@ -279,6 +281,52 @@ async def filament_labels_pdf(
         while text and stringWidth(text + ell, font, pt) > max_w:
             text = text[:-1]
         return ((text + ell) if text else "", pt)
+
+    def _wrap(text, font, pt, max_w):
+        """Decoupe `text` en lignes tenant dans max_w. Un mot plus large que la
+        ligne est coupe au caractere : sans ca, une reference sans espace
+        deborderait indefiniment."""
+        out, cur = [], ""
+        for word in text.split():
+            cand = (cur + " " + word) if cur else word
+            if stringWidth(cand, font, pt) <= max_w:
+                cur = cand
+                continue
+            if cur:
+                out.append(cur)
+                cur = ""
+            while len(word) > 1 and stringWidth(word, font, pt) > max_w:
+                k = len(word)
+                while k > 1 and stringWidth(word[:k], font, pt) > max_w:
+                    k -= 1
+                out.append(word[:k])
+                word = word[k:]
+            cur = word
+        if cur:
+            out.append(cur)
+        return out or [""]
+
+    # Comme _fit_font, mais autorise `max_lines` lignes avant de tronquer :
+    # on reduit d'abord la police, on ne coupe qu'une fois au plancher.
+    def _fit_wrap(text, max_w, font, band_h, max_lines):
+        text = (text or "").strip()
+        if not text:
+            return None
+        pt = min(PT_MAX, (band_h / mm) * PT_CAP * 2.83465 / 0.72)
+        floor = 4.0
+        while True:
+            lines = _wrap(text, font, pt, max_w)
+            if len(lines) <= max_lines:
+                return (lines, pt)
+            if pt <= floor:
+                break
+            pt = max(floor, pt - 0.1)
+        lines = _wrap(text, font, pt, max_w)[:max_lines]
+        ell, last = "…", lines[-1]
+        while last and stringWidth(last + ell, font, pt) > max_w:
+            last = last[:-1]
+        lines[-1] = (last + ell) if last else ell
+        return (lines, pt)
 
     buf = _io.BytesIO()
     c = _canvas.Canvas(buf, pagesize=A4)
@@ -319,10 +367,28 @@ async def filament_labels_pdf(
 
         sub  = (f.fila_type or f.material or "").strip()
 
-        # 2 lignes au-dessus du QR (numero + sous-type)
         top = y + CELL_H
-        _line(top,        f"#{f.id}", True)
-        _line(top - LINE, sub,       False)
+
+        # Ligne 1 : le numero cale a gauche, la marque a sa suite. Le numero
+        # garde une taille fixe (c'est lui qu'on lit pour saisir a la main si le
+        # scan echoue) ; seule la marque s'adapte a la place qui reste.
+        num_pt = min(PT_MAX, (LINE / mm) * PT_CAP * 2.83465 / 0.72)
+        num    = f"{f.id}."
+        num_w  = stringWidth(num, "Helvetica-Bold", num_pt)
+        # Ligne de base commune, calee sur la capitale du numero : sinon une
+        # marque en police reduite flotterait au-dessus du chiffre.
+        base   = top - LINE + (LINE - (num_pt * 0.72 / 2.83465) * mm) / 2
+        c.setFillColorRGB(0, 0, 0)
+        c.setFont("Helvetica-Bold", num_pt)
+        c.drawString(x, base, num)
+        brand = _fit_font(f.manufacturer or "", CELL_W - num_w, "Helvetica", LINE)
+        if brand:
+            b_txt, b_pt = brand
+            c.setFont("Helvetica", b_pt)
+            c.drawString(x + num_w, base, b_txt)
+
+        # Ligne 2 : le sous-type, centre comme avant.
+        _line(top - LINE, sub, False)
 
         # QR pleine largeur, centre verticalement entre les blocs de texte
         qr = qrcode.QRCode(
@@ -337,7 +403,7 @@ async def filament_labels_pdf(
         module = QR / n
         c.setFillColorRGB(0, 0, 0)
         qx = x                              # pleine largeur
-        qy = y + 1*LINE                     # au-dessus de la ligne du bas (marque)
+        qy = y + 2*LINE                     # au-dessus des deux lignes du nom
         for r_i, line in enumerate(matrix):
             for c_i, on in enumerate(line):
                 if on:
@@ -345,8 +411,17 @@ async def filament_labels_pdf(
                            qy + QR - (r_i + 1)*module,
                            module, module, stroke=0, fill=1)
 
-        # 1 ligne en dessous du QR : la marque.
-        _line(y + 1*LINE, f.manufacturer or "", False)
+        # Sous le QR : le nom, sur une ou deux lignes selon la place.
+        name = (f.translated_name or f.name or "").strip()
+        fitted = _fit_wrap(name, CELL_W, "Helvetica", LINE, 2)
+        if fitted:
+            n_lines, n_pt = fitted
+            n_cap = (n_pt * 0.72 / 2.83465) * mm
+            c.setFont("Helvetica", n_pt)
+            c.setFillColorRGB(0, 0, 0)
+            for li, ln in enumerate(n_lines):
+                band_top = y + 2*LINE - li*LINE
+                c.drawCentredString(cx, band_top - LINE + (LINE - n_cap)/2, ln)
 
     c.showPage()
     c.save()
