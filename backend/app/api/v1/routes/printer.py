@@ -159,6 +159,7 @@ class PrinterStatusOut(BaseModel):
     bed_temp: float
     target_bed_temp: float
     chamber_temp: float
+    target_chamber_temp: float = 0.0
     print_name: str
     job_id: str
     design_id: str
@@ -242,6 +243,7 @@ async def printer_status(_: str = Depends(get_current_user)):
         bed_temp=s.bed_temp,
         target_bed_temp=s.target_bed_temp,
         chamber_temp=s.chamber_temp,
+        target_chamber_temp=getattr(s, "target_chamber_temp", 0.0) or 0.0,
         print_name=s.print_name,
         job_id=s.job_id,
         design_id=s.design_id,
