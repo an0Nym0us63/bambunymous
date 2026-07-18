@@ -44,6 +44,19 @@ body {
 .card    { background: var(--surface);  border: 1px solid var(--border); border-radius: var(--r); }
 .card-sm { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); }
 
+/* Panneau flottant : modale, popup, feuille. A n'utiliser QU'au-dessus d'un
+   voile, jamais dans le flux de la page.
+   .card ne convient pas ici : en theme sombre son fond est une teinte
+   TRANSLUCIDE (rgba blanc 4 %) prevue pour se poser sur --bg. Au-dessus d'un
+   voile, elle ne masque rien et la page reste lisible au travers. --sheet-bg
+   est opaque dans les deux themes, c'est ce qu'il faut pour un panneau qui
+   doit couvrir. */
+.sheet-panel {
+  background: var(--sheet-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+
 ::-webkit-scrollbar { width: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
