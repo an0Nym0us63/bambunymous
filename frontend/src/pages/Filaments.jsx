@@ -527,10 +527,10 @@ function WeightEditRow({ spoolId, current, onUpdated }) {
             color:"var(--text)" }}>
             {current != null ? `${Math.round(current)} g` : <span style={{color:"var(--muted)",fontWeight:400}}>—</span>}
           </span>
-          <button onClick={() => { setVal(current != null ? String(Math.round(current)) : ""); setEditing(true); }}
+          <AdminOnly><button onClick={() => { setVal(current != null ? String(Math.round(current)) : ""); setEditing(true); }}
             style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2, display:"flex" }}
             onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
-            onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}><Pencil size={13}/></button>
+            onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}><Pencil size={13}/></button></AdminOnly>
         </div>
       )}
     </div>
@@ -1558,13 +1558,13 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               )}
 
               <div style={{ display:"flex", gap:8, marginTop:20 }}>
-                <button onClick={handleDelete} disabled={deleting}
+                <AdminOnly><button onClick={handleDelete} disabled={deleting}
                   style={{ flex:1, padding:"10px", background:"rgba(239,68,68,0.08)",
                     border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, cursor:"pointer",
                     color:"#ef4444", fontSize:13, display:"flex",
                     alignItems:"center", justifyContent:"center", gap:6 }}>
                   🗑 Supprimer
-                </button>
+                </button></AdminOnly>
             <button onClick={onClose}
               style={{ flex:2, padding:"10px", background:"#3b82f6",
                 border:"none", borderRadius:10, cursor:"pointer",
