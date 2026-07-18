@@ -1165,10 +1165,10 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                         background:"var(--surface2)", color:"var(--muted)", fontSize:11, cursor:"pointer" }}>✕</button>
                   </div>
                 ) : (
-                  <button onClick={()=>{setNbVal(String(nbItems));setEditNb(true);}}
+                  <AdminOnly><button onClick={()=>{setNbVal(String(nbItems));setEditNb(true);}}
                     style={{ fontSize:10, padding:"2px 8px", borderRadius:6,
                       border:"1px solid rgba(34,197,94,0.3)", background:"none",
-                      color:"#22c55e", cursor:"pointer" }}>Modifier</button>
+                      color:"#22c55e", cursor:"pointer" }}>Modifier</button></AdminOnly>
                 )}
               </div>
             </div>
@@ -1188,13 +1188,13 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   {groupPhotos.map((ph,i)=>(
                     <div key={i} style={{ position:"relative", flexShrink:0 }}>
                       <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover", borderRadius:8 }}/>
-                      <button onClick={async()=>{ if(window._confirmedDeletePhoto){
+                      <AdminOnly><button onClick={async()=>{ if(window._confirmedDeletePhoto){
                         await client.delete(`/prints/groups/${groupId}/photo/${ph.name}`);
                         loadGroupPhotos();
                       }}} style={{ position:"absolute", top:2, right:2, width:18, height:18,
                         borderRadius:"50%", background:"rgba(0,0,0,0.6)", border:"none",
                         cursor:"pointer", color:"white", fontSize:12,
-                        display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                        display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button></AdminOnly>
                     </div>
                   ))}
                 </div>
@@ -1235,14 +1235,19 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                 borderRadius:10, overflow:"hidden", position:"relative",
                 background:"var(--surface2)", border:"1px solid var(--border)" }}>
                 {/* Bouton retirer du groupe */}
-                <button onClick={async e=>{ e.stopPropagation();
+                <AdminOnly><button onClick={async e=>{ e.stopPropagation();
                   if(!confirm(`Retirer "${p.file_name||"ce print"}" du groupe ?`)) return;
                   try { await client.post("/prints/"+p.id+"/group", {}); setLocalPrints(ps=>ps.filter(x=>x.id!==p.id)); } catch{}
                 }} style={{ position:"absolute", top:4, right:4, zIndex:2, width:20, height:20,
                   borderRadius:"50%", background:"rgba(0,0,0,0.55)", border:"none",
                   cursor:"pointer", color:"white", fontSize:11,
-                  display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+                  display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button></AdminOnly>
                 {/* Bouton étoile = définir comme référence visuelle */}
+                <AdminOnly fallback={coverPrintId===p.id ? (
+                  <span title="Référence visuelle" style={{ position:"absolute", top:4, left:4, zIndex:2,
+                    width:20, height:20, borderRadius:"50%", background:"#f59e0b", color:"white",
+                    fontSize:11, display:"flex", alignItems:"center", justifyContent:"center" }}>★</span>
+                ) : null}>
                 <button onClick={async e=>{ e.stopPropagation();
                   try {
                     await client.patch("/prints/groups/"+groupId, { cover_print_id: p.id });
@@ -1255,7 +1260,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   border:"none", cursor:"pointer", color:"white", fontSize:11,
                   display:"flex", alignItems:"center", justifyContent:"center" }}>
                   ★
-                </button>
+                </button></AdminOnly>
                 <div onClick={()=>setSelectedPrint(p)} style={{ cursor:"pointer" }}>
                 <div style={{ position:"relative", paddingTop:"75%", background:"var(--surface2)" }}>
                   <img src={"/api/v1/prints/"+p.id+"/image"} alt="" style={{
@@ -1279,6 +1284,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
 
           {/* Actions */}
           <div style={{ display:"flex", gap:8 }}>
+            <AdminOnly>
             <button onClick={()=>setEditGroup(true)}
               style={{ flex:1, padding:"10px", borderRadius:12, border:"1px solid var(--border)",
                 background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700, cursor:"pointer" }}>
@@ -1296,6 +1302,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                 color:"#a78bfa", fontSize:12, fontWeight:700, cursor:"pointer" }}>
               📤 Dégrouper
             </button>
+            </AdminOnly>
             <button onClick={onClose}
               style={{ flex:2, padding:"10px", borderRadius:12, border:"none",
                 background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
