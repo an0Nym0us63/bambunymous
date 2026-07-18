@@ -1198,12 +1198,12 @@ export default function Settings() {
 
       {/* ── Étiquettes filaments ───────────────────────────────────── */}
       {/* ── Points d'attention ─────────────────────────────────────── */}
-      <AttentionCard card={card} cardTitle={cardTitle}/>
+      <AdminOnly><AttentionCard card={card} cardTitle={cardTitle}/></AdminOnly>
 
-      <LabelsCard card={card} cardTitle={cardTitle}/>
+      <AdminOnly><LabelsCard card={card} cardTitle={cardTitle}/></AdminOnly>
 
       {/* ── Import depuis Spoolnymous ───────────────────────────────── */}
-      <SpoolnymousImport/>
+      <AdminOnly><SpoolnymousImport/></AdminOnly>
 
 
       {version && (

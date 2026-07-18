@@ -855,7 +855,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           )}
 
           {/* Créer objet depuis ce print */}
-          <button onClick={async () => {
+          <AdminOnly><button onClick={async () => {
             const n = parseInt(prompt(`Créer combien d'objets depuis ce print ?
 (Max restant calculé automatiquement)`, "1"));
             if (!n || isNaN(n)) return;
@@ -871,7 +871,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             border:"1px solid rgba(34,197,94,0.3)", background:"rgba(34,197,94,0.06)",
             color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer" }}>
             📦 Créer un objet depuis ce print
-          </button>
+          </button></AdminOnly>
 
           {/* Filaments — accordéon */}
           {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')} onUnmap={setUnmapping} onUnmapped={()=>{ client.get('/prints/'+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }}/>}
@@ -1204,7 +1204,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
 
           {/* Prints en tuiles */}
           {/* Créer objet depuis ce groupe */}
-          <button onClick={async () => {
+          <AdminOnly><button onClick={async () => {
             const n = parseInt(prompt(`Créer combien d'objets depuis ce groupe ?
 (Max restant calculé automatiquement)`, "1"));
             if (!n || isNaN(n)) return;
@@ -1220,7 +1220,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
             border:"1px solid rgba(34,197,94,0.3)", background:"rgba(34,197,94,0.06)",
             color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer" }}>
             📦 Créer un objet depuis ce groupe
-          </button>
+          </button></AdminOnly>
 
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:"0.06em", margin:"0 0 8px" }}>
@@ -2136,13 +2136,13 @@ export default function Prints() {
             <Check size={14}/>
           </button></AdminOnly>
         )}
-        <label title="Importer .3mf"
+        <AdminOnly><label title="Importer .3mf"
           style={{ width:36, height:36, borderRadius:10, border:"1px solid var(--border)",
             background:"var(--surface2)", color:"var(--muted)", cursor:"pointer",
             display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
           <Upload size={14}/>
           <input type="file" accept=".3mf" onChange={handleImport} style={{ display:"none" }}/>
-        </label>
+        </label></AdminOnly>
 
       </div>
 

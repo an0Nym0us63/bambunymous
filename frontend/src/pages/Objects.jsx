@@ -138,12 +138,12 @@ function AccessorySheet({ accId, onClose, onChanged }) {
                   </span>
                 )}
               </div>
-              <button onClick={()=>fileRef.current?.click()} disabled={busy}
+              <AdminOnly><button onClick={()=>fileRef.current?.click()} disabled={busy}
                 style={{ marginTop:8, display:"inline-flex", alignItems:"center", gap:5,
                   padding:"4px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
                   border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)" }}>
                 <ImageIcon size={12}/> {d.has_image ? "Changer la photo" : "Ajouter une photo"}
-              </button>
+              </button></AdminOnly>
               <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
                 onChange={e => { upload(e.target.files?.[0]); e.target.value=""; }}/>
             </div>

@@ -1542,13 +1542,13 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
                         : `${Math.round(f.remaining_weight_total_g)} g`} restants
                   </span>
                 )}
-                <button onClick={() => setAddSpool(true)}
+                <AdminOnly><button onClick={() => setAddSpool(true)}
                   style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:5,
                     padding:"5px 12px", borderRadius:20, border:"none", cursor:"pointer",
                     background:"rgba(34,197,94,0.12)", color:"#22c55e",
                     fontSize:11, fontWeight:700 }}>
                   <Plus size={13}/> Créer une bobine
-                </button>
+                </button></AdminOnly>
               </div>
 
               {addSpool && (
