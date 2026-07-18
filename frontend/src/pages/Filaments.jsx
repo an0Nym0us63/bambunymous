@@ -537,6 +537,73 @@ function WeightEditRow({ spoolId, current, onUpdated }) {
   );
 }
 
+// Edition du tag NFC d'une bobine. Utile quand une bobine a ete mappee sur le
+// mauvais tag, ou pour saisir/corriger l'UID a la main.
+function TagEditRow({ spoolId, current, onUpdated }) {
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(current || "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      // Champ vide -> on detache le tag (null cote API).
+      await client.patch(`/filaments/spools/${spoolId}`, { tag_number: val.trim() || null });
+      onUpdated?.();
+      setEditing(false);
+    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+      padding:"8px 0", borderBottom:"1px solid var(--border)", gap:8 }}>
+      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>Tag NFC</span>
+      {editing ? (
+        <div style={{ display:"flex", gap:6, alignItems:"center", flex:1, justifyContent:"flex-end" }}>
+          <input value={val} autoFocus placeholder="UID"
+            onChange={e => setVal(e.target.value)}
+            onKeyDown={e => { if(e.key==="Enter") save(); if(e.key==="Escape") setEditing(false); }}
+            style={{ flex:1, maxWidth:190, padding:"4px 8px", borderRadius:7, fontSize:12,
+              background:"var(--surface2)", border:"1px solid var(--border)",
+              color:"var(--text)", outline:"none", textAlign:"right",
+              fontFamily:"JetBrains Mono,monospace" }}/>
+          <button onClick={save} disabled={saving}
+            style={{ padding:"4px 10px", borderRadius:7, fontSize:12, fontWeight:700,
+              background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
+            {saving ? "…" : "OK"}
+          </button>
+          <button onClick={() => { setVal(current || ""); setEditing(false); }}
+            style={{ padding:"4px 8px", borderRadius:7, fontSize:12,
+              background:"var(--surface2)", border:"1px solid var(--border)",
+              color:"var(--muted)", cursor:"pointer" }}>✕</button>
+        </div>
+      ) : (
+        <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+          {current ? (
+            <span style={{ fontSize:13, fontWeight:600, fontFamily:"JetBrains Mono,monospace",
+              color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {current}
+            </span>
+          ) : (
+            <span style={{ fontSize:12, color:"var(--muted)", fontStyle:"italic" }}>aucun</span>
+          )}
+          <AdminOnly>
+            <button onClick={() => { setVal(current || ""); setEditing(true); }}
+              title="Modifier le tag NFC"
+              style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)",
+                padding:2, display:"flex" }}
+              onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
+              onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
+              <Pencil size={13}/>
+            </button>
+          </AdminOnly>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(current != null ? String(Number(current).toFixed(2)) : "");
@@ -591,12 +658,12 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
           ) : (
             <span style={{ fontSize:12, color:"var(--muted)", fontStyle:"italic" }}>non défini</span>
           )}
-          <button onClick={() => { setVal(current != null ? String(Number(current).toFixed(2)) : filamentPrice != null ? String(Number(filamentPrice).toFixed(2)) : ""); setEditing(true); }}
+          <AdminOnly><button onClick={() => { setVal(current != null ? String(Number(current).toFixed(2)) : filamentPrice != null ? String(Number(filamentPrice).toFixed(2)) : ""); setEditing(true); }}
             style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2, display:"flex" }}
             onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
             onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
             <Pencil size={13}/>
-          </button>
+          </button></AdminOnly>
         </div>
       )}
     </div>
@@ -735,7 +802,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Emplacement"    value={spool.location}/>
           <WeightEditRow spoolId={spool.id} current={remaining} onUpdated={onClose}/>
           <PriceEditRow spoolId={spool.id} current={spool.price_override} filamentPrice={spool.filament_price} onUpdated={onClose}/>
-          <Row label="Tag NFC"        value={spool.tag_number} mono/>
+          <TagEditRow spoolId={spool.id} current={spool.tag_number} onUpdated={onClose}/>
           <Row label="Tray AMS"       value={spool.ams_tray}/>
           <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
           <Row label="Dernière util." value={spool.last_used_at?.slice(0,10)}/>
