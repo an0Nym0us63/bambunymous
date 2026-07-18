@@ -119,6 +119,7 @@ def _activity_label(method: str, path: str) -> str:
     p = path.replace("/api/v1", "")
     if p.startswith("/auth/login"):        return "Connexion"
     if p.startswith("/auth/change-password"): return "Changement de mot de passe"
+    if p.startswith("/users/activity"):    return "Purge du journal d'activite"
     if p.startswith("/users"):             return "Gestion des comptes"
     if p.startswith("/prints"):            return "Impressions"
     if p.startswith("/filaments"):         return "Filaments / bobines"
@@ -231,6 +232,14 @@ async def track_activity(request, call_next):
         is_action = request.method in ("POST", "PATCH", "PUT", "DELETE")
         now = datetime.utcnow()
 
+        # Presence reelle : l'onglet est au premier plan ET l'utilisateur y a
+        # touche recemment. Sans ce filtre, le sondage du statut imprimante
+        # rafraichissait last_seen toutes les minutes sur une fenetre laissee
+        # ouverte en arriere-plan -- "vu il y a 1 min" pour quelqu'un parti la
+        # veille. Une ecriture vaut toujours interaction : ca evite que
+        # last_seen se fige si un client n'envoie pas encore l'en-tete.
+        present = is_action or request.headers.get("x-app-active") == "1"
+
         # Visite et detail : uniquement au changement, ou apres une longue
         # inactivite sur la meme vue -- sinon une session ouverte des heures
         # sur l'Accueil n'y laisserait qu'une seule trace, en tout debut.
@@ -253,7 +262,8 @@ async def track_activity(request, call_next):
             u = (await db.execute(
                 select(User).where(User.username == username)
             )).scalar_one_or_none()
-            if u and (u.last_seen is None or (now - u.last_seen) > timedelta(minutes=1)):
+            if u and present and (u.last_seen is None
+                                  or (now - u.last_seen) > timedelta(minutes=1)):
                 await db.execute(
                     update(User).where(User.id == u.id).values(last_seen=now))
                 await db.commit()

@@ -150,6 +150,26 @@ async def activity(
     }
 
 
+@router.delete("/activity")
+async def activity_clear(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_admin),
+):
+    """
+    Vide le journal. Declaree AVANT /{uid} : sinon "activity" serait pris pour
+    un identifiant de compte et la route ne serait jamais atteinte.
+
+    La purge elle-meme sera journalisee par le middleware, qui s'execute apres
+    la reponse : le journal vide garde donc une premiere ligne disant qui l'a
+    vide et quand. C'est voulu -- un journal qu'on peut effacer sans trace
+    n'aurait plus grand interet.
+    """
+    from sqlalchemy import delete as _delete
+    n = (await db.execute(_delete(ActivityLog))).rowcount or 0
+    await db.commit()
+    return {"deleted": n}
+
+
 @router.patch("/{uid}", response_model=UserOut)
 async def update_user(
     uid: int,

@@ -519,6 +519,7 @@ function ActivitySection() {
   const [names, setNames] = React.useState([]);
   const [busy,  setBusy]  = React.useState(false);
   const [err,   setErr]   = React.useState(null);
+  const [purge, setPurge] = React.useState(false);   // confirmation en deux temps
 
   const load = React.useCallback(async (offset = 0) => {
     setBusy(true); setErr(null);
@@ -566,6 +567,24 @@ function ActivitySection() {
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 4px",
         display:"flex", alignItems:"center", gap:7 }}>
         <Activity size={15}/> Activité
+        {/* Discret et a l'ecart des filtres : c'est une action irreversible,
+            elle ne doit pas se trouver sous un doigt qui trie. */}
+        <button disabled={busy}
+          onClick={() => purge
+            ? (async () => {
+                setBusy(true);
+                try { await client.delete("/users/activity"); setPurge(false); await load(0); }
+                catch (e) { setErr(e.response?.data?.detail || e.message); }
+                setBusy(false);
+              })()
+            : setPurge(true)}
+          onBlur={() => setPurge(false)}
+          style={{ marginLeft:"auto", padding:"3px 9px", borderRadius:7, fontSize:10,
+            fontWeight:600, cursor:"pointer", border:"1px solid var(--border)",
+            background: purge ? "#ef4444" : "transparent",
+            color: purge ? "white" : "var(--muted)" }}>
+          {purge ? "Confirmer ?" : "Vider"}
+        </button>
       </h3>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
         <b>Actions</b> : créations, modifications, suppressions. <b>Pages</b> : arrivée sur
