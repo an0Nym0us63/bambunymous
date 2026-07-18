@@ -495,7 +495,12 @@ const METHOD_STYLE = {
   DELETE: ["#ef4444", "rgba(239,68,68,0.12)"],
 };
 const ACT_PAGE = 50;
-const ACT_KINDS = [["", "Tout"], ["action", "Actions"], ["visite", "Visites"]];
+const ACT_KINDS = [["", "Tout"], ["action", "Actions"],
+                   ["visite", "Pages"], ["detail", "Détails"]];
+const KIND_STYLE = {
+  visite: ["#a78bfa", "rgba(167,139,250,0.12)", "PAGE"],
+  detail: ["#22d3ee", "rgba(34,211,238,0.12)", "VUE"],
+};
 // Fenetres proposees. Celles qui depassent la duree de conservation renvoyee
 // par l'API sont retirees : promettre 30 jours quand la purge en garde 7
 // n'aurait affiche que du vide.
@@ -506,6 +511,8 @@ function ActivitySection() {
   const [days,  setDays]  = React.useState(7);
   const [who,   setWho]   = React.useState("");
   const [kind,  setKind]  = React.useState("");
+  const [q,     setQ]     = React.useState("");     // saisie
+  const [query, setQuery] = React.useState("");     // terme effectivement envoye
   const [items, setItems] = React.useState(null);
   const [total, setTotal] = React.useState(0);
   const [keep,  setKeep]  = React.useState(null);   // duree de conservation
@@ -518,7 +525,7 @@ function ActivitySection() {
     try {
       const { data } = await client.get("/users/activity", {
         params: { days, username: who || undefined, kind: kind || undefined,
-                  limit: ACT_PAGE, offset },
+                  q: query || undefined, limit: ACT_PAGE, offset },
       });
       setTotal(data.total || 0);
       if (data.retention_days) setKeep(data.retention_days);
@@ -529,9 +536,15 @@ function ActivitySection() {
       if (offset === 0) setItems([]);
     }
     setBusy(false);
-  }, [days, who, kind]);
+  }, [days, who, kind, query]);
 
   React.useEffect(() => { if (isAdmin) load(0); }, [isAdmin, load]);
+  // Recherche differee : sans ce delai, chaque touche frappee declencherait un
+  // appel et la liste sauterait sous les doigts.
+  React.useEffect(() => {
+    const t = setTimeout(() => setQuery(q.trim()), 350);
+    return () => clearTimeout(t);
+  }, [q]);
   React.useEffect(() => {
     if (!isAdmin) return;
     client.get("/users")
@@ -555,8 +568,9 @@ function ActivitySection() {
         <Activity size={15}/> Activité
       </h3>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
-        <b>Actions</b> : créations, modifications, suppressions. <b>Visites</b> : arrivée
-        sur une page de l'application, enregistrée au changement de page seulement.
+        <b>Actions</b> : créations, modifications, suppressions. <b>Pages</b> : arrivée sur
+        une page. <b>Détails</b> : onglet ouvert ou fiche consultée. Les vues ne sont
+        enregistrées qu'au changement, jamais en continu.
         {keep ? ` Le journal est purgé au-delà de ${keep} jours.` : ""}
       </p>
 
@@ -570,6 +584,10 @@ function ActivitySection() {
         {ACT_WINDOWS.filter(([d]) => !keep || d <= keep).map(([d,l]) => (
           <button key={d} onClick={()=>setDays(d)} style={chip(days===d)}>{l}</button>
         ))}
+        <input value={q} onChange={e=>setQ(e.target.value)}
+          placeholder="Rechercher un libellé…"
+          style={{ ...inp, width:"auto", flex:"1 1 140px", minWidth:120,
+            fontSize:12, padding:"5px 10px" }}/>
         <select value={who} onChange={e=>setWho(e.target.value)}
           style={{ ...chip(!!who), marginLeft:"auto", maxWidth:150 }}>
           <option value="">Tous les comptes</option>
@@ -588,25 +606,24 @@ function ActivitySection() {
           <div style={{ display:"flex", flexDirection:"column", gap:4,
             maxHeight:420, overflowY:"auto" }}>
             {items.map(it => {
-              const visit = it.kind === "visite";
-              const [fg, bg] = visit
-                ? ["#a78bfa", "rgba(167,139,250,0.12)"]
-                : (METHOD_STYLE[it.method] || ["#94a3b8","rgba(148,163,184,0.15)"]);
+              const view = it.kind === "visite" || it.kind === "detail";
+              const [fg, bg, tag] = KIND_STYLE[it.kind]
+                || [...(METHOD_STYLE[it.method] || ["#94a3b8","rgba(148,163,184,0.15)"]), it.method];
               const ko = it.status >= 400;
               return (
                 <div key={it.id} style={{ display:"flex", alignItems:"flex-start", gap:8,
                   background:"var(--surface2)", border:"1px solid var(--border)",
                   borderRadius:10, padding:"8px 10px" }}>
                   <span style={{ fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:6,
-                    background:bg, color:fg, flexShrink:0, marginTop:1 }}>{it.method}</span>
+                    background:bg, color:fg, flexShrink:0, marginTop:1 }}>{tag}</span>
                   <div style={{ flex:1, minWidth:0 }}>
                     <p style={{ margin:0, fontSize:12, fontWeight:600,
-                      color: visit ? "var(--text2)" : "var(--text)" }}>
-                      {visit ? `Page ${it.label}` : (it.label || it.path)}
+                      color: view ? "var(--text2)" : "var(--text)" }}>
+                      {it.kind === "visite" ? `Page ${it.label}` : (it.label || it.path)}
                     </p>
-                    {/* Le chemin n'apprend rien sur une visite : le libelle de
-                        page dit deja tout, l'afficher ferait du bruit. */}
-                    {!visit && (
+                    {/* Le chemin n'apprend rien sur une vue : le libelle dit
+                        deja tout, l'afficher ferait du bruit. */}
+                    {!view && (
                       <p style={{ margin:"1px 0 0", fontSize:10, color:"var(--muted)",
                         overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                         {it.path}{ko ? ` · échec ${it.status}` : ""}
