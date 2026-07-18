@@ -5,21 +5,8 @@ import client from "../api/client";
 import HeaderAction from "../components/HeaderAction";
 import { usePrinter } from "../store/printer";
 import { useTheme } from "../useTheme";
-import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY, ROLE_READONLY_PRICES } from "../store/auth";
-
-// Libelles des roles, definis une fois : ils apparaissent dans le badge, le
-// selecteur de creation et les boutons de changement de role.
-const ROLE_OPTIONS = [
-  [ROLE_ADMIN,           "Administrateur"],
-  [ROLE_READONLY,        "Lecture seule"],
-  [ROLE_READONLY_PRICES, "Lecture seule (avec prix)"],
-];
-const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS);
-const ROLE_BADGE = {
-  [ROLE_ADMIN]:           "Admin",
-  [ROLE_READONLY]:        "Lecture seule",
-  [ROLE_READONLY_PRICES]: "Lecture seule + prix",
-};
+import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
+         ROLE_OPTIONS, ROLE_LABEL, ROLE_BADGE } from "../store/auth";
 import AdminOnly from "../components/AdminOnly";
 
 const inp = {

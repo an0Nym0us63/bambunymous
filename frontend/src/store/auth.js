@@ -60,6 +60,20 @@ export const useAuth = create(
   )
 );
 
+// Libelles des roles. Ils vivent ici et non dans Settings : le menu profil du
+// layout en a besoin aussi, et deux copies auraient fini par diverger.
+export const ROLE_OPTIONS = [
+  [ROLE_ADMIN,           "Administrateur"],
+  [ROLE_READONLY,        "Lecture seule"],
+  [ROLE_READONLY_PRICES, "Lecture seule (avec prix)"],
+];
+export const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS);
+export const ROLE_BADGE = {
+  [ROLE_ADMIN]:           "Admin",
+  [ROLE_READONLY]:        "Lecture seule",
+  [ROLE_READONLY_PRICES]: "Lecture seule + prix",
+};
+
 // Raccourcis pour les composants.
 export const useIsAdmin    = () => useAuth((s) => (s.role || ROLE_ADMIN) === ROLE_ADMIN);
 // Non-admin = lecture seule, quel que soit le role. Enumerer les roles brides
