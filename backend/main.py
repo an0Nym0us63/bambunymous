@@ -103,11 +103,16 @@ app = FastAPI(
 )
 
 # ── Lecture seule ────────────────────────────────────────────────────────────
-# Un compte "readonly" peut tout consulter mais ne doit rien pouvoir modifier.
-# Plutot que d'annoter un a un des centaines d'endpoints (avec le risque d'en
-# oublier, et d'oublier les futurs), on filtre globalement sur la methode HTTP :
-# tout ce qui n'est pas une lecture est refuse. Seul le changement de son propre
-# mot de passe fait exception.
+# Un compte non-administrateur peut tout consulter mais ne doit rien pouvoir
+# modifier. Plutot que d'annoter un a un des centaines d'endpoints (avec le
+# risque d'en oublier, et d'oublier les futurs), on filtre globalement sur la
+# methode HTTP : tout ce qui n'est pas une lecture est refuse. Seul le
+# changement de son propre mot de passe fait exception.
+#
+# Le test porte sur "role != admin" et non sur une liste de roles bridés : tout
+# role inconnu ou ajoute plus tard est en lecture seule tant qu'on ne l'a pas
+# explicitement autorise. L'inverse laissait un nouveau role obtenir tous les
+# droits d'ecriture en silence.
 _READONLY_ALLOWED_PATHS = {
     "/api/v1/auth/login",
     "/api/v1/auth/change-password",
@@ -126,7 +131,7 @@ async def enforce_readonly(request, call_next):
         auth = request.headers.get("authorization") or ""
         if auth.lower().startswith("bearer "):
             payload = decode_token_payload(auth.split(" ", 1)[1].strip())
-            if payload and payload.get("role") == "readonly":
+            if payload and (payload.get("role") or "admin") != "admin":
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "Compte en lecture seule : action non autorisee"},
