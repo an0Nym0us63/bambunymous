@@ -4,7 +4,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../store/auth";
 
 export default function Login() {
-  const [user, setUser]     = useState("admin");
+  const [user, setUser]     = useState("");
   const [pass, setPass]     = useState("");
   const [show, setShow]     = useState(false);
   const [error, setError]   = useState("");
