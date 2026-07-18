@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2 } from "lucide-react";
+import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
 import HeaderAction from "../components/HeaderAction";
@@ -18,6 +18,36 @@ const lbl = {
   display:"block", fontSize:11, color:"var(--muted)", marginBottom:6,
   textTransform:"uppercase", letterSpacing:"0.05em",
 };
+
+// Le backend renvoie des datetime UTC *naifs* ("2026-07-18 21:24:33.123456").
+// Sans le T ni le Z, Safari refuse de les parser et les autres moteurs les
+// lisent en heure locale : le journal aurait affiche deux heures de decalage
+// sans rien signaler.
+function parseUTC(t) {
+  if (!t) return null;
+  const s = String(t).trim();
+  const hasTz = /(?:Z|[+-]\d{2}:?\d{2})$/.test(s);
+  const d = new Date(s.replace(" ", "T") + (hasTz ? "" : "Z"));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Duree relative : sur une fenetre de 7 jours c'est plus parlant qu'une date.
+function ago(t) {
+  const d = parseUTC(t);
+  if (!d) return null;
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60)    return "à l'instant";
+  if (s < 3600)  return `il y a ${Math.floor(s / 60)} min`;
+  if (s < 86400) return `il y a ${Math.floor(s / 3600)} h`;
+  const j = Math.floor(s / 86400);
+  return j === 1 ? "hier" : `il y a ${j} j`;
+}
+
+function stamp(t) {
+  const d = parseUTC(t);
+  return d ? d.toLocaleString("fr-FR", { day:"2-digit", month:"2-digit",
+    hour:"2-digit", minute:"2-digit" }) : "";
+}
 const sec = {
   display:"grid", gridTemplateColumns:"1fr 1fr", gap:12,
 };
@@ -356,6 +386,11 @@ function UsersSection() {
                     background:"rgba(239,68,68,0.12)", color:"#ef4444" }}>Désactivé</span>
                 )}
               </div>
+              {/* Derniere utilisation : elle a sa place ici, aupres du compte,
+                  plutot que dans une seconde liste de comptes ailleurs. */}
+              <p style={{ fontSize:11, color:"var(--muted)", margin:"4px 0 0" }}>
+                {u.last_seen ? `Vu ${ago(u.last_seen)} · ${stamp(u.last_seen)}` : "Jamais utilisé"}
+              </p>
               <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
                 {/* Le compte principal et le sien propre ne sont pas modifiables
                     (hors mot de passe) : on evite de se couper l'acces. */}
