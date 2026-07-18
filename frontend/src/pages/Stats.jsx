@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 
 import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag } from "lucide-react";
 import client from "../api/client";
+import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 
 const fmtH = s => {
@@ -10,7 +11,7 @@ const fmtH = s => {
   return h > 0 ? `${h}h${m > 0 ? ` ${m}min` : ""}` : m > 0 ? `${m}min` : "—";
 };
 const fmtKg  = g => `${((g || 0) / 1000).toFixed(2)} kg`;
-const fmtEur = c => `${(c || 0).toFixed(2)} €`;
+const fmtEur = c => isMoneyHidden() ? MONEY_MASK : `${(c || 0).toFixed(2)} €`;
 
 // Pastille couleur : dégradé sur un calque interne d'un conteneur overflow:hidden,
 // anneau en box-shadow. Aucun border sur l'élément peint → pas de halo.

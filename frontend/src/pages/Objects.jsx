@@ -1,10 +1,15 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
 import client from "../api/client";
+import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 
-function fmtPrice(v) { return v != null ? `${Number(v).toFixed(2)} €` : "—"; }
+// Les montants sont masques pour les comptes en lecture seule.
+function fmtPrice(v) {
+  if (isMoneyHidden()) return MONEY_MASK;
+  return v != null ? `${Number(v).toFixed(2)} €` : "—";
+}
 
 // ── Accessory Card ────────────────────────────────────────────────────────
 

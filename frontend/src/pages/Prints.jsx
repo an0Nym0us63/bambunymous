@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
+import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
@@ -487,11 +488,11 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
                     gratuite : c'est une info, pas une absence). f.cost peut
                     valoir 0 legitimement -> on ne bascule PAS sur normal_cost. */}
                 <span style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
-                  {(f.cost || 0).toFixed(2)}€
+                  {moneyVal((f.cost || 0), 2)}€
                 </span>
                 {/* Toujours les DEUX couts, meme identiques : la parenthese
                     confirme le cout catalogue, son absence laisserait un doute. */}
-                <p style={{ fontSize:9, color:"var(--muted)", margin:0 }}>({(f.normal_cost || 0).toFixed(2)}€)</p>
+                <p style={{ fontSize:9, color:"var(--muted)", margin:0 }}>({moneyVal((f.normal_cost || 0), 2)}€)</p>
               </div>
             </div>
           ))}
@@ -765,17 +766,17 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
               <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
                 <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>Filament</p>
                 <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
-                  {costFil.toFixed(2)}€
+                  {moneyVal(costFil, 2)}€
                 </p>
                 <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
-                  ({costNormal.toFixed(2)}€ sans bobine)
+                  ({moneyVal(costNormal, 2)}€ sans bobine)
                 </p>
               </div>
               {/* Électricité */}
               <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
                 <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>Électricité</p>
                 <p style={{ fontSize:15, fontWeight:800, color:"#f59e0b", margin:0, fontFamily:"monospace" }}>
-                  {costElec.toFixed(2)}€
+                  {moneyVal(costElec, 2)}€
                 </p>
               </div>
             </div>
@@ -787,10 +788,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                   textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>Total</p>
                 <div style={{ textAlign:"right" }}>
                   <span style={{ fontSize:20, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
-                    {totalBobine.toFixed(2)}€
+                    {moneyVal(totalBobine, 2)}€
                   </span>
                   <span style={{ fontSize:11, color:"var(--muted)", marginLeft:8 }}>
-                    ({totalNormal.toFixed(2)}€)
+                    ({moneyVal(totalNormal, 2)}€)
                   </span>
                 </div>
               </div>
@@ -803,8 +804,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                   </span>
                   {localNb > 1 && (
                     <span style={{ fontSize:12, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
-                      · {(totalBobine/localNb).toFixed(2)}€/u
-                      {` (${(totalNormal/localNb).toFixed(2)}€/u)`}
+                      · {moneyVal((totalBobine/localNb), 2)}€/u
+                      {` (${moneyVal((totalNormal/localNb), 2)}€/u)`}
                     </span>
                   )}
                 </div>
@@ -1127,9 +1128,9 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                 <p style={{ fontSize:10, color:"#60a5fa", fontWeight:700, textTransform:"uppercase",
                   letterSpacing:"0.06em", margin:0 }}>Coût total</p>
                 <span style={{ fontSize:22, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
-                  {totalCost.toFixed(2)}€
+                  {moneyVal(totalCost, 2)}€
                   <span style={{ fontSize:13, fontWeight:700, color:"var(--muted)", marginLeft:6 }}>
-                    ({totalNormal.toFixed(2)}€)
+                    ({moneyVal(totalNormal, 2)}€)
                   </span>
                 </span>
               </div>
@@ -1142,8 +1143,8 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                   </span>
                   {nbItems > 1 && (
                     <span style={{ fontSize:12, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
-                      · {(totalCost/nbItems).toFixed(2)}€/u
-                      {` (${(totalNormal/nbItems).toFixed(2)}€/u)`}
+                      · {moneyVal((totalCost/nbItems), 2)}€/u
+                      {` (${moneyVal((totalNormal/nbItems), 2)}€/u)`}
                     </span>
                   )}
                 </div>
@@ -1839,7 +1840,7 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
         else setSelectedPrint(it);
       }}
       compareFields={[
-        ["Coût",   it => it.total_cost ? `${it.total_cost.toFixed(2)}€` : null],
+        ["Coût",   it => it.total_cost ? `${moneyVal(it.total_cost, 2)}€` : null],
         ["Durée",  it => fmtDur(it.duration_seconds)],
         ["Poids",  it => it.total_weight_g ? `${it.total_weight_g.toFixed(0)}g` : null],
       ]}
@@ -2097,7 +2098,7 @@ export default function Prints() {
             [`${kpis.count}`, "prints", "#3b82f6"],
             kpis.duration > 0 ? [fmtDur(kpis.duration), null, "#8b5cf6"] : null,
             kpis.weight_g > 0 ? [`${(kpis.weight_g/1000).toFixed(2)} kg`, null, "#f59e0b"] : null,
-            kpis.cost > 0 ? [`${kpis.cost.toFixed(2)} €`, null, "#22c55e"] : null,
+            kpis.cost > 0 ? [`${moneyVal(kpis.cost, 2)} €`, null, "#22c55e"] : null,
           ].filter(Boolean).map(([val, label, color])=>(
             <div key={val} style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 10px",
               borderRadius:20, background:`${color}18`, border:`1px solid ${color}30` }}>

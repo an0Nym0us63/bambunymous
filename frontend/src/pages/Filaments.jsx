@@ -7,6 +7,7 @@ import { useNativeScan } from "../hooks/useNativeScan";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette } from "lucide-react";
 import client from "../api/client";
+import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { colorBg, parseColorsList } from "../utils/colors";
 import GalleryCompare from "../components/GalleryCompare";
@@ -580,12 +581,12 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           {current != null ? (
             <span style={{ fontSize:13, fontWeight:600, fontFamily:"JetBrains Mono,monospace", color:"#22c55e" }}>
-              {Number(current).toFixed(2)} €
+              {moneyVal(Number(current), 2)} €
             </span>
           ) : filamentPrice != null ? (
             <span style={{ fontSize:13, fontWeight:600, fontFamily:"JetBrains Mono,monospace", color:"#f59e0b" }}
               title="Prix du filament (non personnalisé)">
-              {Number(filamentPrice).toFixed(2)} €
+              {moneyVal(Number(filamentPrice), 2)} €
             </span>
           ) : (
             <span style={{ fontSize:12, color:"var(--muted)", fontStyle:"italic" }}>non défini</span>
@@ -769,7 +770,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           {spool.filament_profile_id && <Row label="Code Bambu" value={spool.filament_profile_id} mono/>}
           {spool.filament_fila_color_code && <Row label="Code couleur Bambu" value={spool.filament_fila_color_code} mono/>}
           <Row label="Poids total"    value={spool.filament_weight_g ? `${spool.filament_weight_g}g` : null}/>
-          <Row label="Prix catalogue" value={spool.filament_price ? `${Number(spool.filament_price).toFixed(2)}€` : null}/>
+          <Row label="Prix catalogue" value={spool.filament_price ? `${moneyVal(Number(spool.filament_price), 2)}€` : null}/>
 
 
           {/* Historique utilisation */}
@@ -856,7 +857,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                     </p>
                     {u.cost > 0 && (
                       <p style={{ fontSize:10, color:"var(--muted)", margin:0, fontFamily:"monospace" }}>
-                        {u.cost.toFixed(2)}€
+                        {moneyVal(u.cost, 2)}€
                       </p>
                     )}
                   </div>
@@ -1145,7 +1146,7 @@ function SpoolsView({ filaments, showArchived }) {
       const prixTotal = spools.reduce((s, b) => s + (b.price_override || 0), 0);
       return [
         { label:"archivées", value: spools.length, accent:"#94a3b8" },
-        { label:"valeur",    value: prixTotal > 0 ? `${prixTotal.toFixed(0)} €` : null, accent:"#94a3b8" },
+        { label:"valeur",    value: prixTotal > 0 ? `${moneyVal(prixTotal, 0)} €` : null, accent:"#94a3b8" },
       ];
     }
     const marques = new Set(spools.map(b => b.filament_manufacturer).filter(Boolean)).size;
@@ -1155,7 +1156,7 @@ function SpoolsView({ filaments, showArchived }) {
       { label:"bobines",  value: spools.length, accent:"#3b82f6" },
       { label:"marques",  value: marques || null, accent:"#8b5cf6" },
       { label:"en stock", value: poids > 0 ? `${(poids/1000).toFixed(2)} kg` : null, accent:"#f59e0b" },
-      { label:"valeur",   value: prix > 0 ? `${prix.toFixed(0)} €` : null, accent:"#22c55e" },
+      { label:"valeur",   value: prix > 0 ? `${moneyVal(prix, 0)} €` : null, accent:"#22c55e" },
     ];
   }, [spools, showArchived]);
 
