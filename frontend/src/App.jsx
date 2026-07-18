@@ -13,6 +13,13 @@ import Prints from "./pages/Prints";
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuth();
+  const refreshMe = useAuth((s) => s.refreshMe);
+
+  // A l'ouverture d'une session authentifiee, on resynchronise identite et role
+  // depuis le serveur : le role a pu changer, ou la session dater d'avant
+  // l'introduction des roles.
+  React.useEffect(() => { if (isAuthenticated) refreshMe?.(); }, [isAuthenticated, refreshMe]);
+
   return isAuthenticated ? children : <Navigate to="/login" replace />;
 }
 
