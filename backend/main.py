@@ -202,7 +202,12 @@ async def enforce_readonly(request, call_next):
         auth = request.headers.get("authorization") or ""
         if auth.lower().startswith("bearer "):
             payload = decode_token_payload(auth.split(" ", 1)[1].strip())
-            if payload and payload.get("role") == "readonly":
+            # Test sur "different de admin" et non sur une liste de roles brides :
+            # tout role inconnu ou ajoute plus tard est en lecture seule tant
+            # qu'on ne l'a pas explicitement autorise. L'inverse laisse un
+            # nouveau role obtenir tous les droits d'ecriture en silence -- ce
+            # qui vient d'arriver a readonly_prices.
+            if payload and (payload.get("role") or "admin") != "admin":
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "Compte en lecture seule : action non autorisee"},
