@@ -139,6 +139,7 @@ class SpoolOut(BaseModel):
     filament_color_bucket: Optional[str] = None
     filament_external_id: Optional[str] = None
     filament_fila_color_code: Optional[str] = None
+    filament_swatch: bool = False              # echantillon (nuancier) imprime
     # Bobine physique
     remaining_weight_g: Optional[float] = None
     price_override: Optional[float] = None
@@ -659,6 +660,7 @@ def _spool_out(s: Spool) -> SpoolOut:
         filament_price=f.price if f else None,
         filament_profile_id=f.profile_id if f else None,
         filament_fila_color_code=getattr(f, "fila_color_code", None) if f else None,
+        filament_swatch=bool(getattr(f, "swatch", False)) if f else False,
         filament_multicolor_type=f.multicolor_type if f else None,
         filament_colors_array=f.colors_array if f else None,
         filament_color_bucket=getattr(f, "color_bucket", None) if f else None,

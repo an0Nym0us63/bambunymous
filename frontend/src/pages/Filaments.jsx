@@ -5,7 +5,7 @@ import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
 import { useNativeScan } from "../hooks/useNativeScan";
 import HeaderAction from "../components/HeaderAction";
-import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc } from "lucide-react";
+import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette } from "lucide-react";
 import client from "../api/client";
 import { colorBg, parseColorsList } from "../utils/colors";
 import GalleryCompare from "../components/GalleryCompare";
@@ -687,11 +687,22 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                 {spool.filament_fila_type || spool.filament_material}
                 {spool.filament_manufacturer ? ` · ${spool.filament_manufacturer}` : ""}
               </p>
-              {spool.archived && (
-                <span style={{ fontSize:10, background:"rgba(148,163,184,0.15)",
-                  color:"#94a3b8", padding:"2px 8px", borderRadius:20,
-                  fontWeight:600, display:"inline-block", marginTop:4 }}>Archivée</span>
-              )}
+              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:4 }}>
+                {spool.archived && (
+                  <span style={{ fontSize:10, background:"rgba(148,163,184,0.15)",
+                    color:"#94a3b8", padding:"2px 8px", borderRadius:20,
+                    fontWeight:600, display:"inline-block" }}>Archivée</span>
+                )}
+                {/* Indicateur echantillon (nuancier) du filament. */}
+                <span style={{ display:"inline-flex", alignItems:"center", gap:4,
+                  fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
+                  background: spool.filament_swatch ? "rgba(34,197,94,0.12)" : "var(--surface2)",
+                  color:      spool.filament_swatch ? "#22c55e" : "var(--muted)",
+                  border: "1px solid " + (spool.filament_swatch ? "rgba(34,197,94,0.3)" : "var(--border)") }}>
+                  <Palette size={10}/>
+                  {spool.filament_swatch ? "Échantillon" : "Sans échantillon"}
+                </span>
+              </div>
             </div>
           </div>
 
@@ -751,6 +762,8 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Marque"         value={spool.filament_manufacturer}/>
           <Row label="Matière"        value={spool.filament_material}/>
           <Row label="Sous-type"      value={spool.filament_fila_type}/>
+          <Row label="Échantillon"    value={spool.filament_swatch ? "Oui" : "Non"}
+            accent={spool.filament_swatch ? "#22c55e" : "var(--muted)"}/>
           <Row label="Couleur"        value={color} mono/>
           {spool.filament_profile_id && <Row label="Code Bambu" value={spool.filament_profile_id} mono/>}
           {spool.filament_fila_color_code && <Row label="Code couleur Bambu" value={spool.filament_fila_color_code} mono/>}
@@ -1346,6 +1359,15 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               <p style={{ fontSize:12, color:"var(--muted)", margin:"4px 0 0" }}>
                 {[f.manufacturer, f.material].filter(Boolean).join(" · ")}
               </p>
+              {/* Indicateur echantillon (nuancier) imprime ou non. */}
+              <span style={{ display:"inline-flex", alignItems:"center", gap:4, marginTop:6,
+                padding:"3px 9px", borderRadius:20, fontSize:10, fontWeight:700,
+                background: f.swatch ? "rgba(34,197,94,0.12)" : "var(--surface2)",
+                color:      f.swatch ? "#22c55e" : "var(--muted)",
+                border: "1px solid " + (f.swatch ? "rgba(34,197,94,0.3)" : "var(--border)") }}>
+                <Palette size={11}/>
+                {f.swatch ? "Échantillon" : "Sans échantillon"}
+              </span>
             </div>
             <button onClick={() => setEditing(e=>!e)}
               style={{ padding:"6px 12px", borderRadius:8, fontSize:12, fontWeight:700,
