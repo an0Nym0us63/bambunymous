@@ -257,6 +257,11 @@ async def filament_labels_pdf(
     PT_CAP  = 0.82                     # part de la bande occupee par la capitale
     PT_MAX  = 9.0                      # plafond haut : les lignes "adaptables"
                                        # (sous-type, marque) remplissent la largeur
+    PT_DESC = 0.21                     # jambage sous la ligne de base (p, g, y)
+    QGAP    = 0.30 * mm                # respiration entre le texte et le QR :
+                                       # a la police maximale, le texte venait
+                                       # au contact du QR, jambages compris
+    SEP     = 0.40 * mm                # ecart minimal numero <-> marque
 
     cols = int((W - 2*MARG + GAP) // (CELL_W + GAP))
     rows = int((H - 2*MARG + GAP) // (CELL_H + GAP))
@@ -353,17 +358,26 @@ async def filament_labels_pdf(
 
         cx = x + CELL_W/2
 
-        def _line(cy_top, text, bold):
-            """Ligne centree dans une bande LINE, scommencant en haut a cy_top."""
+        def _baseline(band_bottom, band_h, pt):
+            """Ligne de base centrant le bloc capitale+jambage dans la bande.
+            Ignorer le jambage faisait descendre les p et les g sous la bande,
+            donc au contact du QR."""
+            cap  = pt * 0.72 / 2.83465 * mm
+            desc = pt * PT_DESC / 2.83465 * mm
+            return band_bottom + desc + (band_h - cap - desc) / 2
+
+        def _line(cy_top, text, bold, gap=0):
+            """Ligne centree dans une bande LINE commencant en haut a cy_top.
+            `gap` reserve un espace en bas de bande, du cote du QR."""
             font = "Helvetica-Bold" if bold else "Helvetica"
-            fitted = _fit_font(text, CELL_W, font, LINE)
+            band = LINE - gap
+            fitted = _fit_font(text, CELL_W, font, band)
             if not fitted:
                 return
             txt, pt = fitted
-            cap_mm = pt * 0.72 / 2.83465
             c.setFont(font, pt)
             c.setFillColorRGB(0, 0, 0)
-            c.drawCentredString(cx, cy_top - LINE + (LINE - cap_mm*mm)/2, txt)
+            c.drawCentredString(cx, _baseline(cy_top - LINE + gap, band, pt), txt)
 
         sub  = (f.fila_type or f.material or "").strip()
 
@@ -373,22 +387,25 @@ async def filament_labels_pdf(
         # garde une taille fixe (c'est lui qu'on lit pour saisir a la main si le
         # scan echoue) ; seule la marque s'adapte a la place qui reste.
         num_pt = min(PT_MAX, (LINE / mm) * PT_CAP * 2.83465 / 0.72)
-        num    = f"{f.id}."
+        num    = str(f.id)
         num_w  = stringWidth(num, "Helvetica-Bold", num_pt)
         # Ligne de base commune, calee sur la capitale du numero : sinon une
         # marque en police reduite flotterait au-dessus du chiffre.
-        base   = top - LINE + (LINE - (num_pt * 0.72 / 2.83465) * mm) / 2
+        base   = _baseline(top - LINE, LINE, num_pt)
         c.setFillColorRGB(0, 0, 0)
         c.setFont("Helvetica-Bold", num_pt)
         c.drawString(x, base, num)
-        brand = _fit_font(f.manufacturer or "", CELL_W - num_w, "Helvetica", LINE)
+        # Marque calee a droite : les deux bouts de la ligne sont ainsi alignes
+        # sur les bords de l'etiquette, et l'espace variable retombe au milieu
+        # ou il separe justement le numero du texte.
+        brand = _fit_font(f.manufacturer or "", CELL_W - num_w - SEP, "Helvetica", LINE)
         if brand:
             b_txt, b_pt = brand
             c.setFont("Helvetica", b_pt)
-            c.drawString(x + num_w, base, b_txt)
+            c.drawRightString(x + CELL_W, base, b_txt)
 
-        # Ligne 2 : le sous-type, centre comme avant.
-        _line(top - LINE, sub, False)
+        # Ligne 2 : le sous-type, centre, avec une respiration avant le QR.
+        _line(top - LINE, sub, False, gap=QGAP)
 
         # QR pleine largeur, centre verticalement entre les blocs de texte
         qr = qrcode.QRCode(
@@ -411,17 +428,20 @@ async def filament_labels_pdf(
                            qy + QR - (r_i + 1)*module,
                            module, module, stroke=0, fill=1)
 
-        # Sous le QR : le nom, sur une ou deux lignes selon la place.
+        # Sous le QR : le nom, sur une ou deux lignes selon la place. La
+        # respiration est prise sur le bloc entier, pas sur chaque ligne, sinon
+        # l'interligne se serait creuse pour rien.
         name = (f.translated_name or f.name or "").strip()
-        fitted = _fit_wrap(name, CELL_W, "Helvetica", LINE, 2)
+        n_top = y + 2*LINE - QGAP
+        n_h   = (2*LINE - QGAP) / 2
+        fitted = _fit_wrap(name, CELL_W, "Helvetica", n_h, 2)
         if fitted:
             n_lines, n_pt = fitted
-            n_cap = (n_pt * 0.72 / 2.83465) * mm
             c.setFont("Helvetica", n_pt)
             c.setFillColorRGB(0, 0, 0)
             for li, ln in enumerate(n_lines):
-                band_top = y + 2*LINE - li*LINE
-                c.drawCentredString(cx, band_top - LINE + (LINE - n_cap)/2, ln)
+                band_bottom = n_top - (li + 1) * n_h
+                c.drawCentredString(cx, _baseline(band_bottom, n_h, n_pt), ln)
 
     c.showPage()
     c.save()
