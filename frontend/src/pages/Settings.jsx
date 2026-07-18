@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
-import { Save, Wifi, RefreshCw, Sun, Moon } from "lucide-react";
+import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
 import HeaderAction from "../components/HeaderAction";
 import { usePrinter } from "../store/printer";
 import { useTheme } from "../useTheme";
+import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY } from "../store/auth";
 
 const inp = {
   width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
@@ -216,6 +217,223 @@ function EnrichFromCatalogSection() {
   );
 }
 
+
+// ── Mon compte : changer son propre mot de passe (tous les roles) ──────────
+function MyAccountSection() {
+  const username = useAuth((s) => s.username);
+  const role     = useAuth((s) => s.role);
+  const [f, setF] = React.useState({ current:"", next:"", confirm:"" });
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg]   = React.useState(null);
+
+  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
+  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+    letterSpacing:"0.05em", marginBottom:4, display:"block" };
+
+  const submit = async () => {
+    setMsg(null);
+    if (f.next.length < 4)      return setMsg({ err:true, t:"Mot de passe trop court (4 caractères minimum)" });
+    if (f.next !== f.confirm)   return setMsg({ err:true, t:"La confirmation ne correspond pas" });
+    setBusy(true);
+    try {
+      await client.post("/auth/change-password", { current_password: f.current, new_password: f.next });
+      setF({ current:"", next:"", confirm:"" });
+      setMsg({ err:false, t:"Mot de passe modifié." });
+    } catch(e) {
+      setMsg({ err:true, t: e.response?.data?.detail || e.message });
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 4px",
+        display:"flex", alignItems:"center", gap:7 }}>
+        <KeyRound size={15}/> Mon compte
+      </h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        {username ? <b>{username}</b> : "Compte courant"}
+        {" — "}
+        {role === ROLE_READONLY ? "lecture seule" : "administrateur"}
+      </p>
+      <div style={{ display:"flex", flexDirection:"column", gap:10, maxWidth:360 }}>
+        <div><label style={lbl}>Mot de passe actuel</label>
+          <input style={inp} type="password" value={f.current}
+            onChange={e=>setF(v=>({...v,current:e.target.value}))}/></div>
+        <div><label style={lbl}>Nouveau mot de passe</label>
+          <input style={inp} type="password" value={f.next}
+            onChange={e=>setF(v=>({...v,next:e.target.value}))}/></div>
+        <div><label style={lbl}>Confirmer</label>
+          <input style={inp} type="password" value={f.confirm}
+            onChange={e=>setF(v=>({...v,confirm:e.target.value}))}/></div>
+        {msg && <p style={{ fontSize:12, margin:0, color: msg.err ? "#ef4444" : "#22c55e" }}>{msg.t}</p>}
+        <button onClick={submit} disabled={busy || !f.current || !f.next}
+          style={{ padding:"9px 18px", borderRadius:10, border:"none", background:"#3b82f6",
+            color:"white", fontSize:13, fontWeight:700, alignSelf:"flex-start",
+            cursor:(busy||!f.current||!f.next)?"not-allowed":"pointer",
+            opacity:(busy||!f.current||!f.next)?0.6:1 }}>
+          {busy ? "Modification…" : "Changer le mot de passe"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Utilisateurs (administrateurs seulement) ──────────────────────────────
+function UsersSection() {
+  const isAdmin = useIsAdmin();
+  const meName  = useAuth((s) => s.username);
+  const [list, setList]   = React.useState(null);
+  const [busy, setBusy]   = React.useState(false);
+  const [err, setErr]     = React.useState(null);
+  const [creating, setCreating] = React.useState(false);
+  const [nf, setNf] = React.useState({ username:"", password:"", role: ROLE_READONLY });
+  const [confirmDel, setConfirmDel] = React.useState(null);
+  const [pwdFor, setPwdFor] = React.useState(null);   // id du compte dont on change le mdp
+  const [pwdVal, setPwdVal] = React.useState("");
+
+  const load = React.useCallback(async () => {
+    try { const { data } = await client.get("/users"); setList(data); setErr(null); }
+    catch(e) { setList([]); setErr(e.response?.status === 403 ? null : (e.response?.data?.detail || e.message)); }
+  }, []);
+  React.useEffect(() => { if (isAdmin) load(); }, [isAdmin, load]);
+
+  if (!isAdmin) return null;
+
+  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+    padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
+
+  const act = async (fn) => {
+    setBusy(true); setErr(null);
+    try { await fn(); await load(); }
+    catch(e) { setErr(e.response?.data?.detail || e.message); }
+    setBusy(false);
+  };
+
+  const create = () => act(async () => {
+    await client.post("/users", { username: nf.username.trim(), password: nf.password, role: nf.role });
+    setNf({ username:"", password:"", role: ROLE_READONLY }); setCreating(false);
+  });
+
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 4px",
+        display:"flex", alignItems:"center", gap:7 }}>
+        <Users size={15}/> Utilisateurs
+      </h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        Un compte <b>administrateur</b> a tous les droits. Un compte <b>lecture seule</b> peut
+        tout consulter, sans aucune modification, et les montants lui sont masqués.
+      </p>
+
+      {err && <p style={{ fontSize:12, color:"#ef4444", margin:"0 0 10px" }}>{err}</p>}
+
+      {list === null ? (
+        <p style={{ fontSize:12, color:"var(--muted)" }}>Chargement…</p>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:12 }}>
+          {list.map(u => (
+            <div key={u.id} style={{ background:"var(--surface2)", border:"1px solid var(--border)",
+              borderRadius:10, padding:"10px 12px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                <span style={{ fontSize:13, fontWeight:700, flex:1, minWidth:100 }}>
+                  {u.username}{u.username === meName ? " (vous)" : ""}
+                </span>
+                <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
+                  background: u.role === ROLE_ADMIN ? "rgba(59,130,246,0.12)" : "rgba(148,163,184,0.15)",
+                  color: u.role === ROLE_ADMIN ? "#60a5fa" : "#94a3b8" }}>
+                  {u.role === ROLE_ADMIN ? "Admin" : "Lecture seule"}
+                </span>
+                {!u.active && (
+                  <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
+                    background:"rgba(239,68,68,0.12)", color:"#ef4444" }}>Désactivé</span>
+                )}
+              </div>
+              <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+                <button disabled={busy} onClick={()=>act(()=>client.patch(`/users/${u.id}`, {
+                    role: u.role === ROLE_ADMIN ? ROLE_READONLY : ROLE_ADMIN }))}
+                  style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
+                    border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
+                  {u.role === ROLE_ADMIN ? "Passer en lecture seule" : "Passer admin"}
+                </button>
+                <button disabled={busy} onClick={()=>act(()=>client.patch(`/users/${u.id}`, { active: !u.active }))}
+                  style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
+                    border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
+                  {u.active ? "Désactiver" : "Réactiver"}
+                </button>
+                <button disabled={busy} onClick={()=>{ setPwdFor(pwdFor===u.id?null:u.id); setPwdVal(""); }}
+                  style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
+                    border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
+                  Mot de passe
+                </button>
+                <button disabled={busy}
+                  onClick={()=> confirmDel === u.id
+                    ? act(async ()=>{ await client.delete(`/users/${u.id}`); setConfirmDel(null); })
+                    : setConfirmDel(u.id)}
+                  style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer",
+                    border:"1px solid rgba(239,68,68,0.3)",
+                    background: confirmDel === u.id ? "#ef4444" : "rgba(239,68,68,0.06)",
+                    color: confirmDel === u.id ? "white" : "#ef4444" }}>
+                  {confirmDel === u.id ? "Confirmer ?" : <Trash2 size={12}/>}
+                </button>
+              </div>
+              {pwdFor === u.id && (
+                <div style={{ display:"flex", gap:6, marginTop:8 }}>
+                  <input style={{ ...inp, flex:1 }} type="password" placeholder="Nouveau mot de passe"
+                    value={pwdVal} onChange={e=>setPwdVal(e.target.value)}/>
+                  <button disabled={busy || pwdVal.length < 4}
+                    onClick={()=>act(async ()=>{ await client.patch(`/users/${u.id}`, { password: pwdVal });
+                      setPwdFor(null); setPwdVal(""); })}
+                    style={{ padding:"8px 14px", borderRadius:8, border:"none", background:"#3b82f6",
+                      color:"white", fontSize:12, fontWeight:700,
+                      cursor: pwdVal.length < 4 ? "not-allowed" : "pointer",
+                      opacity: pwdVal.length < 4 ? 0.6 : 1 }}>OK</button>
+                </div>
+              )}
+            </div>
+          ))}
+          {list.length === 0 && (
+            <p style={{ fontSize:12, color:"var(--muted)" }}>Aucun compte enregistré.</p>
+          )}
+        </div>
+      )}
+
+      {!creating ? (
+        <button onClick={()=>setCreating(true)}
+          style={{ padding:"8px 16px", borderRadius:10, border:"1px solid var(--border)",
+            background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700,
+            cursor:"pointer" }}>+ Nouvel utilisateur</button>
+      ) : (
+        <div style={{ display:"flex", flexDirection:"column", gap:8, maxWidth:360 }}>
+          <input style={inp} placeholder="Nom d'utilisateur" value={nf.username}
+            onChange={e=>setNf(v=>({...v,username:e.target.value}))}/>
+          <input style={inp} type="password" placeholder="Mot de passe" value={nf.password}
+            onChange={e=>setNf(v=>({...v,password:e.target.value}))}/>
+          <div style={{ display:"flex", gap:6 }}>
+            {[[ROLE_READONLY,"Lecture seule"],[ROLE_ADMIN,"Administrateur"]].map(([r,l])=>(
+              <button key={r} onClick={()=>setNf(v=>({...v,role:r}))}
+                style={{ flex:1, padding:"8px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
+                  border:"1px solid " + (nf.role===r ? "#3b82f6" : "var(--border)"),
+                  background: nf.role===r ? "rgba(59,130,246,0.12)" : "var(--surface2)",
+                  color: nf.role===r ? "#60a5fa" : "var(--muted)" }}>{l}</button>
+            ))}
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={()=>{ setCreating(false); setErr(null); }}
+              style={{ flex:1, padding:"9px", borderRadius:10, border:"1px solid var(--border)",
+                background:"var(--surface2)", color:"var(--muted)", fontSize:12, cursor:"pointer" }}>Annuler</button>
+            <button onClick={create} disabled={busy || !nf.username.trim() || nf.password.length < 4}
+              style={{ flex:2, padding:"9px", borderRadius:10, border:"none", background:"#3b82f6",
+                color:"white", fontSize:12, fontWeight:700,
+                cursor:(!nf.username.trim()||nf.password.length<4)?"not-allowed":"pointer",
+                opacity:(busy||!nf.username.trim()||nf.password.length<4)?0.6:1 }}>Créer</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function RfidDebugSection() {
   // Visible seulement dans la coquille WebView (window.BambuScan present).
@@ -969,6 +1187,8 @@ export default function Settings() {
 
       <EnrichFromCatalogSection/>
         <RecalculateSection/>
+      <MyAccountSection/>
+      <UsersSection/>
       <RfidDebugSection/>
 
 
