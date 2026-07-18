@@ -7,6 +7,8 @@ import client from "../api/client";
 // pas brider un administrateur par accident.
 export const ROLE_ADMIN = "admin";
 export const ROLE_READONLY = "readonly";
+// Meme perimetre que ROLE_READONLY, mais les montants restent affiches.
+export const ROLE_READONLY_PRICES = "readonly_prices";
 
 export const useAuth = create(
   persist(
@@ -60,4 +62,6 @@ export const useAuth = create(
 
 // Raccourcis pour les composants.
 export const useIsAdmin    = () => useAuth((s) => (s.role || ROLE_ADMIN) === ROLE_ADMIN);
-export const useIsReadOnly = () => useAuth((s) => s.role === ROLE_READONLY);
+// Non-admin = lecture seule, quel que soit le role. Enumerer les roles brides
+// ici ferait passer tout nouveau role pour un administrateur.
+export const useIsReadOnly = () => useAuth((s) => (s.role || ROLE_ADMIN) !== ROLE_ADMIN);

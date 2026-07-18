@@ -4,7 +4,8 @@ import { useAuth, ROLE_READONLY } from "../store/auth";
 export const MONEY_MASK = "—";
 
 /**
- * Vrai si les montants doivent etre masques (compte en lecture seule).
+ * Vrai si les montants doivent etre masques. Seul ROLE_READONLY est concerne :
+ * ROLE_READONLY_PRICES est aussi en lecture seule mais voit les montants.
  * Lecture synchrone du store : utilisable dans des fonctions de formatage qui
  * ne sont pas des composants React.
  */

@@ -5,7 +5,21 @@ import client from "../api/client";
 import HeaderAction from "../components/HeaderAction";
 import { usePrinter } from "../store/printer";
 import { useTheme } from "../useTheme";
-import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY } from "../store/auth";
+import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY, ROLE_READONLY_PRICES } from "../store/auth";
+
+// Libelles des roles, definis une fois : ils apparaissent dans le badge, le
+// selecteur de creation et les boutons de changement de role.
+const ROLE_OPTIONS = [
+  [ROLE_ADMIN,           "Administrateur"],
+  [ROLE_READONLY,        "Lecture seule"],
+  [ROLE_READONLY_PRICES, "Lecture seule (avec prix)"],
+];
+const ROLE_LABEL = Object.fromEntries(ROLE_OPTIONS);
+const ROLE_BADGE = {
+  [ROLE_ADMIN]:           "Admin",
+  [ROLE_READONLY]:        "Lecture seule",
+  [ROLE_READONLY_PRICES]: "Lecture seule + prix",
+};
 import AdminOnly from "../components/AdminOnly";
 
 const inp = {
@@ -256,7 +270,7 @@ function MyAccountSection() {
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
         {username ? <b>{username}</b> : "Compte courant"}
         {" — "}
-        {role === ROLE_READONLY ? "lecture seule" : "administrateur"}
+        {(ROLE_LABEL[role] || ROLE_LABEL[ROLE_ADMIN]).toLowerCase()}
       </p>
       <div style={{ display:"flex", flexDirection:"column", gap:10, maxWidth:360 }}>
         <div><label style={lbl}>Mot de passe actuel</label>
@@ -344,7 +358,7 @@ function UsersSection() {
                 <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
                   background: u.role === ROLE_ADMIN ? "rgba(59,130,246,0.12)" : "rgba(148,163,184,0.15)",
                   color: u.role === ROLE_ADMIN ? "#60a5fa" : "#94a3b8" }}>
-                  {u.role === ROLE_ADMIN ? "Admin" : "Lecture seule"}
+                  {ROLE_BADGE[u.role] || u.role}
                 </span>
                 {u.protected && (
                   <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
@@ -359,12 +373,16 @@ function UsersSection() {
                 {/* Le compte principal et le sien propre ne sont pas modifiables
                     (hors mot de passe) : on evite de se couper l'acces. */}
                 {!u.protected && u.username !== meName && (<>
-                <button disabled={busy} onClick={()=>act(()=>client.patch(`/users/${u.id}`, {
-                    role: u.role === ROLE_ADMIN ? ROLE_READONLY : ROLE_ADMIN }))}
-                  style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
-                    border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
-                  {u.role === ROLE_ADMIN ? "Passer en lecture seule" : "Passer admin"}
-                </button>
+                {/* Avec trois roles, la bascule binaire n'a plus de sens : on
+                    propose les roles autres que le sien. */}
+                {ROLE_OPTIONS.filter(([r]) => r !== u.role).map(([r,l]) => (
+                  <button key={r} disabled={busy}
+                    onClick={()=>act(()=>client.patch(`/users/${u.id}`, { role: r }))}
+                    style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
+                      border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
+                    → {l}
+                  </button>
+                ))}
                 <button disabled={busy} onClick={()=>act(()=>client.patch(`/users/${u.id}`, { active: !u.active }))}
                   style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
                     border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
@@ -419,10 +437,13 @@ function UsersSection() {
             onChange={e=>setNf(v=>({...v,username:e.target.value}))}/>
           <input style={inp} type="password" placeholder="Mot de passe" value={nf.password}
             onChange={e=>setNf(v=>({...v,password:e.target.value}))}/>
-          <div style={{ display:"flex", gap:6 }}>
-            {[[ROLE_READONLY,"Lecture seule"],[ROLE_ADMIN,"Administrateur"]].map(([r,l])=>(
+          {/* En colonne : a trois options, les libelles ne tiennent plus cote
+              a cote sur un ecran de telephone. */}
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            {ROLE_OPTIONS.map(([r,l])=>(
               <button key={r} onClick={()=>setNf(v=>({...v,role:r}))}
-                style={{ flex:1, padding:"8px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
+                style={{ padding:"8px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
+                  textAlign:"left",
                   border:"1px solid " + (nf.role===r ? "#3b82f6" : "var(--border)"),
                   background: nf.role===r ? "rgba(59,130,246,0.12)" : "var(--surface2)",
                   color: nf.role===r ? "#60a5fa" : "var(--muted)" }}>{l}</button>
