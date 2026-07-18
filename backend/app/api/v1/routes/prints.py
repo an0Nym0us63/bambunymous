@@ -733,6 +733,23 @@ async def prints_stats(
             return [{"name": r.k, "grams": round(float(r.grams or 0)),
                      "cost": round(float(r.cost or 0), 2)} for r in rows]
 
+        # ── Patterns d'activite (a partir de `rows` deja chargees) ──────────────
+        # Repartition par jour de la semaine et par heure ; jour le plus productif.
+        _dow = [0] * 7          # lundi=0 ... dimanche=6
+        _hour = [0] * 24
+        _by_day: dict = {}      # date -> nb, pour trouver le record
+        for r in rows:
+            d = r.print_date
+            if not d:
+                continue
+            _dow[d.weekday()] += 1
+            _hour[d.hour] += 1
+            k = str(d)[:10]
+            _by_day[k] = _by_day.get(k, 0) + 1
+        _best_day = max(_by_day.items(), key=lambda kv: kv[1]) if _by_day else None
+        _peak_hour = max(range(24), key=lambda h: _hour[h]) if any(_hour) else None
+        DOW_NAMES = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"]
+
         return {
             "days": days,
             "total_prints":   total,
@@ -780,6 +797,15 @@ async def prints_stats(
                 "weight_g":     round(float(stock[1] or 0), 1),
                 "value":        round(float(stock_value), 2),
             },
+            # ── Patterns d'activite ──
+            "by_weekday": [{"name": DOW_NAMES[i], "value": _dow[i]} for i in range(7)],
+            "by_hour":    [{"hour": h, "value": _hour[h]} for h in range(24)],
+            "peak_hour":  _peak_hour,
+            "best_day":   ({"date": _best_day[0], "count": _best_day[1]} if _best_day else None),
+            "status_split": [
+                {"name": "Réussies", "value": success},
+                {"name": "Échecs",   "value": failed},
+            ],
         }
 
 

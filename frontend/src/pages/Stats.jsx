@@ -57,6 +57,32 @@ function ObjectsStats({ stats, onOpen }) {
           <KpiCard icon={Tag} label="Vendus" value={stats.sold} color="#f59e0b"/>
           <KpiCard icon={Euro} label="Coût du stock" value={fmtEur(stats.stock_cost)} color="#8b5cf6"
             sub={stats.potential_value > 0 ? `désiré ${fmtEur(stats.potential_value)}` : null}/>
+          {stats.avg_cost > 0 && (
+            <KpiCard icon={Euro} label="Coût moyen / objet" value={fmtEur(stats.avg_cost)} color="#06b6d4"/>
+          )}
+        </div>
+
+        {/* Repartition etat + origine */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",
+          gap:12, marginTop:12 }}>
+          {(stats.state_split || []).some(d => d.value > 0) && (
+            <Donut palette title="Par état"
+              data={stats.state_split.filter(d => d.value > 0).map(d => ({
+                ...d,
+                hex: d.name === "Vendus" ? "#f59e0b"
+                   : d.name === "Disponibles" ? "#22c55e" : "#64748b",
+              }))}/>
+          )}
+          {(stats.by_parent || []).some(d => d.value > 0) && (
+            <div className="card" style={{ padding:"14px 16px" }}>
+              <p style={{ fontSize:13, fontWeight:700, color:"var(--text)", margin:"0 0 8px" }}>Origine</p>
+              {stats.by_parent.filter(d => d.value > 0).map(d => (
+                <Bar key={d.name} label={d.name} value={d.value}
+                  max={Math.max(...stats.by_parent.map(x => x.value), 1)}
+                  sublabel={`${d.value} objet${d.value > 1 ? "s" : ""}`} color="#8b5cf6"/>
+              ))}
+            </div>
+          )}
         </div>
       </Section>
 
@@ -295,6 +321,34 @@ function Donut({ data, title, palette }) {
 }
 
 // ── Classement prints / groupes
+function MiniBarChart({ data, title, color = "#3b82f6", labelKey = "name", suffix = "" }) {
+  const max = Math.max(...data.map(d => d.value), 1);
+  const total = data.reduce((a, d) => a + d.value, 0);
+  if (!total) return null;
+  return (
+    <div className="card" style={{ padding: "14px 16px" }}>
+      <p style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", margin: "0 0 12px" }}>{title}</p>
+      <div style={{ display: "flex", gap: 3, alignItems: "stretch", height: 96 }}>
+        {data.map((d, i) => {
+          const lab = labelKey === "hour" ? String(d.hour).padStart(2, "0") : d[labelKey];
+          return (
+            <div key={i} title={`${lab}${suffix} — ${d.value}`}
+              style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", minWidth: 0 }}>
+              <div style={{ flex: 1, width: "100%", display: "flex", alignItems: "flex-end", minHeight: 0 }}>
+                <div style={{ width: "100%", height: `${Math.max(2, (d.value / max) * 100)}%`,
+                  background: color, borderRadius: "3px 3px 0 0",
+                  opacity: d.value === max ? 1 : 0.55, transition: "height 0.4s ease" }}/>
+              </div>
+              <span style={{ fontSize: 8, color: "var(--muted)", marginTop: 5,
+                whiteSpace: "nowrap", overflow: "hidden" }}>{lab}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function TopList({ title, prints, groups, valueKey, valueLabel, barColor = "#3b82f6", onItemClick }) {
   const [mode, setMode] = useState("prints");
   const hasGroups = (groups || []).length > 0;
@@ -508,6 +562,40 @@ export default function Stats() {
           )}
         </div>
       </Section>
+
+      {/* Habitudes : quand imprimes-tu ? */}
+      {(data.by_weekday || data.by_hour) && (
+        <Section title="Habitudes d'impression">
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))",
+            gap: 10, marginBottom: 12 }}>
+            {data.peak_hour != null && (
+              <KpiCard icon={Clock} label="Heure de pointe"
+                value={`${String(data.peak_hour).padStart(2,"0")}h`} color="#f59e0b"/>
+            )}
+            {data.best_day && (
+              <KpiCard icon={Layers} label="Meilleure journée"
+                value={`${data.best_day.count} prints`} color="#22c55e"
+                sub={data.best_day.date}/>
+            )}
+            <KpiCard icon={CheckCircle2} label="Taux de réussite"
+              value={`${data.success_rate} %`} color="#22c55e"/>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
+            {(data.by_weekday || []).length > 0 && (
+              <MiniBarChart data={data.by_weekday} title="Par jour de la semaine" color="#3b82f6"/>
+            )}
+            {(data.by_hour || []).length > 0 && (
+              <MiniBarChart data={data.by_hour} title="Par heure de lancement"
+                color="#f59e0b" labelKey="hour" suffix="h"/>
+            )}
+            {(data.status_split || []).some(d => d.value > 0) && (
+              <Donut palette title="Réussites / échecs"
+                data={data.status_split.filter(d => d.value > 0)
+                  .map(d => ({ ...d, hex: d.name === "Échecs" ? "#ef4444" : "#22c55e" }))}/>
+            )}
+          </div>
+        </Section>
+      )}
 
       {data.failed_prints > 0 && (
         <Section title="Perdu sur les échecs">

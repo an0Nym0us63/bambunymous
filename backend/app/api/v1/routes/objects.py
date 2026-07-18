@@ -115,6 +115,19 @@ async def objects_stats(_: str = Depends(get_current_user)):
              "margin": round(_m(o), 2), "sold_price": o.sold_price}
             for o in top_margin
         ],
+        # Repartition par etat (pour un donut).
+        "state_split": [
+            {"name": "Disponibles", "value": len(available)},
+            {"name": "Vendus",      "value": len(sold)},
+            {"name": "Indispo.",    "value": total - len(available) - len(sold)},
+        ],
+        # Origine des objets (print unique vs groupe).
+        "by_parent": [
+            {"name": "Depuis un print",  "value": len([o for o in rows if o.parent_type == "print"])},
+            {"name": "Depuis un groupe", "value": len([o for o in rows if o.parent_type == "group"])},
+        ],
+        # Cout moyen de fabrication d'un objet.
+        "avg_cost": round(sum((o.cost_total or 0) for o in rows) / total, 2) if total else 0,
     }
 
 
