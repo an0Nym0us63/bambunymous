@@ -487,6 +487,140 @@ function UsersSection() {
   );
 }
 
+// Couleur par methode : on lit la nature de l'action avant meme son libelle.
+const METHOD_STYLE = {
+  POST:   ["#22c55e", "rgba(34,197,94,0.12)"],
+  PUT:    ["#3b82f6", "rgba(59,130,246,0.12)"],
+  PATCH:  ["#3b82f6", "rgba(59,130,246,0.12)"],
+  DELETE: ["#ef4444", "rgba(239,68,68,0.12)"],
+};
+const ACT_PAGE = 50;
+
+function ActivitySection() {
+  const isAdmin = useIsAdmin();
+  const [days,  setDays]  = React.useState(7);
+  const [who,   setWho]   = React.useState("");
+  const [items, setItems] = React.useState(null);
+  const [total, setTotal] = React.useState(0);
+  const [names, setNames] = React.useState([]);
+  const [busy,  setBusy]  = React.useState(false);
+  const [err,   setErr]   = React.useState(null);
+
+  const load = React.useCallback(async (offset = 0) => {
+    setBusy(true); setErr(null);
+    try {
+      const { data } = await client.get("/users/activity", {
+        params: { days, username: who || undefined, limit: ACT_PAGE, offset },
+      });
+      setTotal(data.total || 0);
+      // offset 0 = nouveau filtre, on repart de zero ; sinon on empile.
+      setItems(prev => offset === 0 ? (data.items || []) : [...(prev || []), ...(data.items || [])]);
+    } catch (e) {
+      setErr(e.response?.data?.detail || e.message);
+      if (offset === 0) setItems([]);
+    }
+    setBusy(false);
+  }, [days, who]);
+
+  React.useEffect(() => { if (isAdmin) load(0); }, [isAdmin, load]);
+  React.useEffect(() => {
+    if (!isAdmin) return;
+    client.get("/users")
+      .then(r => setNames((r.data || []).map(u => u.username)))
+      .catch(() => {});   // le filtre reste utilisable sans la liste
+  }, [isAdmin]);
+
+  if (!isAdmin) return null;
+
+  const chip = (on) => ({
+    padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
+    border:"1px solid " + (on ? "#3b82f6" : "var(--border)"),
+    background: on ? "rgba(59,130,246,0.12)" : "var(--surface2)",
+    color: on ? "#60a5fa" : "var(--muted)",
+  });
+
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 4px",
+        display:"flex", alignItems:"center", gap:7 }}>
+        <Activity size={15}/> Activité
+      </h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        Journal des <b>actions</b> : créations, modifications, suppressions. Les simples
+        consultations n'y figurent pas — elles se lisent dans la dernière utilisation de
+        chaque compte, ci-dessus. Le journal est purgé au-delà de 7 jours.
+      </p>
+
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
+        {[[1,"24 h"],[7,"7 jours"],[30,"30 jours"]].map(([d,l]) => (
+          <button key={d} onClick={()=>setDays(d)} style={chip(days===d)}>{l}</button>
+        ))}
+        <select value={who} onChange={e=>setWho(e.target.value)}
+          style={{ ...chip(!!who), marginLeft:"auto", maxWidth:150 }}>
+          <option value="">Tous les comptes</option>
+          {names.map(n => <option key={n} value={n}>{n}</option>)}
+        </select>
+      </div>
+
+      {err && <p style={{ fontSize:12, color:"#ef4444", margin:"0 0 10px" }}>{err}</p>}
+
+      {items === null ? (
+        <p style={{ fontSize:12, color:"var(--muted)" }}>Chargement…</p>
+      ) : items.length === 0 ? (
+        <p style={{ fontSize:12, color:"var(--muted)" }}>Aucune action sur cette période.</p>
+      ) : (
+        <>
+          <div style={{ display:"flex", flexDirection:"column", gap:4,
+            maxHeight:420, overflowY:"auto" }}>
+            {items.map(it => {
+              const [fg, bg] = METHOD_STYLE[it.method] || ["#94a3b8","rgba(148,163,184,0.15)"];
+              const ko = it.status >= 400;
+              return (
+                <div key={it.id} style={{ display:"flex", alignItems:"flex-start", gap:8,
+                  background:"var(--surface2)", border:"1px solid var(--border)",
+                  borderRadius:10, padding:"8px 10px" }}>
+                  <span style={{ fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:6,
+                    background:bg, color:fg, flexShrink:0, marginTop:1 }}>{it.method}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <p style={{ margin:0, fontSize:12, color:"var(--text)", fontWeight:600 }}>
+                      {it.label || it.path}
+                    </p>
+                    <p style={{ margin:"1px 0 0", fontSize:10, color:"var(--muted)",
+                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {it.path}{ko ? ` · échec ${it.status}` : ""}
+                    </p>
+                  </div>
+                  <div style={{ textAlign:"right", flexShrink:0 }}>
+                    <p style={{ margin:0, fontSize:11, fontWeight:600, color:"var(--text2)" }}>
+                      {it.username}
+                    </p>
+                    <p style={{ margin:"1px 0 0", fontSize:10, color:"var(--muted)" }}>
+                      {stamp(it.at)}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:10 }}>
+            <span style={{ fontSize:11, color:"var(--muted)" }}>
+              {items.length} sur {total}
+            </span>
+            {items.length < total && (
+              <button disabled={busy} onClick={()=>load(items.length)}
+                style={{ marginLeft:"auto", padding:"6px 12px", borderRadius:8, fontSize:11,
+                  fontWeight:600, cursor:"pointer", border:"1px solid var(--border)",
+                  background:"var(--bg)", color:"var(--text)" }}>
+                {busy ? "Chargement…" : "Charger plus"}
+              </button>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function RfidDebugSection() {
   // Visible seulement dans la coquille WebView (window.BambuScan present).
   const isWebView = typeof window !== "undefined" && !!window.BambuScan;
@@ -1234,6 +1368,7 @@ export default function Settings() {
       </AdminOnly>
       <MyAccountSection/>
       <UsersSection/>
+      <ActivitySection/>
       <AdminOnly><RfidDebugSection/></AdminOnly>
 
 
