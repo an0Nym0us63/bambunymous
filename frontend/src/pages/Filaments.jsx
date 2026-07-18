@@ -7,7 +7,7 @@ import { useNativeScan } from "../hooks/useNativeScan";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette } from "lucide-react";
 import client from "../api/client";
-import { moneyVal } from "../utils/money";
+import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { colorBg, parseColorsList } from "../utils/colors";
 import GalleryCompare from "../components/GalleryCompare";
@@ -2112,7 +2112,7 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
           ["Marque",   f => f.manufacturer],
           ["Couleur",  f => f.color ? `#${f.color}` : null],
           ["Poids",    f => f.filament_weight_g ? `${f.filament_weight_g}g` : null],
-          ["Prix",     f => f.price ? `${f.price}€` : null],
+          ["Prix",     f => isMoneyHidden() ? MONEY_MASK : (f.price ? `${f.price}€` : null)],
           ["Bobines",  f => `${f.active_spool_count} active${f.active_spool_count!==1?"s":""}/${f.spool_count}`],
         ]}
       />
@@ -2428,7 +2428,7 @@ export default function Filaments() {
                 ["Marque",    f => f.manufacturer],
                 ["Couleur",   f => f.color ? `#${f.color}` : null],
                 ["Poids",     f => f.filament_weight_g ? `${f.filament_weight_g}g` : null],
-                ["Prix",      f => f.price ? `${f.price}€` : null],
+                ["Prix",      f => isMoneyHidden() ? MONEY_MASK : (f.price ? `${f.price}€` : null)],
                 ["Bobines",   f => `${f.active_spool_count} active${f.active_spool_count!==1?"s":""} / ${f.spool_count}`],
               ]}
             />
