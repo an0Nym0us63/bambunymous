@@ -107,6 +107,7 @@ class PrinterState:
     bed_temp: float = 0.0
     target_bed_temp: float = 0.0
     chamber_temp: float = 0.0
+    target_chamber_temp: float = 0.0
 
     # Vitesse
     speed_level: int = 1

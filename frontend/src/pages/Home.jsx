@@ -227,7 +227,7 @@ function StatusBanner({ status }) {
               {left  && <TempChip label={isDualNozzle ? "Buse Gauche" : "Buse"} current={left.temp}  target={left.target}  active={left.active}/>}
               {right && isDualNozzle && <TempChip label="Buse Droite" current={right.temp} target={right.target} active={right.active}/>}
               <TempChip label="Plateau" current={status.bed_temp}     target={status.target_bed_temp} accent="#ef4444" />
-              <TempChip label="Chambre" current={status.chamber_temp} target={0} />
+              <TempChip label="Chambre" current={status.chamber_temp} target={status.target_chamber_temp} />
             </div>
             {/* Couche + vitesse */}
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>

@@ -99,7 +99,7 @@ export default function PrinterCard({ status }) {
         <TempBlock
           label="Chambre"
           current={status.chamber_temp}
-          target={0}
+          target={status.target_chamber_temp}
         />
       </div>
     </div>

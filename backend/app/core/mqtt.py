@@ -306,10 +306,13 @@ class MQTTManager:
                 state.bed_temp, state.target_bed_temp = _decode_temp(int(bed_raw))
                 changed = True
 
-            # Chambre (ctc): valeur directe en °C
+            # Chambre (ctc): meme encodage int32 que le lit (low = actuel,
+            # high = consigne). Elle etait lue brute, ce qui affichait la valeur
+            # encodee telle quelle des qu'une consigne existait (ex: 4259899
+            # pour 59°C / consigne 65°C, cas d'une impression ASA).
             ctc_temp = device.get("ctc", {}).get("info", {}).get("temp")
             if ctc_temp is not None:
-                state.chamber_temp = float(ctc_temp)
+                state.chamber_temp, state.target_chamber_temp = _decode_temp(int(ctc_temp))
                 changed = True
 
             # Dual nozzle extruder (H2C)
@@ -340,6 +343,7 @@ class MQTTManager:
         if "bed_temper" in p: state.bed_temp = float(p["bed_temper"]); changed = True
         if "bed_target_temper" in p: state.target_bed_temp = float(p["bed_target_temper"]); changed = True
         if "chamber_temper" in p: state.chamber_temp = float(p["chamber_temper"]); changed = True
+        if "ctt" in p: state.target_chamber_temp = float(p["ctt"]); changed = True
 
         # ── AMS ─────────────────────────────────────────────────────────
         ams_data = p.get("ams", {})
