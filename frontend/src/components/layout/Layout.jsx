@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
-import { Home, Settings, LogOut, Package, History, ShoppingBag, BarChart2 } from "lucide-react";
-import { useAuth } from "../../store/auth";
+import { Home, Settings, Package, History, ShoppingBag, BarChart2 } from "lucide-react";
+import UserMenu from "../UserMenu";
 
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil"    },
@@ -71,7 +71,6 @@ function NavItem({ to, icon: Icon, label }) {
 }
 
 export default function Layout() {
-  const { logout } = useAuth();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const title = TITLES[pathname] ?? null;
@@ -99,12 +98,11 @@ export default function Layout() {
         <nav style={S.nav}>
           {nav.map(n => <NavItem key={n.to} {...n} />)}
         </nav>
-        <button onClick={() => { logout(); navigate("/login"); }}
-          style={{ display:"flex", alignItems:"center", gap:10, margin:"0 8px", padding:"10px 12px", borderRadius:12, color:"var(--muted)", fontSize:14, transition:"color 0.15s", cursor:"pointer" }}
-          onMouseEnter={e => e.currentTarget.style.color="#ef4444"}
-          onMouseLeave={e => e.currentTarget.style.color="var(--muted)"}>
-          <LogOut size={17} /><span>Déconnexion</span>
-        </button>
+        {/* Le compte remplace le bouton de deconnexion nu : meme place, en bas
+            du menu, mais il indique aussi qui est connecte et sous quel role. */}
+        <div style={{ margin:"0 8px", padding:"10px 12px", borderTop:"1px solid var(--border)" }}>
+          <UserMenu placement="top" showName size={28}/>
+        </div>
       </aside>
 
       <div style={S.main}>
@@ -130,6 +128,9 @@ export default function Layout() {
               barre d'actions occupe une ligne entiere sous le header. */}
           <div id="header-actions" style={{ marginLeft:"auto", display:"flex",
             alignItems:"center", gap:6, flexShrink:0 }}/>
+          {/* Apres le point d'injection, donc toujours le plus a droite quelles
+              que soient les actions de la page en cours. */}
+          <UserMenu placement="bottom"/>
         </header>
 
         <main className="page-content" style={S.page}><Outlet /></main>
