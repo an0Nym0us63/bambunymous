@@ -102,6 +102,38 @@ app = FastAPI(
     redoc_url=None,
 )
 
+# ── Lecture seule ────────────────────────────────────────────────────────────
+# Un compte "readonly" peut tout consulter mais ne doit rien pouvoir modifier.
+# Plutot que d'annoter un a un des centaines d'endpoints (avec le risque d'en
+# oublier, et d'oublier les futurs), on filtre globalement sur la methode HTTP :
+# tout ce qui n'est pas une lecture est refuse. Seul le changement de son propre
+# mot de passe fait exception.
+_READONLY_ALLOWED_PATHS = {
+    "/api/v1/auth/login",
+    "/api/v1/auth/change-password",
+}
+
+
+@app.middleware("http")
+async def enforce_readonly(request, call_next):
+    from starlette.responses import JSONResponse
+    from app.core.security import decode_token_payload
+
+    path = request.url.path
+    if (path.startswith("/api/")
+            and request.method not in ("GET", "HEAD", "OPTIONS")
+            and path not in _READONLY_ALLOWED_PATHS):
+        auth = request.headers.get("authorization") or ""
+        if auth.lower().startswith("bearer "):
+            payload = decode_token_payload(auth.split(" ", 1)[1].strip())
+            if payload and payload.get("role") == "readonly":
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "Compte en lecture seule : action non autorisee"},
+                )
+    return await call_next(request)
+
+
 @app.middleware("http")
 async def no_cache_api(request, call_next):
     response = await call_next(request)

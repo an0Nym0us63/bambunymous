@@ -32,6 +32,7 @@ async def init_db():
     from ..models import filament, print_history, object_history  # noqa
     from ..models import attention  # noqa - table des mises en sourdine
     from ..models import rfid       # noqa - table des scans NFC
+    from ..models import user       # noqa - comptes et roles
     async with engine.begin() as conn:
         # WAL mode : permet lectures concurrentes, évite les database locked
         await conn.execute(__import__("sqlalchemy").text("PRAGMA journal_mode=WAL"))
@@ -45,6 +46,7 @@ async def init_db():
     await _backfill_color_buckets()
     await _backfill_material_family()
     await _normalize_spool_locations()
+    await _seed_admin_user()
 
 
 async def _migrate():
@@ -106,6 +108,37 @@ async def _migrate():
                 await conn.commit()
             except Exception:
                 pass  # colonne déjà existante → ignorer
+
+
+async def _seed_admin_user():
+    """
+    Cree le premier compte administrateur si la table users est vide, a partir de
+    l'ancien couple ADMIN_USERNAME / ADMIN_PASSWORD_HASH stocke dans les settings
+    (ou admin/admin si rien n'a jamais ete defini). Garantit qu'on ne se retrouve
+    jamais enferme dehors apres la mise a jour. Idempotent.
+    """
+    from sqlalchemy import text as _text
+    from ..core.security import hash_password
+    try:
+        async with engine.begin() as conn:
+            n = (await conn.execute(_text("SELECT COUNT(*) FROM users"))).scalar() or 0
+            if n:
+                return
+            row = (await conn.execute(_text(
+                "SELECT key, value FROM settings WHERE key IN "
+                "('ADMIN_USERNAME','ADMIN_PASSWORD_HASH')"
+            ))).all()
+            conf = {k: v for k, v in row}
+            username = conf.get("ADMIN_USERNAME") or "admin"
+            pwd_hash = conf.get("ADMIN_PASSWORD_HASH") or hash_password("admin")
+            await conn.execute(
+                _text("INSERT INTO users (username, password_hash, role, active) "
+                      "VALUES (:u, :p, 'admin', 1)"),
+                {"u": username, "p": pwd_hash},
+            )
+        print(f"[migration] compte administrateur initial cree : {username}")
+    except Exception as e:
+        print(f"[migration] creation admin initial ignoree : {e}")
 
 
 async def _normalize_spool_locations():
