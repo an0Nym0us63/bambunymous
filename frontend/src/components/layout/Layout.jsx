@@ -24,7 +24,10 @@ const TITLES = {
 };
 
 const S = {
-  app:     { display:"flex", height:"100dvh", overflow:"hidden", background:"var(--bg)" },
+  // height:100% plutot que 100dvh : la chaine html > body > #root porte le
+  // correctif de hauteur iOS (voir index.css). Avec 100dvh, ce conteneur
+  // recalculait sa propre hauteur trop courte et annulait le correctif.
+  app:     { display:"flex", height:"100%", overflow:"hidden", background:"var(--bg)" },
   aside:   { display:"flex", flexDirection:"column", width:208, background:"var(--sidebar)", borderRight:"1px solid var(--border)", padding:"20px 0", flexShrink:0 },
   logo:    { display:"flex", alignItems:"center", gap:10, padding:"0 16px", marginBottom:32 },
   logoBox: { width:28, height:28, borderRadius:8, overflow:"hidden" },

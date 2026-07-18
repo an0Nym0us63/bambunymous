@@ -30,6 +30,20 @@
 
 *, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
 html, body { height: 100%; }
+
+/* iOS en PWA installee : au premier rendu, la hauteur de fenetre annoncee par
+   le systeme est trop courte, et n'est corrigee qu'au premier scroll --
+   l'application s'affichait amputee, barre de navigation comprise, avec une
+   bande vide sous elle. -webkit-fill-available est resolu par WebKit une fois
+   la hauteur reelle connue, ce qui supprime l'etat intermediaire.
+
+   Le @supports cible WebKit sur iOS et lui seul : -webkit-touch-callout n'y
+   existe nulle part ailleurs. La coquille WebView Android et les navigateurs
+   de bureau ne voient donc PAS cette regle et conservent height:100%, soit
+   exactement le comportement actuel. */
+@supports (-webkit-touch-callout: none) {
+  html, body { height: -webkit-fill-available; }
+}
 body {
   background: var(--bg);
   color: var(--text);
@@ -39,7 +53,10 @@ body {
   -webkit-font-smoothing: antialiased;
   transition: background 0.25s, color 0.25s;
 }
-#root { min-height: 100dvh; display: flex; flex-direction: column; }
+/* height:100% et non 100dvh : la hauteur se chaine depuis <html>, donc elle
+   herite du correctif iOS ci-dessus. Ailleurs, 100% d'un <html> en 100% vaut
+   la fenetre, comme 100dvh. */
+#root { height: 100%; display: flex; flex-direction: column; }
 
 .card    { background: var(--surface);  border: 1px solid var(--border); border-radius: var(--r); }
 .card-sm { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); }
