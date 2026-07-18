@@ -44,6 +44,7 @@ async def init_db():
     await _ensure_indexes()
     await _backfill_color_buckets()
     await _backfill_material_family()
+    await _normalize_spool_locations()
 
 
 async def _migrate():
@@ -105,6 +106,28 @@ async def _migrate():
                 await conn.commit()
             except Exception:
                 pass  # colonne déjà existante → ignorer
+
+
+async def _normalize_spool_locations():
+    """
+    Normalise l'emplacement des bobines : convention interne = "AMS ..." ou
+    "Tiroir" (singulier). D'anciennes saisies utilisaient "Tiroirs" au pluriel.
+    Idempotent : ne touche que les lignes concernees, donc sans effet aux
+    demarrages suivants.
+    """
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            res = await conn.execute(_text(
+                "UPDATE bobines SET location = 'Tiroir' "
+                "WHERE location IS NOT NULL "
+                "  AND TRIM(location) COLLATE NOCASE = 'Tiroirs'"
+            ))
+            n = res.rowcount or 0
+        if n:
+            print(f"[migration] emplacement normalise : {n} bobine(s) 'Tiroirs' -> 'Tiroir'")
+    except Exception as e:
+        print(f"[migration] normalisation emplacement ignoree : {e}")
 
 
 async def _backfill_color_buckets():

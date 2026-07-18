@@ -14,6 +14,13 @@ from ..models.object_history import Object, ObjectGroup, Accessory, ObjectAccess
 logger = logging.getLogger(__name__)
 
 
+def _norm_location(v):
+    """Convention interne : "AMS ..." ou "Tiroir" (singulier). Spoolnymous a pu
+    stocker "Tiroirs" au pluriel : on normalise a l'import."""
+    s = (v or "").strip()
+    return "Tiroir" if s.lower() == "tiroirs" else (s or None)
+
+
 def parse_dt(val, local_to_utc: bool = False):
     if not val: return None
     for fmt in ("%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
@@ -114,7 +121,7 @@ async def run_import(src_path: str, local_to_utc: bool = False) -> dict:
                 filament_id=new_fil,
                 remaining_weight_g=row.get("remaining_weight_g"),
                 price_override=row.get("price_override"),
-                location=row.get("location"),
+                location=_norm_location(row.get("location")),
                 tag_number=row.get("tag_number"),
                 ams_tray=row.get("ams_tray"),
                 archived=bool(row.get("archived", 0)),
