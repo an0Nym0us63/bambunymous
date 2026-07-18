@@ -9,6 +9,7 @@ from .auth import require_admin, get_current_role, get_current_user
 from ....db.session import get_db
 from ....core.security import hash_password
 from ....models.user import User, ROLE_ADMIN, ROLE_READONLY, ROLES
+from ....models.activity import ActivityLog
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ class UserOut(BaseModel):
     username: str
     role: str
     active: bool
+    last_seen: Optional[str] = None   # derniere activite (ISO)
     protected: bool = False   # compte admin d'origine : non modifiable
 
 
@@ -35,7 +37,8 @@ class UserUpdate(BaseModel):
 
 def _out(u: User, protected: bool = False) -> UserOut:
     return UserOut(id=u.id, username=u.username, role=u.role, active=u.active,
-                   protected=protected)
+                   protected=protected,
+                   last_seen=(str(u.last_seen) if getattr(u, "last_seen", None) else None))
 
 
 async def _root_admin_id(db: AsyncSession) -> Optional[int]:
@@ -77,6 +80,42 @@ async def create_user(
     await db.commit()
     await db.refresh(u)
     return _out(u)
+
+
+@router.get("/activity")
+async def activity(
+    days: int = 7,
+    username: Optional[str] = None,
+    limit: int = 200,
+    offset: int = 0,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(require_admin),
+):
+    """
+    Journal des actions sur une fenetre glissante (7 jours par defaut).
+    Seules les ecritures sont journalisees ; la simple consultation est reflete
+    par users.last_seen.
+    """
+    from datetime import datetime, timedelta
+    since = datetime.utcnow() - timedelta(days=max(1, min(days, 90)))
+    q = select(ActivityLog).where(ActivityLog.created_at >= since)
+    if username:
+        q = q.where(ActivityLog.username == username)
+    total = (await db.execute(
+        select(func.count()).select_from(q.subquery())
+    )).scalar_one()
+    rows = (await db.execute(
+        q.order_by(ActivityLog.created_at.desc())
+         .limit(max(1, min(limit, 500))).offset(max(0, offset))
+    )).scalars().all()
+    return {
+        "total": total,
+        "items": [{
+            "id": r.id, "username": r.username, "method": r.method,
+            "path": r.path, "status": r.status, "label": r.label,
+            "at": str(r.created_at),
+        } for r in rows],
+    }
 
 
 @router.patch("/{uid}", response_model=UserOut)

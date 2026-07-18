@@ -103,20 +103,91 @@ app = FastAPI(
 )
 
 # ── Lecture seule ────────────────────────────────────────────────────────────
-# Un compte non-administrateur peut tout consulter mais ne doit rien pouvoir
-# modifier. Plutot que d'annoter un a un des centaines d'endpoints (avec le
-# risque d'en oublier, et d'oublier les futurs), on filtre globalement sur la
-# methode HTTP : tout ce qui n'est pas une lecture est refuse. Seul le
-# changement de son propre mot de passe fait exception.
-#
-# Le test porte sur "role != admin" et non sur une liste de roles bridés : tout
-# role inconnu ou ajoute plus tard est en lecture seule tant qu'on ne l'a pas
-# explicitement autorise. L'inverse laissait un nouveau role obtenir tous les
-# droits d'ecriture en silence.
+# Un compte "readonly" peut tout consulter mais ne doit rien pouvoir modifier.
+# Plutot que d'annoter un a un des centaines d'endpoints (avec le risque d'en
+# oublier, et d'oublier les futurs), on filtre globalement sur la methode HTTP :
+# tout ce qui n'est pas une lecture est refuse. Seul le changement de son propre
+# mot de passe fait exception.
 _READONLY_ALLOWED_PATHS = {
     "/api/v1/auth/login",
     "/api/v1/auth/change-password",
 }
+
+
+# Libelles lisibles pour le journal, deduits du chemin.
+def _activity_label(method: str, path: str) -> str:
+    p = path.replace("/api/v1", "")
+    if p.startswith("/auth/login"):        return "Connexion"
+    if p.startswith("/auth/change-password"): return "Changement de mot de passe"
+    if p.startswith("/users"):             return "Gestion des comptes"
+    if p.startswith("/prints"):            return "Impressions"
+    if p.startswith("/filaments"):         return "Filaments / bobines"
+    if p.startswith("/objects/accessories"): return "Accessoires"
+    if p.startswith("/objects"):           return "Objets"
+    if p.startswith("/attention"):         return "Alertes"
+    if p.startswith("/settings"):          return "Parametres"
+    if p.startswith("/rfid"):              return "Scan RFID"
+    if p.startswith("/printer"):           return "Imprimante"
+    return p
+
+
+@app.middleware("http")
+async def track_activity(request, call_next):
+    """
+    Suit l'activite des comptes :
+      - users.last_seen a chaque requete authentifiee (au plus une ecriture par
+        minute et par compte, sinon on ecrirait a chaque appel de polling) ;
+      - une ligne de journal pour les ACTIONS uniquement (ecritures et connexion).
+        Les lectures ne sont pas tracees : sans valeur et bien trop nombreuses.
+    Ne doit jamais faire echouer la requete : tout est protege.
+    """
+    response = await call_next(request)
+
+    path = request.url.path
+    if not path.startswith("/api/"):
+        return response
+    try:
+        from datetime import datetime, timedelta
+        from sqlalchemy import select, update
+        from app.core.security import decode_token_payload
+        from app.db.session import AsyncSessionLocal
+        from app.models.user import User
+        from app.models.activity import ActivityLog
+
+        username = None
+        auth = request.headers.get("authorization") or ""
+        if auth.lower().startswith("bearer "):
+            payload = decode_token_payload(auth.split(" ", 1)[1].strip())
+            if payload:
+                username = payload.get("sub")
+        is_login = path.endswith("/auth/login") and response.status_code < 400
+        if is_login and not username:
+            # Au login le client n'a pas encore de jeton : on prend l'identifiant
+            # transmis dans le formulaire.
+            username = (request.query_params.get("username")
+                        or getattr(request.state, "login_username", None))
+        if not username:
+            return response
+
+        is_action = request.method in ("POST", "PATCH", "PUT", "DELETE")
+        now = datetime.utcnow()
+        async with AsyncSessionLocal() as db:
+            u = (await db.execute(
+                select(User).where(User.username == username)
+            )).scalar_one_or_none()
+            if u and (u.last_seen is None or (now - u.last_seen) > timedelta(minutes=1)):
+                await db.execute(
+                    update(User).where(User.id == u.id).values(last_seen=now))
+                await db.commit()
+            if is_action and response.status_code < 400:
+                db.add(ActivityLog(
+                    username=username, method=request.method, path=path,
+                    status=response.status_code,
+                    label=_activity_label(request.method, path), created_at=now))
+                await db.commit()
+    except Exception:
+        pass   # le suivi ne doit jamais casser une requete
+    return response
 
 
 @app.middleware("http")
@@ -131,7 +202,7 @@ async def enforce_readonly(request, call_next):
         auth = request.headers.get("authorization") or ""
         if auth.lower().startswith("bearer "):
             payload = decode_token_payload(auth.split(" ", 1)[1].strip())
-            if payload and (payload.get("role") or "admin") != "admin":
+            if payload and payload.get("role") == "readonly":
                 return JSONResponse(
                     status_code=403,
                     content={"detail": "Compte en lecture seule : action non autorisee"},

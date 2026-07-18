@@ -33,6 +33,7 @@ async def init_db():
     from ..models import attention  # noqa - table des mises en sourdine
     from ..models import rfid       # noqa - table des scans NFC
     from ..models import user       # noqa - comptes et roles
+    from ..models import activity   # noqa - journal d'activite
     async with engine.begin() as conn:
         # WAL mode : permet lectures concurrentes, évite les database locked
         await conn.execute(__import__("sqlalchemy").text("PRAGMA journal_mode=WAL"))
@@ -47,6 +48,8 @@ async def init_db():
     await _backfill_material_family()
     await _normalize_spool_locations()
     await _seed_admin_user()
+    await _migrate_last_seen()
+    await _purge_activity_log()
 
 
 async def _migrate():
@@ -108,6 +111,36 @@ async def _migrate():
                 await conn.commit()
             except Exception:
                 pass  # colonne déjà existante → ignorer
+
+
+async def _migrate_last_seen():
+    """Ajoute users.last_seen sur une base existante. Idempotent."""
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            cols = [r[1] for r in (await conn.execute(_text("PRAGMA table_info(users)"))).all()]
+            if "last_seen" not in cols:
+                await conn.execute(_text("ALTER TABLE users ADD COLUMN last_seen DATETIME"))
+                print("[migration] colonne users.last_seen ajoutee")
+    except Exception as e:
+        print(f"[migration] last_seen ignoree : {e}")
+
+
+async def _purge_activity_log(days: int = 7):
+    """
+    Le journal ne sert qu'a un historique glissant : au-dela on supprime. Evite
+    que la table grossisse indefiniment. Appele a chaque demarrage.
+    """
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            res = await conn.execute(_text(
+                "DELETE FROM activity_log WHERE created_at < datetime('now', :d)"
+            ), {"d": f"-{days} days"})
+            if res.rowcount:
+                print(f"[maintenance] journal d'activite : {res.rowcount} ligne(s) purgee(s)")
+    except Exception as e:
+        print(f"[maintenance] purge du journal ignoree : {e}")
 
 
 async def _seed_admin_user():
