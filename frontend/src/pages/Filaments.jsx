@@ -9,6 +9,7 @@ import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, S
 import client from "../api/client";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
+import { useTrackDetail } from "../utils/track";
 import PhotoAddButton from "../components/PhotoAddButton";
 import { useIsAdmin } from "../store/auth";
 import { colorBg, parseColorsList } from "../utils/colors";
@@ -620,6 +621,7 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
 }
 
 export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
+  useTrackDetail(spool ? `Fiche bobine · ${spool.filament_translated_name || spool.filament_name || "#" + spool.id}` : null);
   const [confirmDelete, setConfirmDelete] = React.useState(null);
   const [filSheet, setFilSheet] = React.useState(null);   // fiche filament ouverte par-dessus
   const openFilament = async () => {
@@ -1231,6 +1233,7 @@ function SpoolsView({ filaments, showArchived }) {
 // ── Vue Catalogue ──────────────────────────────────────────────────────────
 // ── Fiche filament catalogue ────────────────────────────────────────────────
 export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
+  useTrackDetail(f ? `Fiche filament · ${f.translated_name || f.name || "#" + f.id}` : null);
   const [addSpool, setAddSpool] = useState(false);
   const [lightbox, setLightbox] = useState(null);
   const [deleting, setDeleting] = useState(false);
@@ -2113,6 +2116,8 @@ export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, 
 export default function Filaments() {
   const [tab, setTab] = useState("spools");
   const [searchParams, setSearchParams] = useSearchParams();
+  useTrackDetail(`Filaments · ${ {spools:"Stock", archived:"Archivées",
+    catalog:"Filaments", gallery:"Galerie"}[tab] || tab }`);
   const [deepFil, setDeepFil] = useState(null);   // fiche ouverte via /filaments?id=XXX
   const [deepErr, setDeepErr] = useState(null);
   const [galleryMode, setGalleryMode] = useState("photos");

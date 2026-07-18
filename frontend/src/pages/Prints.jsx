@@ -5,6 +5,7 @@ import client from "../api/client";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { useIsAdmin } from "../store/auth";
+import { useTrackDetail } from "../utils/track";
 import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
 import PhotoAddButton from "../components/PhotoAddButton";
@@ -626,6 +627,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   useEffect(() => { loadUserPhotos(); }, [pProp.id]);
   const uploadPhoto = async (file) => { const fd = new FormData(); fd.append("file", file); await client.post(`/prints/${pProp.id}/photos/upload`, fd, { headers:{"Content-Type":"multipart/form-data"} }); loadUserPhotos(); };
   const [p, setP] = useState(pProp);
+  useTrackDetail(`Fiche print · ${p?.name || pProp?.name || "#" + pProp.id}`);
 
   useEffect(() => {
     if (pProp.total_cost_filament == null) {
@@ -997,6 +999,7 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
 }
 
 export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
+  useTrackDetail(`Fiche groupe · ${name || "#" + groupId}`);
   const [localPrints, setLocalPrints] = useState([]);
   const [nbItems, setNbItems]         = useState(nbItemsProp || 1);
   const [editNb, setEditNb]           = useState(false);

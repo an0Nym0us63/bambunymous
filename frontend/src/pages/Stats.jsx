@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 
 import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag } from "lucide-react";
 import client from "../api/client";
+import { useTrackDetail } from "../utils/track";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 
@@ -419,6 +420,8 @@ export default function Stats() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [tab, setTab] = useState("prints");     // prints | filaments | objects
+  useTrackDetail(`Stats · ${ {prints:"Prints", filaments:"Filaments",
+    objects:"Objets"}[tab] || tab }`);
   const [objStats, setObjStats] = useState(null);
 
   useEffect(() => {

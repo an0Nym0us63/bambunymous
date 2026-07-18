@@ -4,6 +4,7 @@ import client from "../api/client";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
+import { useTrackDetail } from "../utils/track";
 
 // Les montants sont masques pour les comptes en lecture seule.
 function fmtPrice(v) {
@@ -18,6 +19,10 @@ function fmtPrice(v) {
 // reapprovisionnement (prix moyen pondere), photo et suppression.
 function AccessorySheet({ accId, onClose, onChanged }) {
   const [d, setD] = React.useState(null);
+  // Le nom n'arrive qu'apres le chargement : on annonce d'abord l'identifiant,
+  // le libelle se precise ensuite. Deux lignes de journal, mais aucune vue
+  // perdue si le chargement echoue.
+  useTrackDetail(`Fiche accessoire · ${d?.name || "#" + accId}`);
   const [mode, setMode] = React.useState("view");     // view | edit | restock
   const [form, setForm] = React.useState({ name:"", quantity:"", unit_price:"" });
   const [restock, setRestock] = React.useState({ qty:"", total_price:"" });
@@ -593,6 +598,7 @@ function AccessoryPicker({ accessories, onClose, onConfirm }) {
 
 function ObjectSheet({ obj, onClose, onUpdated }) {
   if (!obj) return null;
+  useTrackDetail(`Fiche objet · ${obj.name || "#" + obj.id}`);
   const [accessories, setAccessories] = React.useState([]);
   const [addingAcc, setAddingAcc] = React.useState(false);
   const [allAccs, setAllAccs] = React.useState([]);
@@ -939,6 +945,7 @@ function ObjectGroupTile({ group, objects }) {
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function Objects() {
   const [tab, setTab] = useState("objects");
+  useTrackDetail(`Objets · ${tab === "accessories" ? "Accessoires" : "Objets"}`);
   const [q, setQ] = useState("");
   const [objects, setObjects] = useState([]);
   const [accessories, setAccessories] = useState([]);

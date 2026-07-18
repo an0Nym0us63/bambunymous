@@ -1,4 +1,5 @@
 import axios from "axios";
+import { currentDetail, registerBeacon } from "../utils/track";
 
 const client = axios.create({ baseURL: "/api/v1" });
 
@@ -14,9 +15,19 @@ client.interceptors.request.use((config) => {
   // Meme origine que l'API (baseURL /api/v1) : pas de prevol CORS.
   if (typeof window !== "undefined") {
     config.headers["X-App-Page"] = window.location.pathname || "/";
+    // Onglet actif ou fiche ouverte, quand le front en declare un. Encode en
+    // URI : un en-tete HTTP est limite a l'ASCII et les libelles ont des
+    // accents. Le serveur decode et ne journalise qu'au changement.
+    const d = currentDetail();
+    if (d) config.headers["X-App-Detail"] = encodeURIComponent(d);
   }
   return config;
 });
+
+// Un changement d'onglet ou l'ouverture d'une fiche deja chargee ne provoquent
+// aucun appel reseau : sans ce ping, ces vues n'existeraient pas pour le
+// serveur. La requete est vide, son seul role est de porter les en-tetes.
+registerBeacon(() => { client.get("/users/activity/ping").catch(() => {}); });
 
 // Auto-logout on 401
 client.interceptors.response.use(
