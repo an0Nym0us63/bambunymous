@@ -128,9 +128,10 @@ export default function Layout() {
               barre d'actions occupe une ligne entiere sous le header. */}
           <div id="header-actions" style={{ marginLeft:"auto", display:"flex",
             alignItems:"center", gap:6, flexShrink:0 }}/>
-          {/* Apres le point d'injection, donc toujours le plus a droite quelles
-              que soient les actions de la page en cours. */}
-          <UserMenu placement="bottom"/>
+          {/* Accueil uniquement : ailleurs le header porte deja un titre et les
+              actions de la page, et la pastille encombrerait une barre etroite.
+              Placee apres le point d'injection, elle reste la plus a droite. */}
+          {pathname === "/" && <UserMenu placement="bottom"/>}
         </header>
 
         <main className="page-content" style={S.page}><Outlet /></main>
