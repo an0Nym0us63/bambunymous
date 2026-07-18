@@ -86,6 +86,7 @@ async def create_user(
 async def activity(
     days: int = 7,
     username: Optional[str] = None,
+    kind: Optional[str] = None,
     limit: int = 200,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
@@ -101,6 +102,8 @@ async def activity(
     q = select(ActivityLog).where(ActivityLog.created_at >= since)
     if username:
         q = q.where(ActivityLog.username == username)
+    if kind in ("action", "visite"):
+        q = q.where(ActivityLog.kind == kind)
     total = (await db.execute(
         select(func.count()).select_from(q.subquery())
     )).scalar_one()
@@ -113,6 +116,7 @@ async def activity(
         "items": [{
             "id": r.id, "username": r.username, "method": r.method,
             "path": r.path, "status": r.status, "label": r.label,
+            "kind": r.kind or "action",
             "at": str(r.created_at),
         } for r in rows],
     }

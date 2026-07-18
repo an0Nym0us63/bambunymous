@@ -131,14 +131,49 @@ def _activity_label(method: str, path: str) -> str:
     return p
 
 
+# Pages de l'application. L'interface etant en page unique, le serveur ne voit
+# jamais de navigation : c'est le front qui annonce sa page courante dans
+# l'en-tete X-App-Page. Deviner la page depuis l'endpoint appele ne marcherait
+# pas -- /filaments/filaments est interroge depuis l'Accueil, l'Historique, les
+# Filaments ET les Parametres.
+_PAGE_LABELS = {
+    "/":          "Accueil",
+    "/prints":    "Historique",
+    "/filaments": "Filaments",
+    "/objects":   "Objets",
+    "/stats":     "Statistiques",
+    "/settings":  "Parametres",
+    "/logs":      "Journal",
+}
+
+# Derniere page journalisee par compte, gardee en memoire. Indispensable : le
+# front envoie l'en-tete a CHAQUE appel, polling imprimante compris, et une
+# lecture SQL par requete serait absurde. Cache local au processus ; l'app
+# tourne en un seul worker (le client MQTT est un singleton en memoire), sinon
+# quelques doublons apparaitraient au changement de worker.
+_LAST_PAGE = {}
+_PAGE_REPEAT = 30   # minutes avant de re-journaliser une page inchangee
+
+
+def _page_key(raw):
+    """Normalise l'en-tete en une page connue, ou None. Filtrer sur une liste
+    fermee evite qu'une URL inattendue ne pollue le journal."""
+    p = (raw or "").split("?")[0].strip()
+    if not p.startswith("/"):
+        return None
+    body = p.strip("/")
+    seg = "/" + body.split("/")[0] if body else "/"
+    return seg if seg in _PAGE_LABELS else None
+
+
 @app.middleware("http")
 async def track_activity(request, call_next):
     """
     Suit l'activite des comptes :
       - users.last_seen a chaque requete authentifiee (au plus une ecriture par
         minute et par compte, sinon on ecrirait a chaque appel de polling) ;
-      - une ligne de journal pour les ACTIONS uniquement (ecritures et connexion).
-        Les lectures ne sont pas tracees : sans valeur et bien trop nombreuses.
+      - une ligne "action" pour chaque ecriture ou connexion ;
+      - une ligne "visite" a chaque changement de page de l'interface.
     Ne doit jamais faire echouer la requete : tout est protege.
     """
     response = await call_next(request)
@@ -171,6 +206,18 @@ async def track_activity(request, call_next):
 
         is_action = request.method in ("POST", "PATCH", "PUT", "DELETE")
         now = datetime.utcnow()
+
+        # Visite : uniquement au changement de page, ou apres une longue
+        # inactivite sur la meme page -- sinon une session ouverte des heures
+        # sur l'Accueil n'y laisserait qu'une seule trace, en tout debut.
+        page = _page_key(request.headers.get("x-app-page"))
+        is_visit = False
+        if page and response.status_code < 400:
+            prev = _LAST_PAGE.get(username)
+            if (prev is None or prev[0] != page
+                    or (now - prev[1]) > timedelta(minutes=_PAGE_REPEAT)):
+                _LAST_PAGE[username] = (page, now)
+                is_visit = True
         async with AsyncSessionLocal() as db:
             u = (await db.execute(
                 select(User).where(User.username == username)
@@ -182,8 +229,14 @@ async def track_activity(request, call_next):
             if is_action and response.status_code < 400:
                 db.add(ActivityLog(
                     username=username, method=request.method, path=path,
-                    status=response.status_code,
+                    status=response.status_code, kind="action",
                     label=_activity_label(request.method, path), created_at=now))
+                await db.commit()
+            elif is_visit:
+                db.add(ActivityLog(
+                    username=username, method="VUE", path=page,
+                    status=response.status_code, kind="visite",
+                    label=_PAGE_LABELS[page], created_at=now))
                 await db.commit()
     except Exception:
         pass   # le suivi ne doit jamais casser une requete

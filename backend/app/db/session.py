@@ -49,6 +49,7 @@ async def init_db():
     await _normalize_spool_locations()
     await _seed_admin_user()
     await _migrate_last_seen()
+    await _migrate_activity_kind()
     await _purge_activity_log()
 
 
@@ -124,6 +125,25 @@ async def _migrate_last_seen():
                 print("[migration] colonne users.last_seen ajoutee")
     except Exception as e:
         print(f"[migration] last_seen ignoree : {e}")
+
+
+async def _migrate_activity_kind():
+    """
+    Ajoute activity_log.kind sur une base existante. Les lignes deja presentes
+    sont toutes des actions, d'ou le DEFAULT : aucune reprise a faire.
+    """
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            cols = [r[1] for r in (await conn.execute(
+                _text("PRAGMA table_info(activity_log)"))).all()]
+            if cols and "kind" not in cols:
+                await conn.execute(_text(
+                    "ALTER TABLE activity_log ADD COLUMN kind VARCHAR(8) "
+                    "NOT NULL DEFAULT 'action'"))
+                print("[migration] colonne activity_log.kind ajoutee")
+    except Exception as e:
+        print(f"[migration] activity_log.kind ignoree : {e}")
 
 
 async def _purge_activity_log(days: int = 7):
