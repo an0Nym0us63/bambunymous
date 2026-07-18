@@ -1033,8 +1033,7 @@ export default function Settings() {
     if (serial) payload.PRINTER_ID     = serial;
     if (code)   payload.PRINTER_ACCESS_CODE = code;
     if (pname)  payload.PRINTER_NAME   = pname;
-    if (user)   payload.ADMIN_USERNAME = user;
-    if (pass)   payload.ADMIN_PASSWORD = pass;
+    // Les identifiants ne sont plus geres ici : voir "Mon compte" et "Utilisateurs".
     if (cost)   payload.COST_BY_HOUR   = cost;
     try {
       await client.patch("/settings", payload);
@@ -1152,15 +1151,6 @@ export default function Settings() {
               {codeSet && !code && <p style={{ fontSize:10, color:"#22c55e", marginTop:4 }}>✓ Code configuré</p>}
             </div>
             {F("Nom affiché", pname, setPname, { placeholder:"Mon H2C" })}
-          </div>
-        </div>
-
-        {/* Compte */}
-        <div className="card" style={card}>
-          <div style={cardTitle}>Compte</div>
-          <div style={sec}>
-            {F("Utilisateur", user, setUser)}
-            {F("Mot de passe", pass, setPass, { type:"password", placeholder:"Laisser vide pour conserver" })}
           </div>
         </div>
 
