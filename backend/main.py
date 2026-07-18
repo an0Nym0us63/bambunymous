@@ -146,13 +146,37 @@ _PAGE_LABELS = {
     "/logs":      "Journal",
 }
 
-# Derniere page journalisee par compte, gardee en memoire. Indispensable : le
-# front envoie l'en-tete a CHAQUE appel, polling imprimante compris, et une
-# lecture SQL par requete serait absurde. Cache local au processus ; l'app
+# Dernieres vues journalisees par compte, gardees en memoire. Indispensable :
+# le front envoie les en-tetes a CHAQUE appel, polling imprimante compris, et
+# une lecture SQL par requete serait absurde. Cache local au processus ; l'app
 # tourne en un seul worker (le client MQTT est un singleton en memoire), sinon
 # quelques doublons apparaitraient au changement de worker.
+#
+# DEUX emplacements distincts, et non un seul : page et detail changent en
+# alternance. Ouvrir une fiche bascule le detail, puis le rafraichissement de
+# la liste derriere ferait rebasculer la page -- avec un emplacement unique le
+# journal se serait mis a alterner page/fiche/page/fiche indefiniment.
 _LAST_PAGE = {}
-_PAGE_REPEAT = 30   # minutes avant de re-journaliser une page inchangee
+_LAST_DETAIL = {}
+_PAGE_REPEAT = 30   # minutes avant de re-journaliser une vue inchangee
+
+
+def _detail_key(raw):
+    """
+    Libelle de detail annonce par le front (onglet ouvert, fiche consultee),
+    encode en URI pour survivre aux accents : un en-tete HTTP est limite a
+    l'ASCII, "Gris anthracite metallise" serait passe mais pas "métallisé".
+    """
+    if not raw:
+        return None
+    try:
+        from urllib.parse import unquote
+        label = unquote(str(raw)).strip()
+    except Exception:
+        return None
+    # 120 = taille de la colonne label ; on coupe ici plutot que de laisser
+    # SQLite tronquer sans prevenir.
+    return label[:120] or None
 
 
 def _page_key(raw):
@@ -207,17 +231,24 @@ async def track_activity(request, call_next):
         is_action = request.method in ("POST", "PATCH", "PUT", "DELETE")
         now = datetime.utcnow()
 
-        # Visite : uniquement au changement de page, ou apres une longue
-        # inactivite sur la meme page -- sinon une session ouverte des heures
+        # Visite et detail : uniquement au changement, ou apres une longue
+        # inactivite sur la meme vue -- sinon une session ouverte des heures
         # sur l'Accueil n'y laisserait qu'une seule trace, en tout debut.
-        page = _page_key(request.headers.get("x-app-page"))
-        is_visit = False
-        if page and response.status_code < 400:
-            prev = _LAST_PAGE.get(username)
-            if (prev is None or prev[0] != page
+        def _changed(cache, key):
+            if not key:
+                return False
+            prev = cache.get(username)
+            if (prev is None or prev[0] != key
                     or (now - prev[1]) > timedelta(minutes=_PAGE_REPEAT)):
-                _LAST_PAGE[username] = (page, now)
-                is_visit = True
+                cache[username] = (key, now)
+                return True
+            return False
+
+        ok = response.status_code < 400
+        page   = _page_key(request.headers.get("x-app-page")) if ok else None
+        detail = _detail_key(request.headers.get("x-app-detail")) if ok else None
+        is_visit  = _changed(_LAST_PAGE, page)
+        is_detail = _changed(_LAST_DETAIL, detail)
         async with AsyncSessionLocal() as db:
             u = (await db.execute(
                 select(User).where(User.username == username)
@@ -232,12 +263,22 @@ async def track_activity(request, call_next):
                     status=response.status_code, kind="action",
                     label=_activity_label(request.method, path), created_at=now))
                 await db.commit()
-            elif is_visit:
-                db.add(ActivityLog(
-                    username=username, method="VUE", path=page,
-                    status=response.status_code, kind="visite",
-                    label=_PAGE_LABELS[page], created_at=now))
-                await db.commit()
+            else:
+                # Une requete peut porter les deux a la fois : arriver sur une
+                # page en ouvrant directement une fiche. On journalise la page
+                # d'abord, pour que l'ordre de lecture reste logique.
+                if is_visit:
+                    db.add(ActivityLog(
+                        username=username, method="VUE", path=page,
+                        status=response.status_code, kind="visite",
+                        label=_PAGE_LABELS[page], created_at=now))
+                if is_detail:
+                    db.add(ActivityLog(
+                        username=username, method="DETAIL", path=page or "",
+                        status=response.status_code, kind="detail",
+                        label=detail, created_at=now))
+                if is_visit or is_detail:
+                    await db.commit()
     except Exception:
         pass   # le suivi ne doit jamais casser une requete
     return response

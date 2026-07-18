@@ -82,11 +82,31 @@ async def create_user(
     return _out(u)
 
 
+@router.get("/activity/ping", status_code=204)
+async def activity_ping(_: str = Depends(get_current_user)):
+    """
+    Requete vide dont le seul role est de porter les en-tetes X-App-Page et
+    X-App-Detail : le middleware journalise a partir d'elles, mais il lui faut
+    une requete pour les voir. Un changement d'onglet ou l'ouverture d'une
+    fiche ne declenchent pas toujours un appel reseau -- sans ce ping, ces
+    vues-la passeraient sous le radar.
+
+    En GET et non en POST a dessein : un compte en lecture seule doit pouvoir
+    l'emettre, or le middleware refuse toute ecriture a ces comptes.
+
+    Declaree AVANT /activity pour rester hors d'atteinte des routes a
+    parametre, et nichee sous un prefixe litteral pour ne jamais entrer en
+    conflit avec /{uid}.
+    """
+    return None
+
+
 @router.get("/activity")
 async def activity(
     days: int = 7,
     username: Optional[str] = None,
     kind: Optional[str] = None,
+    q: Optional[str] = None,
     limit: int = 200,
     offset: int = 0,
     db: AsyncSession = Depends(get_db),
@@ -100,16 +120,22 @@ async def activity(
     from datetime import datetime, timedelta
     since = datetime.utcnow() - timedelta(
         days=max(1, min(days, ACTIVITY_RETENTION_DAYS)))
-    q = select(ActivityLog).where(ActivityLog.created_at >= since)
+    stmt_q = select(ActivityLog).where(ActivityLog.created_at >= since)
     if username:
-        q = q.where(ActivityLog.username == username)
-    if kind in ("action", "visite"):
-        q = q.where(ActivityLog.kind == kind)
+        stmt_q = stmt_q.where(ActivityLog.username == username)
+    if kind in ("action", "visite", "detail"):
+        stmt_q = stmt_q.where(ActivityLog.kind == kind)
+    if q and q.strip():
+        # Recherche sur le libelle ET le chemin : on cherche aussi bien "Rose
+        # sakura" qu'un fragment d'URL quand on remonte un incident.
+        like = f"%{q.strip()}%"
+        stmt_q = stmt_q.where(
+            ActivityLog.label.ilike(like) | ActivityLog.path.ilike(like))
     total = (await db.execute(
-        select(func.count()).select_from(q.subquery())
+        select(func.count()).select_from(stmt_q.subquery())
     )).scalar_one()
     rows = (await db.execute(
-        q.order_by(ActivityLog.created_at.desc())
+        stmt_q.order_by(ActivityLog.created_at.desc())
          .limit(max(1, min(limit, 500))).offset(max(0, offset))
     )).scalars().all()
     return {
