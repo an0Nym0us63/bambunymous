@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
 import client from "../api/client";
+import AdminOnly from "../components/AdminOnly";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 
 function fmtPrice(v) { return v != null ? `${Number(v).toFixed(2)} €` : "—"; }
@@ -230,7 +231,7 @@ function AccessorySheet({ accId, onClose, onChanged }) {
 
           {/* Actions */}
           {mode === "view" && (
-            <div style={{ display:"flex", gap:8 }}>
+            <AdminOnly><div style={{ display:"flex", gap:8 }}>
               <button onClick={()=>setMode("edit")}
                 style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
                   background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700,
@@ -245,7 +246,7 @@ function AccessorySheet({ accId, onClose, onChanged }) {
                   color: confirmDel ? "white" : "#ef4444", fontSize:12, fontWeight:700, cursor:"pointer" }}>
                 {confirmDel ? "Confirmer ?" : "🗑"}
               </button>
-            </div>
+            </div></AdminOnly>
           )}
         </>)}
       </div>
@@ -750,9 +751,9 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
         <div style={{ marginBottom:14 }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
             <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>Accessoires</p>
-            <button onClick={openAddAcc}
+            <AdminOnly><button onClick={openAddAcc}
               style={{ fontSize:11, padding:"2px 10px", borderRadius:20, border:"1px solid var(--border)",
-                background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>+ Ajouter</button>
+                background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>+ Ajouter</button></AdminOnly>
           </div>
           {accessories.length === 0 && <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>Aucun accessoire</p>}
           {accessories.map(a => (
@@ -779,16 +780,16 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
 
         {/* Actions */}
         <div style={{ display:"flex", gap:8 }}>
-          <button onClick={()=>setEditing(true)}
+          <AdminOnly><button onClick={()=>setEditing(true)}
             style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
               background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700, cursor:"pointer" }}>
             ✏️ Modifier
-          </button>
-          <button onClick={handleDelete}
+          </button></AdminOnly>
+          <AdminOnly><button onClick={handleDelete}
             style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid rgba(239,68,68,0.3)",
               background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:12, fontWeight:700, cursor:"pointer" }}>
             🗑 Supprimer
-          </button>
+          </button></AdminOnly>
           <button onClick={onClose}
             style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
               background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>✕</button>
@@ -986,12 +987,12 @@ export default function Objects() {
       <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Objets & Accessoires</h1>
         {tab === "accessories" && (
-          <button onClick={()=>setCreatingAcc(true)}
+          <AdminOnly><button onClick={()=>setCreatingAcc(true)}
             style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:5,
               padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer",
               background:"#3b82f6", color:"white", fontSize:12, fontWeight:700 }}>
             <Plus size={14}/> Accessoire
-          </button>
+          </button></AdminOnly>
         )}
       </div>
 

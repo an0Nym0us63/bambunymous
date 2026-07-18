@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
+import AdminOnly from "../components/AdminOnly";
 import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
 import PhotoAddButton from "../components/PhotoAddButton";
@@ -900,6 +901,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
           {/* Actions */}
           <div style={{ display:"flex", gap:8, marginTop:8 }}>
+            <AdminOnly>
             <button onClick={()=>setEditMode(true)}
               style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid var(--border)",
                 background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
@@ -912,6 +914,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             }} style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid rgba(239,68,68,0.3)",
               background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:13, fontWeight:700,
               cursor:"pointer" }}>🗑 Supprimer</button>
+            </AdminOnly>
             <button onClick={onClose}
               style={{ flex:2, padding:"11px", borderRadius:12, border:"none",
                 background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
@@ -2123,14 +2126,14 @@ export default function Prints() {
           {[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF, colorF].filter(Boolean).length > 0 ? `Filtres (${[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF, colorF].filter(Boolean).length})` : "Filtres"}
         </button>
         {viewMode==="list" && (
-          <button onClick={()=>selectMode?exitSelectMode():setSelectMode(true)}
+          <AdminOnly><button onClick={()=>selectMode?exitSelectMode():setSelectMode(true)}
             title={selectMode?"Annuler sélection":"Sélectionner"}
             style={{ width:36, height:36, borderRadius:10, border:"1px solid var(--border)",
               background:selectMode?"rgba(59,130,246,0.1)":"var(--surface2)",
               color:selectMode?"#3b82f6":"var(--muted)", cursor:"pointer",
               display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
             <Check size={14}/>
-          </button>
+          </button></AdminOnly>
         )}
         <label title="Importer .3mf"
           style={{ width:36, height:36, borderRadius:10, border:"1px solid var(--border)",

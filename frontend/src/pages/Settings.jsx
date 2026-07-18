@@ -6,6 +6,7 @@ import HeaderAction from "../components/HeaderAction";
 import { usePrinter } from "../store/printer";
 import { useTheme } from "../useTheme";
 import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY } from "../store/auth";
+import AdminOnly from "../components/AdminOnly";
 
 const inp = {
   width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
@@ -1088,6 +1089,7 @@ export default function Settings() {
         </button>
       </div>
 
+      <AdminOnly>
       <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
         {/* Thème */}
@@ -1182,14 +1184,16 @@ export default function Settings() {
           {saved ? "Sauvegardé ✓" : "Sauvegarder"}
         </button>
       </form>
+      </AdminOnly>
 
-      <AMSOrderSection/>
-
-      <EnrichFromCatalogSection/>
+      <AdminOnly>
+        <AMSOrderSection/>
+        <EnrichFromCatalogSection/>
         <RecalculateSection/>
+      </AdminOnly>
       <MyAccountSection/>
       <UsersSection/>
-      <RfidDebugSection/>
+      <AdminOnly><RfidDebugSection/></AdminOnly>
 
 
 

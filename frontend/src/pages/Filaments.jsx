@@ -7,6 +7,7 @@ import { useNativeScan } from "../hooks/useNativeScan";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette } from "lucide-react";
 import client from "../api/client";
+import AdminOnly from "../components/AdminOnly";
 import { colorBg, parseColorsList } from "../utils/colors";
 import GalleryCompare from "../components/GalleryCompare";
 
@@ -782,6 +783,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
 
           {/* Actions */}
           <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap" }}>
+            <AdminOnly>
             {!spool.archived && (
               <button onClick={async()=>{ await onArchive(spool.id); onClose(); }}
                 style={{ flex:1, padding:"10px", background:"var(--surface2)",
@@ -798,6 +800,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                 alignItems:"center", justifyContent:"center", gap:6 }}>
               🗑 Supprimer
             </button>
+            </AdminOnly>
             <button onClick={onClose}
               style={{ flex:1, padding:"10px", background:"#3b82f6",
                 border:"none", borderRadius:10, cursor:"pointer",
@@ -1173,9 +1176,9 @@ function SpoolsView({ filaments, showArchived }) {
           <SlidersHorizontal size={14}/>
           {activeFilters > 0 ? `Filtres (${activeFilters})` : "Filtres"}
         </button>
-        <button onClick={()=>setShowAdd(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"#3b82f6", color:"white", border:"none", borderRadius:8, fontSize:13, cursor:"pointer", flexShrink:0 }}>
+        <AdminOnly><button onClick={()=>setShowAdd(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"#3b82f6", color:"white", border:"none", borderRadius:8, fontSize:13, cursor:"pointer", flexShrink:0 }}>
           <Plus size={14}/> Bobine
-        </button>
+        </button></AdminOnly>
       </div>
       {filterOpen && (
         <FilterSortSheet
@@ -1369,13 +1372,13 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
                 {f.swatch ? "Échantillon" : "Sans échantillon"}
               </span>
             </div>
-            <button onClick={() => setEditing(e=>!e)}
+            <AdminOnly><button onClick={() => setEditing(e=>!e)}
               style={{ padding:"6px 12px", borderRadius:8, fontSize:12, fontWeight:700,
                 background: editing ? "var(--surface2)" : "#3b82f6",
                 color: editing ? "var(--muted)" : "white",
                 border:"1px solid var(--border)", cursor:"pointer", flexShrink:0 }}>
               {editing ? "Annuler" : "✏️ Éditer"}
-            </button>
+            </button></AdminOnly>
           </div>
 
           {editing ? (
@@ -1591,12 +1594,12 @@ function FilamentsView() {
             border:"1px solid var(--border)", borderRadius:8, fontSize:12, cursor:"pointer", flexShrink:0 }}>
           <SlidersHorizontal size={14}/>{activeFilters>0?` Filtres (${activeFilters})`:" Filtres"}
         </button>
-        <button onClick={() => setCreateOpen(true)}
+        <AdminOnly><button onClick={() => setCreateOpen(true)}
           style={{ padding:"8px 14px", borderRadius:10, background:"#3b82f6", border:"none",
             color:"white", fontSize:13, fontWeight:700, cursor:"pointer",
             display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
           <Plus size={14}/> Filament
-        </button>
+        </button></AdminOnly>
       </div>
       {filterOpen && (
         <FilterSortSheet allItems={allFilaments} getFamily={getFamilyF} filters={filters} sort={sort}
