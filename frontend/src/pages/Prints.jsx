@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
+import { useIsAdmin } from "../store/auth";
 import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
 import PhotoAddButton from "../components/PhotoAddButton";
@@ -419,6 +420,7 @@ function UnmapFilamentConfirm({ f, printId, onClose, onDone }) {
 }
 
 function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRestore, onUnmapped, onUnmap }) {
+  const isAdmin = useIsAdmin();
   const [open, setOpen] = useState(false);
   const [dissociate, setDissociate] = useState(null); // filament usage à dissocier
   return (
@@ -431,7 +433,7 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
         <div style={{ display:"flex", alignItems:"center", gap:6, flex:1, minWidth:0 }}>
           <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:"0.06em", whiteSpace:"nowrap" }}>Filaments ({filaments.length})</span>
-          {onRestore && filaments.some(f=>f.spool_id) && (
+          {isAdmin && onRestore && filaments.some(f=>f.spool_id) && (
             <span onClick={e=>{e.stopPropagation();onRestore();}}
               style={{ fontSize:10, fontWeight:700, cursor:"pointer",
                 padding:"2px 8px", borderRadius:20, whiteSpace:"nowrap",
@@ -458,15 +460,16 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
         <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
           {filaments.map((f,i) => (
             <div key={i}
-              onClick={e=>{e.stopPropagation(); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else{onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,colorsArray:f.filament_colors_array,multicolorType:f.filament_multicolor_type,filamentType:f.filament_fila_type||f.filament_type});}}}
-              onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(f.spool_id)onUnmap&&onUnmap(f);}}
-              onPointerDown={e=>{ if(!f.spool_id) return; const t=setTimeout(()=>{navigator.vibrate&&navigator.vibrate(20); onUnmap&&onUnmap(f);},600); e.currentTarget._lpt=t; }}
+              onClick={e=>{e.stopPropagation(); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else if(isAdmin){onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,colorsArray:f.filament_colors_array,multicolorType:f.filament_multicolor_type,filamentType:f.filament_fila_type||f.filament_type});}}}
+              onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(isAdmin&&f.spool_id)onUnmap&&onUnmap(f);}}
+              onPointerDown={e=>{ if(!isAdmin||!f.spool_id) return; const t=setTimeout(()=>{navigator.vibrate&&navigator.vibrate(20); onUnmap&&onUnmap(f);},600); e.currentTarget._lpt=t; }}
               onPointerUp={e=>clearTimeout(e.currentTarget._lpt)}
               onPointerLeave={e=>clearTimeout(e.currentTarget._lpt)}
               onPointerCancel={e=>clearTimeout(e.currentTarget._lpt)}
               style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px 12px", background:"var(--bg)",
-              borderTop:"1px solid var(--border)", cursor:"pointer",
+              borderTop:"1px solid var(--border)",
+              cursor: (f.spool_id || isAdmin) ? "pointer" : "default",
               opacity: f.spool_id ? 1 : 0.85 }}>
               <ColorDot hex={f.color_hex} colors={f.filament_colors_array}
                 multicolor={f.filament_multicolor_type} size={20}
@@ -476,7 +479,7 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
                   overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                   {f.filament_translated_name || f.filament_fila_type || f.filament_name || "Inconnu"}
                   {f.spool_id && <span style={{ fontSize:9, color:"#22c55e", marginLeft:5 }}>✓#{f.spool_id}</span>}
-                  {!f.spool_id && <span style={{ fontSize:9, color:"#f59e0b", marginLeft:5,
+                  {!f.spool_id && isAdmin && <span style={{ fontSize:9, color:"#f59e0b", marginLeft:5,
                     background:"rgba(245,158,11,0.12)", padding:"1px 5px", borderRadius:6 }}>▸ Mapper</span>}
                 </p>
                 <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
@@ -715,13 +718,13 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
               margin:"0 0 4px", letterSpacing:"-0.01em" }}>
               {p.file_name || "Sans nom"}
             </h2>
-            <button onClick={()=>setEditMode(true)} aria-label="Éditer"
+            <AdminOnly><button onClick={()=>setEditMode(true)} aria-label="Éditer"
               style={{ flexShrink:0, background:"none", border:"none", cursor:"pointer",
                 color:"var(--muted)", padding:4, display:"flex" }}
               onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
               onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
               <Pencil size={16}/>
-            </button>
+            </button></AdminOnly>
           </div>
           {p.original_name && p.original_name !== p.file_name && (
             <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 6px" }}>{p.original_name}</p>
@@ -733,10 +736,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                 background:"rgba(167,139,250,0.15)", color:"#a78bfa",
                 padding:"2px 6px 2px 8px", borderRadius:20, fontWeight:700 }}>
                 📁 {groupe}
-                <button onClick={handleUngroup} style={{ background:"none", border:"none",
+                <AdminOnly><button onClick={handleUngroup} style={{ background:"none", border:"none",
                   color:"#a78bfa", cursor:"pointer", padding:0, display:"flex" }}>
                   <X size={11}/>
-                </button>
+                </button></AdminOnly>
               </span>
             )}
           </div>
@@ -810,10 +813,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                   )}
                 </div>
                 {!editNb ? (
-                  <button onClick={()=>{setNbVal(String(localNb));setEditNb(true);}}
+                  <AdminOnly><button onClick={()=>{setNbVal(String(localNb));setEditNb(true);}}
                     style={{ fontSize:10, padding:"2px 8px", borderRadius:6,
                       border:"1px solid rgba(34,197,94,0.3)", background:"none",
-                      color:"#22c55e", cursor:"pointer" }}>Modifier</button>
+                      color:"#22c55e", cursor:"pointer" }}>Modifier</button></AdminOnly>
                 ) : (
                   <div style={{ display:"flex", gap:5, alignItems:"center" }}>
                     <input type="number" min="1" value={nbVal} onChange={e=>setNbVal(e.target.value)}
@@ -1559,12 +1562,14 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
   const [diskFiles, setDiskFiles] = useState([]);
   const [photoToDelete, setPhotoToDelete] = useState(null);
   const [deletedNames, setDeletedNames] = useState(new Set());
+  const isAdmin = useIsAdmin();
 
   // Appui long -> menu (meme geste que les photos de filament). La croix de
   // suppression sur chaque vignette encombrait et se declenchait par erreur.
   const [photoMenu, setPhotoMenu] = useState(null);   // { item, canCover }
   const pressTimer = React.useRef(null);
   const startPress = (item, canCover) => {
+    if (!isAdmin) return;   // le menu ne contient que des actions
     pressTimer.current = setTimeout(() => setPhotoMenu({ item, canCover }), 500);
   };
   const cancelPress = () => clearTimeout(pressTimer.current);
