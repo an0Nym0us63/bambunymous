@@ -114,8 +114,13 @@ def _external_unit(p):
                 by_id[int(sl.get("id", -1))] = sl
             except (TypeError, ValueError):
                 continue
-        # 255 puis 254 : l'ordre des emplacements, pas celui du tableau.
-        for ext_id in (255, 254):
+        # 254 puis 255, et non l'inverse : c'est l'ordre dans lequel la machine
+        # presente physiquement les deux supports, de gauche a droite. Le
+        # protocole les numerote a l'envers. On remet donc l'ordre a l'endroit
+        # ICI, une seule fois, plutot que de le corriger a l'affichage : sinon
+        # l'emplacement ecrit sur la bobine ("Externe slot 2") contredisait
+        # l'etiquette affichee juste au-dessus ("E1").
+        for ext_id in (254, 255):
             if ext_id in by_id:
                 slots.append(by_id[ext_id])
     else:

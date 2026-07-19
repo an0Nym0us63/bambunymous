@@ -84,24 +84,15 @@ const AMS_NAMES = ["AMS-A","AMS-B","AMS-C","AMS-D"];
 const amsName = (id) => (id === EXT_AMS_ID ? "Externe" : (AMS_NAMES[id] ?? `AMS ${id+1}`));
 // Pastille de slot : A1, B3... et E1/E2 pour l'externe.
 const amsInitial = (id) => (id === EXT_AMS_ID ? "E" : (AMS_NAMES[id]?.slice(-1) ?? id+1));
-// Ordre d'AFFICHAGE des slots. Sur l'externe, le protocole numerote 255 puis
-// 254, ce qui donne E1 a gauche alors que la machine les presente dans l'autre
-// sens. On inverse donc a l'affichage seulement : les identifiants, les
-// libelles et le decompte restent inchanges.
-const traysInOrder = (ams) =>
-  (ams.id === EXT_AMS_ID ? [...(ams.trays || [])].reverse() : (ams.trays || []));
+// Les slots arrivent deja dans l'ordre physique, y compris pour l'externe :
+// c'est le serveur qui remet a l'endroit la numerotation inversee du
+// protocole. Le front n'a donc rien a reordonner -- l'avoir fait ici faisait
+// diverger l'etiquette affichee et l'emplacement inscrit sur la bobine.
+const traysInOrder = (ams) => ams.trays || [];
 // Pas de capteur sur le support externe : afficher 0 % et 0 °C ferait croire a
 // une mesure, alors qu'il n'y en a aucune.
 const hasClimate = (ams) => ams.id !== EXT_AMS_ID;
-// Numero AFFICHE d'un slot. Sur l'externe les trays sont presentees dans
-// l'ordre inverse : numeroter d'apres t.id donnait un E2 a gauche et un E1 a
-// droite. On numerote donc dans le sens de lecture, pas dans celui du
-// protocole. Sur un AMS reel les deux ordres coincident, la fonction est
-// transparente.
-const traySlotNo = (ams, t) => {
-  const i = traysInOrder(ams).findIndex(x => x.id === t.id);
-  return (i >= 0 ? i : t.id) + 1;
-};
+const traySlotNo = (ams, t) => t.id + 1;
 
 // ── Mini pastille ──────────────────────────────────────────────────────────
 function ColorPill({ tray, spoolInfo, active }) {

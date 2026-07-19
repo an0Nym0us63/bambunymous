@@ -471,7 +471,10 @@ async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_i
                     logger.info(f"[SLOT] slot={slot} ams_mapping[{idx}] → non utilisé (255)")
                 else:
                     if ams_id in (255, 254):
-                        lookup_ams, lookup_tray = 255, (0 if ams_id == 255 else 1)
+                        # Les slots externes sont ranges dans l'ordre physique
+                        # (254 en premier), pas dans l'ordre du protocole :
+                        # l'indice est donc inverse par rapport a l'ams_id.
+                        lookup_ams, lookup_tray = 255, (0 if ams_id == 254 else 1)
                     else:
                         lookup_ams, lookup_tray = ams_id, tray_id
                     ams = next((a for a in state.ams_list if a.id == lookup_ams), None)
