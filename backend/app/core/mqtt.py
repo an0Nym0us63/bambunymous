@@ -82,6 +82,52 @@ def invalidate_tray_cache(tag_uid: str = "", profile_id: str = "") -> int:
     return invalidated
 
 
+# Identite conventionnelle du pseudo-AMS qui porte les bobines externes.
+# Aucun AMS reel ne porte ce numero.
+EXT_AMS_ID = 255
+
+
+def _external_unit(p):
+    """
+    Construit un pseudo-AMS a partir des emplacements externes.
+
+    Deux formes de charge utile selon la machine, comme dans l'integration
+    Home Assistant :
+      - vir_slot : tableau, machines bi-buse (H2D / H2C), une entree par
+        emplacement, id 255 = externe 1 et id 254 = externe 2 ;
+      - vt_tray  : objet unique, machines mono-buse (P1P / X1), id 254.
+
+    Ces entrees portent EXACTEMENT les memes champs qu'une tray d'AMS --
+    tray_info_idx, tray_color, tray_type, tag_uid, tray_uuid, remain. On les
+    presente donc comme un AMS ordinaire, avec des slots renumerotes 0 et 1 :
+    le decodage, le matching, le cache spool_info, la localisation et tout
+    l'affichage fonctionnent alors sans une ligne de plus. C'est le seul point
+    de conception qui compte ici -- traiter l'externe a part aurait demande de
+    dupliquer une centaine de lignes.
+    """
+    slots = []
+    vir = p.get("vir_slot")
+    if isinstance(vir, list) and vir:
+        by_id = {}
+        for sl in vir:
+            try:
+                by_id[int(sl.get("id", -1))] = sl
+            except (TypeError, ValueError):
+                continue
+        # 255 puis 254 : l'ordre des emplacements, pas celui du tableau.
+        for ext_id in (255, 254):
+            if ext_id in by_id:
+                slots.append(by_id[ext_id])
+    else:
+        vt = p.get("vt_tray")
+        if isinstance(vt, dict) and vt:
+            slots.append(vt)
+    if not slots:
+        return None
+    return {"id": EXT_AMS_ID, "humidity_raw": 0, "temp": 0,
+            "tray": [dict(sl, id=i) for i, sl in enumerate(slots)]}
+
+
 def _decode_temp(raw: int) -> tuple[float, float]:
     """Décode un int32 Bambu H2C en (actuel°C, target°C).
     Méthode ha-bambulab: low word = actuel, high word = target.
@@ -392,7 +438,11 @@ class MQTTManager:
             # Si tray_now==255 (transition) ou 254 (externe) : on garde la dernière valeur connue
             # plutôt que de tout effacer, pour éviter un clignotement de la surbrillance.
             state.ams_list = []
-            for ams_raw in ams_data["ams"]:
+            _units = list(ams_data["ams"])
+            _ext = _external_unit(p)
+            if _ext:
+                _units.append(_ext)
+            for ams_raw in _units:
                 ams = AMS(id=int(ams_raw.get("id", 0)),
                           humidity=int(ams_raw.get("humidity_raw", 0)),
                           temp=float(ams_raw.get("temp", 0)),
@@ -488,7 +538,9 @@ class MQTTManager:
                                         _MATCH_MODE_CACHE[_key] = mode
                                     if spool_id:
                                         _t.spool_id   = spool_id
-                                        loc = f"AMS-{chr(65+_ams_id)} slot {_tray_slot+1}"
+                                        loc = (f"Externe {_tray_slot+1}"
+                                               if _ams_id == EXT_AMS_ID
+                                               else f"AMS-{chr(65+_ams_id)} slot {_tray_slot+1}")
                                         logger.debug(f"[AMS] {_ams_id}/{_tray_slot} → #{spool_id} {mode}")
                                         # Stocker spool_info en cache
                                         try:

@@ -461,18 +461,30 @@ async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_i
                     # Format entier legacy (au cas où)
                     ams_id  = int(entry) // 4
                     tray_id = int(entry) % 4
-                if ams_id == 255 or tray_id == 255:
+                # 255 cote AMS ne veut PAS dire "non utilise" : c'est la
+                # premiere bobine externe, et 254 la seconde. Seul slot_id ==
+                # 255 signifie reellement qu'aucun filament n'est affecte.
+                # Confondre les deux faisait tomber les prints sur bobine
+                # externe dans le repli par couleur, qui decomptait alors les
+                # grammes sur une bobine rangee dans un tiroir.
+                if tray_id == 255:
                     logger.info(f"[SLOT] slot={slot} ams_mapping[{idx}] → non utilisé (255)")
                 else:
-                    ams = next((a for a in state.ams_list if a.id == ams_id), None)
-                    if ams:
-                        t = next((t for t in ams.trays if t.id == tray_id), None)
-                        if t and t.spool_id:
-                            logger.info(f"[SLOT] slot={slot} → AMS{ams_id} tray{tray_id} spool_id={t.spool_id} ✅")
-                            return t.spool_id, "live"
-                        logger.info(f"[SLOT] slot={slot} → AMS{ams_id} tray{tray_id} pas de spool_id mappé")
+                    if ams_id in (255, 254):
+                        lookup_ams, lookup_tray = 255, (0 if ams_id == 255 else 1)
                     else:
-                        logger.info(f"[SLOT] slot={slot} → AMS{ams_id} introuvable dans l'état MQTT")
+                        lookup_ams, lookup_tray = ams_id, tray_id
+                    ams = next((a for a in state.ams_list if a.id == lookup_ams), None)
+                    if ams:
+                        t = next((t for t in ams.trays if t.id == lookup_tray), None)
+                        _lbl = ("Externe " + str(lookup_tray + 1)
+                                if lookup_ams == 255 else f"AMS{lookup_ams} tray{lookup_tray}")
+                        if t and t.spool_id:
+                            logger.info(f"[SLOT] slot={slot} → {_lbl} spool_id={t.spool_id} ✅")
+                            return t.spool_id, "live"
+                        logger.info(f"[SLOT] slot={slot} → {_lbl} pas de spool_id mappé")
+                    else:
+                        logger.info(f"[SLOT] slot={slot} → AMS{lookup_ams} introuvable dans l'état MQTT")
             else:
                 logger.info(f"[SLOT] slot={slot} hors plage ams_mapping (len={len(am)})")
         else:

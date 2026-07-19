@@ -58,7 +58,9 @@ const cardTitle = {
   letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6,
 };
 
-const AMS_NAMES = { 0:"AMS-A", 1:"AMS-B", 2:"AMS-C", 3:"AMS-D" };
+// 255 = pseudo-AMS des bobines externes : il se range et se reordonne comme
+// les autres, seul son nom change.
+const AMS_NAMES = { 0:"AMS-A", 1:"AMS-B", 2:"AMS-C", 3:"AMS-D", 255:"Externe" };
 const POSITION_LABELS = [
   "Position 1 — haut gauche",
   "Position 2 — bas gauche (sous A)",

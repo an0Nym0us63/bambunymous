@@ -76,7 +76,14 @@ function multicolorType(tray, spoolInfo) {
   return spoolInfo?.multicolor_type || tray?.multicolor_type || null;
 }
 
+// L'AMS 255 est le pseudo-AMS des bobines externes, fabrique cote serveur pour
+// que l'externe traverse exactement le meme code que les AMS reels. Seul son
+// libelle differe -- un tableau indexe aurait rendu "AMS 256".
+const EXT_AMS_ID = 255;
 const AMS_NAMES = ["AMS-A","AMS-B","AMS-C","AMS-D"];
+const amsName = (id) => (id === EXT_AMS_ID ? "Externe" : (AMS_NAMES[id] ?? `AMS ${id+1}`));
+// Pastille de slot : A1, B3... et E1/E2 pour l'externe.
+const amsInitial = (id) => (id === EXT_AMS_ID ? "E" : (AMS_NAMES[id]?.slice(-1) ?? id+1));
 
 // ── Mini pastille ──────────────────────────────────────────────────────────
 function ColorPill({ tray, spoolInfo, active }) {
@@ -151,7 +158,7 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
       <div style={{ display:"flex", alignItems:"center", gap:4 }}>
         <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.08em",
           color: isActive ? "#3b82f6" : isSelected ? "var(--text)" : "var(--muted)" }}>
-          {AMS_NAMES[ams.id] ?? `AMS ${ams.id+1}`}
+          {amsName(ams.id)}
         </span>
         {/* Pastille bleue toujours visible si actif, même en séchage */}
         {isActive && <span style={{ width:6, height:6, borderRadius:"50%",
@@ -364,7 +371,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
       <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: isDrying ? 10 : 16 }}>
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:12, fontWeight:700, letterSpacing:"0.06em", color: isDrying?"#f97316":isActive?"#3b82f6":"var(--muted)" }}>
-            {AMS_NAMES[ams.id] ?? `AMS ${ams.id+1}`}
+            {amsName(ams.id)}
           </span>
           {isActive && !isDrying && <span style={{ width:6, height:6, borderRadius:"50%", backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
           {isDrying && (
@@ -413,10 +420,10 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:4 }}>
         {ams.trays.map(t => (
           <TrayCard key={t.id} tray={t} amsId={ams.id}
-            label={`${AMS_NAMES[ams.id]?.slice(-1)??ams.id+1}${t.id+1}`}
+            label={`${amsInitial(ams.id)}${t.id+1}`}
             activeAmsId={activeAmsId} activeTrayId={activeTrayId}
             spoolInfo={getInfo(t)}
-            onClick={()=>onTrayClick&&onTrayClick({tray:t,amsLabel:AMS_NAMES[ams.id]||`AMS-${ams.id+1}`})}
+            onClick={()=>onTrayClick&&onTrayClick({tray:t,amsLabel:amsName(ams.id)})}
           />
         ))}
       </div>
@@ -929,7 +936,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
 
 
 // ── Section principale ─────────────────────────────────────────────────────
-export { AMSBox, AMSDetail, TrayBottomSheet, AMS_NAMES };
+export { AMSBox, AMSDetail, TrayBottomSheet, AMS_NAMES, amsName, EXT_AMS_ID };
 
 export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLookup }) {
   // Dédupliquer par id au cas où le polling enverrait des doublons
