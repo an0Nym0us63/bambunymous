@@ -773,34 +773,47 @@ function RfidDebugSection() {
   );
 }
 
-function TranslateNamesSection() {
-  const [busy, setBusy] = React.useState(false);
-  const [prog, setProg] = React.useState(null);   // { done, seen, total }
-  const stop = React.useRef(false);
+// Etat du rattrapage, HORS du composant et volontairement.
+//
+// Quitter Parametres demonte la section, mais n'arrete pas la boucle en cours :
+// c'est une fermeture JavaScript, pas un effet React. Un composant demonte ne
+// peut simplement plus rien afficher. Avec un simple useState, le bouton
+// repassait donc a "pret" au retour sur la page, et un second clic lancait un
+// rattrapage concurrent -- deux boucles martelant le meme service de
+// traduction, soit le meilleur moyen de se faire limiter.
+const translateRun = {
+  busy: false, done: 0, stop: false, error: null,
+  subs: new Set(),
+  set(patch) { Object.assign(this, patch); this.subs.forEach(f => f()); },
+};
 
-  // L'endpoint traite un paquet et rend ce qu'il reste : on le rappelle
-  // jusqu'a epuisement. La progression est donc reelle, et rien n'est a
-  // maintenir cote serveur -- ni thread, ni route de statut.
-  const run = async () => {
-    setBusy(true); stop.current = false;
-    let done = 0, seen = 0;
-    try {
-      for (;;) {
-        const { data } = await client.post("/prints/translate-missing", null,
-          { params: { limit: 40 } });
-        // Deux compteurs distincts : "traites" avance a chaque print sorti de
-        // la file, "traduits" seulement quand une traduction a ete produite.
-        // Un nom deja francais est traite sans etre traduit -- confondre les
-        // deux ferait une barre qui n'atteint jamais 100 %.
-        done += (data.translated || 0);
-        seen += (data.translated || 0) + (data.skipped || 0);
-        setProg({ done, seen, total: seen + (data.remaining || 0) });
-        if (stop.current || !data.remaining) break;
-      }
-    } catch (e) {
-      alert(e.response?.data?.detail || e.message);
-    } finally { setBusy(false); }
-  };
+async function runTranslate() {
+  if (translateRun.busy) return;          // garde-fou : une seule boucle
+  translateRun.set({ busy: true, stop: false, done: 0, error: null });
+  try {
+    for (;;) {
+      const { data } = await client.post("/prints/translate-missing", null,
+        { params: { limit: 40 } });
+      translateRun.set({ done: translateRun.done + (data.translated || 0) });
+      if (translateRun.stop || !data.remaining) break;
+    }
+  } catch (e) {
+    // Stocke plutot qu'affiche : une alerte sur une page qu'on a quittee
+    // n'aurait aucun sens.
+    translateRun.set({ error: e.response?.data?.detail || e.message });
+  } finally {
+    translateRun.set({ busy: false });
+  }
+}
+
+function TranslateNamesSection() {
+  const [, force] = React.useReducer(x => x + 1, 0);
+  React.useEffect(() => {
+    translateRun.subs.add(force);
+    return () => translateRun.subs.delete(force);
+  }, []);
+
+  const { busy, done, error } = translateRun;
 
   return (
     <div className="card" style={{ padding:"16px 20px" }}>
@@ -814,31 +827,32 @@ function TranslateNamesSection() {
         prints sont traduits automatiquement, ce bouton ne sert qu'à l'existant.
       </p>
       <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-        <button onClick={busy ? () => { stop.current = true; } : run}
+        <button onClick={busy ? () => translateRun.set({ stop: true }) : runTranslate}
           style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700,
             cursor:"pointer", border:"none",
             background: busy ? "var(--border)" : "#3b82f6",
             color: busy ? "var(--text)" : "white" }}>
           {busy ? "Arrêter" : "⟳ Traduire les noms manquants"}
         </button>
-        {prog && (
-          <span style={{ fontSize:12, color:"var(--muted)" }}>
-            <b style={{ color:"var(--text)", fontFamily:"JetBrains Mono, monospace" }}>
-              {prog.seen}/{prog.total}
-            </b>{" "}traités · {prog.done} traduit{prog.done > 1 ? "s" : ""}
-            {prog.seen >= prog.total ? " · terminé" : ""}
+        {busy && (
+          <span style={{ display:"flex", alignItems:"center", gap:7, fontSize:12,
+            color:"#3b82f6", fontWeight:600 }}>
+            {/* Pastille pulsante : le rattrapage dure plusieurs minutes sans
+                rien afficher entre deux paquets, il faut un signe de vie. */}
+            <span style={{ width:8, height:8, borderRadius:"50%", background:"#3b82f6",
+              animation:"pulse 1.2s ease-in-out infinite" }}/>
+            En cours{done ? ` · ${done} traduit${done > 1 ? "s" : ""}` : "…"}
           </span>
         )}
+        {!busy && done > 0 && (
+          <span style={{ fontSize:12, color:"#22c55e", fontWeight:600 }}>
+            ✓ Terminé · {done} traduit{done > 1 ? "s" : ""}
+          </span>
+        )}
+        {error && (
+          <span style={{ fontSize:12, color:"#ef4444" }}>{error}</span>
+        )}
       </div>
-      {prog && prog.total > 0 && (
-        <div style={{ marginTop:10, height:5, borderRadius:20,
-          background:"var(--surface2)", overflow:"hidden" }}>
-          <div style={{ height:"100%", borderRadius:20,
-            width:`${Math.min(100, Math.round(prog.seen * 100 / prog.total))}%`,
-            background: prog.seen >= prog.total ? "#22c55e" : "#3b82f6",
-            transition:"width 0.3s" }}/>
-        </div>
-      )}
     </div>
   );
 }
