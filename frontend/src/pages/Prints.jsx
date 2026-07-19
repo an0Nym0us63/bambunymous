@@ -627,6 +627,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   useEffect(() => { loadUserPhotos(); }, [pProp.id]);
   const uploadPhoto = async (file) => { const fd = new FormData(); fd.append("file", file); await client.post(`/prints/${pProp.id}/photos/upload`, fd, { headers:{"Content-Type":"multipart/form-data"} }); loadUserPhotos(); };
   const [p, setP] = useState(pProp);
+  const [editFr, setEditFr] = useState(false);
+  const [frVal, setFrVal]   = useState("");
   useTrackDetail(`Fiche print · ${p?.name || pProp?.name || "#" + pProp.id}`);
 
   useEffect(() => {
@@ -731,6 +733,50 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           {p.original_name && p.original_name !== p.file_name && (
             <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 6px" }}>{p.original_name}</p>
           )}
+          {/* Nom francais : sert uniquement a la recherche, il ne remplace
+              jamais le titre. Modifiable, car une traduction automatique se
+              trompe parfois -- et surtout parce que le nom sous lequel on
+              cherche un print est souvent personnel ("la tirelire de Matteo")
+              et qu'aucun traducteur ne peut le deviner. */}
+          <div style={{ display:"flex", alignItems:"center", gap:6, margin:"0 0 8px" }}>
+            {editFr ? (
+              <>
+                <input value={frVal} onChange={e=>setFrVal(e.target.value)} autoFocus
+                  placeholder="Nom en français (recherche)"
+                  style={{ flex:1, minWidth:0, fontSize:12, padding:"4px 8px", borderRadius:7,
+                    background:"var(--surface2)", border:"1px solid var(--border)",
+                    color:"var(--text)", outline:"none" }}/>
+                <button onClick={async()=>{
+                    const v = frVal.trim();
+                    try {
+                      await client.patch(`/prints/${p.id}`, { translated_name: v });
+                      setP(prev => ({ ...prev, translated_name: v }));
+                      onChanged && onChanged();
+                    } catch(e) { alert(e.response?.data?.detail || e.message); }
+                    setEditFr(false);
+                  }}
+                  style={{ fontSize:11, padding:"4px 10px", borderRadius:7, cursor:"pointer",
+                    border:"none", background:"#3b82f6", color:"white", fontWeight:600 }}>OK</button>
+                <button onClick={()=>setEditFr(false)}
+                  style={{ fontSize:11, padding:"4px 8px", borderRadius:7, cursor:"pointer",
+                    border:"1px solid var(--border)", background:"transparent",
+                    color:"var(--muted)" }}>✕</button>
+              </>
+            ) : (
+              <AdminOnly>
+                <button onClick={()=>{ setFrVal(p.translated_name || ""); setEditFr(true); }}
+                  style={{ display:"flex", alignItems:"center", gap:5, fontSize:11,
+                    padding:"2px 9px", borderRadius:20, cursor:"pointer",
+                    border:"1px solid var(--border)", background:"transparent",
+                    color:"var(--muted)", maxWidth:"100%" }}>
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    🔎 {p.translated_name || "Ajouter un nom de recherche"}
+                  </span>
+                  <Pencil size={11} style={{ flexShrink:0 }}/>
+                </button>
+              </AdminOnly>
+            )}
+          </div>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16, flexWrap:"wrap" }}>
             <StatusBadge status={p.status}/>
             {groupe && (

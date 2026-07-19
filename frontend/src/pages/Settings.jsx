@@ -773,6 +773,60 @@ function RfidDebugSection() {
   );
 }
 
+function TranslateNamesSection() {
+  const [busy, setBusy] = React.useState(false);
+  const [prog, setProg] = React.useState(null);   // { done, remaining }
+  const stop = React.useRef(false);
+
+  // L'endpoint traite un paquet et rend ce qu'il reste : on le rappelle
+  // jusqu'a epuisement. La progression est donc reelle, et rien n'est a
+  // maintenir cote serveur -- ni thread, ni route de statut.
+  const run = async () => {
+    setBusy(true); stop.current = false;
+    let done = 0;
+    try {
+      for (;;) {
+        const { data } = await client.post("/prints/translate-missing", null,
+          { params: { limit: 40 } });
+        done += (data.translated || 0);
+        setProg({ done, remaining: data.remaining || 0 });
+        if (stop.current || !data.remaining) break;
+      }
+    } catch (e) {
+      alert(e.response?.data?.detail || e.message);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
+        Traduire les noms de prints
+      </h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        Les prints arrivent nommés en anglais ou en chinois : ce rattrapage leur ajoute
+        un nom français, utilisé <b>uniquement pour la recherche</b> — le nom d'origine
+        reste affiché. Les noms saisis à la main ne sont jamais écrasés. Les nouveaux
+        prints sont traduits automatiquement, ce bouton ne sert qu'à l'existant.
+      </p>
+      <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+        <button onClick={busy ? () => { stop.current = true; } : run}
+          style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700,
+            cursor:"pointer", border:"none",
+            background: busy ? "var(--border)" : "#3b82f6",
+            color: busy ? "var(--text)" : "white" }}>
+          {busy ? "Arrêter" : "⟳ Traduire les noms manquants"}
+        </button>
+        {prog && (
+          <span style={{ fontSize:12, color:"var(--muted)" }}>
+            {prog.done} traduit{prog.done > 1 ? "s" : ""}
+            {prog.remaining ? ` · ${prog.remaining} restant${prog.remaining > 1 ? "s" : ""}` : " · terminé"}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function RecalculateSection() {
   const [loading, setLoading] = React.useState(false);
   const [done, setDone] = React.useState(false);
@@ -1490,6 +1544,7 @@ export default function Settings() {
       <AdminOnly>
         <EnrichFromCatalogSection/>
         <RecalculateSection/>
+        <TranslateNamesSection/>
         <SpoolnymousImport/>
         <RfidDebugSection/>
       </AdminOnly>
