@@ -84,6 +84,15 @@ const AMS_NAMES = ["AMS-A","AMS-B","AMS-C","AMS-D"];
 const amsName = (id) => (id === EXT_AMS_ID ? "Externe" : (AMS_NAMES[id] ?? `AMS ${id+1}`));
 // Pastille de slot : A1, B3... et E1/E2 pour l'externe.
 const amsInitial = (id) => (id === EXT_AMS_ID ? "E" : (AMS_NAMES[id]?.slice(-1) ?? id+1));
+// Ordre d'AFFICHAGE des slots. Sur l'externe, le protocole numerote 255 puis
+// 254, ce qui donne E1 a gauche alors que la machine les presente dans l'autre
+// sens. On inverse donc a l'affichage seulement : les identifiants, les
+// libelles et le decompte restent inchanges.
+const traysInOrder = (ams) =>
+  (ams.id === EXT_AMS_ID ? [...(ams.trays || [])].reverse() : (ams.trays || []));
+// Pas de capteur sur le support externe : afficher 0 % et 0 °C ferait croire a
+// une mesure, alors qu'il n'y en a aucune.
+const hasClimate = (ams) => ams.id !== EXT_AMS_ID;
 
 // ── Mini pastille ──────────────────────────────────────────────────────────
 function ColorPill({ tray, spoolInfo, active }) {
@@ -172,8 +181,9 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
         animation: isDrying ? "dryPulse 2.5s ease-in-out infinite" : "none",
         transition:"all 0.2s",
       }}>
-        {ams.trays.map(t => <ColorPill key={t.id} tray={t} spoolInfo={getInfo(t)} active={isActive && t.id===activeTrayId} />)}
+        {traysInOrder(ams).map(t => <ColorPill key={t.id} tray={t} spoolInfo={getInfo(t)} active={isActive && t.id===activeTrayId} />)}
       </div>
+      {hasClimate(ams) && (
       <div style={{ display:"flex", gap:8, fontSize:9, color:"var(--muted)" }}>
         <span style={{ display:"flex", alignItems:"center", gap:2 }}><Droplets size={8}/>{ams.humidity}%</span>
         <span style={{ display:"flex", alignItems:"center", gap:2,
@@ -182,6 +192,7 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
           <Sun size={8} style={{ color: isDrying ? "#f97316" : undefined }}/>{(ams.temp ?? 0).toFixed(1)}°
         </span>
       </div>
+      )}
       <div style={{ height:2, borderRadius:1,
         background: isSelected ? "#3b82f6" : "transparent",
         width: isSelected ? 32 : 8, transition:"all 0.3s" }} />
@@ -386,12 +397,14 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
             </span>
           )}
         </div>
+        {hasClimate(ams) && (
         <div style={{ display:"flex", gap:12, fontSize:10, color:"var(--muted)" }}>
           <span style={{ display:"flex", alignItems:"center", gap:3 }}><Droplets size={10}/>{ams.humidity}%</span>
           <span style={{ display:"flex", alignItems:"center", gap:3, color: isDrying ? "#f97316" : "var(--muted)" }}>
             <Sun size={10}/>{ams.temp?.toFixed(1)}°C{isDrying && ams.dry_temperature ? ` → ${ams.dry_temperature}°C` : ""}
           </span>
         </div>
+        )}
       </div>
 
       {/* Bandeau séchage */}
@@ -418,7 +431,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
         </div>
       )}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:4 }}>
-        {ams.trays.map(t => (
+        {traysInOrder(ams).map(t => (
           <TrayCard key={t.id} tray={t} amsId={ams.id}
             label={`${amsInitial(ams.id)}${t.id+1}`}
             activeAmsId={activeAmsId} activeTrayId={activeTrayId}
