@@ -538,7 +538,7 @@ class MQTTManager:
                                         _MATCH_MODE_CACHE[_key] = mode
                                     if spool_id:
                                         _t.spool_id   = spool_id
-                                        loc = (f"Externe {_tray_slot+1}"
+                                        loc = (f"Externe slot {_tray_slot+1}"
                                                if _ams_id == EXT_AMS_ID
                                                else f"AMS-{chr(65+_ams_id)} slot {_tray_slot+1}")
                                         logger.debug(f"[AMS] {_ams_id}/{_tray_slot} → #{spool_id} {mode}")

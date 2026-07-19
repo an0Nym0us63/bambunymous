@@ -70,9 +70,12 @@ async def update_spool_location(spool_id: int, location: str):
 
 
 async def mark_inactive_spools_as_drawer(active_spool_ids: set):
-    """Les bobines qui étaient en AMS mais ne sont plus détectées → Tiroir."""
+    """Les bobines qui étaient montées mais ne sont plus détectées → Tiroir."""
     removed = {sid for sid in _ACTIVE_AMS_SPOOLS if sid not in active_spool_ids}
     for spool_id in removed:
         old_loc = _ACTIVE_AMS_SPOOLS.pop(spool_id, "")
-        if old_loc.startswith(("AMS", "Vortek")):
+        # "Externe" ajoute au filtre : une bobine retiree du support externe
+        # gardait sinon son emplacement indefiniment, puisque seuls les
+        # prefixes AMS et Vortek declenchaient le retour en tiroir.
+        if old_loc.startswith(("AMS", "Vortek", "Externe")):
             await update_spool_location(spool_id, "Tiroir")
