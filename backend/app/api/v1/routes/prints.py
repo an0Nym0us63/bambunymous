@@ -842,6 +842,36 @@ async def reenrich_print(print_id: int, _: str = Depends(get_current_user)):
     return {"ok": True, "message": "Enrichissement relancé en arrière-plan"}
 
 
+# ── Rattrapage des noms traduits ───────────────────────────────────────────
+# Declarees ICI, avant /{print_id} : plus bas, "translate-missing" aurait ete
+# interprete comme un identifiant de print et le GET n'aurait jamais ete
+# atteint. Le piege classique de ce fichier.
+
+@router.get("/translate-missing")
+async def translate_missing_status(_: str = Depends(get_current_user)):
+    """Le rattrapage tourne-t-il ? Un booleen, rien de plus."""
+    from ....services.translate import backfill_running
+    return {"running": backfill_running()}
+
+
+@router.post("/translate-missing")
+async def translate_missing_start(stop: bool = False,
+                                  _: str = Depends(require_admin)):
+    """
+    Demarre le rattrapage en tache de fond, ou l'arrete avec ?stop=1.
+
+    En tache de fond et non par paquets pilotes depuis le navigateur : un
+    rechargement de page tuait la boucle cliente sans laisser de trace, et il
+    devenait impossible de savoir en revenant si un rattrapage etait en cours.
+    """
+    from ....services.translate import start_backfill, stop_backfill, backfill_running
+    if stop:
+        stop_backfill()
+        return {"running": backfill_running(), "stopping": True}
+    started = start_backfill()
+    return {"running": True, "started": started}
+
+
 @router.get("/kpis")
 async def prints_kpis(
     status: Optional[str] = None,
@@ -1246,23 +1276,6 @@ async def set_group(print_id: int, body: dict, _: str = Depends(get_current_user
 
         await db.commit()
     return {"ok": True, "group_id": p.group_id}
-
-
-@router.post("/translate-missing")
-async def translate_missing(
-    limit: int = 40,
-    _: str = Depends(require_admin),
-):
-    """
-    Traduit un paquet de prints sans nom francais et rend ce qu'il reste.
-
-    Borne et repetable plutot que lance en tache de fond : l'appelant rappelle
-    jusqu'a remaining = 0. La progression est donc reelle, sans etat serveur,
-    sans thread a surveiller ni route de statut a maintenir -- et une requete
-    ne reste jamais assez longtemps ouverte pour expirer derriere un proxy.
-    """
-    from ....services.translate import translate_missing_prints
-    return await translate_missing_prints(max(1, min(limit, 100)))
 
 
 @router.post("/recalculate-all")

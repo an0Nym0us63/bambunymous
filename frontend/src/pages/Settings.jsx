@@ -773,47 +773,40 @@ function RfidDebugSection() {
   );
 }
 
-// Etat du rattrapage, HORS du composant et volontairement.
-//
-// Quitter Parametres demonte la section, mais n'arrete pas la boucle en cours :
-// c'est une fermeture JavaScript, pas un effet React. Un composant demonte ne
-// peut simplement plus rien afficher. Avec un simple useState, le bouton
-// repassait donc a "pret" au retour sur la page, et un second clic lancait un
-// rattrapage concurrent -- deux boucles martelant le meme service de
-// traduction, soit le meilleur moyen de se faire limiter.
-const translateRun = {
-  busy: false, done: 0, stop: false, error: null,
-  subs: new Set(),
-  set(patch) { Object.assign(this, patch); this.subs.forEach(f => f()); },
-};
-
-async function runTranslate() {
-  if (translateRun.busy) return;          // garde-fou : une seule boucle
-  translateRun.set({ busy: true, stop: false, done: 0, error: null });
-  try {
-    for (;;) {
-      const { data } = await client.post("/prints/translate-missing", null,
-        { params: { limit: 40 } });
-      translateRun.set({ done: translateRun.done + (data.translated || 0) });
-      if (translateRun.stop || !data.remaining) break;
-    }
-  } catch (e) {
-    // Stocke plutot qu'affiche : une alerte sur une page qu'on a quittee
-    // n'aurait aucun sens.
-    translateRun.set({ error: e.response?.data?.detail || e.message });
-  } finally {
-    translateRun.set({ busy: false });
-  }
-}
-
 function TranslateNamesSection() {
-  const [, force] = React.useReducer(x => x + 1, 0);
-  React.useEffect(() => {
-    translateRun.subs.add(force);
-    return () => translateRun.subs.delete(force);
+  const [running, setRunning] = React.useState(null);   // null = pas encore su
+  const [err, setErr] = React.useState(null);
+
+  // L'etat vit sur le serveur, pas ici : c'est lui qui fait tourner le thread.
+  // On l'interroge en arrivant, puis toutes les 5 s tant qu'il tourne. Quitter
+  // la page, y revenir ou recharger l'application retrouve donc toujours
+  // l'etat reel -- ce qu'une boucle cliente ne permettait pas.
+  const poll = React.useCallback(async () => {
+    try {
+      const { data } = await client.get("/prints/translate-missing");
+      setRunning(!!data.running);
+      return !!data.running;
+    } catch { setRunning(false); return false; }
   }, []);
 
-  const { busy, done, error } = translateRun;
+  React.useEffect(() => {
+    let alive = true, timer = null;
+    const tick = async () => {
+      const on = await poll();
+      if (alive && on) timer = setTimeout(tick, 5000);
+    };
+    tick();
+    return () => { alive = false; clearTimeout(timer); };
+  }, [poll]);
+
+  const act = async (stop) => {
+    setErr(null);
+    try {
+      await client.post("/prints/translate-missing", null, { params: { stop } });
+      setRunning(!stop);
+      if (!stop) setTimeout(poll, 5000);
+    } catch (e) { setErr(e.response?.data?.detail || e.message); }
+  };
 
   return (
     <div className="card" style={{ padding:"16px 20px" }}>
@@ -827,31 +820,24 @@ function TranslateNamesSection() {
         prints sont traduits automatiquement, ce bouton ne sert qu'à l'existant.
       </p>
       <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-        <button onClick={busy ? () => translateRun.set({ stop: true }) : runTranslate}
+        <button onClick={() => act(running)} disabled={running === null}
           style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700,
-            cursor:"pointer", border:"none",
-            background: busy ? "var(--border)" : "#3b82f6",
-            color: busy ? "var(--text)" : "white" }}>
-          {busy ? "Arrêter" : "⟳ Traduire les noms manquants"}
+            cursor: running === null ? "wait" : "pointer", border:"none",
+            background: running ? "var(--border)" : "#3b82f6",
+            color: running ? "var(--text)" : "white" }}>
+          {running ? "Arrêter" : "⟳ Traduire les noms manquants"}
         </button>
-        {busy && (
+        {running && (
           <span style={{ display:"flex", alignItems:"center", gap:7, fontSize:12,
             color:"#3b82f6", fontWeight:600 }}>
-            {/* Pastille pulsante : le rattrapage dure plusieurs minutes sans
-                rien afficher entre deux paquets, il faut un signe de vie. */}
+            {/* Le rattrapage dure plusieurs minutes sans rien afficher : il
+                faut un signe de vie, sinon on le croit bloque. */}
             <span style={{ width:8, height:8, borderRadius:"50%", background:"#3b82f6",
               animation:"pulse 1.2s ease-in-out infinite" }}/>
-            En cours{done ? ` · ${done} traduit${done > 1 ? "s" : ""}` : "…"}
+            Traduction en cours…
           </span>
         )}
-        {!busy && done > 0 && (
-          <span style={{ fontSize:12, color:"#22c55e", fontWeight:600 }}>
-            ✓ Terminé · {done} traduit{done > 1 ? "s" : ""}
-          </span>
-        )}
-        {error && (
-          <span style={{ fontSize:12, color:"#ef4444" }}>{error}</span>
-        )}
+        {err && <span style={{ fontSize:12, color:"#ef4444" }}>{err}</span>}
       </div>
     </div>
   );

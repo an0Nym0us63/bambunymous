@@ -288,3 +288,52 @@ async def translate_missing_prints(limit: int = 40) -> dict:
 
     return {"translated": done, "skipped": len(ids) - done,
             "remaining": max(0, remaining_before - len(ids))}
+
+
+# ── Rattrapage en tache de fond ────────────────────────────────────────────
+#
+# La boucle vivait cote client : quitter la page ne l'arretait pas, mais un
+# rechargement la tuait sans que rien ne subsiste. Impossible, dans ces
+# conditions, de savoir en arrivant sur la page si un rattrapage est en cours.
+# Elle passe donc ici. L'etat tient en un booleen : c'est tout ce qu'on veut
+# savoir, et un booleen n'a pas besoin de base pour survivre a une navigation.
+#
+# En memoire du processus, volontairement : si le serveur redemarre, le thread
+# est mort avec lui et le drapeau doit repartir a faux. Le persister aurait
+# affiche "en cours" pour un travail qui ne tourne plus.
+_BACKFILL = {"running": False, "stop": False}
+
+
+def backfill_running() -> bool:
+    return bool(_BACKFILL["running"])
+
+
+def stop_backfill() -> None:
+    _BACKFILL["stop"] = True
+
+
+def start_backfill() -> bool:
+    """Demarre le rattrapage. Rend False s'il tournait deja."""
+    if _BACKFILL["running"]:
+        return False
+    _BACKFILL.update(running=True, stop=False)
+
+    def _run():
+        import asyncio
+        loop = asyncio.new_event_loop()
+        total = 0
+        try:
+            while not _BACKFILL["stop"]:
+                r = loop.run_until_complete(translate_missing_prints(40))
+                total += r.get("translated", 0)
+                if not r.get("remaining"):
+                    break
+        except Exception:
+            logger.exception("[TRAD] rattrapage interrompu")
+        finally:
+            loop.close()
+            _BACKFILL.update(running=False, stop=False)
+            logger.info(f"[TRAD] rattrapage termine, {total} nom(s) traduit(s)")
+
+    threading.Thread(target=_run, daemon=True).start()
+    return True
