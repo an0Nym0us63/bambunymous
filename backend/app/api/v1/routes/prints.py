@@ -165,6 +165,7 @@ def _apply_search(q, search: str):
     direct = or_(
         Print.file_name.ilike(s),
         Print.original_name.ilike(s),
+        Print.translated_name.ilike(s),
     )
 
     # 2. Tag

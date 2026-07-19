@@ -15,6 +15,11 @@ class Print(Base):
     print_date          = Column(DateTime,    nullable=False, default=datetime.utcnow)
     file_name           = Column(String(512), nullable=False, default="")
     original_name       = Column(String(512), nullable=True)
+    # Nom en francais, uniquement pour la recherche : les noms arrivent en
+    # anglais ou en chinois, chercher "cochon" ne trouvait jamais "pig".
+    # N'a aucun rapport avec filaments.translated_name, qui vient du catalogue
+    # Bambu local.
+    translated_name     = Column(String(512), nullable=True)
     print_type          = Column(String(32),  default="cloud")
 
     status              = Column(String(32),  default="IN_PROGRESS")

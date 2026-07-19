@@ -296,6 +296,14 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
             await db.commit()
             logger.info(f"[SPOOL] ✅ Déduction terminée print #{pid}")
     logger.info(f"[DB] ✅ Print {pid}: {name!r}, {len(meta.get('filaments',{}))} filaments")
+    # Ici seulement : avant, on n'a que le taskname brut, alors qu'a ce stade le
+    # nom vient d'etre nettoye depuis le 3MF. Lance en arriere-plan, un appel
+    # reseau tiers n'a rien a faire sur ce chemin.
+    try:
+        from .translate import launch_translation
+        launch_translation(pid)
+    except Exception:
+        logger.exception("[TRAD] lancement impossible")
 
 
 async def _enrich(pid: int, job_id: str, url: str, taskname: str,

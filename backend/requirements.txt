@@ -11,6 +11,9 @@ aiofiles==24.1.0
 bcrypt==4.2.1
 python-jose[cryptography]==3.3.0
 requests==2.32.3
+# Traduction des noms de prints (endpoint public Google). Deja utilise par
+# Spoolnymous, d'ou le portage a l'identique.
+deep-translator==1.11.4
 reportlab==4.2.5
 qrcode==7.4.2
 pycurl==7.45.3
