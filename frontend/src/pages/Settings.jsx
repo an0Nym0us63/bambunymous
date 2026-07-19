@@ -775,7 +775,7 @@ function RfidDebugSection() {
 
 function TranslateNamesSection() {
   const [busy, setBusy] = React.useState(false);
-  const [prog, setProg] = React.useState(null);   // { done, remaining }
+  const [prog, setProg] = React.useState(null);   // { done, seen, total }
   const stop = React.useRef(false);
 
   // L'endpoint traite un paquet et rend ce qu'il reste : on le rappelle
@@ -783,13 +783,18 @@ function TranslateNamesSection() {
   // maintenir cote serveur -- ni thread, ni route de statut.
   const run = async () => {
     setBusy(true); stop.current = false;
-    let done = 0;
+    let done = 0, seen = 0;
     try {
       for (;;) {
         const { data } = await client.post("/prints/translate-missing", null,
           { params: { limit: 40 } });
+        // Deux compteurs distincts : "traites" avance a chaque print sorti de
+        // la file, "traduits" seulement quand une traduction a ete produite.
+        // Un nom deja francais est traite sans etre traduit -- confondre les
+        // deux ferait une barre qui n'atteint jamais 100 %.
         done += (data.translated || 0);
-        setProg({ done, remaining: data.remaining || 0 });
+        seen += (data.translated || 0) + (data.skipped || 0);
+        setProg({ done, seen, total: seen + (data.remaining || 0) });
         if (stop.current || !data.remaining) break;
       }
     } catch (e) {
@@ -818,11 +823,22 @@ function TranslateNamesSection() {
         </button>
         {prog && (
           <span style={{ fontSize:12, color:"var(--muted)" }}>
-            {prog.done} traduit{prog.done > 1 ? "s" : ""}
-            {prog.remaining ? ` · ${prog.remaining} restant${prog.remaining > 1 ? "s" : ""}` : " · terminé"}
+            <b style={{ color:"var(--text)", fontFamily:"JetBrains Mono, monospace" }}>
+              {prog.seen}/{prog.total}
+            </b>{" "}traités · {prog.done} traduit{prog.done > 1 ? "s" : ""}
+            {prog.seen >= prog.total ? " · terminé" : ""}
           </span>
         )}
       </div>
+      {prog && prog.total > 0 && (
+        <div style={{ marginTop:10, height:5, borderRadius:20,
+          background:"var(--surface2)", overflow:"hidden" }}>
+          <div style={{ height:"100%", borderRadius:20,
+            width:`${Math.min(100, Math.round(prog.seen * 100 / prog.total))}%`,
+            background: prog.seen >= prog.total ? "#22c55e" : "#3b82f6",
+            transition:"width 0.3s" }}/>
+        </div>
+      )}
     </div>
   );
 }
