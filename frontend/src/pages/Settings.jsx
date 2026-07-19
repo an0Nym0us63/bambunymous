@@ -8,6 +8,7 @@ import { useTheme } from "../useTheme";
 import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
          ROLE_OPTIONS, ROLE_LABEL, ROLE_BADGE } from "../store/auth";
 import AdminOnly from "../components/AdminOnly";
+import { useTrackDetail } from "../utils/track";
 
 const inp = {
   width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
@@ -1232,6 +1233,16 @@ function LabelsCard({ card, cardTitle }) {
   );
 }
 
+// Onglets de la page. `admin` marque ceux dont tout le contenu est reserve aux
+// administrateurs : les afficher a un compte en lecture seule reviendrait a lui
+// proposer des onglets vides.
+const SET_TABS = [
+  { id:"general",  label:"Général",  admin:true  },
+  { id:"display",  label:"Affichage", admin:false },
+  { id:"accounts", label:"Comptes",  admin:false },
+  { id:"data",     label:"Données",  admin:true  },
+];
+
 export default function Settings() {
   // Config de la coquille native (URL + presence du jeton), pour affichage.
   const [nativeCfg, setNativeCfg] = React.useState(null);
@@ -1288,6 +1299,17 @@ export default function Settings() {
     } finally { setSaving(false); }
   };
 
+  const isAdmin = useIsAdmin();
+  const tabs = SET_TABS.filter(t => isAdmin || !t.admin);
+  // L'onglet par defaut depend du role : "Général" n'existe pas pour un compte
+  // en lecture seule, il atterrit donc sur "Affichage".
+  const [tab, setTab] = React.useState(() => (isAdmin ? "general" : "display"));
+  useTrackDetail(`Paramètres · ${tabs.find(t => t.id === tab)?.label || tab}`);
+
+  // Tous les hooks sont declares AVANT ce retour anticipe. Les placer apres
+  // aurait fait varier leur nombre entre le rendu "chargement" et le suivant,
+  // ce que React refuse ("Rendered more hooks than during the previous
+  // render") -- l'ecran des parametres serait devenu blanc au chargement.
   if (loading) return (
     <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
       height:200, color:"var(--muted)", fontSize:14 }}>Chargement…</div>
@@ -1332,7 +1354,22 @@ export default function Settings() {
         </button></AdminOnly>
       </div>
 
-      {/* Thème */}
+      {/* Meme composant visuel que Filaments / Historique / Objets. */}
+      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12,
+        padding:4, border:"1px solid var(--border)" }}>
+        {tabs.map(t => (
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{
+            flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600,
+            cursor:"pointer", border:"none", transition:"all 0.15s",
+            background: tab===t.id ? "#3b82f6" : "transparent",
+            color: tab===t.id ? "white" : "var(--muted)" }}>
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Affichage ─────────────────────────────────────────────── */}
+      {tab === "display" && (<>
       <div className="card" style={card}>
         <div style={cardTitle}>Apparence</div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -1345,7 +1382,15 @@ export default function Settings() {
           </button>
         </div>
       </div>
+      <AdminOnly>
+        <AMSOrderSection/>
+        <AttentionCard card={card} cardTitle={cardTitle}/>
+        <LabelsCard card={card} cardTitle={cardTitle}/>
+      </AdminOnly>
+      </>)}
 
+      {/* ── Général ───────────────────────────────────────────────── */}
+      {tab === "general" && (
       <AdminOnly>
       <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
@@ -1419,28 +1464,26 @@ export default function Settings() {
         </button>
       </form>
       </AdminOnly>
+      )}
 
-      <AdminOnly>
-        <AMSOrderSection/>
-        <EnrichFromCatalogSection/>
-        <RecalculateSection/>
-      </AdminOnly>
+      {/* ── Comptes ───────────────────────────────────────────────── */}
+      {tab === "accounts" && (<>
       <MyAccountSection/>
       <UsersSection/>
       <ActivitySection/>
-      <AdminOnly><RfidDebugSection/></AdminOnly>
+      </>)}
+
+      {/* ── Données ───────────────────────────────────────────────── */}
+      {tab === "data" && (
+      <AdminOnly>
+        <EnrichFromCatalogSection/>
+        <RecalculateSection/>
+        <SpoolnymousImport/>
+        <RfidDebugSection/>
+      </AdminOnly>
+      )}
 
 
-
-
-      {/* ── Étiquettes filaments ───────────────────────────────────── */}
-      {/* ── Points d'attention ─────────────────────────────────────── */}
-      <AdminOnly><AttentionCard card={card} cardTitle={cardTitle}/></AdminOnly>
-
-      <AdminOnly><LabelsCard card={card} cardTitle={cardTitle}/></AdminOnly>
-
-      {/* ── Import depuis Spoolnymous ───────────────────────────────── */}
-      <AdminOnly><SpoolnymousImport/></AdminOnly>
 
 
       {version && (
