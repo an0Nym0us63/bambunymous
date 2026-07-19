@@ -211,12 +211,21 @@ async def translate_missing_prints(limit: int = 40) -> dict:
     Volontairement borne et repetable plutot que lance en tache de fond : le
     front rappelle jusqu'a ce qu'il ne reste rien, ce qui donne une progression
     reelle sans etat serveur, sans thread et sans route de statut a maintenir.
+
+    Le travail se fait en TROIS temps -- lire, traduire hors boucle, ecrire --
+    et non d'une traite. deep_translator est une bibliotheque bloquante :
+    l'appeler dans une fonction async gele la boucle d'evenements, donc tout le
+    serveur, pendant chaque requete reseau. L'application devenait inutilisable
+    le temps du rattrapage. On sort donc la traduction dans un thread, et on ne
+    garde surtout pas la session SQL ouverte pendant ce temps-la.
     """
-    from sqlalchemy import select, or_, func
+    import asyncio
+    from sqlalchemy import select, or_, func, update
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
     from .tmf_parser import _clean_name
 
+    # ── 1. Lecture, session refermee aussitot ────────────────────────────
     async with AsyncSessionLocal() as db:
         base = select(Print).where(
             or_(Print.translated_name.is_(None), Print.translated_name == ""))
@@ -235,29 +244,36 @@ async def translate_missing_prints(limit: int = 40) -> dict:
 
         # On traduit le nom NETTOYE : sans extension, sans underscore ni
         # marqueur de version, le traducteur voit enfin des mots.
-        sources = {}
+        sources, fallback = {}, {}
         for p in rows:
-            src = _clean_name(p.file_name or p.original_name or "")
+            fallback[p.id] = (p.file_name or p.original_name or "")
+            src = _clean_name(fallback[p.id])
             if src:
                 sources[p.id] = src
+        ids = [p.id for p in rows]
 
-        table = translate_names(list(sources.values()))
+    # ── 2. Traduction HORS de la boucle d'evenements ─────────────────────
+    # to_thread : le reste de l'application continue d'etre servi pendant les
+    # secondes d'attente reseau, au lieu de se figer.
+    table = await asyncio.to_thread(translate_names, list(sources.values()))
 
-        done = 0
-        for p in rows:
-            tr = table.get(sources.get(p.id, ""))
-            if tr:
-                p.translated_name = tr
-                done += 1
-            else:
+    # ── 3. Ecriture, session rouverte ────────────────────────────────────
+    done = 0
+    async with AsyncSessionLocal() as db:
+        for pid in ids:
+            tr = table.get(sources.get(pid, ""))
+            if not tr:
                 # Rien a traduire : deja francais, nom propre, ou sans lettre.
                 # On inscrit le nom NETTOYE plutot qu'un marqueur technique.
                 # C'est vrai -- le nom francais est bien celui-la --, ca reste
-                # utile a la recherche, et surtout ca evite de represente ce
+                # utile a la recherche, et surtout ca evite de representer ce
                 # print a chaque passage suivant, ce qui bouclerait sans fin.
-                p.translated_name = (sources.get(p.id) or
-                                     p.file_name or p.original_name or "")[:512]
+                tr = (sources.get(pid) or fallback.get(pid) or "")
+            else:
+                done += 1
+            await db.execute(update(Print).where(Print.id == pid)
+                             .values(translated_name=tr[:512]))
         await db.commit()
 
-    return {"translated": done, "skipped": len(rows) - done,
-            "remaining": max(0, remaining_before - len(rows))}
+    return {"translated": done, "skipped": len(ids) - done,
+            "remaining": max(0, remaining_before - len(ids))}
