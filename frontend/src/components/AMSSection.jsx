@@ -539,9 +539,9 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
             <Row label="Type"          value={tray.filament_type}/>
             <Row label="Couleur"       value={(() => { const arr = (info?.colors_array||tray?.colors_array||"").split(",").filter(Boolean); return arr.length > 1 ? arr.map(hexDisplay).filter(Boolean).join(" / ") : color; })()} mono/>
             <Row label="Profile ID"    value={tray.tray_info_idx || tray.tray_id_name}/>
-            <Row label="Tag UID (RFID)"value={tray.tag_uid && !tray.tag_uid.match(/^0+$/) ? tray.tag_uid : null} mono/>
+            <Row label="Tag UID"       value={tray.tag_uid && !tray.tag_uid.match(/^0+$/) ? tray.tag_uid : null} mono/>
             <Row label="Restant"       value={`${tray.remain}%`}/>
-            <Row label="UUID tray"     value={tray.uuid && !tray.uuid.match(/^0+$/) ? tray.uuid : null} mono/>
+            <Row label="UUID tray (RFID)" value={tray.uuid && !tray.uuid.match(/^0+$/) ? tray.uuid : null} mono/>
 
             {/* ── Section DB (bobine liée) ── */}
             <div style={{ display:"flex", alignItems:"center", gap:8, margin:"16px 0 4px" }}>
