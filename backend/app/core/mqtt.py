@@ -669,6 +669,27 @@ class MQTTManager:
 mqtt_manager = MQTTManager()
 
 
+def clear_match_cache() -> None:
+    """
+    A appeler apres TOUTE mutation de bobine, d'ou qu'elle vienne.
+
+    Vide le cache puis relance un matching immediat : sans le second, l'accueil
+    attend le prochain tick MQTT pour se corriger.
+
+    Ce helper vit ici, aupres des caches, et non dans un routeur : il etait
+    jusqu'ici defini dans filaments.py, si bien que prints.py -- qui modifie
+    pourtant le poids des bobines lors d'une restitution -- ne l'appelait pas.
+    Une regle qui ne vit qu'a un seul endroit ne peut pas etre oubliee par le
+    fichier d'a cote.
+    """
+    try:
+        invalidate_tray_cache()
+        force_rematch_all_trays()
+    except Exception:
+        # Un cache non vide ne doit jamais faire echouer la mutation elle-meme.
+        logger.exception("[CACHE] invalidation impossible")
+
+
 def force_rematch_all_trays():
     """Relance le matching spool sur tous les trays connus en mémoire (après invalidation cache)."""
     import threading as _th

@@ -1338,6 +1338,9 @@ async def patch_filament_usage(
             if spool and used_dt and (spool.last_used_at is None or used_dt > spool.last_used_at):
                 spool.last_used_at = used_dt
         await db.commit()
+    if updates.get("spool_id"):
+        from ....core.mqtt import clear_match_cache
+        clear_match_cache()
     return {"ok": True}
 
 
@@ -1369,6 +1372,13 @@ async def restore_spool_weights(
             fu.grams_used = round(max(0, (fu.grams_used or 0) - add_g), 1)
             restored.append({"spool_id": fu.spool_id, "added_g": add_g, "usage_id": fu.id})
         await db.commit()
+    # Le poids restant des bobines vient de changer : sans ca, l'accueil
+    # continuait d'afficher l'ancienne valeur jusqu'a la prochaine mutation
+    # passant par filaments.py -- il fallait enregistrer une bobine pour rien,
+    # juste pour forcer le vidage.
+    if restored:
+        from ....core.mqtt import clear_match_cache
+        clear_match_cache()
     return {"ok": True, "restored": restored}
 
 

@@ -12,13 +12,10 @@ from ....core.colors import buckets_for, all_buckets
 from ....core.materials import family_of, is_family
 
 def _clear_match_cache():
-    """Vide le cache de matching MQTT après toute mutation de bobine."""
-    try:
-        from ....core.mqtt import invalidate_tray_cache
-        invalidate_tray_cache()
-        force_rematch_all_trays()
-    except Exception:
-        pass
+    """Vide le cache de matching MQTT après toute mutation de bobine.
+    Delegue au helper partage : voir core/mqtt.clear_match_cache."""
+    from ....core.mqtt import clear_match_cache
+    clear_match_cache()
 
 
 def _bg_recalc_by_filament(fid: int):
