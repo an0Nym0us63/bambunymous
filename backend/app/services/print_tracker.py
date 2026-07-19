@@ -22,6 +22,12 @@ DATA_DIR = Path("/data")
 
 # ── État mémoire par job_id ────────────────────────────────────────────────
 _LOCK   = Lock()
+# job_id dont la creation est EN COURS. Chaque rapport MQTT eligible lance son
+# propre thread : deux rapports rapproches appelaient create_print en parallele,
+# tous deux lisaient "aucun print pour ce job" avant que l'un n'ait insere, et
+# tous deux inseraient. Le test d'existence en base ne protege que des appels
+# separes dans le temps, pas des appels simultanes.
+_CREATING: set = set()
 _JOBS:           Dict[str, Dict[str, Any]] = {}
 _FIN_PENDING:    Dict[str, tuple]          = {}  # job_id -> (state, first_seen_ts)
 _PROCESSED:      set                       = set()
@@ -172,6 +178,25 @@ def _clean_design_id(raw) -> str | None:
 
 # ── Création ───────────────────────────────────────────────────────────────
 async def create_print(job_id: str, url: str, taskname: str,
+                        print_type: str = "cloud",
+                        printer_ip: str = "", printer_code: str = "",
+                        ams_mapping: list = None, design_id: str = "") -> Optional[int]:
+    jid = str(job_id)
+    with _LOCK:
+        if jid in _CREATING:
+            logger.info(f"job_id {jid} déjà en cours de création → skip")
+            return None
+        _CREATING.add(jid)
+    try:
+        return await _create_print_locked(jid, url, taskname, print_type,
+                                          printer_ip, printer_code,
+                                          ams_mapping, design_id)
+    finally:
+        with _LOCK:
+            _CREATING.discard(jid)
+
+
+async def _create_print_locked(job_id: str, url: str, taskname: str,
                         print_type: str = "cloud",
                         printer_ip: str = "", printer_code: str = "",
                         ams_mapping: list = None, design_id: str = "") -> Optional[int]:

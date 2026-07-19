@@ -50,6 +50,7 @@ async def init_db():
     await _seed_admin_user()
     await _migrate_last_seen()
     await _migrate_activity_kind()
+    await _migrate_print_job_id_unique()
     await _purge_activity_log()
 
 
@@ -150,6 +151,42 @@ async def _migrate_activity_kind():
                 print("[migration] colonne activity_log.kind ajoutee")
     except Exception as e:
         print(f"[migration] activity_log.kind ignoree : {e}")
+
+
+async def _migrate_print_job_id_unique():
+    """
+    Interdit deux prints pour un meme job_id.
+
+    Le verrou pose dans create_print protege des appels simultanes DANS le
+    processus ; cet index est la garantie de derniere ligne, celle qui tient
+    meme apres un redemarrage ou si un autre chemin de code insere un jour.
+
+    Index PARTIEL : les prints ajoutes a la main n'ont pas de job_id, et SQLite
+    tolere plusieurs NULL mais pas plusieurs chaines vides.
+
+    Si des doublons existent deja, l'index ne peut pas etre cree : on le signale
+    dans les logs sans rien supprimer. Fusionner deux prints suppose de decider
+    quoi faire de leurs consommations de filament et de leurs photos -- ce n'est
+    pas a une migration silencieuse de trancher.
+    """
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            dups = (await conn.execute(_text(
+                "SELECT job_id, COUNT(*) c FROM prints "
+                "WHERE job_id IS NOT NULL AND job_id != '' "
+                "GROUP BY job_id HAVING c > 1"))).all()
+            if dups:
+                print("[migration] index unique prints.job_id NON cree : "
+                      f"{len(dups)} job_id en double a traiter a la main "
+                      f"({', '.join(str(d[0]) for d in dups[:5])}"
+                      f"{'…' if len(dups) > 5 else ''})")
+                return
+            await conn.execute(_text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS ux_prints_job_id "
+                "ON prints(job_id) WHERE job_id IS NOT NULL AND job_id != ''"))
+    except Exception as e:
+        print(f"[migration] index unique prints.job_id ignore : {e}")
 
 
 async def _purge_activity_log(days: int = ACTIVITY_RETENTION_DAYS):
