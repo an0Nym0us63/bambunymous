@@ -158,6 +158,10 @@ async def run_import(src_path: str, local_to_utc: bool = False) -> dict:
                     print_date=parse_dt(row.get("print_date") or row.get("created_at"), local_to_utc=local_to_utc) or datetime.utcnow(),
                     file_name=row.get("file_name") or row.get("original_name") or "Import",
                     original_name=row.get("original_name"),
+                    # Spoolnymous traduisait deja les noms de prints, mais la
+                    # colonne n'existait pas ici : la valeur etait perdue a
+                    # chaque import. On la reprend, ce qui evite de retraduire.
+                    translated_name=row.get("translated_name"),
                     print_type=row.get("print_type") or "cloud",
                     status=row.get("status") or "SUCCESS",
                     status_note=row.get("status_note"),

@@ -36,16 +36,31 @@ def translate_name(name: str) -> str:
     if not name or not name.strip():
         return ""
 
-    from deep_translator import GoogleTranslator
+    import time
+    from deep_translator import GoogleTranslator, exceptions
 
     forced_input = "\n".join(name.split())
-    mot_a_mot = GoogleTranslator(source="auto", target="fr").translate(forced_input)
-    mot_a_mot = " ".join((mot_a_mot or "").split("\n")).strip()
+    original = name.strip()
 
-    contextuel = (GoogleTranslator(source="auto", target="fr")
-                  .translate(name.strip()) or "").strip()
+    def _both():
+        # translate_batch : UNE seule requete pour les deux passages au lieu de
+        # deux. Sur un rattrapage de plusieurs centaines de prints, c'est la
+        # difference entre passer sous le quota et se faire couper.
+        r = GoogleTranslator(source="auto", target="fr").translate_batch(
+            [forced_input, original])
+        return (r[0] or "").strip(), (r[1] or "").strip()
 
-    if contextuel.lower() == name.strip().lower():
+    try:
+        mot_a_mot, contextuel = _both()
+    except exceptions.TooManyRequests:
+        time.sleep(1)          # un seul repli : au-dela, on rend l'original
+        try:
+            mot_a_mot, contextuel = _both()
+        except Exception:
+            return original
+    mot_a_mot = " ".join(mot_a_mot.split("\n")).strip()
+
+    if contextuel.lower() == original.lower():
         return contextuel
 
     seen, words = set(), []
