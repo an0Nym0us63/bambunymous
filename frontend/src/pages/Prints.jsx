@@ -629,7 +629,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [p, setP] = useState(pProp);
   const [editFr, setEditFr] = useState(false);
   const [frVal, setFrVal]   = useState("");
-  useTrackDetail(`Fiche print · ${p?.name || pProp?.name || "#" + pProp.id}`);
+  // file_name et non name : un Print n'a pas de champ "name" -- la fiche elle
+  // meme affiche file_name. Le libelle tombait donc systematiquement sur le
+  // repli "#id", et le journal ne montrait que des numeros.
+  useTrackDetail(`Fiche print · ${p?.file_name || pProp?.file_name || "#" + pProp.id}`);
 
   useEffect(() => {
     if (pProp.total_cost_filament == null) {
