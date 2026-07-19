@@ -78,7 +78,14 @@ async def translate_print(pid: int) -> bool:
 
     Ne remplit QUE le vide : cette seule regle protege les corrections faites a
     la main, sans qu'il faille un drapeau pour les distinguer.
+
+    Lire, traduire, ecrire -- en refermant la session entre les deux. La garder
+    ouverte immobiliserait une connexion SQLite pendant tout l'appel reseau,
+    soit plusieurs secondes, et ce code s'execute sur le chemin de creation
+    d'un print : precisement la ou une pression d'ecriture supplementaire est
+    le moins souhaitable.
     """
+    from sqlalchemy import update
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
 
@@ -87,22 +94,26 @@ async def translate_print(pid: int) -> bool:
         if not p or (p.translated_name or "").strip():
             return False
         source = (p.file_name or p.original_name or "").strip()
-        if not source:
-            return False
-        try:
-            tr = translate_name(source).strip()
-        except Exception as e:
-            # L'endpoint public de Google n'est pas contractuel : il coupe ou
-            # limite le debit. Un nom non traduit n'est pas un incident, la
-            # recherche retombe simplement sur le nom d'origine.
-            logger.warning(f"[TRAD] print #{pid} : {e}")
-            return False
-        if not tr or tr.lower() == source.lower():
-            return False
-        p.translated_name = tr[:512]
+    if not source:
+        return False
+
+    try:
+        tr = translate_name(source).strip()
+    except Exception as e:
+        # L'endpoint public de Google n'est pas contractuel : il coupe ou
+        # limite le debit. Un nom non traduit n'est pas un incident, la
+        # recherche retombe simplement sur le nom d'origine.
+        logger.warning(f"[TRAD] print #{pid} : {e}")
+        return False
+    if not tr or tr.lower() == source.lower():
+        return False
+
+    async with AsyncSessionLocal() as db:
+        await db.execute(update(Print).where(Print.id == pid)
+                         .values(translated_name=tr[:512]))
         await db.commit()
-        logger.info(f"[TRAD] print #{pid} : {source!r} → {tr!r}")
-        return True
+    logger.info(f"[TRAD] print #{pid} : {source!r} → {tr!r}")
+    return True
 
 
 def launch_translation(pid: int) -> None:
