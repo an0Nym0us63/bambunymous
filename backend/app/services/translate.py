@@ -220,7 +220,12 @@ async def translate_missing_prints(limit: int = 40) -> dict:
     async with AsyncSessionLocal() as db:
         base = select(Print).where(
             or_(Print.translated_name.is_(None), Print.translated_name == ""))
-        rows = (await db.execute(base.limit(limit))).scalars().all()
+        # Du plus recent au plus vieux : ce sont les prints recents qu'on
+        # cherche en premier. Sans order_by explicite, SQLite rendait l'ordre
+        # des rowid, donc les plus anciens d'abord -- exactement l'inverse de
+        # ce qui est utile si le rattrapage s'interrompt en cours de route.
+        rows = (await db.execute(
+            base.order_by(Print.print_date.desc()).limit(limit))).scalars().all()
         # COUNT plutot que de charger toutes les lignes pour les compter : sur
         # plusieurs centaines de prints, la difference est reelle.
         remaining_before = (await db.execute(
