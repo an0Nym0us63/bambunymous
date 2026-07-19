@@ -337,6 +337,17 @@ function UsersSection() {
   const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
     padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
 
+  // Pastilles d'action, meme grammaire que partout ailleurs dans l'application
+  // (bouton Journal du header, filtres du journal d'activite) : forme arrondie,
+  // fond transparent, contour fin, couleur porteuse de sens. Les boutons
+  // precedents etaient des paves opaques en var(--bg), plus lourds que le
+  // contenu qu'ils accompagnaient et etrangers au reste de l'interface.
+  const pill = (color, border) => ({
+    padding:"4px 11px", borderRadius:20, fontSize:11, fontWeight:600,
+    cursor:"pointer", background:"transparent", whiteSpace:"nowrap",
+    border:`1px solid ${border || "var(--border)"}`, color,
+  });
+
   const act = async (fn) => {
     setBusy(true); setErr(null);
     try { await fn(); await load(); }
@@ -356,7 +367,8 @@ function UsersSection() {
         <Users size={15}/> Utilisateurs
       </h3>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
-        Un compte <b>administrateur</b> a tous les droits. Un compte <b>lecture seule</b> peut
+        Un compte <b>administrateur</b> a tous les droits. Un compte <b>lecture seule (avec
+        prix)</b> consulte tout, montants compris, sans rien pouvoir modifier. Un compte <b>lecture seule</b> peut
         tout consulter, sans aucune modification, et les montants lui sont masqués.
       </p>
 
@@ -401,30 +413,30 @@ function UsersSection() {
                 {ROLE_OPTIONS.filter(([r]) => r !== u.role).map(([r,l]) => (
                   <button key={r} disabled={busy}
                     onClick={()=>act(()=>client.patch(`/users/${u.id}`, { role: r }))}
-                    style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
-                      border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
+                    style={pill("#60a5fa", "rgba(59,130,246,0.35)")}>
                     → {l}
                   </button>
                 ))}
                 <button disabled={busy} onClick={()=>act(()=>client.patch(`/users/${u.id}`, { active: !u.active }))}
-                  style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
-                    border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
+                  style={u.active ? pill("#f59e0b", "rgba(245,158,11,0.35)")
+                                  : pill("#22c55e", "rgba(34,197,94,0.35)")}>
                   {u.active ? "Désactiver" : "Réactiver"}
                 </button>
                 <button disabled={busy}
                   onClick={()=> confirmDel === u.id
                     ? act(async ()=>{ await client.delete(`/users/${u.id}`); setConfirmDel(null); })
                     : setConfirmDel(u.id)}
-                  style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:700, cursor:"pointer",
-                    border:"1px solid rgba(239,68,68,0.3)",
-                    background: confirmDel === u.id ? "#ef4444" : "rgba(239,68,68,0.06)",
-                    color: confirmDel === u.id ? "white" : "#ef4444" }}>
+                  style={{ ...pill("#ef4444", "rgba(239,68,68,0.35)"),
+                    // Seule exception au fond transparent : une fois armee, la
+                    // suppression doit se distinguer nettement du reste.
+                    ...(confirmDel === u.id
+                      ? { background:"#ef4444", color:"white", borderColor:"#ef4444" }
+                      : {}) }}>
                   {confirmDel === u.id ? "Confirmer ?" : <Trash2 size={12}/>}
                 </button>
                 </>)}
                 <button disabled={busy} onClick={()=>{ setPwdFor(pwdFor===u.id?null:u.id); setPwdVal(""); }}
-                  style={{ padding:"5px 10px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer",
-                    border:"1px solid var(--border)", background:"var(--bg)", color:"var(--text)" }}>
+                  style={pill("var(--muted)")}>
                   Mot de passe
                 </button>
               </div>
@@ -668,9 +680,9 @@ function ActivitySection() {
             </span>
             {items.length < total && (
               <button disabled={busy} onClick={()=>load(items.length)}
-                style={{ marginLeft:"auto", padding:"6px 12px", borderRadius:8, fontSize:11,
+                style={{ marginLeft:"auto", padding:"5px 12px", borderRadius:20, fontSize:11,
                   fontWeight:600, cursor:"pointer", border:"1px solid var(--border)",
-                  background:"var(--bg)", color:"var(--text)" }}>
+                  background:"transparent", color:"var(--muted)" }}>
                 {busy ? "Chargement…" : "Charger plus"}
               </button>
             )}
