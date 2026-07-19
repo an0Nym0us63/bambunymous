@@ -93,6 +93,15 @@ const traysInOrder = (ams) =>
 // Pas de capteur sur le support externe : afficher 0 % et 0 °C ferait croire a
 // une mesure, alors qu'il n'y en a aucune.
 const hasClimate = (ams) => ams.id !== EXT_AMS_ID;
+// Numero AFFICHE d'un slot. Sur l'externe les trays sont presentees dans
+// l'ordre inverse : numeroter d'apres t.id donnait un E2 a gauche et un E1 a
+// droite. On numerote donc dans le sens de lecture, pas dans celui du
+// protocole. Sur un AMS reel les deux ordres coincident, la fonction est
+// transparente.
+const traySlotNo = (ams, t) => {
+  const i = traysInOrder(ams).findIndex(x => x.id === t.id);
+  return (i >= 0 ? i : t.id) + 1;
+};
 
 // ── Mini pastille ──────────────────────────────────────────────────────────
 function ColorPill({ tray, spoolInfo, active }) {
@@ -446,10 +455,11 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
         margin:"0 auto" }}>
         {traysInOrder(ams).map(t => (
           <TrayCard key={t.id} tray={t} amsId={ams.id}
-            label={`${amsInitial(ams.id)}${t.id+1}`}
+            label={`${amsInitial(ams.id)}${traySlotNo(ams, t)}`}
             activeAmsId={activeAmsId} activeTrayId={activeTrayId}
             spoolInfo={getInfo(t)}
-            onClick={()=>onTrayClick&&onTrayClick({tray:t,amsLabel:amsName(ams.id)})}
+            onClick={()=>onTrayClick&&onTrayClick({tray:t,amsLabel:amsName(ams.id),
+              slotNo:traySlotNo(ams, t)})}
           />
         ))}
       </div>
@@ -467,7 +477,7 @@ const MATCH_LABEL = {
   manual:   { text:"Manuel",       color:"#94a3b8" },
 };
 
-function TrayBottomSheet({ tray, amsLabel, onClose }) {
+function TrayBottomSheet({ tray, amsLabel, slotNo, onClose }) {
   const [spoolSheet, setSpoolSheet] = React.useState(null);
   if (!tray) return null;
   const color  = hexDisplay(tray.color);
@@ -513,7 +523,7 @@ function TrayBottomSheet({ tray, amsLabel, onClose }) {
                 {info?.translated_name || info?.name || tray.filament_type || "Slot vide"}
               </p>
               <p style={{ fontSize:12, color:"var(--muted)", margin:"4px 0 0" }}>
-                {amsLabel} · Slot {tray.id + 1}
+                {amsLabel} · Slot {slotNo ?? tray.id + 1}
                 {tray.tray_id_name ? ` · ${tray.tray_id_name}` : ""}
               </p>
               {tray.uuid && tray.uuid !== "00000000" && (
@@ -994,7 +1004,8 @@ export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLo
       </div>
       {/* Détail */}
       {displayAms && <AMSDetail ams={displayAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId} spoolLookup={spoolLookup} onTrayClick={setSelectedTray}/>}
-      {selectedTray && <TrayBottomSheet tray={selectedTray.tray} amsLabel={selectedTray.amsLabel} onClose={()=>setSelectedTray(null)}/>}
+      {selectedTray && <TrayBottomSheet tray={selectedTray.tray} amsLabel={selectedTray.amsLabel}
+        slotNo={selectedTray.slotNo} onClose={()=>setSelectedTray(null)}/>}
     </div>
   );
 }
