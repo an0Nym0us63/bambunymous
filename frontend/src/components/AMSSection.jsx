@@ -430,7 +430,20 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
           </div>
         </div>
       )}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:4 }}>
+      {/* Largeur calquee sur une grille de 4, puis centree : avec un ou deux
+          slots -- le cas de l'externe -- une grille figee a 4 colonnes les
+          collait a gauche. On garde volontairement la MEME taille de carte
+          que dans un AMS plein plutot que de les etirer, sinon deux slots
+          externes auraient l'air de deux fois rien a cote d'un AMS. */}
+      {(() => {
+        const n = traysInOrder(ams).length || 1;
+        const GAP = 4, COLS = 4;
+        return (
+      <div style={{ display:"grid", gridTemplateColumns:`repeat(${n},1fr)`, gap:GAP,
+        width: n < COLS
+          ? `calc((100% - ${(COLS-1)*GAP}px) * ${n} / ${COLS} + ${(n-1)*GAP}px)`
+          : "100%",
+        margin:"0 auto" }}>
         {traysInOrder(ams).map(t => (
           <TrayCard key={t.id} tray={t} amsId={ams.id}
             label={`${amsInitial(ams.id)}${t.id+1}`}
@@ -440,6 +453,8 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
           />
         ))}
       </div>
+        );
+      })()}
     </div>
   );
 }
