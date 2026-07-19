@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from sqlalchemy import select, desc, func, or_
 from sqlalchemy.orm import selectinload
 
-from .auth import get_current_user
+from .auth import get_current_user, require_admin
 from ....models.print_history import Print, FilamentUsage, PrintSnapshot, PrintTag, Group
 from ....models.filament import Spool, Filament
 from ....db.session import AsyncSessionLocal
@@ -895,7 +895,8 @@ async def get_print(print_id: int, _: str = Depends(get_current_user)):
 async def update_print(print_id: int, body: dict, _: str = Depends(get_current_user)):
     allowed = {"file_name","status","status_note","number_of_items",
                 "sold_units","sold_price_total","margin","notes",
-                "design_id","duration_seconds","print_date"}
+                "design_id","duration_seconds","print_date",
+                "translated_name"}
     async with AsyncSessionLocal() as db:
         p = await db.get(Print, print_id)
         if not p: raise HTTPException(404)
@@ -1245,6 +1246,23 @@ async def set_group(print_id: int, body: dict, _: str = Depends(get_current_user
 
         await db.commit()
     return {"ok": True, "group_id": p.group_id}
+
+
+@router.post("/translate-missing")
+async def translate_missing(
+    limit: int = 40,
+    _: str = Depends(require_admin),
+):
+    """
+    Traduit un paquet de prints sans nom francais et rend ce qu'il reste.
+
+    Borne et repetable plutot que lance en tache de fond : l'appelant rappelle
+    jusqu'a remaining = 0. La progression est donc reelle, sans etat serveur,
+    sans thread a surveiller ni route de statut a maintenir -- et une requete
+    ne reste jamais assez longtemps ouverte pour expirer derriere un proxy.
+    """
+    from ....services.translate import translate_missing_prints
+    return await translate_missing_prints(max(1, min(limit, 100)))
 
 
 @router.post("/recalculate-all")

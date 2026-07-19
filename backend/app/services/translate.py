@@ -122,3 +122,137 @@ def launch_translation(pid: int) -> None:
             loop.close()
 
     threading.Thread(target=_run, daemon=True).start()
+
+
+# ── Rattrapage groupé ──────────────────────────────────────────────────────
+
+_CHUNK = 20        # noms distincts par requête (soit 40 chaînes envoyées)
+
+
+def translate_names(names: list) -> dict:
+    """
+    Traduit une liste de noms et rend {source: traduction}.
+
+    Trois economies par rapport a Spoolnymous, qui traitait un print a la fois :
+
+      1. DEDOUBLONNAGE. Un meme modele reimprime dix fois porte dix fois le
+         meme nom. On ne traduit qu'une fois et on applique partout.
+      2. GROUPAGE. translate_batch accepte une liste : 20 noms partent en UNE
+         requete au lieu de 20. Sur une bibliotheque fournie, c'est ce qui
+         evite de se faire couper pour abus.
+      3. TRI PREALABLE. Un nom sans la moindre lettre (« 20250807_163605 »)
+         n'a rien a traduire : on ne le soumet pas.
+    """
+    import re as _re
+    import time
+    from deep_translator import GoogleTranslator, exceptions
+
+    uniques = []
+    for n in names:
+        n = (n or "").strip()
+        if not n or n in uniques:
+            continue
+        if not _re.search(r"[^\W\d_]", n, _re.UNICODE):   # aucune lettre
+            continue
+        uniques.append(n)
+    if not uniques:
+        return {}
+
+    out = {}
+    for i in range(0, len(uniques), _CHUNK):
+        chunk = uniques[i:i + _CHUNK]
+        # Deux entrees par nom : mot a mot (un terme par ligne) puis contextuel.
+        payload = []
+        for n in chunk:
+            payload.append("\n".join(n.split()))
+            payload.append(n)
+
+        def _go():
+            return GoogleTranslator(source="auto", target="fr").translate_batch(payload)
+
+        try:
+            res = _go()
+        except exceptions.TooManyRequests:
+            time.sleep(2)
+            try:
+                res = _go()
+            except Exception as e:
+                logger.warning(f"[TRAD] lot abandonne apres nouvel echec : {e}")
+                continue
+        except Exception as e:
+            logger.warning(f"[TRAD] lot ignore : {e}")
+            continue
+
+        for k, n in enumerate(chunk):
+            mot_a_mot  = " ".join((res[2*k]     or "").split("\n")).strip()
+            contextuel = (res[2*k + 1] or "").strip()
+            if not contextuel or contextuel.lower() == n.lower():
+                continue          # deja francais, ou intraduisible
+            seen, words = set(), []
+            for w in (mot_a_mot + " " + contextuel).split():
+                if w.lower() not in seen:
+                    seen.add(w.lower())
+                    words.append(w)
+            merged = " ".join(words)
+            if merged and merged.lower() != n.lower():
+                out[n] = merged[:512]
+
+        # Respiration entre deux lots : l'endpoint est public, on ne le
+        # martele pas.
+        if i + _CHUNK < len(uniques):
+            time.sleep(0.5)
+    return out
+
+
+async def translate_missing_prints(limit: int = 40) -> dict:
+    """
+    Traduit jusqu'a `limit` prints sans nom francais, et rend le reste a faire.
+
+    Volontairement borne et repetable plutot que lance en tache de fond : le
+    front rappelle jusqu'a ce qu'il ne reste rien, ce qui donne une progression
+    reelle sans etat serveur, sans thread et sans route de statut a maintenir.
+    """
+    from sqlalchemy import select, or_, func
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    from .tmf_parser import _clean_name
+
+    async with AsyncSessionLocal() as db:
+        base = select(Print).where(
+            or_(Print.translated_name.is_(None), Print.translated_name == ""))
+        rows = (await db.execute(base.limit(limit))).scalars().all()
+        # COUNT plutot que de charger toutes les lignes pour les compter : sur
+        # plusieurs centaines de prints, la difference est reelle.
+        remaining_before = (await db.execute(
+            select(func.count()).select_from(base.subquery()))).scalar_one()
+        if not rows:
+            return {"translated": 0, "skipped": 0, "remaining": 0}
+
+        # On traduit le nom NETTOYE : sans extension, sans underscore ni
+        # marqueur de version, le traducteur voit enfin des mots.
+        sources = {}
+        for p in rows:
+            src = _clean_name(p.file_name or p.original_name or "")
+            if src:
+                sources[p.id] = src
+
+        table = translate_names(list(sources.values()))
+
+        done = 0
+        for p in rows:
+            tr = table.get(sources.get(p.id, ""))
+            if tr:
+                p.translated_name = tr
+                done += 1
+            else:
+                # Rien a traduire : deja francais, nom propre, ou sans lettre.
+                # On inscrit le nom NETTOYE plutot qu'un marqueur technique.
+                # C'est vrai -- le nom francais est bien celui-la --, ca reste
+                # utile a la recherche, et surtout ca evite de represente ce
+                # print a chaque passage suivant, ce qui bouclerait sans fin.
+                p.translated_name = (sources.get(p.id) or
+                                     p.file_name or p.original_name or "")[:512]
+        await db.commit()
+
+    return {"translated": done, "skipped": len(rows) - done,
+            "remaining": max(0, remaining_before - len(rows))}
