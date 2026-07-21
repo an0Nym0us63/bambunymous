@@ -1012,25 +1012,99 @@ const SPOOL_SORTS = [
   ["fullest",   "Poids restant ↑"],
 ];
 
+// Sous-type d'un élément, quel que soit le jeu de champs : les bobines portent
+// filament_*, le catalogue et la galerie non. Une seule fonction plutôt que la
+// même expression recopiée dans les quatre endroits qui filtrent.
+const itemSub   = (s) => s.filament_fila_type || s.filament_material || s.fila_type || s.material || "";
+const itemBrand = (s) => s.filament_manufacturer || s.manufacturer || "";
+
+/** Décompte par valeur, trié du plus fréquent au plus rare. */
+function tally(items, get) {
+  const m = new Map();
+  for (const it of items) {
+    const v = get(it);
+    if (v) m.set(v, (m.get(v) || 0) + 1);
+  }
+  return [...m.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+}
+
+/**
+ * Groupe de pastilles à bascule, multi-sélection.
+ *
+ * Remplace un <select> : au doigt, choisir plusieurs valeurs dans une liste
+ * native est impraticable, et sa popup restait en thème clair. Les valeurs sont
+ * triées par fréquence — les trois marques réellement utilisées remontent en
+ * tête — et repliées au-delà de huit, sinon vingt sous-types faisaient un mur.
+ */
+function ChipGroup({ label, options, selected, onToggle }) {
+  const [expanded, setExpanded] = useState(false);
+  if (!options.length) return null;
+  const LIMIT = 8;
+  const shown = expanded ? options : options.slice(0, LIMIT);
+  const hidden = options.length - shown.length;
+  return (
+    <div>
+      <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+        letterSpacing:"0.06em", margin:"0 0 6px" }}>{label}</p>
+      <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+        {shown.map(([v, n]) => {
+          const on = selected.includes(v);
+          return (
+            <button key={v} onClick={()=>onToggle(v)}
+              style={{ padding:"5px 10px", borderRadius:20, fontSize:11, fontWeight:600,
+                cursor:"pointer", whiteSpace:"nowrap",
+                border:"1px solid " + (on ? "#3b82f6" : "var(--border)"),
+                background: on ? "rgba(59,130,246,0.15)" : "transparent",
+                color: on ? "#60a5fa" : "var(--muted)" }}>
+              {v}<span style={{ opacity:0.55, marginLeft:5 }}>{n}</span>
+            </button>
+          );
+        })}
+        {hidden > 0 && (
+          <button onClick={()=>setExpanded(true)}
+            style={{ padding:"5px 10px", borderRadius:20, fontSize:11, fontWeight:600,
+              cursor:"pointer", border:"1px dashed var(--border)",
+              background:"transparent", color:"var(--muted)" }}>
+            +{hidden}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose }) {
-  const [fb, setFb] = useState(filters.brand  || "");
-  const [fm, setFm] = useState(filters.mat    || "");
-  const [fs, setFs] = useState(filters.sub    || "");
-  const [fst,setFst]= useState(filters.stock  || "all"); // all/instock/unavailable
-  const [so, setSo] = useState(sort            || "recent");
+  // Tableaux et non chaînes : le multi-choix est tout l'objet de ce composant.
+  const [fb, setFb] = useState(filters.brand || []);
+  const [fm, setFm] = useState(filters.mat   || []);
+  const [fs, setFs] = useState(filters.sub   || []);
+  const [fst,setFst]= useState(filters.stock || "all"); // all/instock/unavailable
+  const [so, setSo] = useState(sort           || "recent");
+
+  const toggle = (setter) => (v) =>
+    setter(prev => prev.includes(v) ? prev.filter(x => x !== v) : [...prev, v]);
 
   // Options TOUJOURS depuis le dataset complet (pas filtré)
-  const brands  = useMemo(() => [...new Set(allItems.map(s => s.filament_manufacturer || s.manufacturer).filter(Boolean))].sort(), [allItems]);
-  const fams    = useMemo(() => [...new Set(allItems.map(s => getFamily(s)).filter(Boolean))].sort(), [allItems]);
-  const subs    = useMemo(() => {
-    const base = !fm ? allItems : allItems.filter(s => getFamily(s) === fm);
-    return [...new Set(base.map(s => s.filament_fila_type || s.filament_material || s.fila_type || s.material).filter(Boolean))].sort();
-  }, [allItems, fm]);
+  const brands = useMemo(() => tally(allItems, itemBrand), [allItems]);
+  const fams   = useMemo(() => tally(allItems, getFamily), [allItems, getFamily]);
+  // Les sous-types se restreignent aux matériaux cochés : proposer "PETG-HF"
+  // alors qu'on a coché PLA ne mène qu'à zéro résultat.
+  const subs   = useMemo(() => {
+    const base = fm.length ? allItems.filter(s => fm.includes(getFamily(s))) : allItems;
+    return tally(base, itemSub);
+  }, [allItems, fm, getFamily]);
+
+  // Un sous-type coché puis devenu hors périmètre est retiré en silence,
+  // sinon la liste se vide sans que rien n'explique pourquoi.
+  useEffect(() => {
+    const ok = new Set(subs.map(([v]) => v));
+    setFs(prev => prev.filter(v => ok.has(v)));
+  }, [subs]);
 
   const iStyle = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
     padding:"8px 10px", fontSize:12, color:"var(--text)", outline:"none", width:"100%" };
 
-  const activeCount = [fb,fm,fs].filter(Boolean).length;
+  const activeCount = fb.length + fm.length + fs.length;
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:300, display:"flex", alignItems:"flex-end" }}
@@ -1040,7 +1114,7 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose 
         <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 4px" }}/>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <span style={{ fontWeight:700, fontSize:15, color:"var(--text)" }}>Filtres & tri</span>
-          {(fb||fm||fs) && <button onClick={()=>{setFb("");setFm("");setFs("");}}
+          {activeCount > 0 && <button onClick={()=>{setFb([]);setFm([]);setFs([]);}}
             style={{ fontSize:11, color:"#60a5fa", background:"none", border:"none", cursor:"pointer" }}>
             Effacer filtres
           </button>}
@@ -1064,20 +1138,11 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose 
         {/* Filtres */}
         <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>Filtrer</p>
-          <select value={fb} onChange={e=>setFb(e.target.value)} style={iStyle}>
-            <option value="">Toutes marques ({brands.length})</option>
-            {brands.map(b=><option key={b} value={b}>{b}</option>)}
-          </select>
-          <select value={fm} onChange={e=>{setFm(e.target.value);setFs("");}} style={iStyle}>
-            <option value="">Tous matériaux</option>
-            {fams.map(f=><option key={f} value={f}>{f}</option>)}
-          </select>
+          <ChipGroup label="Matière"   options={fams}   selected={fm} onToggle={toggle(setFm)}/>
           {subs.length > 1 && (
-            <select value={fs} onChange={e=>setFs(e.target.value)} style={iStyle}>
-              <option value="">Tous sous-types</option>
-              {subs.map(s=><option key={s} value={s}>{s}</option>)}
-            </select>
+            <ChipGroup label="Sous-type" options={subs}  selected={fs} onToggle={toggle(setFs)}/>
           )}
+          <ChipGroup label="Marque"    options={brands} selected={fb} onToggle={toggle(setFb)}/>
           <div style={{ display:"flex", gap:6 }}>
             {[["all","Tous"],["instock","En stock"],["unavailable","Non disponible"]].map(([id,label])=>(
               <button key={id} onClick={()=>setFst(id)}
@@ -1106,7 +1171,7 @@ function SpoolsView({ filaments, showArchived }) {
   const [showAdd, setShowAdd] = useState(false);
   const [selected, setSelected] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({ brand:"", mat:"", sub:"" });
+  const [filters, setFilters] = useState({ brand:[], mat:[], sub:[] });
   const [sort, setSort] = useState("recent");
 
   const FAMILIES = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
@@ -1136,9 +1201,11 @@ function SpoolsView({ filaments, showArchived }) {
         s.filament_fila_color_code, s.location, s.tag_number,
       ].some(v => v && v.toLowerCase().includes(ql)));
     }
-    if (filters.brand) res = res.filter(s => s.filament_manufacturer === filters.brand);
-    if (filters.mat)   res = res.filter(s => getFamily(s) === filters.mat);
-    if (filters.sub)   res = res.filter(s => (s.filament_fila_type || s.filament_material || "") === filters.sub);
+    // Multi-choix : une valeur cochee suffit (OU au sein d'un critere), mais
+    // tous les criteres renseignes doivent etre satisfaits (ET entre criteres).
+    if (filters.brand?.length) res = res.filter(s => filters.brand.includes(itemBrand(s)));
+    if (filters.mat?.length)   res = res.filter(s => filters.mat.includes(getFamily(s)));
+    if (filters.sub?.length)   res = res.filter(s => filters.sub.includes(itemSub(s)));
     if (filters.stock === "instock")     res = res.filter(s => (s.remaining_weight_g||0) > 0);
     if (filters.stock === "unavailable") res = res.filter(s => !(s.remaining_weight_g > 0));
     // Tri
@@ -1156,7 +1223,7 @@ function SpoolsView({ filaments, showArchived }) {
     return res;
   }, [allSpools, q, filters, sort]);
 
-  const activeFilters = [filters.brand, filters.mat, filters.sub].filter(Boolean).length;
+  const activeFilters = (filters.brand?.length||0) + (filters.mat?.length||0) + (filters.sub?.length||0);
 
   // KPIs dynamiques (recalculés à chaque changement de spools filtrés)
   const kpis = useMemo(() => {
@@ -1547,7 +1614,7 @@ function FilamentsView() {
   const [selectedFil, setSelectedFil] = useState(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [filters, setFilters] = useState({ brand:"", mat:"", sub:"" });
+  const [filters, setFilters] = useState({ brand:[], mat:[], sub:[] });
   const [sort, setSort] = useState("name");
 
   const FAMILIES_F = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
@@ -1572,9 +1639,9 @@ function FilamentsView() {
       const ql = q.toLowerCase();
       res = res.filter(f => [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type,f.fila_color_code].some(v=>v&&v.toLowerCase().includes(ql)));
     }
-    if (filters.brand) res = res.filter(f => f.manufacturer === filters.brand);
-    if (filters.mat)   res = res.filter(f => getFamilyF(f) === filters.mat);
-    if (filters.sub)   res = res.filter(f => (f.fila_type||f.material||"") === filters.sub);
+    if (filters.brand?.length) res = res.filter(f => filters.brand.includes(itemBrand(f)));
+    if (filters.mat?.length)   res = res.filter(f => filters.mat.includes(getFamilyF(f)));
+    if (filters.sub?.length)   res = res.filter(f => filters.sub.includes(itemSub(f)));
     return [...res].sort((a,b) => {
       if (sort==="brand")     return (a.manufacturer||"").localeCompare(b.manufacturer||"");
       if (sort==="remaining") return (b.remaining_weight_total_g||0)-(a.remaining_weight_total_g||0);
@@ -1583,7 +1650,7 @@ function FilamentsView() {
     });
   }, [allFilaments, q, filters, sort]);
 
-  const activeFilters = [filters.brand,filters.mat,filters.sub].filter(Boolean).length;
+  const activeFilters = (filters.brand?.length||0) + (filters.mat?.length||0) + (filters.sub?.length||0);
 
   const kpis = useMemo(() => {
     const marques = new Set(filaments.map(f => f.manufacturer).filter(Boolean)).size;
@@ -2124,7 +2191,7 @@ export default function Filaments() {
   const [allFilaments, setAllFilaments] = useState([]);
   const [galQ, setGalQ] = useState("");
   const [galFilterOpen, setGalFilterOpen] = useState(false);
-  const [galFilters, setGalFilters] = useState({ brand:"", mat:"", sub:"", stock:"all" });
+  const [galFilters, setGalFilters] = useState({ brand:[], mat:[], sub:[], stock:"all" });
   const [galSort, setGalSort] = useState("hue");
   const [galSelectMode, setGalSelectMode] = useState(false);
   const [galSelected, setGalSelected] = useState(null);
@@ -2214,9 +2281,9 @@ export default function Filaments() {
       const ql = galQ.toLowerCase();
       res = res.filter(f => [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type].some(v=>v&&v.toLowerCase().includes(ql)));
     }
-    if (galFilters.brand) res = res.filter(f => f.manufacturer === galFilters.brand);
-    if (galFilters.mat)   res = res.filter(f => getFamilyG(f) === galFilters.mat);
-    if (galFilters.sub)   res = res.filter(f => (f.fila_type||f.material||"") === galFilters.sub);
+    if (galFilters.brand?.length) res = res.filter(f => galFilters.brand.includes(itemBrand(f)));
+    if (galFilters.mat?.length)   res = res.filter(f => galFilters.mat.includes(getFamilyG(f)));
+    if (galFilters.sub?.length)   res = res.filter(f => galFilters.sub.includes(itemSub(f)));
     if (galFilters.stock === "instock")     res = res.filter(f => (f.active_spool_count||0) > 0);
     if (galFilters.stock === "unavailable") res = res.filter(f => !(f.active_spool_count > 0));
     // Tri
@@ -2235,7 +2302,7 @@ export default function Filaments() {
     return res;
   }, [allFilaments, galQ, galFilters, galSort]);
 
-  const galActiveFilters = [galFilters.brand,galFilters.mat,galFilters.sub].filter(Boolean).length;
+  const galActiveFilters = (galFilters.brand?.length||0) + (galFilters.mat?.length||0) + (galFilters.sub?.length||0);
 
   const tabs = [
     { id:"spools",   label:"Stock" },
