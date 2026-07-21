@@ -1,4 +1,13 @@
 /* ── Dark theme (défaut) ──────────────────────────────────────────────────── */
+/* Indique au navigateur que l'interface est sombre par defaut. Sans cette
+   declaration, les controles NATIFS -- listes deroulantes <select> et surtout
+   la liste d'options qu'elles ouvrent, champs de date, ascenseurs -- restaient
+   dessines en clair : texte gris sur fond blanc au milieu d'une application
+   sombre, illisible. C'est le seul moyen d'agir sur ces elements, leur rendu
+   echappant totalement au CSS de la page. */
+:root { color-scheme: dark; }
+[data-theme="light"] { color-scheme: light; }
+
 :root {
   --bg:      #0f1117;
   --surface: rgba(255,255,255,0.04);
