@@ -1210,10 +1210,7 @@ function SpoolsView({ filaments, showArchived }) {
     if (filters.stock === "unavailable") res = res.filter(s => !(s.remaining_weight_g > 0));
     // Tri
     res = [...res].sort((a,b) => {
-      if (sort==="hue") {
-        const hexToH = h => { h=(h||"888888").slice(0,6).padEnd(6,"0"); const r=parseInt(h.slice(0,2),16)/255,g=parseInt(h.slice(2,4),16)/255,b=parseInt(h.slice(4,6),16)/255,mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn,l=(mx+mn)/2; if(!d) return l>0.9?370:l<0.1?380:360; const H=mx===r?((g-b)/d+(g<b?6:0)):mx===g?((b-r)/d+2):((r-g)/d+4); const s=l>0.5?d/(2-mx-mn):d/(mx+mn); if(s<0.12) return l>0.85?370:380; return H*60; };
-        return hexToH(a.filament_color)-hexToH(b.filament_color);
-      }
+      if (sort==="hue") return compareHue(a.filament_color, b.filament_color);
       if (sort==="name")      return (a.filament_translated_name||a.filament_name||"").localeCompare(b.filament_translated_name||b.filament_name||"");
       if (sort==="brand")     return (a.filament_manufacturer||"").localeCompare(b.filament_manufacturer||"");
       if (sort==="remaining") return (b.remaining_weight_g||0)-(a.remaining_weight_g||0);
@@ -1643,6 +1640,10 @@ function FilamentsView() {
     if (filters.mat?.length)   res = res.filter(f => filters.mat.includes(getFamilyF(f)));
     if (filters.sub?.length)   res = res.filter(f => filters.sub.includes(itemSub(f)));
     return [...res].sort((a,b) => {
+      // Manquait ici : "Teinte" figurait dans la liste des tris mais aucune
+      // branche ne le traitait, le tri retombait donc silencieusement sur le
+      // nom. Le choix semblait sans effet.
+      if (sort==="hue")       return compareHue(a.color, b.color);
       if (sort==="brand")     return (a.manufacturer||"").localeCompare(b.manufacturer||"");
       if (sort==="remaining") return (b.remaining_weight_total_g||0)-(a.remaining_weight_total_g||0);
       if (sort==="fullest")   return (a.remaining_weight_total_g||0)-(b.remaining_weight_total_g||0);
@@ -2100,6 +2101,40 @@ function hexToHsl(hex) {
   return [Math.round(hue*60), Math.round(s*100), Math.round(l*100)];
 }
 
+/**
+ * Comparateur du tri "Teinte", partagé par les bobines, le nuancier et la
+ * galerie — il en existait deux copies quasi identiques.
+ *
+ * Trois corrections par rapport à la version d'origine :
+ *
+ *  1. Les NEUTRES formaient trois groupes incohérents : les gris, puis le
+ *     blanc, puis le noir. Le blanc arrivait donc APRÈS le gris foncé. Ils
+ *     forment maintenant un seul bloc en fin de liste, en rampe de clarté du
+ *     blanc au noir, ce que l'œil attend.
+ *  2. Aucun tri SECONDAIRE : tous les rouges partageaient la même clé, leur
+ *     ordre relatif était donc celui du hasard. À teinte égale on va désormais
+ *     du plus clair au plus foncé, comme sur un nuancier imprimé.
+ *  3. Les teintes sont regroupées par paliers de 12°, sinon deux rouges
+ *     imperceptiblement différents se retrouvaient séparés par leur clarté.
+ *
+ * La coupure rouge / magenta est conservée volontairement : c'est l'ordre
+ * conventionnel d'un arc-en-ciel (rouge, orange, jaune, vert, bleu, violet,
+ * rose) et le déplacer surprendrait plus qu'il n'aiderait.
+ */
+function hueSortKey(hex) {
+  const [h, s, l] = hexToHsl(hex);
+  // s est en 0-100 ici. En dessous de 12 la teinte n'est plus perceptible et
+  // devient instable : un gris très légèrement chaud tomberait au milieu des
+  // oranges.
+  if (s < 12) return [1, 0, -l];
+  return [0, Math.round(h / 12), -l];
+}
+
+function compareHue(a, b) {
+  const ka = hueSortKey(a), kb = hueSortKey(b);
+  return (ka[0]-kb[0]) || (ka[1]-kb[1]) || (ka[2]-kb[2]);
+}
+
 function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeChange, onItemClick, onReload }) {
   // Filaments déjà filtrés ET triés par le parent
 
@@ -2288,10 +2323,7 @@ export default function Filaments() {
     if (galFilters.stock === "unavailable") res = res.filter(f => !(f.active_spool_count > 0));
     // Tri
     res = [...res].sort((a,b) => {
-      if (galSort === "hue") {
-        const hexH = h => { const hx=(h||"888888").replace("#","").slice(0,6).padEnd(6,"0"); const r=parseInt(hx.slice(0,2),16)/255,g=parseInt(hx.slice(2,4),16)/255,b2=parseInt(hx.slice(4,6),16)/255,mx=Math.max(r,g,b2),mn=Math.min(r,g,b2),d=mx-mn,l=(mx+mn)/2; if(!d) return l>0.9?370:l<0.1?380:360; const H=mx===r?((g-b2)/d+(g<b2?6:0)):mx===g?((b2-r)/d+2):((r-g)/d+4); const s=l>0.5?d/(2-mx-mn):d/(mx+mn); if(s<0.12) return l>0.85?370:380; return H*60; };
-        return hexH(a.color)-hexH(b.color);
-      }
+      if (galSort === "hue") return compareHue(a.color, b.color);
       if (galSort === "name")     return (a.translated_name||a.name||"").localeCompare(b.translated_name||b.name||"");
       if (galSort === "brand")    return (a.manufacturer||"").localeCompare(b.manufacturer||"");
       if (galSort === "remaining") return (b.remaining_weight_total_g||0)-(a.remaining_weight_total_g||0);
