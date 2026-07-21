@@ -429,6 +429,24 @@ class MQTTManager:
                 new_ams, new_tray = tray_now // 4, tray_now % 4
                 source = "tray_now_fallback"
 
+            # ── Bobine externe active ────────────────────────────────────
+            # L'externe est annoncee par un INDEX D'AMS de 254 ou 255, pas par
+            # un numero de bac. Sans cette conversion, imprimer depuis le
+            # support externe laissait la surbrillance sur le dernier slot AMS
+            # utilise : non seulement l'externe n'apparaissait pas active, mais
+            # une bobine qui ne tournait pas etait signalee comme telle.
+            # Le numero de bac issu de snow (snow & 0x3) n'a aucun sens ici, on
+            # l'ignore au profit de l'ordre physique des supports.
+            if new_ams in (254, 255):
+                new_ams, new_tray = EXT_AMS_ID, (0 if new_ams == 254 else 1)
+                source = f"{source or '?'}+externe"
+            elif new_ams is None and tray_now == 254:
+                # Machines mono-buse : un seul support externe, annonce par
+                # tray_now. Jusqu'ici ce cas conservait la derniere valeur
+                # connue, d'ou une surbrillance figee sur un AMS.
+                new_ams, new_tray = EXT_AMS_ID, 0
+                source = "tray_now_externe"
+
             # Diagnostic ponctuel : structure brute de extruder_infos, pour vérifier
             # si le champ "snow" existe réellement dans ce payload/firmware.
             if extruder_infos and getattr(state, "_extruder_infos_logged", None) != str(extruder_infos):
