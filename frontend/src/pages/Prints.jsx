@@ -1384,7 +1384,12 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
       </div>
     </div>
     {unmappingG && <UnmapFilamentConfirm f={unmappingG} printId={unmappingG.print_id} onClose={()=>setUnmappingG(null)} onDone={()=>{ setUnmappingG(null); onUpdated?.(); }}/>}
-    {groupPhotoToDelete && <PhotoDeleteConfirm label={groupPhotoToDelete.name} onCancel={()=>setGroupPhotoToDelete(null)} onConfirm={async()=>{ await client.delete(`/prints/groups/${groupId}/photo/${groupPhotoToDelete.name}`); setGroupPhotoToDelete(null); loadGroupPhotos(); }}/>}
+    {/* Ancien PhotoDeleteConfirm retire : il coexistait avec la confirmation en
+        deux temps sur la pastille (plus haut) et se declenchait en meme temps.
+        Il lisait groupPhotoToDelete.name en attendant un objet, alors que la
+        pastille y stocke une chaine (ph.name) -> .name valait undefined ->
+        DELETE .../photo/undefined -> 404 silencieux. C'est ce qui faisait que
+        la popup confirmait mais que rien n'etait supprime. */}
     {editGroup && <GroupEditSheet groupId={groupId} name={name} onClose={()=>setEditGroup(false)} onSaved={()=>{ setEditGroup(false); onUpdated?.(); }}/>}
     {selSpoolG && <FilamentSheetFromSpool filamentId={selSpoolG.filId} spoolId={selSpoolG.spoolId} filamentColorHex={selSpoolG.hex} onClose={()=>setSelSpoolG(null)} zIndex={2000}/>}
     {selectedPrint && (
