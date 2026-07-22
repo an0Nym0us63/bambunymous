@@ -2241,15 +2241,24 @@ export default function Filaments() {
   const deepId    = searchParams.get("id");
   const deepSpool = searchParams.get("spool");
 
+  // ?swatch=1 dans l'URL = on arrive par le scan du QR d'un echantillon (le QR
+  // imprime sur la planche encode ce parametre). Dans ce seul cas on coche la
+  // case echantillon AVANT d'afficher : le POST renvoie la fiche a jour, donc
+  // "Echantillon : Oui" est visible des l'ouverture, sans rechargement. Un lien
+  // ordinaire vers la fiche (sans swatch=1) ne declenche rien.
+  const deepSwatch = searchParams.get("swatch") === "1";
   useEffect(() => {
     // Fiche filament uniquement si on N'ouvre PAS une bobine.
     if (!deepId || deepSpool) { setDeepFil(null); setDeepErr(null); return; }
     let cancelled = false;
-    client.get(`/filaments/filaments/${deepId}`)
+    const req = deepSwatch
+      ? client.post(`/filaments/filaments/${deepId}/mark-swatch`)
+      : client.get(`/filaments/filaments/${deepId}`);
+    req
       .then(r => { if (!cancelled) { setDeepFil(r.data); setDeepErr(null); } })
       .catch(() => { if (!cancelled) { setDeepFil(null); setDeepErr(`#${deepId}`); } });
     return () => { cancelled = true; };
-  }, [deepId, deepSpool]);
+  }, [deepId, deepSpool, deepSwatch]);
 
   const closeDeep = () => {
     setDeepFil(null); setDeepErr(null);
