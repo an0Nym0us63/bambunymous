@@ -280,24 +280,30 @@ function FilamentPhotos({ filamentId, onLightbox }) {
 
   const pressTimer = React.useRef(null);
   const pressStart = React.useRef(null);   // position initiale du doigt
+  const moved = React.useRef(false);       // le doigt a-t-il bouge depuis le contact
   const startPhotoPress = (photo, idx, e) => {
     if (!isAdmin) return;   // le menu ne propose que photo principale / suppression
     const t = e?.touches?.[0];
     pressStart.current = t ? { x: t.clientX, y: t.clientY } : null;
+    moved.current = false;
+    clearTimeout(pressTimer.current);
     pressTimer.current = setTimeout(() => {
-      setPhotoMenu({ url: photo.url, filename: photo.url.split("/").pop(), index: idx });
-    }, 500);
+      // Ne s'ouvre que si le doigt n'a pas bouge : au moindre deplacement,
+      // moved passe a true et le menu est inhibe.
+      if (!moved.current) setPhotoMenu({ url: photo.url, filename: photo.url.split("/").pop(), index: idx });
+    }, 450);
   };
-  // Au-dela de 10px de glissement, c'est un scroll, pas un appui long : on
-  // annule le timer. Sans ce garde, faire defiler la bande de photos ouvrait le
-  // menu en plein milieu du geste.
+  // Seuil bas (8px) : des qu'on glisse, c'est un scroll. On marque moved pour
+  // que ni l'appui long deja arme, ni le clic de fin de geste ne se declenchent.
   const movePhotoPress = (e) => {
-    if (!pressStart.current || !pressTimer.current) return;
+    if (!pressStart.current) return;
     const t = e?.touches?.[0];
     if (!t) return;
-    const dx = Math.abs(t.clientX - pressStart.current.x);
-    const dy = Math.abs(t.clientY - pressStart.current.y);
-    if (dx > 10 || dy > 10) clearTimeout(pressTimer.current);
+    if (Math.abs(t.clientX - pressStart.current.x) > 8 ||
+        Math.abs(t.clientY - pressStart.current.y) > 8) {
+      moved.current = true;
+      clearTimeout(pressTimer.current);
+    }
   };
   const cancelPhotoPress = () => { clearTimeout(pressTimer.current); pressStart.current = null; };
 
@@ -320,14 +326,19 @@ function FilamentPhotos({ filamentId, onLightbox }) {
         </p>
         <PhotoAddButton onPick={handleUpload} size={26}/>
       </div>
-      <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
+      {/* onScroll sur le conteneur : le defilement horizontal annule tout appui
+          long en cours, meme si le touchmove de la photo n'a pas eu le temps de
+          se declencher (le scroll natif capte parfois le geste en premier). */}
+      <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}
+        onScroll={() => { moved.current = true; clearTimeout(pressTimer.current); }}>
         {photos.map((photo, i) => (
           <div key={i}
-            onClick={() => { if(!photoMenu) { onLightbox ? onLightbox(photo.url) : setLightbox(photo.url); }}}
+            onClick={() => { if(moved.current){ return; } if(!photoMenu) { onLightbox ? onLightbox(photo.url) : setLightbox(photo.url); }}}
             onMouseDown={() => startPhotoPress(photo, i)}
             onMouseUp={cancelPhotoPress} onMouseLeave={cancelPhotoPress}
             onTouchStart={(e) => startPhotoPress(photo, i, e)}
             onTouchMove={movePhotoPress} onTouchEnd={cancelPhotoPress}
+            onTouchCancel={cancelPhotoPress}
             onContextMenu={e => e.preventDefault()}
             style={{ flexShrink:0, cursor:"pointer", borderRadius:8, overflow:"hidden", position:"relative",
               border: i===0 ? "2px solid #22c55e" : "1px solid var(--border)", width:90, height:90 }}>
