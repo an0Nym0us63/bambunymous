@@ -449,6 +449,37 @@ async def filament_labels_pdf(
     )
 
 
+@router.post("/filaments/{fid}/mark-swatch", response_model=FilamentOut)
+async def mark_swatch(
+    fid: int,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """
+    Marque le filament comme ayant un echantillon imprime (swatch=True).
+
+    Appele par le front juste avant d'ouvrir la fiche depuis un scan de QR
+    d'echantillon : si tu tiens l'echantillon en main, c'est qu'il existe. La
+    case doit donc etre deja cochee quand la fiche s'affiche.
+
+    Un POST distinct plutot que d'ecrire dans le GET de la fiche : une lecture
+    ne doit jamais avoir d'effet de bord. Le meme QR ouvert depuis un
+    historique de navigateur, un apercu de lien ou un prefetch ne doit pas
+    cocher la case toute seule -- seul le scan, qui passe par ce POST, le fait.
+
+    Idempotent : si la case est deja cochee, on ne réécrit rien.
+    """
+    f = await db.get(Filament, fid)
+    if not f:
+        raise HTTPException(404, "Filament introuvable")
+    if not f.swatch:
+        f.swatch = True
+        await db.commit()
+    stmt = (select(Filament).options(selectinload(Filament.spools))
+            .where(Filament.id == fid))
+    return _fil_out((await db.execute(stmt)).scalar_one())
+
+
 @router.get("/filaments/{fid}", response_model=FilamentOut)
 async def get_filament(
     fid: int,
@@ -619,6 +650,14 @@ async def create_spool(
         data["location"] = "Tiroir"
     s = Spool(**data)
     db.add(s)
+
+    # Ajouter une bobine physique avec son tag NFC signifie qu'on la possede :
+    # le filament n'est donc plus a commander. On ne le fait QUE si un tag est
+    # renseigne -- creer une fiche vide, sans tag, ne prouve pas la possession
+    # et pourrait meme etre le geste par lequel on prepare une commande.
+    if (data.get("tag_number") or "").strip() and fil.to_order:
+        fil.to_order = False
+
     await db.commit()
     await db.refresh(s)
     _clear_match_cache()
