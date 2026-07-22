@@ -12,7 +12,11 @@ import { useIsAdmin } from "../store/auth";
  *    donc notre popup ferait doublon. On declenche directement l'input simple et
  *    c'est Android qui affiche son choix.
  *
- * onPick(file) est appele avec le fichier choisi.
+ * onPick(file) est appele une fois PAR fichier choisi, dans l'ordre de
+ * selection. Sur telephone, la galerie numerote les photos au moment du choix :
+ * cet ordre est celui de FileList, on le respecte donc tel quel. Les appelants
+ * qui n'attendent qu'une photo continuent de marcher -- ils reçoivent juste
+ * plusieurs appels successifs au lieu d'un.
  */
 export default function PhotoAddButton({ onPick, size = 20, title = "Ajouter une photo" }) {
   // Ajout de photo = action : masque pour les comptes en lecture seule.
@@ -27,11 +31,21 @@ export default function PhotoAddButton({ onPick, size = 20, title = "Ajouter une
 
   const isWebView = typeof window !== "undefined" && !!window.BambuScan;
 
-  const handle = (e) => {
-    const f = e.target.files?.[0];
-    if (f) onPick(f);
-    e.target.value = "";        // permet de reprendre le meme fichier ensuite
+  const handle = async (e) => {
+    // FileList preserve l'ordre de selection : sur mobile, l'ordre dans lequel
+    // l'utilisateur a tape les vignettes (les numeros affiches).
+    const files = Array.from(e.target.files || []);
+    e.target.value = "";        // permet de reprendre les memes fichiers ensuite
     setOpen(false);
+    // Sequentiel et non parallele : on ATTEND chaque onPick avant le suivant.
+    // Si l'appelant fait un upload (onPick renvoie une promesse), les fichiers
+    // arrivent au serveur dans l'ordre choisi. Sans await, les requetes
+    // partiraient en meme temps et l'ordre serait celui, aleatoire, des
+    // reponses reseau -- l'ordre des vignettes serait perdu.
+    for (const f of files) {
+      try { await onPick(f); }
+      catch (err) { console.error("upload photo", err); }
+    }
   };
 
   return (
@@ -48,7 +62,7 @@ export default function PhotoAddButton({ onPick, size = 20, title = "Ajouter une
       {/* Inputs caches : camera (capture) et galerie (simple). */}
       <input ref={camRef} type="file" accept="image/*" capture="environment"
         style={{ display:"none" }} onChange={handle}/>
-      <input ref={fileRef} type="file" accept="image/*"
+      <input ref={fileRef} type="file" accept="image/*" multiple
         style={{ display:"none" }} onChange={handle}/>
 
       {open && createPortal(
