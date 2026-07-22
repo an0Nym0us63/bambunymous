@@ -69,13 +69,8 @@ async def update_spool_location(spool_id: int, location: str):
     await _get_queue().put((spool_id, location))
 
 
-async def mark_inactive_spools_as_drawer(active_spool_ids: set):
-    """Les bobines qui étaient montées mais ne sont plus détectées → Tiroir."""
-    removed = {sid for sid in _ACTIVE_AMS_SPOOLS if sid not in active_spool_ids}
-    for spool_id in removed:
-        old_loc = _ACTIVE_AMS_SPOOLS.pop(spool_id, "")
-        # "Externe" ajoute au filtre : une bobine retiree du support externe
-        # gardait sinon son emplacement indefiniment, puisque seuls les
-        # prefixes AMS et Vortek declenchaient le retour en tiroir.
-        if old_loc.startswith(("AMS", "Vortek", "Externe")):
-            await update_spool_location(spool_id, "Tiroir")
+# NB : le retour en Tiroir n'est PAS gere ici mais dans core/mqtt, qui compare
+# les trays presents d'un tick a l'autre (cache _MATCH_CACHE). Ce module ne fait
+# qu'ecrire les emplacements. Une ancienne fonction mark_inactive_spools_as_drawer
+# vivait ici sans jamais etre appelee -- retiree pour ne pas laisser croire a un
+# second mecanisme concurrent.

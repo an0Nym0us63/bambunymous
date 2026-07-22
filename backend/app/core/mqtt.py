@@ -632,6 +632,13 @@ class MQTTManager:
                     if _k not in current_keys:
                         _old = _MATCH_CACHE.pop(_k, -1)
                         if _old and _old != -1:
+                            # _k = (ams_id, tray_id, uuid) : l'AMS 255 est le
+                            # support externe. Ce mecanisme couvre donc AUSSI
+                            # les bobines externes, puisqu'elles vivent dans
+                            # state.ams_list comme les autres. Log explicite pour
+                            # pouvoir le verifier au retrait d'une bobine externe.
+                            _where = "Externe" if _k[0] == EXT_AMS_ID else f"AMS {_k[0]}"
+                            logger.info(f"[LOC] bobine #{_old} retiree de {_where} → Tiroir")
                             import asyncio as _lio3, threading as _lth3
                             def _mk_drawer(_sid=_old):
                                 lp = _lio3.new_event_loop()
