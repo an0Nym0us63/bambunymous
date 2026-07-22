@@ -410,11 +410,53 @@ async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user))
 
 # ── Supprimer un objet ───────────────────────────────────────────────────────
 @router.delete("/objects/{oid}")
-async def delete_object(oid: int, _: str = Depends(get_current_user)):
+async def delete_object(oid: int, restock: str = "", _: str = Depends(get_current_user)):
+    """
+    Supprime un objet, en restituant au stock les accessoires choisis.
+
+    `restock` : liste "accessory_id:qty" separee par des virgules, construite
+    par la popup de confirmation. Ce qui n'y figure pas n'est pas remis en
+    stock -- l'accessoire est considere comme parti avec l'objet (vendu, casse).
+    Passer par un parametre plutot qu'un body : DELETE avec corps est
+    inegalement supporte selon les clients HTTP.
+    """
+    wanted = {}
+    for part in (restock or "").split(","):
+        part = part.strip()
+        if not part or ":" not in part:
+            continue
+        aid_s, qty_s = part.split(":", 1)
+        try:
+            aid, qty = int(aid_s), int(qty_s)
+        except ValueError:
+            continue
+        if qty > 0:
+            wanted[aid] = qty
+
     async with AsyncSessionLocal() as db:
         obj = await db.get(Object, oid)
         if not obj:
             raise HTTPException(404)
+
+        if wanted:
+            # On borne chaque restitution a ce que le lien portait reellement :
+            # la popup pre-remplit avec cette quantite, mais une valeur trafiquee
+            # cote client ne doit pas pouvoir gonfler le stock.
+            links = (await db.execute(
+                select(ObjectAccessory).where(ObjectAccessory.object_id == oid)
+            )).scalars().all()
+            linked_qty = {}
+            for lk in links:
+                linked_qty[lk.accessory_id] = linked_qty.get(lk.accessory_id, 0) + (lk.quantity or 0)
+            for aid, qty in wanted.items():
+                give = min(qty, linked_qty.get(aid, 0))
+                if give <= 0:
+                    continue
+                acc = await db.get(Accessory, aid)
+                if acc:
+                    acc.quantity = (acc.quantity or 0) + give
+
+        # La cascade FK supprime les ObjectAccessory : on lit AVANT de supprimer.
         await db.delete(obj)
         await db.commit()
         return {"ok": True}
@@ -448,6 +490,12 @@ async def link_accessory_to_object(oid: int, body: LinkAccessory, _: str = Depen
         if not obj: raise HTTPException(404)
         acc = await db.get(Accessory, body.accessory_id)
         if not acc: raise HTTPException(404, "Accessoire introuvable")
+        # Le stock est le DISPONIBLE : lier prend sur l'etagere. On ne peut donc
+        # pas lier plus qu'il n'en reste. 422 plutot que de laisser filer un
+        # stock negatif, qui fausserait toutes les valorisations.
+        if body.qty > (acc.quantity or 0):
+            raise HTTPException(422,
+                f"Stock insuffisant : {acc.quantity or 0} en stock, {body.qty} demandé(s)")
         # Vérifier si déjà lié
         existing = (await db.execute(
             select(ObjectAccessory)
@@ -460,6 +508,8 @@ async def link_accessory_to_object(oid: int, body: LinkAccessory, _: str = Depen
             db.add(ObjectAccessory(object_id=oid, accessory_id=body.accessory_id,
                                    quantity=body.qty,
                                    unit_price_at_link=acc.unit_price or 0.0))
+        # Sortie du stock, une fois le lien acquis.
+        acc.quantity = (acc.quantity or 0) - body.qty
         # Recalcul coût accessoires sur le PRIX FIGE de chaque lien.
         all_links = (await db.execute(
             select(ObjectAccessory)
@@ -480,6 +530,11 @@ async def unlink_accessory(oid: int, aid: int, _: str = Depends(get_current_user
             .where(ObjectAccessory.object_id == oid, ObjectAccessory.accessory_id == aid)
         )).scalar_one_or_none()
         if not lnk: raise HTTPException(404)
+        # Delier rend au stock ce que le lien avait pris, sans rien demander :
+        # c'est une action unitaire et deliberee.
+        acc = await db.get(Accessory, aid)
+        if acc:
+            acc.quantity = (acc.quantity or 0) + (lnk.quantity or 0)
         await db.delete(lnk)
         # Recalcul coût
         obj = await db.get(Object, oid)

@@ -603,6 +603,8 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
   const [addingAcc, setAddingAcc] = React.useState(false);
   const [allAccs, setAllAccs] = React.useState([]);
   const [deleting, setDeleting] = React.useState(false);
+  const [confirmDel, setConfirmDel] = React.useState(false);  // panneau de suppression
+  const [restock, setRestock] = React.useState({});           // accessory_id -> { on, qty }
   // Ouverture en overlay du print / groupe parent (sans navigation).
   const [parentPrint, setParentPrint] = React.useState(null);
   const [parentGroup, setParentGroup] = React.useState(null);
@@ -648,10 +650,36 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
     onUpdated?.();
   };
 
-  const handleDelete = async () => {
-    if (!confirm(`Supprimer "${obj.name}" ?`)) return;
-    await client.delete(`/objects/objects/${obj.id}`);
-    onClose(); onUpdated?.();
+  // Ouvre le panneau de confirmation. On y pre-remplit la restitution : chaque
+  // accessoire lie est coche par defaut, quantite = celle du lien. Si l'objet
+  // n'a aucun accessoire, le panneau est une simple confirmation.
+  const askDelete = () => {
+    const init = {};
+    for (const a of accessories) {
+      init[a.accessory_id] = { on: true, qty: a.qty };
+    }
+    setRestock(init);
+    setConfirmDel(true);
+  };
+
+  const doDelete = async () => {
+    setDeleting(true);
+    // "accessory_id:qty" pour chaque accessoire coche avec une quantite > 0.
+    const parts = accessories
+      .map(a => {
+        const r = restock[a.accessory_id];
+        const q = r?.on ? Math.min(Math.max(0, r.qty|0), a.qty) : 0;
+        return q > 0 ? `${a.accessory_id}:${q}` : null;
+      })
+      .filter(Boolean);
+    try {
+      await client.delete(`/objects/objects/${obj.id}`,
+        { params: parts.length ? { restock: parts.join(",") } : {} });
+      onClose(); onUpdated?.();
+    } catch (e) {
+      alert(e.response?.data?.detail || e.message);
+      setDeleting(false);
+    }
   };
 
   return (
@@ -796,7 +824,7 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
               background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700, cursor:"pointer" }}>
             ✏️ Modifier
           </button></AdminOnly>
-          <AdminOnly><button onClick={handleDelete}
+          <AdminOnly><button onClick={askDelete}
             style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid rgba(239,68,68,0.3)",
               background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:12, fontWeight:700, cursor:"pointer" }}>
             🗑 Supprimer
@@ -833,6 +861,94 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
           prints={[]} number_of_items={parentGroup.number_of_items||1}
           onClose={()=>setParentGroup(null)}
           onSelectPrint={()=>{}} onDelete={()=>{}} onUngroup={()=>{}}/>
+      )}
+
+      {confirmDel && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:300,
+          display:"flex", alignItems:"flex-end", justifyContent:"center" }}
+          onClick={()=>!deleting && setConfirmDel(false)}>
+          <div onClick={e=>e.stopPropagation()} className="sheet-panel"
+            style={{ width:"100%", maxWidth:520, borderTopLeftRadius:20, borderTopRightRadius:20,
+              padding:"20px 20px 24px", maxHeight:"80vh", overflowY:"auto" }}>
+            <h3 style={{ margin:"0 0 4px", fontSize:16, fontWeight:700, color:"var(--text)" }}>
+              Supprimer « {obj.name} » ?
+            </h3>
+            <p style={{ margin:"0 0 16px", fontSize:12.5, color:"var(--muted)" }}>
+              {accessories.length
+                ? "Choisis les accessoires à remettre en stock. Ce qui n'est pas coché part avec l'objet."
+                : "Cette action est définitive."}
+            </p>
+
+            {accessories.length > 0 && (
+              <>
+                {/* Bascule global : au-dessus de la liste, pour trancher d'un
+                    geste avant d'ajuster au cas par cas. */}
+                <button
+                  onClick={()=>{
+                    const allOn = accessories.every(a => restock[a.accessory_id]?.on);
+                    const next = {};
+                    for (const a of accessories)
+                      next[a.accessory_id] = { on: !allOn, qty: restock[a.accessory_id]?.qty ?? a.qty };
+                    setRestock(next);
+                  }}
+                  style={{ marginBottom:10, padding:"5px 12px", borderRadius:20, fontSize:11,
+                    fontWeight:600, cursor:"pointer", border:"1px solid var(--border)",
+                    background:"transparent", color:"var(--muted)" }}>
+                  {accessories.every(a => restock[a.accessory_id]?.on) ? "Tout décocher" : "Tout cocher"}
+                </button>
+
+                <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:18 }}>
+                  {accessories.map(a => {
+                    const r = restock[a.accessory_id] || { on:false, qty:a.qty };
+                    return (
+                      <div key={a.accessory_id} style={{ display:"flex", alignItems:"center", gap:10,
+                        padding:"8px 10px", borderRadius:10, background:"var(--surface2)",
+                        opacity: r.on ? 1 : 0.55 }}>
+                        <button onClick={()=>setRestock(p=>({ ...p,
+                            [a.accessory_id]: { on: !r.on, qty: r.qty } }))}
+                          style={{ width:22, height:22, borderRadius:6, flexShrink:0, cursor:"pointer",
+                            border:"1px solid " + (r.on ? "#22c55e" : "var(--border)"),
+                            background: r.on ? "#22c55e" : "transparent", color:"white",
+                            fontSize:13, lineHeight:1, display:"flex", alignItems:"center",
+                            justifyContent:"center" }}>
+                          {r.on ? "✓" : ""}
+                        </button>
+                        <span style={{ flex:1, fontSize:13, color:"var(--text)",
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                          {a.name}
+                        </span>
+                        <span style={{ fontSize:11, color:"var(--muted)" }}>sur {a.qty}</span>
+                        <input type="number" min={0} max={a.qty} value={r.on ? r.qty : ""}
+                          disabled={!r.on}
+                          onChange={e=>{
+                            const q = Math.min(Math.max(0, parseInt(e.target.value||"0",10)), a.qty);
+                            setRestock(p=>({ ...p, [a.accessory_id]: { on:true, qty:q } }));
+                          }}
+                          style={{ width:56, textAlign:"center", fontSize:13, padding:"5px 6px",
+                            borderRadius:8, border:"1px solid var(--border)",
+                            background:"var(--surface)", color:"var(--text)" }}/>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            <div style={{ display:"flex", gap:10 }}>
+              <button onClick={()=>setConfirmDel(false)} disabled={deleting}
+                style={{ flex:1, padding:"11px", borderRadius:12, fontSize:13, fontWeight:600,
+                  cursor:"pointer", border:"1px solid var(--border)", background:"transparent",
+                  color:"var(--text)" }}>
+                Annuler
+              </button>
+              <button onClick={doDelete} disabled={deleting}
+                style={{ flex:1, padding:"11px", borderRadius:12, fontSize:13, fontWeight:700,
+                  cursor:"pointer", border:"none", background:"#ef4444", color:"white" }}>
+                {deleting ? "Suppression…" : "Supprimer"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
