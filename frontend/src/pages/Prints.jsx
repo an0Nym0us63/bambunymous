@@ -1237,18 +1237,37 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
               </div>
               {groupPhotos.length > 0 && (
                 <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
-                  {groupPhotos.map((ph,i)=>(
+                  {groupPhotos.map((ph,i)=>{
+                    // Confirmation en deux temps sur la pastille elle-meme : un
+                    // premier clic l'arme (rouge), le second supprime. L'ancien
+                    // bouton testait window._confirmedDeletePhoto, une variable
+                    // jamais definie nulle part -- le clic ne faisait donc
+                    // jamais rien.
+                    const armed = groupPhotoToDelete === ph.name;
+                    return (
                     <div key={i} style={{ position:"relative", flexShrink:0 }}>
                       <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover", borderRadius:8 }}/>
-                      <AdminOnly><button onClick={async()=>{ if(window._confirmedDeletePhoto){
-                        await client.delete(`/prints/groups/${groupId}/photo/${ph.name}`);
-                        loadGroupPhotos();
-                      }}} style={{ position:"absolute", top:2, right:2, width:18, height:18,
-                        borderRadius:"50%", background:"rgba(0,0,0,0.6)", border:"none",
-                        cursor:"pointer", color:"white", fontSize:12,
-                        display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button></AdminOnly>
+                      <AdminOnly><button
+                        onClick={async()=>{
+                          if(!armed){ setGroupPhotoToDelete(ph.name); return; }
+                          try {
+                            await client.delete(`/prints/groups/${groupId}/photo/${ph.name}`);
+                            setGroupPhotoToDelete(null);
+                            loadGroupPhotos();
+                          } catch(e){ alert(e.response?.data?.detail || e.message); }
+                        }}
+                        onBlur={()=>setGroupPhotoToDelete(null)}
+                        title={armed ? "Confirmer la suppression" : "Supprimer"}
+                        style={{ position:"absolute", top:2, right:2,
+                        width: armed ? "auto" : 18, height:18, padding: armed ? "0 6px" : 0,
+                        borderRadius: armed ? 9 : "50%",
+                        background: armed ? "#ef4444" : "rgba(0,0,0,0.6)", border:"none",
+                        cursor:"pointer", color:"white", fontSize: armed ? 10 : 12, fontWeight:600,
+                        display:"flex", alignItems:"center", justifyContent:"center" }}>
+                        {armed ? "Supprimer ?" : "✕"}</button></AdminOnly>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
