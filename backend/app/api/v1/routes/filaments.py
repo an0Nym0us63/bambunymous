@@ -1178,6 +1178,12 @@ async def map_tray_link(body: dict, _: str = Depends(get_current_user)):
                 f.color = color_hex
                 changes.append(f"Couleur #{color_hex} ajoutée sur le filament")
 
+            # Associer un tag RFID a une bobine existante prouve aussi la
+            # possession : meme automatisme que les deux autres chemins de scan.
+            if tag_uid and f.to_order:
+                f.to_order = False
+                changes.append("Filament retiré de la liste à commander")
+
         await db.commit()
 
         # Construire la réponse DANS la session pendant que la relation est encore accessible
@@ -1268,6 +1274,17 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
             remaining_weight_g=weight,
         )
         db.add(spool)
+
+        # Scanner une bobine RFID prouve qu'on la possede : le filament n'est
+        # donc plus a commander. Ce chemin (map-tray/create) est celui du scan
+        # RFID -- distinct de POST /spools, ou le meme automatisme vit pour la
+        # creation manuelle avec tag. Un tag_uid est presque toujours present
+        # ici, mais on garde la condition : sans tag, rien ne prouve la
+        # possession. Le cas compte surtout quand fil est un filament EXISTANT
+        # reutilise, qui peut avoir ete marque a commander de longue date.
+        if tag_uid and fil.to_order:
+            fil.to_order = False
+
         await db.commit()
         await db.refresh(spool)
         await db.refresh(spool.filament)
