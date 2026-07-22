@@ -108,7 +108,11 @@ function ColorPill({ tray, spoolInfo, active }) {
     <div style={{ flex:1, height:28, borderRadius:6, transition:"all 0.2s",
       boxShadow: active ? `0 0 0 2px ${ringColor}` : `0 0 0 1px ${ringColor}`,
       position:"relative", ...bg }}>
-      {tray.match_mode && (
+      {/* Slot vide : aucun indicateur de detection. Un slot sans filament
+          conservait parfois le dernier match_mode connu, laissant une pastille
+          grise/verte "a verifier" sur du vide. La grande vue filtrait deja sur
+          !empty, pas la tuile compacte. */}
+      {tray.match_mode && !isEmpty && (
         <span style={{ position:"absolute", top:2, right:3 }}>
           <MatchIcon mode={tray.match_mode} size={8}/>
         </span>
@@ -183,8 +187,11 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
       }}>
         {traysInOrder(ams).map(t => <ColorPill key={t.id} tray={t} spoolInfo={getInfo(t)} active={isActive && t.id===activeTrayId} />)}
       </div>
-      {hasClimate(ams) && (
-      <div style={{ display:"flex", gap:8, fontSize:9, color:"var(--muted)" }}>
+      {/* Hauteur reservee meme sans capteur (externe) : sinon la tuile est
+          plus courte que les AMS voisins et, dans la grille, son nom et ses
+          slots ne s'alignent plus. On garde le bloc, vide, a la meme hauteur. */}
+      <div style={{ display:"flex", gap:8, fontSize:9, color:"var(--muted)",
+        minHeight:12, visibility: hasClimate(ams) ? "visible" : "hidden" }}>
         <span style={{ display:"flex", alignItems:"center", gap:2 }}><Droplets size={8}/>{ams.humidity}%</span>
         <span style={{ display:"flex", alignItems:"center", gap:2,
           color: isDrying ? "#f97316" : "var(--muted)",
@@ -192,7 +199,6 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
           <Sun size={8} style={{ color: isDrying ? "#f97316" : undefined }}/>{(ams.temp ?? 0).toFixed(1)}°
         </span>
       </div>
-      )}
       <div style={{ height:2, borderRadius:1,
         background: isSelected ? "#3b82f6" : "transparent",
         width: isSelected ? 32 : 8, transition:"all 0.3s" }} />
