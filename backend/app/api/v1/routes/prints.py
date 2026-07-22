@@ -396,6 +396,7 @@ async def prints_gallery(_: str = Depends(get_current_user)):
                 "name": (p.group.name if p.group else None) or f"Groupe #{p.group_id}",
                 "number_of_items": (p.group.number_of_items if p.group else None) or 1,
                 "cover_print_id":  p.group.cover_print_id if p.group else None,
+                "cover_photo":     p.group.cover_photo if p.group else None,
                 "prints": 0, "photos": [],
                 "total_weight_g": 0.0, "total_cost_filament": 0.0,
                 "electric_cost": 0.0, "total_cost": 0.0, "duration_seconds": 0.0,
@@ -430,10 +431,17 @@ async def prints_gallery(_: str = Depends(get_current_user)):
         if d.exists():
             for f in sorted(d.iterdir()):
                 if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
-                    acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{f.name}", "label": f.name})
+                    acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{f.name}",
+                                          "label": f.name, "name": f.name})
+        # La vignette est photos[0]. Si une photo de couverture est definie pour
+        # le groupe, on la remonte en tete -- meme principe que Print.cover_photo.
+        cover = acc.get("cover_photo")
+        if cover:
+            acc["photos"].sort(key=lambda ph: (ph.get("name") or ph.get("label")) != cover)
 
     groups = [
-        {**g, "cost_per_item": round(g["total_cost"] / g["number_of_items"], 2) if g.get("number_of_items", 1) > 1 else None}
+        {**{k: v for k, v in g.items() if k != "cover_photo"},
+         "cost_per_item": round(g["total_cost"] / g["number_of_items"], 2) if g.get("number_of_items", 1) > 1 else None}
         for g in group_acc.values() if g["photos"]
     ]
     items.sort(key=lambda it: it["print_date"] or "", reverse=True)
@@ -470,15 +478,18 @@ def _group_dir(group_id: int) -> Optional[Path]:
 
 @router.get("/groups/{group_id}/photos")
 async def group_photos(group_id: int):
-    """Liste les photos d'un groupe."""
+    """Liste les photos d'un groupe, et le nom de celle choisie comme vignette."""
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        cover = g.cover_photo if g else None
     d = _group_dir(group_id)
     if not d:
-        return {"files": []}
+        return {"files": [], "cover_photo": cover}
     files = []
     for f in sorted(d.iterdir()):
         if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
             files.append({"name": f.name, "url": f"/api/v1/prints/groups/{group_id}/photo/{f.name}"})
-    return {"files": files}
+    return {"files": files, "cover_photo": cover}
 
 
 @router.get("/groups/{group_id}/photo/{filename}")
@@ -1329,12 +1340,40 @@ async def upload_group_photo(
     return {"ok": True, "name": dest.name, "url": f"/api/v1/prints/groups/{group_id}/photo/{dest.name}"}
 
 
+@router.post("/groups/{group_id}/photo/{filename}/cover")
+async def set_group_cover_photo(group_id: int, filename: str, _: str = Depends(get_current_user)):
+    """
+    Choisit la photo affichee en vignette dans la galerie pour ce groupe.
+    Stocke juste le nom de fichier ; la galerie remonte cette photo en tete.
+    """
+    if ".." in filename or "/" in filename:
+        raise HTTPException(400)
+    path = DATA_DIR / "groups" / str(group_id) / filename
+    if not path.exists():
+        raise HTTPException(404, "Photo introuvable")
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        g.cover_photo = filename
+        await db.commit()
+    return {"ok": True, "cover_photo": filename}
+
+
 @router.delete("/groups/{group_id}/photo/{filename}")
 async def delete_group_photo_ep(group_id: int, filename: str, _: str = Depends(get_current_user)):
     if ".." in filename or "/" in filename: raise HTTPException(400)
     path = DATA_DIR / "groups" / str(group_id) / filename
     if not path.exists(): raise HTTPException(404)
-    path.unlink(); return {"ok": True}
+    path.unlink()
+    # Si on vient de supprimer la photo qui servait de couverture, on oublie la
+    # reference : sinon la galerie chercherait un fichier disparu.
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if g and g.cover_photo == filename:
+            g.cover_photo = None
+            await db.commit()
+    return {"ok": True}
 
 
 # ── Filament Usage — mapping bobine et ajustement poids ─────────────────────

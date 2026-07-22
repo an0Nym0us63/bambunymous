@@ -150,6 +150,7 @@ class Group(Base):
     external_ref = Column(String(64), nullable=True)
     number_of_items  = Column(Integer, default=1)
     cover_print_id   = Column(Integer, nullable=True)  # print de référence pour la vignette
+    cover_photo      = Column(String(256), nullable=True)  # nom de fichier de la photo choisie comme vignette de galerie
     created_at   = Column(DateTime, default=datetime.utcnow)
 
     prints = relationship("Print", back_populates="group")

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
@@ -1057,11 +1058,27 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   const [selSpoolG, setSelSpoolG] = useState(null);
   const [coverPrintId, setCoverPrintId] = useState(coverPrintIdProp||null);
   const [groupPhotoToDelete, setGroupPhotoToDelete] = useState(null);
+  const [groupPhotoMenu, setGroupPhotoMenu] = useState(null);   // { name, url } appui long
+  const gpPressTimer = React.useRef(null);
+  const gpPressStart = React.useRef(null);
+  const startGpPress = (ph, e) => {
+    const t = e?.touches?.[0];
+    gpPressStart.current = t ? { x:t.clientX, y:t.clientY } : null;
+    gpPressTimer.current = setTimeout(() => setGroupPhotoMenu({ name: ph.name, url: ph.url }), 500);
+  };
+  const moveGpPress = (e) => {
+    if (!gpPressStart.current || !gpPressTimer.current) return;
+    const t = e?.touches?.[0]; if (!t) return;
+    if (Math.abs(t.clientX-gpPressStart.current.x) > 10 || Math.abs(t.clientY-gpPressStart.current.y) > 10)
+      clearTimeout(gpPressTimer.current);
+  };
+  const cancelGpPress = () => { clearTimeout(gpPressTimer.current); gpPressStart.current = null; };
   const [unmappingG, setUnmappingG] = useState(null);
   const [editGroup, setEditGroup] = useState(false);
   const [groupPhotos, setGroupPhotos] = useState([]);
+  const [groupCover, setGroupCover] = useState(null);
 
-  const loadGroupPhotos = () => client.get(`/prints/groups/${groupId}/photos`).then(r=>setGroupPhotos(r.data?.files||[])).catch(()=>{});
+  const loadGroupPhotos = () => client.get(`/prints/groups/${groupId}/photos`).then(r=>{ setGroupPhotos(r.data?.files||[]); setGroupCover(r.data?.cover_photo||null); }).catch(()=>{});
   useEffect(() => { if(groupId) loadGroupPhotos(); }, [groupId]);
   const uploadGroupPhoto = async (file) => {
     const fd = new FormData(); fd.append('file', file);
@@ -1238,33 +1255,20 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
               {groupPhotos.length > 0 && (
                 <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
                   {groupPhotos.map((ph,i)=>{
-                    // Confirmation en deux temps sur la pastille elle-meme : un
-                    // premier clic l'arme (rouge), le second supprime. L'ancien
-                    // bouton testait window._confirmedDeletePhoto, une variable
-                    // jamais definie nulle part -- le clic ne faisait donc
-                    // jamais rien.
-                    const armed = groupPhotoToDelete === ph.name;
+                    // Appui long -> menu (definir vignette / supprimer), comme
+                    // sur la fiche filament. Le principal usage : choisir quelle
+                    // photo represente le groupe dans la galerie.
+                    const isCover = groupCover === ph.name;
                     return (
-                    <div key={i} style={{ position:"relative", flexShrink:0 }}>
-                      <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover", borderRadius:8 }}/>
-                      <AdminOnly><button
-                        onClick={async()=>{
-                          if(!armed){ setGroupPhotoToDelete(ph.name); return; }
-                          try {
-                            await client.delete(`/prints/groups/${groupId}/photo/${ph.name}`);
-                            setGroupPhotoToDelete(null);
-                            loadGroupPhotos();
-                          } catch(e){ alert(e.response?.data?.detail || e.message); }
-                        }}
-                        onBlur={()=>setGroupPhotoToDelete(null)}
-                        title={armed ? "Confirmer la suppression" : "Supprimer"}
-                        style={{ position:"absolute", top:2, right:2,
-                        width: armed ? "auto" : 18, height:18, padding: armed ? "0 6px" : 0,
-                        borderRadius: armed ? 9 : "50%",
-                        background: armed ? "#ef4444" : "rgba(0,0,0,0.6)", border:"none",
-                        cursor:"pointer", color:"white", fontSize: armed ? 10 : 12, fontWeight:600,
-                        display:"flex", alignItems:"center", justifyContent:"center" }}>
-                        {armed ? "Supprimer ?" : "✕"}</button></AdminOnly>
+                    <div key={i} style={{ position:"relative", flexShrink:0, cursor:"pointer",
+                        borderRadius:8, overflow:"hidden",
+                        border: isCover ? "2px solid #22c55e" : "1px solid var(--border)" }}
+                      onMouseDown={()=>{ gpPressTimer.current = setTimeout(()=>setGroupPhotoMenu({name:ph.name,url:ph.url}),500); }}
+                      onMouseUp={cancelGpPress} onMouseLeave={cancelGpPress}
+                      onTouchStart={(e)=>startGpPress(ph,e)} onTouchMove={moveGpPress} onTouchEnd={cancelGpPress}
+                      onContextMenu={e=>e.preventDefault()}>
+                      <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover", display:"block" }}/>
+                      {isCover && <span style={{ position:"absolute", top:2, left:2, fontSize:11 }}>⭐</span>}
                     </div>
                     );
                   })}
@@ -1384,6 +1388,46 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
       </div>
     </div>
     {unmappingG && <UnmapFilamentConfirm f={unmappingG} printId={unmappingG.print_id} onClose={()=>setUnmappingG(null)} onDone={()=>{ setUnmappingG(null); onUpdated?.(); }}/>}
+    {groupPhotoMenu && createPortal(
+      <div style={{ position:"fixed", inset:0, zIndex:4000, background:"rgba(0,0,0,0.5)" }}
+        onClick={()=>setGroupPhotoMenu(null)}>
+        <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0, right:0,
+          background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px 32px" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 14px" }}/>
+          <img src={groupPhotoMenu.url} alt="" style={{ width:70, height:70, objectFit:"cover",
+            borderRadius:10, display:"block", margin:"0 auto 16px" }}/>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            <button onClick={async()=>{
+                try {
+                  await client.post(`/prints/groups/${groupId}/photo/${groupPhotoMenu.name}/cover`);
+                  setGroupCover(groupPhotoMenu.name); setGroupPhotoMenu(null); onUpdated?.();
+                } catch(e){ alert(e.response?.data?.detail || e.message); }
+              }}
+              style={{ padding:"14px", borderRadius:12, border:"none", cursor:"pointer",
+                background:"var(--surface2)", color:"var(--text)", fontSize:14, fontWeight:600,
+                display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ fontSize:20 }}>⭐</span> Définir comme vignette
+            </button>
+            <button onClick={async()=>{
+                try {
+                  await client.delete(`/prints/groups/${groupId}/photo/${groupPhotoMenu.name}`);
+                  setGroupPhotoMenu(null); loadGroupPhotos();
+                } catch(e){ alert(e.response?.data?.detail || e.message); }
+              }}
+              style={{ padding:"14px", borderRadius:12, border:"none", cursor:"pointer",
+                background:"rgba(239,68,68,0.1)", color:"#ef4444", fontSize:14, fontWeight:600,
+                display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ fontSize:20 }}>🗑</span> Supprimer cette photo
+            </button>
+            <button onClick={()=>setGroupPhotoMenu(null)}
+              style={{ padding:"12px", borderRadius:12, border:"1px solid var(--border)", cursor:"pointer",
+                background:"none", color:"var(--muted)", fontSize:13 }}>Annuler</button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+
     {/* Ancien PhotoDeleteConfirm retire : il coexistait avec la confirmation en
         deux temps sur la pastille (plus haut) et se declenchait en meme temps.
         Il lisait groupPhotoToDelete.name en attendant un objet, alors que la
