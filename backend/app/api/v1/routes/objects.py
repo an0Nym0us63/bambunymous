@@ -572,20 +572,42 @@ async def delete_accessory(aid: int, _: str = Depends(get_current_user)):
 
 # ── Stock accessoire ─────────────────────────────────────────────────────────
 class StockAdjust(BaseModel):
-    qty: int
-    total_price: float = 0.0  # coût du lot ajouté (recalcule unit_price moyen)
+    # "add"   : reception d'un lot -> prix moyen pondere si total_price fourni
+    # "remove": perte, casse, usage ailleurs -> quantite retiree, prix inchange
+    # "set"   : correction d'inventaire -> nouvelle valeur absolue, prix inchange
+    mode: str = "add"
+    qty: int                       # add/remove : quantite ; set : ignore
+    total_price: float = 0.0       # add uniquement
+    new_quantity: Optional[int] = None   # set uniquement
 
 @router.post("/accessories/{aid}/stock")
 async def adjust_accessory_stock(aid: int, body: StockAdjust, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
         acc = await db.get(Accessory, aid)
         if not acc: raise HTTPException(404)
-        if body.qty > 0 and body.total_price > 0:
-            # Prix moyen pondéré
-            old_total = acc.quantity * acc.unit_price
-            new_qty = acc.quantity + body.qty
-            acc.unit_price = (old_total + body.total_price) / new_qty
-        acc.quantity = max(0, acc.quantity + body.qty)
+        cur = acc.quantity or 0
+
+        if body.mode == "set":
+            # Definir une valeur absolue : correction d'inventaire. Le prix
+            # unitaire NE bouge PAS -- on ne connait pas le prix de ce qui a ete
+            # compte, on ne fait que rectifier le nombre.
+            target = body.new_quantity if body.new_quantity is not None else cur
+            acc.quantity = max(0, int(target))
+
+        elif body.mode == "remove":
+            # Retirer du stock : perte, casse, utilise ailleurs. On borne a ce
+            # qui existe et le prix reste inchange -- retirer des unites ne
+            # renseigne rien sur leur cout.
+            acc.quantity = max(0, cur - abs(body.qty))
+
+        else:  # "add"
+            add = abs(body.qty)
+            if add > 0 and body.total_price > 0:
+                # Prix moyen pondere : (valeur existante + cout du lot) / total.
+                old_value = cur * (acc.unit_price or 0)
+                acc.unit_price = (old_value + body.total_price) / (cur + add)
+            acc.quantity = cur + add
+
         await db.commit()
         return {"id": acc.id, "quantity": acc.quantity, "unit_price": acc.unit_price}
 

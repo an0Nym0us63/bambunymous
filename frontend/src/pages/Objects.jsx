@@ -31,6 +31,8 @@ function AccessorySheet({ accId, onClose, onChanged }) {
   // distinctes pour que basculer de mode ne mélange pas les valeurs saisies.
   const [priceMode, setPriceMode] = React.useState("total");  // total | unit
   const [unitInput, setUnitInput] = React.useState("");
+  const [stockMode, setStockMode] = React.useState("add");    // add | remove | set
+  const [setValue, setSetValue] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [confirmDel, setConfirmDel] = React.useState(false);
   const fileRef = React.useRef(null);
@@ -63,16 +65,25 @@ function AccessorySheet({ accId, onClose, onChanged }) {
   };
 
   const doRestock = async () => {
-    const qty = parseInt(restock.qty || "0", 10);
-    if (!qty) return;
+    let payload;
+    if (stockMode === "set") {
+      const v = parseInt(setValue, 10);
+      if (Number.isNaN(v) || v < 0) return;
+      payload = { mode:"set", qty:0, new_quantity:v };
+    } else {
+      const qty = parseInt(restock.qty || "0", 10);
+      if (!qty) return;
+      payload = stockMode === "remove"
+        ? { mode:"remove", qty }
+        : { mode:"add", qty, total_price: priceMode === "unit"
+              ? parseFloat(unitInput || "0") * qty
+              : parseFloat(restock.total_price || "0") };
+    }
     setBusy(true);
     try {
-      await client.post(`/objects/accessories/${accId}/stock`, {
-        qty, total_price: priceMode === "unit"
-          ? parseFloat(unitInput || "0") * qty
-          : parseFloat(restock.total_price || "0"),
-      });
-      setRestock({ qty:"", total_price:"" }); setUnitInput(""); setMode("view");
+      await client.post(`/objects/accessories/${accId}/stock`, payload);
+      setRestock({ qty:"", total_price:"" }); setUnitInput(""); setSetValue("");
+      setStockMode("add"); setMode("view");
       await load(); onChanged?.();
     } catch(e) { alert(e.response?.data?.detail || e.message); }
     setBusy(false);
@@ -202,46 +213,84 @@ function AccessorySheet({ accId, onClose, onChanged }) {
             </div>
           )}
 
-          {/* Mode reapprovisionnement */}
+          {/* Gestion du stock : ajouter, retirer, ou definir une valeur */}
           {mode === "restock" && (
             <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
-              <div><label style={lbl}>Quantité reçue</label>
-                <input style={inp} type="number" min={1} value={restock.qty} autoFocus
-                  onChange={e=>setRestock(r=>({...r,qty:e.target.value}))}/></div>
-              {/* Bascule Total / Unitaire : deux façons de saisir le meme prix.
-                  En unitaire, le total est deduit pour le prix moyen pondere. */}
-              <div>
-                <div style={{ display:"flex", gap:6, marginBottom:6 }}>
-                  {[["total","Coût du lot"],["unit","Prix / unité"]].map(([m,l])=>(
-                    <button key={m} onClick={()=>setPriceMode(m)}
-                      style={{ flex:1, padding:"6px", borderRadius:8, fontSize:11, fontWeight:600,
-                        cursor:"pointer", border:"1px solid "+(priceMode===m?"#3b82f6":"var(--border)"),
-                        background: priceMode===m?"rgba(59,130,246,0.15)":"transparent",
-                        color: priceMode===m?"#60a5fa":"var(--muted)" }}>{l}</button>
-                  ))}
-                </div>
-                {priceMode === "total" ? (
-                  <input style={inp} type="number" step="0.01" placeholder="€ pour tout le lot"
-                    value={restock.total_price}
-                    onChange={e=>setRestock(r=>({...r,total_price:e.target.value}))}/>
-                ) : (
-                  <input style={inp} type="number" step="0.01" placeholder="€ par unité"
-                    value={unitInput} onChange={e=>setUnitInput(e.target.value)}/>
-                )}
+              {/* Choix de l'operation. Retirer sert aux pertes et casses ;
+                  definir corrige un inventaire. Ni l'un ni l'autre ne touche
+                  au prix unitaire -- seul l'ajout d'un lot le recalcule. */}
+              <div style={{ display:"flex", gap:6 }}>
+                {[["add","Ajouter"],["remove","Retirer"],["set","Définir"]].map(([m,l])=>(
+                  <button key={m} onClick={()=>setStockMode(m)}
+                    style={{ flex:1, padding:"7px", borderRadius:8, fontSize:12, fontWeight:600,
+                      cursor:"pointer", border:"1px solid "+(stockMode===m?"#22c55e":"var(--border)"),
+                      background: stockMode===m?"rgba(34,197,94,0.15)":"transparent",
+                      color: stockMode===m?"#22c55e":"var(--muted)" }}>{l}</button>
+                ))}
               </div>
-              <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
-                {newAvg != null
-                  ? `Nouveau stock : ${d.quantity + parseInt(restock.qty||"0",10)} · prix moyen ${fmtPrice(newAvg)}/u`
-                  : "Laisser le coût vide pour ajouter du stock sans changer le prix unitaire."}
-              </p>
+
+              {stockMode === "set" ? (
+                <>
+                  <div><label style={lbl}>Nouveau stock</label>
+                    <input style={inp} type="number" min={0} value={setValue} autoFocus
+                      onChange={e=>setSetValue(e.target.value)}/></div>
+                  <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+                    Correction d'inventaire. Le prix unitaire ({fmtPrice(d.unit_price)}) reste inchangé.
+                  </p>
+                </>
+              ) : stockMode === "remove" ? (
+                <>
+                  <div><label style={lbl}>Quantité retirée</label>
+                    <input style={inp} type="number" min={1} max={d.quantity} value={restock.qty} autoFocus
+                      onChange={e=>setRestock(r=>({...r,qty:e.target.value}))}/></div>
+                  <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+                    Perte, casse ou utilisé ailleurs. Reste {Math.max(0, d.quantity - parseInt(restock.qty||"0",10))} en stock · prix inchangé.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <div><label style={lbl}>Quantité reçue</label>
+                    <input style={inp} type="number" min={1} value={restock.qty} autoFocus
+                      onChange={e=>setRestock(r=>({...r,qty:e.target.value}))}/></div>
+                  <div>
+                    <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+                      {[["total","Coût du lot"],["unit","Prix / unité"]].map(([m,l])=>(
+                        <button key={m} onClick={()=>setPriceMode(m)}
+                          style={{ flex:1, padding:"6px", borderRadius:8, fontSize:11, fontWeight:600,
+                            cursor:"pointer", border:"1px solid "+(priceMode===m?"#3b82f6":"var(--border)"),
+                            background: priceMode===m?"rgba(59,130,246,0.15)":"transparent",
+                            color: priceMode===m?"#60a5fa":"var(--muted)" }}>{l}</button>
+                      ))}
+                    </div>
+                    {priceMode === "total" ? (
+                      <input style={inp} type="number" step="0.01" placeholder="€ pour tout le lot"
+                        value={restock.total_price}
+                        onChange={e=>setRestock(r=>({...r,total_price:e.target.value}))}/>
+                    ) : (
+                      <input style={inp} type="number" step="0.01" placeholder="€ par unité"
+                        value={unitInput} onChange={e=>setUnitInput(e.target.value)}/>
+                    )}
+                  </div>
+                  <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+                    {newAvg != null
+                      ? `Nouveau stock : ${d.quantity + parseInt(restock.qty||"0",10)} · prix moyen ${fmtPrice(newAvg)}/u`
+                      : "Laisser le coût vide pour ajouter du stock sans changer le prix unitaire."}
+                  </p>
+                </>
+              )}
+
               <div style={{ display:"flex", gap:8 }}>
-                <button onClick={()=>setMode("view")}
+                <button onClick={()=>{ setMode("view"); setStockMode("add"); }}
                   style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
                     background:"var(--surface2)", color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
-                <button onClick={doRestock} disabled={busy || !restock.qty}
-                  style={{ flex:2, padding:"10px", borderRadius:10, border:"none", background:"#22c55e",
+                <button onClick={doRestock}
+                  disabled={busy || (stockMode==="set" ? setValue==="" : !restock.qty)}
+                  style={{ flex:2, padding:"10px", borderRadius:10, border:"none",
+                    background: stockMode==="remove" ? "#f59e0b" : stockMode==="set" ? "#3b82f6" : "#22c55e",
                     color:"white", fontSize:13, fontWeight:700, cursor:"pointer",
-                    opacity:(busy||!restock.qty)?0.6:1 }}>Ajouter au stock</button>
+                    opacity:(busy || (stockMode==="set"?setValue==="":!restock.qty))?0.6:1 }}>
+                  {stockMode==="remove" ? "Retirer" : stockMode==="set" ? "Définir" : "Ajouter au stock"}
+                </button>
               </div>
             </div>
           )}
@@ -272,10 +321,10 @@ function AccessorySheet({ accId, onClose, onChanged }) {
                 style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid var(--border)",
                   background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700,
                   cursor:"pointer" }}>✏️ Modifier</button>
-              <button onClick={()=>setMode("restock")}
+              <button onClick={()=>{ setStockMode("add"); setSetValue(String(d.quantity)); setMode("restock"); }}
                 style={{ flex:1, padding:"10px", borderRadius:10, border:"1px solid rgba(34,197,94,0.3)",
                   background:"rgba(34,197,94,0.06)", color:"#22c55e", fontSize:12, fontWeight:700,
-                  cursor:"pointer" }}>+ Stock</button>
+                  cursor:"pointer" }}>Stock</button>
               <button onClick={()=> confirmDel ? remove() : setConfirmDel(true)} disabled={busy}
                 style={{ padding:"10px 14px", borderRadius:10, border:"1px solid rgba(239,68,68,0.3)",
                   background: confirmDel ? "#ef4444" : "rgba(239,68,68,0.06)",
