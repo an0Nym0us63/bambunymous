@@ -2263,7 +2263,7 @@ export default function Filaments() {
   const closeDeep = () => {
     setDeepFil(null); setDeepErr(null);
     const next = new URLSearchParams(searchParams);
-    next.delete("id"); next.delete("spool");
+    next.delete("id"); next.delete("spool"); next.delete("swatch");
     setSearchParams(next, { replace: true });
   };
 
@@ -2305,7 +2305,12 @@ export default function Filaments() {
   const [scanOpen, setScanOpen] = useState(false);
   const onScanned = (id) => {
     setScanOpen(false);
-    setSearchParams({ id }, { replace: false });
+    // Ce scanner-ci est celui des ECHANTILLONS (les deux boutons qui l'ouvrent
+    // disent "Scanner un echantillon") : tout ce qui en sort est donc, par
+    // construction, le QR d'un echantillon. On ajoute swatch=1, ce qui fait
+    // cocher la case avant l'ouverture de la fiche -- sans rien attendre de
+    // l'app Android, l'information est deja connue ici.
+    setSearchParams({ id, swatch: "1" }, { replace: false });
   };
 
   const FAMILIES_G = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];
