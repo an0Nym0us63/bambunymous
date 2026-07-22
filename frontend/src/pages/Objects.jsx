@@ -26,6 +26,11 @@ function AccessorySheet({ accId, onClose, onChanged }) {
   const [mode, setMode] = React.useState("view");     // view | edit | restock
   const [form, setForm] = React.useState({ name:"", quantity:"", unit_price:"" });
   const [restock, setRestock] = React.useState({ qty:"", total_price:"" });
+  // Le prix peut se saisir en TOTAL (coût du lot) ou en UNITAIRE. Le serveur
+  // n'attend qu'un total ; l'unitaire est donc converti a l'envoi. Deux clés
+  // distinctes pour que basculer de mode ne mélange pas les valeurs saisies.
+  const [priceMode, setPriceMode] = React.useState("total");  // total | unit
+  const [unitInput, setUnitInput] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const [confirmDel, setConfirmDel] = React.useState(false);
   const fileRef = React.useRef(null);
@@ -63,9 +68,11 @@ function AccessorySheet({ accId, onClose, onChanged }) {
     setBusy(true);
     try {
       await client.post(`/objects/accessories/${accId}/stock`, {
-        qty, total_price: parseFloat(restock.total_price || "0"),
+        qty, total_price: priceMode === "unit"
+          ? parseFloat(unitInput || "0") * qty
+          : parseFloat(restock.total_price || "0"),
       });
-      setRestock({ qty:"", total_price:"" }); setMode("view");
+      setRestock({ qty:"", total_price:"" }); setUnitInput(""); setMode("view");
       await load(); onChanged?.();
     } catch(e) { alert(e.response?.data?.detail || e.message); }
     setBusy(false);
@@ -103,7 +110,10 @@ function AccessorySheet({ accId, onClose, onChanged }) {
   const newAvg = (() => {
     if (!d) return null;
     const q = parseInt(restock.qty || "0", 10);
-    const tp = parseFloat(restock.total_price || "0");
+    // Total effectif selon le mode : en unitaire, total = prix/u × quantité.
+    const tp = priceMode === "unit"
+      ? parseFloat(unitInput || "0") * q
+      : parseFloat(restock.total_price || "0");
     if (!q || !tp) return null;
     return ((d.quantity * d.unit_price) + tp) / (d.quantity + q);
   })();
@@ -195,13 +205,29 @@ function AccessorySheet({ accId, onClose, onChanged }) {
           {/* Mode reapprovisionnement */}
           {mode === "restock" && (
             <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
-              <div style={{ display:"flex", gap:8 }}>
-                <div style={{ flex:1 }}><label style={lbl}>Quantité reçue</label>
-                  <input style={inp} type="number" min={1} value={restock.qty} autoFocus
-                    onChange={e=>setRestock(r=>({...r,qty:e.target.value}))}/></div>
-                <div style={{ flex:1 }}><label style={lbl}>Coût du lot (€)</label>
-                  <input style={inp} type="number" step="0.01" value={restock.total_price}
-                    onChange={e=>setRestock(r=>({...r,total_price:e.target.value}))}/></div>
+              <div><label style={lbl}>Quantité reçue</label>
+                <input style={inp} type="number" min={1} value={restock.qty} autoFocus
+                  onChange={e=>setRestock(r=>({...r,qty:e.target.value}))}/></div>
+              {/* Bascule Total / Unitaire : deux façons de saisir le meme prix.
+                  En unitaire, le total est deduit pour le prix moyen pondere. */}
+              <div>
+                <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+                  {[["total","Coût du lot"],["unit","Prix / unité"]].map(([m,l])=>(
+                    <button key={m} onClick={()=>setPriceMode(m)}
+                      style={{ flex:1, padding:"6px", borderRadius:8, fontSize:11, fontWeight:600,
+                        cursor:"pointer", border:"1px solid "+(priceMode===m?"#3b82f6":"var(--border)"),
+                        background: priceMode===m?"rgba(59,130,246,0.15)":"transparent",
+                        color: priceMode===m?"#60a5fa":"var(--muted)" }}>{l}</button>
+                  ))}
+                </div>
+                {priceMode === "total" ? (
+                  <input style={inp} type="number" step="0.01" placeholder="€ pour tout le lot"
+                    value={restock.total_price}
+                    onChange={e=>setRestock(r=>({...r,total_price:e.target.value}))}/>
+                ) : (
+                  <input style={inp} type="number" step="0.01" placeholder="€ par unité"
+                    value={unitInput} onChange={e=>setUnitInput(e.target.value)}/>
+                )}
               </div>
               <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
                 {newAvg != null
@@ -266,10 +292,18 @@ function AccessorySheet({ accId, onClose, onChanged }) {
 
 // ── Creation d'un accessoire ──────────────────────────────────────────────
 function AccessoryCreateSheet({ onClose, onCreated }) {
-  const [form, setForm] = React.useState({ name:"", quantity:"0", unit_price:"0" });
+  const [form, setForm] = React.useState({ name:"", quantity:"0", unit_price:"0", total_price:"" });
+  const [priceMode, setPriceMode] = React.useState("unit");  // unit | total
   const [busy, setBusy] = React.useState(false);
   const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
     padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none", width:"100%", boxSizing:"border-box" };
+
+  const qty = parseInt(form.quantity || "0", 10);
+  // Prix unitaire effectif : saisi tel quel, ou deduit du total reparti sur la
+  // quantite. Repartir un total sans quantite n'a pas de sens -> 0.
+  const effUnit = priceMode === "total"
+    ? (qty > 0 ? parseFloat(form.total_price || "0") / qty : 0)
+    : parseFloat(form.unit_price || "0");
   const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
     letterSpacing:"0.05em", marginBottom:4, display:"block" };
 
@@ -279,8 +313,10 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
     try {
       const r = await client.post("/objects/accessories", {
         name: form.name.trim(),
-        quantity: parseInt(form.quantity || "0", 10),
-        unit_price: parseFloat(form.unit_price || "0"),
+        quantity: qty,
+        // Le serveur stocke un prix unitaire : on lui envoie l'unitaire
+        // effectif, que l'utilisateur ait saisi l'un ou l'autre.
+        unit_price: effUnit,
       });
       onCreated?.(r.data?.id);
     } catch(e) {
@@ -300,15 +336,33 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
           <div><label style={lbl}>Nom</label>
             <input style={inp} autoFocus value={form.name} placeholder="Ex : Aimant 10×3"
               onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
-          <div style={{ display:"flex", gap:8 }}>
-            <div style={{ flex:1 }}><label style={lbl}>Stock initial</label>
-              <input style={inp} type="number" value={form.quantity}
-                onChange={e=>setForm(f=>({...f,quantity:e.target.value}))}/></div>
-            <div style={{ flex:1 }}><label style={lbl}>Prix unitaire (€)</label>
-              <input style={inp} type="number" step="0.01" value={form.unit_price}
-                onChange={e=>setForm(f=>({...f,unit_price:e.target.value}))}/></div>
+          <div><label style={lbl}>Stock initial</label>
+            <input style={inp} type="number" value={form.quantity}
+              onChange={e=>setForm(f=>({...f,quantity:e.target.value}))}/></div>
+          <div>
+            <div style={{ display:"flex", gap:6, marginBottom:6 }}>
+              {[["unit","Prix / unité"],["total","Coût total"]].map(([m,l])=>(
+                <button key={m} onClick={()=>setPriceMode(m)}
+                  style={{ flex:1, padding:"6px", borderRadius:8, fontSize:11, fontWeight:600,
+                    cursor:"pointer", border:"1px solid "+(priceMode===m?"#3b82f6":"var(--border)"),
+                    background: priceMode===m?"rgba(59,130,246,0.15)":"transparent",
+                    color: priceMode===m?"#60a5fa":"var(--muted)" }}>{l}</button>
+              ))}
+            </div>
+            {priceMode === "unit" ? (
+              <input style={inp} type="number" step="0.01" placeholder="€ par unité"
+                value={form.unit_price}
+                onChange={e=>setForm(f=>({...f,unit_price:e.target.value}))}/>
+            ) : (
+              <input style={inp} type="number" step="0.01" placeholder="€ pour tout le stock"
+                value={form.total_price}
+                onChange={e=>setForm(f=>({...f,total_price:e.target.value}))}/>
+            )}
           </div>
           <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+            {priceMode === "total" && qty > 0
+              ? `Soit ${fmtPrice(effUnit)} / unité. `
+              : ""}
             La photo pourra être ajoutée depuis la fiche, juste après la création.
           </p>
         </div>
