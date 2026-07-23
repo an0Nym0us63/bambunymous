@@ -681,8 +681,25 @@ async def update_spool(
     s = await _load_spool(db, sid)
     if not s:
         raise HTTPException(404, "Bobine introuvable")
-    changed_price = "price_override" in body.model_dump(exclude_none=True)
-    for k, v in body.model_dump(exclude_none=True).items():
+    # exclude_unset et non exclude_none : le second ignorait les champs envoyes
+    # a null, si bien qu'AUCUN champ ne pouvait etre vide. Vider le tag NFC
+    # etait donc impossible -- utile pourtant, par exemple pour renvoyer une
+    # bobine dans les detections non attribuees du scan RFID.
+    #
+    # La distinction : "absent du corps" veut dire ne pas toucher, "present a
+    # null" veut dire effacer. Les trois appelants n'envoient qu'un champ a la
+    # fois, aucun risque d'effacement collateral.
+    data = body.model_dump(exclude_unset=True)
+
+    # Chaine vide traitee comme un effacement : selon le chemin, le client
+    # envoie l'un ou l'autre, et un "" en base ressemblerait a un tag valide
+    # lors des comparaisons.
+    for k in ("tag_number", "location", "comment"):
+        if k in data and isinstance(data[k], str) and not data[k].strip():
+            data[k] = None
+
+    changed_price = "price_override" in data
+    for k, v in data.items():
         setattr(s, k, v)
     await db.commit()
     _clear_match_cache()

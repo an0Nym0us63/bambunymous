@@ -523,7 +523,9 @@ function TagEditRow({ spoolId, current, onUpdated }) {
       <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>Tag NFC</span>
       {editing ? (
         <div style={{ display:"flex", gap:6, alignItems:"center", flex:1, justifyContent:"flex-end" }}>
-          <input value={val} autoFocus placeholder="UID"
+          {/* Le placeholder dit ce que le champ vide provoque : sans lui, rien
+              n'indique qu'effacer detache le tag. */}
+          <input value={val} autoFocus placeholder="UID — vide = détacher"
             onChange={e => setVal(e.target.value)}
             onKeyDown={e => { if(e.key==="Enter") save(); if(e.key==="Escape") setEditing(false); }}
             style={{ flex:1, maxWidth:190, padding:"4px 8px", borderRadius:7, fontSize:12,
