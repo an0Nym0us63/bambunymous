@@ -770,10 +770,15 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Dernier séchage" value={spool.last_dried_at?.slice(0,10)}/>
           <Row label="Commentaire"    value={spool.comment}/>
 
-          {/* ── Filament (catalogue) ── */}
+          {/* ── Filament ── */}
           <div style={{ display:"flex", alignItems:"center", gap:8, margin:"16px 0 4px" }}>
+            {/* Meme forme que "Bobine #26" juste au-dessus : le numero identifie
+                la fiche et rend les deux sections symetriques. "(catalogue)"
+                disparait, l'icone a cote suffit a dire ou l'on va. */}
             <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-              letterSpacing:"0.08em", margin:0 }}>Filament (catalogue)</p>
+              letterSpacing:"0.08em", margin:0 }}>
+              Filament{spool.filament_id ? ` #${spool.filament_id}` : ""}
+            </p>
             {spool.filament_id && (
               <button
                 onClick={openFilament}
