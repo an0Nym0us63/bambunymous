@@ -83,6 +83,57 @@ async def objects_stats(_: str = Depends(get_current_user)):
     """Statistiques agregees sur les objets : inventaire, ventes, marge."""
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Object))).scalars().all()
+        accs = (await db.execute(select(Accessory))).scalars().all()
+        links = (await db.execute(select(ObjectAccessory))).scalars().all()
+
+    # ── Accessoires ────────────────────────────────────────────────────────
+    # Depuis le passage au modele "stock = disponible", quantity est ce qui
+    # reste sur l'etagere et les liens representent ce qui est parti dans des
+    # objets. Le patrimoine total est donc la somme des deux, et les separer
+    # est la seule facon de repondre a "qu'est-ce que j'ai encore" sans
+    # confondre avec "qu'est-ce que j'ai achete".
+    used_by_acc: dict[int, int] = {}
+    for lk in links:
+        used_by_acc[lk.accessory_id] = used_by_acc.get(lk.accessory_id, 0) + (lk.quantity or 0)
+
+    acc_stock_units = sum((a.quantity or 0) for a in accs)
+    acc_used_units  = sum(used_by_acc.values())
+    acc_stock_value = sum((a.quantity or 0) * (a.unit_price or 0) for a in accs)
+    # Valeur engagee au prix FIGE au moment du lien, pas au prix courant : c'est
+    # ce que l'objet a reellement coute, et c'est ce qui alimente sa marge.
+    acc_used_value = sum((lk.quantity or 0) * (lk.unit_price_at_link or 0) for lk in links)
+
+    # Rupture = plus rien en stock alors que l'accessoire sert quelque part.
+    # Un accessoire a zero jamais utilise n'est pas une rupture, juste une fiche.
+    acc_out = [a for a in accs if (a.quantity or 0) == 0 and used_by_acc.get(a.id, 0) > 0]
+
+    def _acc_value(a):
+        return (a.quantity or 0) * (a.unit_price or 0)
+
+    accessories = {
+        "count": len(accs),
+        "stock_units": acc_stock_units,
+        "used_units": acc_used_units,
+        "stock_value": round(acc_stock_value, 2),
+        "used_value": round(acc_used_value, 2),
+        "total_value": round(acc_stock_value + acc_used_value, 2),
+        "out_of_stock": len(acc_out),
+        "out_of_stock_names": [a.name for a in acc_out][:8],
+        "objects_with_accessories": len({lk.object_id for lk in links}),
+        # Les plus immobilisants : la ou l'argent dort.
+        "top_value": [
+            {"id": a.id, "name": a.name, "qty": a.quantity or 0,
+             "value": round(_acc_value(a), 2)}
+            for a in sorted(accs, key=_acc_value, reverse=True)[:5]
+            if _acc_value(a) > 0
+        ],
+        # Les plus employes : ceux qu'il ne faut jamais laisser tomber a zero.
+        "top_used": [
+            {"id": a.id, "name": a.name, "used": used_by_acc.get(a.id, 0)}
+            for a in sorted(accs, key=lambda x: used_by_acc.get(x.id, 0), reverse=True)[:5]
+            if used_by_acc.get(a.id, 0) > 0
+        ],
+    }
 
     total = len(rows)
     sold = [o for o in rows if (o.sold_price or 0) > 0]
@@ -100,6 +151,7 @@ async def objects_stats(_: str = Depends(get_current_user)):
     top_margin = sorted(sold, key=_m, reverse=True)[:5]
 
     return {
+        "accessories": accessories,
         "total": total,
         "available": len(available),
         "sold": len(sold),

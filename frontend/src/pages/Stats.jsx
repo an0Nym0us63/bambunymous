@@ -49,6 +49,7 @@ function ObjectsStats({ stats, onOpen }) {
     </p>
   );
   const marginColor = stats.margin >= 0 ? "#22c55e" : "#ef4444";
+  const acc = stats.accessories;
   return (
     <>
       <Section title="Inventaire">
@@ -127,6 +128,60 @@ function ObjectsStats({ stats, onOpen }) {
                   color={o.margin >= 0 ? "#22c55e" : "#ef4444"}/>
               );
             })}
+          </div>
+        </Section>
+      )}
+
+      {acc && acc.count > 0 && (
+        <Section title="Accessoires">
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",
+            gap:10, marginBottom:12 }}>
+            <KpiCard icon={Package} label="Références" value={acc.count} color="#3b82f6"
+              sub={`${acc.stock_units} en stock`}/>
+            {/* Stock et engage separes : depuis que lier un accessoire le sort
+                du stock, ce sont deux realites distinctes -- ce qui reste sur
+                l'etagere, et ce qui est deja parti dans des objets. */}
+            <KpiCard icon={Euro} label="Valeur du stock" value={fmtEur(acc.stock_value)}
+              color="#22c55e" sub={`${acc.stock_units} unité${acc.stock_units>1?"s":""}`}/>
+            <KpiCard icon={Euro} label="Engagé dans les objets" value={fmtEur(acc.used_value)}
+              color="#8b5cf6" sub={`${acc.used_units} unité${acc.used_units>1?"s":""}`}/>
+            <KpiCard icon={TrendingUp} label="Total achete" value={fmtEur(acc.total_value)}
+              color="#06b6d4" sub={`${acc.objects_with_accessories} objet${acc.objects_with_accessories>1?"s":""} équipé${acc.objects_with_accessories>1?"s":""}`}/>
+            {acc.out_of_stock > 0 && (
+              <KpiCard icon={Tag} label="En rupture" value={acc.out_of_stock} color="#ef4444"
+                sub={acc.out_of_stock_names.slice(0,2).join(", ")}/>
+            )}
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",
+            gap:12 }}>
+            {/* Ou l'argent dort : utile avant de recommander. */}
+            {(acc.top_value || []).length > 0 && (
+              <div className="card" style={{ padding:"14px 16px" }}>
+                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:"0 0 10px" }}>
+                  Stock le plus immobilisant
+                </p>
+                {acc.top_value.map(a => (
+                  <Bar key={a.id} label={a.name} value={a.value}
+                    max={acc.top_value[0].value || 1}
+                    sublabel={`${fmtEur(a.value)} · ${a.qty} en stock`} color="#8b5cf6"/>
+                ))}
+              </div>
+            )}
+            {/* Les plus employes : ceux a ne jamais laisser tomber a zero. */}
+            {(acc.top_used || []).length > 0 && (
+              <div className="card" style={{ padding:"14px 16px" }}>
+                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:"0 0 10px" }}>
+                  Les plus utilisés
+                </p>
+                {acc.top_used.map(a => (
+                  <Bar key={a.id} label={a.name} value={a.used}
+                    max={acc.top_used[0].used || 1}
+                    sublabel={`${a.used} unité${a.used>1?"s":""} posée${a.used>1?"s":""}`}
+                    color="#3b82f6"/>
+                ))}
+              </div>
+            )}
           </div>
         </Section>
       )}
