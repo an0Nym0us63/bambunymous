@@ -9,6 +9,7 @@ import { useTrackDetail } from "../utils/track";
 import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
 import PhotoAddButton from "../components/PhotoAddButton";
+import GroupMosaic from "../components/GroupMosaic";
 import Select from "../components/Select";
 
 // PARTIAL et TO_REDO viennent de Spoolnymous, qui gerait cinq statuts. Les
@@ -1946,6 +1947,18 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
       getPhotos={it => it.photos||[]}
       getTitle={it => it.title||"Sans nom"}
       getSubtitle={it => it.kind==="group" ? `📁 ${it.count} prints` : fmtDate(it.print_date)}
+      /* Mosaique pour les GROUPES seulement : une image unique ne disait pas
+         qu'il y avait un ensemble derriere, et n'en montrait qu'une piece sur
+         huit. Les prints gardent leur photo unique, il n'y a rien a composer. */
+      renderCover={it => it.kind === "group"
+        ? <GroupMosaic photos={it.photos} title={it.title} cover={it.cover_photo}/>
+        : (it.photos?.[0]?.url
+            ? <img src={it.photos[0].url} alt={it.title||""}
+                style={{ width:"100%", height:"100%", objectFit:"cover" }}
+                onError={e => { e.currentTarget.style.display="none"; }}/>
+            : <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
+                height:"100%", color:"var(--muted)", fontSize:10, padding:6,
+                textAlign:"center" }}>{it.title||"Sans nom"}</div>)}
       emptyLabel="Aucune photo disponible"
       onItemClick={it => {
         if (it.kind==="group") setSelectedGroup(it);

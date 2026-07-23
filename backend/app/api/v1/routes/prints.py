@@ -440,7 +440,10 @@ async def prints_gallery(_: str = Depends(get_current_user)):
             acc["photos"].sort(key=lambda ph: (ph.get("name") or ph.get("label")) != cover)
 
     groups = [
-        {**{k: v for k, v in g.items() if k != "cover_photo"},
+        # cover_photo est CONSERVE dans la reponse : la mosaique s'en sert pour
+        # donner la place dominante a la photo choisie. Il etait filtre quand il
+        # ne servait qu'au tri interne.
+        {**g,
          "cost_per_item": round(g["total_cost"] / g["number_of_items"], 2) if g.get("number_of_items", 1) > 1 else None}
         for g in group_acc.values() if g["photos"]
     ]
