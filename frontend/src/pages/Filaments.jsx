@@ -713,9 +713,12 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                 letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                 {spool.filament_translated_name || spool.filament_name}
               </p>
+              {/* Marque en tete puis sous-type : meme ordre que la fiche
+                  filament, les deux se lisent desormais pareil. */}
               <p style={{ fontSize:13, color:"var(--muted)", margin:"4px 0 0" }}>
-                {spool.filament_fila_type || spool.filament_material}
-                {spool.filament_manufacturer ? ` · ${spool.filament_manufacturer}` : ""}
+                {[spool.filament_manufacturer,
+                  spool.filament_fila_type || spool.filament_material]
+                  .filter(Boolean).join(" · ")}
               </p>
               <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:4 }}>
                 {spool.archived && (
@@ -1465,15 +1468,20 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
             <div style={{ width:56, height:56, borderRadius:14, flexShrink:0,
               overflow:"hidden", boxShadow:"0 2px 12px rgba(0,0,0,0.2), inset 0 0 0 2px var(--border)", ...colorBg(colorsList, f.multicolor_type) }}/>
             <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ fontSize:18, fontWeight:800, color:"var(--text)", margin:0,
-                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              <p style={{ fontSize:20, fontWeight:800, color:"var(--text)", margin:0,
+                letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                 {f.translated_name || f.name}
               </p>
               {f.translated_name && f.translated_name !== f.name && (
                 <p style={{ fontSize:11, color:"var(--muted)", margin:"2px 0 0" }}>{f.name}</p>
               )}
-              <p style={{ fontSize:12, color:"var(--muted)", margin:"4px 0 0" }}>
-                {[f.manufacturer, f.material].filter(Boolean).join(" · ")}
+              {/* Marque puis SOUS-TYPE, comme sur la fiche bobine. On affichait
+                  ici la matiere (PLA), c'est-a-dire la famille : le sous-type
+                  (PLA Basic) est l'information utile, et il implique deja la
+                  matiere. Repli sur la matiere quand aucun sous-type n'est
+                  renseigne. */}
+              <p style={{ fontSize:13, color:"var(--muted)", margin:"4px 0 0" }}>
+                {[f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
               </p>
               {/* Indicateur echantillon (nuancier) imprime ou non. */}
               <span style={{ display:"inline-flex", alignItems:"center", gap:4, marginTop:6,
@@ -2517,7 +2525,7 @@ export default function Filaments() {
               getCoverImage={f => f.photo_url}
               getPhotos={f => f.photos}
               getTitle={f => f.name}
-              getSubtitle={f => [f.manufacturer, f.material].filter(Boolean).join(" · ")}
+              getSubtitle={f => [f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
               emptyLabel="Aucune photo de filament"
               compareFields={[
                 ["Matière",   f => f.material],
