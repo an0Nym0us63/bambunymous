@@ -153,7 +153,12 @@ async def _migrate_object_status():
                  OR (status = 'available' AND (
                         (sold_price IS NOT NULL AND sold_price > 0)
                      OR personal = 1
-                     OR available = 0)))
+                     OR available = 0))
+                 -- Rattrape les dons classes "indisponible" par la version
+                 -- precedente, qui ne connaissait pas encore ce cas.
+                 OR (status = 'unavailable'
+                     AND sold_price IS NOT NULL AND sold_price = 0
+                     AND personal = 0))
             """)
             n = (await conn.execute(_text(
                 f"SELECT COUNT(*) FROM objects WHERE {cond}"))).scalar()
@@ -163,6 +168,12 @@ async def _migrate_object_status():
                 UPDATE objects SET status = CASE
                     WHEN sold_price IS NOT NULL AND sold_price > 0 THEN 'sold'
                     WHEN personal = 1                              THEN 'personal'
+                    -- Spoolnymous encodait un CADEAU par sold_price = 0 avec
+                    -- personal = 0 (cf. gifted_count dans son objects.py).
+                    -- L'information a survecu a l'import : un prix de vente a
+                    -- zero n'est pas une absence de prix, c'est un don. Sans ce
+                    -- cas, ces objets tombaient en "indisponible".
+                    WHEN sold_price IS NOT NULL AND sold_price = 0 THEN 'gifted'
                     WHEN available = 0                             THEN 'unavailable'
                     ELSE 'available'
                 END
