@@ -55,11 +55,18 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
       {!empty && isGradient ? (
         <circle cx="40" cy="40" r="30" fill={`url(#${uid})`}/>
       ) : multi && !empty ? (
-        // Secteurs de couleur (pie chart SVG) — coaxial et autres types
+        // Secteurs de couleur (pie chart SVG) — coaxial et autres types.
+        //
+        // Depart a 6h (+PI/2) et non a midi : les secteurs tournent dans le sens
+        // horaire, si bien qu'un depart a midi placait la PREMIERE couleur a
+        // DROITE. Or partout ailleurs -- bandeau des tuiles, pastilles, aplats
+        // du nuancier -- colorBg la place a GAUCHE. La meme bobine se lisait
+        // donc en miroir selon l'element regarde. Le degrade, lui, etait deja
+        // oriente de gauche a droite et n'a pas bouge.
         colors.map((cl, i) => {
           const total = colors.length;
-          const startAngle = (i / total) * 2 * Math.PI - Math.PI / 2;
-          const endAngle   = ((i + 1) / total) * 2 * Math.PI - Math.PI / 2;
+          const startAngle = (i / total) * 2 * Math.PI + Math.PI / 2;
+          const endAngle   = ((i + 1) / total) * 2 * Math.PI + Math.PI / 2;
           const x1 = 40 + 30 * Math.cos(startAngle);
           const y1 = 40 + 30 * Math.sin(startAngle);
           const x2 = 40 + 30 * Math.cos(endAngle);
