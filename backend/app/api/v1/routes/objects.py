@@ -206,6 +206,34 @@ async def list_objects(
     return {"total": total, "items": [_obj_out(o) for o in rows]}
 
 
+@router.get("/objects/quota")
+async def objects_quota(
+    parent_type: str, parent_id: int,
+    _: str = Depends(get_current_user),
+):
+    """
+    Combien d'objets un print ou un groupe autorise-t-il encore.
+
+    Le serveur plafonnait deja la creation, mais silencieusement : l'interface
+    ne pouvait ni afficher le restant ni desactiver le bouton, si bien qu'on
+    decouvrait la limite en la heurtant. Elle peut desormais le demander.
+    """
+    from ....models.print_history import Print, Group as PGroup
+    async with AsyncSessionLocal() as db:
+        if parent_type == "print":
+            src = await db.get(Print, parent_id)
+        else:
+            src = await db.get(PGroup, parent_id)
+        if not src:
+            raise HTTPException(404, "Parent introuvable")
+        nb_items = src.number_of_items or 1
+        used = (await db.execute(
+            select(func.count()).select_from(Object)
+            .where(Object.parent_type == parent_type, Object.parent_id == parent_id)
+        )).scalar() or 0
+    return {"total": nb_items, "used": used, "remaining": max(0, nb_items - used)}
+
+
 @router.get("/objects/{oid}")
 async def get_object(oid: int, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
@@ -418,34 +446,6 @@ class ObjectCreate(BaseModel):
     # l'appelant plutot que de choisir a sa place.
     group_new: bool = False           # regrouper les objets crees dans un nouveau groupe
     group_name: Optional[str] = None  # nom de ce groupe (defaut : nom de l'objet)
-
-@router.get("/objects/quota")
-async def objects_quota(
-    parent_type: str, parent_id: int,
-    _: str = Depends(get_current_user),
-):
-    """
-    Combien d'objets un print ou un groupe autorise-t-il encore.
-
-    Le serveur plafonnait deja la creation, mais silencieusement : l'interface
-    ne pouvait ni afficher le restant ni desactiver le bouton, si bien qu'on
-    decouvrait la limite en la heurtant. Elle peut desormais le demander.
-    """
-    from ....models.print_history import Print, Group as PGroup
-    async with AsyncSessionLocal() as db:
-        if parent_type == "print":
-            src = await db.get(Print, parent_id)
-        else:
-            src = await db.get(PGroup, parent_id)
-        if not src:
-            raise HTTPException(404, "Parent introuvable")
-        nb_items = src.number_of_items or 1
-        used = (await db.execute(
-            select(func.count()).select_from(Object)
-            .where(Object.parent_type == parent_type, Object.parent_id == parent_id)
-        )).scalar() or 0
-    return {"total": nb_items, "used": used, "remaining": max(0, nb_items - used)}
-
 
 @router.post("/objects")
 async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user)):
