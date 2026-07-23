@@ -55,7 +55,16 @@ async def _root_admin_id(db: AsyncSession) -> Optional[int]:
 
 @router.get("", response_model=List[UserOut])
 async def list_users(db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
-    rows = (await db.execute(select(User).order_by(User.username))).scalars().all()
+    # Derniere connexion en tete, comptes jamais connectes a la fin.
+    #
+    # Le is_(None) en premier critere plutot qu'un NULLS LAST : cette clause
+    # n'existe qu'a partir de SQLite 3.30, et un booleen trie (False avant
+    # True) donne le meme resultat partout sans dependre de la version
+    # embarquee. Nom en tri secondaire, pour que les jamais-connectes gardent
+    # un ordre stable entre eux.
+    rows = (await db.execute(
+        select(User).order_by(User.last_seen.is_(None), User.last_seen.desc(), User.username)
+    )).scalars().all()
     root = await _root_admin_id(db)
     return [_out(u, protected=(u.id == root)) for u in rows]
 
