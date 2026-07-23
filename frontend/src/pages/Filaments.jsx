@@ -1352,7 +1352,9 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     fila_color_code:  f.fila_color_code || "",
     filament_weight_g: f.filament_weight_g || 1000,
     spool_weight_g:   f.spool_weight_g || "",
-    price:            f.price || "",
+    // != null et non "||" : un filament a 0 EUR (offert, echantillon) affichait
+    // un champ VIDE, et le reenregistrer effacait le zero saisi.
+    price:            f.price != null ? f.price : "",
     comment:          f.comment || "",
     swatch:           f.swatch || false,
     to_order:         f.to_order || false,

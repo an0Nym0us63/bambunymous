@@ -613,16 +613,23 @@ async def _costs(db, p: Print):
             fi = fils.get(sp.filament_id) if sp and sp.filament_id else None
             w_ref = (fi.filament_weight_g if fi and fi.filament_weight_g else None) or 1000.0
 
-            price_sp = (sp.price_override or 0) if sp else 0      # prix de LA bobine
-            price_fi = (fi.price or 0) if fi else 0               # prix du filament (reference)
+            # None = non renseigne, 0 = renseigne A ZERO. La distinction compte :
+            # une bobine offerte, un echantillon ou une fin de bobine saisie a 0
+            # doivent couter 0, pas retomber sur le tarif catalogue. Un "or"
+            # confondait les deux, puisque 0 est faux en Python -- le prix saisi
+            # etait alors silencieusement remplace.
+            price_sp = sp.price_override if sp else None          # prix de LA bobine
+            price_fi = fi.price if fi else None                   # prix du filament (reference)
 
             # Coût 1 (principal) : bobine -> sinon filament -> sinon 20 €/kg.
-            price_ov = price_sp or price_fi or DEFAULT_PRICE_PER_KG
+            price_ov = (price_sp if price_sp is not None
+                        else price_fi if price_fi is not None
+                        else DEFAULT_PRICE_PER_KG)
             cost_ov  = round(g * price_ov / w_ref, 4)
 
             # Coût 2 (entre parenthèses) : filament -> sinon 20 €/kg. Il ignore
             # volontairement le prix de la bobine : c'est le coût "au tarif catalogue".
-            price_no = price_fi or DEFAULT_PRICE_PER_KG
+            price_no = price_fi if price_fi is not None else DEFAULT_PRICE_PER_KG
             cost_no  = round(g * price_no / w_ref, 4)
 
             u.cost        = cost_ov
