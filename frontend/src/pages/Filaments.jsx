@@ -779,6 +779,20 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
               letterSpacing:"0.08em", margin:0 }}>
               Filament{spool.filament_id ? ` #${spool.filament_id}` : ""}
             </p>
+            {/* Autres bobines du meme filament : savoir qu'il en reste evite
+                d'en racheter, et savoir qu'il n'en reste plus est le moment ou
+                on veut le savoir -- d'ou les deux etats plutot qu'un badge
+                affiche seulement quand il y a du stock. */}
+            {spool.sibling_count != null && (
+              <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px",
+                borderRadius:20, whiteSpace:"nowrap",
+                background: spool.sibling_count > 0 ? "rgba(34,197,94,0.15)" : "rgba(148,163,184,0.15)",
+                color: spool.sibling_count > 0 ? "#22c55e" : "var(--muted)" }}>
+                {spool.sibling_count > 0
+                  ? `+${spool.sibling_count} en stock${spool.sibling_weight_g ? ` · ${Math.round(spool.sibling_weight_g)}g` : ""}`
+                  : "seule bobine"}
+              </span>
+            )}
             {spool.filament_id && (
               <button
                 onClick={openFilament}

@@ -147,6 +147,11 @@ class SpoolOut(BaseModel):
     comment: Optional[str] = None
     external_spool_id: Optional[str] = None
     found_mode: Optional[str] = None
+    # Autres bobines NON archivees du meme filament (celle-ci exclue) et poids
+    # total qu'elles representent. Renseignes uniquement la ou c'est utile, pour
+    # eviter une requete par bobine.
+    sibling_count: Optional[int] = None
+    sibling_weight_g: Optional[float] = None
     first_used_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
     last_dried_at: Optional[datetime] = None
@@ -611,7 +616,9 @@ async def list_spools(
         stmt = stmt.where(Filament.fila_type == fila_type)
     stmt = stmt.order_by(Spool.last_used_at.desc().nullslast())
     result = await db.execute(stmt)
-    return [_spool_out(s) for s in result.scalars().all()]
+    rows = result.scalars().all()
+    sibs = await _siblings_map(db, [r.filament_id for r in rows])
+    return [_spool_out(r, sibs.get(r.filament_id)) for r in rows]
 
 
 @router.post("/filaments/clear-swatches")
@@ -732,6 +739,26 @@ async def adjust_spool_weight(
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+async def _siblings_map(db, filament_ids):
+    """
+    Pour chaque filament, nombre de bobines actives et poids restant cumule.
+
+    Une seule requete groupee plutot qu'un comptage par bobine : la liste des
+    bobines en affiche parfois plusieurs centaines, et un N+1 s'y verrait.
+    """
+    fids = [f for f in set(filament_ids) if f]
+    if not fids:
+        return {}
+    rows = (await db.execute(
+        select(Spool.filament_id,
+               func.count(Spool.id),
+               func.coalesce(func.sum(Spool.remaining_weight_g), 0))
+        .where(Spool.filament_id.in_(fids), Spool.archived.is_(False))
+        .group_by(Spool.filament_id)
+    )).all()
+    return {r[0]: (int(r[1]), float(r[2] or 0)) for r in rows}
+
+
 async def _load_spool(db, sid):
     result = await db.execute(
         select(Spool).options(selectinload(Spool.filament)).where(Spool.id == sid)
@@ -776,7 +803,7 @@ def _fil_out(f: Filament) -> FilamentOut:
     )
 
 
-def _spool_out(s: Spool) -> SpoolOut:
+def _spool_out(s: Spool, sib: tuple | None = None) -> SpoolOut:
     f = s.filament
     return SpoolOut(
         id=s.id, filament_id=s.filament_id,
@@ -805,6 +832,11 @@ def _spool_out(s: Spool) -> SpoolOut:
         comment=s.comment,
         external_spool_id=s.external_spool_id,
         found_mode=getattr(s, "found_mode", None),
+        # On retranche la bobine courante : l'interface veut savoir ce qu'il
+        # reste A COTE, pas le total du filament.
+        sibling_count=(max(0, sib[0] - 1) if sib else None),
+        sibling_weight_g=(round(max(0.0, sib[1] - (s.remaining_weight_g or 0)), 1)
+                          if sib else None),
         first_used_at=s.first_used_at,
         last_used_at=s.last_used_at,
         last_dried_at=s.last_dried_at,
