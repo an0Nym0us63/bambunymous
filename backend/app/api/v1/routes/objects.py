@@ -413,6 +413,39 @@ class ObjectCreate(BaseModel):
     available: bool = True
     group_id: Optional[int] = None
     comment: Optional[str] = None
+    # Creer plusieurs objets d'un coup pose une question que le quota ne
+    # tranche pas : des unites independantes, ou un lot ? On la pose donc a
+    # l'appelant plutot que de choisir a sa place.
+    group_new: bool = False           # regrouper les objets crees dans un nouveau groupe
+    group_name: Optional[str] = None  # nom de ce groupe (defaut : nom de l'objet)
+
+@router.get("/objects/quota")
+async def objects_quota(
+    parent_type: str, parent_id: int,
+    _: str = Depends(get_current_user),
+):
+    """
+    Combien d'objets un print ou un groupe autorise-t-il encore.
+
+    Le serveur plafonnait deja la creation, mais silencieusement : l'interface
+    ne pouvait ni afficher le restant ni desactiver le bouton, si bien qu'on
+    decouvrait la limite en la heurtant. Elle peut desormais le demander.
+    """
+    from ....models.print_history import Print, Group as PGroup
+    async with AsyncSessionLocal() as db:
+        if parent_type == "print":
+            src = await db.get(Print, parent_id)
+        else:
+            src = await db.get(PGroup, parent_id)
+        if not src:
+            raise HTTPException(404, "Parent introuvable")
+        nb_items = src.number_of_items or 1
+        used = (await db.execute(
+            select(func.count()).select_from(Object)
+            .where(Object.parent_type == parent_type, Object.parent_id == parent_id)
+        )).scalar() or 0
+    return {"total": nb_items, "used": used, "remaining": max(0, nb_items - used)}
+
 
 @router.post("/objects")
 async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user)):
@@ -435,9 +468,26 @@ async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user))
             nb_items = src.number_of_items if src else 1
             cost_fab = body.cost_fabrication
         
-        n = min(body.qty, max(0, nb_items - already))
-        if n <= 0:
-            return {"created": 0, "message": f"Quota atteint ({already}/{nb_items})"}
+        remaining = max(0, nb_items - already)
+        if remaining <= 0:
+            # 409 et non un 200 avec created:0 : l'appelant doit pouvoir
+            # distinguer un refus d'un succes vide.
+            raise HTTPException(409,
+                f"Tous les objets de ce {'print' if body.parent_type == 'print' else 'groupe'} "
+                f"ont deja ete crees ({already}/{nb_items}).")
+        if body.qty > remaining:
+            raise HTTPException(409,
+                f"Il ne reste que {remaining} objet(s) a creer sur {nb_items}.")
+        n = body.qty
+
+        # Regroupement demande : le groupe est cree AVANT les objets pour que
+        # chacun naisse deja rattache, plutot qu'en deux temps.
+        target_group_id = body.group_id
+        if body.group_new and n > 1:
+            grp = ObjectGroup(name=(body.group_name or body.name or "Lot").strip())
+            db.add(grp)
+            await db.flush()
+            target_group_id = grp.id
         
         created_ids = []
         for _ in range(n):
@@ -450,14 +500,14 @@ async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user))
                 cost_accessory=body.cost_accessory,
                 cost_total=cost_fab + body.cost_accessory,
                 available=body.available,
-                group_id=body.group_id,
+                group_id=target_group_id,
                 comment=body.comment,
             )
             db.add(obj)
             await db.flush()
             created_ids.append(obj.id)
         await db.commit()
-        return {"created": n, "ids": created_ids}
+        return {"created": n, "ids": created_ids, "group_id": target_group_id}
 
 
 # ── Supprimer un objet ───────────────────────────────────────────────────────

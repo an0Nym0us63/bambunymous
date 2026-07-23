@@ -10,6 +10,8 @@ import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
 import PhotoAddButton from "../components/PhotoAddButton";
 import GroupMosaic from "../components/GroupMosaic";
+import ObjectCreateSheet from "../components/ObjectCreateSheet";
+import ObjectQuotaButton from "../components/ObjectQuotaButton";
 import Select from "../components/Select";
 
 // PARTIAL et TO_REDO viennent de Spoolnymous, qui gerait cinq statuts. Les
@@ -657,6 +659,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [editNb, setEditNb]   = useState(false);
   const [spoolPicker, setSpoolPicker] = useState(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [objCreate, setObjCreate] = useState(null);   // feuille de creation d'objets
   const [unmapping, setUnmapping] = useState(null);
   const [photoCount, setPhotoCount] = useState(0);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -921,24 +924,20 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             </a>
           )}
 
-          {/* Créer objet depuis ce print */}
-          <AdminOnly><button onClick={async () => {
-            const n = parseInt(prompt(`Créer combien d'objets depuis ce print ?
-(Max restant calculé automatiquement)`, "1"));
-            if (!n || isNaN(n)) return;
-            try {
-              const r = await client.post("/objects/objects", {
-                parent_type: "print", parent_id: p.id,
-                name: p.file_name || "Sans nom", qty: n,
-                cost_fabrication: totalBobine,
-              });
-              alert(`✅ ${r.data.created} objet(s) créé(s)`);
-            } catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
-          }} style={{ width:"100%", padding:"10px", borderRadius:10, marginBottom:14,
-            border:"1px solid rgba(34,197,94,0.3)", background:"rgba(34,197,94,0.06)",
-            color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-            📦 Créer un objet depuis ce print
-          </button></AdminOnly>
+          {/* Creation d'objets : le bouton porte le quota et se desactive
+              quand tout est cree, plutot que de laisser tenter puis echouer. */}
+          <AdminOnly>
+            <ObjectQuotaButton parentType="print" parentId={p.id}
+              label="depuis ce print" refreshKey={refreshKey}
+              onOpen={() => setObjCreate({ name: p.file_name || "Sans nom",
+                cost: totalBobine })}/>
+          </AdminOnly>
+          {objCreate && (
+            <ObjectCreateSheet parentType="print" parentId={p.id}
+              defaultName={objCreate.name} costFabrication={objCreate.cost}
+              onDone={() => { setRefreshKey(k=>k+1); onChanged?.(); }}
+              onClose={() => setObjCreate(null)}/>
+          )}
 
           {/* Filaments — accordéon */}
           {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')} onUnmap={setUnmapping} onUnmapped={()=>{ client.get('/prints/'+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }}/>}
@@ -1073,6 +1072,8 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   // scroll natif capte le geste avant React et le menu s'ouvrait en plein
   // defilement.
   const [groupPhotoToDelete, setGroupPhotoToDelete] = useState(null);  // nom arme
+  const [objCreate, setObjCreate] = useState(false);   // feuille de creation d'objets
+  const [objRefresh, setObjRefresh] = useState(0);     // relecture du quota apres creation
   const setGroupCoverPhoto = async (name) => {
     try {
       await client.post(`/prints/groups/${groupId}/photo/${name}/cover`);
@@ -1313,24 +1314,17 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
           {filaments.length > 0 && <FilamentAccordion filaments={filaments} onSpoolClick={setSelSpoolG} onUnmap={setUnmappingG}/>}
 
           {/* Prints en tuiles */}
-          {/* Créer objet depuis ce groupe */}
-          <AdminOnly><button onClick={async () => {
-            const n = parseInt(prompt(`Créer combien d'objets depuis ce groupe ?
-(Max restant calculé automatiquement)`, "1"));
-            if (!n || isNaN(n)) return;
-            try {
-              const r = await client.post("/objects/objects", {
-                parent_type: "group", parent_id: groupId,
-                name: name, qty: n,
-                cost_fabrication: totalCost / nbItems,
-              });
-              alert(`✅ ${r.data.created} objet(s) créé(s)`);
-            } catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
-          }} style={{ width:"100%", padding:"10px", borderRadius:10, marginBottom:14,
-            border:"1px solid rgba(34,197,94,0.3)", background:"rgba(34,197,94,0.06)",
-            color:"#22c55e", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-            📦 Créer un objet depuis ce groupe
-          </button></AdminOnly>
+          <AdminOnly>
+            <ObjectQuotaButton parentType="group" parentId={groupId}
+              label="depuis ce groupe" refreshKey={objRefresh}
+              onOpen={() => setObjCreate(true)}/>
+          </AdminOnly>
+          {objCreate && (
+            <ObjectCreateSheet parentType="group" parentId={groupId}
+              defaultName={name} costFabrication={totalCost / nbItems}
+              onDone={() => { setObjRefresh(k=>k+1); onUpdated?.(); }}
+              onClose={() => setObjCreate(false)}/>
+          )}
 
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:"0.06em", margin:"0 0 8px" }}>
