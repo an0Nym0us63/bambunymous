@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
+import PriceReview from "../components/PriceReview";
 import Select from "../components/Select";
 import HeaderAction from "../components/HeaderAction";
 import { usePrinter } from "../store/printer";
@@ -776,6 +777,31 @@ function RfidDebugSection() {
         </div>
       )}
     </div>
+  );
+}
+
+function PriceReviewSection() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <>
+      <div className="card" style={{ padding:"16px 20px" }}>
+        <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
+          Révision des prix
+        </h3>
+        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+          Compare le tarif catalogue de chaque filament au prix d'achat de ses bobines,
+          <b> archivées comprises</b>, et permet de corriger sur place. Utile pour repérer
+          les prix manquants — qui font retomber le calcul des coûts sur 20 €/kg par
+          défaut — et les écarts inhabituels.
+        </p>
+        <button onClick={()=>setOpen(true)}
+          style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700,
+            cursor:"pointer", border:"none", background:"#3b82f6", color:"white" }}>
+          Ouvrir la révision
+        </button>
+      </div>
+      {open && <PriceReview onClose={()=>setOpen(false)}/>}
+    </>
   );
 }
 
@@ -1566,6 +1592,7 @@ export default function Settings() {
       <AdminOnly>
         <EnrichFromCatalogSection/>
         <RecalculateSection/>
+        <PriceReviewSection/>
         <TranslateNamesSection/>
         <SpoolnymousImport/>
         <RfidDebugSection/>

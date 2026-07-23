@@ -454,6 +454,57 @@ async def filament_labels_pdf(
     )
 
 
+@router.get("/price-review")
+async def price_review(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """
+    Vue d'audit des prix : chaque filament avec son tarif catalogue et le prix
+    d'achat de TOUTES ses bobines, archivees comprises.
+
+    Les archivees sont volontairement incluses : ce sont elles qui portent
+    l'historique d'achat, donc la reference pour juger si un tarif catalogue
+    est encore juste. Les exclure aurait vide la vue de son interet.
+
+    Une seule requete par table plutot qu'un chargement relationnel : la vue
+    embrasse tout le catalogue, et un selectinload par filament aurait fait
+    autant d'allers-retours que de lignes.
+    """
+    fils = (await db.execute(select(Filament))).scalars().all()
+    spools = (await db.execute(select(Spool))).scalars().all()
+
+    by_fil: dict[int, list] = {}
+    for sp in spools:
+        by_fil.setdefault(sp.filament_id, []).append(sp)
+
+    out = []
+    for f in fils:
+        sps = by_fil.get(f.id, [])
+        out.append({
+            "id": f.id,
+            "name": f.translated_name or f.name,
+            "manufacturer": f.manufacturer,
+            "fila_type": f.fila_type or f.material,
+            "color": f.color,
+            "colors_array": f.colors_array,
+            "multicolor_type": f.multicolor_type,
+            # None = jamais renseigne, 0 = renseigne a zero. La distinction est
+            # le coeur de cette vue : on cherche les prix MANQUANTS, pas les
+            # prix nuls, qui peuvent etre volontaires.
+            "price": f.price,
+            "weight_g": f.filament_weight_g,
+            "spools": [
+                {"id": sp.id, "price": sp.price_override, "archived": bool(sp.archived),
+                 "remaining_weight_g": sp.remaining_weight_g,
+                 "location": sp.location}
+                for sp in sorted(sps, key=lambda x: (x.archived, -(x.id or 0)))
+            ],
+        })
+    out.sort(key=lambda x: (x["manufacturer"] or "", x["name"] or ""))
+    return out
+
+
 @router.post("/filaments/{fid}/mark-swatch", response_model=FilamentOut)
 async def mark_swatch(
     fid: int,
@@ -550,6 +601,15 @@ async def update_filament(
     if not f:
         raise HTTPException(404, "Filament introuvable")
     payload = body.model_dump(exclude_none=True)
+    # exclude_none reste la regle pour ce formulaire, qui envoie TOUS ses champs
+    # a chaque enregistrement : basculer en exclude_unset viderait tout ce qui
+    # est vide a l'ecran. Mais le prix doit pouvoir etre EFFACE depuis la vue de
+    # revision, ou "aucun prix" et "prix a zero" sont deux etats distincts. On
+    # rattrape donc le seul cas d'un null explicitement transmis.
+    raw = body.model_dump(exclude_unset=True)
+    if "price" in raw and raw["price"] is None:
+        payload["price"] = None
+
     changed_price = "price" in payload
     for k, v in payload.items():
         setattr(f, k, v)
