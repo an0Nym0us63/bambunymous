@@ -18,6 +18,12 @@ DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 
 # ── Schemas ───────────────────────────────────────────────────────────────────
 
+# Les cinq etats possibles d'un objet. "gifted" manquait alors que Spoolnymous
+# le gerait, et "unavailable" nomme enfin le cas qui grisait les tuiles sans
+# aucune explication.
+OBJECT_STATUSES = {"available", "sold", "gifted", "personal", "unavailable"}
+
+
 class ObjectOut(BaseModel):
     id: int; external_ref: Optional[str]; name: str; translated_name: Optional[str]
     thumbnail: Optional[str]; comment: Optional[str]
@@ -25,6 +31,7 @@ class ObjectOut(BaseModel):
     group_id: Optional[int]; group_name: Optional[str]
     cost_fabrication: float; cost_accessory: float; cost_total: float
     normal_cost_unit: Optional[float]
+    status: str = "available"
     available: bool; personal: bool
     sold_price: Optional[float]; sold_date: Optional[str]; desired_price: Optional[float]
     margin: Optional[float]
@@ -33,6 +40,7 @@ class ObjectOut(BaseModel):
 class ObjectUpdate(BaseModel):
     name: Optional[str] = None; translated_name: Optional[str] = None
     comment: Optional[str] = None; group_id: Optional[int] = None
+    status: Optional[str] = None
     available: Optional[bool] = None; personal: Optional[bool] = None
     sold_price: Optional[float] = None; desired_price: Optional[float] = None
     sold_date: Optional[str] = None
@@ -65,6 +73,7 @@ def _obj_out(o: Object) -> ObjectOut:
         group_id=o.group_id, group_name=o.group.name if o.group else None,
         cost_fabrication=o.cost_fabrication or 0, cost_accessory=o.cost_accessory or 0,
         cost_total=o.cost_total or 0, normal_cost_unit=o.normal_cost_unit,
+        status=o.status or "available",
         available=bool(o.available), personal=bool(o.personal),
         sold_price=o.sold_price, sold_date=str(o.sold_date) if o.sold_date else None,
         desired_price=o.desired_price, margin=o.margin,
@@ -258,6 +267,24 @@ async def update_object(oid: int, body: ObjectUpdate, _: str = Depends(get_curre
             o.sold_price = None
             o.sold_date = None
             o.available = True
+            o.status = "available"
+
+        # Statut explicite. Les anciens champs restent tenus a jour en miroir :
+        # ils alimentent encore des filtres et des statistiques, et les laisser
+        # diverger du statut recreerait exactement l'incoherence qu'on corrige.
+        if "status" in data:
+            st = data.pop("status")
+            if st not in OBJECT_STATUSES:
+                raise HTTPException(400, f"Statut invalide : {st}")
+            o.status = st
+            o.personal  = (st == "personal")
+            o.available = (st == "available")
+            if st != "sold":
+                # Quitter l'etat vendu efface le montant : le conserver
+                # ferait apparaitre l'objet dans le chiffre d'affaires alors
+                # qu'il n'est plus vendu.
+                o.sold_price = None
+                o.sold_date = None
 
         # sold_date : chaine ISO -> datetime (SQLite exige un datetime).
         if "sold_date" in data:
@@ -275,10 +302,14 @@ async def update_object(oid: int, body: ObjectUpdate, _: str = Depends(get_curre
             if sp and sp > 0:
                 o.sold_price = sp
                 o.available = False
+                o.status = "sold"
                 if o.sold_date is None:
                     o.sold_date = datetime.utcnow()
             else:
                 o.sold_price = None  # 0 = pas vendu
+                if o.status == "sold":
+                    o.status = "available"
+                    o.available = True
             data.pop("sold_price")
 
         # Champs simples restants (name, translated_name, comment, group_id,

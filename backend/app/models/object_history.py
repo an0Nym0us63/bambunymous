@@ -45,6 +45,21 @@ class Object(Base):
     cost_total       = Column(Float, default=0.0)   # = fabrication + accessoire
     normal_cost_unit = Column(Float, nullable=True)  # coût au prix normal
 
+    # Etat de l'objet, explicite.
+    #
+    # Il etait jusqu'ici DEDUIT de trois champs (available, personal,
+    # sold_price), ce qui rendait certains cas illisibles : un objet
+    # indisponible mais ni vendu ni perso n'avait aucun libelle et
+    # s'affichait simplement grise, sans qu'on sache pourquoi. Et "offert"
+    # n'existait pas, alors que Spoolnymous le gerait.
+    #
+    #   available    a vendre
+    #   sold         vendu (montant dans sold_price)
+    #   gifted       offert
+    #   personal     garde pour soi
+    #   unavailable  indisponible : casse, perdu, reserve
+    status           = Column(String(16), nullable=False, default="available")
+
     # Vente
     available        = Column(Boolean, default=True)
     personal         = Column(Boolean, default=False)

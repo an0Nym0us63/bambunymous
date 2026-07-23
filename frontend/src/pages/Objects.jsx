@@ -473,6 +473,7 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
     translated_name: obj.translated_name || obj.name || "",
     comment:         obj.comment || "",
     personal:        !!obj.personal,
+    status:          objStatus(obj),
     available:       !!obj.available,
     desired_price:   obj.desired_price != null ? String(obj.desired_price) : "",
     sold_price:      obj.sold_price != null && obj.sold_price > 0 ? String(obj.sold_price) : "",
@@ -495,6 +496,9 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
         payload.translated_name = form.translated_name;
         payload.comment = form.comment;
         payload.personal = form.personal;
+        // Un objet vendu garde son etat : il se quitte en effacant le prix,
+        // pas en changeant d'etiquette.
+        if (form.status !== "sold") payload.status = form.status;
         payload.available = form.available;
         payload.desired_price = form.desired_price === "" ? 0 : parseFloat(form.desired_price);
         if (form.sold_price !== "") {
@@ -528,22 +532,33 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
               value={form.comment} onChange={e=>set("comment",e.target.value)}/>
           </div>
 
-          {/* Toggles Perso / Disponible */}
-          <div style={{ display:"flex", gap:8 }}>
-            <button onClick={()=>set("personal",!form.personal)}
-              style={{ flex:1, padding:"10px", borderRadius:10, cursor:"pointer", fontSize:12, fontWeight:700,
-                border:"1px solid " + (form.personal ? "#a78bfa" : "var(--border)"),
-                background: form.personal ? "rgba(168,85,247,0.12)" : "var(--surface2)",
-                color: form.personal ? "#a78bfa" : "var(--muted)" }}>
-              {form.personal ? "✓ " : ""}Perso
-            </button>
-            <button onClick={()=>set("available",!form.available)}
-              style={{ flex:1, padding:"10px", borderRadius:10, cursor:"pointer", fontSize:12, fontWeight:700,
-                border:"1px solid " + (form.available ? "#22c55e" : "var(--border)"),
-                background: form.available ? "rgba(34,197,94,0.12)" : "var(--surface2)",
-                color: form.available ? "#22c55e" : "var(--muted)" }}>
-              {form.available ? "✓ Disponible" : "Indisponible"}
-            </button>
+          {/* Un choix UNIQUE remplace deux bascules independantes : elles
+              autorisaient des combinaisons sans signification (perso ET
+              disponible) et n'offraient aucune case pour "offert". La vente,
+              elle, se fait par le champ prix -- elle porte un montant et une
+              date, ce n'est pas une simple etiquette. */}
+          <div>
+            <label style={lbl}>État</label>
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(2,1fr)", gap:6 }}>
+              {["available","personal","gifted","unavailable"].map(k => {
+                const c = OBJ_STATUS[k], on = form.status === k;
+                return (
+                  <button key={k} onClick={()=>set("status",k)}
+                    style={{ padding:"10px 8px", borderRadius:10, cursor:"pointer",
+                      fontSize:12, fontWeight:700,
+                      border:"1px solid " + (on ? c.color : "var(--border)"),
+                      background: on ? c.color+"22" : "var(--surface2)",
+                      color: on ? c.color : "var(--muted)" }}>
+                    {on ? "✓ " : ""}{c.label}
+                  </button>
+                );
+              })}
+            </div>
+            {form.status === "sold" && (
+              <p style={{ fontSize:11, color:"var(--muted)", margin:"8px 0 0" }}>
+                Objet vendu. Efface le prix de vente pour le remettre en circulation.
+              </p>
+            )}
           </div>
 
           <div>
@@ -811,8 +826,12 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
             </h2>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
               {isSold && <span style={{ fontSize:10, background:"rgba(34,197,94,0.12)", color:"#22c55e", padding:"2px 8px", borderRadius:20, fontWeight:700 }}>Vendu {fmtPrice(obj.sold_price)}</span>}
-              {!obj.available && !isSold && <span style={{ fontSize:10, background:"rgba(239,68,68,0.1)", color:"#ef4444", padding:"2px 8px", borderRadius:20 }}>Non disponible</span>}
-              {obj.personal && <span style={{ fontSize:10, background:"rgba(168,85,247,0.1)", color:"#a78bfa", padding:"2px 8px", borderRadius:20 }}>Perso</span>}
+              {/* Un seul badge, celui de l'etat reel : deux etiquettes
+                  potentiellement contradictoires ne renseignaient pas. */}
+              {(() => { const c = OBJ_STATUS[objStatus(obj)]; return (
+                <span style={{ fontSize:10, background:c.color+"1f", color:c.color,
+                  padding:"2px 8px", borderRadius:20, fontWeight:700 }}>{c.label}</span>
+              ); })()}
             </div>
             {(obj.parent_type === "print" || obj.parent_type === "group") && obj.parent_id && (
               <button onClick={openParent}
@@ -1057,22 +1076,47 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
   );
 }
 
+// Un etat = un libelle et une couleur, definis une seule fois et partages par
+// la tuile, la fiche et les filtres. Aucune tuile ne peut plus etre grisee sans
+// porter la raison : c'est precisement ce qui rendait la liste incomprehensible.
+export const OBJ_STATUS = {
+  available:   { label:"À vendre",     color:"#3b82f6", dim:false },
+  sold:        { label:"Vendu",        color:"#22c55e", dim:true  },
+  gifted:      { label:"Offert",       color:"#f59e0b", dim:true  },
+  personal:    { label:"Perso",        color:"#a855f7", dim:true  },
+  unavailable: { label:"Indisponible", color:"#94a3b8", dim:true  },
+};
+// Repli pour les objets anterieurs a la colonne status, si la reprise n'a pas
+// encore tourne : on rededuit plutot que d'afficher un etat vide.
+export const objStatus = (o) =>
+  o.status && OBJ_STATUS[o.status] ? o.status
+  : (o.sold_price > 0 ? "sold" : o.personal ? "personal"
+     : o.available === false ? "unavailable" : "available");
+
 function ObjectCard({ obj, onClick }) {
-  const isSold = obj.sold_price > 0;
+  const st = objStatus(obj);
+  const cfg = OBJ_STATUS[st];
   return (
     <div className="card" onClick={onClick} style={{ padding:0, overflow:"hidden", cursor:"pointer", position:"relative",
-      opacity: !obj.available && !isSold ? 0.6 : 1 }}>
+      opacity: cfg.dim ? 0.72 : 1 }}>
       <div style={{ position:"relative", height:130, background:"var(--surface2)",
         display:"flex", alignItems:"center", justifyContent:"center" }}>
         <img src={`/api/v1/objects/objects/${obj.id}/image`} alt=""
           style={{ width:"100%", height:"100%", objectFit:"cover" }}
           onError={e => e.currentTarget.style.display="none"}/>
-        {isSold && <span style={{ position:"absolute", top:6, right:6,
-          background:"rgba(34,197,94,0.85)", color:"white",
-          fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>Vendu</span>}
-        {obj.personal && <span style={{ position:"absolute", top:6, left:6,
-          background:"rgba(168,85,247,0.85)", color:"white",
-          fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>Perso</span>}
+        <span style={{ position:"absolute", top:6, left:6,
+          background:cfg.color, color:"white", opacity:0.92,
+          fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>
+          {cfg.label}
+        </span>
+        {st === "sold" && obj.sold_price > 0 && (
+          <span style={{ position:"absolute", top:6, right:6,
+            background:"rgba(0,0,0,0.6)", color:"white",
+            fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20,
+            fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>
+            {fmtPrice(obj.sold_price)}
+          </span>
+        )}
       </div>
       <div style={{ padding:"8px 10px" }}>
         <p style={{ fontWeight:700, fontSize:12, color:"var(--text)", margin:"0 0 3px",

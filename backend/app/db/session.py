@@ -49,6 +49,7 @@ async def init_db():
     await _normalize_spool_locations()
     await _seed_admin_user()
     await _migrate_last_seen()
+    await _migrate_object_status()
     await _migrate_activity_kind()
     await _migrate_print_job_id_unique()
     await _purge_activity_log()
@@ -58,6 +59,7 @@ async def _migrate():
     """Applique les colonnes manquantes sans perdre les données."""
     migrations = [
         # table, colonne, type SQL
+        ("objects",   "status",               "TEXT DEFAULT 'available'"),
         ("users",     "tokens_valid_from",    "TIMESTAMP"),
         ("groups",    "cover_photo",          "TEXT"),
         ("prints",    "translated_name",      "TEXT"),
@@ -116,6 +118,38 @@ async def _migrate():
                 await conn.commit()
             except Exception:
                 pass  # colonne déjà existante → ignorer
+
+
+async def _migrate_object_status():
+    """
+    Deduit objects.status des anciens champs, une seule fois.
+
+    L'ordre des tests compte : un objet vendu ET marque perso doit compter
+    comme VENDU, la vente etant l'evenement le plus fort. Ne touche que les
+    lignes encore vides, donc rejouable sans ecraser une saisie manuelle.
+    """
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            cols = [r[1] for r in (await conn.execute(_text("PRAGMA table_info(objects)"))).all()]
+            if "status" not in cols:
+                return
+            n = (await conn.execute(_text(
+                "SELECT COUNT(*) FROM objects WHERE status IS NULL OR status = ''"))).scalar()
+            if not n:
+                return
+            await conn.execute(_text("""
+                UPDATE objects SET status = CASE
+                    WHEN sold_price IS NOT NULL AND sold_price > 0 THEN 'sold'
+                    WHEN personal = 1                              THEN 'personal'
+                    WHEN available = 0                             THEN 'unavailable'
+                    ELSE 'available'
+                END
+                WHERE status IS NULL OR status = ''
+            """))
+            print(f"[migration] statut deduit pour {n} objet(s)")
+    except Exception as e:
+        print(f"[migration] statut objets: {e}")
 
 
 async def _migrate_last_seen():
