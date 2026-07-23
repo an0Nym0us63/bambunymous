@@ -1028,11 +1028,19 @@ function SpoolCard({ s, colorsList, onClick }) {
 
         {/* Nom sur deux lignes fixes : sans hauteur imposee, les tuiles d'une
             meme rangee se decalent des qu'un nom passe a la ligne. */}
-        <p style={{ fontWeight:700, fontSize:11.5, color:"var(--text)", margin:0,
-          lineHeight:"1.3", height:"2.6em", overflow:"hidden", textAlign:"center",
-          display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
-          {s.filament_translated_name || s.filament_name}
-        </p>
+        {/* Hauteur reservee sur le CONTENEUR, centrage dedans. Le tronquage a
+            deux lignes impose display:-webkit-box au paragraphe, qui aligne son
+            texte en haut : un nom d'une seule ligne laissait donc un blanc sous
+            lui. Le conteneur flex remet l'ensemble au milieu sans renoncer au
+            tronquage ni a la hauteur fixe qui aligne les tuiles entre elles. */}
+        <div style={{ height:"2.6em", display:"flex", alignItems:"center",
+          justifyContent:"center" }}>
+          <p style={{ fontWeight:700, fontSize:11.5, color:"var(--text)", margin:0,
+            lineHeight:"1.3", maxHeight:"2.6em", overflow:"hidden", textAlign:"center",
+            display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+            {s.filament_translated_name || s.filament_name}
+          </p>
+        </div>
 
         {s.filament_manufacturer && (
           <p style={{ fontSize:9.5, color:"var(--muted)", margin:"-2px 0 0",
@@ -1792,13 +1800,18 @@ function FilamentsView() {
                     {hasT && <div style={{ position:"absolute", inset:0, backgroundImage:"repeating-conic-gradient(#aaa 0% 25%,#eee 0% 50%)", backgroundSize:"6px 6px" }}/>}
                     <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>
                     <div style={{ position:"relative", padding:"8px 10px 28px", display:"flex", flexDirection:"column", gap:0 }}>
-                      <p style={{ fontWeight:600, fontSize:11, color:"white", margin:"0 0 7px",
-                        lineHeight:"1.35", height:"2.7em", overflow:"hidden",
-                        display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
-                        fontFamily:"'Inter','DM Sans','Segoe UI',system-ui,sans-serif",
-                        letterSpacing:"0.01em", filter:flt }}>
-                        {f.translated_name || f.name}
-                      </p>
+                      {/* Meme centrage que la grille des bobines : le tronquage
+                          alignait les noms d'une seule ligne en haut du bloc. */}
+                      <div style={{ height:"2.7em", margin:"0 0 7px", display:"flex",
+                        alignItems:"center" }}>
+                        <p style={{ fontWeight:600, fontSize:11, color:"white", margin:0,
+                          lineHeight:"1.35", maxHeight:"2.7em", overflow:"hidden",
+                          display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
+                          fontFamily:"'Inter','DM Sans','Segoe UI',system-ui,sans-serif",
+                          letterSpacing:"0.01em", filter:flt }}>
+                          {f.translated_name || f.name}
+                        </p>
+                      </div>
                       <div style={{ display:"flex", gap:3, flexWrap:"nowrap", overflow:"hidden", height:16, alignItems:"center" }}>
                         {f.manufacturer && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", whiteSpace:"nowrap", flexShrink:0 }}>{f.manufacturer}</span>}
                         {(f.fila_type||f.material) && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.20)", color:"rgba(255,255,255,0.75)", whiteSpace:"nowrap", flexShrink:0 }}>{f.fila_type||f.material}</span>}
