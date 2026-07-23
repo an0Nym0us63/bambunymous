@@ -2552,38 +2552,63 @@ export default function Prints() {
 
       {/* Barre flottante de sélection multiple */}
       {selectMode && selectedIds.size > 0 && (
-        <div style={{ position:"fixed", bottom:76, left:12, right:12, zIndex:500,
+        /* Deux rangees plutot qu'une seule : quatre elements cote a cote
+           debordaient de l'ecran sur telephone, "Annuler" se retrouvait coupe.
+           Le compte et l'abandon tiennent sur la premiere ligne, les deux
+           actions se partagent la seconde en parts egales -- cibles larges au
+           doigt, et aucune largeur a deviner. */
+        <div style={{ position:"fixed", bottom:"calc(76px + env(safe-area-inset-bottom,0px))",
+          left:12, right:12, zIndex:500,
           background:"var(--sheet-bg)", border:"1px solid var(--border)", borderRadius:14,
-          padding:10, display:"flex", alignItems:"center", gap:10, boxShadow:"0 4px 24px rgba(0,0,0,0.35)" }}>
-          <span style={{ fontSize:12, color:"var(--text)", fontWeight:700, flexShrink:0 }}>
-            {selectedIds.size} sélectionné{selectedIds.size>1?"s":""}
-          </span>
-          <div style={{ flex:1 }}/>
-          <button onClick={() => setGroupPickerOpen(true)}
-            style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8,
-              fontSize:12, fontWeight:700, background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
-            <FolderPlus size={14}/> Grouper
-          </button>
-          {confirmDelete ? (
-            <button onClick={deleteSelected} disabled={deleting}
-              style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8,
-                fontSize:12, fontWeight:700, background:"#ef4444", color:"white", border:"none",
-                cursor:"pointer", opacity: deleting?0.6:1 }}>
-              <Trash2 size={14}/> {deleting ? "Suppression…" : "Confirmer ?"}
+          padding:10, display:"flex", flexDirection:"column", gap:8,
+          boxShadow:"0 4px 24px rgba(0,0,0,0.35)" }}>
+
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontSize:12.5, color:"var(--text)", fontWeight:700,
+              flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis",
+              whiteSpace:"nowrap" }}>
+              {selectedIds.size} sélectionné{selectedIds.size>1?"s":""}
+            </span>
+            <button onClick={exitSelectMode}
+              style={{ padding:"5px 12px", borderRadius:8, fontSize:12, background:"none",
+                border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer",
+                flexShrink:0 }}>
+              Annuler
             </button>
-          ) : (
-            <button onClick={() => setConfirmDelete(true)}
-              style={{ display:"flex", alignItems:"center", gap:5, padding:"7px 12px", borderRadius:8,
-                fontSize:12, fontWeight:700, background:"rgba(239,68,68,0.12)", color:"#ef4444",
-                border:"none", cursor:"pointer" }}>
-              <Trash2 size={14}/> Supprimer
+          </div>
+
+          <div style={{ display:"flex", gap:8 }}>
+            <button onClick={() => setGroupPickerOpen(true)}
+              style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center",
+                gap:6, padding:"10px 8px", borderRadius:10, fontSize:12.5, fontWeight:700,
+                background:"#3b82f6", color:"white", border:"none", cursor:"pointer",
+                minWidth:0 }}>
+              <FolderPlus size={15} style={{ flexShrink:0 }}/>
+              <span style={{ overflow:"hidden", textOverflow:"ellipsis",
+                whiteSpace:"nowrap" }}>Grouper</span>
             </button>
-          )}
-          <button onClick={exitSelectMode}
-            style={{ padding:"7px 10px", borderRadius:8, fontSize:12, background:"none",
-              border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>
-            Annuler
-          </button>
+            {confirmDelete ? (
+              <button onClick={deleteSelected} disabled={deleting}
+                style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center",
+                  gap:6, padding:"10px 8px", borderRadius:10, fontSize:12.5, fontWeight:700,
+                  background:"#ef4444", color:"white", border:"none", cursor:"pointer",
+                  opacity: deleting?0.6:1, minWidth:0 }}>
+                <Trash2 size={15} style={{ flexShrink:0 }}/>
+                <span style={{ overflow:"hidden", textOverflow:"ellipsis",
+                  whiteSpace:"nowrap" }}>{deleting ? "Suppression…" : "Confirmer ?"}</span>
+              </button>
+            ) : (
+              <button onClick={() => setConfirmDelete(true)}
+                style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center",
+                  gap:6, padding:"10px 8px", borderRadius:10, fontSize:12.5, fontWeight:700,
+                  background:"rgba(239,68,68,0.12)", color:"#ef4444",
+                  border:"none", cursor:"pointer", minWidth:0 }}>
+                <Trash2 size={15} style={{ flexShrink:0 }}/>
+                <span style={{ overflow:"hidden", textOverflow:"ellipsis",
+                  whiteSpace:"nowrap" }}>Supprimer</span>
+              </button>
+            )}
+          </div>
         </div>
       )}
 
