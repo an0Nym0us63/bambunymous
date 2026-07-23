@@ -89,6 +89,11 @@ class SpoolInfoOut(BaseModel):
     external_spool_id: Optional[str] = None
     first_used_at: Optional[str] = None
     last_used_at: Optional[str] = None
+    # Manquaient pour que la feuille de l'accueil affiche les memes lignes que
+    # la fiche bobine : sans eux, deux ecrans decrivant le meme objet n'en
+    # disaient pas la meme chose.
+    last_dried_at: Optional[str] = None
+    swatch: Optional[bool] = None
 
 class TrayOut(BaseModel):
     id: int
@@ -208,6 +213,8 @@ def _spool_info(spool_id, spools_map):
         external_spool_id=s.external_spool_id,
         first_used_at=str(s.first_used_at) if s.first_used_at else None,
         last_used_at=str(s.last_used_at) if s.last_used_at else None,
+        last_dried_at=str(s.last_dried_at) if getattr(s, "last_dried_at", None) else None,
+        swatch=bool(getattr(f, "swatch", False)) if f else None,
     )
 
 

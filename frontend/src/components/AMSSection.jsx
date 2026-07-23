@@ -588,7 +588,9 @@ function TrayBottomSheet({ tray, amsLabel, slotNo, onClose }) {
             {/* ── Section DB (bobine liée) ── */}
             <div style={{ display:"flex", alignItems:"center", gap:8, margin:"16px 0 4px" }}>
               <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.08em", margin:0 }}>Bobine liée en base</p>
+                letterSpacing:"0.08em", margin:0 }}>
+                Bobine{tray.spool_id ? ` #${tray.spool_id}` : " liée en base"}
+              </p>
               {tray.spool_id && (
                 <button
                   onClick={() => setSpoolSheet({ spoolId: tray.spool_id, filamentId: info?.filament_id, hex: info?.color || tray.color })}
@@ -602,25 +604,39 @@ function TrayBottomSheet({ tray, amsLabel, slotNo, onClose }) {
               )}
             </div>
             {info ? (<>
-              <Row label="Nom"             value={info.name}/>
-              <Row label="Nom traduit"     value={info.translated_name}/>
-              <Row label="Marque"          value={info.brand}/>
-              <Row label="Matière"         value={info.material}/>
-              <Row label="Profile ID"      value={info.profile_id} mono/>
-              <Row label="Multicolor"      value={info.multicolor_type !== "monochrome" ? info.multicolor_type : null}/>
-              <Row label="Poids bobine"    value={info.initial_weight_g ? `${info.initial_weight_g}g` : null}/>
-              <Row label="Poids support"   value={info.spool_weight_g ? `${info.spool_weight_g}g` : null}/>
-              <Row label="Restant"         value={info.remaining_weight_g != null ? `${Math.round(info.remaining_weight_g)}g` : null}/>
-              <Row label="Prix catalogue"  value={info.price ? `${Number(info.price).toFixed(2)}€` : null}/>
-              <Row label="Prix achat"      value={info.price_override ? `${Number(info.price_override).toFixed(2)}€` : null}/>
+              {/* Meme decoupage, memes libelles et meme ordre que la fiche
+                  bobine : les deux ecrans decrivent le meme objet, ils doivent
+                  se lire pareil. Ici les valeurs ne sont pas editables, c'est
+                  la seule difference -- le bouton en haut ouvre la vraie fiche
+                  pour cela. */}
               <Row label="Emplacement"     value={info.location}/>
+              <Row label="Poids restant"   value={info.remaining_weight_g != null ? `${Math.round(info.remaining_weight_g)} g` : null}/>
+              <Row label="Prix d'achat"    value={info.price_override ? `${Number(info.price_override).toFixed(2)} €` : null}/>
               <Row label="Tag NFC"         value={info.tag_number} mono/>
               <Row label="Tray AMS"        value={info.ams_tray}/>
-              <Row label="Commentaire"     value={info.comment}/>
-              <Row label="ID externe"      value={info.external_spool_id} mono/>
               <Row label="Première util."  value={info.first_used_at?.slice(0,10)}/>
               <Row label="Dernière util."  value={info.last_used_at?.slice(0,10)}/>
-              <Row label="Bobine #"        value={`${tray.spool_id}`} mono/>
+              <Row label="Dernier séchage" value={info.last_dried_at?.slice(0,10)}/>
+              <Row label="Commentaire"     value={info.comment}/>
+              <Row label="ID externe"      value={info.external_spool_id} mono/>
+
+              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+                letterSpacing:"0.08em", margin:"14px 0 4px" }}>
+                Filament{info.filament_id ? ` #${info.filament_id}` : ""}
+              </p>
+              <Row label="Nom"             value={info.translated_name || info.name}/>
+              {info.translated_name && info.name !== info.translated_name &&
+                <Row label="Nom EN"        value={info.name}/>}
+              <Row label="Marque"          value={info.brand}/>
+              <Row label="Matière"         value={info.material}/>
+              <Row label="Sous-type"       value={info.fila_type}/>
+              {info.swatch != null &&
+                <Row label="Échantillon"   value={info.swatch ? "Oui" : "Non"}/>}
+              <Row label="Profile ID"      value={info.profile_id} mono/>
+              <Row label="Multicolor"      value={info.multicolor_type !== "monochrome" ? info.multicolor_type : null}/>
+              <Row label="Poids bobine"    value={info.initial_weight_g ? `${info.initial_weight_g} g` : null}/>
+              <Row label="Poids support"   value={info.spool_weight_g ? `${info.spool_weight_g} g` : null}/>
+              <Row label="Prix catalogue"  value={info.price ? `${Number(info.price).toFixed(2)} €` : null}/>
             </>) : (
               <p style={{ fontSize:12, color:"#f59e0b", fontStyle:"italic", padding:"4px 0" }}>
                 {tray.spool_id
