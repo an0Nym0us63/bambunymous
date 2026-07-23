@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { createPortal } from "react-dom";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2 } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
@@ -1057,22 +1056,22 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   const [selectedPrint, setSelectedPrint] = useState(null);
   const [selSpoolG, setSelSpoolG] = useState(null);
   const [coverPrintId, setCoverPrintId] = useState(coverPrintIdProp||null);
-  const [groupPhotoToDelete, setGroupPhotoToDelete] = useState(null);
-  const [groupPhotoMenu, setGroupPhotoMenu] = useState(null);   // { name, url } appui long
-  const gpPressTimer = React.useRef(null);
-  const gpPressStart = React.useRef(null);
-  const startGpPress = (ph, e) => {
-    const t = e?.touches?.[0];
-    gpPressStart.current = t ? { x:t.clientX, y:t.clientY } : null;
-    gpPressTimer.current = setTimeout(() => setGroupPhotoMenu({ name: ph.name, url: ph.url }), 500);
+  // Boutons visibles plutot qu'appui long : sur une bande qui defile, le
+  // scroll natif capte le geste avant React et le menu s'ouvrait en plein
+  // defilement.
+  const [groupPhotoToDelete, setGroupPhotoToDelete] = useState(null);  // nom arme
+  const setGroupCoverPhoto = async (name) => {
+    try {
+      await client.post(`/prints/groups/${groupId}/photo/${name}/cover`);
+      setGroupCover(name); onUpdated?.();
+    } catch(e){ alert(e.response?.data?.detail || e.message); }
   };
-  const moveGpPress = (e) => {
-    if (!gpPressStart.current || !gpPressTimer.current) return;
-    const t = e?.touches?.[0]; if (!t) return;
-    if (Math.abs(t.clientX-gpPressStart.current.x) > 10 || Math.abs(t.clientY-gpPressStart.current.y) > 10)
-      clearTimeout(gpPressTimer.current);
+  const delGroupPhoto = async (name) => {
+    try {
+      await client.delete(`/prints/groups/${groupId}/photo/${name}`);
+      setGroupPhotoToDelete(null); loadGroupPhotos();
+    } catch(e){ alert(e.response?.data?.detail || e.message); }
   };
-  const cancelGpPress = () => { clearTimeout(gpPressTimer.current); gpPressStart.current = null; };
   const [unmappingG, setUnmappingG] = useState(null);
   const [editGroup, setEditGroup] = useState(false);
   const [groupPhotos, setGroupPhotos] = useState([]);
@@ -1255,20 +1254,35 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
               {groupPhotos.length > 0 && (
                 <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
                   {groupPhotos.map((ph,i)=>{
-                    // Appui long -> menu (definir vignette / supprimer), comme
-                    // sur la fiche filament. Le principal usage : choisir quelle
-                    // photo represente le groupe dans la galerie.
                     const isCover = groupCover === ph.name;
+                    const armed   = groupPhotoToDelete === ph.name;
                     return (
-                    <div key={i} style={{ position:"relative", flexShrink:0, cursor:"pointer",
-                        borderRadius:8, overflow:"hidden",
-                        border: isCover ? "2px solid #22c55e" : "1px solid var(--border)" }}
-                      onMouseDown={()=>{ gpPressTimer.current = setTimeout(()=>setGroupPhotoMenu({name:ph.name,url:ph.url}),500); }}
-                      onMouseUp={cancelGpPress} onMouseLeave={cancelGpPress}
-                      onTouchStart={(e)=>startGpPress(ph,e)} onTouchMove={moveGpPress} onTouchEnd={cancelGpPress}
-                      onContextMenu={e=>e.preventDefault()}>
-                      <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover", display:"block" }}/>
-                      {isCover && <span style={{ position:"absolute", top:2, left:2, fontSize:11 }}>⭐</span>}
+                    <div key={i} style={{ position:"relative", flexShrink:0, borderRadius:8,
+                        border: isCover ? "2px solid #22c55e" : "1px solid var(--border)" }}>
+                      {/* Aucun handler tactile : le defilement reste natif. */}
+                      <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover",
+                        display:"block", borderRadius:6 }}/>
+                      {isCover && <span style={{ position:"absolute", bottom:2, left:2, fontSize:10,
+                        pointerEvents:"none" }}>⭐</span>}
+                      <AdminOnly>
+                        <div style={{ position:"absolute", top:2, right:2, display:"flex", gap:3 }}>
+                          {!isCover && !armed && (
+                            <button onClick={()=>setGroupCoverPhoto(ph.name)} title="Définir comme vignette"
+                              style={{ width:20, height:20, borderRadius:"50%", border:"none", cursor:"pointer",
+                                background:"rgba(0,0,0,0.6)", color:"white", fontSize:10, lineHeight:1,
+                                display:"flex", alignItems:"center", justifyContent:"center" }}>⭐</button>
+                          )}
+                          <button onClick={()=> armed ? delGroupPhoto(ph.name) : setGroupPhotoToDelete(ph.name)}
+                            onBlur={()=>setGroupPhotoToDelete(null)}
+                            title={armed ? "Confirmer la suppression" : "Supprimer"}
+                            style={{ height:20, width: armed ? "auto" : 20, padding: armed ? "0 6px" : 0,
+                              borderRadius: armed ? 10 : "50%", border:"none", cursor:"pointer",
+                              background: armed ? "#ef4444" : "rgba(0,0,0,0.6)", color:"white",
+                              fontSize: armed ? 9 : 10, fontWeight:600, lineHeight:1,
+                              display:"flex", alignItems:"center", justifyContent:"center" }}>
+                            {armed ? "Supprimer ?" : "🗑"}</button>
+                        </div>
+                      </AdminOnly>
                     </div>
                     );
                   })}
@@ -1388,46 +1402,6 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
       </div>
     </div>
     {unmappingG && <UnmapFilamentConfirm f={unmappingG} printId={unmappingG.print_id} onClose={()=>setUnmappingG(null)} onDone={()=>{ setUnmappingG(null); onUpdated?.(); }}/>}
-    {groupPhotoMenu && createPortal(
-      <div style={{ position:"fixed", inset:0, zIndex:4000, background:"rgba(0,0,0,0.5)" }}
-        onClick={()=>setGroupPhotoMenu(null)}>
-        <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0, right:0,
-          background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px 32px" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 14px" }}/>
-          <img src={groupPhotoMenu.url} alt="" style={{ width:70, height:70, objectFit:"cover",
-            borderRadius:10, display:"block", margin:"0 auto 16px" }}/>
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-            <button onClick={async()=>{
-                try {
-                  await client.post(`/prints/groups/${groupId}/photo/${groupPhotoMenu.name}/cover`);
-                  setGroupCover(groupPhotoMenu.name); setGroupPhotoMenu(null); onUpdated?.();
-                } catch(e){ alert(e.response?.data?.detail || e.message); }
-              }}
-              style={{ padding:"14px", borderRadius:12, border:"none", cursor:"pointer",
-                background:"var(--surface2)", color:"var(--text)", fontSize:14, fontWeight:600,
-                display:"flex", alignItems:"center", gap:12 }}>
-              <span style={{ fontSize:20 }}>⭐</span> Définir comme vignette
-            </button>
-            <button onClick={async()=>{
-                try {
-                  await client.delete(`/prints/groups/${groupId}/photo/${groupPhotoMenu.name}`);
-                  setGroupPhotoMenu(null); loadGroupPhotos();
-                } catch(e){ alert(e.response?.data?.detail || e.message); }
-              }}
-              style={{ padding:"14px", borderRadius:12, border:"none", cursor:"pointer",
-                background:"rgba(239,68,68,0.1)", color:"#ef4444", fontSize:14, fontWeight:600,
-                display:"flex", alignItems:"center", gap:12 }}>
-              <span style={{ fontSize:20 }}>🗑</span> Supprimer cette photo
-            </button>
-            <button onClick={()=>setGroupPhotoMenu(null)}
-              style={{ padding:"12px", borderRadius:12, border:"1px solid var(--border)", cursor:"pointer",
-                background:"none", color:"var(--muted)", fontSize:13 }}>Annuler</button>
-          </div>
-        </div>
-      </div>,
-      document.body
-    )}
-
     {/* Ancien PhotoDeleteConfirm retire : il coexistait avec la confirmation en
         deux temps sur la pastille (plus haut) et se declenchait en meme temps.
         Il lisait groupPhotoToDelete.name en attendant un objet, alors que la
@@ -1691,24 +1665,17 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
   const [deletedNames, setDeletedNames] = useState(new Set());
   const isAdmin = useIsAdmin();
 
-  // Appui long -> menu (meme geste que les photos de filament). La croix de
-  // suppression sur chaque vignette encombrait et se declenchait par erreur.
-  const [photoMenu, setPhotoMenu] = useState(null);   // { item, canCover }
-  const pressTimer = React.useRef(null);
-  const startPress = (item, canCover) => {
-    if (!isAdmin) return;   // le menu ne contient que des actions
-    pressTimer.current = setTimeout(() => setPhotoMenu({ item, canCover }), 500);
-  };
-  const cancelPress = () => clearTimeout(pressTimer.current);
+  // Plus d'appui long : sur une bande qui defile horizontalement, le scroll
+  // natif capte le geste avant React et le menu s'ouvrait en plein
+  // defilement. Deux boutons visibles sur chaque vignette a la place.
+  const [confirmDelPhoto, setConfirmDelPhoto] = useState(null);  // url armee
 
-  const setAsCover = async () => {
-    const name = photoMenu?.item?.name;
+  const setAsCover = async (name) => {
     if (!name) return;
     try {
       await client.post(`/prints/${printId}/photo/${name}/primary`);
       onCoverChange?.(name);
     } catch (e) { alert("Erreur : " + (e.response?.data?.detail || e.message)); }
-    setPhotoMenu(null);
   };
 
   const reloadDiskFiles = () => client.get("/prints/" + printId + "/snapshots")
@@ -1792,33 +1759,61 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
           )}
         </div>
         <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6, scrollbarWidth:"none" }}>
-          {items.map((item, i) => (
-            <div key={i} style={{ position:"relative", flexShrink:0 }}
-              onMouseDown={() => startPress(item, canCover)}
-              onMouseUp={cancelPress} onMouseLeave={cancelPress}
-              onTouchStart={() => startPress(item, canCover)} onTouchEnd={cancelPress}
-              onContextMenu={e => e.preventDefault()}>
-              <div onClick={() => { if (!photoMenu) setLightbox(flatItems[startIdx + i]); }}
+          {items.map((item, i) => {
+            const isCover = item.name && item.name === coverPhoto;
+            const armed   = confirmDelPhoto === item.url;
+            return (
+            <div key={i} style={{ position:"relative", flexShrink:0 }}>
+              {/* Aucun handler tactile ici : le defilement reste 100% natif. */}
+              <div onClick={() => setLightbox(flatItems[startIdx + i])}
                 style={{ cursor:"pointer" }}>
                 <img src={item.url} alt={item.label}
                   style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
-                    border: item.name && item.name === coverPhoto
-                      ? "2px solid #22c55e" : "1px solid var(--border)",
+                    border: isCover ? "2px solid #22c55e" : "1px solid var(--border)",
                     display:"block" }}
                   onError={e => { e.currentTarget.style.display="none"; }}/>
               </div>
               <span style={{ position:"absolute", bottom:4, left:4,
                 background:"rgba(0,0,0,0.65)", color:"white",
-                fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:4 }}>
+                fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:4,
+                pointerEvents:"none" }}>
                 {item.label}
               </span>
-              {item.name && item.name === coverPhoto && (
-                <span style={{ position:"absolute", top:4, right:4, fontSize:9,
+              {isCover && (
+                <span style={{ position:"absolute", bottom:4, right:4, fontSize:9,
                   background:"rgba(34,197,94,0.9)", color:"white",
-                  padding:"1px 5px", borderRadius:4 }}>⭐</span>
+                  padding:"1px 5px", borderRadius:4, pointerEvents:"none" }}>⭐</span>
+              )}
+              {isAdmin && (
+                <div style={{ position:"absolute", top:4, right:4, display:"flex", gap:3 }}>
+                  {/* Vignette de galerie : reservee aux vraies photos, les
+                      milestones sont des captures automatiques. */}
+                  {canCover && item.name && !isCover && !armed && (
+                    <button onClick={()=>setAsCover(item.name)} title="Définir comme photo principale"
+                      style={{ width:22, height:22, borderRadius:"50%", border:"none", cursor:"pointer",
+                        background:"rgba(0,0,0,0.6)", color:"white", fontSize:11, lineHeight:1,
+                        display:"flex", alignItems:"center", justifyContent:"center" }}>⭐</button>
+                  )}
+                  <button
+                    onClick={() => {
+                      if (!armed) { setConfirmDelPhoto(item.url); return; }
+                      setConfirmDelPhoto(null);
+                      if (item.snap) handleDelete({ stopPropagation(){} }, item.snap);
+                      else { setDeletedNames(prev=>new Set([...prev,item.name])); onDeleteUpload?.(item.name); }
+                    }}
+                    onBlur={()=>setConfirmDelPhoto(null)}
+                    title={armed ? "Confirmer la suppression" : "Supprimer"}
+                    style={{ height:22, width: armed ? "auto" : 22, padding: armed ? "0 7px" : 0,
+                      borderRadius: armed ? 11 : "50%", border:"none", cursor:"pointer",
+                      background: armed ? "#ef4444" : "rgba(0,0,0,0.6)", color:"white",
+                      fontSize: armed ? 9 : 11, fontWeight:600, lineHeight:1,
+                      display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    {armed ? "Supprimer ?" : "🗑"}</button>
+                </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
@@ -1873,46 +1868,6 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
           )}
         </div>
       )}
-    {photoMenu && (
-      <div style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(0,0,0,0.5)" }}
-        onClick={() => setPhotoMenu(null)}>
-        <div onClick={e => e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0,
-          right:0, background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-          padding:"20px 16px 32px" }}>
-          <img src={photoMenu.item.url} alt="" style={{ width:"100%", maxHeight:180,
-            objectFit:"contain", borderRadius:10, marginBottom:14 }}/>
-          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-            {/* Vignette de la galerie : reservee aux vraies photos (les milestones
-                sont des captures automatiques, pas des cliches a mettre en avant). */}
-            {photoMenu.canCover && photoMenu.item.name && photoMenu.item.name !== coverPhoto && (
-              <button onClick={setAsCover} style={{ padding:"12px", borderRadius:10, border:"none",
-                cursor:"pointer", background:"rgba(34,197,94,0.12)", color:"#22c55e",
-                fontSize:14, fontWeight:700 }}>
-                ⭐ Définir comme photo principale
-              </button>
-            )}
-            <button onClick={() => {
-                const it = photoMenu.item;
-                setPhotoMenu(null);
-                if (it.snap) {
-                  handleDelete({ stopPropagation(){} }, it.snap);
-                } else {
-                  setPhotoToDelete(it);
-                }
-              }}
-              style={{ padding:"12px", borderRadius:10, border:"none", cursor:"pointer",
-                background:"rgba(239,68,68,0.12)", color:"#ef4444", fontSize:14, fontWeight:700 }}>
-              🗑 Supprimer
-            </button>
-            <button onClick={() => setPhotoMenu(null)}
-              style={{ padding:"12px", borderRadius:10, border:"1px solid var(--border)",
-                cursor:"pointer", background:"none", color:"var(--muted)", fontSize:13 }}>
-              Annuler
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
     {photoToDelete && <PhotoDeleteConfirm
       label={photoToDelete.label||photoToDelete.name}
       onCancel={()=>setPhotoToDelete(null)}
