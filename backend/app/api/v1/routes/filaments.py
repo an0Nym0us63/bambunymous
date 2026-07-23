@@ -1394,7 +1394,7 @@ async def delete_spool_permanent(sid: int, force: bool = False, _: str = Depends
 async def delete_filament(fid: int, _: str = Depends(get_current_user)):
     """
     Supprime un filament — uniquement si aucune bobine n'y est rattachée
-    (archivées ou non). Sinon retourne une erreur 409.
+    (archivées ou non) et si aucun échantillon n'a été imprimé. Sinon 409.
     """
     async with AsyncSessionLocal() as db:
         f = await db.get(Filament, fid)
@@ -1410,6 +1410,17 @@ async def delete_filament(fid: int, _: str = Depends(get_current_user)):
                 409,
                 f"Impossible de supprimer ce filament : {spool_count} bobine(s) y sont rattachées "
                 f"(archivées ou non). Supprime ou déplace les bobines d'abord."
+            )
+
+        # Un echantillon imprime est un objet PHYSIQUE, range dans le nuancier
+        # et porteur d'un QR qui pointe cette fiche. Supprimer le filament
+        # laisserait une plaquette orpheline dont le scan mene a une 404, sans
+        # aucun moyen de retrouver ce qu'elle representait.
+        if f.swatch:
+            raise HTTPException(
+                409,
+                "Impossible de supprimer ce filament : un échantillon a été imprimé. "
+                "Décoche la case Échantillon si la plaquette a été jetée."
             )
 
         await db.delete(f)

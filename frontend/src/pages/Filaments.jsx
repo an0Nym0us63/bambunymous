@@ -1413,6 +1413,14 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
   };
 
   const handleDelete = async () => {
+    // Meme regle que le serveur, annoncee AVANT le clic de confirmation : le
+    // garde-fou qui compte vit cote serveur, mais laisser confirmer une
+    // suppression vouee a echouer n'apprend rien a personne.
+    if (f.swatch) {
+      alert("Ce filament a un échantillon imprimé : la plaquette du nuancier porte "
+          + "un QR qui pointe cette fiche. Décoche la case Échantillon si elle a été jetée.");
+      return;
+    }
     if (!confirm(`Supprimer le filament "${f.name}" ?`)) return;
     setDeleting(true);
     try {
