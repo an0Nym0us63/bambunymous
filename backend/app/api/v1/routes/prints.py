@@ -9,7 +9,7 @@ from typing import Optional, List
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, UploadFile, File, Form
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sqlalchemy import select, desc, func, or_
+from sqlalchemy import select, desc, func, or_, update
 from sqlalchemy.orm import selectinload
 
 from .auth import get_current_user, require_admin
@@ -511,6 +511,48 @@ async def group_photo(group_id: int, filename: str):
     return FileResponse(str(path), media_type=mime)
 
 
+@router.delete("/groups/{group_id}")
+async def ungroup(group_id: int, _: str = Depends(get_current_user)):
+    """
+    Degroupe : les prints sont detaches, le groupe disparait.
+
+    Le front appelait cette route depuis toujours, mais elle n'existait pas.
+    Seule la variante PATCH etait declaree sur ce chemin, d'ou un 405 Method
+    Not Allowed plutot qu'un 404 -- le chemin correspondait, pas la methode.
+
+    Les prints sont DETACHES et non supprimes : degrouper n'est pas detruire,
+    c'est defaire un regroupement. Le detachement est explicite plutot que
+    laisse au ON DELETE SET NULL de la cle etrangere, pour que l'intention
+    soit lisible ici et non dans le schema.
+
+    Les photos propres au groupe sont retirees avec lui : elles decrivaient
+    l'ensemble, elles n'ont plus d'objet une fois celui-ci defait.
+    """
+    async with AsyncSessionLocal() as db:
+        g = await db.get(Group, group_id)
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        n = (await db.execute(
+            select(func.count()).select_from(Print).where(Print.group_id == group_id)
+        )).scalar() or 0
+        await db.execute(
+            update(Print).where(Print.group_id == group_id).values(group_id=None)
+        )
+        await db.delete(g)
+        await db.commit()
+
+    d = DATA_DIR / "groups" / str(group_id)
+    if d.exists():
+        try:
+            shutil.rmtree(d)
+        except OSError as e:
+            # Un dossier residuel ne doit pas faire echouer le degroupage :
+            # la base fait foi, le disque se nettoie a la main si besoin.
+            print(f"[GROUP] photos du groupe {group_id} non supprimees : {e}")
+
+    return {"ok": True, "detached": n}
+
+
 @router.patch("/groups/{group_id}")
 async def patch_group(group_id: int, body: dict = Body({}), _: str = Depends(get_current_user)):
     """Met à jour les champs éditables d'un groupe (name, number_of_items)."""
@@ -918,6 +960,23 @@ async def prints_kpis(
         return {"count": r.count or 0, "duration": int(r.duration or 0),
                 "weight_g": float(r.weight or 0), "cost": round(float(r.cost or 0), 2)}
 
+@router.get("/debug")
+async def debug_prints():  # noqa — public debug route
+    """Route de debug — dump brut de la table prints (pas d'auth requis)."""
+    import aiosqlite, os
+    db_path = os.getenv("DATABASE_URL", "sqlite+aiosqlite:////data/bambunymous.db")
+    db_path = db_path.replace("sqlite+aiosqlite:///", "")
+    rows = []
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute("SELECT id,job_id,file_name,status,plate_image,model_3mf,created_at FROM prints ORDER BY id DESC LIMIT 20") as cur:
+            async for row in cur:
+                rows.append(dict(row))
+        async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
+            tables = [r[0] async for r in cur]
+    return {"tables": tables, "prints": rows}
+
+
 @router.get("/{print_id}")
 async def get_print(print_id: int, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
@@ -1209,23 +1268,6 @@ async def del_tag(print_id: int, tag: str, _: str = Depends(get_current_user)):
         t = result.scalar_one_or_none()
         if t: await db.delete(t); await db.commit()
     return {"ok": True}
-
-
-@router.get("/debug")
-async def debug_prints():  # noqa — public debug route
-    """Route de debug — dump brut de la table prints (pas d'auth requis)."""
-    import aiosqlite, os
-    db_path = os.getenv("DATABASE_URL", "sqlite+aiosqlite:////data/bambunymous.db")
-    db_path = db_path.replace("sqlite+aiosqlite:///", "")
-    rows = []
-    async with aiosqlite.connect(db_path) as db:
-        db.row_factory = aiosqlite.Row
-        async with db.execute("SELECT id,job_id,file_name,status,plate_image,model_3mf,created_at FROM prints ORDER BY id DESC LIMIT 20") as cur:
-            async for row in cur:
-                rows.append(dict(row))
-        async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
-            tables = [r[0] async for r in cur]
-    return {"tables": tables, "prints": rows}
 
 
 @router.post("/group/bulk")
