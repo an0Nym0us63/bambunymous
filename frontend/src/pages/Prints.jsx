@@ -1252,7 +1252,8 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                 <PhotoAddButton onPick={(f)=>uploadGroupPhoto(f)}/>
               </div>
               {groupPhotos.length > 0 && (
-                <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
+                <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4,
+                  touchAction:"pan-x", overscrollBehaviorX:"contain" }}>
                   {groupPhotos.map((ph,i)=>{
                     const isCover = groupCover === ph.name;
                     const armed   = groupPhotoToDelete === ph.name;
@@ -1262,16 +1263,20 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                       {/* Aucun handler tactile : le defilement reste natif. */}
                       <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover",
                         display:"block", borderRadius:6 }}/>
-                      {isCover && <span style={{ position:"absolute", bottom:2, left:2, fontSize:10,
-                        pointerEvents:"none" }}>⭐</span>}
                       <AdminOnly>
-                        <div style={{ position:"absolute", top:2, right:2, display:"flex", gap:3 }}>
-                          {!isCover && !armed && (
-                            <button onClick={()=>setGroupCoverPhoto(ph.name)} title="Définir comme vignette"
-                              style={{ width:20, height:20, borderRadius:"50%", border:"none", cursor:"pointer",
-                                background:"rgba(0,0,0,0.6)", color:"white", fontSize:10, lineHeight:1,
-                                display:"flex", alignItems:"center", justifyContent:"center" }}>⭐</button>
-                          )}
+                        {/* Etoile a gauche, doree sur la vignette actuelle et
+                            grise sur les autres : l'etat se lit sans chercher. */}
+                        <button onClick={()=> !isCover && setGroupCoverPhoto(ph.name)}
+                          title={isCover ? "Vignette de la galerie" : "Définir comme vignette"}
+                          style={{ position:"absolute", top:2, left:2,
+                            width:20, height:20, borderRadius:"50%", border:"none",
+                            cursor: isCover ? "default" : "pointer",
+                            background:"rgba(0,0,0,0.6)", fontSize:10, lineHeight:1,
+                            display:"flex", alignItems:"center", justifyContent:"center",
+                            filter: isCover ? "none" : "grayscale(1)", opacity: isCover ? 1 : 0.75 }}>⭐</button>
+                      </AdminOnly>
+                      <AdminOnly>
+                        <div style={{ position:"absolute", top:2, right:2 }}>
                           <button onClick={()=> armed ? delGroupPhoto(ph.name) : setGroupPhotoToDelete(ph.name)}
                             onBlur={()=>setGroupPhotoToDelete(null)}
                             title={armed ? "Confirmer la suppression" : "Supprimer"}
@@ -1758,7 +1763,11 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
             </div>
           )}
         </div>
-        <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6, scrollbarWidth:"none" }}>
+        {/* touchAction pan-x : cette bande ne repond qu'au glissement
+            horizontal, le composant vertical du geste n'est plus consomme ici
+            et ne declenche donc plus le tirer-pour-rafraichir. */}
+        <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6,
+          scrollbarWidth:"none", touchAction:"pan-x", overscrollBehaviorX:"contain" }}>
           {items.map((item, i) => {
             const isCover = item.name && item.name === coverPhoto;
             const armed   = confirmDelPhoto === item.url;
@@ -1779,21 +1788,25 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
                 pointerEvents:"none" }}>
                 {item.label}
               </span>
-              {isCover && (
-                <span style={{ position:"absolute", bottom:4, right:4, fontSize:9,
-                  background:"rgba(34,197,94,0.9)", color:"white",
-                  padding:"1px 5px", borderRadius:4, pointerEvents:"none" }}>⭐</span>
+              {/* Etoile a gauche, doree si principale et grise sinon. Reservee
+                  aux vraies photos : les milestones sont des captures
+                  automatiques, pas des cliches a mettre en avant. */}
+              {isAdmin && canCover && item.name && (
+                <button onClick={()=> !isCover && setAsCover(item.name)}
+                  title={isCover ? "Photo principale" : "Définir comme photo principale"}
+                  style={{ position:"absolute", top:4, left:4,
+                    width:22, height:22, borderRadius:"50%", border:"none",
+                    cursor: isCover ? "default" : "pointer",
+                    background:"rgba(0,0,0,0.6)", fontSize:11, lineHeight:1,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    filter: isCover ? "none" : "grayscale(1)", opacity: isCover ? 1 : 0.75 }}>⭐</button>
+              )}
+              {!isAdmin && isCover && (
+                <span style={{ position:"absolute", top:4, left:4, fontSize:11,
+                  pointerEvents:"none" }}>⭐</span>
               )}
               {isAdmin && (
-                <div style={{ position:"absolute", top:4, right:4, display:"flex", gap:3 }}>
-                  {/* Vignette de galerie : reservee aux vraies photos, les
-                      milestones sont des captures automatiques. */}
-                  {canCover && item.name && !isCover && !armed && (
-                    <button onClick={()=>setAsCover(item.name)} title="Définir comme photo principale"
-                      style={{ width:22, height:22, borderRadius:"50%", border:"none", cursor:"pointer",
-                        background:"rgba(0,0,0,0.6)", color:"white", fontSize:11, lineHeight:1,
-                        display:"flex", alignItems:"center", justifyContent:"center" }}>⭐</button>
-                  )}
+                <div style={{ position:"absolute", top:4, right:4 }}>
                   <button
                     onClick={() => {
                       if (!armed) { setConfirmDelPhoto(item.url); return; }

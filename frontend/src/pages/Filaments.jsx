@@ -303,7 +303,12 @@ function FilamentPhotos({ filamentId, onLightbox }) {
         </p>
         <PhotoAddButton onPick={handleUpload} size={26}/>
       </div>
-      <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
+      {/* touchAction pan-x : on declare que cette bande ne repond qu'au
+          glissement horizontal. Le composant vertical du geste n'est alors plus
+          consomme ici, ce qui evite de declencher le tirer-pour-rafraichir en
+          essayant simplement de faire defiler les photos. */}
+      <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4,
+        touchAction:"pan-x", overscrollBehaviorX:"contain" }}>
         {photos.map((photo, i) => {
           const fn = photo.url.split("/").pop();
           const armed = confirmDelPhoto === fn;
@@ -317,17 +322,25 @@ function FilamentPhotos({ filamentId, onLightbox }) {
               style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:6,
                 cursor:"pointer", display:"block" }}
               onError={e => { e.currentTarget.style.display="none"; }}/>
-            {i===0 && <span style={{ position:"absolute", bottom:2, left:2, fontSize:7,
-              background:"rgba(34,197,94,0.85)", color:"white", padding:"1px 4px", borderRadius:4,
-              pointerEvents:"none" }}>⭐</span>}
+            {/* Etoile TOUJOURS presente, a gauche : doree sur la photo
+                principale, grise sur les autres. L'etat se lit d'un coup d'oeil
+                et le geste pour changer est le meme partout. */}
             {isAdmin && (
-              <div style={{ position:"absolute", top:2, right:2, display:"flex", gap:3 }}>
-                {i !== 0 && !armed && (
-                  <button onClick={()=>setPrimary(fn)} title="Définir comme photo principale"
-                    style={{ width:22, height:22, borderRadius:"50%", border:"none", cursor:"pointer",
-                      background:"rgba(0,0,0,0.6)", color:"white", fontSize:11, lineHeight:1,
-                      display:"flex", alignItems:"center", justifyContent:"center" }}>⭐</button>
-                )}
+              <button onClick={()=> i!==0 && setPrimary(fn)}
+                title={i===0 ? "Photo principale" : "Définir comme photo principale"}
+                style={{ position:"absolute", top:2, left:2,
+                  width:22, height:22, borderRadius:"50%", border:"none",
+                  cursor: i===0 ? "default" : "pointer",
+                  background:"rgba(0,0,0,0.6)", fontSize:11, lineHeight:1,
+                  display:"flex", alignItems:"center", justifyContent:"center",
+                  filter: i===0 ? "none" : "grayscale(1)", opacity: i===0 ? 1 : 0.75 }}>⭐</button>
+            )}
+            {!isAdmin && i===0 && (
+              <span style={{ position:"absolute", top:2, left:2, fontSize:11,
+                pointerEvents:"none" }}>⭐</span>
+            )}
+            {isAdmin && (
+              <div style={{ position:"absolute", top:2, right:2 }}>
                 {/* Confirmation en deux temps : le premier appui arme (rouge,
                     "Supprimer ?"), le second supprime. */}
                 <button onClick={()=> armed ? deletePhoto(fn) : setConfirmDelPhoto(fn)}
