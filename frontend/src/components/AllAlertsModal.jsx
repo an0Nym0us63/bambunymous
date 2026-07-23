@@ -117,6 +117,26 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
     return `Encore ${days} j`;
   };
 
+  // Restaure exactement les lignes VISIBLES, c'est-a-dire ce que la recherche
+  // et la categorie ont laisse passer. Il n'existe pas de route "restaurer un
+  // lot" : on enchaine les suppressions unitaires, puis on recharge une seule
+  // fois a la fin plutot qu'a chaque appel.
+  const clearFiltered = async () => {
+    const keys = shown.map(a => a.key);
+    if (!keys.length) return;
+    if (!window.confirm(
+      `Remettre en circulation ${keys.length} alerte${keys.length > 1 ? "s" : ""} ?`)) return;
+    setBusy(true);
+    try {
+      for (const k of keys) {
+        await client.delete(`/attention/dismiss/${encodeURIComponent(k)}`);
+      }
+      setDis(ds => (ds || []).filter(d => !keys.includes(d.key)));
+      load(); onChanged?.();
+    } catch (e) { setErr(e.response?.data?.detail || e.message); }
+    finally { setBusy(false); }
+  };
+
   const clearAll = async () => {
     if (!window.confirm("Remettre en circulation TOUTES les alertes ignorées ?")) return;
     setBusy(true);
@@ -264,12 +284,23 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
         </div>
 
         {tab === "dismissed" && !!(dis || []).length && (
-          <div style={{ padding:"10px 16px" }}>
+          <div style={{ padding:"10px 16px", display:"flex", flexDirection:"column", gap:8 }}>
+            {/* Le bouton restreint n'apparait que si un filtre est actif ET
+                qu'il ne selectionne pas deja tout : sinon il ferait doublon
+                avec celui d'en dessous. */}
+            {shown.length > 0 && shown.length < (dis || []).length && (
+              <AdminOnly><button type="button" disabled={busy} onClick={clearFiltered}
+                style={{ width:"100%", padding:"9px", borderRadius:8, border:"none",
+                  background:"rgba(59,130,246,0.12)", color:"#3b82f6",
+                  fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                {busy ? "…" : `Remettre en circulation ces ${shown.length} alertes`}
+              </button></AdminOnly>
+            )}
             <AdminOnly><button type="button" disabled={busy} onClick={clearAll}
               style={{ width:"100%", padding:"9px", borderRadius:8, border:"none",
                 background:"rgba(239,68,68,0.12)", color:"#ef4444",
                 fontSize:12, fontWeight:700, cursor:"pointer" }}>
-              {busy ? "…" : "Tout remettre en circulation"}
+              {busy ? "…" : `Tout remettre en circulation (${(dis || []).length})`}
             </button></AdminOnly>
           </div>
         )}
