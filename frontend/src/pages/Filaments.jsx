@@ -254,7 +254,7 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
 function FilamentPhotos({ filamentId, onLightbox }) {
   const [photos, setPhotos] = React.useState([]);
   const [lightbox, setLightbox] = React.useState(null);
-  const [photoMenu, setPhotoMenu] = React.useState(null);
+  const [confirmDelPhoto, setConfirmDelPhoto] = React.useState(null);  // filename arme
 
   const reload = () => client.get("/filaments/" + filamentId + "/photos")
     .then(r => setPhotos(r.data.files || [])).catch(() => {});
@@ -278,43 +278,20 @@ function FilamentPhotos({ filamentId, onLightbox }) {
     finally { setUploading(false); }
   };
 
-  const pressTimer = React.useRef(null);
-  const pressStart = React.useRef(null);   // position initiale du doigt
-  const moved = React.useRef(false);       // le doigt a-t-il bouge depuis le contact
-  const startPhotoPress = (photo, idx, e) => {
-    if (!isAdmin) return;   // le menu ne propose que photo principale / suppression
-    const t = e?.touches?.[0];
-    pressStart.current = t ? { x: t.clientX, y: t.clientY } : null;
-    moved.current = false;
-    clearTimeout(pressTimer.current);
-    pressTimer.current = setTimeout(() => {
-      // Ne s'ouvre que si le doigt n'a pas bouge : au moindre deplacement,
-      // moved passe a true et le menu est inhibe.
-      if (!moved.current) setPhotoMenu({ url: photo.url, filename: photo.url.split("/").pop(), index: idx });
-    }, 450);
+  // Plus d'appui long : sur une bande qui defile, distinguer un maintien d'un
+  // glissement est un combat perdu -- trois tentatives, trois echecs. Deux
+  // boutons VISIBLES en haut de chaque photo, comme ailleurs dans l'app.
+  const deletePhoto = async (filename) => {
+    try {
+      await client.delete(`/filaments/${filamentId}/photo/${filename}`);
+      setConfirmDelPhoto(null); reload();
+    } catch(e){ alert(e.response?.data?.detail || e.message); }
   };
-  // Seuil bas (8px) : des qu'on glisse, c'est un scroll. On marque moved pour
-  // que ni l'appui long deja arme, ni le clic de fin de geste ne se declenchent.
-  const movePhotoPress = (e) => {
-    if (!pressStart.current) return;
-    const t = e?.touches?.[0];
-    if (!t) return;
-    if (Math.abs(t.clientX - pressStart.current.x) > 8 ||
-        Math.abs(t.clientY - pressStart.current.y) > 8) {
-      moved.current = true;
-      clearTimeout(pressTimer.current);
-    }
-  };
-  const cancelPhotoPress = () => { clearTimeout(pressTimer.current); pressStart.current = null; };
-
-  const deletePhoto = async () => {
-    if (!window.confirm("Supprimer cette photo ?")) return;
-    await client.delete(`/filaments/${filamentId}/photo/${photoMenu.filename}`);
-    setPhotoMenu(null); reload();
-  };
-  const setPrimary = async () => {
-    await client.post(`/filaments/${filamentId}/photo/${photoMenu.filename}/primary`);
-    setPhotoMenu(null); reload();
+  const setPrimary = async (filename) => {
+    try {
+      await client.post(`/filaments/${filamentId}/photo/${filename}/primary`);
+      reload();
+    } catch(e){ alert(e.response?.data?.detail || e.message); }
   };
 
   return (
@@ -326,54 +303,48 @@ function FilamentPhotos({ filamentId, onLightbox }) {
         </p>
         <PhotoAddButton onPick={handleUpload} size={26}/>
       </div>
-      {/* onScroll sur le conteneur : le defilement horizontal annule tout appui
-          long en cours, meme si le touchmove de la photo n'a pas eu le temps de
-          se declencher (le scroll natif capte parfois le geste en premier). */}
-      <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}
-        onScroll={() => { moved.current = true; clearTimeout(pressTimer.current); }}>
-        {photos.map((photo, i) => (
-          <div key={i}
-            onClick={() => { if(moved.current){ return; } if(!photoMenu) { onLightbox ? onLightbox(photo.url) : setLightbox(photo.url); }}}
-            onMouseDown={() => startPhotoPress(photo, i)}
-            onMouseUp={cancelPhotoPress} onMouseLeave={cancelPhotoPress}
-            onTouchStart={(e) => startPhotoPress(photo, i, e)}
-            onTouchMove={movePhotoPress} onTouchEnd={cancelPhotoPress}
-            onTouchCancel={cancelPhotoPress}
-            onContextMenu={e => e.preventDefault()}
-            style={{ flexShrink:0, cursor:"pointer", borderRadius:8, overflow:"hidden", position:"relative",
+      <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
+        {photos.map((photo, i) => {
+          const fn = photo.url.split("/").pop();
+          const armed = confirmDelPhoto === fn;
+          return (
+          <div key={i} style={{ flexShrink:0, borderRadius:8, position:"relative",
               border: i===0 ? "2px solid #22c55e" : "1px solid var(--border)", width:90, height:90 }}>
-            <img src={photo.url} alt="" style={{ width:"100%", height:"100%", objectFit:"cover" }}
+            {/* Aucun handler tactile sur la vignette : le scroll reste
+                entierement natif, c'est tout l'interet du changement. */}
+            <img src={photo.url} alt=""
+              onClick={() => onLightbox ? onLightbox(photo.url) : setLightbox(photo.url)}
+              style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:6,
+                cursor:"pointer", display:"block" }}
               onError={e => { e.currentTarget.style.display="none"; }}/>
             {i===0 && <span style={{ position:"absolute", bottom:2, left:2, fontSize:7,
-              background:"rgba(34,197,94,0.85)", color:"white", padding:"1px 4px", borderRadius:4 }}>⭐</span>}
+              background:"rgba(34,197,94,0.85)", color:"white", padding:"1px 4px", borderRadius:4,
+              pointerEvents:"none" }}>⭐</span>}
+            {isAdmin && (
+              <div style={{ position:"absolute", top:2, right:2, display:"flex", gap:3 }}>
+                {i !== 0 && !armed && (
+                  <button onClick={()=>setPrimary(fn)} title="Définir comme photo principale"
+                    style={{ width:22, height:22, borderRadius:"50%", border:"none", cursor:"pointer",
+                      background:"rgba(0,0,0,0.6)", color:"white", fontSize:11, lineHeight:1,
+                      display:"flex", alignItems:"center", justifyContent:"center" }}>⭐</button>
+                )}
+                {/* Confirmation en deux temps : le premier appui arme (rouge,
+                    "Supprimer ?"), le second supprime. */}
+                <button onClick={()=> armed ? deletePhoto(fn) : setConfirmDelPhoto(fn)}
+                  onBlur={()=>setConfirmDelPhoto(null)}
+                  title={armed ? "Confirmer la suppression" : "Supprimer"}
+                  style={{ height:22, width: armed ? "auto" : 22, padding: armed ? "0 7px" : 0,
+                    borderRadius: armed ? 11 : "50%", border:"none", cursor:"pointer",
+                    background: armed ? "#ef4444" : "rgba(0,0,0,0.6)", color:"white",
+                    fontSize: armed ? 9 : 11, fontWeight:600, lineHeight:1,
+                    display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {armed ? "Supprimer ?" : "🗑"}</button>
+              </div>
+            )}
           </div>
-        ))}
+          );
+        })}
       </div>
-      {photoMenu && (
-        <div style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(0,0,0,0.5)" }}
-          onClick={() => setPhotoMenu(null)}>
-          <div onClick={e=>e.stopPropagation()} style={{ position:"absolute", bottom:0, left:0, right:0,
-            background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", padding:"20px 16px 32px" }}>
-            <img src={photoMenu.url} alt="" style={{ width:"100%", maxHeight:180, objectFit:"contain", borderRadius:10, marginBottom:14 }}/>
-            <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-              {photoMenu.index !== 0 && (
-                <button onClick={setPrimary} style={{ padding:"12px", borderRadius:10, border:"none",
-                  cursor:"pointer", background:"rgba(34,197,94,0.12)", color:"#22c55e", fontSize:14, fontWeight:700 }}>
-                  ⭐ Définir comme photo principale
-                </button>
-              )}
-              <button onClick={deletePhoto} style={{ padding:"12px", borderRadius:10, border:"none",
-                cursor:"pointer", background:"rgba(239,68,68,0.1)", color:"#ef4444", fontSize:14, fontWeight:700 }}>
-                🗑 Supprimer cette photo
-              </button>
-              <button onClick={()=>setPhotoMenu(null)} style={{ padding:"12px", borderRadius:10,
-                border:"1px solid var(--border)", cursor:"pointer", background:"var(--surface2)", color:"var(--muted)", fontSize:13 }}>
-                Annuler
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {lightbox && (
         <div onClick={() => setLightbox(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.88)",
           zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center" }}>
