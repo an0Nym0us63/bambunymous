@@ -205,11 +205,28 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
         {err && <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"#ef4444" }}>⚠ {err}</p>}
 
         <div style={{ padding:"0 16px 10px", display:"flex", flexDirection:"column", gap:8 }}>
-          <input value={q} onChange={e => setQ(e.target.value)}
-            placeholder="Filtrer : nom, marque, matière…"
-            style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
-              border:"1px solid var(--border)", background:"var(--surface2)",
-              color:"var(--text)", fontSize:13, outline:"none" }}/>
+          {/* Compteur DANS le champ plutot qu'au-dessus de la liste : c'est la
+              qu'on regarde en tapant, et la reponse arrive sans deplacer les
+              yeux. Affiche des qu'un filtre est actif -- recherche ou
+              categorie -- puisque c'est la seule situation ou le total brut ne
+              suffit plus. */}
+          <div style={{ position:"relative" }}>
+            <input value={q} onChange={e => setQ(e.target.value)}
+              placeholder="Filtrer : nom, marque, matière…"
+              style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
+                paddingRight: (q || cat) ? 76 : 12,
+                border:"1px solid var(--border)", background:"var(--surface2)",
+                color:"var(--text)", fontSize:13, outline:"none" }}/>
+            {(q || cat) && (
+              <span style={{ position:"absolute", right:8, top:"50%",
+                transform:"translateY(-50%)", pointerEvents:"none",
+                fontSize:11, fontWeight:700, padding:"2px 8px", borderRadius:20,
+                background: shown.length ? "rgba(59,130,246,0.15)" : "rgba(239,68,68,0.15)",
+                color: shown.length ? "#3b82f6" : "#ef4444" }}>
+                {shown.length} / {source.length}
+              </span>
+            )}
+          </div>
 
           {/* Menu déroulant plutôt que des pastilles : avec dix catégories, elles
               occupaient trois lignes pour pas grand-chose. */}
