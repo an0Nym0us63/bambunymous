@@ -1439,7 +1439,16 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
 
 function GroupTile({ groupId, name, prints, latestDate, number_of_items, duration_seconds, cover_print_id, onSelectPrint, onDelete, onUngroup }) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const coverImgId = cover_print_id || (prints[0]?.id ?? null);
+  // Mosaique des prints du groupe, le print de couverture en tete. Une seule
+  // vignette ne montrait qu'une piece sur N et ne laissait pas deviner ce que
+  // le groupe contient -- c'est pourtant la question qu'on se pose en
+  // parcourant l'historique.
+  const mosaicUrls = React.useMemo(() => {
+    const ids = prints.map(pr => pr.id).filter(Boolean);
+    const i = cover_print_id ? ids.indexOf(cover_print_id) : -1;
+    const ordered = i > 0 ? [ids[i], ...ids.slice(0, i), ...ids.slice(i + 1)] : ids;
+    return ordered.map(id => `/api/v1/prints/${id}/image`);
+  }, [prints, cover_print_id]);
 
   return (
     <>
@@ -1448,12 +1457,9 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
           position:"relative", padding:0, cursor:"pointer" }}>
         <div style={{ position:"relative", paddingTop:"75%",
           background:"var(--surface2)", overflow:"hidden" }}>
-          {coverImgId && (
-            <img src={"/api/v1/prints/" + coverImgId + "/image"} alt=""
-              style={{ position:"absolute", inset:0, width:"100%", height:"100%",
-                objectFit:"contain" }}
-              onError={e => { e.currentTarget.style.display="none"; }}/>
-          )}
+          <div style={{ position:"absolute", inset:0 }}>
+            <GroupMosaic photos={mosaicUrls} title={name}/>
+          </div>
           <div style={{ position:"absolute", inset:0, background:"rgba(124,58,237,0.08)" }}/>
           <span style={{ position:"absolute", top:6, left:6,
             background:"rgba(124,58,237,0.85)", color:"white",
@@ -1947,18 +1953,15 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
       getPhotos={it => it.photos||[]}
       getTitle={it => it.title||"Sans nom"}
       getSubtitle={it => it.kind==="group" ? `📁 ${it.count} prints` : fmtDate(it.print_date)}
-      /* Mosaique pour les GROUPES seulement : une image unique ne disait pas
-         qu'il y avait un ensemble derriere, et n'en montrait qu'une piece sur
-         huit. Les prints gardent leur photo unique, il n'y a rien a composer. */
-      renderCover={it => it.kind === "group"
-        ? <GroupMosaic photos={it.photos} title={it.title} cover={it.cover_photo}/>
-        : (it.photos?.[0]?.url
-            ? <img src={it.photos[0].url} alt={it.title||""}
-                style={{ width:"100%", height:"100%", objectFit:"cover" }}
-                onError={e => { e.currentTarget.style.display="none"; }}/>
-            : <div style={{ display:"flex", alignItems:"center", justifyContent:"center",
-                height:"100%", color:"var(--muted)", fontSize:10, padding:6,
-                textAlign:"center" }}>{it.title||"Sans nom"}</div>)}
+      /* Mosaique pour les groupes ET les prints : un print porte lui aussi
+         plusieurs photos (captures d'impression et cliches ajoutes), et n'en
+         montrer qu'une revenait a cacher le reste. Pour un print, le serveur
+         trie deja ses photos couverture en tete : la case dominante est donc
+         la bonne sans avoir a lui passer cover_photo. */
+      renderCover={it => (
+        <GroupMosaic photos={it.photos} title={it.title}
+          cover={it.kind === "group" ? it.cover_photo : null}/>
+      )}
       emptyLabel="Aucune photo disponible"
       onItemClick={it => {
         if (it.kind==="group") setSelectedGroup(it);
