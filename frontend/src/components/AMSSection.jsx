@@ -237,10 +237,15 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
 
   return (
     <div onClick={onClick} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4,
-      cursor: onClick ? "pointer" : "default" }}>
-      {/* Type de filament en haut */}
-      <p style={{ fontSize:10, color:"var(--muted)", fontWeight:600, lineHeight:"13px",
-        textAlign:"center", whiteSpace:"nowrap", height:13 }}>
+      minWidth:0, cursor: onClick ? "pointer" : "default" }}>
+      {/* Type de filament en haut. minWidth:0 sur la colonne + troncature ici :
+          sans les deux, un libelle long comme "Support for PLA/PETG" imposait
+          sa largeur en nowrap et elargissait TOUTE la colonne, decalant les
+          slots voisins. Le titre complet reste accessible au survol. */}
+      <p title={empty ? "" : (material || "")}
+        style={{ fontSize:10, color:"var(--muted)", fontWeight:600, lineHeight:"13px",
+        textAlign:"center", whiteSpace:"nowrap", height:13,
+        maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis" }}>
         {empty ? "" : (material || "—")}
       </p>
       {/* Barre de progression couleur filament */}
@@ -365,7 +370,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
         const n = traysInOrder(ams).length || 1;
         const GAP = 4, COLS = 4;
         return (
-      <div style={{ display:"grid", gridTemplateColumns:`repeat(${n},1fr)`, gap:GAP,
+      <div style={{ display:"grid", gridTemplateColumns:`repeat(${n},minmax(0,1fr))`, gap:GAP,
         width: n < COLS
           ? `calc((100% - ${(COLS-1)*GAP}px) * ${n} / ${COLS} + ${(n-1)*GAP}px)`
           : "100%",
