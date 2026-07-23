@@ -59,7 +59,11 @@ async def _migrate():
     """Applique les colonnes manquantes sans perdre les données."""
     migrations = [
         # table, colonne, type SQL
-        ("objects",   "status",               "TEXT DEFAULT 'available'"),
+        # SANS valeur par defaut, volontairement : un DEFAULT remplit
+        # immediatement TOUTES les lignes existantes, et la reprise ci-dessous
+        # ne trouve alors plus rien a corriger. Les nouvelles lignes recoivent
+        # leur valeur par le modele SQLAlchemy.
+        ("objects",   "status",               "TEXT"),
         ("users",     "tokens_valid_from",    "TIMESTAMP"),
         ("groups",    "cover_photo",          "TEXT"),
         ("prints",    "translated_name",      "TEXT"),
@@ -134,20 +138,37 @@ async def _migrate_object_status():
             cols = [r[1] for r in (await conn.execute(_text("PRAGMA table_info(objects)"))).all()]
             if "status" not in cols:
                 return
+            # Deux populations a traiter :
+            #  - les lignes encore vides (cas normal) ;
+            #  - celles que la premiere version de cette migration a marquees
+            #    'available' a tort, parce que la colonne avait ete creee avec
+            #    un DEFAULT qui remplissait tout avant la reprise.
+            #
+            # La seconde condition ne touche QUE les lignes dont les anciens
+            # champs contredisent le statut : un objet reellement disponible
+            # n'a aucun de ces marqueurs et reste intact. Une remise a 'a
+            # vendre' faite a la main n'est donc jamais ecrasee.
+            cond = ("""
+                (status IS NULL OR status = ''
+                 OR (status = 'available' AND (
+                        (sold_price IS NOT NULL AND sold_price > 0)
+                     OR personal = 1
+                     OR available = 0)))
+            """)
             n = (await conn.execute(_text(
-                "SELECT COUNT(*) FROM objects WHERE status IS NULL OR status = ''"))).scalar()
+                f"SELECT COUNT(*) FROM objects WHERE {cond}"))).scalar()
             if not n:
                 return
-            await conn.execute(_text("""
+            await conn.execute(_text(f"""
                 UPDATE objects SET status = CASE
                     WHEN sold_price IS NOT NULL AND sold_price > 0 THEN 'sold'
                     WHEN personal = 1                              THEN 'personal'
                     WHEN available = 0                             THEN 'unavailable'
                     ELSE 'available'
                 END
-                WHERE status IS NULL OR status = ''
+                WHERE {cond}
             """))
-            print(f"[migration] statut deduit pour {n} objet(s)")
+            print(f"[migration] statut deduit ou corrige pour {n} objet(s)")
     except Exception as e:
         print(f"[migration] statut objets: {e}")
 
