@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2 } from "lucide-react";
+import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import { moneyVal } from "../utils/money";
@@ -10,11 +10,18 @@ import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
 import PhotoAddButton from "../components/PhotoAddButton";
 
+// PARTIAL et TO_REDO viennent de Spoolnymous, qui gerait cinq statuts. Les
+// prints importes les portent toujours, mais l'application ne les connaissait
+// pas : faute de configuration, ils tombaient dans le repli SUCCESS et
+// s'affichaient comme REUSSIS. Une impression a refaire passait donc pour un
+// succes, sans aucun signe.
 const STATUS_CFG = {
-  IN_PROGRESS: { label:"En cours", color:"#3b82f6", bg:"rgba(59,130,246,0.75)",  icon:Loader },
-  SUCCESS:     { label:"Réussi",   color:"#22c55e", bg:"rgba(34,197,94,0.75)",   icon:CheckCircle },
-  FAILED:      { label:"Échoué",   color:"#ef4444", bg:"rgba(239,68,68,0.75)",   icon:XCircle },
-  CANCELLED:   { label:"Annulé",   color:"#94a3b8", bg:"rgba(148,163,184,0.75)", icon:XCircle },
+  IN_PROGRESS: { label:"En cours",  color:"#3b82f6", bg:"rgba(59,130,246,0.75)",  icon:Loader },
+  SUCCESS:     { label:"Réussi",    color:"#22c55e", bg:"rgba(34,197,94,0.75)",   icon:CheckCircle },
+  PARTIAL:     { label:"Partiel",   color:"#f59e0b", bg:"rgba(245,158,11,0.75)",  icon:AlertTriangle },
+  TO_REDO:     { label:"À refaire", color:"#a855f7", bg:"rgba(168,85,247,0.75)",  icon:RotateCcw },
+  FAILED:      { label:"Échoué",    color:"#ef4444", bg:"rgba(239,68,68,0.75)",   icon:XCircle },
+  CANCELLED:   { label:"Annulé",    color:"#94a3b8", bg:"rgba(148,163,184,0.75)", icon:XCircle },
 };
 
 function fmtDur(s) {
@@ -90,7 +97,10 @@ function FilamentDots({ filaments }) {
 }
 
 function StatusBadge({ status }) {
-  const cfg = STATUS_CFG[status] || STATUS_CFG.SUCCESS;
+  // Repli NEUTRE et non SUCCESS : un statut inconnu ne doit pas se deguiser en
+  // reussite. Il s'affiche tel quel, ce qui le rend reperable.
+  const cfg = STATUS_CFG[status] || { label: status || "?", color:"#94a3b8",
+    bg:"rgba(148,163,184,0.75)", icon:AlertTriangle };
   const Icon = cfg.icon;
   return (
     <span style={{ display:"inline-flex", alignItems:"center", gap:4,
@@ -584,6 +594,8 @@ function PrintEditSheet({ p, onClose, onSaved }) {
             <label style={lbl}>Statut</label>
             <select style={sel} value={form.status} onChange={e=>set("status",e.target.value)}>
               <option value="SUCCESS">Réussi</option>
+              <option value="PARTIAL">Partiel</option>
+              <option value="TO_REDO">À refaire</option>
               <option value="FAILED">Échoué</option>
               <option value="IN_PROGRESS">En cours</option>
             </select>
@@ -2170,8 +2182,9 @@ export default function Prints() {
     finally { setImporting(false); e.target.value = ""; }
   };
 
-  const STATUSES = ["","IN_PROGRESS","SUCCESS","FAILED"];
-  const STATUS_LABELS = {"":"Tous","IN_PROGRESS":"En cours","SUCCESS":"Réussis","FAILED":"Échoués"};
+  const STATUSES = ["","IN_PROGRESS","SUCCESS","PARTIAL","TO_REDO","FAILED"];
+  const STATUS_LABELS = {"":"Tous","IN_PROGRESS":"En cours","SUCCESS":"Réussis",
+    "PARTIAL":"Partiels","TO_REDO":"À refaire","FAILED":"Échoués"};
 
   return (
     <div style={{ maxWidth:960, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>

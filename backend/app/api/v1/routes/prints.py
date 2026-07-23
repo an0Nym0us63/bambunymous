@@ -938,6 +938,13 @@ async def update_print(print_id: int, body: dict, _: str = Depends(get_current_u
                 "sold_units","sold_price_total","margin","notes",
                 "design_id","duration_seconds","print_date",
                 "translated_name"}
+    # Les cinq statuts de Spoolnymous, plus CANCELLED. Valide explicitement :
+    # le champ etait accepte comme chaine libre, une faute de frappe cote client
+    # inscrivait donc un statut inconnu, invisible dans les filtres.
+    PRINT_STATUSES = {"IN_PROGRESS", "SUCCESS", "PARTIAL", "TO_REDO",
+                      "FAILED", "CANCELLED"}
+    if "status" in body and body["status"] not in PRINT_STATUSES:
+        raise HTTPException(400, f"Statut invalide : {body['status']}")
     async with AsyncSessionLocal() as db:
         p = await db.get(Print, print_id)
         if not p: raise HTTPException(404)
