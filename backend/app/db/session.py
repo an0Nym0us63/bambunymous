@@ -58,6 +58,7 @@ async def _migrate():
     """Applique les colonnes manquantes sans perdre les données."""
     migrations = [
         # table, colonne, type SQL
+        ("users",     "tokens_valid_from",    "TIMESTAMP"),
         ("groups",    "cover_photo",          "TEXT"),
         ("prints",    "translated_name",      "TEXT"),
         ("filaments", "translated_name",      "TEXT"),

@@ -29,9 +29,13 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(sub: str, role: str = "admin") -> str:
-    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    now = datetime.utcnow()
+    expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return jwt.encode(
-        {"sub": sub, "role": role, "exp": expire},
+        # iat = date d'emission. C'est elle qu'on compare a tokens_valid_from
+        # pour savoir si le jeton precede un changement de mot de passe ou de
+        # role, et doit donc etre refuse.
+        {"sub": sub, "role": role, "iat": now, "exp": expire},
         settings.SECRET_KEY,
         algorithm=ALGORITHM,
     )

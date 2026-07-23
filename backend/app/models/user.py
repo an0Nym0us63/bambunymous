@@ -20,6 +20,11 @@ class User(Base):
     role          = Column(String(32), nullable=False, default=ROLE_ADMIN)
     active        = Column(Boolean, default=True, nullable=False)
     last_seen     = Column(DateTime, nullable=True)   # derniere activite
+    # Tout jeton emis AVANT cette date est refuse. Un JWT est sans etat : sans
+    # ce garde-fou, changer un mot de passe ou retrograder un role n'a aucun
+    # effet sur les sessions deja ouvertes, qui restent valides jusqu'a
+    # expiration -- des jours plus tard.
+    tokens_valid_from = Column(DateTime, nullable=True)
     created_at    = Column(DateTime, default=datetime.utcnow)
     updated_at    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

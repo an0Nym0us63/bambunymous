@@ -1,3 +1,4 @@
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy import select
@@ -55,23 +56,66 @@ async def login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = 
     }
 
 
+async def _resolve(token: str, db: AsyncSession) -> tuple[str, str]:
+    """
+    Valide un jeton contre l'etat REEL du compte et rend (username, role).
+
+    Un JWT est autonome : il porte son role et reste valide jusqu'a expiration,
+    sans jamais consulter la base. Trois consequences qu'on corrige ici :
+
+      - un mot de passe change n'ejectait aucune session ouverte ;
+      - un role modifie ne prenait effet qu'a la reconnexion, puisque le role
+        lu etait celui GRAVE dans le jeton ;
+      - un compte desactive ou supprime gardait ses acces.
+
+    Le role est donc relu en base a chaque requete, et tout jeton emis avant
+    tokens_valid_from est refuse.
+    """
+    payload = decode_token_payload(token)
+    if not payload:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
+    username = payload.get("sub")
+    if not username:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
+
+    user = (await db.execute(
+        select(User).where(User.username == username)
+    )).scalar_one_or_none()
+
+    # Pas de ligne en base : c'est l'admin historique des settings (avant la
+    # table users). On le laisse passer avec le role du jeton, sinon une
+    # installation pas encore migree se retrouverait verrouillee dehors.
+    if not user:
+        return username, (payload.get("role") or ROLE_ADMIN)
+
+    if not user.active:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Compte desactive")
+
+    if user.tokens_valid_from:
+        iat = payload.get("iat")
+        if iat is None or int(iat) < int(user.tokens_valid_from.timestamp()):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED,
+                                "Session expiree, reconnexion necessaire")
+
+    return username, user.role
+
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> str:
     """Dependance historique : renvoie le nom d'utilisateur."""
-    username = decode_token(token)
-    if not username:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
+    username, _ = await _resolve(token, db)
     return username
 
 
-async def get_current_role(token: str = Depends(oauth2_scheme)) -> str:
-    """Role porte par le token (admin par defaut pour les anciens tokens)."""
-    payload = decode_token_payload(token)
-    if not payload:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
-    return payload.get("role") or ROLE_ADMIN
+async def get_current_role(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    """Role REEL du porteur, relu en base et non pris dans le jeton."""
+    _, role = await _resolve(token, db)
+    return role
 
 
 async def require_admin(role: str = Depends(get_current_role)) -> str:
@@ -82,12 +126,10 @@ async def require_admin(role: str = Depends(get_current_role)) -> str:
 
 
 @router.get("/me")
-async def me(token: str = Depends(oauth2_scheme)):
-    """Identite et role du porteur du token (pour l'interface)."""
-    payload = decode_token_payload(token)
-    if not payload:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")
-    return {"username": payload.get("sub"), "role": payload.get("role") or ROLE_ADMIN}
+async def me(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    """Identite et role REELS du porteur (l'interface s'y fie pour l'affichage)."""
+    username, role = await _resolve(token, db)
+    return {"username": username, "role": role}
 
 
 class PasswordChange(BaseModel):
@@ -120,7 +162,14 @@ async def change_password(
         if not verify_password(body.current_password, user.password_hash):
             raise HTTPException(400, "Mot de passe actuel incorrect")
         user.password_hash = hash_password(body.new_password)
+        # Toutes les sessions ouvertes tombent, y compris sur d'autres appareils :
+        # c'est tout l'interet de changer un mot de passe.
+        user.tokens_valid_from = datetime.utcnow()
         await db.commit()
+        # ... sauf celle-ci, sinon on se deconnecterait soi-meme en changeant son
+        # propre mot de passe. Un jeton neuf est renvoye, le front le remplace.
+        return {"ok": True,
+                "access_token": create_access_token(sub=username, role=user.role)}
     else:
         # Compte historique (settings) : on met a jour la ou il est stocke.
         stored_hash = await get_setting(db, "ADMIN_PASSWORD_HASH")

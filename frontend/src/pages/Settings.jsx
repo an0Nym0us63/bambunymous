@@ -272,7 +272,11 @@ function MyAccountSection() {
     if (f.next !== f.confirm)   return setMsg({ err:true, t:"La confirmation ne correspond pas" });
     setBusy(true);
     try {
-      await client.post("/auth/change-password", { current_password: f.current, new_password: f.next });
+      const r = await client.post("/auth/change-password", { current_password: f.current, new_password: f.next });
+      // Le serveur ejecte toutes les sessions du compte, y compris celle-ci.
+      // Il renvoie un jeton neuf pour qu'on ne se deconnecte pas soi-meme en
+      // changeant son propre mot de passe -- les autres appareils, eux, tombent.
+      if (r.data?.access_token) localStorage.setItem("token", r.data.access_token);
       setF({ current:"", next:"", confirm:"" });
       setMsg({ err:false, t:"Mot de passe modifié." });
     } catch(e) {

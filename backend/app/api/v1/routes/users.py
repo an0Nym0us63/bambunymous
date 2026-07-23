@@ -1,4 +1,5 @@
 """Routes de gestion des comptes utilisateurs (reservees aux administrateurs)."""
+from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -200,16 +201,32 @@ async def update_user(
             if not others:
                 raise HTTPException(400, "Impossible : ce serait le dernier administrateur actif")
 
+    # Toute modification touchant les DROITS ou l'authentification ejecte les
+    # sessions ouvertes du compte concerne. Sans cela, retrograder un role ou
+    # reinitialiser un mot de passe restait sans effet tant que le jeton
+    # n'expirait pas -- soit potentiellement plusieurs jours.
+    invalidate = False
+
     if body.role is not None:
         if body.role not in ROLES:
             raise HTTPException(400, "Role invalide")
+        if u.role != body.role:
+            invalidate = True      # le role est relu en base, mais on force
+                                   # la reconnexion pour repartir au propre
         u.role = body.role
     if body.active is not None:
+        if u.active and not body.active:
+            invalidate = True      # desactivation : coupe l'acces immediatement
         u.active = body.active
     if body.password:
         if len(body.password) < 4:
             raise HTTPException(400, "Mot de passe trop court (4 caracteres minimum)")
         u.password_hash = hash_password(body.password)
+        invalidate = True
+
+    if invalidate:
+        u.tokens_valid_from = datetime.utcnow()
+
     await db.commit()
     await db.refresh(u)
     return _out(u)
