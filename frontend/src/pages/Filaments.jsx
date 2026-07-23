@@ -14,6 +14,7 @@ import PhotoAddButton from "../components/PhotoAddButton";
 import Select from "../components/Select";
 import { useIsAdmin } from "../store/auth";
 import { colorBg, parseColorsList } from "../utils/colors";
+import SpoolSVG from "../components/SpoolSVG";
 import GalleryCompare from "../components/GalleryCompare";
 
 const MATERIALS = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","BVOH","PLA-CF","PETG-CF","PA-CF","PPS"];
@@ -969,66 +970,93 @@ function KpiBar({ kpis }) {
 }
 
 function SpoolCard({ s, colorsList, onClick }) {
-  const pct = s.remaining_weight_g != null
-    ? Math.min(100, Math.round(s.remaining_weight_g / (s.filament_weight_g||1000) * 100)) : 0;
-  const barColor = pct > 60 ? "#22c55e" : pct > 35 ? "#f59e0b" : pct > 15 ? "#f97316" : "#ef4444";
-  const shd = null; // remplacé par filter drop-shadow
-  const flt = "drop-shadow(0 1px 4px rgba(0,0,0,0.95)) drop-shadow(0 2px 10px rgba(0,0,0,0.6))";
+  const total = s.filament_weight_g || 1000;
+  const rem   = s.remaining_weight_g;
+  const pct   = rem != null ? Math.max(0, Math.min(100, Math.round(rem / total * 100))) : 0;
+  // Vert -> rouge selon ce qu'il reste : la couleur previent avant qu'on lise
+  // le chiffre, ce qui est tout l'interet d'une grille qu'on parcourt vite.
+  const barColor = pct > 60 ? "#22c55e" : pct > 35 ? "#f59e0b"
+                 : pct > 15 ? "#f97316" : "#ef4444";
+  const sub = s.filament_fila_type || s.filament_material;
+
   return (
     <div onClick={onClick} className="card-sm"
       style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
-        ...colorBg(colorsList, s.filament_multicolor_type),
-        // Une bordure translucide sur un fond peint laisse transparaitre le fond
-        // de page (liseré clair) : on la remplace par un liseré en inset shadow.
-        border:"none",
-        boxShadow:"inset 0 0 0 1px rgba(255,255,255,0.18), 0 1px 3px rgba(0,0,0,0.12)" }}>
-      <div style={{ padding:"9px 10px 28px", display:"flex", flexDirection:"column", gap:0 }}>
-        {/* Nom : toujours 2 lignes fixes */}
-        <p style={{ fontWeight:600, fontSize:11, color:"white", margin:"0 0 7px",
-          lineHeight:"1.35", height:"2.7em", overflow:"hidden",
-          display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
-          fontFamily:"'Inter','DM Sans','Segoe UI',system-ui,sans-serif",
-          letterSpacing:"0.01em", filter:flt }}>
+        display:"flex", flexDirection:"column",
+        background:"var(--surface)", border:"1px solid var(--border)" }}>
+
+      {/* Bandeau de couleur en tete : c'est le seul endroit ou la teinte du
+          filament est montree en aplat. Peindre toute la tuile, comme avant,
+          imposait du texte blanc sur des fonds parfois tres clairs et rendait
+          la grille bruyante -- ici la couleur sert d'intercalaire et le reste
+          de la carte respecte le theme. */}
+      <div style={{ height:6, flexShrink:0, ...colorBg(colorsList, s.filament_multicolor_type) }}/>
+
+      {/* Sous-type, comme sur l'accueil */}
+      <p style={{ fontSize:9, fontWeight:700, color:"var(--muted)", textAlign:"center",
+        letterSpacing:"0.04em", textTransform:"uppercase", margin:"7px 6px 0",
+        height:12, lineHeight:"12px", overflow:"hidden", whiteSpace:"nowrap",
+        textOverflow:"ellipsis" }}>
+        {sub || "\u00A0"}
+      </p>
+
+      {/* La bobine, meme dessin qu'au slot AMS de l'accueil */}
+      <div style={{ display:"flex", justifyContent:"center", margin:"2px 0 0" }}>
+        <SpoolSVG colors={colorsList} empty={false} size={72}
+          type={s.filament_multicolor_type}/>
+      </div>
+
+      <div style={{ padding:"0 9px 9px", display:"flex", flexDirection:"column", gap:5 }}>
+        {/* Jauge + poids chiffre : la barre pour l'oeil, le detail pour la
+            decision d'impression. */}
+        <div>
+          <div style={{ height:5, borderRadius:3, background:"var(--surface2)",
+            overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)" }}>
+            <div style={{ width:`${pct}%`, height:"100%", background:barColor,
+              borderRadius:3, transition:"width 0.5s" }}/>
+          </div>
+          <p style={{ fontSize:9.5, color:"var(--muted)", margin:"4px 0 0", textAlign:"center",
+            fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>
+            <span style={{ color:"var(--text)", fontWeight:700 }}>
+              {rem != null ? `${Math.round(rem)} g` : "—"}
+            </span>
+            <span style={{ opacity:0.6 }}> / {total} g</span>
+          </p>
+        </div>
+
+        {/* Nom sur deux lignes fixes : sans hauteur imposee, les tuiles d'une
+            meme rangee se decalent des qu'un nom passe a la ligne. */}
+        <p style={{ fontWeight:700, fontSize:11.5, color:"var(--text)", margin:0,
+          lineHeight:"1.3", height:"2.6em", overflow:"hidden", textAlign:"center",
+          display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
           {s.filament_translated_name || s.filament_name}
         </p>
-        {/* Étiquettes marque + type — hauteur fixe */}
-        <div style={{ display:"flex", gap:3, flexWrap:"nowrap", overflow:"hidden",
-          height:16, alignItems:"center", marginBottom:7 }}>
-          {s.filament_manufacturer && (
-            <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3,
-              background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)",
-              whiteSpace:"nowrap", flexShrink:0 }}>
-              {s.filament_manufacturer}
-            </span>
-          )}
-          {(s.filament_fila_type || s.filament_material) && (
-            <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3,
-              background:"rgba(0,0,0,0.20)", color:"rgba(255,255,255,0.75)",
-              whiteSpace:"nowrap", flexShrink:0 }}>
-              {s.filament_fila_type || s.filament_material}
-            </span>
-          )}
-        </div>
-        {/* Barre + poids — hauteur fixe */}
-        <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-          <div style={{ flex:1, height:5, borderRadius:3,
-            background:"rgba(0,0,0,0.25)", border:"1px solid rgba(255,255,255,0.2)",
-            overflow:"hidden" }}>
-            <div style={{ width:`${pct}%`, height:"100%", background:barColor, borderRadius:3 }}/>
-          </div>
-          <span style={{ fontSize:9, fontFamily:"'Inter','DM Sans',system-ui,sans-serif",
-            fontWeight:700, color:"white", flexShrink:0, filter:flt,
-            minWidth:28, textAlign:"right", letterSpacing:"0.02em" }}>
-            {s.remaining_weight_g != null ? `${Math.round(s.remaining_weight_g)}g` : "—"}
+
+        {s.filament_manufacturer && (
+          <p style={{ fontSize:9.5, color:"var(--muted)", margin:"-2px 0 0",
+            textAlign:"center", overflow:"hidden", whiteSpace:"nowrap",
+            textOverflow:"ellipsis" }}>
+            {s.filament_manufacturer}
+          </p>
+        )}
+
+        {/* Emplacement en pastille pleine largeur : c'est l'info qu'on cherche
+            quand on veut aller chercher la bobine physiquement. */}
+        {s.location && (
+          <span style={{ fontSize:9, fontWeight:600, padding:"3px 6px", borderRadius:6,
+            background:"var(--surface2)", color:"var(--muted)", textAlign:"center",
+            overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>
+            {s.location}
           </span>
-        </div>
+        )}
       </div>
-      {/* Emplacement : coin bas gauche absolu */}
-      {s.location && (
-        <span style={{ position:"absolute", bottom:6, left:8,
-          fontSize:8, fontWeight:500, background:"rgba(0,0,0,0.28)",
-          color:"rgba(255,255,255,0.85)", padding:"1px 7px", borderRadius:20 }}>
-          {s.location}
+
+      {/* Bobine vide ou presque : signal discret mais present, sinon il faut
+          lire chaque chiffre pour reperer celles a remplacer. */}
+      {rem != null && pct <= 15 && (
+        <span style={{ position:"absolute", top:12, right:6, fontSize:8, fontWeight:800,
+          padding:"1px 5px", borderRadius:20, background:"#ef4444", color:"white" }}>
+          {pct}%
         </span>
       )}
     </div>
@@ -1306,7 +1334,10 @@ function SpoolsView({ filaments, showArchived }) {
           onClose={()=>setFilterOpen(false)}
         />
       )}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
+      {/* 104px mini : trois colonnes des 360px de large, donc sur les plus
+          petits telephones aussi, et la grille s'elargit ensuite d'elle-meme
+          sur tablette et bureau -- aucun point de rupture a maintenir. */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(104px,1fr))", gap:8 }}>
         {spools.map(s => {
           const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
           return (
