@@ -11,6 +11,7 @@ import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { useTrackDetail } from "../utils/track";
 import PhotoAddButton from "../components/PhotoAddButton";
+import Select from "../components/Select";
 import { useIsAdmin } from "../store/auth";
 import { colorBg, parseColorsList } from "../utils/colors";
 import GalleryCompare from "../components/GalleryCompare";
@@ -1427,9 +1428,8 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     <div style={{ marginBottom:10 }}>
       <label style={lStyle}>{label}</label>
       {options ? (
-        <select style={iStyle} value={form[k]} onChange={e => setForm(p=>({...p,[k]:e.target.value}))}>
-          {options.map(([v,l])=><option key={v} value={v}>{l}</option>)}
-        </select>
+        <Select style={iStyle} value={form[k]} onChange={e => setForm(p=>({...p,[k]:e.target.value}))}
+          options={options.map(([v,l])=>({ value:v, label:l }))}/>
       ) : (
         <input style={iStyle} type={type} value={form[k]}
           onChange={e => setForm(p=>({...p,[k]:e.target.value}))}/>
@@ -1531,11 +1531,10 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               {liveColors.length > 1 && (
                 <div style={{ marginBottom:10 }}>
                   <label style={lStyle}>Type multicolore</label>
-                  <select style={iStyle} value={form.multicolor_type === "monochrome" ? "coaxial" : form.multicolor_type}
-                    onChange={e => setForm(f=>({...f, multicolor_type: e.target.value}))}>
-                    <option value="gradient">Gradient (dégradé)</option>
-                    <option value="coaxial">Coaxial (segments)</option>
-                  </select>
+                  <Select style={iStyle} value={form.multicolor_type === "monochrome" ? "coaxial" : form.multicolor_type}
+                    onChange={e => setForm(f=>({...f, multicolor_type: e.target.value}))}
+                    options={[{ value:"gradient", label:"Gradient (dégradé)" },
+                              { value:"coaxial",  label:"Coaxial (segments)" }]}/>
                 </div>
               )}
               {F("Profile ID Bambu (ex: GFA00)","profile_id")}
@@ -1962,16 +1961,14 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
           {mode === "catalog" && (
             <div>
               <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap" }}>
-                <select value={selectedFamily} onChange={e => { setSelectedFamily(e.target.value); setSelectedType(""); }}
-                  style={{ ...iStyle, flex:1, minWidth:120 }}>
-                  <option value="">Toutes familles</option>
-                  {families.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
-                <select value={selectedType} onChange={e => setSelectedType(e.target.value)}
-                  style={{ ...iStyle, flex:1, minWidth:140 }}>
-                  <option value="">Tous types</option>
-                  {types.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                <Select value={selectedFamily} onChange={e => { setSelectedFamily(e.target.value); setSelectedType(""); }}
+                  style={{ ...iStyle, flex:1, minWidth:120 }}
+                  options={[{ value:"", label:"Toutes familles" },
+                            ...families.map(f => ({ value:f, label:f }))]}/>
+                <Select value={selectedType} onChange={e => setSelectedType(e.target.value)}
+                  style={{ ...iStyle, flex:1, minWidth:140 }}
+                  options={[{ value:"", label:"Tous types" },
+                            ...types.map(t => ({ value:t, label:t }))]}/>
               </div>
               <input value={catalogQ} onChange={e => setCatalogQ(e.target.value)}
                 placeholder="Rechercher une couleur (Jade White, Orange…)"
@@ -2071,11 +2068,10 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
               {liveColors.length > 1 && (
                 <div style={{ marginBottom:10 }}>
                   <label style={lStyle}>Type multicolore</label>
-                  <select style={iStyle} value={form.multicolor_type === "monochrome" ? "coaxial" : form.multicolor_type}
-                    onChange={e => setForm(f => ({...f, multicolor_type: e.target.value}))}>
-                    <option value="gradient">Gradient (dégradé)</option>
-                    <option value="coaxial">Coaxial (segments)</option>
-                  </select>
+                  <Select style={iStyle} value={form.multicolor_type === "monochrome" ? "coaxial" : form.multicolor_type}
+                    onChange={e => setForm(f => ({...f, multicolor_type: e.target.value}))}
+                    options={[{ value:"gradient", label:"Gradient (dégradé)" },
+                              { value:"coaxial",  label:"Coaxial (segments)" }]}/>
                 </div>
               )}
               <div style={{ marginBottom:10 }}>

@@ -9,6 +9,7 @@ import { useTrackDetail } from "../utils/track";
 import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
 import PhotoAddButton from "../components/PhotoAddButton";
+import Select from "../components/Select";
 
 // PARTIAL et TO_REDO viennent de Spoolnymous, qui gerait cinq statuts. Les
 // prints importes les portent toujours, mais l'application ne les connaissait
@@ -592,13 +593,12 @@ function PrintEditSheet({ p, onClose, onSaved }) {
           </div>
           <div>
             <label style={lbl}>Statut</label>
-            <select style={sel} value={form.status} onChange={e=>set("status",e.target.value)}>
-              <option value="SUCCESS">Réussi</option>
-              <option value="PARTIAL">Partiel</option>
-              <option value="TO_REDO">À refaire</option>
-              <option value="FAILED">Échoué</option>
-              <option value="IN_PROGRESS">En cours</option>
-            </select>
+            <Select style={sel} value={form.status} onChange={e=>set("status",e.target.value)}
+              options={[{ value:"SUCCESS", label:"Réussi" },
+                        { value:"PARTIAL", label:"Partiel" },
+                        { value:"TO_REDO", label:"À refaire" },
+                        { value:"FAILED",  label:"Échoué" },
+                        { value:"IN_PROGRESS", label:"En cours" }]}/>
           </div>
           <div>
             <label style={lbl}>Note de statut</label>

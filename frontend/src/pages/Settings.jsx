@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
+import Select from "../components/Select";
 import HeaderAction from "../components/HeaderAction";
 import { usePrinter } from "../store/printer";
 import { useTheme } from "../useTheme";
@@ -626,11 +627,10 @@ function ActivitySection() {
           placeholder="Rechercher un libellé…"
           style={{ ...inp, width:"auto", flex:"1 1 140px", minWidth:120,
             fontSize:12, padding:"5px 10px" }}/>
-        <select value={who} onChange={e=>setWho(e.target.value)}
-          style={{ ...chip(!!who), marginLeft:"auto", maxWidth:150 }}>
-          <option value="">Tous les comptes</option>
-          {names.map(n => <option key={n} value={n}>{n}</option>)}
-        </select>
+        <Select value={who} onChange={e=>setWho(e.target.value)}
+          style={{ ...chip(!!who), marginLeft:"auto", maxWidth:150 }}
+          options={[{ value:"", label:"Tous les comptes" },
+                    ...names.map(n => ({ value:n, label:n }))]}/>
       </div>
 
       {err && <p style={{ fontSize:12, color:"#ef4444", margin:"0 0 10px" }}>{err}</p>}

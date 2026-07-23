@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
+import Select from "./Select";
 import AdminOnly from "./AdminOnly";
 import { colorBg, parseColorsList } from "../utils/colors";
 import { FilamentSheet, FilamentSheetFromSpool } from "../pages/Filaments";
@@ -212,17 +213,15 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
 
           {/* Menu déroulant plutôt que des pastilles : avec dix catégories, elles
               occupaient trois lignes pour pas grand-chose. */}
-          <select value={cat} onChange={e => setCat(e.target.value)}
+          <Select value={cat} onChange={e => setCat(e.target.value)}
             style={{ width:"100%", boxSizing:"border-box", padding:"8px 12px", borderRadius:8,
               border:"1px solid var(--border)", background:"var(--surface2)",
-              color:"var(--text)", fontSize:13, outline:"none" }}>
-            <option value="">Toutes les catégories ({source.length})</option>
-            {catList.map(c => (
-              <option key={c.category} value={c.category}>
-                {c.icon} {c.label} ({counts[c.category]})
-              </option>
-            ))}
-          </select>
+              color:"var(--text)", fontSize:13, outline:"none" }}
+            options={[
+              { value:"", label:`Toutes les catégories (${source.length})` },
+              ...catList.map(c => ({ value:c.category,
+                label:`${c.icon} ${c.label} (${counts[c.category]})` })),
+            ]}/>
 
         </div>
 
