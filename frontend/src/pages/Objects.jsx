@@ -1620,10 +1620,14 @@ export default function Objects() {
           ? <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>Aucun objet</p>
           : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               {sections.map(sec => (
+                /* Toutes fermees au depart : l'en-tete porte deja le compte et
+                   le montant, donc la page se lit d'un coup d'oeil et on ne
+                   deplie que ce qu'on veut voir. Ouvrir une section par defaut
+                   repoussait les autres hors de l'ecran. */
                 <StatusSection key={sec.st} sec={sec}
-                  open={openSections[sec.st] ?? (sec.st === "available")}
+                  open={openSections[sec.st] ?? false}
                   onToggle={() => setOpenSections(o => ({ ...o,
-                    [sec.st]: !(o[sec.st] ?? (sec.st === "available")) }))}>
+                    [sec.st]: !(o[sec.st] ?? false) }))}>
                   {sec.items.map(item => item.kind === "group"
                     ? <ObjectGroupTile key={`g${item.group_id}-${sec.st}`} group={item.group}
                         objects={item.objects} sectionStatus={sec.st}
@@ -1639,9 +1643,9 @@ export default function Objects() {
           : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
               {accSections.map(sec => (
                 <AccessorySection key={sec.name || "_none"} sec={sec}
-                  open={openAccSections[sec.name || "_none"] ?? true}
+                  open={openAccSections[sec.name || "_none"] ?? false}
                   onToggle={() => setOpenAccSections(o => ({ ...o,
-                    [sec.name || "_none"]: !(o[sec.name || "_none"] ?? true) }))}>
+                    [sec.name || "_none"]: !(o[sec.name || "_none"] ?? false) }))}>
                   {sec.items.map(a => (
                     <AccessoryCard key={a.id} acc={a} selectMode={!!accSel}
                       selected={accSel?.has(a.id)}
