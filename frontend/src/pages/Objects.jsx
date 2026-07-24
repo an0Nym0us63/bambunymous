@@ -1093,6 +1093,57 @@ export const objStatus = (o) =>
   : (o.sold_price > 0 ? "sold" : o.personal ? "personal"
      : o.available === false ? "unavailable" : "available");
 
+/**
+ * Section repliable regroupant les objets d'un meme etat.
+ *
+ * L'en-tete resume ce qu'elle contient meme fermee -- nombre, et le montant
+ * qui a du sens pour CET etat -- pour qu'on n'ait pas a deplier chaque
+ * section pour savoir si elle merite un regard. Le montant pertinent n'est
+ * pas le meme partout : ce qu'on espere pour les objets a vendre, ce qu'on a
+ * encaisse pour les vendus, ce que ca a coute pour tout le reste.
+ */
+function StatusSection({ sec, open, onToggle, children }) {
+  const cfg = OBJ_STATUS[sec.st];
+  const resume =
+    sec.st === "sold"      ? `${fmtPrice(sec.revenue)} encaissés`
+    : sec.st === "available" ? (sec.desired > 0 ? `${fmtPrice(sec.desired)} espérés`
+                                                : `${fmtPrice(sec.cost)} de production`)
+    : `${fmtPrice(sec.cost)} de production`;
+
+  return (
+    <div className="card" style={{ padding:0, overflow:"hidden" }}>
+      <button onClick={onToggle}
+        style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
+          padding:"11px 14px", border:"none", background:"none", cursor:"pointer",
+          textAlign:"left" }}>
+        <span style={{ width:4, height:26, borderRadius:2, background:cfg.color,
+          flexShrink:0 }}/>
+        <span style={{ flex:1, minWidth:0 }}>
+          <span style={{ display:"block", fontSize:13.5, fontWeight:800,
+            color:"var(--text)" }}>{cfg.label}</span>
+          <span style={{ display:"block", fontSize:10.5, color:"var(--muted)",
+            marginTop:1, overflow:"hidden", textOverflow:"ellipsis",
+            whiteSpace:"nowrap" }}>
+            {sec.count} objet{sec.count>1?"s":""} · {resume}
+          </span>
+        </span>
+        <span style={{ fontSize:11, fontWeight:800, padding:"3px 9px", borderRadius:20,
+          background:cfg.color+"1f", color:cfg.color, flexShrink:0,
+          fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>{sec.count}</span>
+        <span style={{ color:"var(--muted)", fontSize:11, flexShrink:0 }}>
+          {open ? "▾" : "▸"}</span>
+      </button>
+      {open && (
+        <div style={{ borderTop:"1px solid var(--border)", padding:10,
+          display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",
+          gap:10 }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ObjectCard({ obj, onClick }) {
   const st = objStatus(obj);
   const cfg = OBJ_STATUS[st];
@@ -1252,10 +1303,36 @@ export default function Objects() {
     else solo.push(o);
   }
   // Items pour la grille : groupes d'abord puis solos — comme galerie prints
+  const [openSections, setOpenSections] = React.useState({});
+
   const gridItems = [
     ...Object.entries(grouped).map(([gid, g]) => ({ kind:"group", group_id:Number(gid), group:g, objects:g.items })),
     ...solo.map(o => ({ kind:"object", obj:o })),
   ];
+
+  // Ordre volontaire : ce sur quoi on peut agir en premier, l'archive en
+  // dernier. "A vendre" ouvre la page parce que c'est la seule section qui
+  // appelle une decision ; les autres consignent ce qui est deja arrive.
+  const SECTION_ORDER = ["available", "sold", "gifted", "personal", "unavailable"];
+
+  // Un groupe d'objets prend le statut de ses membres s'ils sont unanimes,
+  // et tombe dans "available" sinon : le scinder entre plusieurs sections
+  // casserait justement le regroupement qu'on a voulu.
+  const itemStatus = (it) => {
+    if (it.kind === "object") return objStatus(it.obj);
+    const sts = [...new Set(it.objects.map(objStatus))];
+    return sts.length === 1 ? sts[0] : "available";
+  };
+
+  const sections = SECTION_ORDER.map(st => {
+    const items = gridItems.filter(it => itemStatus(it) === st);
+    if (!items.length) return null;
+    const objs = items.flatMap(it => it.kind === "object" ? [it.obj] : it.objects);
+    const cost = objs.reduce((a, o) => a + (o.cost_total || 0), 0);
+    const revenue = objs.reduce((a, o) => a + (o.sold_price || 0), 0);
+    const desired = objs.reduce((a, o) => a + (o.desired_price || 0), 0);
+    return { st, items, count: objs.length, cost, revenue, desired };
+  }).filter(Boolean);
 
   return (
     <div style={{ maxWidth:900, margin:"0 auto", display:"flex", flexDirection:"column", gap:12 }}>
@@ -1307,11 +1384,18 @@ export default function Objects() {
       : tab === "objects" ? (
         gridItems.length === 0
           ? <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>Aucun objet</p>
-          : <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
-              {gridItems.map(item => item.kind === "group"
-                ? <ObjectGroupTile key={`g${item.group_id}`} group={item.group} objects={item.objects}/>
-                : <ObjectCard key={item.obj.id} obj={item.obj} onClick={() => setSelected(item.obj)}/>
-              )}
+          : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {sections.map(sec => (
+                <StatusSection key={sec.st} sec={sec}
+                  open={openSections[sec.st] ?? (sec.st === "available")}
+                  onToggle={() => setOpenSections(o => ({ ...o,
+                    [sec.st]: !(o[sec.st] ?? (sec.st === "available")) }))}>
+                  {sec.items.map(item => item.kind === "group"
+                    ? <ObjectGroupTile key={`g${item.group_id}`} group={item.group} objects={item.objects}/>
+                    : <ObjectCard key={item.obj.id} obj={item.obj} onClick={() => setSelected(item.obj)}/>
+                  )}
+                </StatusSection>
+              ))}
             </div>
       ) : (
         accessories.length === 0
