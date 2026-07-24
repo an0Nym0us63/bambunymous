@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
 import client from "../api/client";
 import CategoryPicker from "../components/CategoryPicker";
+import Select from "../components/Select";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
@@ -1557,6 +1558,39 @@ export default function Objects() {
   const [openSections, setOpenSections] = React.useState({});
   const [openAccSections, setOpenAccSections] = React.useState({});
   const [accSel, setAccSel] = React.useState(null);   // null = pas en selection
+  const [objSort, setObjSort] = React.useState("name");
+
+  // Le tri s'applique A L'INTERIEUR de chaque section, jamais entre elles :
+  // l'ordre des etats est porteur de sens -- ce sur quoi on peut agir d'abord --
+  // et le laisser bousculer par un tri l'aurait efface.
+  const OBJ_SORTS = [
+    ["name",    "Nom (A→Z)"],
+    ["recent",  "Plus récents"],
+    ["cost",    "Coût décroissant"],
+    ["value",   "Valeur décroissante"],
+  ];
+  const objLabel = (it) => (it.kind === "group"
+    ? (it.group.name || "") : (it.obj.translated_name || it.obj.name || ""));
+  const objCost = (it) => (it.kind === "group"
+    ? it.objects.reduce((a, o) => a + (o.cost_total || 0), 0) : (it.obj.cost_total || 0));
+  // "Valeur" = ce que la ligne represente en euros : le prix encaisse si elle
+  // est vendue, le prix vise sinon. Deux colonnes distinctes n'auraient servi
+  // a rien puisqu'un objet ne peut pas etre dans les deux etats.
+  const objValue = (it) => {
+    const arr = it.kind === "group" ? it.objects : [it.obj];
+    return arr.reduce((a, o) => a + (o.sold_price || o.desired_price || 0), 0);
+  };
+  const objId = (it) => (it.kind === "group"
+    ? Math.max(...it.objects.map(o => o.id || 0)) : (it.obj.id || 0));
+
+  const sortItems = (arr) => {
+    const c = [...arr];
+    if (objSort === "recent") c.sort((a, b) => objId(b) - objId(a));
+    else if (objSort === "cost")  c.sort((a, b) => objCost(b) - objCost(a));
+    else if (objSort === "value") c.sort((a, b) => objValue(b) - objValue(a));
+    else c.sort((a, b) => objLabel(a).localeCompare(objLabel(b), "fr", { numeric: true }));
+    return c;
+  };
   const [bulkCat, setBulkCat] = React.useState(false);
   const selCount = accSel ? accSel.size : 0;
 
@@ -1611,6 +1645,7 @@ export default function Objects() {
     }
     if (!items.length) return null;
     const objs = items.flatMap(it => it.kind === "object" ? [it.obj] : it.objects);
+    items.splice(0, items.length, ...sortItems(items));
     const cost = objs.reduce((a, o) => a + (o.cost_total || 0), 0);
     const revenue = objs.reduce((a, o) => a + (o.sold_price || 0), 0);
     const desired = objs.reduce((a, o) => a + (o.desired_price || 0), 0);
@@ -1646,6 +1681,16 @@ export default function Objects() {
               background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
               fontSize:12, color:"var(--text)", outline:"none", boxSizing:"border-box" }}/>
         </div>
+        {/* Tri des objets, a cote de la recherche comme sur la page Filaments.
+            Il s'applique DANS chaque section : l'ordre des etats reste celui
+            qu'on a voulu, seul le contenu de chacune se reordonne. */}
+        {tab === "objects" && (
+          <Select value={objSort} onChange={e => setObjSort(e.target.value)}
+            options={OBJ_SORTS.map(([v, l]) => ({ value: v, label: l }))}
+            style={{ flexShrink:0, minWidth:132, padding:"7px 10px", borderRadius:8,
+              border:"1px solid var(--border)", background:"var(--surface2)",
+              color:"var(--text)", fontSize:12, outline:"none" }}/>
+        )}
         {/* A cote de la recherche et non dans la ligne de titre : c'est la
             place qu'occupe le bouton d'ajout sur la page Filaments, et une
             action de contenu se range avec les outils du contenu, pas avec
