@@ -523,22 +523,42 @@ function BulkCategorySheet({ ids, onClose, onDone }) {
 }
 
 function AccessoryCard({ acc, onClick, onLongPress, selectMode, selected }) {
-  // Appui long sur la carte, comme sur les prints. Ici la vignette ne defile
-  // pas horizontalement : le geste ne rentre en concurrence avec rien, un
-  // simple garde de deplacement suffit.
+  // Appui long sur la carte, comme sur les prints.
   const timer = React.useRef(null);
   const moved = React.useRef(false);
-  const start = () => {
-    if (selectMode) return;
+  const from  = React.useRef(null);
+
+  const start = (e) => {
+    // Reinitialiser AVANT toute sortie anticipee. La version precedente
+    // sortait des l'entree en mode selection sans remettre "moved" a faux :
+    // une carte ou le doigt avait bouge une fois gardait le drapeau leve pour
+    // toujours, et son clic etait ignore indefiniment. D'ou des cartes qui
+    // refusaient de se cocher, au hasard de celles qu'on avait effleurees.
     moved.current = false;
-    timer.current = setTimeout(() => { if (!moved.current) onLongPress?.(); }, 480);
+    const t = e && e.touches && e.touches[0];
+    from.current = t ? { x: t.clientX, y: t.clientY } : null;
+    if (selectMode) return;   // en selection, pas d'appui long a armer
+    timer.current = setTimeout(() => { if (!moved.current) onLongPress && onLongPress(); }, 480);
+  };
+
+  // Seuil de 8px : le moindre fremissement du doigt marquait un deplacement,
+  // alors qu'un appui parfaitement immobile n'existe pas sur un ecran tactile.
+  const onMove = (e) => {
+    if (!from.current) return;
+    const t = e && e.touches && e.touches[0];
+    if (!t) return;
+    if (Math.abs(t.clientX - from.current.x) > 8 ||
+        Math.abs(t.clientY - from.current.y) > 8) {
+      moved.current = true;
+      clearTimeout(timer.current);
+    }
   };
   const cancel = () => clearTimeout(timer.current);
 
   return (
     <div className="card"
-      onClick={() => { if (moved.current) return; onClick?.(); }}
-      onTouchStart={start} onTouchMove={()=>{ moved.current = true; cancel(); }}
+      onClick={() => { if (!selectMode && moved.current) return; onClick && onClick(); }}
+      onTouchStart={start} onTouchMove={onMove}
       onTouchEnd={cancel} onTouchCancel={cancel}
       onMouseDown={start} onMouseUp={cancel} onMouseLeave={cancel}
       onContextMenu={e => e.preventDefault()}
