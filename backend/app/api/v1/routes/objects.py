@@ -297,6 +297,14 @@ async def update_object(oid: int, body: ObjectUpdate, _: str = Depends(get_curre
         if not o: raise HTTPException(404)
 
         data = body.model_dump(exclude_none=True)
+        # exclude_none reste la regle pour ce formulaire, qui envoie tous ses
+        # champs. Mais le prix souhaite doit pouvoir etre EFFACE : "aucun prix
+        # vise" et "prix vise a zero" ne sont pas la meme chose, et seul le
+        # premier doit disparaitre de la tuile. On rattrape donc le null
+        # explicitement transmis.
+        raw = body.model_dump(exclude_unset=True)
+        if "desired_price" in raw and raw["desired_price"] is None:
+            data["desired_price"] = None
 
         # Annulation de vente : efface prix + date, remet disponible. Prioritaire.
         if data.pop("unsell", False):

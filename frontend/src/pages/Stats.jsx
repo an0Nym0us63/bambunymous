@@ -84,8 +84,12 @@ function ObjectsStats({ stats, onOpen }) {
             <Donut palette title="Par état"
               data={stats.state_split.filter(d => d.value > 0).map(d => ({
                 ...d,
-                hex: d.name === "Vendus" ? "#f59e0b"
-                   : d.name === "Disponibles" ? "#22c55e" : "#64748b",
+                // La palette etait restee calee sur les anciens libelles :
+                // "Disponibles" n'existe plus, donc tout retombait sur le gris
+                // de repli sauf "Vendus". Memes couleurs que les sections de la
+                // page Objets desormais -- un etat garde son code partout.
+                hex: { "À vendre":"#3b82f6", "Vendus":"#22c55e", "Offerts":"#f59e0b",
+                       "Perso":"#a855f7", "Indisponibles":"#94a3b8" }[d.name] || "#64748b",
               }))}/>
           )}
           {(stats.by_parent || []).some(d => d.value > 0) && (
@@ -112,10 +116,15 @@ function ObjectsStats({ stats, onOpen }) {
 
       <Section title="Ratios">
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
-          {stats.total > 0 && (
+          {/* Rapporte aux objets DESTINES A LA VENTE, pas au total. Un cadeau
+              ou un objet garde pour soi n'a jamais ete propose : le compter
+              comme une vente ratee ecrasait le taux -- 9 sur 174 affichait 5%,
+              alors que sur les seuls objets proposes le chiffre a un sens. */}
+          {(stats.available + stats.sold) > 0 && (
             <KpiCard icon={Tag} label="Taux de vente"
-              value={`${Math.round(stats.sold / stats.total * 100)} %`} color="#f59e0b"
-              sub={`${stats.sold} / ${stats.total}`}/>
+              value={`${Math.round(stats.sold / (stats.available + stats.sold) * 100)} %`}
+              color="#22c55e"
+              sub={`${stats.sold} vendus / ${stats.available + stats.sold} proposés`}/>
           )}
           {stats.sold > 0 && (
             <KpiCard icon={Euro} label="Panier moyen"

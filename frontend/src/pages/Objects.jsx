@@ -626,7 +626,10 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
         // pas en changeant d'etiquette.
         if (form.status !== "sold") payload.status = form.status;
         payload.available = form.available;
-        payload.desired_price = form.desired_price === "" ? 0 : parseFloat(form.desired_price);
+        // Champ vide = EFFACER, et non mettre a zero. Un zero se serait
+        // affiche sur la tuile comme un prix vise a 0 EUR.
+        payload.desired_price = form.desired_price.trim() === ""
+          ? null : parseFloat(form.desired_price);
         if (form.sold_price !== "") {
           payload.sold_price = parseFloat(form.sold_price);
           if (form.sold_date) payload.sold_date = form.sold_date;
@@ -1378,7 +1381,7 @@ function ObjectCard({ obj, onClick }) {
         </p>
         <div style={{ display:"flex", gap:6, justifyContent:"space-between" }}>
           <span style={{ fontSize:10, color:"var(--muted)" }}>{fmtPrice(obj.cost_total)}</span>
-          {obj.desired_price && <span style={{ fontSize:10, color:"#22c55e", fontFamily:"monospace" }}>{fmtPrice(obj.desired_price)}</span>}
+          {obj.desired_price > 0 && <span style={{ fontSize:10, color:"#22c55e", fontFamily:"monospace" }}>{fmtPrice(obj.desired_price)}</span>}
         </div>
       </div>
     </div>
@@ -1427,7 +1430,7 @@ function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, 
               </button>
             )}
           </div>
-          {group.desired_price && (
+          {group.desired_price > 0 && (
             <span style={{ fontSize:12, fontFamily:"monospace", color:"#22c55e",
               background:"rgba(34,197,94,0.1)", padding:"4px 10px", borderRadius:20 }}>
               Prix souhaité : {fmtPrice(group.desired_price)}
@@ -1475,7 +1478,7 @@ function ObjectGroupTile({ group, objects, sectionStatus, totalCount }) {
       <div style={{ padding:"8px 10px" }}>
         <p style={{ fontWeight:700, fontSize:12, color:"#a78bfa", margin:"0 0 2px",
           overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{group.name}</p>
-        {group.desired_price && <p style={{ fontSize:10, color:"#22c55e", margin:0, fontFamily:"monospace" }}>{fmtPrice(group.desired_price)}</p>}
+        {group.desired_price > 0 && <p style={{ fontSize:10, color:"#22c55e", margin:0, fontFamily:"monospace" }}>{fmtPrice(group.desired_price)}</p>}
       </div>
     </div>
     {open && <ObjectGroupSheet group={group} objects={objects}
