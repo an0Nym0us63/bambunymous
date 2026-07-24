@@ -1274,19 +1274,19 @@ export default function Objects() {
   const [selected, setSelected] = useState(null);
   const [selectedAcc, setSelectedAcc] = useState(null);   // fiche accessoire
   const [creatingAcc, setCreatingAcc] = useState(false);  // creation accessoire
-  const [filter, setFilter] = useState("all");
+  // Plus de filtre par etat : les sections repliables le font, et mieux --
+  // elles montrent les cinq etats a la fois avec leurs comptes, la ou une
+  // pastille en isolait un seul. Surtout, filtrer cote serveur privait les
+  // en-tetes des donnees necessaires a leurs resumes.
 
   const loadObjects = useCallback(async () => {
     setLoading(true);
     try {
       const params = { q: q||undefined, limit:500 };
-      if (filter === "available") params.available = true;
-      if (filter === "sold") params.sold = true;
-      if (filter === "personal") params.personal = true;
       const { data } = await client.get("/objects/objects", { params });
       setObjects(data.items || []);
     } catch(e) { console.error(e); } finally { setLoading(false); }
-  }, [q, filter]);
+  }, [q]);
 
   const loadAccessories = useCallback(async () => {
     setLoading(true);
@@ -1298,9 +1298,7 @@ export default function Objects() {
 
   useEffect(() => {
     if (tab === "objects") loadObjects(); else loadAccessories();
-  }, [tab, q, filter]);
-
-  const FILTERS = [["all","Tous"],["available","Disponibles"],["sold","Vendus"],["personal","Perso"]];
+  }, [tab, q]);
 
   // Séparer objets groupés vs solo — comme les prints
   const grouped = {};
@@ -1382,13 +1380,6 @@ export default function Objects() {
               background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
               fontSize:12, color:"var(--text)", outline:"none", boxSizing:"border-box" }}/>
         </div>
-        {tab === "objects" && FILTERS.map(([id,label]) => (
-          <button key={id} onClick={() => setFilter(id)}
-            style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", border:"none",
-              background:filter===id?"#3b82f6":"var(--surface2)", color:filter===id?"white":"var(--muted)" }}>
-            {label}
-          </button>
-        ))}
       </div>
 
       {loading ? <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>Chargement…</p>
