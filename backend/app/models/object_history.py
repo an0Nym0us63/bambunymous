@@ -90,6 +90,11 @@ class Accessory(Base):
     name        = Column(String(256), nullable=False, unique=True)
     quantity    = Column(Integer, default=0)
     unit_price  = Column(Float, default=0.0)
+    # Regroupement libre, saisi par l'utilisateur (Visserie, Aimants,
+    # Electronique...). Champ texte plutot qu'une table dediee : la liste des
+    # valeurs se deduit de l'existant, il n'y a donc rien a administrer, et un
+    # regroupement vide disparait de lui-meme.
+    category    = Column(String(64), nullable=True, index=True)
     image_path  = Column(String(512), nullable=True)
     created_at  = Column(DateTime, default=datetime.utcnow)
     updated_at  = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

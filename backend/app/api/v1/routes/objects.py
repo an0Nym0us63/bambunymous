@@ -51,16 +51,19 @@ class AccessoryOut(BaseModel):
     id: int; external_ref: Optional[str]; name: str
     quantity: int; unit_price: float; image_path: Optional[str]
     has_image: bool = False
+    category: Optional[str] = None
 
 class AccessoryUpdate(BaseModel):
     name: Optional[str] = None; quantity: Optional[int] = None
     unit_price: Optional[float] = None
+    category: Optional[str] = None
 
 
 def _acc_out(a: Accessory) -> AccessoryOut:
     img_dir = DATA_DIR / "accessories" / str(a.id)
     has_img = any(img_dir.iterdir()) if img_dir.exists() else False
     return AccessoryOut(id=a.id, external_ref=a.external_ref, name=a.name,
+        category=a.category,
                         quantity=a.quantity, unit_price=a.unit_price,
                         image_path=a.image_path, has_image=has_img)
 
@@ -717,9 +720,32 @@ async def unlink_accessory(oid: int, aid: int, _: str = Depends(get_current_user
 
 # ── Créer / supprimer un accessoire ─────────────────────────────────────────
 class AccessoryCreate(BaseModel):
+    category: Optional[str] = None
     name: str
     quantity: int = 0
     unit_price: float = 0.0
+
+@router.get("/accessories/categories")
+async def accessory_categories(_: str = Depends(get_current_user)):
+    """
+    Regroupements existants, avec leur effectif.
+
+    Deduits de l'existant plutot que stockes dans une table : il n'y a donc
+    rien a administrer, et un regroupement vide disparait de lui-meme.
+    Declaree AVANT les routes en /accessories/{aid}, sinon "categories" serait
+    pris pour un identifiant.
+    """
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(
+            select(Accessory.category, func.count(Accessory.id))
+            .where(Accessory.category.isnot(None), Accessory.category != "")
+            .group_by(Accessory.category)
+        )).all()
+    return sorted(
+        [{"name": r[0], "count": int(r[1])} for r in rows],
+        key=lambda x: x["name"].lower(),
+    )
+
 
 @router.post("/accessories")
 async def create_accessory(body: AccessoryCreate, _: str = Depends(get_current_user)):

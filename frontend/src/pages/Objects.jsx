@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
 import client from "../api/client";
+import CategoryPicker from "../components/CategoryPicker";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
@@ -46,6 +47,7 @@ function AccessorySheet({ accId, onClose, onChanged }) {
         name: r.data.name || "",
         quantity: String(r.data.quantity ?? 0),
         unit_price: String(r.data.unit_price ?? 0),
+        category:   r.data.category || null,
       });
     } catch { setD(null); }
   }, [accId]);
@@ -58,6 +60,9 @@ function AccessorySheet({ accId, onClose, onChanged }) {
         name: form.name,
         quantity: parseInt(form.quantity || "0", 10),
         unit_price: parseFloat(form.unit_price || "0"),
+        // Chaine vide envoyee a null : un regroupement vide n'est pas un
+        // regroupement nomme "", qui creerait une section fantome.
+        category: (form.category || "").trim() || null,
       });
       setMode("view"); await load(); onChanged?.();
     } catch(e) { alert(e.response?.data?.detail || e.message); }
@@ -193,6 +198,9 @@ function AccessorySheet({ accId, onClose, onChanged }) {
             <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
               <div><label style={lbl}>Nom</label>
                 <input style={inp} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
+              <div><label style={lbl}>Regroupement</label>
+                <CategoryPicker value={form.category}
+                  onChange={v => setForm(f=>({...f, category:v}))}/></div>
               <div style={{ display:"flex", gap:8 }}>
                 <div style={{ flex:1 }}><label style={lbl}>Stock</label>
                   <input style={inp} type="number" value={form.quantity}
@@ -1146,6 +1154,53 @@ function StatusSection({ sec, open, onToggle, children }) {
   );
 }
 
+/**
+ * Section repliable d'accessoires, par regroupement.
+ *
+ * Meme principe que les sections d'objets, mais le decoupage vient d'un champ
+ * libre et non d'une liste fermee : il n'y a donc pas d'ordre naturel a
+ * respecter, d'ou l'alphabetique. Le resume porte l'information qu'on cherche
+ * sur un stock -- combien d'unites, combien ca vaut, combien sont a zero.
+ */
+function AccessorySection({ sec, open, onToggle, children }) {
+  const color = sec.name ? "#3b82f6" : "#94a3b8";
+  return (
+    <div className="card" style={{ padding:0, overflow:"hidden" }}>
+      <button onClick={onToggle}
+        style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
+          padding:"11px 14px", border:"none", background:"none", cursor:"pointer",
+          textAlign:"left" }}>
+        <span style={{ width:4, height:26, borderRadius:2, background:color,
+          flexShrink:0 }}/>
+        <span style={{ flex:1, minWidth:0 }}>
+          <span style={{ display:"block", fontSize:13.5, fontWeight:800,
+            color: sec.name ? "var(--text)" : "var(--muted)" }}>
+            {sec.name || "Sans regroupement"}
+          </span>
+          <span style={{ display:"block", fontSize:10.5, color:"var(--muted)",
+            marginTop:1, overflow:"hidden", textOverflow:"ellipsis",
+            whiteSpace:"nowrap" }}>
+            {sec.units} unité{sec.units>1?"s":""} · {fmtPrice(sec.value)}
+            {sec.out > 0 && ` · ${sec.out} en rupture`}
+          </span>
+        </span>
+        <span style={{ fontSize:11, fontWeight:800, padding:"3px 9px", borderRadius:20,
+          background:color+"1f", color, flexShrink:0,
+          fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>{sec.count}</span>
+        <span style={{ color:"var(--muted)", fontSize:11, flexShrink:0 }}>
+          {open ? "▾" : "▸"}</span>
+      </button>
+      {open && (
+        <div style={{ borderTop:"1px solid var(--border)", padding:10,
+          display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",
+          gap:10 }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ObjectCard({ obj, onClick }) {
   const st = objStatus(obj);
   const cfg = OBJ_STATUS[st];
@@ -1309,6 +1364,31 @@ export default function Objects() {
   }
   // Items pour la grille : groupes d'abord puis solos — comme galerie prints
   const [openSections, setOpenSections] = React.useState({});
+  const [openAccSections, setOpenAccSections] = React.useState({});
+
+  // Sections d'accessoires, deduites du regroupement saisi sur chaque fiche.
+  // Alphabetique, et les non classes en DERNIER : ce sont ceux a ranger, pas
+  // ceux a consulter, et les remonter en tete aurait mis le desordre devant.
+  const accSections = React.useMemo(() => {
+    const by = new Map();
+    for (const a of accessories) {
+      const k = (a.category || "").trim() || null;
+      if (!by.has(k)) by.set(k, []);
+      by.get(k).push(a);
+    }
+    const named = [...by.entries()].filter(([k]) => k)
+      .sort((x, y) => x[0].localeCompare(y[0]));
+    const none = by.get(null);
+    const all = none ? [...named, [null, none]] : named;
+    return all.map(([name, items]) => ({
+      name,
+      items,
+      count: items.length,
+      units: items.reduce((a, x) => a + (x.quantity || 0), 0),
+      value: items.reduce((a, x) => a + (x.quantity || 0) * (x.unit_price || 0), 0),
+      out: items.filter(x => (x.quantity || 0) === 0).length,
+    }));
+  }, [accessories]);
 
   const gridItems = [
     ...Object.entries(grouped).map(([gid, g]) => ({ kind:"group", group_id:Number(gid), group:g, objects:g.items })),
@@ -1404,8 +1484,17 @@ export default function Objects() {
       ) : (
         accessories.length === 0
           ? <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>Aucun accessoire</p>
-          : <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
-              {accessories.map(a => <AccessoryCard key={a.id} acc={a} onClick={()=>setSelectedAcc(a.id)}/>)}
+          : <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+              {accSections.map(sec => (
+                <AccessorySection key={sec.name || "_none"} sec={sec}
+                  open={openAccSections[sec.name || "_none"] ?? true}
+                  onToggle={() => setOpenAccSections(o => ({ ...o,
+                    [sec.name || "_none"]: !(o[sec.name || "_none"] ?? true) }))}>
+                  {sec.items.map(a => (
+                    <AccessoryCard key={a.id} acc={a} onClick={()=>setSelectedAcc(a.id)}/>
+                  ))}
+                </AccessorySection>
+              ))}
             </div>
       )}
 

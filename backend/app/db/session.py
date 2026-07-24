@@ -63,6 +63,7 @@ async def _migrate():
         # immediatement TOUTES les lignes existantes, et la reprise ci-dessous
         # ne trouve alors plus rien a corriger. Les nouvelles lignes recoivent
         # leur valeur par le modele SQLAlchemy.
+        ("accessories", "category",           "TEXT"),
         ("objects",   "status",               "TEXT"),
         ("users",     "tokens_valid_from",    "TIMESTAMP"),
         ("groups",    "cover_photo",          "TEXT"),
