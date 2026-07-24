@@ -1386,9 +1386,19 @@ function ObjectCard({ obj, onClick }) {
 }
 
 // ── Object Group Sheet ────────────────────────────────────────────────────
-function ObjectGroupSheet({ group, objects, onClose, onSelectObj }) {
-  const totalCost = objects.reduce((s,o) => s+(o.cost_total||0), 0);
-  const soldCount = objects.filter(o => o.sold_price > 0).length;
+function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, onSelectObj }) {
+  // Ouverte depuis une section, la feuille montre d'abord les objets de CETTE
+  // section -- c'est ce qu'on venait consulter. Mais on veut souvent verifier
+  // le lot entier dans la foulee, d'ou la bascule plutot qu'une fermeture et
+  // une reouverture depuis une autre section.
+  const [showAll, setShowAll] = useState(false);
+  const full = allObjects || objects;
+  const canToggle = !!sectionStatus && full.length > objects.length;
+  const shown = showAll ? full : objects;
+  const cfg = sectionStatus ? OBJ_STATUS[sectionStatus] : null;
+
+  const totalCost = shown.reduce((s,o) => s+(o.cost_total||0), 0);
+  const soldCount = shown.filter(o => o.sold_price > 0).length;
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-end" }}
       onClick={onClose}>
@@ -1401,9 +1411,21 @@ function ObjectGroupSheet({ group, objects, onClose, onSelectObj }) {
           <div>
             <p style={{ fontWeight:800, fontSize:16, color:"#a78bfa", margin:"0 0 4px" }}>{group.name}</p>
             <p style={{ fontSize:12, color:"var(--muted)", margin:0 }}>
-              {objects.length} objet{objects.length!==1?"s":""} · {fmtPrice(totalCost)}
+              {shown.length} objet{shown.length!==1?"s":""} · {fmtPrice(totalCost)}
               {soldCount > 0 && ` · ${soldCount} vendu${soldCount>1?"s":""}`}
             </p>
+            {canToggle && (
+              <button onClick={()=>setShowAll(v=>!v)}
+                style={{ marginTop:8, padding:"5px 11px", borderRadius:20, fontSize:11,
+                  fontWeight:700, cursor:"pointer",
+                  border:"1px solid " + (showAll ? "var(--border)" : (cfg?.color || "var(--border)")),
+                  background: showAll ? "transparent" : (cfg ? cfg.color+"1f" : "transparent"),
+                  color: showAll ? "var(--muted)" : (cfg?.color || "var(--muted)") }}>
+                {showAll
+                  ? `Voir seulement : ${cfg.label.toLowerCase()} (${objects.length})`
+                  : `Voir tout le groupe (${full.length})`}
+              </button>
+            )}
           </div>
           {group.desired_price && (
             <span style={{ fontSize:12, fontFamily:"monospace", color:"#22c55e",
@@ -1413,7 +1435,7 @@ function ObjectGroupSheet({ group, objects, onClose, onSelectObj }) {
           )}
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:8 }}>
-          {objects.map(o => <ObjectCard key={o.id} obj={o} onClick={() => { onClose(); onSelectObj(o); }}/>)}
+          {shown.map(o => <ObjectCard key={o.id} obj={o} onClick={() => { onClose(); onSelectObj(o); }}/>)}
         </div>
       </div>
     </div>
@@ -1456,7 +1478,8 @@ function ObjectGroupTile({ group, objects, sectionStatus, totalCount }) {
         {group.desired_price && <p style={{ fontSize:10, color:"#22c55e", margin:0, fontFamily:"monospace" }}>{fmtPrice(group.desired_price)}</p>}
       </div>
     </div>
-    {open && <ObjectGroupSheet group={group} objects={objects} onClose={() => setOpen(false)}
+    {open && <ObjectGroupSheet group={group} objects={objects}
+      allObjects={group.items} sectionStatus={sectionStatus} onClose={() => setOpen(false)}
       onSelectObj={o => setSelected(o)}/>}
     {selected && <ObjectSheet obj={selected} onClose={() => setSelected(null)}
       onUpdated={(updated) => { if (updated) setSelected(updated); }}/>}
