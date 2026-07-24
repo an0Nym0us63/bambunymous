@@ -54,10 +54,22 @@ function ObjectsStats({ stats, onOpen }) {
     <>
       <Section title="Inventaire">
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
-          <KpiCard icon={ShoppingBag} label="Objets" value={stats.total} color="#3b82f6"
-            sub={`${stats.personal} perso`}/>
-          <KpiCard icon={Package} label="Disponibles" value={stats.available} color="#22c55e"/>
-          <KpiCard icon={Tag} label="Vendus" value={stats.sold} color="#f59e0b"/>
+          {/* Memes couleurs que les sections de la page Objets : un etat garde
+              son code visuel d'un ecran a l'autre. */}
+          <KpiCard icon={ShoppingBag} label="Objets" value={stats.total} color="#64748b"/>
+          <KpiCard icon={Package} label="À vendre" value={stats.available} color="#3b82f6"/>
+          <KpiCard icon={Tag} label="Vendus" value={stats.sold} color="#22c55e"/>
+          {stats.gifted > 0 && (
+            <KpiCard icon={Tag} label="Offerts" value={stats.gifted} color="#f59e0b"
+              sub={stats.cost_gifted > 0 ? `${fmtEur(stats.cost_gifted)} de production` : null}/>
+          )}
+          {stats.personal > 0 && (
+            <KpiCard icon={Package} label="Perso" value={stats.personal} color="#a855f7"
+              sub={stats.cost_personal > 0 ? `${fmtEur(stats.cost_personal)} de production` : null}/>
+          )}
+          {stats.unavailable > 0 && (
+            <KpiCard icon={Package} label="Indisponibles" value={stats.unavailable} color="#94a3b8"/>
+          )}
           <KpiCard icon={Euro} label="Coût du stock" value={fmtEur(stats.stock_cost)} color="#8b5cf6"
             sub={stats.potential_value > 0 ? `désiré ${fmtEur(stats.potential_value)}` : null}/>
           {stats.avg_cost > 0 && (

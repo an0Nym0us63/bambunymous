@@ -145,15 +145,40 @@ async def objects_stats(_: str = Depends(get_current_user)):
     }
 
     total = len(rows)
-    sold = [o for o in rows if (o.sold_price or 0) > 0]
-    available = [o for o in rows if o.available and (o.sold_price or 0) <= 0]
-    personal = [o for o in rows if o.personal]
+
+    # Le STATUT fait foi depuis qu'il existe. Les comptes se deduisaient encore
+    # des anciens champs, qui ne savent pas distinguer un objet offert d'un
+    # objet indisponible : les cadeaux etaient donc comptes nulle part et le
+    # camembert n'avait que trois parts pour cinq etats.
+    def _st(o):
+        if o.status:
+            return o.status
+        # Repli pour une base ou la reprise n'aurait pas encore tourne.
+        if (o.sold_price or 0) > 0:  return "sold"
+        if o.personal:               return "personal"
+        if (o.sold_price is not None and o.sold_price == 0): return "gifted"
+        if not o.available:          return "unavailable"
+        return "available"
+
+    by_status = {k: [] for k in ("available", "sold", "gifted", "personal", "unavailable")}
+    for o in rows:
+        by_status.setdefault(_st(o), []).append(o)
+
+    sold        = by_status["sold"]
+    available   = by_status["available"]
+    personal    = by_status["personal"]
+    gifted      = by_status["gifted"]
+    unavailable = by_status["unavailable"]
 
     revenue = sum((o.sold_price or 0) for o in sold)
     cost_sold = sum((o.cost_total or 0) for o in sold)
     margin = revenue - cost_sold
     stock_cost = sum((o.cost_total or 0) for o in available)
     potential = sum((o.desired_price or 0) for o in available)
+    # Ce que les objets sortis du circuit sans recette ont coute a produire :
+    # c'est une depense reelle, invisible tant qu'on ne regarde que la marge.
+    cost_gifted   = sum((o.cost_total or 0) for o in gifted)
+    cost_personal = sum((o.cost_total or 0) for o in personal)
 
     # Top objets par marge (vendus).
     def _m(o): return (o.sold_price or 0) - (o.cost_total or 0)
@@ -165,6 +190,10 @@ async def objects_stats(_: str = Depends(get_current_user)):
         "available": len(available),
         "sold": len(sold),
         "personal": len(personal),
+        "gifted": len(gifted),
+        "unavailable": len(unavailable),
+        "cost_gifted": round(cost_gifted, 2),
+        "cost_personal": round(cost_personal, 2),
         "revenue": round(revenue, 2),
         "cost_sold": round(cost_sold, 2),
         "margin": round(margin, 2),
@@ -177,10 +206,14 @@ async def objects_stats(_: str = Depends(get_current_user)):
             for o in top_margin
         ],
         # Repartition par etat (pour un donut).
+        # Cinq parts et non trois : chaque etat compte pour lui-meme, et la
+        # somme retombe sur le total sans categorie fourre-tout.
         "state_split": [
-            {"name": "Disponibles", "value": len(available)},
-            {"name": "Vendus",      "value": len(sold)},
-            {"name": "Indispo.",    "value": total - len(available) - len(sold)},
+            {"name": "À vendre",     "value": len(available)},
+            {"name": "Vendus",       "value": len(sold)},
+            {"name": "Offerts",      "value": len(gifted)},
+            {"name": "Perso",        "value": len(personal)},
+            {"name": "Indisponibles","value": len(unavailable)},
         ],
         # Origine des objets (print unique vs groupe).
         "by_parent": [
