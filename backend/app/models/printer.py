@@ -97,11 +97,13 @@ class PrinterState:
     gcode_file: str = ""
     print_stage: int = 0
 
-    # Températures dual nozzle
-    nozzles: list[NozzleTemp] = field(default_factory=lambda: [
-        NozzleTemp(id=0, active=True),
-        NozzleTemp(id=1, active=False),
-    ])
+    # Buses, remplies par le MQTT selon ce que la machine declare.
+    #
+    # Liste VIDE au depart, et non deux buses pre-creees : la valeur par defaut
+    # faisait passer toute imprimante pour une bi-buse, l'interface affichant
+    # "Buse Gauche" et "Buse Droite" meme sur une mono-buse. C'est la machine
+    # qui dit combien elle en a, pas nous.
+    nozzles: list[NozzleTemp] = field(default_factory=list)
 
     # Plateau et chambre
     bed_temp: float = 0.0

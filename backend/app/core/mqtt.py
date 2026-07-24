@@ -388,7 +388,24 @@ class MQTTManager:
                 n.active = (eid == active_nozzle_idx)
                 changed = True
 
-        # Fallback legacy (P1/X1 — pas utilisé sur H2C qui utilise device.extruder)
+        # Repli mono-buse (P1 / X1 / A1) : ces machines ne remontent pas
+        # device.extruder.info, seulement nozzle_temper a la racine. Sans ce
+        # repli, et depuis que la liste des buses demarre vide, elles
+        # n'afficheraient plus aucune buse.
+        #
+        # Uniquement si extruder.info n'a rien fourni : la H2C envoie AUSSI
+        # nozzle_temper, avec la temperature de la buse active, ce qui
+        # ecraserait la vraie valeur de la buse 0.
+        if not state.nozzles and "nozzle_temper" in p:
+            n0 = NozzleTemp(id=0, active=True)
+            try:
+                n0.temp = float(p.get("nozzle_temper") or 0)
+                n0.target = float(p.get("nozzle_target_temper") or 0)
+            except (TypeError, ValueError):
+                pass
+            state.nozzles.append(n0)
+            changed = True
+
         # NE PAS écraser nozzle_temper sur nozzles[0] car H2C envoie aussi ce champ
         # avec la temp de la buse active, ce qui écrase la vraie valeur de id=0
         if "bed_temper" in p: state.bed_temp = float(p["bed_temper"]); changed = True
