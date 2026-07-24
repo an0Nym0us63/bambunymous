@@ -47,7 +47,6 @@ function AccessorySheet({ accId, onClose, onChanged }) {
         name: r.data.name || "",
         quantity: String(r.data.quantity ?? 0),
         unit_price: String(r.data.unit_price ?? 0),
-        category:   r.data.category || null,
       });
     } catch { setD(null); }
   }, [accId]);
@@ -60,9 +59,10 @@ function AccessorySheet({ accId, onClose, onChanged }) {
         name: form.name,
         quantity: parseInt(form.quantity || "0", 10),
         unit_price: parseFloat(form.unit_price || "0"),
-        // Chaine vide envoyee a null : un regroupement vide n'est pas un
-        // regroupement nomme "", qui creerait une section fantome.
-        category: (form.category || "").trim() || null,
+        // Le regroupement n'est PAS renvoye ici : il se modifie par son propre
+        // selecteur, hors du formulaire. L'inclure aurait renvoye la valeur
+        // capturee a l'ouverture de la fiche et annule un changement fait
+        // entre-temps -- enregistrer le nom aurait remis l'ancien rangement.
       });
       setMode("view"); await load(); onChanged?.();
     } catch(e) { alert(e.response?.data?.detail || e.message); }
@@ -180,6 +180,22 @@ function AccessorySheet({ accId, onClose, onChanged }) {
             </div>
           </div>
 
+          {/* Regroupement modifiable sans passer en mode edition : c'est un
+              rangement, pas une caracteristique de l'accessoire, et l'imposer
+              derriere "Modifier" rendait le simple deplacement laborieux. */}
+          <AdminOnly>
+            <div style={{ marginBottom:14 }}>
+              <label style={lbl}>Regroupement</label>
+              <CategoryPicker value={d.category || null}
+                onChange={async (v) => {
+                  try {
+                    await client.patch(`/objects/accessories/${accId}`, { category: v });
+                    await load(); onChanged?.();
+                  } catch(e) { alert(e.response?.data?.detail || e.message); }
+                }}/>
+            </div>
+          </AdminOnly>
+
           {/* KPIs */}
           <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:8, marginBottom:16 }}>
             {[["Stock", String(d.quantity)],
@@ -198,9 +214,6 @@ function AccessorySheet({ accId, onClose, onChanged }) {
             <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:16 }}>
               <div><label style={lbl}>Nom</label>
                 <input style={inp} value={form.name} onChange={e=>setForm(f=>({...f,name:e.target.value}))}/></div>
-              <div><label style={lbl}>Regroupement</label>
-                <CategoryPicker value={form.category}
-                  onChange={v => setForm(f=>({...f, category:v}))}/></div>
               <div style={{ display:"flex", gap:8 }}>
                 <div style={{ flex:1 }}><label style={lbl}>Stock</label>
                   <input style={inp} type="number" value={form.quantity}
@@ -479,10 +492,19 @@ function BulkCategorySheet({ ids, onClose, onDone }) {
           Regrouper {ids.length} accessoire{ids.length>1?"s":""}
         </h3>
         <p style={{ margin:"0 0 14px", fontSize:12, color:"var(--muted)" }}>
-          Choisis un regroupement existant ou crée-en un. Laisser vide les retire
-          de tout regroupement.
+          Choisis un regroupement existant, ou crée-en un.
         </p>
         <CategoryPicker value={cat} onChange={setCat}/>
+        {/* Bouton distinct plutot qu'un champ laisse vide : sortir du
+            regroupement est une action a part entiere, pas une absence de
+            choix, et rien ne l'aurait signale autrement. */}
+        <button onClick={() => setCat(null)}
+          style={{ marginTop:8, padding:"7px 12px", borderRadius:8, fontSize:11.5,
+            fontWeight:600, cursor:"pointer", border:"1px solid var(--border)",
+            background: cat === null ? "rgba(239,68,68,0.12)" : "transparent",
+            color: cat === null ? "#ef4444" : "var(--muted)" }}>
+          {cat === null ? "✓ " : ""}Retirer de tout regroupement
+        </button>
         <div style={{ display:"flex", gap:8, marginTop:18 }}>
           <button onClick={onClose}
             style={{ flex:1, padding:"11px", borderRadius:11, fontSize:13, fontWeight:600,
@@ -522,6 +544,11 @@ function AccessoryCard({ acc, onClick, onLongPress, selectMode, selected }) {
       onContextMenu={e => e.preventDefault()}
       style={{ padding:0, overflow:"hidden", cursor: onClick ? "pointer" : "default",
         position:"relative",
+        // Rupture signalee sur la CARTE ENTIERE et pas seulement par le chiffre
+        // du stock : dans une grille qu'on parcourt, un 0 en rouge se lit trop
+        // tard. Le liseré et le fond se voient avant qu'on lise quoi que ce soit.
+        border: (acc.quantity || 0) === 0 ? "1px solid rgba(239,68,68,0.55)" : undefined,
+        background: (acc.quantity || 0) === 0 ? "rgba(239,68,68,0.07)" : undefined,
         outline: selected ? "2px solid #3b82f6" : "none",
         outlineOffset:-2 }}>
       {selectMode && (
@@ -1253,8 +1280,31 @@ function StatusSection({ sec, open, onToggle, children }) {
  * respecter, d'ou l'alphabetique. Le resume porte l'information qu'on cherche
  * sur un stock -- combien d'unites, combien ca vaut, combien sont a zero.
  */
+// Teinte stable deduite du NOM du regroupement : le meme nom donne toujours
+// la meme couleur, d'une session a l'autre et d'un appareil a l'autre, sans
+// rien stocker ni demander a l'utilisateur. Un bleu unique pour toutes les
+// sections ne distinguait rien -- c'etait un decor, pas un repere.
+//
+// Saturation et clarte fixes : seule la teinte varie, donc toutes les couleurs
+// se valent en intensite et aucune section ne crie plus fort qu'une autre.
+function hueFromName(name) {
+  // FNV-1a puis angle d'or. Un simple modulo 360 sur une somme ponderee
+  // donnait des teintes voisines pour des noms voisins -- "Ressorts" et
+  // "Roulements" tombaient a 9 degres l'un de l'autre, donc identiques a
+  // l'oeil. Le melange FNV casse cette correlation, et l'angle d'or ecarte
+  // au maximum les valeurs consecutives.
+  let h = 2166136261;
+  for (let i = 0; i < name.length; i++) {
+    h ^= name.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return Math.round((((h >>> 0) % 1000) * 137.508) % 360);
+}
+const sectionColor = (name) =>
+  name ? `hsl(${hueFromName(name)} 62% 56%)` : "#94a3b8";
+
 function AccessorySection({ sec, open, onToggle, children }) {
-  const color = sec.name ? "#3b82f6" : "#94a3b8";
+  const color = sectionColor(sec.name);
   return (
     <div className="card" style={{ padding:0, overflow:"hidden" }}>
       <button onClick={onToggle}
@@ -1272,7 +1322,11 @@ function AccessorySection({ sec, open, onToggle, children }) {
             marginTop:1, overflow:"hidden", textOverflow:"ellipsis",
             whiteSpace:"nowrap" }}>
             {sec.units} unité{sec.units>1?"s":""} · {fmtPrice(sec.value)}
-            {sec.out > 0 && ` · ${sec.out} en rupture`}
+            {sec.out > 0 && (
+              <span style={{ color:"#ef4444", fontWeight:700 }}>
+                {" · "}{sec.out} en rupture
+              </span>
+            )}
           </span>
         </span>
         <span style={{ fontSize:11, fontWeight:800, padding:"3px 9px", borderRadius:20,
