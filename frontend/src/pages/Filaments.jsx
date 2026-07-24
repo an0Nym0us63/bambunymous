@@ -1330,9 +1330,14 @@ function SpoolsView({ filaments, showArchived }) {
           <SlidersHorizontal size={14}/>
           {activeFilters > 0 ? `Filtres (${activeFilters})` : "Filtres"}
         </button>
-        <AdminOnly><button onClick={()=>setShowAdd(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"#3b82f6", color:"white", border:"none", borderRadius:8, fontSize:13, cursor:"pointer", flexShrink:0 }}>
-          <Plus size={14}/> Bobine
-        </button></AdminOnly>
+        {/* Masque dans l'onglet Archivees : on y consulte un historique, une
+            bobine neuve n'a aucune raison d'y naitre -- elle apparaitrait
+            aussitot dans l'onglet Stock, hors de la vue en cours. */}
+        {!showArchived && (
+          <AdminOnly><button onClick={()=>setShowAdd(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"#3b82f6", color:"white", border:"none", borderRadius:8, fontSize:13, cursor:"pointer", flexShrink:0 }}>
+            <Plus size={14}/> Bobine
+          </button></AdminOnly>
+        )}
       </div>
       {filterOpen && (
         <FilterSortSheet

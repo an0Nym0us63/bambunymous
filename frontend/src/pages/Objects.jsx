@@ -439,10 +439,101 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
   );
 }
 
-function AccessoryCard({ acc, onClick }) {
+/**
+ * Applique un regroupement a plusieurs accessoires d'un coup.
+ *
+ * Reutilise le meme selecteur que la fiche individuelle : une seule facon de
+ * nommer un regroupement, donc pas de divergence possible entre les deux
+ * chemins -- et l'anti-doublon vaut ici aussi.
+ */
+function BulkCategorySheet({ ids, onClose, onDone }) {
+  const [cat, setCat] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+
+  const apply = async () => {
+    setBusy(true);
+    try {
+      // En serie et non en parallele : quelques accessoires tout au plus, et
+      // une erreur reste ainsi rattachable a une ligne precise.
+      for (const id of ids) {
+        await client.patch(`/objects/accessories/${id}`, { category: cat });
+      }
+      onDone();
+    } catch (e) {
+      alert(e.response?.data?.detail || e.message);
+      setBusy(false);
+    }
+  };
+
   return (
-    <div className="card" onClick={onClick}
-      style={{ padding:0, overflow:"hidden", cursor: onClick ? "pointer" : "default" }}>
+    <div onClick={onClose}
+      style={{ position:"fixed", inset:0, zIndex:6000, background:"rgba(0,0,0,0.55)",
+        display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e=>e.stopPropagation()} className="sheet-panel"
+        style={{ width:"100%", maxWidth:520, borderTopLeftRadius:20,
+          borderTopRightRadius:20,
+          padding:"18px 18px max(env(safe-area-inset-bottom,20px),20px)" }}>
+        <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)",
+          margin:"0 auto 14px" }}/>
+        <h3 style={{ margin:"0 0 4px", fontSize:16, fontWeight:800, color:"var(--text)" }}>
+          Regrouper {ids.length} accessoire{ids.length>1?"s":""}
+        </h3>
+        <p style={{ margin:"0 0 14px", fontSize:12, color:"var(--muted)" }}>
+          Choisis un regroupement existant ou crée-en un. Laisser vide les retire
+          de tout regroupement.
+        </p>
+        <CategoryPicker value={cat} onChange={setCat}/>
+        <div style={{ display:"flex", gap:8, marginTop:18 }}>
+          <button onClick={onClose}
+            style={{ flex:1, padding:"11px", borderRadius:11, fontSize:13, fontWeight:600,
+              border:"1px solid var(--border)", background:"transparent",
+              color:"var(--text)", cursor:"pointer" }}>Annuler</button>
+          <button onClick={apply} disabled={busy}
+            style={{ flex:2, padding:"11px", borderRadius:11, fontSize:13, fontWeight:800,
+              border:"none", background:"#3b82f6", color:"white", cursor:"pointer",
+              opacity: busy?0.6:1 }}>
+            {busy ? "Application…" : "Appliquer"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccessoryCard({ acc, onClick, onLongPress, selectMode, selected }) {
+  // Appui long sur la carte, comme sur les prints. Ici la vignette ne defile
+  // pas horizontalement : le geste ne rentre en concurrence avec rien, un
+  // simple garde de deplacement suffit.
+  const timer = React.useRef(null);
+  const moved = React.useRef(false);
+  const start = () => {
+    if (selectMode) return;
+    moved.current = false;
+    timer.current = setTimeout(() => { if (!moved.current) onLongPress?.(); }, 480);
+  };
+  const cancel = () => clearTimeout(timer.current);
+
+  return (
+    <div className="card"
+      onClick={() => { if (moved.current) return; onClick?.(); }}
+      onTouchStart={start} onTouchMove={()=>{ moved.current = true; cancel(); }}
+      onTouchEnd={cancel} onTouchCancel={cancel}
+      onMouseDown={start} onMouseUp={cancel} onMouseLeave={cancel}
+      onContextMenu={e => e.preventDefault()}
+      style={{ padding:0, overflow:"hidden", cursor: onClick ? "pointer" : "default",
+        position:"relative",
+        outline: selected ? "2px solid #3b82f6" : "none",
+        outlineOffset:-2 }}>
+      {selectMode && (
+        <span style={{ position:"absolute", top:6, right:6, zIndex:2,
+          width:22, height:22, borderRadius:"50%", display:"flex",
+          alignItems:"center", justifyContent:"center", fontSize:12,
+          border:"2px solid " + (selected ? "#3b82f6" : "rgba(255,255,255,0.7)"),
+          background: selected ? "#3b82f6" : "rgba(0,0,0,0.35)",
+          color:"white", fontWeight:800 }}>
+          {selected ? "✓" : ""}
+        </span>
+      )}
       <div style={{ height:120, background:"var(--surface2)", display:"flex",
         alignItems:"center", justifyContent:"center", overflow:"hidden", padding:8,
         boxSizing:"border-box" }}>
@@ -1365,6 +1456,9 @@ export default function Objects() {
   // Items pour la grille : groupes d'abord puis solos — comme galerie prints
   const [openSections, setOpenSections] = React.useState({});
   const [openAccSections, setOpenAccSections] = React.useState({});
+  const [accSel, setAccSel] = React.useState(null);   // null = pas en selection
+  const [bulkCat, setBulkCat] = React.useState(false);
+  const selCount = accSel ? accSel.size : 0;
 
   // Sections d'accessoires, deduites du regroupement saisi sur chaque fiche.
   // Alphabetique, et les non classes en DERNIER : ce sont ceux a ranger, pas
@@ -1427,14 +1521,6 @@ export default function Objects() {
     <div style={{ maxWidth:900, margin:"0 auto", display:"flex", flexDirection:"column", gap:12 }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Objets & Accessoires</h1>
-        {tab === "accessories" && (
-          <AdminOnly><button onClick={()=>setCreatingAcc(true)}
-            style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:5,
-              padding:"7px 14px", borderRadius:20, border:"none", cursor:"pointer",
-              background:"#3b82f6", color:"white", fontSize:12, fontWeight:700 }}>
-            <Plus size={14}/> Accessoire
-          </button></AdminOnly>
-        )}
       </div>
 
       {/* Onglets Objets / Accessoires — meme composant visuel que Filaments/Historique. */}
@@ -1460,6 +1546,18 @@ export default function Objects() {
               background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
               fontSize:12, color:"var(--text)", outline:"none", boxSizing:"border-box" }}/>
         </div>
+        {/* A cote de la recherche et non dans la ligne de titre : c'est la
+            place qu'occupe le bouton d'ajout sur la page Filaments, et une
+            action de contenu se range avec les outils du contenu, pas avec
+            l'en-tete de la page. */}
+        {tab === "accessories" && (
+          <AdminOnly><button onClick={()=>setCreatingAcc(true)}
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px",
+              background:"#3b82f6", color:"white", border:"none", borderRadius:8,
+              fontSize:13, cursor:"pointer", flexShrink:0 }}>
+            <Plus size={14}/> Accessoire
+          </button></AdminOnly>
+        )}
       </div>
 
       {loading ? <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>Chargement…</p>
@@ -1491,7 +1589,17 @@ export default function Objects() {
                   onToggle={() => setOpenAccSections(o => ({ ...o,
                     [sec.name || "_none"]: !(o[sec.name || "_none"] ?? true) }))}>
                   {sec.items.map(a => (
-                    <AccessoryCard key={a.id} acc={a} onClick={()=>setSelectedAcc(a.id)}/>
+                    <AccessoryCard key={a.id} acc={a} selectMode={!!accSel}
+                      selected={accSel?.has(a.id)}
+                      onLongPress={() => setAccSel(new Set([a.id]))}
+                      onClick={() => {
+                        if (!accSel) { setSelectedAcc(a.id); return; }
+                        setAccSel(prev => {
+                          const n = new Set(prev);
+                          n.has(a.id) ? n.delete(a.id) : n.add(a.id);
+                          return n;
+                        });
+                      }}/>
                   ))}
                 </AccessorySection>
               ))}
@@ -1500,6 +1608,40 @@ export default function Objects() {
 
       {selected && <ObjectSheet obj={selected} onClose={() => setSelected(null)}
         onUpdated={(updated) => { if (updated) setSelected(updated); loadObjects(); }}/>}
+
+      {selCount > 0 && (
+        /* Deux rangees, comme la barre de selection des prints : quatre
+           elements cote a cote debordent sur telephone. */
+        <div style={{ position:"fixed", bottom:"calc(76px + env(safe-area-inset-bottom,0px))",
+          left:12, right:12, zIndex:500, background:"var(--sheet-bg)",
+          border:"1px solid var(--border)", borderRadius:14, padding:10,
+          display:"flex", flexDirection:"column", gap:8,
+          boxShadow:"0 4px 24px rgba(0,0,0,0.35)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ flex:1, minWidth:0, fontSize:12.5, fontWeight:700,
+              color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis",
+              whiteSpace:"nowrap" }}>
+              {selCount} sélectionné{selCount>1?"s":""}
+            </span>
+            <button onClick={()=>setAccSel(null)}
+              style={{ flexShrink:0, padding:"5px 12px", borderRadius:8, fontSize:12,
+                background:"none", border:"1px solid var(--border)",
+                color:"var(--muted)", cursor:"pointer" }}>Annuler</button>
+          </div>
+          <button onClick={()=>setBulkCat(true)}
+            style={{ width:"100%", padding:"10px", borderRadius:10, border:"none",
+              background:"#3b82f6", color:"white", fontSize:12.5, fontWeight:700,
+              cursor:"pointer" }}>
+            Regrouper ces {selCount} accessoire{selCount>1?"s":""}
+          </button>
+        </div>
+      )}
+
+      {bulkCat && (
+        <BulkCategorySheet ids={[...accSel]}
+          onClose={()=>setBulkCat(false)}
+          onDone={()=>{ setBulkCat(false); setAccSel(null); loadAccessories(); }}/>
+      )}
 
       {selectedAcc && (
         <AccessorySheet accId={selectedAcc} onClose={()=>setSelectedAcc(null)}
