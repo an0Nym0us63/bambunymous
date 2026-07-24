@@ -1080,11 +1080,13 @@ function ObjectSheet({ obj, onClose, onUpdated }) {
 // la tuile, la fiche et les filtres. Aucune tuile ne peut plus etre grisee sans
 // porter la raison : c'est precisement ce qui rendait la liste incomprehensible.
 export const OBJ_STATUS = {
-  available:   { label:"À vendre",     color:"#3b82f6", dim:false },
-  sold:        { label:"Vendu",        color:"#22c55e", dim:true  },
-  gifted:      { label:"Offert",       color:"#f59e0b", dim:true  },
-  personal:    { label:"Perso",        color:"#a855f7", dim:true  },
-  unavailable: { label:"Indisponible", color:"#94a3b8", dim:true  },
+  // "short" sert aux comptes ("3 vendus") ; certains libelles sont invariables
+  // en nombre, d'ou le drapeau plutot qu'un s ajoute aveuglement.
+  available:   { label:"À vendre",     short:"à vendre",     plural:false, color:"#3b82f6", dim:false },
+  sold:        { label:"Vendu",        short:"vendu",        plural:true,  color:"#22c55e", dim:true  },
+  gifted:      { label:"Offert",       short:"offert",       plural:true,  color:"#f59e0b", dim:true  },
+  personal:    { label:"Perso",        short:"perso",        plural:false, color:"#a855f7", dim:true  },
+  unavailable: { label:"Indisponible", short:"indisponible", plural:true,  color:"#94a3b8", dim:true  },
 };
 // Repli pour les objets anterieurs a la colonne status, si la reprise n'a pas
 // encore tourne : on rededuit plutot que d'afficher un etat vide.
@@ -1219,11 +1221,14 @@ function ObjectGroupSheet({ group, objects, onClose, onSelectObj }) {
 }
 
 // ── Object Group Tile ─────────────────────────────────────────────────────
-function ObjectGroupTile({ group, objects }) {
+function ObjectGroupTile({ group, objects, sectionStatus, totalCount }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
   const cover = objects[0];
-  const soldCount = objects.filter(o => o.sold_price > 0).length;
+  // Dans une section d'etat, la tuile ne montre QUE les objets concernes : le
+  // compte affiche est donc celui de la section, pas celui du groupe entier.
+  const cfg = sectionStatus ? OBJ_STATUS[sectionStatus] : null;
+  const partial = totalCount != null && totalCount > objects.length;
   return (<>
     <div className="card" onClick={() => setOpen(true)}
       style={{ padding:0, overflow:"hidden", cursor:"pointer", position:"relative" }}>
@@ -1235,12 +1240,14 @@ function ObjectGroupTile({ group, objects }) {
         <div style={{ position:"absolute", inset:0, background:"rgba(167,139,250,0.12)" }}/>
         <span style={{ position:"absolute", top:6, left:6, background:"rgba(167,139,250,0.85)",
           color:"white", fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>
-          📁 {objects.length}
+          {/* "3 / 7" quand le groupe deborde de la section : on voit d'un coup
+              qu'il en existe d'autres ailleurs, sans avoir a l'ouvrir. */}
+          📁 {objects.length}{partial ? ` / ${totalCount}` : ""}
         </span>
-        {soldCount > 0 && <span style={{ position:"absolute", top:6, right:6,
-          background:"rgba(34,197,94,0.85)", color:"white",
+        {cfg && <span style={{ position:"absolute", top:6, right:6,
+          background:cfg.color, opacity:0.92, color:"white",
           fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
-          {soldCount} vendu{soldCount>1?"s":""}
+          {objects.length} {cfg.short}{cfg.plural && objects.length > 1 ? "s" : ""}
         </span>}
       </div>
       <div style={{ padding:"8px 10px" }}>
@@ -1315,17 +1322,21 @@ export default function Objects() {
   // appelle une decision ; les autres consignent ce qui est deja arrive.
   const SECTION_ORDER = ["available", "sold", "gifted", "personal", "unavailable"];
 
-  // Un groupe d'objets prend le statut de ses membres s'ils sont unanimes,
-  // et tombe dans "available" sinon : le scinder entre plusieurs sections
-  // casserait justement le regroupement qu'on a voulu.
-  const itemStatus = (it) => {
-    if (it.kind === "object") return objStatus(it.obj);
-    const sts = [...new Set(it.objects.map(objStatus))];
-    return sts.length === 1 ? sts[0] : "available";
-  };
-
+  // Un groupe apparait dans CHAQUE etat ou il compte au moins un membre, avec
+  // uniquement les objets concernes. Un lot de 7 dont 3 vendus se montre donc
+  // dans "Vendus" avec ses 3, et dans "A vendre" avec ses 4 : le forcer dans
+  // une seule section aurait cache la moitie de son contenu, et le scinder en
+  // objets isoles aurait defait le regroupement.
   const sections = SECTION_ORDER.map(st => {
-    const items = gridItems.filter(it => itemStatus(it) === st);
+    const items = [];
+    for (const it of gridItems) {
+      if (it.kind === "object") {
+        if (objStatus(it.obj) === st) items.push(it);
+      } else {
+        const part = it.objects.filter(o => objStatus(o) === st);
+        if (part.length) items.push({ ...it, objects: part, sectionStatus: st });
+      }
+    }
     if (!items.length) return null;
     const objs = items.flatMap(it => it.kind === "object" ? [it.obj] : it.objects);
     const cost = objs.reduce((a, o) => a + (o.cost_total || 0), 0);
@@ -1391,7 +1402,9 @@ export default function Objects() {
                   onToggle={() => setOpenSections(o => ({ ...o,
                     [sec.st]: !(o[sec.st] ?? (sec.st === "available")) }))}>
                   {sec.items.map(item => item.kind === "group"
-                    ? <ObjectGroupTile key={`g${item.group_id}`} group={item.group} objects={item.objects}/>
+                    ? <ObjectGroupTile key={`g${item.group_id}-${sec.st}`} group={item.group}
+                        objects={item.objects} sectionStatus={sec.st}
+                        totalCount={item.group.items?.length}/>
                     : <ObjectCard key={item.obj.id} obj={item.obj} onClick={() => setSelected(item.obj)}/>
                   )}
                 </StatusSection>
