@@ -202,8 +202,7 @@ function ObjectsStats({ stats, onOpen }) {
             )}
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",
-            gap:12 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {/* Ou l'argent dort : utile avant de recommander. */}
             {(acc.top_value || []).length > 0 && (
               <div className="card" style={{ padding:"14px 16px" }}>
@@ -211,9 +210,9 @@ function ObjectsStats({ stats, onOpen }) {
                   Stock le plus immobilisant
                 </p>
                 {acc.top_value.map(a => (
-                  <Bar key={a.id} label={a.name} value={a.value}
+                  <Bar key={a.id} label={a.name} value={a.value} stacked
                     max={acc.top_value[0].value || 1}
-                    sublabel={`${fmtEur(a.value)} · ${a.qty} en stock`} color="#8b5cf6"/>
+                    sublabel={`${fmtEur(a.value)} · ${a.qty} u.`} color="#8b5cf6"/>
                 ))}
               </div>
             )}
@@ -224,9 +223,9 @@ function ObjectsStats({ stats, onOpen }) {
                   Les plus utilisés
                 </p>
                 {acc.top_used.map(a => (
-                  <Bar key={a.id} label={a.name} value={a.used}
+                  <Bar key={a.id} label={a.name} value={a.used} stacked
                     max={acc.top_used[0].used || 1}
-                    sublabel={`${a.used} unité${a.used>1?"s":""} posée${a.used>1?"s":""}`}
+                    sublabel={`${a.used} posée${a.used>1?"s":""}`}
                     color="#3b82f6"/>
                 ))}
               </div>
@@ -265,8 +264,29 @@ function KpiCard({ icon: Icon, label, value, sub, color = "#3b82f6" }) {
   );
 }
 
-function Bar({ label, value, max, color = "#3b82f6", sublabel, dot }) {
+function Bar({ label, value, max, color = "#3b82f6", sublabel, dot, stacked }) {
   const pct = max > 0 ? Math.max(2, (value / max) * 100) : 0;
+  // Variante 'dashboard' : nom + valeur sur une ligne, barre EN PLEINE LARGEUR
+  // dessous. En ligne unique, le nom et la valeur ecrasaient la barre au point
+  // qu'on ne la voyait presque plus.
+  if (stacked) {
+    return (
+      <div style={{ padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline",
+          gap: 8, marginBottom: 6 }}>
+          <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", minWidth: 0,
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            display: "flex", alignItems: "center", gap: 6 }}>{dot}{label}</span>
+          <span style={{ fontSize: 11, fontFamily: "JetBrains Mono,monospace", color: "var(--muted)",
+            flexShrink: 0, whiteSpace: "nowrap" }}>{sublabel}</span>
+        </div>
+        <div style={{ height: 8, background: "var(--surface2)", borderRadius: 4, overflow: "hidden" }}>
+          <div style={{ width: `${pct}%`, height: "100%", background: color, borderRadius: 4,
+            transition: "width 0.5s ease" }}/>
+        </div>
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0",
       borderBottom: "1px solid var(--border)" }}>
