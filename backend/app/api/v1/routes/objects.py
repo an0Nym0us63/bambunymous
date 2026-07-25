@@ -187,6 +187,16 @@ async def objects_stats(_: str = Depends(get_current_user)):
     def _m(o): return (o.sold_price or 0) - (o.cost_total or 0)
     top_margin = sorted(sold, key=_m, reverse=True)[:5]
 
+    # Top objets par marge EN POURCENTAGE -- retour sur cout, meme convention que
+    # le margin_pct global (marge / cout). Restreint aux vendus dont le cout est
+    # connu et non nul : sans cout, le pourcentage n'a pas de sens (division par
+    # zero, ou marge "infinie" sur un objet qui n'a rien coute a produire). Le
+    # classement differe donc de la marge absolue : un petit objet a fort ratio
+    # peut passer devant un gros objet a marge elevee mais cout eleve.
+    def _pct(o): return _m(o) / (o.cost_total or 1) * 100
+    sold_costed = [o for o in sold if (o.cost_total or 0) > 0]
+    top_margin_pct = sorted(sold_costed, key=_pct, reverse=True)[:5]
+
     return {
         "accessories": accessories,
         "total": total,
@@ -207,6 +217,12 @@ async def objects_stats(_: str = Depends(get_current_user)):
             {"id": o.id, "name": o.translated_name or o.name,
              "margin": round(_m(o), 2), "sold_price": o.sold_price}
             for o in top_margin
+        ],
+        "top_margin_pct": [
+            {"id": o.id, "name": o.translated_name or o.name,
+             "margin_pct": round(_pct(o), 1), "margin": round(_m(o), 2),
+             "sold_price": o.sold_price, "cost": round(o.cost_total or 0, 2)}
+            for o in top_margin_pct
         ],
         # Repartition par etat (pour un donut).
         # Cinq parts et non trois : chaque etat compte pour lui-meme, et la
