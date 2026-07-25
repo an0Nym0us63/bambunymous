@@ -55,7 +55,7 @@ const S = {
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderTop:"1px solid var(--border)",
     position:"fixed", left:0, right:0, bottom:0, zIndex:50,
-    paddingBottom:"calc(env(safe-area-inset-bottom, 0px) * 0.25)" },
+    paddingBottom:"calc(env(safe-area-inset-bottom, 0px) * 0.7)" },
 };
 
 function NavItem({ to, icon: Icon, label }) {
@@ -187,7 +187,7 @@ export default function Layout() {
           /* Header en verre depoli = fixed : il chevauche le contenu (pour qu'on
              voie le scroll flou derriere). On pousse donc le contenu dessous de la
              hauteur du header (~48px) + la safe-area du haut portee par le header. */
-          .page-content { padding-top: calc(60px + var(--sat, env(safe-area-inset-top,0px))) !important; }
+          .page-content { padding-top: calc(52px + var(--sat, env(safe-area-inset-top,0px))) !important; }
           /* Le titre est deja dans le header mobile : on evite de le repeter. */
           .page-title { display:none!important; }
         }
