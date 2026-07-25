@@ -33,7 +33,7 @@ const S = {
   logoBox: { width:28, height:28, borderRadius:8, overflow:"hidden" },
   nav:     { flex:1, padding:"0 8px", display:"flex", flexDirection:"column", gap:2 },
   main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
-  page:    { flex:1, overflowY:"auto", padding:16, paddingTop:"calc(16px + var(--sat, env(safe-area-inset-top, 0px)))", background:"var(--bg)" },
+  page:    { flex:1, minHeight:0, overflowY:"auto", padding:16, paddingTop:"calc(16px + var(--sat, env(safe-area-inset-top, 0px)))", background:"var(--bg)" },
   // Mobile
   // Le header est colle en haut de l'ecran. En PWA installee edge-to-edge et en
   // WebView, la barre d'etat (heure, wifi) passe PAR-DESSUS s'il ne reserve pas la
@@ -49,12 +49,19 @@ const S = {
     backdropFilter:"blur(12px) saturate(140%)",
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderBottom:"1px solid var(--border)" },
-  bottomNav: { display:"flex",
+  // La nav n'est plus `position:fixed`. En PWA iOS installee, un element ancre a
+  // bottom:0 se cale sur une hauteur de viewport sous-evaluee tant qu'aucun scroll
+  // n'a force le recalcul : sur les pages courtes qui ne defilent pas (Objets,
+  // Parametres) elle flottait au-dessus du bas reel de l'ecran. En enfant flex de
+  // la colonne -- dont la hauteur suit la chaine html>body>#root deja corrigee iOS
+  // (-webkit-fill-available) -- elle se cale toujours sur le bas reel du shell.
+  // flexShrink:0 : elle garde sa hauteur, c'est la zone de contenu qui se comprime.
+  bottomNav: { display:"flex", flexShrink:0,
     background:"var(--glass)",
     backdropFilter:"blur(12px) saturate(140%)",
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderTop:"1px solid var(--border)",
-    position:"fixed", left:0, right:0, bottom:0, zIndex:50,
+    zIndex:50,
     paddingBottom:"env(safe-area-inset-bottom,0px)" },
 };
 
@@ -158,7 +165,6 @@ export default function Layout() {
         @media (max-width: 767px) {
           .hidden-mobile { display:none!important; }
           .show-mobile { display:flex!important; }
-          .page-content { padding-bottom: calc(76px + env(safe-area-inset-bottom,0px)) !important; }
           /* Header en verre depoli = fixed : il chevauche le contenu (pour qu'on
              voie le scroll flou derriere). On pousse donc le contenu dessous de la
              hauteur du header (~48px) + la safe-area du haut portee par le header. */
