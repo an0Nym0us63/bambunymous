@@ -32,8 +32,7 @@ const S = {
   logo:    { display:"flex", alignItems:"center", gap:10, padding:"0 16px", marginBottom:32 },
   logoBox: { width:28, height:28, borderRadius:8, overflow:"hidden" },
   nav:     { flex:1, padding:"0 8px", display:"flex", flexDirection:"column", gap:2 },
-  // position:relative -> sert d'ancrage a la bottomNav en position:absolute (voir plus bas).
-  main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden", position:"relative" },
+  main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
   page:    { flex:1, overflowY:"auto", padding:16, paddingTop:"calc(16px + var(--sat, env(safe-area-inset-top, 0px)))", background:"var(--bg)" },
   // Mobile
   // Le header est colle en haut de l'ecran. En PWA installee edge-to-edge et en
@@ -50,21 +49,12 @@ const S = {
     backdropFilter:"blur(12px) saturate(140%)",
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderBottom:"1px solid var(--border)" },
-  // absolute (et non fixed) : on garde l'effet verre depoli -- le contenu defile
-  // DESSOUS la barre floutee, donc elle doit rester superposee, hors du flux.
-  // Mais en PWA iOS installee, `position:fixed` s'ancre sur le viewport, dont la
-  // hauteur est sous-evaluee tant qu'aucun scroll n'a force le recalcul : sur les
-  // pages courtes qui ne defilent pas (Objets, Parametres) la nav flottait au-dessus
-  // du bas reel. Ancree en `absolute` sur S.main (position:relative), elle se cale
-  // sur la hauteur de la colonne -- qui suit la chaine html>body>#root deja corrigee
-  // iOS (-webkit-fill-available) -- au lieu du viewport foireux. Effet identique,
-  // ancrage fiable.
   bottomNav: { display:"flex",
     background:"var(--glass)",
     backdropFilter:"blur(12px) saturate(140%)",
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderTop:"1px solid var(--border)",
-    position:"absolute", left:0, right:0, bottom:0, zIndex:50,
+    position:"fixed", left:0, right:0, bottom:0, zIndex:50,
     paddingBottom:"env(safe-area-inset-bottom,0px)" },
 };
 
@@ -168,8 +158,6 @@ export default function Layout() {
         @media (max-width: 767px) {
           .hidden-mobile { display:none!important; }
           .show-mobile { display:flex!important; }
-          /* La nav superposee (absolute) chevauche le bas du contenu : on reserve
-             sa hauteur (~76px) + la safe-area pour que rien ne finisse cache dessous. */
           .page-content { padding-bottom: calc(76px + env(safe-area-inset-bottom,0px)) !important; }
           /* Header en verre depoli = fixed : il chevauche le contenu (pour qu'on
              voie le scroll flou derriere). On pousse donc le contenu dessous de la
