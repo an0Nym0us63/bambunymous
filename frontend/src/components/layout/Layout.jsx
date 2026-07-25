@@ -73,6 +73,62 @@ function NavItem({ to, icon: Icon, label }) {
   );
 }
 
+// ── Encart de diagnostic TEMPORAIRE (iOS PWA installee uniquement) ──────────
+// Affiche les hauteurs reelles du viewport pour comprendre pourquoi la barre se
+// decale. A RETIRER une fois le diagnostic fait.
+function ViewportDebug() {
+  const [, force] = React.useReducer(x => x + 1, 0);
+  useEffect(() => {
+    const on = () => force();
+    window.addEventListener("resize", on);
+    window.addEventListener("scroll", on, true);
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener("resize", on);
+      window.visualViewport.addEventListener("scroll", on);
+    }
+    const id = setInterval(on, 400);
+    return () => {
+      window.removeEventListener("resize", on);
+      window.removeEventListener("scroll", on, true);
+      if (window.visualViewport) {
+        window.visualViewport.removeEventListener("resize", on);
+        window.visualViewport.removeEventListener("scroll", on);
+      }
+      clearInterval(id);
+    };
+  }, []);
+  const d = document.documentElement;
+  const vv = window.visualViewport;
+  // Sonde safe-area basse (env resolu en px)
+  let sab = "?";
+  try {
+    const el = document.createElement("div");
+    el.style.cssText = "position:fixed;bottom:0;left:0;width:0;height:env(safe-area-inset-bottom,0px)";
+    document.body.appendChild(el);
+    sab = el.getBoundingClientRect().height;
+    document.body.removeChild(el);
+  } catch (e) {}
+  const rows = [
+    ["innerH", window.innerHeight],
+    ["visualH", vv ? Math.round(vv.height) : "-"],
+    ["clientH", d.clientHeight],
+    ["screenH", window.screen ? window.screen.height : "-"],
+    ["bodyScrollH", document.body.scrollHeight],
+    ["docScrollH", d.scrollHeight],
+    ["scrollY", Math.round(window.scrollY)],
+    ["vvOffTop", vv ? Math.round(vv.offsetTop) : "-"],
+    ["safeBottom", sab],
+  ];
+  return (
+    <div style={{ position:"fixed", top:"env(safe-area-inset-top,0px)", left:0, zIndex:99999,
+      background:"rgba(0,0,0,0.85)", color:"#22ff88", font:"11px/1.35 monospace",
+      padding:"6px 9px", borderRadius:"0 0 10px 0", pointerEvents:"none",
+      whiteSpace:"pre", letterSpacing:"0.2px" }}>
+      {rows.map(([k, v]) => k + ": " + v).join("\n")}
+    </div>
+  );
+}
+
 export default function Layout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -94,8 +150,11 @@ export default function Layout() {
     }
   }, []);
 
+  const iosStandalone = typeof window !== "undefined" && window.navigator.standalone === true;
+
   return (
     <div style={S.app}>
+      {iosStandalone && <ViewportDebug/>}
       {/* Sidebar desktop */}
       <aside className="hidden-mobile" style={S.aside}>
         <div style={{...S.logo, cursor:"pointer"}} onClick={() => navigate("/")}>
