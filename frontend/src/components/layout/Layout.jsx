@@ -40,7 +40,7 @@ const S = {
   // safe-area : le titre se retrouvait sous l'heure. Dans un navigateur classique,
   // env(safe-area-inset-top) vaut 0, donc rien ne change la-bas.
   header:  { display:"flex", alignItems:"center", gap:8,
-    padding:"12px 16px", paddingTop:"calc(12px + var(--sat, env(safe-area-inset-top, 0px)))",
+    padding:"8px 16px", paddingTop:"calc(8px + var(--sat, env(safe-area-inset-top, 0px)))",
     // Verre depoli : fond translucide + flou de ce qui scrolle derriere. Fixed
     // en haut pour que le contenu passe DESSOUS (sinon rien a flouter). La
     // compensation d'espace est faite en CSS (.page-content padding-top).
@@ -77,6 +77,28 @@ export default function Layout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const title = TITLES[pathname] ?? null;
+  const headerRef = React.useRef(null);
+
+  // Le header mobile est fixed et sa hauteur VARIE selon la page (bouton scan sur
+  // Filaments, avatar sur Accueil, rien ailleurs) + la safe-area du haut. Un
+  // padding-top fixe sur le contenu laissait donc trop de vide sur les pages a
+  // header court. On mesure la hauteur reelle du header et on la publie dans
+  // --header-h : le contenu se cale alors pile dessous, quelle que soit la page.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const setHH = () => document.documentElement.style.setProperty("--header-h", el.offsetHeight + "px");
+    setHH();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(setHH) : null;
+    if (ro) ro.observe(el);
+    window.addEventListener("resize", setHH);
+    window.addEventListener("orientationchange", setHH);
+    return () => {
+      if (ro) ro.disconnect();
+      window.removeEventListener("resize", setHH);
+      window.removeEventListener("orientationchange", setHH);
+    };
+  }, [pathname]);
 
   // Dans la coquille WebView, une bande coloree (scrim natif) occupe DEJA la place
   // de la barre de statut. Le header ne doit donc pas reserver en plus la
@@ -135,7 +157,7 @@ export default function Layout() {
 
       <div style={S.main}>
         {/* Header mobile */}
-        <header className="show-mobile app-header" style={S.header}>
+        <header ref={headerRef} className="show-mobile app-header" style={S.header}>
           <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0, cursor:"pointer" }}
             onClick={() => navigate("/")}>
             <img src="/icon-192.png" style={{ width:24, height:24, borderRadius:6, flexShrink:0 }} alt=""/>
@@ -187,7 +209,7 @@ export default function Layout() {
           /* Header en verre depoli = fixed : il chevauche le contenu (pour qu'on
              voie le scroll flou derriere). On pousse donc le contenu dessous de la
              hauteur du header (~48px) + la safe-area du haut portee par le header. */
-          .page-content { padding-top: calc(52px + var(--sat, env(safe-area-inset-top,0px))) !important; }
+          .page-content { padding-top: var(--header-h, calc(52px + var(--sat, env(safe-area-inset-top,0px)))) !important; }
           /* Le titre est deja dans le header mobile : on evite de le repeter. */
           .page-title { display:none!important; }
         }
