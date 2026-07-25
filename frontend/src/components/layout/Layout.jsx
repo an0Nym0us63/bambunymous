@@ -73,62 +73,6 @@ function NavItem({ to, icon: Icon, label }) {
   );
 }
 
-// ── Encart de diagnostic TEMPORAIRE (iOS PWA installee uniquement) ──────────
-// Affiche les hauteurs reelles du viewport pour comprendre pourquoi la barre se
-// decale. A RETIRER une fois le diagnostic fait.
-function ViewportDebug() {
-  const [, force] = React.useReducer(x => x + 1, 0);
-  useEffect(() => {
-    const on = () => force();
-    window.addEventListener("resize", on);
-    window.addEventListener("scroll", on, true);
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener("resize", on);
-      window.visualViewport.addEventListener("scroll", on);
-    }
-    const id = setInterval(on, 400);
-    return () => {
-      window.removeEventListener("resize", on);
-      window.removeEventListener("scroll", on, true);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener("resize", on);
-        window.visualViewport.removeEventListener("scroll", on);
-      }
-      clearInterval(id);
-    };
-  }, []);
-  const d = document.documentElement;
-  const vv = window.visualViewport;
-  // Sonde safe-area basse (env resolu en px)
-  let sab = "?";
-  try {
-    const el = document.createElement("div");
-    el.style.cssText = "position:fixed;bottom:0;left:0;width:0;height:env(safe-area-inset-bottom,0px)";
-    document.body.appendChild(el);
-    sab = el.getBoundingClientRect().height;
-    document.body.removeChild(el);
-  } catch (e) {}
-  const rows = [
-    ["innerH", window.innerHeight],
-    ["visualH", vv ? Math.round(vv.height) : "-"],
-    ["clientH", d.clientHeight],
-    ["screenH", window.screen ? window.screen.height : "-"],
-    ["bodyScrollH", document.body.scrollHeight],
-    ["docScrollH", d.scrollHeight],
-    ["scrollY", Math.round(window.scrollY)],
-    ["vvOffTop", vv ? Math.round(vv.offsetTop) : "-"],
-    ["safeBottom", sab],
-  ];
-  return (
-    <div style={{ position:"fixed", top:"env(safe-area-inset-top,0px)", left:0, zIndex:99999,
-      background:"rgba(0,0,0,0.85)", color:"#22ff88", font:"11px/1.35 monospace",
-      padding:"6px 9px", borderRadius:"0 0 10px 0", pointerEvents:"none",
-      whiteSpace:"pre", letterSpacing:"0.2px" }}>
-      {rows.map(([k, v]) => k + ": " + v).join("\n")}
-    </div>
-  );
-}
-
 export default function Layout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -144,17 +88,33 @@ export default function Layout() {
     }
     // navigator.standalone n'est vrai QUE sur iOS en PWA installee (icone ecran
     // d'accueil) -- propriete Safari propre a iOS, absente ailleurs. On marque
-    // <html> pour ne cibler que ce shell, ou la barre fixe se decale (voir CSS).
+    // <html> pour ne cibler que ce shell.
     if (typeof window !== "undefined" && window.navigator.standalone === true) {
       document.documentElement.classList.add("ios-standalone");
+      // Diagnostic terrain : sur ce shell, -webkit-fill-available cale la hauteur a
+      // (ecran - safe-area-top) et ne se corrige jamais -- le shell fait 59px de
+      // moins que l'ecran, donc la barre fixed s'ancre 59px trop haut. screen.height
+      // est la seule mesure STABLE des le lancement (852 constant sur toutes les
+      // captures) et vaut le plein ecran. L'app est verrouillee en portrait
+      // (manifest orientation:portrait-primary), donc screen.height est toujours la
+      // bonne hauteur. On la pose dans --app-height, consommee par le CSS scope.
+      const setAppH = () => {
+        const h = window.screen && window.screen.height;
+        if (h) document.documentElement.style.setProperty("--app-height", h + "px");
+      };
+      setAppH();
+      window.addEventListener("orientationchange", setAppH);
+      window.addEventListener("resize", setAppH);
+      return () => {
+        window.removeEventListener("orientationchange", setAppH);
+        window.removeEventListener("resize", setAppH);
+      };
     }
   }, []);
 
-  const iosStandalone = typeof window !== "undefined" && window.navigator.standalone === true;
 
   return (
     <div style={S.app}>
-      {iosStandalone && <ViewportDebug/>}
       {/* Sidebar desktop */}
       <aside className="hidden-mobile" style={S.aside}>
         <div style={{...S.logo, cursor:"pointer"}} onClick={() => navigate("/")}>
@@ -205,7 +165,7 @@ export default function Layout() {
         <main className="page-content" style={S.page}><Outlet /></main>
 
         {/* Bottom nav mobile */}
-        <nav className="show-mobile bottom-nav" style={S.bottomNav}>
+        <nav className="show-mobile" style={S.bottomNav}>
           {nav.map(({ to, icon: Icon, label }) => (
             <NavLink key={to} to={to} end={to === "/"} style={({ isActive }) => ({
               flex:1, display:"flex", flexDirection:"column", alignItems:"center",
@@ -231,19 +191,17 @@ export default function Layout() {
           /* Le titre est deja dans le header mobile : on evite de le repeter. */
           .page-title { display:none!important; }
         }
-        /* iOS PWA installee (standalone) UNIQUEMENT : la barre reste calee en bas
-           SANS position:fixed. Sur ce shell precis, un element fixe/absolu s'ancre
-           sur un viewport mal annonce au lancement (corrige seulement au premier
-           scroll), d'ou la barre trop haute. En flux (position:static), en bas d'une
-           colonne pleine hauteur, elle est toujours au bon endroit. On perd le verre
-           depoli (le contenu ne passe plus dessous) uniquement dans ce contexte --
-           compromis assume. Le shell (hauteur, overflow) n'est PAS touche : le
-           pull-to-refresh natif de la PWA iOS est donc preserve. */
-        html.ios-standalone .bottom-nav { position: static !important; }
-        html.ios-standalone .page-content {
-          min-height: 0 !important;
-          padding-bottom: env(safe-area-inset-bottom,0px) !important;
-        }
+        /* iOS PWA installee (standalone) UNIQUEMENT : on cale la hauteur du shell
+           sur --app-height (= screen.height, plein ecran) au lieu de
+           -webkit-fill-available, qui y retranche la safe-area du haut (~59px) et ne
+           se corrige jamais -- ce qui laissait la barre fixed ancree 59px trop haut.
+           La barre RESTE en position:fixed (le contenu defile dessous, verre depoli
+           conserve, et elle ne suit pas le scroll du document). Le document peut
+           toujours deborder et scroller : le pull-to-refresh natif iOS est preserve.
+           Scope a .ios-standalone : aucun impact navigateur / WebView / desktop. */
+        html.ios-standalone,
+        html.ios-standalone body,
+        html.ios-standalone #root { height: var(--app-height, 100vh) !important; }
         /* WebView : le scrim natif occupe deja la barre de statut. On force donc
            la safe-area top a 0 (sinon l'espace serait double sous la barre
            violette). --sat est utilisee par le header et la page a la place de
