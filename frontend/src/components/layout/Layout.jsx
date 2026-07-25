@@ -32,9 +32,7 @@ const S = {
   logo:    { display:"flex", alignItems:"center", gap:10, padding:"0 16px", marginBottom:32 },
   logoBox: { width:28, height:28, borderRadius:8, overflow:"hidden" },
   nav:     { flex:1, padding:"0 8px", display:"flex", flexDirection:"column", gap:2 },
-  // position:relative : ancre la bottomNav (position:absolute) sur cette colonne,
-  // dont la hauteur suit le viewport reel (shell en 100dvh, cf. index.css). Voir S.bottomNav.
-  main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden", position:"relative" },
+  main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
   page:    { flex:1, overflowY:"auto", padding:16, paddingTop:"calc(16px + var(--sat, env(safe-area-inset-top, 0px)))", background:"var(--bg)" },
   // Mobile
   // Le header est colle en haut de l'ecran. En PWA installee edge-to-edge et en
@@ -51,19 +49,12 @@ const S = {
     backdropFilter:"blur(12px) saturate(140%)",
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderBottom:"1px solid var(--border)" },
-  // absolute (et non fixed) : on garde l'effet verre depoli -- le contenu defile
-  // DESSOUS la barre, donc elle reste superposee, hors du flux. Ancree sur S.main
-  // (position:relative) dont la hauteur est calee sur le viewport reel via 100dvh
-  // (cf. index.css). fixed s'ancrait sur un viewport
-  // sous-evalue en PWA iOS ; absolute sur une colonne qui debordait le viewport
-  // renvoyait la nav sous la ligne de flottaison. Colonne = viewport reel : la nav
-  // se cale sur le bas reel, visible sans scroll, sur tous les environnements.
   bottomNav: { display:"flex",
     background:"var(--glass)",
     backdropFilter:"blur(12px) saturate(140%)",
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderTop:"1px solid var(--border)",
-    position:"absolute", left:0, right:0, bottom:0, zIndex:50,
+    position:"fixed", left:0, right:0, bottom:0, zIndex:50,
     paddingBottom:"env(safe-area-inset-bottom,0px)" },
 };
 

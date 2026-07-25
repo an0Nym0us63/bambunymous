@@ -38,16 +38,20 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
-/* Hauteur du shell = viewport dynamique reel. 100dvh (dynamic viewport height)
-   est resolu par le moteur au viewport reel DES le premier rendu, y compris en
-   PWA iOS installee, SANS dependre d'un premier scroll -- contrairement a
-   -webkit-fill-available ou a une mesure JS de window.innerHeight, toutes deux
-   sous-evaluees au lancement tant qu'aucun geste n'a force le recalcul (la nav
-   demarrait alors trop haute et ne se calait qu'apres un petit scroll). Repli
-   100% pour les rares moteurs sans support de dvh (comportement d'origine). */
-html, body, #root { height: 100%; }
-@supports (height: 100dvh) {
-  html, body, #root { height: 100dvh; }
+html, body { height: 100%; }
+
+/* iOS en PWA installee : au premier rendu, la hauteur de fenetre annoncee par
+   le systeme est trop courte, et n'est corrigee qu'au premier scroll --
+   l'application s'affichait amputee, barre de navigation comprise, avec une
+   bande vide sous elle. -webkit-fill-available est resolu par WebKit une fois
+   la hauteur reelle connue, ce qui supprime l'etat intermediaire.
+
+   Le @supports cible WebKit sur iOS et lui seul : -webkit-touch-callout n'y
+   existe nulle part ailleurs. La coquille WebView Android et les navigateurs
+   de bureau ne voient donc PAS cette regle et conservent height:100%, soit
+   exactement le comportement actuel. */
+@supports (-webkit-touch-callout: none) {
+  html, body { height: -webkit-fill-available; }
 }
 body {
   background: var(--bg);
@@ -58,8 +62,10 @@ body {
   -webkit-font-smoothing: antialiased;
   transition: background 0.25s, color 0.25s;
 }
-/* Hauteur portee par les regles html,body,#root ci-dessus (100dvh / repli 100%). */
-#root { display: flex; flex-direction: column; }
+/* height:100% et non 100dvh : la hauteur se chaine depuis <html>, donc elle
+   herite du correctif iOS ci-dessus. Ailleurs, 100% d'un <html> en 100% vaut
+   la fenetre, comme 100dvh. */
+#root { height: 100%; display: flex; flex-direction: column; }
 
 .card    { background: var(--surface);  border: 1px solid var(--border); border-radius: var(--r); }
 .card-sm { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); }
