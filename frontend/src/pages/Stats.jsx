@@ -139,7 +139,9 @@ function ObjectsStats({ stats, onOpen }) {
 
       {((stats.top_margin || []).length > 0 || (stats.top_margin_pct || []).length > 0) && (
         <Section title="Meilleures marges">
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
+          {/* Empilees et non cote a cote : cote a cote, les barres etaient trop
+              etroites pour se lire. */}
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {(stats.top_margin || []).length > 0 && (
               <div className="card" style={{ padding:"14px 16px" }}>
                 <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:"0 0 10px" }}>
@@ -150,7 +152,7 @@ function ObjectsStats({ stats, onOpen }) {
                   return (
                     <Bar key={o.id} label={o.name}
                       value={Math.max(0, o.margin)} max={max}
-                      sublabel={`${fmtEur(o.margin)} (vendu ${fmtEur(o.sold_price)})`}
+                      sublabel={fmtEur(o.margin)}
                       color={o.margin >= 0 ? "#22c55e" : "#ef4444"}/>
                   );
                 })}
@@ -169,7 +171,7 @@ function ObjectsStats({ stats, onOpen }) {
                   return (
                     <Bar key={o.id} label={o.name}
                       value={Math.max(0, o.margin_pct)} max={max}
-                      sublabel={`${o.margin_pct} % (${fmtEur(o.margin)} sur ${fmtEur(o.cost)})`}
+                      sublabel={`${o.margin_pct} %`}
                       color={o.margin_pct >= 0 ? "#22c55e" : "#ef4444"}/>
                   );
                 })}
