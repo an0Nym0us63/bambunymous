@@ -55,7 +55,7 @@ const S = {
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderTop:"1px solid var(--border)",
     position:"fixed", left:0, right:0, bottom:0, zIndex:50,
-    paddingBottom:"calc(env(safe-area-inset-bottom, 0px) * 0.7)" },
+    paddingBottom:"calc(env(safe-area-inset-bottom, 0px) * 0.5)" },
 };
 
 function NavItem({ to, icon: Icon, label }) {
