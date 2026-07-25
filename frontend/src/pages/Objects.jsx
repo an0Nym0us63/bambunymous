@@ -1256,6 +1256,13 @@ export const objStatus = (o) =>
  */
 function StatusSection({ sec, open, onToggle, children }) {
   const cfg = OBJ_STATUS[sec.st];
+  const ref = React.useRef(null);
+  // Accordeon : a l'ouverture, ramener le haut de la section sous le header fixe.
+  // Sinon, quand une grande section au-dessus vient de se replier, on reste
+  // visuellement "dans le vide" au lieu d'etre en haut de la section ouverte.
+  React.useEffect(() => {
+    if (open && ref.current) ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [open]);
   const resume =
     sec.st === "sold"      ? `${fmtPrice(sec.revenue)} encaissés`
     : sec.st === "available" ? (sec.desired > 0 ? `${fmtPrice(sec.desired)} espérés`
@@ -1263,7 +1270,8 @@ function StatusSection({ sec, open, onToggle, children }) {
     : `${fmtPrice(sec.cost)} de production`;
 
   return (
-    <div className="card" style={{ padding:0, overflow:"hidden" }}>
+    <div ref={ref} className="card" style={{ padding:0, overflow:"hidden",
+      scrollMarginTop:"calc(64px + var(--sat, env(safe-area-inset-top, 0px)))" }}>
       <button onClick={onToggle}
         style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
           padding:"11px 14px", border:"none", background:"none", cursor:"pointer",
@@ -1329,8 +1337,13 @@ const sectionColor = (name) =>
 
 function AccessorySection({ sec, open, onToggle, children }) {
   const color = sectionColor(sec.name);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    if (open && ref.current) ref.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [open]);
   return (
-    <div className="card" style={{ padding:0, overflow:"hidden" }}>
+    <div ref={ref} className="card" style={{ padding:0, overflow:"hidden",
+      scrollMarginTop:"calc(64px + var(--sat, env(safe-area-inset-top, 0px)))" }}>
       <button onClick={onToggle}
         style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
           padding:"11px 14px", border:"none", background:"none", cursor:"pointer",
