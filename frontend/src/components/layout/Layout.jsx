@@ -86,6 +86,12 @@ export default function Layout() {
     if (typeof window !== "undefined" && window.BambuScan) {
       document.documentElement.classList.add("in-webview");
     }
+    // navigator.standalone n'est vrai QUE sur iOS en PWA installee (icone ecran
+    // d'accueil) -- propriete Safari propre a iOS, absente ailleurs. On marque
+    // <html> pour ne cibler que ce shell, ou la barre fixe se decale (voir CSS).
+    if (typeof window !== "undefined" && window.navigator.standalone === true) {
+      document.documentElement.classList.add("ios-standalone");
+    }
   }, []);
 
   return (
@@ -140,7 +146,7 @@ export default function Layout() {
         <main className="page-content" style={S.page}><Outlet /></main>
 
         {/* Bottom nav mobile */}
-        <nav className="show-mobile" style={S.bottomNav}>
+        <nav className="show-mobile bottom-nav" style={S.bottomNav}>
           {nav.map(({ to, icon: Icon, label }) => (
             <NavLink key={to} to={to} end={to === "/"} style={({ isActive }) => ({
               flex:1, display:"flex", flexDirection:"column", alignItems:"center",
@@ -165,6 +171,19 @@ export default function Layout() {
           .page-content { padding-top: calc(60px + var(--sat, env(safe-area-inset-top,0px))) !important; }
           /* Le titre est deja dans le header mobile : on evite de le repeter. */
           .page-title { display:none!important; }
+        }
+        /* iOS PWA installee (standalone) UNIQUEMENT : la barre reste calee en bas
+           SANS position:fixed. Sur ce shell precis, un element fixe/absolu s'ancre
+           sur un viewport mal annonce au lancement (corrige seulement au premier
+           scroll), d'ou la barre trop haute. En flux (position:static), en bas d'une
+           colonne pleine hauteur, elle est toujours au bon endroit. On perd le verre
+           depoli (le contenu ne passe plus dessous) uniquement dans ce contexte --
+           compromis assume. Le shell (hauteur, overflow) n'est PAS touche : le
+           pull-to-refresh natif de la PWA iOS est donc preserve. */
+        html.ios-standalone .bottom-nav { position: static !important; }
+        html.ios-standalone .page-content {
+          min-height: 0 !important;
+          padding-bottom: env(safe-area-inset-bottom,0px) !important;
         }
         /* WebView : le scrim natif occupe deja la barre de statut. On force donc
            la safe-area top a 0 (sinon l'espace serait double sous la barre
