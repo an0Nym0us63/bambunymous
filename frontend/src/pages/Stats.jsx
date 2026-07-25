@@ -137,18 +137,44 @@ function ObjectsStats({ stats, onOpen }) {
         </div>
       </Section>
 
-      {(stats.top_margin || []).length > 0 && (
+      {((stats.top_margin || []).length > 0 || (stats.top_margin_pct || []).length > 0) && (
         <Section title="Meilleures marges">
-          <div className="card" style={{ padding:"14px 16px" }}>
-            {stats.top_margin.map(o => {
-              const max = stats.top_margin[0].margin || 1;
-              return (
-                <Bar key={o.id} label={o.name}
-                  value={Math.max(0, o.margin)} max={max}
-                  sublabel={`${fmtEur(o.margin)} (vendu ${fmtEur(o.sold_price)})`}
-                  color={o.margin >= 0 ? "#22c55e" : "#ef4444"}/>
-              );
-            })}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))", gap:12 }}>
+            {(stats.top_margin || []).length > 0 && (
+              <div className="card" style={{ padding:"14px 16px" }}>
+                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:"0 0 10px" }}>
+                  En valeur
+                </p>
+                {stats.top_margin.map(o => {
+                  const max = stats.top_margin[0].margin || 1;
+                  return (
+                    <Bar key={o.id} label={o.name}
+                      value={Math.max(0, o.margin)} max={max}
+                      sublabel={`${fmtEur(o.margin)} (vendu ${fmtEur(o.sold_price)})`}
+                      color={o.margin >= 0 ? "#22c55e" : "#ef4444"}/>
+                  );
+                })}
+              </div>
+            )}
+            {/* Memes objets, classes par ratio marge/cout : revele les plus
+                rentables proportionnellement, la ou la marge absolue favorise
+                mecaniquement les gros objets chers. */}
+            {(stats.top_margin_pct || []).length > 0 && (
+              <div className="card" style={{ padding:"14px 16px" }}>
+                <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:"0 0 10px" }}>
+                  En pourcentage
+                </p>
+                {stats.top_margin_pct.map(o => {
+                  const max = stats.top_margin_pct[0].margin_pct || 1;
+                  return (
+                    <Bar key={o.id} label={o.name}
+                      value={Math.max(0, o.margin_pct)} max={max}
+                      sublabel={`${o.margin_pct} % (${fmtEur(o.margin)} sur ${fmtEur(o.cost)})`}
+                      color={o.margin_pct >= 0 ? "#22c55e" : "#ef4444"}/>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </Section>
       )}
