@@ -38,16 +38,17 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
-/* Hauteur reelle du viewport, posee en JS dans --app-height (cf. Layout.jsx) et
-   reevaluee sur resize/orientationchange/visualViewport. Remplace l'ancien
-   -webkit-fill-available : sur iOS PWA installee, la hauteur systeme est fausse
-   au premier rendu et n'etait corrigee qu'apres un scroll -- fill-available
-   restait alors soit sous-evaluee (nav decalee, bande vide dessous), soit, dans
-   d'autres coquilles, sur-evaluee (shell plus haut que l'ecran, nav a aller
-   chercher en scrollant). La mesure JS cale le shell sur le viewport reel, ce qui
-   donne un ancrage fiable a la nav (position:absolute sur cette colonne).
-   Repli 100% avant l'execution du JS et pour tout environnement sans mesure. */
-html, body, #root { height: var(--app-height, 100%); }
+/* Hauteur du shell = viewport dynamique reel. 100dvh (dynamic viewport height)
+   est resolu par le moteur au viewport reel DES le premier rendu, y compris en
+   PWA iOS installee, SANS dependre d'un premier scroll -- contrairement a
+   -webkit-fill-available ou a une mesure JS de window.innerHeight, toutes deux
+   sous-evaluees au lancement tant qu'aucun geste n'a force le recalcul (la nav
+   demarrait alors trop haute et ne se calait qu'apres un petit scroll). Repli
+   100% pour les rares moteurs sans support de dvh (comportement d'origine). */
+html, body, #root { height: 100%; }
+@supports (height: 100dvh) {
+  html, body, #root { height: 100dvh; }
+}
 body {
   background: var(--bg);
   color: var(--text);
@@ -57,7 +58,7 @@ body {
   -webkit-font-smoothing: antialiased;
   transition: background 0.25s, color 0.25s;
 }
-/* Hauteur portee par la regle html,body,#root ci-dessus (--app-height). */
+/* Hauteur portee par les regles html,body,#root ci-dessus (100dvh / repli 100%). */
 #root { display: flex; flex-direction: column; }
 
 .card    { background: var(--surface);  border: 1px solid var(--border); border-radius: var(--r); }
