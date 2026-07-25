@@ -40,7 +40,10 @@ const S = {
   // safe-area : le titre se retrouvait sous l'heure. Dans un navigateur classique,
   // env(safe-area-inset-top) vaut 0, donc rien ne change la-bas.
   header:  { display:"flex", alignItems:"center", gap:8,
-    padding:"8px 16px", paddingTop:"calc(8px + var(--sat, env(safe-area-inset-top, 0px)))",
+    // Safe-area du haut reservee a 85% : le logo (gauche) et l'avatar (droite)
+    // peuvent remonter un peu -- ils sont sur les cotes, l'heure/batterie et l'ile
+    // (centree) restent degagees -- ce qui compacte le header sans le coller au statut.
+    padding:"4px 16px", paddingTop:"calc(4px + var(--sat, env(safe-area-inset-top, 0px)) * 0.85)",
     // Verre depoli : fond translucide + flou de ce qui scrolle derriere. Fixed
     // en haut pour que le contenu passe DESSOUS (sinon rien a flouter). La
     // compensation d'espace est faite en CSS (.page-content padding-top).
