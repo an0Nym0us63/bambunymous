@@ -207,6 +207,16 @@ export default function Layout() {
            violette). --sat est utilisee par le header et la page a la place de
            env(safe-area-inset-top). */
         html.in-webview { --sat: 0px; }
+        /* APK Android (WebView) : aucune safe-area exposee en bas, donc la barre
+           se collait au bord de la WebView -- avec les coins arrondis de l'ecran,
+           Accueil/Parametres mordaient dans la courbe. On la remonte un peu ET on
+           ecarte les boutons des cotes. Scope a .in-webview : iOS reste colle via
+           sa safe-area, rien ne bouge de ce cote. */
+        html.in-webview .show-mobile {
+          padding-bottom: 12px !important;
+          padding-left: 12px;
+          padding-right: 12px;
+        }
       `}</style>
     </div>
   );
