@@ -38,21 +38,16 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; margin:0; padding:0; }
-html, body { height: 100%; }
-
-/* iOS en PWA installee : au premier rendu, la hauteur de fenetre annoncee par
-   le systeme est trop courte, et n'est corrigee qu'au premier scroll --
-   l'application s'affichait amputee, barre de navigation comprise, avec une
-   bande vide sous elle. -webkit-fill-available est resolu par WebKit une fois
-   la hauteur reelle connue, ce qui supprime l'etat intermediaire.
-
-   Le @supports cible WebKit sur iOS et lui seul : -webkit-touch-callout n'y
-   existe nulle part ailleurs. La coquille WebView Android et les navigateurs
-   de bureau ne voient donc PAS cette regle et conservent height:100%, soit
-   exactement le comportement actuel. */
-@supports (-webkit-touch-callout: none) {
-  html, body { height: -webkit-fill-available; }
-}
+/* Hauteur reelle du viewport, posee en JS dans --app-height (cf. Layout.jsx) et
+   reevaluee sur resize/orientationchange/visualViewport. Remplace l'ancien
+   -webkit-fill-available : sur iOS PWA installee, la hauteur systeme est fausse
+   au premier rendu et n'etait corrigee qu'apres un scroll -- fill-available
+   restait alors soit sous-evaluee (nav decalee, bande vide dessous), soit, dans
+   d'autres coquilles, sur-evaluee (shell plus haut que l'ecran, nav a aller
+   chercher en scrollant). La mesure JS cale le shell sur le viewport reel, ce qui
+   donne un ancrage fiable a la nav (position:absolute sur cette colonne).
+   Repli 100% avant l'execution du JS et pour tout environnement sans mesure. */
+html, body, #root { height: var(--app-height, 100%); }
 body {
   background: var(--bg);
   color: var(--text);
@@ -62,10 +57,8 @@ body {
   -webkit-font-smoothing: antialiased;
   transition: background 0.25s, color 0.25s;
 }
-/* height:100% et non 100dvh : la hauteur se chaine depuis <html>, donc elle
-   herite du correctif iOS ci-dessus. Ailleurs, 100% d'un <html> en 100% vaut
-   la fenetre, comme 100dvh. */
-#root { height: 100%; display: flex; flex-direction: column; }
+/* Hauteur portee par la regle html,body,#root ci-dessus (--app-height). */
+#root { display: flex; flex-direction: column; }
 
 .card    { background: var(--surface);  border: 1px solid var(--border); border-radius: var(--r); }
 .card-sm { background: var(--surface2); border: 1px solid var(--border); border-radius: var(--r-sm); }

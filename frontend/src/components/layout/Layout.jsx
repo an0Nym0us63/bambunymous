@@ -32,7 +32,9 @@ const S = {
   logo:    { display:"flex", alignItems:"center", gap:10, padding:"0 16px", marginBottom:32 },
   logoBox: { width:28, height:28, borderRadius:8, overflow:"hidden" },
   nav:     { flex:1, padding:"0 8px", display:"flex", flexDirection:"column", gap:2 },
-  main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden" },
+  // position:relative : ancre la bottomNav (position:absolute) sur cette colonne,
+  // dont la hauteur suit --app-height (viewport reel). Voir S.bottomNav.
+  main:    { flex:1, display:"flex", flexDirection:"column", overflow:"hidden", position:"relative" },
   page:    { flex:1, overflowY:"auto", padding:16, paddingTop:"calc(16px + var(--sat, env(safe-area-inset-top, 0px)))", background:"var(--bg)" },
   // Mobile
   // Le header est colle en haut de l'ecran. En PWA installee edge-to-edge et en
@@ -49,12 +51,19 @@ const S = {
     backdropFilter:"blur(12px) saturate(140%)",
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderBottom:"1px solid var(--border)" },
+  // absolute (et non fixed) : on garde l'effet verre depoli -- le contenu defile
+  // DESSOUS la barre, donc elle reste superposee, hors du flux. Ancree sur S.main
+  // (position:relative) dont la hauteur est calee sur le viewport reel via
+  // --app-height (cf. index.css + useEffect). fixed s'ancrait sur un viewport
+  // sous-evalue en PWA iOS ; absolute sur une colonne qui debordait le viewport
+  // renvoyait la nav sous la ligne de flottaison. Colonne = viewport reel : la nav
+  // se cale sur le bas reel, visible sans scroll, sur tous les environnements.
   bottomNav: { display:"flex",
     background:"var(--glass)",
     backdropFilter:"blur(12px) saturate(140%)",
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderTop:"1px solid var(--border)",
-    position:"fixed", left:0, right:0, bottom:0, zIndex:50,
+    position:"absolute", left:0, right:0, bottom:0, zIndex:50,
     paddingBottom:"env(safe-area-inset-bottom,0px)" },
 };
 
@@ -86,6 +95,30 @@ export default function Layout() {
     if (typeof window !== "undefined" && window.BambuScan) {
       document.documentElement.classList.add("in-webview");
     }
+  }, []);
+
+  // Hauteur reelle du viewport posee en JS dans --app-height (consommee par
+  // html,body,#root dans index.css). En PWA iOS installee, la hauteur systeme est
+  // trop courte au premier rendu et n'est corrigee qu'apres une interaction :
+  // -webkit-fill-available restait fausse, decalant la nav ou faisant deborder le
+  // shell. On mesure window.innerHeight (viewport de mise en page, insensible au
+  // clavier) et on la reevalue sur resize/orientationchange -- le resize declenche
+  // par iOS apres le lancement corrige la valeur sans scroll utilisateur. Le shell
+  // colle alors au viewport reel, et la nav absolute avec.
+  useEffect(() => {
+    const setH = () => {
+      const h = window.innerHeight;
+      if (h) document.documentElement.style.setProperty("--app-height", h + "px");
+    };
+    setH();
+    window.addEventListener("resize", setH);
+    window.addEventListener("orientationchange", setH);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", setH);
+    return () => {
+      window.removeEventListener("resize", setH);
+      window.removeEventListener("orientationchange", setH);
+      if (window.visualViewport) window.visualViewport.removeEventListener("resize", setH);
+    };
   }, []);
 
   return (
