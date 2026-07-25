@@ -55,7 +55,7 @@ const S = {
     WebkitBackdropFilter:"blur(12px) saturate(140%)",
     borderTop:"1px solid var(--border)",
     position:"fixed", left:0, right:0, bottom:0, zIndex:50,
-    paddingBottom:"env(safe-area-inset-bottom,0px)" },
+    paddingBottom:"calc(env(safe-area-inset-bottom, 0px) * 0.7)" },
 };
 
 function NavItem({ to, icon: Icon, label }) {
@@ -169,7 +169,7 @@ export default function Layout() {
           {nav.map(({ to, icon: Icon, label }) => (
             <NavLink key={to} to={to} end={to === "/"} style={({ isActive }) => ({
               flex:1, display:"flex", flexDirection:"column", alignItems:"center",
-              padding:"12px 0", gap:3, fontSize:10, textDecoration:"none",
+              padding:"12px 0 6px", gap:3, fontSize:10, textDecoration:"none",
               color: isActive ? "#3b82f6" : "var(--muted)", transition:"color 0.15s",
             })}>
               <Icon size={19} /><span>{label}</span>
