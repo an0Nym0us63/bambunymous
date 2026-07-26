@@ -1982,6 +1982,23 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
   );
 }
 
+// Nombre de CARTES affichees pour un lot de prints : un print solo = 1 carte, un
+// groupe = 1 carte quel que soit son nombre de prints. Sert a paginer par
+// elements affiches et non par prints bruts (un lot de 40 prints peut ne donner
+// que quelques cartes si de gros groupes s'y trouvent).
+function countDisplayItems(list) {
+  const groups = new Set();
+  const seen = new Set();
+  let solo = 0;
+  for (const p of (list || [])) {
+    if (seen.has(p.id)) continue;
+    seen.add(p.id);
+    if (p.group_id) groups.add(p.group_id);
+    else solo++;
+  }
+  return solo + groups.size;
+}
+
 export default function Prints() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [prints, setPrints]   = useState([]);
@@ -2011,6 +2028,8 @@ export default function Prints() {
   };
   const sentinelRef = useRef(null);
   const loadingMoreRef = useRef(false);
+  const printsRef = useRef([]);
+  printsRef.current = prints;
   const [search, setSearch]   = useState("");
   const [statusF, setStatusF] = useState("");
   const [selected, setSelected] = useState(null);
@@ -2059,6 +2078,7 @@ export default function Prints() {
   };
 
   const LIMIT = 40;
+  const CARDS_PER_LOAD = 20;   // cartes AFFICHEES visees par chargement (solos + groupes)
 
   const loadKpis = useCallback(async () => {
     const p = new URLSearchParams();
@@ -2123,22 +2143,37 @@ export default function Prints() {
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      const next = offset + LIMIT;
-      const params = new URLSearchParams({ limit: LIMIT, offset: next });
-      if (search)      params.set("search", search);
-      if (statusF)     params.set("status", statusF);
-      if (groupF)      params.set("group_id", groupF);
-      if (materialF)   params.set("material", materialF);
-      if (filaTypeF)   params.set("fila_type", filaTypeF);
-      if (filamentIdF) params.set("filament_id", filamentIdF);
-      if (colorF)      params.set("color", colorF);
-      if (sortF)       params.set("sort", sortF);
-      const { data } = await client.get("/prints?" + params);
-      const existingIds = new Set((prints||[]).map(p => p.id));
-      const fresh = (data.prints || []).filter(p => !existingIds.has(p.id));
-      setPrints(prev => [...prev, ...fresh]);
-      setOffset(next);
-      setHasMore(data.has_more ?? false);
+      let acc = printsRef.current.slice();
+      let curOffset = offset;
+      let more = true;
+      const startCount = countDisplayItems(acc);
+      let guard = 0;
+      // On enchaine les lots de prints jusqu'a ~CARDS_PER_LOAD nouvelles CARTES
+      // affichees : les prints d'un meme groupe se replient en une seule carte,
+      // donc un lot de 40 prints peut n'en produire que quelques-unes. Garde-fou
+      // a 12 lots pour ne jamais tourner indefiniment.
+      while (more && guard < 12 && (countDisplayItems(acc) - startCount) < CARDS_PER_LOAD) {
+        guard++;
+        const next = curOffset + LIMIT;
+        const params = new URLSearchParams({ limit: LIMIT, offset: next });
+        if (search)      params.set("search", search);
+        if (statusF)     params.set("status", statusF);
+        if (groupF)      params.set("group_id", groupF);
+        if (materialF)   params.set("material", materialF);
+        if (filaTypeF)   params.set("fila_type", filaTypeF);
+        if (filamentIdF) params.set("filament_id", filamentIdF);
+        if (colorF)      params.set("color", colorF);
+        if (sortF)       params.set("sort", sortF);
+        const { data } = await client.get("/prints?" + params);
+        const existingIds = new Set(acc.map(p => p.id));
+        const fresh = (data.prints || []).filter(p => !existingIds.has(p.id));
+        acc = [...acc, ...fresh];
+        curOffset = next;
+        more = data.has_more ?? false;
+      }
+      setPrints(acc);
+      setOffset(curOffset);
+      setHasMore(more);
     } catch(e) {}
     setLoadingMore(false);
     loadingMoreRef.current = false;
