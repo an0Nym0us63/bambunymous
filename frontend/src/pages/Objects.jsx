@@ -1616,7 +1616,12 @@ function GroupBulkPanel({ group, memberCount, onChanged }) {
   const run = async (fn, okMsg) => {
     setBusy(true); setMsg(null);
     try { const r = await fn(); onChanged?.(); setMsg(typeof okMsg === "function" ? okMsg(r) : okMsg); }
-    catch (e) { setMsg("⚠ " + (e.response?.data?.detail || e.message || "Erreur")); }
+    catch (e) {
+      const d = e.response?.data?.detail;
+      const text = Array.isArray(d) ? (d[0]?.msg || "Requête invalide")
+        : (typeof d === "string" ? d : (e.message || "Erreur"));
+      setMsg("⚠ " + text);
+    }
     setBusy(false);
   };
   const applyStatus = (st) => run(() => client.patch(`${base}/members`, { status: st }),
@@ -1863,7 +1868,7 @@ export default function Objects() {
   const grouped = {};
   const solo = [];
   for (const o of objects) {
-    if (o.group_id) { (grouped[o.group_id] = grouped[o.group_id] || { name: o.group_name, desired_price: null, items: [] }).items.push(o); }
+    if (o.group_id) { (grouped[o.group_id] = grouped[o.group_id] || { id: o.group_id, name: o.group_name, desired_price: o.desired_price ?? null, items: [] }).items.push(o); }
     else solo.push(o);
   }
   // Items pour la grille : groupes d'abord puis solos — comme galerie prints
