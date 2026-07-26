@@ -771,10 +771,28 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
   );
 }
 
+// Remonte une bottom-sheet au-dessus du clavier virtuel (API visualViewport) :
+// sans ca, le bas de la feuille (champ de saisie, boutons) passe sous le clavier
+// sur mobile et devient invisible.
+function useKeyboardInset() {
+  const [inset, setInset] = React.useState(0);
+  React.useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onChange = () => setInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    vv.addEventListener("resize", onChange);
+    vv.addEventListener("scroll", onChange);
+    onChange();
+    return () => { vv.removeEventListener("resize", onChange); vv.removeEventListener("scroll", onChange); };
+  }, []);
+  return inset;
+}
+
 function AccessoryPicker({ accessories, onClose, onConfirm, multiplier = 1 }) {
   const [q, setQ] = React.useState("");
   const [sel, setSel] = React.useState(null);   // accessoire choisi
   const [qty, setQty] = React.useState(1);
+  const kb = useKeyboardInset();
 
   const filtered = React.useMemo(() => {
     const t = q.trim().toLowerCase();
@@ -800,7 +818,8 @@ function AccessoryPicker({ accessories, onClose, onConfirm, multiplier = 1 }) {
       onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} className="sheet-inner"
         style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-          padding:"16px 16px 32px", maxHeight:"80vh", overflowY:"auto" }}>
+          padding:"16px 16px 32px", maxHeight: kb > 0 ? `calc(92vh - ${kb}px)` : "80vh",
+          marginBottom: kb, overflowY:"auto", transition:"margin-bottom 0.15s ease" }}>
         <p style={{ fontWeight:700, fontSize:14, margin:"0 0 12px" }}>Ajouter un accessoire</p>
 
         {/* Recherche */}
@@ -1452,6 +1471,7 @@ function AccessorySection({ sec, open, onToggle, children }) {
 // existants et propose de creer celui qu'on tape. onPick recoit {group_id} ou
 // {group_name} (nouveau). Le parent gere l'action (rattachement, etc.).
 function ObjectGroupPickerSheet({ title, onClose, onPick }) {
+  const kb = useKeyboardInset();
   const [q, setQ] = React.useState("");
   const [groups, setGroups] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
@@ -1471,7 +1491,9 @@ function ObjectGroupPickerSheet({ title, onClose, onPick }) {
     <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:6000, background:"rgba(0,0,0,0.6)",
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} className="sheet-panel"
-        style={{ width:"100%", maxWidth:480, borderRadius:"20px 20px 0 0", maxHeight:"85vh",
+        style={{ width:"100%", maxWidth:480, borderRadius:"20px 20px 0 0",
+          maxHeight: kb > 0 ? `calc(92vh - ${kb}px)` : "85vh", marginBottom: kb,
+          transition:"margin-bottom 0.15s ease",
           display:"flex", flexDirection:"column", paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0", position:"relative" }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
