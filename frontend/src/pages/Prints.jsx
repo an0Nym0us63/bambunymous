@@ -120,15 +120,20 @@ function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorTyp
   const [spools, setSpools] = useState([]);
   const [search, setSearch] = useState(filamentType || "");
   const [confirmSpool, setConfirmSpool] = useState(null);
+  const [tab, setTab] = useState("active");   // active | archived
 
+  // Le backend renvoie non-archivees par defaut : on charge les deux jeux pour
+  // pouvoir aussi mapper une bobine archivee (2e onglet).
   useEffect(() => {
-    client.get("/filaments/spools", { params:{ limit:500 } })
-      .then(r => setSpools(r.data || []))
-      .catch(() => {});
+    Promise.all([
+      client.get("/filaments/spools", { params:{ limit:500, archived:false } }).then(r => r.data || []).catch(() => []),
+      client.get("/filaments/spools", { params:{ limit:500, archived:true } }).then(r => r.data || []).catch(() => []),
+    ]).then(([act, arch]) => setSpools([...act, ...arch]));
   }, []);
 
   const filtered = spools.filter(s => {
-    if (s.archived) return false;
+    if (tab === "active" && s.archived) return false;
+    if (tab === "archived" && !s.archived) return false;
     if (!search.trim()) return true;
     const words = search.trim().toLowerCase().split(/\s+/);
     const hay = [s.filament_name, s.filament_translated_name, s.filament_manufacturer,
@@ -167,6 +172,15 @@ function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorTyp
               background:"var(--surface2)", border:"none", cursor:"pointer",
               color:"var(--muted)", fontSize:14, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
           </div>
+          <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:10, padding:3 }}>
+            {[["active","Actives"],["archived","Archivées"]].map(([id,label]) => (
+              <button key={id} onClick={()=>setTab(id)} style={{ flex:1, padding:"6px 10px", borderRadius:8,
+                fontSize:12, fontWeight:700, border:"none", cursor:"pointer",
+                background: tab===id ? "#3b82f6" : "transparent", color: tab===id ? "#fff" : "var(--muted)" }}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
         {/* Liste scrollable */}
         <div style={{ flex:1, overflowY:"auto", padding:"0 16px" }}>
@@ -179,8 +193,9 @@ function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorTyp
                 multicolor={s.filament_multicolor_type} size={16}/>
               <div style={{ flex:1, minWidth:0 }}>
                 <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {s.filament_translated_name||s.filament_name||"Bobine #"+s.id}
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", display:"flex", alignItems:"center", gap:6 }}>
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.filament_translated_name||s.filament_name||"Bobine #"+s.id}</span>
+                  {s.archived && <span style={{ flexShrink:0, fontSize:9, fontWeight:700, color:"var(--muted)", background:"var(--bg)", border:"1px solid var(--border)", borderRadius:5, padding:"1px 5px" }}>archivée</span>}
                 </p>
                 <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
                   {[s.filament_manufacturer, s.filament_fila_type||s.filament_material,
