@@ -889,3 +889,140 @@ async def delete_object_group(gid: int, _: str = Depends(get_current_user)):
         if not g: raise HTTPException(404)
         await db.delete(g); await db.commit()
         return {"ok": True}
+
+
+# ── Actions EN MASSE sur les membres d'un groupe ────────────────────────────
+class GroupBulkUpdate(BaseModel):
+    desired_price: Optional[float] = None
+    clear_desired_price: bool = False        # effacer explicitement le prix desire
+    status: Optional[str] = None
+    sold_price: Optional[float] = None        # si status=sold : prix applique a chaque membre
+
+
+@router.patch("/object-groups/{gid}/members")
+async def bulk_update_group_members(gid: int, body: GroupBulkUpdate,
+                                    _: str = Depends(get_current_user)):
+    """Applique prix desire et/ou statut a TOUS les membres du groupe."""
+    async with AsyncSessionLocal() as db:
+        members = (await db.execute(select(Object).where(Object.group_id == gid))).scalars().all()
+        if not members:
+            raise HTTPException(404, "Groupe vide ou introuvable")
+        st = body.status
+        if st is not None and st not in OBJECT_STATUSES:
+            raise HTTPException(400, f"Statut invalide : {st}")
+        for o in members:
+            if body.clear_desired_price:
+                o.desired_price = None
+            elif body.desired_price is not None:
+                o.desired_price = body.desired_price
+            if st is not None:
+                # Meme miroir que la maj unitaire : les anciens champs suivent le
+                # statut (ils alimentent encore filtres et stats).
+                o.status = st
+                o.personal = (st == "personal")
+                o.available = (st == "available")
+                if st == "sold":
+                    if body.sold_price is not None:
+                        o.sold_price = body.sold_price
+                    if not o.sold_date:
+                        o.sold_date = datetime.utcnow()
+                else:
+                    o.sold_price = None
+                    o.sold_date = None
+        await db.commit()
+        return {"updated": len(members)}
+
+
+class GroupAccessory(BaseModel):
+    accessory_id: int
+    qty_per_object: int = 1
+
+
+async def _recompute_members_cost(db, members):
+    for o in members:
+        links = (await db.execute(
+            select(ObjectAccessory).where(ObjectAccessory.object_id == o.id))).scalars().all()
+        o.cost_accessory = sum((l.quantity * (l.unit_price_at_link or 0)) for l in links)
+        o.cost_total = (o.cost_fabrication or 0) + o.cost_accessory
+
+
+@router.get("/object-groups/{gid}/accessories")
+async def list_group_accessories(gid: int, _: str = Depends(get_current_user)):
+    """Accessoires presents chez les membres : quantite totale + nb d'objets concernes."""
+    async with AsyncSessionLocal() as db:
+        member_ids = (await db.execute(
+            select(Object.id).where(Object.group_id == gid))).scalars().all()
+        if not member_ids:
+            return []
+        rows = (await db.execute(
+            select(ObjectAccessory, Accessory)
+            .join(Accessory, ObjectAccessory.accessory_id == Accessory.id)
+            .where(ObjectAccessory.object_id.in_(member_ids)))).all()
+        agg: dict[int, dict] = {}
+        for oa, a in rows:
+            e = agg.setdefault(a.id, {"accessory_id": a.id, "name": a.name,
+                                      "total_qty": 0, "objects": 0})
+            e["total_qty"] += oa.quantity or 0
+            e["objects"] += 1
+        return sorted(agg.values(), key=lambda x: -x["total_qty"])
+
+
+@router.post("/object-groups/{gid}/accessories")
+async def add_accessory_to_group(gid: int, body: GroupAccessory,
+                                 _: str = Depends(get_current_user)):
+    """Ajoute qty_per_object a CHAQUE membre. Le stock retire = qty x nb de membres."""
+    async with AsyncSessionLocal() as db:
+        members = (await db.execute(select(Object).where(Object.group_id == gid))).scalars().all()
+        if not members:
+            raise HTTPException(404, "Groupe vide ou introuvable")
+        acc = await db.get(Accessory, body.accessory_id)
+        if not acc:
+            raise HTTPException(404, "Accessoire introuvable")
+        n = len(members)
+        total = (body.qty_per_object or 0) * n
+        if total <= 0:
+            raise HTTPException(422, "Quantite invalide")
+        if total > (acc.quantity or 0):
+            raise HTTPException(422,
+                f"Stock insuffisant : {acc.quantity or 0} en stock, {total} demandé(s) "
+                f"({body.qty_per_object} × {n} objets)")
+        for o in members:
+            existing = (await db.execute(select(ObjectAccessory).where(
+                ObjectAccessory.object_id == o.id,
+                ObjectAccessory.accessory_id == body.accessory_id))).scalar_one_or_none()
+            if existing:
+                existing.quantity += body.qty_per_object
+            else:
+                db.add(ObjectAccessory(object_id=o.id, accessory_id=body.accessory_id,
+                                       quantity=body.qty_per_object,
+                                       unit_price_at_link=acc.unit_price or 0.0))
+        acc.quantity = (acc.quantity or 0) - total   # une seule sortie de stock, x nb membres
+        await db.flush()
+        await _recompute_members_cost(db, members)
+        await db.commit()
+        return {"updated": n, "total_deducted": total}
+
+
+@router.delete("/object-groups/{gid}/accessories/{acc_id}")
+async def remove_accessory_from_group(gid: int, acc_id: int,
+                                      _: str = Depends(get_current_user)):
+    """Retire l'accessoire de tous les membres et rend au stock la quantite totale."""
+    async with AsyncSessionLocal() as db:
+        member_ids = (await db.execute(
+            select(Object.id).where(Object.group_id == gid))).scalars().all()
+        if not member_ids:
+            raise HTTPException(404, "Groupe vide ou introuvable")
+        links = (await db.execute(select(ObjectAccessory).where(
+            ObjectAccessory.accessory_id == acc_id,
+            ObjectAccessory.object_id.in_(member_ids)))).scalars().all()
+        restocked = sum((l.quantity or 0) for l in links)
+        for l in links:
+            await db.delete(l)
+        acc = await db.get(Accessory, acc_id)
+        if acc and restocked:
+            acc.quantity = (acc.quantity or 0) + restocked
+        await db.flush()
+        members = (await db.execute(select(Object).where(Object.group_id == gid))).scalars().all()
+        await _recompute_members_cost(db, members)
+        await db.commit()
+        return {"restocked": restocked}
