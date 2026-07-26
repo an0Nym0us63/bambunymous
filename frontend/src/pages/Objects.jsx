@@ -771,7 +771,7 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
   );
 }
 
-function AccessoryPicker({ accessories, onClose, onConfirm }) {
+function AccessoryPicker({ accessories, onClose, onConfirm, multiplier = 1 }) {
   const [q, setQ] = React.useState("");
   const [sel, setSel] = React.useState(null);   // accessoire choisi
   const [qty, setQty] = React.useState(1);
@@ -782,10 +782,13 @@ function AccessoryPicker({ accessories, onClose, onConfirm }) {
     return accessories.filter(a => (a.name || "").toLowerCase().includes(t));
   }, [q, accessories]);
 
+  const mult = Math.max(1, Number(multiplier) || 1);   // ex. nb d'objets d'un groupe
   const stock = sel ? Number(sel.quantity || 0) : 0;
   const qn = Math.max(1, Number(qty || 1));
-  const tooMuch = sel && qn > stock;
-  const remaining = sel ? stock - qn : 0;
+  const total = qn * mult;                             // quantite reellement prise au stock
+  const maxQty = Math.max(1, Math.floor(stock / mult));
+  const tooMuch = sel && total > stock;
+  const remaining = sel ? stock - total : 0;
 
   const confirm = () => {
     if (!sel || tooMuch || qn < 1) return;
@@ -845,16 +848,16 @@ function AccessoryPicker({ accessories, onClose, onConfirm }) {
               <span style={{ fontSize:11, color:"var(--muted)" }}>Stock dispo : {stock}</span>
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8 }}>
-              <span style={{ fontSize:12, color:"var(--muted)" }}>Quantité</span>
+              <span style={{ fontSize:12, color:"var(--muted)" }}>{mult > 1 ? "Quantité / objet" : "Quantité"}</span>
               <div style={{ display:"flex", alignItems:"center", gap:6 }}>
                 <button onClick={()=>setQty(Math.max(1, qn-1))}
                   style={{ width:28, height:28, borderRadius:6, border:"1px solid var(--border)",
                     background:"var(--surface2)", color:"var(--text)", cursor:"pointer", fontSize:16 }}>−</button>
-                <input type="number" min={1} max={stock} value={qty}
-                  onChange={e=>{ let v=Math.max(1, Number(e.target.value||1)); if(v>stock) v=stock; setQty(v); }}
+                <input type="number" min={1} max={maxQty} value={qty}
+                  onChange={e=>{ let v=Math.max(1, Number(e.target.value||1)); if(v>maxQty) v=maxQty; setQty(v); }}
                   style={{ width:56, textAlign:"center", padding:"6px", background:"var(--surface2)",
                     border:"1px solid var(--border)", borderRadius:6, color:"var(--text)", fontSize:13 }}/>
-                <button onClick={()=>setQty(Math.min(stock, qn+1))}
+                <button onClick={()=>setQty(Math.min(maxQty, qn+1))}
                   style={{ width:28, height:28, borderRadius:6, border:"1px solid var(--border)",
                     background:"var(--surface2)", color:"var(--text)", cursor:"pointer", fontSize:16 }}>+</button>
               </div>
@@ -862,8 +865,10 @@ function AccessoryPicker({ accessories, onClose, onConfirm }) {
             {/* Estimation du restant */}
             <p style={{ fontSize:11, color: tooMuch ? "#ef4444" : "var(--muted)", margin:"0 0 12px" }}>
               {tooMuch
-                ? `Stock insuffisant : maximum ${stock} disponible${stock>1?"s":""}.`
-                : `Après ajout, il restera ${remaining} en stock · coût ${fmtPrice((sel.unit_price||0)*qn)}.`}
+                ? `Stock insuffisant : maximum ${maxQty} par objet (${stock} en stock).`
+                : mult > 1
+                  ? `${qn} × ${mult} objets = ${total} retiré(s) · reste ${remaining} · coût ${fmtPrice((sel.unit_price||0)*total)}.`
+                  : `Après ajout, il restera ${remaining} en stock · coût ${fmtPrice((sel.unit_price||0)*qn)}.`}
             </p>
             <button onClick={confirm} disabled={tooMuch || qn<1}
               style={{ width:"100%", padding:"11px", borderRadius:10, border:"none", fontSize:13, fontWeight:700,
@@ -1602,8 +1607,7 @@ function GroupBulkPanel({ group, memberCount, onChanged }) {
   const [price, setPrice] = React.useState(group.desired_price > 0 ? String(group.desired_price) : "");
   const [allAccs, setAllAccs] = React.useState([]);
   const [groupAccs, setGroupAccs] = React.useState([]);
-  const [accId, setAccId] = React.useState("");
-  const [qtyPer, setQtyPer] = React.useState("1");
+  const [pickAcc, setPickAcc] = React.useState(false);
 
   const base = `/objects/object-groups/${group.id}`;
   const reloadAccs = () => client.get(`${base}/accessories`).then(r => setGroupAccs(r.data || [])).catch(() => {});
@@ -1629,9 +1633,9 @@ function GroupBulkPanel({ group, memberCount, onChanged }) {
   const applyPrice = () => run(() => client.patch(`${base}/members`,
     price.trim() === "" ? { clear_desired_price: true } : { desired_price: parseFloat(price) }),
     "Prix désiré appliqué au groupe.");
-  const addAcc = () => run(async () => {
-    const r = await client.post(`${base}/accessories`, { accessory_id: Number(accId), qty_per_object: Number(qtyPer) });
-    reloadAccs(); setAccId(""); setQtyPer("1"); return r;
+  const addAcc = (aId, qty) => run(async () => {
+    const r = await client.post(`${base}/accessories`, { accessory_id: Number(aId), qty_per_object: Number(qty) });
+    reloadAccs(); return r;
   }, (r) => `${r.data.total_deducted} unité(s) retirée(s) du stock.`);
   const removeAcc = (aid) => run(async () => {
     const r = await client.delete(`${base}/accessories/${aid}`); reloadAccs(); return r;
@@ -1644,7 +1648,6 @@ function GroupBulkPanel({ group, memberCount, onChanged }) {
     padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none" };
   const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", margin:"0 0 6px" };
 
-  const total = (Number(qtyPer) || 0) * memberCount;
   const STATUSES = [["available","À vendre"],["gifted","Offert"],["personal","Perso"],["unavailable","Indisponible"]];
 
   return (
@@ -1683,21 +1686,15 @@ function GroupBulkPanel({ group, memberCount, onChanged }) {
           {/* Ajouter un accessoire a tout le groupe */}
           <div>
             <p style={lbl}>Ajouter un accessoire à tout le groupe</p>
-            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-              <select value={accId} onChange={e => setAccId(e.target.value)} style={{ ...inp, flex:1, minWidth:140 }}>
-                <option value="">Choisir un accessoire…</option>
-                {allAccs.map(a => (
-                  <option key={a.id} value={a.id}>{a.name} (stock {a.quantity ?? 0})</option>
-                ))}
-              </select>
-              <input type="number" min="1" value={qtyPer} onChange={e => setQtyPer(e.target.value)}
-                style={{ ...inp, width:70 }} title="Quantité par objet"/>
-              <button disabled={busy || !accId} onClick={addAcc} style={{ ...chip(true), opacity:(busy || !accId) ? 0.6 : 1 }}>Ajouter</button>
-            </div>
-            {accId && (
-              <p style={{ fontSize:11, color:"var(--muted)", margin:"6px 0 0" }}>
-                {qtyPer || 0} par objet × {memberCount} objets = <b style={{ color:"var(--text)" }}>{total}</b> retiré(s) du stock.
-              </p>
+            <button disabled={busy} onClick={() => setPickAcc(true)}
+              style={{ ...chip(true), opacity: busy ? 0.6 : 1 }}>+ Choisir un accessoire</button>
+            <p style={{ fontSize:10, color:"var(--muted)", margin:"6px 0 0" }}>
+              La quantité choisie est appliquée à chacun des {memberCount} objets (stock déduit × {memberCount}).
+            </p>
+            {pickAcc && (
+              <AccessoryPicker accessories={allAccs} multiplier={memberCount}
+                onClose={() => setPickAcc(false)}
+                onConfirm={(aId, qty) => { setPickAcc(false); addAcc(aId, qty); }}/>
             )}
           </div>
 
