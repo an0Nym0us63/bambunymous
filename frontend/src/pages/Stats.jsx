@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from "react";
 
 import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag, Filter } from "lucide-react";
 import client from "../api/client";
+import HeaderAction from "../components/HeaderAction";
 import { useTrackDetail } from "../utils/track";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
@@ -578,7 +579,7 @@ function PeriodFilterSheet({ value, onApply, onClose }) {
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
       zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div className="sheet-panel" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 560,
-        background: "var(--surface)", borderRadius: "16px 16px 0 0", padding: 16, maxHeight: "85vh",
+        borderRadius: "16px 16px 0 0", padding: 16, maxHeight: "85vh",
         overflowY: "auto", paddingBottom: "calc(16px + env(safe-area-inset-bottom,0px))" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
           <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Période</h3>
@@ -665,20 +666,32 @@ export default function Stats() {
   const typeData  = useMemo(() => (data?.fila_types || []).map(t => ({ name: t.name, value: t.grams })), [data]);
   const colorData = useMemo(() => (data?.colors     || []).map(c => ({ name: c.name, value: c.grams, hex: c.hex })), [data]);
 
-  const periodSel = (
+  const filterBtn = () => (
     <button onClick={() => setFilterOpen(true)}
       style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 20,
         border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)",
-        fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+        fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
       <Filter size={14}/> {period.label}
     </button>
   );
 
+  // Mobile : le bouton part dans le header fixe (via HeaderAction), il affiche la
+  // plage courante. Desktop : le header mobile n'existe pas, titre + bouton dans le flux.
   const header = (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end" }}>
-      <h1 className="page-title" style={{ fontSize: 18, fontWeight: 700, color: "var(--text)", margin: 0, marginRight: "auto" }}>Statistiques</h1>
-      {periodSel}
-    </div>
+    <>
+      <HeaderAction>{filterBtn()}</HeaderAction>
+      <div className="hidden-mobile" style={{ display: "none", alignItems: "center",
+        justifyContent: "flex-end", gap: 10 }}>
+        <h1 className="page-title" style={{ fontSize: 18, fontWeight: 700, color: "var(--text)",
+          margin: 0, marginRight: "auto" }}>Statistiques</h1>
+        {filterBtn()}
+      </div>
+      {filterOpen && (
+        <PeriodFilterSheet value={period}
+          onApply={(r) => { setPeriod(r); setFilterOpen(false); }}
+          onClose={() => setFilterOpen(false)}/>
+      )}
+    </>
   );
 
   if (loading) return (
@@ -702,11 +715,6 @@ export default function Stats() {
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
-      {filterOpen && (
-        <PeriodFilterSheet value={period}
-          onApply={(r) => { setPeriod(r); setFilterOpen(false); }}
-          onClose={() => setFilterOpen(false)}/>
-      )}
       {header}
 
       {/* Onglets */}
