@@ -7,6 +7,7 @@ import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { useTrackDetail } from "../utils/track";
+import { useKeyboardInset } from "../utils/keyboard";
 
 // Les montants sont masques pour les comptes en lecture seule.
 function fmtPrice(v) {
@@ -631,6 +632,7 @@ function AccessoryCard({ acc, onClick, onLongPress, selectMode, selected }) {
 // Formulaire complet : nom FR, commentaire, perso, disponibilité, prix desire,
 // vente (prix + date) et annulation de vente.
 function ObjectEditSheet({ obj, onClose, onSaved }) {
+  const kb = useKeyboardInset();
   const [form, setForm] = React.useState({
     translated_name: obj.translated_name || obj.name || "",
     comment:         obj.comment || "",
@@ -682,7 +684,8 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
       onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} className="sheet-inner"
         style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-          padding:"16px 16px 32px", maxHeight:"85vh", overflowY:"auto" }}>
+          padding:"16px 16px 32px", maxHeight: kb > 0 ? `calc(92vh - ${kb}px)` : "85vh",
+          marginBottom: kb, overflowY:"auto", transition:"margin-bottom 0.15s ease" }}>
         <p style={{ fontWeight:700, fontSize:15, margin:"0 0 16px" }}>Modifier l'objet</p>
 
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
@@ -769,23 +772,6 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
       </div>
     </div>
   );
-}
-
-// Remonte une bottom-sheet au-dessus du clavier virtuel (API visualViewport) :
-// sans ca, le bas de la feuille (champ de saisie, boutons) passe sous le clavier
-// sur mobile et devient invisible.
-function useKeyboardInset() {
-  const [inset, setInset] = React.useState(0);
-  React.useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const onChange = () => setInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
-    vv.addEventListener("resize", onChange);
-    vv.addEventListener("scroll", onChange);
-    onChange();
-    return () => { vv.removeEventListener("resize", onChange); vv.removeEventListener("scroll", onChange); };
-  }, []);
-  return inset;
 }
 
 function AccessoryPicker({ accessories, onClose, onConfirm, multiplier = 1 }) {

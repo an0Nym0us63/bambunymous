@@ -8,6 +8,7 @@ import { useIsAdmin } from "../store/auth";
 import { useTrackDetail } from "../utils/track";
 import GalleryCompare from "../components/GalleryCompare";
 import { FilamentSheetFromSpool } from "./Filaments";
+import { useKeyboardInset } from "../utils/keyboard";
 import PhotoAddButton from "../components/PhotoAddButton";
 import GroupMosaic from "../components/GroupMosaic";
 import ObjectCreateSheet from "../components/ObjectCreateSheet";
@@ -116,21 +117,6 @@ function StatusBadge({ status }) {
 }
 
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
-// Remonte une bottom-sheet au-dessus du clavier virtuel (API visualViewport).
-function useKeyboardInset() {
-  const [inset, setInset] = useState(0);
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const onChange = () => setInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
-    vv.addEventListener("resize", onChange);
-    vv.addEventListener("scroll", onChange);
-    onChange();
-    return () => { vv.removeEventListener("resize", onChange); vv.removeEventListener("scroll", onChange); };
-  }, []);
-  return inset;
-}
-
 function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorType, filamentType, onClose, onMapped }) {
   const [spools, setSpools] = useState([]);
   const [search, setSearch] = useState(filamentType || "");
@@ -554,6 +540,7 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
 }
 
 function PrintEditSheet({ p, onClose, onSaved }) {
+  const kb = useKeyboardInset();
   const [form, setForm] = useState({
     file_name:     p.file_name || "",
     original_name: p.original_name || "",
@@ -592,7 +579,8 @@ function PrintEditSheet({ p, onClose, onSaved }) {
       display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} className="sheet-inner"
         style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
-          maxWidth:640, maxHeight:"90dvh", overflowY:"auto",
+          maxWidth:640, maxHeight: kb > 0 ? `calc(94dvh - ${kb}px)` : "90dvh", overflowY:"auto",
+          marginBottom: kb, transition:"margin-bottom 0.15s ease",
           padding:"0 16px 24px", paddingBottom:"env(safe-area-inset-bottom,24px)" }}>
 
         <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 8px", position:"relative" }}>

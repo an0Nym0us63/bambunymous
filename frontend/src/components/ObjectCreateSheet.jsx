@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import client from "../api/client";
+import { useKeyboardInset } from "../utils/keyboard";
 
 /**
  * Creation d'objets depuis un print ou un groupe de prints.
@@ -21,6 +22,7 @@ export default function ObjectCreateSheet({ parentType, parentId, defaultName,
   const [name, setName] = useState(defaultName || "");
   const [groupName, setGroupName] = useState(defaultName || "");
   const [busy, setBusy] = useState(false);
+  const kb = useKeyboardInset();
   const [err, setErr] = useState(null);
 
   useEffect(() => {
@@ -62,7 +64,8 @@ export default function ObjectCreateSheet({ parentType, parentId, defaultName,
       <div onClick={e => e.stopPropagation()} className="sheet-panel"
         style={{ width:"100%", maxWidth:520, borderTopLeftRadius:20, borderTopRightRadius:20,
           padding:"18px 18px max(env(safe-area-inset-bottom,20px),20px)",
-          maxHeight:"85dvh", overflowY:"auto" }}>
+          marginBottom: kb, transition:"margin-bottom 0.15s ease",
+          maxHeight: kb > 0 ? `calc(92dvh - ${kb}px)` : "85dvh", overflowY:"auto" }}>
         <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)",
           margin:"0 auto 14px" }}/>
         <h3 style={{ margin:"0 0 4px", fontSize:16, fontWeight:800, color:"var(--text)" }}>
