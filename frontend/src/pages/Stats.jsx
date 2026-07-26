@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 
-import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag } from "lucide-react";
+import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag, Filter } from "lucide-react";
 import client from "../api/client";
 import { useTrackDetail } from "../utils/track";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
@@ -534,11 +534,92 @@ function TopList({ title, prints, groups, valueKey, valueLabel, barColor = "#3b8
   );
 }
 
-const PERIODS = [[0, "Tout"], [365, "12 mois"], [90, "90 j"], [30, "30 j"]];
+// ── Filtre de période ──────────────────────────────────────────────────────
+const ISO = (d) => { const z = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
+
+// Calcule {from,to,label} pour un preset. Dates locales (pas d'UTC, sinon
+// decalage d'un jour selon le fuseau).
+function presetRange(key) {
+  const now = new Date();
+  const today = ISO(now);
+  const s = new Date(now);
+  switch (key) {
+    case "all":   return { from: null, to: null, label: "Tout" };
+    case "week":  { const d = new Date(now); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return { from: ISO(d), to: today, label: "Cette semaine" }; }
+    case "month": return { from: ISO(new Date(now.getFullYear(), now.getMonth(), 1)), to: today, label: "Ce mois" };
+    case "year":  return { from: ISO(new Date(now.getFullYear(), 0, 1)), to: today, label: "Cette année" };
+    case "prevmonth": { const a = new Date(now.getFullYear(), now.getMonth() - 1, 1); const b = new Date(now.getFullYear(), now.getMonth(), 0); return { from: ISO(a), to: ISO(b), label: "Mois dernier" }; }
+    case "prevyear":  { const y = now.getFullYear() - 1; return { from: `${y}-01-01`, to: `${y}-12-31`, label: "Année dernière" }; }
+    case "7d":  { s.setDate(now.getDate() - 6);  return { from: ISO(s), to: today, label: "7 jours" }; }
+    case "30d": { s.setDate(now.getDate() - 29); return { from: ISO(s), to: today, label: "30 jours" }; }
+    case "90d": { s.setDate(now.getDate() - 89); return { from: ISO(s), to: today, label: "90 jours" }; }
+    case "12m": { s.setFullYear(now.getFullYear() - 1); s.setDate(s.getDate() + 1); return { from: ISO(s), to: today, label: "12 mois" }; }
+    default: return { from: null, to: null, label: "Tout" };
+  }
+}
+
+const PRESETS = [
+  ["all", "Tout"], ["week", "Cette semaine"], ["month", "Ce mois"], ["year", "Cette année"],
+  ["prevmonth", "Mois dernier"], ["prevyear", "Année dernière"],
+  ["7d", "7 jours"], ["30d", "30 jours"], ["90d", "90 jours"], ["12m", "12 mois"],
+];
+
+function PeriodFilterSheet({ value, onApply, onClose }) {
+  const [from, setFrom] = React.useState(value.from || "");
+  const [to, setTo] = React.useState(value.to || "");
+  const applyCustom = () => {
+    if (!from && !to) { onApply({ from: null, to: null, label: "Tout" }); return; }
+    const label = from && to ? `${from} → ${to}` : from ? `Depuis ${from}` : `Jusqu'au ${to}`;
+    onApply({ from: from || null, to: to || null, label });
+  };
+  const inputStyle = { width: "100%", marginTop: 4, padding: "8px 10px", borderRadius: 8,
+    border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 13 };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)",
+      zIndex: 1000, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div className="sheet-panel" onClick={(e) => e.stopPropagation()} style={{ width: "100%", maxWidth: 560,
+        background: "var(--surface)", borderRadius: "16px 16px 0 0", padding: 16, maxHeight: "85vh",
+        overflowY: "auto", paddingBottom: "calc(16px + env(safe-area-inset-bottom,0px))" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: "var(--text)" }}>Période</h3>
+          <button onClick={onClose} style={{ background: "none", border: "none", color: "var(--muted)",
+            fontSize: 24, cursor: "pointer", lineHeight: 1 }}>×</button>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 8, marginBottom: 18 }}>
+          {PRESETS.map(([k, lbl]) => {
+            const active = value.label === lbl;
+            return (
+              <button key={k} onClick={() => onApply(presetRange(k))} style={{ padding: "10px 12px",
+                borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "1px solid var(--border)",
+                background: active ? "#3b82f6" : "var(--surface2)", color: active ? "#fff" : "var(--text)" }}>
+                {lbl}
+              </button>
+            );
+          })}
+        </div>
+        <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", margin: "0 0 8px",
+          textTransform: "uppercase", letterSpacing: 0.4 }}>Plage personnalisée</p>
+        <div style={{ display: "flex", gap: 10, marginBottom: 14 }}>
+          <label style={{ flex: 1, fontSize: 11, color: "var(--muted)" }}>Début
+            <input type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} style={inputStyle}/>
+          </label>
+          <label style={{ flex: 1, fontSize: 11, color: "var(--muted)" }}>Fin
+            <input type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} style={inputStyle}/>
+          </label>
+        </div>
+        <button onClick={applyCustom} style={{ width: "100%", padding: 12, borderRadius: 10, border: "none",
+          background: "#3b82f6", color: "#fff", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
+          Appliquer la plage
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function Stats() {
   const [data, setData] = useState(null);
-  const [days, setDays] = useState(0);
+  const [period, setPeriod] = useState({ from: null, to: null, label: "Tout" });
+  const [filterOpen, setFilterOpen] = useState(false);
   const [detail, setDetail] = useState(null);
   const [groupPrints, setGroupPrints] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -550,18 +631,18 @@ export default function Stats() {
 
   useEffect(() => {
     setLoading(true);
-    client.get("/prints/stats/summary", { params: { days } })
+    client.get("/prints/stats/summary", { params: { date_from: period.from || undefined, date_to: period.to || undefined } })
       .then(r => { setData(r.data); setError(null); })
       .catch(e => setError(e.response?.data?.detail || e.message || "Erreur"))
       .finally(() => setLoading(false));
-  }, [days]);
+  }, [period]);
 
-  // Stats objets (independantes de la periode).
+  // Stats objets : les VENTES suivent la periode (sold_date), l'inventaire reste global.
   useEffect(() => {
-    client.get("/objects/objects/stats")
+    client.get("/objects/objects/stats", { params: { date_from: period.from || undefined, date_to: period.to || undefined } })
       .then(r => setObjStats(r.data))
       .catch(() => setObjStats(null));
-  }, []);
+  }, [period]);
 
   const openDetail = async (item, mode) => {
     if (mode === "groups") {
@@ -585,16 +666,12 @@ export default function Stats() {
   const colorData = useMemo(() => (data?.colors     || []).map(c => ({ name: c.name, value: c.grams, hex: c.hex })), [data]);
 
   const periodSel = (
-    <div style={{ display: "flex", gap: 2, background: "var(--surface2)", borderRadius: 20, padding: 2 }}>
-      {PERIODS.map(([d, label]) => (
-        <button key={d} onClick={() => setDays(d)}
-          style={{ padding: "4px 10px", borderRadius: 18, fontSize: 10, fontWeight: 600, cursor: "pointer",
-            border: "none", background: days === d ? "#3b82f6" : "transparent",
-            color: days === d ? "white" : "var(--muted)" }}>
-          {label}
-        </button>
-      ))}
-    </div>
+    <button onClick={() => setFilterOpen(true)}
+      style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 20,
+        border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)",
+        fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+      <Filter size={14}/> {period.label}
+    </button>
   );
 
   const header = (
@@ -625,6 +702,11 @@ export default function Stats() {
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+      {filterOpen && (
+        <PeriodFilterSheet value={period}
+          onApply={(r) => { setPeriod(r); setFilterOpen(false); }}
+          onClose={() => setFilterOpen(false)}/>
+      )}
       {header}
 
       {/* Onglets */}
