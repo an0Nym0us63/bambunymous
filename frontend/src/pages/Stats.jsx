@@ -6,7 +6,7 @@ import HeaderAction from "../components/HeaderAction";
 import { useTrackDetail } from "../utils/track";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
-import { ObjectSheet } from "./Objects";
+import { ObjectSheet, AccessorySheet } from "./Objects";
 
 const fmtH = s => {
   const t = Math.round(s || 0);
@@ -39,7 +39,7 @@ function Dot({ hex, colors, multicolor, size = 12 }) {
   );
 }
 
-function ObjectsStats({ stats, onOpen, onOpenObject }) {
+function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
   if (!stats) return (
     <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>
       Chargement des statistiques objets…
@@ -216,6 +216,7 @@ function ObjectsStats({ stats, onOpen, onOpenObject }) {
                 {acc.top_value.map(a => (
                   <Bar key={a.id} label={a.name} value={a.value} stacked
                     max={acc.top_value[0].value || 1}
+                    onClick={onOpenAccessory ? () => onOpenAccessory(a.id) : undefined}
                     sublabel={`${fmtEur(a.value)} · ${a.qty} u.`} color="#8b5cf6"/>
                 ))}
               </div>
@@ -229,6 +230,7 @@ function ObjectsStats({ stats, onOpen, onOpenObject }) {
                 {acc.top_used.map(a => (
                   <Bar key={a.id} label={a.name} value={a.used} stacked
                     max={acc.top_used[0].used || 1}
+                    onClick={onOpenAccessory ? () => onOpenAccessory(a.id) : undefined}
                     sublabel={`${a.used} posée${a.used>1?"s":""}`}
                     color="#3b82f6"/>
                 ))}
@@ -655,6 +657,7 @@ export default function Stats() {
     objects:"Objets"}[tab] || tab }`);
   const [objStats, setObjStats] = useState(null);
   const [objDetail, setObjDetail] = useState(null);
+  const [accId, setAccId] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -671,6 +674,9 @@ export default function Stats() {
       .catch(() => setObjStats(null));
   }, [period]);
   useEffect(() => { loadObjects(); }, [loadObjects]);
+
+  // Clic sur un accessoire (histogrammes accessoires) -> ouverture de sa fiche.
+  const openAccessory = (id) => setAccId(id);
 
   // Clic sur un objet (histogrammes de marges) -> ouverture de sa fiche sur place.
   const openObject = async (id) => {
@@ -769,6 +775,9 @@ export default function Stats() {
       {objDetail && (
         <ObjectSheet obj={objDetail} onClose={() => setObjDetail(null)}
           onUpdated={(updated) => { if (updated) setObjDetail(updated); loadObjects(); }}/>
+      )}
+      {accId && (
+        <AccessorySheet accId={accId} onClose={() => setAccId(null)} onChanged={loadObjects}/>
       )}
       {detail?.type === "print" && detail.data?.id && (
         <PrintDetail p={detail.data} onClose={() => setDetail(null)}
@@ -979,7 +988,7 @@ export default function Stats() {
       </>)}
 
       {tab === "objects" && (
-        <ObjectsStats stats={objStats} onOpen={openDetail} onOpenObject={openObject}/>
+        <ObjectsStats stats={objStats} onOpen={openDetail} onOpenObject={openObject} onOpenAccessory={openAccessory}/>
       )}
     </div>
   );

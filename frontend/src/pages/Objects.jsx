@@ -19,7 +19,7 @@ function fmtPrice(v) {
 // ── Fiche accessoire ──────────────────────────────────────────────────────
 // Consultation (photo, stock, valeur, objets qui l'utilisent), edition,
 // reapprovisionnement (prix moyen pondere), photo et suppression.
-function AccessorySheet({ accId, onClose, onChanged }) {
+export function AccessorySheet({ accId, onClose, onChanged }) {
   const [d, setD] = React.useState(null);
   // Le nom n'arrive qu'apres le chargement : on annonce d'abord l'identifiant,
   // le libelle se precise ensuite. Deux lignes de journal, mais aucune vue
