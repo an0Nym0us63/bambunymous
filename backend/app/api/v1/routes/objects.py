@@ -359,6 +359,10 @@ async def update_object(oid: int, body: ObjectUpdate, _: str = Depends(get_curre
         raw = body.model_dump(exclude_unset=True)
         if "desired_price" in raw and raw["desired_price"] is None:
             data["desired_price"] = None
+        # Idem pour le groupe : dissocier un objet = transmettre group_id null
+        # explicitement, que exclude_none aurait sinon avale.
+        if "group_id" in raw and raw["group_id"] is None:
+            data["group_id"] = None
 
         # Annulation de vente : efface prix + date, remet disponible. Prioritaire.
         if data.pop("unsell", False):
