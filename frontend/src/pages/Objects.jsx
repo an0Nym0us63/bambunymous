@@ -1503,7 +1503,134 @@ function ObjectCard({ obj, onClick }) {
 }
 
 // ── Object Group Sheet ────────────────────────────────────────────────────
-function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, onSelectObj }) {
+// Actions EN MASSE sur un groupe : statut / prix desire a tous les membres, et
+// accessoires ajoutes/retires a tout le groupe (stock = qty x nb de membres).
+function GroupBulkPanel({ group, memberCount, onChanged }) {
+  const [open, setOpen] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState(null);
+  const [price, setPrice] = React.useState(group.desired_price > 0 ? String(group.desired_price) : "");
+  const [allAccs, setAllAccs] = React.useState([]);
+  const [groupAccs, setGroupAccs] = React.useState([]);
+  const [accId, setAccId] = React.useState("");
+  const [qtyPer, setQtyPer] = React.useState("1");
+
+  const base = `/objects/object-groups/${group.id}`;
+  const reloadAccs = () => client.get(`${base}/accessories`).then(r => setGroupAccs(r.data || [])).catch(() => {});
+  React.useEffect(() => {
+    if (!open) return;
+    client.get("/objects/accessories").then(r => setAllAccs(r.data || [])).catch(() => {});
+    reloadAccs();
+  }, [open]);
+
+  const run = async (fn, okMsg) => {
+    setBusy(true); setMsg(null);
+    try { const r = await fn(); onChanged?.(); setMsg(typeof okMsg === "function" ? okMsg(r) : okMsg); }
+    catch (e) { setMsg("⚠ " + (e.response?.data?.detail || e.message || "Erreur")); }
+    setBusy(false);
+  };
+  const applyStatus = (st) => run(() => client.patch(`${base}/members`, { status: st }),
+    `Statut appliqué aux ${memberCount} objets.`);
+  const applyPrice = () => run(() => client.patch(`${base}/members`,
+    price.trim() === "" ? { clear_desired_price: true } : { desired_price: parseFloat(price) }),
+    "Prix désiré appliqué au groupe.");
+  const addAcc = () => run(async () => {
+    const r = await client.post(`${base}/accessories`, { accessory_id: Number(accId), qty_per_object: Number(qtyPer) });
+    reloadAccs(); setAccId(""); setQtyPer("1"); return r;
+  }, (r) => `${r.data.total_deducted} unité(s) retirée(s) du stock.`);
+  const removeAcc = (aid) => run(async () => {
+    const r = await client.delete(`${base}/accessories/${aid}`); reloadAccs(); return r;
+  }, (r) => `${r.data.restocked} unité(s) rendue(s) au stock.`);
+
+  const chip = (active) => ({ padding:"6px 10px", borderRadius:8, fontSize:12, fontWeight:600,
+    cursor: busy ? "default" : "pointer", border:"1px solid var(--border)",
+    background: active ? "#3b82f6" : "var(--surface2)", color: active ? "#fff" : "var(--text)", opacity: busy ? 0.6 : 1 });
+  const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+    padding:"8px 10px", fontSize:13, color:"var(--text)", outline:"none" };
+  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", margin:"0 0 6px" };
+
+  const total = (Number(qtyPer) || 0) * memberCount;
+  const STATUSES = [["available","À vendre"],["gifted","Offert"],["personal","Perso"],["unavailable","Indisponible"]];
+
+  return (
+    <div style={{ border:"1px solid var(--border)", borderRadius:12, marginBottom:14, overflow:"hidden" }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width:"100%", display:"flex", alignItems:"center",
+        justifyContent:"space-between", padding:"11px 14px", background:"var(--surface2)", border:"none",
+        cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:700 }}>
+        <span>Actions sur tout le groupe ({memberCount})</span>
+        <span style={{ color:"var(--muted)" }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div style={{ padding:"14px", display:"flex", flexDirection:"column", gap:16 }}>
+          {msg && <p style={{ fontSize:12, color: msg.startsWith("⚠") ? "#ef4444" : "#22c55e", margin:0 }}>{msg}</p>}
+
+          {/* Statut */}
+          <div>
+            <p style={lbl}>Statut de tous les objets</p>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {STATUSES.map(([st, label]) => (
+                <button key={st} disabled={busy} onClick={() => applyStatus(st)} style={chip(false)}>{label}</button>
+              ))}
+            </div>
+            <p style={{ fontSize:10, color:"var(--muted)", margin:"6px 0 0" }}>« Vendu » reste objet par objet (chacun son prix).</p>
+          </div>
+
+          {/* Prix desire */}
+          <div>
+            <p style={lbl}>Prix désiré de tous les objets</p>
+            <div style={{ display:"flex", gap:8 }}>
+              <input type="number" step="0.01" value={price} onChange={e => setPrice(e.target.value)}
+                placeholder="Vider pour effacer" style={{ ...inp, flex:1 }}/>
+              <button disabled={busy} onClick={applyPrice} style={chip(true)}>Appliquer</button>
+            </div>
+          </div>
+
+          {/* Ajouter un accessoire a tout le groupe */}
+          <div>
+            <p style={lbl}>Ajouter un accessoire à tout le groupe</p>
+            <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+              <select value={accId} onChange={e => setAccId(e.target.value)} style={{ ...inp, flex:1, minWidth:140 }}>
+                <option value="">Choisir un accessoire…</option>
+                {allAccs.map(a => (
+                  <option key={a.id} value={a.id}>{a.name} (stock {a.quantity ?? 0})</option>
+                ))}
+              </select>
+              <input type="number" min="1" value={qtyPer} onChange={e => setQtyPer(e.target.value)}
+                style={{ ...inp, width:70 }} title="Quantité par objet"/>
+              <button disabled={busy || !accId} onClick={addAcc} style={{ ...chip(true), opacity:(busy || !accId) ? 0.6 : 1 }}>Ajouter</button>
+            </div>
+            {accId && (
+              <p style={{ fontSize:11, color:"var(--muted)", margin:"6px 0 0" }}>
+                {qtyPer || 0} par objet × {memberCount} objets = <b style={{ color:"var(--text)" }}>{total}</b> retiré(s) du stock.
+              </p>
+            )}
+          </div>
+
+          {/* Accessoires deja poses sur le groupe */}
+          {groupAccs.length > 0 && (
+            <div>
+              <p style={lbl}>Accessoires du groupe</p>
+              <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                {groupAccs.map(a => (
+                  <div key={a.accessory_id} style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                    gap:8, background:"var(--surface2)", borderRadius:8, padding:"8px 10px" }}>
+                    <span style={{ fontSize:12, color:"var(--text)", minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                      {a.name} <span style={{ color:"var(--muted)" }}>· {a.total_qty} sur {a.objects} objet{a.objects > 1 ? "s" : ""}</span>
+                    </span>
+                    <button disabled={busy} onClick={() => removeAcc(a.accessory_id)}
+                      style={{ ...chip(false), flexShrink:0, color:"#ef4444" }}>Retirer</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, onSelectObj, onChanged }) {
   // Ouverte depuis une section, la feuille montre d'abord les objets de CETTE
   // section -- c'est ce qu'on venait consulter. Mais on veut souvent verifier
   // le lot entier dans la foulee, d'ou la bascule plutot qu'une fermeture et
@@ -1551,6 +1678,8 @@ function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, 
             </span>
           )}
         </div>
+        <GroupBulkPanel group={group} memberCount={full.length} onChanged={onChanged}/>
+
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:8 }}>
           {shown.map(o => <ObjectCard key={o.id} obj={o} onClick={() => { onClose(); onSelectObj(o); }}/>)}
         </div>
@@ -1560,7 +1689,7 @@ function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, 
 }
 
 // ── Object Group Tile ─────────────────────────────────────────────────────
-function ObjectGroupTile({ group, objects, sectionStatus, totalCount }) {
+function ObjectGroupTile({ group, objects, sectionStatus, totalCount, onChanged }) {
   const [open, setOpen] = useState(false);
   const [selected, setSelected] = useState(null);
   const cover = objects[0];
@@ -1597,7 +1726,7 @@ function ObjectGroupTile({ group, objects, sectionStatus, totalCount }) {
     </div>
     {open && <ObjectGroupSheet group={group} objects={objects}
       allObjects={group.items} sectionStatus={sectionStatus} onClose={() => setOpen(false)}
-      onSelectObj={o => setSelected(o)}/>}
+      onSelectObj={o => setSelected(o)} onChanged={onChanged}/>}
     {selected && <ObjectSheet obj={selected} onClose={() => setSelected(null)}
       onUpdated={(updated) => { if (updated) setSelected(updated); }}/>}
   </>);
@@ -1815,7 +1944,7 @@ export default function Objects() {
                   {sec.items.map(item => item.kind === "group"
                     ? <ObjectGroupTile key={`g${item.group_id}-${sec.st}`} group={item.group}
                         objects={item.objects} sectionStatus={sec.st}
-                        totalCount={item.group.items?.length}/>
+                        totalCount={item.group.items?.length} onChanged={loadObjects}/>
                     : <ObjectCard key={item.obj.id} obj={item.obj} onClick={() => setSelected(item.obj)}/>
                   )}
                 </StatusSection>
