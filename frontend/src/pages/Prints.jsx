@@ -116,11 +116,27 @@ function StatusBadge({ status }) {
 }
 
 // ── Tuile groupe collapsible ────────────────────────────────────────────────
+// Remonte une bottom-sheet au-dessus du clavier virtuel (API visualViewport).
+function useKeyboardInset() {
+  const [inset, setInset] = useState(0);
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onChange = () => setInset(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
+    vv.addEventListener("resize", onChange);
+    vv.addEventListener("scroll", onChange);
+    onChange();
+    return () => { vv.removeEventListener("resize", onChange); vv.removeEventListener("scroll", onChange); };
+  }, []);
+  return inset;
+}
+
 function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorType, filamentType, onClose, onMapped }) {
   const [spools, setSpools] = useState([]);
   const [search, setSearch] = useState(filamentType || "");
   const [confirmSpool, setConfirmSpool] = useState(null);
   const [tab, setTab] = useState("active");   // active | archived
+  const kb = useKeyboardInset();
 
   // Le backend renvoie non-archivees par defaut : on charge les deux jeux pour
   // pouvoir aussi mapper une bobine archivee (2e onglet).
@@ -161,7 +177,8 @@ function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorTyp
       display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"flex-end" }} onClick={onClose}>
       <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)",
         borderRadius:"20px 20px 0 0", width:"100%", maxWidth:640,
-        display:"flex", flexDirection:"column", maxHeight:"80dvh" }}>
+        marginBottom: kb, transition:"margin-bottom 0.15s ease",
+        display:"flex", flexDirection:"column", maxHeight: kb > 0 ? `calc(92dvh - ${kb}px)` : "80dvh" }}>
         {/* Handle + titre */}
         <div style={{ padding:"12px 16px 8px", flexShrink:0 }}>
           <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 10px" }}/>
