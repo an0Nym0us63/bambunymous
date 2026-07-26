@@ -53,13 +53,13 @@ function ObjectsStats({ stats, onOpen }) {
   const acc = stats.accessories;
   return (
     <>
-      <Section title="Inventaire">
+      <Section title="Inventaire" isGlobal>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
           {/* Memes couleurs que les sections de la page Objets : un etat garde
               son code visuel d'un ecran a l'autre. */}
           <KpiCard icon={ShoppingBag} label="Objets" value={stats.total} color="#64748b"/>
           <KpiCard icon={Package} label="À vendre" value={stats.available} color="#3b82f6"/>
-          <KpiCard icon={Tag} label="Vendus" value={stats.sold} color="#22c55e"/>
+          <KpiCard icon={Tag} label="Vendus" value={stats.total_sold ?? stats.sold} color="#22c55e"/>
           {stats.gifted > 0 && (
             <KpiCard icon={Tag} label="Offerts" value={stats.gifted} color="#f59e0b"
               sub={stats.cost_gifted > 0 ? `${fmtEur(stats.cost_gifted)} de production` : null}/>
@@ -183,7 +183,7 @@ function ObjectsStats({ stats, onOpen }) {
       )}
 
       {acc && acc.count > 0 && (
-        <Section title="Accessoires">
+        <Section title="Accessoires" isGlobal>
           <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",
             gap:10, marginBottom:12 }}>
             <KpiCard icon={Package} label="Références" value={acc.count} color="#3b82f6"
@@ -238,11 +238,23 @@ function ObjectsStats({ stats, onOpen }) {
   );
 }
 
-function Section({ title, children }) {
+// Badge discret signalant une section GLOBALE (indep. du filtre de periode).
+function GlobalBadge() {
+  return (
+    <span title="Indépendant du filtre de période"
+      style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase",
+        color: "var(--muted)", background: "var(--surface2)", border: "1px solid var(--border)",
+        borderRadius: 5, padding: "1px 5px", lineHeight: 1.5 }}>global</span>
+  );
+}
+
+function Section({ title, children, isGlobal }) {
   return (
     <section>
       <p style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase",
-        letterSpacing: "0.08em", margin: "0 0 12px" }}>{title}</p>
+        letterSpacing: "0.08em", margin: "0 0 12px", display: "flex", alignItems: "center", gap: 8 }}>
+        {title}{isGlobal && <GlobalBadge/>}
+      </p>
       {children}
     </section>
   );
@@ -859,7 +871,7 @@ export default function Stats() {
 
       {tab === "filaments" && (<>
       {/* KPIs stock en tete */}
-      <Section title="Stock actuel">
+      <Section title="Stock actuel" isGlobal>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
           <KpiCard icon={Package} label="Références" value={data.stock?.references} color="#3b82f6"/>
           <KpiCard icon={Package} label="Bobines actives" value={data.stock?.spools} color="#22c55e"/>
