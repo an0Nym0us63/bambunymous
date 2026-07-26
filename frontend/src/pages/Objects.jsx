@@ -1464,11 +1464,111 @@ function AccessorySection({ sec, open, onToggle, children }) {
   );
 }
 
-function ObjectCard({ obj, onClick }) {
+// Ajoute une SELECTION d'objets a un groupe (existant ou nouveau).
+function BulkGroupSheet({ ids, onClose, onDone }) {
+  const [groups, setGroups] = React.useState([]);
+  const [newName, setNewName] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  React.useEffect(() => {
+    client.get("/objects/object-groups").then(r => setGroups(r.data || [])).catch(() => {});
+  }, []);
+  const addTo = async (gid) => {
+    setBusy(true);
+    try { await client.post(`/objects/object-groups/${gid}/add-members`, { object_ids: ids }); onDone(); }
+    catch (e) { alert(e.response?.data?.detail || e.message); setBusy(false); }
+  };
+  const createAndAdd = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      const r = await client.post("/objects/object-groups", { name });
+      await client.post(`/objects/object-groups/${r.data.id}/add-members`, { object_ids: ids });
+      onDone();
+    } catch (e) { alert(e.response?.data?.detail || e.message); setBusy(false); }
+  };
+  const chip = { padding:"8px 12px", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
+    border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", textAlign:"left" };
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:6000, background:"rgba(0,0,0,0.55)",
+      display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e => e.stopPropagation()} className="sheet-panel"
+        style={{ width:"100%", maxWidth:520, borderTopLeftRadius:20, borderTopRightRadius:20,
+          padding:"18px 18px max(env(safe-area-inset-bottom,20px),20px)", maxHeight:"80vh", overflowY:"auto" }}>
+        <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 14px" }}/>
+        <h3 style={{ margin:"0 0 4px", fontSize:16, fontWeight:800, color:"var(--text)" }}>
+          Ajouter {ids.length} objet{ids.length>1?"s":""} à un groupe
+        </h3>
+        <p style={{ margin:"0 0 14px", fontSize:12, color:"var(--muted)" }}>
+          Choisis un groupe existant, ou crée-en un.
+        </p>
+        {groups.length > 0 && (
+          <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:14 }}>
+            {groups.map(g => (
+              <button key={g.id} disabled={busy} onClick={() => addTo(g.id)} style={{ ...chip, opacity: busy ? 0.6 : 1 }}>
+                {g.name}
+              </button>
+            ))}
+          </div>
+        )}
+        <div style={{ display:"flex", gap:8 }}>
+          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nouveau groupe…"
+            style={{ flex:1, background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+              padding:"9px 12px", fontSize:13, color:"var(--text)", outline:"none" }}/>
+          <button disabled={busy || !newName.trim()} onClick={createAndAdd}
+            style={{ padding:"9px 16px", borderRadius:8, border:"none", background:"#3b82f6", color:"#fff",
+              fontSize:13, fontWeight:700, cursor:"pointer", opacity:(busy || !newName.trim()) ? 0.6 : 1 }}>
+            Créer
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ObjectCard({ obj, onClick, onLongPress, selectMode, selected, onToggleSelect }) {
   const st = objStatus(obj);
   const cfg = OBJ_STATUS[st];
+  // Appui long -> selection multiple, comme sur les prints/accessoires.
+  const timer = React.useRef(null);
+  const moved = React.useRef(false);
+  const from  = React.useRef(null);
+  const start = (e) => {
+    moved.current = false;
+    const t = e && e.touches && e.touches[0];
+    from.current = t ? { x: t.clientX, y: t.clientY } : null;
+    if (selectMode) return;
+    timer.current = setTimeout(() => { if (!moved.current) onLongPress && onLongPress(); }, 480);
+  };
+  const onMove = (e) => {
+    if (!from.current) return;
+    const t = e && e.touches && e.touches[0];
+    if (!t) return;
+    if (Math.abs(t.clientX - from.current.x) > 8 || Math.abs(t.clientY - from.current.y) > 8) {
+      moved.current = true; clearTimeout(timer.current);
+    }
+  };
+  const cancel = () => clearTimeout(timer.current);
+  const handleClick = () => {
+    if (selectMode) { onToggleSelect && onToggleSelect(obj.id); return; }
+    if (moved.current) return;
+    onClick && onClick();
+  };
   return (
-    <div className="card" onClick={onClick} style={{ padding:0, overflow:"hidden", cursor:"pointer", position:"relative" }}>
+    <div className="card" onClick={handleClick}
+      onTouchStart={start} onTouchMove={onMove} onTouchEnd={cancel} onTouchCancel={cancel}
+      onMouseDown={start} onMouseUp={cancel} onMouseLeave={cancel}
+      onContextMenu={e => e.preventDefault()}
+      style={{ padding:0, overflow:"hidden", cursor:"pointer", position:"relative",
+        outline: selected ? "2px solid #3b82f6" : "none", outlineOffset:-2 }}>
+      {selectMode && (
+        <span style={{ position:"absolute", top:6, right:6, zIndex:3, width:22, height:22,
+          borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:12,
+          border:"2px solid " + (selected ? "#3b82f6" : "rgba(255,255,255,0.7)"),
+          background: selected ? "#3b82f6" : "rgba(0,0,0,0.35)", color:"white", fontWeight:800 }}>
+          {selected ? "\u2713" : ""}
+        </span>
+      )}
       <div style={{ position:"relative", height:130, background:"var(--surface2)",
         display:"flex", alignItems:"center", justifyContent:"center" }}>
         <img src={`/api/v1/objects/objects/${obj.id}/image`} alt=""
@@ -1780,6 +1880,12 @@ export default function Objects() {
   const [openSections, setOpenSections] = React.useState({});
   const [openAccSections, setOpenAccSections] = React.useState({});
   const [accSel, setAccSel] = React.useState(null);   // null = pas en selection
+  const [objSel, setObjSel] = React.useState(null);   // selection multiple d'objets
+  const [bulkGroup, setBulkGroup] = React.useState(false);
+  const objSelCount = objSel ? objSel.size : 0;
+  const toggleObjSel = (id) => setObjSel(s => {
+    const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n;
+  });
   const [objSort, setObjSort] = React.useState("name");
 
   // Le tri s'applique A L'INTERIEUR de chaque section, jamais entre elles :
@@ -1945,7 +2051,12 @@ export default function Objects() {
                     ? <ObjectGroupTile key={`g${item.group_id}-${sec.st}`} group={item.group}
                         objects={item.objects} sectionStatus={sec.st}
                         totalCount={item.group.items?.length} onChanged={loadObjects}/>
-                    : <ObjectCard key={item.obj.id} obj={item.obj} onClick={() => setSelected(item.obj)}/>
+                    : <ObjectCard key={item.obj.id} obj={item.obj}
+                        onClick={() => setSelected(item.obj)}
+                        selectMode={!!objSel}
+                        selected={!!objSel && objSel.has(item.obj.id)}
+                        onToggleSelect={toggleObjSel}
+                        onLongPress={() => setObjSel(new Set([item.obj.id]))}/>
                   )}
                 </StatusSection>
               ))}
@@ -1981,6 +2092,34 @@ export default function Objects() {
 
       {selected && <ObjectSheet obj={selected} onClose={() => setSelected(null)}
         onUpdated={(updated) => { if (updated) setSelected(updated); loadObjects(); }}/>}
+
+      {tab === "objects" && objSelCount > 0 && (
+        <div style={{ position:"fixed", bottom:"calc(76px + env(safe-area-inset-bottom,0px))",
+          left:12, right:12, zIndex:500, background:"var(--sheet-bg)", border:"1px solid var(--border)",
+          borderRadius:14, padding:10, display:"flex", flexDirection:"column", gap:8,
+          boxShadow:"0 4px 24px rgba(0,0,0,0.35)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ flex:1, minWidth:0, fontSize:12.5, fontWeight:700, color:"var(--text)",
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {objSelCount} sélectionné{objSelCount>1?"s":""}
+            </span>
+            <button onClick={()=>setObjSel(null)}
+              style={{ flexShrink:0, padding:"5px 12px", borderRadius:8, fontSize:12, background:"none",
+                border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>Annuler</button>
+          </div>
+          <button onClick={()=>setBulkGroup(true)}
+            style={{ width:"100%", padding:"10px", borderRadius:10, border:"none", background:"#3b82f6",
+              color:"white", fontSize:12.5, fontWeight:700, cursor:"pointer" }}>
+            Ajouter ces {objSelCount} objet{objSelCount>1?"s":""} à un groupe
+          </button>
+        </div>
+      )}
+
+      {bulkGroup && (
+        <BulkGroupSheet ids={[...objSel]}
+          onClose={()=>setBulkGroup(false)}
+          onDone={()=>{ setBulkGroup(false); setObjSel(null); loadObjects(); }}/>
+      )}
 
       {selCount > 0 && (
         /* Deux rangees, comme la barre de selection des prints : quatre
