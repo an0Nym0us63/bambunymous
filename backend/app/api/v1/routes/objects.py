@@ -632,7 +632,11 @@ async def create_objects(body: ObjectCreate, _: str = Depends(get_current_user))
                 cost_fabrication=cost_fab,
                 cost_accessory=body.cost_accessory,
                 cost_total=cost_fab + body.cost_accessory,
-                available=body.available,
+                # Par defaut un objet frais est PERSO (garde pour soi), pas a vendre :
+                # on decide de le vendre ensuite. status + miroirs coherents.
+                status="personal",
+                available=False,
+                personal=True,
                 group_id=target_group_id,
                 comment=body.comment,
             )
