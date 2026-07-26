@@ -1227,8 +1227,9 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
 }
 
 // Un etat = un libelle et une couleur, definis une seule fois et partages par
-// la tuile, la fiche et les filtres. Aucune tuile ne peut plus etre grisee sans
-// porter la raison : c'est precisement ce qui rendait la liste incomprehensible.
+// la tuile, la fiche et les filtres. Les tuiles ne sont plus grisees : le statut
+// est deja porte par la section (sold/gifted/perso/unavailable) et par le badge
+// de couleur sur la tuile -- le grise en plus n'apportait rien et alourdissait.
 export const OBJ_STATUS = {
   // "short" sert aux comptes ("3 vendus") ; certains libelles sont invariables
   // en nombre, d'ou le drapeau plutot qu'un s ajoute aveuglement.
@@ -1387,8 +1388,7 @@ function ObjectCard({ obj, onClick }) {
   const st = objStatus(obj);
   const cfg = OBJ_STATUS[st];
   return (
-    <div className="card" onClick={onClick} style={{ padding:0, overflow:"hidden", cursor:"pointer", position:"relative",
-      opacity: cfg.dim ? 0.72 : 1 }}>
+    <div className="card" onClick={onClick} style={{ padding:0, overflow:"hidden", cursor:"pointer", position:"relative" }}>
       <div style={{ position:"relative", height:130, background:"var(--surface2)",
         display:"flex", alignItems:"center", justifyContent:"center" }}>
         <img src={`/api/v1/objects/objects/${obj.id}/image`} alt=""
