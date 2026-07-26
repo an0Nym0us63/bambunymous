@@ -584,11 +584,28 @@ def _clean_name(fn: Optional[str]) -> str:
 
 @router.get("/stats/summary")
 async def prints_stats(
-    days: int = 0,   # 0 = tout l'historique
+    days: int = 0,   # retro-compat : fenetre glissante en jours (0 = tout)
+    date_from: Optional[str] = None,   # borne debut (ISO / YYYY-MM-DD), prioritaire sur days
+    date_to: Optional[str] = None,     # borne fin incluse
     _: str = Depends(get_current_user),
 ):
     from ....models.filament import Spool as _Spool, Filament as _Fil
     from datetime import timedelta
+
+    def _parse_d(s):
+        if not s:
+            return None
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            try:
+                return datetime.strptime(s, "%Y-%m-%d")
+            except Exception:
+                return None
+    d_from = _parse_d(date_from)
+    d_to = _parse_d(date_to)
+    if d_to:
+        d_to = d_to + timedelta(days=1)   # borne de fin incluse (jour entier)
 
     async with AsyncSessionLocal() as db:
         DUR = func.coalesce(Print.duration_seconds, Print.estimated_seconds, 0)
@@ -597,7 +614,12 @@ async def prints_stats(
         ko   = Print.status == "FAILED"
 
         period = []
-        if days and days > 0:
+        if d_from or d_to:
+            if d_from:
+                period.append(Print.print_date >= d_from)
+            if d_to:
+                period.append(Print.print_date < d_to)
+        elif days and days > 0:
             period.append(Print.print_date >= datetime.utcnow() - timedelta(days=days))
 
         def W(*extra):
@@ -671,6 +693,10 @@ async def prints_stats(
         # Etendue effective des donnees (en jours), pour choisir le grain meme en
         # mode "Tout".
         span_days = days
+        if d_from and d_to:
+            span_days = max(span_days, (d_to - d_from).days)
+        elif d_from:
+            span_days = max(span_days, (datetime.utcnow() - d_from).days)
         if rows:
             first = rows[0].print_date
             last  = rows[-1].print_date
