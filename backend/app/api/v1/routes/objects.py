@@ -1026,3 +1026,25 @@ async def remove_accessory_from_group(gid: int, acc_id: int,
         await _recompute_members_cost(db, members)
         await db.commit()
         return {"restocked": restocked}
+
+
+class GroupAddMembers(BaseModel):
+    object_ids: List[int]
+
+
+@router.post("/object-groups/{gid}/add-members")
+async def add_objects_to_group(gid: int, body: GroupAddMembers,
+                               _: str = Depends(get_current_user)):
+    """Rattache plusieurs objets a un groupe existant (selection multiple)."""
+    async with AsyncSessionLocal() as db:
+        g = await db.get(ObjectGroup, gid)
+        if not g:
+            raise HTTPException(404, "Groupe introuvable")
+        if not body.object_ids:
+            return {"added": 0, "group_id": gid}
+        objs = (await db.execute(
+            select(Object).where(Object.id.in_(body.object_ids)))).scalars().all()
+        for o in objs:
+            o.group_id = gid
+        await db.commit()
+        return {"added": len(objs), "group_id": gid}
