@@ -864,6 +864,84 @@ function AccessoryPicker({ accessories, onClose, onConfirm }) {
   );
 }
 
+// Gestion du groupe (ObjectGroup) d'un objet APRES creation : associer a un
+// groupe existant, en creer un, ou dissocier. Le backend expose deja
+// GET/POST /objects/object-groups et PATCH group_id (null pour dissocier).
+function ObjectGroupControl({ obj, onChanged }) {
+  const [groups, setGroups] = React.useState([]);
+  const [adding, setAdding] = React.useState(false);
+  const [newName, setNewName] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    client.get("/objects/object-groups").then(r => setGroups(r.data || [])).catch(() => {});
+  }, []);
+
+  // Recharge l'objet a jour pour rafraichir la fiche (group_id + group_name).
+  const done = async () => {
+    try { const r = await client.get(`/objects/objects/${obj.id}`); onChanged?.(r.data); }
+    catch { onChanged?.(); }
+    setBusy(false); setAdding(false); setNewName("");
+  };
+  const assign = async (gid) => {
+    setBusy(true);
+    try { await client.patch(`/objects/objects/${obj.id}`, { group_id: gid }); } catch {}
+    await done();
+  };
+  const createAndAssign = async () => {
+    const name = newName.trim();
+    if (!name) return;
+    setBusy(true);
+    try {
+      const r = await client.post("/objects/object-groups", { name });
+      const gid = r.data?.id;
+      if (gid) await client.patch(`/objects/objects/${obj.id}`, { group_id: gid });
+    } catch {}
+    await done();
+  };
+
+  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+    letterSpacing:"0.05em", marginBottom:6, display:"block" };
+  const chip = (active) => ({ padding:"6px 10px", borderRadius:8, fontSize:12, fontWeight:600,
+    cursor:"pointer", border:"1px solid var(--border)",
+    background: active ? "#3b82f6" : "var(--surface2)", color: active ? "#fff" : "var(--text)" });
+
+  return (
+    <div style={{ marginBottom:14 }}>
+      <label style={lbl}>Groupe</label>
+      {obj.group_id ? (
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          <span style={{ padding:"6px 12px", borderRadius:8, background:"rgba(59,130,246,0.12)",
+            color:"#60a5fa", fontSize:12, fontWeight:700 }}>{obj.group_name || "Groupe"}</span>
+          <button disabled={busy} onClick={() => assign(null)}
+            style={{ ...chip(false), opacity: busy ? 0.6 : 1 }}>Retirer du groupe</button>
+        </div>
+      ) : adding ? (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {groups.length > 0 && (
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {groups.map(g => (
+                <button key={g.id} disabled={busy} onClick={() => assign(g.id)} style={chip(false)}>{g.name}</button>
+              ))}
+            </div>
+          )}
+          <div style={{ display:"flex", gap:8 }}>
+            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nouveau groupe…"
+              style={{ flex:1, background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
+                padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none" }}/>
+            <button disabled={busy || !newName.trim()} onClick={createAndAssign}
+              style={{ ...chip(true), opacity:(busy || !newName.trim()) ? 0.6 : 1 }}>Créer</button>
+          </div>
+          <button onClick={() => { setAdding(false); setNewName(""); }}
+            style={{ ...chip(false), alignSelf:"flex-start" }}>Annuler</button>
+        </div>
+      ) : (
+        <button onClick={() => setAdding(true)} style={chip(false)}>+ Ajouter à un groupe</button>
+      )}
+    </div>
+  );
+}
+
 export function ObjectSheet({ obj, onClose, onUpdated }) {
   if (!obj) return null;
   useTrackDetail(`Fiche objet · ${obj.name || "#" + obj.id}`);
@@ -994,6 +1072,8 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
             )}
           </div>
         </div>
+
+        <ObjectGroupControl obj={obj} onChanged={onUpdated}/>
 
         {/* Coûts — meme presentation que la fiche print/groupe */}
         <div style={{ background:"linear-gradient(135deg,rgba(59,130,246,0.06),rgba(139,92,246,0.06))",
