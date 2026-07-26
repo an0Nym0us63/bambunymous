@@ -2204,6 +2204,24 @@ export default function Prints() {
     }
   }, [prints, hasMore, loading, loadingMore, viewMode, loadMore]);
 
+  // Chargement au defilement via une SENTINELLE (IntersectionObserver) : plus
+  // fiable que le calcul de scroll manuel -- fonctionne quel que soit le
+  // conteneur de defilement et se declenche meme quand le contenu remplit pile
+  // l'ecran (cas desktop ou une page de gros groupes tient en un ecran). Le
+  // rootMargin large precharge avant d'atteindre le bas. Se re-observe a chaque
+  // ajout de cartes ; loadMore boucle jusqu'a ~CARDS_PER_LOAD nouvelles cartes.
+  useEffect(() => {
+    if (viewMode !== "list" || !hasMore) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const root = document.querySelector(".page-content") || null;
+    const io = new IntersectionObserver((entries) => {
+      if (entries.some(e => e.isIntersecting)) loadMore();
+    }, { root, rootMargin: "800px 0px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadMore, viewMode, hasMore, prints.length]);
+
   const loadGroups = useCallback(async () => {
     try {
       const { data } = await client.get("/prints/groups");
@@ -2564,6 +2582,9 @@ export default function Prints() {
       })()}
 
       {/* Filet de sécurité : si l'amorçage auto échoue, on garde une action explicite */}
+      {viewMode==="list" && !loading && !error && hasMore && (
+        <div ref={sentinelRef} aria-hidden style={{ height: 1 }}/>
+      )}
       {viewMode==="list" && !loading && !error && hasMore && (
         <div style={{ display:"flex", justifyContent:"center", padding:"16px 0 8px" }}>
           <button onClick={loadMore} disabled={loadingMore}
