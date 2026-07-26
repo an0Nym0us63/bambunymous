@@ -544,8 +544,7 @@ function PrintEditSheet({ p, onClose, onSaved }) {
     status:        p.status || "SUCCESS",
     status_note:   p.status_note || "",
     design_id:     p.design_id || "",
-    duration_h: Math.floor((p.duration_seconds||p.estimated_seconds||0)/3600),
-    duration_m: Math.floor(((p.duration_seconds||p.estimated_seconds||0)%3600)/60),
+    duration_min: Math.round((p.duration_seconds||p.estimated_seconds||0)/60),
   });
   const [saving, setSaving] = useState(false);
 
@@ -555,8 +554,8 @@ function PrintEditSheet({ p, onClose, onSaved }) {
     setSaving(true);
     try {
       const payload = {...form};
-      payload.duration_seconds = ((parseInt(payload.duration_h)||0)*3600) + ((parseInt(payload.duration_m)||0)*60);
-      delete payload.duration_h; delete payload.duration_m;
+      payload.duration_seconds = (parseInt(payload.duration_min)||0)*60;
+      delete payload.duration_min;
       delete payload.original_name;
       await client.patch(`/prints/${p.id}`, payload);
       onSaved(form);
