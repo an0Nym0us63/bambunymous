@@ -204,6 +204,7 @@ async def objects_stats(
 
     # Le vendu est filtre par periode (sold_date) ; le reste decrit l'etat courant.
     sold        = [o for o in by_status["sold"] if _in_period(o.sold_date)] if _period_active else by_status["sold"]
+    total_sold  = len(by_status["sold"])   # nb de vendus TOUS TEMPS (inventaire, donut : global)
     available   = by_status["available"]
     personal    = by_status["personal"]
     gifted      = by_status["gifted"]
@@ -238,6 +239,7 @@ async def objects_stats(
         "total": total,
         "available": len(available),
         "sold": len(sold),
+        "total_sold": total_sold,
         "personal": len(personal),
         "gifted": len(gifted),
         "unavailable": len(unavailable),
@@ -265,7 +267,7 @@ async def objects_stats(
         # somme retombe sur le total sans categorie fourre-tout.
         "state_split": [
             {"name": "À vendre",     "value": len(available)},
-            {"name": "Vendus",       "value": len(sold)},
+            {"name": "Vendus",       "value": total_sold},
             {"name": "Offerts",      "value": len(gifted)},
             {"name": "Perso",        "value": len(personal)},
             {"name": "Indisponibles","value": len(unavailable)},
