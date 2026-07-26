@@ -91,8 +91,43 @@ def _obj_out(o: Object) -> ObjectOut:
 # ── Objets ────────────────────────────────────────────────────────────────────
 
 @router.get("/objects/stats")
-async def objects_stats(_: str = Depends(get_current_user)):
-    """Statistiques agregees sur les objets : inventaire, ventes, marge."""
+async def objects_stats(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    _: str = Depends(get_current_user),
+):
+    """Statistiques agregees sur les objets : inventaire, ventes, marge.
+
+    La periode (date_from/date_to) filtre les VENTES par sold_date : revenu, marge,
+    top marges et nb de vendus reflètent la periode. L'inventaire courant (à vendre,
+    valeur stock, potentiel, perso, offerts, accessoires) reste GLOBAL par nature."""
+    from datetime import datetime as _dt, timedelta as _td
+
+    def _parse_d(s):
+        if not s:
+            return None
+        try:
+            return _dt.fromisoformat(s)
+        except Exception:
+            try:
+                return _dt.strptime(s, "%Y-%m-%d")
+            except Exception:
+                return None
+    _d_from = _parse_d(date_from)
+    _d_to = _parse_d(date_to)
+    if _d_to:
+        _d_to = _d_to + _td(days=1)   # borne de fin incluse
+    _period_active = bool(_d_from or _d_to)
+
+    def _in_period(dt):
+        if dt is None:
+            return False
+        if _d_from and dt < _d_from:
+            return False
+        if _d_to and dt >= _d_to:
+            return False
+        return True
+
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(Object))).scalars().all()
         accs = (await db.execute(select(Accessory))).scalars().all()
@@ -167,7 +202,8 @@ async def objects_stats(_: str = Depends(get_current_user)):
     for o in rows:
         by_status.setdefault(_st(o), []).append(o)
 
-    sold        = by_status["sold"]
+    # Le vendu est filtre par periode (sold_date) ; le reste decrit l'etat courant.
+    sold        = [o for o in by_status["sold"] if _in_period(o.sold_date)] if _period_active else by_status["sold"]
     available   = by_status["available"]
     personal    = by_status["personal"]
     gifted      = by_status["gifted"]
