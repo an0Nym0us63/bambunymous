@@ -883,76 +883,32 @@ function AccessoryPicker({ accessories, onClose, onConfirm }) {
 // groupe existant, en creer un, ou dissocier. Le backend expose deja
 // GET/POST /objects/object-groups et PATCH group_id (null pour dissocier).
 function ObjectGroupControl({ obj, onChanged }) {
-  const [groups, setGroups] = React.useState([]);
-  const [adding, setAdding] = React.useState(false);
-  const [newName, setNewName] = React.useState("");
   const [busy, setBusy] = React.useState(false);
-
-  React.useEffect(() => {
-    client.get("/objects/object-groups").then(r => setGroups(r.data || [])).catch(() => {});
-  }, []);
-
-  // Recharge l'objet a jour pour rafraichir la fiche (group_id + group_name).
-  const done = async () => {
-    try { const r = await client.get(`/objects/objects/${obj.id}`); onChanged?.(r.data); }
-    catch { onChanged?.(); }
-    setBusy(false); setAdding(false); setNewName("");
-  };
-  const assign = async (gid) => {
-    setBusy(true);
-    try { await client.patch(`/objects/objects/${obj.id}`, { group_id: gid }); } catch {}
-    await done();
-  };
-  const createAndAssign = async () => {
-    const name = newName.trim();
-    if (!name) return;
+  // Plus de bouton "+ Ajouter" ici : l'ajout a un groupe se fait par selection
+  // multiple (appui long) dans la liste. La fiche ne sert plus qu'a VOIR le
+  // groupe et a en RETIRER l'objet.
+  if (!obj.group_id) return null;
+  const remove = async () => {
     setBusy(true);
     try {
-      const r = await client.post("/objects/object-groups", { name });
-      const gid = r.data?.id;
-      if (gid) await client.patch(`/objects/objects/${obj.id}`, { group_id: gid });
-    } catch {}
-    await done();
+      await client.patch(`/objects/objects/${obj.id}`, { group_id: null });
+      const r = await client.get(`/objects/objects/${obj.id}`);
+      onChanged?.(r.data);
+    } catch { onChanged?.(); }
+    setBusy(false);
   };
-
-  const lbl = { fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-    letterSpacing:"0.05em", marginBottom:6, display:"block" };
-  const chip = (active) => ({ padding:"6px 10px", borderRadius:8, fontSize:12, fontWeight:600,
-    cursor:"pointer", border:"1px solid var(--border)",
-    background: active ? "#3b82f6" : "var(--surface2)", color: active ? "#fff" : "var(--text)" });
-
   return (
     <div style={{ marginBottom:14 }}>
-      <label style={lbl}>Groupe</label>
-      {obj.group_id ? (
-        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-          <span style={{ padding:"6px 12px", borderRadius:8, background:"rgba(59,130,246,0.12)",
-            color:"#60a5fa", fontSize:12, fontWeight:700 }}>{obj.group_name || "Groupe"}</span>
-          <button disabled={busy} onClick={() => assign(null)}
-            style={{ ...chip(false), opacity: busy ? 0.6 : 1 }}>Retirer du groupe</button>
-        </div>
-      ) : adding ? (
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          {groups.length > 0 && (
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {groups.map(g => (
-                <button key={g.id} disabled={busy} onClick={() => assign(g.id)} style={chip(false)}>{g.name}</button>
-              ))}
-            </div>
-          )}
-          <div style={{ display:"flex", gap:8 }}>
-            <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nouveau groupe…"
-              style={{ flex:1, background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-                padding:"8px 12px", fontSize:13, color:"var(--text)", outline:"none" }}/>
-            <button disabled={busy || !newName.trim()} onClick={createAndAssign}
-              style={{ ...chip(true), opacity:(busy || !newName.trim()) ? 0.6 : 1 }}>Créer</button>
-          </div>
-          <button onClick={() => { setAdding(false); setNewName(""); }}
-            style={{ ...chip(false), alignSelf:"flex-start" }}>Annuler</button>
-        </div>
-      ) : (
-        <button onClick={() => setAdding(true)} style={chip(false)}>+ Ajouter à un groupe</button>
-      )}
+      <label style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+        letterSpacing:"0.05em", marginBottom:6, display:"block" }}>Groupe</label>
+      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+        <span style={{ padding:"6px 12px", borderRadius:8, background:"rgba(59,130,246,0.12)",
+          color:"#60a5fa", fontSize:12, fontWeight:700 }}>{obj.group_name || "Groupe"}</span>
+        <button disabled={busy} onClick={remove}
+          style={{ padding:"6px 10px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
+            border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)",
+            opacity: busy ? 0.6 : 1 }}>Retirer du groupe</button>
+      </div>
     </div>
   );
 }
@@ -1487,61 +1443,73 @@ function AccessorySection({ sec, open, onToggle, children }) {
 }
 
 // Ajoute une SELECTION d'objets a un groupe (existant ou nouveau).
-function BulkGroupSheet({ ids, onClose, onDone }) {
+// Selecteur de groupe facon prints : un champ de recherche filtre les groupes
+// existants et propose de creer celui qu'on tape. onPick recoit {group_id} ou
+// {group_name} (nouveau). Le parent gere l'action (rattachement, etc.).
+function ObjectGroupPickerSheet({ title, onClose, onPick }) {
+  const [q, setQ] = React.useState("");
   const [groups, setGroups] = React.useState([]);
-  const [newName, setNewName] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   React.useEffect(() => {
     client.get("/objects/object-groups").then(r => setGroups(r.data || [])).catch(() => {});
   }, []);
-  const addTo = async (gid) => {
+  const needle = q.trim().toLowerCase();
+  const filtered = needle ? groups.filter(g => (g.name || "").toLowerCase().includes(needle)) : groups;
+  const exact = needle && groups.some(g => (g.name || "").toLowerCase() === needle);
+  const pick = async (payload) => {
+    if (busy) return;
     setBusy(true);
-    try { await client.post(`/objects/object-groups/${gid}/add-members`, { object_ids: ids }); onDone(); }
+    try { await onPick(payload); }
     catch (e) { alert(e.response?.data?.detail || e.message); setBusy(false); }
   };
-  const createAndAdd = async () => {
-    const name = newName.trim();
-    if (!name) return;
-    setBusy(true);
-    try {
-      const r = await client.post("/objects/object-groups", { name });
-      await client.post(`/objects/object-groups/${r.data.id}/add-members`, { object_ids: ids });
-      onDone();
-    } catch (e) { alert(e.response?.data?.detail || e.message); setBusy(false); }
-  };
-  const chip = { padding:"8px 12px", borderRadius:8, fontSize:13, fontWeight:600, cursor:"pointer",
-    border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", textAlign:"left" };
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:6000, background:"rgba(0,0,0,0.55)",
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:6000, background:"rgba(0,0,0,0.6)",
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} className="sheet-panel"
-        style={{ width:"100%", maxWidth:520, borderTopLeftRadius:20, borderTopRightRadius:20,
-          padding:"18px 18px max(env(safe-area-inset-bottom,20px),20px)", maxHeight:"80vh", overflowY:"auto" }}>
-        <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 14px" }}/>
-        <h3 style={{ margin:"0 0 4px", fontSize:16, fontWeight:800, color:"var(--text)" }}>
-          Ajouter {ids.length} objet{ids.length>1?"s":""} à un groupe
-        </h3>
-        <p style={{ margin:"0 0 14px", fontSize:12, color:"var(--muted)" }}>
-          Choisis un groupe existant, ou crée-en un.
-        </p>
-        {groups.length > 0 && (
-          <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:14 }}>
-            {groups.map(g => (
-              <button key={g.id} disabled={busy} onClick={() => addTo(g.id)} style={{ ...chip, opacity: busy ? 0.6 : 1 }}>
-                {g.name}
-              </button>
-            ))}
-          </div>
-        )}
-        <div style={{ display:"flex", gap:8 }}>
-          <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Nouveau groupe…"
-            style={{ flex:1, background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-              padding:"9px 12px", fontSize:13, color:"var(--text)", outline:"none" }}/>
-          <button disabled={busy || !newName.trim()} onClick={createAndAdd}
-            style={{ padding:"9px 16px", borderRadius:8, border:"none", background:"#3b82f6", color:"#fff",
-              fontSize:13, fontWeight:700, cursor:"pointer", opacity:(busy || !newName.trim()) ? 0.6 : 1 }}>
-            Créer
-          </button>
+        style={{ width:"100%", maxWidth:480, borderRadius:"20px 20px 0 0", maxHeight:"85vh",
+          display:"flex", flexDirection:"column", paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
+        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0", position:"relative" }}>
+          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
+          <button onClick={onClose} style={{ position:"absolute", top:6, right:12, width:28, height:28,
+            borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer",
+            color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+        </div>
+        <div style={{ padding:"14px 18px 10px" }}>
+          <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 10px" }}>{title}</h3>
+          <input value={q} onChange={e => setQ(e.target.value)} autoFocus
+            placeholder="Rechercher ou créer un groupe…"
+            style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
+              borderRadius:8, padding:"9px 12px", fontSize:13, color:"var(--text)", outline:"none" }}/>
+        </div>
+        <div style={{ overflowY:"auto", padding:"0 18px 16px", flex:1 }}>
+          {needle && (
+            <button disabled={busy} onClick={() => pick({ group_name: q.trim() })}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
+                marginBottom: exact ? 4 : 8, borderRadius:10, background:"rgba(59,130,246,0.12)",
+                border:"1px solid rgba(59,130,246,0.35)", color:"#3b82f6", fontSize:13, fontWeight:700,
+                cursor:"pointer", textAlign:"left", opacity: busy ? 0.6 : 1 }}>
+              <Plus size={15}/> Créer un nouveau groupe « {q.trim()} »
+            </button>
+          )}
+          {exact && (
+            <p style={{ margin:"0 0 10px", fontSize:11, color:"var(--muted)", padding:"0 2px" }}>
+              Un groupe porte déjà ce nom — tu peux le rejoindre ci-dessous.
+            </p>
+          )}
+          {filtered.length === 0 && !needle && (
+            <p style={{ textAlign:"center", color:"var(--muted)", fontSize:12, padding:"20px 0" }}>
+              Aucun groupe — tape un nom pour en créer un.
+            </p>
+          )}
+          {filtered.map(g => (
+            <button key={g.id} disabled={busy} onClick={() => pick({ group_id: g.id })}
+              style={{ width:"100%", padding:"10px 14px", textAlign:"left", background:"var(--surface2)",
+                border:"1px solid var(--border)", borderRadius:8, cursor:"pointer", color:"var(--text)",
+                fontSize:13, marginBottom:6, display:"flex", alignItems:"center", gap:10, opacity: busy ? 0.6 : 1 }}>
+              <span style={{ fontSize:15, flexShrink:0 }}>📁</span>
+              <span style={{ flex:1, minWidth:0, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.name}</span>
+            </button>
+          ))}
         </div>
       </div>
     </div>
@@ -2138,9 +2106,15 @@ export default function Objects() {
       )}
 
       {bulkGroup && (
-        <BulkGroupSheet ids={[...objSel]}
+        <ObjectGroupPickerSheet
+          title={`Ajouter ${objSelCount} objet${objSelCount>1?"s":""} à un groupe`}
           onClose={()=>setBulkGroup(false)}
-          onDone={()=>{ setBulkGroup(false); setObjSel(null); loadObjects(); }}/>
+          onPick={async ({ group_id, group_name }) => {
+            let gid = group_id;
+            if (!gid && group_name) { const r = await client.post("/objects/object-groups", { name: group_name }); gid = r.data?.id; }
+            if (gid) await client.post(`/objects/object-groups/${gid}/add-members`, { object_ids: [...objSel] });
+            setBulkGroup(false); setObjSel(null); loadObjects();
+          }}/>
       )}
 
       {selCount > 0 && (
