@@ -864,7 +864,7 @@ function AccessoryPicker({ accessories, onClose, onConfirm }) {
   );
 }
 
-function ObjectSheet({ obj, onClose, onUpdated }) {
+export function ObjectSheet({ obj, onClose, onUpdated }) {
   if (!obj) return null;
   useTrackDetail(`Fiche objet · ${obj.name || "#" + obj.id}`);
   const [accessories, setAccessories] = React.useState([]);

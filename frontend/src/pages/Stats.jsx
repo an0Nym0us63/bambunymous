@@ -6,6 +6,7 @@ import HeaderAction from "../components/HeaderAction";
 import { useTrackDetail } from "../utils/track";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
+import { ObjectSheet } from "./Objects";
 
 const fmtH = s => {
   const t = Math.round(s || 0);
@@ -38,7 +39,7 @@ function Dot({ hex, colors, multicolor, size = 12 }) {
   );
 }
 
-function ObjectsStats({ stats, onOpen }) {
+function ObjectsStats({ stats, onOpen, onOpenObject }) {
   if (!stats) return (
     <p style={{ textAlign:"center", color:"var(--muted)", padding:40 }}>
       Chargement des statistiques objets…
@@ -154,6 +155,7 @@ function ObjectsStats({ stats, onOpen }) {
                     <Bar key={o.id} label={o.name}
                       value={Math.max(0, o.margin)} max={max}
                       sublabel={fmtEur(o.margin)}
+                      onClick={onOpenObject ? () => onOpenObject(o.id) : undefined}
                       color={o.margin >= 0 ? "#22c55e" : "#ef4444"}/>
                   );
                 })}
@@ -173,6 +175,7 @@ function ObjectsStats({ stats, onOpen }) {
                     <Bar key={o.id} label={o.name}
                       value={Math.max(0, o.margin_pct)} max={max}
                       sublabel={`${o.margin_pct} %`}
+                      onClick={onOpenObject ? () => onOpenObject(o.id) : undefined}
                       color={o.margin_pct >= 0 ? "#22c55e" : "#ef4444"}/>
                   );
                 })}
@@ -277,14 +280,24 @@ function KpiCard({ icon: Icon, label, value, sub, color = "#3b82f6" }) {
   );
 }
 
-function Bar({ label, value, max, color = "#3b82f6", sublabel, dot, stacked }) {
+function Bar({ label, value, max, color = "#3b82f6", sublabel, dot, stacked, onClick }) {
   const pct = max > 0 ? Math.max(2, (value / max) * 100) : 0;
+  const [hover, setHover] = React.useState(false);
+  const clickable = typeof onClick === "function";
+  const rowExtra = clickable
+    ? { cursor: "pointer", background: hover ? "var(--surface2)" : "transparent",
+        borderRadius: 8, transition: "background 0.12s" }
+    : {};
+  const handlers = clickable
+    ? { onClick, role: "button", tabIndex: 0,
+        onMouseEnter: () => setHover(true), onMouseLeave: () => setHover(false) }
+    : {};
   // Variante 'dashboard' : nom + valeur sur une ligne, barre EN PLEINE LARGEUR
   // dessous. En ligne unique, le nom et la valeur ecrasaient la barre au point
   // qu'on ne la voyait presque plus.
   if (stacked) {
     return (
-      <div style={{ padding: "8px 0", borderBottom: "1px solid var(--border)" }}>
+      <div {...handlers} style={{ padding: "8px 6px", borderBottom: "1px solid var(--border)", ...rowExtra }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline",
           gap: 8, marginBottom: 6 }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: "var(--text)", minWidth: 0,
@@ -301,8 +314,8 @@ function Bar({ label, value, max, color = "#3b82f6", sublabel, dot, stacked }) {
     );
   }
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0",
-      borderBottom: "1px solid var(--border)" }}>
+    <div {...handlers} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 6px",
+      borderBottom: "1px solid var(--border)", ...rowExtra }}>
       <div style={{ width: 130, fontSize: 11, color: "var(--text)", fontWeight: 600, flexShrink: 0,
         display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
         {dot}
@@ -641,6 +654,7 @@ export default function Stats() {
   useTrackDetail(`Stats · ${ {prints:"Prints", filaments:"Filaments",
     objects:"Objets"}[tab] || tab }`);
   const [objStats, setObjStats] = useState(null);
+  const [objDetail, setObjDetail] = useState(null);
 
   useEffect(() => {
     setLoading(true);
@@ -651,11 +665,20 @@ export default function Stats() {
   }, [period]);
 
   // Stats objets : les VENTES suivent la periode (sold_date), l'inventaire reste global.
-  useEffect(() => {
+  const loadObjects = React.useCallback(() => {
     client.get("/objects/objects/stats", { params: { date_from: period.from || undefined, date_to: period.to || undefined } })
       .then(r => setObjStats(r.data))
       .catch(() => setObjStats(null));
   }, [period]);
+  useEffect(() => { loadObjects(); }, [loadObjects]);
+
+  // Clic sur un objet (histogrammes de marges) -> ouverture de sa fiche sur place.
+  const openObject = async (id) => {
+    try {
+      const r = await client.get(`/objects/objects/${id}`);
+      setObjDetail(r.data);
+    } catch { /* objet supprime entre-temps */ }
+  };
 
   const openDetail = async (item, mode) => {
     if (mode === "groups") {
@@ -743,6 +766,10 @@ export default function Stats() {
         ))}
       </div>
 
+      {objDetail && (
+        <ObjectSheet obj={objDetail} onClose={() => setObjDetail(null)}
+          onUpdated={(updated) => { if (updated) setObjDetail(updated); loadObjects(); }}/>
+      )}
       {detail?.type === "print" && detail.data?.id && (
         <PrintDetail p={detail.data} onClose={() => setDetail(null)}
           onDelete={() => setDetail(null)} onChanged={() => {}}/>
@@ -952,7 +979,7 @@ export default function Stats() {
       </>)}
 
       {tab === "objects" && (
-        <ObjectsStats stats={objStats} onOpen={openDetail}/>
+        <ObjectsStats stats={objStats} onOpen={openDetail} onOpenObject={openObject}/>
       )}
     </div>
   );
