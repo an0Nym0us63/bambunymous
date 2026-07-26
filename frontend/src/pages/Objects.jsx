@@ -39,6 +39,10 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
   const [confirmDel, setConfirmDel] = React.useState(false);
   const fileRef = React.useRef(null);
   const [imgV, setImgV] = React.useState(0);          // cache-buster photo
+  const [viewObj, setViewObj] = React.useState(null); // fiche objet ouverte sur place
+  const openObj = async (id) => {
+    try { const r = await client.get(`/objects/objects/${id}`); setViewObj(r.data); } catch {}
+  };
 
   const load = React.useCallback(async () => {
     try {
@@ -325,14 +329,25 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
                 Utilisé dans {d.used_in_objects} objet{d.used_in_objects>1?"s":""}
               </p>
               {d.objects.slice(0,20).map(o => (
-                <div key={o.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px",
+                <div key={o.id} onClick={() => openObj(o.id)}
+                  style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", cursor:"pointer",
                   background:"var(--surface2)", borderRadius:8, marginBottom:5,
                   border:"1px solid var(--border)" }}>
+                  <div style={{ width:28, height:28, borderRadius:6, overflow:"hidden", flexShrink:0,
+                    background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <img src={`/api/v1/objects/objects/${o.id}/image`} alt=""
+                      style={{ width:"100%", height:"100%", objectFit:"cover" }}
+                      onError={e=>e.currentTarget.style.display="none"}/>
+                  </div>
                   <span style={{ fontSize:12, flex:1, overflow:"hidden", textOverflow:"ellipsis",
                     whiteSpace:"nowrap" }}>{o.name}</span>
                   <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>×{o.quantity}</span>
                 </div>
               ))}
+              {viewObj && (
+                <ObjectSheet obj={viewObj} onClose={() => setViewObj(null)}
+                  onUpdated={(u) => { if (u) setViewObj(u); load(); }}/>
+              )}
             </div>
           )}
 
@@ -955,6 +970,7 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
   const [parentPrint, setParentPrint] = React.useState(null);
   const [parentGroup, setParentGroup] = React.useState(null);
   const [editing, setEditing] = React.useState(false);
+  const [viewAcc, setViewAcc] = React.useState(null);   // fiche accessoire ouverte sur place
 
   React.useEffect(() => {
     client.get(`/objects/objects/${obj.id}/accessories`).then(r=>setAccessories(r.data)).catch(()=>{});
@@ -1148,7 +1164,8 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
           </div>
           {accessories.length === 0 && <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>Aucun accessoire</p>}
           {accessories.map(a => (
-            <div key={a.accessory_id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px",
+            <div key={a.accessory_id} onClick={() => setViewAcc(a.accessory_id)}
+              style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 10px", cursor:"pointer",
               background:"var(--surface2)", borderRadius:8, marginBottom:5, border:"1px solid var(--border)" }}>
               <div style={{ width:28, height:28, borderRadius:6, overflow:"hidden", flexShrink:0,
                 background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center" }}>
@@ -1159,7 +1176,7 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
               <span style={{ fontSize:12, flex:1 }}>{a.name}</span>
               <span style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace" }}>×{a.qty}</span>
               <span style={{ fontSize:11, color:"var(--text)", fontFamily:"monospace" }}>{fmtPrice(a.unit_price * a.qty)}</span>
-              <button onClick={()=>unlinkAcc(a.accessory_id)}
+              <button onClick={(e)=>{ e.stopPropagation(); unlinkAcc(a.accessory_id); }}
                 style={{ width:18, height:18, borderRadius:"50%", background:"rgba(239,68,68,0.1)",
                   border:"none", cursor:"pointer", color:"#ef4444", fontSize:12 }}>✕</button>
             </div>
@@ -1190,6 +1207,11 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
       {/* Picker accessoire — recherche filtrée, vignette, quantité bornee au stock */}
       {addingAcc && (
         <AccessoryPicker accessories={allAccs} onClose={()=>setAddingAcc(false)} onConfirm={linkAcc}/>
+      )}
+
+      {viewAcc && (
+        <AccessorySheet accId={viewAcc} onClose={()=>setViewAcc(null)}
+          onChanged={()=>client.get(`/objects/objects/${obj.id}/accessories`).then(r=>setAccessories(r.data)).catch(()=>{})}/>
       )}
 
       {/* Édition complete de l'objet */}
