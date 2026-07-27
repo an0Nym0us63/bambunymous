@@ -1463,13 +1463,12 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
     return ordered.map(id => `/api/v1/prints/${id}/image`);
   }, [prints, cover_print_id]);
 
-  // Statut agrege du groupe : on remonte le plus notable des membres (un print
-  // en cours doit se voir depuis la carte du groupe, pas seulement en l'ouvrant).
-  const aggStatus = React.useMemo(() => {
-    const order = ["IN_PROGRESS", "FAILED", "TO_REDO", "PARTIAL", "CANCELLED"];
-    return order.find(st => prints.some(pr => pr.status === st)) || null;
-  }, [prints]);
-  const aggCfg = aggStatus ? STATUS_CFG[aggStatus] : null;
+  // Seul "en cours" est remonte sur la carte du groupe : un echec ou un partiel
+  // isole ne doit pas faire paraitre en echec un groupe globalement reussi ;
+  // en revanche un print encore en cours merite d'etre visible sans ouvrir.
+  const inProgress = React.useMemo(
+    () => prints.some(pr => pr.status === "IN_PROGRESS"), [prints]);
+  const aggCfg = inProgress ? STATUS_CFG.IN_PROGRESS : null;
   const AggIcon = aggCfg?.icon;
 
   return (
