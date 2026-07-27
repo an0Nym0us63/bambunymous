@@ -1463,6 +1463,15 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
     return ordered.map(id => `/api/v1/prints/${id}/image`);
   }, [prints, cover_print_id]);
 
+  // Statut agrege du groupe : on remonte le plus notable des membres (un print
+  // en cours doit se voir depuis la carte du groupe, pas seulement en l'ouvrant).
+  const aggStatus = React.useMemo(() => {
+    const order = ["IN_PROGRESS", "FAILED", "TO_REDO", "PARTIAL", "CANCELLED"];
+    return order.find(st => prints.some(pr => pr.status === st)) || null;
+  }, [prints]);
+  const aggCfg = aggStatus ? STATUS_CFG[aggStatus] : null;
+  const AggIcon = aggCfg?.icon;
+
   return (
     <>
       <div className="card" onClick={() => setSheetOpen(true)}
@@ -1484,6 +1493,13 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
               background:"rgba(59,130,246,0.85)", color:"white",
               fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
               ×{number_of_items}
+            </span>
+          )}
+          {aggCfg && (
+            <span style={{ position:"absolute", bottom:6, left:6, display:"inline-flex",
+              alignItems:"center", gap:4, background:aggCfg.bg, color:"white",
+              fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>
+              <AggIcon size={9}/> {aggCfg.label}
             </span>
           )}
         </div>
