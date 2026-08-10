@@ -145,3 +145,21 @@ def all_buckets() -> list[dict]:
     """Palette exposée à l'UI."""
     return [{"slug": k, "label": v[0], "hex": v[1]}
             for k, v in COLOR_BUCKETS.items()]
+
+
+def apply_alpha(colors_csv: Optional[str], main_color: Optional[str]) -> Optional[str]:
+    """Propage l'alpha du color principal (#RRGGBBAA) a chaque couleur d'une liste
+    CSV souvent stockee en 6 hex (catalogue sans alpha). La transparence est une
+    propriete du FILAMENT : ses couleurs partagent le meme alpha. No-op si le
+    color principal est opaque (pas d'alpha, ou alpha == ff)."""
+    if not colors_csv or not main_color:
+        return colors_csv
+    m = str(main_color).strip().lstrip("#")
+    alpha = m[6:8].lower() if len(m) >= 8 else ""
+    if not alpha or alpha == "ff":
+        return colors_csv
+    out = []
+    for c in str(colors_csv).split(","):
+        h = c.strip().lstrip("#")
+        out.append("#" + h + (alpha if len(h) == 6 else ""))
+    return ",".join(out)

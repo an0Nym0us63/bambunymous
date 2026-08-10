@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import get_current_user
 from ....core.materials import family_of
+from ....core.colors import apply_alpha
 from ....core.security import decode_token
 from ....db.session import AsyncSessionLocal, get_db
 from ....models.filament import Filament, Spool
@@ -329,6 +330,8 @@ async def rfid_create(
     if fil is None:
         colors = (match or {}).get("colors") or []
         colors_array = (",".join("#" + c[:6] for c in colors)) if len(colors) > 1 else None
+        # Propager l'alpha du color reel (scan/catalogue) : le catalogue est en 6 hex.
+        colors_array = apply_alpha(colors_array, (match or {}).get("color_hex") or scan.get("color_hex"))
         fila_type = (match or {}).get("fila_type") or scan["fila_type"] or None
         material = family_of(fila_type) if fila_type else (scan["family"] or "PLA")
 

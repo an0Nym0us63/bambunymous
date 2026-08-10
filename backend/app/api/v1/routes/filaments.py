@@ -8,7 +8,7 @@ from typing import Optional
 from datetime import datetime
 import os
 
-from ....core.colors import buckets_for, all_buckets
+from ....core.colors import buckets_for, all_buckets, apply_alpha
 from ....core.materials import family_of, is_family
 
 def _clear_match_cache():
@@ -1341,6 +1341,8 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
     colors_array = None
     if isinstance(cat_colors, list) and len(cat_colors) > 1:
         colors_array = ",".join("#" + str(c).lstrip("#")[:6] for c in cat_colors)
+    # Le catalogue n'a pas l'alpha, mais le scan (color) si : on le propage.
+    colors_array = apply_alpha(colors_array, color)
 
     async with AsyncSessionLocal() as db:
         # Réutiliser un filament existant si profile_id + couleur correspondent
