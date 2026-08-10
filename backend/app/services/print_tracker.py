@@ -345,6 +345,20 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
             return
         _ENRICHING.add(pid)
     try:
+        # Reference de fraicheur pour le FTP : le DEBUT du print (created_at). Le
+        # bon fichier a un mtime proche de ce moment, meme si on telecharge tard
+        # (bascule cloud->FTP ~1 min, rattrapage periodique ~5 min). Sans cette
+        # reference, le test d'age FTP (<=60s vs "maintenant") echouerait a tort.
+        ref_ts = None
+        try:
+            from datetime import timezone as _tz
+            async with AsyncSessionLocal() as _db:
+                _pr = await _db.get(Print, pid)
+                if _pr and _pr.created_at:
+                    ref_ts = _pr.created_at.replace(tzinfo=_tz.utc).timestamp()
+        except Exception:
+            pass
+
         DELAYS = [10, 20, 45, 90, 180, 300, 600, 900]
         MAX_ATTEMPTS = len(DELAYS) + 1
         # Nombre d'essais sur l'URL cloud AVANT de basculer sur le FTP. L'URL
@@ -372,7 +386,7 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
             src = "FTP" if cur_url.startswith("ftp://") else "cloud"
             try:
                 logger.info(f"[3MF] ▶ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} via {src}")
-                meta = await extract_3mf(cur_url, taskname, pid, printer_ip, printer_code)
+                meta = await extract_3mf(cur_url, taskname, pid, printer_ip, printer_code, ref_ts)
                 if not meta:
                     raise ValueError("extraction vide")
                 await _apply_meta(pid, meta, taskname, job_id=job_id)

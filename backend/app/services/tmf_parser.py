@@ -20,6 +20,7 @@ FTP_TIMEOUT_S      = int(os.getenv("TMF_FTP_TIMEOUT", "600"))   # 240 -> 600
 FTP_CHECK_INTERVAL = 5
 FTP_STABLE_CYCLES  = 3
 FTP_FRESH_MAX_AGE  = 60
+FRESH_REF_MARGIN   = int(os.getenv("TMF_FRESH_REF_MARGIN", "300"))  # tolerance autour du debut du print
 HTTP_ATTEMPTS      = 4
 HTTP_TIMEOUT_S     = 90
 
@@ -83,7 +84,7 @@ async def _download_http(url: str) -> bytes:
     raise Invalid3MF(f"échec HTTP après {HTTP_ATTEMPTS} tentatives : {last}")
 
 
-def _download_ftp_sync(taskname: str, ip: str, code: str) -> bytes:
+def _download_ftp_sync(taskname: str, ip: str, code: str, ref_ts: float = None) -> bytes:
     """
     FTPS — attend l'apparition du fichier, verifie sa fraicheur et sa stabilite,
     puis telecharge. Portage complet de Spoolnymous + garde-fous supplementaires.
@@ -165,7 +166,15 @@ def _download_ftp_sync(taskname: str, ip: str, code: str) -> bytes:
 
             now_utc = int(datetime.now(timezone.utc).timestamp())
             age = (now_utc - mtime) if mtime is not None else None
-            fresh   = mtime is not None and 0 <= age <= FTP_FRESH_MAX_AGE
+            # Fraicheur : si on connait le debut du print (ref_ts), on compare le
+            # mtime a CE moment et non a "maintenant". Sinon une bascule tardive
+            # (essais cloud ~1 min, rattrapage periodique ~5 min) ferait toujours
+            # echouer le test alors que le fichier est le bon. Un ancien homonyme
+            # d'un print bien anterieur reste, lui, hors fenetre.
+            if ref_ts is not None and mtime is not None:
+                fresh = mtime >= (ref_ts - FRESH_REF_MARGIN)
+            else:
+                fresh = mtime is not None and 0 <= age <= FTP_FRESH_MAX_AGE
             size_ok = size is not None and size > 0
             sig = (size if size is not None else -1, mtime if mtime is not None else -1)
 
@@ -361,7 +370,8 @@ def _parse_3mf(data: bytes, print_id: int, strict: bool = True) -> dict:
 
 
 async def extract_3mf(url: str, taskname: str, print_id: int,
-                       printer_ip: str = "", printer_code: str = "") -> dict:
+                       printer_ip: str = "", printer_code: str = "",
+                       ref_ts: float = None) -> dict:
     """Point d'entrée principal — détecte le type d'URL et dispatch."""
     logger.info(f"extract_3mf url={url[:60]!r} print_id={print_id}")
     logger.info(f"[3MF] ▶ URL={url[:60]!r}")
@@ -370,7 +380,7 @@ async def extract_3mf(url: str, taskname: str, print_id: int,
             data = await _download_http(url)
         elif url.startswith("ftp://"):
             loop = asyncio.get_event_loop()
-            data = await loop.run_in_executor(None, _download_ftp_sync, taskname, printer_ip, printer_code)
+            data = await loop.run_in_executor(None, _download_ftp_sync, taskname, printer_ip, printer_code, ref_ts)
         elif url.startswith("local:"):
             async with aiofiles.open(url[6:], "rb") as f: data = await f.read()
         else:
