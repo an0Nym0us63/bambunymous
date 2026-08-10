@@ -48,11 +48,15 @@ async def lifespan(app: FastAPI):
     logger.info(f"BambuNymous starting — version {VERSION}")
     await init_db()
     # Restaurer les prints IN_PROGRESS en mémoire après un redémarrage
-    from app.services.print_tracker import restore_in_progress, resume_enrichment
+    from app.services.print_tracker import restore_in_progress, resume_enrichment, enrichment_reconciler
     await restore_in_progress()
     # Reprend les prints laisses sans 3MF par un redemarrage pendant la fenetre
     # de retry (les retries d'_enrich ne vivent qu'en memoire).
     await resume_enrichment()
+    # Rattrapage PERIODIQUE du 3MF : sans lui, un print laisse sans 3MF obligeait
+    # a redemarrer le container a la main. Tourne toutes les ~5 min (self-healing).
+    import asyncio as _aio
+    _reconciler_task = _aio.create_task(enrichment_reconciler())
     # Démarrer le worker de location AMS (doit être dans le bon event loop)
     from app.services.spool_location import _ensure_worker
     await _ensure_worker()
@@ -80,6 +84,7 @@ async def lifespan(app: FastAPI):
 
     yield
     _stop_purge.set()
+    _reconciler_task.cancel()
     catalog_sync.stop()
     await mqtt_manager.stop()
 

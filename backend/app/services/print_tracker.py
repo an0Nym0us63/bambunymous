@@ -28,6 +28,7 @@ _LOCK   = Lock()
 # tous deux inseraient. Le test d'existence en base ne protege que des appels
 # separes dans le temps, pas des appels simultanes.
 _CREATING: set = set()
+_ENRICHING: set = set()   # print_id en cours d'enrichissement 3MF (anti-doublon)
 _JOBS:           Dict[str, Dict[str, Any]] = {}
 _FIN_PENDING:    Dict[str, tuple]          = {}  # job_id -> (state, first_seen_ts)
 _PROCESSED:      set                       = set()
@@ -86,6 +87,25 @@ async def resume_enrichment():
             _bg(_enrich(p.id, p.job_id or "", url, p.task_name, ip or "", code or ""))
     except Exception as e:
         logger.error(f"[RESUME] Erreur resume_enrichment: {e}")
+
+
+async def enrichment_reconciler(interval_sec: int = 300):
+    """Rattrapage PERIODIQUE (self-healing) du 3MF.
+
+    Jusqu'ici la reprise ne se faisait qu'au demarrage du container (resume_enrichment
+    dans le lifespan) : un print reste sans 3MF obligeait a redemarrer a la main.
+    On rejoue donc resume_enrichment toutes les ~5 min. _enrich se dedoublonne
+    (set _ENRICHING) et bascule sur FTP, donc les relances sont sans risque et
+    finissent par recuperer le fichier des qu'il est disponible dans /cache.
+    """
+    while True:
+        try:
+            await asyncio.sleep(interval_sec)
+            await resume_enrichment()
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"[RECONCILE] {e}")
 
 
 async def restore_in_progress():
@@ -317,27 +337,46 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
     Retries volontairement longs : sur un gros print, le fichier peut mettre du
     temps a apparaitre / se stabiliser dans /cache. Couverture ~35 min.
     """
-    DELAYS = [10, 20, 45, 90, 180, 300, 600, 900]
-    MAX_ATTEMPTS = len(DELAYS) + 1
-
-    for attempt in range(1, MAX_ATTEMPTS + 1):
-        try:
-            logger.info(f"[3MF] ▶ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} url={url[:60]!r}")
-            meta = await extract_3mf(url, taskname, pid, printer_ip, printer_code)
-            if not meta:
-                raise ValueError("extraction vide")
-            await _apply_meta(pid, meta, taskname, job_id=job_id)
-            logger.info(f"[3MF] ✅ print_id={pid} enrichi à la tentative {attempt}")
+    # Anti-doublon : le rattrapage periodique peut relancer un print alors qu'un
+    # _enrich tourne deja. On evite les telechargements FTP concurrents.
+    with _LOCK:
+        if pid in _ENRICHING:
+            logger.info(f"[3MF] print_id={pid} déjà en cours d'enrichissement → skip")
             return
-        except Exception as e:
-            logger.error(f"[3MF] ❌ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} : "
-                         f"{type(e).__name__}: {e}")
-            if attempt < MAX_ATTEMPTS:
-                await asyncio.sleep(DELAYS[attempt - 1])
+        _ENRICHING.add(pid)
+    try:
+        DELAYS = [10, 20, 45, 90, 180, 300, 600, 900]
+        MAX_ATTEMPTS = len(DELAYS) + 1
+        ftp_ok = bool(printer_ip and printer_code)
+        cur_url = url or ("ftp://" if ftp_ok else "")
 
-    logger.error(f"[3MF] ❌ ABANDON print_id={pid} après {MAX_ATTEMPTS} tentatives "
-                 f"(~{sum(DELAYS)//60} min). Le print reste sans métadonnées ; "
-                 f"un ré-import manuel du 3MF est possible.")
+        for attempt in range(1, MAX_ATTEMPTS + 1):
+            try:
+                logger.info(f"[3MF] ▶ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} url={cur_url[:60]!r}")
+                meta = await extract_3mf(cur_url, taskname, pid, printer_ip, printer_code)
+                if not meta:
+                    raise ValueError("extraction vide")
+                await _apply_meta(pid, meta, taskname, job_id=job_id)
+                logger.info(f"[3MF] ✅ print_id={pid} enrichi à la tentative {attempt}")
+                return
+            except Exception as e:
+                logger.error(f"[3MF] ❌ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} : "
+                             f"{type(e).__name__}: {e}")
+                # L'URL cloud pre-signee expire (~60s) : reessayer avec la meme URL
+                # est voue a l'echec. Des le 1er echec on bascule sur le FTP, qui
+                # lit /cache de l'imprimante directement et n'expire pas — c'est
+                # exactement ce qui ne fonctionnait jusqu'ici qu'apres un redemarrage.
+                if ftp_ok and not cur_url.startswith("ftp://"):
+                    cur_url = "ftp://"
+                    logger.info(f"[3MF] print_id={pid} → bascule FTP pour les tentatives suivantes")
+                if attempt < MAX_ATTEMPTS:
+                    await asyncio.sleep(DELAYS[attempt - 1])
+
+        logger.error(f"[3MF] ❌ ABANDON print_id={pid} après {MAX_ATTEMPTS} tentatives "
+                     f"(~{sum(DELAYS)//60} min). Le rattrapage périodique reprendra automatiquement.")
+    finally:
+        with _LOCK:
+            _ENRICHING.discard(pid)
 
 
 # ── Milestones ─────────────────────────────────────────────────────────────
