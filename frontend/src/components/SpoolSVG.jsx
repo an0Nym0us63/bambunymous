@@ -17,6 +17,16 @@ function luminance(hex) {
   return isNaN(r) ? 128 : (r*299+g*587+b*114)/1000;
 }
 
+// Couleur translucide ? Gere les deux formats qui arrivent ici : #RRGGBBAA
+// (page Bobines, via parseColorsList) ET rgba(r,g,b,a) (slots AMS accueil, via
+// hexToCss qui convertit deja l'alpha en rgba).
+function _translucent(c) {
+  const s = String(c || "");
+  if (/^#[0-9a-fA-F]{8}$/.test(s)) return s.slice(7).toLowerCase() !== "ff";
+  const m = s.match(/^rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*\)$/i);
+  return m ? parseFloat(m[1]) < 1 : false;
+}
+
 export default function SpoolSVG({ colors, empty, size=68, active, type }) {
   const c1 = colors?.[0] || (empty ? "#2a2a2a" : "#888");
   const multi = colors && colors.length > 1;
@@ -30,6 +40,8 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
   const spokeColor= dark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.10)";
   const fill = empty ? "none" : c1;
   const patId = `pat${uid}`;
+  const transp = !empty && !!colors?.some(_translucent);
+  const cbId = `cb${uid}`;
 
   return (
     <svg width={size} height={size} viewBox="0 0 80 80" fill="none">
@@ -42,6 +54,13 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
             <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(148,163,184,0.25)" strokeWidth="3"/>
           </pattern>
         )}
+        {transp && (
+          <pattern id={cbId} patternUnits="userSpaceOnUse" width="8" height="8">
+            <rect width="8" height="8" fill="#f0f0f0"/>
+            <rect width="4" height="4" fill="#c0c0c0"/>
+            <rect x="4" y="4" width="4" height="4" fill="#c0c0c0"/>
+          </pattern>
+        )}
         {isGradient && (
           <linearGradient id={uid} x1="10" y1="40" x2="70" y2="40" gradientUnits="userSpaceOnUse">
             {colors.map((cl, i) => (
@@ -50,6 +69,9 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
           </linearGradient>
         )}
       </defs>
+
+      {/* Damier de transparence derrière le disque : rend l'alpha visible. */}
+      {transp && <circle cx="40" cy="40" r="30" fill={`url(#${cbId})`}/>}
 
       {/* Disque principal — couleur exacte, dégradé lisse, ou secteurs selon le type */}
       {!empty && isGradient ? (
