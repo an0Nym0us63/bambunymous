@@ -609,6 +609,10 @@ async def update_filament(
     raw = body.model_dump(exclude_unset=True)
     if "price" in raw and raw["price"] is None:
         payload["price"] = None
+    # Idem pour colors_array : repasser en monochrome doit EFFACER le colors_array,
+    # sinon un ancien residu masque la nouvelle couleur (parseColorsList le prefere).
+    if "colors_array" in raw and raw["colors_array"] is None:
+        payload["colors_array"] = None
 
     changed_price = "price" in payload
     for k, v in payload.items():
