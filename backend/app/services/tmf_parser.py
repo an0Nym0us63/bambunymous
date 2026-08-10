@@ -20,7 +20,7 @@ FTP_TIMEOUT_S      = int(os.getenv("TMF_FTP_TIMEOUT", "600"))   # 240 -> 600
 FTP_CHECK_INTERVAL = 5
 FTP_STABLE_CYCLES  = 3
 FTP_FRESH_MAX_AGE  = 60
-FRESH_REF_MARGIN   = int(os.getenv("TMF_FRESH_REF_MARGIN", "300"))  # tolerance autour du debut du print
+FRESH_REF_MARGIN   = int(os.getenv("TMF_FRESH_REF_MARGIN", "60"))   # le fichier est ecrit juste avant le debut du print
 HTTP_ATTEMPTS      = 4
 HTTP_TIMEOUT_S     = 90
 
@@ -166,11 +166,11 @@ def _download_ftp_sync(taskname: str, ip: str, code: str, ref_ts: float = None) 
 
             now_utc = int(datetime.now(timezone.utc).timestamp())
             age = (now_utc - mtime) if mtime is not None else None
-            # Fraicheur : si on connait le debut du print (ref_ts), on compare le
-            # mtime a CE moment et non a "maintenant". Sinon une bascule tardive
-            # (essais cloud ~1 min, rattrapage periodique ~5 min) ferait toujours
-            # echouer le test alors que le fichier est le bon. Un ancien homonyme
-            # d'un print bien anterieur reste, lui, hors fenetre.
+            # Fraicheur : le bon fichier est ecrit juste avant le debut du print,
+            # donc son mtime doit etre >= (debut du print - 60s). On compare au
+            # debut du print (ref_ts) et non a "maintenant" : sinon une bascule
+            # tardive (essais cloud, rattrapage periodique) echouerait a tort. Un
+            # homonyme d'un print bien anterieur reste hors fenetre.
             if ref_ts is not None and mtime is not None:
                 fresh = mtime >= (ref_ts - FRESH_REF_MARGIN)
             else:
