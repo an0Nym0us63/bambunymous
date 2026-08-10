@@ -16,11 +16,21 @@
  * arrivent en 8 hex (l'ingestion ne rstrip que l'alpha FF opaque).
  */
 export function parseColorsList(color, colorsArray) {
+  // Alpha "global" du filament : la transparence est une propriété du FILAMENT,
+  // pas d'une couleur. Plusieurs chemins backend tronquent colors_array à 6 hex
+  // (alpha perdu) alors que le color principal, lui, garde son alpha. On propage
+  // donc cet alpha à chaque couleur qui n'en a pas — sinon seul le filament sans
+  // colors_array (retombant sur color) affichait la transparence.
+  const mainAlpha = (() => {
+    const h = String(color || "").trim().replace(/^#/, "");
+    return /^[0-9a-fA-F]{8}$/.test(h) ? h.slice(6).toLowerCase() : null;
+  })();
   const norm = (c) => {
     const h = String(c).trim().replace(/^#/, "");
-    if (/^[0-9a-fA-F]{8}$/.test(h)) return `#${h}`;     // RRGGBBAA (alpha gardé)
+    if (/^[0-9a-fA-F]{8}$/.test(h)) return `#${h}`;      // déjà un alpha propre
     const six = h.slice(0, 6);
-    return /^[0-9a-fA-F]{6}$/.test(six) ? `#${six}` : null;
+    if (!/^[0-9a-fA-F]{6}$/.test(six)) return null;
+    return mainAlpha ? `#${six}${mainAlpha}` : `#${six}`;
   };
   if (colorsArray) {
     const list = String(colorsArray).split(",").map(norm).filter(Boolean);
