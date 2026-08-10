@@ -103,3 +103,17 @@ export function colorBg(colors, type) {
     backgroundRepeat: "no-repeat,repeat,repeat,repeat,repeat",
   };
 }
+
+/**
+ * Rend une liste de couleurs OPAQUE (retire l'alpha). Pour la barre de niveau :
+ * un remplissage translucide sur damier ne laisse plus voir le niveau ; on veut
+ * la couleur pleine, sans damier.
+ */
+export function opaqueColors(colors) {
+  return (colors || []).map((c) => {
+    const s = String(c);
+    if (/^#[0-9a-fA-F]{8}$/.test(s)) return s.slice(0, 7);
+    const m = s.match(/^rgba\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*[\d.]+\s*\)$/i);
+    return m ? `rgb(${m[1]},${m[2]},${m[3]})` : s;
+  });
+}

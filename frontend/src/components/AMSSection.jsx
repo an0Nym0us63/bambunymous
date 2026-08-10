@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Droplets, Sun, Thermometer, Timer, Clock, Package } from "lucide-react";
 import client from "../api/client";
-import { colorBg } from "../utils/colors";
+import { colorBg, opaqueColors } from "../utils/colors";
 import { createPortal } from "react-dom";
 import { FilamentSheetFromSpool } from "../pages/Filaments";
 import SpoolSVG from "./SpoolSVG";
@@ -231,7 +231,9 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
   // Barre de progression : couleur du filament, contour si trop clair
   const lum = luminance((c1||"").replace("#",""));
   const mcType = multicolorType(tray, spoolInfo);
-  const barBg = colorBg(colors, mcType);
+  // Barre de niveau : couleur OPAQUE, sans damier — sinon translucide sur damier
+  // masque le niveau. Le damier reste sur la bobine et les pastilles.
+  const barBg = colorBg(opaqueColors(colors), mcType);
   // Si filament gris/blanc → fond de la barre plus foncé
   const barTrackColor = "var(--border)";
 
