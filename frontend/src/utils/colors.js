@@ -41,9 +41,16 @@ export function parseColorsList(color, colorsArray) {
   return c ? [c] : [];
 }
 
-/** Une couleur #RRGGBBAA est-elle réellement translucide (alpha < FF) ? */
+/**
+ * Couleur translucide ? Gère les DEUX formats qui atteignent colorBg :
+ *  - #RRGGBBAA (page Bobines, via parseColorsList) ;
+ *  - rgba(r,g,b,a) (section AMS, via son hexToCss qui convertit déjà l'alpha).
+ */
 function _translucent(c) {
-  return /^#[0-9a-fA-F]{8}$/.test(c) && c.slice(7).toLowerCase() !== "ff";
+  const s = String(c || "");
+  if (/^#[0-9a-fA-F]{8}$/.test(s)) return s.slice(7).toLowerCase() !== "ff";
+  const m = s.match(/^rgba\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*,\s*([\d.]+)\s*\)$/i);
+  return m ? parseFloat(m[1]) < 1 : false;
 }
 
 // Damier de transparence (façon éditeur d'image) : posé DERRIÈRE la couleur pour

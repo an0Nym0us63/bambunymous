@@ -53,27 +53,13 @@ function hexDisplay(hex) {
 }
 
 
-// Détecte si une couleur hex 8 chars a de la transparence (alpha < FF)
-function hasTransparency(hex) {
-  const h = (hex||"").replace(/^#/,"").toLowerCase();
-  if (h.length === 8) return parseInt(h.slice(6,8),16) < 255;
-  return false;
-}
-
-// Swatch couleur avec damier visible si transparence
+// Swatch couleur — le damier de transparence est géré par colorBg.
 function ColorSwatch({ color, colorsArray, multicolorType, size=40, radius=10 }) {
   const colors = parseColorsList(color, colorsArray);
-  const isTransparent = !colorsArray && hasTransparency(color);
   return (
-    <div style={{ position:"relative", width:size, height:size, borderRadius:radius,
-      flexShrink:0, overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.12)" }}>
-      {isTransparent && (
-        <div style={{ position:"absolute", inset:0,
-          backgroundImage:"repeating-conic-gradient(#aaa 0% 25%, #eee 0% 50%)",
-          backgroundSize:"8px 8px" }}/>
-      )}
-      <div style={{ position:"absolute", inset:0, ...colorBg(colors, multicolorType) }}/>
-    </div>
+    <div style={{ width:size, height:size, borderRadius:radius, flexShrink:0,
+      overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.12)",
+      ...colorBg(colors, multicolorType) }}/>
   );
 }
 
@@ -1573,7 +1559,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
                   <div style={{ display:"flex", gap:4, marginTop:6, alignItems:"center" }}>
                     {liveColors.map((c,i) => (
                       <div key={i} style={{ width:24, height:24, borderRadius:5,
-                        background:c, border:"1px solid var(--border)" }}/>
+                        overflow:"hidden", border:"1px solid var(--border)", ...colorBg([c]) }}/>
                     ))}
                     {liveColors.length === 1
                       ? <span style={{ fontSize:10, color:"var(--muted)", marginLeft:4 }}>Monochrome</span>
@@ -1797,12 +1783,10 @@ function FilamentsView() {
               (() => {
                 const pct = f.active_spool_count > 0 ? Math.min(100, f.active_spool_count * 20) : 0;
                 const flt = "drop-shadow(0 1px 4px rgba(0,0,0,0.95)) drop-shadow(0 2px 10px rgba(0,0,0,0.6))";
-                const hasT = hasTransparency(f.color) && !f.colors_array;
                 return (
                   <div key={f.id} onClick={() => setSelectedFil(f)} className="card-sm"
                     style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative" }}>
-                    {/* fond couleur pur + couche checker si transparent */}
-                    {hasT && <div style={{ position:"absolute", inset:0, backgroundImage:"repeating-conic-gradient(#aaa 0% 25%,#eee 0% 50%)", backgroundSize:"6px 6px" }}/>}
+                    {/* fond couleur (damier de transparence géré par colorBg) */}
                     <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>
                     <div style={{ position:"relative", padding:"8px 10px 28px", display:"flex", flexDirection:"column", gap:0 }}>
                       {/* Meme centrage que la grille des bobines : le tronquage
@@ -2115,7 +2099,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
                   <div style={{ display:"flex", gap:4, marginTop:6, alignItems:"center" }}>
                     {liveColors.map((c,i) => (
                       <div key={i} style={{ width:24, height:24, borderRadius:5,
-                        background:c, border:"1px solid var(--border)" }}/>
+                        overflow:"hidden", border:"1px solid var(--border)", ...colorBg([c]) }}/>
                     ))}
                     {liveColors.length === 1
                       ? <span style={{ fontSize:10, color:"var(--muted)", marginLeft:4 }}>Monochrome</span>
