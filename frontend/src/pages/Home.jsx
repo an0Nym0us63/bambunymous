@@ -76,10 +76,14 @@ function StatusBanner({ status }) {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, []);
   // Déplier possible même hors impression (pour voir temps, températures)
+  // visKey est incremente au retour de l'app (visibilitychange) : sans lui dans
+  // les deps, le flux coupe par le navigateur en arriere-plan ne redemarrait pas
+  // et il fallait replier/deplier. Le cleanup (stopCam) remet timer, inFlightRef
+  // et l'img a zero, puis startCam repart proprement.
   useEffect(() => {
     if (expanded) startCam(); else stopCam();
     return stopCam;
-  }, [expanded, isRunning]);
+  }, [expanded, isRunning, visKey]);
 
   const [printInfo, setPrintInfo] = useState(null);
 
