@@ -10,33 +10,79 @@
  * filtre le noir pur). Les fusionner casserait l'une des deux.
  */
 
-/** "#RRGGBB,#RRGGBB" (+ couleur principale) → ["#RRGGBB", …] */
+/**
+ * "#RRGGBB,#RRGGBB" (+ couleur principale) → ["#RRGGBB", …]
+ * Conserve l'alpha quand il est présent (#RRGGBBAA) : les filaments translucides
+ * arrivent en 8 hex (l'ingestion ne rstrip que l'alpha FF opaque).
+ */
 export function parseColorsList(color, colorsArray) {
+  const norm = (c) => {
+    const h = String(c).trim().replace(/^#/, "");
+    if (/^[0-9a-fA-F]{8}$/.test(h)) return `#${h}`;     // RRGGBBAA (alpha gardé)
+    const six = h.slice(0, 6);
+    return /^[0-9a-fA-F]{6}$/.test(six) ? `#${six}` : null;
+  };
   if (colorsArray) {
-    const list = String(colorsArray)
-      .split(",")
-      .map(c => `#${c.trim().replace(/^#/, "").slice(0, 6)}`)
-      .filter(c => c.length === 7);
+    const list = String(colorsArray).split(",").map(norm).filter(Boolean);
     if (list.length) return list;
   }
   if (!color) return [];
-  const c = String(color).replace(/^#/, "").slice(0, 6);
-  return c.length === 6 ? [`#${c}`] : [];
+  const c = norm(color);
+  return c ? [c] : [];
 }
+
+/** Une couleur #RRGGBBAA est-elle réellement translucide (alpha < FF) ? */
+function _translucent(c) {
+  return /^#[0-9a-fA-F]{8}$/.test(c) && c.slice(7).toLowerCase() !== "ff";
+}
+
+// Damier de transparence (façon éditeur d'image) : posé DERRIÈRE la couleur pour
+// que l'alpha se voie. Carreaux clairs, lisibles aussi bien en thème clair que
+// sombre (la transparence laisse voir le damier = signal universel).
+const CHECKER = {
+  image: [
+    "linear-gradient(45deg,#c0c0c0 25%,transparent 25%)",
+    "linear-gradient(-45deg,#c0c0c0 25%,transparent 25%)",
+    "linear-gradient(45deg,transparent 75%,#c0c0c0 75%)",
+    "linear-gradient(-45deg,transparent 75%,#c0c0c0 75%)",
+  ].join(","),
+  size: "8px 8px,8px 8px,8px 8px,8px 8px",
+  position: "0 0,0 4px,4px -4px,-4px 0",
+  color: "#f0f0f0",
+};
 
 /** Style de fond d'un filament : aplat, dégradé (gradient) ou tranches (coaxial). */
 export function colorBg(colors, type) {
   if (!colors?.length) return { backgroundColor: "var(--border)" };
-  if (colors.length === 1) return { backgroundColor: colors[0] };
-  if (type === "gradient") {
-    // Fondu lisse entre les couleurs
-    return { background: `linear-gradient(90deg, ${colors.join(", ")})` };
+
+  // Couche couleur, exprimée comme IMAGE (linear-gradient) pour pouvoir être
+  // superposée à un damier si besoin.
+  let layer;
+  if (colors.length === 1) {
+    layer = `linear-gradient(${colors[0]},${colors[0]})`;
+  } else if (type === "gradient") {
+    layer = `linear-gradient(90deg, ${colors.join(", ")})`;
+  } else {
+    const stops = colors.map((c, i) => {
+      const a = Math.round((i / colors.length) * 100);
+      const b = Math.round(((i + 1) / colors.length) * 100);
+      return `${c} ${a}%, ${c} ${b}%`;
+    }).join(", ");
+    layer = `linear-gradient(90deg, ${stops})`;
   }
-  // Autres types (coaxial, etc.) : séparation nette
-  const stops = colors.map((c, i) => {
-    const a = Math.round((i / colors.length) * 100);
-    const b = Math.round(((i + 1) / colors.length) * 100);
-    return `${c} ${a}%, ${c} ${b}%`;
-  }).join(", ");
-  return { background: `linear-gradient(90deg, ${stops})` };
+
+  // Aucune transparence : rendu simple, strictement identique à avant.
+  if (!colors.some(_translucent)) {
+    if (colors.length === 1) return { backgroundColor: colors[0] };
+    return { background: layer };
+  }
+
+  // Transparence présente : couleur PAR-DESSUS le damier.
+  return {
+    backgroundColor: CHECKER.color,
+    backgroundImage: `${layer},${CHECKER.image}`,
+    backgroundSize: `100% 100%,${CHECKER.size}`,
+    backgroundPosition: `0 0,${CHECKER.position}`,
+    backgroundRepeat: "no-repeat,repeat,repeat,repeat,repeat",
+  };
 }
