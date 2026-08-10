@@ -347,28 +347,43 @@ async def _enrich(pid: int, job_id: str, url: str, taskname: str,
     try:
         DELAYS = [10, 20, 45, 90, 180, 300, 600, 900]
         MAX_ATTEMPTS = len(DELAYS) + 1
+        # Nombre d'essais sur l'URL cloud AVANT de basculer sur le FTP. L'URL
+        # pre-signee reste valide ~60s : un echec peut etre transitoire (reseau,
+        # cloud pas encore pret), on lui laisse donc quelques essais rapproches
+        # (t≈0/10/30s) avant de passer au FTP, qui lit /cache directement et
+        # n'expire pas. Configurable via TMF_CLOUD_ATTEMPTS.
+        import os as _os
+        CLOUD_ATTEMPTS = int(_os.getenv("TMF_CLOUD_ATTEMPTS", "3"))
         ftp_ok = bool(printer_ip and printer_code)
-        cur_url = url or ("ftp://" if ftp_ok else "")
+        cloud_url = url if (url and not url.startswith("ftp://")) else ""
 
         for attempt in range(1, MAX_ATTEMPTS + 1):
+            # Choix de la source pour CETTE tentative.
+            if cloud_url and attempt <= CLOUD_ATTEMPTS:
+                cur_url = cloud_url
+            elif ftp_ok:
+                cur_url = "ftp://"
+            else:
+                cur_url = cloud_url   # pas de FTP : on s'acharne sur le cloud
+            if not cur_url:
+                logger.warning(f"[3MF] print_id={pid} : ni URL cloud ni FTP disponible, abandon")
+                break
+
+            src = "FTP" if cur_url.startswith("ftp://") else "cloud"
             try:
-                logger.info(f"[3MF] ▶ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} url={cur_url[:60]!r}")
+                logger.info(f"[3MF] ▶ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} via {src}")
                 meta = await extract_3mf(cur_url, taskname, pid, printer_ip, printer_code)
                 if not meta:
                     raise ValueError("extraction vide")
                 await _apply_meta(pid, meta, taskname, job_id=job_id)
-                logger.info(f"[3MF] ✅ print_id={pid} enrichi à la tentative {attempt}")
+                logger.info(f"[3MF] ✅ print_id={pid} enrichi à la tentative {attempt} (via {src})")
                 return
             except Exception as e:
-                logger.error(f"[3MF] ❌ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} : "
+                logger.error(f"[3MF] ❌ Tentative {attempt}/{MAX_ATTEMPTS} print_id={pid} ({src}) : "
                              f"{type(e).__name__}: {e}")
-                # L'URL cloud pre-signee expire (~60s) : reessayer avec la meme URL
-                # est voue a l'echec. Des le 1er echec on bascule sur le FTP, qui
-                # lit /cache de l'imprimante directement et n'expire pas — c'est
-                # exactement ce qui ne fonctionnait jusqu'ici qu'apres un redemarrage.
-                if ftp_ok and not cur_url.startswith("ftp://"):
-                    cur_url = "ftp://"
-                    logger.info(f"[3MF] print_id={pid} → bascule FTP pour les tentatives suivantes")
+                # Journalise le moment exact de la bascule cloud -> FTP.
+                if cloud_url and ftp_ok and attempt == CLOUD_ATTEMPTS:
+                    logger.info(f"[3MF] print_id={pid} → bascule FTP après {CLOUD_ATTEMPTS} essais cloud")
                 if attempt < MAX_ATTEMPTS:
                     await asyncio.sleep(DELAYS[attempt - 1])
 
