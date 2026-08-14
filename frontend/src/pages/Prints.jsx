@@ -307,9 +307,20 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
                       {o===0?"Non":o===1?"100%":`${o*100}%`}
                     </button>
                   ))}
-                  {(fracs[f.id]??0)>0 && (
-                    <span style={{ fontSize:10, color:"#22c55e", marginLeft:4 }}>+{(f.grams_used*(fracs[f.id]??0)).toFixed(1)}g</span>
-                  )}
+                  {/* Saisie precise en grammes : pilote la fraction (bornee a la
+                      quantite consommee). Les boutons rapides mettent a jour ce champ. */}
+                  <span style={{ fontSize:10, color:"var(--muted)", marginLeft:2 }}>ou</span>
+                  <input type="number" min="0" max={f.grams_used} step="0.1"
+                    value={Math.round((f.grams_used*(fracs[f.id]??0))*10)/10}
+                    onChange={e=>{
+                      let g=parseFloat(e.target.value); if(isNaN(g)) g=0;
+                      g=Math.max(0, Math.min(f.grams_used, g));
+                      setOne(f.id, f.grams_used>0 ? g/f.grams_used : 0);
+                    }}
+                    onFocus={e=>e.target.select()}
+                    style={{ width:58, padding:"3px 6px", borderRadius:6, border:"1px solid var(--border)",
+                      background:"var(--bg)", color:"var(--text)", fontSize:11, fontFamily:"monospace", textAlign:"right" }}/>
+                  <span style={{ fontSize:10, color:"var(--muted)" }}>g</span>
                 </div>
               </div>
             ))}
