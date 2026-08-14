@@ -254,9 +254,27 @@ function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorTyp
 function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
   const mapped = (p.filament_usage || []).filter(f => f.spool_id && f.grams_used > 0);
   const [fracs, setFracs] = useState(() => Object.fromEntries(mapped.map(f=>[f.id, 1.0])));
+  // Texte BRUT de la saisie precise par usage : on ne reformate pas pendant la
+  // frappe (sinon taper "37." effacerait le point avant les decimales) et on
+  // accepte "." comme "," comme separateur decimal (pave numerique FR).
+  const gFmt = (g) => String(+(g||0).toFixed(1));
+  const [gtxt, setGtxt] = useState(() => Object.fromEntries(mapped.map(f=>[f.id, gFmt(f.grams_used)])));
   const OPTS = [0, 0.25, 0.5, 0.75, 1.0];
-  const setAll = (v) => setFracs(Object.fromEntries(mapped.map(f=>[f.id,v])));
-  const setOne = (id, v) => setFracs(prev=>({...prev,[id]:v}));
+  const setAll = (v) => {
+    setFracs(Object.fromEntries(mapped.map(f=>[f.id,v])));
+    setGtxt(Object.fromEntries(mapped.map(f=>[f.id, gFmt(f.grams_used*v)])));
+  };
+  const setOne = (f, v) => {
+    setFracs(prev=>({...prev,[f.id]:v}));
+    setGtxt(prev=>({...prev,[f.id]:gFmt(f.grams_used*v)}));
+  };
+  const setGrams = (f, raw) => {
+    setGtxt(prev=>({...prev,[f.id]:raw}));
+    let g = parseFloat(String(raw).replace(",", "."));
+    if (isNaN(g)) g = 0;
+    g = Math.max(0, Math.min(f.grams_used, g));
+    setFracs(prev=>({...prev,[f.id]:f.grams_used>0 ? g/f.grams_used : 0}));
+  };
   const allSame = OPTS.find(o => mapped.every(f=>(fracs[f.id]??0)===o));
   const totalAdded = mapped.reduce((s,f)=>s+(f.grams_used||0)*(fracs[f.id]??0),0);
 
@@ -300,7 +318,7 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
                 </div>
                 <div style={{ display:"flex", gap:4, flexWrap:"wrap", alignItems:"center" }}>
                   {OPTS.map(o=>(
-                    <button key={o} onClick={()=>setOne(f.id,o)} style={{ padding:"4px 9px",
+                    <button key={o} onClick={()=>setOne(f,o)} style={{ padding:"4px 9px",
                       borderRadius:20, border:"none", cursor:"pointer", fontWeight:600, fontSize:11,
                       background:(fracs[f.id]??0)===o?"#22c55e":"var(--bg)",
                       color:(fracs[f.id]??0)===o?"white":"var(--muted)" }}>
@@ -310,13 +328,10 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
                   {/* Saisie precise en grammes : pilote la fraction (bornee a la
                       quantite consommee). Les boutons rapides mettent a jour ce champ. */}
                   <span style={{ fontSize:10, color:"var(--muted)", marginLeft:2 }}>ou</span>
-                  <input type="number" min="0" max={f.grams_used} step="0.1"
-                    value={Math.round((f.grams_used*(fracs[f.id]??0))*10)/10}
-                    onChange={e=>{
-                      let g=parseFloat(e.target.value); if(isNaN(g)) g=0;
-                      g=Math.max(0, Math.min(f.grams_used, g));
-                      setOne(f.id, f.grams_used>0 ? g/f.grams_used : 0);
-                    }}
+                  <input type="text" inputMode="decimal"
+                    value={gtxt[f.id] ?? ""}
+                    onChange={e=>setGrams(f, e.target.value)}
+                    onBlur={()=>setGtxt(prev=>({...prev,[f.id]:gFmt(f.grams_used*(fracs[f.id]??0))}))}
                     onFocus={e=>e.target.select()}
                     style={{ width:58, padding:"3px 6px", borderRadius:6, border:"1px solid var(--border)",
                       background:"var(--bg)", color:"var(--text)", fontSize:11, fontFamily:"monospace", textAlign:"right" }}/>
