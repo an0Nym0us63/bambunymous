@@ -1150,14 +1150,27 @@ async def upload_print_photo(
     raw = await file.read()
     orig_ext = (file.filename or ("video.mp4" if is_video else "photo.jpg")).rsplit(".", 1)[-1].lower()
     if is_video:
-        # Video : stockee telle quelle (Video-01, 02...), sans reencodage.
-        if orig_ext not in ("mp4", "webm", "mov", "m4v"):
-            orig_ext = "mp4"
+        # Video transcodee en mp4 h264 (compresse + redimensionne, faststart) :
+        # se lit partout (iOS PWA, WebView Android, desktop) et pese bien moins.
         idx = 1
-        while (d / f"Video-{idx:02d}.{orig_ext}").exists():
+        while (d / f"Video-{idx:02d}.mp4").exists():
             idx += 1
-        dest = d / f"Video-{idx:02d}.{orig_ext}"
-        dest.write_bytes(raw)
+        dest = d / f"Video-{idx:02d}.mp4"
+        try:
+            with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
+                tmp.write(raw); tmp_path = tmp.name
+            _sp.run([
+                "ffmpeg", "-y", "-i", tmp_path,
+                "-vf", "scale='min(1280,iw)':-2",
+                "-c:v", "libx264", "-crf", "28", "-preset", "veryfast",
+                "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart", "-pix_fmt", "yuv420p", str(dest)
+            ], check=True, capture_output=True, timeout=180)
+            _os.unlink(tmp_path)
+        except Exception:
+            ext = orig_ext if orig_ext in ("mp4", "webm", "mov", "m4v") else "mp4"
+            dest = d / f"Video-{idx:02d}.{ext}"
+            dest.write_bytes(raw)
     else:
         # Numéroter Photo-01, 02... (même convention que zip_importer)
         idx = 1
@@ -1447,11 +1460,23 @@ async def upload_group_photo(
     raw = await file.read()
     orig_ext = (file.filename or ("video.mp4" if is_video else "photo.jpg")).rsplit(".", 1)[-1].lower()
     if is_video:
-        if orig_ext not in ("mp4", "webm", "mov", "m4v"):
-            orig_ext = "mp4"
         n = len(list(d.glob("Video-*"))) + 1
-        dest = d / f"Video-{n:02d}.{orig_ext}"
-        dest.write_bytes(raw)
+        dest = d / f"Video-{n:02d}.mp4"
+        try:
+            with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
+                tmp.write(raw); tmp_path = tmp.name
+            _sp.run([
+                "ffmpeg", "-y", "-i", tmp_path,
+                "-vf", "scale='min(1280,iw)':-2",
+                "-c:v", "libx264", "-crf", "28", "-preset", "veryfast",
+                "-c:a", "aac", "-b:a", "128k",
+                "-movflags", "+faststart", "-pix_fmt", "yuv420p", str(dest)
+            ], check=True, capture_output=True, timeout=180)
+            _os.unlink(tmp_path)
+        except Exception:
+            ext = orig_ext if orig_ext in ("mp4", "webm", "mov", "m4v") else "mp4"
+            dest = d / f"Video-{n:02d}.{ext}"
+            dest.write_bytes(raw)
     else:
         n = len(list(d.glob("Photo-*"))) + 1
         dest = d / f"Photo-{n:02d}.webp"
