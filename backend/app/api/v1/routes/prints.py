@@ -1150,24 +1150,25 @@ async def upload_print_photo(
     raw = await file.read()
     orig_ext = (file.filename or ("video.mp4" if is_video else "photo.jpg")).rsplit(".", 1)[-1].lower()
     if is_video:
-        # Video transcodee en mp4 h264 (compresse + redimensionne, faststart) :
-        # se lit partout (iOS PWA, WebView Android, desktop) et pese bien moins.
+        # Comme Spoolnymous : la video devient un WebP ANIME (facon gif, muet, en
+        # boucle). C'est une image -> rendue partout comme une photo (<img>), elle
+        # boucle nativement et sert de vignette, sans <video> ni 404.
         idx = 1
-        while (d / f"Video-{idx:02d}.mp4").exists():
+        while (d / f"Photo-{idx:02d}.webp").exists():
             idx += 1
-        dest = d / f"Video-{idx:02d}.mp4"
+        dest = d / f"Photo-{idx:02d}.webp"
         try:
             with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
                 tmp.write(raw); tmp_path = tmp.name
             _sp.run([
-                "ffmpeg", "-y", "-i", tmp_path,
-                "-vf", "scale='min(1280,iw)':-2",
-                "-c:v", "libx264", "-crf", "28", "-preset", "veryfast",
-                "-c:a", "aac", "-b:a", "128k",
-                "-movflags", "+faststart", "-pix_fmt", "yuv420p", str(dest)
+                "ffmpeg", "-y", "-i", tmp_path, "-t", "10",
+                "-vf", "fps=15,scale='min(720,iw)':-1:flags=lanczos",
+                "-an", "-loop", "0", "-c:v", "libwebp",
+                "-q:v", "55", "-compression_level", "5", "-preset", "picture", str(dest)
             ], check=True, capture_output=True, timeout=180)
             _os.unlink(tmp_path)
         except Exception:
+            # Repli : si l'encodage anime echoue, garder la video brute.
             ext = orig_ext if orig_ext in ("mp4", "webm", "mov", "m4v") else "mp4"
             dest = d / f"Video-{idx:02d}.{ext}"
             dest.write_bytes(raw)
@@ -1460,17 +1461,16 @@ async def upload_group_photo(
     raw = await file.read()
     orig_ext = (file.filename or ("video.mp4" if is_video else "photo.jpg")).rsplit(".", 1)[-1].lower()
     if is_video:
-        n = len(list(d.glob("Video-*"))) + 1
-        dest = d / f"Video-{n:02d}.mp4"
+        n = len(list(d.glob("Photo-*"))) + 1
+        dest = d / f"Photo-{n:02d}.webp"
         try:
             with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
                 tmp.write(raw); tmp_path = tmp.name
             _sp.run([
-                "ffmpeg", "-y", "-i", tmp_path,
-                "-vf", "scale='min(1280,iw)':-2",
-                "-c:v", "libx264", "-crf", "28", "-preset", "veryfast",
-                "-c:a", "aac", "-b:a", "128k",
-                "-movflags", "+faststart", "-pix_fmt", "yuv420p", str(dest)
+                "ffmpeg", "-y", "-i", tmp_path, "-t", "10",
+                "-vf", "fps=15,scale='min(720,iw)':-1:flags=lanczos",
+                "-an", "-loop", "0", "-c:v", "libwebp",
+                "-q:v", "55", "-compression_level", "5", "-preset", "picture", str(dest)
             ], check=True, capture_output=True, timeout=180)
             _os.unlink(tmp_path)
         except Exception:
