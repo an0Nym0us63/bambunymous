@@ -567,6 +567,8 @@ async def patch_group(group_id: int, body: dict = Body({}), _: str = Depends(get
             raise HTTPException(404, "Groupe introuvable")
         for k, v in updates.items():
             setattr(g, k, v)
+        if "number_of_items" in updates:
+            await _propagate_object_costs(db, "group", group_id)
         await db.commit()
     return {"ok": True}
 
@@ -1409,6 +1411,11 @@ async def recalculate_all_prints(_: str = Depends(get_current_user)):
                 await recalculate_print(pid)
                 if i % 10 == 0:
                     import logging; logging.getLogger(__name__).info(f"[RECALC] {i}/{total} prints recalculés...")
+            # Repercuter les nouveaux couts sur les objets lies.
+            async with AsyncSessionLocal() as db:
+                for pid in pids:
+                    await _propagate_from_print(db, pid)
+                await db.commit()
         try: loop.run_until_complete(_go())
         finally: loop.close()
     threading.Thread(target=_run, daemon=True).start()
@@ -1554,6 +1561,52 @@ async def restore_spool_weights(
     return {"ok": True, "restored": restored}
 
 
+async def _propagate_object_costs(db, parent_type: str, parent_id: int):
+    """Repercute le cout courant d'un print/groupe sur les objets qui en derivent.
+
+    Meme formule qu'a la creation (objects.create_objects / ObjectCreateSheet) :
+      - objet depuis un PRINT  : cout = filament + electricite du print (cout plein) ;
+      - objet depuis un GROUPE : cout = somme des total_cost des membres / number_of_items.
+    normal_cost_unit est peuple au passage (cout au prix normal catalogue). Le cout
+    accessoire propre a chaque objet est conserve.
+    """
+    from ....models.object_history import Object
+    if parent_type == "print":
+        pr = await db.get(Print, parent_id)
+        if not pr:
+            return
+        fab    = (pr.total_cost_filament or 0) + (pr.electric_cost or 0)
+        normal = (pr.total_cost_filament_normal or 0) + (pr.electric_cost or 0)
+    elif parent_type == "group":
+        g = await db.get(Group, parent_id)
+        if not g:
+            return
+        members = (await db.execute(select(Print).where(Print.group_id == parent_id))).scalars().all()
+        nb = max(1, g.number_of_items or 1)
+        fab    = sum((m.total_cost or 0) for m in members) / nb
+        normal = sum(((m.total_cost_filament_normal or 0) + (m.electric_cost or 0)) for m in members) / nb
+    else:
+        return
+    objs = (await db.execute(
+        select(Object).where(Object.parent_type == parent_type, Object.parent_id == parent_id)
+    )).scalars().all()
+    for o in objs:
+        o.cost_fabrication = round(fab, 4)
+        o.normal_cost_unit = round(normal, 4)
+        o.cost_total = round(fab + (o.cost_accessory or 0), 4)
+
+
+async def _propagate_from_print(db, print_id: int):
+    """Un changement de cout sur un print touche ses propres objets ET, s'il est
+    dans un groupe, les objets du groupe (leur part depend de ses membres)."""
+    pr = await db.get(Print, print_id)
+    if not pr:
+        return
+    await _propagate_object_costs(db, "print", print_id)
+    if pr.group_id:
+        await _propagate_object_costs(db, "group", pr.group_id)
+
+
 @router.post("/{print_id}/recalc-costs")
 async def recalc_print_costs(print_id: int, _: str = Depends(get_current_user)):
     """Recalcule les coûts filament + électricité d'un print."""
@@ -1566,5 +1619,6 @@ async def recalc_print_costs(print_id: int, _: str = Depends(get_current_user)):
         )).scalar_one_or_none()
         if not p: raise HTTPException(404)
         await _calc_costs(db, p)
+        await _propagate_from_print(db, print_id)   # repercuter sur les objets lies
         await db.commit()
     return {"ok": True}
