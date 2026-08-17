@@ -389,10 +389,19 @@ function TimeChart({ data, bucket = "month" }) {
       <div style={{ display: "flex", gap: 3, alignItems: "stretch", height: 130, overflowX: "auto" }}>
         {keys.map((k, i) => {
           const v = values[i];
-          const failed = data[k].failed || 0;
-          const failPct = tab === "count" && data[k].count > 0 ? (failed / data[k].count) * 100 : 0;
+          const cnt = data[k].count || 0;
+          // Segments "non reussis" empiles depuis le bas (mode count) : echecs,
+          // a refaire, partiel. Le reste de la barre = reussites.
+          const segs = tab === "count" && cnt > 0
+            ? [
+                { v: data[k].failed || 0,  c: "#ef4444", lbl: "échec" },
+                { v: data[k].to_redo || 0, c: "#8b5cf6", lbl: "à refaire" },
+                { v: data[k].partial || 0, c: "#f59e0b", lbl: "partiel" },
+              ].filter(s => s.v > 0)
+            : [];
+          const segTip = segs.map(s => `${s.v} ${s.lbl}${s.v > 1 ? "s" : ""}`).join(", ");
           return (
-            <div key={k} title={`${fmtBucketLabel(k, bucket)} — ${unit(v)}${failed ? ` (${failed} échec${failed > 1 ? "s" : ""})` : ""}`}
+            <div key={k} title={`${fmtBucketLabel(k, bucket)} — ${unit(v)}${segTip ? ` (${segTip})` : ""}`}
               style={{ display: "flex", flexDirection: "column", alignItems: "center",
                 flex: "0 0 auto", width: 26, height: "100%" }}>
               {/* Zone barre : c'est ELLE qui doit avoir une hauteur fixe, sinon le
@@ -403,10 +412,11 @@ function TimeChart({ data, bucket = "month" }) {
                 <div style={{ width: "100%", height: `${Math.max(3, (v / max) * 100)}%`,
                   background: colors[tab], borderRadius: "3px 3px 0 0", minHeight: v > 0 ? 3 : 0,
                   position: "relative", overflow: "hidden", transition: "height 0.4s ease" }}>
-                  {failPct > 0 && (
-                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0,
-                      height: `${failPct}%`, background: "#ef4444", opacity: 0.75 }}/>
-                  )}
+                  {(() => { let acc = 0; return segs.map((s, si) => {
+                    const h = (s.v / cnt) * 100; const bottom = acc; acc += h;
+                    return <div key={si} style={{ position: "absolute", left: 0, right: 0,
+                      bottom: `${bottom}%`, height: `${h}%`, background: s.c, opacity: 0.82 }}/>;
+                  }); })()}
                 </div>
               </div>
               <span style={{ fontSize: 7, color: "var(--muted)", transform: "rotate(-45deg)",
@@ -418,11 +428,15 @@ function TimeChart({ data, bucket = "month" }) {
         })}
       </div>
       {tab === "count" && (
-        <p style={{ fontSize: 9, color: "var(--muted)", margin: "10px 0 0", textAlign: "right" }}>
-          <span style={{ display: "inline-block", width: 8, height: 8, background: "#ef4444",
-            opacity: 0.75, borderRadius: 2, marginRight: 4 }}/>
-          part d'échecs
-        </p>
+        <div style={{ display: "flex", gap: 12, justifyContent: "flex-end", flexWrap: "wrap",
+          fontSize: 9, color: "var(--muted)", margin: "10px 0 0" }}>
+          {[["#ef4444", "échecs"], ["#8b5cf6", "à refaire"], ["#f59e0b", "partiel"]].map(([c, l]) => (
+            <span key={l} style={{ display: "inline-flex", alignItems: "center" }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, background: c,
+                opacity: 0.82, borderRadius: 2, marginRight: 4 }}/>{l}
+            </span>
+          ))}
+        </div>
       )}
     </div>
   );
