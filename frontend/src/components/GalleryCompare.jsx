@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { X, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import AdminOnly from "./AdminOnly";
+import { showAlert, showConfirm } from "../utils/dialog";
 
 /**
  * Galerie photo en tuiles avec carrousel multi-photos par item et comparaison.
@@ -318,7 +319,7 @@ export default function GalleryCompare({
                 const filename = current.url.split("/").pop();
                 return (<AdminOnly>
                   <button onClick={async e => { e.stopPropagation();
-                    if (!window.confirm("Supprimer cette photo ?")) return;
+                    if (!(await showConfirm("Supprimer cette photo ?", { danger: true, confirmLabel: "Supprimer" }))) return;
                     await onDeletePhoto(carousel.item, filename);
                     setCarousel(null); onPhotosChanged?.(); }}
                     style={{ padding:"6px 14px", borderRadius:20, background:"rgba(239,68,68,0.15)",

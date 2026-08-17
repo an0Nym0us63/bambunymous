@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
+import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { useIsAdmin } from "../store/auth";
@@ -154,7 +155,7 @@ function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorTyp
       } else {
         onMapped?.();
       }
-    } catch(e) { alert("Erreur: " + e.message); }
+    } catch(e) { showAlert("Erreur: " + e.message); }
   };
 
   return (
@@ -371,7 +372,7 @@ function DissociateDialog({ usage, printId, onClose, onDone }) {
       await client.patch(`/prints/${printId}/filament-usage/${usage.id}`, { spool_id: null });
       await client.post(`/prints/${printId}/recalc-costs`).catch(()=>{});
       onDone?.();
-    } catch(e) { alert("Erreur: " + e.message); }
+    } catch(e) { showAlert("Erreur: " + e.message); }
     setLoading(false);
   };
 
@@ -589,7 +590,7 @@ function PrintEditSheet({ p, onClose, onSaved }) {
       delete payload.original_name;
       await client.patch(`/prints/${p.id}`, payload);
       onSaved(form);
-    } catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
+    } catch(e) { showAlert("Erreur: " + (e.response?.data?.detail || e.message)); }
     setSaving(false);
   };
 
@@ -731,9 +732,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   };
 
   const handleUngroup = async () => {
-    if (!confirm("Retirer ce print de son groupe ?")) return;
+    if (!(await showConfirm("Retirer ce print de son groupe ?"))) return;
     try { await client.post("/prints/" + p.id + "/group", {}); setUngrouped(true); onChanged?.(); }
-    catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+    catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
 
   // Les deux coûts viennent du backend, qui applique deja la cascade (bobine ->
@@ -816,7 +817,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                       await client.patch(`/prints/${p.id}`, { translated_name: v });
                       setP(prev => ({ ...prev, translated_name: v }));
                       onChanged && onChanged();
-                    } catch(e) { alert(e.response?.data?.detail || e.message); }
+                    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
                     setEditFr(false);
                   }}
                   style={{ fontSize:11, padding:"4px 10px", borderRadius:7, cursor:"pointer",
@@ -1053,7 +1054,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         // fracs = {usageId: fraction, ...}
         const hasRestore = Object.values(fracs).some(v=>v>0);
         if (hasRestore) await client.post("/prints/"+p.id+"/restore-weights", {fracs}).catch(()=>{});
-        if (showDeleteConfirm !== "restore") { client.delete("/prints/"+p.id).then(()=>{ onDelete?.(p.id); onClose(); }).catch(()=>alert("Erreur")); }
+        if (showDeleteConfirm !== "restore") { client.delete("/prints/"+p.id).then(()=>{ onDelete?.(p.id); onClose(); }).catch(()=>showAlert("Erreur")); }
         else { setShowDeleteConfirm(false); client.get("/prints/"+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }
       }}/>}
   </>);
@@ -1069,7 +1070,7 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
   const save = async () => {
     setSaving(true);
     try { await client.patch(`/prints/groups/${groupId}`, form); onSaved(form.name); }
-    catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
+    catch(e) { showAlert("Erreur: " + (e.response?.data?.detail || e.message)); }
     setSaving(false);
   };
   return (
@@ -1123,13 +1124,13 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
     try {
       await client.post(`/prints/groups/${groupId}/photo/${name}/cover`);
       setGroupCover(name); onUpdated?.();
-    } catch(e){ alert(e.response?.data?.detail || e.message); }
+    } catch(e){ showAlert(e.response?.data?.detail || e.message); }
   };
   const delGroupPhoto = async (name) => {
     try {
       await client.delete(`/prints/groups/${groupId}/photo/${name}`);
       setGroupPhotoToDelete(null); loadGroupPhotos();
-    } catch(e){ alert(e.response?.data?.detail || e.message); }
+    } catch(e){ showAlert(e.response?.data?.detail || e.message); }
   };
   const [unmappingG, setUnmappingG] = useState(null);
   const [editGroup, setEditGroup] = useState(false);
@@ -1187,19 +1188,19 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Supprimer le groupe "${name}" et ses ${localPrints.length} prints ?`)) return;
+    if (!(await showConfirm(`Supprimer le groupe "${name}" et ses ${localPrints.length} prints ?`, { danger: true, confirmLabel: "Supprimer" }))) return;
     try {
       await Promise.all(localPrints.map(p => client.delete("/prints/" + p.id)));
       onDelete?.(); onClose();
-    } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+    } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
 
   const handleUngroup = async () => {
-    if (!confirm(`Dégrouper "${name}" (les prints resteront) ?`)) return;
+    if (!(await showConfirm(`Dégrouper "${name}" (les prints resteront) ?`, { confirmLabel: "Dégrouper" }))) return;
     try {
       await client.delete("/prints/groups/" + groupId);
       onUngroup?.(); onClose();
-    } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+    } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
 
   return (
@@ -1382,7 +1383,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                 background:"var(--surface2)", border:"1px solid var(--border)" }}>
                 {/* Bouton retirer du groupe */}
                 <AdminOnly><button onClick={async e=>{ e.stopPropagation();
-                  if(!confirm(`Retirer "${p.file_name||"ce print"}" du groupe ?`)) return;
+                  if(!(await showConfirm(`Retirer "${p.file_name||"ce print"}" du groupe ?`))) return;
                   try { await client.post("/prints/"+p.id+"/group", {}); setLocalPrints(ps=>ps.filter(x=>x.id!==p.id)); } catch{}
                 }} style={{ position:"absolute", top:4, right:4, zIndex:2, width:20, height:20,
                   borderRadius:"50%", background:"rgba(0,0,0,0.55)", border:"none",
@@ -1567,7 +1568,7 @@ function QuantityEditor({ id, type, value, onChange }) {
       else await client.patch(`/prints/groups/${id}`, { number_of_items: n });
       onChange?.(n);
       setEditing(false);
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
   };
 
@@ -1633,7 +1634,7 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
     try {
       await client.delete("/prints/" + p.id);
       onDelete(p.id);
-    } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+    } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
     setMenuOpen(false); setConfirming(false);
   };
 
@@ -1753,7 +1754,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
     try {
       await client.post(`/prints/${printId}/photo/${name}/primary`);
       onCoverChange?.(name);
-    } catch (e) { alert("Erreur : " + (e.response?.data?.detail || e.message)); }
+    } catch (e) { showAlert("Erreur : " + (e.response?.data?.detail || e.message)); }
   };
 
   const reloadDiskFiles = () => client.get("/prints/" + printId + "/snapshots")
@@ -1770,7 +1771,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
       await client.delete("/prints/" + printId + "/snapshots/" + s.id);
       onDelete(s.id);
       if (lightbox && lightbox.snap && lightbox.snap.id === s.id) setLightbox(null);
-    } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+    } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
 
   const snapByName = {};
@@ -2133,7 +2134,7 @@ export default function Prints() {
       exitSelectMode();
       await Promise.all([load(), loadGroups()]);
     } catch (err) {
-      alert("Erreur: " + (err.response?.data?.detail || err.message));
+      showAlert("Erreur: " + (err.response?.data?.detail || err.message));
     } finally { setDeleting(false); }
   };
 
@@ -2301,7 +2302,7 @@ export default function Prints() {
     try {
       await client.post("/prints/import", form, { headers:{"Content-Type":"multipart/form-data"} });
       await load();
-    } catch(err) { alert("Erreur import: " + (err.response?.data?.detail || err.message)); }
+    } catch(err) { showAlert("Erreur import: " + (err.response?.data?.detail || err.message)); }
     finally { setImporting(false); e.target.value = ""; }
   };
 
@@ -2733,7 +2734,7 @@ export default function Prints() {
               setGroupPickerOpen(false);
               exitSelectMode();
               await Promise.all([load(), loadGroups()]);
-            } catch(err) { alert("Erreur: " + (err.response?.data?.detail || err.message)); }
+            } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
           }}
         />
       )}

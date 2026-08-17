@@ -6,6 +6,7 @@ import AdminOnly from "./AdminOnly";
 import { colorBg, parseColorsList } from "../utils/colors";
 import { FilamentSheet, FilamentSheetFromSpool } from "../pages/Filaments";
 import { PrintDetail } from "../pages/Prints";
+import { showAlert, showConfirm } from "../utils/dialog";
 
 /**
  * Toutes les alertes, filtrables.
@@ -125,8 +126,7 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
   const clearFiltered = async () => {
     const keys = shown.map(a => a.key);
     if (!keys.length) return;
-    if (!window.confirm(
-      `Remettre en circulation ${keys.length} alerte${keys.length > 1 ? "s" : ""} ?`)) return;
+    if (!(await showConfirm(`Remettre en circulation ${keys.length} alerte${keys.length > 1 ? "s" : ""} ?`))) return;
     setBusy(true);
     try {
       for (const k of keys) {
@@ -139,7 +139,7 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
   };
 
   const clearAll = async () => {
-    if (!window.confirm("Remettre en circulation TOUTES les alertes ignorées ?")) return;
+    if (!(await showConfirm("Remettre en circulation TOUTES les alertes ignorées ?", { danger: true }))) return;
     setBusy(true);
     try { await client.delete("/attention/dismissed"); setDis([]); load(); onChanged?.(); }
     catch (e) { setErr(e.response?.data?.detail || e.message); }

@@ -10,6 +10,7 @@ import Stats from "./pages/Stats";
 import Objects from "./pages/Objects";
 import Filaments from "./pages/Filaments";
 import Prints from "./pages/Prints";
+import DialogHost from "./components/DialogHost";
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -25,6 +26,7 @@ function PrivateRoute({ children }) {
 
 export default function App() {
   return (
+    <>
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/" element={
@@ -41,6 +43,8 @@ export default function App() {
         <Route path="stats" element={<Stats />} />
       </Route>
     </Routes>
+    <DialogHost />
+    </>
   );
 }
 

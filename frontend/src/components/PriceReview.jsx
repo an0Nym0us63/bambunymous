@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import client from "../api/client";
+import { showAlert, showConfirm } from "../utils/dialog";
 import { colorBg, parseColorsList } from "../utils/colors";
 import { moneyVal } from "../utils/money";
 
@@ -48,7 +49,7 @@ function PriceCell({ value, onSave, muted }) {
     if (t !== "" && (isNaN(n) || n < 0)) return;
     setBusy(true);
     try { await onSave(n); setEditing(false); }
-    catch (e) { alert(e.response?.data?.detail || e.message); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setBusy(false); }
   };
 

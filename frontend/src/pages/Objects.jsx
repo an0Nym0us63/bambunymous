@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
 import client from "../api/client";
+import { showAlert, showConfirm } from "../utils/dialog";
 import CategoryPicker from "../components/CategoryPicker";
 import Select from "../components/Select";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
@@ -71,7 +72,7 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
         // entre-temps -- enregistrer le nom aurait remis l'ancien rangement.
       });
       setMode("view"); await load(); onChanged?.();
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     setBusy(false);
   };
 
@@ -96,7 +97,7 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
       setRestock({ qty:"", total_price:"" }); setUnitInput(""); setSetValue("");
       setStockMode("add"); setMode("view");
       await load(); onChanged?.();
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     setBusy(false);
   };
 
@@ -108,7 +109,7 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
       await client.post(`/objects/accessories/${accId}/photo/upload`, fd,
         { headers: { "Content-Type": "multipart/form-data" } });
       setImgV(v => v + 1); await load(); onChanged?.();
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     setBusy(false);
   };
 
@@ -118,7 +119,7 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
       await client.delete(`/objects/accessories/${accId}`);
       onChanged?.(); onClose();
     } catch(e) {
-      alert(e.response?.data?.detail || "Suppression impossible (accessoire peut-être lié à des objets).");
+      showAlert(e.response?.data?.detail || "Suppression impossible (accessoire peut-être lié à des objets).");
       setBusy(false); setConfirmDel(false);
     }
   };
@@ -197,7 +198,7 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
                   try {
                     await client.patch(`/objects/accessories/${accId}`, { category: v });
                     await load(); onChanged?.();
-                  } catch(e) { alert(e.response?.data?.detail || e.message); }
+                  } catch(e) { showAlert(e.response?.data?.detail || e.message); }
                 }}/>
             </div>
           </AdminOnly>
@@ -407,7 +408,7 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
       });
       onCreated?.(r.data?.id);
     } catch(e) {
-      alert(e.response?.data?.detail || "Création impossible (nom déjà utilisé ?)");
+      showAlert(e.response?.data?.detail || "Création impossible (nom déjà utilisé ?)");
       setBusy(false);
     }
   };
@@ -490,7 +491,7 @@ function BulkCategorySheet({ ids, onClose, onDone }) {
       }
       onDone();
     } catch (e) {
-      alert(e.response?.data?.detail || e.message);
+      showAlert(e.response?.data?.detail || e.message);
       setBusy(false);
     }
   };
@@ -675,7 +676,7 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
       }
       await client.patch(`/objects/objects/${obj.id}`, payload);
       onSaved();
-    } catch(e) { alert("Erreur: " + (e.response?.data?.detail || e.message)); }
+    } catch(e) { showAlert("Erreur: " + (e.response?.data?.detail || e.message)); }
     setSaving(false);
   };
 
@@ -1005,7 +1006,7 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
         { params: parts.length ? { restock: parts.join(",") } : {} });
       onClose(); onUpdated?.();
     } catch (e) {
-      alert(e.response?.data?.detail || e.message);
+      showAlert(e.response?.data?.detail || e.message);
       setDeleting(false);
     }
   };
@@ -1471,7 +1472,7 @@ function ObjectGroupPickerSheet({ title, onClose, onPick }) {
     if (busy) return;
     setBusy(true);
     try { await onPick(payload); }
-    catch (e) { alert(e.response?.data?.detail || e.message); setBusy(false); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); setBusy(false); }
   };
   return (
     <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:6000, background:"rgba(0,0,0,0.6)",

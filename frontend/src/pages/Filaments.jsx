@@ -7,6 +7,7 @@ import { useNativeScan } from "../hooks/useNativeScan";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette } from "lucide-react";
 import client from "../api/client";
+import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { useTrackDetail } from "../utils/track";
@@ -262,7 +263,7 @@ function FilamentPhotos({ filamentId, onLightbox }) {
         headers: { "Content-Type": "multipart/form-data" }
       });
       reload();
-    } catch(e) { alert(e.response?.data?.detail || "Erreur upload"); }
+    } catch(e) { showAlert(e.response?.data?.detail || "Erreur upload"); }
     finally { setUploading(false); }
   };
 
@@ -273,13 +274,13 @@ function FilamentPhotos({ filamentId, onLightbox }) {
     try {
       await client.delete(`/filaments/${filamentId}/photo/${filename}`);
       setConfirmDelPhoto(null); reload();
-    } catch(e){ alert(e.response?.data?.detail || e.message); }
+    } catch(e){ showAlert(e.response?.data?.detail || e.message); }
   };
   const setPrimary = async (filename) => {
     try {
       await client.post(`/filaments/${filamentId}/photo/${filename}/primary`);
       reload();
-    } catch(e){ alert(e.response?.data?.detail || e.message); }
+    } catch(e){ showAlert(e.response?.data?.detail || e.message); }
   };
 
   return (
@@ -374,7 +375,7 @@ function WeightAdjustInline({ spoolId, current, onUpdated, isPrix = false }) {
       }
       setOpen(false); setVal("");
       onUpdated?.();
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
   };
 
@@ -442,7 +443,7 @@ function WeightEditRow({ spoolId, current, onUpdated }) {
       await client.post(`/filaments/spools/${spoolId}/weight`, { mode:"set", value: n });
       onUpdated?.();
       setEditing(false);
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
   };
 
@@ -499,7 +500,7 @@ function TagEditRow({ spoolId, current, onUpdated }) {
       await client.patch(`/filaments/spools/${spoolId}`, { tag_number: val.trim() || null });
       onUpdated?.();
       setEditing(false);
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
   };
 
@@ -567,7 +568,7 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
       await client.patch(`/filaments/spools/${spoolId}`, { price_override: n });
       onUpdated?.();
       setEditing(false);
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
   };
 
@@ -628,7 +629,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
     try {
       const r = await client.get(`/filaments/filaments/${spool.filament_id}`);
       setFilSheet(r.data);
-    } catch (e) { alert(e.response?.data?.detail || e.message); }
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
   const [deleting, setDeleting] = React.useState(false);
   const [showUsage, setShowUsage] = React.useState(false);
@@ -642,7 +643,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
       // Calculer poids avant/après chaque print (chronologique)
       setUsageHistory(r.data || []);
       setShowUsage(true);
-    } catch(e) { alert('Erreur: ' + e.message); }
+    } catch(e) { showAlert('Erreur: ' + e.message); }
     setLoadingUsage(false);
   };
 
@@ -656,7 +657,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
       }
       onDelete?.();
       onClose();
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setDeleting(false); }
   };
   if (!spool) return null;
@@ -1442,7 +1443,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
       });
       setEditing(false);
       onUpdated?.();
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
   };
 
@@ -1451,18 +1452,18 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     // garde-fou qui compte vit cote serveur, mais laisser confirmer une
     // suppression vouee a echouer n'apprend rien a personne.
     if (f.swatch) {
-      alert("Ce filament a un échantillon imprimé : la plaquette du nuancier porte "
+      showAlert("Ce filament a un échantillon imprimé : la plaquette du nuancier porte "
           + "un QR qui pointe cette fiche. Décoche la case Échantillon si elle a été jetée.");
       return;
     }
-    if (!confirm(`Supprimer le filament "${f.name}" ?`)) return;
+    if (!(await showConfirm(`Supprimer le filament "${f.name}" ?`, { danger: true, confirmLabel: "Supprimer" }))) return;
     setDeleting(true);
     try {
       await client.delete(`/filaments/filaments/${f.id}`);
       onDeleted?.();
       onClose();
     } catch(e) {
-      alert(e.response?.data?.detail || e.message);
+      showAlert(e.response?.data?.detail || e.message);
     } finally { setDeleting(false); }
   };
 
@@ -1956,7 +1957,7 @@ function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
       if (e.response?.status === 409) {
         const d = e.response.data?.detail || {};
         setDuplicate({ id: d.existing_id, name: d.existing_name, message: d.message });
-      } else { alert(e.response?.data?.detail || e.message); }
+      } else { showAlert(e.response?.data?.detail || e.message); }
     } finally { setSaving(false); }
   };
 

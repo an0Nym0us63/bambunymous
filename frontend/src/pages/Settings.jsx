@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
+import { showAlert, showConfirm } from "../utils/dialog";
 import PriceReview from "../components/PriceReview";
 import Select from "../components/Select";
 import HeaderAction from "../components/HeaderAction";
@@ -104,7 +105,7 @@ function AMSOrderSection() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch(e) {
-      alert("Erreur: " + (e.response?.data?.detail || e.message));
+      showAlert("Erreur: " + (e.response?.data?.detail || e.message));
     } finally { setSaving(false); }
   };
 
@@ -187,7 +188,7 @@ function EnrichFromCatalogSection() {
     try {
       const { data } = await client.post("/filaments/filaments/enrich-from-catalog");
       setResult(data);
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setRunning(false); }
   };
 
@@ -885,7 +886,7 @@ function RecalculateSection() {
       await client.post("/prints/recalculate-all");
       setDone(true);
       setTimeout(() => setDone(false), 5000);
-    } catch(e) { alert(e.response?.data?.detail || e.message); }
+    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setLoading(false); }
   };
 
@@ -1409,7 +1410,7 @@ export default function Settings() {
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch(err) {
-      alert("Erreur: " + (err.response?.data?.detail || err.message));
+      showAlert("Erreur: " + (err.response?.data?.detail || err.message));
     } finally { setSaving(false); }
   };
 
@@ -1626,7 +1627,7 @@ function SpoolnymousImport() {
     try {
       const r = await client.get("/import/spoolnymous/ping", { params:{ url } });
       setPingInfo(r.data);
-    } catch { setPingInfo(null); alert("Impossible de joindre Spoolnymous — vérifie l\'URL et que Spoolnymous est démarré."); }
+    } catch { setPingInfo(null); showAlert("Impossible de joindre Spoolnymous — vérifie l\'URL et que Spoolnymous est démarré."); }
   };
 
   const start = async () => {
