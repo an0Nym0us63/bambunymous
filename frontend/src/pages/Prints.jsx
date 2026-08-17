@@ -1321,8 +1321,13 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                     <div key={i} style={{ position:"relative", flexShrink:0, borderRadius:8,
                         border: isCover ? "2px solid #22c55e" : "1px solid var(--border)" }}>
                       {/* Aucun handler tactile : le defilement reste natif. */}
-                      <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover",
-                        display:"block", borderRadius:6 }}/>
+                      {isVideoUrl(ph.url) ? (
+                        <video src={ph.url} muted loop autoPlay playsInline preload="metadata"
+                          style={{ height:80, width:80, objectFit:"cover", display:"block", borderRadius:6 }}/>
+                      ) : (
+                        <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover",
+                          display:"block", borderRadius:6 }}/>
+                      )}
                       <AdminOnly>
                         {/* Etoile a gauche, doree sur la vignette actuelle et
                             grise sur les autres : l'etat se lit sans chercher. */}
@@ -1853,13 +1858,9 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
               <div onClick={() => setLightbox(flatItems[startIdx + i])}
                 style={{ cursor:"pointer" }}>
                 {isVideoUrl(item.url) ? (
-                  <div style={{ position:"relative" }}>
-                    <video src={item.url} preload="metadata" muted playsInline
-                      style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
-                        border: isCover ? "2px solid #22c55e" : "1px solid var(--border)", display:"block" }}/>
-                    <span style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)",
-                      fontSize:24, color:"white", textShadow:"0 1px 4px rgba(0,0,0,0.6)", pointerEvents:"none" }}>▶</span>
-                  </div>
+                  <video src={item.url} muted loop autoPlay playsInline preload="metadata"
+                    style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
+                      border: isCover ? "2px solid #22c55e" : "1px solid var(--border)", display:"block" }}/>
                 ) : (
                   <img src={item.url} alt={item.label}
                     style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",

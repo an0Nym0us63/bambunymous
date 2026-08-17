@@ -353,10 +353,8 @@ export default function GalleryCompare({
                   const st = { width:48, height:48, objectFit:"cover", borderRadius:6, flexShrink:0, cursor:"pointer",
                     border: i===carousel.index ? "2px solid #3b82f6" : "2px solid transparent", opacity: i===carousel.index ? 1 : 0.55 };
                   return isVideoUrl(p.url)
-                    ? <div key={i} onClick={() => setCarousel(c => ({ ...c, index:i }))} style={{ position:"relative", flexShrink:0 }}>
-                        <video src={p.url} preload="metadata" muted playsInline style={st}/>
-                        <span style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", color:"white", fontSize:14, pointerEvents:"none", textShadow:"0 1px 3px rgba(0,0,0,0.6)" }}>▶</span>
-                      </div>
+                    ? <video key={i} src={p.url} muted loop autoPlay playsInline preload="metadata"
+                        onClick={() => setCarousel(c => ({ ...c, index:i }))} style={st}/>
                     : <img key={i} src={p.url} alt={p.label} onClick={() => setCarousel(c => ({ ...c, index:i }))} style={st}/>;
                 })}
               </div>
