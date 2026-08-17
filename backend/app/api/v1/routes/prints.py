@@ -431,7 +431,7 @@ async def prints_gallery(_: str = Depends(get_current_user)):
         d = groups_dir / str(gid)
         if d.exists():
             for f in sorted(d.iterdir()):
-                if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+                if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
                     acc["photos"].append({"url": f"/api/v1/prints/groups/{gid}/photo/{f.name}",
                                           "label": f.name, "name": f.name})
         # La vignette est photos[0]. Si une photo de couverture est definie pour
@@ -491,7 +491,7 @@ async def group_photos(group_id: int):
         return {"files": [], "cover_photo": cover}
     files = []
     for f in sorted(d.iterdir()):
-        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v"):
             files.append({"name": f.name, "url": f"/api/v1/prints/groups/{group_id}/photo/{f.name}"})
     return {"files": files, "cover_photo": cover}
 
@@ -1131,7 +1131,8 @@ async def list_print_photos(print_id: int, _: str = Depends(get_current_user)):
     if not d.exists(): return []
     return [{"filename": f.name, "url": f"/api/v1/prints/{print_id}/file/{f.name}"}
             for f in sorted(d.iterdir())
-            if f.name.startswith("Photo-") and f.suffix.lower() in (".jpg",".jpeg",".png",".webp")]
+            if (f.name.startswith("Photo-") and f.suffix.lower() in (".jpg",".jpeg",".png",".webp"))
+            or (f.name.startswith("Video-") and f.suffix.lower() in (".mp4",".webm",".mov",".m4v"))]
 
 @router.post("/{print_id}/photos/upload")
 async def upload_print_photo(
@@ -1141,29 +1142,40 @@ async def upload_print_photo(
 ):
     import subprocess as _sp, tempfile as _tf, os as _os
     from ....models.print_history import PrintSnapshot as _PS
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(400, "Fichier image requis")
+    is_video = bool(file.content_type and file.content_type.startswith("video/"))
+    if not file.content_type or not (file.content_type.startswith("image/") or is_video):
+        raise HTTPException(400, "Fichier image ou vidéo requis")
     d = DATA_DIR / "prints" / str(print_id)
     d.mkdir(parents=True, exist_ok=True)
     raw = await file.read()
-    orig_ext = (file.filename or "photo.jpg").rsplit(".", 1)[-1].lower()
-    # Numéroter Photo-01, 02... (même convention que zip_importer)
-    idx = 1
-    while (d / f"Photo-{idx:02d}.webp").exists() or (d / f"Photo-{idx:02d}.{orig_ext}").exists():
-        idx += 1
-    dest = d / f"Photo-{idx:02d}.webp"
-    try:
-        with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
-            tmp.write(raw); tmp_path = tmp.name
-        _sp.run([
-            "ffmpeg", "-y", "-i", tmp_path,
-            "-vf", "scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
-            "-quality", "80", "-compression_level", "6", str(dest)
-        ], check=True, capture_output=True, timeout=30)
-        _os.unlink(tmp_path)
-    except Exception:
-        dest = d / f"Photo-{idx:02d}.{orig_ext}"
+    orig_ext = (file.filename or ("video.mp4" if is_video else "photo.jpg")).rsplit(".", 1)[-1].lower()
+    if is_video:
+        # Video : stockee telle quelle (Video-01, 02...), sans reencodage.
+        if orig_ext not in ("mp4", "webm", "mov", "m4v"):
+            orig_ext = "mp4"
+        idx = 1
+        while (d / f"Video-{idx:02d}.{orig_ext}").exists():
+            idx += 1
+        dest = d / f"Video-{idx:02d}.{orig_ext}"
         dest.write_bytes(raw)
+    else:
+        # Numéroter Photo-01, 02... (même convention que zip_importer)
+        idx = 1
+        while (d / f"Photo-{idx:02d}.webp").exists() or (d / f"Photo-{idx:02d}.{orig_ext}").exists():
+            idx += 1
+        dest = d / f"Photo-{idx:02d}.webp"
+        try:
+            with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
+                tmp.write(raw); tmp_path = tmp.name
+            _sp.run([
+                "ffmpeg", "-y", "-i", tmp_path,
+                "-vf", "scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
+                "-quality", "80", "-compression_level", "6", str(dest)
+            ], check=True, capture_output=True, timeout=30)
+            _os.unlink(tmp_path)
+        except Exception:
+            dest = d / f"Photo-{idx:02d}.{orig_ext}"
+            dest.write_bytes(raw)
     # Créer PrintSnapshot en DB (trigger=manual) pour apparaître dans la galerie
     rel_path = f"prints/{print_id}/{dest.name}"
     async with AsyncSessionLocal() as db:
@@ -1427,24 +1439,32 @@ async def upload_group_photo(
     group_id: int, file: UploadFile = File(...), _: str = Depends(get_current_user),
 ):
     import subprocess as _sp, tempfile as _tf, os as _os
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(400, "Fichier image requis")
+    is_video = bool(file.content_type and file.content_type.startswith("video/"))
+    if not file.content_type or not (file.content_type.startswith("image/") or is_video):
+        raise HTTPException(400, "Fichier image ou vidéo requis")
     d = DATA_DIR / "groups" / str(group_id)
     d.mkdir(parents=True, exist_ok=True)
     raw = await file.read()
-    orig_ext = (file.filename or "photo.jpg").rsplit(".", 1)[-1].lower()
-    n = len(list(d.glob("Photo-*"))) + 1
-    dest = d / f"Photo-{n:02d}.webp"
-    try:
-        with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
-            tmp.write(raw); tmp_path = tmp.name
-        _sp.run(["ffmpeg","-y","-i",tmp_path,
-                 "-vf","scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
-                 "-quality","80","-compression_level","6",str(dest)],
-                check=True, capture_output=True, timeout=30)
-        _os.unlink(tmp_path)
-    except Exception:
-        dest = d / f"Photo-{n:02d}.{orig_ext}"; dest.write_bytes(raw)
+    orig_ext = (file.filename or ("video.mp4" if is_video else "photo.jpg")).rsplit(".", 1)[-1].lower()
+    if is_video:
+        if orig_ext not in ("mp4", "webm", "mov", "m4v"):
+            orig_ext = "mp4"
+        n = len(list(d.glob("Video-*"))) + 1
+        dest = d / f"Video-{n:02d}.{orig_ext}"
+        dest.write_bytes(raw)
+    else:
+        n = len(list(d.glob("Photo-*"))) + 1
+        dest = d / f"Photo-{n:02d}.webp"
+        try:
+            with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
+                tmp.write(raw); tmp_path = tmp.name
+            _sp.run(["ffmpeg","-y","-i",tmp_path,
+                     "-vf","scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
+                     "-quality","80","-compression_level","6",str(dest)],
+                    check=True, capture_output=True, timeout=30)
+            _os.unlink(tmp_path)
+        except Exception:
+            dest = d / f"Photo-{n:02d}.{orig_ext}"; dest.write_bytes(raw)
     return {"ok": True, "name": dest.name, "url": f"/api/v1/prints/groups/{group_id}/photo/{dest.name}"}
 
 
