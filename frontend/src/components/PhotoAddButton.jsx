@@ -62,7 +62,7 @@ export default function PhotoAddButton({ onPick, size = 20, title = "Ajouter une
       {/* Inputs caches : camera (capture) et galerie (simple). */}
       <input ref={camRef} type="file" accept="image/*" capture="environment"
         style={{ display:"none" }} onChange={handle}/>
-      <input ref={fileRef} type="file" accept="image/*" multiple
+      <input ref={fileRef} type="file" accept="image/*,video/*" multiple
         style={{ display:"none" }} onChange={handle}/>
 
       {open && createPortal(

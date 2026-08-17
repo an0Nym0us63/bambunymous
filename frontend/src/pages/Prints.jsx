@@ -1736,6 +1736,8 @@ function PhotoDeleteConfirm({ label, onCancel, onConfirm }) {
   );
 }
 
+const isVideoUrl = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || "");
+
 function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], onDeleteUpload,
                            onCountChange, coverPhoto, onCoverChange }) {
   const [lightbox, setLightbox] = useState(null);
@@ -1850,11 +1852,21 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
               {/* Aucun handler tactile ici : le defilement reste 100% natif. */}
               <div onClick={() => setLightbox(flatItems[startIdx + i])}
                 style={{ cursor:"pointer" }}>
-                <img src={item.url} alt={item.label}
-                  style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
-                    border: isCover ? "2px solid #22c55e" : "1px solid var(--border)",
-                    display:"block" }}
-                  onError={e => { e.currentTarget.style.display="none"; }}/>
+                {isVideoUrl(item.url) ? (
+                  <div style={{ position:"relative" }}>
+                    <video src={item.url} preload="metadata" muted playsInline
+                      style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
+                        border: isCover ? "2px solid #22c55e" : "1px solid var(--border)", display:"block" }}/>
+                    <span style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)",
+                      fontSize:24, color:"white", textShadow:"0 1px 4px rgba(0,0,0,0.6)", pointerEvents:"none" }}>▶</span>
+                  </div>
+                ) : (
+                  <img src={item.url} alt={item.label}
+                    style={{ height:110, width:"auto", borderRadius:8, objectFit:"cover",
+                      border: isCover ? "2px solid #22c55e" : "1px solid var(--border)",
+                      display:"block" }}
+                    onError={e => { e.currentTarget.style.display="none"; }}/>
+                )}
               </div>
               <span style={{ position:"absolute", bottom:4, left:4,
                 background:"rgba(0,0,0,0.65)", color:"white",
@@ -1936,8 +1948,13 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
                 ‹
               </button>
             )}
-            <img src={lightbox.url} alt={lightbox.label}
-              style={{ maxWidth:"80vw", maxHeight:"80vh", borderRadius:12, objectFit:"contain" }}/>
+            {isVideoUrl(lightbox.url) ? (
+              <video src={lightbox.url} controls autoPlay playsInline
+                style={{ maxWidth:"80vw", maxHeight:"80vh", borderRadius:12 }}/>
+            ) : (
+              <img src={lightbox.url} alt={lightbox.label}
+                style={{ maxWidth:"80vw", maxHeight:"80vh", borderRadius:12, objectFit:"contain" }}/>
+            )}
             {flatItems.length > 1 && (
               <button onClick={()=>moveLb(1)}
                 style={{ background:"rgba(255,255,255,0.12)", border:"none", borderRadius:"50%",

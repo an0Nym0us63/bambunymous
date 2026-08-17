@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from "react";
 import { X, ChevronLeft, ChevronRight, Check } from "lucide-react";
 import AdminOnly from "./AdminOnly";
 import { showAlert, showConfirm } from "../utils/dialog";
+const isVideoUrl = (u) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(u || "");
 
 /**
  * Galerie photo en tuiles avec carrousel multi-photos par item et comparaison.
@@ -287,8 +288,13 @@ export default function GalleryCompare({
                   <ChevronLeft size={18}/>
                 </button>
               )}
-              <img src={current.url} alt={current.label}
-                style={{ maxWidth:"88vw", maxHeight:"100%", objectFit:"contain", borderRadius:10 }}/>
+              {isVideoUrl(current.url) ? (
+                <video src={current.url} controls autoPlay playsInline
+                  style={{ maxWidth:"88vw", maxHeight:"100%", borderRadius:10 }}/>
+              ) : (
+                <img src={current.url} alt={current.label}
+                  style={{ maxWidth:"88vw", maxHeight:"100%", objectFit:"contain", borderRadius:10 }}/>
+              )}
               {photos.length > 1 && (
                 <button onClick={() => move(1)}
                   style={{ position:"absolute", right:8, background:"rgba(255,255,255,0.1)", border:"none",
@@ -343,11 +349,16 @@ export default function GalleryCompare({
             {photos.length > 1 && (
               <div onClick={e => e.stopPropagation()}
                 style={{ display:"flex", gap:6, overflowX:"auto", padding:"4px 16px calc(10px + env(safe-area-inset-bottom,0px))" }}>
-                {photos.map((p, i) => (
-                  <img key={i} src={p.url} alt={p.label} onClick={() => setCarousel(c => ({ ...c, index:i }))}
-                    style={{ width:48, height:48, objectFit:"cover", borderRadius:6, flexShrink:0, cursor:"pointer",
-                      border: i===carousel.index ? "2px solid #3b82f6" : "2px solid transparent", opacity: i===carousel.index ? 1 : 0.55 }}/>
-                ))}
+                {photos.map((p, i) => {
+                  const st = { width:48, height:48, objectFit:"cover", borderRadius:6, flexShrink:0, cursor:"pointer",
+                    border: i===carousel.index ? "2px solid #3b82f6" : "2px solid transparent", opacity: i===carousel.index ? 1 : 0.55 };
+                  return isVideoUrl(p.url)
+                    ? <div key={i} onClick={() => setCarousel(c => ({ ...c, index:i }))} style={{ position:"relative", flexShrink:0 }}>
+                        <video src={p.url} preload="metadata" muted playsInline style={st}/>
+                        <span style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", color:"white", fontSize:14, pointerEvents:"none", textShadow:"0 1px 3px rgba(0,0,0,0.6)" }}>▶</span>
+                      </div>
+                    : <img key={i} src={p.url} alt={p.label} onClick={() => setCarousel(c => ({ ...c, index:i }))} style={st}/>;
+                })}
               </div>
             )}
           </div>
