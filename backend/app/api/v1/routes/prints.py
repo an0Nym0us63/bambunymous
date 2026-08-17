@@ -610,7 +610,8 @@ async def prints_stats(
 
     async with AsyncSessionLocal() as db:
         DUR = func.coalesce(Print.duration_seconds, Print.estimated_seconds, 0)
-        done = Print.status.in_(["SUCCESS", "FAILED"])   # print terminé
+        done = Print.status.in_(["SUCCESS", "FAILED"])   # print terminé (KPIs succes/echec)
+        done_all = Print.status.in_(["SUCCESS", "FAILED", "PARTIAL", "TO_REDO"])  # tous les resultats
         ok   = Print.status == "SUCCESS"
         ko   = Print.status == "FAILED"
 
@@ -643,7 +644,7 @@ async def prints_stats(
         # Répartition par statut : pas seulement succès/échec, mais aussi partiel,
         # à refaire et annulé (sinon ces prints n'apparaissaient nulle part).
         _st_rows = (await db.execute(
-            select(Print.status, func.count(Print.id)).where(*W()).group_by(Print.status)
+            select(Print.status, func.count(Print.id)).where(*period).group_by(Print.status)
         )).all()
         _sc = {(s or ""): n for s, n in _st_rows}
         status_split = [x for x in [
@@ -702,7 +703,7 @@ async def prints_stats(
         # exigeant > 1 point). On choisit donc le grain selon l'etendue reelle.
         rows = (await db.execute(
             select(Print.print_date, Print.total_cost, Print.total_weight_g, Print.status, DUR.label("dur_s"))
-            .where(*W(), Print.print_date.isnot(None)).order_by(Print.print_date)
+            .where(*period, done_all, Print.print_date.isnot(None)).order_by(Print.print_date)
         )).all()
 
         # Etendue effective des donnees (en jours), pour choisir le grain meme en
