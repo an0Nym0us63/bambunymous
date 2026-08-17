@@ -740,11 +740,16 @@ async def prints_stats(
             if not r.print_date:
                 continue
             key = _bucket_key(r.print_date)
-            m = monthly.setdefault(key, {"count": 0, "failed": 0, "cost": 0.0,
+            m = monthly.setdefault(key, {"count": 0, "failed": 0, "partial": 0,
+                                         "to_redo": 0, "cost": 0.0,
                                          "weight_g": 0.0, "duration_s": 0.0})
             m["count"]      += 1
             if r.status == "FAILED":
                 m["failed"] += 1
+            elif r.status == "PARTIAL":
+                m["partial"] += 1
+            elif r.status == "TO_REDO":
+                m["to_redo"] += 1
             m["cost"]       += float(r.total_cost or 0)
             m["weight_g"]   += float(r.total_weight_g or 0)
             m["duration_s"] += float(r.dur_s or 0)
