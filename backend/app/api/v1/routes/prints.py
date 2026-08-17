@@ -610,8 +610,11 @@ async def prints_stats(
 
     async with AsyncSessionLocal() as db:
         DUR = func.coalesce(Print.duration_seconds, Print.estimated_seconds, 0)
-        done = Print.status.in_(["SUCCESS", "FAILED"])   # print terminé (KPIs succes/echec)
-        done_all = Print.status.in_(["SUCCESS", "FAILED", "PARTIAL", "TO_REDO"])  # tous les resultats
+        # Base des stats = tous les resultats REELS d'impression (on exclut les
+        # en-cours et les annules). Le taux de reussite et le donut partagent donc
+        # la meme base -> ils concordent.
+        done = Print.status.in_(["SUCCESS", "FAILED", "PARTIAL", "TO_REDO"])
+        done_all = done
         ok   = Print.status == "SUCCESS"
         ko   = Print.status == "FAILED"
 
@@ -630,7 +633,7 @@ async def prints_stats(
         # ── KPIs (le filament d'un print raté est consommé : on le compte)
         total   = (await db.execute(select(func.count(Print.id)).where(*W()))).scalar() or 0
         success = (await db.execute(select(func.count(Print.id)).where(*W(ok)))).scalar() or 0
-        failed  = total - success
+        failed  = (await db.execute(select(func.count(Print.id)).where(*W(ko)))).scalar() or 0
 
         weight  = (await db.execute(select(func.sum(func.coalesce(Print.total_weight_g, 0))).where(*W()))).scalar() or 0
         cost    = (await db.execute(select(func.sum(func.coalesce(Print.total_cost, 0))).where(*W()))).scalar() or 0
@@ -652,7 +655,6 @@ async def prints_stats(
             {"name": "Partiel",   "value": _sc.get("PARTIAL", 0)},
             {"name": "À refaire", "value": _sc.get("TO_REDO", 0)},
             {"name": "Échecs",    "value": _sc.get("FAILED", 0)},
-            {"name": "Annulé",    "value": _sc.get("CANCELLED", 0)},
         ] if x["value"] > 0]
 
         # ── Tops prints
