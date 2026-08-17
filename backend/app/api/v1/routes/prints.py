@@ -1161,11 +1161,11 @@ async def upload_print_photo(
             with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
                 tmp.write(raw); tmp_path = tmp.name
             _sp.run([
-                "ffmpeg", "-y", "-i", tmp_path, "-t", "10",
+                "ffmpeg", "-y", "-i", tmp_path, "-t", "30",
                 "-vf", "fps=15,scale='min(720,iw)':-1:flags=lanczos",
                 "-an", "-loop", "0", "-c:v", "libwebp",
                 "-q:v", "55", "-compression_level", "5", "-preset", "picture", str(dest)
-            ], check=True, capture_output=True, timeout=180)
+            ], check=True, capture_output=True, timeout=300)
             _os.unlink(tmp_path)
         except Exception:
             # Repli : si l'encodage anime echoue, garder la video brute.
@@ -1467,11 +1467,11 @@ async def upload_group_photo(
             with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
                 tmp.write(raw); tmp_path = tmp.name
             _sp.run([
-                "ffmpeg", "-y", "-i", tmp_path, "-t", "10",
+                "ffmpeg", "-y", "-i", tmp_path, "-t", "30",
                 "-vf", "fps=15,scale='min(720,iw)':-1:flags=lanczos",
                 "-an", "-loop", "0", "-c:v", "libwebp",
                 "-q:v", "55", "-compression_level", "5", "-preset", "picture", str(dest)
-            ], check=True, capture_output=True, timeout=180)
+            ], check=True, capture_output=True, timeout=300)
             _os.unlink(tmp_path)
         except Exception:
             ext = orig_ext if orig_ext in ("mp4", "webm", "mov", "m4v") else "mp4"
