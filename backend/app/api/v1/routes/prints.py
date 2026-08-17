@@ -2,6 +2,7 @@
 API REST — Historique des impressions.
 """
 import os, shutil
+import html
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
@@ -575,7 +576,7 @@ async def patch_group(group_id: int, body: dict = Body({}), _: str = Depends(get
 def _clean_name(fn: Optional[str]) -> str:
     """Retire proprement l'extension. rstrip() retirerait des caractères :
     "shelf.3mf".rstrip(".3mf") == "shel"."""
-    n = (fn or "?").strip()
+    n = html.unescape((fn or "?").strip())   # &apos; -> ', &amp; -> & ...
     for ext in (".gcode.3mf", ".3mf", ".gcode", ".stl"):
         if n.lower().endswith(ext):
             return n[: -len(ext)]
@@ -641,18 +642,18 @@ async def prints_stats(
 
         # ── Tops prints
         top_dur = (await db.execute(
-            select(Print.id, Print.file_name, Print.original_name,
+            select(Print.id, Print.file_name, Print.original_name, Print.translated_name,
                    DUR.label("dur_s"), Print.total_cost, Print.total_weight_g, Print.print_date)
             .where(*W(ok)).order_by(DUR.desc()).limit(10)
         )).all()
         top_cost = (await db.execute(
-            select(Print.id, Print.file_name, Print.original_name,
+            select(Print.id, Print.file_name, Print.original_name, Print.translated_name,
                    DUR.label("dur_s"), Print.total_cost, Print.total_weight_g, Print.print_date)
             .where(*W(ok), Print.total_cost > 0)
             .order_by(desc(Print.total_cost)).limit(10)
         )).all()
         top_weight = (await db.execute(
-            select(Print.id, Print.file_name, Print.original_name,
+            select(Print.id, Print.file_name, Print.original_name, Print.translated_name,
                    DUR.label("dur_s"), Print.total_cost, Print.total_weight_g, Print.print_date)
             .where(*W(ok), Print.total_weight_g > 0)
             .order_by(desc(Print.total_weight_g)).limit(10)
@@ -671,7 +672,7 @@ async def prints_stats(
                 .group_by(Group.id)
                 .order_by(desc(order_col)).limit(10)
             )).all()
-            return [{"id": r.id, "name": r.name or "Groupe", "nb": r.nb,
+            return [{"id": r.id, "name": html.unescape(r.name) if r.name else "Groupe", "nb": r.nb,
                      "duration_s": float(r.dur_s or 0),
                      "cost": round(float(r.cost or 0), 2),
                      "weight_g": round(float(r.weight_g or 0), 1)} for r in rows]
@@ -805,7 +806,7 @@ async def prints_stats(
         def _p(r):
             return {
                 "id": r.id,
-                "name": _clean_name(r.original_name or r.file_name),
+                "name": _clean_name(r.translated_name or r.original_name or r.file_name),
                 "duration_s": float(r.dur_s or 0),
                 "cost": round(float(r.total_cost or 0), 2),
                 "weight_g": round(float(r.total_weight_g or 0), 1),
