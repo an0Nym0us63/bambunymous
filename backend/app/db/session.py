@@ -139,48 +139,41 @@ async def _migrate_object_status():
             cols = [r[1] for r in (await conn.execute(_text("PRAGMA table_info(objects)"))).all()]
             if "status" not in cols:
                 return
-            # Deux populations a traiter :
-            #  - les lignes encore vides (cas normal) ;
-            #  - celles que la premiere version de cette migration a marquees
-            #    'available' a tort, parce que la colonne avait ete creee avec
-            #    un DEFAULT qui remplissait tout avant la reprise.
-            #
-            # La seconde condition ne touche QUE les lignes dont les anciens
-            # champs contredisent le statut : un objet reellement disponible
-            # n'a aucun de ces marqueurs et reste intact. Une remise a 'a
-            # vendre' faite a la main n'est donc jamais ecrasee.
-            cond = ("""
-                (status IS NULL OR status = ''
-                 OR (status = 'available' AND (
-                        (sold_price IS NOT NULL AND sold_price > 0)
-                     OR personal = 1
-                     OR available = 0))
-                 -- Rattrape les dons classes "indisponible" par la version
-                 -- precedente, qui ne connaissait pas encore ce cas.
-                 OR (status = 'unavailable'
-                     AND sold_price IS NOT NULL AND sold_price = 0
-                     AND personal = 0))
-            """)
+            # 1) Backfill unique : deduire status des anciens miroirs UNIQUEMENT
+            #    pour les lignes encore vides (objets importes avant l'ajout du
+            #    champ status). On ne "corrige" plus les status deja definis :
+            #    c'etait la cause du bug ou un objet passe "a vendre" (mais dont
+            #    le miroir personal restait a 1 a cause d'un PATCH boiteux)
+            #    repassait en perso a chaque redemarrage.
             n = (await conn.execute(_text(
-                f"SELECT COUNT(*) FROM objects WHERE {cond}"))).scalar()
-            if not n:
-                return
-            await conn.execute(_text(f"""
-                UPDATE objects SET status = CASE
-                    WHEN sold_price IS NOT NULL AND sold_price > 0 THEN 'sold'
-                    WHEN personal = 1                              THEN 'personal'
-                    -- Spoolnymous encodait un CADEAU par sold_price = 0 avec
-                    -- personal = 0 (cf. gifted_count dans son objects.py).
-                    -- L'information a survecu a l'import : un prix de vente a
-                    -- zero n'est pas une absence de prix, c'est un don. Sans ce
-                    -- cas, ces objets tombaient en "indisponible".
-                    WHEN sold_price IS NOT NULL AND sold_price = 0 THEN 'gifted'
-                    WHEN available = 0                             THEN 'unavailable'
-                    ELSE 'available'
-                END
-                WHERE {cond}
+                "SELECT COUNT(*) FROM objects WHERE status IS NULL OR status = ''"))).scalar()
+            if n:
+                await conn.execute(_text("""
+                    UPDATE objects SET status = CASE
+                        WHEN sold_price IS NOT NULL AND sold_price > 0 THEN 'sold'
+                        WHEN personal = 1                              THEN 'personal'
+                        -- Spoolnymous encodait un CADEAU par sold_price = 0 avec
+                        -- personal = 0 : un prix a zero est un don, pas une absence.
+                        WHEN sold_price IS NOT NULL AND sold_price = 0 THEN 'gifted'
+                        WHEN available = 0                             THEN 'unavailable'
+                        ELSE 'available'
+                    END
+                    WHERE status IS NULL OR status = ''
+                """))
+                print(f"[migration] statut deduit pour {n} objet(s)")
+
+            # 2) Le statut est desormais la SOURCE DE VERITE ; les miroirs
+            #    personal/available doivent le refleter. On repare ainsi les
+            #    lignes rendues incoherentes (ex. status=available + personal=1)
+            #    et les stats/filtres qui s'appuient encore sur ces miroirs.
+            await conn.execute(_text("""
+                UPDATE objects
+                SET personal  = CASE WHEN status = 'personal'  THEN 1 ELSE 0 END,
+                    available = CASE WHEN status = 'available' THEN 1 ELSE 0 END
+                WHERE status IS NOT NULL AND status != ''
+                  AND (personal  != (CASE WHEN status = 'personal'  THEN 1 ELSE 0 END)
+                    OR available != (CASE WHEN status = 'available' THEN 1 ELSE 0 END))
             """))
-            print(f"[migration] statut deduit ou corrige pour {n} objet(s)")
     except Exception as e:
         print(f"[migration] statut objets: {e}")
 
