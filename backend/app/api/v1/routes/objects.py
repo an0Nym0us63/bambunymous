@@ -381,6 +381,13 @@ async def update_object(oid: int, body: ObjectUpdate, _: str = Depends(get_curre
             o.status = st
             o.personal  = (st == "personal")
             o.available = (st == "available")
+            # Le statut est la SOURCE DE VERITE : on ignore les miroirs
+            # personal/available du payload (le selecteur front peut les laisser
+            # obsoletes). Sinon la boucle generique plus bas re-appliquerait
+            # personal=1 sur un objet passe "available", et la migration de
+            # demarrage le repasserait en perso au prochain rebuild.
+            data.pop("personal", None)
+            data.pop("available", None)
             if st != "sold":
                 # Quitter l'etat vendu efface le montant : le conserver
                 # ferait apparaitre l'objet dans le chiffre d'affaires alors
