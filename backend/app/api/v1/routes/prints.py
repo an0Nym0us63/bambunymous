@@ -640,6 +640,20 @@ async def prints_stats(
         c_fail  = (await db.execute(select(func.sum(func.coalesce(Print.total_cost, 0))).where(*W(ko)))).scalar() or 0
         d_fail  = (await db.execute(select(func.sum(DUR)).where(*W(ko)))).scalar() or 0
 
+        # Répartition par statut : pas seulement succès/échec, mais aussi partiel,
+        # à refaire et annulé (sinon ces prints n'apparaissaient nulle part).
+        _st_rows = (await db.execute(
+            select(Print.status, func.count(Print.id)).where(*W()).group_by(Print.status)
+        )).all()
+        _sc = {(s or ""): n for s, n in _st_rows}
+        status_split = [x for x in [
+            {"name": "Réussies",  "value": _sc.get("SUCCESS", 0)},
+            {"name": "Partiel",   "value": _sc.get("PARTIAL", 0)},
+            {"name": "À refaire", "value": _sc.get("TO_REDO", 0)},
+            {"name": "Échecs",    "value": _sc.get("FAILED", 0)},
+            {"name": "Annulé",    "value": _sc.get("CANCELLED", 0)},
+        ] if x["value"] > 0]
+
         # ── Tops prints
         top_dur = (await db.execute(
             select(Print.id, Print.file_name, Print.original_name, Print.translated_name,
@@ -886,7 +900,7 @@ async def prints_stats(
             "by_hour":    [{"hour": h, "value": _hour[h]} for h in range(24)],
             "peak_hour":  _peak_hour,
             "best_day":   ({"date": _best_day[0], "count": _best_day[1]} if _best_day else None),
-            "status_split": [
+            "status_split": status_split or [
                 {"name": "Réussies", "value": success},
                 {"name": "Échecs",   "value": failed},
             ],

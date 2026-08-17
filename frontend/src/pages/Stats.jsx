@@ -428,6 +428,15 @@ function TimeChart({ data, bucket = "month" }) {
   );
 }
 
+// Couleur par statut pour le donut de repartition (aligne sur STATUS_CFG).
+const STATUS_SPLIT_COLORS = {
+  "Réussies": "#22c55e",
+  "Partiel": "#f59e0b",
+  "À refaire": "#8b5cf6",
+  "Échecs": "#ef4444",
+  "Annulé": "#94a3b8",
+};
+
 // ── Donut
 function Donut({ data, title, palette }) {
   const total = (data || []).reduce((s, d) => s + d.value, 0);
@@ -859,9 +868,9 @@ export default function Stats() {
                 color="#f59e0b" labelKey="hour" suffix="h"/>
             )}
             {(data.status_split || []).some(d => d.value > 0) && (
-              <Donut palette title="Réussites / échecs"
+              <Donut palette title="Répartition par statut"
                 data={data.status_split.filter(d => d.value > 0)
-                  .map(d => ({ ...d, hex: d.name === "Échecs" ? "#ef4444" : "#22c55e" }))}/>
+                  .map(d => ({ ...d, hex: STATUS_SPLIT_COLORS[d.name] || "#94a3b8" }))}/>
             )}
           </div>
         </Section>
