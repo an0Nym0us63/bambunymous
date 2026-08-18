@@ -314,7 +314,7 @@ async def printer_status(_: str = Depends(get_current_user)):
             head_id=s.hotend_rack.head_id,
         ),
         hms_errors=s.hms_errors,
-        hms_decoded=decode_hms(s.hms_errors),
+        hms_decoded=decode_hms(s.hms_errors, model_id=getattr(s, "model_id", "") or "", model_name=getattr(s, "printer_model", "") or ""),
         print_error=s.print_error,
         fw_version=s.fw_version,
     )

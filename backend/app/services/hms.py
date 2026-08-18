@@ -116,6 +116,27 @@ def _wiki_pretty(attr: int, code: int) -> str:
     return f"{ahi:04X}_{alo:04X}_{code >> 16:04X}_{code & 0xFFFF:04X}"
 
 
+# Segment "modele" de l'URL wiki. Bambu a des pages par famille (x1 / h2 / a1 / p1).
+# On deduit la famille du model_id MQTT (ex. C12 = H2D, BL-P001 = X1C) ou du nom ;
+# override possible via HMS_WIKI_MODEL (utile pour l'H2C dont le code peut varier).
+# Defaut x1 : chemin le plus universel.
+_WIKI_MODEL_ENV = os.getenv("HMS_WIKI_MODEL", "auto").strip().lower()
+
+def _wiki_model(model_id: str = "", model_name: str = "") -> str:
+    if _WIKI_MODEL_ENV and _WIKI_MODEL_ENV != "auto":
+        return _WIKI_MODEL_ENV
+    blob = f"{model_id or ''} {model_name or ''}".upper()
+    if "H2" in blob or "C12" in blob:                                  # H2C/H2D/H2S/H2D Pro
+        return "h2"
+    if "X1" in blob or "BL-P00" in blob or "C11" in blob:              # X1/X1C/X1E
+        return "x1"
+    if "A1" in blob or "C20" in blob or "C21" in blob:                 # A1/A1 mini
+        return "a1"
+    if "P1" in blob or "C13" in blob or "C24" in blob:                 # P1P/P1S
+        return "p1"
+    return "x1"
+
+
 def _find_label(obj):
     """Extrait un libelle d'une reponse JSON de forme inconnue (best effort)."""
     if isinstance(obj, str):
@@ -162,9 +183,10 @@ async def _fetch_label(code_key: str):
         _fetching.discard(code_key)
 
 
-def decode_hms(hms_errors, schedule_fetch: bool = True):
+def decode_hms(hms_errors, model_id: str = "", model_name: str = "", schedule_fetch: bool = True):
     """Tableau brut MQTT -> liste enrichie {code, severity, label, wiki}."""
     out = []
+    seg = _wiki_model(model_id, model_name)
     for e in (hms_errors or []):
         try:
             attr = int(e.get("attr", 0))
@@ -189,7 +211,7 @@ def decode_hms(hms_errors, schedule_fetch: bool = True):
             "code": pretty,
             "severity": _SEVERITY.get(code >> 16, "info"),
             "label": label,
-            "wiki": f"https://wiki.bambulab.com/en/x1/troubleshooting/hmscode/{wiki_code}",
+            "wiki": f"https://wiki.bambulab.com/{_LANG}/{seg}/troubleshooting/hmscode/{wiki_code}",
         })
     order = {"fatal": 0, "serious": 1, "common": 2, "info": 3}
     out.sort(key=lambda x: order.get(x["severity"], 9))
