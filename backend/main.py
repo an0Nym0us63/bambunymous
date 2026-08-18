@@ -23,7 +23,6 @@ VERSION = os.getenv("COMMIT_SHA", "dev")[:8]
 # On ajoute le FileHandler directement dans le lifespan, après que /data existe
 LOG_FILE = str(Path(settings.DATA_DIR) / "bambunymous.log")
 _log_fmt = logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
-_log_fmt.converter = time.gmtime   # horodatage en UTC ; le front convertit en local
 logger = logging.getLogger(__name__)
 
 # Silencer les loggers trop verbeux

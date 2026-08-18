@@ -2,14 +2,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { RefreshCw, Trash2, Play, Square, Filter, Search } from "lucide-react";
 import client from "../api/client";
 
-// Le backend ecrit ses horodatages en UTC ; on affiche en heure LOCALE, comme le
-// reste de l'app (le journal montrait sinon l'heure UTC, ~2h de decalage l'ete).
-const localTime = (date, ts) => {
-  try {
-    const d = new Date(`${date}T${ts}Z`);
-    return isNaN(d) ? ts : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-  } catch { return ts; }
-};
 
 const LEVEL_COLOR = { DEBUG:"#64748b", INFO:"#3b82f6", WARNING:"#f59e0b", ERROR:"#ef4444", CRITICAL:"#dc2626" };
 const LEVELS = ["DEBUG","INFO","WARNING","ERROR"];
@@ -209,7 +201,7 @@ export default function Logs({ embedded = false }) {
               borderLeft: `2px solid ${LEVEL_COLOR[l.level]||"transparent"}`,
               marginBottom:1,
             }}>
-              <span style={{ color:"var(--muted)", flexShrink:0, minWidth:60 }}>{localTime(l.date, l.ts)}</span>
+              <span style={{ color:"var(--muted)", flexShrink:0, minWidth:60 }}>{l.ts}</span>
               <span style={{ color:LEVEL_COLOR[l.level]||"var(--text2)", fontWeight:700, flexShrink:0, minWidth:56 }}>{l.level}</span>
               <span style={{ color:"var(--muted)", flexShrink:0, minWidth:64, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.name}</span>
               <span style={{ color:"var(--text)", flex:1, wordBreak:"break-word", lineHeight:1.5 }}>
