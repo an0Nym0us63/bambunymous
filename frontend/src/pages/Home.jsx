@@ -45,6 +45,13 @@ const STATUS_CFG = {
 // (alerte HMS désormais affichée en badge discret dans StatusBanner)
 
 
+const HMS_SEV = {
+  fatal:   { label: "Fatal",   color: "#dc2626" },
+  serious: { label: "Sérieux", color: "#f97316" },
+  common:  { label: "Courant", color: "#f59e0b" },
+  info:    { label: "Info",    color: "#3b82f6" },
+};
+
 function StatusBanner({ status }) {
   const [expanded, setExpanded] = useState(false);
   const camRef      = useRef(null);
@@ -246,6 +253,36 @@ function StatusBanner({ status }) {
                 </div>
               ))}
             </div>
+
+            {/* Encart alertes HMS : libelle + criticite + lien wiki */}
+            {status.hms_decoded?.length > 0 && (
+              <div style={{ border:"1px solid rgba(245,158,11,0.5)", background:"rgba(245,158,11,0.10)",
+                borderRadius:12, padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
+                <p style={{ fontSize:10, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em",
+                  color:"#f59e0b", margin:0, display:"flex", alignItems:"center", gap:6 }}>
+                  <AlertTriangle size={13}/> {status.hms_decoded.length} alerte{status.hms_decoded.length>1?"s":""} imprimante
+                </p>
+                {status.hms_decoded.map((h,i) => {
+                  const sc = HMS_SEV[h.severity] || HMS_SEV.info;
+                  return (
+                    <a key={i} href={h.wiki} target="_blank" rel="noreferrer"
+                      style={{ display:"flex", gap:8, alignItems:"flex-start", textDecoration:"none",
+                        background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8, padding:"8px 10px" }}>
+                      <span style={{ flexShrink:0, marginTop:1, fontSize:9, fontWeight:800, color:"white",
+                        background:sc.color, borderRadius:6, padding:"2px 6px", textTransform:"uppercase" }}>{sc.label}</span>
+                      <span style={{ flex:1, minWidth:0 }}>
+                        <span style={{ display:"block", fontSize:12, color:"var(--text)", lineHeight:1.4 }}>
+                          {h.label || "Code HMS non répertorié — voir le wiki"}
+                        </span>
+                        <span style={{ display:"block", fontSize:10, color:"var(--muted)", fontFamily:"monospace", marginTop:2 }}>
+                          {h.code} ↗
+                        </span>
+                      </span>
+                    </a>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
