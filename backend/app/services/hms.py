@@ -101,6 +101,21 @@ def _pretty(attr: int, code: int) -> str:
     return f"{attr >> 16:04X}_{attr & 0xFFFF:04X}_{code >> 16:04X}_{code & 0xFFFF:04X}"
 
 
+# Modules AMS/filament : octet haut de attr_hi. Pour eux, l'unite AMS (octet bas de
+# attr_hi) et le slot (2e quartet de attr_lo) sont des INDEX ; la page wiki est
+# generique (AMS A / slot 1) -> on remet ces index a zero pour pointer la bonne
+# page. Les autres modules ont ces bits significatifs : on n'y touche pas.
+_AMS_HI = {0x07, 0x12, 0x18}
+
+def _wiki_pretty(attr: int, code: int) -> str:
+    ahi = (attr >> 16) & 0xFFFF
+    alo = attr & 0xFFFF
+    if (ahi >> 8) in _AMS_HI:
+        ahi &= 0xFF00
+        alo &= 0xF0FF
+    return f"{ahi:04X}_{alo:04X}_{code >> 16:04X}_{code & 0xFFFF:04X}"
+
+
 def _find_label(obj):
     """Extrait un libelle d'une reponse JSON de forme inconnue (best effort)."""
     if isinstance(obj, str):
@@ -156,19 +171,25 @@ def decode_hms(hms_errors, schedule_fetch: bool = True):
             code = int(e.get("code", 0))
         except (TypeError, ValueError, AttributeError):
             continue
-        pretty = _pretty(attr, code)
+        pretty = _pretty(attr, code)            # code exact (precis : AMS C slot 4)
+        wiki_code = _wiki_pretty(attr, code)    # code canonique pour la page wiki
         key = pretty.replace("_", "")
-        label = _labels.get(key)
+        norm_key = wiki_code.replace("_", "")
+        # libelle : precis d'abord, sinon le generique de la page canonique
+        label = _labels.get(key) or _labels.get(norm_key)
         if label is None and schedule_fetch:
             try:
-                asyncio.get_running_loop().create_task(_fetch_label(key))
+                loop = asyncio.get_running_loop()
+                loop.create_task(_fetch_label(key))
+                if norm_key != key:
+                    loop.create_task(_fetch_label(norm_key))
             except RuntimeError:
                 pass
         out.append({
             "code": pretty,
             "severity": _SEVERITY.get(code >> 16, "info"),
             "label": label,
-            "wiki": f"https://wiki.bambulab.com/en/x1/troubleshooting/hmscode/{pretty}",
+            "wiki": f"https://wiki.bambulab.com/en/x1/troubleshooting/hmscode/{wiki_code}",
         })
     order = {"fatal": 0, "serious": 1, "common": 2, "info": 3}
     out.sort(key=lambda x: order.get(x["severity"], 9))
