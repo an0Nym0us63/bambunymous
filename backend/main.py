@@ -27,6 +27,21 @@ logger = logging.getLogger(__name__)
 for _noisy in ("sqlalchemy.engine", "sqlalchemy.pool", "aiosqlite", "sqlalchemy.dialects"):
     logging.getLogger(_noisy).setLevel(logging.WARNING)
 
+# Filtre applique au fichier log : on n'y ECRIT pas le bruit (SQL, polling
+# imprimante, assets). Sans lui, ce bruit noyait les vraies lignes et le
+# visualiseur scannait dans le vide -> pages "Journal" vides / incoherentes.
+_NOISY_LOG_NAMES = ("sqlalchemy", "aiosqlite")
+_NOISY_LOG_MSGS = ("/api/v1/logs", "/api/v1/printer", "/healthz", "/favicon", "/assets/")
+class _LogNoiseFilter(logging.Filter):
+    def filter(self, record):
+        if any(record.name.startswith(n) for n in _NOISY_LOG_NAMES):
+            return False
+        try:
+            msg = record.getMessage()
+        except Exception:
+            return True
+        return not any(x in msg for x in _NOISY_LOG_MSGS)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,6 +51,7 @@ async def lifespan(app: FastAPI):
     _fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
     _fh.setFormatter(_log_fmt)
     _fh.setLevel(logging.DEBUG)
+    _fh.addFilter(_LogNoiseFilter())
     # Ajouter sur TOUS les loggers déjà créés + root
     root = logging.getLogger()
     root.addHandler(_fh)
@@ -43,7 +59,11 @@ async def lifespan(app: FastAPI):
     # S'assurer que tous les sous-loggers propagent vers root
     for _name, _lg in list(logging.Logger.manager.loggerDict.items()):
         if isinstance(_lg, logging.Logger):
-            _lg.setLevel(logging.DEBUG)
+            # Ne PAS forcer a DEBUG les loggers deliberement silencieux (SQL,
+            # aiosqlite) : sinon on annule le setLevel(WARNING) plus haut et le
+            # fichier reexplose de requetes SQL a chaque appel.
+            if not _name.startswith(_NOISY_LOG_NAMES):
+                _lg.setLevel(logging.DEBUG)
             _lg.propagate = True
     logger.info(f"BambuNymous starting — version {VERSION}")
     await init_db()
