@@ -33,40 +33,61 @@ def _norm_key(s) -> str:
     return "".join(ch for ch in str(s).upper() if ch in "0123456789ABCDEF")
 
 
+def _ingest(data) -> int:
+    """Absorbe un mapping de libelles, quel que soit son format :
+       - dict plat {code: "libelle"} (notre cache / fusion embarquee) ;
+       - format Bambu brut {data:{device_hms:{fr:[{ecode,intro}]}}} (dump Studio /
+         reponse e.bambulab.com) ;
+       - liste [{ecode/code, intro/desc}]."""
+    n0 = len(_labels)
+    if isinstance(data, dict) and isinstance(data.get("data"), dict) \
+            and isinstance(data["data"].get("device_hms"), dict):
+        for lang, arr in data["data"]["device_hms"].items():
+            if isinstance(arr, list):
+                for e in arr:
+                    k = _norm_key(e.get("ecode") or e.get("code") or "")
+                    t = (e.get("intro") or e.get("desc") or "").strip()
+                    if k and t:
+                        _labels[k] = t
+    elif isinstance(data, dict):
+        for k, v in data.items():
+            t = v if isinstance(v, str) else (
+                (v.get("intro") or v.get("desc") or "") if isinstance(v, dict) else "")
+            k2 = _norm_key(k)
+            if k2 and t:
+                _labels[k2] = t
+    elif isinstance(data, list):
+        for e in data:
+            k = _norm_key(e.get("ecode") or e.get("code") or "")
+            t = (e.get("intro") or e.get("desc") or "").strip()
+            if k and t:
+                _labels[k] = t
+    return len(_labels) - n0
+
+
+def _load_file(path: Path):
+    try:
+        if path.exists():
+            n = _ingest(json.loads(path.read_text("utf-8")))
+            logger.info(f"[HMS] {n} libelles depuis {path.name}")
+    except Exception as e:
+        logger.warning(f"[HMS] lecture {path.name}: {e}")
+
+
 def init_hms():
-    """Charge le cache disque + un eventuel dump complet fourni par l'utilisateur."""
+    """Charge : le mapping embarque (repo) -> le cache disque -> un dump utilisateur
+    (/data/hms_<lang>.json). Chaque source complete/ecrase la precedente."""
     global _loaded
     if _loaded:
         return
     _loaded = True
-    try:
-        if _CACHE_FILE.exists():
-            _labels.update({_norm_key(k): v for k, v in
-                            json.loads(_CACHE_FILE.read_text("utf-8")).items()})
-    except Exception as e:
-        logger.warning(f"[HMS] cache illisible: {e}")
-
-    for name in (f"hms_{_LANG}.json", "hms.json"):
+    _load_file(Path(__file__).parent / "hms_data" / f"hms_{_LANG}.json")  # embarque
+    _load_file(_CACHE_FILE)                                               # cache runtime
+    for name in (f"hms_{_LANG}.json", "hms.json"):                        # dump utilisateur
         f = _DATA / name
-        if not f.exists():
-            continue
-        try:
-            data = json.loads(f.read_text("utf-8"))
-            n0 = len(_labels)
-            if isinstance(data, dict):
-                for k, v in data.items():
-                    _labels[_norm_key(k)] = v if isinstance(v, str) else (
-                        v.get("intro") or v.get("desc") or v.get("detail") or "")
-            elif isinstance(data, list):
-                for e in data:
-                    key = _norm_key(e.get("ecode") or e.get("code") or "")
-                    txt = e.get("intro") or e.get("desc") or e.get("detail") or ""
-                    if key and txt:
-                        _labels[key] = txt
-            logger.info(f"[HMS] {len(_labels) - n0} libelles charges depuis {name}")
-        except Exception as e:
-            logger.warning(f"[HMS] lecture {name}: {e}")
-        break
+        if f.exists():
+            _load_file(f)
+            break
 
 
 def _persist():

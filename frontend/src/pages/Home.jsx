@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle, Calendar } from "lucide-react";
+import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle, ExternalLink, Calendar } from "lucide-react";
 import client from "../api/client";
 import AttentionSection from "../components/AttentionSection";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
@@ -254,35 +254,48 @@ function StatusBanner({ status }) {
               ))}
             </div>
 
-            {/* Encart alertes HMS : libelle + criticite + lien wiki */}
-            {status.hms_decoded?.length > 0 && (
-              <div style={{ border:"1px solid rgba(245,158,11,0.5)", background:"rgba(245,158,11,0.10)",
-                borderRadius:12, padding:"10px 12px", display:"flex", flexDirection:"column", gap:8 }}>
-                <p style={{ fontSize:10, fontWeight:800, textTransform:"uppercase", letterSpacing:"0.08em",
-                  color:"#f59e0b", margin:0, display:"flex", alignItems:"center", gap:6 }}>
-                  <AlertTriangle size={13}/> {status.hms_decoded.length} alerte{status.hms_decoded.length>1?"s":""} imprimante
-                </p>
-                {status.hms_decoded.map((h,i) => {
-                  const sc = HMS_SEV[h.severity] || HMS_SEV.info;
-                  return (
-                    <a key={i} href={h.wiki} target="_blank" rel="noreferrer"
-                      style={{ display:"flex", gap:8, alignItems:"flex-start", textDecoration:"none",
-                        background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8, padding:"8px 10px" }}>
-                      <span style={{ flexShrink:0, marginTop:1, fontSize:9, fontWeight:800, color:"white",
-                        background:sc.color, borderRadius:6, padding:"2px 6px", textTransform:"uppercase" }}>{sc.label}</span>
-                      <span style={{ flex:1, minWidth:0 }}>
-                        <span style={{ display:"block", fontSize:12, color:"var(--text)", lineHeight:1.4 }}>
-                          {h.label || "Code HMS non répertorié — voir le wiki"}
-                        </span>
-                        <span style={{ display:"block", fontSize:10, color:"var(--muted)", fontFamily:"monospace", marginTop:2 }}>
-                          {h.code} ↗
-                        </span>
-                      </span>
-                    </a>
-                  );
-                })}
-              </div>
-            )}
+            {/* Encart alertes HMS : criticite + libelle + lien wiki */}
+            {status.hms_decoded?.length > 0 && (() => {
+              const worst = status.hms_decoded[0]?.severity || "info";
+              const tone = HMS_SEV[worst] || HMS_SEV.info;
+              return (
+                <div style={{ borderRadius:14, overflow:"hidden",
+                  border:`1px solid ${tone.color}44`,
+                  background:`linear-gradient(180deg, ${tone.color}1f, ${tone.color}0a)` }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 12px",
+                    background:`${tone.color}22`, color:tone.color, fontSize:11, fontWeight:800,
+                    letterSpacing:"0.02em" }}>
+                    <AlertTriangle size={14}/>
+                    {status.hms_decoded.length} alerte{status.hms_decoded.length>1?"s":""} imprimante
+                  </div>
+                  <div style={{ display:"flex", flexDirection:"column" }}>
+                    {status.hms_decoded.map((h,i) => {
+                      const sc = HMS_SEV[h.severity] || HMS_SEV.info;
+                      return (
+                        <a key={i} href={h.wiki} target="_blank" rel="noreferrer"
+                          style={{ display:"flex", gap:10, alignItems:"flex-start", textDecoration:"none",
+                            padding:"10px 12px",
+                            borderTop: i>0 ? "1px solid var(--border)" : "none" }}>
+                          <span style={{ flexShrink:0, width:8, height:8, borderRadius:"50%",
+                            background:sc.color, marginTop:5, boxShadow:`0 0 0 3px ${sc.color}22` }}/>
+                          <span style={{ flex:1, minWidth:0 }}>
+                            <span style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                              <span style={{ fontSize:9, fontWeight:800, color:sc.color,
+                                textTransform:"uppercase", letterSpacing:"0.04em" }}>{sc.label}</span>
+                              <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"monospace" }}>{h.code}</span>
+                            </span>
+                            <span style={{ display:"block", fontSize:12.5, color:"var(--text)", lineHeight:1.45, marginTop:2 }}>
+                              {h.label || "Code non répertorié — appuyez pour ouvrir le wiki"}
+                            </span>
+                          </span>
+                          <ExternalLink size={13} style={{ flexShrink:0, color:"var(--muted)", marginTop:3 }}/>
+                        </a>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}
