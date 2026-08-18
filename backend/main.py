@@ -7,6 +7,7 @@ from fastapi.encoders import jsonable_encoder
 from datetime import datetime
 from pathlib import Path
 import logging
+import logging.handlers
 import time
 import os
 
@@ -50,7 +51,11 @@ async def lifespan(app: FastAPI):
     Path(settings.DATA_DIR).mkdir(parents=True, exist_ok=True)
     Path(settings.UPLOADS_DIR).mkdir(parents=True, exist_ok=True)
     # Ajouter FileHandler sur TOUS les loggers existants (uvicorn les a déjà créés)
-    _fh = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    # WatchedFileHandler (et non FileHandler) : la purge remplace le fichier via
+    # os.replace ; un FileHandler continuerait alors d'ecrire dans l'ancien inode
+    # (invisible) et le journal figeait a l'heure de la purge. WatchedFileHandler
+    # detecte le remplacement et rouvre le nouveau fichier.
+    _fh = logging.handlers.WatchedFileHandler(LOG_FILE, encoding="utf-8")
     _fh.setFormatter(_log_fmt)
     _fh.setLevel(logging.DEBUG)
     _fh.addFilter(_LogNoiseFilter())
