@@ -73,6 +73,8 @@ async def lifespan(app: FastAPI):
             _lg.propagate = True
     logger.info(f"BambuNymous starting — version {VERSION}")
     await init_db()
+    from app.services.hms import init_hms
+    init_hms()   # charge cache/dump des libelles HMS
     # Restaurer les prints IN_PROGRESS en mémoire après un redémarrage
     from app.services.print_tracker import restore_in_progress, resume_enrichment, enrichment_reconciler
     await restore_in_progress()

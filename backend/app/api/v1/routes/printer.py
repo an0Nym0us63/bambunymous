@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from typing import Optional
 from ....core.mqtt import get_state
 from ....db.session import AsyncSessionLocal
+from ....services.hms import decode_hms
 from .auth import get_current_user
 
 
@@ -180,6 +181,7 @@ class PrinterStatusOut(BaseModel):
     active_tray_local: int = -1
     hotend_rack: HotendRackOut
     hms_errors: list[dict]
+    hms_decoded: list[dict] = []
     print_error: int
     fw_version: str
 
@@ -312,6 +314,7 @@ async def printer_status(_: str = Depends(get_current_user)):
             head_id=s.hotend_rack.head_id,
         ),
         hms_errors=s.hms_errors,
+        hms_decoded=decode_hms(s.hms_errors),
         print_error=s.print_error,
         fw_version=s.fw_version,
     )
