@@ -2426,6 +2426,34 @@ export default function Prints() {
                 </button>
               )}
             </div>
+            {/* Filtre période (temporel) — en tete du sheet : plage Debut/Fin +
+                bascule "Tout" qui vide les bornes. Meme sens que le filtre periode
+                de Stats, reduit a la plage personnalisee. Cases a largeur fixe et
+                bouton aligne en bas sur les champs (aligns-items flex-end). */}
+            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Période</p>
+            <div style={{ display:"flex", gap:8, alignItems:"flex-end", flexWrap:"wrap", marginBottom:20 }}>
+              <button onClick={()=>{ setDateFrom(""); setDateTo(""); }}
+                style={{ height:35, padding:"0 16px", borderRadius:20, fontSize:12, fontWeight:600,
+                  cursor:"pointer", border:"none",
+                  background:(!dateFrom && !dateTo) ? "#3b82f6" : "var(--surface2)",
+                  color:(!dateFrom && !dateTo) ? "white" : "var(--muted)" }}>
+                Tout
+              </button>
+              <label style={{ fontSize:11, color:"var(--muted)" }}>Début
+                <input type="date" value={dateFrom} max={dateTo || undefined}
+                  onChange={e=>setDateFrom(e.target.value)}
+                  style={{ display:"block", width:150, boxSizing:"border-box", marginTop:4, padding:"8px 10px",
+                    borderRadius:8, border:"1px solid var(--border)", background:"var(--surface2)",
+                    color:"var(--text)", fontSize:13 }}/>
+              </label>
+              <label style={{ fontSize:11, color:"var(--muted)" }}>Fin
+                <input type="date" value={dateTo} min={dateFrom || undefined}
+                  onChange={e=>setDateTo(e.target.value)}
+                  style={{ display:"block", width:150, boxSizing:"border-box", marginTop:4, padding:"8px 10px",
+                    borderRadius:8, border:"1px solid var(--border)", background:"var(--surface2)",
+                    color:"var(--text)", fontSize:13 }}/>
+              </label>
+            </div>
             <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Statut</p>
             <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:16 }}>
               {STATUSES.map(s => (
@@ -2450,35 +2478,6 @@ export default function Prints() {
                 </button>
               ))}
             </div>
-            {/* Filtre période (temporel) : plage de dates + bascule "Tout" qui
-                vide les bornes. Meme sens que le filtre periode de Stats, mais
-                reduit a la plage personnalisee, presente comme les autres
-                sections du sheet. */}
-            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Période</p>
-            <div style={{ display:"flex", gap:8, alignItems:"flex-end", flexWrap:"wrap", marginBottom:24 }}>
-              <button onClick={()=>{ setDateFrom(""); setDateTo(""); }}
-                style={{ padding:"8px 16px", borderRadius:20, fontSize:12, fontWeight:600,
-                  cursor:"pointer", border:"none", alignSelf:"center",
-                  background:(!dateFrom && !dateTo) ? "#3b82f6" : "var(--surface2)",
-                  color:(!dateFrom && !dateTo) ? "white" : "var(--muted)" }}>
-                Tout
-              </button>
-              <label style={{ flex:1, minWidth:120, fontSize:11, color:"var(--muted)" }}>Début
-                <input type="date" value={dateFrom} max={dateTo || undefined}
-                  onChange={e=>setDateFrom(e.target.value)}
-                  style={{ width:"100%", boxSizing:"border-box", marginTop:4, padding:"8px 10px",
-                    borderRadius:8, border:"1px solid var(--border)", background:"var(--surface2)",
-                    color:"var(--text)", fontSize:13 }}/>
-              </label>
-              <label style={{ flex:1, minWidth:120, fontSize:11, color:"var(--muted)" }}>Fin
-                <input type="date" value={dateTo} min={dateFrom || undefined}
-                  onChange={e=>setDateTo(e.target.value)}
-                  style={{ width:"100%", boxSizing:"border-box", marginTop:4, padding:"8px 10px",
-                    borderRadius:8, border:"1px solid var(--border)", background:"var(--surface2)",
-                    color:"var(--text)", fontSize:13 }}/>
-              </label>
-            </div>
-
             {/* Filtre matériau */}
             {allMaterials.length > 0 && (<>
               <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Matériau</p>
