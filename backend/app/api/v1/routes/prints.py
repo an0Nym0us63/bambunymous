@@ -1410,11 +1410,26 @@ async def set_group_bulk(body: dict, _: str = Depends(get_current_user)):
             target_gid = g.id
 
         updated = 0
+        affected = set()
         for pid in print_ids:
             p = await db.get(Print, int(pid))
             if p:
+                if p.group_id:
+                    affected.add(p.group_id)   # ancien groupe quitte
                 p.group_id = target_gid
                 updated += 1
+        if target_gid:
+            affected.add(target_gid)           # groupe rejoint
+
+        # Le cout par objet d'un groupe = somme des total_cost de ses membres /
+        # number_of_items. Ajouter/retirer un print change donc le cout des objets
+        # rattaches au(x) groupe(s) concerne(s) : on le repercute (comme patch_group
+        # le fait deja sur number_of_items). flush prealable pour que la requete
+        # des membres voie la nouvelle appartenance.
+        await db.flush()
+        for gid in affected - {None}:
+            await _propagate_object_costs(db, "group", gid)
+
         await db.commit()
     return {"ok": True, "group_id": target_gid, "updated": updated}
 
@@ -1435,6 +1450,7 @@ async def set_group(print_id: int, body: dict, _: str = Depends(get_current_user
         if not p:
             raise HTTPException(404)
 
+        old_gid = p.group_id
         if group_id:
             g = await db.get(Group, int(group_id))
             if not g:
@@ -1447,6 +1463,13 @@ async def set_group(print_id: int, body: dict, _: str = Depends(get_current_user
             p.group_id = g.id
         else:
             p.group_id = None
+
+        # Rejoindre/quitter un groupe change l'ensemble de ses membres, donc le
+        # cout par objet (somme des membres / number_of_items). On repercute sur
+        # les objets des deux groupes concernes (ancien et nouveau).
+        await db.flush()
+        for gid in {old_gid, p.group_id} - {None}:
+            await _propagate_object_costs(db, "group", gid)
 
         await db.commit()
     return {"ok": True, "group_id": p.group_id}
