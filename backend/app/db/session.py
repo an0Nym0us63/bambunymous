@@ -47,6 +47,7 @@ async def init_db():
     await _backfill_color_buckets()
     await _backfill_material_family()
     await _normalize_spool_locations()
+    await _normalize_archived_spools()
     await _seed_admin_user()
     await _migrate_last_seen()
     await _migrate_object_status()
@@ -320,6 +321,32 @@ async def _normalize_spool_locations():
             print(f"[migration] emplacement normalise : {n} bobine(s) 'Tiroirs' -> 'Tiroir'")
     except Exception as e:
         print(f"[migration] normalisation emplacement ignoree : {e}")
+
+
+async def _normalize_archived_spools():
+    """
+    Garantit la coherence des bobines archivees : quantite (remaining_weight_g)
+    a 0 et emplacement "Archives". Rattrape les bobines archivees avant
+    l'introduction de cette regle, qui gardaient leur dernier poids restant et
+    leur derniere location AMS (le worker spool_location ignore les archivees).
+    Idempotent : ne touche que les lignes hors-norme.
+    """
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            res = await conn.execute(_text(
+                "UPDATE bobines "
+                "SET remaining_weight_g = 0, location = 'Archives' "
+                "WHERE archived = 1 "
+                "  AND (COALESCE(remaining_weight_g, 0) <> 0 "
+                "       OR location IS NULL "
+                "       OR TRIM(location) COLLATE NOCASE <> 'Archives')"
+            ))
+            n = res.rowcount or 0
+        if n:
+            print(f"[migration] bobines archivees normalisees (qte 0 + Archives) : {n}")
+    except Exception as e:
+        print(f"[migration] normalisation bobines archivees ignoree : {e}")
 
 
 async def _backfill_color_buckets():
