@@ -829,7 +829,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
             {!spool.archived && (
               <button onClick={async()=>{
                   if (!(await showConfirm(
-                    `Archiver la bobine #${spool.id} ? Elle passera en Tiroir avec une quantité remise à 0 et sortira du stock.`,
+                    `Archiver la bobine #${spool.id} ? Elle passera en Archives avec une quantité remise à 0 et sortira du stock.`,
                     { confirmLabel: "Archiver" }
                   ))) return;
                   await onArchive(spool.id); onClose();
