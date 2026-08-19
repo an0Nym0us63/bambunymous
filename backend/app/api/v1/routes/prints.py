@@ -278,6 +278,32 @@ def _order_clauses(sort: str, g):
             desc(Print.print_date)]
 
 
+def _period_clauses(date_from: Optional[str], date_to: Optional[str]):
+    """Bornes temporelles sur print_date. Meme semantique que /stats/summary :
+    date_from inclus, date_to inclus (jour entier). Accepte ISO ou YYYY-MM-DD.
+    Retourne la liste des conditions SQLAlchemy (vide si aucune borne)."""
+    from datetime import timedelta
+
+    def _p(s):
+        if not s:
+            return None
+        try:
+            return datetime.fromisoformat(s)
+        except Exception:
+            try:
+                return datetime.strptime(s, "%Y-%m-%d")
+            except Exception:
+                return None
+    clauses = []
+    d_from = _p(date_from)
+    d_to = _p(date_to)
+    if d_from:
+        clauses.append(Print.print_date >= d_from)
+    if d_to:
+        clauses.append(Print.print_date < d_to + timedelta(days=1))
+    return clauses
+
+
 @router.get("")
 async def list_prints(
     status:   Optional[str] = None,
@@ -288,6 +314,8 @@ async def list_prints(
     fila_type:   Optional[str] = None,
     filament_id: Optional[int] = None,
     color:       Optional[str] = None,
+    date_from: Optional[str] = None,  # borne debut (ISO / YYYY-MM-DD)
+    date_to:   Optional[str] = None,  # borne fin incluse
     sort:     str = "recent",
     limit:    int = Query(40, le=200),
     offset:   int = 0,
@@ -325,6 +353,8 @@ async def list_prints(
             q = q.where(exists().where(
                 (_PT.print_id == Print.id) & (_PT.tag == tag)
             ))
+        for c in _period_clauses(date_from, date_to):
+            q = q.where(c)
 
         total = (await db.execute(
             select(func.count()).select_from(q.subquery())
@@ -988,6 +1018,8 @@ async def prints_kpis(
     fila_type:   Optional[str] = None,
     filament_id: Optional[int] = None,
     color:       Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to:   Optional[str] = None,
     _: str = Depends(get_current_user),
 ):
     async with AsyncSessionLocal() as db:
@@ -1007,6 +1039,8 @@ async def prints_kpis(
             ))
         if material or fila_type or filament_id or color:
             q = q.where(Print.id.in_(_filament_filter_subq(material, fila_type, filament_id, color)))
+        for c in _period_clauses(date_from, date_to):
+            q = q.where(c)
         r = (await db.execute(q)).one()
         return {"count": r.count or 0, "duration": int(r.duration or 0),
                 "weight_g": float(r.weight or 0), "cost": round(float(r.cost or 0), 2)}

@@ -2121,6 +2121,8 @@ export default function Prints() {
   const [filaTypeF, setFilaTypeF] = useState("");
   const [filamentIdF, setFilamentIdF] = useState("");
   const [colorF, setColorF] = useState("");
+  const [dateFrom, setDateFrom] = useState("");  // borne debut plage temporelle
+  const [dateTo, setDateTo] = useState("");      // borne fin (incluse)
   const [colorBuckets, setColorBuckets] = useState([]);
   const [allFilaments, setAllFilaments] = useState([]);
   const [allMaterials, setAllMaterials] = useState([]);
@@ -2168,11 +2170,13 @@ export default function Prints() {
     if (filaTypeF)   p.set("fila_type", filaTypeF);
     if (filamentIdF) p.set("filament_id", filamentIdF);
     if (colorF)      p.set("color", colorF);
+    if (dateFrom)    p.set("date_from", dateFrom);
+    if (dateTo)      p.set("date_to", dateTo);
     try {
       const { data } = await client.get("/prints/kpis?" + p);
       setKpis(data);
     } catch {}
-  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF]);
+  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo]);
 
   useEffect(() => { loadKpis(); }, [loadKpis]);
 
@@ -2206,6 +2210,8 @@ export default function Prints() {
       if (filaTypeF)   params.set("fila_type", filaTypeF);
       if (filamentIdF) params.set("filament_id", filamentIdF);
       if (colorF)      params.set("color", colorF);
+      if (dateFrom)    params.set("date_from", dateFrom);
+      if (dateTo)      params.set("date_to", dateTo);
       if (sortF)       params.set("sort", sortF);
       const { data } = await client.get("/prints?" + params);
       setPrints(data.prints ?? []);
@@ -2215,7 +2221,7 @@ export default function Prints() {
       setError(e.response?.data?.detail || e.message || "Erreur");
     }
     setLoading(false);
-  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, sortF]);
+  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || loadingMoreRef.current) return;
@@ -2242,6 +2248,8 @@ export default function Prints() {
         if (filaTypeF)   params.set("fila_type", filaTypeF);
         if (filamentIdF) params.set("filament_id", filamentIdF);
         if (colorF)      params.set("color", colorF);
+        if (dateFrom)    params.set("date_from", dateFrom);
+        if (dateTo)      params.set("date_to", dateTo);
         if (sortF)       params.set("sort", sortF);
         const { data } = await client.get("/prints?" + params);
         const existingIds = new Set(acc.map(p => p.id));
@@ -2256,7 +2264,7 @@ export default function Prints() {
     } catch(e) {}
     setLoadingMore(false);
     loadingMoreRef.current = false;
-  }, [loadingMore, hasMore, offset, statusF, search, groupF, materialF, filaTypeF, filamentIdF, colorF, sortF]);
+  }, [loadingMore, hasMore, offset, statusF, search, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF]);
 
   useEffect(() => {
     const container = document.querySelector(".page-content");
@@ -2375,11 +2383,11 @@ export default function Prints() {
         </div>
         <button onClick={()=>setFilterOpen(true)}
           style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px",
-            background: (statusF||sortF!=="recent") ? "#3b82f6" : "var(--surface2)",
-            color: (statusF||sortF!=="recent") ? "white" : "var(--text)",
+            background: (statusF||sortF!=="recent"||dateFrom||dateTo) ? "#3b82f6" : "var(--surface2)",
+            color: (statusF||sortF!=="recent"||dateFrom||dateTo) ? "white" : "var(--text)",
             border:"1px solid var(--border)", borderRadius:10, fontSize:12, cursor:"pointer", flexShrink:0 }}>
           <SlidersHorizontal size={14}/>
-          {[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF, colorF].filter(Boolean).length > 0 ? `Filtres (${[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF, colorF].filter(Boolean).length})` : "Filtres"}
+          {[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF, colorF, dateFrom||dateTo].filter(Boolean).length > 0 ? `Filtres (${[statusF, sortF!=="recent", materialF, filaTypeF, filamentIdF, colorF, dateFrom||dateTo].filter(Boolean).length})` : "Filtres"}
         </button>
         {viewMode==="list" && (
           <AdminOnly><button onClick={()=>selectMode?exitSelectMode():setSelectMode(true)}
@@ -2411,8 +2419,8 @@ export default function Prints() {
             <button onClick={()=>setFilterOpen(false)} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
               <p style={{ fontWeight:700, fontSize:15, color:"var(--text)", margin:0 }}>Filtres & tri</p>
-              {(statusF||sortF!=="recent"||materialF||filaTypeF||filamentIdF||colorF) && (
-                <button onClick={()=>{ setStatusF(""); setSortF("recent"); setMaterialF(""); setFilaTypeF(""); setFilamentIdF(""); setColorF(""); setFilSearch(""); }}
+              {(statusF||sortF!=="recent"||materialF||filaTypeF||filamentIdF||colorF||dateFrom||dateTo) && (
+                <button onClick={()=>{ setStatusF(""); setSortF("recent"); setMaterialF(""); setFilaTypeF(""); setFilamentIdF(""); setColorF(""); setDateFrom(""); setDateTo(""); setFilSearch(""); }}
                   style={{ fontSize:11, color:"#60a5fa", background:"none", border:"none", cursor:"pointer" }}>
                   Effacer filtres
                 </button>
@@ -2442,6 +2450,35 @@ export default function Prints() {
                 </button>
               ))}
             </div>
+            {/* Filtre période (temporel) : plage de dates + bascule "Tout" qui
+                vide les bornes. Meme sens que le filtre periode de Stats, mais
+                reduit a la plage personnalisee, presente comme les autres
+                sections du sheet. */}
+            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Période</p>
+            <div style={{ display:"flex", gap:8, alignItems:"flex-end", flexWrap:"wrap", marginBottom:24 }}>
+              <button onClick={()=>{ setDateFrom(""); setDateTo(""); }}
+                style={{ padding:"8px 16px", borderRadius:20, fontSize:12, fontWeight:600,
+                  cursor:"pointer", border:"none", alignSelf:"center",
+                  background:(!dateFrom && !dateTo) ? "#3b82f6" : "var(--surface2)",
+                  color:(!dateFrom && !dateTo) ? "white" : "var(--muted)" }}>
+                Tout
+              </button>
+              <label style={{ flex:1, minWidth:120, fontSize:11, color:"var(--muted)" }}>Début
+                <input type="date" value={dateFrom} max={dateTo || undefined}
+                  onChange={e=>setDateFrom(e.target.value)}
+                  style={{ width:"100%", boxSizing:"border-box", marginTop:4, padding:"8px 10px",
+                    borderRadius:8, border:"1px solid var(--border)", background:"var(--surface2)",
+                    color:"var(--text)", fontSize:13 }}/>
+              </label>
+              <label style={{ flex:1, minWidth:120, fontSize:11, color:"var(--muted)" }}>Fin
+                <input type="date" value={dateTo} min={dateFrom || undefined}
+                  onChange={e=>setDateTo(e.target.value)}
+                  style={{ width:"100%", boxSizing:"border-box", marginTop:4, padding:"8px 10px",
+                    borderRadius:8, border:"1px solid var(--border)", background:"var(--surface2)",
+                    color:"var(--text)", fontSize:13 }}/>
+              </label>
+            </div>
+
             {/* Filtre matériau */}
             {allMaterials.length > 0 && (<>
               <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Matériau</p>
