@@ -827,7 +827,13 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap" }}>
             <AdminOnly>
             {!spool.archived && (
-              <button onClick={async()=>{ await onArchive(spool.id); onClose(); }}
+              <button onClick={async()=>{
+                  if (!(await showConfirm(
+                    `Archiver la bobine #${spool.id} ? Elle passera en Tiroir avec une quantité remise à 0 et sortira du stock.`,
+                    { confirmLabel: "Archiver" }
+                  ))) return;
+                  await onArchive(spool.id); onClose();
+                }}
                 style={{ flex:1, padding:"10px", background:"var(--surface2)",
                   border:"1px solid var(--border)", borderRadius:10, cursor:"pointer",
                   color:"var(--muted)", fontSize:13, display:"flex",
