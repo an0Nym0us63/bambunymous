@@ -783,11 +783,11 @@ async def archive_spool(
         raise HTTPException(404, "Bobine introuvable")
     s.archived = True
     # Une bobine archivee sort du stock : on remet sa quantite a 0 et on la
-    # replace en Tiroir. Le worker spool_location ne touche plus aux archivees
-    # (exclues du matching AMS), sa location resterait sinon figee sur son
-    # dernier tray AMS et son poids continuerait a fausser les cumuls.
+    # replace en "Archives". Le worker spool_location ne touche plus aux
+    # archivees (exclues du matching AMS), sa location resterait sinon figee
+    # sur son dernier tray AMS et son poids continuerait a fausser les cumuls.
     s.remaining_weight_g = 0.0
-    s.location = "Tiroir"
+    s.location = "Archives"
     await db.commit()
     _clear_match_cache()
 
