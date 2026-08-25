@@ -51,6 +51,7 @@ async def init_db():
     await _seed_admin_user()
     await _migrate_last_seen()
     await _migrate_object_status()
+    await _cleanup_bogus_translations()
     await _migrate_activity_kind()
     await _migrate_print_job_id_unique()
     await _purge_activity_log()
@@ -124,6 +125,30 @@ async def _migrate():
                 await conn.commit()
             except Exception:
                 pass  # colonne déjà existante → ignorer
+
+
+async def _cleanup_bogus_translations():
+    """Efface les translated_name qui sont en fait des pages d'erreur Google
+    ("Error 500 ... That's an error") stockees a tort. Le champ redevient vide
+    et le rattrapage de traduction le reprendra proprement."""
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            res = await conn.execute(_text("""
+                UPDATE prints SET translated_name = NULL
+                WHERE translated_name IS NOT NULL AND (
+                       translated_name LIKE '%That%error%'
+                    OR translated_name LIKE '%all we know%'
+                    OR translated_name LIKE '%Server Error%'
+                    OR translated_name LIKE '%!!1%'
+                    OR translated_name LIKE '%try again later%'
+                    OR translated_name LIKE '%<%'
+                    OR translated_name LIKE '%google.com%')
+            """))
+            if getattr(res, "rowcount", 0):
+                print(f"[migration] {res.rowcount} traductions erronees effacees")
+    except Exception as e:
+        print(f"[migration] nettoyage traductions: {e}")
 
 
 async def _migrate_object_status():

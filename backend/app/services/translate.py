@@ -16,6 +16,25 @@ import threading
 logger = logging.getLogger(__name__)
 
 
+def _looks_bogus(text: str) -> bool:
+    """Vrai si `text` n'est pas une traduction mais une PAGE D'ERREUR.
+
+    L'endpoint public de Google renvoie parfois du HTML d'erreur en HTTP 200
+    ("Error 500 ... That's an error ... That's all we know"), que le scraper
+    restitue tel quel -- et qui finissait stocke dans translated_name.
+    """
+    if not text:
+        return False
+    low = text.lower()
+    markers = ("that's an error", "that\u2019s an error", "that's all we know",
+               "that\u2019s all we know", "server error", "please try again later",
+               "error 500", "error 429", "!!1", "<html", "</", "http://", "https://",
+               "www.google.com")
+    if any(m in low for m in markers):
+        return True
+    return len(text) > 300   # un nom traduit ne fait jamais 300+ caracteres
+
+
 def translate_name(name: str) -> str:
     """
     Traduit un nom vers le francais.
@@ -59,6 +78,9 @@ def translate_name(name: str) -> str:
         except Exception:
             return original
     mot_a_mot = " ".join(mot_a_mot.split("\n")).strip()
+
+    if _looks_bogus(contextuel) or _looks_bogus(mot_a_mot):
+        return ""              # page d'erreur Google : on ne stocke rien
 
     if contextuel.lower() == original.lower():
         return contextuel
@@ -199,13 +221,15 @@ def translate_names(names: list) -> dict:
             contextuel = (res[2*k + 1] or "").strip()
             if not contextuel or contextuel.lower() == n.lower():
                 continue          # deja francais, ou intraduisible
+            if _looks_bogus(contextuel) or _looks_bogus(mot_a_mot):
+                continue          # page d'erreur Google : on ignore
             seen, words = set(), []
             for w in (mot_a_mot + " " + contextuel).split():
                 if w.lower() not in seen:
                     seen.add(w.lower())
                     words.append(w)
             merged = " ".join(words)
-            if merged and merged.lower() != n.lower():
+            if merged and merged.lower() != n.lower() and not _looks_bogus(merged):
                 out[n] = merged[:512]
 
         # Respiration entre deux lots : l'endpoint est public, on ne le
