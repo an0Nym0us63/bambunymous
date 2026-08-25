@@ -143,7 +143,12 @@ async def _cleanup_bogus_translations():
                     OR translated_name LIKE '%!!1%'
                     OR translated_name LIKE '%try again later%'
                     OR translated_name LIKE '%<%'
-                    OR translated_name LIKE '%google.com%')
+                    OR translated_name LIKE '%google.com%'
+                    OR translated_name LIKE '%INVALID SOURCE%'
+                    OR translated_name LIKE '%INVALID TARGET%'
+                    OR translated_name LIKE '%LANGPAIR%'
+                    OR translated_name LIKE '%MYMEMORY WARNING%'
+                    OR translated_name LIKE '%YOU USED ALL AVAILABLE%')
             """))
             if getattr(res, "rowcount", 0):
                 print(f"[migration] {res.rowcount} traductions erronees effacees")
