@@ -35,6 +35,35 @@ def _looks_bogus(text: str) -> bool:
     return len(text) > 300   # un nom traduit ne fait jamais 300+ caracteres
 
 
+def _mymemory_one(txt: str) -> str:
+    """Traduit UNE chaine via MyMemory (gratuit, sans cle), source auto-detectee.
+    Repli quand Google est indisponible."""
+    from deep_translator import MyMemoryTranslator
+    for src, tgt in (("auto", "fr-FR"), ("en-GB", "fr-FR"), ("auto", "french")):
+        try:
+            r = MyMemoryTranslator(source=src, target=tgt).translate(txt)
+            if r and not _looks_bogus(r):
+                return r
+        except Exception:
+            continue
+    return txt
+
+
+def _translate_batch(payload: list) -> list:
+    """Traduit une liste de chaines vers le FR. Google d'abord (rapide, un seul
+    appel) ; si indisponible ou page d'erreur HTML, repli MyMemory item par item.
+    Renvoie toujours une liste de meme longueur que payload."""
+    from deep_translator import GoogleTranslator
+    try:
+        r = GoogleTranslator(source="auto", target="fr").translate_batch(payload)
+        if r and len(r) == len(payload) and not any(_looks_bogus(x or "") for x in r):
+            return r
+        logger.warning("[TRAD] Google indisponible (page d'erreur) -> repli MyMemory")
+    except Exception as e:
+        logger.warning(f"[TRAD] Google KO ({type(e).__name__}) -> repli MyMemory")
+    return [_mymemory_one(x) for x in payload]
+
+
 def translate_name(name: str) -> str:
     """
     Traduit un nom vers le francais.
@@ -55,28 +84,15 @@ def translate_name(name: str) -> str:
     if not name or not name.strip():
         return ""
 
-    import time
-    from deep_translator import GoogleTranslator, exceptions
-
     forced_input = "\n".join(name.split())
     original = name.strip()
 
-    def _both():
-        # translate_batch : UNE seule requete pour les deux passages au lieu de
-        # deux. Sur un rattrapage de plusieurs centaines de prints, c'est la
-        # difference entre passer sous le quota et se faire couper.
-        r = GoogleTranslator(source="auto", target="fr").translate_batch(
-            [forced_input, original])
-        return (r[0] or "").strip(), (r[1] or "").strip()
-
     try:
-        mot_a_mot, contextuel = _both()
-    except exceptions.TooManyRequests:
-        time.sleep(1)          # un seul repli : au-dela, on rend l'original
-        try:
-            mot_a_mot, contextuel = _both()
-        except Exception:
-            return original
+        r = _translate_batch([forced_input, original])
+        mot_a_mot  = (r[0] or "").strip()
+        contextuel = (r[1] or "").strip()
+    except Exception:
+        return original
     mot_a_mot = " ".join(mot_a_mot.split("\n")).strip()
 
     if _looks_bogus(contextuel) or _looks_bogus(mot_a_mot):
@@ -200,18 +216,8 @@ def translate_names(names: list) -> dict:
             payload.append("\n".join(n.split()))
             payload.append(n)
 
-        def _go():
-            return GoogleTranslator(source="auto", target="fr").translate_batch(payload)
-
         try:
-            res = _go()
-        except exceptions.TooManyRequests:
-            time.sleep(2)
-            try:
-                res = _go()
-            except Exception as e:
-                logger.warning(f"[TRAD] lot abandonne apres nouvel echec : {e}")
-                continue
+            res = _translate_batch(payload)
         except Exception as e:
             logger.warning(f"[TRAD] lot ignore : {e}")
             continue
