@@ -29,7 +29,10 @@ def _looks_bogus(text: str) -> bool:
     markers = ("that's an error", "that\u2019s an error", "that's all we know",
                "that\u2019s all we know", "server error", "please try again later",
                "error 500", "error 429", "!!1", "<html", "</", "http://", "https://",
-               "www.google.com")
+               "www.google.com",
+               # erreurs renvoyees EN TEXTE (HTTP 200) par MyMemory
+               "invalid source language", "invalid target language", "langpair=",
+               "mymemory warning", "you used all available", "please specify")
     if any(m in low for m in markers):
         return True
     return len(text) > 300   # un nom traduit ne fait jamais 300+ caracteres
@@ -38,10 +41,12 @@ def _looks_bogus(text: str) -> bool:
 def _mymemory_one(txt: str) -> str:
     """Traduit UNE chaine via MyMemory (gratuit, sans cle), source auto-detectee.
     Repli quand Google est indisponible."""
+    # MyMemory exige une langue source ISO ('auto' est refuse). Les noms de print
+    # sont quasi toujours en anglais (MakerWorld / trancheur) -> on force 'en'.
     from deep_translator import MyMemoryTranslator
-    for src, tgt in (("auto", "fr-FR"), ("en-GB", "fr-FR"), ("auto", "french")):
+    for src in ("en-GB", "en-US", "en"):
         try:
-            r = MyMemoryTranslator(source=src, target=tgt).translate(txt)
+            r = MyMemoryTranslator(source=src, target="fr-FR").translate(txt)
             if r and not _looks_bogus(r):
                 return r
         except Exception:
