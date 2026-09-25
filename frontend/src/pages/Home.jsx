@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle, ExternalLink, Calendar } from "lucide-react";
+import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
 import client from "../api/client";
 import AttentionSection from "../components/AttentionSection";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
-import { layoutCells, columnWeight, slotCount } from "../utils/ams";
+import { layoutCells, columnWeight, slotCount, slotLabel } from "../utils/ams";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function hexCss(hex) {
@@ -521,6 +521,12 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
 }
 
 
+// Vue retenue de la tuile AMS/rack, par appareil.
+const VIEW_KEY = "home.deviceView";
+// Duree du clignotement du bouton de bascule quand l'unite active change sur
+// la vue cachee : assez pour etre vu, pas au point de devenir un bruit de fond.
+const BLINK_MS = 20000;
+
 function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId }) {
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
@@ -542,126 +548,167 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, act
   const filled = slots.filter(s => s.slot?.filament_id && !s.onHead).length;
 
   const autoAmsId = uniqueAmsList.length ? (activeAmsId >= 0 ? activeAmsId : uniqueAmsList[0]?.id ?? 0) : null;
-  const [sel, setSel] = useState(null); // {kind:'ams', id} | {kind:'hotend', num}
+  // Deux selections, une par vue : basculer vers le rack puis revenir ne doit
+  // pas perdre l'AMS qu'on regardait.
+  const [selAms, setSelAms] = useState(null);
+  const [selHotend, setSelHotend] = useState(null);
   const [selectedTray, setSelectedTray] = useState(null);
   const [amsOrder, setAmsOrder] = useState(null);
 
+  // La tuile montre SOIT les AMS, SOIT le rack : cote a cote, trois colonnes
+  // d'AMS ecrasaient tout sur un telephone, et empiler le rack dessous doublait
+  // la hauteur de la carte. Choix retenu par appareil (commodite locale).
+  const [view, setViewState] = useState(() => {
+    try { return localStorage.getItem(VIEW_KEY) === "rack" ? "rack" : "ams"; } catch { return "ams"; }
+  });
+  const setView = (v) => {
+    setViewState(v);
+    setBlink(false);
+    try { localStorage.setItem(VIEW_KEY, v); } catch {}
+  };
+  const showRack = hasRack && view === "rack";
+
   // Si l'AMS/tray actif change pendant qu'on est sur l'accueil, suivre automatiquement
   // (comme si on avait cliqué dessus) plutôt que de rester figé sur une vieille sélection.
+  // La VUE, elle, ne bascule jamais seule : une tuile qui change sous le doigt
+  // pendant une impression est penible. Si le changement a lieu sur la vue
+  // cachee, c'est le bouton de bascule qui clignote.
+  const [blink, setBlink] = useState(false);
+  const blinkTimer = useRef(null);
+  const signal = () => {
+    setBlink(true);
+    clearTimeout(blinkTimer.current);
+    blinkTimer.current = setTimeout(() => setBlink(false), BLINK_MS);
+  };
+  useEffect(() => () => clearTimeout(blinkTimer.current), []);
+
   const prevActive = useRef({ ams: activeAmsId, tray: activeTrayId });
   useEffect(() => {
     if (prevActive.current.ams !== activeAmsId || prevActive.current.tray !== activeTrayId) {
-      if (activeAmsId >= 0) setSel({ kind:"ams", id: activeAmsId });
+      if (activeAmsId >= 0) {
+        setSelAms(activeAmsId);
+        if (showRack) signal();
+      }
       prevActive.current = { ams: activeAmsId, tray: activeTrayId };
     }
   }, [activeAmsId, activeTrayId]);
+
+  const prevHead = useRef(headId);
+  useEffect(() => {
+    if (prevHead.current !== headId) {
+      if (hasRack && !showRack && headId >= 0) signal();
+      prevHead.current = headId;
+    }
+  }, [headId]);
 
   useEffect(() => {
     client.get("/settings/ams-order").then(({ data }) => setAmsOrder(data.order || []))
       .catch(() => setAmsOrder([]));
   }, []);
 
-  // Largeur reelle de la carte : sur un telephone, le rack a cote de trois
-  // colonnes d'AMS ecrasait tout. En dessous du seuil, il passe dessous.
-  const gridRef = useRef(null);
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(([e]) => setNarrow(e.contentRect.width < 520));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [hasRack, uniqueAmsList.length]);
-
   if (!uniqueAmsList.length && !hasRack) return (
     <div className="card" style={{ padding:24, textAlign:"center", color:"var(--muted)", fontSize:14 }}>Aucun AMS détecté</div>
   );
 
-  const current = sel ?? (autoAmsId !== null ? { kind:"ams", id:autoAmsId } : { kind:"hotend", num:1 });
-  const selectedAms     = current.kind === "ams"    ? (uniqueAmsList.find(a => a.id === current.id) ?? uniqueAmsList[0]) : null;
-  const selectedHotend  = current.kind === "hotend" ? slots.find(s => s.num === current.num) : null;
+  const headEntry = slots.find(s => s.onHead) ?? null;
+  const selectedAms = uniqueAmsList.find(a => a.id === (selAms ?? autoAmsId)) ?? uniqueAmsList[0] ?? null;
+  const hotendNum = selHotend ?? headEntry?.num ?? 1;
+  const selectedHotend = slots.find(s => s.num === hotendNum) ?? null;
+  // La fiche du dessous suit la vue affichee. Sans AMS du tout, seul le rack
+  // a quelque chose a montrer.
+  const detailKind = (showRack || !uniqueAmsList.length) && hasRack ? "hotend" : "ams";
 
-  // Grille de l'accueil : deux lignes, autant de colonnes que d'unites a
-  // ranger, dans l'ordre choisi dans les reglages. Le rack, s'il existe,
-  // prend toujours la derniere colonne. Sans rack ni ordre enregistre, et
-  // avec au plus 4 unites, on garde la simple rangee d'origine.
+  // Grille des AMS : deux lignes, autant de colonnes que d'unites a ranger,
+  // dans l'ordre choisi dans les reglages. Sans ordre enregistre et avec au
+  // plus 4 unites, on garde la simple rangee d'origine.
   const hasOrder = (amsOrder || []).some(v => v != null);
-  const useGrid = hasRack || hasOrder || uniqueAmsList.length > 4;
+  const useGrid = hasOrder || uniqueAmsList.length > 4;
   const cols = useGrid ? layoutCells(uniqueAmsList, amsOrder) : uniqueAmsList.map(a => [a]);
-  // Le rack valait 1,5 colonne d'AMS (4 slots) : 6 en unites de slot.
-  const rackBeside = hasRack && !narrow;
-  const template = cols.map(c => `${columnWeight(c)}fr`).join(" ") + (rackBeside ? " 6fr" : "");
+  const template = cols.map(c => `${columnWeight(c)}fr`).join(" ");
 
-  const renderBox = (ams, weight) => (
-    // Une unite plus etroite que sa colonne (HT ou externe a cote d'un AMS)
-    // garde des pastilles de la meme largeur que ses voisines ; son nom et
-    // ses mesures, eux, prennent toute la colonne.
-    <div key={ams.id} style={{ minWidth:0 }}>
+  // Chaque unite est posee sur SA ligne d'une grille commune, et non dans
+  // une sous-grille par colonne : une case vide en haut d'une colonne avait
+  // alors une hauteur nulle, et l'unite du bas remontait d'un cran, decalee
+  // de ses voisines (l'externe seul en bas de sa colonne).
+  const units = cols.flatMap((col, ci) => col.map((ams, ri) => ams && (
+    <div key={ams.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth:0 }}>
       <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
-        isSelected={current.kind==="ams" && current.id===ams.id}
-        onClick={() => setSel({ kind:"ams", id:ams.id })}
+        isSelected={detailKind === "ams" && selectedAms?.id === ams.id}
+        onClick={() => setSelAms(ams.id)}
         spoolLookup={spoolLookup}
-        slotsWidth={`${(slotCount(ams) / weight) * 100}%`}/>
+        slotsWidth={`${(slotCount(ams) / columnWeight(col)) * 100}%`}/>
     </div>
-  );
+  ))).filter(Boolean);
+
+  // Bouton de bascule : il annonce l'essentiel de la vue CACHEE, pour qu'on
+  // n'ait pas a basculer juste pour savoir. Vue AMS → buse montee sur la tete
+  // et sa couleur ; vue rack → emplacement AMS actif et sa couleur.
+  const toggle = hasRack && (() => {
+    const toRack = !showRack;
+    const label = toRack
+      ? (headEntry ? `Rack · buse ${headEntry.num}` : "Rack")
+      : (activeAms && activeTray ? `AMS · ${slotLabel(activeAms.id, activeTray.id)}` : "AMS");
+    const dot = toRack ? (headEntry ? headColorValue : null) : (activeTray?.color ?? null);
+    const dotCss = dot ? `#${String(dot).replace("#", "").slice(0, 6)}` : null;
+    return (
+      <button onClick={() => setView(toRack ? "rack" : "ams")}
+        title={toRack ? "Afficher le rack Vortek" : "Afficher les AMS"}
+        style={{ display:"flex", alignItems:"center", gap:6, padding:"4px 10px", borderRadius:20,
+          border:`1px solid ${blink ? "rgba(59,130,246,0.6)" : "var(--border)"}`,
+          background: blink ? "rgba(59,130,246,0.10)" : "var(--surface2)",
+          color: blink ? "#3b82f6" : "var(--muted)", fontSize:11, fontWeight:700, cursor:"pointer",
+          whiteSpace:"nowrap", animation: blink ? "toggleBlink 1s ease-in-out infinite" : "none" }}>
+        {dotCss && <span style={{ width:10, height:10, borderRadius:"50%", background:dotCss,
+          boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>}
+        {label}
+        <ArrowLeftRight size={12}/>
+      </button>
+    );
+  })();
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
       <div className="card" style={{ padding:12 }}>
-        <div ref={gridRef} style={{ display:"grid", gridTemplateColumns: template, gap:10 }}>
+        {hasRack && (
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:10 }}>
+            <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>
+              {showRack ? <>Rack Vortek <span style={{ fontFamily:"monospace", marginLeft:4 }}>{filled}/6</span></> : "AMS"}
+            </span>
+            {toggle}
+          </div>
+        )}
 
-          {cols.map((col, ci) => {
-            const w = columnWeight(col);
-            return (
-              <div key={ci} style={{ gridColumn: ci + 1, display:"grid",
-                gridTemplateRows: useGrid ? "auto auto" : "auto", alignContent:"start", gap:10, minWidth:0 }}>
-                {col.map((ams, ri) => ams ? renderBox(ams, w) : <div key={`vide-${ri}`}/>)}
-              </div>
-            );
-          })}
+        {!showRack && (
+          <div style={{ display:"grid", gridTemplateColumns: template,
+            gridTemplateRows: useGrid ? "auto auto" : "auto", columnGap:10, rowGap:10 }}>
+            {units}
+          </div>
+        )}
 
-          {/* Dernière colonne : les 6 hotends du rack Vortek — libellé aligné en haut, slots centrés */}
-          {hasRack && (
-            <div style={rackBeside
-              ? { gridColumn: cols.length + 1, display:"flex", flexDirection:"column",
-                  height:"100%", paddingLeft:10, marginLeft:4, borderLeft:"1px solid var(--border)" }
-              : { gridColumn:"1 / -1", display:"flex", flexDirection:"column", gap:6,
-                  paddingTop:10, borderTop:"1px solid var(--border)" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>Rack Vortek</span>
-                <span style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)" }}>{filled}/6</span>
+        {/* Les 6 hotends du rack Vortek, dans leur disposition physique */}
+        {showRack && (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, padding:"4px 0" }}>
+            {[[slots[0], slots[2], slots[4]], [slots[1], slots[3], slots[5]]].map((row, i) => (
+              <div key={i} style={{ display:"flex", gap:5, justifyContent:"center" }}>
+                {row.map(({ slot, num, onHead }) => (
+                  <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
+                    headColor={onHead ? headColorValue : null}
+                    isSelected={detailKind === "hotend" && hotendNum === num}
+                    activeNozzleId={activeNozzleId}
+                    onClick={() => setSelHotend(num)}/>
+                ))}
               </div>
-              <div style={{ flex:1, display:"flex", flexDirection:"column", justifyContent:"center", alignItems:"center", gap:6 }}>
-                <div style={{ display:"flex", gap:5, justifyContent:"center" }}>
-                  {[slots[0], slots[2], slots[4]].map(({ slot, num, onHead }) => (
-                    <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
-                      headColor={onHead ? headColorValue : null}
-                      isSelected={current.kind==="hotend" && current.num===num}
-                      activeNozzleId={activeNozzleId}
-                      onClick={() => setSel({ kind:"hotend", num })}/>
-                  ))}
-                </div>
-                <div style={{ display:"flex", gap:5, justifyContent:"center" }}>
-                  {[slots[1], slots[3], slots[5]].map(({ slot, num, onHead }) => (
-                    <SlotMini key={num} slot={slot} num={num} isOnHead={onHead}
-                      headColor={onHead ? headColorValue : null}
-                      isSelected={current.kind==="hotend" && current.num===num}
-                      activeNozzleId={activeNozzleId}
-                      onClick={() => setSel({ kind:"hotend", num })}/>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Détail partagé — AMS (grille de trays) ou hotend rack (fiche) */}
-      {current.kind === "ams" && selectedAms && (
+      {/* Détail partagé — AMS (grille de trays) ou hotend rack (fiche), selon la vue */}
+      {detailKind === "ams" && selectedAms && (
         <AMSDetail ams={selectedAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
           spoolLookup={spoolLookup} onTrayClick={setSelectedTray}/>
       )}
-      {current.kind === "hotend" && selectedHotend?.slot && (
+      {detailKind === "hotend" && selectedHotend?.slot && (
         <SlotDetail slot={selectedHotend.slot} num={selectedHotend.num}
           isOnHead={selectedHotend.onHead}
           headSlot={selectedHotend.onHead ? headSlot : null}/>

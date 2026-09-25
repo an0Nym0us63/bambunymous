@@ -93,6 +93,10 @@ body {
   0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.5); }
   50%      { box-shadow: 0 0 0 4px rgba(59,130,246,0); }
 }
+@keyframes toggleBlink {
+  0%,100% { box-shadow: 0 0 0 0 rgba(59,130,246,0.0); }
+  50% { box-shadow: 0 0 0 4px rgba(59,130,246,0.30); }
+}
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes dryGlow {
   0%,100% { opacity:0.7; text-shadow: 0 0 0px rgba(249,115,22,0); }
