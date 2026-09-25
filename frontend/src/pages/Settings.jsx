@@ -12,6 +12,7 @@ import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
          ROLE_OPTIONS, ROLE_LABEL, ROLE_BADGE } from "../store/auth";
 import AdminOnly from "../components/AdminOnly";
 import { useTrackDetail } from "../utils/track";
+import { amsName, slotCount, LAYOUT_ROWS } from "../utils/ams";
 
 const inp = {
   width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
@@ -61,47 +62,74 @@ const cardTitle = {
   letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6,
 };
 
-// 255 = pseudo-AMS des bobines externes : il se range et se reordonne comme
-// les autres, seul son nom change.
-const AMS_NAMES = { 0:"AMS-A", 1:"AMS-B", 2:"AMS-C", 3:"AMS-D", 255:"Externe" };
-const POSITION_LABELS = [
-  "Position 1 — haut gauche",
-  "Position 2 — bas gauche (sous A)",
-  "Position 3 — à côté de A",
-  "Position 4 — sous la position 3",
-];
+// Positions lues colonne par colonne sur deux lignes, comme sur l'accueil
+// (utils/ams) : [0] haut col. 1, [1] bas col. 1, [2] haut col. 2... Le nombre
+// de colonnes suit ce qu'il y a a ranger, avec toujours une case libre : une
+// unite de plus ne doit jamais se retrouver sans endroit ou la poser.
+function positionLabel(idx) {
+  const col = Math.floor(idx / LAYOUT_ROWS) + 1;
+  return `Colonne ${col} — ${idx % LAYOUT_ROWS === 0 ? "haut" : "bas"}`;
+}
 
 function AMSOrderSection() {
-  const status = usePrinter(s => s.status);
-  const availableIds = [...new Map((status?.ams_list || []).map(a => [a.id, a])).values()]
-    .map(a => a.id).sort((a,b) => a-b);
+  const storeStatus = usePrinter(s => s.status);
+  // L'etat de l'imprimante n'est interroge que par l'accueil : en ouvrant les
+  // reglages directement (rechargement, lien), il est vide et toutes les
+  // unites paraissent absentes. On le lit une fois ici dans ce cas.
+  const [ownStatus, setOwnStatus] = useState(null);
+  useEffect(() => {
+    if (storeStatus?.ams_list?.length) return;
+    client.get("/printer/status").then(({ data }) => setOwnStatus(data)).catch(() => {});
+  }, []);
+  const status = storeStatus?.ams_list?.length ? storeStatus : ownStatus;
+  const available = [...new Map((status?.ams_list || []).map(a => [a.id, a])).values()]
+    .sort((a,b) => a.id - b.id);
+  const availableIds = available.map(a => a.id);
 
-  const [order, setOrder] = useState([null, null, null, null]);
+  const [order, setOrder] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Choix au toucher : le glisser-deposer HTML ne marche pas sur mobile. On
+  // touche une unite, puis la case ou la poser.
+  const [picked, setPicked] = useState(null);
 
   useEffect(() => {
     client.get("/settings/ams-order").then(({ data }) => {
-      const o = data.order || [];
-      setOrder([0,1,2,3].map(i => (o[i] ?? null)));
+      setOrder(Array.isArray(data.order) ? data.order : []);
     }).finally(() => setLoading(false));
   }, []);
 
+  const lastFilled = order.reduce((last, v, i) => (v != null ? i + 1 : last), 0);
   const unplaced = availableIds.filter(id => !order.includes(id));
+  const cellsOf = (n) => Array.from({ length: n * LAYOUT_ROWS }, (_, i) => order[i] ?? null);
+  let nCols = Math.ceil(Math.max(lastFilled, availableIds.length, 4) / LAYOUT_ROWS);
+  if (!cellsOf(nCols).includes(null)) nCols += 1;
+  const cells = cellsOf(nCols);
 
   const placeAt = (slotIndex, amsId) => {
-    setOrder(prev => prev.map((v, i) => {
-      if (i === slotIndex) return amsId;
-      return v === amsId ? null : v; // retire l'AMS de son ancienne position
-    }));
+    setOrder(prev => {
+      const next = [...prev];
+      while (next.length <= slotIndex) next.push(null);
+      const from = next.indexOf(amsId);
+      // Deposer sur une case occupee echange les deux unites, plutot que de
+      // renvoyer l'occupant dans les "non placees".
+      if (from >= 0) next[from] = next[slotIndex] ?? null;
+      next[slotIndex] = amsId;
+      return next;
+    });
+    setPicked(null);
   };
   const clearSlot = (slotIndex) => setOrder(prev => prev.map((v,i) => i===slotIndex ? null : v));
 
   const save = async () => {
     setSaving(true);
     try {
-      await client.post("/settings/ams-order", { order });
+      // Cases vides de fin retirees : elles ne portent rien.
+      const clean = [...order];
+      while (clean.length && clean[clean.length - 1] == null) clean.pop();
+      await client.post("/settings/ams-order", { order: clean });
+      setOrder(clean);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch(e) {
@@ -109,11 +137,30 @@ function AMSOrderSection() {
     } finally { setSaving(false); }
   };
 
-  const chipStyle = (draggable) => ({
+  const chipStyle = (id) => ({
     display:"flex", alignItems:"center", gap:6, padding:"8px 12px", borderRadius:10,
-    background:"var(--surface2)", border:"1px solid var(--border)", fontSize:13, fontWeight:700,
-    color:"var(--text)", cursor: draggable ? "grab" : "default", userSelect:"none",
+    background:"var(--surface2)", fontSize:13, fontWeight:700, minWidth:0,
+    border: picked === id ? "1px solid #3b82f6" : "1px solid var(--border)",
+    boxShadow: picked === id ? "0 0 0 2px rgba(59,130,246,0.25)" : "none",
+    color:"var(--text)", cursor:"grab", userSelect:"none",
   });
+  // Nombre de slots en clair : c'est ce qui distingue un HT d'un AMS au
+  // premier coup d'oeil, et ce qui decide de sa largeur sur l'accueil. Une
+  // unite enregistree mais plus detectee est dite "absente" : on peut la
+  // retirer, et elle ne laisse qu'une case vide sur l'accueil.
+  const chipLabel = (id) => {
+    const a = available.find(x => x.id === id);
+    const n = a ? slotCount(a) : 0;
+    return (
+      <span style={{ display:"flex", flexDirection:"column", minWidth:0, lineHeight:1.2 }}>
+        <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{amsName(id)}</span>
+        <span style={{ fontSize:10, fontWeight:500, color:"var(--muted)", whiteSpace:"nowrap" }}>
+          {a ? `${n} slot${n > 1 ? "s" : ""}` : "absente"}
+        </span>
+      </span>
+    );
+  };
+  const onChipClick = (id) => (e) => { e.stopPropagation(); setPicked(p => (p === id ? null : id)); };
 
   if (loading) return null;
 
@@ -121,41 +168,51 @@ function AMSOrderSection() {
     <div className="card" style={card}>
       <p style={cardTitle}>Disposition AMS sur l'accueil</p>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 14px" }}>
-        Glisse-dépose un AMS dans la position où tu veux le voir sur l'accueil.
+        Glisse-dépose une unité dans la case où tu veux la voir sur l'accueil — ou touche-la,
+        puis touche la case. Deux lignes, autant de colonnes que nécessaire ; le rack Vortek
+        reste toujours à droite.
       </p>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gridTemplateRows:"auto auto", gridAutoFlow:"column", gap:10, marginBottom:16 }}>
-        {order.map((amsId, idx) => (
-          <div key={idx}
-            onDragOver={e => e.preventDefault()}
-            onDrop={e => { e.preventDefault(); const id = Number(e.dataTransfer.getData("text/plain")); if (!isNaN(id)) placeAt(idx, id); }}
-            style={{ minHeight:64, borderRadius:12, border:"2px dashed var(--border)",
-              background:"var(--surface)", padding:10, display:"flex", flexDirection:"column", gap:6 }}>
-            <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.04em" }}>
-              {POSITION_LABELS[idx]}
-            </span>
-            {amsId != null ? (
-              <div draggable onDragStart={e => e.dataTransfer.setData("text/plain", String(amsId))}
-                style={chipStyle(true)}>
-                {AMS_NAMES[amsId] ?? `AMS ${amsId+1}`}
-                <button onClick={() => clearSlot(idx)} style={{ marginLeft:"auto", background:"none",
-                  border:"none", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>✕</button>
-              </div>
-            ) : (
-              <span style={{ fontSize:11, color:"var(--muted)", opacity:0.6 }}>Vide — dépose un AMS ici</span>
-            )}
-          </div>
-        ))}
+      <div style={{ overflowX:"auto", marginBottom:16 }}>
+        <div style={{ display:"grid", gridTemplateColumns:`repeat(${nCols}, minmax(120px, 1fr))`,
+          gridTemplateRows:`repeat(${LAYOUT_ROWS}, auto)`, gridAutoFlow:"column", gap:10 }}>
+          {cells.map((amsId, idx) => (
+            <div key={idx}
+              onDragOver={e => e.preventDefault()}
+              onDrop={e => { e.preventDefault(); const id = Number(e.dataTransfer.getData("text/plain")); if (!isNaN(id)) placeAt(idx, id); }}
+              onClick={() => { if (picked != null) placeAt(idx, picked); }}
+              style={{ minHeight:64, borderRadius:12, minWidth:0,
+                border:`2px dashed ${picked != null ? "rgba(59,130,246,0.5)" : "var(--border)"}`,
+                cursor: picked != null ? "pointer" : "default",
+                background:"var(--surface)", padding:10, display:"flex", flexDirection:"column", gap:6 }}>
+              <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.04em" }}>
+                {positionLabel(idx)}
+              </span>
+              {amsId != null ? (
+                <div draggable onDragStart={e => e.dataTransfer.setData("text/plain", String(amsId))}
+                  onClick={onChipClick(amsId)} style={chipStyle(amsId)}>
+                  {chipLabel(amsId)}
+                  <button onClick={(e) => { e.stopPropagation(); clearSlot(idx); }} style={{ marginLeft:"auto", background:"none",
+                    border:"none", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>✕</button>
+                </div>
+              ) : (
+                <span style={{ fontSize:11, color:"var(--muted)", opacity:0.6 }}>Vide</span>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       {unplaced.length > 0 && (
         <div style={{ marginBottom:16 }}>
-          <p style={{ fontSize:11, color:"var(--muted)", marginBottom:8 }}>AMS disponibles (non placés)</p>
+          <p style={{ fontSize:11, color:"var(--muted)", marginBottom:8 }}>
+            Unités non placées — affichées à la suite sur l'accueil tant qu'elles ne sont pas rangées
+          </p>
           <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
             {unplaced.map(id => (
               <div key={id} draggable onDragStart={e => e.dataTransfer.setData("text/plain", String(id))}
-                style={chipStyle(true)}>
-                {AMS_NAMES[id] ?? `AMS ${id+1}`}
+                onClick={onChipClick(id)} style={chipStyle(id)}>
+                {chipLabel(id)}
               </div>
             ))}
           </div>

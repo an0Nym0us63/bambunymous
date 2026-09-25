@@ -526,9 +526,14 @@ async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_i
                     ams_id  = entry.get("ams_id",  255)
                     tray_id = entry.get("slot_id", 255)
                 else:
-                    # Format entier legacy (au cas où)
-                    ams_id  = int(entry) // 4
-                    tray_id = int(entry) % 4
+                    # Format entier legacy (au cas où). Un HT y figure par
+                    # son numero d'unite (128...), pas par ams*4+tray.
+                    from ..core.mqtt import is_ht
+                    if is_ht(int(entry)):
+                        ams_id, tray_id = int(entry), 0
+                    else:
+                        ams_id  = int(entry) // 4
+                        tray_id = int(entry) % 4
                 # 255 cote AMS ne veut PAS dire "non utilise" : c'est la
                 # premiere bobine externe, et 254 la seconde. Seul slot_id ==
                 # 255 signifie reellement qu'aucun filament n'est affecte.
@@ -548,8 +553,8 @@ async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_i
                     ams = next((a for a in state.ams_list if a.id == lookup_ams), None)
                     if ams:
                         t = next((t for t in ams.trays if t.id == lookup_tray), None)
-                        _lbl = ("Externe " + str(lookup_tray + 1)
-                                if lookup_ams == 255 else f"AMS{lookup_ams} tray{lookup_tray}")
+                        from ..core.mqtt import slot_location
+                        _lbl = slot_location(lookup_ams, lookup_tray)
                         if t and t.spool_id:
                             logger.info(f"[SLOT] slot={slot} → {_lbl} spool_id={t.spool_id} ✅")
                             return t.spool_id, "live"

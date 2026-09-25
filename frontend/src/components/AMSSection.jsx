@@ -5,6 +5,7 @@ import { colorBg, opaqueColors } from "../utils/colors";
 import { createPortal } from "react-dom";
 import { FilamentSheetFromSpool } from "../pages/Filaments";
 import SpoolSVG from "./SpoolSVG";
+import { EXT_AMS_ID, amsName, slotLabel, isExternal } from "../utils/ams";
 import AdminOnly from "./AdminOnly";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -79,12 +80,7 @@ function multicolorType(tray, spoolInfo) {
 
 // L'AMS 255 est le pseudo-AMS des bobines externes, fabrique cote serveur pour
 // que l'externe traverse exactement le meme code que les AMS reels. Seul son
-// libelle differe -- un tableau indexe aurait rendu "AMS 256".
-const EXT_AMS_ID = 255;
-const AMS_NAMES = ["AMS-A","AMS-B","AMS-C","AMS-D"];
-const amsName = (id) => (id === EXT_AMS_ID ? "Externe" : (AMS_NAMES[id] ?? `AMS ${id+1}`));
-// Pastille de slot : A1, B3... et E1/E2 pour l'externe.
-const amsInitial = (id) => (id === EXT_AMS_ID ? "E" : (AMS_NAMES[id]?.slice(-1) ?? id+1));
+// libelle differe. Noms et etiquettes vivent dans utils/ams (AMS, HT, externe).
 // Les slots arrivent deja dans l'ordre physique, y compris pour l'externe :
 // c'est le serveur qui remet a l'endroit la numerotation inversee du
 // protocole. Le front n'a donc rien a reordonner -- l'avoir fait ici faisait
@@ -92,7 +88,7 @@ const amsInitial = (id) => (id === EXT_AMS_ID ? "E" : (AMS_NAMES[id]?.slice(-1) 
 const traysInOrder = (ams) => ams.trays || [];
 // Pas de capteur sur le support externe : afficher 0 % et 0 °C ferait croire a
 // une mesure, alors qu'il n'y en a aucune.
-const hasClimate = (ams) => ams.id !== EXT_AMS_ID;
+const hasClimate = (ams) => !isExternal(ams.id);
 const traySlotNo = (ams, t) => t.id + 1;
 
 // ── Mini pastille ──────────────────────────────────────────────────────────
@@ -141,7 +137,7 @@ function MatchIcon({ mode, size = 10 }) {
 }
 
 // ── Boîtier AMS compact ─────────────────────────────────────────────────────
-function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup }) {
+function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup, slotsWidth }) {
   const isActive = ams.id === activeAmsId;
   const isDrying = ams.is_drying || ams.dry_time > 0;
   const getInfo = t => t.spool_info ?? null;
@@ -170,7 +166,9 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
       background:"none", border:"none", cursor:"pointer", width:"100%", padding:0,
     }}>
       <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-        <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.08em",
+        {/* nowrap : un HT n'a qu'un slot, sa tuile est etroite et "HT-A"
+            passait a la ligne. Le nom peut deborder de la tuile, pas se casser. */}
+        <span style={{ fontSize:10, fontWeight:700, letterSpacing:"0.08em", whiteSpace:"nowrap",
           color: isActive ? "#3b82f6" : isSelected ? "var(--text)" : "var(--muted)" }}>
           {amsName(ams.id)}
         </span>
@@ -179,7 +177,7 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
           backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
       </div>
       <div style={{
-        width:"100%", borderRadius:12, padding:6, display:"flex", gap:4,
+        width: slotsWidth ?? "100%", minWidth:0, borderRadius:12, padding:6, display:"flex", gap:4, boxSizing:"border-box",
         border:`1px solid ${borderColor}`,
         background: bg,
         boxShadow: boxShadow,
@@ -191,7 +189,8 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
       {/* Hauteur reservee meme sans capteur (externe) : sinon la tuile est
           plus courte que les AMS voisins et, dans la grille, son nom et ses
           slots ne s'alignent plus. On garde le bloc, vide, a la meme hauteur. */}
-      <div style={{ display:"flex", gap:8, fontSize:9, color:"var(--muted)",
+      <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", columnGap:8, fontSize:9,
+        color:"var(--muted)", whiteSpace:"nowrap",
         minHeight:12, visibility: hasClimate(ams) ? "visible" : "hidden" }}>
         <span style={{ display:"flex", alignItems:"center", gap:2 }}><Droplets size={8}/>{ams.humidity}%</span>
         <span style={{ display:"flex", alignItems:"center", gap:2,
@@ -379,7 +378,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
         margin:"0 auto" }}>
         {traysInOrder(ams).map(t => (
           <TrayCard key={t.id} tray={t} amsId={ams.id}
-            label={`${amsInitial(ams.id)}${traySlotNo(ams, t)}`}
+            label={slotLabel(ams.id, t.id)}
             activeAmsId={activeAmsId} activeTrayId={activeTrayId}
             spoolInfo={getInfo(t)}
             onClick={()=>onTrayClick&&onTrayClick({tray:t,amsLabel:amsName(ams.id),
@@ -914,7 +913,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
 
 
 // ── Section principale ─────────────────────────────────────────────────────
-export { AMSBox, AMSDetail, TrayBottomSheet, AMS_NAMES, amsName, EXT_AMS_ID };
+export { AMSBox, AMSDetail, TrayBottomSheet, amsName, EXT_AMS_ID };
 
 export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLookup }) {
   // Dédupliquer par id au cas où le polling enverrait des doublons

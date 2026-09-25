@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from typing import Optional
@@ -49,7 +49,7 @@ async def reset_all_data(_: str = Depends(get_current_user)):
 
 @router.get("/ams-order")
 async def get_ams_order(db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
-    """Ordre d'affichage personnalisé des AMS sur l'accueil (4 positions)."""
+    """Ordre d'affichage personnalisé des AMS sur l'accueil."""
     import json
     raw = await get_setting(db, "AMS_ORDER")
     try:
@@ -62,11 +62,26 @@ async def get_ams_order(db: AsyncSession = Depends(get_db), _: str = Depends(get
 @router.post("/ams-order")
 async def set_ams_order(body: dict, db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
     """
-    body: {"order": [ams_id, ams_id, null, ams_id]} — 4 positions (A/B/C/D),
-    null pour une position vide. Sert à placer manuellement les AMS sur l'accueil.
+    body: {"order": [ams_id, ams_id, null, ams_id, ...]} — positions lues
+    colonne par colonne sur deux lignes (haut col. 1, bas col. 1, haut col. 2...),
+    autant que necessaire ; null pour une case vide. Couvre AMS (0-3),
+    AMS HT (128+) et externe (255).
     """
     import json
-    order = body.get("order", [])
+    raw = body.get("order", [])
+    if not isinstance(raw, list):
+        raise HTTPException(422, "order doit etre une liste")
+    order, seen = [], set()
+    for v in raw[:64]:
+        # Un id en double s'afficherait deux fois sur l'accueil : seule sa
+        # premiere position compte.
+        if v is None or isinstance(v, bool) or not isinstance(v, int) or v in seen:
+            order.append(None)
+        else:
+            seen.add(v)
+            order.append(v)
+    while order and order[-1] is None:
+        order.pop()
     await set_setting(db, "AMS_ORDER", json.dumps(order))
     return {"ok": True, "order": order}
 

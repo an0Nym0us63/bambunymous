@@ -86,6 +86,39 @@ def invalidate_tray_cache(tag_uid: str = "", profile_id: str = "") -> int:
 # Aucun AMS reel ne porte ce numero.
 EXT_AMS_ID = 255
 
+# AMS HT : unite a un seul slot, numerotee par la machine a partir de 128
+# (128 = HT-A, 129 = HT-B...). Son bac porte l'id 0, et tray_now l'annonce
+# directement par son numero d'unite.
+HT_BASE_ID = 128
+
+
+def is_ht(ams_id) -> bool:
+    return HT_BASE_ID <= int(ams_id) < HT_BASE_ID + 8
+
+
+def ams_label(ams_id) -> str:
+    """Nom d'une unite, le meme que celui affiche par le front (utils/ams)."""
+    ams_id = int(ams_id)
+    if ams_id == EXT_AMS_ID:
+        return "Externe"
+    if is_ht(ams_id):
+        return f"HT-{chr(65 + ams_id - HT_BASE_ID)}"
+    if 0 <= ams_id < 26:
+        return f"AMS-{chr(65 + ams_id)}"
+    return f"AMS {ams_id}"
+
+
+def slot_location(ams_id, tray_slot) -> str:
+    """
+    Emplacement ecrit sur la bobine. Un HT n'a qu'un slot, "slot 1" n'y
+    apprendrait rien ; il garde le prefixe "AMS" de la convention interne
+    ("AMS ..." ou "Tiroir"), que "HT-A" seul aurait rompue.
+    """
+    ams_id = int(ams_id)
+    if is_ht(ams_id):
+        return f"AMS {ams_label(ams_id)}"
+    return f"{ams_label(ams_id)} slot {int(tray_slot) + 1}"
+
 
 def _external_unit(p):
     """
@@ -445,6 +478,11 @@ class MQTTManager:
                 # Repli legacy : suppose un index global (vrai sur mono-buse/AMS unique)
                 new_ams, new_tray = tray_now // 4, tray_now % 4
                 source = "tray_now_fallback"
+            elif new_ams is None and is_ht(tray_now):
+                # Un HT est annonce par son numero d'unite (128...), pas par un
+                # index ams*4+tray : 128 // 4 aurait designe un AMS 32.
+                new_ams, new_tray = tray_now, 0
+                source = "tray_now_ht"
 
             # ── Bobine externe active ────────────────────────────────────
             # L'externe est annoncee par un INDEX D'AMS de 254 ou 255, pas par
@@ -578,9 +616,7 @@ class MQTTManager:
                                         _MATCH_MODE_CACHE[_key] = mode
                                     if spool_id:
                                         _t.spool_id   = spool_id
-                                        loc = (f"Externe slot {_tray_slot+1}"
-                                               if _ams_id == EXT_AMS_ID
-                                               else f"AMS-{chr(65+_ams_id)} slot {_tray_slot+1}")
+                                        loc = slot_location(_ams_id, _tray_slot)
                                         logger.debug(f"[AMS] {_ams_id}/{_tray_slot} → #{spool_id} {mode}")
                                         # Stocker spool_info en cache
                                         try:
@@ -654,7 +690,7 @@ class MQTTManager:
                             # les bobines externes, puisqu'elles vivent dans
                             # state.ams_list comme les autres. Log explicite pour
                             # pouvoir le verifier au retrait d'une bobine externe.
-                            _where = "Externe" if _k[0] == EXT_AMS_ID else f"AMS {_k[0]}"
+                            _where = ams_label(_k[0])
                             logger.info(f"[LOC] bobine #{_old} retiree de {_where} → Tiroir")
                             import asyncio as _lio3, threading as _lth3
                             def _mk_drawer(_sid=_old):

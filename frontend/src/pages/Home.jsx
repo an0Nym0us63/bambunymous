@@ -4,6 +4,7 @@ import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTr
 import client from "../api/client";
 import AttentionSection from "../components/AttentionSection";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
+import { layoutCells, columnWeight, slotCount } from "../utils/ams";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function hexCss(hex) {
@@ -560,6 +561,18 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, act
       .catch(() => setAmsOrder([]));
   }, []);
 
+  // Largeur reelle de la carte : sur un telephone, le rack a cote de trois
+  // colonnes d'AMS ecrasait tout. En dessous du seuil, il passe dessous.
+  const gridRef = useRef(null);
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setNarrow(e.contentRect.width < 520));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hasRack, uniqueAmsList.length]);
+
   if (!uniqueAmsList.length && !hasRack) return (
     <div className="card" style={{ padding:24, textAlign:"center", color:"var(--muted)", fontSize:14 }}>Aucun AMS détecté</div>
   );
@@ -568,67 +581,52 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, act
   const selectedAms     = current.kind === "ams"    ? (uniqueAmsList.find(a => a.id === current.id) ?? uniqueAmsList[0]) : null;
   const selectedHotend  = current.kind === "hotend" ? slots.find(s => s.num === current.num) : null;
 
-  const orderedAmsList = (() => {
-    if (!amsOrder || !amsOrder.length) return uniqueAmsList;
-    const byId = new Map(uniqueAmsList.map(a => [a.id, a]));
-    const placed = amsOrder.map(id => (id != null ? byId.get(id) : null)).filter(Boolean);
-    const placedIds = new Set(placed.map(a => a.id));
-    const rest = uniqueAmsList.filter(a => !placedIds.has(a.id));
-    return [...placed, ...rest];
-  })();
+  // Grille de l'accueil : deux lignes, autant de colonnes que d'unites a
+  // ranger, dans l'ordre choisi dans les reglages. Le rack, s'il existe,
+  // prend toujours la derniere colonne. Sans rack ni ordre enregistre, et
+  // avec au plus 4 unites, on garde la simple rangee d'origine.
+  const hasOrder = (amsOrder || []).some(v => v != null);
+  const useGrid = hasRack || hasOrder || uniqueAmsList.length > 4;
+  const cols = useGrid ? layoutCells(uniqueAmsList, amsOrder) : uniqueAmsList.map(a => [a]);
+  // Le rack valait 1,5 colonne d'AMS (4 slots) : 6 en unites de slot.
+  const rackBeside = hasRack && !narrow;
+  const template = cols.map(c => `${columnWeight(c)}fr`).join(" ") + (rackBeside ? " 6fr" : "");
 
-  const colA = orderedAmsList.slice(0, 2);
-  const amsC = orderedAmsList[2] ?? null;
-  const amsD = orderedAmsList[3] ?? null;
+  const renderBox = (ams, weight) => (
+    // Une unite plus etroite que sa colonne (HT ou externe a cote d'un AMS)
+    // garde des pastilles de la meme largeur que ses voisines ; son nom et
+    // ses mesures, eux, prennent toute la colonne.
+    <div key={ams.id} style={{ minWidth:0 }}>
+      <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
+        isSelected={current.kind==="ams" && current.id===ams.id}
+        onClick={() => setSel({ kind:"ams", id:ams.id })}
+        spoolLookup={spoolLookup}
+        slotsWidth={`${(slotCount(ams) / weight) * 100}%`}/>
+    </div>
+  );
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
       <div className="card" style={{ padding:12 }}>
-        <div style={{ display:"grid",
-          gridTemplateColumns: hasRack ? "1fr 1fr 1.5fr" : `repeat(${Math.min(uniqueAmsList.length,4)},1fr)`,
-          gap:10 }}>
+        <div ref={gridRef} style={{ display:"grid", gridTemplateColumns: template, gap:10 }}>
 
-          {/* Colonne 1 : AMS-A au-dessus de AMS-B */}
-          {!hasRack
-            ? uniqueAmsList.map(ams => (
-                <AMSBox key={ams.id} ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
-                  isSelected={current.kind==="ams" && current.id===ams.id}
-                  onClick={() => setSel({ kind:"ams", id:ams.id })}
-                  spoolLookup={spoolLookup}/>
-              ))
-            : colA.length > 0 && (
-                <div style={{ gridColumn:1, gridRow:"1 / span 2", display:"flex", flexDirection:"column", gap:10 }}>
-                  {colA.map(ams => (
-                    <AMSBox key={ams.id} ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
-                      isSelected={current.kind==="ams" && current.id===ams.id}
-                      onClick={() => setSel({ kind:"ams", id:ams.id })}
-                      spoolLookup={spoolLookup}/>
-                  ))}
-                </div>
-              )}
+          {cols.map((col, ci) => {
+            const w = columnWeight(col);
+            return (
+              <div key={ci} style={{ gridColumn: ci + 1, display:"grid",
+                gridTemplateRows: useGrid ? "auto auto" : "auto", alignContent:"start", gap:10, minWidth:0 }}>
+                {col.map((ams, ri) => ams ? renderBox(ams, w) : <div key={`vide-${ri}`}/>)}
+              </div>
+            );
+          })}
 
-          {/* Colonne 2 : AMS-C en haut, à côté de AMS-A — place libre en dessous pour un éventuel AMS-D */}
-          {hasRack && amsC && (
-            <div style={{ gridColumn:2, gridRow:1 }}>
-              <AMSBox ams={amsC} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
-                isSelected={current.kind==="ams" && current.id===amsC.id}
-                onClick={() => setSel({ kind:"ams", id:amsC.id })}
-                spoolLookup={spoolLookup}/>
-            </div>
-          )}
-          {hasRack && amsD && (
-            <div style={{ gridColumn:2, gridRow:2 }}>
-              <AMSBox ams={amsD} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
-                isSelected={current.kind==="ams" && current.id===amsD.id}
-                onClick={() => setSel({ kind:"ams", id:amsD.id })}
-                spoolLookup={spoolLookup}/>
-            </div>
-          )}
-
-          {/* Colonne 3 : les 6 hotends du rack Vortek — libellé aligné en haut, slots centrés */}
+          {/* Dernière colonne : les 6 hotends du rack Vortek — libellé aligné en haut, slots centrés */}
           {hasRack && (
-            <div style={{ gridColumn:3, gridRow:"1 / span 2", display:"flex", flexDirection:"column",
-              height:"100%", paddingLeft:10, marginLeft:4, borderLeft:"1px solid var(--border)" }}>
+            <div style={rackBeside
+              ? { gridColumn: cols.length + 1, display:"flex", flexDirection:"column",
+                  height:"100%", paddingLeft:10, marginLeft:4, borderLeft:"1px solid var(--border)" }
+              : { gridColumn:"1 / -1", display:"flex", flexDirection:"column", gap:6,
+                  paddingTop:10, borderTop:"1px solid var(--border)" }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
                 <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>Rack Vortek</span>
                 <span style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)" }}>{filled}/6</span>
