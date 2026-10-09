@@ -49,7 +49,7 @@ async def reset_all_data(_: str = Depends(get_current_user)):
 
 @router.get("/ams-order")
 async def get_ams_order(db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
-    """Ordre d'affichage personnalisé des AMS sur l'accueil."""
+    """Disposition des AMS sur l'accueil (objet {rows, cols, cells}, ou ancienne liste)."""
     import json
     raw = await get_setting(db, "AMS_ORDER")
     try:
@@ -62,26 +62,38 @@ async def get_ams_order(db: AsyncSession = Depends(get_db), _: str = Depends(get
 @router.post("/ams-order")
 async def set_ams_order(body: dict, db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
     """
-    body: {"order": [ams_id, ams_id, null, ams_id, ...]} — positions lues
-    colonne par colonne sur deux lignes (haut col. 1, bas col. 1, haut col. 2...),
-    autant que necessaire ; null pour une case vide. Couvre AMS (0-3),
-    AMS HT (128+) et externe (255).
+    body: {"order": {"rows": R, "cols": C, "cells": [{"id": ams_id, "row": r, "col": c}]}}
+    Grille de l'accueil aux dimensions choisies, chaque unite rangee par sa
+    case (0 = premiere ligne / colonne). Couvre AMS (0-3), AMS HT (128+) et
+    externe (255). L'ancienne forme -- une liste de positions lue colonne par
+    colonne sur deux lignes -- reste relue par le front.
     """
     import json
-    raw = body.get("order", [])
-    if not isinstance(raw, list):
-        raise HTTPException(422, "order doit etre une liste")
-    order, seen = [], set()
-    for v in raw[:64]:
-        # Un id en double s'afficherait deux fois sur l'accueil : seule sa
-        # premiere position compte.
-        if v is None or isinstance(v, bool) or not isinstance(v, int) or v in seen:
-            order.append(None)
-        else:
-            seen.add(v)
-            order.append(v)
-    while order and order[-1] is None:
-        order.pop()
+    raw = body.get("order")
+    if not isinstance(raw, dict):
+        raise HTTPException(422, "order doit etre un objet {rows, cols, cells}")
+
+    def entier(v, lo, hi):
+        return isinstance(v, int) and not isinstance(v, bool) and lo <= v <= hi
+
+    rows, cols = raw.get("rows"), raw.get("cols")
+    if not entier(rows, 1, 4) or not entier(cols, 1, 8):
+        raise HTTPException(422, "rows doit valoir 1 a 4 et cols 1 a 8")
+    cells, ids, prises = [], set(), set()
+    for c in (raw.get("cells") or [])[:64]:
+        if not isinstance(c, dict):
+            continue
+        i, r, k = c.get("id"), c.get("row"), c.get("col")
+        if not entier(i, 0, 255) or not entier(r, 0, rows - 1) or not entier(k, 0, cols - 1):
+            raise HTTPException(422, f"case invalide : {c}")
+        # Une unite rangee deux fois s'afficherait deux fois, deux unites sur
+        # une case se recouvriraient : refus plutot que choix silencieux.
+        if i in ids or (r, k) in prises:
+            raise HTTPException(422, f"unite ou case en double : {c}")
+        ids.add(i)
+        prises.add((r, k))
+        cells.append({"id": i, "row": r, "col": k})
+    order = {"rows": rows, "cols": cols, "cells": cells}
     await set_setting(db, "AMS_ORDER", json.dumps(order))
     return {"ok": True, "order": order}
 

@@ -4,7 +4,7 @@ import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTr
 import client from "../api/client";
 import AttentionSection from "../components/AttentionSection";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
-import { layoutCells, columnWeight, slotCount, slotLabel } from "../utils/ams";
+import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel } from "../utils/ams";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function hexCss(hex) {
@@ -602,8 +602,8 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, act
   }, [headId]);
 
   useEffect(() => {
-    client.get("/settings/ams-order").then(({ data }) => setAmsOrder(data.order || []))
-      .catch(() => setAmsOrder([]));
+    client.get("/settings/ams-order").then(({ data }) => setAmsOrder(data.order ?? null))
+      .catch(() => setAmsOrder(null));
   }, []);
 
   if (!uniqueAmsList.length && !hasRack) return (
@@ -618,12 +618,10 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, act
   // a quelque chose a montrer.
   const detailKind = (showRack || !uniqueAmsList.length) && hasRack ? "hotend" : "ams";
 
-  // Grille des AMS : deux lignes, autant de colonnes que d'unites a ranger,
-  // dans l'ordre choisi dans les reglages. Sans ordre enregistre et avec au
-  // plus 4 unites, on garde la simple rangee d'origine.
-  const hasOrder = (amsOrder || []).some(v => v != null);
-  const useGrid = hasOrder || uniqueAmsList.length > 4;
-  const cols = useGrid ? layoutCells(uniqueAmsList, amsOrder) : uniqueAmsList.map(a => [a]);
+  // Grille des AMS : les dimensions et les cases choisies dans les reglages
+  // (lignes x colonnes). Sans reglage, une rangee jusqu'a quatre unites.
+  const cols = grilleAccueil(uniqueAmsList, lireDisposition(amsOrder));
+  const nbLignes = cols[0]?.length || 1;
   const template = cols.map(c => `${columnWeight(c)}fr`).join(" ");
 
   // Chaque unite est posee sur SA ligne d'une grille commune, et non dans
@@ -680,7 +678,7 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, act
 
         {!showRack && (
           <div style={{ display:"grid", gridTemplateColumns: template,
-            gridTemplateRows: useGrid ? "auto auto" : "auto", columnGap:10, rowGap:10 }}>
+            gridTemplateRows: `repeat(${nbLignes}, auto)`, columnGap:10, rowGap:10 }}>
             {units}
           </div>
         )}

@@ -41,37 +41,87 @@ export function slotCount(ams) {
 }
 
 // ── Disposition de l'accueil ────────────────────────────────────────────────
-// L'ordre enregistre est une liste de positions lue colonne par colonne, sur
-// deux lignes : [0] haut de la colonne 1, [1] bas de la colonne 1, [2] haut
-// de la colonne 2... Une position peut valoir null (case laissee vide). C'est
-// exactement la semantique des 4 positions d'origine, prolongee : un reglage
-// deja enregistre se relit tel quel.
-export const LAYOUT_ROWS = 2;
+// La grille a les dimensions choisies dans les reglages (lignes x colonnes) et
+// chaque unite y est rangee par SA CASE {id, row, col} (0 = premiere). Ranger
+// par case et non par un numero de position fait qu'en changeant le nombre de
+// lignes, les unites ne se melangent pas : elles restent ou elles sont.
+export const MAX_LIGNES = 4;
+export const MAX_COLONNES = 8;
 
-// Place les unites dans la grille : celles de l'ordre enregistre a leur
-// position, les autres (un AMS branche depuis, une unite jamais placee) a la
-// suite, dans les premieres cases libres apres la derniere placee. Sans ca,
-// un AMS ajoute n'apparaitrait nulle part tant qu'on ne l'a pas range.
-// Une position qui designe une unite absente reste vide.
-export function layoutCells(amsList, order) {
+const entier = (v, min, max) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= min && n <= max ? n : null;
+};
+
+// Relit ce que le serveur rend : la forme {rows, cols, cells} d'aujourd'hui, ou
+// l'ancienne liste de positions lue colonne par colonne sur deux lignes
+// ([0] haut col. 1, [1] bas col. 1...). Une case hors grille, une unite placee
+// deux fois ou deux unites sur une case : seule la premiere compte.
+export function lireDisposition(brut) {
+  let rows, cols, liste = [];
+  if (Array.isArray(brut)) {
+    rows = 2;
+    cols = Math.max(1, Math.ceil(brut.length / 2));
+    brut.forEach((id, i) => { if (id != null) liste.push({ id, row: i % 2, col: Math.floor(i / 2) }); });
+  } else if (brut && typeof brut === "object") {
+    rows = entier(brut.rows, 1, MAX_LIGNES) ?? 2;
+    cols = entier(brut.cols, 1, MAX_COLONNES) ?? 2;
+    liste = Array.isArray(brut.cells) ? brut.cells : [];
+  } else {
+    return null;
+  }
+  const cells = [], ids = new Set(), prises = new Set();
+  for (const c of liste) {
+    const row = entier(c?.row, 0, rows - 1), col = entier(c?.col, 0, cols - 1);
+    if (row == null || col == null || !Number.isInteger(c?.id)) continue;
+    const k = `${row},${col}`;
+    if (ids.has(c.id) || prises.has(k)) continue;
+    ids.add(c.id); prises.add(k);
+    cells.push({ id: c.id, row, col });
+  }
+  if (!cells.length) return null;
+  return { rows, cols, cells };
+}
+
+// Disposition sans reglage : une rangee jusqu'a quatre unites, deux lignes
+// au-dela -- ce que faisait l'accueil avant qu'on puisse choisir.
+export function dispositionParDefaut(n) {
+  const rows = n <= 4 ? 1 : 2;
+  return { rows, cols: Math.max(1, Math.ceil(n / rows)), cells: [] };
+}
+
+// Grille de l'accueil : une liste de COLONNES, chacune de `rows` cases (unite
+// ou null). Les unites rangees vont dans leur case ; les autres (un AMS
+// branche depuis, une unite jamais rangee) prennent les cases libres colonne
+// par colonne, puis des colonnes en plus : une unite ne disparait jamais
+// faute de place. Les lignes et colonnes entierement vides sont retirees,
+// elles creuseraient un trou sans rien porter.
+export function grilleAccueil(amsList, disposition) {
+  const d = disposition ?? dispositionParDefaut(amsList.length);
   const byId = new Map(amsList.map(a => [a.id, a]));
-  const cells = (order || []).map(id => (id != null && byId.has(id) ? byId.get(id) : null));
-  const placed = new Set(cells.filter(Boolean).map(a => a.id));
-  let i = cells.reduce((last, c, k) => (c ? k + 1 : last), 0);
+  const rows = d.rows;
+  const grille = Array.from({ length: d.cols }, () => Array(rows).fill(null));
+  const places = new Set();
+  for (const c of d.cells) {
+    const a = byId.get(c.id);
+    if (!a) continue;
+    grille[c.col][c.row] = a;
+    places.add(a.id);
+  }
+  let col = 0, row = 0;
   for (const a of amsList) {
-    if (placed.has(a.id)) continue;
-    while (cells[i]) i++;
-    cells[i++] = a;
+    if (places.has(a.id)) continue;
+    while (grille[col]?.[row]) {
+      row++;
+      if (row >= rows) { row = 0; col++; }
+    }
+    if (!grille[col]) grille[col] = Array(rows).fill(null);
+    grille[col][row] = a;
   }
-  // Colonnes entierement vides retirees : elles creuseraient un trou dans
-  // l'accueil sans rien porter.
-  const cols = [];
-  for (let c = 0; c * LAYOUT_ROWS < cells.length; c++) {
-    const col = cells.slice(c * LAYOUT_ROWS, (c + 1) * LAYOUT_ROWS);
-    while (col.length < LAYOUT_ROWS) col.push(null);
-    if (col.some(Boolean)) cols.push(col);
-  }
-  return cols;
+  const lignesUtiles = [...Array(rows).keys()].filter(r => grille.some(c => c[r]));
+  return grille
+    .filter(c => c.some(Boolean))
+    .map(c => lignesUtiles.map(r => c[r]));
 }
 
 // Largeur relative d'une colonne : le plus large de ses occupants, au moins

@@ -12,7 +12,7 @@ import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
          ROLE_OPTIONS, ROLE_LABEL, ROLE_BADGE } from "../store/auth";
 import AdminOnly from "../components/AdminOnly";
 import { useTrackDetail } from "../utils/track";
-import { amsName, slotCount, LAYOUT_ROWS } from "../utils/ams";
+import { amsName, slotCount, lireDisposition, dispositionParDefaut, MAX_LIGNES, MAX_COLONNES } from "../utils/ams";
 
 const inp = {
   width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
@@ -62,15 +62,8 @@ const cardTitle = {
   letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6,
 };
 
-// Positions lues colonne par colonne sur deux lignes, comme sur l'accueil
-// (utils/ams) : [0] haut col. 1, [1] bas col. 1, [2] haut col. 2... Le nombre
-// de colonnes suit ce qu'il y a a ranger, avec toujours une case libre : une
-// unite de plus ne doit jamais se retrouver sans endroit ou la poser.
-function positionLabel(idx) {
-  const col = Math.floor(idx / LAYOUT_ROWS) + 1;
-  return `Colonne ${col} — ${idx % LAYOUT_ROWS === 0 ? "haut" : "bas"}`;
-}
-
+// La grille a les dimensions qu'on choisit (lignes x colonnes) et chaque unite
+// y est rangee par sa case. Format et regles dans utils/ams.
 function AMSOrderSection() {
   const storeStatus = usePrinter(s => s.status);
   // L'etat de l'imprimante n'est interroge que par l'accueil : en ouvrant les
@@ -86,7 +79,9 @@ function AMSOrderSection() {
     .sort((a,b) => a.id - b.id);
   const availableIds = available.map(a => a.id);
 
-  const [order, setOrder] = useState([]);
+  const [rows, setRows] = useState(null);
+  const [cols, setCols] = useState(null);
+  const [cells, setCells] = useState([]);   // [{id, row, col}]
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -96,40 +91,51 @@ function AMSOrderSection() {
 
   useEffect(() => {
     client.get("/settings/ams-order").then(({ data }) => {
-      setOrder(Array.isArray(data.order) ? data.order : []);
+      const d = lireDisposition(data.order);
+      if (d) { setRows(d.rows); setCols(d.cols); setCells(d.cells); }
     }).finally(() => setLoading(false));
   }, []);
+  // Rien d'enregistre : on part de ce que l'accueil affiche deja (une rangee
+  // jusqu'a quatre unites), une fois les unites connues.
+  useEffect(() => {
+    if (loading || rows != null || !availableIds.length) return;
+    const d = dispositionParDefaut(availableIds.length);
+    setRows(d.rows); setCols(d.cols);
+  }, [loading, rows, availableIds.length]);
 
-  const lastFilled = order.reduce((last, v, i) => (v != null ? i + 1 : last), 0);
-  const unplaced = availableIds.filter(id => !order.includes(id));
-  const cellsOf = (n) => Array.from({ length: n * LAYOUT_ROWS }, (_, i) => order[i] ?? null);
-  let nCols = Math.ceil(Math.max(lastFilled, availableIds.length, 4) / LAYOUT_ROWS);
-  if (!cellsOf(nCols).includes(null)) nCols += 1;
-  const cells = cellsOf(nCols);
+  const R = rows ?? 1, C = cols ?? 2;
+  const at = (r, c) => cells.find(x => x.row === r && x.col === c)?.id ?? null;
+  const placedIds = new Set(cells.map(x => x.id));
+  const unplaced = availableIds.filter(id => !placedIds.has(id));
+  const capacite = R * C;
+  const tropPetit = availableIds.length > capacite;
 
-  const placeAt = (slotIndex, amsId) => {
-    setOrder(prev => {
-      const next = [...prev];
-      while (next.length <= slotIndex) next.push(null);
-      const from = next.indexOf(amsId);
+  // Reduire la grille ne perd rien : les unites hors de la nouvelle grille
+  // repassent dans les non placees.
+  const redimensionner = (r, c) => {
+    setRows(r); setCols(c);
+    setCells(prev => prev.filter(x => x.row < r && x.col < c));
+  };
+
+  const placeAt = (r, c, amsId) => {
+    setCells(prev => {
+      const from = prev.find(x => x.id === amsId);
+      const occupant = prev.find(x => x.row === r && x.col === c);
+      let next = prev.filter(x => x.id !== amsId && x !== occupant);
+      next.push({ id: amsId, row: r, col: c });
       // Deposer sur une case occupee echange les deux unites, plutot que de
       // renvoyer l'occupant dans les "non placees".
-      if (from >= 0) next[from] = next[slotIndex] ?? null;
-      next[slotIndex] = amsId;
+      if (occupant && occupant.id !== amsId && from) next.push({ id: occupant.id, row: from.row, col: from.col });
       return next;
     });
     setPicked(null);
   };
-  const clearSlot = (slotIndex) => setOrder(prev => prev.map((v,i) => i===slotIndex ? null : v));
+  const clearCell = (r, c) => setCells(prev => prev.filter(x => !(x.row === r && x.col === c)));
 
   const save = async () => {
     setSaving(true);
     try {
-      // Cases vides de fin retirees : elles ne portent rien.
-      const clean = [...order];
-      while (clean.length && clean[clean.length - 1] == null) clean.pop();
-      await client.post("/settings/ams-order", { order: clean });
-      setOrder(clean);
+      await client.post("/settings/ams-order", { order: { rows: R, cols: C, cells } });
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch(e) {
@@ -161,6 +167,7 @@ function AMSOrderSection() {
     );
   };
   const onChipClick = (id) => (e) => { e.stopPropagation(); setPicked(p => (p === id ? null : id)); };
+  const nombres = (max) => Array.from({ length: max }, (_, i) => ({ value: i + 1, label: String(i + 1) }));
 
   if (loading) return null;
 
@@ -168,38 +175,56 @@ function AMSOrderSection() {
     <div className="card" style={card}>
       <p style={cardTitle}>Disposition AMS sur l'accueil</p>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"-8px 0 14px" }}>
-        Glisse-dépose une unité dans la case où tu veux la voir sur l'accueil — ou touche-la,
-        puis touche la case. Deux lignes, autant de colonnes que nécessaire ; le rack Vortek
-        reste toujours à droite.
+        Choisis la forme de la grille, puis glisse-dépose chaque unité dans sa case — ou touche-la,
+        puis touche la case. Le rack Vortek a son propre bouton sur l'accueil, il n'occupe pas de case.
       </p>
 
+      <div style={{ display:"flex", gap:12, alignItems:"flex-end", flexWrap:"wrap", marginBottom:14 }}>
+        <div style={{ width:110 }}>
+          <label style={lbl}>Lignes</label>
+          <Select value={R} onChange={e => redimensionner(Number(e.target.value), C)} options={nombres(MAX_LIGNES)} style={inp}/>
+        </div>
+        <div style={{ width:110 }}>
+          <label style={lbl}>Colonnes</label>
+          <Select value={C} onChange={e => redimensionner(R, Number(e.target.value))} options={nombres(MAX_COLONNES)} style={inp}/>
+        </div>
+        <span style={{ fontSize:12, color: tropPetit ? "#ef4444" : "var(--muted)", paddingBottom:9 }}>
+          {tropPetit
+            ? `${availableIds.length} unités pour ${capacite} case${capacite > 1 ? "s" : ""} : agrandis la grille.`
+            : `${capacite} case${capacite > 1 ? "s" : ""} pour ${availableIds.length} unité${availableIds.length > 1 ? "s" : ""}.`}
+        </span>
+      </div>
+
       <div style={{ overflowX:"auto", marginBottom:16 }}>
-        <div style={{ display:"grid", gridTemplateColumns:`repeat(${nCols}, minmax(120px, 1fr))`,
-          gridTemplateRows:`repeat(${LAYOUT_ROWS}, auto)`, gridAutoFlow:"column", gap:10 }}>
-          {cells.map((amsId, idx) => (
-            <div key={idx}
-              onDragOver={e => e.preventDefault()}
-              onDrop={e => { e.preventDefault(); const id = Number(e.dataTransfer.getData("text/plain")); if (!isNaN(id)) placeAt(idx, id); }}
-              onClick={() => { if (picked != null) placeAt(idx, picked); }}
-              style={{ minHeight:64, borderRadius:12, minWidth:0,
-                border:`2px dashed ${picked != null ? "rgba(59,130,246,0.5)" : "var(--border)"}`,
-                cursor: picked != null ? "pointer" : "default",
-                background:"var(--surface)", padding:10, display:"flex", flexDirection:"column", gap:6 }}>
-              <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.04em" }}>
-                {positionLabel(idx)}
-              </span>
-              {amsId != null ? (
-                <div draggable onDragStart={e => e.dataTransfer.setData("text/plain", String(amsId))}
-                  onClick={onChipClick(amsId)} style={chipStyle(amsId)}>
-                  {chipLabel(amsId)}
-                  <button onClick={(e) => { e.stopPropagation(); clearSlot(idx); }} style={{ marginLeft:"auto", background:"none",
-                    border:"none", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>✕</button>
-                </div>
-              ) : (
-                <span style={{ fontSize:11, color:"var(--muted)", opacity:0.6 }}>Vide</span>
-              )}
-            </div>
-          ))}
+        <div style={{ display:"grid", gridTemplateColumns:`repeat(${C}, minmax(120px, 1fr))`, gap:10 }}>
+          {Array.from({ length: R * C }, (_, i) => {
+            const r = Math.floor(i / C), c = i % C;
+            const amsId = at(r, c);
+            return (
+              <div key={`${r}-${c}`}
+                onDragOver={e => e.preventDefault()}
+                onDrop={e => { e.preventDefault(); const id = Number(e.dataTransfer.getData("text/plain")); if (!isNaN(id)) placeAt(r, c, id); }}
+                onClick={() => { if (picked != null) placeAt(r, c, picked); }}
+                style={{ minHeight:64, borderRadius:12, minWidth:0,
+                  border:`2px dashed ${picked != null ? "rgba(59,130,246,0.5)" : "var(--border)"}`,
+                  cursor: picked != null ? "pointer" : "default",
+                  background:"var(--surface)", padding:10, display:"flex", flexDirection:"column", gap:6 }}>
+                <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.04em" }}>
+                  {R > 1 ? `Ligne ${r + 1} · ` : ""}Colonne {c + 1}
+                </span>
+                {amsId != null ? (
+                  <div draggable onDragStart={e => e.dataTransfer.setData("text/plain", String(amsId))}
+                    onClick={onChipClick(amsId)} style={chipStyle(amsId)}>
+                    {chipLabel(amsId)}
+                    <button onClick={(e) => { e.stopPropagation(); clearCell(r, c); }} style={{ marginLeft:"auto", background:"none",
+                      border:"none", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>✕</button>
+                  </div>
+                ) : (
+                  <span style={{ fontSize:11, color:"var(--muted)", opacity:0.6 }}>Vide</span>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -225,10 +250,12 @@ function AMSOrderSection() {
         </p>
       )}
 
-      <button onClick={save} disabled={saving}
+      <button onClick={save} disabled={saving || tropPetit}
+        title={tropPetit ? "La grille n'a pas assez de cases pour toutes les unités" : ""}
         style={{ display:"flex", alignItems:"center", gap:8, padding:"9px 16px",
           background:"#3b82f6", border:"none", borderRadius:10, color:"white",
-          fontSize:13, fontWeight:700, cursor: saving ? "not-allowed" : "pointer", opacity: saving ? 0.6 : 1 }}>
+          fontSize:13, fontWeight:700, cursor: (saving || tropPetit) ? "not-allowed" : "pointer",
+          opacity: (saving || tropPetit) ? 0.6 : 1 }}>
         {saving ? <RefreshCw size={14} style={{ animation:"spin 1s linear infinite" }}/> : <Save size={14}/>}
         {saved ? "Sauvegardé ✓" : "Sauvegarder la disposition"}
       </button>
