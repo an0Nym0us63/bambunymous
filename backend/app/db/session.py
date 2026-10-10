@@ -50,6 +50,7 @@ async def init_db():
     await _normalize_archived_spools()
     await _seed_admin_user()
     await _migrate_last_seen()
+    await _migrate_label_printed()
     await _migrate_object_status()
     await _cleanup_bogus_translations()
     await _migrate_activity_kind()
@@ -78,8 +79,6 @@ async def _migrate():
         ("filaments", "multicolor_type",      "TEXT DEFAULT 'monochrome'"),
         ("filaments", "colors_array",         "TEXT"),
         ("filaments", "swatch",               "INTEGER DEFAULT 0"),
-        ("filaments", "label_printed",        "INTEGER DEFAULT 0"),
-        ("filaments", "label_printed_at",     "TIMESTAMP"),
         ("filaments", "transparent",          "INTEGER DEFAULT 0"),
         ("filaments", "to_order",             "INTEGER DEFAULT 0"),
         ("bobines",   "found_mode",           "TEXT"),
@@ -209,6 +208,41 @@ async def _migrate_object_status():
             """))
     except Exception as e:
         print(f"[migration] statut objets: {e}")
+
+
+LABEL_FROM_SWATCH_DONE = "MIGRATION_LABEL_FROM_SWATCH"
+
+
+async def _migrate_label_printed():
+    """
+    Ajoute filaments.label_printed / label_printed_at, puis -- UNE SEULE FOIS --
+    coche l'etiquette des filaments qui ont deja un echantillon : la plaquette
+    existe, son etiquette aussi. Date laissee vide, on ne la connait pas.
+
+    La reprise est notee dans settings et ne se rejoue plus : au demarrage
+    suivant, une etiquette decochee expres sur un filament avec echantillon
+    serait sinon recochee. Le repere vaut aussi pour une base ou les colonnes
+    existent deja (version precedente qui les ajoutait sans reprise).
+    """
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            cols = [r[1] for r in (await conn.execute(_text("PRAGMA table_info(filaments)"))).all()]
+            if "label_printed" not in cols:
+                await conn.execute(_text("ALTER TABLE filaments ADD COLUMN label_printed INTEGER DEFAULT 0"))
+            if "label_printed_at" not in cols:
+                await conn.execute(_text("ALTER TABLE filaments ADD COLUMN label_printed_at TIMESTAMP"))
+            done = (await conn.execute(_text("SELECT value FROM settings WHERE key = :k"),
+                                       {"k": LABEL_FROM_SWATCH_DONE})).first()
+            if done is None:
+                res = await conn.execute(_text(
+                    "UPDATE filaments SET label_printed = 1 "
+                    "WHERE swatch = 1 AND (label_printed IS NULL OR label_printed = 0)"))
+                await conn.execute(_text("INSERT INTO settings (key, value) VALUES (:k, '1')"),
+                                   {"k": LABEL_FROM_SWATCH_DONE})
+                print(f"[migration] etiquette cochee sur {res.rowcount or 0} filament(s) avec echantillon")
+    except Exception as e:
+        print(f"[migration] label_printed ignoree : {e}")
 
 
 async def _migrate_last_seen():
