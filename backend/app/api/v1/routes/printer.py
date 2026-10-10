@@ -220,6 +220,22 @@ def _spool_info(spool_id, spools_map):
     )
 
 
+def _tray_spool_info(t, spools_map):
+    """
+    Fiche de la bobine d'un bac. Le cache pose au moment ou la bobine a ete
+    reconnue sert pour tout, sauf l'echantillon : il change sans que la bobine
+    bouge (case cochee a la main, QR scanne), et le cache l'aurait fige -- la
+    pastille « pas d'echantillon » serait restee sur l'accueil apres coup. On le
+    relit donc dans le filament charge a chaque appel.
+    """
+    cached = getattr(t, "_spool_info_cache", None)
+    si = SpoolInfoOut(**cached) if cached else _spool_info(t.spool_id, spools_map)
+    if si is not None and t.spool_id in spools_map:
+        f = spools_map[t.spool_id][1]
+        si.swatch = bool(f.swatch) if f is not None else None
+    return si
+
+
 @router.get("/status", response_model=PrinterStatusOut)
 async def printer_status(_: str = Depends(get_current_user)):
     from sqlalchemy import select as _sel
@@ -273,7 +289,7 @@ async def printer_status(_: str = Depends(get_current_user)):
                     drying_temp=t.drying_temp, drying_time=t.drying_time,
                     spool_id=t.spool_id,
                     match_mode=getattr(t, "match_mode", ""),
-                    spool_info=(lambda si: SpoolInfoOut(**si) if si else _spool_info(t.spool_id, _spools_map))(getattr(t, "_spool_info_cache", None)),
+                    spool_info=_tray_spool_info(t, _spools_map),
                     cols=getattr(t, "cols", []) or [],
                     ctype=str(getattr(t, "ctype", "") or ""),
                     catalog_name=(

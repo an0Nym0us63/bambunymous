@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Droplets, Sun, Thermometer, Timer, Clock, Package } from "lucide-react";
+import { Droplets, Sun, Thermometer, Timer, Clock, Package, Palette } from "lucide-react";
 import client from "../api/client";
 import { colorBg, opaqueColors } from "../utils/colors";
 import { createPortal } from "react-dom";
@@ -90,6 +90,12 @@ const traysInOrder = (ams) => ams.trays || [];
 // une mesure, alors qu'il n'y en a aucune.
 const hasClimate = (ams) => !isExternal(ams.id);
 const traySlotNo = (ams, t) => t.id + 1;
+// Le filament en place n'a pas d'echantillon (nuancier) : c'est le bon moment
+// pour l'imprimer, la bobine est deja chargee. Seulement quand on SAIT : une
+// bobine non reconnue (swatch inconnu) ne porte pas la pastille.
+const sansEchantillon = (tray, info) => !isEmptyTray(tray) && info?.swatch === false;
+const SWATCH_COLOR = "#F59E0B";
+const SWATCH_TITLE = "Pas d'échantillon pour ce filament : il est en place, c'est le moment de l'imprimer";
 
 // ── Mini pastille ──────────────────────────────────────────────────────────
 function ColorPill({ tray, spoolInfo, active }) {
@@ -112,6 +118,14 @@ function ColorPill({ tray, spoolInfo, active }) {
       {tray.match_mode && !isEmpty && (
         <span style={{ position:"absolute", top:2, right:3 }}>
           <MatchIcon mode={tray.match_mode} size={8}/>
+        </span>
+      )}
+      {sansEchantillon(tray, spoolInfo) && (
+        <span title={SWATCH_TITLE} style={{ position:"absolute", bottom:2, left:"50%", transform:"translateX(-50%)",
+          width:12, height:12, borderRadius:"50%", background:SWATCH_COLOR, color:"white",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          boxShadow:"0 0 0 1.5px rgba(255,255,255,0.9), 0 1px 3px rgba(0,0,0,0.35)" }}>
+          <Palette size={8} strokeWidth={2.5}/>
         </span>
       )}
     </div>
@@ -289,6 +303,13 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
         whiteSpace:"normal", wordBreak:"break-word", maxWidth:80, lineHeight:"12px" }}>
         {empty ? "Vide" : (name || "")}
       </p>
+      {sansEchantillon(tray, spoolInfo) && (
+        <span title={SWATCH_TITLE} style={{ display:"inline-flex", alignItems:"center", gap:3,
+          padding:"1px 6px", borderRadius:20, fontSize:9, fontWeight:700, whiteSpace:"nowrap",
+          color:SWATCH_COLOR, background:"rgba(245,158,11,0.12)", border:"1px solid rgba(245,158,11,0.35)" }}>
+          <Palette size={9}/> Échantillon à faire
+        </span>
+      )}
     </div>
   );
 }
