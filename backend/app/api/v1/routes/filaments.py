@@ -559,12 +559,15 @@ async def filament_prints(
     _: str = Depends(get_current_user),
 ):
     """
-    Les impressions qui ont utilise une bobine de ce filament (archivee ou non),
-    les plus recentes d'abord : la galerie qu'ouvre l'onglet Photos. Pour
-    chacune, les photos prises (snapshots « manual », la photo de couverture
-    d'abord), l'image du plateau a defaut, et les grammes de CE filament.
+    Les impressions qui ont utilise une bobine de ce filament (archivee ou non) :
+    la galerie qu'ouvre l'onglet Photos. Pour chacune, ses photos prises
+    (snapshots « manual », couverture d'abord) ; a defaut celles de son GROUPE
+    (photos prises de tous ses prints et images deposees dans son dossier, la
+    couverture du groupe d'abord), meme regle que la galerie des prints ; a
+    defaut l'image du plateau. Celles qui ont une photo passent en tete, puis
+    les plus recentes.
     """
-    from ....models.print_history import Print as _P, FilamentUsage as _FU
+    from ....models.print_history import Print as _P, FilamentUsage as _FU, PrintSnapshot as _PS
     f = await db.get(Filament, fid)
     if not f:
         raise HTTPException(404, "Filament introuvable")
@@ -582,12 +585,43 @@ async def filament_prints(
         .where(_P.id.in_(list(grams)))
         .order_by(_P.print_date.desc())
     )).scalars().all()
-    out = []
-    for p in prints:
-        manual = [s for s in (p.snapshots or []) if s.trigger == "manual" and s.file_path]
-        names = [(s.file_path or "").split("/")[-1] for s in manual]
+
+    def own_photos(p):
+        names = [(s.file_path or "").split("/")[-1] for s in (p.snapshots or [])
+                 if s.trigger == "manual" and s.file_path]
         if p.cover_photo in names:
             names.sort(key=lambda n: n != p.cover_photo)
+        return [(n, f"/api/v1/prints/{p.id}/file/{n}") for n in names]
+
+    # Photos des groupes concernes, lues une fois par groupe.
+    gids = {p.group_id for p in prints if p.group_id}
+    group_photos = {}
+    if gids:
+        snaps = (await db.execute(
+            select(_P.group_id, _PS.print_id, _PS.file_path)
+            .join(_PS, _PS.print_id == _P.id)
+            .where(_P.group_id.in_(list(gids)), _PS.trigger == "manual")
+        )).all()
+        for gid, pid, path in snaps:
+            if path:
+                n = path.split("/")[-1]
+                group_photos.setdefault(gid, []).append((n, f"/api/v1/prints/{pid}/file/{n}"))
+        for gid in gids:
+            d = DATA_DIR / "groups" / str(gid)
+            if d.is_dir():
+                for fp in sorted(d.iterdir()):
+                    if fp.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
+                        group_photos.setdefault(gid, []).append(
+                            (fp.name, f"/api/v1/prints/groups/{gid}/photo/{fp.name}"))
+    for p in prints:
+        if p.group and p.group.cover_photo and p.group_id in group_photos:
+            group_photos[p.group_id].sort(key=lambda t: t[0] != p.group.cover_photo)
+
+    out = []
+    for p in prints:
+        photos, source = own_photos(p), "print"
+        if not photos and p.group_id in group_photos:
+            photos, source = group_photos[p.group_id], "group"
         out.append({
             "id": p.id,
             "name": p.translated_name or p.file_name or f"Impression #{p.id}",
@@ -595,9 +629,12 @@ async def filament_prints(
             "print_date": p.print_date.isoformat() if p.print_date else None,
             "grams": round(grams.get(p.id, 0), 1),
             "group_name": p.group.name if p.group else None,
-            "photos": [f"/api/v1/prints/{p.id}/file/{n}" for n in names],
+            "photos": [url for _, url in photos],
+            "photo_source": source if photos else None,
             "image": f"/api/v1/prints/{p.id}/image",
         })
+    # Avec photo d'abord (sort stable : chaque moitie garde l'ordre des dates).
+    out.sort(key=lambda it: not it["photos"])
     return {"prints": out}
 
 

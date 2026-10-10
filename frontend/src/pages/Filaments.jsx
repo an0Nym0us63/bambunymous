@@ -1657,9 +1657,14 @@ function FilamentPrintsSheet({ f, onClose }) {
                       <img src={cover} alt="" loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}
                         onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
                       {p.photos.length > 0 && (
-                        <span title="Photos prises de cette impression" style={{ position:"absolute", top:6, right:6,
+                        <span title={p.photo_source === "group"
+                            ? "Pas de photo pour cette impression : photos de son groupe"
+                            : "Photos prises de cette impression"}
+                          style={{ position:"absolute", top:6, right:6,
                           background:"rgba(0,0,0,0.6)", color:"white", fontSize:9, fontWeight:700,
-                          padding:"2px 6px", borderRadius:20 }}>{p.photos.length} 📷</span>
+                          padding:"2px 6px", borderRadius:20 }}>
+                          {p.photos.length} 📷{p.photo_source === "group" ? " groupe" : ""}
+                        </span>
                       )}
                       <span style={{ position:"absolute", top:6, left:6, fontSize:9, fontWeight:700, padding:"2px 6px",
                         borderRadius:20, color:"white", background:stColor }}>{stLabel}</span>
