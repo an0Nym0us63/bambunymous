@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
 import { useNativeScan } from "../hooks/useNativeScan";
@@ -16,6 +16,7 @@ import { useIsAdmin } from "../store/auth";
 import { colorBg, parseColorsList } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import GalleryCompare from "../components/GalleryCompare";
+import { PrintDetail } from "./Prints";
 
 const MATERIALS = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","BVOH","PLA-CF","PETG-CF","PA-CF","PPS"];
 
@@ -1600,25 +1601,29 @@ function FilamentCard({ f, onClick, extra = null }) {
 
 // Galerie des impressions d'un filament : les prints qui ont utilise une de
 // ses bobines, archivee ou non (onglet Galerie > Photos). Vignette = la photo
-// prise (couverture d'abord), a defaut l'image du plateau. Un clic montre les
-// photos, ou ouvre directement le print dans l'historique s'il n'en a pas.
+// prise (couverture d'abord), celle du groupe a defaut, sinon l'image du
+// plateau. Un clic ouvre la fiche du print PAR-DESSUS, sans quitter la page :
+// la meme fiche que l'historique (photos comprises).
 function FilamentPrintsSheet({ f, onClose }) {
   const [prints, setPrints] = useState(null);
   const [err, setErr] = useState(null);
-  const [lightbox, setLightbox] = useState(null);   // {photos, i, p}
-  const navigate = useNavigate();
-  useEffect(() => {
+  const [detail, setDetail] = useState(null);   // print complet ouvert en fiche
+  const load = useCallback(() => {
     client.get(`/filaments/filaments/${f.id}/prints`)
       .then(r => setPrints(r.data?.prints || []))
       .catch(e => setErr(e.response?.data?.detail || "Chargement impossible"));
   }, [f.id]);
+  useEffect(() => { load(); }, [load]);
+  const openDetail = (id) => client.get(`/prints/${id}`)
+    .then(r => setDetail(r.data))
+    .catch(e => showAlert(e.response?.data?.detail || "Impression introuvable"));
   const colorsList = parseColorsList(f.color, f.colors_array);
   const STATUS = { FINISHED:["Terminé","#22c55e"], FAILED:["Échoué","#ef4444"],
     CANCELLED:["Annulé","#94a3b8"], IN_PROGRESS:["En cours","#3b82f6"] };
   const fmtDate = d => d ? new Date(d).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"2-digit" }) : "";
 
   return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:1500, background:"rgba(0,0,0,0.7)",
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:990, background:"rgba(0,0,0,0.7)",
       display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
       <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:760, maxHeight:"88vh",
         display:"flex", flexDirection:"column", background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
@@ -1652,7 +1657,7 @@ function FilamentPrintsSheet({ f, onClose }) {
                 const cover = p.photos[0] || p.image;
                 return (
                   <div key={p.id} className="card-sm" style={{ padding:0, overflow:"hidden", cursor:"pointer" }}
-                    onClick={() => p.photos.length ? setLightbox({ photos:p.photos, i:0, p }) : navigate(`/prints?id=${p.id}`)}>
+                    onClick={() => openDetail(p.id)}>
                     <div style={{ position:"relative", aspectRatio:"1", background:"var(--surface2)" }}>
                       <img src={cover} alt="" loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}
                         onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
@@ -1684,28 +1689,11 @@ function FilamentPrintsSheet({ f, onClose }) {
         </div>
       </div>
 
-      {lightbox && (
-        <div onClick={e => { e.stopPropagation(); setLightbox(null); }} style={{ position:"fixed", inset:0, zIndex:1600,
-          background:"rgba(0,0,0,0.92)", display:"flex", flexDirection:"column", alignItems:"center",
-          justifyContent:"center", gap:12, padding:16 }}>
-          <img src={lightbox.photos[lightbox.i]} alt="" onClick={e => e.stopPropagation()}
-            style={{ maxWidth:"92vw", maxHeight:"78vh", objectFit:"contain", borderRadius:12 }}/>
-          <div onClick={e => e.stopPropagation()} style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", justifyContent:"center" }}>
-            {lightbox.photos.length > 1 && (
-              <button onClick={() => setLightbox(l => ({ ...l, i:(l.i - 1 + l.photos.length) % l.photos.length }))}
-                style={{ padding:"6px 12px", borderRadius:8, border:"none", cursor:"pointer" }}>‹</button>
-            )}
-            <span style={{ color:"white", fontSize:12 }}>
-              {lightbox.p.name}{lightbox.photos.length > 1 ? ` — ${lightbox.i + 1} / ${lightbox.photos.length}` : ""}
-            </span>
-            {lightbox.photos.length > 1 && (
-              <button onClick={() => setLightbox(l => ({ ...l, i:(l.i + 1) % l.photos.length }))}
-                style={{ padding:"6px 12px", borderRadius:8, border:"none", cursor:"pointer" }}>›</button>
-            )}
-            <button onClick={() => navigate(`/prints?id=${lightbox.p.id}`)}
-              style={{ padding:"6px 12px", borderRadius:8, border:"none", cursor:"pointer",
-                background:"#3b82f6", color:"white", fontSize:12, fontWeight:700 }}>Ouvrir l'impression</button>
-          </div>
+      {detail && (
+        <div onClick={e => e.stopPropagation()}>
+          <PrintDetail p={detail} onClose={() => setDetail(null)}
+            onDelete={() => { setDetail(null); load(); }}
+            onChanged={load}/>
         </div>
       )}
     </div>,
