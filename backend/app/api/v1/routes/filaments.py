@@ -90,6 +90,8 @@ class FilamentOut(BaseModel):
     profile_id: Optional[str]
     fila_color_code: Optional[str] = None
     swatch: bool
+    label_printed: bool = False
+    label_printed_at: Optional[datetime] = None
     to_order: bool
     spool_count: int = 0
     active_spool_count: int = 0
@@ -111,6 +113,9 @@ class FilamentCreate(BaseModel):
     profile_id: Optional[str] = None
     fila_color_code: Optional[str] = None
     swatch: bool = False
+    # None = « je n'en parle pas » : un appelant qui ne connait pas le champ ne
+    # doit pas decocher l'etiquette en enregistrant le reste de la fiche.
+    label_printed: Optional[bool] = None
     to_order: bool = False
     comment: Optional[str] = None
 
@@ -525,12 +530,43 @@ async def mark_swatch(
     f = await db.get(Filament, fid)
     if not f:
         raise HTTPException(404, "Filament introuvable")
+    changed = False
     if not f.swatch:
         f.swatch = True
+        changed = True
+    # Scanner le QR prouve aussi que l'etiquette existe.
+    if not f.label_printed:
+        f.label_printed, f.label_printed_at = True, datetime.utcnow()
+        changed = True
+    if changed:
         await db.commit()
     stmt = (select(Filament).options(selectinload(Filament.spools))
             .where(Filament.id == fid))
     return _fil_out((await db.execute(stmt)).scalar_one())
+
+
+@router.post("/filaments/labels/mark")
+async def mark_labels_printed(
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """
+    Marque les etiquettes de ces filaments comme imprimees, apres confirmation
+    a l'ecran : generer le PDF ne veut pas dire que la planche est sortie de
+    l'imprimante. body: {ids: [..]}. Ceux deja marques gardent leur date.
+    """
+    ids = [i for i in (body.get("ids") or []) if isinstance(i, int) and not isinstance(i, bool)]
+    if not ids:
+        raise HTTPException(422, "ids requis")
+    now = datetime.utcnow()
+    res = await db.execute(
+        update(Filament)
+        .where(Filament.id.in_(ids), or_(Filament.label_printed.is_(False), Filament.label_printed.is_(None)))
+        .values(label_printed=True, label_printed_at=now)
+    )
+    await db.commit()
+    return {"ok": True, "marked": res.rowcount or 0}
 
 
 @router.get("/filaments/print-counts")
@@ -691,7 +727,9 @@ async def create_filament(
                     "existing_name": candidate.name,
                 })
 
-    f = Filament(**body.model_dump())
+    f = Filament(**body.model_dump(exclude={"label_printed"}))
+    if body.label_printed:
+        f.label_printed, f.label_printed_at = True, datetime.utcnow()
     f.color_bucket = buckets_for(f.color, f.colors_array)
     db.add(f)
     await db.commit()
@@ -730,6 +768,12 @@ async def update_filament(
         payload["colors_array"] = None
 
     changed_price = "price" in payload
+    # L'etiquette porte une date : posee au passage a « imprimee », retiree
+    # avec elle.
+    lp = payload.pop("label_printed", None)
+    if lp is not None and bool(lp) != bool(f.label_printed):
+        f.label_printed = bool(lp)
+        f.label_printed_at = datetime.utcnow() if lp else None
     for k, v in payload.items():
         setattr(f, k, v)
     if "color" in payload or "colors_array" in payload:
@@ -981,6 +1025,8 @@ def _fil_out(f: Filament) -> FilamentOut:
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
         profile_id=f.profile_id, fila_color_code=getattr(f, "fila_color_code", None),
         swatch=f.swatch, to_order=f.to_order,
+        label_printed=bool(getattr(f, "label_printed", False)),
+        label_printed_at=getattr(f, "label_printed_at", None),
         spool_count=len(f.spools), active_spool_count=len(active),
         # Une bobine dont on n'a jamais pese le restant est supposee pleine.
         remaining_weight_total_g=round(sum(

@@ -5,7 +5,7 @@ import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
 import { useNativeScan } from "../hooks/useNativeScan";
 import HeaderAction from "../components/HeaderAction";
-import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette } from "lucide-react";
+import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag } from "lucide-react";
 import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
@@ -1275,6 +1275,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     price:            f.price != null ? f.price : "",
     comment:          f.comment || "",
     swatch:           f.swatch || false,
+    label_printed:    f.label_printed || false,
     to_order:         f.to_order || false,
   });
 
@@ -1324,6 +1325,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
         price:             form.price ? Number(form.price) : undefined,
         comment:           form.comment || undefined,
         swatch:            form.swatch,
+        label_printed:     form.label_printed,
         to_order:          form.to_order,
       });
       setEditing(false);
@@ -1420,6 +1422,18 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
                 <Palette size={11}/>
                 {f.swatch ? "Échantillon" : "Sans échantillon"}
               </span>
+              {/* Etiquette QR imprimee ou non (planche des etiquettes). */}
+              <span title={f.label_printed && f.label_printed_at
+                  ? `Étiquette imprimée le ${new Date(f.label_printed_at + (String(f.label_printed_at).endsWith("Z") ? "" : "Z")).toLocaleDateString("fr-FR")}`
+                  : undefined}
+                style={{ display:"inline-flex", alignItems:"center", gap:4, marginTop:6, marginLeft:6,
+                padding:"3px 9px", borderRadius:20, fontSize:10, fontWeight:700,
+                background: f.label_printed ? "rgba(59,130,246,0.12)" : "var(--surface2)",
+                color:      f.label_printed ? "#3b82f6" : "var(--muted)",
+                border: "1px solid " + (f.label_printed ? "rgba(59,130,246,0.3)" : "var(--border)") }}>
+                <Tag size={11}/>
+                {f.label_printed ? "Étiquette" : "Sans étiquette"}
+              </span>
             </div>
             <AdminOnly><button onClick={() => setEditing(e=>!e)}
               style={{ padding:"6px 12px", borderRadius:8, fontSize:12, fontWeight:700,
@@ -1472,7 +1486,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               {F("Prix (€)","price","number")}
               {F("Commentaire","comment")}
               <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
-                {[["swatch","Échantillon"],["to_order","À commander"]].map(([k,l])=>(
+                {[["swatch","Échantillon"],["label_printed","Étiquette imprimée"],["to_order","À commander"]].map(([k,l])=>(
                   <label key={k} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, cursor:"pointer" }}>
                     <input type="checkbox" checked={!!form[k]}
                       onChange={e => setForm(f=>({...f,[k]:e.target.checked}))}/>

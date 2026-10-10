@@ -1314,8 +1314,10 @@ function LabelsCard({ card, cardTitle }) {
         // Ce qu'on vient chercher ici, c'est surtout l'etiquette des
         // echantillons qu'on n'a pas encore : coches par defaut quand il y en
         // a, tout sinon.
-        const sans = list.filter(f => !f.swatch && !ign.has(f.id));
-        setSel(new Set((sans.length ? sans : list).map(f => f.id)));
+        // Coches par defaut : ce qui n'a pas encore d'etiquette -- l'echantillon
+        // fait a etiqueter, et le sans echantillon non ignore. Tout s'il n'y a rien.
+        const a_faire = list.filter(f => !f.label_printed && (f.swatch || !ign.has(f.id)));
+        setSel(new Set((a_faire.length ? a_faire : list).map(f => f.id)));
       })
       .catch(() => setErr("Chargement impossible"));
     client.get("/printer/status")
@@ -1339,9 +1341,13 @@ function LabelsCard({ card, cardTitle }) {
   const aBobine = (f) => (f.active_spool_count || 0) > 0;
   const ordre = (a, b) => (enPlace.has(b.id) - enPlace.has(a.id))
     || (aBobine(b) - aBobine(a)) || (a.id - b.id);
-  const sansEch = shown.filter(f => !f.swatch && !ignores.has(f.id)).sort(ordre);
-  const sansEchIgnores = shown.filter(f => !f.swatch && ignores.has(f.id)).sort(ordre);
-  const avecEch = shown.filter(f => f.swatch);
+  // Etiquette deja imprimee : en bas, quoi qu'il en soit de l'echantillon.
+  // Au-dessus, l'echantillon fait qui n'attend que son etiquette, puis les
+  // sans echantillon (non ignores, puis ignores).
+  const aEtiqueter = shown.filter(f => !f.label_printed && f.swatch).sort(ordre);
+  const sansEch = shown.filter(f => !f.label_printed && !f.swatch && !ignores.has(f.id)).sort(ordre);
+  const sansEchIgnores = shown.filter(f => !f.label_printed && !f.swatch && ignores.has(f.id)).sort(ordre);
+  const etiquetes = shown.filter(f => f.label_printed);
   const cocherListe = (liste, oui) => setSel(prev => {
     const n = new Set(prev);
     liste.forEach(f => (oui ? n.add(f.id) : n.delete(f.id)));
@@ -1353,6 +1359,22 @@ function LabelsCard({ card, cardTitle }) {
     n.has(id) ? n.delete(id) : n.add(id);
     return n;
   });
+
+  // Generer le PDF ne veut pas dire que la planche est sortie de
+  // l'imprimante : on DEMANDE avant de marquer les etiquettes imprimees.
+  const proposerMarquage = async (ids) => {
+    const a_marquer = (ids || []).filter(id => !fils.find(f => f.id === id)?.label_printed);
+    if (!a_marquer.length) return;
+    const n = a_marquer.length;
+    const ok = await showConfirm(
+      `Les étiquettes sont imprimées ? Marquer ${n} filament${n > 1 ? "s" : ""} comme « étiquette imprimée ».`);
+    if (!ok) return;
+    try {
+      await client.post("/filaments/filaments/labels/mark", { ids: a_marquer });
+    } catch (e) {
+      showAlert("Marquage impossible : " + (e.response?.data?.detail || e.message));
+    }
+  };
 
   const download = async (ids) => {
     setBusy(true); setErr(null);
@@ -1378,6 +1400,7 @@ function LabelsCard({ card, cardTitle }) {
         });
         window.BambuScan.savePdf(b64, fileName);
         setOpen(false);
+        await proposerMarquage(ids);
         return;
       }
 
@@ -1387,6 +1410,7 @@ function LabelsCard({ card, cardTitle }) {
       a.click();
       URL.revokeObjectURL(url);
       setOpen(false);
+      await proposerMarquage(ids);
     } catch {
       setErr("Génération impossible");
     } finally { setBusy(false); }
@@ -1434,9 +1458,10 @@ function LabelsCard({ card, cardTitle }) {
             </div>
 
             <div style={{ flex:1, overflowY:"auto", padding:"0 8px" }}>
-              {[["Sans échantillon", sansEch, "#F59E0B"],
+              {[["Échantillon sans étiquette", aEtiqueter, "#3b82f6"],
+                ["Sans échantillon", sansEch, "#F59E0B"],
                 ["Sans échantillon, ignorés", sansEchIgnores, "var(--muted)"],
-                ["Avec échantillon", avecEch, "var(--muted)"]]
+                ["Étiquette déjà imprimée", etiquetes, "var(--muted)"]]
                 .filter(([, liste]) => liste.length)
                 .map(([titre, liste, teinte]) => {
                   const toutes = liste.every(f => sel.has(f.id));

@@ -466,6 +466,33 @@ async def _filaments_without_swatch(db) -> list[Alert]:
     ]
 
 
+@check("fil_swatch_no_label", "Échantillons sans étiquette", "🏷️")
+async def _swatches_without_label(db) -> list[Alert]:
+    """
+    Echantillon imprime mais etiquette pas encore imprimee : la plaquette est
+    faite, il ne lui manque que son QR pour etre retrouvee par un scan.
+    """
+    rows = (await db.execute(
+        select(Filament).where(
+            Filament.swatch.is_(True),
+            or_(Filament.label_printed.is_(False), Filament.label_printed.is_(None)),
+        )
+    )).scalars().all()
+    return [
+        Alert(
+            key=f"fil_swatch_no_label:filament:{f.id}",
+            category="fil_swatch_no_label",
+            title=_fil_title(f),
+            detail="",
+            severity="info",
+            link=f"/filaments?id={f.id}",
+            entity="filament", entity_id=f.id,
+            **_fil_visual(f),
+        )
+        for f in rows
+    ]
+
+
 @check("to_order", "Filaments à commander", "🛒")
 async def _filaments_to_order(db) -> list[Alert]:
     """Marques \"a commander\" a la main (champ to_order)."""

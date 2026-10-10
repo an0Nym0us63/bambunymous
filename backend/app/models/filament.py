@@ -33,6 +33,11 @@ class Filament(Base):
     reference_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     swatch: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Etiquette QR (planche « Generer les etiquettes ») imprimee pour ce
+    # filament, et quand. Entre l'echantillon et le scan du QR, c'est la seule
+    # trace de l'etape « plaquette faite, etiquette pas encore collee ».
+    label_printed: Mapped[bool] = mapped_column(Boolean, default=False)
+    label_printed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     transparent: Mapped[bool] = mapped_column(Boolean, default=False)  # conservé pour compatibilité DB (NOT NULL), non exposé dans les schémas
     to_order: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
