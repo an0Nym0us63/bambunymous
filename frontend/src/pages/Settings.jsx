@@ -1292,17 +1292,29 @@ function LabelsCard({ card, cardTitle }) {
   // suite, la bobine est deja chargee. Lu a l'ouverture ; une imprimante
   // injoignable n'empeche pas la fenetre de servir.
   const [enPlace, setEnPlace] = React.useState(new Set());
+  const [ignores, setIgnores] = React.useState(new Set());
 
   React.useEffect(() => {
     if (!open) return;
-    client.get("/filaments/filaments")
-      .then(r => {
+    // Filaments dont l'alerte « sans échantillon » a ete ignoree dans les points
+    // d'attention : on ne veut pas les imprimer, ils passent dans leur propre
+    // section, non coches. Lus EN MEME TEMPS que les filaments : sinon, selon
+    // l'ordre d'arrivee, la selection par defaut recochait les ignores.
+    // Points d'attention injoignables : rien n'est ignore, la fenetre sert.
+    const ignoresP = client.get("/attention/dismissed")
+      .then(({ data }) => new Set((data?.dismissed || [])
+        .filter(d => d.category === "fil_no_swatch" && !d.expired && d.entity_id != null)
+        .map(d => d.entity_id)))
+      .catch(() => new Set());
+    Promise.all([client.get("/filaments/filaments"), ignoresP])
+      .then(([r, ign]) => {
         const list = r.data || [];
         setFils(list);
+        setIgnores(ign);
         // Ce qu'on vient chercher ici, c'est surtout l'etiquette des
         // echantillons qu'on n'a pas encore : coches par defaut quand il y en
         // a, tout sinon.
-        const sans = list.filter(f => !f.swatch);
+        const sans = list.filter(f => !f.swatch && !ign.has(f.id));
         setSel(new Set((sans.length ? sans : list).map(f => f.id)));
       })
       .catch(() => setErr("Chargement impossible"));
@@ -1323,8 +1335,12 @@ function LabelsCard({ card, cardTitle }) {
   });
 
   // Sans echantillon d'abord, et parmi eux ceux en place dans l'AMS.
-  const sansEch = shown.filter(f => !f.swatch)
-    .sort((a, b) => (enPlace.has(b.id) - enPlace.has(a.id)) || (a.id - b.id));
+  // et ceux dont on a une bobine avant ceux qu'on n'a plus.
+  const aBobine = (f) => (f.active_spool_count || 0) > 0;
+  const ordre = (a, b) => (enPlace.has(b.id) - enPlace.has(a.id))
+    || (aBobine(b) - aBobine(a)) || (a.id - b.id);
+  const sansEch = shown.filter(f => !f.swatch && !ignores.has(f.id)).sort(ordre);
+  const sansEchIgnores = shown.filter(f => !f.swatch && ignores.has(f.id)).sort(ordre);
   const avecEch = shown.filter(f => f.swatch);
   const cocherListe = (liste, oui) => setSel(prev => {
     const n = new Set(prev);
@@ -1418,7 +1434,9 @@ function LabelsCard({ card, cardTitle }) {
             </div>
 
             <div style={{ flex:1, overflowY:"auto", padding:"0 8px" }}>
-              {[["Sans échantillon", sansEch, "#F59E0B"], ["Avec échantillon", avecEch, "var(--muted)"]]
+              {[["Sans échantillon", sansEch, "#F59E0B"],
+                ["Sans échantillon, ignorés", sansEchIgnores, "var(--muted)"],
+                ["Avec échantillon", avecEch, "var(--muted)"]]
                 .filter(([, liste]) => liste.length)
                 .map(([titre, liste, teinte]) => {
                   const toutes = liste.every(f => sel.has(f.id));
@@ -1447,6 +1465,16 @@ function LabelsCard({ card, cardTitle }) {
                     <span style={{ color:"var(--muted)" }}>
                       {" · "}{[f.manufacturer, f.material].filter(Boolean).join(" · ")}
                     </span>
+                  </span>
+                  {/* Bobines en stock : sans bobine, l'echantillon ne
+                      s'imprime pas sans en racheter une. */}
+                  <span title={aBobine(f) ? "Bobines actives en stock" : "Aucune bobine active"}
+                    style={{ flexShrink:0, fontSize:10, fontWeight:600, whiteSpace:"nowrap",
+                      color: aBobine(f) ? "var(--text2, var(--muted))" : "var(--muted)",
+                      opacity: aBobine(f) ? 1 : 0.6 }}>
+                    {aBobine(f)
+                      ? `${f.active_spool_count} bobine${f.active_spool_count > 1 ? "s" : ""}`
+                      : "pas de bobine"}
                   </span>
                   {!f.swatch && enPlace.has(f.id) && (
                     <span title="Bobine en place dans l'AMS : l'échantillon peut s'imprimer tout de suite"
