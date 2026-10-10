@@ -127,7 +127,6 @@ export default function ImportSection() {
 const ZIP_TYPES = [
   { id:"prints",            label:"Prints (3MF + vignettes)",      hint:"prints/" },
   { id:"uploads_prints",    label:"Snapshots prints",               hint:"uploads/prints/" },
-  { id:"uploads_filaments", label:"Photos filaments",               hint:"uploads/filaments/" },
   { id:"uploads_groups",    label:"Photos groupes",                 hint:"uploads/groups/" },
   { id:"uploads_accessories", label:"Photos accessoires",             hint:"uploads/accessories/{id}/" },
 ];

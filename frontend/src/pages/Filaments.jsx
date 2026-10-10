@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
 import { useNativeScan } from "../hooks/useNativeScan";
@@ -11,7 +11,6 @@ import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { useTrackDetail } from "../utils/track";
-import PhotoAddButton from "../components/PhotoAddButton";
 import Select from "../components/Select";
 import { useIsAdmin } from "../store/auth";
 import { colorBg, parseColorsList } from "../utils/colors";
@@ -240,123 +239,6 @@ function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect })
 }
 
 // ── Bottom sheet détail bobine ────────────────────────────────────────────
-function FilamentPhotos({ filamentId, onLightbox }) {
-  const [photos, setPhotos] = React.useState([]);
-  const [lightbox, setLightbox] = React.useState(null);
-  const [confirmDelPhoto, setConfirmDelPhoto] = React.useState(null);  // filename arme
-
-  const reload = () => client.get("/filaments/" + filamentId + "/photos")
-    .then(r => setPhotos(r.data.files || [])).catch(() => {});
-
-  React.useEffect(() => { if (filamentId) reload(); }, [filamentId]);
-
-  const isAdmin = useIsAdmin();
-  const [uploading, setUploading] = React.useState(false);
-
-  const handleUpload = async (file) => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      await client.post(`/filaments/${filamentId}/photos/upload`, form, {
-        headers: { "Content-Type": "multipart/form-data" }
-      });
-      reload();
-    } catch(e) { showAlert(e.response?.data?.detail || "Erreur upload"); }
-    finally { setUploading(false); }
-  };
-
-  // Plus d'appui long : sur une bande qui defile, distinguer un maintien d'un
-  // glissement est un combat perdu -- trois tentatives, trois echecs. Deux
-  // boutons VISIBLES en haut de chaque photo, comme ailleurs dans l'app.
-  const deletePhoto = async (filename) => {
-    try {
-      await client.delete(`/filaments/${filamentId}/photo/${filename}`);
-      setConfirmDelPhoto(null); reload();
-    } catch(e){ showAlert(e.response?.data?.detail || e.message); }
-  };
-  const setPrimary = async (filename) => {
-    try {
-      await client.post(`/filaments/${filamentId}/photo/${filename}/primary`);
-      reload();
-    } catch(e){ showAlert(e.response?.data?.detail || e.message); }
-  };
-
-  return (
-    <div style={{ marginBottom:16 }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-        <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-          letterSpacing:"0.06em", margin:0 }}>
-          Photos{photos.length ? ` (${photos.length})` : ""}
-        </p>
-        <PhotoAddButton onPick={handleUpload} size={26}/>
-      </div>
-      {/* touchAction pan-x : on declare que cette bande ne repond qu'au
-          glissement horizontal. Le composant vertical du geste n'est alors plus
-          consomme ici, ce qui evite de declencher le tirer-pour-rafraichir en
-          essayant simplement de faire defiler les photos. */}
-      <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4,
-        touchAction:"pan-x", overscrollBehaviorX:"contain" }}>
-        {photos.map((photo, i) => {
-          const fn = photo.url.split("/").pop();
-          const armed = confirmDelPhoto === fn;
-          return (
-          <div key={i} style={{ flexShrink:0, borderRadius:8, position:"relative",
-              border: i===0 ? "2px solid #22c55e" : "1px solid var(--border)", width:90, height:90 }}>
-            {/* Aucun handler tactile sur la vignette : le scroll reste
-                entierement natif, c'est tout l'interet du changement. */}
-            <img src={photo.url} alt=""
-              onClick={() => onLightbox ? onLightbox(photo.url) : setLightbox(photo.url)}
-              style={{ width:"100%", height:"100%", objectFit:"cover", borderRadius:6,
-                cursor:"pointer", display:"block" }}
-              onError={e => { e.currentTarget.style.display="none"; }}/>
-            {/* Etoile TOUJOURS presente, a gauche : doree sur la photo
-                principale, grise sur les autres. L'etat se lit d'un coup d'oeil
-                et le geste pour changer est le meme partout. */}
-            {isAdmin && (
-              <button onClick={()=> i!==0 && setPrimary(fn)}
-                title={i===0 ? "Photo principale" : "Définir comme photo principale"}
-                style={{ position:"absolute", top:2, left:2,
-                  width:22, height:22, borderRadius:"50%", border:"none",
-                  cursor: i===0 ? "default" : "pointer",
-                  background:"rgba(0,0,0,0.6)", fontSize:11, lineHeight:1,
-                  display:"flex", alignItems:"center", justifyContent:"center",
-                  filter: i===0 ? "none" : "grayscale(1)", opacity: i===0 ? 1 : 0.75 }}>⭐</button>
-            )}
-            {!isAdmin && i===0 && (
-              <span style={{ position:"absolute", top:2, left:2, fontSize:11,
-                pointerEvents:"none" }}>⭐</span>
-            )}
-            {isAdmin && (
-              <div style={{ position:"absolute", top:2, right:2 }}>
-                {/* Confirmation en deux temps : le premier appui arme (rouge,
-                    "Supprimer ?"), le second supprime. */}
-                <button onClick={()=> armed ? deletePhoto(fn) : setConfirmDelPhoto(fn)}
-                  onBlur={()=>setConfirmDelPhoto(null)}
-                  title={armed ? "Confirmer la suppression" : "Supprimer"}
-                  style={{ height:22, width: armed ? "auto" : 22, padding: armed ? "0 7px" : 0,
-                    borderRadius: armed ? 11 : "50%", border:"none", cursor:"pointer",
-                    background: armed ? "#ef4444" : "rgba(0,0,0,0.6)", color:"white",
-                    fontSize: armed ? 9 : 11, fontWeight:600, lineHeight:1,
-                    display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  {armed ? "Supprimer ?" : "🗑"}</button>
-              </div>
-            )}
-          </div>
-          );
-        })}
-      </div>
-      {lightbox && (
-        <div onClick={() => setLightbox(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.88)",
-          zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <img src={lightbox} alt="" style={{ maxWidth:"90vw", maxHeight:"90vh", objectFit:"contain", borderRadius:12 }}/>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function WeightAdjustInline({ spoolId, current, onUpdated, isPrix = false }) {
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState("set");
@@ -729,9 +611,6 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
               </div>
             </div>
           </div>
-
-          {/* Photos du filament */}
-          <FilamentPhotos filamentId={spool.filament_id} />
 
           {/* Jauge restant */}
           <div style={{ marginBottom:24 }}>
@@ -1371,7 +1250,6 @@ function SpoolsView({ filaments, showArchived }) {
 export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
   useTrackDetail(f ? `Fiche filament · ${f.translated_name || f.name || "#" + f.id}` : null);
   const [addSpool, setAddSpool] = useState(false);
-  const [lightbox, setLightbox] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1610,9 +1488,6 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
             </div>
           ) : (
             <>
-              {/* Photos */}
-              <FilamentPhotos filamentId={f.id} onLightbox={setLightbox} />
-
               {/* Infos */}
               <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
                 letterSpacing:"0.08em", marginBottom:4 }}>Filament #{f.id}</p>
@@ -1677,15 +1552,159 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
         </div>
       </div>
 
-      {lightbox && (
-        <div onClick={() => setLightbox(null)}
-          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.9)",
-            zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <img src={lightbox} alt="" onClick={e=>e.stopPropagation()}
-            style={{ maxWidth:"92vw", maxHeight:"92vh", borderRadius:12, objectFit:"contain" }}/>
+    </div>
+  );
+}
+
+// Carte d'un filament : sa couleur en fond, nom, marque, matiere, bobines en
+// stock. Partagee par l'onglet Filaments et la galerie Photos, qui doivent se
+// lire pareil. `extra` ajoute une pastille en bas a droite.
+function FilamentCard({ f, onClick, extra = null }) {
+  const colorsList = parseColorsList(f.color, f.colors_array);
+  const flt = "drop-shadow(0 1px 4px rgba(0,0,0,0.95)) drop-shadow(0 2px 10px rgba(0,0,0,0.6))";
+  return (
+    <div onClick={onClick} className="card-sm"
+      style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative" }}>
+      {/* fond couleur (damier de transparence géré par colorBg) */}
+      <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>
+      <div style={{ position:"relative", padding:"8px 10px 28px", display:"flex", flexDirection:"column", gap:0 }}>
+        {/* Meme centrage que la grille des bobines : le tronquage
+            alignait les noms d'une seule ligne en haut du bloc. */}
+        <div style={{ height:"2.7em", margin:"0 0 7px", display:"flex",
+          alignItems:"center" }}>
+          <p style={{ fontWeight:600, fontSize:11, color:"white", margin:0,
+            lineHeight:"1.35", maxHeight:"2.7em", overflow:"hidden",
+            display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
+            fontFamily:"'Inter','DM Sans','Segoe UI',system-ui,sans-serif",
+            letterSpacing:"0.01em", filter:flt }}>
+            {f.translated_name || f.name}
+          </p>
         </div>
+        <div style={{ display:"flex", gap:3, flexWrap:"nowrap", overflow:"hidden", height:16, alignItems:"center" }}>
+          {f.manufacturer && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", whiteSpace:"nowrap", flexShrink:0 }}>{f.manufacturer}</span>}
+          {(f.fila_type||f.material) && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.20)", color:"rgba(255,255,255,0.75)", whiteSpace:"nowrap", flexShrink:0 }}>{f.fila_type||f.material}</span>}
+        </div>
+      </div>
+      <span style={{ position:"absolute", bottom:6, left:8, fontSize:8, fontWeight:500, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", padding:"1px 7px", borderRadius:20 }}>
+        {f.active_spool_count>0 ? `${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "aucune bobine"}
+      </span>
+      {extra != null && (
+        <span style={{ position:"absolute", bottom:6, right:8, fontSize:8, fontWeight:600,
+          background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.9)", padding:"1px 7px", borderRadius:20 }}>
+          {extra}
+        </span>
       )}
     </div>
+  );
+}
+
+// Galerie des impressions d'un filament : les prints qui ont utilise une de
+// ses bobines, archivee ou non (onglet Galerie > Photos). Vignette = la photo
+// prise (couverture d'abord), a defaut l'image du plateau. Un clic montre les
+// photos, ou ouvre directement le print dans l'historique s'il n'en a pas.
+function FilamentPrintsSheet({ f, onClose }) {
+  const [prints, setPrints] = useState(null);
+  const [err, setErr] = useState(null);
+  const [lightbox, setLightbox] = useState(null);   // {photos, i, p}
+  const navigate = useNavigate();
+  useEffect(() => {
+    client.get(`/filaments/filaments/${f.id}/prints`)
+      .then(r => setPrints(r.data?.prints || []))
+      .catch(e => setErr(e.response?.data?.detail || "Chargement impossible"));
+  }, [f.id]);
+  const colorsList = parseColorsList(f.color, f.colors_array);
+  const STATUS = { FINISHED:["Terminé","#22c55e"], FAILED:["Échoué","#ef4444"],
+    CANCELLED:["Annulé","#94a3b8"], IN_PROGRESS:["En cours","#3b82f6"] };
+  const fmtDate = d => d ? new Date(d).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"2-digit" }) : "";
+
+  return createPortal(
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:1500, background:"rgba(0,0,0,0.7)",
+      display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:760, maxHeight:"88vh",
+        display:"flex", flexDirection:"column", background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, padding:"12px 16px",
+          borderBottom:"1px solid var(--border)" }}>
+          <div style={{ width:34, height:34, borderRadius:8, flexShrink:0,
+            boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.2)", ...colorBg(colorsList, f.multicolor_type) }}/>
+          <div style={{ flex:1, minWidth:0 }}>
+            <p style={{ margin:0, fontSize:14, fontWeight:700, color:"var(--text)",
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.translated_name || f.name}</p>
+            <p style={{ margin:0, fontSize:11, color:"var(--muted)" }}>
+              {[f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
+              {prints ? ` — ${prints.length} impression${prints.length > 1 ? "s" : ""}` : ""}
+            </p>
+          </div>
+          <button onClick={onClose} aria-label="Fermer" style={{ background:"none", border:"none",
+            color:"var(--muted)", cursor:"pointer", padding:4 }}><X size={18}/></button>
+        </div>
+        <div style={{ flex:1, overflowY:"auto", padding:12 }}>
+          {err && <p style={{ color:"#ef4444", fontSize:13 }}>⚠ {err}</p>}
+          {!prints && !err && <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:24 }}>Chargement…</p>}
+          {prints && !prints.length && (
+            <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:24 }}>
+              Aucune impression n'a encore utilisé une bobine de ce filament.
+            </p>
+          )}
+          {prints && prints.length > 0 && (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
+              {prints.map(p => {
+                const [stLabel, stColor] = STATUS[p.status] || [p.status, "#94a3b8"];
+                const cover = p.photos[0] || p.image;
+                return (
+                  <div key={p.id} className="card-sm" style={{ padding:0, overflow:"hidden", cursor:"pointer" }}
+                    onClick={() => p.photos.length ? setLightbox({ photos:p.photos, i:0, p }) : navigate(`/prints?id=${p.id}`)}>
+                    <div style={{ position:"relative", aspectRatio:"1", background:"var(--surface2)" }}>
+                      <img src={cover} alt="" loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}
+                        onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
+                      {p.photos.length > 0 && (
+                        <span title="Photos prises de cette impression" style={{ position:"absolute", top:6, right:6,
+                          background:"rgba(0,0,0,0.6)", color:"white", fontSize:9, fontWeight:700,
+                          padding:"2px 6px", borderRadius:20 }}>{p.photos.length} 📷</span>
+                      )}
+                      <span style={{ position:"absolute", top:6, left:6, fontSize:9, fontWeight:700, padding:"2px 6px",
+                        borderRadius:20, color:"white", background:stColor }}>{stLabel}</span>
+                    </div>
+                    <div style={{ padding:"6px 8px 8px" }}>
+                      <p title={p.name} style={{ margin:0, fontSize:11, fontWeight:600, color:"var(--text)",
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.name}</p>
+                      <p style={{ margin:"2px 0 0", fontSize:10, color:"var(--muted)" }}>
+                        {fmtDate(p.print_date)} · {p.grams} g{p.group_name ? ` · ${p.group_name}` : ""}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {lightbox && (
+        <div onClick={e => { e.stopPropagation(); setLightbox(null); }} style={{ position:"fixed", inset:0, zIndex:1600,
+          background:"rgba(0,0,0,0.92)", display:"flex", flexDirection:"column", alignItems:"center",
+          justifyContent:"center", gap:12, padding:16 }}>
+          <img src={lightbox.photos[lightbox.i]} alt="" onClick={e => e.stopPropagation()}
+            style={{ maxWidth:"92vw", maxHeight:"78vh", objectFit:"contain", borderRadius:12 }}/>
+          <div onClick={e => e.stopPropagation()} style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", justifyContent:"center" }}>
+            {lightbox.photos.length > 1 && (
+              <button onClick={() => setLightbox(l => ({ ...l, i:(l.i - 1 + l.photos.length) % l.photos.length }))}
+                style={{ padding:"6px 12px", borderRadius:8, border:"none", cursor:"pointer" }}>‹</button>
+            )}
+            <span style={{ color:"white", fontSize:12 }}>
+              {lightbox.p.name}{lightbox.photos.length > 1 ? ` — ${lightbox.i + 1} / ${lightbox.photos.length}` : ""}
+            </span>
+            {lightbox.photos.length > 1 && (
+              <button onClick={() => setLightbox(l => ({ ...l, i:(l.i + 1) % l.photos.length }))}
+                style={{ padding:"6px 12px", borderRadius:8, border:"none", cursor:"pointer" }}>›</button>
+            )}
+            <button onClick={() => navigate(`/prints?id=${lightbox.p.id}`)}
+              style={{ padding:"6px 12px", borderRadius:8, border:"none", cursor:"pointer",
+                background:"#3b82f6", color:"white", fontSize:12, fontWeight:700 }}>Ouvrir l'impression</button>
+          </div>
+        </div>
+      )}
+    </div>,
+    document.body
   );
 }
 
@@ -1784,43 +1803,7 @@ function FilamentsView() {
         <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Chargement…</p>
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
-          {filaments.map(f => {
-            const colorsList = parseColorsList(f.color, f.colors_array);
-            return (
-              (() => {
-                const pct = f.active_spool_count > 0 ? Math.min(100, f.active_spool_count * 20) : 0;
-                const flt = "drop-shadow(0 1px 4px rgba(0,0,0,0.95)) drop-shadow(0 2px 10px rgba(0,0,0,0.6))";
-                return (
-                  <div key={f.id} onClick={() => setSelectedFil(f)} className="card-sm"
-                    style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative" }}>
-                    {/* fond couleur (damier de transparence géré par colorBg) */}
-                    <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>
-                    <div style={{ position:"relative", padding:"8px 10px 28px", display:"flex", flexDirection:"column", gap:0 }}>
-                      {/* Meme centrage que la grille des bobines : le tronquage
-                          alignait les noms d'une seule ligne en haut du bloc. */}
-                      <div style={{ height:"2.7em", margin:"0 0 7px", display:"flex",
-                        alignItems:"center" }}>
-                        <p style={{ fontWeight:600, fontSize:11, color:"white", margin:0,
-                          lineHeight:"1.35", maxHeight:"2.7em", overflow:"hidden",
-                          display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
-                          fontFamily:"'Inter','DM Sans','Segoe UI',system-ui,sans-serif",
-                          letterSpacing:"0.01em", filter:flt }}>
-                          {f.translated_name || f.name}
-                        </p>
-                      </div>
-                      <div style={{ display:"flex", gap:3, flexWrap:"nowrap", overflow:"hidden", height:16, alignItems:"center" }}>
-                        {f.manufacturer && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", whiteSpace:"nowrap", flexShrink:0 }}>{f.manufacturer}</span>}
-                        {(f.fila_type||f.material) && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.20)", color:"rgba(255,255,255,0.75)", whiteSpace:"nowrap", flexShrink:0 }}>{f.fila_type||f.material}</span>}
-                      </div>
-                    </div>
-                    <span style={{ position:"absolute", bottom:6, left:8, fontSize:8, fontWeight:500, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", padding:"1px 7px", borderRadius:20 }}>
-                      {f.active_spool_count>0 ? `${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "aucune bobine"}
-                    </span>
-                  </div>
-                );
-              })()
-            );
-          })}
+          {filaments.map(f => <FilamentCard key={f.id} f={f} onClick={() => setSelectedFil(f)}/>)}
           {!filaments.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
         </div>
       )}
@@ -2229,11 +2212,6 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
     <>
       <GalleryCompare
         items={allFilaments}
-        onDeletePhoto={async (item, filename) =>
-          client.delete(`/filaments/${item.id}/photo/${filename}`)}
-        onSetPrimaryPhoto={async (item, filename) =>
-          client.post(`/filaments/${item.id}/photo/${filename}/primary`)}
-        onPhotosChanged={() => onReload?.()}
         selectMode={selectMode}
         onSelectModeChange={onSelectModeChange}
         onItemClick={onItemClick}
@@ -2242,6 +2220,7 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
         getSubtitle={f => [f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
         emptyLabel="Aucun filament"
         swatchMode={true}
+        swatchInfo={true}
         renderCover={f => {
           const colors = parseColorsList(f.color, f.colors_array);
           return <div style={{ width:"100%", height:"100%", ...colorBg(colors, f.multicolor_type) }}/>;
@@ -2315,6 +2294,10 @@ export default function Filaments() {
   const [galSort, setGalSort] = useState("hue");
   const [galSelectMode, setGalSelectMode] = useState(false);
   const [galSelected, setGalSelected] = useState(null);
+  // Impressions par filament (badge des cartes de la galerie Photos), et le
+  // filament dont la galerie d'impressions est ouverte.
+  const [printCounts, setPrintCounts] = useState({});
+  const [galPrintsOf, setGalPrintsOf] = useState(null);
 
   // Liens directs :
   //   /filaments?spool=YY[&id=XX] -> ouvre la fiche BOBINE (scan RFID, creation).
@@ -2433,6 +2416,12 @@ export default function Filaments() {
     return res;
   }, [allFilaments, galQ, galFilters, galSort]);
 
+  useEffect(() => {
+    if (tab !== "gallery") return;
+    client.get("/filaments/filaments/print-counts")
+      .then(r => setPrintCounts(r.data || {})).catch(() => {});
+  }, [tab]);
+
   const galActiveFilters = (galFilters.brand?.length||0) + (galFilters.mat?.length||0) + (galFilters.sub?.length||0);
 
   const tabs = [
@@ -2509,7 +2498,7 @@ export default function Filaments() {
       {tab==="catalog" && <FilamentsView/>}
       {tab==="gallery" && (
         <>
-          {/* Barre recherche + filtres partagés Photos/Nuancier */}
+          {/* Barre recherche + filtres partages Photos/Nuancier */}
           <div style={{ display:"flex", gap:8 }}>
             <div style={{ position:"relative", flex:1 }}>
               <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
@@ -2540,7 +2529,7 @@ export default function Filaments() {
                 {label}
               </button>
             ))}
-            <div style={{ marginLeft:"auto" }}>
+            <div style={{ marginLeft:"auto", visibility: galleryMode === "swatch" ? "visible" : "hidden" }}>
               {galSelectMode ? (
                 <button onClick={()=>setGalSelectMode(false)}
                   style={{ padding:"5px 12px", borderRadius:20, fontSize:11, border:"1px solid var(--border)",
@@ -2557,34 +2546,18 @@ export default function Filaments() {
             </div>
           </div>
 
-          {galleryMode==="photos" ? (
-            <GalleryCompare
-              items={filaments}
-              onDeletePhoto={async (item, filename) =>
-                client.delete(`/filaments/${item.id}/photo/${filename}`)}
-              onSetPrimaryPhoto={async (item, filename) =>
-                client.post(`/filaments/${item.id}/photo/${filename}/primary`)}
-              onPhotosChanged={() => client.get("/filaments/filaments")
-                .then(r => setAllFilaments(r.data || [])).catch(()=>{})}
-              selectMode={galSelectMode}
-              onSelectModeChange={setGalSelectMode}
-              onItemClick={f=>setGalSelected(f)}
-              getId={f => f.id}
-              getCoverImage={f => f.photo_url}
-              getPhotos={f => f.photos}
-              getTitle={f => f.name}
-              getSubtitle={f => [f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
-              emptyLabel="Aucune photo de filament"
-              compareFields={[
-                ["Matière",   f => f.material],
-                ["Marque",    f => f.manufacturer],
-                ["Couleur",   f => f.color ? `#${f.color}` : null],
-                ["Poids",     f => f.filament_weight_g ? `${f.filament_weight_g}g` : null],
-                ["Prix",      f => isMoneyHidden() ? MONEY_MASK : (f.price ? `${f.price}€` : null)],
-                ["Bobines",   f => `${f.active_spool_count} active${f.active_spool_count!==1?"s":""} / ${f.spool_count}`],
-              ]}
-            />
-          ) : null}
+          {galleryMode==="photos" && (
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
+              {filaments.map(f => {
+                const n = printCounts[String(f.id)] || 0;
+                return <FilamentCard key={f.id} f={f} onClick={() => setGalPrintsOf(f)}
+                  extra={n ? `${n} impression${n > 1 ? "s" : ""}` : "aucune impression"}/>;
+              })}
+              {!filaments.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)",
+                fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
+            </div>
+          )}
+          {galPrintsOf && <FilamentPrintsSheet f={galPrintsOf} onClose={() => setGalPrintsOf(null)}/>}
           {galSelected && <FilamentSheet f={galSelected} onClose={()=>setGalSelected(null)} onDeleted={()=>{setGalSelected(null); client.get("/filaments/filaments").then(r=>setAllFilaments(r.data));}} onUpdated={()=>client.get("/filaments/filaments").then(r=>setAllFilaments(r.data))}/>}
           {galleryMode==="swatch" && <SwatchView filaments={filaments} sort={galSort} selectMode={galSelectMode} onSelectModeChange={setGalSelectMode} onItemClick={f=>setGalSelected(f)}
             onReload={() => client.get("/filaments/filaments").then(r => setAllFilaments(r.data || [])).catch(()=>{})}/>}

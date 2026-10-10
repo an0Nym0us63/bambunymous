@@ -33,15 +33,6 @@ from ..models.print_history import Print, FilamentUsage, PrintSnapshot
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
-PHOTO_EXT = (".png", ".jpg", ".jpeg", ".webp", ".gif")
-
-
-def _has_photo(fid: int) -> bool:
-    """Les photos de filament vivent sur le disque, pas en base."""
-    d = DATA_DIR / "filaments" / str(fid)
-    if not d.is_dir():
-        return False
-    return any(f.suffix.lower() in PHOTO_EXT for f in d.iterdir())
 
 
 def _print_image(p) -> Optional[str]:
@@ -448,28 +439,6 @@ async def _bambu_spools_without_rfid(db) -> list[Alert]:
             **_fil_visual(f),
         )
         for s, f in rows
-    ]
-
-
-@check("fil_no_photo", "Filaments sans photo", "📷")
-async def _filaments_without_photo(db) -> list[Alert]:
-    """
-    Aucune photo : impossible de reconnaitre le rendu reel de la teinte, qui ne
-    correspond jamais tout a fait au code couleur.
-    """
-    rows = (await db.execute(select(Filament))).scalars().all()
-    return [
-        Alert(
-            key=f"fil_no_photo:filament:{f.id}",
-            category="fil_no_photo",
-            title=_fil_title(f),
-            detail="",
-            severity="info",
-            link=f"/filaments?id={f.id}",
-            entity="filament", entity_id=f.id,
-            **_fil_visual(f),
-        )
-        for f in rows if not _has_photo(f.id)
     ]
 
 

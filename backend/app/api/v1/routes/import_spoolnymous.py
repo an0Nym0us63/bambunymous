@@ -89,7 +89,7 @@ async def _run_import(url: str):
         # 5. Réutiliser exactement les mêmes importers que l'import manuel par ZIP
         from ....services.zip_importer import (
             import_prints_zip, import_uploads_prints_zip,
-            import_uploads_filaments_zip, import_uploads_groups_zip,
+            import_uploads_groups_zip,
             import_uploads_accessories_zip,
         )
 
@@ -122,14 +122,7 @@ async def _run_import(url: str):
                 _add_step(f"Photos prints : {r.get('copied',0)} copiées")
             except Exception as e: _add_step(f"Photos prints erreur : {e}", ok=False)
 
-        # 5c. Photos filaments → import_uploads_filaments_zip
-        zb = _make_zip(static_src / "uploads" / "filaments")
-        if zb:
-            try:
-                r = await import_uploads_filaments_zip(zb)
-                _add_step(f"Photos filaments : {r.get('copied',0)} copiées")
-            except Exception as e: _add_step(f"Photos filaments erreur : {e}", ok=False)
-
+        # 5c. Photos filaments : plus importees, la notion a ete retiree.
         # 5d. Photos groupes → import_uploads_groups_zip
         for gdir in ["groupes", "groups"]:
             zb = _make_zip(static_src / "uploads" / gdir)

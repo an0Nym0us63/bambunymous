@@ -19,7 +19,7 @@ export default function GalleryCompare({
   onDeletePhoto, onSetPrimaryPhoto, onPhotosChanged,
   items, getId, getCoverImage, getPhotos, getTitle, getSubtitle, compareFields = [],
   maxCompare = 6, emptyLabel = "Aucun élément", pageSize = 30,
-  enableCompare = true, renderCover = null, swatchMode = false,
+  enableCompare = true, renderCover = null, swatchMode = false, swatchInfo = false,
   selectMode: selectModeProp = false, onSelectModeChange = null,
   onItemClick = null,
 }) {
@@ -98,8 +98,10 @@ export default function GalleryCompare({
     <div style={{ position:"relative" }}>
 
       <div style={{ display:"grid",
-        gridTemplateColumns: swatchMode ? "repeat(auto-fill,minmax(72px,1fr))" : "repeat(auto-fill,minmax(110px,1fr))",
-        gap: swatchMode ? 3 : 8,
+        gridTemplateColumns: swatchMode
+          ? `repeat(auto-fill,minmax(${swatchInfo ? 108 : 72}px,1fr))`
+          : "repeat(auto-fill,minmax(110px,1fr))",
+        gap: swatchMode ? (swatchInfo ? 6 : 3) : 8,
         paddingBottom: (enableCompare && selectedList.length) ? 76 : 0 }}>
         {visibleItems.map(item => {
           const id = getId(item);
@@ -118,9 +120,26 @@ export default function GalleryCompare({
               onTouchEnd={cancelPress}
               onContextMenu={e => e.preventDefault()}
               style={{ position:"relative", borderRadius:10, overflow:"hidden", cursor:"pointer",
-                aspectRatio:"1", background:"var(--surface2)",
+                aspectRatio: swatchInfo ? undefined : "1", background:"var(--surface2)",
+                display: swatchInfo ? "flex" : undefined, flexDirection:"column",
                 border: checked ? "2px solid #3b82f6" : "2px solid transparent" }}>
-              {renderCover ? renderCover(item) : img ? (
+              {swatchInfo ? (
+                // Nuancier avec ses informations : la couleur reste pleine en
+                // haut, le texte vit DESSOUS sur un bandeau neutre -- par-dessus,
+                // il fausserait la lecture de la teinte.
+                <>
+                  <div style={{ height:58, flexShrink:0, position:"relative" }}>{renderCover(item)}</div>
+                  <div style={{ padding:"5px 7px 6px", display:"flex", flexDirection:"column", gap:1, minWidth:0 }}>
+                    <p title={getTitle(item)} style={{ fontSize:10.5, fontWeight:700, color:"var(--text)", margin:0,
+                      lineHeight:1.25, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2,
+                      WebkitBoxOrient:"vertical", minHeight:"2.5em" }}>{getTitle(item)}</p>
+                    {getSubtitle && (
+                      <p title={getSubtitle(item)} style={{ fontSize:9, color:"var(--muted)", margin:0,
+                        overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getSubtitle(item)}</p>
+                    )}
+                  </div>
+                </>
+              ) : renderCover ? renderCover(item) : img ? (
                 <img src={img} alt={getTitle(item)} style={{ width:"100%", height:"100%", objectFit:"cover" }}
                   onError={e => { e.currentTarget.style.display="none"; }}/>
               ) : (

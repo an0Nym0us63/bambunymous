@@ -1,4 +1,3 @@
-from fastapi.responses import FileResponse
 from fastapi import APIRouter, Depends, Query, HTTPException, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, or_, update
@@ -95,8 +94,6 @@ class FilamentOut(BaseModel):
     spool_count: int = 0
     active_spool_count: int = 0
     remaining_weight_total_g: float = 0   # somme du restant sur les bobines actives
-    photo_url: Optional[str] = None
-    photos: list[str] = []
 
 class FilamentCreate(BaseModel):
     name: str
@@ -536,6 +533,74 @@ async def mark_swatch(
     return _fil_out((await db.execute(stmt)).scalar_one())
 
 
+@router.get("/filaments/print-counts")
+async def filament_print_counts(
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """
+    Nombre d'impressions par filament : prints ayant utilise une bobine de ce
+    filament, archivee ou non. {filament_id: n}. Declaree AVANT
+    /filaments/{fid}, sinon « print-counts » serait pris pour un identifiant.
+    """
+    from ....models.print_history import FilamentUsage as _FU
+    rows = (await db.execute(
+        select(Spool.filament_id, func.count(func.distinct(_FU.print_id)))
+        .join(_FU, _FU.spool_id == Spool.id)
+        .group_by(Spool.filament_id)
+    )).all()
+    return {str(fid): n for fid, n in rows if fid is not None}
+
+
+@router.get("/filaments/{fid}/prints")
+async def filament_prints(
+    fid: int,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """
+    Les impressions qui ont utilise une bobine de ce filament (archivee ou non),
+    les plus recentes d'abord : la galerie qu'ouvre l'onglet Photos. Pour
+    chacune, les photos prises (snapshots « manual », la photo de couverture
+    d'abord), l'image du plateau a defaut, et les grammes de CE filament.
+    """
+    from ....models.print_history import Print as _P, FilamentUsage as _FU
+    f = await db.get(Filament, fid)
+    if not f:
+        raise HTTPException(404, "Filament introuvable")
+    usages = (await db.execute(
+        select(_FU.print_id, func.sum(_FU.grams_used))
+        .join(Spool, Spool.id == _FU.spool_id)
+        .where(Spool.filament_id == fid)
+        .group_by(_FU.print_id)
+    )).all()
+    grams = {pid: float(g or 0) for pid, g in usages}
+    if not grams:
+        return {"prints": []}
+    prints = (await db.execute(
+        select(_P).options(selectinload(_P.snapshots), selectinload(_P.group))
+        .where(_P.id.in_(list(grams)))
+        .order_by(_P.print_date.desc())
+    )).scalars().all()
+    out = []
+    for p in prints:
+        manual = [s for s in (p.snapshots or []) if s.trigger == "manual" and s.file_path]
+        names = [(s.file_path or "").split("/")[-1] for s in manual]
+        if p.cover_photo in names:
+            names.sort(key=lambda n: n != p.cover_photo)
+        out.append({
+            "id": p.id,
+            "name": p.translated_name or p.file_name or f"Impression #{p.id}",
+            "status": p.status,
+            "print_date": p.print_date.isoformat() if p.print_date else None,
+            "grams": round(grams.get(p.id, 0), 1),
+            "group_name": p.group.name if p.group else None,
+            "photos": [f"/api/v1/prints/{p.id}/file/{n}" for n in names],
+            "image": f"/api/v1/prints/{p.id}/image",
+        })
+    return {"prints": out}
+
+
 @router.get("/filaments/{fid}", response_model=FilamentOut)
 async def get_filament(
     fid: int,
@@ -853,21 +918,8 @@ async def _load_spool(db, sid):
     return result.scalar_one_or_none()
 
 
-def _fil_photos(fid: int) -> list[str]:
-    """Toutes les photos du dossier /data/filaments/{id}/."""
-    d = DATA_DIR / "filaments" / str(fid)
-    if not d.exists():
-        return []
-    return [
-        f"/api/v1/filaments/{fid}/photo/{f.name}"
-        for f in sorted(d.iterdir())
-        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif")
-    ]
-
-
 def _fil_out(f: Filament) -> FilamentOut:
     active = [s for s in f.spools if not s.archived]
-    photos = _fil_photos(f.id)
     return FilamentOut(
         id=f.id, name=f.name,
         name_en=getattr(f,"name_en",None),
@@ -886,7 +938,6 @@ def _fil_out(f: Filament) -> FilamentOut:
              else (f.filament_weight_g or 0))
             for s in active
         ), 1),
-        photo_url=(photos[0] if photos else None), photos=photos,
     )
 
 
@@ -1517,83 +1568,6 @@ async def delete_filament(fid: int, _: str = Depends(get_current_user)):
 
     _clear_match_cache()
     return {"ok": True}
-
-
-@router.get("/{fid}/photos")
-async def filament_photos(fid: int):
-    """Liste les photos d'un filament depuis /data/filaments/{id}/"""
-    import mimetypes
-    from pathlib import Path as _Path
-    fil_dir = _Path(DATA_DIR) / "filaments" / str(fid)
-    if not fil_dir.exists():
-        return {"files": []}
-    files = []
-    for f in sorted(fil_dir.iterdir()):
-        if f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif"):
-            files.append({"name": f.name, "url": f"/api/v1/filaments/{fid}/photo/{f.name}"})
-    return {"files": files}
-
-
-@router.get("/{fid}/photo/{filename}")
-async def filament_photo(fid: int, filename: str):
-    """Sert une photo de filament."""
-    import mimetypes
-    from pathlib import Path as _Path
-    if ".." in filename or "/" in filename:
-        raise HTTPException(400)
-    path = _Path(DATA_DIR) / "filaments" / str(fid) / filename
-    if not path.exists():
-        raise HTTPException(404)
-    mime = mimetypes.guess_type(str(path))[0] or "image/jpeg"
-    return FileResponse(str(path), media_type=mime)
-
-
-@router.delete("/{fid}/photo/{filename}")
-async def delete_filament_photo(fid: int, filename: str, _: str = Depends(get_current_user)):
-    if ".." in filename or "/" in filename:
-        raise HTTPException(400, "Nom invalide")
-    p = DATA_DIR / "filaments" / str(fid) / filename
-    if not p.exists():
-        raise HTTPException(404)
-    p.unlink()
-    return {"ok": True}
-
-
-@router.post("/{fid}/photo/{filename}/primary")
-async def set_primary_filament_photo(fid: int, filename: str, _: str = Depends(get_current_user)):
-    if ".." in filename or "/" in filename:
-        raise HTTPException(400, "Nom invalide")
-    d = DATA_DIR / "filaments" / str(fid)
-    p = d / filename
-    if not p.exists():
-        raise HTTPException(404)
-    # Retirer l'ancien préfixe 00_ si existant
-    for old in d.iterdir():
-        if old.name.startswith("00_") and old.name != filename:
-            old.rename(d / old.name[3:])
-    if not filename.startswith("00_"):
-        p.rename(d / f"00_{filename}")
-    return {"ok": True}
-
-
-@router.post("/{fid}/photos/upload")
-async def upload_filament_photo(
-    fid: int,
-    file: UploadFile = File(...),
-    _: str = Depends(get_current_user),
-):
-    """Upload une photo pour un filament."""
-    import uuid as _uuid
-    from fastapi import UploadFile as _UF
-    if not file.content_type or not file.content_type.startswith("image/"):
-        raise HTTPException(400, "Fichier image requis")
-    ext = file.filename.rsplit(".", 1)[-1].lower() if file.filename and "." in file.filename else "jpg"
-    d = DATA_DIR / "filaments" / str(fid)
-    d.mkdir(parents=True, exist_ok=True)
-    dest = d / f"{_uuid.uuid4().hex[:12]}.{ext}"
-    content = await file.read()
-    dest.write_bytes(content)
-    return {"ok": True, "filename": dest.name, "url": f"/api/v1/filaments/{fid}/photo/{dest.name}"}
 
 
 @router.get("/spools/{sid}/usage")
