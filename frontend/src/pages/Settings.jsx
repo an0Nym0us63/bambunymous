@@ -1288,15 +1288,30 @@ function LabelsCard({ card, cardTitle }) {
   const [busy, setBusy] = React.useState(false);
   const [err, setErr] = React.useState(null);
 
+  // Filaments en place dans l'AMS : ce sont eux qu'on peut imprimer tout de
+  // suite, la bobine est deja chargee. Lu a l'ouverture ; une imprimante
+  // injoignable n'empeche pas la fenetre de servir.
+  const [enPlace, setEnPlace] = React.useState(new Set());
+
   React.useEffect(() => {
     if (!open) return;
     client.get("/filaments/filaments")
       .then(r => {
         const list = r.data || [];
         setFils(list);
-        setSel(new Set(list.map(f => f.id)));   // tout coché par défaut
+        // Ce qu'on vient chercher ici, c'est surtout l'etiquette des
+        // echantillons qu'on n'a pas encore : coches par defaut quand il y en
+        // a, tout sinon.
+        const sans = list.filter(f => !f.swatch);
+        setSel(new Set((sans.length ? sans : list).map(f => f.id)));
       })
       .catch(() => setErr("Chargement impossible"));
+    client.get("/printer/status")
+      .then(({ data }) => setEnPlace(new Set((data?.ams_list || [])
+        .flatMap(a => a.trays || [])
+        .map(t => t.spool_info?.filament_id)
+        .filter(id => id != null))))
+      .catch(() => {});
   }, [open]);
 
   const shown = fils.filter(f => {
@@ -1305,6 +1320,16 @@ function LabelsCard({ card, cardTitle }) {
                  f.material, f.fila_type, f.color_bucket]
       .filter(Boolean).join(" ").toLowerCase();
     return q.trim().toLowerCase().split(/\s+/).every(w => hay.includes(w));
+  });
+
+  // Sans echantillon d'abord, et parmi eux ceux en place dans l'AMS.
+  const sansEch = shown.filter(f => !f.swatch)
+    .sort((a, b) => (enPlace.has(b.id) - enPlace.has(a.id)) || (a.id - b.id));
+  const avecEch = shown.filter(f => f.swatch);
+  const cocherListe = (liste, oui) => setSel(prev => {
+    const n = new Set(prev);
+    liste.forEach(f => (oui ? n.add(f.id) : n.delete(f.id)));
+    return n;
   });
 
   const toggle = (id) => setSel(prev => {
@@ -1393,7 +1418,23 @@ function LabelsCard({ card, cardTitle }) {
             </div>
 
             <div style={{ flex:1, overflowY:"auto", padding:"0 8px" }}>
-              {shown.map(f => (
+              {[["Sans échantillon", sansEch, "#F59E0B"], ["Avec échantillon", avecEch, "var(--muted)"]]
+                .filter(([, liste]) => liste.length)
+                .map(([titre, liste, teinte]) => {
+                  const toutes = liste.every(f => sel.has(f.id));
+                  return (
+                    <div key={titre} style={{ marginBottom:8 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 8px 4px",
+                        position:"sticky", top:0, background:"var(--sheet-bg)", zIndex:1 }}>
+                        <span style={{ fontSize:11, fontWeight:700, textTransform:"uppercase",
+                          letterSpacing:"0.06em", color:teinte }}>{titre} · {liste.length}</span>
+                        <button type="button" onClick={() => cocherListe(liste, !toutes)}
+                          style={{ marginLeft:"auto", background:"none", border:"none", cursor:"pointer",
+                            fontSize:11, color:"#60a5fa", padding:0 }}>
+                          {toutes ? "Décocher la section" : "Cocher la section"}
+                        </button>
+                      </div>
+                      {liste.map(f => (
                 <label key={f.id} style={{ display:"flex", alignItems:"center", gap:10,
                   padding:"7px 8px", borderRadius:8, cursor:"pointer" }}>
                   <input type="checkbox" checked={sel.has(f.id)} onChange={() => toggle(f.id)}/>
@@ -1407,8 +1448,19 @@ function LabelsCard({ card, cardTitle }) {
                       {" · "}{[f.manufacturer, f.material].filter(Boolean).join(" · ")}
                     </span>
                   </span>
+                  {!f.swatch && enPlace.has(f.id) && (
+                    <span title="Bobine en place dans l'AMS : l'échantillon peut s'imprimer tout de suite"
+                      style={{ flexShrink:0, padding:"1px 7px", borderRadius:20, fontSize:10, fontWeight:700,
+                        color:"#F59E0B", background:"rgba(245,158,11,0.12)",
+                        border:"1px solid rgba(245,158,11,0.35)", whiteSpace:"nowrap" }}>
+                      Dans l'AMS
+                    </span>
+                  )}
                 </label>
-              ))}
+                      ))}
+                    </div>
+                  );
+                })}
               {!shown.length && (
                 <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>
                   Aucun filament.
