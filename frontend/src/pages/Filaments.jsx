@@ -1586,7 +1586,7 @@ function FilamentCard({ f, onClick, extra = null }) {
         </div>
       </div>
       <span style={{ position:"absolute", bottom:6, left:8, fontSize:8, fontWeight:500, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", padding:"1px 7px", borderRadius:20 }}>
-        {f.active_spool_count>0 ? `${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "aucune bobine"}
+        {f.active_spool_count>0 ? `${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "0 bobine"}
       </span>
       {extra != null && (
         <span style={{ position:"absolute", bottom:6, right:8, fontSize:8, fontWeight:600,
@@ -2551,7 +2551,7 @@ export default function Filaments() {
               {filaments.map(f => {
                 const n = printCounts[String(f.id)] || 0;
                 return <FilamentCard key={f.id} f={f} onClick={() => setGalPrintsOf(f)}
-                  extra={n ? `${n} impression${n > 1 ? "s" : ""}` : "aucune impression"}/>;
+                  extra={n ? `${n} impression${n > 1 ? "s" : ""}` : "0 impression"}/>;
               })}
               {!filaments.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)",
                 fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
