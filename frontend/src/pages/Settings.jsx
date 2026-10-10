@@ -1360,22 +1360,6 @@ function LabelsCard({ card, cardTitle }) {
     return n;
   });
 
-  // Generer le PDF ne veut pas dire que la planche est sortie de
-  // l'imprimante : on DEMANDE avant de marquer les etiquettes imprimees.
-  const proposerMarquage = async (ids) => {
-    const a_marquer = (ids || []).filter(id => !fils.find(f => f.id === id)?.label_printed);
-    if (!a_marquer.length) return;
-    const n = a_marquer.length;
-    const ok = await showConfirm(
-      `Les étiquettes sont imprimées ? Marquer ${n} filament${n > 1 ? "s" : ""} comme « étiquette imprimée ».`);
-    if (!ok) return;
-    try {
-      await client.post("/filaments/filaments/labels/mark", { ids: a_marquer });
-    } catch (e) {
-      showAlert("Marquage impossible : " + (e.response?.data?.detail || e.message));
-    }
-  };
-
   const download = async (ids) => {
     setBusy(true); setErr(null);
     try {
@@ -1400,7 +1384,6 @@ function LabelsCard({ card, cardTitle }) {
         });
         window.BambuScan.savePdf(b64, fileName);
         setOpen(false);
-        await proposerMarquage(ids);
         return;
       }
 
@@ -1410,7 +1393,6 @@ function LabelsCard({ card, cardTitle }) {
       a.click();
       URL.revokeObjectURL(url);
       setOpen(false);
-      await proposerMarquage(ids);
     } catch {
       setErr("Génération impossible");
     } finally { setBusy(false); }

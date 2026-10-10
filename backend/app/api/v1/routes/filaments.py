@@ -450,6 +450,18 @@ async def filament_labels_pdf(
     c.showPage()
     c.save()
     buf.seek(0)
+    # Generer la planche marque ses filaments « etiquette imprimee » : c'est le
+    # geste qui compte, il n'y a rien d'autre a confirmer. Fait ici et non par
+    # l'ecran, pour valoir quel que soit le chemin (navigateur, appli Android).
+    # Ceux deja marques gardent leur date.
+    now = datetime.utcnow()
+    await db.execute(
+        update(Filament)
+        .where(Filament.id.in_([f.id for f in fils]),
+               or_(Filament.label_printed.is_(False), Filament.label_printed.is_(None)))
+        .values(label_printed=True, label_printed_at=now)
+    )
+    await db.commit()
     return StreamingResponse(
         buf, media_type="application/pdf",
         headers={"Content-Disposition": 'attachment; filename="etiquettes-filaments.pdf"'},
