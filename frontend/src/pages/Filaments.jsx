@@ -16,7 +16,7 @@ import { useIsAdmin } from "../store/auth";
 import { colorBg, parseColorsList } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import GalleryCompare from "../components/GalleryCompare";
-import { PrintDetail } from "./Prints";
+import { PrintDetail, GroupBottomSheet } from "./Prints";
 
 const MATERIALS = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","BVOH","PLA-CF","PETG-CF","PA-CF","PPS"];
 
@@ -1607,12 +1607,41 @@ function FilamentCard({ f, onClick, extra = null }) {
 function FilamentPrintsSheet({ f, onClose }) {
   const [prints, setPrints] = useState(null);
   const [err, setErr] = useState(null);
+  const [groups, setGroups] = useState([]);
   const [detail, setDetail] = useState(null);   // print complet ouvert en fiche
+  const [groupOpen, setGroupOpen] = useState(null);   // groupe ouvert en fiche
   const load = useCallback(() => {
     client.get(`/filaments/filaments/${f.id}/prints`)
-      .then(r => setPrints(r.data?.prints || []))
+      .then(r => { setPrints(r.data?.prints || []); setGroups(r.data?.groups || []); })
       .catch(e => setErr(e.response?.data?.detail || "Chargement impossible"));
   }, [f.id]);
+
+  // Plusieurs prints du meme groupe = UNE vignette, celle du groupe (ses
+  // photos, sa couverture d'abord) ; un print seul de son groupe reste une
+  // vignette de print. Avec photo d'abord, puis les plus recents.
+  const tiles = useMemo(() => {
+    if (!prints) return null;
+    const byG = {};
+    prints.forEach(p => { if (p.group_id != null) (byG[p.group_id] ||= []).push(p); });
+    const info = Object.fromEntries(groups.map(g => [g.id, g]));
+    const out = [], done = new Set();
+    for (const p of prints) {
+      const members = p.group_id != null ? byG[p.group_id] : null;
+      if (members && members.length > 1) {
+        if (done.has(p.group_id)) continue;
+        done.add(p.group_id);
+        const g = info[p.group_id] || { id:p.group_id, name:p.group_name, number_of_items:1 };
+        const photos = g.photos?.length ? g.photos : (members.find(m => m.photos.length)?.photos || []);
+        const date = members.map(m => m.print_date || "").sort().pop();
+        const grams = Math.round(members.reduce((t, m) => t + (m.grams || 0), 0) * 10) / 10;
+        out.push({ kind:"group", key:"g" + g.id, g, members, photos, date, grams, image: members[0].image });
+      } else {
+        out.push({ kind:"print", key:"p" + p.id, p, photos:p.photos, date:p.print_date });
+      }
+    }
+    out.sort((a, b) => (!a.photos.length - !b.photos.length) || (b.date || "").localeCompare(a.date || ""));
+    return out;
+  }, [prints, groups]);
   useEffect(() => { load(); }, [load]);
   const openDetail = (id) => client.get(`/prints/${id}`)
     .then(r => setDetail(r.data))
@@ -1652,7 +1681,36 @@ function FilamentPrintsSheet({ f, onClose }) {
           )}
           {prints && prints.length > 0 && (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
-              {prints.map(p => {
+              {tiles.map(t => {
+                if (t.kind === "group") {
+                  const cover = t.photos[0] || t.image;
+                  return (
+                    <div key={t.key} className="card-sm" style={{ padding:0, overflow:"hidden", cursor:"pointer" }}
+                      onClick={() => setGroupOpen(t.g)}>
+                      <div style={{ position:"relative", aspectRatio:"1", background:"var(--surface2)" }}>
+                        <img src={cover} alt="" loading="lazy" style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }}
+                          onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
+                        <span style={{ position:"absolute", top:6, left:6, fontSize:9, fontWeight:700, padding:"2px 6px",
+                          borderRadius:20, color:"white", background:"#8b5cf6" }}>
+                          Groupe · {t.members.length} prints
+                        </span>
+                        {t.photos.length > 0 && (
+                          <span title="Photos du groupe" style={{ position:"absolute", top:6, right:6,
+                            background:"rgba(0,0,0,0.6)", color:"white", fontSize:9, fontWeight:700,
+                            padding:"2px 6px", borderRadius:20 }}>{t.photos.length} 📷</span>
+                        )}
+                      </div>
+                      <div style={{ padding:"6px 8px 8px" }}>
+                        <p title={t.g.name} style={{ margin:0, fontSize:11, fontWeight:600, color:"var(--text)",
+                          overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{t.g.name}</p>
+                        <p style={{ margin:"2px 0 0", fontSize:10, color:"var(--muted)" }}>
+                          {fmtDate(t.date)} · {t.grams} g
+                        </p>
+                      </div>
+                    </div>
+                  );
+                }
+                const p = t.p;
                 const [stLabel, stColor] = STATUS[p.status] || [p.status, "#94a3b8"];
                 const cover = p.photos[0] || p.image;
                 return (
@@ -1689,6 +1747,17 @@ function FilamentPrintsSheet({ f, onClose }) {
         </div>
       </div>
 
+      {groupOpen && (
+        <div onClick={e => e.stopPropagation()}>
+          <GroupBottomSheet groupId={groupOpen.id} name={groupOpen.name} prints={[]}
+            number_of_items={groupOpen.number_of_items || 1} cover_print_id={groupOpen.cover_print_id}
+            onClose={() => setGroupOpen(null)}
+            onSelectPrint={() => {}}
+            onDelete={() => { setGroupOpen(null); load(); }}
+            onUngroup={() => { setGroupOpen(null); load(); }}
+            onUpdated={load}/>
+        </div>
+      )}
       {detail && (
         <div onClick={e => e.stopPropagation()}>
           <PrintDetail p={detail} onClose={() => setDetail(null)}

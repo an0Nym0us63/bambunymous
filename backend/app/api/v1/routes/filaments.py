@@ -628,6 +628,7 @@ async def filament_prints(
             "status": p.status,
             "print_date": p.print_date.isoformat() if p.print_date else None,
             "grams": round(grams.get(p.id, 0), 1),
+            "group_id": p.group_id,
             "group_name": p.group.name if p.group else None,
             "photos": [url for _, url in photos],
             "photo_source": source if photos else None,
@@ -635,7 +636,19 @@ async def filament_prints(
         })
     # Avec photo d'abord (sort stable : chaque moitie garde l'ordre des dates).
     out.sort(key=lambda it: not it["photos"])
-    return {"prints": out}
+    # Les groupes concernes, pour que l'ecran reunisse en UNE vignette les
+    # prints d'un meme groupe et ouvre la fiche du groupe.
+    groups = {}
+    for p in prints:
+        if p.group and p.group_id not in groups:
+            groups[p.group_id] = {
+                "id": p.group_id,
+                "name": p.group.name,
+                "number_of_items": p.group.number_of_items or 1,
+                "cover_print_id": p.group.cover_print_id,
+                "photos": [url for _, url in group_photos.get(p.group_id, [])],
+            }
+    return {"prints": out, "groups": list(groups.values())}
 
 
 @router.get("/filaments/{fid}", response_model=FilamentOut)
