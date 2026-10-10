@@ -150,56 +150,72 @@ async def _enrich_filament_usage(db, prints):
             u._filament_multicolor_type = fil.multicolor_type
 
 
-def _apply_search(q, search: str):
+def _search_condition(search: str):
     """
-    Recherche full-text case-insensitive via sous-requêtes simples compatibles SQLite.
-    Champs : file_name, original_name, tags, filament_type, color_hex,
-             filament.name, translated_name, material, manufacturer, color, profile_id
+    Condition de recherche, partagee par la liste et les totaux (/kpis) : deux
+    versions differentes donnaient une liste pleine et des totaux a zero.
+
+    Le texte est decoupe en MOTS, et chaque mot doit se retrouver quelque part
+    dans le print -- nom, tags, type de filament, fiche du filament, nom du
+    groupe. Cherche d'un bloc, « pla rouge » ne trouvait que ce qu'un MEME
+    champ contenait mot pour mot.
+
+    Les codes couleur hexadecimaux ne sont interroges que si le mot EN EST un
+    (6 chiffres hexa, # facultatif) : sinon « café », « bed » ou « 80 », faits
+    de lettres a-f et de chiffres, ramenaient des prints au hasard de leur
+    couleur. % et _ sont pris a la lettre, pas comme jokers SQL.
+    Rend None quand il n'y a aucun mot.
     """
-    from sqlalchemy import or_, exists, and_, select as _sel
+    import re
+    from sqlalchemy import or_, and_, exists, select as _sel
     from ....models.print_history import PrintTag as _PT, FilamentUsage as _FU
     from ....models.filament import Filament as _Fil, Spool as _Sp
 
-    s = f"%{search}%"
+    mots = [m for m in (search or "").split() if m]
+    if not mots:
+        return None
 
-    # 1. Champs directs du print
-    direct = or_(
-        Print.file_name.ilike(s),
-        Print.original_name.ilike(s),
-        Print.translated_name.ilike(s),
-    )
+    def motif(m):
+        m = m.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        return f"%{m}%"
 
-    # 2. Tag
-    tag_match = exists().where(
-        and_(_PT.print_id == Print.id, _PT.tag.ilike(s))
-    )
+    par_mot = []
+    for m in mots:
+        s = motif(m)
+        lk = lambda col: col.ilike(s, escape="\\")
+        hexa = re.fullmatch(r"#?([0-9a-fA-F]{6})", m)
+        hx = f"%{hexa.group(1)}%" if hexa else None
 
-    # 3. filament_usage direct
-    usage_match = exists().where(
-        and_(
-            _FU.print_id == Print.id,
-            or_(_FU.filament_type.ilike(s), _FU.color_hex.ilike(s))
-        )
-    )
+        usage_cols = [lk(_FU.filament_type)]
+        fil_cols = [lk(_Fil.name), lk(_Fil.translated_name), lk(_Fil.material),
+                    lk(_Fil.manufacturer), lk(_Fil.fila_type), lk(_Fil.profile_id)]
+        if hx:
+            usage_cols.append(_FU.color_hex.ilike(hx))
+            fil_cols.append(_Fil.color.ilike(hx))
 
-    # 4. Filament via spool — jointure plate sans EXISTS imbriqués
-    fil_subq = (
-        _sel(_FU.print_id)
-        .join(_Sp, _Sp.id == _FU.spool_id)
-        .join(_Fil, _Fil.id == _Sp.filament_id)
-        .where(or_(
-            _Fil.name.ilike(s),
-            _Fil.translated_name.ilike(s),
-            _Fil.material.ilike(s),
-            _Fil.manufacturer.ilike(s),
-            _Fil.color.ilike(s),
-            _Fil.profile_id.ilike(s),
+        par_mot.append(or_(
+            lk(Print.file_name),
+            lk(Print.original_name),
+            lk(Print.translated_name),
+            exists().where(and_(_PT.print_id == Print.id, lk(_PT.tag))),
+            exists().where(and_(_FU.print_id == Print.id, or_(*usage_cols))),
+            Print.id.in_(
+                _sel(_FU.print_id)
+                .join(_Sp, _Sp.id == _FU.spool_id)
+                .join(_Fil, _Fil.id == _Sp.filament_id)
+                .where(or_(*fil_cols))
+            ),
+            # Le nom du groupe fait partie de la condition, et non plus un ajout
+            # apres coup : ses prints passent ainsi par les autres filtres
+            # (etat, dates, filament) et entrent dans le total.
+            Print.group_id.in_(_sel(Group.id).where(lk(Group.name))),
         ))
-        .scalar_subquery()
-    )
-    spool_match = Print.id.in_(fil_subq)
+    return and_(*par_mot)
 
-    return q.where(or_(direct, tag_match, usage_match, spool_match))
+
+def _apply_search(q, search: str):
+    c = _search_condition(search)
+    return q.where(c) if c is not None else q
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────
@@ -365,16 +381,8 @@ async def list_prints(
 
         # Compléter les groupes :
         # 1. Si un print de la page appartient à un groupe → ramener tous les prints du groupe
-        # 2. Si la recherche matche un nom de groupe → ramener tous les prints des groupes matchés
         page_ids = {p.id for p in rows}
         page_group_ids = {p.group_id for p in rows if p.group_id}
-
-        if search:
-            grp_result = await db.execute(
-                select(Group.id).where(Group.name.ilike(f"%{search}%"))
-            )
-            for row_g in grp_result.all():
-                page_group_ids.add(row_g[0])
 
         if page_group_ids:
             extra_q = (select(Print)
@@ -1033,10 +1041,7 @@ async def prints_kpis(
         if status:   q = q.where(Print.status == status)
         if group_id: q = q.where(Print.group_id == group_id)
         if search:
-            q = q.where(_or(
-                Print.file_name.ilike(f"%{search}%"),
-                Print.original_name.ilike(f"%{search}%"),
-            ))
+            q = _apply_search(q, search)
         if material or fila_type or filament_id or color:
             q = q.where(Print.id.in_(_filament_filter_subq(material, fila_type, filament_id, color)))
         for c in _period_clauses(date_from, date_to):

@@ -2110,6 +2110,19 @@ export default function Prints() {
   const printsRef = useRef([]);
   printsRef.current = prints;
   const [search, setSearch]   = useState("");
+  // Texte reellement envoye au serveur : 300 ms apres la derniere frappe. Une
+  // requete par lettre, sans garde, laissait la reponse d'une frappe ancienne
+  // (« p », lente car large) arriver apres la bonne et l'ecraser -- le champ
+  // disait une chose, la liste en montrait une autre.
+  const [searchQ, setSearchQ] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setSearchQ(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+  // Numero de la derniere demande de liste / de totaux : une reponse qui
+  // n'est plus la derniere est ignoree.
+  const loadGen = useRef(0);
+  const kpiGen = useRef(0);
   const [statusF, setStatusF] = useState("");
   const [selected, setSelected] = useState(null);
   const [importing, setImporting] = useState(false);
@@ -2162,8 +2175,9 @@ export default function Prints() {
   const CARDS_PER_LOAD = 20;   // cartes AFFICHEES visees par chargement (solos + groupes)
 
   const loadKpis = useCallback(async () => {
+    const gen = ++kpiGen.current;
     const p = new URLSearchParams();
-    if (search)      p.set("search", search);
+    if (searchQ)     p.set("search", searchQ);
     if (statusF)     p.set("status", statusF);
     if (groupF)      p.set("group_id", groupF);
     if (materialF)   p.set("material", materialF);
@@ -2174,9 +2188,9 @@ export default function Prints() {
     if (dateTo)      p.set("date_to", dateTo);
     try {
       const { data } = await client.get("/prints/kpis?" + p);
-      setKpis(data);
+      if (gen === kpiGen.current) setKpis(data);
     } catch {}
-  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo]);
+  }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo]);
 
   useEffect(() => { loadKpis(); }, [loadKpis]);
 
@@ -2198,12 +2212,13 @@ export default function Prints() {
   }, []);
 
   const load = useCallback(async () => {
+    const gen = ++loadGen.current;
     setLoading(true);
     setError(null);
     setOffset(0);
     try {
       const params = new URLSearchParams({ limit: LIMIT, offset: 0 });
-      if (search)      params.set("search", search);
+      if (searchQ)     params.set("search", searchQ);
       if (statusF)     params.set("status", statusF);
       if (groupF)      params.set("group_id", groupF);
       if (materialF)   params.set("material", materialF);
@@ -2214,14 +2229,16 @@ export default function Prints() {
       if (dateTo)      params.set("date_to", dateTo);
       if (sortF)       params.set("sort", sortF);
       const { data } = await client.get("/prints?" + params);
+      if (gen !== loadGen.current) return;   // une demande plus recente est partie
       setPrints(data.prints ?? []);
       setTotal(data.total ?? 0);
       setHasMore(data.has_more ?? false);
     } catch(e) {
+      if (gen !== loadGen.current) return;
       setError(e.response?.data?.detail || e.message || "Erreur");
     }
     setLoading(false);
-  }, [search, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF]);
+  }, [searchQ, statusF, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF]);
 
   const loadMore = useCallback(async () => {
     if (loadingMore || !hasMore || loadingMoreRef.current) return;
@@ -2237,11 +2254,14 @@ export default function Prints() {
       // affichees : les prints d'un meme groupe se replient en une seule carte,
       // donc un lot de 40 prints peut n'en produire que quelques-unes. Garde-fou
       // a 12 lots pour ne jamais tourner indefiniment.
+      // La suite d'une liste que la recherche a remplacee entre-temps ne doit
+      // pas s'y ajouter.
+      const gen = loadGen.current;
       while (more && guard < 12 && (countDisplayItems(acc) - startCount) < CARDS_PER_LOAD) {
         guard++;
         const next = curOffset + LIMIT;
         const params = new URLSearchParams({ limit: LIMIT, offset: next });
-        if (search)      params.set("search", search);
+        if (searchQ)     params.set("search", searchQ);
         if (statusF)     params.set("status", statusF);
         if (groupF)      params.set("group_id", groupF);
         if (materialF)   params.set("material", materialF);
@@ -2252,19 +2272,22 @@ export default function Prints() {
         if (dateTo)      params.set("date_to", dateTo);
         if (sortF)       params.set("sort", sortF);
         const { data } = await client.get("/prints?" + params);
+        if (gen !== loadGen.current) { more = false; acc = null; break; }
         const existingIds = new Set(acc.map(p => p.id));
         const fresh = (data.prints || []).filter(p => !existingIds.has(p.id));
         acc = [...acc, ...fresh];
         curOffset = next;
         more = data.has_more ?? false;
       }
-      setPrints(acc);
-      setOffset(curOffset);
-      setHasMore(more);
+      if (acc) {
+        setPrints(acc);
+        setOffset(curOffset);
+        setHasMore(more);
+      }
     } catch(e) {}
     setLoadingMore(false);
     loadingMoreRef.current = false;
-  }, [loadingMore, hasMore, offset, statusF, search, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF]);
+  }, [loadingMore, hasMore, offset, statusF, searchQ, groupF, materialF, filaTypeF, filamentIdF, colorF, dateFrom, dateTo, sortF]);
 
   useEffect(() => {
     const container = document.querySelector(".page-content");
