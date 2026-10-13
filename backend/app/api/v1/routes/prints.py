@@ -595,77 +595,92 @@ async def ungroup(group_id: int, _: str = Depends(get_current_user)):
 @router.post("/groups/{group_id}/merge")
 async def merge_group(group_id: int, body: dict = Body({}), _: str = Depends(get_current_user)):
     """
-    Fusionne le groupe `source` DANS `group_id` : ses prints, ses photos et ses
-    objets passent au groupe garde, puis il disparait.
-    body: {"source_id": 12}
+    Fusionne des groupes DANS `group_id` : leurs prints, photos et objets
+    passent au groupe garde, puis ils disparaissent.
+    body: {"source_ids": [12, 13], "number_of_items": 4}
 
-    Le groupe garde conserve son nom, son nombre d'objets et ses vignettes ;
-    il ne reprend celles de la source que s'il n'en avait pas. Le nombre
-    d'objets n'est PAS additionne : fusionner sert le plus souvent a recoller
-    un meme lot coupe en deux, il s'ajuste dans « Editer » sinon.
+    Le groupe garde conserve son nom et ses vignettes ; il ne reprend celles
+    d'une source que s'il n'en avait pas. `number_of_items` est le nombre
+    d'objets du groupe fusionne : l'ecran propose la somme de ceux des groupes,
+    a valider ou corriger. Absent, le groupe garde conserve le sien.
     """
-    source_id = body.get("source_id")
-    if not source_id:
-        raise HTTPException(400, "source_id requis")
-    source_id = int(source_id)
-    if source_id == group_id:
+    source_ids = [int(s) for s in (body.get("source_ids") or [])]
+    if not source_ids:
+        raise HTTPException(400, "source_ids requis")
+    if group_id in source_ids:
         raise HTTPException(400, "Un groupe ne peut pas fusionner avec lui-meme")
+    nb = body.get("number_of_items")
+    if nb is not None:
+        try:
+            nb = int(nb)
+        except (TypeError, ValueError):
+            raise HTTPException(400, "number_of_items invalide")
+        if nb < 1:
+            raise HTTPException(400, "number_of_items doit valoir au moins 1")
     from ....models.object_history import Object
 
     async with AsyncSessionLocal() as db:
         keep = await db.get(Group, group_id)
-        src = await db.get(Group, source_id)
-        if not keep or not src:
+        sources = [await db.get(Group, s) for s in dict.fromkeys(source_ids)]
+        if not keep or not all(sources):
             raise HTTPException(404, "Groupe introuvable")
 
-        # Photos d'abord, sur le disque : un nom deja pris chez le groupe garde
-        # est renumerote (Photo-03 existe des deux cotes, la plupart du temps).
-        src_dir = DATA_DIR / "groups" / str(source_id)
-        renamed = {}
-        if src_dir.exists():
-            dst_dir = DATA_DIR / "groups" / str(group_id)
-            dst_dir.mkdir(parents=True, exist_ok=True)
-            for f in sorted(src_dir.iterdir()):
-                if not f.is_file():
-                    continue
-                dest = dst_dir / f.name
-                if dest.exists():
-                    prefix = "Video" if f.name.startswith("Video") else "Photo"
-                    n = 1
-                    while (dst_dir / f"{prefix}-{n:02d}{f.suffix}").exists():
-                        n += 1
-                    dest = dst_dir / f"{prefix}-{n:02d}{f.suffix}"
-                shutil.move(str(f), str(dest))
-                renamed[f.name] = dest.name
+        dst_dir = DATA_DIR / "groups" / str(group_id)
+        moved = photos = objs = 0
+        for src in sources:
+            # Photos d'abord, sur le disque : un nom deja pris chez le groupe
+            # garde est renumerote (Photo-01 existe des deux cotes, souvent).
+            src_dir = DATA_DIR / "groups" / str(src.id)
+            renamed = {}
+            if src_dir.exists():
+                dst_dir.mkdir(parents=True, exist_ok=True)
+                for f in sorted(src_dir.iterdir()):
+                    if not f.is_file():
+                        continue
+                    dest = dst_dir / f.name
+                    if dest.exists():
+                        prefix = "Video" if f.name.startswith("Video") else "Photo"
+                        n = 1
+                        while (dst_dir / f"{prefix}-{n:02d}{f.suffix}").exists():
+                            n += 1
+                        dest = dst_dir / f"{prefix}-{n:02d}{f.suffix}"
+                    shutil.move(str(f), str(dest))
+                    renamed[f.name] = dest.name
+            photos += len(renamed)
 
-        moved = (await db.execute(
-            select(func.count()).select_from(Print).where(Print.group_id == source_id)
-        )).scalar() or 0
-        await db.execute(update(Print).where(Print.group_id == source_id).values(group_id=group_id))
-        objs = (await db.execute(
-            update(Object).where(Object.parent_type == "group", Object.parent_id == source_id)
-            .values(parent_id=group_id)
-        )).rowcount or 0
+            moved += (await db.execute(
+                select(func.count()).select_from(Print).where(Print.group_id == src.id)
+            )).scalar() or 0
+            await db.execute(update(Print).where(Print.group_id == src.id).values(group_id=group_id))
+            objs += (await db.execute(
+                update(Object).where(Object.parent_type == "group", Object.parent_id == src.id)
+                .values(parent_id=group_id)
+            )).rowcount or 0
 
-        if not keep.cover_photo and src.cover_photo:
-            keep.cover_photo = renamed.get(src.cover_photo)
-        if not keep.cover_print_id and src.cover_print_id:
-            keep.cover_print_id = src.cover_print_id
-        await db.delete(src)
+            if not keep.cover_photo and src.cover_photo:
+                keep.cover_photo = renamed.get(src.cover_photo)
+            if not keep.cover_print_id and src.cover_print_id:
+                keep.cover_print_id = src.cover_print_id
+            await db.delete(src)
+
+        if nb is not None:
+            keep.number_of_items = nb
         await db.flush()
-        # Les membres ont change : cout par objet du groupe garde a refaire,
-        # objets de la source compris (ils lui sont rattaches maintenant).
+        # Membres et nombre d'objets ont change : cout par objet a refaire,
+        # objets des sources compris (ils sont rattaches au groupe garde).
         await _propagate_object_costs(db, "group", group_id)
         await db.commit()
 
-    if src_dir.exists():
-        try:
-            shutil.rmtree(src_dir)
-        except OSError as e:
-            print(f"[GROUP] dossier du groupe fusionne {source_id} non supprime : {e}")
+    for s in source_ids:
+        d = DATA_DIR / "groups" / str(s)
+        if d.exists():
+            try:
+                shutil.rmtree(d)
+            except OSError as e:
+                print(f"[GROUP] dossier du groupe fusionne {s} non supprime : {e}")
 
     return {"ok": True, "group_id": group_id, "prints": moved,
-            "photos": len(renamed), "objects": objs}
+            "photos": photos, "objects": objs}
 
 
 @router.patch("/groups/{group_id}")

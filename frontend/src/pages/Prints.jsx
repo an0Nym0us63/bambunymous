@@ -1195,32 +1195,6 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
     } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
   };
 
-  // Fusion : on choisit un AUTRE groupe, qui est absorbe par celui-ci (ses
-  // prints, photos et objets passent ici, il disparait). La liste se charge a
-  // l'ouverture du selecteur seulement.
-  const [mergeGroups, setMergeGroups] = useState(null);
-  const openMerge = async () => {
-    try {
-      const { data } = await client.get("/prints/groups");
-      setMergeGroups((data.groups || []).filter(g => g.id !== groupId));
-    } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
-  };
-  const handleMerge = async ({ group_id: sourceId }) => {
-    const src = mergeGroups?.find(g => g.id === sourceId);
-    if (!src) return;
-    const n = src.print_count;
-    if (!(await showConfirm(
-      `Fusionner « ${src.name} » dans « ${name} » ?\n\n`
-      + `Ses ${n} print${n > 1 ? "s" : ""}, ses photos et ses objets passent dans « ${name} », `
-      + `qui garde son nom et son nombre d'objets. « ${src.name} » disparaît.`,
-      { confirmLabel: "Fusionner" }))) return;
-    try {
-      await client.post(`/prints/groups/${groupId}/merge`, { source_id: sourceId });
-      setMergeGroups(null);
-      onUngroup?.(); onClose();
-    } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
-  };
-
   const handleUngroup = async () => {
     if (!(await showConfirm(`Dégrouper "${name}" (les prints resteront) ?`, { confirmLabel: "Dégrouper" }))) return;
     try {
@@ -1481,12 +1455,6 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                 color:"#a78bfa", fontSize:12, fontWeight:700, cursor:"pointer" }}>
               📤 Dégrouper
             </button>
-            <button onClick={openMerge}
-              style={{ flex:"1 1 0", minWidth:96, padding:"10px", borderRadius:12,
-                border:"1px solid rgba(59,130,246,0.3)", background:"rgba(59,130,246,0.06)",
-                color:"#3b82f6", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-              🔗 Fusionner
-            </button>
             </AdminOnly>
             <button onClick={onClose}
               style={{ flex:"2 1 0", minWidth:96, padding:"10px", borderRadius:12, border:"none",
@@ -1497,11 +1465,6 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
         </div>
       </div>
     </div>
-    {mergeGroups && (
-      <GroupPickerSheet groups={mergeGroups} allowCreate={false}
-        title={`Fusionner dans « ${name} »`}
-        onClose={() => setMergeGroups(null)} onPick={handleMerge}/>
-    )}
     {unmappingG && <UnmapFilamentConfirm f={unmappingG} printId={unmappingG.print_id} onClose={()=>setUnmappingG(null)} onDone={()=>{ setUnmappingG(null); onUpdated?.(); }}/>}
     {/* Ancien PhotoDeleteConfirm retire : il coexistait avec la confirmation en
         deux temps sur la pastille (plus haut) et se declenchait en meme temps.
@@ -1520,8 +1483,27 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   );
 }
 
-function GroupTile({ groupId, name, prints, latestDate, number_of_items, duration_seconds, cover_print_id, onSelectPrint, onDelete, onUngroup }) {
+function GroupTile({ groupId, name, prints, latestDate, number_of_items, duration_seconds, cover_print_id, onSelectPrint, onDelete, onUngroup,
+                    selectMode, selected, onToggleSelect, onLongPress }) {
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Appui long : passe en selection avec ce groupe coche (meme geste que sur
+  // une carte de print) ; en selection, un appui coche / decoche.
+  const pressTimer = useRef(null);
+  const longPressed = useRef(false);
+  const startPress = () => {
+    if (selectMode || !onLongPress) return;
+    longPressed.current = false;
+    pressTimer.current = setTimeout(() => {
+      longPressed.current = true;
+      if (navigator.vibrate) navigator.vibrate(15);
+      onLongPress(groupId);
+    }, 480);
+  };
+  const cancelPress = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
+  const handleClick = () => {
+    if (longPressed.current) { longPressed.current = false; return; }
+    if (selectMode && onToggleSelect) onToggleSelect(groupId); else setSheetOpen(true);
+  };
   // Mosaique des prints du groupe, le print de couverture en tete. Une seule
   // vignette ne montrait qu'une piece sur N et ne laissait pas deviner ce que
   // le groupe contient -- c'est pourtant la question qu'on se pose en
@@ -1543,9 +1525,14 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
 
   return (
     <>
-      <div className="card" onClick={() => setSheetOpen(true)}
+      <div className="card" onClick={handleClick}
+        onTouchStart={startPress} onTouchEnd={cancelPress} onTouchMove={cancelPress}
+        onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
+        onContextMenu={e => e.preventDefault()}
         style={{ overflow:"hidden", display:"flex", flexDirection:"column",
-          position:"relative", padding:0, cursor:"pointer" }}>
+          position:"relative", padding:0, cursor:"pointer",
+          outline: selected ? "2px solid #3b82f6" : "none",
+          userSelect:"none", WebkitUserSelect:"none", WebkitTouchCallout:"none", touchAction:"manipulation" }}>
         <div style={{ position:"relative", paddingTop:"75%",
           background:"var(--surface2)", overflow:"hidden" }}>
           <div style={{ position:"absolute", inset:0 }}>
@@ -1557,7 +1544,15 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
             fontSize:9, fontWeight:800, padding:"2px 8px", borderRadius:20 }}>
             📁 {prints.length} print{prints.length>1?"s":""}
           </span>
-          {number_of_items > 1 && (
+          {selectMode && (
+            <div style={{ position:"absolute", top:6, right:6, width:22, height:22, borderRadius:"50%",
+              display:"flex", alignItems:"center", justifyContent:"center", zIndex:2,
+              border: selected ? "none" : "1.5px solid rgba(255,255,255,0.8)",
+              background: selected ? "#3b82f6" : "rgba(0,0,0,0.4)" }}>
+              {selected && <Check size={13} color="white" strokeWidth={3}/>}
+            </div>
+          )}
+          {!selectMode && number_of_items > 1 && (
             <span style={{ position:"absolute", top:6, right:6,
               background:"rgba(59,130,246,0.85)", color:"white",
               fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
@@ -2183,6 +2178,10 @@ export default function Prints() {
   const [viewMode, setViewMode] = useState("list"); // "list" | "gallery"
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  // Groupes selectionnes (appui long sur une tuile de groupe), dans l'ordre de
+  // selection : le premier est celui qui reste, sauf choix contraire.
+  const [selectedGroups, setSelectedGroups] = useState([]);
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [groupPickerOpen, setGroupPickerOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);  // 1er clic -> confirme
   const [deleting, setDeleting] = useState(false);
@@ -2194,7 +2193,9 @@ export default function Prints() {
       return next;
     });
   };
-  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); setConfirmDelete(false); };
+  const toggleGroup = (g) => setSelectedGroups(prev =>
+    prev.some(x => x.groupId === g.groupId) ? prev.filter(x => x.groupId !== g.groupId) : [...prev, g]);
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); setSelectedGroups([]); setConfirmDelete(false); setMergeOpen(false); };
 
   // Suppression des prints selectionnes (pas d'endpoint bulk -> un par un, comme
   // ailleurs dans le code). Confirmation a deux temps dans la barre.
@@ -2745,6 +2746,10 @@ export default function Prints() {
                 onLongPress={id => { setSelectMode(true); setSelectedIds(new Set([id])); }}/>
             ) : (
               <GroupTile key={item.groupId} groupId={item.groupId} name={item.name}
+                selectMode={selectMode}
+                selected={selectedGroups.some(g => g.groupId === item.groupId)}
+                onToggleSelect={() => toggleGroup(item)}
+                onLongPress={() => { setSelectMode(true); setSelectedIds(new Set()); setSelectedGroups([item]); }}
                 prints={item.prints} latestDate={item.latestDate}
                 number_of_items={item.number_of_items}
                 duration_seconds={item.duration_seconds}
@@ -2777,7 +2782,7 @@ export default function Prints() {
         onChanged={() => { load(); loadGroups(); }}/>}
 
       {/* Barre flottante de sélection multiple */}
-      {selectMode && selectedIds.size > 0 && (
+      {selectMode && (selectedIds.size > 0 || selectedGroups.length > 0) && (
         /* Deux rangees plutot qu'une seule : quatre elements cote a cote
            debordaient de l'ecran sur telephone, "Annuler" se retrouvait coupe.
            Le compte et l'abandon tiennent sur la premiere ligne, les deux
@@ -2793,7 +2798,9 @@ export default function Prints() {
             <span style={{ fontSize:12.5, color:"var(--text)", fontWeight:700,
               flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis",
               whiteSpace:"nowrap" }}>
-              {selectedIds.size} sélectionné{selectedIds.size>1?"s":""}
+              {[selectedIds.size && `${selectedIds.size} print${selectedIds.size>1?"s":""}`,
+                selectedGroups.length && `${selectedGroups.length} groupe${selectedGroups.length>1?"s":""}`]
+                .filter(Boolean).join(" + ")} sélectionné{selectedIds.size + selectedGroups.length > 1 ? "s" : ""}
             </span>
             <button onClick={exitSelectMode}
               style={{ padding:"5px 12px", borderRadius:8, fontSize:12, background:"none",
@@ -2803,6 +2810,22 @@ export default function Prints() {
             </button>
           </div>
 
+          {selectedGroups.length > 0 && selectedIds.size > 0 && (
+            <p style={{ margin:0, fontSize:11.5, color:"var(--muted)" }}>
+              Sélectionne soit des prints (pour les grouper), soit des groupes (pour les fusionner).
+            </p>
+          )}
+          {selectedGroups.length > 0 && selectedIds.size === 0 && (
+            <button onClick={() => setMergeOpen(true)} disabled={selectedGroups.length < 2}
+              style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+                padding:"10px 8px", borderRadius:10, fontSize:12.5, fontWeight:700, border:"none",
+                background: selectedGroups.length < 2 ? "var(--surface2)" : "#7c3aed",
+                color: selectedGroups.length < 2 ? "var(--muted)" : "white",
+                cursor: selectedGroups.length < 2 ? "default" : "pointer" }}>
+              🔗 {selectedGroups.length < 2 ? "Sélectionne au moins 2 groupes" : `Fusionner ${selectedGroups.length} groupes`}
+            </button>
+          )}
+          {selectedIds.size > 0 && selectedGroups.length === 0 && (
           <div style={{ display:"flex", gap:8 }}>
             <button onClick={() => setGroupPickerOpen(true)}
               style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center",
@@ -2835,7 +2858,13 @@ export default function Prints() {
               </button>
             )}
           </div>
+          )}
         </div>
+      )}
+
+      {mergeOpen && (
+        <GroupMergeSheet groups={selectedGroups} onClose={() => setMergeOpen(false)}
+          onDone={async () => { exitSelectMode(); await Promise.all([load(), loadGroups()]); }}/>
       )}
 
       {/* Sélecteur de groupe — créer ou choisir un groupe existant (recherche substring) */}
@@ -2857,6 +2886,99 @@ export default function Prints() {
   );
 }
 
+// ── Fusion de groupes ───────────────────────────────────────────────────────
+// Les groupes choisis n'en font plus qu'un. On choisit celui qui reste (son nom,
+// ses vignettes) ; le nombre d'elements propose est la somme de ceux de chaque
+// groupe (1 par defaut), a valider ou corriger avant d'envoyer.
+function GroupMergeSheet({ groups, onClose, onDone }) {
+  const [keepId, setKeepId] = useState(groups[0]?.groupId);
+  const sum = groups.reduce((t, g) => t + Math.max(1, g.number_of_items || 1), 0);
+  const [nb, setNb] = useState(String(sum));
+  const [busy, setBusy] = useState(false);
+  const nbOk = /^\d+$/.test(nb) && +nb >= 1;
+  const keep = groups.find(g => g.groupId === keepId);
+  const nPrints = groups.reduce((t, g) => t + (g.prints?.length || 0), 0);
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      await client.post(`/prints/groups/${keepId}/merge`, {
+        source_ids: groups.filter(g => g.groupId !== keepId).map(g => g.groupId),
+        number_of_items: +nb,
+      });
+      await onDone();
+    } catch (err) {
+      showAlert("Erreur: " + (err.response?.data?.detail || err.message));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:1400, background:"rgba(0,0,0,0.6)",
+      display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+        width:"100%", maxWidth:480, maxHeight:"90dvh", overflowY:"auto",
+        padding:"16px 18px", paddingBottom:"calc(16px + env(safe-area-inset-bottom,0px))" }}>
+        <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 4px" }}>
+          Fusionner {groups.length} groupes
+        </h3>
+        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px" }}>
+          {nPrints} print{nPrints > 1 ? "s" : ""}, leurs photos et leurs objets iront dans un seul groupe.
+          Choisis celui qui reste :
+        </p>
+
+        {groups.map(g => {
+          const on = g.groupId === keepId;
+          return (
+            <button key={g.groupId} onClick={() => setKeepId(g.groupId)}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 12px",
+                marginBottom:6, borderRadius:10, cursor:"pointer", textAlign:"left",
+                background: on ? "rgba(124,58,237,0.12)" : "var(--surface2)",
+                border: on ? "1.5px solid #7c3aed" : "1px solid var(--border)", color:"var(--text)" }}>
+              <span style={{ width:16, height:16, borderRadius:"50%", flexShrink:0,
+                border: on ? "5px solid #7c3aed" : "1.5px solid var(--muted)" }}/>
+              <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:600, overflow:"hidden",
+                textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.name}</span>
+              <span style={{ flexShrink:0, fontSize:10, color:"var(--muted)", fontFamily:"JetBrains Mono, monospace",
+                textAlign:"right", lineHeight:1.35 }}>
+                {g.prints?.length || 0} print{(g.prints?.length || 0) > 1 ? "s" : ""}<br/>
+                {Math.max(1, g.number_of_items || 1)} élément{(g.number_of_items || 1) > 1 ? "s" : ""}
+              </span>
+            </button>
+          );
+        })}
+
+        <label style={{ display:"block", fontSize:11, fontWeight:700, color:"var(--muted)",
+          textTransform:"uppercase", letterSpacing:0.4, margin:"14px 0 6px" }}>
+          Nombre d'éléments du groupe fusionné
+        </label>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <input value={nb} onChange={e => setNb(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric"
+            style={{ width:90, background:"var(--surface2)", border:`1.5px solid ${nbOk ? "var(--border)" : "#ef4444"}`,
+              borderRadius:8, padding:"9px 12px", fontSize:15, fontWeight:700, color:"var(--text)", outline:"none" }}/>
+          <span style={{ fontSize:11, color:"var(--muted)" }}>
+            {groups.map(g => Math.max(1, g.number_of_items || 1)).join(" + ")} = {sum}
+          </span>
+        </div>
+
+        <div style={{ display:"flex", gap:8, marginTop:16 }}>
+          <button onClick={onClose} style={{ flex:1, padding:10, borderRadius:12, border:"1px solid var(--border)",
+            background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
+            Annuler
+          </button>
+          <button onClick={submit} disabled={busy || !nbOk}
+            style={{ flex:2, padding:10, borderRadius:12, border:"none", fontSize:13, fontWeight:700,
+              cursor: busy || !nbOk ? "default" : "pointer",
+              background: busy || !nbOk ? "var(--surface2)" : "#7c3aed",
+              color: busy || !nbOk ? "var(--muted)" : "white" }}>
+            {busy ? "Fusion…" : `Fusionner dans « ${keep?.name ?? "?"} »`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Date courte et lisible pour distinguer les groupes homonymes.
 function fmtGroupDate(d) {
   if (!d) return "—";
@@ -2866,7 +2988,7 @@ function fmtGroupDate(d) {
 }
 
 // ── Sélecteur de groupe — recherche substring + création ───────────────────
-function GroupPickerSheet({ groups, onClose, onPick, title = "Ajouter à un groupe", allowCreate = true }) {
+function GroupPickerSheet({ groups, onClose, onPick }) {
   const [q, setQ] = useState("");
   const [vh, setVh] = useState(typeof window !== "undefined" ? window.innerHeight : 800);
 
@@ -2904,17 +3026,16 @@ function GroupPickerSheet({ groups, onClose, onPick, title = "Ajouter à un grou
 
         <div style={{ padding:"14px 18px 10px" }}>
           <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 10px" }}>
-            {title}
+            Ajouter à un groupe
           </h3>
-          <input value={q} onChange={e => setQ(e.target.value)}
-            placeholder={allowCreate ? "Rechercher ou créer un groupe…" : "Rechercher un groupe…"}
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Rechercher ou créer un groupe…"
             autoFocus
             style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
               borderRadius:8, padding:"9px 12px", fontSize:13, color:"var(--text)", outline:"none" }}/>
         </div>
 
         <div style={{ overflowY:"auto", padding:"0 18px 16px", flex:1 }}>
-          {allowCreate && q.trim() && (
+          {q.trim() && (
             <button onClick={() => onPick({ group_name: q.trim() })}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"10px 12px",
                 marginBottom: exactNameExists ? 4 : 8, borderRadius:10, background:"rgba(59,130,246,0.12)",
@@ -2923,7 +3044,7 @@ function GroupPickerSheet({ groups, onClose, onPick, title = "Ajouter à un grou
               <FolderPlus size={15}/> Créer un nouveau groupe « {q.trim()} »
             </button>
           )}
-          {allowCreate && q.trim() && exactNameExists && (
+          {q.trim() && exactNameExists && (
             <p style={{ margin:"0 0 10px", fontSize:11, color:"var(--muted)", padding:"0 2px" }}>
               Un groupe porte déjà ce nom. Tu peux le rejoindre ci-dessous, ou en créer un nouveau.
             </p>
@@ -2931,7 +3052,7 @@ function GroupPickerSheet({ groups, onClose, onPick, title = "Ajouter à un grou
 
           {filtered.length === 0 && !q.trim() && (
             <p style={{ textAlign:"center", color:"var(--muted)", fontSize:12, padding:"20px 0" }}>
-              {allowCreate ? "Aucun groupe pour l'instant — tape un nom pour en créer un." : "Aucun autre groupe."}
+              Aucun groupe pour l'instant — tape un nom pour en créer un.
             </p>
           )}
 
