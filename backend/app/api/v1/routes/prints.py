@@ -592,6 +592,82 @@ async def ungroup(group_id: int, _: str = Depends(get_current_user)):
     return {"ok": True, "detached": n}
 
 
+@router.post("/groups/{group_id}/merge")
+async def merge_group(group_id: int, body: dict = Body({}), _: str = Depends(get_current_user)):
+    """
+    Fusionne le groupe `source` DANS `group_id` : ses prints, ses photos et ses
+    objets passent au groupe garde, puis il disparait.
+    body: {"source_id": 12}
+
+    Le groupe garde conserve son nom, son nombre d'objets et ses vignettes ;
+    il ne reprend celles de la source que s'il n'en avait pas. Le nombre
+    d'objets n'est PAS additionne : fusionner sert le plus souvent a recoller
+    un meme lot coupe en deux, il s'ajuste dans « Editer » sinon.
+    """
+    source_id = body.get("source_id")
+    if not source_id:
+        raise HTTPException(400, "source_id requis")
+    source_id = int(source_id)
+    if source_id == group_id:
+        raise HTTPException(400, "Un groupe ne peut pas fusionner avec lui-meme")
+    from ....models.object_history import Object
+
+    async with AsyncSessionLocal() as db:
+        keep = await db.get(Group, group_id)
+        src = await db.get(Group, source_id)
+        if not keep or not src:
+            raise HTTPException(404, "Groupe introuvable")
+
+        # Photos d'abord, sur le disque : un nom deja pris chez le groupe garde
+        # est renumerote (Photo-03 existe des deux cotes, la plupart du temps).
+        src_dir = DATA_DIR / "groups" / str(source_id)
+        renamed = {}
+        if src_dir.exists():
+            dst_dir = DATA_DIR / "groups" / str(group_id)
+            dst_dir.mkdir(parents=True, exist_ok=True)
+            for f in sorted(src_dir.iterdir()):
+                if not f.is_file():
+                    continue
+                dest = dst_dir / f.name
+                if dest.exists():
+                    prefix = "Video" if f.name.startswith("Video") else "Photo"
+                    n = 1
+                    while (dst_dir / f"{prefix}-{n:02d}{f.suffix}").exists():
+                        n += 1
+                    dest = dst_dir / f"{prefix}-{n:02d}{f.suffix}"
+                shutil.move(str(f), str(dest))
+                renamed[f.name] = dest.name
+
+        moved = (await db.execute(
+            select(func.count()).select_from(Print).where(Print.group_id == source_id)
+        )).scalar() or 0
+        await db.execute(update(Print).where(Print.group_id == source_id).values(group_id=group_id))
+        objs = (await db.execute(
+            update(Object).where(Object.parent_type == "group", Object.parent_id == source_id)
+            .values(parent_id=group_id)
+        )).rowcount or 0
+
+        if not keep.cover_photo and src.cover_photo:
+            keep.cover_photo = renamed.get(src.cover_photo)
+        if not keep.cover_print_id and src.cover_print_id:
+            keep.cover_print_id = src.cover_print_id
+        await db.delete(src)
+        await db.flush()
+        # Les membres ont change : cout par objet du groupe garde a refaire,
+        # objets de la source compris (ils lui sont rattaches maintenant).
+        await _propagate_object_costs(db, "group", group_id)
+        await db.commit()
+
+    if src_dir.exists():
+        try:
+            shutil.rmtree(src_dir)
+        except OSError as e:
+            print(f"[GROUP] dossier du groupe fusionne {source_id} non supprime : {e}")
+
+    return {"ok": True, "group_id": group_id, "prints": moved,
+            "photos": len(renamed), "objects": objs}
+
+
 @router.patch("/groups/{group_id}")
 async def patch_group(group_id: int, body: dict = Body({}), _: str = Depends(get_current_user)):
     """Met à jour les champs éditables d'un groupe (name, number_of_items)."""
