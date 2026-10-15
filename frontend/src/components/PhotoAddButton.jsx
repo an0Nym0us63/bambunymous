@@ -1,6 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { useIsAdmin } from "../store/auth";
+import { useShares } from "../store/shares";
 
 /**
  * Bouton "+" d'ajout de photo, avec le meme comportement partout (fiche filament,
@@ -42,8 +43,10 @@ export default function PhotoAddButton({ onPick, size = 20, title = "Ajouter une
     // arrivent au serveur dans l'ordre choisi. Sans await, les requetes
     // partiraient en meme temps et l'ordre serait celui, aleatoire, des
     // reponses reseau -- l'ordre des vignettes serait perdu.
+    // Chaque envoi est suivi par la puce du header : une grosse video (envoi
+    // puis compression) peut durer, on garde la main et on voit ou ca en est.
     for (const f of files) {
-      try { await onPick(f); }
+      try { await useShares.getState().upload(f, () => Promise.resolve(onPick(f))); }
       catch (err) { console.error("upload photo", err); }
     }
   };

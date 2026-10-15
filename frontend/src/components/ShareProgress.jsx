@@ -1,19 +1,27 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Send, Check, AlertTriangle, X } from "lucide-react";
+import { Send, Check, AlertTriangle, X, ImagePlus } from "lucide-react";
 import { useShares } from "../store/shares";
 import { showAlert } from "../utils/dialog";
 
-// Suivi des partages Telegram partis en arriere-plan (album, conversion des
-// gifs, plusieurs destinations : ca peut durer), visible sur toutes les pages.
+// Suivi des travaux partis en arriere-plan -- partages Telegram (album,
+// conversion des gifs, plusieurs destinations) et ajouts de photos/videos
+// (envoi + compression d'une grosse video) -- visible sur toutes les pages.
 // Telephone : une puce compacte DANS le header (#header-status). Ordinateur
 // (pas de header) : sous le logo de la barre laterale (#sidebar-status).
+const up = (j) => j.kind === "upload";
 const TONE = {
-  sending: { bg: "#229ED9", icon: null,          long: (j) => `Envoi Telegram · ${j.title}`, short: "Envoi" },
-  done:    { bg: "#22c55e", icon: Check,         long: (j) => `Envoyé · ${j.detail}`,        short: "Envoyé" },
-  partial: { bg: "#f59e0b", icon: AlertTriangle, long: (j) => `Envoi partiel · ${j.title}`,  short: "Partiel" },
-  error:   { bg: "#ef4444", icon: AlertTriangle, long: (j) => `Échec de l'envoi · ${j.title}`, short: "Échec" },
+  sending: { bg: "#229ED9", icon: null,
+    long: (j) => up(j) ? `Ajout de ${j.title}…` : `Envoi Telegram · ${j.title}`, short: (j) => up(j) ? (j.video ? "Vidéo" : "Photo") : "Envoi" },
+  done:    { bg: "#22c55e", icon: Check,
+    long: (j) => up(j) ? `${j.video ? "Vidéo ajoutée" : "Photo ajoutée"}` : `Envoyé · ${j.detail}`, short: (j) => up(j) ? "Ajoutée" : "Envoyé" },
+  partial: { bg: "#f59e0b", icon: AlertTriangle,
+    long: (j) => `Envoi partiel · ${j.title}`, short: () => "Partiel" },
+  error:   { bg: "#ef4444", icon: AlertTriangle,
+    long: (j) => up(j) ? `Échec de l'ajout · ${j.title}` : `Échec de l'envoi · ${j.title}`, short: () => "Échec" },
 };
+const KindIcon = ({ j, size }) => up(j) ? <ImagePlus size={size} style={{ flexShrink:0, opacity:0.85 }}/>
+                                        : <Send size={size} style={{ flexShrink:0, opacity:0.85 }}/>;
 const MOBILE = "(max-width: 767px)";
 
 function useMobile() {
@@ -36,10 +44,12 @@ const Spinner = ({ size = 12 }) => (
 // un envoi termine se ferme en plus.
 function open(j, dismiss) {
   if (j.status === "sending") {
-    showAlert(`Envoi Telegram en cours : « ${j.title} »` + (j.count > 1 ? ` vers ${j.count} destinations.` : "."));
+    showAlert(up(j) ? `Ajout de ${j.title} en cours (envoi puis compression).`
+      : `Envoi Telegram en cours : « ${j.title} »` + (j.count > 1 ? ` vers ${j.count} destinations.` : "."));
     return;
   }
-  showAlert(j.status === "done" ? `Envoyé : « ${j.title} » → ${j.detail}` : j.detail);
+  if (j.status === "done") { dismiss(j.id); return; }
+  showAlert(j.detail);
   dismiss(j.id);
 }
 
@@ -63,8 +73,8 @@ export default function ShareProgress() {
           border:"none", background:t.bg, color:"white", fontSize:11, fontWeight:700, cursor:"pointer",
           flexShrink:0, whiteSpace:"nowrap" }}>
         {Icon ? <Icon size={12}/> : <Spinner size={11}/>}
-        <Send size={11} style={{ opacity:0.85 }}/>
-        {t.short}{n > 1 ? ` ×${n}` : j.status === "sending" && j.count > 1 ? ` → ${j.count}` : ""}
+        <KindIcon j={j} size={11}/>
+        {t.short(j)}{n > 1 ? ` ×${n}` : j.status === "sending" && j.count > 1 ? ` → ${j.count}` : ""}
       </button>,
       slot
     );
@@ -84,7 +94,7 @@ export default function ShareProgress() {
               padding:"6px 8px 6px 10px", borderRadius:10, background:t.bg, color:"white",
               fontSize:11.5, fontWeight:700, cursor: failed ? "pointer" : "default" }}>
             {Icon ? <Icon size={14} style={{ flexShrink:0 }}/> : <Spinner/>}
-            <Send size={12} style={{ flexShrink:0, opacity:0.8 }}/>
+            <KindIcon j={j} size={12}/>
             <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
               {t.long(j)}{j.status === "sending" && j.count > 1 ? ` → ${j.count} destinations` : ""}
             </span>

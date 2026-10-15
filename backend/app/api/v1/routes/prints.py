@@ -1,6 +1,7 @@
 """
 API REST — Historique des impressions.
 """
+import asyncio
 import os, shutil
 import html
 from datetime import datetime
@@ -1290,7 +1291,9 @@ async def upload_print_photo(
         try:
             with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
                 tmp.write(raw); tmp_path = tmp.name
-            _sp.run([
+            # Hors de la boucle : ffmpeg sur une grosse video prend des minutes,
+            # et un appel bloquant figeait TOUT le serveur pendant ce temps.
+            await asyncio.to_thread(_sp.run, [
                 "ffmpeg", "-y", "-i", tmp_path, "-t", "30",
                 "-vf", "fps=15,scale='min(720,iw)':-1:flags=lanczos",
                 "-an", "-loop", "0", "-c:v", "libwebp",
@@ -1311,7 +1314,9 @@ async def upload_print_photo(
         try:
             with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
                 tmp.write(raw); tmp_path = tmp.name
-            _sp.run([
+            # Hors de la boucle : ffmpeg sur une grosse video prend des minutes,
+            # et un appel bloquant figeait TOUT le serveur pendant ce temps.
+            await asyncio.to_thread(_sp.run, [
                 "ffmpeg", "-y", "-i", tmp_path,
                 "-vf", "scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
                 "-quality", "80", "-compression_level", "6", str(dest)
@@ -1619,7 +1624,9 @@ async def upload_group_photo(
         try:
             with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
                 tmp.write(raw); tmp_path = tmp.name
-            _sp.run([
+            # Hors de la boucle : ffmpeg sur une grosse video prend des minutes,
+            # et un appel bloquant figeait TOUT le serveur pendant ce temps.
+            await asyncio.to_thread(_sp.run, [
                 "ffmpeg", "-y", "-i", tmp_path, "-t", "30",
                 "-vf", "fps=15,scale='min(720,iw)':-1:flags=lanczos",
                 "-an", "-loop", "0", "-c:v", "libwebp",
@@ -1636,7 +1643,7 @@ async def upload_group_photo(
         try:
             with _tf.NamedTemporaryFile(delete=False, suffix="." + orig_ext) as tmp:
                 tmp.write(raw); tmp_path = tmp.name
-            _sp.run(["ffmpeg","-y","-i",tmp_path,
+            await asyncio.to_thread(_sp.run, ["ffmpeg","-y","-i",tmp_path,
                      "-vf","scale='min(800,iw)':'min(800,ih)':force_original_aspect_ratio=decrease",
                      "-quality","80","-compression_level","6",str(dest)],
                     check=True, capture_output=True, timeout=30)
