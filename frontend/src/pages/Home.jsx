@@ -241,20 +241,6 @@ function StatusBanner({ status }) {
               <TempChip label="Plateau" current={status.bed_temp}     target={status.target_bed_temp} accent="#ef4444" />
               <TempChip label="Chambre" current={status.chamber_temp} target={status.target_chamber_temp} />
             </div>
-            {/* Couche + vitesse */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
-              {[
-                { label:"Couche", value:`${status.layer}/${status.total_layers}` },
-                { label:"Restant", value:remain||"—" },
-                { label:"Vitesse", value:status.speed_mag ? `${status.speed_mag}%` : "—" },
-              ].map(({ label, value }) => (
-                <div key={label} style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10, padding:"8px 10px" }}>
-                  <p style={{ fontSize:9, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em", marginBottom:2 }}>{label}</p>
-                  <p style={{ fontSize:14, fontWeight:700, fontFamily:"monospace", color:"var(--text)" }}>{value}</p>
-                </div>
-              ))}
-            </div>
-
             {/* Encart alertes HMS : criticite + libelle + lien wiki */}
             {status.hms_decoded?.length > 0 && (() => {
               const worst = status.hms_decoded[0]?.severity || "info";
