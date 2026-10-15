@@ -531,8 +531,20 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
                  for k, (g, c) in sorted(fil.items(), key=lambda kv: -kv[1][0]) if g > 0][:6]
 
     live = _live(prints, tz_offset_min)
-    # En cours : la vue de la camera prend la premiere place de l'album.
-    media = media[:ALBUM_MAX - 1] if live else media[:ALBUM_MAX]
+    if live:
+        # En cours : la camera en direct (ajoutee a l'envoi, en tete) suffit a
+        # montrer ou en est la piece ; les captures 50 % / 100 % font doublon.
+        # La vignette du plateau, elle, montre ce que ce sera : on la garde.
+        media = [m for m in media if not m.name.startswith("snapshot-")]
+        for m in _plate(live["print_id"]):
+            if m not in media:
+                media.append(m)
+        media = media[:ALBUM_MAX - 1]
+        plate = _plate(live["print_id"])
+        if plate and plate[0] not in media:        # album plein de photos : la vignette passe quand meme
+            media[-1] = plate[0]
+    else:
+        media = media[:ALBUM_MAX]
     return {"title": title, "stats": stats, "filaments": fil_lines, "links": links,
             "media": media, "live": live}
 
