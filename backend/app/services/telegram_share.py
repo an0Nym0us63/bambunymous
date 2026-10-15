@@ -498,7 +498,10 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
                 .where(Spool.id.in_(spool_ids))
             )).all()
             names = {sid: (f"{f.translated_name or f.name} ("
-                           + " · ".join(filter(None, [f.manufacturer, f.fila_type or f.material])) + ")",
+                           # code couleur Bambu (ex. 10502) quand on le connait : c'est
+                           # lui qu'on cherche pour racheter la meme bobine
+                           + " · ".join(filter(None, [f.manufacturer, f.fila_type or f.material,
+                                                      (f.fila_color_code or "").strip() or None])) + ")",
                            f.color)
                      for sid, f in rows}
         fil = {}
