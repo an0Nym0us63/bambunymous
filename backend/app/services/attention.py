@@ -546,7 +546,9 @@ async def _spools_not_dried(db) -> list[Alert]:
             title=_fil_title(f),
             detail=f"Bobine #{s.id}",
             value=f"{days // 30} mois" if ref else "jamais séchée",
-            rank=-days if ref else float("-inf"),   # jamais sechees, puis la plus ancienne
+            # Jamais sechees d'abord, puis la plus ancienne. Pas de float("-inf") :
+            # la reponse JSON refuse les infinis (500 sur l'accueil).
+            rank=-days if ref else -1e9,
             severity="warn",
             link=f"/filaments?id={f.id}",
             entity="spool", entity_id=s.id, filament_id=f.id,
