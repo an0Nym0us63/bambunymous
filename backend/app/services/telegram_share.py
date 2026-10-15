@@ -78,7 +78,7 @@ async def save_destinations(items: list[dict]) -> list[dict]:
             "topic_id": int(d["topic_id"]) if d.get("topic_id") else None,
             "topic_title": d.get("topic_title") or None,
             "peer": {"type": peer["type"], "id": int(peer["id"]),
-                     "access_hash": int(peer["access_hash"]) if peer.get("access_hash") is not None else None},
+                     "access_hash": str(int(peer["access_hash"])) if peer.get("access_hash") is not None else None},
         })
     await _set(K_DEST, json.dumps(clean, ensure_ascii=False))
     return clean
@@ -220,14 +220,17 @@ async def list_chats() -> list[dict]:
         out = []
         async for d in c.iter_dialogs(limit=300):
             e = d.entity
+            # access_hash en TEXTE : c'est un entier 64 bits, et le navigateur
+            # (JavaScript) arrondit tout nombre au-dela de 2^53. Renvoye tel quel a
+            # l'enregistrement, il arrivait faux -> « An invalid Peer was used ».
             if isinstance(e, Channel):
-                peer = {"type": "channel", "id": e.id, "access_hash": e.access_hash}
+                peer = {"type": "channel", "id": e.id, "access_hash": str(e.access_hash)}
                 kind = "canal" if e.broadcast else "groupe"
             elif isinstance(e, Chat):
                 peer = {"type": "chat", "id": e.id, "access_hash": None}
                 kind = "groupe"
             elif isinstance(e, User) and not e.deleted:
-                peer = {"type": "user", "id": e.id, "access_hash": e.access_hash}
+                peer = {"type": "user", "id": e.id, "access_hash": str(e.access_hash)}
                 kind = "moi" if e.is_self else ("bot" if e.bot else "personne")
             else:
                 continue
@@ -249,10 +252,31 @@ async def list_chats() -> list[dict]:
 def _input_peer(peer: dict):
     from telethon.tl.types import InputPeerChannel, InputPeerChat, InputPeerUser
     if peer["type"] == "channel":
-        return InputPeerChannel(peer["id"], peer["access_hash"])
+        return InputPeerChannel(int(peer["id"]), int(peer["access_hash"]))
     if peer["type"] == "user":
-        return InputPeerUser(peer["id"], peer["access_hash"])
-    return InputPeerChat(peer["id"])
+        return InputPeerUser(int(peer["id"]), int(peer["access_hash"]))
+    return InputPeerChat(int(peer["id"]))
+
+
+async def _refresh_peer(c, dest: dict) -> Optional[dict]:
+    """
+    Retrouve la destination dans les discussions du compte et rend son peer a
+    jour (access_hash juste). Repare les destinations enregistrees avant la
+    correction des 64 bits, ou dont la cle a change. None si introuvable.
+    """
+    from telethon.tl.types import Channel, Chat, User
+    want = dest["peer"]
+    async for d in c.iter_dialogs(limit=500):
+        e = d.entity
+        if int(getattr(e, "id", 0)) != int(want["id"]):
+            continue
+        if want["type"] == "channel" and isinstance(e, Channel):
+            return {"type": "channel", "id": e.id, "access_hash": str(e.access_hash)}
+        if want["type"] == "user" and isinstance(e, User):
+            return {"type": "user", "id": e.id, "access_hash": str(e.access_hash)}
+        if want["type"] == "chat" and isinstance(e, Chat):
+            return {"type": "chat", "id": e.id, "access_hash": None}
+    return None
 
 
 # ── Medias ──────────────────────────────────────────────────────────────────
@@ -546,12 +570,14 @@ async def send(kind: str, obj_id: int, destination_id: str, message: str = "",
                 cam.write_bytes(jpg)
                 files.insert(0, (cam, False))
         async with _lock:
+            from telethon.errors import (PeerIdInvalidError, ChannelInvalidError,
+                                         UserIdInvalidError, ChatIdInvalidError)
             c = await _connected_client()
-            peer = _input_peer(dest["peer"])
             kw = {"parse_mode": "html"}
             if dest.get("topic_id"):
                 kw["reply_to"] = dest["topic_id"]       # sujet d'un groupe a sujets
-            try:
+
+            async def _go(peer):
                 if files:
                     paths = [str(p) for p, _ in files]
                     cap = [caption] + [""] * (len(paths) - 1)
@@ -561,6 +587,26 @@ async def send(kind: str, obj_id: int, destination_id: str, message: str = "",
                         supports_streaming=True, **kw), timeout=300)
                 else:
                     await c.send_message(peer, caption, link_preview=True, **kw)
+
+            try:
+                try:
+                    await _go(_input_peer(dest["peer"]))
+                except (PeerIdInvalidError, ChannelInvalidError, UserIdInvalidError, ChatIdInvalidError):
+                    # Cle perimee ou abimee : on la relit dans les discussions,
+                    # on la corrige dans les destinations, et on reessaie une fois.
+                    fresh = await _refresh_peer(c, dest)
+                    if not fresh:
+                        raise ShareError(f"« {dest['label']} » est introuvable dans tes discussions Telegram : "
+                                         f"retire-la et ajoute-la de nouveau")
+                    all_d = await destinations()
+                    for d in all_d:
+                        if d["id"] == dest["id"]:
+                            d["peer"] = fresh
+                    await _set(K_DEST, json.dumps(all_d, ensure_ascii=False))
+                    logger.info(f"[TG] destination {dest['label']} reparee")
+                    await _go(_input_peer(fresh))
+            except ShareError:
+                raise
             except asyncio.TimeoutError:
                 raise ShareError("Telegram n'a pas répondu à temps (envoi trop long ?)")
             except Exception as e:
