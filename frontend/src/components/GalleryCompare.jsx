@@ -19,7 +19,7 @@ export default function GalleryCompare({
   onDeletePhoto, onSetPrimaryPhoto, onPhotosChanged,
   items, getId, getCoverImage, getPhotos, getTitle, getSubtitle, compareFields = [],
   maxCompare = 6, emptyLabel = "Aucun élément", pageSize = 30,
-  enableCompare = true, renderCover = null, swatchMode = false, swatchInfo = false,
+  enableCompare = true, renderCover = null, swatchMode = false, swatchInfo = false, getTone = null,
   selectMode: selectModeProp = false, onSelectModeChange = null,
   onItemClick = null,
 }) {
@@ -109,6 +109,7 @@ export default function GalleryCompare({
           const checked = selected.has(id);
           const photos = normPhotos(item);
           const hasPhotos = photos.length > 0;
+          const light = swatchInfo && getTone ? getTone(item) === "light" : false;
           return (
             <div key={id}
               onClick={() => { if (selectMode && enableCompare) toggle(item); else if (hasPhotos && !selectMode) openCarousel(item, 0); else if (onItemClick && !selectMode) onItemClick(item); }}
@@ -124,17 +125,25 @@ export default function GalleryCompare({
                 display: swatchInfo ? "flex" : undefined, flexDirection:"column",
                 border: checked ? "2px solid #3b82f6" : "2px solid transparent" }}>
               {swatchInfo ? (
-                // Nuancier avec ses informations : la couleur reste pleine en
-                // haut, le texte vit DESSOUS sur un bandeau neutre -- par-dessus,
-                // il fausserait la lecture de la teinte.
+                // Nuancier avec ses informations : la couleur occupe toute la
+                // tuile, le texte vit sur un voile translucide en bas. Un
+                // bandeau plein mangeait la moitie de la hauteur ; le voile
+                // laisse la teinte lisible sur les trois quarts du haut.
                 <>
-                  <div style={{ height:58, flexShrink:0, position:"relative" }}>{renderCover(item)}</div>
-                  <div style={{ padding:"5px 7px 6px", display:"flex", flexDirection:"column", gap:1, minWidth:0 }}>
-                    <p title={getTitle(item)} style={{ fontSize:10.5, fontWeight:700, color:"var(--text)", margin:0,
+                  <div style={{ position:"absolute", inset:0 }}>{renderCover(item)}</div>
+                  <div style={{ height:86 }}/>
+                  <div style={{ position:"relative", marginTop:"auto", padding:"4px 7px 5px",
+                    display:"flex", flexDirection:"column", gap:0, minWidth:0,
+                    // Voile choisi d'apres la TEINTE et non le theme : un voile
+                    // sombre sur du blanc, ou clair sur du noir, rendait le nom
+                    // illisible.
+                    background: light ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.38)",
+                    backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)" }}>
+                    <p title={getTitle(item)} style={{ fontSize:10.5, fontWeight:700, color: light ? "#111827" : "#fff", margin:0,
                       lineHeight:1.25, overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2,
-                      WebkitBoxOrient:"vertical", minHeight:"2.5em" }}>{getTitle(item)}</p>
+                      WebkitBoxOrient:"vertical" }}>{getTitle(item)}</p>
                     {getSubtitle && (
-                      <p title={getSubtitle(item)} style={{ fontSize:9, color:"var(--muted)", margin:0,
+                      <p title={getSubtitle(item)} style={{ fontSize:9, color: light ? "rgba(17,24,39,0.7)" : "rgba(255,255,255,0.78)", margin:0,
                         overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getSubtitle(item)}</p>
                     )}
                   </div>

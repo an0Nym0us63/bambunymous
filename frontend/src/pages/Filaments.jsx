@@ -551,6 +551,15 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   const pct = Math.max(0, Math.min(100, Math.round((remaining / total) * 100)));
   const barColor = pct > 30 ? "#3b82f6" : pct > 15 ? "#f59e0b" : "#ef4444";
 
+  // Stock du filament : cette bobine (si active) + les autres actives.
+  const stockFil = spool.sibling_weight_g != null
+    ? (spool.archived ? 0 : (spool.remaining_weight_g || 0)) + spool.sibling_weight_g : null;
+  // Meme regle que l'alerte du serveur : pas sechee depuis 6 mois (depuis
+  // sa premiere utilisation si jamais sechee ; jamais utilisee = sous vide).
+  const refSechage = spool.last_dried_at || spool.first_used_at;
+  const aSecher = !spool.archived && !!refSechage
+    && (Date.now() - new Date(refSechage).getTime()) > 180 * 86400000;
+
   const Row = ({ label, value, mono, accent }) => (value == null || value === "") ? null : (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
       padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
@@ -641,7 +650,9 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Tray AMS"       value={spool.ams_tray}/>
           <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
           <Row label="Dernière util." value={spool.last_used_at?.slice(0,10)}/>
-          <Row label="Dernier séchage" value={spool.last_dried_at?.slice(0,10)}/>
+          <Row label="Dernier séchage" value={aSecher
+            ? `${spool.last_dried_at?.slice(0,10) || "jamais"} · à sécher`
+            : spool.last_dried_at?.slice(0,10)} accent={aSecher ? "#0EA5E9" : undefined}/>
           <Row label="Commentaire"    value={spool.comment}/>
 
           {/* ── Filament ── */}
@@ -690,6 +701,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Couleur"        value={color} mono/>
           {spool.filament_profile_id && <Row label="Code Bambu" value={spool.filament_profile_id} mono/>}
           {spool.filament_fila_color_code && <Row label="Code couleur Bambu" value={spool.filament_fila_color_code} mono/>}
+          <Row label="Stock du filament" value={stockFil != null ? `${fmtStock(stockFil)} (toutes bobines)` : null}/>
           <Row label="Poids total"    value={spool.filament_weight_g ? `${spool.filament_weight_g}g` : null}/>
           <Row label="Prix catalogue" value={spool.filament_price ? `${moneyVal(Number(spool.filament_price), 2)}€` : null}/>
 
@@ -1574,6 +1586,9 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
 // Carte d'un filament : sa couleur en fond, nom, marque, matiere, bobines en
 // stock. Partagee par l'onglet Filaments et la galerie Photos, qui doivent se
 // lire pareil. `extra` ajoute une pastille en bas a droite.
+// Stock lisible : grammes sous le kilo, kilos au-dela.
+const fmtStock = (g) => g >= 1000 ? `${(g / 1000).toFixed(2).replace(".", ",")} kg` : `${Math.round(g)} g`;
+
 function FilamentCard({ f, onClick, extra = null }) {
   const colorsList = parseColorsList(f.color, f.colors_array);
   const flt = "drop-shadow(0 1px 4px rgba(0,0,0,0.95)) drop-shadow(0 2px 10px rgba(0,0,0,0.6))";
@@ -1602,6 +1617,7 @@ function FilamentCard({ f, onClick, extra = null }) {
       </div>
       <span style={{ position:"absolute", bottom:6, left:8, fontSize:8, fontWeight:500, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", padding:"1px 7px", borderRadius:20 }}>
         {f.active_spool_count>0 ? `${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "0 bobine"}
+        {f.active_spool_count>0 && f.remaining_weight_total_g > 0 && ` · ${fmtStock(f.remaining_weight_total_g)}`}
       </span>
       {extra != null && (
         <span style={{ position:"absolute", bottom:6, right:8, fontSize:8, fontWeight:600,
@@ -2297,6 +2313,13 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
         emptyLabel="Aucun filament"
         swatchMode={true}
         swatchInfo={true}
+        getTone={f => {
+          // Teinte claire -> voile clair et texte sombre (luminance percue).
+          const hex = (parseColorsList(f.color, f.colors_array)?.[0] || "").replace("#", "");
+          if (hex.length < 6) return "dark";
+          const [r, g, b] = [0, 2, 4].map(k => parseInt(hex.slice(k, k + 2), 16));
+          return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? "light" : "dark";
+        }}
         renderCover={f => {
           const colors = parseColorsList(f.color, f.colors_array);
           return <div style={{ width:"100%", height:"100%", ...colorBg(colors, f.multicolor_type) }}/>;

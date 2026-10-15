@@ -93,6 +93,32 @@ def _fil_title(f) -> str:
     return f.translated_name or f.name or f"Filament #{f.id}"
 
 
+# ── Sechage ────────────────────────────────────────────────────────────────
+DRY_DAYS = 180
+
+
+def dry_reference(spool) -> Optional[datetime]:
+    """
+    Depuis quand la bobine prend l'humidite : son dernier sechage, sinon sa
+    premiere utilisation (la bobine a ete ouverte). Une bobine jamais utilisee
+    est supposee encore sous vide : pas de reference, pas d'alerte.
+    """
+    return getattr(spool, "last_dried_at", None) or getattr(spool, "first_used_at", None)
+
+
+def needs_drying(spool, now: Optional[datetime] = None) -> bool:
+    """Pas sechee depuis plus de DRY_DAYS (meme regle pour l'alerte et l'AMS)."""
+    ref = dry_reference(spool)
+    if ref is None or getattr(spool, "archived", False):
+        return False
+    if isinstance(ref, str):        # colonne ajoutee en TEXT par la migration
+        try:
+            ref = datetime.fromisoformat(ref)
+        except ValueError:
+            return False
+    return ref < (now or datetime.utcnow()) - timedelta(days=DRY_DAYS)
+
+
 # ── Registre ───────────────────────────────────────────────────────────────
 CHECKS: list[dict] = []
 
@@ -491,6 +517,44 @@ async def _swatches_without_label(db) -> list[Alert]:
         )
         for f in rows
     ]
+
+
+@check("spool_not_dried", f"Bobines pas séchées depuis {DRY_DAYS // 30} mois", "💧",
+       shown=5, random_sample=False)
+async def _spools_not_dried(db) -> list[Alert]:
+    """
+    Bobine ouverte qui n'a pas ete sechee depuis plus de DRY_DAYS (ou jamais
+    depuis sa premiere utilisation). Par bobine : le sechage se fait bobine par
+    bobine, dans l'AMS. La plus ancienne en premier.
+    """
+    rows = (await db.execute(
+        select(Spool, Filament)
+        .join(Filament, Filament.id == Spool.filament_id)
+        .where(Spool.archived.is_(False),
+               or_(Spool.last_dried_at.isnot(None), Spool.first_used_at.isnot(None)))
+    )).all()
+    now = datetime.utcnow()
+    out = []
+    for s, f in rows:
+        if not needs_drying(s, now):
+            continue
+        ref = dry_reference(s)
+        if isinstance(ref, str):
+            ref = datetime.fromisoformat(ref)
+        days = (now - ref).days
+        out.append(Alert(
+            key=f"spool_not_dried:spool:{s.id}",
+            category="spool_not_dried",
+            title=_fil_title(f),
+            detail=f"Bobine #{s.id}" + ("" if s.last_dried_at else " · jamais séchée"),
+            value=f"{days // 30} mois",
+            rank=-days,                     # la plus ancienne en premier
+            severity="warn",
+            link=f"/filaments?id={f.id}",
+            entity="spool", entity_id=s.id, filament_id=f.id,
+            **_fil_visual(f),
+        ))
+    return out
 
 
 @check("to_order", "Filaments à commander", "🛒")

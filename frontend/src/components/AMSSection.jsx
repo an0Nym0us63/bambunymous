@@ -96,6 +96,23 @@ const traySlotNo = (ams, t) => t.id + 1;
 const sansEchantillon = (tray, info) => !isEmptyTray(tray) && info?.swatch === false;
 const SWATCH_COLOR = "#F59E0B";
 const SWATCH_TITLE = "Pas d'échantillon pour ce filament : il est en place, c'est le moment de l'imprimer";
+// Bobine pas sechee depuis plus de 6 mois (regle du serveur, la meme que
+// l'alerte) : elle est dans l'AMS, on peut la secher sur place.
+const aSecher = (tray, info) => !isEmptyTray(tray) && info?.needs_drying === true;
+const DRY_COLOR = "#0EA5E9";
+const DRY_TITLE = "Bobine pas séchée depuis plus de 6 mois : elle est dans l'AMS, c'est le moment de la sécher";
+const fmtStock = (g) => g >= 1000 ? `${(g / 1000).toFixed(2).replace(".", ",")} kg` : `${Math.round(g)} g`;
+
+// Pastille ronde d'alerte sur la tuile compacte.
+function PillBadge({ color, title, Icon }) {
+  return (
+    <span title={title} style={{ width:12, height:12, borderRadius:"50%", background:color, color:"white",
+      display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+      boxShadow:"0 0 0 1.5px rgba(255,255,255,0.9), 0 1px 3px rgba(0,0,0,0.35)" }}>
+      <Icon size={8} strokeWidth={2.5}/>
+    </span>
+  );
+}
 
 // ── Mini pastille ──────────────────────────────────────────────────────────
 function ColorPill({ tray, spoolInfo, active }) {
@@ -115,17 +132,17 @@ function ColorPill({ tray, spoolInfo, active }) {
           conservait parfois le dernier match_mode connu, laissant une pastille
           grise/verte "a verifier" sur du vide. La grande vue filtrait deja sur
           !empty, pas la tuile compacte. */}
+      {/* Detection en haut a gauche, alertes en bas a droite : coins opposes,
+          rien ne se chevauche meme avec deux alertes sur une pastille etroite. */}
       {tray.match_mode && !isEmpty && (
-        <span style={{ position:"absolute", top:2, right:3 }}>
+        <span style={{ position:"absolute", top:1, left:3, lineHeight:1 }}>
           <MatchIcon mode={tray.match_mode} size={8}/>
         </span>
       )}
-      {sansEchantillon(tray, spoolInfo) && (
-        <span title={SWATCH_TITLE} style={{ position:"absolute", bottom:2, left:"50%", transform:"translateX(-50%)",
-          width:12, height:12, borderRadius:"50%", background:SWATCH_COLOR, color:"white",
-          display:"flex", alignItems:"center", justifyContent:"center",
-          boxShadow:"0 0 0 1.5px rgba(255,255,255,0.9), 0 1px 3px rgba(0,0,0,0.35)" }}>
-          <Palette size={8} strokeWidth={2.5}/>
+      {(sansEchantillon(tray, spoolInfo) || aSecher(tray, spoolInfo)) && (
+        <span style={{ position:"absolute", bottom:2, right:2, display:"flex", gap:2 }}>
+          {sansEchantillon(tray, spoolInfo) && <PillBadge color={SWATCH_COLOR} title={SWATCH_TITLE} Icon={Palette}/>}
+          {aSecher(tray, spoolInfo) && <PillBadge color={DRY_COLOR} title={DRY_TITLE} Icon={Droplets}/>}
         </span>
       )}
     </div>
@@ -310,6 +327,13 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
           <Palette size={9}/> Échantillon à faire
         </span>
       )}
+      {aSecher(tray, spoolInfo) && (
+        <span title={DRY_TITLE} style={{ display:"inline-flex", alignItems:"center", gap:3,
+          padding:"1px 6px", borderRadius:20, fontSize:9, fontWeight:700, whiteSpace:"nowrap",
+          color:DRY_COLOR, background:"rgba(14,165,233,0.12)", border:"1px solid rgba(14,165,233,0.35)" }}>
+          <Droplets size={9}/> À sécher
+        </span>
+      )}
     </div>
   );
 }
@@ -431,11 +455,11 @@ function TrayBottomSheet({ tray, amsLabel, slotNo, onClose }) {
   const isEmpty = tray.empty || !tray.filament_type;
   const [mapOpen, setMapOpen] = React.useState(false);
 
-  const Row = ({ label, value, mono }) => (value == null || value === "") ? null : (
+  const Row = ({ label, value, mono, accent }) => (value == null || value === "") ? null : (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
       padding:"7px 0", borderBottom:"1px solid var(--border)" }}>
       <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>{label}</span>
-      <span style={{ fontSize:13, fontWeight:600, color:"var(--text)",
+      <span style={{ fontSize:13, fontWeight:600, color: accent || "var(--text)",
         fontFamily: mono ? "JetBrains Mono,monospace" : "inherit",
         textAlign:"right", marginLeft:12 }}>{value}</span>
     </div>
@@ -558,12 +582,15 @@ function TrayBottomSheet({ tray, amsLabel, slotNo, onClose }) {
                   pour cela. */}
               <Row label="Emplacement"     value={info.location}/>
               <Row label="Poids restant"   value={info.remaining_weight_g != null ? `${Math.round(info.remaining_weight_g)} g` : null}/>
+              <Row label="Stock du filament" value={info.filament_stock_g != null ? `${fmtStock(info.filament_stock_g)} (toutes bobines)` : null}/>
               <Row label="Prix d'achat"    value={info.price_override ? `${Number(info.price_override).toFixed(2)} €` : null}/>
               <Row label="Tag NFC"         value={info.tag_number} mono/>
               <Row label="Tray AMS"        value={info.ams_tray}/>
               <Row label="Première util."  value={info.first_used_at?.slice(0,10)}/>
               <Row label="Dernière util."  value={info.last_used_at?.slice(0,10)}/>
-              <Row label="Dernier séchage" value={info.last_dried_at?.slice(0,10)}/>
+              <Row label="Dernier séchage" value={info.needs_drying
+                ? `${info.last_dried_at?.slice(0,10) || "jamais"} · à sécher`
+                : info.last_dried_at?.slice(0,10)} accent={info.needs_drying ? DRY_COLOR : undefined}/>
               <Row label="Commentaire"     value={info.comment}/>
               <Row label="ID externe"      value={info.external_spool_id} mono/>
 

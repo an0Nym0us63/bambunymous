@@ -95,6 +95,11 @@ class SpoolInfoOut(BaseModel):
     # disaient pas la meme chose.
     last_dried_at: Optional[str] = None
     swatch: Optional[bool] = None
+    # Pas sechee depuis plus de 6 mois (meme regle que l'alerte) : pastille
+    # sur la tuile AMS, comme « pas d'echantillon ».
+    needs_drying: Optional[bool] = None
+    # Restant cumule de toutes les bobines actives du filament.
+    filament_stock_g: Optional[float] = None
 
 class TrayOut(BaseModel):
     id: int
@@ -220,7 +225,7 @@ def _spool_info(spool_id, spools_map):
     )
 
 
-def _tray_spool_info(t, spools_map):
+def _tray_spool_info(t, spools_map, stock_map=None):
     """
     Fiche de la bobine d'un bac. Le cache pose au moment ou la bobine a ete
     reconnue sert pour tout, sauf l'echantillon : il change sans que la bobine
@@ -231,8 +236,14 @@ def _tray_spool_info(t, spools_map):
     cached = getattr(t, "_spool_info_cache", None)
     si = SpoolInfoOut(**cached) if cached else _spool_info(t.spool_id, spools_map)
     if si is not None and t.spool_id in spools_map:
-        f = spools_map[t.spool_id][1]
+        sp, f = spools_map[t.spool_id]
         si.swatch = bool(f.swatch) if f is not None else None
+        # Meme raison pour le sechage : l'AMS seche la bobine sans qu'elle bouge.
+        from ....services.attention import needs_drying
+        si.last_dried_at = str(sp.last_dried_at) if sp.last_dried_at else None
+        si.needs_drying = needs_drying(sp)
+        if stock_map is not None and f is not None:
+            si.filament_stock_g = stock_map.get(f.id)
     return si
 
 
@@ -243,6 +254,7 @@ async def printer_status(_: str = Depends(get_current_user)):
     s = get_state()
     # Charger les bobines liées aux trays AMS
     _spools_map = {}
+    _stock_map = {}
     all_spool_ids = [
         t.spool_id
         for a in s.ams_list for t in a.trays if t.spool_id
@@ -253,6 +265,16 @@ async def printer_status(_: str = Depends(get_current_user)):
             for sp in spools_r.scalars().all():
                 fil = await db.get(_Fil, sp.filament_id) if sp.filament_id else None
                 _spools_map[sp.id] = (sp, fil)
+            # Stock de chaque filament en place : somme du restant de ses
+            # bobines actives (celle de l'AMS comprise).
+            from sqlalchemy import func as _func
+            fil_ids = {f.id for _, f in _spools_map.values() if f is not None}
+            if fil_ids:
+                _stock_map = dict((await db.execute(
+                    _sel(_Spool.filament_id, _func.coalesce(_func.sum(_Spool.remaining_weight_g), 0))
+                    .where(_Spool.filament_id.in_(fil_ids), _Spool.archived.is_(False))
+                    .group_by(_Spool.filament_id)
+                )).all())
     return PrinterStatusOut(
         connected=s.connected,
         serial=s.serial,
@@ -289,7 +311,7 @@ async def printer_status(_: str = Depends(get_current_user)):
                     drying_temp=t.drying_temp, drying_time=t.drying_time,
                     spool_id=t.spool_id,
                     match_mode=getattr(t, "match_mode", ""),
-                    spool_info=_tray_spool_info(t, _spools_map),
+                    spool_info=_tray_spool_info(t, _spools_map, _stock_map),
                     cols=getattr(t, "cols", []) or [],
                     ctype=str(getattr(t, "ctype", "") or ""),
                     catalog_name=(
