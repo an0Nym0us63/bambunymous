@@ -1023,24 +1023,19 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
               ✏️ Éditer
             </button>
 
-
-            <button onClick={() => {
-              setShowDeleteConfirm(true);
-            }} style={{ flex:"1 1 0", minWidth:96, padding:"11px", borderRadius:12, border:"1px solid rgba(239,68,68,0.3)",
-              background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:13, fontWeight:700,
-              cursor:"pointer" }}>🗑 Supprimer</button>
             <button onClick={() => setSharing(true)} title="Partager sur Telegram"
               style={{ flex:"1 1 0", minWidth:96, padding:"11px", borderRadius:12,
                 border:"1px solid rgba(34,158,217,0.35)", background:"rgba(34,158,217,0.08)",
                 color:"#229ED9", fontSize:12, fontWeight:700, cursor:"pointer" }}>
               📣 Partager
             </button>
+            {/* Supprimer en dernier ; plus de bouton ✕ ici, celui du haut suffit. */}
+            <button onClick={() => {
+              setShowDeleteConfirm(true);
+            }} style={{ flex:"1 1 0", minWidth:96, padding:"11px", borderRadius:12, border:"1px solid rgba(239,68,68,0.3)",
+              background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:13, fontWeight:700,
+              cursor:"pointer" }}>🗑 Supprimer</button>
             </AdminOnly>
-            <button onClick={onClose}
-              style={{ flex:"2 1 0", minWidth:96, padding:"11px", borderRadius:12, border:"none",
-                background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-              ✕
-            </button>
           </div>
         </div>
       </div>
@@ -1444,39 +1439,35 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
             ))}
           </div>
 
-          {/* Actions -- passent a la ligne sur telephone : a cinq sur une
-              rangee, le bouton de fermeture tombait a 30 px. */}
+          {/* Actions : une rangee sur ordinateur, deux de deux sur telephone
+              (minWidth 140). Supprimer en dernier ; plus de bouton ✕ ici, celui
+              du haut suffit. */}
           <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
             <AdminOnly>
             <button onClick={()=>setEditGroup(true)}
-              style={{ flex:"1 1 0", minWidth:96, padding:"10px", borderRadius:12, border:"1px solid var(--border)",
+              style={{ flex:"1 1 0", minWidth:140, padding:"10px", borderRadius:12, border:"1px solid var(--border)",
                 background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700, cursor:"pointer" }}>
               ✏️ Éditer
             </button>
-            <button onClick={handleDelete}
-              style={{ flex:"1 1 0", minWidth:96, padding:"10px", borderRadius:12,
-                border:"1px solid rgba(239,68,68,0.3)", background:"rgba(239,68,68,0.06)",
-                color:"#ef4444", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-              🗑 Supprimer
-            </button>
             <button onClick={handleUngroup}
-              style={{ flex:"1 1 0", minWidth:96, padding:"10px", borderRadius:12,
+              style={{ flex:"1 1 0", minWidth:140, padding:"10px", borderRadius:12,
                 border:"1px solid rgba(167,139,250,0.3)", background:"rgba(167,139,250,0.06)",
                 color:"#a78bfa", fontSize:12, fontWeight:700, cursor:"pointer" }}>
               📤 Dégrouper
             </button>
             <button onClick={() => setSharing(true)} title="Partager sur Telegram"
-              style={{ flex:"1 1 0", minWidth:96, padding:"10px", borderRadius:12,
+              style={{ flex:"1 1 0", minWidth:140, padding:"10px", borderRadius:12,
                 border:"1px solid rgba(34,158,217,0.35)", background:"rgba(34,158,217,0.08)",
                 color:"#229ED9", fontSize:12, fontWeight:700, cursor:"pointer" }}>
               📣 Partager
             </button>
-            </AdminOnly>
-            <button onClick={onClose}
-              style={{ flex:"2 1 0", minWidth:96, padding:"10px", borderRadius:12, border:"none",
-                background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-              ✕
+            <button onClick={handleDelete}
+              style={{ flex:"1 1 0", minWidth:140, padding:"10px", borderRadius:12,
+                border:"1px solid rgba(239,68,68,0.3)", background:"rgba(239,68,68,0.06)",
+                color:"#ef4444", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+              🗑 Supprimer
             </button>
+            </AdminOnly>
           </div>
         </div>
       </div>
