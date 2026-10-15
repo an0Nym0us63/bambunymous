@@ -1,26 +1,78 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { Send, Check, AlertTriangle, X } from "lucide-react";
 import { useShares } from "../store/shares";
 import { showAlert } from "../utils/dialog";
 
-// Pastille flottante en haut de l'ecran, sur toutes les pages : un partage
-// Telegram part en arriere-plan (album, conversion des gifs, plusieurs
-// destinations : ca peut durer), on garde la main et on voit ou il en est.
+// Suivi des partages Telegram partis en arriere-plan (album, conversion des
+// gifs, plusieurs destinations : ca peut durer), visible sur toutes les pages.
+// Telephone : une puce compacte DANS le header (#header-status). Ordinateur
+// (pas de header) : sous le logo de la barre laterale (#sidebar-status).
 const TONE = {
-  sending: { bg: "#229ED9", icon: null,          text: (j) => `Envoi Telegram · ${j.title}` },
-  done:    { bg: "#22c55e", icon: Check,         text: (j) => `Envoyé · ${j.detail}` },
-  partial: { bg: "#f59e0b", icon: AlertTriangle, text: (j) => `Envoi partiel · ${j.title}` },
-  error:   { bg: "#ef4444", icon: AlertTriangle, text: (j) => `Échec de l'envoi · ${j.title}` },
+  sending: { bg: "#229ED9", icon: null,          long: (j) => `Envoi Telegram · ${j.title}`, short: "Envoi" },
+  done:    { bg: "#22c55e", icon: Check,         long: (j) => `Envoyé · ${j.detail}`,        short: "Envoyé" },
+  partial: { bg: "#f59e0b", icon: AlertTriangle, long: (j) => `Envoi partiel · ${j.title}`,  short: "Partiel" },
+  error:   { bg: "#ef4444", icon: AlertTriangle, long: (j) => `Échec de l'envoi · ${j.title}`, short: "Échec" },
 };
+const MOBILE = "(max-width: 767px)";
+
+function useMobile() {
+  const [m, setM] = useState(() => typeof window !== "undefined" && window.matchMedia(MOBILE).matches);
+  useEffect(() => {
+    const mq = window.matchMedia(MOBILE);
+    const on = () => setM(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return m;
+}
+
+const Spinner = ({ size = 12 }) => (
+  <span style={{ width:size, height:size, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
+    border:"2px solid rgba(255,255,255,0.4)", borderTopColor:"white", animation:"spin 0.9s linear infinite" }}/>
+);
+
+// Clic sur la puce : le detail (raison d'un echec, ou ce qui est en cours) ;
+// un envoi termine se ferme en plus.
+function open(j, dismiss) {
+  if (j.status === "sending") {
+    showAlert(`Envoi Telegram en cours : « ${j.title} »` + (j.count > 1 ? ` vers ${j.count} destinations.` : "."));
+    return;
+  }
+  showAlert(j.status === "done" ? `Envoyé : « ${j.title} » → ${j.detail}` : j.detail);
+  dismiss(j.id);
+}
 
 export default function ShareProgress() {
   const jobs = useShares(s => s.jobs);
   const dismiss = useShares(s => s.dismiss);
+  const mobile = useMobile();
+  const [slot, setSlot] = useState(null);
+  useEffect(() => { setSlot(document.getElementById(mobile ? "header-status" : "sidebar-status")); }, [mobile]);
   if (!jobs.length) return null;
-  return (
-    <div className="share-progress" style={{ position:"fixed", left:"50%", transform:"translateX(-50%)",
-      zIndex:1700, display:"flex", flexDirection:"column", gap:6, alignItems:"center",
-      width:"max-content", maxWidth:"calc(100vw - 24px)", pointerEvents:"none" }}>
+
+  if (mobile && slot) {
+    // Une seule puce : l'envoi en cours s'il y en a un, sinon le dernier resultat.
+    const j = jobs.find(x => x.status === "sending") || jobs[jobs.length - 1];
+    const t = TONE[j.status];
+    const Icon = t.icon;
+    const n = jobs.filter(x => x.status === "sending").length;
+    return createPortal(
+      <button onClick={() => open(j, dismiss)} aria-label={t.long(j)} title={t.long(j)}
+        style={{ display:"flex", alignItems:"center", gap:5, height:26, padding:"0 9px", borderRadius:13,
+          border:"none", background:t.bg, color:"white", fontSize:11, fontWeight:700, cursor:"pointer",
+          flexShrink:0, whiteSpace:"nowrap" }}>
+        {Icon ? <Icon size={12}/> : <Spinner size={11}/>}
+        <Send size={11} style={{ opacity:0.85 }}/>
+        {t.short}{n > 1 ? ` ×${n}` : j.status === "sending" && j.count > 1 ? ` → ${j.count}` : ""}
+      </button>,
+      slot
+    );
+  }
+
+  if (!slot) return null;
+  return createPortal(
+    <>
       {jobs.map(j => {
         const t = TONE[j.status];
         const Icon = t.icon;
@@ -28,17 +80,13 @@ export default function ShareProgress() {
         return (
           <div key={j.id} onClick={() => failed && showAlert(j.detail)}
             title={failed ? "Voir le détail" : undefined}
-            style={{ pointerEvents:"auto", display:"flex", alignItems:"center", gap:8, maxWidth:"100%",
-              padding:"7px 10px 7px 12px", borderRadius:20, background:t.bg, color:"white",
-              fontSize:12, fontWeight:700, boxShadow:"0 4px 16px rgba(0,0,0,0.3)",
-              cursor: failed ? "pointer" : "default" }}>
-            {Icon ? <Icon size={14} style={{ flexShrink:0 }}/>
-              : <span style={{ width:12, height:12, borderRadius:"50%", flexShrink:0,
-                  border:"2px solid rgba(255,255,255,0.4)", borderTopColor:"white",
-                  animation:"spin 0.9s linear infinite" }}/>}
+            style={{ display:"flex", alignItems:"center", gap:7, minWidth:0,
+              padding:"6px 8px 6px 10px", borderRadius:10, background:t.bg, color:"white",
+              fontSize:11.5, fontWeight:700, cursor: failed ? "pointer" : "default" }}>
+            {Icon ? <Icon size={14} style={{ flexShrink:0 }}/> : <Spinner/>}
             <Send size={12} style={{ flexShrink:0, opacity:0.8 }}/>
             <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
-              {t.text(j)}{j.status === "sending" && j.count > 1 ? ` → ${j.count} destinations` : ""}
+              {t.long(j)}{j.status === "sending" && j.count > 1 ? ` → ${j.count} destinations` : ""}
             </span>
             {j.status !== "sending" && (
               <button onClick={(e) => { e.stopPropagation(); dismiss(j.id); }} aria-label="Fermer"
@@ -51,10 +99,7 @@ export default function ShareProgress() {
           </div>
         );
       })}
-      <style>{`
-        .share-progress { top: 12px; }
-        @media (max-width: 767px) { .share-progress { top: calc(var(--header-h, 52px) + 6px); } }
-      `}</style>
-    </div>
+    </>,
+    slot
   );
 }

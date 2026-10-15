@@ -149,6 +149,8 @@ export default function Layout() {
             BambuNymous
           </span>
         </div>
+        {/* Suivi d'un partage Telegram en arriere-plan (ShareProgress, par portail). */}
+        <div id="sidebar-status" style={{ display:"flex", flexDirection:"column", gap:6, padding:"0 12px" }}/>
         <nav style={S.nav}>
           {nav.map(n => <NavItem key={n.to} {...n} />)}
         </nav>
@@ -182,6 +184,9 @@ export default function Layout() {
               barre d'actions occupe une ligne entiere sous le header. */}
           <div id="header-actions" style={{ marginLeft:"auto", display:"flex",
             alignItems:"center", gap:6, flexShrink:0 }}/>
+          {/* Suivi d'un partage Telegram en arriere-plan (ShareProgress y
+              injecte sa puce par portail) : visible sur toutes les pages. */}
+          <div id="header-status" style={{ display:"flex", alignItems:"center", flexShrink:0 }}/>
           {/* Accueil uniquement : ailleurs le header porte deja un titre et les
               actions de la page, et la pastille encombrerait une barre etroite.
               Placee apres le point d'injection, elle reste la plus a droite. */}
