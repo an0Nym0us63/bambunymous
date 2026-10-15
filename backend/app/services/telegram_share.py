@@ -333,12 +333,80 @@ def _weight(g) -> Optional[str]:
     return f"{g / 1000:.2f} kg".replace(".", ",") if g >= 1000 else f"{round(g)} g"
 
 
+LIVE_STATES = ("RUNNING", "PAUSE", "PREPARE", "SLICING")
+
+
+def _live(prints, tz_offset_min: Optional[int]) -> Optional[dict]:
+    """
+    L'impression (ou un membre du groupe) est celle qui tourne en ce moment :
+    avancement lu dans l'etat MQTT de l'imprimante. L'heure de fin est donnee
+    dans le fuseau du navigateur (decalage envoye par la fenetre, comme
+    Date.getTimezoneOffset) : le conteneur, lui, vit souvent en UTC.
+    """
+    from datetime import datetime, timedelta
+    try:
+        from ..core.mqtt import get_state
+        s = get_state()
+    except Exception:
+        return None
+    if (s.status or "").upper() not in LIVE_STATES:
+        return None
+    p = next((p for p in prints if p.status == "IN_PROGRESS"
+              and (not p.job_id or not s.job_id or str(p.job_id) == str(s.job_id))), None)
+    if p is None:
+        return None
+    rem = int(s.remaining_minutes or 0)
+    eta = None
+    if rem > 0:
+        end = datetime.utcnow() + timedelta(minutes=rem) - timedelta(minutes=tz_offset_min or 0)
+        eta = end.strftime("%H:%M")
+    return {"print_id": p.id, "paused": (s.status or "").upper() == "PAUSE",
+            "progress": int(round(s.progress or 0)), "layer": s.layer, "total_layers": s.total_layers,
+            "remaining": _dur(rem * 60) if rem else None, "eta": eta}
+
+
+def color_dot(hex_color: Optional[str]) -> str:
+    """
+    Pastille emoji la plus proche d'une couleur de filament : Telegram n'a pas
+    de couleur libre dans le texte, il faut passer par les ronds de couleur.
+    """
+    import colorsys
+    h = str(hex_color or "").strip().lstrip("#")[:6]
+    if len(h) != 6:
+        return "⚪"
+    try:
+        r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    except ValueError:
+        return "⚪"
+    hue, light, sat = colorsys.rgb_to_hls(r, g, b)
+    hue *= 360
+    if light < 0.18:
+        return "⚫"
+    if sat < 0.18:                          # gris : clair ou fonce
+        return "⚪" if light > 0.55 else "⚫"
+    if light > 0.9:
+        return "⚪"
+    if 15 <= hue < 45 and light < 0.42:     # orange sombre = marron
+        return "🟤"
+    if hue < 15 or hue >= 340:
+        return "🔴"
+    if hue < 45:
+        return "🟠"
+    if hue < 70:
+        return "🟡"
+    if hue < 170:
+        return "🟢"
+    if hue < 260:
+        return "🔵"
+    return "🟣"
+
+
 def _makerworld(design_id) -> Optional[str]:
     d = str(design_id or "").strip()
     return f"https://makerworld.com/models/{d}" if d and d != "0" else None
 
 
-async def build_share(kind: str, obj_id: int) -> dict:
+async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = None) -> dict:
     """
     Ce qui partira : titre, statistiques, lien MakerWorld, medias. Sert a
     l'apercu de la fenetre ET a l'envoi : on montre exactement ce qui part.
@@ -384,12 +452,14 @@ async def build_share(kind: str, obj_id: int) -> dict:
                 select(Spool.id, Filament).join(Filament, Filament.id == Spool.filament_id)
                 .where(Spool.id.in_(spool_ids))
             )).all()
-            names = {sid: f"{f.translated_name or f.name} ({f.fila_type or f.material})" for sid, f in rows}
+            names = {sid: (f"{f.translated_name or f.name} ({f.fila_type or f.material})", f.color)
+                     for sid, f in rows}
         fil = {}
         for p in prints:
             for u in p.filament_usage:
-                key = names.get(u.spool_id) or (u.filament_type or "Filament")
-                fil[key] = fil.get(key, 0) + (u.grams_used or 0)
+                key, col = names.get(u.spool_id) or (u.filament_type or "Filament", u.color_hex)
+                g0, c0 = fil.get(key, (0, None))
+                fil[key] = (g0 + (u.grams_used or 0), c0 or col)
 
     duration = sum((p.duration_seconds or 0) for p in prints)
     weight = sum((p.total_weight_g or 0) for p in prints)
@@ -407,19 +477,33 @@ async def build_share(kind: str, obj_id: int) -> dict:
         stats.append(f"⚖️ {_weight(weight)}")
     if dates:
         stats.append(f"📅 {max(dates).strftime('%d/%m/%Y')}")
-    fil_lines = [f"• {html.escape(k)} — {_weight(v) or '0 g'}"
-                 for k, v in sorted(fil.items(), key=lambda kv: -kv[1]) if v > 0][:6]
+    fil_lines = [f"{color_dot(c)} {html.escape(k)} — {_weight(g) or '0 g'}"
+                 for k, (g, c) in sorted(fil.items(), key=lambda kv: -kv[1][0]) if g > 0][:6]
 
-    media = media[:ALBUM_MAX]
+    live = _live(prints, tz_offset_min)
+    # En cours : la vue de la camera prend la premiere place de l'album.
+    media = media[:ALBUM_MAX - 1] if live else media[:ALBUM_MAX]
     return {"title": title, "stats": stats, "filaments": fil_lines, "links": links,
-            "media": media}
+            "media": media, "live": live}
 
 
 def render_caption(share: dict, message: str = "") -> str:
     """Legende HTML (mode d'analyse Telegram), coupee sous 1024 caracteres."""
     parts = [f"<b>{html.escape(share['title'])}</b>"]
+    live = share.get("live")
+    if live:
+        bits = [f"{'⏸ En pause' if live['paused'] else '🟢 En cours'} — {live['progress']} %"]
+        if live.get("total_layers"):
+            bits.append(f"couche {live['layer']}/{live['total_layers']}")
+        if live.get("remaining"):
+            bits.append(f"reste {live['remaining']}")
+        if live.get("eta"):
+            bits.append(f"fin vers {live['eta']}")
+        parts.append(" · ".join(bits))
     if message.strip():
-        parts.append(html.escape(message.strip()))
+        # Encadre (citation Telegram) : le mot ajoute se distingue d'un coup
+        # d'oeil des informations generees.
+        parts.append(f"<blockquote>💬 {html.escape(message.strip())}</blockquote>")
     if share["stats"]:
         parts.append(" · ".join(share["stats"]))
     if share["filaments"]:
@@ -435,27 +519,53 @@ def render_caption(share: dict, message: str = "") -> str:
     return text
 
 
-async def send(kind: str, obj_id: int, destination_id: str, message: str = "") -> dict:
+async def _camera_jpeg() -> Optional[bytes]:
+    """Image de la camera, comme sur l'accueil ; None si indisponible."""
+    try:
+        from ..api.v1.routes.camera import camera_snapshot
+        r = await camera_snapshot()
+        return r.body if r.status_code == 200 and r.body[:2] == b"\xff\xd8" else None
+    except Exception as e:
+        logger.info(f"[TG] camera : {e}")
+        return None
+
+
+async def send(kind: str, obj_id: int, destination_id: str, message: str = "",
+               tz_offset_min: Optional[int] = None) -> dict:
     dest = next((d for d in await destinations() if d["id"] == destination_id), None)
     if not dest:
         raise ShareError("Destination inconnue")
-    share = await build_share(kind, obj_id)
+    share = await build_share(kind, obj_id, tz_offset_min)
     caption = render_caption(share, message)
     with tempfile.TemporaryDirectory() as tmp:
         files = await asyncio.to_thread(prepare_media, share["media"], Path(tmp))
+        if share["live"]:
+            jpg = await _camera_jpeg()
+            if jpg:
+                cam = Path(tmp) / "camera.jpg"
+                cam.write_bytes(jpg)
+                files.insert(0, (cam, False))
         async with _lock:
             c = await _connected_client()
             peer = _input_peer(dest["peer"])
             kw = {"parse_mode": "html"}
             if dest.get("topic_id"):
                 kw["reply_to"] = dest["topic_id"]       # sujet d'un groupe a sujets
-            if files:
-                paths = [str(p) for p, _ in files]
-                cap = [caption] + [""] * (len(paths) - 1)
-                await asyncio.wait_for(c.send_file(
-                    peer, paths if len(paths) > 1 else paths[0],
-                    caption=cap if len(paths) > 1 else caption,
-                    supports_streaming=True, **kw), timeout=300)
-            else:
-                await c.send_message(peer, caption, link_preview=True, **kw)
+            try:
+                if files:
+                    paths = [str(p) for p, _ in files]
+                    cap = [caption] + [""] * (len(paths) - 1)
+                    await asyncio.wait_for(c.send_file(
+                        peer, paths if len(paths) > 1 else paths[0],
+                        caption=cap if len(paths) > 1 else caption,
+                        supports_streaming=True, **kw), timeout=300)
+                else:
+                    await c.send_message(peer, caption, link_preview=True, **kw)
+            except asyncio.TimeoutError:
+                raise ShareError("Telegram n'a pas répondu à temps (envoi trop long ?)")
+            except Exception as e:
+                # Refus de Telegram (confidentialite, bloque, anti-spam, destination
+                # perimee...) : on montre la raison au lieu d'une erreur 500.
+                logger.warning(f"[TG] envoi vers {dest['label']} refuse : {type(e).__name__}: {e}")
+                raise ShareError(f"Telegram a refusé l'envoi vers « {dest['label']} » : {e}")
     return {"ok": True, "media": len(files), "destination": dest["label"]}

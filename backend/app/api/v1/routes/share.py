@@ -1,10 +1,13 @@
 """Partage Telegram : connexion du compte, destinations, apercu et envoi."""
+import logging
+
 from fastapi import APIRouter, Body, Depends, HTTPException
 
 from .auth import require_admin
 from ....services import telegram_share as tg
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def _call(coro):
@@ -12,6 +15,12 @@ async def _call(coro):
         return await coro
     except tg.ShareError as e:
         raise HTTPException(400, str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        # Jamais de 500 muet : la fenetre affiche la raison.
+        logger.exception("[TG] erreur inattendue")
+        raise HTTPException(502, f"Erreur inattendue : {type(e).__name__}: {e}")
 
 
 @router.get("/telegram")
@@ -57,14 +66,17 @@ def _kind(kind: str) -> str:
 
 
 @router.get("/{kind}/{obj_id}/preview")
-async def share_preview(kind: str, obj_id: int, message: str = "", _: str = Depends(require_admin)):
+async def share_preview(kind: str, obj_id: int, message: str = "", tz: int | None = None,
+                        _: str = Depends(require_admin)):
     """Exactement ce qui partira : la legende et les medias."""
-    share = await _call(tg.build_share(_kind(kind), obj_id))
+    share = await _call(tg.build_share(_kind(kind), obj_id, tz))
     return {"caption_html": tg.render_caption(share, message),
-            "media": [p.name for p in share["media"]],
+            "media": (["camera"] if share["live"] else []) + [p.name for p in share["media"]],
+            "live": bool(share["live"]),
             "destinations": [{"id": d["id"], "label": d["label"]} for d in await tg.destinations()]}
 
 
 @router.post("/{kind}/{obj_id}")
 async def share_send(kind: str, obj_id: int, body: dict = Body({}), _: str = Depends(require_admin)):
-    return await _call(tg.send(_kind(kind), obj_id, body.get("destination_id", ""), body.get("message", "")))
+    return await _call(tg.send(_kind(kind), obj_id, body.get("destination_id", ""), body.get("message", ""),
+                               body.get("tz")))

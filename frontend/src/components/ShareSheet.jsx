@@ -8,6 +8,9 @@ import { showAlert } from "../utils/dialog";
 // message facultatif, et APERCU exact de ce qui partira (la legende vient du
 // serveur, la meme qu'a l'envoi). Rien ne part sans le bouton « Envoyer ».
 const LAST_DEST = "bn-share-dest";
+// Decalage du fuseau du navigateur : l'heure de fin d'un en-cours est donnee
+// a l'heure locale, pas a celle du conteneur.
+const TZ = new Date().getTimezoneOffset();
 
 export default function ShareSheet({ kind, id, onClose }) {
   const [preview, setPreview] = useState(null);
@@ -17,7 +20,7 @@ export default function ShareSheet({ kind, id, onClose }) {
   const [done, setDone] = useState(null);
   const timer = useRef(null);
 
-  const load = (msg) => client.get(`/share/${kind}/${id}/preview`, { params: { message: msg } })
+  const load = (msg) => client.get(`/share/${kind}/${id}/preview`, { params: { message: msg, tz: TZ } })
     .then(r => {
       setPreview(r.data);
       setDest(d => {
@@ -39,7 +42,7 @@ export default function ShareSheet({ kind, id, onClose }) {
   const send = async () => {
     setBusy(true);
     try {
-      const { data } = await client.post(`/share/${kind}/${id}`, { destination_id: dest, message });
+      const { data } = await client.post(`/share/${kind}/${id}`, { destination_id: dest, message, tz: TZ });
       try { localStorage.setItem(LAST_DEST, dest); } catch { /* stockage indisponible */ }
       setDone(data);
       setTimeout(onClose, 1400);
@@ -90,10 +93,13 @@ export default function ShareSheet({ kind, id, onClose }) {
 
           <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>
             Ce qui partira · {nMedia ? `${nMedia} photo${nMedia > 1 ? "s" : ""} ou vidéo${nMedia > 1 ? "s" : ""}` : "texte seul"}
+            {preview.live && " · dont la caméra en direct"}
           </div>
           {/* Legende construite par le serveur, contenu deja echappe : seules
               ses balises <b> et <a> sont interpretees. */}
-          <div style={{ padding:"10px 12px", borderRadius:10, background:"var(--surface2)",
+          <style>{`.bn-cap blockquote{margin:0;padding:6px 10px;border-left:3px solid #229ED9;
+            background:rgba(34,158,217,0.10);border-radius:4px;white-space:pre-wrap}`}</style>
+          <div className="bn-cap" style={{ padding:"10px 12px", borderRadius:10, background:"var(--surface2)",
             border:"1px solid var(--border)", fontSize:12.5, color:"var(--text)", whiteSpace:"pre-wrap",
             lineHeight:1.45, marginBottom:14, wordBreak:"break-word" }}
             dangerouslySetInnerHTML={{ __html: preview.caption_html }}/>
