@@ -335,6 +335,20 @@ def _photos_of_dir(d: Path, cover: Optional[str]) -> list[Path]:
     return files
 
 
+SNAP_ORDER = {"pct50": 0, "snapshot-pct50": 0, "pct100": 1, "snapshot-pct100": 1}
+
+
+def _snapshots(p) -> list[Path]:
+    """Captures camera prises a 50 % et a 100 % de l'impression, dans cet ordre."""
+    out = []
+    for s in sorted((s for s in (p.snapshots or []) if s.trigger in SNAP_ORDER and s.file_path),
+                    key=lambda s: SNAP_ORDER[s.trigger]):
+        f = DATA_DIR / s.file_path
+        if f.exists() and f not in out:
+            out.append(f)
+    return out
+
+
 def _plate(print_id: int) -> list[Path]:
     d = DATA_DIR / "prints" / str(print_id)
     for n in ("plate.png", "plate.jpg"):
@@ -442,26 +456,33 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
 
     async with AsyncSessionLocal() as db:
         if kind == "print":
-            p = await db.get(Print, obj_id, options=[selectinload(Print.filament_usage)])
+            p = await db.get(Print, obj_id, options=[selectinload(Print.filament_usage),
+                                                     selectinload(Print.snapshots)])
             if not p:
                 raise ShareError("Impression introuvable")
             prints, title = [p], (p.translated_name or p.file_name or "Impression")
-            media = _photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo) or _plate(p.id)
+            # Photos et gifs d'abord ; a defaut, les captures 50 % et 100 % ;
+            # a defaut encore, l'image du plateau.
+            media = (_photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo)
+                     or _snapshots(p) or _plate(p.id))
             items = p.number_of_items or 1
         elif kind == "group":
             g = await db.get(Group, obj_id)
             if not g:
                 raise ShareError("Groupe introuvable")
             prints = (await db.execute(
-                select(Print).options(selectinload(Print.filament_usage))
+                select(Print).options(selectinload(Print.filament_usage), selectinload(Print.snapshots))
                 .where(Print.group_id == obj_id).order_by(Print.print_date)
             )).scalars().all()
             title = g.name
             media = _photos_of_dir(DATA_DIR / "groups" / str(g.id), g.cover_photo)
             for p in prints:
                 media += _photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo)
+            ordered = sorted(prints, key=lambda p: p.id != g.cover_print_id)
+            if not media:                       # ni photo ni gif : captures 50 % / 100 %
+                for p in ordered:
+                    media += _snapshots(p)
             if not media:
-                ordered = sorted(prints, key=lambda p: p.id != g.cover_print_id)
                 for p in ordered:
                     media += _plate(p.id)
             items = g.number_of_items or 1
@@ -554,13 +575,69 @@ async def _camera_jpeg() -> Optional[bytes]:
         return None
 
 
-async def send(kind: str, obj_id: int, destination_id: str, message: str = "",
+async def _send_one(c, dest: dict, files: list, caption: str) -> None:
+    """Envoie a une destination ; ShareError lisible en cas de refus."""
+    from telethon.errors import (PeerIdInvalidError, ChannelInvalidError,
+                                 UserIdInvalidError, ChatIdInvalidError)
+    kw = {"parse_mode": "html"}
+    if dest.get("topic_id"):
+        kw["reply_to"] = dest["topic_id"]       # sujet d'un groupe a sujets
+
+    async def _go(peer):
+        if files:
+            paths = [str(p) for p, _ in files]
+            cap = [caption] + [""] * (len(paths) - 1)
+            await asyncio.wait_for(c.send_file(
+                peer, paths if len(paths) > 1 else paths[0],
+                caption=cap if len(paths) > 1 else caption,
+                supports_streaming=True, **kw), timeout=300)
+        else:
+            await c.send_message(peer, caption, link_preview=True, **kw)
+
+    try:
+        try:
+            await _go(_input_peer(dest["peer"]))
+        except (PeerIdInvalidError, ChannelInvalidError, UserIdInvalidError, ChatIdInvalidError):
+            # Cle perimee ou abimee : on la relit dans les discussions, on la
+            # corrige dans les destinations, et on reessaie une fois.
+            fresh = await _refresh_peer(c, dest)
+            if not fresh:
+                raise ShareError(f"« {dest['label']} » est introuvable dans tes discussions Telegram : "
+                                 f"retire-la et ajoute-la de nouveau")
+            all_d = await destinations()
+            for d in all_d:
+                if d["id"] == dest["id"]:
+                    d["peer"] = fresh
+            await _set(K_DEST, json.dumps(all_d, ensure_ascii=False))
+            logger.info(f"[TG] destination {dest['label']} reparee")
+            await _go(_input_peer(fresh))
+    except ShareError:
+        raise
+    except asyncio.TimeoutError:
+        raise ShareError("Telegram n'a pas répondu à temps (envoi trop long ?)")
+    except Exception as e:
+        # Refus de Telegram (confidentialite, bloque, anti-spam...) : on montre
+        # la raison au lieu d'une erreur 500.
+        logger.warning(f"[TG] envoi vers {dest['label']} refuse : {type(e).__name__}: {e}")
+        raise ShareError(f"Telegram a refusé l'envoi vers « {dest['label']} » : {e}")
+
+
+async def send(kind: str, obj_id: int, destination_ids, message: str = "",
                tz_offset_min: Optional[int] = None) -> dict:
-    dest = next((d for d in await destinations() if d["id"] == destination_id), None)
-    if not dest:
+    """
+    Envoie a une ou plusieurs destinations. Medias et capture camera sont
+    prepares UNE fois (meme image pour tous). Un refus n'arrete pas les
+    autres : chacun a son resultat.
+    """
+    if isinstance(destination_ids, str):
+        destination_ids = [destination_ids]
+    known = {d["id"]: d for d in await destinations()}
+    dests = [known[i] for i in dict.fromkeys(destination_ids or []) if i in known]
+    if not dests:
         raise ShareError("Destination inconnue")
     share = await build_share(kind, obj_id, tz_offset_min)
     caption = render_caption(share, message)
+    results = []
     with tempfile.TemporaryDirectory() as tmp:
         files = await asyncio.to_thread(prepare_media, share["media"], Path(tmp))
         if share["live"]:
@@ -570,48 +647,14 @@ async def send(kind: str, obj_id: int, destination_id: str, message: str = "",
                 cam.write_bytes(jpg)
                 files.insert(0, (cam, False))
         async with _lock:
-            from telethon.errors import (PeerIdInvalidError, ChannelInvalidError,
-                                         UserIdInvalidError, ChatIdInvalidError)
             c = await _connected_client()
-            kw = {"parse_mode": "html"}
-            if dest.get("topic_id"):
-                kw["reply_to"] = dest["topic_id"]       # sujet d'un groupe a sujets
-
-            async def _go(peer):
-                if files:
-                    paths = [str(p) for p, _ in files]
-                    cap = [caption] + [""] * (len(paths) - 1)
-                    await asyncio.wait_for(c.send_file(
-                        peer, paths if len(paths) > 1 else paths[0],
-                        caption=cap if len(paths) > 1 else caption,
-                        supports_streaming=True, **kw), timeout=300)
-                else:
-                    await c.send_message(peer, caption, link_preview=True, **kw)
-
-            try:
+            for dest in dests:
                 try:
-                    await _go(_input_peer(dest["peer"]))
-                except (PeerIdInvalidError, ChannelInvalidError, UserIdInvalidError, ChatIdInvalidError):
-                    # Cle perimee ou abimee : on la relit dans les discussions,
-                    # on la corrige dans les destinations, et on reessaie une fois.
-                    fresh = await _refresh_peer(c, dest)
-                    if not fresh:
-                        raise ShareError(f"« {dest['label']} » est introuvable dans tes discussions Telegram : "
-                                         f"retire-la et ajoute-la de nouveau")
-                    all_d = await destinations()
-                    for d in all_d:
-                        if d["id"] == dest["id"]:
-                            d["peer"] = fresh
-                    await _set(K_DEST, json.dumps(all_d, ensure_ascii=False))
-                    logger.info(f"[TG] destination {dest['label']} reparee")
-                    await _go(_input_peer(fresh))
-            except ShareError:
-                raise
-            except asyncio.TimeoutError:
-                raise ShareError("Telegram n'a pas répondu à temps (envoi trop long ?)")
-            except Exception as e:
-                # Refus de Telegram (confidentialite, bloque, anti-spam, destination
-                # perimee...) : on montre la raison au lieu d'une erreur 500.
-                logger.warning(f"[TG] envoi vers {dest['label']} refuse : {type(e).__name__}: {e}")
-                raise ShareError(f"Telegram a refusé l'envoi vers « {dest['label']} » : {e}")
-    return {"ok": True, "media": len(files), "destination": dest["label"]}
+                    await _send_one(c, dest, files, caption)
+                    results.append({"id": dest["id"], "label": dest["label"], "ok": True})
+                except ShareError as e:
+                    results.append({"id": dest["id"], "label": dest["label"], "ok": False, "error": str(e)})
+    if not any(r["ok"] for r in results):
+        raise ShareError("\n".join(r["error"] for r in results))
+    return {"ok": all(r["ok"] for r in results), "media": len(files), "results": results,
+            "destination": ", ".join(r["label"] for r in results if r["ok"])}

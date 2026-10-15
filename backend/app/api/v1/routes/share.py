@@ -78,5 +78,5 @@ async def share_preview(kind: str, obj_id: int, message: str = "", tz: int | Non
 
 @router.post("/{kind}/{obj_id}")
 async def share_send(kind: str, obj_id: int, body: dict = Body({}), _: str = Depends(require_admin)):
-    return await _call(tg.send(_kind(kind), obj_id, body.get("destination_id", ""), body.get("message", ""),
-                               body.get("tz")))
+    ids = body.get("destination_ids") or ([body["destination_id"]] if body.get("destination_id") else [])
+    return await _call(tg.send(_kind(kind), obj_id, ids, body.get("message", ""), body.get("tz")))

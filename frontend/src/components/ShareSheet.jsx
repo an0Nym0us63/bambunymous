@@ -7,7 +7,8 @@ import { showAlert } from "../utils/dialog";
 // Partage Telegram d'une impression ou d'un groupe : choix de la destination,
 // message facultatif, et APERCU exact de ce qui partira (la legende vient du
 // serveur, la meme qu'a l'envoi). Rien ne part sans le bouton « Envoyer ».
-const LAST_DEST = "bn-share-dest";
+// Derniere selection de destinations (liste d'ids), pratique d'un partage a l'autre.
+const LAST_DEST = "bn-share-dests";
 // Decalage du fuseau du navigateur : l'heure de fin d'un en-cours est donnee
 // a l'heure locale, pas a celle du conteneur.
 const TZ = new Date().getTimezoneOffset();
@@ -15,7 +16,7 @@ const TZ = new Date().getTimezoneOffset();
 export default function ShareSheet({ kind, id, onClose }) {
   const [preview, setPreview] = useState(null);
   const [message, setMessage] = useState("");
-  const [dest, setDest] = useState("");
+  const [sel, setSel] = useState(null);         // ids coches (null tant que non initialise)
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
   const timer = useRef(null);
@@ -23,11 +24,12 @@ export default function ShareSheet({ kind, id, onClose }) {
   const load = (msg) => client.get(`/share/${kind}/${id}/preview`, { params: { message: msg, tz: TZ } })
     .then(r => {
       setPreview(r.data);
-      setDest(d => {
-        if (d) return d;
-        let last = null; try { last = localStorage.getItem(LAST_DEST); } catch { /* stockage indisponible */ }
+      setSel(cur => {
+        if (cur) return cur;
+        let last = []; try { last = JSON.parse(localStorage.getItem(LAST_DEST) || "[]"); } catch { /* stockage indisponible */ }
         const ids = r.data.destinations.map(x => x.id);
-        return ids.includes(last) ? last : (ids[0] || "");
+        const keep = (Array.isArray(last) ? last : []).filter(i => ids.includes(i));
+        return keep.length ? keep : ids.slice(0, 1);
       });
     })
     .catch(e => setPreview({ error: e.response?.data?.detail || e.message, destinations: [] }));
@@ -42,10 +44,13 @@ export default function ShareSheet({ kind, id, onClose }) {
   const send = async () => {
     setBusy(true);
     try {
-      const { data } = await client.post(`/share/${kind}/${id}`, { destination_id: dest, message, tz: TZ });
-      try { localStorage.setItem(LAST_DEST, dest); } catch { /* stockage indisponible */ }
+      const { data } = await client.post(`/share/${kind}/${id}`, { destination_ids: sel, message, tz: TZ });
+      try { localStorage.setItem(LAST_DEST, JSON.stringify(sel)); } catch { /* stockage indisponible */ }
       setDone(data);
-      setTimeout(onClose, 1400);
+      // Echec partiel : on le dit, et on laisse la fenetre ouverte pour le lire.
+      const ko = (data.results || []).filter(r => !r.ok);
+      if (ko.length) showAlert("Pas envoyé vers :\n" + ko.map(r => r.error).join("\n"));
+      else setTimeout(onClose, 1400);
     } catch (e) {
       showAlert("Envoi impossible : " + (e.response?.data?.detail || e.message));
     }
@@ -75,12 +80,24 @@ export default function ShareSheet({ kind, id, onClose }) {
             Paramètres › Général › Partage Telegram.
           </p>
         ) : (<>
-          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>Destination</label>
-          <select value={dest} onChange={e => setDest(e.target.value)}
-            style={{ width:"100%", background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10,
-              padding:"9px 12px", fontSize:13, color:"var(--text)", marginBottom:12 }}>
-            {dests.map(d => <option key={d.id} value={d.id}>{d.label}</option>)}
-          </select>
+          <label style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>
+            Destinations
+          </label>
+          <div style={{ display:"flex", flexDirection:"column", gap:4, marginBottom:12 }}>
+            {dests.map(d => {
+              const on = sel?.includes(d.id);
+              return (
+                <label key={d.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px",
+                  borderRadius:10, cursor:"pointer",
+                  background: on ? "rgba(34,158,217,0.10)" : "var(--surface2)",
+                  border: `1px solid ${on ? "rgba(34,158,217,0.45)" : "var(--border)"}` }}>
+                  <input type="checkbox" checked={!!on} style={{ accentColor:"#229ED9", width:16, height:16 }}
+                    onChange={() => setSel(s => on ? s.filter(x => x !== d.id) : [...(s || []), d.id])}/>
+                  <span style={{ fontSize:13, color:"var(--text)", fontWeight: on ? 600 : 400 }}>{d.label}</span>
+                </label>
+              );
+            })}
+          </div>
 
           <label style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>
             Message (facultatif)
@@ -111,12 +128,13 @@ export default function ShareSheet({ kind, id, onClose }) {
             {done ? "Fermer" : "Annuler"}
           </button>
           {dests.length > 0 && !preview?.error && (
-            <button onClick={send} disabled={busy || !dest || !!done}
+            <button onClick={send} disabled={busy || !sel?.length || !!done}
               style={{ flex:2, padding:10, borderRadius:12, border:"none", fontSize:13, fontWeight:700,
                 cursor: busy || done ? "default" : "pointer",
                 background: done ? "#22c55e" : busy ? "var(--surface2)" : "#229ED9",
                 color: busy && !done ? "var(--muted)" : "white" }}>
-              {done ? `✓ Envoyé · ${done.destination}` : busy ? "Envoi…" : "Envoyer"}
+              {done ? `✓ Envoyé · ${done.destination}` : busy ? "Envoi…"
+                : sel?.length > 1 ? `Envoyer à ${sel.length} destinations` : "Envoyer"}
             </button>
           )}
         </div>
