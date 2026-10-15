@@ -1614,16 +1614,14 @@ function FilamentCard({ f, onClick, extra = null }) {
           {(f.fila_type||f.material) && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.20)", color:"rgba(255,255,255,0.75)", whiteSpace:"nowrap", flexShrink:0 }}>{f.fila_type||f.material}</span>}
         </div>
       </div>
+      {/* `extra` (galerie : nombre d'impressions) REMPLACE le stock : les deux
+          cote a cote se chevauchaient, et la galerie n'a que faire des bobines. */}
       <span style={{ position:"absolute", bottom:6, left:8, fontSize:8, fontWeight:500, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", padding:"1px 7px", borderRadius:20 }}>
-        {f.active_spool_count>0 ? `${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "0 bobine"}
-        {f.active_spool_count>0 && f.remaining_weight_total_g > 0 && ` · ${fmtStock(f.remaining_weight_total_g)}`}
+        {extra != null ? extra : (<>
+          {f.active_spool_count>0 ? `${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "0 bobine"}
+          {f.active_spool_count>0 && f.remaining_weight_total_g > 0 && ` · ${fmtStock(f.remaining_weight_total_g)}`}
+        </>)}
       </span>
-      {extra != null && (
-        <span style={{ position:"absolute", bottom:6, right:8, fontSize:8, fontWeight:600,
-          background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.9)", padding:"1px 7px", borderRadius:20 }}>
-          {extra}
-        </span>
-      )}
     </div>
   );
 }
