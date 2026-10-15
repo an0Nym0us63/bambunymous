@@ -147,7 +147,7 @@ export default function TelegramSettings({ card, cardTitle }) {
             <div><label style={lbl}>Discussion</label>
               <select value={pick.chat} onChange={e => setPick({ chat:e.target.value, topic:"", label:"" })} style={inp}>
                 <option value="">— Choisir —</option>
-                {chats.map((c, i) => <option key={i} value={i}>{c.title} ({c.kind})</option>)}
+                {chats.map((c, i) => <option key={i} value={i}>{c.kind === "moi" ? c.title : `${c.title} (${c.kind})`}</option>)}
               </select></div>
             {chat?.topics.length > 0 && (
               <div><label style={lbl}>Sujet</label>

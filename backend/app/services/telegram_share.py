@@ -69,7 +69,7 @@ async def save_destinations(items: list[dict]) -> list[dict]:
     clean = []
     for d in items:
         peer = d.get("peer") or {}
-        if peer.get("type") not in ("channel", "chat") or not peer.get("id"):
+        if peer.get("type") not in ("channel", "chat", "user") or not peer.get("id"):
             raise ShareError("Destination invalide")
         clean.append({
             "id": d.get("id") or uuid.uuid4().hex[:8],
@@ -208,8 +208,12 @@ async def logout() -> None:
 
 # ── Discussions ─────────────────────────────────────────────────────────────
 async def list_chats() -> list[dict]:
-    """Groupes et canaux du compte, avec les sujets des groupes a sujets."""
-    from telethon.tl.types import Channel, Chat
+    """
+    Discussions du compte : groupes (avec leurs sujets), canaux, personnes,
+    et ses propres « Messages enregistres » (pratique pour un premier essai).
+    Groupes d'abord, puis personnes, chacun dans l'ordre des discussions.
+    """
+    from telethon.tl.types import Channel, Chat, User
     from telethon.tl.functions.channels import GetForumTopicsRequest
     async with _lock:
         c = await _connected_client()
@@ -222,9 +226,13 @@ async def list_chats() -> list[dict]:
             elif isinstance(e, Chat):
                 peer = {"type": "chat", "id": e.id, "access_hash": None}
                 kind = "groupe"
+            elif isinstance(e, User) and not e.deleted:
+                peer = {"type": "user", "id": e.id, "access_hash": e.access_hash}
+                kind = "moi" if e.is_self else ("bot" if e.bot else "personne")
             else:
                 continue
-            item = {"title": d.name, "kind": kind, "peer": peer, "topics": []}
+            title = "Messages enregistrés" if kind == "moi" else d.name
+            item = {"title": title, "kind": kind, "peer": peer, "topics": []}
             if getattr(e, "forum", False):
                 try:
                     r = await c(GetForumTopicsRequest(channel=e, offset_date=None, offset_id=0,
@@ -234,13 +242,16 @@ async def list_chats() -> list[dict]:
                 except Exception as ex:
                     logger.info(f"[TG] sujets de {d.name} : {ex}")
             out.append(item)
-    return out
+    order = {"moi": 0, "groupe": 1, "canal": 2, "personne": 3, "bot": 4}
+    return sorted(out, key=lambda c: order[c["kind"]])    # tri stable : l'ordre des discussions reste
 
 
 def _input_peer(peer: dict):
-    from telethon.tl.types import InputPeerChannel, InputPeerChat
+    from telethon.tl.types import InputPeerChannel, InputPeerChat, InputPeerUser
     if peer["type"] == "channel":
         return InputPeerChannel(peer["id"], peer["access_hash"])
+    if peer["type"] == "user":
+        return InputPeerUser(peer["id"], peer["access_hash"])
     return InputPeerChat(peer["id"])
 
 
