@@ -70,7 +70,7 @@ async def share_preview(kind: str, obj_id: int, message: str = "", tz: int | Non
                         _: str = Depends(require_admin)):
     """Exactement ce qui partira : la legende et les medias."""
     share = await _call(tg.build_share(_kind(kind), obj_id, tz))
-    return {"caption_html": tg.render_caption(share, message),
+    return {"title": share["title"], "caption_html": tg.render_caption(share, message),
             "media": (["camera"] if share["live"] else []) + [p.name for p in share["media"]],
             "live": bool(share["live"]),
             "destinations": [{"id": d["id"], "label": d["label"]} for d in await tg.destinations()]}

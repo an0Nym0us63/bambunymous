@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Send } from "lucide-react";
 import client from "../api/client";
-import { showAlert } from "../utils/dialog";
+import { useShares } from "../store/shares";
 
 // Partage Telegram d'une impression ou d'un groupe : choix de la destination,
 // message facultatif, et APERCU exact de ce qui partira (la legende vient du
@@ -41,20 +41,13 @@ export default function ShareSheet({ kind, id, onClose }) {
     return () => clearTimeout(timer.current);
   }, [message]);
 
-  const send = async () => {
-    setBusy(true);
-    try {
-      const { data } = await client.post(`/share/${kind}/${id}`, { destination_ids: sel, message, tz: TZ });
-      try { localStorage.setItem(LAST_DEST, JSON.stringify(sel)); } catch { /* stockage indisponible */ }
-      setDone(data);
-      // Echec partiel : on le dit, et on laisse la fenetre ouverte pour le lire.
-      const ko = (data.results || []).filter(r => !r.ok);
-      if (ko.length) showAlert("Pas envoyé vers :\n" + ko.map(r => r.error).join("\n"));
-      else setTimeout(onClose, 1400);
-    } catch (e) {
-      showAlert("Envoi impossible : " + (e.response?.data?.detail || e.message));
-    }
-    setBusy(false);
+  // L'envoi part en arriere-plan (store global) : la fenetre se ferme tout de
+  // suite, la pastille en haut de l'ecran suit l'envoi sur toutes les pages.
+  const send = () => {
+    useShares.getState().start({ kind, id, title: preview?.title || "Partage",
+      destinationIds: sel, message, tz: TZ });
+    try { localStorage.setItem(LAST_DEST, JSON.stringify(sel)); } catch { /* stockage indisponible */ }
+    onClose();
   };
 
   const dests = preview?.destinations || [];

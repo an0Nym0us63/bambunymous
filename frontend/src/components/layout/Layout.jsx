@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { Home, Settings, Package, History, ShoppingBag, BarChart2 } from "lucide-react";
 import UserMenu from "../UserMenu";
+import ShareProgress from "../ShareProgress";
 
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil"    },
@@ -188,6 +189,7 @@ export default function Layout() {
         </header>
 
         <main className="page-content" style={S.page}><Outlet /></main>
+        <ShareProgress/>
 
         {/* Bottom nav mobile */}
         <nav className="show-mobile" style={S.bottomNav}>
