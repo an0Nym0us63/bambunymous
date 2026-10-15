@@ -5,7 +5,7 @@ import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
 import { useNativeScan } from "../hooks/useNativeScan";
 import HeaderAction from "../components/HeaderAction";
-import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag } from "lucide-react";
+import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag, Sun } from "lucide-react";
 import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
@@ -417,11 +417,17 @@ function DryEditRow({ spoolId, current, aSecher, onUpdated }) {
             {current ? current.slice(0, 10) : "jamais"}{aSecher ? " · à sécher" : ""}
           </span>
           <AdminOnly>
-            {/* Le cas courant d'un coup : « je viens de la secher ». */}
-            <button onClick={() => save(today())} disabled={saving} title="Marquer séchée aujourd'hui"
-              style={{ ...small, padding:"3px 8px", fontSize:11, background:"rgba(14,165,233,0.12)",
-                border:"1px solid rgba(14,165,233,0.35)", color:"#0EA5E9" }}>
-              {saving ? "…" : "Aujourd'hui"}</button>
+            {/* Le cas courant : « je viens de la secher ». Icone de sechage (la
+                meme que le bandeau de l'AMS) et confirmation : un libelle
+                « Aujourd'hui » se lisait comme une date, pas comme une action. */}
+            <button disabled={saving} title="Je viens de la sécher"
+              onClick={async () => {
+                if (await showConfirm("Marquer cette bobine comme séchée aujourd'hui ?", { confirmLabel: "Séchée" }))
+                  save(today());
+              }}
+              style={{ background:"none", border:"none", cursor:"pointer", color:"#f59e0b", padding:2, display:"flex" }}>
+              <Sun size={14}/>
+            </button>
             <button onClick={() => { setVal(current?.slice(0, 10) || today()); setEditing(true); }}
               title="Modifier la date de séchage"
               style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2, display:"flex" }}
