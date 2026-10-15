@@ -11,6 +11,7 @@ import { useTheme } from "../useTheme";
 import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
          ROLE_OPTIONS, ROLE_LABEL, ROLE_BADGE } from "../store/auth";
 import AdminOnly from "../components/AdminOnly";
+import TelegramSettings from "../components/TelegramSettings";
 import { useTrackDetail } from "../utils/track";
 import { amsName, slotCount, lireDisposition, dispositionParDefaut, MAX_LIGNES, MAX_COLONNES } from "../utils/ams";
 
@@ -1749,6 +1750,7 @@ export default function Settings() {
           {saved ? "Sauvegardé ✓" : "Sauvegarder"}
         </button>
       </form>
+      <div style={{ marginTop:16 }}><TelegramSettings card={card} cardTitle={cardTitle}/></div>
       </AdminOnly>
       )}
 

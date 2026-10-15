@@ -5,6 +5,7 @@ import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
+import ShareSheet from "../components/ShareSheet";
 import { useIsAdmin } from "../store/auth";
 import { useTrackDetail } from "../utils/track";
 import GalleryCompare from "../components/GalleryCompare";
@@ -681,6 +682,7 @@ function PrintEditSheet({ p, onClose, onSaved }) {
 
 export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
+  const [sharing, setSharing] = useState(false);   // partage Telegram
   const [ungrouped, setUngrouped] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [userPhotos, setUserPhotos] = useState([]);
@@ -1013,10 +1015,10 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           )}
 
           {/* Actions */}
-          <div style={{ display:"flex", gap:8, marginTop:8 }}>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginTop:8 }}>
             <AdminOnly>
             <button onClick={()=>setEditMode(true)}
-              style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid var(--border)",
+              style={{ flex:"1 1 0", minWidth:96, padding:"11px", borderRadius:12, border:"1px solid var(--border)",
                 background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
               ✏️ Éditer
             </button>
@@ -1024,12 +1026,18 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
             <button onClick={() => {
               setShowDeleteConfirm(true);
-            }} style={{ flex:1, padding:"11px", borderRadius:12, border:"1px solid rgba(239,68,68,0.3)",
+            }} style={{ flex:"1 1 0", minWidth:96, padding:"11px", borderRadius:12, border:"1px solid rgba(239,68,68,0.3)",
               background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:13, fontWeight:700,
               cursor:"pointer" }}>🗑 Supprimer</button>
+            <button onClick={() => setSharing(true)} title="Partager sur Telegram"
+              style={{ flex:"1 1 0", minWidth:96, padding:"11px", borderRadius:12,
+                border:"1px solid rgba(34,158,217,0.35)", background:"rgba(34,158,217,0.08)",
+                color:"#229ED9", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+              📣 Partager
+            </button>
             </AdminOnly>
             <button onClick={onClose}
-              style={{ flex:2, padding:"11px", borderRadius:12, border:"none",
+              style={{ flex:"2 1 0", minWidth:96, padding:"11px", borderRadius:12, border:"none",
                 background:"#3b82f6", color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>
               ✕
             </button>
@@ -1037,6 +1045,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         </div>
       </div>
     </div>
+    {sharing && <ShareSheet kind="print" id={p.id} onClose={() => setSharing(false)}/>}
     {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} colorsArray={spoolPicker.colorsArray} multicolorType={spoolPicker.multicolorType} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{
       // Rechargeait toute l'application (bundle re-telecharge, etat perdu).
       setSpoolPicker(null);
@@ -1108,6 +1117,7 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
 export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
   useTrackDetail(`Fiche groupe · ${name || "#" + groupId}`);
   const [localPrints, setLocalPrints] = useState([]);
+  const [sharing, setSharing] = useState(false);   // partage Telegram
   const [nbItems, setNbItems]         = useState(nbItemsProp || 1);
   const [editNb, setEditNb]           = useState(false);
   const [nbVal, setNbVal]             = useState(String(nbItemsProp || 1));
@@ -1455,6 +1465,12 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                 color:"#a78bfa", fontSize:12, fontWeight:700, cursor:"pointer" }}>
               📤 Dégrouper
             </button>
+            <button onClick={() => setSharing(true)} title="Partager sur Telegram"
+              style={{ flex:"1 1 0", minWidth:96, padding:"10px", borderRadius:12,
+                border:"1px solid rgba(34,158,217,0.35)", background:"rgba(34,158,217,0.08)",
+                color:"#229ED9", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+              📣 Partager
+            </button>
             </AdminOnly>
             <button onClick={onClose}
               style={{ flex:"2 1 0", minWidth:96, padding:"10px", borderRadius:12, border:"none",
@@ -1465,6 +1481,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
         </div>
       </div>
     </div>
+    {sharing && <ShareSheet kind="group" id={groupId} onClose={() => setSharing(false)}/>}
     {unmappingG && <UnmapFilamentConfirm f={unmappingG} printId={unmappingG.print_id} onClose={()=>setUnmappingG(null)} onDone={()=>{ setUnmappingG(null); onUpdated?.(); }}/>}
     {/* Ancien PhotoDeleteConfirm retire : il coexistait avec la confirmation en
         deux temps sur la pastille (plus haut) et se declenchait en meme temps.

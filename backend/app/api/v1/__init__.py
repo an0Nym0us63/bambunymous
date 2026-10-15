@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .routes import attention, rfid, auth, users, printer, settings, filaments, import_db, logs, camera, prints, import_zip, objects, import_spoolnymous
+from .routes import attention, rfid, auth, users, printer, settings, filaments, import_db, logs, camera, prints, import_zip, objects, import_spoolnymous, share
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth.router,      prefix="/auth",      tags=["auth"])
@@ -15,5 +15,6 @@ router.include_router(import_zip.router, prefix="/import-zip",  tags=["import-zi
 router.include_router(objects.router,    prefix="/objects",     tags=["objects"])
 router.include_router(attention.router,  prefix="/attention",   tags=["attention"])
 router.include_router(rfid.router,       prefix="/rfid",        tags=["rfid"])
+router.include_router(share.router,      prefix="/share",       tags=["share"])
 
 router.include_router(import_spoolnymous.router)

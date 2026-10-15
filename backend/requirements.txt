@@ -17,6 +17,8 @@ deep-translator==1.11.4
 reportlab==4.2.5
 qrcode==7.4.2
 pycurl==7.45.3
+# Partage Telegram en son nom (API utilisateur officielle, MTProto).
+telethon==1.36.0
 
 aiohttp>=3.9.0
 aiofiles>=23.0.0
