@@ -1429,31 +1429,6 @@ async def map_tray_suggest(
     return {"spools": result}
 
 
-async def _remember_slot(body: dict, tag_uid: str, prof: str, color: str, spool_id: int) -> None:
-    """
-    Sans RFID, le choix fait a la main ne tiendrait pas : au matching suivant,
-    profil + couleur retomberaient sur la meme (mauvaise) bobine. On le
-    memorise pour l'emplacement tant que le meme filament y reste.
-    """
-    from ....services.slot_override import set_override, signature, has_rfid
-    from ....core.mqtt import get_state
-    if has_rfid(tag_uid) or body.get("ams_id") is None or body.get("tray_id") is None:
-        return
-    ams_id, tray_id = int(body["ams_id"]), int(body["tray_id"])
-    # Signature lue sur l'emplacement EN DIRECT, comme le fait la detection : la
-    # couleur renvoyee par l'ecran est deja retouchee (t.color) et ne
-    # correspondrait pas.
-    tray = None
-    try:
-        a = next((a for a in (get_state().ams_list or []) if a.id == ams_id), None)
-        tray = next((t for t in (a.trays if a else []) if t.id == tray_id), None)
-    except Exception:
-        pass
-    if tray is not None:
-        prof, color = getattr(tray, "tray_info_idx", "") or "", getattr(tray, "raw_color", "") or color
-    await set_override(ams_id, tray_id, signature(prof, color), spool_id)
-
-
 @router.post("/map-tray/link")
 async def map_tray_link(body: dict, _: str = Depends(get_current_user)):
     """
@@ -1469,7 +1444,6 @@ async def map_tray_link(body: dict, _: str = Depends(get_current_user)):
 
     if not spool_id:
         raise HTTPException(400, "spool_id requis")
-    await _remember_slot(body, tag_uid, prof, color_hex, int(spool_id))
 
     async with AsyncSessionLocal() as db:
         res = await db.execute(
@@ -1608,7 +1582,6 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
             fil.to_order = False
 
         await db.commit()
-        await _remember_slot(body, tag_uid, prof, color, spool.id)
         await db.refresh(spool)
         await db.refresh(spool.filament)
         # Construire la réponse DANS la session

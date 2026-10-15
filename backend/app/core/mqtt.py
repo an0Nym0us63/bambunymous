@@ -560,9 +560,6 @@ class MQTTManager:
 
                     # Stocker tray_info_idx sur le tray pour l'API
                     t.tray_info_idx = _tray_info
-                    # Couleur brute du MQTT : t.color est retouche (rstrip "FF"), la
-                    # signature d'une association manuelle se calcule sur la brute.
-                    t.raw_color = _tray_color
                     t.cols  = tr.get("cols", []) or []
                     t.ctype = str(tr.get("ctype", "") or "")
 
@@ -609,17 +606,7 @@ class MQTTManager:
                                 lp = _mio.new_event_loop()
                                 async def _go():
                                     from ..services.spool_matcher import match_spool
-                                    from ..services.slot_override import get_override, signature, has_rfid
-                                    spool_id, mode = None, None
-                                    # Sans RFID, une association faite a la main pour cet
-                                    # emplacement (meme filament present) prime sur la
-                                    # detection par profil + couleur.
-                                    if not has_rfid(_tag):
-                                        _ov = await get_override(_ams_id, _tray_slot, signature(_tinfo, _tc))
-                                        if _ov:
-                                            spool_id, mode = _ov, "linked"
-                                    if spool_id is None:
-                                        spool_id, mode = await match_spool(_tag, _tinfo, _tc)
+                                    spool_id, mode = await match_spool(_tag, _tinfo, _tc)
                                     _MATCH_CACHE[_key] = spool_id if spool_id else -1
                                     _CACHE_TS[_key] = __import__('time').time()
                                     # mode est mis en cache même sans spool_id (ex: "notfound")
