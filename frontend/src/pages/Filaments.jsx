@@ -371,6 +371,71 @@ function WeightEditRow({ spoolId, current, onUpdated }) {
 
 // Edition du tag NFC d'une bobine. Utile quand une bobine a ete mappee sur le
 // mauvais tag, ou pour saisir/corriger l'UID a la main.
+// Date du dernier sechage, modifiable : l'AMS ne la pose que s'il seche la
+// bobine lui-meme ; un sechage au four ou sans inserer la bobine se saisit ici.
+function DryEditRow({ spoolId, current, aSecher, onUpdated }) {
+  const today = () => new Date().toISOString().slice(0, 10);
+  const [editing, setEditing] = useState(false);
+  const [val, setVal] = useState(current?.slice(0, 10) || today());
+  const [saving, setSaving] = useState(false);
+
+  const save = async (day) => {
+    setSaving(true);
+    try {
+      // Midi : une date seule a minuit UTC tomberait la veille selon le fuseau.
+      await client.patch(`/filaments/spools/${spoolId}`, { last_dried_at: day ? `${day}T12:00:00` : null });
+      onUpdated?.();
+      setEditing(false);
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    finally { setSaving(false); }
+  };
+
+  const small = { padding:"4px 10px", borderRadius:7, fontSize:12, fontWeight:700, cursor:"pointer" };
+  return (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
+      padding:"8px 0", borderBottom:"1px solid var(--border)", gap:8, flexWrap:"wrap" }}>
+      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>Dernier séchage</span>
+      {editing ? (
+        <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap", justifyContent:"flex-end" }}>
+          <input type="date" value={val} max={today()} autoFocus onChange={e => setVal(e.target.value)}
+            style={{ padding:"4px 8px", borderRadius:7, fontSize:12, background:"var(--surface2)",
+              border:"1px solid var(--border)", color:"var(--text)", outline:"none" }}/>
+          <button onClick={() => save(val)} disabled={saving || !val}
+            style={{ ...small, background:"#3b82f6", color:"white", border:"none" }}>{saving ? "…" : "OK"}</button>
+          {current && (
+            <button onClick={() => save(null)} disabled={saving} title="Remettre à « jamais séchée »"
+              style={{ ...small, background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--muted)" }}>
+              Effacer</button>
+          )}
+          <button onClick={() => setEditing(false)}
+            style={{ ...small, fontWeight:400, background:"var(--surface2)", border:"1px solid var(--border)",
+              color:"var(--muted)" }}>✕</button>
+        </div>
+      ) : (
+        <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+          <span style={{ fontSize:13, fontWeight:600, color: aSecher ? "#0EA5E9" : "var(--text)" }}>
+            {current ? current.slice(0, 10) : "jamais"}{aSecher ? " · à sécher" : ""}
+          </span>
+          <AdminOnly>
+            {/* Le cas courant d'un coup : « je viens de la secher ». */}
+            <button onClick={() => save(today())} disabled={saving} title="Marquer séchée aujourd'hui"
+              style={{ ...small, padding:"3px 8px", fontSize:11, background:"rgba(14,165,233,0.12)",
+                border:"1px solid rgba(14,165,233,0.35)", color:"#0EA5E9" }}>
+              {saving ? "…" : "Aujourd'hui"}</button>
+            <button onClick={() => { setVal(current?.slice(0, 10) || today()); setEditing(true); }}
+              title="Modifier la date de séchage"
+              style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2, display:"flex" }}
+              onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
+              onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
+              <Pencil size={13}/>
+            </button>
+          </AdminOnly>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TagEditRow({ spoolId, current, onUpdated }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(current || "");
@@ -649,9 +714,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Tray AMS"       value={spool.ams_tray}/>
           <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
           <Row label="Dernière util." value={spool.last_used_at?.slice(0,10)}/>
-          <Row label="Dernier séchage" value={aSecher
-            ? `${spool.last_dried_at?.slice(0,10) || "jamais"} · à sécher`
-            : spool.last_dried_at?.slice(0,10)} accent={aSecher ? "#0EA5E9" : undefined}/>
+          <DryEditRow spoolId={spool.id} current={spool.last_dried_at} aSecher={aSecher} onUpdated={onClose}/>
           <Row label="Commentaire"    value={spool.comment}/>
 
           {/* ── Filament ── */}

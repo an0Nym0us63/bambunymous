@@ -4,7 +4,7 @@ from sqlalchemy import select, func, or_, update
 from sqlalchemy.orm import selectinload
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 
 from ....core.colors import buckets_for, all_buckets, apply_alpha
@@ -174,6 +174,9 @@ class SpoolUpdate(BaseModel):
     tag_number: Optional[str] = None
     comment: Optional[str] = None
     archived: Optional[bool] = None
+    # Sechage fait hors de l'AMS (four, dessiccateur) ou sans inserer la bobine :
+    # la detection automatique ne le voit pas, on le saisit. null = jamais sechee.
+    last_dried_at: Optional[datetime] = None
 
 
 # ── Filaments ─────────────────────────────────────────────────────────────────
@@ -890,6 +893,9 @@ async def create_spool(
     # spool_location ; l'utilisateur n'y touche pas. Defaut "Tiroir" a la creation.
     if not data.get("location"):
         data["location"] = "Tiroir"
+    # Une bobine neuve arrive seche (sous vide) : son ajout vaut sechage, sinon
+    # elle partirait aussitot dans l'alerte « a secher ».
+    data["last_dried_at"] = datetime.utcnow()
     s = Spool(**data)
     db.add(s)
 
@@ -932,6 +938,15 @@ async def update_spool(
     for k in ("tag_number", "location", "comment"):
         if k in data and isinstance(data[k], str) and not data[k].strip():
             data[k] = None
+
+    if data.get("last_dried_at") is not None:
+        d = data["last_dried_at"]
+        if d.tzinfo is not None:                     # stocke en UTC naif, comme l'AMS
+            from datetime import timezone as _tz
+            d = d.astimezone(_tz.utc).replace(tzinfo=None)
+        if d > datetime.utcnow() + timedelta(hours=1):
+            raise HTTPException(400, "La date de séchage ne peut pas être dans le futur")
+        data["last_dried_at"] = d
 
     changed_price = "price_override" in data
     for k, v in data.items():
@@ -1552,6 +1567,7 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
             filament_id=fil.id,
             tag_number=tag_uid or None,
             remaining_weight_g=weight,
+            last_dried_at=datetime.utcnow(),     # neuve = seche (cf. create_spool)
         )
         db.add(spool)
 

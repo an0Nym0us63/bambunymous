@@ -1,6 +1,7 @@
 """Scan RFID des bobines Bambu — API."""
 import json
 import logging
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -404,6 +405,7 @@ async def rfid_create(
         # si la bobine est vue dans un AMS. L'utilisateur n'y touche jamais.
         location="Tiroir",
         comment=body.comment,
+        last_dried_at=datetime.utcnow(),     # neuve = seche (cf. filaments.create_spool)
     )
     db.add(spool)
     await db.commit()
