@@ -511,8 +511,12 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
                 g0, c0 = fil.get(key, (0, None))
                 fil[key] = (g0 + (u.grams_used or 0), c0 or col)
 
-    duration = sum((p.duration_seconds or 0) for p in prints)
-    weight = sum((p.total_weight_g or 0) for p in prints)
+    # Memes replis que la fiche (Prints.jsx) pour qu'impression seule et groupe
+    # disent la meme chose : duree reelle, sinon l'estimation (en cours,
+    # import) ; poids enregistre, sinon la somme des filaments utilises.
+    duration = sum((p.duration_seconds or p.estimated_seconds or 0) for p in prints)
+    estimated = any(not p.duration_seconds and p.estimated_seconds for p in prints)
+    weight = sum((p.total_weight_g or sum((u.grams_used or 0) for u in p.filament_usage)) for p in prints)
     links = list(dict.fromkeys(filter(None, (_makerworld(p.design_id) for p in prints))))
     dates = [p.print_date for p in prints if p.print_date]
 
@@ -522,7 +526,7 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
     if items > 1:
         stats.append(f"🧩 {items} pièces")
     if _dur(duration):
-        stats.append(f"⏱ {_dur(duration)}")
+        stats.append(f"⏱ {'≈ ' if estimated else ''}{_dur(duration)}")
     if _weight(weight):
         stats.append(f"⚖️ {_weight(weight)}")
     if dates:
