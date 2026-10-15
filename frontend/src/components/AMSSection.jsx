@@ -100,7 +100,7 @@ const SWATCH_TITLE = "Pas d'échantillon pour ce filament : il est en place, c'e
 // l'alerte) : elle est dans l'AMS, on peut la secher sur place.
 const aSecher = (tray, info) => !isEmptyTray(tray) && info?.needs_drying === true;
 const DRY_COLOR = "#0EA5E9";
-const DRY_TITLE = "Bobine pas séchée depuis plus de 6 mois : elle est dans l'AMS, c'est le moment de la sécher";
+const DRY_TITLE = "Bobine jamais séchée ou pas depuis plus de 6 mois : elle est dans l'AMS, c'est le moment de la sécher";
 const fmtStock = (g) => g >= 1000 ? `${(g / 1000).toFixed(2).replace(".", ",")} kg` : `${Math.round(g)} g`;
 
 // Pastille ronde d'alerte sur la tuile compacte.
@@ -132,15 +132,15 @@ function ColorPill({ tray, spoolInfo, active }) {
           conservait parfois le dernier match_mode connu, laissant une pastille
           grise/verte "a verifier" sur du vide. La grande vue filtrait deja sur
           !empty, pas la tuile compacte. */}
-      {/* Detection en haut a gauche, alertes en bas a droite : coins opposes,
+      {/* Detection en haut a droite, alertes en bas a gauche : coins opposes,
           rien ne se chevauche meme avec deux alertes sur une pastille etroite. */}
       {tray.match_mode && !isEmpty && (
-        <span style={{ position:"absolute", top:1, left:3, lineHeight:1 }}>
+        <span style={{ position:"absolute", top:1, right:3, lineHeight:1 }}>
           <MatchIcon mode={tray.match_mode} size={8}/>
         </span>
       )}
       {(sansEchantillon(tray, spoolInfo) || aSecher(tray, spoolInfo)) && (
-        <span style={{ position:"absolute", bottom:2, right:2, display:"flex", gap:2 }}>
+        <span style={{ position:"absolute", bottom:2, left:2, display:"flex", gap:2 }}>
           {sansEchantillon(tray, spoolInfo) && <PillBadge color={SWATCH_COLOR} title={SWATCH_TITLE} Icon={Palette}/>}
           {aSecher(tray, spoolInfo) && <PillBadge color={DRY_COLOR} title={DRY_TITLE} Icon={Droplets}/>}
         </span>

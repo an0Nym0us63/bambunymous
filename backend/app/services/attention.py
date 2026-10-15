@@ -98,25 +98,26 @@ DRY_DAYS = 180
 
 
 def dry_reference(spool) -> Optional[datetime]:
-    """
-    Depuis quand la bobine prend l'humidite : son dernier sechage, sinon sa
-    premiere utilisation (la bobine a ete ouverte). Une bobine jamais utilisee
-    est supposee encore sous vide : pas de reference, pas d'alerte.
-    """
-    return getattr(spool, "last_dried_at", None) or getattr(spool, "first_used_at", None)
-
-
-def needs_drying(spool, now: Optional[datetime] = None) -> bool:
-    """Pas sechee depuis plus de DRY_DAYS (meme regle pour l'alerte et l'AMS)."""
-    ref = dry_reference(spool)
-    if ref is None or getattr(spool, "archived", False):
-        return False
+    """Dernier sechage de la bobine, None si elle n'a jamais ete sechee."""
+    ref = getattr(spool, "last_dried_at", None)
     if isinstance(ref, str):        # colonne ajoutee en TEXT par la migration
         try:
             ref = datetime.fromisoformat(ref)
         except ValueError:
-            return False
-    return ref < (now or datetime.utcnow()) - timedelta(days=DRY_DAYS)
+            return None
+    return ref
+
+
+def needs_drying(spool, now: Optional[datetime] = None) -> bool:
+    """
+    A secher : jamais sechee (pas de date), ou pas depuis plus de DRY_DAYS.
+    Une bobine sans date de sechage n'est pas presumee bonne. Meme regle pour
+    l'alerte et pour l'AMS ; les bobines archivees ne comptent pas.
+    """
+    if getattr(spool, "archived", False):
+        return False
+    ref = dry_reference(spool)
+    return ref is None or ref < (now or datetime.utcnow()) - timedelta(days=DRY_DAYS)
 
 
 # ── Registre ───────────────────────────────────────────────────────────────
@@ -519,19 +520,18 @@ async def _swatches_without_label(db) -> list[Alert]:
     ]
 
 
-@check("spool_not_dried", f"Bobines pas séchées depuis {DRY_DAYS // 30} mois", "💧",
+@check("spool_not_dried", f"Bobines à sécher (jamais ou plus de {DRY_DAYS // 30} mois)", "💧",
        shown=5, random_sample=False)
 async def _spools_not_dried(db) -> list[Alert]:
     """
-    Bobine ouverte qui n'a pas ete sechee depuis plus de DRY_DAYS (ou jamais
-    depuis sa premiere utilisation). Par bobine : le sechage se fait bobine par
-    bobine, dans l'AMS. La plus ancienne en premier.
+    Bobine jamais sechee, ou pas depuis plus de DRY_DAYS. Par bobine : le
+    sechage se fait bobine par bobine, dans l'AMS. Les jamais sechees en
+    premier, puis la plus ancienne.
     """
     rows = (await db.execute(
         select(Spool, Filament)
         .join(Filament, Filament.id == Spool.filament_id)
-        .where(Spool.archived.is_(False),
-               or_(Spool.last_dried_at.isnot(None), Spool.first_used_at.isnot(None)))
+        .where(Spool.archived.is_(False))
     )).all()
     now = datetime.utcnow()
     out = []
@@ -539,16 +539,14 @@ async def _spools_not_dried(db) -> list[Alert]:
         if not needs_drying(s, now):
             continue
         ref = dry_reference(s)
-        if isinstance(ref, str):
-            ref = datetime.fromisoformat(ref)
-        days = (now - ref).days
+        days = (now - ref).days if ref else None
         out.append(Alert(
             key=f"spool_not_dried:spool:{s.id}",
             category="spool_not_dried",
             title=_fil_title(f),
-            detail=f"Bobine #{s.id}" + ("" if s.last_dried_at else " · jamais séchée"),
-            value=f"{days // 30} mois",
-            rank=-days,                     # la plus ancienne en premier
+            detail=f"Bobine #{s.id}",
+            value=f"{days // 30} mois" if ref else "jamais séchée",
+            rank=-days if ref else float("-inf"),   # jamais sechees, puis la plus ancienne
             severity="warn",
             link=f"/filaments?id={f.id}",
             entity="spool", entity_id=s.id, filament_id=f.id,

@@ -554,11 +554,10 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   // Stock du filament : cette bobine (si active) + les autres actives.
   const stockFil = spool.sibling_weight_g != null
     ? (spool.archived ? 0 : (spool.remaining_weight_g || 0)) + spool.sibling_weight_g : null;
-  // Meme regle que l'alerte du serveur : pas sechee depuis 6 mois (depuis
-  // sa premiere utilisation si jamais sechee ; jamais utilisee = sous vide).
-  const refSechage = spool.last_dried_at || spool.first_used_at;
-  const aSecher = !spool.archived && !!refSechage
-    && (Date.now() - new Date(refSechage).getTime()) > 180 * 86400000;
+  // Meme regle que l'alerte du serveur : jamais sechee (pas de date) ou pas
+  // depuis plus de 6 mois. Sans date, la bobine n'est pas presumee bonne.
+  const aSecher = !spool.archived && (!spool.last_dried_at
+    || (Date.now() - new Date(spool.last_dried_at).getTime()) > 180 * 86400000);
 
   const Row = ({ label, value, mono, accent }) => (value == null || value === "") ? null : (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
