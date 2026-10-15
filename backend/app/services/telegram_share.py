@@ -497,7 +497,9 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
                 select(Spool.id, Filament).join(Filament, Filament.id == Spool.filament_id)
                 .where(Spool.id.in_(spool_ids))
             )).all()
-            names = {sid: (f"{f.translated_name or f.name} ({f.fila_type or f.material})", f.color)
+            names = {sid: (f"{f.translated_name or f.name} ("
+                           + " · ".join(filter(None, [f.manufacturer, f.fila_type or f.material])) + ")",
+                           f.color)
                      for sid, f in rows}
         fil = {}
         for p in prints:
