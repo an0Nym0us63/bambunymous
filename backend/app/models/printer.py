@@ -18,6 +18,7 @@ class AMSTray:
     uuid: str = ""
     tag_uid: str = ""
     tray_info_idx: str = ""
+    raw_color: str = ""        # tray_color MQTT brut (color est retouche)
     empty: bool = False
     drying_temp: int = 0
     drying_time: int = 0

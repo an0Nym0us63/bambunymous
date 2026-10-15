@@ -697,7 +697,7 @@ function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, act
           isOnHead={selectedHotend.onHead}
           headSlot={selectedHotend.onHead ? headSlot : null}/>
       )}
-      {selectedTray && <TrayBottomSheet tray={selectedTray.tray} amsLabel={selectedTray.amsLabel}
+      {selectedTray && <TrayBottomSheet tray={selectedTray.tray} amsId={selectedTray.amsId} amsLabel={selectedTray.amsLabel}
         slotNo={selectedTray.slotNo} onClose={()=>setSelectedTray(null)}/>}
     </div>
   );

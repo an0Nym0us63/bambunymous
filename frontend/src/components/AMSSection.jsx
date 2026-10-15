@@ -157,6 +157,7 @@ function MatchIcon({ mode, size = 10 }) {
     auto:     { symbol: "◈", color: "#f59e0b", title: "Reconnu automatiquement (profil + couleur)" },
     notfound: { symbol: "⚠", color: "#ef4444", title: "Filament identifié par l'imprimante mais introuvable en base" },
     manual:   { symbol: "◇", color: "#94a3b8", title: "Non identifié" },
+    linked:   { symbol: "◆", color: "#8b5cf6", title: "Associée à la main" },
   }[mode];
   if (!cfg) return null;
   return (
@@ -426,7 +427,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
             label={slotLabel(ams.id, t.id)}
             activeAmsId={activeAmsId} activeTrayId={activeTrayId}
             spoolInfo={getInfo(t)}
-            onClick={()=>onTrayClick&&onTrayClick({tray:t,amsLabel:amsName(ams.id),
+            onClick={()=>onTrayClick&&onTrayClick({tray:t,amsId:ams.id,amsLabel:amsName(ams.id),
               slotNo:traySlotNo(ams, t)})}
           />
         ))}
@@ -443,9 +444,10 @@ const MATCH_LABEL = {
   auto:     { text:"Auto",         color:"#f59e0b" },
   notfound: { text:"Introuvable",  color:"#ef4444" },
   manual:   { text:"Manuel",       color:"#94a3b8" },
+  linked:   { text:"Associée à la main", color:"#8b5cf6" },
 };
 
-function TrayBottomSheet({ tray, amsLabel, slotNo, onClose }) {
+function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
   const [spoolSheet, setSpoolSheet] = React.useState(null);
   if (!tray) return null;
   const color  = hexDisplay(tray.color);
@@ -536,11 +538,14 @@ function TrayBottomSheet({ tray, amsLabel, slotNo, onClose }) {
                     </span>
                   )}
                 </span>
-                {tray.match_mode === "notfound" && (
+                {/* Tout ce qui n'est pas du RFID peut se tromper : une detection
+                    « auto » fausse se corrige ici, et le choix est retenu pour
+                    l'emplacement tant que le meme filament y reste. */}
+                {tray.match_mode && tray.match_mode !== "rfid" && (
                   <AdminOnly><button onClick={() => setMapOpen(true)}
                     style={{ marginLeft:"auto", padding:"5px 10px", borderRadius:8, fontSize:11,
                       fontWeight:700, background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
-                    Mapper / Créer
+                    {tray.spool_id ? "Corriger" : "Mapper / Créer"}
                   </button></AdminOnly>
                 )}
               </div>
@@ -643,7 +648,7 @@ function TrayBottomSheet({ tray, amsLabel, slotNo, onClose }) {
       </div>
     </div>
     {mapOpen && (
-      <MapTraySheet tray={tray} onClose={() => setMapOpen(false)} onMapped={() => { setMapOpen(false); onClose(); }}/>
+      <MapTraySheet tray={tray} amsId={amsId} onClose={() => setMapOpen(false)} onMapped={() => { setMapOpen(false); onClose(); }}/>
     )}
     {spoolSheet && createPortal(
       <FilamentSheetFromSpool
@@ -658,9 +663,11 @@ function TrayBottomSheet({ tray, amsLabel, slotNo, onClose }) {
 }
 
 // ── Mapper / Créer une bobine pour un tray non reconnu ────────────────────
-function MapTraySheet({ tray, onClose, onMapped }) {
+function MapTraySheet({ tray, amsId, onClose, onMapped }) {
   const isBambu = Boolean(tray.tray_info_idx);
-  const [mode, setMode] = React.useState(isBambu ? "suggest" : "create");
+  // On ouvre toujours sur les bobines existantes : une bobine tierce sans profil
+  // (emplacement « non identifie ») doit pouvoir etre associee, pas seulement creee.
+  const [mode, setMode] = React.useState("suggest");
   const [spools, setSpools] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
@@ -732,6 +739,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
     try {
       const r = await client.post("/filaments/map-tray/link", {
         spool_id, tray_uuid: tray.uuid, profile_id: tray.tray_info_idx, color: tray.color,
+        ams_id: amsId, tray_id: tray.id,      // retenu pour l'emplacement (sans RFID)
       });
       setResult(r.data);
     } finally { setSaving(false); }
@@ -744,6 +752,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
     try {
       const body = {
         tray_uuid: tray.uuid, profile_id: tray.tray_info_idx, color: tray.color,
+        ams_id: amsId, tray_id: tray.id,
         material: form.material, name: form.name,
         manufacturer: form.manufacturer || undefined,
         weight: Number(form.weight) || 1000,
@@ -827,7 +836,7 @@ function MapTraySheet({ tray, onClose, onMapped }) {
         </div>
         <div style={{ padding:"12px 20px 20px" }}>
           <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 4px" }}>
-            {isBambu ? "Mapper ce filament Bambu" : "Créer une bobine"}
+            {tray.spool_id ? "Corriger la bobine de cet emplacement" : "Associer une bobine à cet emplacement"}
           </h3>
           <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 14px" }}>
             {tray.filament_type || "Type inconnu"}
@@ -836,8 +845,8 @@ function MapTraySheet({ tray, onClose, onMapped }) {
             {tray.uuid && !/^0+$/.test(tray.uuid) ? ` · 🔖 ${tray.uuid.slice(0,8)}…` : ""}
           </p>
 
-          {/* Toggle — seulement pour les Bambu */}
-          {isBambu && (
+          {/* Bascule pour tous : une bobine tierce aussi peut deja exister. */}
+          {(
             <div style={{ display:"flex", gap:6, marginBottom:16 }}>
               {[["suggest","Choisir une bobine existante"],["create","Créer"]].map(([id,label]) => (
                 <button key={id} onClick={() => setMode(id)} style={{
@@ -991,7 +1000,7 @@ export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLo
       </div>
       {/* Détail */}
       {displayAms && <AMSDetail ams={displayAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId} spoolLookup={spoolLookup} onTrayClick={setSelectedTray}/>}
-      {selectedTray && <TrayBottomSheet tray={selectedTray.tray} amsLabel={selectedTray.amsLabel}
+      {selectedTray && <TrayBottomSheet tray={selectedTray.tray} amsId={selectedTray.amsId} amsLabel={selectedTray.amsLabel}
         slotNo={selectedTray.slotNo} onClose={()=>setSelectedTray(null)}/>}
     </div>
   );
