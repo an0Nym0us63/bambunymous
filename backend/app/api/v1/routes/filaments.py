@@ -851,6 +851,7 @@ async def drying_overview(db: AsyncSession = Depends(get_db), _: str = Depends(g
             "colors_array": f.colors_array if f else None,
             "multicolor_type": f.multicolor_type if f else None,
             "location": s.location,
+            "remaining_weight_g": s.remaining_weight_g,
             "last_dried_at": ref.isoformat() if ref else None,
             "age_days": age, "limit_days": limit, "remaining_days": remaining,
         })
@@ -864,7 +865,34 @@ async def drying_overview(db: AsyncSession = Depends(get_db), _: str = Depends(g
          "avg_age_days": round(sum(v["ages"]) / len(v["ages"])) if v["ages"] else None}
         for v in fam.values()), key=lambda v: (-v["to_dry"], -v["count"]))
     in_ams = lambda x: (x["location"] or "").upper().startswith("AMS")
+
+    # Sechages des 12 derniers mois (date du DERNIER sechage de chaque bobine :
+    # pas d'historique complet, c'est l'activite recente qui se lit ici).
+    months = []
+    y, m = now.year, now.month
+    for _ in range(12):
+        months.append((y, m)); m -= 1
+        if m == 0: y, m = y - 1, 12
+    months.reverse()
+    per = {k: 0 for k in months}
+    for s in rows:
+        ref = drying.dry_reference(s)
+        if ref and (ref.year, ref.month) in per:
+            per[(ref.year, ref.month)] += 1
+    ages = [x["age_days"] for x in spools if x["age_days"] is not None]
+    lim = {}
+    for x in spools:
+        lim[x["limit_days"]] = lim.get(x["limit_days"], 0) + 1
+    def loc_stats(pred):
+        sel = [x for x in spools if pred(x)]
+        return {"total": len(sel), "to_dry": sum(1 for x in sel if x in to_dry)}
     return {
+        "dried_by_month": [{"name": f"{m:02d}/{str(y)[2:]}", "value": per[(y, m)]} for y, m in months],
+        "avg_age_days": round(sum(ages) / len(ages)) if ages else None,
+        "oldest_age_days": max(ages) if ages else None,
+        "to_dry_weight_g": round(sum((x["remaining_weight_g"] or 0) for x in to_dry)),
+        "by_location": {"ams": loc_stats(in_ams), "stored": loc_stats(lambda x: not in_ams(x))},
+        "limits": [{"days": d, "count": c} for d, c in sorted(lim.items())],
         "default_days": drying.current()["default_days"], "soon_days": soon_days,
         "kpis": {
             "active": len(spools),

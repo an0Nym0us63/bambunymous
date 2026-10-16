@@ -257,7 +257,6 @@ function DryingStats() {
   if (!d) return <p style={{ color:"var(--muted)", fontSize:13 }}>Chargement…</p>;
   if (d.error) return <p style={{ color:"#ef4444", fontSize:13 }}>Impossible de charger l'état du séchage.</p>;
   const k = d.kpis;
-  const maxB = Math.max(1, ...d.buckets.map(b => b.count));
   const maxF = Math.max(1, ...d.families.map(f => f.count));
 
   const Row = ({ s, late }) => (
@@ -285,6 +284,12 @@ function DryingStats() {
     </div>
   );
 
+  const scroll = { padding:"4px 12px", maxHeight:300, overflowY:"auto" };
+  const fmtKgs = g => g >= 1000 ? `${String(Math.round(g / 100) / 10).replace(".", ",")} kg` : `${g} g`;
+  const loc = d.by_location;
+  // Ancienneté : du bleu clair (récent) au bleu profond (ancien), rouge pour « jamais ».
+  const AGE_HEX = ["#7dd3fc", "#38bdf8", "#0ea5e9", "#0369a1", "#1e3a8a", "#ef4444"];
+
   return (<>
     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
       <KpiCard icon={Droplets} label="À sécher" value={k.to_dry} color="#0EA5E9"
@@ -292,21 +297,39 @@ function DryingStats() {
       <KpiCard icon={AlertTriangle} label="Jamais séchées" value={k.never} color="#ef4444"/>
       <KpiCard icon={Clock} label={`Bientôt (${d.soon_days} j)`} value={k.soon} color="#f59e0b"/>
       <KpiCard icon={CheckCircle2} label="À jour" value={k.ok} color="#22c55e"/>
+      <KpiCard icon={Layers} label="Âge moyen" value={d.avg_age_days == null ? "—" : fmtMonths(d.avg_age_days)}
+        sub={d.oldest_age_days != null ? `le plus ancien : ${fmtMonths(d.oldest_age_days)}` : null} color="#8b5cf6"/>
+      <KpiCard icon={Weight} label="Filament à sécher" value={fmtKgs(d.to_dry_weight_g || 0)} color="#06b6d4"
+        sub="restant sur ces bobines"/>
     </div>
 
-    <Section title="Ancienneté du dernier séchage">
-      <div className="card" style={{ padding:"8px 12px" }}>
-        {d.buckets.map(b => (
-          <Bar key={b.label} label={b.label} value={b.count} max={maxB}
-            color={b.label === "Jamais" ? "#ef4444" : "#0EA5E9"}
-            sublabel={`${b.count} bobine${b.count > 1 ? "s" : ""}`}/>
-        ))}
-      </div>
-    </Section>
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))", gap:12 }}>
+      <Donut title="État des bobines" palette data={[
+        { name:"À sécher", value:k.to_dry - k.never, hex:"#0EA5E9" },
+        { name:"Jamais séchées", value:k.never, hex:"#ef4444" },
+        { name:`Bientôt (${d.soon_days} j)`, value:k.soon, hex:"#f59e0b" },
+        { name:"À jour", value:k.ok, hex:"#22c55e" },
+      ].filter(x => x.value > 0)}/>
+      <Donut title="Ancienneté du dernier séchage" palette
+        data={d.buckets.map((b, i) => ({ name:b.label, value:b.count, hex:AGE_HEX[i] })).filter(x => x.value > 0)}/>
+    </div>
+
+    <MiniBarChart title="Séchages sur 12 mois (dernier séchage de chaque bobine)" color="#0EA5E9"
+      data={d.dried_by_month}/>
+
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(280px,1fr))", gap:12 }}>
+      <Donut title="À sécher : où sont-elles ?" palette data={[
+        { name:`Dans l'AMS (${loc.ams.to_dry}/${loc.ams.total})`, value:loc.ams.to_dry, hex:"#0EA5E9" },
+        { name:`Rangées (${loc.stored.to_dry}/${loc.stored.total})`, value:loc.stored.to_dry, hex:"#64748b" },
+      ].filter(x => x.value > 0)}/>
+      <Donut title="Délais appliqués" palette data={d.limits.map((l, i) => ({
+        name:`${fmtMonths(l.days)}${l.days === d.default_days ? " (défaut)" : ""}`, value:l.count,
+        hex:["#22c55e", "#84cc16", "#f59e0b", "#f97316", "#ef4444", "#8b5cf6"][i % 6] }))}/>
+    </div>
 
     {d.to_dry.length > 0 && (
       <Section title={`À sécher maintenant (${d.to_dry.length})`}>
-        <div className="card" style={{ padding:"4px 12px" }}>
+        <div className="card" style={scroll}>
           {d.to_dry.map(s => <Row key={s.id} s={s} late/>)}
         </div>
       </Section>
@@ -314,14 +337,14 @@ function DryingStats() {
 
     {d.soon.length > 0 && (
       <Section title={`Bientôt — dans les ${d.soon_days} jours (${d.soon.length})`}>
-        <div className="card" style={{ padding:"4px 12px" }}>
+        <div className="card" style={scroll}>
           {d.soon.map(s => <Row key={s.id} s={s}/>)}
         </div>
       </Section>
     )}
 
     <Section title="Par famille">
-      <div className="card" style={{ padding:"8px 12px" }}>
+      <div className="card" style={{ ...scroll, padding:"8px 12px" }}>
         {d.families.map(f => (
           <Bar key={f.family} stacked label={f.family} value={f.count} max={maxF}
             color={f.to_dry ? "#0EA5E9" : "#22c55e"}
