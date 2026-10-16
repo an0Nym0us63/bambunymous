@@ -100,13 +100,19 @@ function StatusBanner({ status }) {
     (ams.trays || []).some(t => t.match_mode === "notfound")
   );
 
-  // Charger les infos du print en cours (vignette + nom)
+  // Charger les infos du print en cours (vignette + nom).
+  // En cours, en pause ou en preparation : l'impression IN_PROGRESS. Sinon
+  // (arretee, echouee, terminee, au repos) : la plus RECENTE, quel que soit son
+  // resultat -- avant, tout ce qui n'etait pas RUNNING allait chercher le
+  // dernier print REUSSI, d'ou la vignette d'un autre print en pause ou apres
+  // un arret. Rechargee aussi quand le travail change (job_id).
   useEffect(() => {
     if (!status?.status) return;
-    client.get("/prints?limit=1&status=" + (status.status === "RUNNING" ? "IN_PROGRESS" : "SUCCESS"))
+    const live = ["RUNNING", "PAUSE", "PREPARE", "SLICING"].includes(status.status);
+    client.get("/prints", { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
       .then(r => { const p = r.data?.prints?.[0]; if (p) setPrintInfo(p); })
       .catch(() => {});
-  }, [status?.status]);
+  }, [status?.status, status?.job_id]);
 
   if (!status) return <div className="card" style={{ height:56, animation:"pulse 2s infinite" }} />;
   const cfg    = STATUS_CFG[status.status] ?? STATUS_CFG.IDLE;
