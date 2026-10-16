@@ -1429,6 +1429,60 @@ async def map_tray_suggest(
     return {"spools": result}
 
 
+async def _remember_slot(body: dict, tag_uid: str, prof: str, color: str, spool_id: int) -> None:
+    """
+    Sans RFID, le choix fait a la main ne tiendrait pas : au matching suivant,
+    profil + couleur retomberaient sur la meme (mauvaise) bobine. On le
+    memorise pour l'emplacement tant que le meme filament y reste.
+    """
+    from ....services.slot_override import set_override, signature, has_rfid
+    from ....core.mqtt import get_state
+    if has_rfid(tag_uid) or body.get("ams_id") is None or body.get("tray_id") is None:
+        return
+    ams_id, tray_id = int(body["ams_id"]), int(body["tray_id"])
+    # Signature lue sur l'emplacement EN DIRECT, comme le fait la detection : la
+    # couleur renvoyee par l'ecran est deja retouchee (t.color) et ne
+    # correspondrait pas.
+    tray = None
+    try:
+        a = next((a for a in (get_state().ams_list or []) if a.id == ams_id), None)
+        tray = next((t for t in (a.trays if a else []) if t.id == tray_id), None)
+    except Exception:
+        pass
+    if tray is not None:
+        prof, color = getattr(tray, "tray_info_idx", "") or "", getattr(tray, "raw_color", "") or color
+    await set_override(ams_id, tray_id, signature(prof, color), spool_id)
+
+
+@router.post("/map-tray/assign")
+async def map_tray_assign(body: dict, _: str = Depends(get_current_user)):
+    """
+    Attribue une bobine a un emplacement AMS sans RFID, tant que le meme
+    filament y reste. Ne modifie NI la bobine NI son filament (pas de profil
+    ni de couleur recopies) : c'est seulement « cette bobine est ici ».
+    body: {ams_id, tray_id, spool_id}
+    """
+    from ....services.slot_override import set_override, signature, has_rfid
+    from ....core.mqtt import get_state, clear_match_cache
+    try:
+        ams_id, tray_id, spool_id = int(body["ams_id"]), int(body["tray_id"]), int(body["spool_id"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(400, "ams_id, tray_id et spool_id requis")
+    a = next((a for a in (get_state().ams_list or []) if a.id == ams_id), None)
+    tray = next((t for t in (a.trays if a else []) if t.id == tray_id), None)
+    if tray is None or tray.empty:
+        raise HTTPException(404, "Emplacement vide ou introuvable")
+    if has_rfid(tray.uuid):
+        raise HTTPException(400, "Emplacement reconnu par RFID : l'attribution ne s'applique pas")
+    async with AsyncSessionLocal() as db:
+        s = await db.get(Spool, spool_id)
+        if not s or s.archived:
+            raise HTTPException(404, "Bobine introuvable ou archivée")
+    await set_override(ams_id, tray_id, signature(tray.tray_info_idx, tray.raw_color or tray.color), spool_id)
+    clear_match_cache()          # re-detection immediate : l'accueil suit
+    return {"ok": True, "spool_id": spool_id}
+
+
 @router.post("/map-tray/link")
 async def map_tray_link(body: dict, _: str = Depends(get_current_user)):
     """
@@ -1582,6 +1636,7 @@ async def map_tray_create(body: dict, _: str = Depends(get_current_user)):
             fil.to_order = False
 
         await db.commit()
+        await _remember_slot(body, tag_uid, prof, color, spool.id)   # bobine creee depuis un emplacement sans RFID
         await db.refresh(spool)
         await db.refresh(spool.filament)
         # Construire la réponse DANS la session
