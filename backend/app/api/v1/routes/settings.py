@@ -6,7 +6,7 @@ from ....db.session import get_db
 from ....services.settings_service import get_all_settings, set_setting, get_setting
 from ....core.mqtt import mqtt_manager
 from ....core.security import hash_password
-from .auth import get_current_user
+from .auth import get_current_user, require_admin
 
 router = APIRouter()
 
@@ -180,3 +180,23 @@ async def update_settings(
         threading.Thread(target=_recalc_all, daemon=True).start()
 
     return {"ok": True}
+
+
+# ── Delais de sechage ─────────────────────────────────────────────────────────
+@router.get("/dry-rules")
+async def get_dry_rules(db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    """Delai par defaut, regles declarees, et familles / sous-familles connues (menu)."""
+    from sqlalchemy import select, distinct
+    from ....models.filament import Filament
+    from ....services import drying
+    rules = await drying.load(db)
+    fams = (await db.execute(select(distinct(Filament.material)).where(Filament.material.isnot(None)))).scalars().all()
+    types = (await db.execute(select(distinct(Filament.fila_type)).where(Filament.fila_type.isnot(None)))).scalars().all()
+    clean = lambda xs: sorted({x.strip() for x in xs if x and x.strip()}, key=str.lower)
+    return {**rules, "families": clean(fams), "types": clean(types)}
+
+
+@router.put("/dry-rules")
+async def put_dry_rules(body: dict, _: str = Depends(require_admin)):
+    from ....services import drying
+    return await drying.save(body)

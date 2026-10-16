@@ -239,9 +239,9 @@ def _tray_spool_info(t, spools_map, stock_map=None):
         sp, f = spools_map[t.spool_id]
         si.swatch = bool(f.swatch) if f is not None else None
         # Meme raison pour le sechage : l'AMS seche la bobine sans qu'elle bouge.
-        from ....services.attention import needs_drying
+        from ....services.drying import needs_drying
         si.last_dried_at = str(sp.last_dried_at) if sp.last_dried_at else None
-        si.needs_drying = needs_drying(sp)
+        si.needs_drying = needs_drying(sp, f)
         if stock_map is not None and f is not None:
             si.filament_stock_g = stock_map.get(f.id)
     return si
@@ -260,7 +260,9 @@ async def printer_status(_: str = Depends(get_current_user)):
         for a in s.ams_list for t in a.trays if t.spool_id
     ]
     if all_spool_ids:
+        from ....services import drying as _drying
         async with AsyncSessionLocal() as db:
+            await _drying.load(db)
             spools_r = await db.execute(_sel(_Spool).where(_Spool.id.in_(all_spool_ids)))
             for sp in spools_r.scalars().all():
                 fil = await db.get(_Fil, sp.filament_id) if sp.filament_id else None

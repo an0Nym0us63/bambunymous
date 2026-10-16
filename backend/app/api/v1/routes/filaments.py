@@ -157,6 +157,10 @@ class SpoolOut(BaseModel):
     first_used_at: Optional[datetime] = None
     last_used_at: Optional[datetime] = None
     last_dried_at: Optional[datetime] = None
+    # A secher (jamais sechee ou delai depasse) et delai applicable a ce
+    # filament : la fiche l'affiche en badge, visible des le scan RFID.
+    needs_drying: bool = False
+    dry_days: Optional[int] = None
     created_at: datetime
 
 class SpoolCreate(BaseModel):
@@ -1065,8 +1069,11 @@ def _fil_out(f: Filament) -> FilamentOut:
 
 
 def _spool_out(s: Spool, sib: tuple | None = None) -> SpoolOut:
+    from ....services import drying as _drying
     f = s.filament
     return SpoolOut(
+        needs_drying=_drying.needs_drying(s, f),
+        dry_days=_drying.days_for(f),
         id=s.id, filament_id=s.filament_id,
         filament_name=f.name if f else "?",
         filament_translated_name=getattr(f, "translated_name", None) if f else None,

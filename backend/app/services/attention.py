@@ -94,30 +94,14 @@ def _fil_title(f) -> str:
 
 
 # ── Sechage ────────────────────────────────────────────────────────────────
-DRY_DAYS = 180
+# La regle (delai par defaut, et par famille / sous-famille) vit dans
+# services/drying.py, partagee avec l'AMS et la fiche bobine.
+from . import drying as _drying
+dry_reference = _drying.dry_reference
 
 
-def dry_reference(spool) -> Optional[datetime]:
-    """Dernier sechage de la bobine, None si elle n'a jamais ete sechee."""
-    ref = getattr(spool, "last_dried_at", None)
-    if isinstance(ref, str):        # colonne ajoutee en TEXT par la migration
-        try:
-            ref = datetime.fromisoformat(ref)
-        except ValueError:
-            return None
-    return ref
-
-
-def needs_drying(spool, now: Optional[datetime] = None) -> bool:
-    """
-    A secher : jamais sechee (pas de date), ou pas depuis plus de DRY_DAYS.
-    Une bobine sans date de sechage n'est pas presumee bonne. Meme regle pour
-    l'alerte et pour l'AMS ; les bobines archivees ne comptent pas.
-    """
-    if getattr(spool, "archived", False):
-        return False
-    ref = dry_reference(spool)
-    return ref is None or ref < (now or datetime.utcnow()) - timedelta(days=DRY_DAYS)
+def needs_drying(spool, now: Optional[datetime] = None, filament=None) -> bool:
+    return _drying.needs_drying(spool, filament, now)
 
 
 # ── Registre ───────────────────────────────────────────────────────────────
@@ -520,14 +504,16 @@ async def _swatches_without_label(db) -> list[Alert]:
     ]
 
 
-@check("spool_not_dried", f"Bobines à sécher (jamais ou plus de {DRY_DAYS // 30} mois)", "💧",
+@check("spool_not_dried", "Bobines à sécher (jamais séchées ou délai dépassé)", "💧",
        shown=5, random_sample=False)
 async def _spools_not_dried(db) -> list[Alert]:
     """
-    Bobine jamais sechee, ou pas depuis plus de DRY_DAYS. Par bobine : le
-    sechage se fait bobine par bobine, dans l'AMS. Les jamais sechees en
-    premier, puis la plus ancienne.
+    Bobine jamais sechee, ou pas depuis plus que le delai de son filament
+    (defaut ou regle de famille / sous-famille, Parametres). Par bobine : le
+    sechage se fait bobine par bobine. Les jamais sechees en premier, puis la
+    plus en retard sur son delai.
     """
+    await _drying.load(db)
     rows = (await db.execute(
         select(Spool, Filament)
         .join(Filament, Filament.id == Spool.filament_id)
@@ -536,19 +522,20 @@ async def _spools_not_dried(db) -> list[Alert]:
     now = datetime.utcnow()
     out = []
     for s, f in rows:
-        if not needs_drying(s, now):
+        if not needs_drying(s, now, f):
             continue
         ref = dry_reference(s)
         days = (now - ref).days if ref else None
+        limit = _drying.days_for(f)
         out.append(Alert(
             key=f"spool_not_dried:spool:{s.id}",
             category="spool_not_dried",
             title=_fil_title(f),
             detail=f"Bobine #{s.id}",
-            value=f"{days // 30} mois" if ref else "jamais séchée",
-            # Jamais sechees d'abord, puis la plus ancienne. Pas de float("-inf") :
-            # la reponse JSON refuse les infinis (500 sur l'accueil).
-            rank=-days if ref else -1e9,
+            value=f"{days // 30} mois (délai {round(limit / 30, 1):g} mois)" if ref else "jamais séchée",
+            # Jamais sechees d'abord, puis la plus en retard sur son delai. Pas de
+            # float("-inf") : la reponse JSON refuse les infinis (500 sur l'accueil).
+            rank=-(days - limit) if ref else -1e9,
             severity="warn",
             link=f"/filaments?id={f.id}",
             entity="spool", entity_id=s.id, filament_id=f.id,

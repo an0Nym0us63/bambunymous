@@ -625,10 +625,9 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   // Stock du filament : cette bobine (si active) + les autres actives.
   const stockFil = spool.sibling_weight_g != null
     ? (spool.archived ? 0 : (spool.remaining_weight_g || 0)) + spool.sibling_weight_g : null;
-  // Meme regle que l'alerte du serveur : jamais sechee (pas de date) ou pas
-  // depuis plus de 6 mois. Sans date, la bobine n'est pas presumee bonne.
-  const aSecher = !spool.archived && (!spool.last_dried_at
-    || (Date.now() - new Date(spool.last_dried_at).getTime()) > 180 * 86400000);
+  // Calcule par le serveur (delai par defaut, ou celui de la famille / sous-
+  // famille du filament, Parametres) : meme regle que l'alerte et l'AMS.
+  const aSecher = !!spool.needs_drying;
 
   const Row = ({ label, value, mono, accent }) => (value == null || value === "") ? null : (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
@@ -688,6 +687,17 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                   <Palette size={10}/>
                   {spool.filament_swatch ? "Échantillon" : "Sans échantillon"}
                 </span>
+                {/* Bien visible en haut : au scan RFID d'une bobine, on voit
+                    tout de suite s'il faut la secher avant de la charger. */}
+                {aSecher && (
+                  <span title={`Jamais séchée, ou pas depuis plus de ${Math.round((spool.dry_days || 180) / 30 * 10) / 10} mois`}
+                    style={{ display:"inline-flex", alignItems:"center", gap:4,
+                    fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
+                    background:"rgba(14,165,233,0.14)", color:"#0EA5E9",
+                    border:"1px solid rgba(14,165,233,0.4)" }}>
+                    <Droplets size={10}/> Séchage nécessaire
+                  </span>
+                )}
               </div>
             </div>
           </div>

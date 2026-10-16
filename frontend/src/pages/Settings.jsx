@@ -12,6 +12,7 @@ import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
          ROLE_OPTIONS, ROLE_LABEL, ROLE_BADGE } from "../store/auth";
 import AdminOnly from "../components/AdminOnly";
 import TelegramSettings from "../components/TelegramSettings";
+import DryRulesCard from "../components/DryRulesCard";
 import { useTrackDetail } from "../utils/track";
 import { amsName, slotCount, lireDisposition, dispositionParDefaut, MAX_LIGNES, MAX_COLONNES } from "../utils/ams";
 
@@ -1673,6 +1674,7 @@ export default function Settings() {
         <AMSOrderSection/>
         <AttentionCard card={card} cardTitle={cardTitle}/>
         <LabelsCard card={card} cardTitle={cardTitle}/>
+        <DryRulesCard card={card} cardTitle={cardTitle}/>
       </AdminOnly>
       </>)}
 

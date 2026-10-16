@@ -73,6 +73,13 @@ async def lifespan(app: FastAPI):
             _lg.propagate = True
     logger.info(f"BambuNymous starting — version {VERSION}")
     await init_db()
+    # Delais de sechage (defaut + regles par famille / sous-famille) en memoire :
+    # la fiche bobine et l'AMS les lisent sans requete.
+    try:
+        from app.services import drying as _drying
+        await _drying.load()
+    except Exception:
+        logging.getLogger(__name__).exception("[DRY] regles de sechage non chargees")
     from app.services.hms import init_hms
     init_hms()   # charge cache/dump des libelles HMS
     # Restaurer les prints IN_PROGRESS en mémoire après un redémarrage
