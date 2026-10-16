@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useMemo } from "react";
 
-import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag, Filter } from "lucide-react";
+import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag, Filter, Droplets } from "lucide-react";
 import client from "../api/client";
 import HeaderAction from "../components/HeaderAction";
 import { useTrackDetail } from "../utils/track";
 import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { ObjectSheet, AccessorySheet } from "./Objects";
+import { FilamentSheetFromSpool } from "./Filaments";
 
 const fmtH = s => {
   const t = Math.round(s || 0);
@@ -244,6 +245,96 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
 }
 
 // Badge discret signalant une section GLOBALE (indep. du filtre de periode).
+// ── Sechage : etat des lieux des bobines actives ────────────────────────────
+const fmtMonths = d => d == null ? "jamais" : d < 30 ? `${d} j`
+  : `${String(Math.round(d / 30 * 10) / 10).replace(".", ",")} mois`;
+
+function DryingStats() {
+  const [d, setD] = useState(null);
+  const [open, setOpen] = useState(null);
+  const load = () => client.get("/filaments/drying/overview").then(r => setD(r.data)).catch(() => setD({ error: true }));
+  useEffect(() => { load(); }, []);
+  if (!d) return <p style={{ color:"var(--muted)", fontSize:13 }}>Chargement…</p>;
+  if (d.error) return <p style={{ color:"#ef4444", fontSize:13 }}>Impossible de charger l'état du séchage.</p>;
+  const k = d.kpis;
+  const maxB = Math.max(1, ...d.buckets.map(b => b.count));
+  const maxF = Math.max(1, ...d.families.map(f => f.count));
+
+  const Row = ({ s, late }) => (
+    <div onClick={() => setOpen(s)} role="button" tabIndex={0}
+      style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 6px", cursor:"pointer",
+        borderBottom:"1px solid var(--border)" }}>
+      <Dot hex={s.color} colors={s.colors_array} multicolor={s.multicolor_type} size={14}/>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:12.5, fontWeight:600, color:"var(--text)", overflow:"hidden",
+          textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{s.name}</div>
+        <div style={{ fontSize:10.5, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+          {[s.brand, s.fila_type, `#${s.id}`, s.location].filter(Boolean).join(" · ")}
+        </div>
+      </div>
+      <div style={{ textAlign:"right", flexShrink:0 }}>
+        <div style={{ fontSize:12, fontWeight:700, fontFamily:"JetBrains Mono,monospace",
+          color: late ? "#0EA5E9" : "#f59e0b" }}>
+          {s.age_days == null ? "jamais séchée"
+            : late ? `+${fmtMonths(-s.remaining_days)} de retard` : `dans ${fmtMonths(s.remaining_days)}`}
+        </div>
+        <div style={{ fontSize:10, color:"var(--muted)" }}>
+          {s.age_days != null ? `séchée il y a ${fmtMonths(s.age_days)} · ` : ""}délai {fmtMonths(s.limit_days)}
+        </div>
+      </div>
+    </div>
+  );
+
+  return (<>
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
+      <KpiCard icon={Droplets} label="À sécher" value={k.to_dry} color="#0EA5E9"
+        sub={k.to_dry_in_ams ? `dont ${k.to_dry_in_ams} dans l'AMS` : `sur ${k.active} bobines`}/>
+      <KpiCard icon={AlertTriangle} label="Jamais séchées" value={k.never} color="#ef4444"/>
+      <KpiCard icon={Clock} label={`Bientôt (${d.soon_days} j)`} value={k.soon} color="#f59e0b"/>
+      <KpiCard icon={CheckCircle2} label="À jour" value={k.ok} color="#22c55e"/>
+    </div>
+
+    <Section title="Ancienneté du dernier séchage">
+      <div className="card" style={{ padding:"8px 12px" }}>
+        {d.buckets.map(b => (
+          <Bar key={b.label} label={b.label} value={b.count} max={maxB}
+            color={b.label === "Jamais" ? "#ef4444" : "#0EA5E9"}
+            sublabel={`${b.count} bobine${b.count > 1 ? "s" : ""}`}/>
+        ))}
+      </div>
+    </Section>
+
+    {d.to_dry.length > 0 && (
+      <Section title={`À sécher maintenant (${d.to_dry.length})`}>
+        <div className="card" style={{ padding:"4px 12px" }}>
+          {d.to_dry.map(s => <Row key={s.id} s={s} late/>)}
+        </div>
+      </Section>
+    )}
+
+    {d.soon.length > 0 && (
+      <Section title={`Bientôt — dans les ${d.soon_days} jours (${d.soon.length})`}>
+        <div className="card" style={{ padding:"4px 12px" }}>
+          {d.soon.map(s => <Row key={s.id} s={s}/>)}
+        </div>
+      </Section>
+    )}
+
+    <Section title="Par famille">
+      <div className="card" style={{ padding:"8px 12px" }}>
+        {d.families.map(f => (
+          <Bar key={f.family} stacked label={f.family} value={f.count} max={maxF}
+            color={f.to_dry ? "#0EA5E9" : "#22c55e"}
+            sublabel={`${f.to_dry}/${f.count} à sécher · âge moyen ${fmtMonths(f.avg_age_days)}`}/>
+        ))}
+      </div>
+    </Section>
+
+    {open && <FilamentSheetFromSpool filamentId={open.filament_id} spoolId={open.id}
+      onClose={() => { setOpen(null); load(); }}/>}
+  </>);
+}
+
 function GlobalBadge() {
   return (
     <span title="Indépendant du filtre de période"
@@ -775,7 +866,7 @@ export default function Stats() {
     </div>
   );
 
-  const tabs = [["prints","Prints"],["filaments","Filaments"],["objects","Objets"]];
+  const tabs = [["prints","Prints"],["filaments","Filaments"],["drying","Séchage"],["objects","Objets"]];
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
@@ -1009,6 +1100,8 @@ export default function Stats() {
       )}
 
       </>)}
+
+      {tab === "drying" && <DryingStats/>}
 
       {tab === "objects" && (
         <ObjectsStats stats={objStats} onOpen={openDetail} onOpenObject={openObject} onOpenAccessory={openAccessory}/>

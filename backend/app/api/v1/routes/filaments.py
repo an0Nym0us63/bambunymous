@@ -807,6 +807,80 @@ async def update_filament(
 
 # ── Spools (Bobines) ──────────────────────────────────────────────────────────
 
+@router.get("/drying/overview")
+async def drying_overview(db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    """
+    Etat des lieux du sechage des bobines actives (Stats > Sechage) : age du
+    dernier sechage, delai applicable (defaut ou regle de famille / sous-
+    famille), temps restant avant d'etre « a secher ». Meme regle que
+    l'alerte, l'AMS et la fiche bobine.
+    """
+    from ....services import drying
+    await drying.load(db)
+    now = datetime.utcnow()
+    soon_days = 30
+    rows = (await db.execute(
+        select(Spool).options(selectinload(Spool.filament)).where(Spool.archived.is_(False))
+    )).scalars().all()
+
+    spools, fam = [], {}
+    buckets = [["< 1 mois", 0], ["1–3 mois", 0], ["3–6 mois", 0], ["6–12 mois", 0], ["> 12 mois", 0], ["Jamais", 0]]
+    for s in rows:
+        f = s.filament
+        ref = drying.dry_reference(s)
+        limit = drying.days_for(f)
+        age = (now - ref).days if ref else None
+        remaining = (limit - age) if ref else None
+        if age is None:
+            buckets[5][1] += 1
+        else:
+            buckets[0 if age < 30 else 1 if age < 90 else 2 if age < 180 else 3 if age < 365 else 4][1] += 1
+        family = ((f.material if f else None) or "?").strip() or "?"
+        fe = fam.setdefault(family, {"family": family, "count": 0, "to_dry": 0, "ages": []})
+        fe["count"] += 1
+        if remaining is None or remaining < 0:
+            fe["to_dry"] += 1
+        if age is not None:
+            fe["ages"].append(age)
+        spools.append({
+            "id": s.id, "filament_id": s.filament_id,
+            "name": (f.translated_name or f.name) if f else f"Bobine #{s.id}",
+            "brand": f.manufacturer if f else None,
+            "fila_type": (f.fila_type or f.material) if f else None,
+            "color": f.color if f else None,
+            "colors_array": f.colors_array if f else None,
+            "multicolor_type": f.multicolor_type if f else None,
+            "location": s.location,
+            "last_dried_at": ref.isoformat() if ref else None,
+            "age_days": age, "limit_days": limit, "remaining_days": remaining,
+        })
+
+    # jamais sechees d'abord, puis la plus en retard, puis la plus proche du delai
+    spools.sort(key=lambda x: (x["remaining_days"] is not None, x["remaining_days"] or 0))
+    to_dry = [x for x in spools if x["remaining_days"] is None or x["remaining_days"] < 0]
+    soon = [x for x in spools if x["remaining_days"] is not None and 0 <= x["remaining_days"] <= soon_days]
+    families = sorted((
+        {"family": v["family"], "count": v["count"], "to_dry": v["to_dry"],
+         "avg_age_days": round(sum(v["ages"]) / len(v["ages"])) if v["ages"] else None}
+        for v in fam.values()), key=lambda v: (-v["to_dry"], -v["count"]))
+    in_ams = lambda x: (x["location"] or "").upper().startswith("AMS")
+    return {
+        "default_days": drying.current()["default_days"], "soon_days": soon_days,
+        "kpis": {
+            "active": len(spools),
+            "to_dry": len(to_dry),
+            "never": sum(1 for x in spools if x["age_days"] is None),
+            "soon": len(soon),
+            "ok": len(spools) - len(to_dry) - len(soon),
+            "to_dry_in_ams": sum(1 for x in to_dry if in_ams(x)),
+        },
+        "buckets": [{"label": l, "count": c} for l, c in buckets],
+        "families": families,
+        "to_dry": to_dry,
+        "soon": soon,
+    }
+
+
 @router.get("/spools", response_model=list[SpoolOut])
 async def list_spools(
     archived: bool = Query(False),
