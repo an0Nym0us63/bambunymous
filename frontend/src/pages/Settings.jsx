@@ -13,6 +13,7 @@ import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
 import AdminOnly from "../components/AdminOnly";
 import TelegramSettings from "../components/TelegramSettings";
 import DryRulesCard from "../components/DryRulesCard";
+import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
 import { amsName, slotCount, lireDisposition, dispositionParDefaut, MAX_LIGNES, MAX_COLONNES } from "../utils/ams";
 
@@ -493,6 +494,11 @@ function UsersSection() {
                   <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
                     background:"rgba(239,68,68,0.12)", color:"#ef4444" }}>Désactivé</span>
                 )}
+                {u.totp_enabled && (
+                  <span title="Double authentification active"
+                    style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
+                    background:"rgba(34,197,94,0.12)", color:"#22c55e" }}>2FA</span>
+                )}
               </div>
               {/* Derniere utilisation : elle a sa place ici, aupres du compte,
                   plutot que dans une seconde liste de comptes ailleurs. */}
@@ -512,6 +518,16 @@ function UsersSection() {
                     → {l}
                   </button>
                 ))}
+                {/* Telephone perdu sans code de secours : un admin retire la 2FA,
+                    l'utilisateur la reactivera lui-meme. */}
+                {u.totp_enabled && (
+                  <button disabled={busy}
+                    onClick={async ()=>{ if (await showConfirm(`Retirer la double authentification de « ${u.username} » ?`,
+                      { confirmLabel:"Retirer" })) act(()=>client.post(`/users/${u.id}/2fa/reset`)); }}
+                    style={pill("#a78bfa", "rgba(167,139,250,0.35)")}>
+                    Retirer la 2FA
+                  </button>
+                )}
                 <button disabled={busy} onClick={()=>act(()=>client.patch(`/users/${u.id}`, { active: !u.active }))}
                   style={u.active ? pill("#f59e0b", "rgba(245,158,11,0.35)")
                                   : pill("#22c55e", "rgba(34,197,94,0.35)")}>
@@ -1759,6 +1775,7 @@ export default function Settings() {
       {/* ── Comptes ───────────────────────────────────────────────── */}
       {tab === "accounts" && (<>
       <MyAccountSection/>
+      <TwoFactorCard/>
       <UsersSection/>
       <ActivitySection/>
       </>)}

@@ -22,6 +22,7 @@ class UserOut(BaseModel):
     active: bool
     last_seen: Optional[str] = None   # derniere activite (ISO)
     protected: bool = False   # compte admin d'origine : non modifiable
+    totp_enabled: bool = False   # double authentification active
 
 
 class UserCreate(BaseModel):
@@ -38,7 +39,7 @@ class UserUpdate(BaseModel):
 
 def _out(u: User, protected: bool = False) -> UserOut:
     return UserOut(id=u.id, username=u.username, role=u.role, active=u.active,
-                   protected=protected,
+                   protected=protected, totp_enabled=bool(getattr(u, "totp_enabled", False)),
                    last_seen=(str(u.last_seen) if getattr(u, "last_seen", None) else None))
 
 
@@ -238,6 +239,20 @@ async def update_user(
 
     await db.commit()
     await db.refresh(u)
+    return _out(u)
+
+
+@router.post("/{uid}/2fa/reset")
+async def reset_user_2fa(uid: int, db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    """
+    Un administrateur retire la double authentification d'un compte (telephone
+    perdu sans code de secours). L'utilisateur pourra la reactiver lui-meme.
+    """
+    u = await db.get(User, uid)
+    if not u:
+        raise HTTPException(404, "Utilisateur introuvable")
+    u.totp_enabled, u.totp_secret, u.totp_last_step, u.totp_recovery = False, None, None, None
+    await db.commit()
     return _out(u)
 
 

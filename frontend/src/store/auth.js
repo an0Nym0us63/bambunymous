@@ -18,10 +18,13 @@ export const useAuth = create(
       role: ROLE_ADMIN,
       username: "",
 
-      login: async (username, password) => {
+      // otp : code de l'application (ou code de secours) si le compte a la
+      // double authentification ; le serveur repond 401 « 2FA_REQUIRED » sinon.
+      login: async (username, password, otp) => {
         const form = new FormData();
         form.append("username", username);
         form.append("password", password);
+        if (otp) form.append("otp", otp);
         const { data } = await client.post("/auth/login", form);
         localStorage.setItem("token", data.access_token);
         set({

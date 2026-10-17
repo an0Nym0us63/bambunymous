@@ -36,7 +36,10 @@ registerBeacon(() => { client.get("/users/activity/ping").catch(() => {}); });
 client.interceptors.response.use(
   (r) => r,
   (err) => {
-    if (err.response?.status === 401) {
+    // Sauf pour la connexion elle-meme : son 401 est une REPONSE (mauvais mot de
+    // passe, ou code de double authentification demande) que l'ecran affiche.
+    // Rediriger rechargeait la page et effacait le formulaire.
+    if (err.response?.status === 401 && !(err.config?.url || "").endsWith("/auth/login")) {
       localStorage.removeItem("token");
       window.location.href = "/login";
     }

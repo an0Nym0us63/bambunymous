@@ -1,6 +1,6 @@
 """Modèle utilisateur : comptes applicatifs et rôles."""
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, text
 from ..db.session import Base
 
 # Rôles supportés.
@@ -25,6 +25,17 @@ class User(Base):
     # effet sur les sessions deja ouvertes, qui restent valides jusqu'a
     # expiration -- des jours plus tard.
     tokens_valid_from = Column(DateTime, nullable=True)
+    # Double authentification (TOTP), activee par l'utilisateur lui-meme.
+    # totp_secret est pose des la mise en place, mais ne compte qu'une fois
+    # totp_enabled (code verifie) ; totp_last_step evite le rejeu d'un code ;
+    # totp_recovery = empreintes JSON des codes de secours restants.
+    totp_secret    = Column(String(64), nullable=True)
+    # server_default : la creation de l'admin initial passe par un INSERT SQL
+    # brut (migration) qui ne nomme pas cette colonne ; sans defaut cote base,
+    # NOT NULL le faisait echouer sur une installation neuve.
+    totp_enabled   = Column(Boolean, default=False, server_default=text("0"), nullable=False)
+    totp_last_step = Column(Integer, nullable=True)
+    totp_recovery  = Column(Text, nullable=True)
     created_at    = Column(DateTime, default=datetime.utcnow)
     updated_at    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

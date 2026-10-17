@@ -9,14 +9,21 @@ export default function Login() {
   const [show, setShow]     = useState(false);
   const [error, setError]   = useState("");
   const [loading, setLoading] = useState(false);
+  // Double authentification : le champ apparait quand le serveur le demande.
+  const [needOtp, setNeedOtp] = useState(false);
+  const [otp, setOtp]         = useState("");
   const { login }   = useAuth();
   const navigate    = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(""); setLoading(true);
-    try { await login(user, pass); navigate("/"); }
-    catch { setError("Identifiants invalides"); }
+    try { await login(user, pass, needOtp ? otp : undefined); navigate("/"); }
+    catch (err) {
+      const detail = err.response?.data?.detail;
+      if (detail === "2FA_REQUIRED") { setNeedOtp(true); setError(""); }
+      else setError(needOtp && detail ? detail : "Identifiants invalides");
+    }
     finally { setLoading(false); }
   };
 
@@ -63,6 +70,20 @@ export default function Login() {
               </button>
             </div>
           </div>
+          {needOtp && (
+            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              <label style={{ fontSize:12, color:"var(--muted)", fontWeight:600 }}>
+                Code de vérification
+              </label>
+              <input value={otp} onChange={e=>setOtp(e.target.value.trim())} autoFocus
+                onKeyDown={e=>e.key==="Enter"&&handleSubmit(e)}
+                inputMode="text" autoComplete="one-time-code" placeholder="123456"
+                style={{ ...inp, fontFamily:"JetBrains Mono, monospace", fontSize:18, letterSpacing:3 }}/>
+              <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
+                Code à 6 chiffres de ton application d'authentification, ou un code de secours.
+              </p>
+            </div>
+          )}
           {error && <p style={{ fontSize:12, color:"#ef4444", margin:0 }}>{error}</p>}
           <button onClick={handleSubmit} disabled={loading}
             style={{ width:"100%", padding:"11px", background:"#3b82f6", border:"none",

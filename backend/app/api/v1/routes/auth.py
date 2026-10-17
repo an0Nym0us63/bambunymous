@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,7 +24,8 @@ class Token(BaseModel):
 
 
 @router.post("/login", response_model=Token)
-async def login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = Depends(get_db)):
+async def login(form: OAuth2PasswordRequestForm = Depends(), otp: str | None = Form(None),
+                db: AsyncSession = Depends(get_db)):
     """
     Authentification sur la table users. Repli historique : si la table est vide
     (premiere version, ou migration pas encore passee), on accepte l'admin stocke
@@ -37,6 +38,22 @@ async def login(form: OAuth2PasswordRequestForm = Depends(), db: AsyncSession = 
     if user:
         if not user.active or not verify_password(form.password, user.password_hash):
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Identifiants invalides")
+        if user.totp_enabled:
+            # Mot de passe bon : il faut encore le code de l'application (ou un
+            # code de secours). Sans code, on le DEMANDE (l'ecran affiche le
+            # champ) ; on ne dit rien du mot de passe avant qu'il soit bon.
+            if not (otp or "").strip():
+                raise HTTPException(status.HTTP_401_UNAUTHORIZED, "2FA_REQUIRED")
+            from ....services import totp
+            step = totp.verify(user.totp_secret, otp, user.totp_last_step)
+            if step is not None:
+                user.totp_last_step = step
+            else:
+                rest = totp.use_recovery_code(user.totp_recovery, otp)
+                if rest is None:
+                    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Code de vérification invalide")
+                user.totp_recovery = rest
+            await db.commit()
         role = user.role
     else:
         # Repli sur l'ancien mecanisme (settings).
@@ -130,6 +147,64 @@ async def me(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get
     """Identite et role REELS du porteur (l'interface s'y fie pour l'affichage)."""
     username, role = await _resolve(token, db)
     return {"username": username, "role": role}
+
+
+# ── Double authentification (activee par chacun pour son compte) ─────────────
+async def _me_user(token: str, db: AsyncSession) -> User:
+    username, _ = await _resolve(token, db)
+    user = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+    if not user:
+        raise HTTPException(400, "Compte historique (sans fiche utilisateur) : crée d'abord un utilisateur")
+    return user
+
+
+@router.get("/2fa")
+async def twofa_status(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    from ....services import totp
+    user = await _me_user(token, db)
+    import json as _json
+    left = len(_json.loads(user.totp_recovery or "[]")) if user.totp_enabled else 0
+    return {"enabled": bool(user.totp_enabled), "recovery_left": left}
+
+
+@router.post("/2fa/setup")
+async def twofa_setup(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    """Nouveau secret (pas encore actif) : QR code a scanner dans l'application."""
+    from ....services import totp
+    user = await _me_user(token, db)
+    if user.totp_enabled:
+        raise HTTPException(400, "Double authentification déjà active")
+    user.totp_secret = totp.new_secret()
+    await db.commit()
+    uri = totp.otpauth_uri(user.username, user.totp_secret)
+    return {"secret": user.totp_secret, "otpauth": uri, "qr": totp.qr_data_url(uri)}
+
+
+@router.post("/2fa/enable")
+async def twofa_enable(body: dict = Body({}), token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    """Active apres verification d'un premier code ; rend les codes de secours (une seule fois)."""
+    from ....services import totp
+    user = await _me_user(token, db)
+    if user.totp_enabled:
+        raise HTTPException(400, "Double authentification déjà active")
+    step = totp.verify(user.totp_secret or "", body.get("code", ""))
+    if step is None:
+        raise HTTPException(400, "Code invalide : vérifie l'heure du téléphone et réessaie")
+    codes, stored = totp.new_recovery_codes()
+    user.totp_enabled, user.totp_last_step, user.totp_recovery = True, step, stored
+    await db.commit()
+    return {"enabled": True, "recovery_codes": codes}
+
+
+@router.post("/2fa/disable")
+async def twofa_disable(body: dict = Body({}), token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
+    """Desactive : le mot de passe est redemande (une session ouverte ne suffit pas)."""
+    user = await _me_user(token, db)
+    if not verify_password(body.get("password", ""), user.password_hash):
+        raise HTTPException(400, "Mot de passe incorrect")
+    user.totp_enabled, user.totp_secret, user.totp_last_step, user.totp_recovery = False, None, None, None
+    await db.commit()
+    return {"enabled": False}
 
 
 class PasswordChange(BaseModel):

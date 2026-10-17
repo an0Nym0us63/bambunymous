@@ -151,6 +151,10 @@ app = FastAPI(
 _READONLY_ALLOWED_PATHS = {
     "/api/v1/auth/login",
     "/api/v1/auth/change-password",
+    # Double authentification de SON compte : permise aussi en lecture seule.
+    "/api/v1/auth/2fa/setup",
+    "/api/v1/auth/2fa/enable",
+    "/api/v1/auth/2fa/disable",
 }
 
 
@@ -159,6 +163,7 @@ def _activity_label(method: str, path: str) -> str:
     p = path.replace("/api/v1", "")
     if p.startswith("/auth/login"):        return "Connexion"
     if p.startswith("/auth/change-password"): return "Changement de mot de passe"
+    if p.startswith("/auth/2fa"):          return "Double authentification"
     if p.startswith("/users/activity"):    return "Purge du journal d'activite"
     if p.startswith("/users"):             return "Gestion des comptes"
     if p.startswith("/prints"):            return "Impressions"
