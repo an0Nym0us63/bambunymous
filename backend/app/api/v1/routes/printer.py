@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 from ....core.mqtt import get_state
@@ -117,6 +117,9 @@ class TrayOut(BaseModel):
     match_mode: str = ""
     spool_info: Optional[SpoolInfoOut] = None
     catalog_name: Optional[str] = None
+    # Emplacement VIDE ou une bobine est posee pour le sechage (sans etre
+    # inseree) : services/drying_slots.
+    drying_spool: Optional[SpoolInfoOut] = None
     cols: list = []     # couleurs Bambu raw (champ 'cols' MQTT) — liste hex
     ctype: str = ""     # type couleur Bambu (int ou str selon firmware) ('gradient','coaxial'…)
 
@@ -255,10 +258,13 @@ async def printer_status(_: str = Depends(get_current_user)):
     # Charger les bobines liées aux trays AMS
     _spools_map = {}
     _stock_map = {}
+    from ....services import drying_slots as _dslots
+    # Un filament insere la ou une bobine etait posee : l'association tombe.
+    await _dslots.prune(s.ams_list)
     all_spool_ids = [
         t.spool_id
         for a in s.ams_list for t in a.trays if t.spool_id
-    ]
+    ] + [e["spool_id"] for e in _dslots.current().values()]
     if all_spool_ids:
         from ....services import drying as _drying
         async with AsyncSessionLocal() as db:
@@ -314,6 +320,8 @@ async def printer_status(_: str = Depends(get_current_user)):
                     spool_id=t.spool_id,
                     match_mode=getattr(t, "match_mode", ""),
                     spool_info=_tray_spool_info(t, _spools_map, _stock_map),
+                    drying_spool=(_spool_info(_dslots.spool_at(a.id, t.id), _spools_map)
+                                  if t.empty and _dslots.spool_at(a.id, t.id) else None),
                     cols=getattr(t, "cols", []) or [],
                     ctype=str(getattr(t, "ctype", "") or ""),
                     catalog_name=(
@@ -358,3 +366,35 @@ async def printer_status(_: str = Depends(get_current_user)):
         print_error=s.print_error,
         fw_version=s.fw_version,
     )
+
+
+# ── Bobines posees pour le sechage (emplacement vide) ─────────────────────────
+@router.put("/ams/{ams_id}/{tray_id}/drying")
+async def place_drying_spool(ams_id: int, tray_id: int, body: dict = Body({}),
+                             _: str = Depends(get_current_user)):
+    """Pose une bobine dans un emplacement AMS VIDE pour le sechage."""
+    from ....services import drying_slots as _dslots
+    from ....models.filament import Spool as _Spool
+    st = get_state()
+    a = next((a for a in (st.ams_list or []) if a.id == ams_id), None)
+    t = next((t for t in (a.trays if a else []) if t.id == tray_id), None)
+    if t is None:
+        raise HTTPException(404, "Emplacement introuvable")
+    if not t.empty:
+        raise HTTPException(400, "Emplacement occupé : un filament y est inséré")
+    try:
+        sid = int(body.get("spool_id"))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "spool_id requis")
+    async with AsyncSessionLocal() as db:
+        sp = await db.get(_Spool, sid)
+        if not sp or sp.archived:
+            raise HTTPException(404, "Bobine introuvable ou archivée")
+    await _dslots.place(ams_id, tray_id, sid)
+    return {"ok": True}
+
+
+@router.delete("/ams/{ams_id}/{tray_id}/drying")
+async def remove_drying_spool(ams_id: int, tray_id: int, _: str = Depends(get_current_user)):
+    from ....services import drying_slots as _dslots
+    return {"ok": await _dslots.remove(ams_id, tray_id)}

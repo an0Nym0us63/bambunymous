@@ -120,7 +120,12 @@ function ColorPill({ tray, spoolInfo, active }) {
   const colors = parseColors(tray, spoolInfo);
   const c1 = colors?.[0];
   const isEmpty = isEmptyTray(tray);
-  const bg = isEmpty
+  // Bobine POSEE pour le sechage dans un emplacement vide : sa couleur,
+  // attenuee et hachuree (elle n'est pas inseree), avec un soleil.
+  const posee = isEmpty ? tray.drying_spool : null;
+  const bg = posee
+    ? { background: `repeating-linear-gradient(-45deg, rgba(255,255,255,0.35) 0px, rgba(255,255,255,0.35) 2px, transparent 2px, transparent 6px), ${parseColors({}, posee)?.[0] || "#94a3b8"}`, opacity: 0.85 }
+    : isEmpty
     ? { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.18) 0px, rgba(148,163,184,0.18) 2px, transparent 2px, transparent 6px)" }
     : colorBg(colors, multicolorType(tray, spoolInfo));
   const lum = luminance((c1||"").replace("#",""));
@@ -138,6 +143,13 @@ function ColorPill({ tray, spoolInfo, active }) {
       {tray.match_mode && !isEmpty && (
         <span style={{ position:"absolute", top:1, right:3, lineHeight:1 }}>
           <MatchIcon mode={tray.match_mode} size={8}/>
+        </span>
+      )}
+      {posee && (
+        <span title={`Posée pour séchage : ${posee.translated_name || posee.name || ""}`}
+          style={{ position:"absolute", top:1, right:3, lineHeight:1, color:"#f59e0b",
+            filter:"drop-shadow(0 0 1px rgba(0,0,0,0.6))" }}>
+          <Sun size={10} strokeWidth={2.8}/>
         </span>
       )}
       {(sansEchantillon(tray, spoolInfo) || aSecher(tray, spoolInfo)) && (
@@ -297,7 +309,14 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
       {/* Bobine SVG */}
       <div style={{ position:"relative",
         transform: isActive ? "scale(1.06)" : "scale(1)", transition:"transform 0.3s" }}>
-        <SpoolSVG colors={empty?null:colors} empty={empty} size={68} active={isActive} type={mcType}/>
+        {empty && tray.drying_spool ? (
+          <div style={{ opacity:0.6 }} title="Posée pour séchage (non insérée)">
+            <SpoolSVG colors={parseColors({}, tray.drying_spool)} empty={false} size={68} active={false}
+              type={multicolorType({}, tray.drying_spool)}/>
+          </div>
+        ) : (
+          <SpoolSVG colors={empty?null:colors} empty={empty} size={68} active={isActive} type={mcType}/>
+        )}
         {/* Label slot */}
         <div style={{ position:"absolute", bottom:10, left:"50%",
           transform:"translateX(-50%)", padding:"1px 7px", borderRadius:20,
@@ -320,7 +339,11 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
       </p>
       <p style={{ fontSize:9, color:"var(--text2)", textAlign:"center",
         whiteSpace:"normal", wordBreak:"break-word", maxWidth:80, lineHeight:"12px" }}>
-        {empty ? "Vide" : (name || "")}
+        {empty
+          ? (tray.drying_spool
+              ? <span style={{ color:"#f59e0b" }}>☀ {tray.drying_spool.translated_name || tray.drying_spool.name}</span>
+              : "Vide")
+          : (name || "")}
       </p>
       {sansEchantillon(tray, spoolInfo) && (
         <span title={SWATCH_TITLE} style={{ display:"inline-flex", alignItems:"center", gap:3,
@@ -506,7 +529,26 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
           </div>
 
           {isEmpty ? (
-            <p style={{ color:"var(--muted)", fontSize:14, textAlign:"center", padding:"24px 0" }}>Slot vide</p>
+            tray.drying_spool ? (
+              <div style={{ textAlign:"center", padding:"18px 0" }}>
+                <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 4px" }}>Emplacement vide — bobine posée pour séchage</p>
+                <p style={{ fontSize:15, fontWeight:700, color:"#f59e0b", margin:"0 0 2px" }}>
+                  ☀ {tray.drying_spool.translated_name || tray.drying_spool.name}</p>
+                <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 12px" }}>
+                  {[tray.drying_spool.brand, tray.drying_spool.fila_type || tray.drying_spool.material, `#${tray.drying_spool.id}`].filter(Boolean).join(" · ")}
+                </p>
+                <AdminOnly><button onClick={async () => {
+                    try { await client.delete(`/printer/ams/${amsId}/${tray.id}/drying`); onClose(); }
+                    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+                  }}
+                  style={{ padding:"7px 14px", borderRadius:10, fontSize:12, fontWeight:700, cursor:"pointer",
+                    background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" }}>
+                  Retirer de l'emplacement
+                </button></AdminOnly>
+              </div>
+            ) : (
+              <p style={{ color:"var(--muted)", fontSize:14, textAlign:"center", padding:"24px 0" }}>Slot vide</p>
+            )
           ) : (<>
             {/* Jauge restant */}
             {pct > 0 && (

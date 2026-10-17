@@ -679,6 +679,12 @@ class MQTTManager:
                 if _is_drying and not _was_drying:
                     _DRYING_AMS.add(ams.id)
                     _sids = [t.spool_id for t in ams.trays if getattr(t, "spool_id", None)]
+                    # ... et celles simplement POSEES dans cet AMS (emplacement vide).
+                    try:
+                        from ..services import drying_slots as _dslots
+                        _sids += [x for x in _dslots.spools_in_ams(ams.id) if x not in _sids]
+                    except Exception:
+                        pass
                     if _sids:
                         logger.info(f"[DRY] AMS {ams.id} en séchage → date sur bobines {_sids}")
                         import threading as _dth

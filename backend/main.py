@@ -78,6 +78,9 @@ async def lifespan(app: FastAPI):
     try:
         from app.services import drying as _drying
         await _drying.load()
+        # Bobines posees dans un AMS pour le sechage (emplacement vide).
+        from app.services import drying_slots as _dslots
+        await _dslots.load()
     except Exception:
         logging.getLogger(__name__).exception("[DRY] regles de sechage non chargees")
     from app.services.hms import init_hms

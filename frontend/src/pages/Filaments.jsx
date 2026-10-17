@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
 import { useRfidScan } from "../store/rfidScan";
+import DryNowDialog from "../components/DryNowDialog";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag, Sun } from "lucide-react";
 import client from "../api/client";
@@ -373,7 +374,8 @@ function WeightEditRow({ spoolId, current, onUpdated }) {
 // mauvais tag, ou pour saisir/corriger l'UID a la main.
 // Date du dernier sechage, modifiable : l'AMS ne la pose que s'il seche la
 // bobine lui-meme ; un sechage au four ou sans inserer la bobine se saisit ici.
-function DryEditRow({ spoolId, current, aSecher, onUpdated }) {
+function DryEditRow({ spoolId, spoolName, current, aSecher, onUpdated }) {
+  const [dryOpen, setDryOpen] = useState(false);
   const today = () => new Date().toISOString().slice(0, 10);
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(current?.slice(0, 10) || today());
@@ -421,10 +423,7 @@ function DryEditRow({ spoolId, current, aSecher, onUpdated }) {
                 meme que le bandeau de l'AMS) et confirmation : un libelle
                 « Aujourd'hui » se lisait comme une date, pas comme une action. */}
             <button disabled={saving} title="Je viens de la sécher"
-              onClick={async () => {
-                if (await showConfirm("Marquer cette bobine comme séchée aujourd'hui ?", { confirmLabel: "Séchée" }))
-                  save(today());
-              }}
+              onClick={() => setDryOpen(true)}
               style={{ background:"none", border:"none", cursor:"pointer", color:"#f59e0b", padding:2, display:"flex" }}>
               <Sun size={14}/>
             </button>
@@ -438,6 +437,8 @@ function DryEditRow({ spoolId, current, aSecher, onUpdated }) {
           </AdminOnly>
         </div>
       )}
+      {dryOpen && <DryNowDialog spoolId={spoolId} spoolName={spoolName} onClose={() => setDryOpen(false)}
+        onDone={() => { setDryOpen(false); onUpdated?.(); }}/>}
     </div>
   );
 }
@@ -580,6 +581,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   const [confirmDelete, setConfirmDelete] = React.useState(null);
   const [filSheet, setFilSheet] = React.useState(null);   // fiche filament ouverte par-dessus
   const isAdmin = useIsAdmin();
+  const [dryOpen, setDryOpen] = useState(false);   // fenetre « sechee aujourd'hui »
   const openFilament = async () => {
     try {
       const r = await client.get(`/filaments/filaments/${spool.filament_id}`);
@@ -635,14 +637,9 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   const resteSechage = ageSechage == null ? null : (spool.dry_days || 180) - ageSechage;
   const secherBientot = !aSecher && resteSechage != null && resteSechage <= 30;
   // Raccourci depuis le badge (meme action que le soleil de la ligne « Dernier sechage »).
-  const marquerSeche = async () => {
-    if (!(await showConfirm("Marquer cette bobine comme séchée aujourd'hui ?", { confirmLabel: "Séchée" }))) return;
-    try {
-      await client.patch(`/filaments/spools/${spool.id}`,
-        { last_dried_at: `${new Date().toISOString().slice(0, 10)}T12:00:00` });
-      onClose?.();
-    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
-  };
+  // Meme fenetre que le soleil de la ligne : date + ou elle seche (ailleurs,
+  // ou posee dans un emplacement AMS vide). Etat declare en tete du composant.
+  const marquerSeche = () => setDryOpen(true);
 
   const Row = ({ label, value, mono, accent }) => (value == null || value === "") ? null : (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
@@ -722,6 +719,9 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                     {isAdmin && <Sun size={10} style={{ marginLeft:2 }}/>}
                   </span>
                 )}
+                {dryOpen && <DryNowDialog spoolId={spool.id}
+                  spoolName={spool.filament_translated_name || spool.filament_name}
+                  onClose={() => setDryOpen(false)} onDone={() => { setDryOpen(false); onClose?.(); }}/>}
               </div>
             </div>
           </div>
@@ -754,7 +754,8 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <Row label="Tray AMS"       value={spool.ams_tray}/>
           <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
           <Row label="Dernière util." value={spool.last_used_at?.slice(0,10)}/>
-          <DryEditRow spoolId={spool.id} current={spool.last_dried_at} aSecher={aSecher} onUpdated={onClose}/>
+          <DryEditRow spoolId={spool.id} spoolName={spool.filament_translated_name || spool.filament_name}
+            current={spool.last_dried_at} aSecher={aSecher} onUpdated={onClose}/>
           <Row label="Commentaire"    value={spool.comment}/>
 
           {/* ── Filament ── */}
