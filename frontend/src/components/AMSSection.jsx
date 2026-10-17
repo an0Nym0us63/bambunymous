@@ -325,9 +325,13 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
       <div style={{ position:"relative",
         transform: isActive ? "scale(1.06)" : "scale(1)", transition:"transform 0.3s" }}>
         {empty && tray.drying_spool ? (
-          <div style={{ opacity:0.6 }} title="Posée pour séchage (non insérée)">
+          <div style={{ opacity:0.6, position:"relative" }} title="Posée pour séchage (non insérée)">
             <SpoolSVG colors={parseColors({}, tray.drying_spool)} empty={false} size={68} active={false}
               type={multicolorType({}, tray.drying_spool)}/>
+            {/* Hachures legeres : la bobine est la, mais pas inseree. */}
+            <span style={{ position:"absolute", left:"50%", top:"50%", width:68, height:68,
+              transform:"translate(-50%,-50%)", borderRadius:"50%", pointerEvents:"none",
+              background:"repeating-linear-gradient(-45deg, rgba(255,255,255,0.28) 0px, rgba(255,255,255,0.28) 1.5px, transparent 1.5px, transparent 7px)" }}/>
           </div>
         ) : (
           <SpoolSVG colors={empty?null:colors} empty={empty} size={68} active={isActive} type={mcType}/>
