@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Nfc, X } from "lucide-react";
 import { useRfidScan } from "../store/rfidScan";
-import { showAlert } from "../utils/dialog";
+import { toast } from "../store/toast";
 
 // Monte une fois dans le Layout :
 //  - recoit les scans du shell natif ou que l'on soit, et ouvre la fiche sur
@@ -33,7 +33,9 @@ export default function RfidScanBridge() {
     if (!available) return;
     const handler = (e) => {
       const d = e.detail || {};
-      if (d.error) { showAlert(d.error); return; }
+      // Mauvaise lecture, tag non Bambu, donnees incompletes... : un message
+      // qui s'efface seul (2 s), pour enchainer le scan sans cliquer « OK ».
+      if (d.error) { toast(`Lecture RFID : ${d.error}`, "error", 2000); return; }
       const qs = (d.redirect || "").split("?")[1] || "";
       // La fiche (ou la creation) s'ouvre sur la page Filaments, d'ou que l'on scanne.
       navigate(`/filaments${qs ? `?${qs}` : ""}`, { replace: pathname === "/filaments" });

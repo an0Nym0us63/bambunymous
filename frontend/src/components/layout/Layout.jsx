@@ -4,6 +4,7 @@ import { Home, Settings, Package, History, ShoppingBag, BarChart2 } from "lucide
 import UserMenu from "../UserMenu";
 import ShareProgress from "../ShareProgress";
 import RfidScanBridge from "../RfidScanBridge";
+import Toast from "../Toast";
 
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil"    },
@@ -197,6 +198,7 @@ export default function Layout() {
         <main className="page-content" style={S.page}><Outlet /></main>
         <ShareProgress/>
         <RfidScanBridge/>
+        <Toast/>
 
         {/* Bottom nav mobile */}
         <nav className="show-mobile" style={S.bottomNav}>
