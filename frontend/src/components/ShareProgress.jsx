@@ -30,6 +30,7 @@ function useMobile() {
     const mq = window.matchMedia(MOBILE);
     const on = () => setM(mq.matches);
     mq.addEventListener("change", on);
+    on();   // la largeur a pu changer entre le premier rendu et cet ecouteur
     return () => mq.removeEventListener("change", on);
   }, []);
   return m;

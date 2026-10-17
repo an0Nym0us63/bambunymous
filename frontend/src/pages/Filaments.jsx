@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
-import { useNativeScan } from "../hooks/useNativeScan";
+import { useRfidScan } from "../store/rfidScan";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag, Sun } from "lucide-react";
 import client from "../api/client";
@@ -2520,16 +2520,13 @@ export default function Filaments() {
     next.delete("rfid");
     setSearchParams(next, { replace: true });
   };
-  // Écoute NFC continue via le shell WebView (absente en PWA pure).
-  const onNativeScan = React.useCallback((detail) => {
-    if (detail.error) { setDeepErr(detail.error); return; }
-    const redirect = detail.redirect || "/";
-    // On ne navigue pas hors de l'app : on rejoue le lien interne, comme le POST
-    // Android le faisait via l'URL. La feuille (fiche ou création) s'ouvre par-dessus.
-    const qs = redirect.split("?")[1] || "";
-    setSearchParams(new URLSearchParams(qs), { replace: true });
-  }, [setSearchParams]);
-  const rfidScan = useNativeScan(onNativeScan);
+  // Écoute NFC continue via le shell WebView (absente en PWA pure). Le mode est
+  // GLOBAL (store/rfidScan) : il s'active ici seulement, mais reste actif sur
+  // les autres pages, et les scans y sont recus par RfidScanBridge (Layout),
+  // qui ramene ici avec la fiche ouverte.
+  const scan = useRfidScan();
+  const rfidScan = { available: scan.available, listening: scan.listening,
+    toggle: () => (scan.listening ? scan.stop() : scan.start()) };
 
   const onRfidCreated = (res) => {
     // On enchaine sur la fiche du filament fraichement cree.

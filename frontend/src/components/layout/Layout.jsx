@@ -3,6 +3,7 @@ import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { Home, Settings, Package, History, ShoppingBag, BarChart2 } from "lucide-react";
 import UserMenu from "../UserMenu";
 import ShareProgress from "../ShareProgress";
+import RfidScanBridge from "../RfidScanBridge";
 
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil"    },
@@ -195,6 +196,7 @@ export default function Layout() {
 
         <main className="page-content" style={S.page}><Outlet /></main>
         <ShareProgress/>
+        <RfidScanBridge/>
 
         {/* Bottom nav mobile */}
         <nav className="show-mobile" style={S.bottomNav}>
