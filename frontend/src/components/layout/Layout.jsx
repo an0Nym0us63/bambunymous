@@ -5,6 +5,7 @@ import UserMenu from "../UserMenu";
 import ShareProgress from "../ShareProgress";
 import RfidScanBridge from "../RfidScanBridge";
 import Toast from "../Toast";
+import NoAutofill from "../NoAutofill";
 
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil"    },
@@ -199,6 +200,7 @@ export default function Layout() {
         <ShareProgress/>
         <RfidScanBridge/>
         <Toast/>
+        <NoAutofill/>
 
         {/* Bottom nav mobile */}
         <nav className="show-mobile" style={S.bottomNav}>
