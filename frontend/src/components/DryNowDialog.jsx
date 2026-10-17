@@ -3,7 +3,8 @@ import { createPortal } from "react-dom";
 import { Sun } from "lucide-react";
 import client from "../api/client";
 import { usePrinter } from "../store/printer";
-import { amsName, slotLabel } from "../utils/ams";
+import { amsName, slotLabel, isExternal } from "../utils/ams";
+import { colorBg } from "../utils/colors";
 import { showAlert } from "../utils/dialog";
 
 // « Sechee aujourd'hui » : date la bobine, et dit OU elle seche. Par defaut
@@ -15,16 +16,17 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
   const [where, setWhere] = useState("");          // "" = ailleurs, sinon "ams:tray"
   const [busy, setBusy] = useState(false);
 
-  const empties = [];
-  for (const a of status?.ams_list || []) {
-    for (const t of a.trays || []) {
-      if (!(t.empty || !t.filament_type)) continue;
-      const occupant = t.drying_spool && t.drying_spool.id !== spoolId
-        ? (t.drying_spool.translated_name || t.drying_spool.name) : null;
-      empties.push({ key: `${a.id}:${t.id}`, label: `${amsName(a.id)} · ${slotLabel(a.id, t.id)}`, occupant,
-        mine: t.drying_spool?.id === spoolId });
-    }
-  }
+  // Memes AMS que l'accueil (le support externe ne seche pas) ; seuls les
+  // emplacements VIDES se choisissent.
+  const units = (status?.ams_list || []).filter(a => !isExternal(a.id) && (a.trays || []).length);
+  const hex = (c) => { const h = String(c || "").replace("#", "").slice(0, 6); return h.length === 6 ? `#${h}` : null; };
+  const sel = (() => {
+    if (!where) return null;
+    const [a, t] = where.split(":").map(Number);
+    const tray = units.find(u => u.id === a)?.trays.find(x => x.id === t);
+    const occ = tray?.drying_spool && tray.drying_spool.id !== spoolId ? (tray.drying_spool.translated_name || tray.drying_spool.name) : null;
+    return { label: `${amsName(a)} · ${slotLabel(a, t)}`, occ };
+  })();
 
   const confirm = async () => {
     setBusy(true);
@@ -75,12 +77,57 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
           {spoolName ? `${spoolName} · ` : ""}Où sèche-t-elle ?
         </p>
         {opt("", "Ailleurs", "four, dessiccateur… — la date suffit")}
-        {empties.length > 0 && (
+        {units.length > 0 && (<>
           <p style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:0.4, margin:"10px 0 6px" }}>Posée dans un AMS (emplacement vide)</p>
-        )}
-        {empties.map(e => opt(e.key, e.label,
-          e.mine ? "déjà posée ici" : e.occupant ? `remplace ${e.occupant}` : null))}
+            letterSpacing:0.4, margin:"10px 0 6px" }}>Ou posée dans un AMS — touche un emplacement vide</p>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:8 }}>
+            {units.map(a => (
+              <div key={a.id} style={{ padding:"8px 8px 9px", borderRadius:12, background:"var(--surface2)",
+                border:"1px solid var(--border)" }}>
+                <div style={{ fontSize:10.5, fontWeight:800, color:"var(--muted)", textAlign:"center",
+                  letterSpacing:0.5, marginBottom:6 }}>{amsName(a.id)}</div>
+                <div style={{ display:"flex", gap:4 }}>
+                  {a.trays.map(t => {
+                    const empty = t.empty || !t.filament_type;
+                    const key = `${a.id}:${t.id}`;
+                    const on = where === key;
+                    const posee = empty ? t.drying_spool : null;
+                    const fill = posee ? hex(posee.color) : empty ? null : hex(t.color);
+                    const bg = empty && !posee
+                      ? { background:"repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }
+                      : posee
+                      ? { background:`repeating-linear-gradient(-45deg, rgba(255,255,255,0.35) 0px, rgba(255,255,255,0.35) 2px, transparent 2px, transparent 6px), ${fill || "#94a3b8"}` }
+                      : colorBg(fill ? [fill] : [], null);
+                    return (
+                      <button key={t.id} disabled={!empty} onClick={() => setWhere(on ? "" : key)}
+                        title={empty ? (posee ? `${slotLabel(a.id, t.id)} — posée : ${posee.translated_name || posee.name}`
+                          : `${slotLabel(a.id, t.id)} — vide`) : `${slotLabel(a.id, t.id)} — occupé`}
+                        style={{ flex:1, height:34, borderRadius:7, position:"relative", padding:0,
+                          cursor: empty ? "pointer" : "not-allowed", opacity: empty ? 1 : 0.3,
+                          border: on ? "2px solid #f59e0b" : empty ? "1.5px dashed rgba(148,163,184,0.7)" : "1px solid rgba(0,0,0,0.15)",
+                          boxShadow: on ? "0 0 0 3px rgba(245,158,11,0.3)" : "none", ...bg }}>
+                        <span style={{ position:"absolute", left:0, right:0, bottom:1, fontSize:8.5, fontWeight:800,
+                          color: on ? "#f59e0b" : "var(--muted)", textShadow:"0 0 2px var(--surface2)" }}>
+                          {slotLabel(a.id, t.id)}
+                        </span>
+                        {(on || posee) && (
+                          <Sun size={12} color="#f59e0b" strokeWidth={2.8}
+                            style={{ position:"absolute", top:3, left:"50%", transform:"translateX(-50%)",
+                              filter:"drop-shadow(0 0 1px rgba(0,0,0,0.6))" }}/>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          {sel && (
+            <p style={{ fontSize:12, color:"#f59e0b", fontWeight:700, margin:"10px 0 0" }}>
+              ☀ Posée en {sel.label}{sel.occ ? ` (remplace ${sel.occ})` : ""}
+            </p>
+          )}
+        </>)}
         <div style={{ display:"flex", gap:8, marginTop:12 }}>
           <button onClick={onClose} style={{ flex:1, padding:10, borderRadius:12, border:"1px solid var(--border)",
             background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>Annuler</button>
