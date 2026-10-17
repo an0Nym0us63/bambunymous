@@ -263,9 +263,14 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
 
 // ── Bobine SVG — vue de face, disque plat ──────────────────────────────────
 // ── Tray card ──────────────────────────────────────────────────────────────
-function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, onClick }) {
+function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loaded, onClick }) {
   const isActive = amsId===activeAmsId && tray.id===activeTrayId;
   const empty = isEmptyTray(tray);
+  // Bobine POSEE pour le sechage (emplacement vide) : memes details qu'une
+  // bobine chargee (matiere, jauge, poids, nom), avec la bobine attenuee et ☀.
+  const posee = empty ? tray.drying_spool : null;
+  const spoolInfo = posee || loaded;
+  const vide = empty && !posee;
   const colors = parseColors(tray, spoolInfo);
   const c1 = colors?.[0];
   const name = spoolInfo?.translated_name ?? spoolInfo?.name ?? spoolInfo?.filament_name ?? tray.catalog_name ?? null;
@@ -298,17 +303,17 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
           sans les deux, un libelle long comme "Support for PLA/PETG" imposait
           sa largeur en nowrap et elargissait TOUTE la colonne, decalant les
           slots voisins. Le titre complet reste accessible au survol. */}
-      <p title={empty ? "" : (material || "")}
+      <p title={vide ? "" : (material || "")}
         style={{ fontSize:10, color:"var(--muted)", fontWeight:600, lineHeight:"13px",
         textAlign:"center", whiteSpace:"nowrap", height:13,
         maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis" }}>
-        {empty ? "" : (material || "—")}
+        {vide ? "" : (material || "—")}
       </p>
       {/* Barre de progression couleur filament */}
       <div style={{ width:48, height:5, background: barTrackColor,
         borderRadius:3, overflow:"hidden",
         boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)" }}>
-        {!empty && (
+        {!vide && (
           <div style={{ height:"100%", borderRadius:3,
             width:`${Math.max(0,Math.min(100,pct))}%`,
             transition:"width 0.7s",
@@ -345,7 +350,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo, on
       </div>
       <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace", height:14,
         display:"flex", alignItems:"center", justifyContent:"center" }}>
-        {empty ? "" : wLabel}
+        {vide ? "" : posee ? (hasW ? wLabel : "") : wLabel}
       </p>
       <p style={{ fontSize:9, color:"var(--text2)", textAlign:"center",
         whiteSpace:"normal", wordBreak:"break-word", maxWidth:80, lineHeight:"12px" }}>
@@ -551,7 +556,9 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
                 <p style={{ fontSize:15, fontWeight:700, color:"#f59e0b", margin:"0 0 2px" }}>
                   ☀ {tray.drying_spool.translated_name || tray.drying_spool.name}</p>
                 <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 12px" }}>
-                  {[tray.drying_spool.brand, tray.drying_spool.fila_type || tray.drying_spool.material, `#${tray.drying_spool.id}`].filter(Boolean).join(" · ")}
+                  {[tray.drying_spool.brand, tray.drying_spool.fila_type || tray.drying_spool.material, `#${tray.drying_spool.id}`,
+                    tray.drying_spool.remaining_weight_g != null ? `${Math.round(tray.drying_spool.remaining_weight_g)} g restants` : null,
+                  ].filter(Boolean).join(" · ")}
                 </p>
                 <AdminOnly><button onClick={async () => {
                     try { await client.delete(`/printer/ams/${amsId}/${tray.id}/drying`); onClose(); }

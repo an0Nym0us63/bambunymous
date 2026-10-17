@@ -1069,6 +1069,8 @@ const SPOOL_SORTS = [
   ["brand",     "Marque"],
   ["remaining", "Poids restant ↓"],
   ["fullest",   "Poids restant ↑"],
+  ["dried_old", "Séchage le plus ancien"],
+  ["dried_new", "Séchage le plus récent"],
 ];
 
 // Sous-type d'un élément, quel que soit le jeu de champs : les bobines portent
@@ -1252,13 +1254,20 @@ function SpoolsView({ filaments, showArchived }) {
   // Filtrage + recherche client-side (options depuis allSpools = pas de cascade cassée)
   const spools = useMemo(() => {
     let res = allSpools;
-    if (q) {
-      const ql = q.replace("#","").toLowerCase();
-      res = res.filter(s => [
-        s.filament_translated_name, s.filament_name, s.filament_manufacturer,
-        s.filament_material, (s.filament_color||"").replace("#",""),
-        s.filament_fila_color_code, s.location, s.tag_number,
-      ].some(v => v && v.toLowerCase().includes(ql)));
+    if (q.trim()) {
+      // Partout (nom, marque, matiere, SOUS-TYPE « PLA Silk+ », couleur, code,
+      // emplacement, tag, commentaire, n° de bobine) et mot par mot : « silk
+      // rouge » trouve les Silk rouges, quel que soit l'ordre des mots.
+      const words = q.replace(/#/g, "").toLowerCase().split(/\s+/).filter(Boolean);
+      res = res.filter(s => {
+        const hay = [
+          s.filament_translated_name, s.filament_name, s.filament_manufacturer,
+          s.filament_material, s.filament_fila_type, (s.filament_color||"").replace("#",""),
+          s.filament_fila_color_code, s.location, s.tag_number, s.comment, s.external_spool_id,
+          String(s.id),
+        ].filter(Boolean).join(" ").toLowerCase();
+        return words.every(w => hay.includes(w));
+      });
     }
     // Multi-choix : une valeur cochee suffit (OU au sein d'un critere), mais
     // tous les criteres renseignes doivent etre satisfaits (ET entre criteres).
@@ -1274,6 +1283,11 @@ function SpoolsView({ filaments, showArchived }) {
       if (sort==="brand")     return (a.filament_manufacturer||"").localeCompare(b.filament_manufacturer||"");
       if (sort==="remaining") return (b.remaining_weight_g||0)-(a.remaining_weight_g||0);
       if (sort==="fullest")   return (a.remaining_weight_g||0)-(b.remaining_weight_g||0);
+      // Jamais sechee = la plus ancienne (en tete du tri « plus ancien »).
+      if (sort==="dried_old" || sort==="dried_new") {
+        const t = x => x.last_dried_at ? new Date(x.last_dried_at).getTime() : 0;
+        return sort==="dried_old" ? t(a) - t(b) : t(b) - t(a);
+      }
       return 0;
     });
     return res;
@@ -1307,7 +1321,7 @@ function SpoolsView({ filaments, showArchived }) {
       <div style={{ display:"flex", gap:8 }}>
         <div style={{ position:"relative", flex:1 }}>
           <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher par nom, marque, couleur hex, code Bambu…"
+          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher : nom, marque, type (silk…), couleur, code…"
             style={{ ...inp, paddingLeft:36 }} onFocus={inpFocus} onBlur={inpBlur}/>
         </div>
         <button onClick={()=>setFilterOpen(true)}
@@ -1931,7 +1945,9 @@ function FilamentsView() {
     let res = allFilaments;
     if (q) {
       const ql = q.toLowerCase();
-      res = res.filter(f => [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type,f.fila_color_code].some(v=>v&&v.toLowerCase().includes(ql)));
+      const words = ql.split(/\s+/).filter(Boolean);   // mot par mot, dans tous les champs
+      res = res.filter(f => { const hay = [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type,f.fila_color_code,f.color,String(f.id)].filter(Boolean).join(" ").toLowerCase();
+        return words.every(w => hay.includes(w)); });
     }
     if (filters.brand?.length) res = res.filter(f => filters.brand.includes(itemBrand(f)));
     if (filters.mat?.length)   res = res.filter(f => filters.mat.includes(getFamilyF(f)));
@@ -2593,7 +2609,9 @@ export default function Filaments() {
     let res = allFilaments;
     if (galQ) {
       const ql = galQ.toLowerCase();
-      res = res.filter(f => [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type].some(v=>v&&v.toLowerCase().includes(ql)));
+      const words = ql.split(/\s+/).filter(Boolean);
+      res = res.filter(f => { const hay = [f.translated_name,f.name,f.manufacturer,f.material,f.fila_type,f.fila_color_code,f.color].filter(Boolean).join(" ").toLowerCase();
+        return words.every(w => hay.includes(w)); });
     }
     if (galFilters.brand?.length) res = res.filter(f => galFilters.brand.includes(itemBrand(f)));
     if (galFilters.mat?.length)   res = res.filter(f => galFilters.mat.includes(getFamilyG(f)));

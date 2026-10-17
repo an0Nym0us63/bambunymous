@@ -1,9 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { Sun } from "lucide-react";
 import client from "../api/client";
 import { usePrinter } from "../store/printer";
-import { amsName, slotLabel, isExternal } from "../utils/ams";
+import { amsName, slotLabel, isExternal, grilleAccueil, lireDisposition, columnWeight, slotCount } from "../utils/ams";
 import { colorBg } from "../utils/colors";
 import { showAlert } from "../utils/dialog";
 
@@ -15,6 +15,11 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
   const status = usePrinter(s => s.status);
   const [where, setWhere] = useState("");          // "" = ailleurs, sinon "ams:tray"
   const [busy, setBusy] = useState(false);
+  // Meme disposition des AMS que l'accueil (Parametres > ordre des AMS).
+  const [order, setOrder] = useState(null);
+  useEffect(() => {
+    client.get("/settings/ams-order").then(({ data }) => setOrder(data.order ?? null)).catch(() => {});
+  }, []);
 
   // Memes AMS que l'accueil (le support externe ne seche pas) ; seuls les
   // emplacements VIDES se choisissent.
@@ -86,13 +91,17 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
         {units.length > 0 && (<>
           <p style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:0.4, margin:"10px 0 6px" }}>Ou posée dans un AMS — touche un emplacement vide</p>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:8 }}>
-            {units.map(a => (
-              <div key={a.id} style={{ padding:"8px 8px 9px", borderRadius:12, background:"var(--surface2)",
+          {(() => { const cols = grilleAccueil(units, lireDisposition(order)); return (
+          <div style={{ display:"grid", gap:8,
+            gridTemplateColumns: cols.map(c => `minmax(0, ${columnWeight(c)}fr)`).join(" ") }}>
+            {cols.flatMap((col, ci) => col.map((a, ri) => a && (
+              <div key={a.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth:0,
+                padding:"8px 6px 9px", borderRadius:12, background:"var(--surface2)",
                 border:"1px solid var(--border)" }}>
                 <div style={{ fontSize:10.5, fontWeight:800, color:"var(--muted)", textAlign:"center",
                   letterSpacing:0.5, marginBottom:6 }}>{amsName(a.id)}</div>
-                <div style={{ display:"flex", gap:4 }}>
+                <div style={{ display:"flex", gap:4, margin:"0 auto",
+                  width: `${(slotCount(a) / columnWeight(col)) * 100}%` }}>
                   {a.trays.map(t => {
                     const empty = t.empty || !t.filament_type;
                     const key = `${a.id}:${t.id}`;
@@ -127,8 +136,9 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
                   })}
                 </div>
               </div>
-            ))}
+            )))}
           </div>
+          ); })()}
           {sel && (
             <p style={{ fontSize:12, color:"#f59e0b", fontWeight:700, margin:"10px 0 0" }}>
               ☀ Posée en {sel.label}{sel.occ ? ` (remplace ${sel.occ})` : ""}
