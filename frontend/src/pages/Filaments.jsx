@@ -579,6 +579,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   useTrackDetail(spool ? `Fiche bobine · ${spool.filament_translated_name || spool.filament_name || "#" + spool.id}` : null);
   const [confirmDelete, setConfirmDelete] = React.useState(null);
   const [filSheet, setFilSheet] = React.useState(null);   // fiche filament ouverte par-dessus
+  const isAdmin = useIsAdmin();
   const openFilament = async () => {
     try {
       const r = await client.get(`/filaments/filaments/${spool.filament_id}`);
@@ -628,6 +629,20 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   // Calcule par le serveur (delai par defaut, ou celui de la famille / sous-
   // famille du filament, Parametres) : meme regle que l'alerte et l'AMS.
   const aSecher = !!spool.needs_drying;
+  // Bientot : moins de 30 jours avant d'atteindre le delai de ce filament.
+  const ageSechage = spool.last_dried_at
+    ? Math.floor((Date.now() - new Date(spool.last_dried_at).getTime()) / 86400000) : null;
+  const resteSechage = ageSechage == null ? null : (spool.dry_days || 180) - ageSechage;
+  const secherBientot = !aSecher && resteSechage != null && resteSechage <= 30;
+  // Raccourci depuis le badge (meme action que le soleil de la ligne « Dernier sechage »).
+  const marquerSeche = async () => {
+    if (!(await showConfirm("Marquer cette bobine comme séchée aujourd'hui ?", { confirmLabel: "Séchée" }))) return;
+    try {
+      await client.patch(`/filaments/spools/${spool.id}`,
+        { last_dried_at: `${new Date().toISOString().slice(0, 10)}T12:00:00` });
+      onClose?.();
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
 
   const Row = ({ label, value, mono, accent }) => (value == null || value === "") ? null : (
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
@@ -689,13 +704,22 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                 </span>
                 {/* Bien visible en haut : au scan RFID d'une bobine, on voit
                     tout de suite s'il faut la secher avant de la charger. */}
-                {aSecher && (
-                  <span title={`Jamais séchée, ou pas depuis plus de ${Math.round((spool.dry_days || 180) / 30 * 10) / 10} mois`}
+                {(aSecher || secherBientot) && (
+                  <span role={isAdmin ? "button" : undefined}
+                    onClick={isAdmin ? marquerSeche : undefined}
+                    title={(aSecher
+                      ? `Jamais séchée, ou pas depuis plus de ${Math.round((spool.dry_days || 180) / 30 * 10) / 10} mois`
+                      : `Délai de séchage atteint dans ${resteSechage} j`)
+                      + (isAdmin ? " — appuyer pour la marquer séchée aujourd'hui" : "")}
                     style={{ display:"inline-flex", alignItems:"center", gap:4,
                     fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
-                    background:"rgba(14,165,233,0.14)", color:"#0EA5E9",
-                    border:"1px solid rgba(14,165,233,0.4)" }}>
-                    <Droplets size={10}/> Séchage nécessaire
+                    cursor: isAdmin ? "pointer" : "default",
+                    background: aSecher ? "rgba(14,165,233,0.14)" : "rgba(245,158,11,0.14)",
+                    color:      aSecher ? "#0EA5E9" : "#f59e0b",
+                    border: `1px solid ${aSecher ? "rgba(14,165,233,0.4)" : "rgba(245,158,11,0.4)"}` }}>
+                    <Droplets size={10}/>
+                    {aSecher ? "Séchage nécessaire" : resteSechage <= 0 ? "Séchage aujourd'hui" : `Séchage dans ${resteSechage} j`}
+                    {isAdmin && <Sun size={10} style={{ marginLeft:2 }}/>}
                   </span>
                 )}
               </div>
