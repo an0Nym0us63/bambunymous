@@ -115,6 +115,13 @@ function PillBadge({ color, title, Icon }) {
   );
 }
 
+// Hachures posees PAR-DESSUS une couleur (bobine posee, non inseree) : en
+// calque, pour garder intactes les couleurs multiples dessous.
+function HatchOverlay({ radius = 0 }) {
+  return <span style={{ position:"absolute", inset:0, borderRadius:radius, pointerEvents:"none",
+    background:"repeating-linear-gradient(-45deg, rgba(255,255,255,0.38) 0px, rgba(255,255,255,0.38) 2px, transparent 2px, transparent 6px)" }}/>;
+}
+
 // ── Mini pastille ──────────────────────────────────────────────────────────
 function ColorPill({ tray, spoolInfo, active }) {
   const colors = parseColors(tray, spoolInfo);
@@ -123,8 +130,10 @@ function ColorPill({ tray, spoolInfo, active }) {
   // Bobine POSEE pour le sechage dans un emplacement vide : sa couleur,
   // attenuee et hachuree (elle n'est pas inseree), avec un soleil.
   const posee = isEmpty ? tray.drying_spool : null;
+  // Toutes ses couleurs (bobine multicolore comprise) ; les hachures viennent
+  // par-dessus, en calque (HatchOverlay).
   const bg = posee
-    ? { background: `repeating-linear-gradient(-45deg, rgba(255,255,255,0.35) 0px, rgba(255,255,255,0.35) 2px, transparent 2px, transparent 6px), ${parseColors({}, posee)?.[0] || "#94a3b8"}`, opacity: 0.85 }
+    ? { ...colorBg(parseColors({}, posee), multicolorType({}, posee)), opacity: 0.85 }
     : isEmpty
     ? { background: "repeating-linear-gradient(-45deg, rgba(148,163,184,0.18) 0px, rgba(148,163,184,0.18) 2px, transparent 2px, transparent 6px)" }
     : colorBg(colors, multicolorType(tray, spoolInfo));
@@ -145,6 +154,7 @@ function ColorPill({ tray, spoolInfo, active }) {
           <MatchIcon mode={tray.match_mode} size={8}/>
         </span>
       )}
+      {posee && <HatchOverlay radius={6}/>}
       {posee && (
         <span title={`Posée pour séchage : ${posee.translated_name || posee.name || ""}`}
           style={{ position:"absolute", top:1, right:3, lineHeight:1, color:"#f59e0b",
@@ -508,9 +518,15 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
         <div style={{ padding:"16px 20px 24px" }}>
           {/* En-tête */}
           <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:20 }}>
-            <div style={{ width:60, height:60, borderRadius:14, flexShrink:0, overflow:"hidden",
+            <div style={{ width:60, height:60, borderRadius:14, flexShrink:0, overflow:"hidden", position:"relative",
               boxShadow:"0 2px 12px rgba(0,0,0,0.25), inset 0 0 0 2px var(--border)",
-              ...(isEmpty ? { backgroundColor:"var(--border)" } : colorBg(parseColors(tray, info), multicolorType(tray, info))) }}/>
+              ...(isEmpty && tray.drying_spool
+                ? { ...colorBg(parseColors({}, tray.drying_spool), multicolorType({}, tray.drying_spool)), opacity:0.85 }
+                : isEmpty ? { backgroundColor:"var(--border)" }
+                : colorBg(parseColors(tray, info), multicolorType(tray, info))) }}>
+              {/* Bobine posee pour sechage : ses couleurs, hachurees (non inseree). */}
+              {isEmpty && tray.drying_spool && <HatchOverlay radius={14}/>}
+            </div>
             <div style={{ flex:1, minWidth:0 }}>
               <p style={{ fontSize:19, fontWeight:800, color:"var(--text)", margin:0,
                 letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>

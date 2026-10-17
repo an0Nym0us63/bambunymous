@@ -20,6 +20,12 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
   // emplacements VIDES se choisissent.
   const units = (status?.ams_list || []).filter(a => !isExternal(a.id) && (a.trays || []).length);
   const hex = (c) => { const h = String(c || "").replace("#", "").slice(0, 6); return h.length === 6 ? `#${h}` : null; };
+  // Toutes les couleurs (bobine multicolore) : colors_array de la fiche, ou
+  // cols du MQTT pour un filament insere ; sinon la couleur simple.
+  const colorsOf = (list, single) => {
+    const arr = (Array.isArray(list) ? list : String(list || "").split(",")).map(hex).filter(Boolean);
+    return arr.length ? arr : [hex(single)].filter(Boolean);
+  };
   const sel = (() => {
     if (!where) return null;
     const [a, t] = where.split(":").map(Number);
@@ -92,12 +98,11 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
                     const key = `${a.id}:${t.id}`;
                     const on = where === key;
                     const posee = empty ? t.drying_spool : null;
-                    const fill = posee ? hex(posee.color) : empty ? null : hex(t.color);
+                    const cols = posee ? colorsOf(posee.colors_array, posee.color)
+                      : empty ? [] : colorsOf(t.cols, t.color);
                     const bg = empty && !posee
                       ? { background:"repeating-linear-gradient(-45deg, rgba(148,163,184,0.22) 0px, rgba(148,163,184,0.22) 2px, transparent 2px, transparent 6px)" }
-                      : posee
-                      ? { background:`repeating-linear-gradient(-45deg, rgba(255,255,255,0.35) 0px, rgba(255,255,255,0.35) 2px, transparent 2px, transparent 6px), ${fill || "#94a3b8"}` }
-                      : colorBg(fill ? [fill] : [], null);
+                      : colorBg(cols, posee ? posee.multicolor_type : null);
                     return (
                       <button key={t.id} disabled={!empty} onClick={() => setWhere(on ? "" : key)}
                         title={empty ? (posee ? `${slotLabel(a.id, t.id)} — posée : ${posee.translated_name || posee.name}`
@@ -106,6 +111,8 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
                           cursor: empty ? "pointer" : "not-allowed", opacity: empty ? 1 : 0.3,
                           border: on ? "2px solid #f59e0b" : empty ? "1.5px dashed rgba(148,163,184,0.7)" : "1px solid rgba(0,0,0,0.15)",
                           boxShadow: on ? "0 0 0 3px rgba(245,158,11,0.3)" : "none", ...bg }}>
+                        {posee && <span style={{ position:"absolute", inset:0, borderRadius:6, pointerEvents:"none",
+                          background:"repeating-linear-gradient(-45deg, rgba(255,255,255,0.38) 0px, rgba(255,255,255,0.38) 2px, transparent 2px, transparent 6px)" }}/>}
                         <span style={{ position:"absolute", left:0, right:0, bottom:1, fontSize:8.5, fontWeight:800,
                           color: on ? "#f59e0b" : "var(--muted)", textShadow:"0 0 2px var(--surface2)" }}>
                           {slotLabel(a.id, t.id)}
