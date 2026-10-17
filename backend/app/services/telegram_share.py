@@ -566,16 +566,17 @@ def render_caption(share: dict, message: str = "") -> str:
         if live.get("eta"):
             bits.append(f"fin vers {live['eta']}")
         parts.append(" · ".join(bits))
-    if message.strip():
-        # Encadre (citation Telegram) : le mot ajoute se distingue d'un coup
-        # d'oeil des informations generees.
-        parts.append(f"<blockquote>💬 {html.escape(message.strip())}</blockquote>")
     if share["stats"]:
         parts.append(" · ".join(share["stats"]))
     if share["filaments"]:
         parts.append("🎨 Filaments\n" + "\n".join(share["filaments"]))
     for url in share["links"][:3]:
         parts.append(f'🔗 <a href="{url}">Voir sur MakerWorld</a>')
+    if message.strip():
+        # Tout EN BAS, en encadre (citation Telegram) : Telegram ouvre un long
+        # message sur sa fin, c'est donc la que le mot ajoute est vu d'abord ;
+        # en tete, il passait inapercu sous les photos.
+        parts.append(f"<blockquote>💬 {html.escape(message.strip())}</blockquote>")
     text = "\n\n".join(parts)
     if len(text) > CAPTION_MAX and share["filaments"]:   # on raccourcit d'abord la liste
         return render_caption({**share, "filaments": share["filaments"][:-1]}, message)
