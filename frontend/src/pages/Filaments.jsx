@@ -347,6 +347,20 @@ function WeightEditRow({ spoolId, current, total, tare, onUpdated }) {
 
   const save = async () => {
     if (!valide) return;
+    // Confirmation : le calcul en clair, puis le poids qui sera reellement enregistre.
+    const g = x => `${Math.round(x)} g`;
+    const fin = Math.max(0, next);
+    const calcul = mode === "set"   ? `Poids restant saisi : ${g(n)}`
+      : mode === "sub"   ? `${g(cur)} − ${g(n)} retirés`
+      : mode === "add"   ? `${g(cur)} + ${g(n)} ajoutés`
+      : `Balance ${g(n)} − support vide ${g(t)}`;
+    const notes = [
+      next < 0 ? "Le calcul passe sous 0 : la bobine sera mise à 0 g." : null,
+      total > 0 && fin > total ? `Attention : plus qu'une bobine neuve (${g(total)}).` : null,
+    ].filter(Boolean);
+    if (!(await showConfirm(
+      `${calcul}\n\nAvant : ${g(cur)}\nEnregistré : ${g(fin)}${notes.length ? `\n\n${notes.join("\n")}` : ""}`,
+      { title: "Valider le nouveau poids ?", confirmLabel: "Valider" }))) return;
     setSaving(true);
     try {
       // La pesee devient une valeur absolue (jamais sous 0 : support mal estime).
