@@ -56,7 +56,12 @@ async def login(form: OAuth2PasswordRequestForm = Depends(), otp: str | None = F
             await db.commit()
         role = user.role
     else:
-        # Repli sur l'ancien mecanisme (settings).
+        # Repli sur l'ancien mecanisme (settings) : SEULEMENT si aucun compte
+        # n'existe encore. Sinon, supprimer le compte « admin » aurait laisse
+        # entrer admin/admin, ou l'ancien mot de passe garde dans les settings.
+        from sqlalchemy import func as _func
+        if (await db.execute(select(_func.count()).select_from(User))).scalar_one():
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Identifiants invalides")
         stored_hash = await get_setting(db, "ADMIN_PASSWORD_HASH")
         stored_user = await get_setting(db, "ADMIN_USERNAME", "admin")
         if not stored_hash:
@@ -103,6 +108,11 @@ async def _resolve(token: str, db: AsyncSession) -> tuple[str, str]:
     # table users). On le laisse passer avec le role du jeton, sinon une
     # installation pas encore migree se retrouverait verrouillee dehors.
     if not user:
+        from sqlalchemy import func as _func
+        if (await db.execute(select(_func.count()).select_from(User))).scalar_one():
+            # Compte supprime (ou jamais cree) alors que la table est en
+            # service : son jeton ne vaut plus rien.
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Compte inconnu")
         return username, (payload.get("role") or ROLE_ADMIN)
 
     if not user.active:

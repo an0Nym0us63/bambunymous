@@ -511,6 +511,18 @@ function UsersSection() {
               <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
                 {/* Le compte principal et le sien propre ne sont pas modifiables
                     (hors mot de passe) : on evite de se couper l'acces. */}
+                {/* Transmettre le role de compte principal : l'ancien devient
+                    un administrateur ordinaire (supprimable). */}
+                {!u.protected && u.role === ROLE_ADMIN && u.active && (
+                  <button disabled={busy}
+                    onClick={async ()=>{ if (await showConfirm(`Faire de « ${u.username} » le compte principal ?\n\n`
+                      + "Le compte principal ne peut être ni supprimé, ni désactivé, ni rétrogradé. L'actuel compte "
+                      + "principal deviendra un administrateur ordinaire, que tu pourras supprimer.",
+                      { confirmLabel:"Rendre principal" })) act(()=>client.post(`/users/${u.id}/primary`)); }}
+                    style={pill("#f59e0b", "rgba(245,158,11,0.35)")}>
+                    ★ Rendre principal
+                  </button>
+                )}
                 {!u.protected && u.username !== meName && (<>
                 {/* Avec trois roles, la bascule binaire n'a plus de sens : on
                     propose les roles autres que le sien. */}

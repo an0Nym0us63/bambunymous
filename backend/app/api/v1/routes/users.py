@@ -43,14 +43,26 @@ def _out(u: User, protected: bool = False) -> UserOut:
                    last_seen=(str(u.last_seen) if getattr(u, "last_seen", None) else None))
 
 
+PRIMARY_KEY = "PRIMARY_ADMIN_ID"
+
+
 async def _root_admin_id(db: AsyncSession) -> Optional[int]:
     """
-    Compte administrateur d'origine : le plus ancien. Il ne peut etre ni
-    supprime, ni desactive, ni retrograde -- seul son mot de passe est
-    modifiable. Garantit qu'il reste toujours un acces administrateur.
+    Compte administrateur principal : celui designe (reglage PRIMARY_ADMIN_ID),
+    sinon le plus ancien administrateur. Il ne peut etre ni supprime, ni
+    desactive, ni retrograde -- seul son mot de passe est modifiable. Garantit
+    qu'il reste toujours un acces administrateur. Le role se transmet a un
+    autre administrateur actif (« Rendre principal »), ce qui rend l'ancien
+    supprimable (le compte « admin » d'installation, par exemple).
     """
+    from ....services.settings_service import get_setting
+    raw = await get_setting(db, PRIMARY_KEY, "")
+    if str(raw or "").isdigit():
+        u = await db.get(User, int(raw))
+        if u and u.role == ROLE_ADMIN and u.active:
+            return u.id
     return (await db.execute(
-        select(User.id).where(User.role == ROLE_ADMIN).order_by(User.id).limit(1)
+        select(User.id).where(User.role == ROLE_ADMIN).order_by(User.active.desc(), User.id).limit(1)
     )).scalar_one_or_none()
 
 
@@ -240,6 +252,19 @@ async def update_user(
     await db.commit()
     await db.refresh(u)
     return _out(u)
+
+
+@router.post("/{uid}/primary", response_model=UserOut)
+async def make_primary(uid: int, db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    """Designe le compte administrateur principal (un administrateur actif)."""
+    from ....services.settings_service import set_setting
+    u = await db.get(User, uid)
+    if not u:
+        raise HTTPException(404, "Utilisateur introuvable")
+    if u.role != ROLE_ADMIN or not u.active:
+        raise HTTPException(400, "Seul un administrateur actif peut devenir le compte principal")
+    await set_setting(db, PRIMARY_KEY, str(u.id))
+    return _out(u, protected=True)
 
 
 @router.post("/{uid}/2fa/reset")
