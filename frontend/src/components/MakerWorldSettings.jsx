@@ -137,6 +137,10 @@ export default function MakerWorldSettings() {
           marginTop:12, cursor:"pointer" }}>
           <input type="checkbox" checked={handy} onChange={e => { setHandyPref(e.target.checked); setHandy(e.target.checked); }}/>
           Ouvrir les liens MakerWorld dans Bambu Handy (cet appareil ; navigateur si Handy n'est pas installée)
+          {window.BambuScan && !window.BambuScan.openIntent && (
+            <span style={{ display:"block", fontSize:11, color:"#f59e0b" }}>
+              Pas encore dans l'application Android BambuNymous (sa mise à jour est nécessaire) ; marche dans Chrome.
+            </span>)}
         </label>
       )}
 

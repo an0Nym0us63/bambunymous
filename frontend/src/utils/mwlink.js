@@ -14,8 +14,13 @@ export function setHandyPref(on) {
   try { localStorage.setItem(KEY, on ? "1" : "0"); } catch { /* navigation privee */ }
 }
 
+// Coquille Android BambuNymous : elle passe les liens externes a Android sans
+// filet, et un lien « intent:// » la faisait PLANTER. Tant qu'elle ne sait pas
+// les ouvrir (pont openIntent absent), on y garde le lien normal.
+const shellCantIntent = () => typeof window !== "undefined" && window.BambuScan && !window.BambuScan.openIntent;
+
 export function mwHref(url) {
-  if (!url || !isAndroid() || !handyPref()) return url;
+  if (!url || !isAndroid() || !handyPref() || shellCantIntent()) return url;
   try {
     const u = new URL(url);
     return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=https;package=${HANDY};`
