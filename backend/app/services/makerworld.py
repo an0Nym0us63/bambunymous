@@ -19,10 +19,21 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-# Deux portes vers la meme API : le site (derriere Cloudflare, qui peut
-# filtrer) puis l'hote de l'API Bambu (sans Cloudflare). La seconde ne sert
-# que si la premiere refuse.
-HOSTS = ("https://makerworld.com/api/v1", "https://api.bambulab.com/v1")
+# Deux portes vers la meme API : l'hote de l'API Bambu (sans Cloudflare, deux
+# fois plus rapide a l'essai : 0,34 s contre 0,65 s) puis le site, qui ne sert
+# que si le premier refuse.
+HOSTS = ("https://api.bambulab.com/v1", "https://makerworld.com/api/v1")
+
+
+def session():
+    """Une session HTTP par fil, gardee ouverte : la connexion TLS n'est pas
+    renegociee a chaque appel (c'etait l'essentiel du temps d'une requete)."""
+    import threading
+    import requests
+    loc = session.__dict__.setdefault("_loc", threading.local())
+    if not hasattr(loc, "s"):
+        loc.s = requests.Session()
+    return loc.s
 REFRESH_DAYS = 30
 _RUNNING = {"on": False}
 _LAST = {"run": None}          # bilan du dernier passage, pour les Parametres
@@ -48,7 +59,7 @@ def _get_json(path: str, token: str = None):
     code = 0
     for host in HOSTS:
         try:
-            r = requests.get(host + path, timeout=20, headers=headers)
+            r = session().get(host + path, timeout=20, headers=headers)
         except Exception as e:
             logger.info(f"[MW] {host}{path} : injoignable ({type(e).__name__})")
             continue

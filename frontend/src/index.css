@@ -122,3 +122,15 @@ body {
 
 /* Position relative sur les sheets pour le bouton ✕ absolu */
 .sheet-inner { position: relative; }
+
+/* MakerWorld : squelettes de chargement (pas de page vide) et petite roue. */
+@keyframes mwShimmer { 0% { background-position: -200px 0; } 100% { background-position: calc(200px + 100%) 0; } }
+.mw-skel {
+  background: linear-gradient(90deg, var(--surface2) 0px, var(--border) 80px, var(--surface2) 160px) var(--surface2);
+  background-size: 200px 100%; background-repeat: no-repeat;
+  animation: mwShimmer 1.2s ease-in-out infinite;
+}
+.mw-spin {
+  width: 18px; height: 18px; border-radius: 50%; display: inline-block;
+  border: 2px solid var(--border); border-top-color: #3b82f6; animation: spin .8s linear infinite;
+}

@@ -3,7 +3,8 @@ import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle
 import { useSearchParams } from "react-router-dom";
 import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
-import MakerWorldModelSheet from "../components/MakerWorldModelSheet";
+import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
+import MwImg from "../components/MwImg";
 import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
@@ -727,10 +728,10 @@ function MakerWorldCard({ designId, note, prints = [] }) {
   return (
     <div style={{ marginBottom:14, borderRadius:12, border:"1px solid var(--border)",
       background:"var(--surface2)", overflow:"hidden" }}>
-      <a href={url} onClick={e => { e.preventDefault(); setSheet(designId); }}
+      <a href={url} onClick={e => { e.preventDefault(); setSheet(designId); }} onPointerDown={() => prefetchModel(designId)}
         style={{ display:"flex", gap:10, padding:10, textDecoration:"none", color:"var(--text)", cursor:"pointer" }}>
         {mw.cover_url && (
-          <img src={mw.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
+          <MwImg src={mw.cover_url} w={64}
             style={{ width:64, height:64, borderRadius:8, objectFit:"cover", flexShrink:0, background:"var(--surface)" }}/>
         )}
         <div style={{ minWidth:0, flex:1 }}>
@@ -745,7 +746,7 @@ function MakerWorldCard({ designId, note, prints = [] }) {
           )}
           {mw.creator_name && (
             <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"var(--muted)", marginTop:3 }}>
-              {mw.creator_avatar && <img src={mw.creator_avatar} alt="" referrerPolicy="no-referrer"
+              {mw.creator_avatar && <MwImg src={mw.creator_avatar} w={28}
                 style={{ width:14, height:14, borderRadius:"50%" }}/>}
               par {mw.creator_name}
             </div>
@@ -825,7 +826,7 @@ function MakerWorldPlates({ profiles, prints }) {
               style={{ flexShrink:0, width:62, textAlign:"center", opacity: ok || cours ? 1 : 0.55 }}>
               <div style={{ position:"relative", width:62, height:62, borderRadius:8, overflow:"hidden",
                 border: ok ? "2px solid #22c55e" : cours ? "2px solid #f59e0b" : "1px dashed var(--border)", background:"var(--surface)" }}>
-                {pl.thumb && <img src={pl.thumb} alt="" loading="lazy" referrerPolicy="no-referrer"
+                {pl.thumb && <MwImg src={pl.thumb} w={62}
                   style={{ width:"100%", height:"100%", objectFit:"cover" }}/>}
                 {ok && <span style={{ position:"absolute", top:2, right:2, width:16, height:16, borderRadius:"50%",
                   background:"#22c55e", color:"white", fontSize:10, fontWeight:800, lineHeight:"16px" }}>✓</span>}
@@ -863,10 +864,11 @@ function MakerWorldSimilar({ designId, onOpen }) {
         <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:2 }}>
           {sim.map(x => (
             <a key={x.design_id} href={x.url} onClick={e => { if (onOpen) { e.preventDefault(); onOpen(x.design_id); } }}
+              onPointerDown={() => prefetchModel(x.design_id)}
               target="_blank" rel="noopener noreferrer"
               style={{ flexShrink:0, width:96, textDecoration:"none", color:"var(--text)" }}>
               <div style={{ position:"relative", width:96, height:96, borderRadius:8, overflow:"hidden", background:"var(--surface)" }}>
-                {x.cover_url && <img src={x.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
+                {x.cover_url && <MwImg src={x.cover_url} w={96}
                   style={{ width:"100%", height:"100%", objectFit:"cover" }}/>}
                 {x.printed > 0 && <span style={{ position:"absolute", left:4, bottom:4, fontSize:9.5, fontWeight:800,
                   padding:"1px 6px", borderRadius:20, background:"#22c55e", color:"white" }}>✓ IMPRIMÉ</span>}

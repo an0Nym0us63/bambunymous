@@ -1,10 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import AdminOnly from "./AdminOnly";
 import { showAlert, showConfirm } from "../utils/dialog";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
-import MakerWorldModelSheet from "./MakerWorldModelSheet";
+import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
+import MwImg from "./MwImg";
+
+// Cache de la vue (le temps de la session) : revenir sur un onglet ou une
+// collection affiche aussitot ce qu'on avait, puis se met a jour en fond.
+const CACHE = new Map();
+const sameIds = (a, b) => a.length >= b.length && b.every((x, i) => a[i]?.design_id === x.design_id);
 
 // Onglet MakerWorld de l'Historique (compte connecte dans les Parametres) : collections
 // de favoris puis leurs modeles, et modeles aimes ; chacun avec « deja
@@ -38,6 +44,7 @@ export default function MakerWorldView({ onSearch }) {
   const [q, setQ] = useState("");                  // saisie de recherche
   const [sq, setSq] = useState("");                // recherche lancee
   const [more, setMore] = useState(false);         // page suivante en cours
+  const sentinel = useRef(null);                   // bas de grille : charge la page suivante
 
   useEffect(() => {
     client.get("/makerworld/status").then(({ data }) => setStatus(data)).catch(() => setStatus({}));
@@ -47,9 +54,11 @@ export default function MakerWorldView({ onSearch }) {
     if (tab === "search") {
       if (!sq) { setData({ items: [] }); return; }
       let alive = true;
-      setData(null);
+      const key = `search:${sq}`;
+      setData(CACHE.get(key) || null);
       client.get("/makerworld/search", { params: { q: sq } })
-        .then(({ data }) => alive && setData(data))
+        .then(({ data }) => { if (!alive) return; const c = CACHE.get(key);
+          if (!(c && sameIds(c.items, data.items))) { CACHE.set(key, data); setData(data); } })
         .catch(e => alive && setData({ error: e.response?.data?.detail || e.message }));
       return () => { alive = false; };
     }
@@ -58,7 +67,9 @@ export default function MakerWorldView({ onSearch }) {
     if (tab === "following") {
       // Par lots de 20 createurs : les premiers modeles s'affichent tout de
       // suite, la suite se complete (250 suivis ne font pas attendre).
-      setData(null); setProgress(null);
+      const fkey = `follow:${picked.join(",") || "tous"}`;
+      const cached = CACHE.get(fkey);
+      setData(cached || null); setProgress(null);
       (async () => {
         try {
           let list = creators;
@@ -79,33 +90,69 @@ export default function MakerWorldView({ onSearch }) {
             const seen = new Set(acc.map(x => x.design_id));
             acc = [...acc, ...(d.items || []).filter(x => !seen.has(x.design_id))]
               .sort((a, b) => (b.published || "").localeCompare(a.published || ""));
-            setData({ items: acc });
+            // Deja en cache : on garde l'affichage et on remplace a la fin.
+            if (!cached) setData({ items: acc });
             setProgress({ done: Math.min(i + 20, target.length), total: target.length });
           }
+          if (alive) { CACHE.set(fkey, { items: acc }); setData({ items: acc }); }
         } catch (e) { alive && setData({ error: e.response?.data?.detail || e.message }); }
       })();
       return () => { alive = false; };
     }
     const url = tab === "likes" ? "/makerworld/collection/likes"
       : coll ? `/makerworld/collections/${coll.id}` : "/makerworld/collections";
+    const key = tab === "likes" ? "likes" : coll ? `coll:${coll.id}` : "colls";
+    const cached = CACHE.get(key);
     const load = (again) => client.get(url).then(({ data }) => {
       if (!alive) return;
+      // Pages deja chargees en cache et meme debut : on garde le cache (le
+      // defilement n'est pas ramene en haut) en rafraichissant les etats.
+      if (data.items && cached?.items && sameIds(cached.items, data.items)) {
+        const fresh = new Map(data.items.map(x => [x.design_id, x]));
+        data = { ...cached, items: cached.items.map(x => fresh.get(x.design_id) || x) };
+      }
+      CACHE.set(key, data);
       setData(data);
       // Modeles sans fiche : lus en arriere-plan, on recharge une fois.
       if (data.pending && again) timer = setTimeout(() => load(false), 8000);
-    }).catch(e => alive && setData({ error: e.response?.data?.detail || e.message }));
-    setData(null);
+    }).catch(e => alive && !cached && setData({ error: e.response?.data?.detail || e.message }));
+    setData(cached || null);
     load(true);
     return () => { alive = false; clearTimeout(timer); };
   }, [tab, coll?.id, status?.connected, sq, picked.join(","), reload]);
 
+  const pageUrl = tab === "search" ? "/makerworld/search" : tab === "likes" ? "/makerworld/collection/likes"
+    : coll ? `/makerworld/collections/${coll.id}` : null;
+  const pageKey = tab === "search" ? `search:${sq}` : tab === "likes" ? "likes" : coll ? `coll:${coll.id}` : null;
+  const hasMore = !!data?.items && (tab === "search" ? data.total > data.items.length
+    : (tab === "likes" || coll) ? !!data.has_more : false);
   const loadMore = () => {
+    if (more || !pageUrl) return;
     setMore(true);
-    client.get("/makerworld/search", { params: { q: sq, offset: data.items.length } })
-      .then(({ data: d }) => setData(prev => ({ ...prev, items: [...prev.items,
-        ...(d.items || []).filter(x => !prev.items.some(y => y.design_id === x.design_id))] })))
+    client.get(pageUrl, { params: { ...(tab === "search" ? { q: sq } : {}), offset: data.items.length } })
+      .then(({ data: d }) => setData(prev => {
+        const seen = new Set(prev.items.map(y => y.design_id));
+        const next = { ...prev, has_more: d.has_more, total: d.total ?? prev.total,
+          items: [...prev.items, ...(d.items || []).filter(x => !seen.has(x.design_id))] };
+        if (!(d.items || []).length) next.has_more = false;
+        if (pageKey) CACHE.set(pageKey, next);
+        return next;
+      }))
       .catch(() => {}).finally(() => setMore(false));
   };
+  useEffect(() => {
+    const el = sentinel.current;
+    if (!el || !hasMore || more) return;
+    // Defilement infini : observateur + controle au defilement (la page
+    // defile dans un conteneur, et certains navigateurs integres retardent
+    // l'observateur).
+    const check = () => { const r = el.getBoundingClientRect(); if (r.top < window.innerHeight + 600) loadMore(); };
+    const io = new IntersectionObserver(es => { if (es[0].isIntersecting) loadMore(); }, { rootMargin: "600px" });
+    io.observe(el);
+    document.addEventListener("scroll", check, true);
+    check();
+    return () => { io.disconnect(); document.removeEventListener("scroll", check, true); };
+  });
 
   const saveName = async () => {
     const v = (nameEdit?.value || "").trim();
@@ -214,7 +261,7 @@ export default function MakerWorldView({ onSearch }) {
           )}
         </div>
 
-        {model && <MakerWorldModelSheet designId={model} onClose={() => setModel(null)} onSearch={onSearch}/>}
+        {model && <MakerWorldModelSheet designId={model.design_id} preview={model} onClose={() => setModel(null)} onSearch={onSearch}/>}
         {pickFor && (
           <MakerWorldCollectionsPicker designId={pickFor.design_id} title={pickFor.title}
             onClose={() => setPickFor(null)} onSaved={() => tab === "favorites" && setReload(n => n + 1)}/>
@@ -225,7 +272,7 @@ export default function MakerWorldView({ onSearch }) {
             : tab !== "search" && !status.connected ? (
               <p style={msg}>Connecte ton compte MakerWorld dans <b>Paramètres → Données → MakerWorld</b> pour voir
                 tes collections et tes j'aime ici.</p>
-            ) : data === null ? <p style={msg}>Chargement…</p>
+            ) : data === null ? <Skeleton/>
             : data.error ? <p style={{ ...msg, color:"#f59e0b" }}>MakerWorld ne répond pas comme prévu : {data.error}</p>
             : !showModels ? (
               (data.collections || []).length === 0 ? <p style={msg}>Aucune collection.</p> : (
@@ -260,16 +307,16 @@ export default function MakerWorldView({ onSearch }) {
               <div style={grid}>
                 {items.map(x => (
                   <div key={x.design_id} style={{ ...card, ...(x.printed > 0 ? printedCard : null) }}>
-                    <a href={x.url} onClick={e => { e.preventDefault(); setModel(x.design_id); }} style={{ display:"block", position:"relative", cursor:"pointer" }}>
+                    <a href={x.url} onClick={e => { e.preventDefault(); setModel(x); }} onPointerDown={() => prefetchModel(x.design_id)}
+                      style={{ display:"block", position:"relative", cursor:"pointer", background:"var(--surface)" }}>
                       {x.cover_url
-                        ? <img src={x.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
-                            style={{ width:"100%", aspectRatio:"1", objectFit:"cover", display:"block", background:"var(--surface)" }}/>
-                        : <div style={{ width:"100%", aspectRatio:"1", background:"var(--surface)" }}/>}
+                        ? <MwImg src={x.cover_url} w={220} style={{ width:"100%", aspectRatio:"1", objectFit:"cover", display:"block" }}/>
+                        : <div style={{ width:"100%", aspectRatio:"1" }}/>}
                       {x.printed > 0 && <span style={ribbon("#22c55e")}>✓ IMPRIMÉ</span>}
                       {!x.printed && x.in_progress > 0 && <span style={ribbon("#f59e0b")}>EN COURS</span>}
                     </a>
                     <div style={{ padding:"7px 8px 8px", display:"flex", flexDirection:"column", gap:4, flex:1 }}>
-                      <a href={x.url} onClick={e => { e.preventDefault(); setModel(x.design_id); }}
+                      <a href={x.url} onClick={e => { e.preventDefault(); setModel(x); }} onPointerDown={() => prefetchModel(x.design_id)}
                         style={{ fontSize:12, fontWeight:700, color:"var(--text)", textDecoration:"none", lineHeight:1.3,
                           overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
                         {x.title_fr || x.title || `Modèle ${x.design_id}`}
@@ -300,11 +347,14 @@ export default function MakerWorldView({ onSearch }) {
                   </div>
                 ))}
               </div>
-              {tab === "search" && data.total > data.items.length && (
-                <button onClick={loadMore} disabled={more}
-                  style={{ display:"block", margin:"14px auto 0", padding:"8px 18px", borderRadius:10, fontSize:12,
-                    fontWeight:700, cursor:"pointer", background:"var(--surface2)", border:"1px solid var(--border)",
-                    color:"var(--text)" }}>{more ? "…" : `Plus de résultats (${data.items.length} / ${data.total})`}</button>
+              {hasMore && (
+                <div ref={sentinel} style={{ display:"flex", justifyContent:"center", padding:"14px 0" }}>
+                  {more ? <span className="mw-spin"/> : (
+                    <button onClick={loadMore} style={{ padding:"8px 18px", borderRadius:10, fontSize:12, fontWeight:700,
+                      cursor:"pointer", background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" }}>
+                      Plus de modèles{data.total ? ` (${data.items.length} / ${data.total})` : ""}</button>
+                  )}
+                </div>
               )}
             </>)}
         </div>
@@ -343,7 +393,7 @@ function CreatorPicker({ creators, picked, onClose, onApply }) {
             <label key={c.uid} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 8px",
               borderRadius:10, cursor:"pointer", background: sel.has(c.uid) ? "rgba(59,130,246,0.08)" : "none" }}>
               <input type="checkbox" checked={sel.has(c.uid)} onChange={() => toggle(c.uid)}/>
-              {c.avatar ? <img src={c.avatar} alt="" loading="lazy" referrerPolicy="no-referrer"
+              {c.avatar ? <MwImg src={c.avatar} w={56}
                 style={{ width:28, height:28, borderRadius:"50%", flexShrink:0 }}/>
                 : <span style={{ width:28, height:28, borderRadius:"50%", background:"var(--surface2)", flexShrink:0 }}/>}
               <span style={{ minWidth:0, flex:1 }}>
@@ -381,7 +431,7 @@ function Mosaic({ covers = [] }) {
       gridTemplateColumns: c.length > 1 ? "minmax(0,1fr) minmax(0,1fr)" : "minmax(0,1fr)",
       gridTemplateRows: c.length > 2 ? "minmax(0,1fr) minmax(0,1fr)" : "minmax(0,1fr)" }}>
       {c.map((u, i) => (
-        <img key={i} src={u} alt="" loading="lazy" referrerPolicy="no-referrer"
+        <MwImg key={i} src={u} w={c.length > 1 ? 110 : 220}
           style={{ width:"100%", height:"100%", minWidth:0, minHeight:0, objectFit:"cover", display:"block",
             background:"var(--surface)", gridRow: c.length === 3 && i === 0 ? "span 2" : undefined }}/>
       ))}
@@ -398,6 +448,23 @@ function printedLabel(x) {
 const printedCard = { border:"2px solid #22c55e", boxShadow:"0 0 0 3px rgba(34,197,94,0.12)" };
 const ribbon = c => ({ position:"absolute", top:6, left:6, fontSize:10, fontWeight:800, letterSpacing:0.4,
   padding:"3px 8px", borderRadius:20, background:c, color:"white", boxShadow:"0 1px 4px rgba(0,0,0,0.35)" });
+
+// Squelette de grille pendant le premier chargement (pas de page vide).
+function Skeleton() {
+  return (
+    <div style={grid}>
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} style={{ ...card, border:"1px solid var(--border)" }}>
+          <div className="mw-skel" style={{ width:"100%", aspectRatio:"1" }}/>
+          <div style={{ padding:"8px" }}>
+            <div className="mw-skel" style={{ height:11, width:"85%", borderRadius:6 }}/>
+            <div className="mw-skel" style={{ height:9, width:"55%", borderRadius:6, marginTop:7 }}/>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 const iconBtn = { padding:"5px 9px", borderRadius:9, fontSize:13, cursor:"pointer", background:"var(--surface2)",
   border:"1px solid var(--border)", color:"var(--text)" };

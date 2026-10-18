@@ -245,11 +245,60 @@ async def _enrich(items: list) -> dict:
     return {"items": out, "pending": len(missing)}
 
 
-async def collection(kind: str) -> dict:
-    """Modeles aimes, enrichis (fiche, deja imprime)."""
+# Petits caches (2 min) : rouvrir une collection ou revenir sur l'onglet ne
+# relit pas MakerWorld. Toute ecriture les vide.
+_LIST_CACHE = {}
+_LIST_TTL = 120
+
+
+def _cache_get(key):
+    import time
+    hit = _LIST_CACHE.get(key)
+    return hit[1] if hit and time.time() - hit[0] < _LIST_TTL else None
+
+
+def _cache_put(key, val):
+    import time
+    _LIST_CACHE[key] = (time.time(), val)
+    return val
+
+
+def _cache_clear():
+    _LIST_CACHE.clear()
+
+
+async def _page(path_fmt: str, offset: int, limit: int) -> dict:
+    """UNE page d'une liste de modeles : le front affiche les premiers tout de
+    suite et demande la suite au defilement."""
+    import asyncio
+    from .makerworld import _get_json
+    tok = await _tok()
+    key = (path_fmt, offset, limit)
+    hit = _cache_get(key)
+    if hit is not None:
+        return hit
+    code, d = await asyncio.to_thread(_get_json, path_fmt.format(offset=offset, limit=limit), tok)
+    if code == 401:
+        raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+    items = [x for x in (_design_of(i) for i in _items(d)) if x]
+    total = d.get("total") if isinstance(d, dict) and isinstance(d.get("total"), int) else None
+    return _cache_put(key, {"items": items, "total": total})
+
+
+async def _paged(path_fmt: str, offset: int, limit: int) -> dict:
+    offset, limit = max(0, int(offset or 0)), max(1, min(int(limit or 30), 60))
+    p = await _page(path_fmt, offset, limit)
+    res = await _enrich(p["items"])
+    total = p["total"]
+    more = (offset + len(p["items"]) < total) if total is not None else len(p["items"]) >= limit
+    return {**res, "total": total, "offset": offset, "has_more": bool(more)}
+
+
+async def collection(kind: str, offset: int = 0, limit: int = 30) -> dict:
+    """Modeles aimes, par pages, enrichis (fiche, deja imprime)."""
     if kind not in LISTS:
         raise AccountError("Liste inconnue")
-    return await _enrich(await _list(LISTS[kind]))
+    return await _paged(LISTS[kind], offset, limit)
 
 
 async def collections() -> dict:
@@ -260,6 +309,9 @@ async def collections() -> dict:
     tok = await token()
     if not tok:
         raise AccountError("Compte MakerWorld non connecté")
+    hit = _cache_get(("collections", tok[-12:]))
+    if hit is not None:
+        return hit
     code, d = await asyncio.to_thread(_get_json, COLLECTIONS, tok)
     if code == 401:
         raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
@@ -274,15 +326,15 @@ async def collections() -> dict:
         out.append({"id": str(it["id"]),
                     "title": it.get("title") if isinstance(it.get("title"), str) else f"Collection {it['id']}",
                     "covers": covers, "count": cnt if isinstance(cnt, int) else None})
-    return {"collections": out}
+    return _cache_put(("collections", tok[-12:]), {"collections": out})
 
 
-async def collection_designs(cid: str) -> dict:
-    """Modeles d'une collection, enrichis (fiche, deja imprime)."""
+async def collection_designs(cid: str, offset: int = 0, limit: int = 30) -> dict:
+    """Modeles d'une collection, par pages, enrichis (fiche, deja imprime)."""
     cid = str(cid or "").strip()
     if not cid.isdigit():
         raise AccountError("Collection inconnue")
-    return await _enrich(await _list(COLLECTION_DESIGNS.format(cid=cid), max_items=500))
+    return await _paged(COLLECTION_DESIGNS.format(cid=cid), offset, limit)
 
 
 # ── Ecritures sur les collections (sur geste explicite de l'utilisateur) ────
@@ -296,7 +348,8 @@ MEMBERSHIP = "/design-service/my/design/favoriteslist"
 def _send(method: str, path: str, body, tok: str):
     import requests
     try:
-        r = requests.request(method, WRITE_HOST + path, json=body, timeout=20, headers={
+        from .makerworld import session
+        r = session().request(method, WRITE_HOST + path, json=body, timeout=20, headers={
             "User-Agent": "Mozilla/5.0 (BambuNymous)", "Accept": "application/json",
             "Content-Type": "application/json", "Authorization": f"Bearer {tok}"})
     except Exception as e:
@@ -378,6 +431,7 @@ async def set_design_collections(design_id: str, ids: list) -> dict:
         raise AccountError("Collection inconnue")
     await asyncio.to_thread(_send, "PUT", MEMBERSHIP,
                             {"designId": int(did), "favoritesIds": [int(i) for i in ids]}, tok)
+    _cache_clear()
     logger.info(f"[MW] modele {did} range dans {len(ids)} collection(s)")
     return {"ok": True, "in": ids}
 
@@ -391,6 +445,7 @@ async def create_collection(title: str) -> dict:
     d = await asyncio.to_thread(_send, "POST", "/design-service/my/favorites",
                                 {"title": title, "status": 1, "description": "", "cover": "",
                                  "tags": [], "setAsDefault": False}, tok)
+    _cache_clear()
     logger.info(f"[MW] collection creee : {title}")
     cid = (d or {}).get("id") if isinstance(d, dict) else None
     return {"ok": True, "id": str(cid) if cid else None, "title": title}
@@ -414,6 +469,7 @@ async def rename_collection(cid: str, title: str) -> dict:
             "tags": cur.get("tags") if isinstance(cur.get("tags"), list) else [],
             "setAsDefault": bool(cur.get("isDefault"))}
     await asyncio.to_thread(_send, "PUT", f"/design-service/my/favorites/{cid}", body, tok)
+    _cache_clear()
     logger.info(f"[MW] collection {cid} renommee : {title}")
     return {"ok": True}
 
@@ -428,6 +484,7 @@ async def delete_collection(cid: str) -> dict:
     if cid not in {c["id"] for c in (await collections())["collections"]}:
         raise AccountError("Collection inconnue")
     await asyncio.to_thread(_send, "DELETE", f"/design-service/my/favorites/{cid}", {"id": int(cid)}, tok)
+    _cache_clear()
     logger.info(f"[MW] collection {cid} supprimee")
     return {"ok": True}
 

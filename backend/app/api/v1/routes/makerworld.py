@@ -60,8 +60,8 @@ async def mw_collections(_: str = Depends(get_current_user)):
 
 
 @router.get("/collections/{cid}")
-async def mw_collection_designs(cid: str, _: str = Depends(get_current_user)):
-    return await _call(acc.collection_designs(cid))
+async def mw_collection_designs(cid: str, offset: int = 0, limit: int = 30, _: str = Depends(get_current_user)):
+    return await _call(acc.collection_designs(cid, offset, limit))
 
 
 @router.get("/following/creators")
@@ -102,8 +102,8 @@ async def mw_set_design_collections(design_id: str, body: dict = Body({}), _: st
 
 
 @router.get("/collection/{kind}")
-async def mw_collection(kind: str, _: str = Depends(get_current_user)):
-    return await _call(acc.collection(kind))
+async def mw_collection(kind: str, offset: int = 0, limit: int = 30, _: str = Depends(get_current_user)):
+    return await _call(acc.collection(kind, offset, limit))
 
 
 @router.get("/search")

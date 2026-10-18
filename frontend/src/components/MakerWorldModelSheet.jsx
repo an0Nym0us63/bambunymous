@@ -3,6 +3,23 @@ import { createPortal } from "react-dom";
 import client from "../api/client";
 import AdminOnly from "./AdminOnly";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
+import MwImg from "./MwImg";
+
+// Prechargement : la fiche est demandee des qu'on touche une tuile ; a
+// l'ouverture, la reponse est souvent deja la.
+const MODELS = new Map();                         // id -> { t, p } ; 5 min (statut « imprime » a jour)
+export function prefetchModel(id) {
+  if (!id) return;
+  const k = String(id), hit = MODELS.get(k);
+  if (hit && Date.now() - hit.t < 300000) return;
+  const p = client.get(`/makerworld/model/${id}`).then(r => r.data);
+  p.catch(() => MODELS.delete(k));
+  MODELS.set(k, { t: Date.now(), p });
+}
+function getModel(id) {
+  prefetchModel(id);
+  return MODELS.get(String(id)).p;
+}
 
 // Fiche d'un modele MakerWorld dans l'appli : galerie, createur, compteurs,
 // descriptif, profils et leurs plateaux (coches s'ils sont imprimes),
@@ -12,7 +29,7 @@ const fmtDur = s => { if (!s) return null; const h = Math.floor(s / 3600), m = M
   return h ? `${h} h${m ? ` ${String(m).padStart(2, "0")}` : ""}` : `${m} min`; };
 const fmtDate = iso => { try { return new Date(iso).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }); } catch { return ""; } };
 
-export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
+export default function MakerWorldModelSheet({ designId, preview, onClose, onSearch }) {
   const [id, setId] = useState(designId);          // permet d'ouvrir un similaire sans empiler
   const [m, setM] = useState(null);
   const [more, setMore] = useState(false);         // descriptif deplie
@@ -27,7 +44,7 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
   useEffect(() => {
     let alive = true;
     setM(null); setCom(null); setSim(null); setMore(false);
-    client.get(`/makerworld/model/${id}`).then(({ data }) => {
+    getModel(id).then(data => {
       if (!alive) return;
       setM(data);
       const p = (data.profiles || []).find(x => x.default) || (data.profiles || [])[0];
@@ -59,7 +76,20 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
           <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--muted)", fontSize:18, cursor:"pointer" }}>✕</button>
         </div>
         <div style={{ flex:1, overflowY:"auto", padding:"0 16px 20px" }}>
-          {m === null ? <p style={msg}>Chargement…</p>
+          {m === null ? (
+            // Ouverture immediate avec ce que la tuile savait deja.
+            <div>
+              <div style={{ display:"flex", gap:8, margin:"0 -16px 12px", padding:"0 16px" }}>
+                {preview?.cover_url
+                  ? <MwImg src={preview.cover_url} w={360} eager style={{ width:"78%", maxWidth:360, aspectRatio:"1",
+                      objectFit:"cover", borderRadius:12, background:"var(--surface2)" }}/>
+                  : <div className="mw-skel" style={{ width:"78%", maxWidth:360, aspectRatio:"1", borderRadius:12 }}/>}
+              </div>
+              <h2 style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:"0 0 6px" }}>
+                {preview?.title_fr || preview?.title || ""}</h2>
+              {[90, 70, 80, 60].map((w, i) => <div key={i} className="mw-skel" style={{ height:12, width:`${w}%`, borderRadius:6, margin:"8px 0" }}/>)}
+            </div>
+          )
             : m.error ? (<>
               <p style={{ ...msg, color:"#f59e0b" }}>{m.error}</p>
               <a href={m.url || `https://makerworld.com/fr/models/${id}`} target="_blank" rel="noopener noreferrer" style={linkBtn}>Ouvrir sur MakerWorld ↗</a>
@@ -71,7 +101,7 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
                 {m.pictures.map((u, i) => (
                   <a key={i} href={u} target="_blank" rel="noopener noreferrer"
                     style={{ flexShrink:0, width:"78%", maxWidth:360, scrollSnapAlign:"center" }}>
-                    <img src={u} alt="" loading={i < 2 ? "eager" : "lazy"} referrerPolicy="no-referrer"
+                    <MwImg src={u} w={360} eager={i < 2}
                       style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:12, display:"block",
                         background:"var(--surface2)" }}/>
                   </a>
@@ -82,7 +112,7 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
             <h2 style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:"0 0 2px", lineHeight:1.3 }}>{m.title_fr || m.title}</h2>
             {m.title_fr && m.title_fr !== m.title && <div style={{ fontSize:12, color:"var(--muted)" }}>{m.title}</div>}
             <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"var(--muted)", margin:"6px 0" }}>
-              {m.creator_avatar && <img src={m.creator_avatar} alt="" referrerPolicy="no-referrer" style={{ width:18, height:18, borderRadius:"50%" }}/>}
+              {m.creator_avatar && <MwImg src={m.creator_avatar} w={36} style={{ width:18, height:18, borderRadius:"50%" }}/>}
               <span>par <b style={{ color:"var(--text2)" }}>{m.creator_name}</b>{m.created ? ` · ${fmtDate(m.created)}` : ""}</span>
             </div>
             <div style={{ display:"flex", flexWrap:"wrap", gap:10, fontSize:12, color:"var(--muted)", margin:"4px 0 10px" }}>
@@ -172,7 +202,7 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
                               <div key={pl.index} style={{ borderRadius:8, overflow:"hidden", background:"var(--surface)",
                                 border: ok ? "2px solid #22c55e" : "1px solid var(--border)" }}>
                                 <div style={{ position:"relative" }}>
-                                  {pl.thumb ? <img src={pl.thumb} alt="" loading="lazy" referrerPolicy="no-referrer"
+                                  {pl.thumb ? <MwImg src={pl.thumb} w={200}
                                     style={{ width:"100%", aspectRatio:"1", objectFit:"cover", display:"block" }}/>
                                     : <div style={{ width:"100%", aspectRatio:"1" }}/>}
                                   {ok && <span style={{ position:"absolute", top:4, left:4, fontSize:9.5, fontWeight:800, color:"white",
@@ -210,7 +240,7 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
               {com === null ? <p style={msg}>…</p> : com.items.length === 0 ? <p style={msg}>Aucun commentaire.</p> : (<>
                 {com.items.map(c => (
                   <div key={c.id} style={{ display:"flex", gap:8, padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
-                    {c.avatar ? <img src={c.avatar} alt="" loading="lazy" referrerPolicy="no-referrer"
+                    {c.avatar ? <MwImg src={c.avatar} w={52}
                       style={{ width:26, height:26, borderRadius:"50%", flexShrink:0 }}/>
                       : <span style={{ width:26, height:26, borderRadius:"50%", background:"var(--surface2)", flexShrink:0 }}/>}
                     <div style={{ minWidth:0, flex:1 }}>
@@ -228,7 +258,7 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
                       {c.images?.length > 0 && (
                         <div style={{ display:"flex", gap:4, marginTop:4, overflowX:"auto" }}>
                           {c.images.map((u, i) => <a key={i} href={u} target="_blank" rel="noopener noreferrer">
-                            <img src={u} alt="" loading="lazy" referrerPolicy="no-referrer"
+                            <MwImg src={u} w={128}
                               style={{ width:64, height:64, objectFit:"cover", borderRadius:6 }}/></a>)}
                         </div>
                       )}
@@ -250,11 +280,11 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
               <Section title="Modèles similaires">
                 <div style={{ display:"flex", gap:8, overflowX:"auto" }}>
                   {sim.map(x => (
-                    <button key={x.design_id} onClick={() => setId(x.design_id)}
+                    <button key={x.design_id} onClick={() => setId(x.design_id)} onPointerDown={() => prefetchModel(x.design_id)}
                       style={{ flexShrink:0, width:100, padding:0, background:"none", border:"none", textAlign:"left",
                         cursor:"pointer", color:"var(--text)" }}>
                       <div style={{ position:"relative", width:100, height:100, borderRadius:8, overflow:"hidden", background:"var(--surface2)" }}>
-                        {x.cover_url && <img src={x.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
+                        {x.cover_url && <MwImg src={x.cover_url} w={100}
                           style={{ width:"100%", height:"100%", objectFit:"cover" }}/>}
                         {x.printed > 0 && <span style={{ position:"absolute", left:4, bottom:4, fontSize:9, fontWeight:800,
                           padding:"1px 5px", borderRadius:20, background:"#22c55e", color:"white" }}>✓ IMPRIMÉ</span>}
