@@ -682,6 +682,7 @@ function PrintEditSheet({ p, onClose, onSaved }) {
 
 // Qui a fourni le nom de recherche (prints.translated_by), montre au survol.
 const TRAD_BY = {
+  gcloud:    "Traduit par Google Cloud Translation",
   deepl:     "Traduit par DeepL",
   google:    "Traduit par Google",
   mymemory:  "Traduit par MyMemory",

@@ -10,8 +10,9 @@ Portage de la fonction de Spoolnymous, qui avait deja resolu le probleme. Elle
 ne concerne QUE les prints -- le translated_name des filaments a sa propre
 source, le catalogue Bambu local, et n'a rien a voir avec ceci.
 
-Services, dans l'ordre : l'endpoint public de Google, puis MyMemory, puis
-DeepL si une cle est posee (Parametres). Les deux premiers sont gratuits,
+Services, dans l'ordre : Google Cloud Translation si une cle est posee
+(Parametres ; 500 000 caracteres gratuits par mois, renouveles), puis
+l'endpoint public de Google, puis MyMemory, puis DeepL si une cle est posee. Les deux premiers sont gratuits,
 sans cle et bornes -- Google coupe vite (TooManyRequests), MyMemory plafonne
 a quelques milliers de caracteres par jour -- mais leurs limites se
 renouvellent. L'offre gratuite de DeepL est un credit qui ne se renouvelle
@@ -31,6 +32,8 @@ import time
 logger = logging.getLogger(__name__)
 
 DEEPL_KEY = "DEEPL_API_KEY"
+GCLOUD_KEY = "GCLOUD_TRANSLATE_KEY"
+KEY_SETTINGS = {"deepl": DEEPL_KEY, "gcloud": GCLOUD_KEY}
 
 # MyMemory a bout de quota : on ne le sollicite plus jusqu'a cette heure.
 _MYMEMORY_PAUSE = {"until": 0.0}
@@ -60,6 +63,33 @@ def _looks_bogus(text: str) -> bool:
     if any(m in low for m in markers):
         return True
     return len(text) > 300   # un nom traduit ne fait jamais 300+ caracteres
+
+
+def _gcloud_batch(payload: list, key: str):
+    """Traduit via Google Cloud Translation v2 (source detectee). None si
+    indisponible -- quota du jour atteint compris (plafond pose dans la console)."""
+    import requests
+    try:
+        r = requests.post("https://translation.googleapis.com/language/translate/v2",
+                          params={"key": key.strip()}, timeout=20,
+                          json={"q": payload, "target": "fr", "format": "text"})
+    except Exception as e:
+        logger.warning(f"[TRAD] Google Cloud injoignable ({type(e).__name__})")
+        return None
+    if r.status_code == 429 or (r.status_code == 403 and "quota" in r.text.lower()):
+        logger.warning("[TRAD] Google Cloud : quota atteint")
+        return None
+    if r.status_code in (400, 401, 403):
+        logger.warning(f"[TRAD] Google Cloud : clé ou API refusée (HTTP {r.status_code})")
+        return None
+    if r.status_code != 200:
+        logger.warning(f"[TRAD] Google Cloud : HTTP {r.status_code}")
+        return None
+    try:
+        out = [t.get("translatedText", "") for t in r.json()["data"]["translations"]]
+    except (ValueError, KeyError, TypeError):
+        return None
+    return out if len(out) == len(payload) else None
 
 
 def _deepl_batch(payload: list, key: str):
@@ -115,14 +145,19 @@ def _mymemory_one(txt: str):
     return None
 
 
-def _translate_batch(payload: list, deepl_key: str = "") -> tuple:
+def _translate_batch(payload: list, keys=None) -> tuple:
     """Traduit une liste de chaines vers le FR. Rend (traductions, services),
     deux listes de meme longueur que payload ; une traduction None = echec
     (rien ne doit etre enregistre), le service dit qui a repondu.
 
     Les services gratuits qui se renouvellent passent d'abord ; DeepL, dont le
     quota gratuit s'epuise pour de bon, ne recoit que ce qu'ils n'ont pas pu
-    traduire."""
+    traduire. keys = {"gcloud": ..., "deepl": ...} (cles facultatives)."""
+    keys = keys if isinstance(keys, dict) else {"deepl": keys or ""}
+    if keys.get("gcloud"):
+        r = _gcloud_batch(payload, keys["gcloud"])
+        if r is not None and not any(_looks_bogus(x or "") for x in r):
+            return r, ["gcloud"] * len(r)
     from deep_translator import GoogleTranslator
     try:
         r = GoogleTranslator(source="auto", target="fr").translate_batch(payload)
@@ -134,8 +169,8 @@ def _translate_batch(payload: list, deepl_key: str = "") -> tuple:
     r = [_mymemory_one(x) for x in payload]
     by = [("mymemory" if x is not None else None) for x in r]
     reste = [i for i, x in enumerate(r) if x is None]
-    if reste and deepl_key:
-        d = _deepl_batch([payload[i] for i in reste], deepl_key)
+    if reste and keys.get("deepl"):
+        d = _deepl_batch([payload[i] for i in reste], keys["deepl"])
         if d is not None and not any(_looks_bogus(x or "") for x in d):
             for i, x in zip(reste, d):
                 r[i], by[i] = x, "deepl"
@@ -151,7 +186,7 @@ def _merge(mot_a_mot: str, contextuel: str) -> str:
     return " ".join(words)
 
 
-def translate_name(name: str, deepl_key: str = "") -> tuple:
+def translate_name(name: str, keys=None) -> tuple:
     """
     Traduit un nom vers le francais : rend (texte, service), service valant
     "identique" si le nom est deja francais. Leve TranslateUnavailable si aucun
@@ -173,7 +208,7 @@ def translate_name(name: str, deepl_key: str = "") -> tuple:
     if not name or not name.strip():
         return "", "identique"
     original = name.strip()
-    r, by = _translate_batch(["\n".join(name.split()), original], deepl_key)
+    r, by = _translate_batch(["\n".join(name.split()), original], keys)
     if r[0] is None or r[1] is None:
         raise TranslateUnavailable()
     mot_a_mot = " ".join((r[0] or "").strip().split("\n")).strip()
@@ -186,11 +221,12 @@ def translate_name(name: str, deepl_key: str = "") -> tuple:
     return merged, (by[1] if merged.lower() != original.lower() else "identique")
 
 
-async def _deepl_key() -> str:
+async def _keys() -> dict:
+    """Cles des services payants ou a credit, posees dans les Parametres."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting
     async with AsyncSessionLocal() as db:
-        return (await get_setting(db, DEEPL_KEY, "") or "").strip()
+        return {k: (await get_setting(db, s, "") or "").strip() for k, s in KEY_SETTINGS.items()}
 
 
 async def translate_print(pid: int) -> bool:
@@ -219,7 +255,7 @@ async def translate_print(pid: int) -> bool:
         source = _clean_name(p.file_name or p.original_name or "").strip()
     if not source:
         return False
-    key = await _deepl_key()
+    key = await _keys()
 
     try:
         tr, by = await asyncio.to_thread(translate_name, source, key)
@@ -268,7 +304,7 @@ def launch_translation(pid: int) -> None:
 _CHUNK = 20        # noms distincts par requête (soit 40 chaînes envoyées)
 
 
-def translate_names(names: list, deepl_key: str = "") -> dict:
+def translate_names(names: list, keys=None) -> dict:
     """
     Traduit une liste de noms et rend {source: traduction}.
 
@@ -306,7 +342,7 @@ def translate_names(names: list, deepl_key: str = "") -> dict:
             payload.append(n)
 
         try:
-            res, by = _translate_batch(payload, deepl_key)
+            res, by = _translate_batch(payload, keys)
         except Exception as e:
             logger.warning(f"[TRAD] lot ignore : {e}")
             continue
@@ -390,7 +426,7 @@ async def translate_missing_prints(limit: int = 40, retry_same: bool = False,
         exclude.add(pid)
 
     # ── 2. Traduction HORS de la boucle d'evenements ─────────────────────
-    key = await _deepl_key()
+    key = await _keys()
     table = await asyncio.to_thread(translate_names, [s for _, s, _ in batch if s], key)
 
     # ── 3. Ecriture, session rouverte ────────────────────────────────────

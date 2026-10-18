@@ -909,13 +909,46 @@ function PriceReviewSection() {
   );
 }
 
+// Cle facultative d'un service de traduction : etat (posee ou non, jamais la
+// cle elle-meme), saisie, retrait.
+function TranslateKeyRow({ label, on, hint, placeholder, onSave }) {
+  const [edit, setEdit] = React.useState(null);           // null = ferme, sinon saisie
+  const btn = { padding:"5px 10px", borderRadius:8, fontSize:12, cursor:"pointer",
+    background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)" };
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", margin:"0 0 8px",
+      padding:"8px 10px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)" }}>
+      <span style={{ fontSize:12, color:"var(--text)", flex:1, minWidth:180 }}>
+        {label} {on
+          ? <b style={{ color:"#22c55e" }}>posée</b>
+          : <span style={{ color:"var(--muted)" }}>— facultative</span>}
+        <span style={{ display:"block", fontSize:11, color:"var(--muted)", marginTop:2 }}>{hint}</span>
+      </span>
+      {edit == null ? (<>
+        <button onClick={() => setEdit("")} style={btn}>{on ? "Changer" : "Ajouter"}</button>
+        {on && <button onClick={() => onSave("")} style={{ ...btn, color:"var(--muted)" }}>Retirer</button>}
+      </>) : (
+        <span style={{ display:"flex", gap:6, flex:"1 1 100%" }}>
+          <input value={edit} onChange={e => setEdit(e.target.value)} autoFocus
+            autoComplete="off" spellCheck={false} placeholder={placeholder}
+            style={{ flex:1, minWidth:0, padding:"6px 9px", borderRadius:8, fontSize:12,
+              background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)", outline:"none",
+              fontFamily:"JetBrains Mono,monospace" }}/>
+          <button onClick={() => setEdit(null)} style={{ ...btn, color:"var(--muted)" }}>✕</button>
+          <button onClick={async () => { if (await onSave(edit.trim())) setEdit(null); }} disabled={!edit.trim()}
+            style={{ ...btn, fontWeight:700, background:"#3b82f6", border:"none", color:"white" }}>OK</button>
+        </span>
+      )}
+    </div>
+  );
+}
+
 function TranslateNamesSection() {
   const [running, setRunning] = React.useState(null);   // null = pas encore su
   const [err, setErr] = React.useState(null);
   const [last, setLast] = React.useState(null);          // bilan du dernier rattrapage
-  const [deepl, setDeepl] = React.useState(false);       // une cle est posee (jamais la cle)
+  const [keysOn, setKeysOn] = React.useState({});        // { gcloud, deepl } : cle posee (jamais la cle)
   const [retrySame, setRetrySame] = React.useState(false);
-  const [keyEdit, setKeyEdit] = React.useState(null);    // null = ferme, sinon saisie
 
   // L'etat vit sur le serveur, pas ici : c'est lui qui fait tourner le thread.
   // On l'interroge en arrivant, puis toutes les 5 s tant qu'il tourne. Quitter
@@ -926,7 +959,7 @@ function TranslateNamesSection() {
       const { data } = await client.get("/prints/translate-missing");
       setRunning(!!data.running);
       setLast(data.last || null);
-      setDeepl(!!data.deepl);
+      setKeysOn({ gcloud: !!data.gcloud, deepl: !!data.deepl });
       return !!data.running;
     } catch { setRunning(false); return false; }
   }, []);
@@ -951,12 +984,13 @@ function TranslateNamesSection() {
     } catch (e) { setErr(e.response?.data?.detail || e.message); }
   };
 
-  const saveKey = async (key) => {
+  const saveKey = async (service, key) => {
     setErr(null);
     try {
-      const { data } = await client.put("/prints/translate-key", { key });
-      setDeepl(!!data.deepl); setKeyEdit(null);
-    } catch (e) { setErr(e.response?.data?.detail || e.message); }
+      const { data } = await client.put("/prints/translate-key", { service, key });
+      setKeysOn(k => ({ ...k, [service]: !!data[service] }));
+      return true;
+    } catch (e) { setErr(e.response?.data?.detail || e.message); return false; }
   };
 
   return (
@@ -972,50 +1006,18 @@ function TranslateNamesSection() {
         traduire sont repris seuls toutes les 6 h.
       </p>
 
-      {/* Services gratuits sans cle : Google coupe vite, MyMemory plafonne a
-          quelques milliers de caracteres par jour. DeepL, s'il a une cle,
-          ne sert qu'en dernier recours : son credit gratuit ne se renouvelle
-          pas. */}
-      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", margin:"0 0 12px",
-        padding:"8px 10px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)" }}>
-        <span style={{ fontSize:12, color:"var(--text)", flex:1, minWidth:180 }}>
-          Clé DeepL {deepl
-            ? <b style={{ color:"#22c55e" }}>posée</b>
-            : <span style={{ color:"var(--muted)" }}>— facultative</span>}
-          <span style={{ display:"block", fontSize:11, color:"var(--muted)", marginTop:2 }}>
-            Dernier recours, après Google et MyMemory : le crédit gratuit de DeepL ne se renouvelle pas.
-          </span>
-        </span>
-        {keyEdit == null ? (<>
-          <button onClick={() => setKeyEdit("")}
-            style={{ padding:"5px 10px", borderRadius:8, fontSize:12, cursor:"pointer",
-              background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)" }}>
-            {deepl ? "Changer" : "Ajouter"}
-          </button>
-          {deepl && (
-            <button onClick={() => saveKey("")}
-              style={{ padding:"5px 10px", borderRadius:8, fontSize:12, cursor:"pointer",
-                background:"var(--surface)", border:"1px solid var(--border)", color:"var(--muted)" }}>Retirer</button>
-          )}
-        </>) : (
-          <span style={{ display:"flex", gap:6, flex:"1 1 100%" }}>
-            <input value={keyEdit} onChange={e => setKeyEdit(e.target.value)} autoFocus
-              autoComplete="off" spellCheck={false} placeholder="xxxxxxxx-xxxx-…:fx"
-              style={{ flex:1, minWidth:0, padding:"6px 9px", borderRadius:8, fontSize:12,
-                background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)", outline:"none",
-                fontFamily:"JetBrains Mono,monospace" }}/>
-            <button onClick={() => setKeyEdit(null)}
-              style={{ padding:"5px 9px", borderRadius:8, fontSize:12, cursor:"pointer",
-                background:"var(--surface)", border:"1px solid var(--border)", color:"var(--muted)" }}>✕</button>
-            <button onClick={() => saveKey(keyEdit.trim())} disabled={!keyEdit.trim()}
-              style={{ padding:"5px 12px", borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer",
-                background:"#3b82f6", border:"none", color:"white" }}>OK</button>
-          </span>
-        )}
-      </div>
+      {/* Ordre : Google Cloud (cle, gratuit jusqu'a 500 000 car./mois,
+          renouvele), Google public, MyMemory, puis DeepL (cle, credit gratuit
+          qui ne se renouvelle pas : dernier recours). */}
+      <TranslateKeyRow label="Clé Google Cloud Translation" on={keysOn.gcloud}
+        hint="Essayée en premier. 500 000 caractères gratuits par mois ; pose un plafond par jour dans la console pour ne jamais payer."
+        placeholder="AIza…" onSave={k => saveKey("gcloud", k)}/>
+      <TranslateKeyRow label="Clé DeepL" on={keysOn.deepl}
+        hint="Dernier recours, après Google et MyMemory : le crédit gratuit de DeepL ne se renouvelle pas."
+        placeholder="xxxxxxxx-xxxx-…:fx" onSave={k => saveKey("deepl", k)}/>
 
       <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, color:"var(--text2)",
-        margin:"0 0 12px", cursor:"pointer" }}>
+        margin:"12px 0", cursor:"pointer" }}>
         <input type="checkbox" checked={retrySame} onChange={e => setRetrySame(e.target.checked)}/>
         Reprendre aussi les noms restés identiques à l'original (non traduits faute de quota)
       </label>

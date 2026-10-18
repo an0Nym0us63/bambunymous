@@ -1088,11 +1088,11 @@ async def reenrich_print(print_id: int, _: str = Depends(get_current_user)):
 async def translate_missing_status(_: str = Depends(get_current_user)):
     """Le rattrapage tourne-t-il, bilan du dernier, une cle DeepL est-elle posee
     (jamais la cle elle-meme)."""
-    from ....services.translate import backfill_running, backfill_last, DEEPL_KEY
+    from ....services.translate import backfill_running, backfill_last, KEY_SETTINGS
     from ....services.settings_service import get_setting
     async with AsyncSessionLocal() as db:
-        has_key = bool((await get_setting(db, DEEPL_KEY, "") or "").strip())
-    return {"running": backfill_running(), "last": backfill_last(), "deepl": has_key}
+        has = {k: bool((await get_setting(db, s, "") or "").strip()) for k, s in KEY_SETTINGS.items()}
+    return {"running": backfill_running(), "last": backfill_last(), **has}
 
 
 @router.post("/translate-missing")
@@ -1117,16 +1117,20 @@ async def translate_missing_start(stop: bool = False, retry_same: bool = False,
 
 @router.put("/translate-key")
 async def translate_set_key(body: dict, _: str = Depends(require_admin)):
-    """Pose (ou retire, avec "") la cle d'API DeepL. Saisie par l'utilisateur,
-    rangee dans les reglages ; jamais renvoyee au navigateur."""
-    from ....services.translate import DEEPL_KEY
+    """Pose (ou retire, avec "") la cle d'un service : body {"service":
+    "deepl"|"gcloud", "key"}. Saisie par l'utilisateur, rangee dans les
+    reglages ; jamais renvoyee au navigateur."""
+    from ....services.translate import KEY_SETTINGS
     from ....services.settings_service import set_setting
+    service = str(body.get("service") or "deepl")
+    if service not in KEY_SETTINGS:
+        raise HTTPException(400, "Service inconnu")
     key = str(body.get("key") or "").strip()
     if len(key) > 200:
         raise HTTPException(400, "Clé trop longue")
     async with AsyncSessionLocal() as db:
-        await set_setting(db, DEEPL_KEY, key)
-    return {"deepl": bool(key)}
+        await set_setting(db, KEY_SETTINGS[service], key)
+    return {service: bool(key)}
 
 
 @router.get("/kpis")
