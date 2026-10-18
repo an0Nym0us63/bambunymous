@@ -45,6 +45,8 @@ export default function MakerWorldView({ onSearch }) {
   const [sq, setSq] = useState("");                // recherche lancee
   const [more, setMore] = useState(false);         // page suivante en cours
   const sentinel = useRef(null);                   // bas de grille : charge la page suivante
+  const freshRef = useRef(false);                  // ⟳ : relire MakerWorld sans passer par les caches
+  const [busy, setBusy] = useState(false);         // ⟳ en cours
 
   useEffect(() => {
     client.get("/makerworld/status").then(({ data }) => setStatus(data)).catch(() => setStatus({}));
@@ -57,13 +59,16 @@ export default function MakerWorldView({ onSearch }) {
       const key = `search:${sq}`;
       setData(CACHE.get(key) || null);
       client.get("/makerworld/search", { params: { q: sq } })
-        .then(({ data }) => { if (!alive) return; const c = CACHE.get(key);
+        .then(({ data }) => { if (!alive) return; setBusy(false); const c = CACHE.get(key);
           if (!(c && sameIds(c.items, data.items))) { CACHE.set(key, data); setData(data); } })
         .catch(e => alive && setData({ error: e.response?.data?.detail || e.message }));
       return () => { alive = false; };
     }
     if (!status?.connected) return;
     let alive = true, timer = null;
+    const fresh = freshRef.current;
+    freshRef.current = false;
+    const fp = fresh ? { fresh: 1 } : {};
     if (tab === "following") {
       // Par lots de 20 createurs : les premiers modeles s'affichent tout de
       // suite, la suite se complete (250 suivis ne font pas attendre).
@@ -72,20 +77,20 @@ export default function MakerWorldView({ onSearch }) {
       setData(cached || null); setProgress(null);
       (async () => {
         try {
-          let list = creators;
+          let list = fresh ? null : creators;
           if (!list) {
-            list = (await client.get("/makerworld/following/creators")).data.creators || [];
+            list = (await client.get("/makerworld/following/creators", { params: fp })).data.creators || [];
             if (!alive) return;
             setCreators(list);
           }
           const target = picked.length ? picked : list.map(c => c.uid);
-          const per = target.length <= 5 ? 40 : 12;
+          const per = target.length <= 5 ? 40 : 10;
           let acc = [];
           setProgress({ done: 0, total: target.length });
           if (!target.length) { setData({ items: [] }); return; }
           for (let i = 0; i < target.length && alive; i += 20) {
             const { data: d } = await client.get("/makerworld/following",
-              { params: { uids: target.slice(i, i + 20).join(","), per } });
+              { params: { uids: target.slice(i, i + 20).join(","), per, ...fp } });
             if (!alive) return;
             const seen = new Set(acc.map(x => x.design_id));
             acc = [...acc, ...(d.items || []).filter(x => !seen.has(x.design_id))]
@@ -94,8 +99,8 @@ export default function MakerWorldView({ onSearch }) {
             if (!cached) setData({ items: acc });
             setProgress({ done: Math.min(i + 20, target.length), total: target.length });
           }
-          if (alive) { CACHE.set(fkey, { items: acc }); setData({ items: acc }); }
-        } catch (e) { alive && setData({ error: e.response?.data?.detail || e.message }); }
+          if (alive) { CACHE.set(fkey, { items: acc }); setData({ items: acc }); setBusy(false); }
+        } catch (e) { if (alive) { setBusy(false); if (!cached) setData({ error: e.response?.data?.detail || e.message }); } }
       })();
       return () => { alive = false; };
     }
@@ -103,11 +108,12 @@ export default function MakerWorldView({ onSearch }) {
       : coll ? `/makerworld/collections/${coll.id}` : "/makerworld/collections";
     const key = tab === "likes" ? "likes" : coll ? `coll:${coll.id}` : "colls";
     const cached = CACHE.get(key);
-    const load = (again) => client.get(url).then(({ data }) => {
+    const load = (again) => client.get(url, { params: again ? fp : {} }).then(({ data }) => {
       if (!alive) return;
+      setBusy(false);
       // Pages deja chargees en cache et meme debut : on garde le cache (le
       // defilement n'est pas ramene en haut) en rafraichissant les etats.
-      if (data.items && cached?.items && sameIds(cached.items, data.items)) {
+      if (!fresh && data.items && cached?.items && sameIds(cached.items, data.items)) {
         const fresh = new Map(data.items.map(x => [x.design_id, x]));
         data = { ...cached, items: cached.items.map(x => fresh.get(x.design_id) || x) };
       }
@@ -115,7 +121,7 @@ export default function MakerWorldView({ onSearch }) {
       setData(data);
       // Modeles sans fiche : lus en arriere-plan, on recharge une fois.
       if (data.pending && again) timer = setTimeout(() => load(false), 8000);
-    }).catch(e => alive && !cached && setData({ error: e.response?.data?.detail || e.message }));
+    }).catch(e => { if (!alive) return; setBusy(false); if (!cached) setData({ error: e.response?.data?.detail || e.message }); });
     setData(cached || null);
     load(true);
     return () => { alive = false; clearTimeout(timer); };
@@ -203,6 +209,13 @@ export default function MakerWorldView({ onSearch }) {
                     background: tab === k ? "#3b82f6" : "var(--surface2)", color: tab === k ? "white" : "var(--muted)",
                     border: tab === k ? "none" : "1px solid var(--border)" }}>{l}</button>
               ))}
+              {(tab !== "search" ? status.connected : !!sq) && (
+                <button onClick={() => { freshRef.current = true; setBusy(true); setReload(n => n + 1); }} disabled={busy}
+                  title="Interroger MakerWorld maintenant"
+                  style={{ ...iconBtn, padding:"4px 9px", display:"inline-flex", alignItems:"center" }}>
+                  {busy ? <span className="mw-spin" style={{ width:13, height:13 }}/> : "⟳"}
+                </button>
+              )}
               {showModels && (
                 <select value={pf} onChange={e => setPf(e.target.value)}
                   style={{ marginLeft:"auto", fontSize:12, padding:"4px 8px", borderRadius:8, background:"var(--surface2)",

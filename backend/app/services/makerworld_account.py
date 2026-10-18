@@ -248,7 +248,7 @@ async def _enrich(items: list) -> dict:
 # Petits caches (2 min) : rouvrir une collection ou revenir sur l'onglet ne
 # relit pas MakerWorld. Toute ecriture les vide.
 _LIST_CACHE = {}
-_LIST_TTL = 120
+_LIST_TTL = 7200          # 2 h : le prechargement horaire les rafraichit
 
 
 def _cache_get(key):
@@ -267,14 +267,14 @@ def _cache_clear():
     _LIST_CACHE.clear()
 
 
-async def _page(path_fmt: str, offset: int, limit: int) -> dict:
+async def _page(path_fmt: str, offset: int, limit: int, fresh: bool = False) -> dict:
     """UNE page d'une liste de modeles : le front affiche les premiers tout de
     suite et demande la suite au defilement."""
     import asyncio
     from .makerworld import _get_json
     tok = await _tok()
     key = (path_fmt, offset, limit)
-    hit = _cache_get(key)
+    hit = None if fresh else _cache_get(key)
     if hit is not None:
         return hit
     code, d = await asyncio.to_thread(_get_json, path_fmt.format(offset=offset, limit=limit), tok)
@@ -285,23 +285,23 @@ async def _page(path_fmt: str, offset: int, limit: int) -> dict:
     return _cache_put(key, {"items": items, "total": total})
 
 
-async def _paged(path_fmt: str, offset: int, limit: int) -> dict:
+async def _paged(path_fmt: str, offset: int, limit: int, fresh: bool = False) -> dict:
     offset, limit = max(0, int(offset or 0)), max(1, min(int(limit or 30), 60))
-    p = await _page(path_fmt, offset, limit)
+    p = await _page(path_fmt, offset, limit, fresh)
     res = await _enrich(p["items"])
     total = p["total"]
     more = (offset + len(p["items"]) < total) if total is not None else len(p["items"]) >= limit
     return {**res, "total": total, "offset": offset, "has_more": bool(more)}
 
 
-async def collection(kind: str, offset: int = 0, limit: int = 30) -> dict:
+async def collection(kind: str, offset: int = 0, limit: int = 30, fresh: bool = False) -> dict:
     """Modeles aimes, par pages, enrichis (fiche, deja imprime)."""
     if kind not in LISTS:
         raise AccountError("Liste inconnue")
-    return await _paged(LISTS[kind], offset, limit)
+    return await _paged(LISTS[kind], offset, limit, fresh)
 
 
-async def collections() -> dict:
+async def collections(fresh: bool = False) -> dict:
     """Mes collections de favoris : nom, quelques couvertures, nombre de
     modeles quand l'API le donne."""
     import asyncio
@@ -309,7 +309,7 @@ async def collections() -> dict:
     tok = await token()
     if not tok:
         raise AccountError("Compte MakerWorld non connecté")
-    hit = _cache_get(("collections", tok[-12:]))
+    hit = None if fresh else _cache_get(("collections", tok[-12:]))
     if hit is not None:
         return hit
     code, d = await asyncio.to_thread(_get_json, COLLECTIONS, tok)
@@ -329,12 +329,12 @@ async def collections() -> dict:
     return _cache_put(("collections", tok[-12:]), {"collections": out})
 
 
-async def collection_designs(cid: str, offset: int = 0, limit: int = 30) -> dict:
+async def collection_designs(cid: str, offset: int = 0, limit: int = 30, fresh: bool = False) -> dict:
     """Modeles d'une collection, par pages, enrichis (fiche, deja imprime)."""
     cid = str(cid or "").strip()
     if not cid.isdigit():
         raise AccountError("Collection inconnue")
-    return await _paged(COLLECTION_DESIGNS.format(cid=cid), offset, limit)
+    return await _paged(COLLECTION_DESIGNS.format(cid=cid), offset, limit, fresh)
 
 
 # ── Ecritures sur les collections (sur geste explicite de l'utilisateur) ────
@@ -528,7 +528,7 @@ async def delete_collection(cid: str) -> dict:
 FOLLOWS = "/design-user-service/user/{uid}/follows?offset={offset}&limit=50"
 PUBLISHED = "/design-service/published/{uid}/design?offset=0&limit={limit}"
 _PUB_CACHE = {}            # uid -> (instant, [modeles]) : 1 h, pour ne pas relire a chaque ouverture
-_PUB_TTL = 3600
+_PUB_TTL = 7200           # 2 h : le prechargement horaire les rafraichit
 _FOLLOW_CACHE = {}         # uid -> (instant, [createurs]) : 10 min
 
 
@@ -540,14 +540,14 @@ async def _my_uid() -> str:
     return str(uid)
 
 
-async def following() -> list:
+async def following(fresh: bool = False) -> list:
     """Createurs que je suis vraiment (liste de mon profil MakerWorld)."""
     import asyncio
     from .makerworld import _get_json
     import time
     uid, tok = await _my_uid(), await token()
     hit = _FOLLOW_CACHE.get(uid)
-    if hit and time.time() - hit[0] < 600:
+    if hit and not fresh and time.time() - hit[0] < _PUB_TTL:
         return hit[1]
     out, offset = [], 0
     while len(out) < 1000:
@@ -575,11 +575,11 @@ def _pub_hit(h, creator) -> dict:
             "published": s(h.get("publishTime")) or s(h.get("createTime"))}
 
 
-async def _published(creator: dict, limit: int) -> list:
+async def _published(creator: dict, limit: int, fresh: bool = False) -> list:
     import asyncio, time
     from .makerworld import _get_json
     hit = _PUB_CACHE.get((creator["uid"], limit))
-    if hit and time.time() - hit[0] < _PUB_TTL:
+    if hit and not fresh and time.time() - hit[0] < _PUB_TTL:
         return hit[1]
     code, d = await asyncio.to_thread(_get_json, PUBLISHED.format(uid=creator["uid"], limit=limit))
     items = [x for x in (_pub_hit(h, creator) for h in _items(d)) if x]
@@ -588,29 +588,79 @@ async def _published(creator: dict, limit: int) -> list:
     return items
 
 
-async def feed(uids: str = "", per: int = 12) -> dict:
+async def feed(uids: str = "", per: int = 10, fresh: bool = False) -> dict:
     """Modeles recents d'un LOT de createurs suivis (uids separes par des
     virgules, 25 au plus), fusionnes du plus recent au plus ancien, avec
     « deja imprime ». Le front enchaine les lots : les premiers modeles
     s'affichent sans attendre les 250 createurs. Seuls des createurs de MA
     liste sont lus."""
     import asyncio
-    creators = {c["uid"]: c for c in await following()}
+    creators = {c["uid"]: c for c in await following(fresh)}
     wanted = list(dict.fromkeys(u.strip() for u in str(uids or "").split(",") if u.strip()))[:25]
     pick = [creators[u] for u in wanted if u in creators]
-    per = max(1, min(int(per or 12), 60))
+    per = max(1, min(int(per or 10), 60))
     sem = asyncio.Semaphore(5)              # pas plus de 5 requetes a la fois
 
     async def one(c):
         async with sem:
             try:
-                return await _published(c, per)
+                return await _published(c, per, fresh)
             except Exception:
                 return []
     lists = await asyncio.gather(*(one(c) for c in pick))
     items = sorted((x for l in lists for x in l), key=lambda x: x.get("published") or "", reverse=True)
     res = await _enrich(items)
     return {"items": res["items"], "pending": res["pending"], "creators_read": len(pick)}
+
+
+# ── Prechargement en arriere-plan ──────────────────────────────────────────
+# Toutes les heures : collections (liste + 1re page de chacune), j'aime (1re
+# page), abonnements et 10 derniers modeles de chaque createur suivi. Les
+# onglets s'ouvrent ainsi sur du cache, sans attente.
+_WARM = {"on": False, "last": None}
+
+
+async def warm_all() -> dict:
+    import asyncio, time
+    if _WARM["on"] or not await token():
+        return {"skipped": True}
+    _WARM["on"] = True
+    t0, n, errors = time.time(), 0, 0
+    try:
+        sem = asyncio.Semaphore(5)
+
+        async def run(coro):
+            nonlocal n, errors
+            async with sem:
+                try:
+                    await coro
+                    n += 1
+                except Exception:
+                    errors += 1
+
+        cols = (await collections(fresh=True))["collections"]
+        jobs = [run(_page(COLLECTION_DESIGNS.format(cid=c["id"]), 0, 30, fresh=True)) for c in cols]
+        jobs.append(run(_page(LISTS["likes"], 0, 30, fresh=True)))
+        creators = await following(fresh=True)
+        jobs += [run(_published(c, 10, fresh=True)) for c in creators]
+        await asyncio.gather(*jobs)
+    finally:
+        _WARM["on"] = False
+    _WARM["last"] = {"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "requests": n, "errors": errors,
+                     "seconds": round(time.time() - t0, 1)}
+    logger.info(f"[MW] prechargement : {n} lecture(s), {errors} erreur(s) en {_WARM['last']['seconds']} s")
+    return _WARM["last"]
+
+
+async def warm_loop(period_s: int = 3600, first_delay_s: int = 180):
+    import asyncio
+    await asyncio.sleep(first_delay_s)
+    while True:
+        try:
+            await warm_all()
+        except Exception:
+            logger.exception("[MW] prechargement")
+        await asyncio.sleep(period_s)
 
 
 async def _debug_collections() -> dict:

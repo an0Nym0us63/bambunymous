@@ -112,6 +112,9 @@ async def lifespan(app: FastAPI):
     # categories, tags) : lues en cache, relues tous les 30 jours.
     from app.services.makerworld import auto_loop as _mw_loop
     _mw_task = _aio.create_task(_mw_loop())
+    # Compte MakerWorld : collections, j'aime et suivis prepares chaque heure.
+    from app.services.makerworld_account import warm_loop as _mw_warm
+    _mw_warm_task = _aio.create_task(_mw_warm())
     await mqtt_manager.start()
     # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.
@@ -139,6 +142,7 @@ async def lifespan(app: FastAPI):
     _reconciler_task.cancel()
     _trad_task.cancel()
     _mw_task.cancel()
+    _mw_warm_task.cancel()
     catalog_sync.stop()
     await mqtt_manager.stop()
 

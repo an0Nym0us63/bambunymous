@@ -55,25 +55,26 @@ async def mw_logout(_: str = Depends(require_admin)):
 
 
 @router.get("/collections")
-async def mw_collections(_: str = Depends(get_current_user)):
-    return await _call(acc.collections())
+async def mw_collections(fresh: bool = False, _: str = Depends(get_current_user)):
+    return await _call(acc.collections(fresh))
 
 
 @router.get("/collections/{cid}")
-async def mw_collection_designs(cid: str, offset: int = 0, limit: int = 30, _: str = Depends(get_current_user)):
-    return await _call(acc.collection_designs(cid, offset, limit))
+async def mw_collection_designs(cid: str, offset: int = 0, limit: int = 30, fresh: bool = False,
+                                _: str = Depends(get_current_user)):
+    return await _call(acc.collection_designs(cid, offset, limit, fresh))
 
 
 @router.get("/following/creators")
-async def mw_following_creators(_: str = Depends(get_current_user)):
+async def mw_following_creators(fresh: bool = False, _: str = Depends(get_current_user)):
     """Createurs suivis (vraie liste du profil), pour le filtre."""
-    return {"creators": await _call(acc.following())}
+    return {"creators": await _call(acc.following(fresh))}
 
 
 @router.get("/following")
-async def mw_following(uids: str = "", per: int = 12, _: str = Depends(get_current_user)):
+async def mw_following(uids: str = "", per: int = 10, fresh: bool = False, _: str = Depends(get_current_user)):
     """Modeles d'un lot de createurs suivis (uids=1,2,3 ; 25 au plus)."""
-    return await _call(acc.feed(uids, per))
+    return await _call(acc.feed(uids, per, fresh))
 
 
 @router.post("/collections")
@@ -112,8 +113,9 @@ async def mw_set_design_collections(design_id: str, body: dict = Body({}), _: st
 
 
 @router.get("/collection/{kind}")
-async def mw_collection(kind: str, offset: int = 0, limit: int = 30, _: str = Depends(get_current_user)):
-    return await _call(acc.collection(kind, offset, limit))
+async def mw_collection(kind: str, offset: int = 0, limit: int = 30, fresh: bool = False,
+                        _: str = Depends(get_current_user)):
+    return await _call(acc.collection(kind, offset, limit, fresh))
 
 
 @router.get("/search")
