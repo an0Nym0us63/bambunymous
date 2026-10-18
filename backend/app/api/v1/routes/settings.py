@@ -200,3 +200,54 @@ async def get_dry_rules(db: AsyncSession = Depends(get_db), _: str = Depends(req
 async def put_dry_rules(body: dict, _: str = Depends(require_admin)):
     from ....services import drying
     return await drying.save(body)
+
+
+# ── Modeles de support vide ───────────────────────────────────────────────────
+# Poids d'un support (bobine vide) par marque ou modele : « Bambu Lab -> 250 g ».
+# Proposes en liste partout ou l'on saisit ce poids (pesee, fiche filament),
+# avec « Autre » pour une valeur libre. Une liste dans la table settings.
+SPOOL_TARES_KEY = "SPOOL_TARES"
+
+
+async def _read_tares(db) -> list:
+    import json
+    raw = await get_setting(db, SPOOL_TARES_KEY, "")
+    try:
+        data = json.loads(raw) if raw else []
+    except ValueError:
+        data = []
+    return [t for t in data if isinstance(t, dict) and t.get("name")] if isinstance(data, list) else []
+
+
+@router.get("/spool-tares")
+async def get_spool_tares(db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
+    return {"tares": await _read_tares(db)}
+
+
+@router.put("/spool-tares")
+async def put_spool_tares(body: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    """body: {"tares": [{"name": "Bambu Lab", "weight_g": 250}, ...]}"""
+    import json
+    raw = body.get("tares")
+    if not isinstance(raw, list) or len(raw) > 100:
+        raise HTTPException(422, "tares doit etre une liste (100 au plus)")
+    out, vus = [], set()
+    for t in raw:
+        if not isinstance(t, dict):
+            raise HTTPException(422, "Modele invalide")
+        name = str(t.get("name") or "").strip()[:60]
+        if not name:
+            raise HTTPException(422, "Chaque modele a besoin d'un nom")
+        try:
+            w = float(t.get("weight_g"))
+        except (TypeError, ValueError):
+            raise HTTPException(422, f"Poids manquant pour « {name} »")
+        if not 0 <= w <= 5000:
+            raise HTTPException(422, f"Poids invalide pour « {name} » (0 a 5000 g)")
+        if name.lower() in vus:
+            raise HTTPException(422, f"« {name} » est en double")
+        vus.add(name.lower())
+        out.append({"name": name, "weight_g": round(w, 1)})
+    out.sort(key=lambda x: x["name"].lower())
+    await set_setting(db, SPOOL_TARES_KEY, json.dumps(out))
+    return {"tares": out}

@@ -5,6 +5,7 @@ import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
 import { useRfidScan } from "../store/rfidScan";
 import DryNowDialog from "../components/DryNowDialog";
+import TarePicker, { useSpoolTares, tareForBrand } from "../components/TarePicker";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag, Sun } from "lucide-react";
 import client from "../api/client";
@@ -325,7 +326,8 @@ const WEIGHT_MODES = [
   ["scale", "Pesée",   "Poids sur la balance, support compris"],
 ];
 
-function WeightEditRow({ spoolId, filamentId, current, total, tare, onUpdated }) {
+function WeightEditRow({ spoolId, filamentId, brand, current, total, tare, onUpdated }) {
+  const tares = useSpoolTares();
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState("set");
   const [val, setVal] = useState("");
@@ -351,7 +353,13 @@ function WeightEditRow({ spoolId, filamentId, current, total, tare, onUpdated })
   const fin = valide ? Math.max(0, next) : 0;
   const g = x => `${Math.round(x)} g`;
 
-  const open = () => { setMode("set"); setVal(""); setTareVal(savedTare != null ? String(Math.round(savedTare)) : ""); setEditing(true); };
+  // Support inconnu du filament : on propose le modele qui porte le nom de sa marque.
+  const brandTare = savedTare == null ? tareForBrand(tares, brand) : null;
+  const open = () => {
+    setMode("set"); setVal("");
+    setTareVal(savedTare != null ? String(Math.round(savedTare)) : brandTare ? String(brandTare.weight_g) : "");
+    setEditing(true);
+  };
 
   const save = () => { if (valide) { setTareEdit(null); setAsking(true); } };
 
@@ -412,14 +420,15 @@ function WeightEditRow({ spoolId, filamentId, current, total, tare, onUpdated })
                 <div style={{ fontSize:11, color:"var(--muted)", marginBottom:6 }}>
                   Nouveau poids du support vide — enregistré sur le filament, pour toutes ses bobines
                 </div>
-                <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-                  <input type="number" inputMode="decimal" min="0" value={tareEdit} autoFocus
-                    onChange={e => setTareEdit(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter") applyTare(); if (e.key === "Escape") setTareEdit(null); }}
-                    style={{ flex:1, minWidth:0, padding:"6px 8px", borderRadius:7, fontSize:13, textAlign:"right",
+                <div style={{ display:"flex", marginBottom:8 }}>
+                  <TarePicker value={tareEdit} onChange={setTareEdit} autoFocus
+                    selectStyle={{ padding:"6px 8px", borderRadius:7, fontSize:13, background:"var(--surface)",
+                      border:"1px solid var(--border)", color:"var(--text)" }}
+                    inputStyle={{ padding:"6px 8px", borderRadius:7, fontSize:13, textAlign:"right",
                       background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)", outline:"none",
                       fontFamily:"JetBrains Mono,monospace" }}/>
-                  <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
+                </div>
+                <div style={{ display:"flex", gap:6, alignItems:"center", justifyContent:"flex-end" }}>
                   <button onClick={() => setTareEdit(null)}
                     style={{ padding:"6px 8px", borderRadius:7, fontSize:12, cursor:"pointer",
                       background:"var(--surface)", border:"1px solid var(--border)", color:"var(--muted)" }}>✕</button>
@@ -504,14 +513,17 @@ function WeightEditRow({ spoolId, filamentId, current, total, tare, onUpdated })
           </div>
         )}
         {mode === "scale" && (
-          <label style={{ fontSize:11, color:"var(--muted)" }}>
-            Support vide {savedTare == null && <span style={{ color:"#f59e0b" }}>(inconnu du filament : à saisir)</span>}
+          <div style={{ fontSize:11, color:"var(--muted)" }}>
+            Support vide {savedTare == null && (
+              <span style={{ color:"#f59e0b" }}>
+                {brandTare ? `(inconnu du filament : modèle « ${brandTare.name} » proposé)` : "(inconnu du filament : à choisir)"}
+              </span>)}
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:4 }}>
-              <input type="number" inputMode="decimal" min="0" value={tareVal}
-                onChange={e => setTareVal(e.target.value)} style={inputStyle}/>
-              <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
+              <TarePicker value={tareVal} onChange={setTareVal}
+                selectStyle={{ ...inputStyle, textAlign:"left", fontFamily:"inherit" }}
+                inputStyle={inputStyle}/>
             </div>
-          </label>
+          </div>
         )}
         <div style={{ fontSize:12, color:"var(--muted)", textAlign:"center", minHeight:16 }}>
           {valide && (<>
@@ -918,7 +930,8 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:"0.08em", marginBottom:4 }}>Bobine #{spool.id}</p>
           <Row label="Emplacement"    value={spool.location}/>
-          <WeightEditRow spoolId={spool.id} filamentId={spool.filament_id} current={remaining} total={total}
+          <WeightEditRow spoolId={spool.id} filamentId={spool.filament_id} brand={spool.filament_manufacturer}
+            current={remaining} total={total}
             tare={spool.filament_spool_weight_g} onUpdated={onClose}/>
           <PriceEditRow spoolId={spool.id} current={spool.price_override} filamentPrice={spool.filament_price} onUpdated={onClose}/>
           <TagEditRow spoolId={spool.id} current={spool.tag_number} onUpdated={onClose}/>
@@ -1782,7 +1795,14 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               {F("Profile ID Bambu (ex: GFA00)","profile_id")}
               {F("Code couleur Bambu (ex: 10600)","fila_color_code")}
               {F("Poids total (g)","filament_weight_g","number")}
-              {F("Poids support (g)","spool_weight_g","number")}
+              <div style={{ marginBottom:10 }}>
+                <label style={lStyle}>Poids support vide</label>
+                <div style={{ display:"flex" }}>
+                  <TarePicker value={form.spool_weight_g === "" || form.spool_weight_g == null ? "" : String(form.spool_weight_g)}
+                    onChange={v => setForm(p => ({ ...p, spool_weight_g: v }))}
+                    selectStyle={iStyle} inputStyle={iStyle}/>
+                </div>
+              </div>
               {F("Prix (€)","price","number")}
               {F("Commentaire","comment")}
               <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>

@@ -13,6 +13,7 @@ import { useAuth, useIsAdmin, ROLE_ADMIN, ROLE_READONLY,
 import AdminOnly from "../components/AdminOnly";
 import TelegramSettings from "../components/TelegramSettings";
 import DryRulesCard from "../components/DryRulesCard";
+import SpoolTaresCard from "../components/SpoolTaresCard";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
 import { amsName, slotCount, lireDisposition, dispositionParDefaut, MAX_LIGNES, MAX_COLONNES } from "../utils/ams";
@@ -1691,6 +1692,7 @@ export default function Settings() {
         <AttentionCard card={card} cardTitle={cardTitle}/>
         <LabelsCard card={card} cardTitle={cardTitle}/>
         <DryRulesCard card={card} cardTitle={cardTitle}/>
+        <SpoolTaresCard card={card} cardTitle={cardTitle}/>
       </AdminOnly>
       </>)}
 
