@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import client from "../api/client";
 import { CreatorPicker } from "./MakerWorldView";
+import MwImg from "./MwImg";
 
 // Parametres > Notifications : le canal (ntfy) puis les types de
 // notification, chacun avec son interrupteur, ses reglages et un « Envoyer
@@ -16,6 +17,13 @@ export default function NotificationsSettings() {
 
   const apply = c => { setCfg(c); setForm({ url: c.ntfy.url, topic: c.ntfy.topic }); };
   useEffect(() => { client.get("/notify").then(({ data }) => apply(data)).catch(e => setMsg({ ntfy: { ok: false, text: e.message } })); }, []);
+  // Les etiquettes des createurs choisis : noms et avatars lus dans la liste
+  // des suivis (en cache cote serveur), seulement s'il y en a de choisis.
+  const hasPicked = !!cfg?.events.some(ev => ev.creators?.length);
+  useEffect(() => {
+    if (hasPicked && !creators) client.get("/makerworld/following/creators")
+      .then(({ data }) => setCreators(data.creators || [])).catch(() => setCreators([]));
+  }, [hasPicked]);
 
   const run = async (key, fn, okText) => {
     setBusy(key); setMsg(m => ({ ...m, [key]: null }));
@@ -99,11 +107,15 @@ export default function NotificationsSettings() {
           <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, flexWrap:"wrap" }}>
             {ev.id === "mw_new_model" && (
               <button onClick={openPicker} disabled={busy === ev.id} style={btn}>
-                👤 {ev.creators.length ? `${ev.creators.length} créateur${ev.creators.length > 1 ? "s" : ""} choisi${ev.creators.length > 1 ? "s" : ""}` : "Choisir les créateurs"}
+                👤 {ev.creators.length ? "Modifier" : "Choisir les créateurs"}
               </button>
             )}
             <button onClick={() => test(ev.id)} disabled={busy === ev.id || !canSend} style={btn}>Envoyer test</button>
           </div>
+          {ev.id === "mw_new_model" && ev.creators.length > 0 && (
+            <CreatorTags uids={ev.creators} creators={creators} disabled={busy === ev.id}
+              onRemove={uid => setEvent(ev.id, { creators: ev.creators.filter(u => u !== uid) })}/>
+          )}
           {ev.id === "mw_new_model" && ev.enabled && !ev.creators.length && (
             <p style={{ fontSize:11.5, color:"#f59e0b", margin:"6px 0 0" }}>Aucun créateur choisi : rien ne sera envoyé.</p>
           )}
@@ -118,6 +130,31 @@ export default function NotificationsSettings() {
       ))}
     </div>
   </>);
+}
+
+// Une etiquette par createur choisi (avatar + nom, ✕ pour le retirer). Un
+// createur qui n'est plus suivi garde son etiquette, marquee comme telle.
+function CreatorTags({ uids, creators, disabled, onRemove }) {
+  const byUid = new Map((creators || []).map(c => [c.uid, c]));
+  return (
+    <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:8 }}>
+      {uids.map(uid => {
+        const c = byUid.get(uid);
+        const label = c ? (c.name || c.handle || `#${uid}`) : creators ? `#${uid} (plus suivi)` : "…";
+        return (
+          <span key={uid} title={c?.handle ? `@${c.handle}` : ""} style={{ display:"inline-flex", alignItems:"center", gap:6,
+            maxWidth:"100%", padding:"3px 4px 3px 4px", borderRadius:999, fontSize:12, color:"var(--text)",
+            background:"rgba(59,130,246,0.10)", border:"1px solid rgba(59,130,246,0.25)" }}>
+            {c?.avatar ? <MwImg src={c.avatar} w={48} style={{ width:20, height:20, borderRadius:"50%", flexShrink:0 }}/>
+              : <span style={{ width:20, height:20, borderRadius:"50%", background:"var(--surface2)", flexShrink:0 }}/>}
+            <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", color: c ? "var(--text)" : "var(--muted)" }}>{label}</span>
+            <button onClick={() => onRemove(uid)} disabled={disabled} aria-label={`Retirer ${label}`}
+              style={{ background:"none", border:"none", color:"var(--muted)", cursor:"pointer", fontSize:12, padding:"0 4px", lineHeight:1 }}>✕</button>
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function Switch({ on, onChange, disabled }) {
