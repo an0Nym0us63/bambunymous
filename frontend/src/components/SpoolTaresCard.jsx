@@ -10,19 +10,24 @@ export default function SpoolTaresCard({ card, cardTitle }) {
   const [rows, setRows] = useState(null);          // [{ name, weight }]
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [bilan, setBilan] = useState("");
 
+  // from = nom d'origine de la ligne : un renommage garde les filaments lies.
+  const toRows = tares => tares.map(t => ({ name: t.name, weight: String(t.weight_g), from: t.name }));
   const load = () => client.get("/settings/spool-tares").then(({ data }) =>
-    setRows((data.tares || []).map(t => ({ name: t.name, weight: String(t.weight_g) })))).catch(() => setRows([]));
+    setRows(toRows(data.tares || []))).catch(() => setRows([]));
   useEffect(() => { load(); }, []);
 
   const save = async () => {
     setSaving(true);
     try {
       const tares = rows.filter(r => r.name.trim() || r.weight.trim())
-        .map(r => ({ name: r.name.trim(), weight_g: parseFloat(String(r.weight).replace(",", ".")) }));
+        .map(r => ({ name: r.name.trim(), weight_g: parseFloat(String(r.weight).replace(",", ".")), from: r.from || null }));
       const { data } = await client.put("/settings/spool-tares", { tares });
-      setRows(data.tares.map(t => ({ name: t.name, weight: String(t.weight_g) })));
+      setRows(toRows(data.tares));
       reloadSpoolTares();
+      const n = data.updated_filaments || 0;
+      setBilan(n ? `${n} filament${n > 1 ? "s" : ""} mis à jour avec le nouveau poids.` : "");
       setSaved(true); setTimeout(() => setSaved(false), 2500);
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setSaving(false);
@@ -38,7 +43,9 @@ export default function SpoolTaresCard({ card, cardTitle }) {
       <div style={cardTitle}>Supports vides</div>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
         Poids d'une bobine vide par marque ou modèle. Proposés en liste à la pesée
-        et sur la fiche filament, avec « Autre » pour un poids libre.
+        et sur la fiche filament, avec « Autre » pour un poids libre. Un filament
+        lié à un modèle suit ses changements de poids et de nom ; le restant des
+        bobines déjà pesées n'est pas recalculé.
       </p>
 
       {rows.map((r, i) => (
@@ -69,6 +76,7 @@ export default function SpoolTaresCard({ card, cardTitle }) {
           {saving ? "…" : saved ? "Enregistré" : "Enregistrer"}
         </button>
       </div>
+      {bilan && <p style={{ fontSize:12, color:"#22c55e", margin:"10px 0 0" }}>{bilan}</p>}
     </div>
   );
 }

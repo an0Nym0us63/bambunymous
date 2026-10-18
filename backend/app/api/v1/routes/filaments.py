@@ -87,6 +87,7 @@ class FilamentOut(BaseModel):
     price: Optional[float]
     filament_weight_g: float
     spool_weight_g: Optional[float]
+    spool_tare_name: Optional[str] = None
     profile_id: Optional[str]
     fila_color_code: Optional[str] = None
     swatch: bool
@@ -110,6 +111,8 @@ class FilamentCreate(BaseModel):
     price: Optional[float] = None
     filament_weight_g: float = 1000.0
     spool_weight_g: Optional[float] = None
+    # Modele de support choisi ; "" = « Autre » (poids libre, lien retire).
+    spool_tare_name: Optional[str] = None
     profile_id: Optional[str] = None
     fila_color_code: Optional[str] = None
     swatch: bool = False
@@ -131,6 +134,7 @@ class SpoolOut(BaseModel):
     filament_color: Optional[str] = None
     filament_weight_g: Optional[float] = None
     filament_spool_weight_g: Optional[float] = None
+    filament_spool_tare_name: Optional[str] = None
     filament_price: Optional[float] = None
     filament_profile_id: Optional[str] = None
     filament_multicolor_type: Optional[str] = None
@@ -528,6 +532,7 @@ async def price_review(
 
 class SpoolTare(BaseModel):
     spool_weight_g: float   # poids du support vide, en grammes
+    tare_name: Optional[str] = None   # modele choisi ; absent / vide = « Autre »
 
 
 @router.put("/filaments/{fid}/spool-weight")
@@ -549,9 +554,10 @@ async def set_spool_tare(
     if not f:
         raise HTTPException(404, "Filament introuvable")
     f.spool_weight_g = round(body.spool_weight_g, 1)
+    f.spool_tare_name = (body.tare_name or "").strip() or None
     await db.commit()
     _clear_match_cache()
-    return {"ok": True, "spool_weight_g": f.spool_weight_g}
+    return {"ok": True, "spool_weight_g": f.spool_weight_g, "spool_tare_name": f.spool_tare_name}
 
 
 @router.post("/filaments/{fid}/mark-swatch", response_model=FilamentOut)
@@ -775,6 +781,7 @@ async def create_filament(
                 })
 
     f = Filament(**body.model_dump(exclude={"label_printed"}))
+    f.spool_tare_name = (f.spool_tare_name or "").strip() or None
     if body.label_printed:
         f.label_printed, f.label_printed_at = True, datetime.utcnow()
     f.color_bucket = buckets_for(f.color, f.colors_array)
@@ -813,6 +820,9 @@ async def update_filament(
     # sinon un ancien residu masque la nouvelle couleur (parseColorsList le prefere).
     if "colors_array" in raw and raw["colors_array"] is None:
         payload["colors_array"] = None
+
+    if "spool_tare_name" in payload:
+        payload["spool_tare_name"] = payload["spool_tare_name"].strip() or None
 
     changed_price = "price" in payload
     # L'etiquette porte une date : posee au passage a « imprimee », retiree
@@ -1190,6 +1200,7 @@ def _fil_out(f: Filament) -> FilamentOut:
         color=f.color, multicolor_type=f.multicolor_type, colors_array=f.colors_array,
         color_bucket=getattr(f, "color_bucket", None),
         price=f.price, filament_weight_g=f.filament_weight_g, spool_weight_g=f.spool_weight_g,
+        spool_tare_name=getattr(f, "spool_tare_name", None),
         profile_id=f.profile_id, fila_color_code=getattr(f, "fila_color_code", None),
         swatch=f.swatch, to_order=f.to_order,
         label_printed=bool(getattr(f, "label_printed", False)),
@@ -1219,6 +1230,7 @@ def _spool_out(s: Spool, sib: tuple | None = None) -> SpoolOut:
         filament_color=f.color if f else None,
         filament_weight_g=f.filament_weight_g if f else None,
         filament_spool_weight_g=f.spool_weight_g if f else None,
+        filament_spool_tare_name=getattr(f, "spool_tare_name", None) if f else None,
         filament_price=f.price if f else None,
         filament_profile_id=f.profile_id if f else None,
         filament_fila_color_code=getattr(f, "fila_color_code", None) if f else None,

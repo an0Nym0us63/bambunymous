@@ -83,6 +83,15 @@ async def lifespan(app: FastAPI):
         await _dslots.load()
     except Exception:
         logging.getLogger(__name__).exception("[DRY] regles de sechage non chargees")
+    try:
+        # Filaments d'avant le lien aux modeles de support vide : rattaches
+        # une fois, au poids exact (cf. settings.link_legacy_tares).
+        from app.db.session import AsyncSessionLocal as _ASL
+        from app.api.v1.routes.settings import link_legacy_tares
+        async with _ASL() as _db:
+            await link_legacy_tares(_db)
+    except Exception:
+        logging.getLogger(__name__).exception("[TARE] rattachement des supports vides non fait")
     from app.services.hms import init_hms
     init_hms()   # charge cache/dump des libelles HMS
     # Restaurer les prints IN_PROGRESS en mémoire après un redémarrage

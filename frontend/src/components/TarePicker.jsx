@@ -36,29 +36,32 @@ export function tareForBrand(tares, brand) {
 }
 
 const OTHER = "__autre__";
-const same = (a, b) => a !== "" && a != null && Math.abs(parseFloat(a) - parseFloat(b)) < 0.05;
 
 // Choix du poids d'un support vide : un modele des Parametres, ou « Autre »
-// et une valeur libre. value / onChange portent les grammes (chaine).
-export default function TarePicker({ value, onChange, selectStyle = {}, inputStyle = {}, autoFocus = false }) {
+// et une valeur libre. value = grammes (chaine), tareName = modele lie (null =
+// « Autre »). onChange(grammes, nomDuModele|null) : le filament retient le
+// modele, et suit ses changements de poids.
+export default function TarePicker({ value, tareName = null, onChange, selectStyle = {}, inputStyle = {}, autoFocus = false }) {
   const tares = useSpoolTares();
-  // « Autre » choisi explicitement, ou valeur qui ne correspond a aucun modele.
+  // « Autre » choisi alors qu'aucun poids n'est encore saisi.
   const [other, setOther] = useState(false);
   // Valeur changee de l'exterieur (support corrige a la validation) : on
   // reaffiche son modele plutot que de rester sur « Autre ».
-  const emitted = useRef(value);
-  const emit = v => { emitted.current = v; onChange(v); };
+  const emitted = useRef(`${value}|${tareName}`);
+  const emit = (v, name) => { emitted.current = `${v}|${name}`; onChange(v, name); };
   useEffect(() => {
-    if (value !== emitted.current) { emitted.current = value; setOther(false); }
-  }, [value]);
-  const match = tares.find(t => same(value, t.weight_g));
-  const sel = other || (!match && value !== "" && value != null) ? OTHER : match ? match.name : "";
+    const k = `${value}|${tareName}`;
+    if (k !== emitted.current) { emitted.current = k; setOther(false); }
+  }, [value, tareName]);
+  const linked = tareName ? tares.find(t => t.name.toLowerCase() === String(tareName).toLowerCase()) : null;
+  const sel = linked && !other ? linked.name
+    : other || (value !== "" && value != null) ? OTHER : "";
 
   if (!tares.length) {
     return (
       <span style={{ display:"flex", alignItems:"center", gap:6, flex:1, minWidth:0 }}>
         <input type="number" inputMode="decimal" min="0" value={value ?? ""} autoFocus={autoFocus}
-          onChange={e => onChange(e.target.value)} style={{ flex:1, minWidth:0, ...inputStyle }}/>
+          onChange={e => onChange(e.target.value, null)} style={{ flex:1, minWidth:0, ...inputStyle }}/>
         <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
       </span>
     );
@@ -69,10 +72,10 @@ export default function TarePicker({ value, onChange, selectStyle = {}, inputSty
       <Select value={sel} placeholder="— Choisir un support —"
         onChange={e => {
           const v = e.target.value;
-          if (v === OTHER) { setOther(true); return; }
+          if (v === OTHER) { setOther(true); emit(value ?? "", null); return; }
           setOther(false);
           const t = tares.find(x => x.name === v);
-          if (t) emit(String(t.weight_g));
+          if (t) emit(String(t.weight_g), t.name);
         }}
         options={[
           ...tares.map(t => ({ value: t.name, label: `${t.name} — ${Math.round(t.weight_g)} g` })),
@@ -81,7 +84,7 @@ export default function TarePicker({ value, onChange, selectStyle = {}, inputSty
         style={{ flex:1, minWidth:0, ...selectStyle }}/>
       {sel === OTHER && (<>
         <input type="number" inputMode="decimal" min="0" value={value ?? ""} autoFocus
-          onChange={e => emit(e.target.value)} placeholder="g"
+          onChange={e => emit(e.target.value, null)} placeholder="g"
           style={{ ...inputStyle, width:90, flexShrink:0 }}/>
         <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
       </>)}

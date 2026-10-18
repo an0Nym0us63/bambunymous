@@ -26,6 +26,9 @@ class Filament(Base):
     price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)       # €/bobine
     filament_weight_g: Mapped[float] = mapped_column(Float, default=1000.0)
     spool_weight_g: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # Modele de support vide (Parametres) dont vient spool_weight_g : le
+    # modifier repercute son poids ici. None = poids saisi a la main (« Autre »).
+    spool_tare_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     profile_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)   # ex: GFA00
     fila_color_code: Mapped[Optional[str]] = mapped_column(String, nullable=True)  # ex: 10600 (code couleur catalogue Bambu)
     external_filament_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)

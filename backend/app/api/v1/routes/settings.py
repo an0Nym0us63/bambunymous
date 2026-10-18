@@ -224,10 +224,50 @@ async def get_spool_tares(db: AsyncSession = Depends(get_db), _: str = Depends(g
     return {"tares": await _read_tares(db)}
 
 
+SPOOL_TARES_LINKED_KEY = "SPOOL_TARES_LINKED"
+
+
+async def link_legacy_tares(db, fils=None, tares=None) -> int:
+    """
+    Une seule fois (cle SPOOL_TARES_LINKED) : les filaments d'avant le lien
+    sont rattaches au modele dont le poids est exactement le leur, s'il est
+    seul a l'avoir. Appele au demarrage, et avant tout enregistrement des
+    modeles. Rend le nombre de filaments rattaches.
+    """
+    from sqlalchemy import select
+    from ....models.filament import Filament
+    if await get_setting(db, SPOOL_TARES_LINKED_KEY, ""):
+        return 0
+    if tares is None:
+        tares = await _read_tares(db)
+    if fils is None:
+        fils = (await db.execute(select(Filament))).scalars().all()
+    n = 0
+    for f in fils:
+        if f.spool_tare_name or f.spool_weight_g is None:
+            continue
+        m = [t for t in tares if abs(float(t["weight_g"]) - f.spool_weight_g) < 0.05]
+        if len(m) == 1:
+            f.spool_tare_name = m[0]["name"]
+            n += 1
+    await db.commit()
+    await set_setting(db, SPOOL_TARES_LINKED_KEY, "1")
+    return n
+
+
 @router.put("/spool-tares")
 async def put_spool_tares(body: dict, db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
-    """body: {"tares": [{"name": "Bambu Lab", "weight_g": 250}, ...]}"""
+    """
+    body: {"tares": [{"name": "Bambu Lab", "weight_g": 250, "from": "Bambu Lab"}, ...]}
+
+    Les filaments rattaches a un modele (spool_tare_name) suivent : nouveau
+    poids repercute, renommage (« from » = nom d'origine de la ligne) suivi,
+    modele supprime -> lien retire, le poids reste. Le poids restant des
+    bobines n'est pas recalcule (la pesee d'origine n'est pas gardee).
+    """
     import json
+    from sqlalchemy import select
+    from ....models.filament import Filament
     raw = body.get("tares")
     if not isinstance(raw, list) or len(raw) > 100:
         raise HTTPException(422, "tares doit etre une liste (100 au plus)")
@@ -247,7 +287,34 @@ async def put_spool_tares(body: dict, db: AsyncSession = Depends(get_db), _: str
         if name.lower() in vus:
             raise HTTPException(422, f"« {name} » est en double")
         vus.add(name.lower())
-        out.append({"name": name, "weight_g": round(w, 1)})
+        frm = str(t.get("from") or "").strip() or None
+        out.append({"name": name, "weight_g": round(w, 1), "_from": frm})
     out.sort(key=lambda x: x["name"].lower())
-    await set_setting(db, SPOOL_TARES_KEY, json.dumps(out))
-    return {"tares": out}
+
+    before = await _read_tares(db)
+    fils = (await db.execute(select(Filament))).scalars().all()
+
+    await link_legacy_tares(db, fils, before)
+
+    # nom d'origine -> nouvelle ligne ; un nom d'origine absent = supprime
+    by_from = {}
+    for o in out:
+        by_from[(o["_from"] or o["name"]).lower()] = o
+    updated = 0
+    for f in fils:
+        if not f.spool_tare_name:
+            continue
+        o = by_from.get(f.spool_tare_name.lower())
+        if o is None:
+            f.spool_tare_name = None          # modele supprime : le poids reste
+            continue
+        if f.spool_tare_name != o["name"] or f.spool_weight_g != o["weight_g"]:
+            if f.spool_weight_g != o["weight_g"]:
+                updated += 1
+            f.spool_tare_name, f.spool_weight_g = o["name"], o["weight_g"]
+    await db.commit()
+
+    clean = [{"name": o["name"], "weight_g": o["weight_g"]} for o in out]
+    await set_setting(db, SPOOL_TARES_KEY, json.dumps(clean))
+    await set_setting(db, SPOOL_TARES_LINKED_KEY, "1")
+    return {"tares": clean, "updated_filaments": updated}
