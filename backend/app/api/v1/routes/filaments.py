@@ -831,12 +831,16 @@ async def update_filament(
     if lp is not None and bool(lp) != bool(f.label_printed):
         f.label_printed = bool(lp)
         f.label_printed_at = datetime.utcnow() if lp else None
+    was_to_order = bool(f.to_order)
     for k, v in payload.items():
         setattr(f, k, v)
     if "color" in payload or "colors_array" in payload:
         f.color_bucket = buckets_for(f.color, f.colors_array)
     await db.commit()
     _clear_match_cache()
+    if f.to_order and not was_to_order:
+        from ....services import notify_events
+        notify_events._spawn(notify_events.fil_to_order, f.id)
     if changed_price:
         # Recalculer tous les prints qui utilisent une bobine de ce filament
         _bg_recalc_by_filament(fid)

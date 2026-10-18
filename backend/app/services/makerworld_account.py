@@ -693,9 +693,11 @@ async def check_new_models(creators: list) -> int:
             cover = x.get("cover_url")
             if cover and "bblmw.com" in cover and "?" not in cover:
                 cover += "?x-oss-process=image/resize,w_600/format,webp"
-            ok = await N.notify("mw_new_model", f"Nouveau modèle de {c.get('name') or 'un créateur suivi'}",
-                                x.get("title_fr") or x.get("title") or "",
-                                click=f"https://makerworld.com/fr/models/{x['design_id']}", attach=cover, tags=["new"])
+            url = f"https://makerworld.com/fr/models/{x['design_id']}"
+            prof = f"https://makerworld.com/fr/@{c['handle']}" if c.get("handle") else None
+            ok = await N.notify("mw_new_model", f"🆕 Nouveau modèle de {c.get('name') or 'un créateur suivi'}",
+                                x.get("title_fr") or x.get("title") or "", click=url, attach=cover, priority=3,
+                                actions=[("Voir le modèle", url), ("Profil du créateur", prof)])
             sent += 1 if ok else 0
         if len(fresh) > 5:
             await N.notify("mw_new_model", f"{c.get('name')} : {len(fresh) - 5} autre(s) nouveau(x) modèle(s)",

@@ -185,6 +185,13 @@ async def _snap(print_id: int, trigger: str):
         logger.warning(f"Snapshot {trigger} print={print_id}: {e}")
 
 
+async def _snap_then_notify(pid: int):
+    """Cliche de la 1re couche, puis la notification qui le montre."""
+    await _snap(pid, "layer1")
+    from . import notify_events as _ne
+    await _ne.print_first_layer(pid)
+
+
 # ── MakerWorld design_id ─────────────────────────────────────────────────────
 def _current_profile(design_id) -> str | None:
     """Profil MakerWorld du print en cours (MQTT), seulement si l'etat parle
@@ -276,6 +283,9 @@ async def _create_print_locked(job_id: str, url: str, taskname: str,
     # _bg() lance deja un thread avec sa propre boucle : rien n'est bloque, les
     # URLs pre-signees (~60s de validite) sont attaquees immediatement.
     _bg(_enrich(pid, job_id, url, taskname, printer_ip, printer_code))
+    # Notification « demarree » : attend elle-meme les metadonnees du 3MF.
+    from . import notify_events as _ne
+    _bg(_ne.print_started(pid))
 
 
 async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
@@ -327,8 +337,10 @@ async def _apply_meta(pid: int, meta: dict, taskname: str, job_id: str = ""):
         logger.info(f"[SPOOL] ▶ Appel déduction pour print #{pid}")
         p_obj = await db.get(Print, pid)
         if p_obj:
-            await _deduct_spool_weights(db, p_obj)
+            changes = await _deduct_spool_weights(db, p_obj)
             await db.commit()
+            from . import notify_events as _ne
+            _bg(_ne.after_deduction(pid, changes or []))
             try:
                 from ..core.mqtt import invalidate_tray_cache
                 invalidate_tray_cache()
@@ -480,7 +492,7 @@ def on_progress(job_id: str, pct: float, layer: int):
             if not st["l2"] and layer >= 2:
                 st["l2"] = True
                 logger.info(f"[MILESTONE] 📸 Snapshot layer1 couche={layer} print_id={pid}")
-                _bg(_snap(pid, "layer1"))
+                _bg(_snap_then_notify(pid))
             if not st["l3"] and layer >= 3:
                 st["l3"] = True
                 logger.info(f"[MILESTONE] 📸 Snapshot layer2 couche={layer} print_id={pid}")
@@ -519,7 +531,12 @@ def on_finish(job_id: str, gcode_state: str):
         if fire_100:
             logger.info(f"[MILESTONE] 📸 Snapshot pct100 (fallback fin de print) print_id={pid}")
             _bg(_snap(pid, "pct100"))
-    _bg(_finalize(pid, job_id, final, st.get("start_time")))
+    try:
+        from ..core.mqtt import get_state
+        _err = int(getattr(get_state(), "print_error", 0) or 0)
+    except Exception:
+        _err = 0
+    _bg(_finalize(pid, job_id, final, st.get("start_time"), pct=int(st.get("last_pct", 0) or 0), print_error=_err))
 
 
 async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_id: str = ""):
@@ -599,7 +616,8 @@ async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_i
         logger.debug(f"[SLOT] match_spool fallback failed: {e}")
     return None, "notfound"
 
-async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float]):
+async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
+                    pct: int = 0, print_error: int = 0):
     logger.info(f"[FINAL] ▶ Démarrage finalisation print #{pid} → {status}")
     try:
         async with AsyncSessionLocal() as db:
@@ -622,10 +640,15 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float]):
         with _LOCK: _JOBS.pop(job_id, None)
     except Exception as e:
         logger.error(f"_finalize pid={pid}: {e}", exc_info=True)
+        return
+    from . import notify_events as _ne
+    await _ne.print_finished(pid, status, pct, print_error)
 
 
 async def _deduct_spool_weights(db, p: Print):
-    """Déduit les grammes utilisés de chaque bobine liée à ce print."""
+    """Déduit les grammes utilisés de chaque bobine liée à ce print. Rend les
+    changements (avant/apres) pour les notifications de bobines."""
+    changes = []
     try:
         # Tous les usages avec spool_id pour ce print (sans filtre grams_used)
         usages = (await db.execute(
@@ -651,6 +674,8 @@ async def _deduct_spool_weights(db, p: Print):
                 continue
             before = spool.remaining_weight_g
             spool.remaining_weight_g = max(0.0, before - u.grams_used)
+            changes.append({"spool_id": spool.id, "filament_id": spool.filament_id, "before": before,
+                            "after": spool.remaining_weight_g, "grams": u.grams_used})
             # Date d'utilisation de la bobine : ce print vient de la consommer.
             used_dt = p.print_date or datetime.utcnow()
             if spool.first_used_at is None or used_dt < spool.first_used_at:
@@ -663,6 +688,7 @@ async def _deduct_spool_weights(db, p: Print):
             )
     except Exception as e:
         logger.error(f"_deduct_spool_weights print #{p.id}: {e}", exc_info=True)
+    return changes
 
 
 async def _costs(db, p: Print):

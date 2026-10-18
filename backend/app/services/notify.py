@@ -3,30 +3,150 @@ Notifications : un canal d'envoi (ntfy pour commencer) et des types de
 notification, chacun activable a part, avec ses reglages.
 
 Reglage NOTIFY_CONFIG (JSON) :
-  {"ntfy": {"url": "https://ntfy.sh", "topic": "...", "token": "..."},
-   "events": {"mw_new_model": {"enabled": true, "creators": ["uid", ...]}}}
+  {"ntfy": {"url": "https://ntfy.sh", "topic": "...", "token": "...",
+            "app_url": "https://bambu.exemple.fr"},
+   "events": {"mw_new_model": {"enabled": true, "creators": ["uid", ...]},
+              "print_done":   {"enabled": true, "options": {"min_minutes": 30}}}}
 Le jeton ntfy est saisi par l'utilisateur et n'est jamais renvoye au
-navigateur (seulement « pose »).
+navigateur (seulement « pose »). app_url est l'adresse de l'appli vue du
+telephone : sans elle, pas de lien vers l'appli dans les notifications.
 
-Ajouter un type : une entree dans EVENTS (libelle, description, exemple pour
-« Envoyer test ») et l'appel a notify(event, ...) la ou l'evenement se produit.
+Ajouter un type : une entree dans EVENTS (section, libelle, description,
+options, exemple pour « Envoyer test ») et l'appel a notify(event, ...) la ou
+l'evenement se produit (services/notify_events.py pour les evenements de
+l'imprimante et du stock).
 """
 import json
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 KEY = "NOTIFY_CONFIG"
 
+SECTIONS = [
+    ("prints", "🖨️ Impressions"),
+    ("dry", "💧 Séchage"),
+    ("spools", "🧵 Bobines"),
+    ("mw", "🌐 MakerWorld"),
+]
+
+_MIN_MINUTES = {"key": "min_minutes", "type": "number", "label": "Seulement si l'impression dure plus de",
+                "unit": "min", "default": 0, "min": 0, "max": 1440}
+_SAMPLE_COVER = ("https://makerworld.bblmw.com/makerworld/model/US300293b2858c3b/design/"
+                 "2025-05-11_9f4182f5c66a7.png?x-oss-process=image/resize,w_600/format,webp")
+
+# priority ntfy : 1 muet, 2 discret, 3 normal, 4 fort, 5 urgent (vibre longuement)
 EVENTS = {
+    # ── Impressions ──
+    "print_started": {
+        "section": "prints", "label": "Impression démarrée",
+        "description": "Nom, aperçu du plateau, durée estimée et bobines utilisées.",
+        "options": [_MIN_MINUTES],
+        "sample": {"title": "▶️ Impression démarrée", "priority": 2, "link": "/prints",
+                   "message": "Kit de semis auto-arrosant\n⏱ 2 h 10 · ⚖️ 86 g\n🧵 PLA Basic Vert (AMS-A slot 2)",
+                   "attach": _SAMPLE_COVER},
+    },
+    "print_first_layer": {
+        "section": "prints", "label": "Première couche terminée",
+        "description": "Photo de la caméra après la 1re couche : le moment de vérifier l'adhérence.",
+        "options": [_MIN_MINUTES],
+        "sample": {"title": "🔍 1re couche terminée", "priority": 3, "link": "/prints",
+                   "message": "Kit de semis auto-arrosant : vérifie l'adhérence.", "attach": _SAMPLE_COVER},
+    },
+    "print_near_end": {
+        "section": "prints", "label": "Bientôt terminée",
+        "description": "Prévient quelques minutes avant la fin, pour aller la récupérer.",
+        "options": [{"key": "minutes", "type": "number", "label": "Prévenir", "unit": "min avant la fin",
+                     "default": 10, "min": 1, "max": 120}],
+        "sample": {"title": "⏳ Fin dans 10 min", "priority": 3, "link": "/prints",
+                   "message": "Kit de semis auto-arrosant · 94 %"},
+    },
+    "print_done": {
+        "section": "prints", "label": "Impression terminée",
+        "description": "Photo finale, durée réelle, filament consommé et coût.",
+        "options": [_MIN_MINUTES],
+        "sample": {"title": "✅ Impression terminée", "priority": 3, "link": "/prints",
+                   "message": "Kit de semis auto-arrosant\n⏱ 2 h 14 · ⚖️ 86 g · 💶 2,31 €",
+                   "attach": _SAMPLE_COVER},
+    },
+    "print_failed": {
+        "section": "prints", "label": "Impression en échec ou annulée",
+        "description": "Photo au moment de l'arrêt et avancement atteint.",
+        "options": [],
+        "sample": {"title": "❌ Impression en échec", "priority": 5, "link": "/prints",
+                   "message": "Kit de semis auto-arrosant\nArrêtée à 37 % après 48 min"},
+    },
+    "print_paused": {
+        "section": "prints", "label": "Impression en pause",
+        "description": "Pause demandée ou imposée (fin de filament, bourrage…), avec la raison si connue.",
+        "options": [],
+        "sample": {"title": "⏸️ Impression en pause", "priority": 4, "link": "/",
+                   "message": "Kit de semis auto-arrosant · 52 %\nRaison : fin de filament (AMS-A slot 2)"},
+    },
+    "printer_hms": {
+        "section": "prints", "label": "Alerte de l'imprimante (HMS)",
+        "description": "Libellé en français et lien vers le wiki Bambu.",
+        "options": [{"key": "level", "type": "select", "label": "Alertes", "default": "serious",
+                     "choices": [["serious", "Graves seulement"], ["common", "Graves et courantes"],
+                                 ["all", "Toutes"]]}],
+        "sample": {"title": "⚠️ Alerte imprimante (grave)", "priority": 4, "link": "/",
+                   "message": "Le filament de l'AMS-A slot 2 est épuisé.\n0700_2000_0002_0001",
+                   "actions": [("Wiki Bambu", "https://wiki.bambulab.com/fr/h2c/troubleshooting/hmscode/0700_2000_0002_0001")]},
+    },
+    # ── Sechage ──
+    "dry_started": {
+        "section": "dry", "label": "Séchage démarré",
+        "description": "Unité, température, durée et bobines concernées.",
+        "options": [],
+        "sample": {"title": "💧 Séchage démarré · AMS-A", "priority": 2, "link": "/",
+                   "message": "🌡️ 55 °C · ⏱ 8 h\n🧵 PLA Basic Vert, PETG HF Noir"},
+    },
+    "dry_done": {
+        "section": "dry", "label": "Séchage terminé",
+        "description": "Quand une unité AMS termine son cycle de séchage.",
+        "options": [],
+        "sample": {"title": "☀️ Séchage terminé · AMS-A", "priority": 3, "link": "/",
+                   "message": "🧵 PLA Basic Vert, PETG HF Noir"},
+    },
+    # ── Bobines ──
+    "fil_to_order": {
+        "section": "spools", "label": "Ajout au panier",
+        "description": "Un filament est marqué « à commander ».",
+        "options": [],
+        "sample": {"title": "🛒 Ajouté au panier", "priority": 2, "link": "/filaments",
+                   "message": "PLA Basic Vert · Bambu Lab"},
+    },
+    "spool_short": {
+        "section": "spools", "label": "Pas assez de filament",
+        "description": "Au démarrage d'une impression, une bobine a moins que ce qu'il faut.",
+        "options": [],
+        "sample": {"title": "⚠️ Pas assez de filament", "priority": 4, "link": "/prints",
+                   "message": "Kit de semis auto-arrosant\nPLA Basic Vert : il faut 86 g, il reste 52 g"},
+    },
+    "spool_low": {
+        "section": "spools", "label": "Bobine bientôt vide",
+        "description": "Une bobine passe sous 15 % après une impression.",
+        "options": [],
+        "sample": {"title": "🪫 Bobine bientôt vide", "priority": 3, "link": "/filaments",
+                   "message": "PLA Basic Vert · bobine #42\nReste 120 g (12 %)"},
+    },
+    "stock_low": {
+        "section": "spools", "label": "Fin de stock",
+        "description": "La dernière bobine d'un filament passe sous 25 % : il est temps de racheter.",
+        "options": [],
+        "sample": {"title": "📉 Fin de stock", "priority": 3, "link": "/filaments",
+                   "message": "PLA Basic Vert : dernière bobine, reste 230 g (23 %)"},
+    },
+    # ── MakerWorld ──
     "mw_new_model": {
-        "label": "Nouveau modèle d'un créateur suivi",
-        "description": "MakerWorld : un créateur choisi publie un modèle (vérifié toutes les heures).",
-        "sample": {"title": "Nouveau modèle de Meyui",
+        "section": "mw", "label": "Nouveau modèle d'un créateur suivi",
+        "description": "Un créateur choisi publie un modèle (vérifié toutes les heures).",
+        "options": [],
+        "sample": {"title": "🆕 Nouveau modèle de Meyui", "priority": 3,
                    "message": "Kit de semis auto-arrosant modulaire",
                    "click": "https://makerworld.com/fr/models/1400373",
-                   "attach": "https://makerworld.bblmw.com/makerworld/model/US300293b2858c3b/design/2025-05-11_9f4182f5c66a7.png?x-oss-process=image/resize,w_600/format,webp",
-                   "tags": ["new"]},
+                   "attach": _SAMPLE_COVER},
     },
 }
 
@@ -35,7 +155,11 @@ class NotifyError(Exception):
     pass
 
 
+_CACHE = None     # derniere config lue : pour l'ecouteur MQTT, qui ne lit pas la base
+
+
 async def _load() -> dict:
+    global _CACHE
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting
     async with AsyncSessionLocal() as db:
@@ -47,14 +171,43 @@ async def _load() -> dict:
     cfg = cfg if isinstance(cfg, dict) else {}
     cfg.setdefault("ntfy", {})
     cfg.setdefault("events", {})
+    _CACHE = cfg
     return cfg
 
 
 async def _save(cfg: dict) -> None:
+    global _CACHE
     from ..db.session import AsyncSessionLocal
     from .settings_service import set_setting
     async with AsyncSessionLocal() as db:
         await set_setting(db, KEY, json.dumps(cfg, ensure_ascii=False))
+    _CACHE = cfg
+
+
+def cached():
+    """Config en memoire (None tant qu'elle n'a pas ete lue)."""
+    return _CACHE
+
+
+def _opt_value(o: dict, v):
+    if o["type"] == "number":
+        try:
+            v = int(v)
+        except (TypeError, ValueError):
+            return o["default"]
+        return max(o.get("min", v), min(o.get("max", v), v))
+    if o["type"] == "select":
+        return v if v in [c[0] for c in o["choices"]] else o["default"]
+    return o["default"]
+
+
+def options_of(cfg: dict, event: str) -> dict:
+    stored = ((cfg.get("events") or {}).get(event) or {}).get("options") or {}
+    return {o["key"]: _opt_value(o, stored.get(o["key"], o["default"])) for o in EVENTS[event]["options"]}
+
+
+def enabled_in(cfg, event: str) -> bool:
+    return bool(cfg and ((cfg.get("events") or {}).get(event) or {}).get("enabled"))
 
 
 def _public(cfg: dict) -> dict:
@@ -62,10 +215,12 @@ def _public(cfg: dict) -> dict:
     n = cfg.get("ntfy") or {}
     return {
         "ntfy": {"url": n.get("url") or "https://ntfy.sh", "topic": n.get("topic") or "",
-                 "has_token": bool(n.get("token"))},
-        "events": [{"id": k, "label": v["label"], "description": v["description"],
-                    **{"enabled": False, "creators": []},
-                    **{kk: vv for kk, vv in (cfg["events"].get(k) or {}).items() if kk in ("enabled", "creators")}}
+                 "app_url": n.get("app_url") or "", "has_token": bool(n.get("token"))},
+        "sections": [{"id": k, "label": v} for k, v in SECTIONS],
+        "events": [{"id": k, "section": v["section"], "label": v["label"], "description": v["description"],
+                    "enabled": enabled_in(cfg, k),
+                    "creators": ((cfg["events"].get(k) or {}).get("creators") or []),
+                    "options": [{**o, "value": options_of(cfg, k)[o["key"]]} for o in v["options"]]}
                    for k, v in EVENTS.items()],
     }
 
@@ -74,12 +229,17 @@ async def get_config() -> dict:
     return _public(await _load())
 
 
-async def set_ntfy(url: str, topic: str, token=None) -> dict:
-    """token None = inchange ; "" = retire."""
-    url = (url or "").strip().rstrip("/") or "https://ntfy.sh"
+def _clean_url(u: str, what: str) -> str:
+    u = (u or "").strip().rstrip("/")
+    if u and (not u.startswith(("http://", "https://")) or len(u) > 300 or " " in u):
+        raise NotifyError(f"{what} invalide (http:// ou https://)")
+    return u
+
+
+async def set_ntfy(url: str, topic: str, token=None, app_url=None) -> dict:
+    """token None = inchange ; "" = retire. app_url None = inchange."""
+    url = _clean_url(url, "Adresse du serveur ntfy") or "https://ntfy.sh"
     topic = (topic or "").strip()
-    if not url.startswith(("http://", "https://")) or len(url) > 300:
-        raise NotifyError("Adresse du serveur ntfy invalide")
     if topic and (len(topic) > 64 or not all(c.isalnum() or c in "-_" for c in topic)):
         raise NotifyError("Sujet ntfy : lettres, chiffres, - et _ seulement (64 max)")
     cfg = await _load()
@@ -87,11 +247,13 @@ async def set_ntfy(url: str, topic: str, token=None) -> dict:
     n.update({"url": url, "topic": topic})
     if token is not None:
         n["token"] = str(token).strip()[:200]
+    if app_url is not None:
+        n["app_url"] = _clean_url(app_url, "Adresse de l'appli")
     await _save(cfg)
     return _public(cfg)
 
 
-async def set_event(event: str, enabled=None, creators=None) -> dict:
+async def set_event(event: str, enabled=None, creators=None, options=None) -> dict:
     if event not in EVENTS:
         raise NotifyError("Type de notification inconnu")
     cfg = await _load()
@@ -100,44 +262,90 @@ async def set_event(event: str, enabled=None, creators=None) -> dict:
         e["enabled"] = bool(enabled)
     if creators is not None:
         e["creators"] = [str(c) for c in creators if str(c).isdigit()][:1000]
+    if isinstance(options, dict):
+        known = {o["key"]: o for o in EVENTS[event]["options"]}
+        cur = e.setdefault("options", {})
+        for k, v in options.items():
+            if k in known:
+                cur[k] = _opt_value(known[k], v)
     await _save(cfg)
     return _public(cfg)
 
 
 async def event_settings(event: str) -> dict:
-    """Reglages d'un type (enabled, creators...) pour le code qui le declenche."""
+    """Reglages d'un type (enabled, creators, options) pour le code qui le declenche."""
     cfg = await _load()
-    return {"enabled": False, "creators": [], **(cfg["events"].get(event) or {})}
+    return {"enabled": False, "creators": [], **(cfg["events"].get(event) or {}),
+            "options": options_of(cfg, event)}
 
 
-def _post_ntfy(n: dict, title: str, message: str, click=None, attach=None, tags=None, priority=None):
+def app_link(cfg, path: str):
+    """Lien vers une page de l'appli, si son adresse est renseignee."""
+    base = ((cfg or {}).get("ntfy") or {}).get("app_url") or ""
+    return f"{base}{path}" if base and path is not None else None
+
+
+# ── Envoi ──────────────────────────────────────────────────────────────────
+def _error_of(r) -> str:
+    try:
+        err = r.json().get("error")
+    except ValueError:
+        err = None
+    return err or f"ntfy a refusé (HTTP {r.status_code})"
+
+
+def _post_ntfy(n: dict, title: str, message: str, click=None, attach=None, tags=None, priority=None,
+               actions=None, file=None, filename=None):
+    """Publie. file (chemin ou octets) part en piece jointe (l'image s'affiche
+    en grand) ; si le serveur ne prend pas les pieces jointes, on renvoie sans."""
     from .makerworld import session
     if not n.get("topic"):
         raise NotifyError("Sujet ntfy non renseigné")
+    base = n.get("url") or "https://ntfy.sh"
+    auth = {"Authorization": f"Bearer {n['token']}"} if n.get("token") else {}
+    acts = [{"action": "view", "label": lbl[:40], "url": u, "clear": False}
+            for lbl, u in (actions or []) if u][:3]
+    data = None
+    if file is not None:
+        try:
+            data = file if isinstance(file, (bytes, bytearray)) else Path(file).read_bytes()
+        except OSError:
+            data = None
+    if data:
+        params = {"title": title[:250], "message": (message or "")[:4000], "filename": filename or "image.jpg"}
+        if click: params["click"] = click
+        if tags: params["tags"] = ",".join(tags)
+        if priority: params["priority"] = str(priority)
+        if acts: params["actions"] = json.dumps(acts, ensure_ascii=False)
+        try:
+            r = session().put(f"{base}/{n['topic']}", data=bytes(data), params=params, headers=auth, timeout=30)
+        except Exception as e:
+            raise NotifyError(f"Serveur ntfy injoignable ({type(e).__name__})")
+        if r.status_code < 400:
+            return
+        if r.status_code in (401, 403):
+            raise NotifyError(_error_of(r))
+        logger.info(f"[NOTIF] piece jointe refusee par ntfy ({_error_of(r)}) : envoi sans image")
     body = {"topic": n["topic"], "title": title[:250], "message": (message or "")[:4000]}
     if click: body["click"] = click
-    if attach: body["attach"] = attach
+    if attach and not data: body["attach"] = attach
     if tags: body["tags"] = tags
-    if priority: body["priority"] = priority
-    headers = {"Content-Type": "application/json"}
-    if n.get("token"):
-        headers["Authorization"] = f"Bearer {n['token']}"
+    if priority: body["priority"] = int(priority)
+    if acts: body["actions"] = acts
     try:
-        r = session().post(n.get("url") or "https://ntfy.sh", json=body, headers=headers, timeout=15)
+        r = session().post(base, json=body, headers={"Content-Type": "application/json", **auth}, timeout=15)
     except Exception as e:
         raise NotifyError(f"Serveur ntfy injoignable ({type(e).__name__})")
     if r.status_code >= 400:
-        try:
-            err = r.json().get("error")
-        except ValueError:
-            err = None
-        raise NotifyError(err or f"ntfy a refusé (HTTP {r.status_code})")
+        raise NotifyError(_error_of(r))
 
 
-async def send(title: str, message: str = "", click=None, attach=None, tags=None, priority=None) -> None:
+async def send(title: str, message: str = "", click=None, attach=None, tags=None, priority=None,
+               actions=None, file=None, filename=None) -> None:
     import asyncio
     cfg = await _load()
-    await asyncio.to_thread(_post_ntfy, cfg["ntfy"], title, message, click, attach, tags, priority)
+    await asyncio.to_thread(_post_ntfy, cfg["ntfy"], title, message, click, attach, tags, priority,
+                            actions, file, filename)
 
 
 async def notify(event: str, title: str, message: str = "", **kw) -> bool:
@@ -157,10 +365,16 @@ async def test(event: str = "") -> dict:
     """« Envoyer test » : du canal (sans event) ou d'un type, meme desactive."""
     if event and event not in EVENTS:
         raise NotifyError("Type de notification inconnu")
+    cfg = await _load()
     if event:
         s = EVENTS[event]["sample"]
-        await send("[Test] " + s["title"], s["message"], click=s.get("click"), attach=s.get("attach"),
-                   tags=s.get("tags"))
+        click = s.get("click") or app_link(cfg, s.get("link"))
+        actions = list(s.get("actions") or [])
+        if s.get("link") is not None and app_link(cfg, s["link"]):
+            actions.insert(0, ("Ouvrir BambuNymous", app_link(cfg, s["link"])))
+        await send("[Test] " + s["title"], s["message"], click=click, attach=s.get("attach"),
+                   priority=s.get("priority"), actions=actions)
     else:
-        await send("BambuNymous", "Test de notification : le canal ntfy fonctionne.", tags=["white_check_mark"])
+        await send("BambuNymous", "Test de notification : le canal ntfy fonctionne.", tags=["white_check_mark"],
+                   click=app_link(cfg, "/"))
     return {"ok": True}

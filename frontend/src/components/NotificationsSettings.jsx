@@ -8,14 +8,14 @@ import MwImg from "./MwImg";
 // test ». Le jeton ntfy est saisi ici et n'est jamais reaffiche.
 export default function NotificationsSettings() {
   const [cfg, setCfg] = useState(null);
-  const [form, setForm] = useState({ url: "", topic: "" });
+  const [form, setForm] = useState({ url: "", topic: "", app_url: "" });
   const [tokEdit, setTokEdit] = useState(null);       // null = ferme, sinon saisie
   const [msg, setMsg] = useState({});                 // { [cle]: { ok, text } }
   const [busy, setBusy] = useState("");
   const [creators, setCreators] = useState(null);     // createurs suivis (MakerWorld)
   const [picker, setPicker] = useState(false);
 
-  const apply = c => { setCfg(c); setForm({ url: c.ntfy.url, topic: c.ntfy.topic }); };
+  const apply = c => { setCfg(c); setForm({ url: c.ntfy.url, topic: c.ntfy.topic, app_url: c.ntfy.app_url || "" }); };
   useEffect(() => { client.get("/notify").then(({ data }) => apply(data)).catch(e => setMsg({ ntfy: { ok: false, text: e.message } })); }, []);
   // Les etiquettes des createurs choisis : noms et avatars lus dans la liste
   // des suivis (en cache cote serveur), seulement s'il y en a de choisis.
@@ -69,6 +69,12 @@ export default function NotificationsSettings() {
         <label style={{ fontSize:11, color:"var(--muted)" }}>Sujet
           <input value={form.topic} onChange={e => setForm(f => ({ ...f, topic: e.target.value }))} placeholder="mon-sujet-bambu"
             {...noFill} style={{ ...inp, marginTop:3 }}/></label>
+        <label style={{ fontSize:11, color:"var(--muted)" }}>Adresse de BambuNymous vue du téléphone
+          <input value={form.app_url} onChange={e => setForm(f => ({ ...f, app_url: e.target.value }))}
+            placeholder="https://bambu.mon-domaine.fr" {...noFill} style={{ ...inp, marginTop:3 }}/>
+          <span style={{ display:"block", marginTop:3, lineHeight:1.4 }}>
+            Pour que toucher une notification ouvre la bonne page (impression, bobine…). Vide : pas de lien vers l'appli.
+          </span></label>
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12, color:"var(--text2)" }}>
           Jeton d'accès {cfg.ntfy.has_token ? <b style={{ color:"#22c55e" }}>posé</b> : <span style={{ color:"var(--muted)" }}>— facultatif</span>}
           {tokEdit === null ? (<>
@@ -92,43 +98,57 @@ export default function NotificationsSettings() {
       </div>
     </div>
 
-    {/* ── Types de notification ── */}
-    <div className="card" style={{ padding:"16px 20px" }}>
-      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 10px" }}>Notifications</h3>
-      {cfg.events.map(ev => (
-        <div key={ev.id} style={{ padding:"10px 0", borderTop:"1px solid var(--border)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{ev.label}</div>
-              <div style={{ fontSize:11.5, color:"var(--muted)", marginTop:2 }}>{ev.description}</div>
+    {/* ── Types de notification, par section ── */}
+    {cfg.sections.map(sec => {
+      const evs = cfg.events.filter(ev => ev.section === sec.id);
+      if (!evs.length) return null;
+      const nOn = evs.filter(ev => ev.enabled).length;
+      return (
+        <div key={sec.id} className="card" style={{ padding:"16px 20px" }}>
+          <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 10px", display:"flex", alignItems:"center" }}>
+            <span style={{ flex:1 }}>{sec.label}</span>
+            <span style={{ fontSize:11, fontWeight:600, color: nOn ? "#22c55e" : "var(--muted)" }}>{nOn}/{evs.length} active{nOn > 1 ? "s" : ""}</span>
+          </h3>
+          {evs.map(ev => (
+            <div key={ev.id} style={{ padding:"10px 0", borderTop:"1px solid var(--border)" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{ev.label}</div>
+                  <div style={{ fontSize:11.5, color:"var(--muted)", marginTop:2 }}>{ev.description}</div>
+                </div>
+                <Switch on={ev.enabled} onChange={v => setEvent(ev.id, { enabled: v })} disabled={busy === ev.id}/>
+              </div>
+              {ev.enabled && ev.options.map(o => (
+                <OptionRow key={o.key} o={o} disabled={busy === ev.id} inp={inp}
+                  onChange={v => setEvent(ev.id, { options: { [o.key]: v } })}/>
+              ))}
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, flexWrap:"wrap" }}>
+                {ev.id === "mw_new_model" && (
+                  <button onClick={openPicker} disabled={busy === ev.id} style={btn}>
+                    👤 {ev.creators.length ? "Modifier" : "Choisir les créateurs"}
+                  </button>
+                )}
+                <button onClick={() => test(ev.id)} disabled={busy === ev.id || !canSend} style={btn}>Envoyer test</button>
+              </div>
+              {ev.id === "mw_new_model" && ev.creators.length > 0 && (
+                <CreatorTags uids={ev.creators} creators={creators} disabled={busy === ev.id}
+                  onRemove={uid => setEvent(ev.id, { creators: ev.creators.filter(u => u !== uid) })}/>
+              )}
+              {ev.id === "mw_new_model" && ev.enabled && !ev.creators.length && (
+                <p style={{ fontSize:11.5, color:"#f59e0b", margin:"6px 0 0" }}>Aucun créateur choisi : rien ne sera envoyé.</p>
+              )}
+              <Msg k={ev.id}/>
+              {ev.id === "mw_new_model" && picker && creators && (
+                <CreatorPicker creators={creators} picked={ev.creators}
+                  applyLabel={n => n ? `Me notifier pour ${n} créateur${n > 1 ? "s" : ""}` : "Aucun créateur"}
+                  onClose={() => setPicker(false)}
+                  onApply={ids => { setPicker(false); setEvent(ev.id, { creators: ids }); }}/>
+              )}
             </div>
-            <Switch on={ev.enabled} onChange={v => setEvent(ev.id, { enabled: v })} disabled={busy === ev.id}/>
-          </div>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, flexWrap:"wrap" }}>
-            {ev.id === "mw_new_model" && (
-              <button onClick={openPicker} disabled={busy === ev.id} style={btn}>
-                👤 {ev.creators.length ? "Modifier" : "Choisir les créateurs"}
-              </button>
-            )}
-            <button onClick={() => test(ev.id)} disabled={busy === ev.id || !canSend} style={btn}>Envoyer test</button>
-          </div>
-          {ev.id === "mw_new_model" && ev.creators.length > 0 && (
-            <CreatorTags uids={ev.creators} creators={creators} disabled={busy === ev.id}
-              onRemove={uid => setEvent(ev.id, { creators: ev.creators.filter(u => u !== uid) })}/>
-          )}
-          {ev.id === "mw_new_model" && ev.enabled && !ev.creators.length && (
-            <p style={{ fontSize:11.5, color:"#f59e0b", margin:"6px 0 0" }}>Aucun créateur choisi : rien ne sera envoyé.</p>
-          )}
-          <Msg k={ev.id}/>
-          {ev.id === "mw_new_model" && picker && creators && (
-            <CreatorPicker creators={creators} picked={ev.creators}
-              applyLabel={n => n ? `Me notifier pour ${n} créateur${n > 1 ? "s" : ""}` : "Aucun créateur"}
-              onClose={() => setPicker(false)}
-              onApply={ids => { setPicker(false); setEvent(ev.id, { creators: ids }); }}/>
-          )}
+          ))}
         </div>
-      ))}
-    </div>
+      );
+    })}
   </>);
 }
 
@@ -153,6 +173,30 @@ function CreatorTags({ uids, creators, disabled, onRemove }) {
           </span>
         );
       })}
+    </div>
+  );
+}
+
+// Reglage d'un type : nombre (saisi, enregistre a la sortie du champ) ou liste.
+function OptionRow({ o, onChange, disabled, inp }) {
+  const [v, setV] = useState(String(o.value));
+  useEffect(() => setV(String(o.value)), [o.value]);
+  const commit = () => { if (String(o.value) !== v) onChange(o.type === "number" ? Number(v) || 0 : v); };
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, fontSize:12, color:"var(--text2)", flexWrap:"wrap" }}>
+      <span>{o.label}</span>
+      {o.type === "select" ? (
+        <select value={o.value} disabled={disabled} onChange={e => onChange(e.target.value)}
+          style={{ ...inp, width:"auto", padding:"5px 8px" }}>
+          {o.choices.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+        </select>
+      ) : (<>
+        <input type="number" inputMode="numeric" min={o.min} max={o.max} value={v} disabled={disabled}
+          onChange={e => setV(e.target.value)} onBlur={commit} onKeyDown={e => e.key === "Enter" && e.currentTarget.blur()}
+          style={{ ...inp, width:70, padding:"5px 8px", textAlign:"right" }}/>
+        <span>{o.unit}</span>
+        {o.key === "min_minutes" && !o.value && <span style={{ color:"var(--muted)" }}>(toutes)</span>}
+      </>)}
     </div>
   );
 }

@@ -115,6 +115,15 @@ async def lifespan(app: FastAPI):
     # Compte MakerWorld : collections, j'aime et suivis prepares chaque heure.
     from app.services.makerworld_account import warm_loop as _mw_warm
     _mw_warm_task = _aio.create_task(_mw_warm())
+    # Notifications de l'imprimante (pause, fin proche, HMS, sechage) : la
+    # config est lue une fois pour l'ecouteur, qui ne touche pas a la base.
+    from app.services import notify as _notify, notify_events as _nev
+    from app.core.mqtt import subscribe_state as _sub
+    try:
+        await _notify.get_config()
+    except Exception:
+        pass
+    _sub(_nev.watch)
     await mqtt_manager.start()
     # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.

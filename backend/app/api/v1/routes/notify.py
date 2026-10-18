@@ -31,12 +31,13 @@ async def notify_config(_: str = Depends(require_admin)):
 async def notify_set_ntfy(body: dict = Body({}), _: str = Depends(require_admin)):
     # "token" absent = inchange ; "" = retire
     return await _call(N.set_ntfy(body.get("url", ""), body.get("topic", ""),
-                                  body["token"] if "token" in body else None))
+                                  body["token"] if "token" in body else None,
+                                  body["app_url"] if "app_url" in body else None))
 
 
 @router.put("/events/{event}")
 async def notify_set_event(event: str, body: dict = Body({}), _: str = Depends(require_admin)):
-    return await _call(N.set_event(event, body.get("enabled"), body.get("creators")))
+    return await _call(N.set_event(event, body.get("enabled"), body.get("creators"), body.get("options")))
 
 
 @router.post("/test")
