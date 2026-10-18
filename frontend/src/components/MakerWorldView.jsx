@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import client from "../api/client";
-import { mwHref } from "../utils/mwlink";
 
 // Onglet MakerWorld de l'Historique (compte connecte dans les Parametres) : collections
 // de favoris puis leurs modeles, et modeles aimes ; chacun avec « deja
@@ -136,14 +135,14 @@ export default function MakerWorldView({ onSearch }) {
               <div style={grid}>
                 {items.map(x => (
                   <div key={x.design_id} style={card}>
-                    <a href={mwHref(x.url)} target="_blank" rel="noopener noreferrer" style={{ display:"block" }}>
+                    <a href={x.url} target="_blank" rel="noopener noreferrer" style={{ display:"block" }}>
                       {x.cover_url
                         ? <img src={x.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
                             style={{ width:"100%", aspectRatio:"1", objectFit:"cover", display:"block", background:"var(--surface)" }}/>
                         : <div style={{ width:"100%", aspectRatio:"1", background:"var(--surface)" }}/>}
                     </a>
                     <div style={{ padding:"7px 8px 8px", display:"flex", flexDirection:"column", gap:4, flex:1 }}>
-                      <a href={mwHref(x.url)} target="_blank" rel="noopener noreferrer"
+                      <a href={x.url} target="_blank" rel="noopener noreferrer"
                         style={{ fontSize:12, fontWeight:700, color:"var(--text)", textDecoration:"none", lineHeight:1.3,
                           overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
                         {x.title || `Modèle ${x.design_id}`}

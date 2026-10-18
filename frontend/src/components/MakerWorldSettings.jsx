@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import client from "../api/client";
-import { isAndroid, handyPref, setHandyPref } from "../utils/mwlink";
 
 // Parametres MakerWorld : fiches publiques des modeles (cache), compte
 // (connexion, deconnexion) et diagnostic. API interne non officielle : tout
@@ -40,7 +39,6 @@ export default function MakerWorldSettings() {
     setInfo(data.started ? "Relecture lancée en arrière-plan (1,5 s par modèle)." : "Une relecture tourne déjà.");
     setTimeout(load, 3000);
   });
-  const [handy, setHandy] = useState(handyPref());
   const [hist, setHist] = useState(null);         // bilan du rattrapage historique cloud
   const history = (apply) => run(async () => {
     const { data } = await client.post("/makerworld/history", null, { params: { apply } });
@@ -130,19 +128,6 @@ export default function MakerWorldSettings() {
         {info && <p style={{ fontSize:12, color:"#3b82f6", margin:"8px 0 0" }}>{info}</p>}
         {err && <p style={{ fontSize:12, color:"#ef4444", margin:"8px 0 0" }}>{err}</p>}
       </div>
-
-      {/* ── Bambu Handy : reglage de CET appareil ── */}
-      {isAndroid() && (
-        <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, color:"var(--text2)",
-          marginTop:12, cursor:"pointer" }}>
-          <input type="checkbox" checked={handy} onChange={e => { setHandyPref(e.target.checked); setHandy(e.target.checked); }}/>
-          Ouvrir les liens MakerWorld dans Bambu Handy (cet appareil ; navigateur si Handy n'est pas installée)
-          {window.BambuScan && !window.BambuScan.openIntent && (
-            <span style={{ display:"block", fontSize:11, color:"#f59e0b" }}>
-              Pas encore dans l'application Android BambuNymous (sa mise à jour est nécessaire) ; marche dans Chrome.
-            </span>)}
-        </label>
-      )}
 
       {/* ── Historique cloud : liens MakerWorld des vieux prints ── */}
       {st?.connected && (
