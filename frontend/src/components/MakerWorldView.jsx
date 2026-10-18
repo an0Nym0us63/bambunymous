@@ -378,7 +378,7 @@ export default function MakerWorldView({ onSearch }) {
 // Choix des createurs suivis : recherche dynamique (nom ou pseudo qui
 // contient le texte, sans tenir compte des accents), cases a cocher.
 const norm = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-function CreatorPicker({ creators, picked, onClose, onApply }) {
+export function CreatorPicker({ creators, picked, onClose, onApply, applyLabel }) {
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(new Set(picked));
   const n = norm(q.trim());
@@ -424,7 +424,7 @@ function CreatorPicker({ creators, picked, onClose, onApply }) {
           <button onClick={() => onApply([...sel])}
             style={{ flex:2, padding:9, borderRadius:10, fontSize:12.5, fontWeight:700, cursor:"pointer",
               background:"#3b82f6", border:"none", color:"white" }}>
-            {sel.size ? `Voir ${sel.size} créateur${sel.size > 1 ? "s" : ""}` : "Voir tous les créateurs"}
+            {applyLabel ? applyLabel(sel.size) : sel.size ? `Voir ${sel.size} créateur${sel.size > 1 ? "s" : ""}` : "Voir tous les créateurs"}
           </button>
         </div>
       </div>

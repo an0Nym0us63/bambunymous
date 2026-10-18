@@ -15,6 +15,7 @@ import TelegramSettings from "../components/TelegramSettings";
 import DryRulesCard from "../components/DryRulesCard";
 import SpoolTaresCard from "../components/SpoolTaresCard";
 import MakerWorldSettings from "../components/MakerWorldSettings";
+import NotificationsSettings from "../components/NotificationsSettings";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
 import { amsName, slotCount, lireDisposition, dispositionParDefaut, MAX_LIGNES, MAX_COLONNES } from "../utils/ams";
@@ -1620,6 +1621,7 @@ const SET_TABS = [
   { id:"display",  label:"Affichage", admin:false },
   { id:"accounts", label:"Comptes",  admin:false },
   { id:"data",     label:"Données",  admin:true  },
+  { id:"notify",   label:"Notifs",   admin:true  },
 ];
 
 export default function Settings() {
@@ -1738,7 +1740,9 @@ export default function Settings() {
         padding:4, border:"1px solid var(--border)" }}>
         {tabs.map(t => (
           <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600,
+            // padding horizontal reduit : 5 onglets tiennent sur un telephone
+            flex:"1 1 auto", minWidth:0, padding:"8px 4px", borderRadius:8, fontSize:12, fontWeight:600,
+            whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
             cursor:"pointer", border:"none", transition:"all 0.15s",
             background: tab===t.id ? "#3b82f6" : "transparent",
             color: tab===t.id ? "white" : "var(--muted)" }}>
@@ -1866,6 +1870,13 @@ export default function Settings() {
         <MakerWorldSettings/>
         <SpoolnymousImport/>
         <RfidDebugSection/>
+      </AdminOnly>
+      )}
+
+      {/* ── Notifications ─────────────────────────────────────────── */}
+      {tab === "notify" && (
+      <AdminOnly>
+        <NotificationsSettings/>
       </AdminOnly>
       )}
 

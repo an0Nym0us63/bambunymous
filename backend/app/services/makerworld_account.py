@@ -644,12 +644,66 @@ async def warm_all() -> dict:
         creators = await following(fresh=True)
         jobs += [run(_published(c, 10, fresh=True)) for c in creators]
         await asyncio.gather(*jobs)
+        try:
+            await check_new_models(creators)
+        except Exception:
+            logger.exception("[MW] nouveaux modeles des suivis")
     finally:
         _WARM["on"] = False
     _WARM["last"] = {"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "requests": n, "errors": errors,
                      "seconds": round(time.time() - t0, 1)}
     logger.info(f"[MW] prechargement : {n} lecture(s), {errors} erreur(s) en {_WARM['last']['seconds']} s")
     return _WARM["last"]
+
+
+K_SEEN = "MW_NOTIFY_SEEN"     # {uid createur: date de publication du dernier modele vu}
+
+
+async def check_new_models(creators: list) -> int:
+    """Notifie les modeles publies par les createurs choisis depuis le dernier
+    passage. Premier passage pour un createur : on retient son dernier
+    modele sans rien envoyer (pas d'avalanche). Rend le nombre d'envois."""
+    from . import notify as N
+    st = await N.event_settings("mw_new_model")
+    watch = set(st.get("creators") or [])
+    if not st.get("enabled") or not watch:
+        return 0
+    try:
+        seen = json.loads(await _get(K_SEEN) or "{}")
+    except ValueError:
+        seen = {}
+    seen = seen if isinstance(seen, dict) else {}
+    by_uid = {c["uid"]: c for c in creators}
+    sent = 0
+    for uid in watch:
+        c = by_uid.get(uid)
+        if not c:
+            continue
+        items = [x for x in await _published(c, 10) if x.get("published")]
+        if not items:
+            continue
+        newest = max(x["published"] for x in items)
+        last = seen.get(uid)
+        if not last:
+            seen[uid] = newest
+            continue
+        fresh = sorted((x for x in items if x["published"] > last), key=lambda x: x["published"])
+        for x in fresh[:5]:
+            cover = x.get("cover_url")
+            if cover and "bblmw.com" in cover and "?" not in cover:
+                cover += "?x-oss-process=image/resize,w_600/format,webp"
+            ok = await N.notify("mw_new_model", f"Nouveau modèle de {c.get('name') or 'un créateur suivi'}",
+                                x.get("title_fr") or x.get("title") or "",
+                                click=f"https://makerworld.com/fr/models/{x['design_id']}", attach=cover, tags=["new"])
+            sent += 1 if ok else 0
+        if len(fresh) > 5:
+            await N.notify("mw_new_model", f"{c.get('name')} : {len(fresh) - 5} autre(s) nouveau(x) modèle(s)",
+                           "", click=f"https://makerworld.com/fr/@{c.get('handle')}" if c.get("handle") else None)
+        seen[uid] = max(last, newest)
+    await _set(K_SEEN, json.dumps(seen))
+    if sent:
+        logger.info(f"[MW] {sent} notification(s) de nouveaux modeles")
+    return sent
 
 
 async def warm_loop(period_s: int = 3600, first_delay_s: int = 180):
