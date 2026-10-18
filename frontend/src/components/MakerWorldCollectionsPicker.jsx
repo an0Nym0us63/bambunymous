@@ -46,7 +46,7 @@ export default function MakerWorldCollectionsPicker({ designId, title, onClose, 
     background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" };
 
   return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4500, background:"rgba(0,0,0,0.6)",
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4500, background:"rgba(0,0,0,0.6)",
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
         width:"100%", maxWidth:480, maxHeight:"80dvh", display:"flex", flexDirection:"column",

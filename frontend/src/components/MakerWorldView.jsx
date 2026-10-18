@@ -372,7 +372,7 @@ function CreatorPicker({ creators, picked, onClose, onApply }) {
   const shown = creators.filter(c => !n || norm(c.name).includes(n) || norm(c.handle).includes(n));
   const toggle = uid => setSel(s => { const x = new Set(s); x.has(uid) ? x.delete(uid) : x.add(uid); return x; });
   return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4000, background:"rgba(0,0,0,0.6)",
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4000, background:"rgba(0,0,0,0.6)",
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
         width:"100%", maxWidth:520, height:"80dvh", display:"flex", flexDirection:"column",

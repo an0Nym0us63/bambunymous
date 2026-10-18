@@ -3,6 +3,10 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App";
 import "./index.css";
+import { installPullRefreshGuard } from "./utils/pullRefreshGuard";
+
+// Coquille Android : les rangees horizontales n'arment plus le tirer-pour-rafraichir.
+installPullRefreshGuard();
 
 // Init thème avant premier render (évite le flash)
 const savedTheme = localStorage.getItem("bambu-theme") || "dark";

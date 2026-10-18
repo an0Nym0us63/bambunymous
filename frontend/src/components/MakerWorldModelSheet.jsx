@@ -4,6 +4,7 @@ import client from "../api/client";
 import AdminOnly from "./AdminOnly";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
 import MwImg from "./MwImg";
+import Lightbox from "./Lightbox";
 
 // Prechargement : la fiche est demandee des qu'on touche une tuile ; a
 // l'ouverture, la reponse est souvent deja la.
@@ -40,6 +41,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [comBusy, setComBusy] = useState(false);
   const [pick, setPick] = useState(false);
   const [sim, setSim] = useState(null);
+  const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
 
   useEffect(() => {
     let alive = true;
@@ -66,7 +68,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const plateDone = (prof, idx) => done.has(`${prof.profile_id}:${idx}`) || done.has(`:${idx}`);
 
   return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4200, background:"rgba(0,0,0,0.6)",
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4200, background:"rgba(0,0,0,0.6)",
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
         width:"100%", maxWidth:640, height:"92dvh", display:"flex", flexDirection:"column",
@@ -99,8 +101,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
               <div style={{ display:"flex", gap:8, overflowX:"auto", scrollSnapType:"x mandatory", margin:"0 -16px 12px",
                 padding:"0 16px" }}>
                 {m.pictures.map((u, i) => (
-                  <a key={i} href={u} target="_blank" rel="noopener noreferrer"
-                    style={{ flexShrink:0, width:"78%", maxWidth:360, scrollSnapAlign:"center" }}>
+                  <a key={i} href={u} onClick={e => { e.preventDefault(); setZoom({ images: m.pictures, index: i }); }}
+                    style={{ flexShrink:0, width:"78%", maxWidth:360, scrollSnapAlign:"center", cursor:"zoom-in" }}>
                     <MwImg src={u} w={360} eager={i < 2}
                       style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:12, display:"block",
                         background:"var(--surface2)" }}/>
@@ -139,6 +141,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
               <a href={m.url} target="_blank" rel="noopener noreferrer" style={linkBtn}>Ouvrir sur MakerWorld ↗</a>
               <AdminOnly><button onClick={() => setPick(true)} style={{ ...linkBtn, cursor:"pointer" }}>☆ Collections</button></AdminOnly>
             </div>
+            {zoom && <Lightbox images={zoom.images} index={zoom.index} onClose={() => setZoom(null)}/>}
             {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} onClose={() => setPick(false)}/>}
 
             {m.categories?.length > 0 && (
@@ -257,7 +260,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                       )}
                       {c.images?.length > 0 && (
                         <div style={{ display:"flex", gap:4, marginTop:4, overflowX:"auto" }}>
-                          {c.images.map((u, i) => <a key={i} href={u} target="_blank" rel="noopener noreferrer">
+                          {c.images.map((u, i) => <a key={i} href={u} onClick={e => { e.preventDefault(); setZoom({ images: c.images, index: i }); }}>
                             <MwImg src={u} w={128}
                               style={{ width:64, height:64, objectFit:"cover", borderRadius:6 }}/></a>)}
                         </div>
