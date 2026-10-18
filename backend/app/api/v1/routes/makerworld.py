@@ -54,6 +54,16 @@ async def mw_logout(_: str = Depends(require_admin)):
     return {"connected": False}
 
 
+@router.get("/collections")
+async def mw_collections(_: str = Depends(get_current_user)):
+    return await _call(acc.collections())
+
+
+@router.get("/collections/{cid}")
+async def mw_collection_designs(cid: str, _: str = Depends(get_current_user)):
+    return await _call(acc.collection_designs(cid))
+
+
 @router.get("/collection/{kind}")
 async def mw_collection(kind: str, _: str = Depends(get_current_user)):
     return await _call(acc.collection(kind))

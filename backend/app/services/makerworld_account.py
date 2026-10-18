@@ -199,21 +199,19 @@ async def _list(path_fmt: str, max_items: int = 300) -> list:
 
 LISTS = {
     "likes": "/design-service/my/design/like?offset={offset}&limit={limit}",
-    "favorites": "/design-service/my/favorites/listlite",
 }
+COLLECTIONS = "/design-service/my/favorites/listlite"
+COLLECTION_DESIGNS = "/design-service/favorites/{cid}/designs?offset={{offset}}&limit={{limit}}"
 
 
-async def collection(kind: str) -> dict:
-    """Modeles aimes / favoris, avec ce que l'appli en sait : fiche en cache
-    et nombre de fois imprime. Les modeles inconnus du cache sont lus en
-    arriere-plan (la liste se complete au rechargement)."""
+async def _enrich(items: list) -> dict:
+    """Ajoute a chaque modele ce que l'appli en sait : fiche en cache et
+    nombre de fois imprime. Les listes portent deja titre, couverture et
+    createur ; seuls les modeles qui n'en ont pas sont lus en arriere-plan."""
     from sqlalchemy import select, func
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print, MakerWorldDesign as MW
     from .makerworld import to_dict, launch_many
-    if kind not in LISTS:
-        raise AccountError("Liste inconnue")
-    items = await _list(LISTS[kind])
     ids = [x["design_id"] for x in items]
     async with AsyncSessionLocal() as db:
         cache = {m.design_id: m for m in (await db.execute(
@@ -224,16 +222,53 @@ async def collection(kind: str) -> dict:
     out = []
     for x in items:
         m = to_dict(cache.get(x["design_id"])) or {}
-        out.append({**x, **{k: v for k, v in m.items() if v}, "printed": printed.get(x["design_id"], 0),
+        out.append({**{k: v for k, v in m.items() if v}, **{k: v for k, v in x.items() if v},
+                    "printed": printed.get(x["design_id"], 0),
                     "url": f"https://makerworld.com/fr/models/{x['design_id']}"})
-    missing = [i for i in ids if i not in cache]
-    # Favoris : la liste rend des COLLECTIONS, pas des modeles (format a
-    # confirmer par le diagnostic) -- on ne lit pas leurs ids comme des modeles.
-    if kind == "favorites":
-        missing = []
+    missing = [x["design_id"] for x in out if not x.get("title")]
     if missing:
         launch_many(missing)
     return {"items": out, "pending": len(missing)}
+
+
+async def collection(kind: str) -> dict:
+    """Modeles aimes, enrichis (fiche, deja imprime)."""
+    if kind not in LISTS:
+        raise AccountError("Liste inconnue")
+    return await _enrich(await _list(LISTS[kind]))
+
+
+async def collections() -> dict:
+    """Mes collections de favoris : nom, quelques couvertures, nombre de
+    modeles quand l'API le donne."""
+    import asyncio
+    from .makerworld import _get_json
+    tok = await token()
+    if not tok:
+        raise AccountError("Compte MakerWorld non connecté")
+    code, d = await asyncio.to_thread(_get_json, COLLECTIONS, tok)
+    if code == 401:
+        raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+    out = []
+    for it in _items(d):
+        if not isinstance(it, dict) or not str(it.get("id") or "").isdigit():
+            continue
+        covers = [c for c in (it.get("designCover") or []) if isinstance(c, str) and c][:4]
+        if not covers and isinstance(it.get("cover"), str) and it["cover"]:
+            covers = [it["cover"]]
+        cnt = it.get("designCnt")
+        out.append({"id": str(it["id"]),
+                    "title": it.get("title") if isinstance(it.get("title"), str) else f"Collection {it['id']}",
+                    "covers": covers, "count": cnt if isinstance(cnt, int) else None})
+    return {"collections": out}
+
+
+async def collection_designs(cid: str) -> dict:
+    """Modeles d'une collection, enrichis (fiche, deja imprime)."""
+    cid = str(cid or "").strip()
+    if not cid.isdigit():
+        raise AccountError("Collection inconnue")
+    return await _enrich(await _list(COLLECTION_DESIGNS.format(cid=cid), max_items=500))
 
 
 async def _debug_collections() -> dict:

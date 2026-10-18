@@ -2,15 +2,16 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 
-// Mes modeles MakerWorld (compte connecte dans les Parametres) : j'aime et
-// favoris, chacun avec « deja imprime N fois » ou « jamais imprime », croise
-// avec l'historique. Lecture seule. Si l'API ne repond plus, la fenetre le
-// dit et rien d'autre n'est touche.
+// Mes modeles MakerWorld (compte connecte dans les Parametres) : collections
+// de favoris puis leurs modeles, et modeles aimes ; chacun avec « deja
+// imprime N fois » ou « jamais imprime », croise avec l'historique. Lecture
+// seule. Si l'API ne repond plus, la fenetre le dit et rien d'autre n'est touche.
 const TABS = [["favorites", "Favoris"], ["likes", "J'aime"]];
 
 export default function MakerWorldSheet({ onClose, onSearch }) {
   const [tab, setTab] = useState("favorites");
-  const [data, setData] = useState(null);       // { items, pending } | { error }
+  const [coll, setColl] = useState(null);          // collection ouverte { id, title }
+  const [data, setData] = useState(null);          // { items } | { collections } | { error }
   const [onlyNew, setOnlyNew] = useState(false);
   const [status, setStatus] = useState(null);
 
@@ -21,17 +22,20 @@ export default function MakerWorldSheet({ onClose, onSearch }) {
   useEffect(() => {
     if (!status?.connected) return;
     let alive = true, timer = null;
-    const load = (again) => client.get(`/makerworld/collection/${tab}`).then(({ data }) => {
+    const url = tab === "likes" ? "/makerworld/collection/likes"
+      : coll ? `/makerworld/collections/${coll.id}` : "/makerworld/collections";
+    const load = (again) => client.get(url).then(({ data }) => {
       if (!alive) return;
       setData(data);
-      // Modeles pas encore en cache : lus en arriere-plan, on recharge une fois.
+      // Modeles sans fiche : lus en arriere-plan, on recharge une fois.
       if (data.pending && again) timer = setTimeout(() => load(false), 8000);
     }).catch(e => alive && setData({ error: e.response?.data?.detail || e.message }));
     setData(null);
     load(true);
     return () => { alive = false; clearTimeout(timer); };
-  }, [tab, status?.connected]);
+  }, [tab, coll?.id, status?.connected]);
 
+  const showModels = tab === "likes" || !!coll;
   const items = (data?.items || []).filter(x => !onlyNew || !x.printed);
   const nNew = (data?.items || []).filter(x => !x.printed).length;
 
@@ -43,23 +47,32 @@ export default function MakerWorldSheet({ onClose, onSearch }) {
         paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
         <div style={{ padding:"14px 16px 8px", borderBottom:"1px solid var(--border)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            <h3 style={{ flex:1, fontSize:15, fontWeight:800, color:"var(--text)", margin:0 }}>Mes modèles MakerWorld</h3>
+            {coll && tab === "favorites" && (
+              <button onClick={() => setColl(null)} title="Toutes les collections"
+                style={{ background:"none", border:"none", color:"var(--text)", fontSize:18, cursor:"pointer", padding:"0 4px 0 0" }}>‹</button>
+            )}
+            <h3 style={{ flex:1, minWidth:0, fontSize:15, fontWeight:800, color:"var(--text)", margin:0,
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+              {coll && tab === "favorites" ? coll.title : "Mes modèles MakerWorld"}
+            </h3>
             <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--muted)",
               fontSize:18, cursor:"pointer" }}>✕</button>
           </div>
           {status?.connected && (
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:10, flexWrap:"wrap" }}>
               {TABS.map(([k, l]) => (
-                <button key={k} onClick={() => setTab(k)}
+                <button key={k} onClick={() => { setTab(k); if (k === "likes") setColl(null); }}
                   style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer",
                     background: tab === k ? "#3b82f6" : "var(--surface2)", color: tab === k ? "white" : "var(--muted)",
                     border: tab === k ? "none" : "1px solid var(--border)" }}>{l}</button>
               ))}
-              <label style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6, fontSize:12,
-                color:"var(--text2)", cursor:"pointer" }}>
-                <input type="checkbox" checked={onlyNew} onChange={e => setOnlyNew(e.target.checked)}/>
-                Jamais imprimés{data?.items ? ` (${nNew})` : ""}
-              </label>
+              {showModels && (
+                <label style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6, fontSize:12,
+                  color:"var(--text2)", cursor:"pointer" }}>
+                  <input type="checkbox" checked={onlyNew} onChange={e => setOnlyNew(e.target.checked)}/>
+                  Jamais imprimés{data?.items ? ` (${nNew})` : ""}
+                </label>
+              )}
             </div>
           )}
         </div>
@@ -68,18 +81,32 @@ export default function MakerWorldSheet({ onClose, onSearch }) {
           {status === null ? <p style={msg}>…</p>
             : !status.connected ? (
               <p style={msg}>Connecte ton compte MakerWorld dans <b>Paramètres → Données → MakerWorld</b> pour voir
-                tes favoris et tes j'aime ici.</p>
+                tes collections et tes j'aime ici.</p>
             ) : data === null ? <p style={msg}>Chargement…</p>
             : data.error ? <p style={{ ...msg, color:"#f59e0b" }}>MakerWorld ne répond pas comme prévu : {data.error}</p>
-            : items.length === 0 ? <p style={msg}>{onlyNew ? "Tout a déjà été imprimé 🎉" : "Rien dans cette liste."}</p>
+            : !showModels ? (
+              (data.collections || []).length === 0 ? <p style={msg}>Aucune collection.</p> : (
+                <div style={grid}>
+                  {data.collections.map(c => (
+                    <button key={c.id} onClick={() => setColl(c)}
+                      style={{ ...card, cursor:"pointer", padding:0, textAlign:"left", color:"var(--text)" }}>
+                      <Mosaic covers={c.covers}/>
+                      <div style={{ padding:"7px 8px 8px" }}>
+                        <div style={{ fontSize:12.5, fontWeight:700 }}>{c.title}</div>
+                        {c.count != null && <div style={{ fontSize:10.5, color:"var(--muted)" }}>{c.count} modèle{c.count > 1 ? "s" : ""}</div>}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )
+            ) : items.length === 0 ? <p style={msg}>{onlyNew ? "Tout a déjà été imprimé 🎉" : "Rien dans cette liste."}</p>
             : (<>
               {data.pending > 0 && (
                 <p style={{ ...msg, padding:"0 0 8px" }}>{data.pending} modèle{data.pending > 1 ? "s" : ""} en cours de lecture…</p>
               )}
-              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
+              <div style={grid}>
                 {items.map(x => (
-                  <div key={x.design_id} style={{ borderRadius:12, border:"1px solid var(--border)",
-                    background:"var(--surface2)", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+                  <div key={x.design_id} style={card}>
                     <a href={x.url} target="_blank" rel="noopener noreferrer" style={{ display:"block" }}>
                       {x.cover_url
                         ? <img src={x.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
@@ -116,4 +143,23 @@ export default function MakerWorldSheet({ onClose, onSearch }) {
   );
 }
 
+// Couverture d'une collection : jusqu'a 4 modeles en mosaique.
+function Mosaic({ covers = [] }) {
+  const c = covers.slice(0, 4);
+  if (!c.length) return <div style={{ width:"100%", aspectRatio:"1", background:"var(--surface)" }}/>;
+  return (
+    <div style={{ width:"100%", aspectRatio:"1", display:"grid", gap:1, background:"var(--border)",
+      gridTemplateColumns: c.length > 1 ? "1fr 1fr" : "1fr", gridTemplateRows: c.length > 2 ? "1fr 1fr" : "1fr" }}>
+      {c.map((u, i) => (
+        <img key={i} src={u} alt="" loading="lazy" referrerPolicy="no-referrer"
+          style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", background:"var(--surface)",
+            gridRow: c.length === 3 && i === 0 ? "span 2" : undefined }}/>
+      ))}
+    </div>
+  );
+}
+
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };
+const grid = { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 };
+const card = { borderRadius:12, border:"1px solid var(--border)", background:"var(--surface2)",
+  overflow:"hidden", display:"flex", flexDirection:"column" };
