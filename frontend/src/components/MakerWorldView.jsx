@@ -6,13 +6,23 @@ import client from "../api/client";
 // imprime N fois » ou « jamais imprime », croise avec l'historique. Lecture
 // seule. Si l'API ne repond plus, la fenetre le dit et rien d'autre n'est touche.
 // La recherche MakerWorld est publique : elle marche sans compte.
-const TABS = [["favorites", "Collections"], ["likes", "J'aime"], ["search", "Recherche"]];
+const TABS = [["favorites", "Collections"], ["likes", "J'aime"], ["following", "Suivis"], ["search", "Recherche"]];
+// « Il y a 3 j » : date de publication (Suivis).
+const ago = iso => {
+  const d = (Date.now() - new Date(iso).getTime()) / 86400000;
+  if (!(d >= 0)) return null;
+  return d < 1 ? "aujourd'hui" : d < 2 ? "hier" : d < 31 ? `il y a ${Math.floor(d)} j`
+    : d < 365 ? `il y a ${Math.floor(d / 30)} mois` : `il y a ${Math.floor(d / 365)} an${d >= 730 ? "s" : ""}`;
+};
+const FILTERS = [["all", "Tous"], ["printed", "Déjà imprimés"], ["new", "Jamais imprimés"]];
 
 export default function MakerWorldView({ onSearch }) {
   const [tab, setTab] = useState("favorites");
   const [coll, setColl] = useState(null);          // collection ouverte { id, title }
   const [data, setData] = useState(null);          // { items } | { collections } | { error }
-  const [onlyNew, setOnlyNew] = useState(false);
+  const [pf, setPf] = useState("all");           // tous / deja imprimes / jamais imprimes
+  const [creator, setCreator] = useState("");      // Suivis : un seul createur (uid)
+  const [creators, setCreators] = useState([]);    // Suivis : pastilles, gardees pendant un rechargement
   const [status, setStatus] = useState(null);
   const [q, setQ] = useState("");                  // saisie de recherche
   const [sq, setSq] = useState("");                // recherche lancee
@@ -35,17 +45,19 @@ export default function MakerWorldView({ onSearch }) {
     if (!status?.connected) return;
     let alive = true, timer = null;
     const url = tab === "likes" ? "/makerworld/collection/likes"
+      : tab === "following" ? `/makerworld/following${creator ? `?creator=${creator}` : ""}`
       : coll ? `/makerworld/collections/${coll.id}` : "/makerworld/collections";
     const load = (again) => client.get(url).then(({ data }) => {
       if (!alive) return;
       setData(data);
+      if (data.creators) setCreators(data.creators);
       // Modeles sans fiche : lus en arriere-plan, on recharge une fois.
       if (data.pending && again) timer = setTimeout(() => load(false), 8000);
     }).catch(e => alive && setData({ error: e.response?.data?.detail || e.message }));
     setData(null);
     load(true);
     return () => { alive = false; clearTimeout(timer); };
-  }, [tab, coll?.id, status?.connected, sq]);
+  }, [tab, coll?.id, status?.connected, sq, creator]);
 
   const loadMore = () => {
     setMore(true);
@@ -56,8 +68,9 @@ export default function MakerWorldView({ onSearch }) {
   };
 
   const showModels = tab !== "favorites" || !!coll;
-  const items = (data?.items || []).filter(x => !onlyNew || !x.printed);
-  const nNew = (data?.items || []).filter(x => !x.printed).length;
+  const all = data?.items || [];
+  const items = all.filter(x => pf === "all" || (pf === "new" ? !x.printed : x.printed > 0));
+  const count = { all: all.length, printed: all.filter(x => x.printed > 0).length, new: all.filter(x => !x.printed).length };
 
   return (
       <div style={{ display:"flex", flexDirection:"column" }}>
@@ -75,18 +88,34 @@ export default function MakerWorldView({ onSearch }) {
           {status && (
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:10, flexWrap:"wrap" }}>
               {TABS.map(([k, l]) => (
-                <button key={k} onClick={() => { setTab(k); if (k !== "favorites") setColl(null); }}
+                <button key={k} onClick={() => { setTab(k); if (k !== "favorites") setColl(null); if (k !== "following") setCreator(""); }}
                   style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer",
                     background: tab === k ? "#3b82f6" : "var(--surface2)", color: tab === k ? "white" : "var(--muted)",
                     border: tab === k ? "none" : "1px solid var(--border)" }}>{l}</button>
               ))}
               {showModels && (
-                <label style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:6, fontSize:12,
-                  color:"var(--text2)", cursor:"pointer" }}>
-                  <input type="checkbox" checked={onlyNew} onChange={e => setOnlyNew(e.target.checked)}/>
-                  Jamais imprimés{data?.items ? ` (${nNew})` : ""}
-                </label>
+                <select value={pf} onChange={e => setPf(e.target.value)}
+                  style={{ marginLeft:"auto", fontSize:12, padding:"4px 8px", borderRadius:8, background:"var(--surface2)",
+                    border:"1px solid var(--border)", color:"var(--text2)" }}>
+                  {FILTERS.map(([k, l]) => <option key={k} value={k}>{l}{data?.items ? ` (${count[k]})` : ""}</option>)}
+                </select>
               )}
+            </div>
+          )}
+          {tab === "following" && creators.length > 0 && (
+            <div style={{ display:"flex", gap:6, overflowX:"auto", marginTop:10, paddingBottom:2 }}>
+              {[{ uid: "", name: "Tous" }, ...creators].map(c => (
+                <button key={c.uid || "tous"} onClick={() => setCreator(c.uid)}
+                  style={{ flexShrink:0, display:"flex", alignItems:"center", gap:5, padding:"3px 10px 3px 4px",
+                    borderRadius:20, fontSize:11.5, fontWeight:600, cursor:"pointer",
+                    background: creator === c.uid ? "rgba(59,130,246,0.15)" : "var(--surface2)",
+                    color: creator === c.uid ? "#3b82f6" : "var(--text2)",
+                    border: creator === c.uid ? "1px solid #3b82f6" : "1px solid var(--border)" }}>
+                  {c.avatar ? <img src={c.avatar} alt="" referrerPolicy="no-referrer"
+                    style={{ width:20, height:20, borderRadius:"50%" }}/> : <span style={{ width:6 }}/>}
+                  {c.name || c.handle}
+                </button>
+              ))}
             </div>
           )}
           {tab === "search" && (
@@ -126,8 +155,10 @@ export default function MakerWorldView({ onSearch }) {
                   ))}
                 </div>
               )
-            ) : items.length === 0 ? <p style={msg}>{onlyNew ? "Tout a déjà été imprimé 🎉"
-                : tab === "search" ? "Aucun résultat." : "Rien dans cette liste."}</p>
+            ) : items.length === 0 ? <p style={msg}>{pf === "new" && all.length ? "Tout a déjà été imprimé 🎉"
+                : pf === "printed" && all.length ? "Aucun n'a encore été imprimé."
+                : tab === "search" ? "Aucun résultat."
+                : tab === "following" ? "Aucun modèle (ou aucun créateur suivi)." : "Rien dans cette liste."}</p>
             : (<>
               {data.pending > 0 && (
                 <p style={{ ...msg, padding:"0 0 8px" }}>{data.pending} modèle{data.pending > 1 ? "s" : ""} en cours de lecture…</p>
@@ -147,7 +178,8 @@ export default function MakerWorldView({ onSearch }) {
                           overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
                         {x.title || `Modèle ${x.design_id}`}
                       </a>
-                      {x.creator_name && <span style={{ fontSize:10.5, color:"var(--muted)" }}>par {x.creator_name}</span>}
+                      {x.creator_name && <span style={{ fontSize:10.5, color:"var(--muted)" }}>par {x.creator_name}
+                        {x.published && ago(x.published) ? ` · ${ago(x.published)}` : ""}</span>}
                       <div style={{ marginTop:"auto" }}>
                         {x.printed > 0 ? (
                           <button onClick={() => onSearch?.(x)} title="Voir ces prints dans l'historique"

@@ -271,6 +271,91 @@ async def collection_designs(cid: str) -> dict:
     return await _enrich(await _list(COLLECTION_DESIGNS.format(cid=cid), max_items=500))
 
 
+# ── Createurs suivis et leurs modeles ──────────────────────────────────────
+FOLLOWS = "/design-user-service/user/{uid}/follows?offset={offset}&limit=50"
+PUBLISHED = "/design-service/published/{uid}/design?offset=0&limit={limit}"
+_PUB_CACHE = {}            # uid -> (instant, [modeles]) : 1 h, pour ne pas relire a chaque ouverture
+_PUB_TTL = 3600
+_FOLLOW_CACHE = {}         # uid -> (instant, [createurs]) : 10 min
+
+
+async def _my_uid() -> str:
+    st = await status()
+    uid = (st.get("account") or {}).get("uid")
+    if not st.get("connected") or not uid:
+        raise AccountError("Compte MakerWorld non connecté")
+    return str(uid)
+
+
+async def following() -> list:
+    """Createurs que je suis vraiment (liste de mon profil MakerWorld)."""
+    import asyncio
+    from .makerworld import _get_json
+    import time
+    uid, tok = await _my_uid(), await token()
+    hit = _FOLLOW_CACHE.get(uid)
+    if hit and time.time() - hit[0] < 600:
+        return hit[1]
+    out, offset = [], 0
+    while len(out) < 1000:
+        code, d = await asyncio.to_thread(_get_json, FOLLOWS.format(uid=uid, offset=offset), tok)
+        if code == 401:
+            raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+        hits = [h for h in _items(d) if isinstance(h, dict) and str(h.get("uid") or "").isdigit()]
+        if not hits:
+            break
+        out += [{"uid": str(h["uid"]), "name": h.get("name") if isinstance(h.get("name"), str) else "",
+                 "handle": h.get("handle") if isinstance(h.get("handle"), str) else "",
+                 "avatar": h.get("avatar") if isinstance(h.get("avatar"), str) else None} for h in hits]
+        offset += 50
+    _FOLLOW_CACHE[uid] = (time.time(), out)
+    return out
+
+
+def _pub_hit(h, creator) -> dict:
+    if not isinstance(h, dict) or not str(h.get("id") or "").isdigit():
+        return None
+    s = lambda v: v if isinstance(v, str) and v else None
+    return {"design_id": str(h["id"]), "title": s(h.get("title")),
+            "cover_url": s(h.get("coverUrl")) or s(h.get("cover")),
+            "creator_name": creator.get("name"), "creator_uid": creator["uid"],
+            "published": s(h.get("publishTime")) or s(h.get("createTime"))}
+
+
+async def _published(creator: dict, limit: int) -> list:
+    import asyncio, time
+    from .makerworld import _get_json
+    hit = _PUB_CACHE.get((creator["uid"], limit))
+    if hit and time.time() - hit[0] < _PUB_TTL:
+        return hit[1]
+    code, d = await asyncio.to_thread(_get_json, PUBLISHED.format(uid=creator["uid"], limit=limit))
+    items = [x for x in (_pub_hit(h, creator) for h in _items(d)) if x]
+    if code == 200:
+        _PUB_CACHE[(creator["uid"], limit)] = (time.time(), items)
+    return items
+
+
+async def feed(creator_uid: str = "") -> dict:
+    """Modeles recents des createurs suivis, fusionnes du plus recent au plus
+    ancien, avec « deja imprime ». Un createur choisi : ses 60 derniers."""
+    import asyncio
+    creators = await following()
+    pick = [c for c in creators if c["uid"] == str(creator_uid)] if creator_uid else creators
+    per = 60 if creator_uid else 12
+    sem = asyncio.Semaphore(5)              # pas plus de 5 requetes a la fois
+
+    async def one(c):
+        async with sem:
+            try:
+                return await _published(c, per)
+            except Exception:
+                return []
+    lists = await asyncio.gather(*(one(c) for c in pick))
+    items = sorted((x for l in lists for x in l), key=lambda x: x.get("published") or "", reverse=True)
+    res = await _enrich(items)
+    return {"creators": creators, "items": res["items"], "pending": res["pending"]}
+
+
 async def _debug_collections() -> dict:
     """Essais pour lire le CONTENU d'une collection : prend la premiere de la
     liste et tente les chemins plausibles (non documentes), avec le code et le
