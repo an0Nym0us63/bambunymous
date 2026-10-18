@@ -284,6 +284,153 @@ async def collection_designs(cid: str) -> dict:
     return await _enrich(await _list(COLLECTION_DESIGNS.format(cid=cid), max_items=500))
 
 
+# ── Ecritures sur les collections (sur geste explicite de l'utilisateur) ────
+# Requetes relevees sur makerworld.com (18/10/2026). Envoyees a l'hote de
+# l'API Bambu (sans Cloudflare) avec le jeton du compte. Rien n'est jamais
+# ecrit sans une action de l'utilisateur dans l'appli.
+WRITE_HOST = "https://api.bambulab.com/v1"
+MEMBERSHIP = "/design-service/my/design/favoriteslist"
+
+
+def _send(method: str, path: str, body, tok: str):
+    import requests
+    try:
+        r = requests.request(method, WRITE_HOST + path, json=body, timeout=20, headers={
+            "User-Agent": "Mozilla/5.0 (BambuNymous)", "Accept": "application/json",
+            "Content-Type": "application/json", "Authorization": f"Bearer {tok}"})
+    except Exception as e:
+        raise AccountError(f"MakerWorld injoignable ({type(e).__name__})")
+    if r.status_code == 401:
+        raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+    try:
+        data = r.json()
+    except ValueError:
+        data = None
+    if r.status_code >= 400:
+        msg = (data or {}).get("error") or (data or {}).get("message") if isinstance(data, dict) else None
+        raise AccountError(msg or f"MakerWorld a refusé (HTTP {r.status_code})")
+    return data
+
+
+async def _tok() -> str:
+    tok = await token()
+    if not tok:
+        raise AccountError("Compte MakerWorld non connecté")
+    return tok
+
+
+_FLAGS = ("isFavorite", "isCollected", "collected", "isCollect", "hasCollect", "checked",
+          "selected", "exist", "isExist", "isIn", "inFavorites", "contains", "isAdded")
+
+
+def _membership_ids(d):
+    """Collections ou se trouve un modele, d'apres la reponse (forme non
+    documentee). None des que la forme n'est pas reconnue avec certitude :
+    l'ecriture REMPLACE la liste, on ne devine donc jamais."""
+    if isinstance(d, dict):
+        for k in ("favoritesIds", "favoriteIds", "ids"):
+            v = d.get(k)
+            if isinstance(v, list) and all(str(x).isdigit() for x in v):
+                return [str(x) for x in v]
+        lst = next((d[k] for k in ("hits", "list", "items", "favorites", "data")
+                    if isinstance(d.get(k), list)), None)
+    elif isinstance(d, list):
+        lst = d
+    else:
+        return None
+    if lst is None:
+        return None
+    if all(isinstance(x, int) or (isinstance(x, str) and x.isdigit()) for x in lst):
+        return [str(x) for x in lst]                 # liste d'ids (vide comprise)
+    if all(isinstance(x, dict) and x.get("id") is not None for x in lst):
+        keys = set().union(*(x.keys() for x in lst))
+        flag = next((f for f in _FLAGS if f in keys), None)
+        if flag:
+            return [str(x["id"]) for x in lst if x.get(flag)]
+    return None
+
+
+async def design_collections(design_id: str) -> dict:
+    """Toutes mes collections, et celles qui contiennent deja ce modele."""
+    import asyncio
+    from .makerworld import _get_json
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        raise AccountError("Modèle inconnu")
+    tok = await _tok()
+    cols = (await collections())["collections"]
+    code, d = await asyncio.to_thread(_get_json, f"{MEMBERSHIP}?designId={did}", tok)
+    ids = _membership_ids(d) if code == 200 else None
+    return {"collections": cols, "in": ids, "known": ids is not None}
+
+
+async def set_design_collections(design_id: str, ids: list) -> dict:
+    """Range un modele dans exactement ces collections (ajout et retrait)."""
+    import asyncio
+    did = str(design_id or "").strip()
+    ids = [str(i) for i in (ids or []) if str(i).isdigit()]
+    if not did.isdigit():
+        raise AccountError("Modèle inconnu")
+    tok = await _tok()
+    mine = {c["id"] for c in (await collections())["collections"]}
+    if any(i not in mine for i in ids):
+        raise AccountError("Collection inconnue")
+    await asyncio.to_thread(_send, "PUT", MEMBERSHIP,
+                            {"designId": int(did), "favoritesIds": [int(i) for i in ids]}, tok)
+    logger.info(f"[MW] modele {did} range dans {len(ids)} collection(s)")
+    return {"ok": True, "in": ids}
+
+
+async def create_collection(title: str) -> dict:
+    import asyncio
+    title = (title or "").strip()[:60]
+    if not title:
+        raise AccountError("Nom de collection requis")
+    tok = await _tok()
+    d = await asyncio.to_thread(_send, "POST", "/design-service/my/favorites",
+                                {"title": title, "status": 1, "description": "", "cover": "",
+                                 "tags": [], "setAsDefault": False}, tok)
+    logger.info(f"[MW] collection creee : {title}")
+    cid = (d or {}).get("id") if isinstance(d, dict) else None
+    return {"ok": True, "id": str(cid) if cid else None, "title": title}
+
+
+async def rename_collection(cid: str, title: str) -> dict:
+    """Renomme en gardant le reste de la fiche : le PUT la remplace en entier."""
+    import asyncio
+    from .makerworld import _get_json
+    cid, title = str(cid or "").strip(), (title or "").strip()[:60]
+    if not cid.isdigit() or not title:
+        raise AccountError("Collection ou nom manquant")
+    tok = await _tok()
+    code, cur = await asyncio.to_thread(_get_json, f"/design-service/favorites/{cid}/withoutdesign", tok)
+    if not isinstance(cur, dict) or str(cur.get("id")) != cid:
+        raise AccountError("Fiche de la collection illisible : renommage annulé")
+    body = {"title": title,
+            "status": cur.get("status") if isinstance(cur.get("status"), int) else 1,
+            "description": cur.get("description") if isinstance(cur.get("description"), str) else "",
+            "cover": cur.get("cover") if isinstance(cur.get("cover"), str) else "",
+            "tags": cur.get("tags") if isinstance(cur.get("tags"), list) else [],
+            "setAsDefault": bool(cur.get("isDefault"))}
+    await asyncio.to_thread(_send, "PUT", f"/design-service/my/favorites/{cid}", body, tok)
+    logger.info(f"[MW] collection {cid} renommee : {title}")
+    return {"ok": True}
+
+
+async def delete_collection(cid: str) -> dict:
+    """Supprime une de MES collections (les modeles restent sur MakerWorld)."""
+    import asyncio
+    cid = str(cid or "").strip()
+    if not cid.isdigit():
+        raise AccountError("Collection inconnue")
+    tok = await _tok()
+    if cid not in {c["id"] for c in (await collections())["collections"]}:
+        raise AccountError("Collection inconnue")
+    await asyncio.to_thread(_send, "DELETE", f"/design-service/my/favorites/{cid}", {"id": int(cid)}, tok)
+    logger.info(f"[MW] collection {cid} supprimee")
+    return {"ok": True}
+
+
 # ── Createurs suivis et leurs modeles ──────────────────────────────────────
 FOLLOWS = "/design-user-service/user/{uid}/follows?offset={offset}&limit=50"
 PUBLISHED = "/design-service/published/{uid}/design?offset=0&limit={limit}"
@@ -553,6 +700,8 @@ DEBUG_TRIES = {
         "/search-service/select/design/search?keyword=panda&offset=0&limit=3",
         "/search-service/design/search?keyword=panda&offset=0&limit=3",
         "/search-service/search/design?keyword=panda&offset=0&limit=3"]),
+    "essais_appartenance": lambda did: ("essais appartenance", [
+        f"{MEMBERSHIP}?designId={did}"]),
     "essais_suivis": lambda did: ("essais suivis", [
         "/design-user-service/my/follow/following?offset=0&limit=3",
         "/design-user-service/my/following?offset=0&limit=3",

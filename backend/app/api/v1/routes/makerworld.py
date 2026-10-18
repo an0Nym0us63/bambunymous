@@ -76,6 +76,31 @@ async def mw_following(uids: str = "", per: int = 12, _: str = Depends(get_curre
     return await _call(acc.feed(uids, per))
 
 
+@router.post("/collections")
+async def mw_create_collection(body: dict = Body({}), _: str = Depends(require_admin)):
+    return await _call(acc.create_collection(str(body.get("title", ""))))
+
+
+@router.put("/collections/{cid}")
+async def mw_rename_collection(cid: str, body: dict = Body({}), _: str = Depends(require_admin)):
+    return await _call(acc.rename_collection(cid, str(body.get("title", ""))))
+
+
+@router.delete("/collections/{cid}")
+async def mw_delete_collection(cid: str, _: str = Depends(require_admin)):
+    return await _call(acc.delete_collection(cid))
+
+
+@router.get("/design/{design_id}/collections")
+async def mw_design_collections(design_id: str, _: str = Depends(get_current_user)):
+    return await _call(acc.design_collections(design_id))
+
+
+@router.put("/design/{design_id}/collections")
+async def mw_set_design_collections(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+    return await _call(acc.set_design_collections(design_id, body.get("ids") or []))
+
+
 @router.get("/collection/{kind}")
 async def mw_collection(kind: str, _: str = Depends(get_current_user)):
     return await _call(acc.collection(kind))

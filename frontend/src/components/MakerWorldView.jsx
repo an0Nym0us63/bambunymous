@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
+import AdminOnly from "./AdminOnly";
+import { showAlert, showConfirm } from "../utils/dialog";
+import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
 
 // Onglet MakerWorld de l'Historique (compte connecte dans les Parametres) : collections
 // de favoris puis leurs modeles, et modeles aimes ; chacun avec « deja
@@ -26,6 +29,9 @@ export default function MakerWorldView({ onSearch }) {
   const [picked, setPicked] = useState([]);        // Suivis : createurs choisis (vide = tous)
   const [picker, setPicker] = useState(false);     // Suivis : fenetre de choix des createurs
   const [progress, setProgress] = useState(null);  // Suivis : { done, total } pendant le chargement
+  const [pickFor, setPickFor] = useState(null);    // modele a ranger dans mes collections
+  const [reload, setReload] = useState(0);         // relecture apres une ecriture
+  const [nameEdit, setNameEdit] = useState(null);  // { mode: "new"|"rename", value }
   const [status, setStatus] = useState(null);
   const [q, setQ] = useState("");                  // saisie de recherche
   const [sq, setSq] = useState("");                // recherche lancee
@@ -89,7 +95,7 @@ export default function MakerWorldView({ onSearch }) {
     setData(null);
     load(true);
     return () => { alive = false; clearTimeout(timer); };
-  }, [tab, coll?.id, status?.connected, sq, picked.join(",")]);
+  }, [tab, coll?.id, status?.connected, sq, picked.join(","), reload]);
 
   const loadMore = () => {
     setMore(true);
@@ -97,6 +103,22 @@ export default function MakerWorldView({ onSearch }) {
       .then(({ data: d }) => setData(prev => ({ ...prev, items: [...prev.items,
         ...(d.items || []).filter(x => !prev.items.some(y => y.design_id === x.design_id))] })))
       .catch(() => {}).finally(() => setMore(false));
+  };
+
+  const saveName = async () => {
+    const v = (nameEdit?.value || "").trim();
+    if (!v) return;
+    try {
+      if (nameEdit.mode === "new") await client.post("/makerworld/collections", { title: v });
+      else { await client.put(`/makerworld/collections/${coll.id}`, { title: v }); setColl(c => ({ ...c, title: v })); }
+      setNameEdit(null); setReload(n => n + 1);
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
+  const delColl = async () => {
+    if (!(await showConfirm(`Supprimer la collection « ${coll.title} » sur MakerWorld ? Les modèles, eux, restent.`,
+      { danger: true, confirmLabel: "Supprimer" }))) return;
+    try { await client.delete(`/makerworld/collections/${coll.id}`); setColl(null); setReload(n => n + 1); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
 
   const showModels = tab !== "favorites" || !!coll;
@@ -116,6 +138,13 @@ export default function MakerWorldView({ onSearch }) {
               <h3 style={{ flex:1, minWidth:0, fontSize:15, fontWeight:800, color:"var(--text)", margin:0,
                 overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{coll.title}</h3>
             )}
+            {coll && tab === "favorites" && status?.connected && (
+              <AdminOnly>
+                <button onClick={() => setNameEdit({ mode: "rename", value: coll.title })} title="Renommer"
+                  style={iconBtn}>✎</button>
+                <button onClick={delColl} title="Supprimer la collection" style={{ ...iconBtn, color:"#ef4444" }}>🗑</button>
+              </AdminOnly>
+            )}
           </div>
           {status && (
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:10, flexWrap:"wrap" }}>
@@ -132,6 +161,19 @@ export default function MakerWorldView({ onSearch }) {
                   {FILTERS.map(([k, l]) => <option key={k} value={k}>{l}{data?.items ? ` (${count[k]})` : ""}</option>)}
                 </select>
               )}
+            </div>
+          )}
+          {nameEdit && (
+            <div style={{ display:"flex", gap:6, marginTop:10 }}>
+              <input value={nameEdit.value} onChange={e => setNameEdit(n => ({ ...n, value: e.target.value }))} autoFocus
+                maxLength={60} autoComplete="off" placeholder={nameEdit.mode === "new" ? "Nom de la nouvelle collection" : "Nouveau nom"}
+                onKeyDown={e => { if (e.key === "Enter") saveName(); if (e.key === "Escape") setNameEdit(null); }}
+                style={{ flex:1, minWidth:0, padding:"8px 10px", borderRadius:10, fontSize:13, background:"var(--surface2)",
+                  border:"1px solid var(--border)", color:"var(--text)", outline:"none" }}/>
+              <button onClick={() => setNameEdit(null)} style={iconBtn}>✕</button>
+              <button onClick={saveName} disabled={!nameEdit.value.trim()}
+                style={{ padding:"8px 14px", borderRadius:10, fontSize:12, fontWeight:700, border:"none",
+                  background:"#3b82f6", color:"white", cursor:"pointer" }}>{nameEdit.mode === "new" ? "Créer" : "Renommer"}</button>
             </div>
           )}
           {tab === "following" && creators && (
@@ -170,6 +212,10 @@ export default function MakerWorldView({ onSearch }) {
           )}
         </div>
 
+        {pickFor && (
+          <MakerWorldCollectionsPicker designId={pickFor.design_id} title={pickFor.title}
+            onClose={() => setPickFor(null)} onSaved={() => tab === "favorites" && setReload(n => n + 1)}/>
+        )}
         <div style={{ padding:"4px 0 16px" }}>
           {status === null ? <p style={msg}>…</p>
             : tab === "search" && !sq ? <p style={msg}>Cherche un modèle sur MakerWorld : ceux que tu as déjà imprimés sont signalés.</p>
@@ -181,6 +227,13 @@ export default function MakerWorldView({ onSearch }) {
             : !showModels ? (
               (data.collections || []).length === 0 ? <p style={msg}>Aucune collection.</p> : (
                 <div style={grid}>
+                  <AdminOnly>
+                    <button onClick={() => setNameEdit({ mode: "new", value: "" })}
+                      style={{ ...card, cursor:"pointer", alignItems:"center", justifyContent:"center", minHeight:120,
+                        border:"1.5px dashed var(--border)", color:"var(--muted)", fontSize:13, fontWeight:600 }}>
+                      <span style={{ fontSize:26, lineHeight:1 }}>+</span>Nouvelle collection
+                    </button>
+                  </AdminOnly>
                   {data.collections.map(c => (
                     <button key={c.id} onClick={() => setColl(c)}
                       style={{ ...card, cursor:"pointer", padding:0, textAlign:"left", color:"var(--text)" }}>
@@ -231,6 +284,13 @@ export default function MakerWorldView({ onSearch }) {
                           <span style={{ fontSize:11, fontWeight:600, color:"#f59e0b" }}>⏳ en cours d'impression</span>
                         ) : (
                           <span style={{ fontSize:11, color:"var(--muted)" }}>jamais imprimé</span>
+                        )}
+                        {status?.connected && (
+                          <AdminOnly>
+                            <button onClick={() => setPickFor(x)} title="Ranger dans mes collections"
+                              style={{ display:"block", marginTop:5, fontSize:11, fontWeight:600, color:"#3b82f6", background:"none",
+                                border:"none", padding:0, cursor:"pointer" }}>☆ Collections</button>
+                          </AdminOnly>
                         )}
                       </div>
                     </div>
@@ -336,6 +396,8 @@ const printedCard = { border:"2px solid #22c55e", boxShadow:"0 0 0 3px rgba(34,1
 const ribbon = c => ({ position:"absolute", top:6, left:6, fontSize:10, fontWeight:800, letterSpacing:0.4,
   padding:"3px 8px", borderRadius:20, background:c, color:"white", boxShadow:"0 1px 4px rgba(0,0,0,0.35)" });
 
+const iconBtn = { padding:"5px 9px", borderRadius:9, fontSize:13, cursor:"pointer", background:"var(--surface2)",
+  border:"1px solid var(--border)", color:"var(--text)" };
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };
 const grid = { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 };
 const card = { borderRadius:12, border:"1px solid var(--border)", background:"var(--surface2)",

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import MakerWorldView from "../components/MakerWorldView";
+import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
 import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
@@ -696,6 +697,7 @@ const TRAD_BY = {
 const fmtK = n => n == null ? null : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
 function MakerWorldCard({ designId, note, prints = [] }) {
   const [mw, setMw] = useState(undefined);       // undefined = en cours, null = rien
+  const [pick, setPick] = useState(false);       // ranger dans mes collections
   useEffect(() => {
     let alive = true, timer = null;
     const load = (again) => client.get(`/prints/makerworld/${encodeURIComponent(designId)}`).then(({ data }) => {
@@ -761,6 +763,12 @@ function MakerWorldCard({ designId, note, prints = [] }) {
       )}
       {note && <div style={{ fontSize:10.5, color:"var(--muted)", padding:"0 10px 8px" }}>{note}</div>}
       <MakerWorldPlates profiles={mw.profiles || []} prints={prints}/>
+      <AdminOnly>
+        <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",
+          borderTop:"1px solid var(--border)", background:"none", color:"#3b82f6", fontSize:11.5, fontWeight:600,
+          cursor:"pointer" }}>☆ Ranger dans mes collections</button>
+      </AdminOnly>
+      {pick && <MakerWorldCollectionsPicker designId={designId} title={mw.title} onClose={() => setPick(false)}/>}
       <MakerWorldSimilar designId={designId}/>
     </div>
   );

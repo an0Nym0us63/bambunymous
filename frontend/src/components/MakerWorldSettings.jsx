@@ -166,7 +166,7 @@ export default function MakerWorldSettings() {
         <details style={{ marginTop:12 }}>
           <summary style={{ fontSize:12, color:"var(--muted)", cursor:"pointer" }}>Diagnostic de l'API</summary>
           <div style={{ display:"flex", gap:6, flexWrap:"wrap", margin:"8px 0" }}>
-            {["profil", "favoris_ids", "aimes", "essais_collections", "essais_plateaux", "essais_historique", "essais_recherche", "essais_similaires", "essais_suivis"].map(n => (
+            {["profil", "favoris_ids", "aimes", "essais_collections", "essais_plateaux", "essais_historique", "essais_recherche", "essais_similaires", "essais_suivis", "essais_appartenance"].map(n => (
               <button key={n} onClick={() => debug(n)} disabled={busy} style={{ ...btn, padding:"4px 10px", fontWeight:500 }}>{n}</button>
             ))}
           </div>
