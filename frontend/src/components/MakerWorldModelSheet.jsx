@@ -93,7 +93,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     getModel(id).then(data => {
       if (!alive) return;
       setM(data);
-      const p = (data.profiles || []).find(x => x.default) || (data.profiles || [])[0];
+      const p = (data.profiles || []).find(x => x.main) || (data.profiles || [])[0];
       setOpen(p?.instance_id || null);
     }).catch(e => alive && setM({ error: e.response?.data?.detail || e.message }));
     client.get(`/makerworld/similar/${id}`).then(({ data }) => alive && setSim(data.items || [])).catch(() => {});
@@ -232,7 +232,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             {m.profiles?.length > 0 && (
               <Section title={`Profils (${m.profiles.length})`}
                 open={allProfiles} onToggle={m.profiles.length > 1 ? () => setAllProfiles(v => !v) : null}>
-                {(allProfiles ? m.profiles : [m.profiles.find(x => x.default) || m.profiles[0]]).map(p => {
+                {(allProfiles ? m.profiles : [m.profiles.find(x => x.main) || m.profiles[0]]).map(p => {
                   const isOpen = open === p.instance_id;
                   const nDone = p.plates.filter(pl => plateDone(p, pl.index)).length;
                   return (
@@ -254,6 +254,16 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                             p.settings?.layerHeight ? `${p.settings.layerHeight} mm` : null,
                             p.settings?.sparseInfillDensity ? `remplissage ${p.settings.sparseInfillDensity}` : null,
                             p.print_count != null ? `${fmtK(p.print_count)} impressions` : null].filter(Boolean).join(" · ")}
+                        </div>
+                        <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:4 }}>
+                          {p.main && <span style={{ ...pBadge, background:"#3b82f6", border:"none", color:"white" }}>Retenu</span>}
+                          {p.fit === 2 ? <span style={{ ...pBadge, color:"#22c55e" }}>🖨️ pour ta {m.printer}</span>
+                            : p.fit === 1 ? <span style={{ ...pBadge, color:"#84cc16" }}>🖨️ compatible {m.printer}</span>
+                            : m.printer ? <span style={{ ...pBadge, color:"#f59e0b" }}>pas pour ta {m.printer}</span> : null}
+                          {p.by_designer ? <span style={pBadge}>✏️ du créateur</span>
+                            : p.author ? <span style={{ ...pBadge, color:"var(--muted)" }}>par {p.author}</span> : null}
+                          {p.rating != null && <span style={pBadge}>⭐ {p.rating.toFixed(1).replace(".", ",")}
+                            {p.rating_count ? ` (${fmtK(p.rating_count)} avis)` : ""}</span>}
                         </div>
                         {allProfiles && !isOpen && stockSummary(m.stock?.[p.instance_id]) && (
                           <div style={{ fontSize:11, color:"var(--text2)", marginTop:2 }}>{stockSummary(m.stock[p.instance_id])}</div>
@@ -436,4 +446,5 @@ const linkBtn = { padding:"7px 12px", borderRadius:10, fontSize:12, fontWeight:7
   color:"#3b82f6", background:"rgba(59,130,246,0.08)", border:"1px solid rgba(59,130,246,0.3)" };
 const textBtn = { marginTop:6, fontSize:12, fontWeight:600, color:"#3b82f6", background:"none", border:"none",
   padding:0, cursor:"pointer" };
+const pBadge = { fontSize:10, fontWeight:700, padding:"1px 7px", borderRadius:20, background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text2)" };
 const chip = { fontSize:10.5, padding:"2px 8px", borderRadius:20, background:"rgba(59,130,246,0.1)", color:"#60a5fa", fontWeight:600 };

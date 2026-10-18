@@ -274,6 +274,12 @@ def _plate_detail(d) -> list:
                         agg.setdefault(k, 0)
             pfils = [{"type": t, "color": c, "g": round(g) or None} for (t, c), g in agg.items() if c]
         ps = mi.get("projectSettings") if isinstance(mi.get("projectSettings"), dict) else {}
+        # Imprimante du profil, et celles avec lesquelles MakerWorld le dit compatible.
+        others = [c.get("devProductName") for c in (mi.get("otherCompatibility") if isinstance(mi.get("otherCompatibility"), list) else [])
+                  if isinstance(c, dict) and isinstance(c.get("devProductName"), str)]
+        ic = i.get("instanceCreator") if isinstance(i.get("instanceCreator"), dict) else {}
+        dc = d.get("designCreator") if isinstance(d.get("designCreator"), dict) else {}
+        r_tot, r_cnt = i.get("ratingScoreTotal"), i.get("ratingCount")
         t_or = i.get("title") if isinstance(i.get("title"), str) else ""
         t_fr = i.get("titleTranslated") if isinstance(i.get("titleTranslated"), str) and i.get("titleTranslated") else ""
         out.append({"instance_id": str(i.get("id") or ""), "profile_id": str(i.get("profileId") or ""),
@@ -281,11 +287,61 @@ def _plate_detail(d) -> list:
                     "summary": _text(i.get("summaryTranslated") or i.get("summary"))[:500],
                     "default": i.get("id") == d.get("defaultInstanceId"),
                     "printer": comp.get("devProductName") if isinstance(comp.get("devProductName"), str) else None,
+                    "also_for": others,
+                    "by_designer": bool(ic.get("uid")) and ic.get("uid") == dc.get("uid"),
+                    "author": ic.get("name") if isinstance(ic.get("name"), str) else None,
+                    "rating": round(r_tot / r_cnt, 2) if isinstance(r_tot, (int, float)) and isinstance(r_cnt, int) and r_cnt else None,
+                    "rating_count": r_cnt if isinstance(r_cnt, int) else None,
+                    "score": i.get("score") if isinstance(i.get("score"), (int, float)) else None,
                     "weight_g": i.get("weight") if isinstance(i.get("weight"), (int, float)) else None,
                     "seconds": i.get("prediction") if isinstance(i.get("prediction"), (int, float)) else None,
                     "settings": {k: ps.get(k) for k in ("layerHeight", "wallLoops", "sparseInfillDensity") if ps.get(k) is not None},
                     "print_count": i.get("printCount") if isinstance(i.get("printCount"), int) else None,
                     "filaments": pfils, "plates": plates})
+    return out
+
+
+def _pnorm(s) -> str:
+    return "".join(ch for ch in str(s or "").upper() if ch.isalnum())
+
+
+async def my_printer() -> str:
+    """Mon imprimante : la plus presente dans l'historique (H2C par defaut)."""
+    from sqlalchemy import select, func
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    try:
+        async with AsyncSessionLocal() as db:
+            row = (await db.execute(select(Print.printer_model, func.count(Print.id))
+                                    .where(Print.printer_model.isnot(None))
+                                    .group_by(Print.printer_model).order_by(func.count(Print.id).desc()).limit(1))).first()
+        return row[0] if row and row[0] else "H2C"
+    except Exception:
+        return "H2C"
+
+
+def rank_profiles(profiles: list, printer: str) -> list:
+    """Profils dans l'ordre de choix, le premier marque « main » :
+      1. imprimable sur mon imprimante (fait pour elle, ou declaree compatible) ;
+      2. du designer du modele ;
+      3. fait pour mon imprimante plutot que seulement compatible ;
+      4. le mieux note (score MakerWorld, qui tient compte du nombre d'avis) ;
+      5. le defaut du createur.
+    Un profil qui ne s'imprime pas sur mon imprimante passe apres."""
+    me = _pnorm(printer)
+
+    def fit(p):
+        if me and _pnorm(p.get("printer")) == me:
+            return 2
+        return 1 if me and any(_pnorm(x) == me for x in p.get("also_for") or []) else 0
+    out = []
+    for p in profiles or []:
+        f = fit(p)
+        out.append({**p, "fit": f, "main": False})
+    out.sort(key=lambda p: (p["fit"] > 0, bool(p.get("by_designer")), p["fit"] == 2,
+                            p.get("score") or 0, bool(p.get("default"))), reverse=True)
+    if out:
+        out[0]["main"] = True
     return out
 
 
@@ -340,7 +396,8 @@ async def model_detail(design_id: str) -> dict:
     except Exception:
         logger.exception("[MW] filaments face au stock")
         stock = {}
-    return {**base, "stock": stock, "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
+    printer = await my_printer()
+    return {**base, "stock": stock, "printer": printer, "profiles": rank_profiles(base.get("profiles") or [], printer), "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
             "printed": len(done), "in_progress": sum(1 for r in rows if r[1] == "IN_PROGRESS"),
             "printed_plates": sorted({f"{r[3] or ''}:{r[2] or '1'}" for r in done})}
 
