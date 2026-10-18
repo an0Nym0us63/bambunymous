@@ -82,15 +82,23 @@ def _norm(t):
 
 def material_fit(mw_type, fil):
     """2 = meme matiere, 1 = meme famille (PLA-CF pour PLA…), 0 = autre."""
-    t = _norm(mw_type)
+    t = re.sub(r"-AMS$", "", _norm(mw_type))          # TPU-AMS : du TPU pour l'AMS
     if not t:
         return 0
     names = {_norm(fil.material), _norm(fil.fila_type)} - {""}
+    # Un support ne se remplace que par un support, et inversement.
+    if is_support(t) != any(is_support(n) for n in names):
+        return 0
     if t in names:
         return 2
     fam = re.split(r"[ \-+]", t)[0]
     fams = {re.split(r"[ \-+]", n)[0] for n in names}
     return 1 if fam and fam in fams else 0
+
+
+def is_support(t: str) -> bool:
+    t = _norm(t)
+    return t.endswith("-S") or "SUPPORT" in t or t in ("PVA", "BVOH", "HIPS")
 
 
 async def stock_rows():
@@ -123,7 +131,19 @@ def is_bambu(f):
     return "bambu" in (f.manufacturer or "").lower()
 
 
-def best_matches(mw_type, color, grams, stock, n=6):
+def _same_finish(sub: str, f) -> bool:
+    s = _norm(sub)
+    return bool(s) and s in {_norm(f.fila_type), _norm(f.name), _norm(f.name_en)}
+
+
+def best_matches(mw_type, color, grams, stock, n=6, exact=None):
+    """exact : l'emplacement lu dans le 3MF du profil (reference, finition,
+    marque). Meme reference Bambu (GFA01…) = -10 ; meme finition = -6 (plus que
+    le seul bonus Bambu : un Silk demande passe devant un Basic Bambu)."""
+    ref = (exact or {}).get("id") or ""
+    sub = (exact or {}).get("subtype") or ""
+    vendor = ((exact or {}).get("vendor") or "").lower()
+    bambu_ok = not vendor or "bambu" in vendor
     cands = []
     for e in stock:
         f = e["f"]
@@ -137,16 +157,20 @@ def best_matches(mw_type, color, grams, stock, n=6):
             continue
         multi = (f.multicolor_type or "monochrome") != "monochrome"
         de = min(des)
-        score = de + (0 if fit == 2 else 4) + (6 if multi else 0) - (BAMBU_BONUS if is_bambu(f) else 0)
-        cands.append((score, de, fit, multi, e))
+        same_ref = bool(ref) and (f.profile_id or "").upper() == ref.upper()
+        same_fin = same_ref or _same_finish(sub, f)
+        score = (de + (0 if fit == 2 else 4) + (6 if multi else 0) - (BAMBU_BONUS if bambu_ok and is_bambu(f) else 0)
+                 - (10 if same_ref else 6 if same_fin else 0))
+        cands.append((score, de, fit, multi, e, same_ref, same_fin))
     cands.sort(key=lambda x: x[0])
     out = []
-    for score, de, fit, multi, e in cands[:n]:
+    for score, de, fit, multi, e, same_ref, same_fin in cands[:n]:
         f = e["f"]
         out.append({"filament_id": f.id, "name": f.translated_name or f.name, "brand": f.manufacturer,
                     "material": f.fila_type or f.material, "color": f.color, "colors_array": f.colors_array,
                     "multicolor_type": f.multicolor_type, "delta_e": round(de, 1), "level": level(de),
                     "same_material": fit == 2, "multicolor": multi, "bambu": is_bambu(f),
+                    "same_ref": same_ref, "same_finish": same_fin if sub else None,
                     "remaining_g": round(e["remaining_g"]), "spools": e["spools"], "where": e["where"][:3],
                     # Ordre d'usage probable : la bobine chargee dans l'AMS, puis la
                     # plus entamee (on finit une bobine avant d'en ouvrir une autre).
@@ -164,14 +188,20 @@ def _grams(v):
 
 
 async def match_profiles(profiles: list) -> dict:
-    """{instance_id: [{type, color, g, matches: [...]}]} pour les profils d'un modele."""
+    """{instance_id: [{type, color, g, exact, matches: [...]}]} pour les profils
+    d'un modele. Un profil dont le 3MF a deja ete lu (filaments exacts) en
+    profite : reference, finition et marque departagent les propositions."""
+    from .mw_3mf import cached as exact_cached, slot_for
     stock = await stock_rows()
     res = {}
     for p in profiles or []:
+        slots = exact_cached(p.get("instance_id")) if str(p.get("instance_id") or "").isdigit() else None
         items = []
         for fl in p.get("filaments") or []:
             g = _grams(fl.get("g"))
+            ex = slot_for(slots, fl.get("type"), fl.get("color")) if slots else None
             items.append({"type": fl.get("type"), "color": fl.get("color"), "g": g,
-                          "matches": best_matches(fl.get("type"), fl.get("color"), g, stock)})
+                          "exact": {k: ex[k] for k in ("id", "setting", "subtype", "vendor")} if ex else None,
+                          "matches": best_matches(fl.get("type"), fl.get("color"), g, stock, exact=ex)})
         res[p.get("instance_id")] = items
     return res

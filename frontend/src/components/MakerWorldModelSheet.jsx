@@ -7,7 +7,7 @@ import { mwLiked } from "../utils/mwSync";
 import MwImg from "./MwImg";
 import MwStockMatch, { stockSummary } from "./MwStockMatch";
 import Lightbox from "./Lightbox";
-import { showAlert } from "../utils/dialog";
+import { showAlert, showConfirm } from "../utils/dialog";
 
 // Prechargement : la fiche est demandee des qu'on touche une tuile ; a
 // l'ouverture, la reponse est souvent deja la.
@@ -45,6 +45,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [pick, setPick] = useState(false);
   const [sim, setSim] = useState(null);
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
+  const [exactBusy, setExactBusy] = useState(null); // profil dont le 3MF est en lecture
   const [plateSel, setPlateSel] = useState({});    // instance_id -> plateaux choisis (absent = tous)
   const [allProfiles, setAllProfiles] = useState(false);  // replie : seulement le profil principal
   const [showCom, setShowCom] = useState(false);   // commentaires replies (charges a l'ouverture)
@@ -62,6 +63,19 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const tile = () => String(preview?.design_id) === String(id) ? preview
     : m ? { design_id: String(id), title: m.title, title_fr: m.title_fr, cover_url: m.pictures?.[0] || m.cover_url,
             creator_name: m.creator_name, url: `https://makerworld.com/fr/models/${id}` } : null;
+  // Filaments exacts d'un profil (finition, reference, marque) : lus dans son
+  // 3MF, a la demande, une seule fois (garde ensuite sur le serveur).
+  const readExact = async p => {
+    if (!await showConfirm("Lire les filaments exacts de ce profil ? BambuNymous télécharge son fichier 3MF "
+      + "avec ton compte MakerWorld (ça compte comme un téléchargement sur le site), une seule fois.")) return;
+    setExactBusy(p.instance_id);
+    try {
+      const { data } = await client.post(`/makerworld/model/${id}/exact/${p.instance_id}`);
+      setM(data);
+      MODELS.set(String(id), { t: Date.now(), p: Promise.resolve(data) });
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    setExactBusy(null);
+  };
   const toggleLike = async () => {
     const want = !like.liked;
     setLike(l => ({ ...l, liked: want })); setLikeBusy(true);          // tout de suite a l'ecran
@@ -245,6 +259,15 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                           <div style={{ fontSize:11, color:"var(--text2)", marginTop:2 }}>{stockSummary(m.stock[p.instance_id])}</div>
                         )}
                       </button>
+                      {(!allProfiles || isOpen) && m.stock?.[p.instance_id]?.length > 0
+                        && !m.stock[p.instance_id].some(x => x.exact) && (
+                        <AdminOnly>
+                          <button onClick={() => readExact(p)} disabled={exactBusy === p.instance_id}
+                            style={{ ...textBtn, margin:"0 10px 6px", display:"flex", alignItems:"center", gap:6 }}>
+                            {exactBusy === p.instance_id ? <><span className="mw-spin"/> Lecture du 3MF…</>
+                              : "🔎 Filaments exacts (finition, référence) — lire le 3MF"}</button>
+                        </AdminOnly>
+                      )}
                       {(!allProfiles || isOpen) && <MwStockMatch items={m.stock?.[p.instance_id]} plates={p.plates} scope={`${id}|${p.instance_id}`}
                         selected={plateSel[p.instance_id]} onNavigate={onClose}/>}
                       {isOpen && p.plates.length > 1 && (() => {

@@ -130,6 +130,19 @@ async def mw_model(design_id: str, _: str = Depends(get_current_user)):
     return await _call(mw.model_detail(design_id))
 
 
+@router.post("/model/{design_id}/exact/{instance_id}")
+async def mw_model_exact(design_id: str, instance_id: str, _: str = Depends(require_admin)):
+    """Lit le 3MF d'un profil (compte comme un telechargement sur MakerWorld,
+    une seule fois : garde sur disque) et rend la fiche recalculee."""
+    from ....services.mw_3mf import exact_filaments, ExactError
+    try:
+        r = await exact_filaments(instance_id)
+    except ExactError as e:
+        raise HTTPException(400, str(e))
+    d = await _call(mw.model_detail(design_id))
+    return {**d, "exact_read": {"instance_id": instance_id, "cached": r["cached"], "slots": len(r["slots"])}}
+
+
 @router.get("/model/{design_id}/comments")
 async def mw_model_comments(design_id: str, offset: int = 0, _: str = Depends(get_current_user)):
     return await _call(mw.model_comments(design_id, offset))

@@ -111,8 +111,11 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
               style={{ width:"100%", display:"flex", alignItems:"flex-start", gap:8, padding:"6px 8px", background:"none",
                 border:"none", cursor: best ? "pointer" : "default", color:"var(--text)", textAlign:"left" }}>
               <Swatch color={x.color} title={x.color}/>
-              <span style={{ fontSize:11.5, fontWeight:700, flexShrink:0, lineHeight:"16px" }}>
-                {x.type || "?"}<span style={{ color:"var(--muted)", fontWeight:500 }}>
+              <span title={x.exact?.setting || undefined}
+                style={{ fontSize:11.5, fontWeight:700, flexShrink:0, lineHeight:"16px", maxWidth:"34%" }}>
+                {x.exact?.subtype || x.type || "?"}
+                {x.exact?.vendor && !/bambu/i.test(x.exact.vendor) ? <span style={{ color:"var(--muted)", fontWeight:500 }}> ({x.exact.vendor})</span> : null}
+                <span style={{ color:"var(--muted)", fontWeight:500 }}>
                   {unused ? " · pas utilisé" : g ? ` · ${Math.round(g)} g` : ""}</span>
               </span>
               <span style={{ color:"var(--muted)", fontSize:11, lineHeight:"16px" }}>→</span>
@@ -121,6 +124,7 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
                 <span style={{ flex:1, minWidth:0 }}>
                   <span style={{ display:"block", fontSize:11.5, fontWeight:600, lineHeight:"16px", overflow:"hidden",
                     textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{best.name}</span>
+                  {x.exact && <RefBadge mt={best}/>}
                   <span style={{ display:"block", fontSize:10.5, color:"var(--muted)", lineHeight:1.35 }}>
                     {detailOf(best)}{detailOf(best) ? " · " : ""}
                     {unused || !g ? `${best.remaining_g} g en stock`
@@ -175,6 +179,7 @@ function MatchRow({ mt, g, on, onPick, onGo }) {
         <span style={{ flex:1, minWidth:0 }}>
           <span style={{ display:"block", fontSize:11.5, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {mt.name}</span>
+          {mt.same_finish != null && <RefBadge mt={mt}/>}
           <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
             {[detailOf(mt), `${mt.remaining_g} g (${mt.spools} bobine${mt.spools > 1 ? "s" : ""})`].filter(Boolean).join(" · ")}
             {g > 0 ? <b style={{ color: after < 0 ? "#f59e0b" : "var(--text2)" }}> · {after < 0 ? `manque ${-after} g` : `reste ${after} g`}</b> : null}
@@ -191,6 +196,13 @@ function MatchRow({ mt, g, on, onPick, onGo }) {
         style={{ padding:"6px 10px", background:"none", border:"none", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>↗</button>
     </div>
   );
+}
+
+// Ce que dit le 3MF du profil : meme reference Bambu, meme finition, ou autre finition.
+function RefBadge({ mt }) {
+  const [t, c] = mt.same_ref ? ["✓ même référence", "#22c55e"] : mt.same_finish ? ["✓ même finition", "#22c55e"]
+    : ["autre finition", "#f59e0b"];
+  return <span style={{ display:"inline-block", fontSize:9.5, fontWeight:800, color:c, lineHeight:1.3 }}>{t}</span>;
 }
 
 function Swatch({ color, f, size = 16, title }) {
