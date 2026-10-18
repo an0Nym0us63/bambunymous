@@ -973,14 +973,18 @@ function TranslateNamesSection() {
       </p>
 
       {/* Services gratuits sans cle : Google coupe vite, MyMemory plafonne a
-          quelques milliers de caracteres par jour. Une cle DeepL (offre
-          gratuite) leve la limite. */}
+          quelques milliers de caracteres par jour. DeepL, s'il a une cle,
+          ne sert qu'en dernier recours : son credit gratuit ne se renouvelle
+          pas. */}
       <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", margin:"0 0 12px",
         padding:"8px 10px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)" }}>
         <span style={{ fontSize:12, color:"var(--text)", flex:1, minWidth:180 }}>
           Clé DeepL {deepl
             ? <b style={{ color:"#22c55e" }}>posée</b>
-            : <span style={{ color:"var(--muted)" }}>— facultative (offre gratuite : 500 000 caractères / mois)</span>}
+            : <span style={{ color:"var(--muted)" }}>— facultative</span>}
+          <span style={{ display:"block", fontSize:11, color:"var(--muted)", marginTop:2 }}>
+            Dernier recours, après Google et MyMemory : le crédit gratuit de DeepL ne se renouvelle pas.
+          </span>
         </span>
         {keyEdit == null ? (<>
           <button onClick={() => setKeyEdit("")}

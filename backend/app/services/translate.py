@@ -10,11 +10,13 @@ Portage de la fonction de Spoolnymous, qui avait deja resolu le probleme. Elle
 ne concerne QUE les prints -- le translated_name des filaments a sa propre
 source, le catalogue Bambu local, et n'a rien a voir avec ceci.
 
-Services, dans l'ordre : DeepL si une cle est posee (Parametres, offre
-gratuite : 500 000 caracteres par mois), puis l'endpoint public de Google,
-puis MyMemory. Les deux derniers sont gratuits et sans cle, donc bornes :
-Google coupe vite (TooManyRequests), MyMemory plafonne a quelques milliers de
-caracteres par jour.
+Services, dans l'ordre : l'endpoint public de Google, puis MyMemory, puis
+DeepL si une cle est posee (Parametres). Les deux premiers sont gratuits,
+sans cle et bornes -- Google coupe vite (TooManyRequests), MyMemory plafonne
+a quelques milliers de caracteres par jour -- mais leurs limites se
+renouvellent. L'offre gratuite de DeepL est un credit qui ne se renouvelle
+pas (1 million de caracteres au total pour les comptes recents) : il ne sert
+donc qu'en dernier recours, pour ce que les deux autres n'ont pas traduit.
 
 Regle qui compte : un ECHEC n'est jamais pris pour « deja en francais ». Un
 service a bout de quota renvoie le texte tel quel ; l'ancienne version
@@ -116,11 +118,11 @@ def _mymemory_one(txt: str):
 def _translate_batch(payload: list, deepl_key: str = "") -> tuple:
     """Traduit une liste de chaines vers le FR. Rend (traductions, services),
     deux listes de meme longueur que payload ; une traduction None = echec
-    (rien ne doit etre enregistre), le service dit qui a repondu."""
-    if deepl_key:
-        r = _deepl_batch(payload, deepl_key)
-        if r is not None and not any(_looks_bogus(x or "") for x in r):
-            return r, ["deepl"] * len(r)
+    (rien ne doit etre enregistre), le service dit qui a repondu.
+
+    Les services gratuits qui se renouvellent passent d'abord ; DeepL, dont le
+    quota gratuit s'epuise pour de bon, ne recoit que ce qu'ils n'ont pas pu
+    traduire."""
     from deep_translator import GoogleTranslator
     try:
         r = GoogleTranslator(source="auto", target="fr").translate_batch(payload)
@@ -130,7 +132,14 @@ def _translate_batch(payload: list, deepl_key: str = "") -> tuple:
     except Exception as e:
         logger.warning(f"[TRAD] Google KO ({type(e).__name__}) -> repli MyMemory")
     r = [_mymemory_one(x) for x in payload]
-    return r, [("mymemory" if x is not None else None) for x in r]
+    by = [("mymemory" if x is not None else None) for x in r]
+    reste = [i for i, x in enumerate(r) if x is None]
+    if reste and deepl_key:
+        d = _deepl_batch([payload[i] for i in reste], deepl_key)
+        if d is not None and not any(_looks_bogus(x or "") for x in d):
+            for i, x in zip(reste, d):
+                r[i], by[i] = x, "deepl"
+    return r, by
 
 
 def _merge(mot_a_mot: str, contextuel: str) -> str:
