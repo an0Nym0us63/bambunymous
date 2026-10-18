@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
+import { mwCollections } from "../utils/mwSync";
 
 // Ranger un modele dans mes collections MakerWorld : une case par collection,
 // creation rapide. MakerWorld REMPLACE la liste a chaque enregistrement :
 // si l'appli n'a pas su lire ou se trouve deja le modele, elle refuse
 // d'enregistrer plutot que de le retirer des autres collections.
-export default function MakerWorldCollectionsPicker({ designId, title, onClose, onSaved }) {
+export default function MakerWorldCollectionsPicker({ designId, title, item, onClose, onSaved }) {
   const [data, setData] = useState(null);         // { collections, in, known } | { error }
   const [sel, setSel] = useState(new Set());
   const [q, setQ] = useState("");
@@ -34,6 +35,7 @@ export default function MakerWorldCollectionsPicker({ designId, title, onClose, 
     setBusy(true); setErr(null);
     try {
       await client.put(`/makerworld/design/${designId}/collections`, { ids: [...sel] });
+      mwCollections(designId, [...sel], item);
       onSaved?.([...sel]); onClose();
     } catch (e) { setErr(e.response?.data?.detail || e.message); setBusy(false); }
   };

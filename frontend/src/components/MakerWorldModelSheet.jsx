@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import client from "../api/client";
 import AdminOnly from "./AdminOnly";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
+import { mwLiked } from "../utils/mwSync";
 import MwImg from "./MwImg";
 import Lightbox from "./Lightbox";
 import { showAlert } from "../utils/dialog";
@@ -55,10 +56,17 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     client.get(`/makerworld/model/${id}/like`).then(({ data }) => alive && data.known && setLike(data)).catch(() => {});
     return () => { alive = false; };
   }, [id]);
+  // La tuile de ce modele, pour l'ajouter aussitot a une liste (j'aime, collection).
+  const tile = () => String(preview?.design_id) === String(id) ? preview
+    : m ? { design_id: String(id), title: m.title, title_fr: m.title_fr, cover_url: m.pictures?.[0] || m.cover_url,
+            creator_name: m.creator_name, url: `https://makerworld.com/fr/models/${id}` } : null;
   const toggleLike = async () => {
     const want = !like.liked;
     setLike(l => ({ ...l, liked: want })); setLikeBusy(true);          // tout de suite a l'ecran
-    try { const { data } = await client.put(`/makerworld/model/${id}/like`, { liked: want }); setLike(data); }
+    try {
+      const { data } = await client.put(`/makerworld/model/${id}/like`, { liked: want }); setLike(data);
+      mwLiked(id, data.known === false ? want : data.liked, tile());
+    }
     catch (e) { setLike(l => ({ ...l, liked: !want })); showAlert(e.response?.data?.detail || e.message); }
     setLikeBusy(false);
   };
@@ -176,7 +184,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
               <AdminOnly><button onClick={() => setPick(true)} style={{ ...linkBtn, cursor:"pointer" }}>☆ Collections</button></AdminOnly>
             </div>
             {zoom && <Lightbox images={zoom.images} index={zoom.index} onClose={() => setZoom(null)}/>}
-            {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} onClose={() => setPick(false)}/>}
+            {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} item={tile()} onClose={() => setPick(false)}/>}
 
             {m.categories?.length > 0 && (
               <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:12 }}>

@@ -6,6 +6,7 @@ import { showAlert, showConfirm } from "../utils/dialog";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
+import { mwPatch, onMwChange } from "../utils/mwSync";
 
 // Cache de la vue (le temps de la session) : revenir sur un onglet ou une
 // collection affiche aussitot ce qu'on avait, puis se met a jour en fond.
@@ -47,6 +48,15 @@ export default function MakerWorldView({ onSearch }) {
   const sentinel = useRef(null);                   // bas de grille : charge la page suivante
   const freshRef = useRef(false);                  // ⟳ : relire MakerWorld sans passer par les caches
   const [busy, setBusy] = useState(false);         // ⟳ en cours
+
+  // J'aime retire, modele range ailleurs : la liste ouverte suit aussitot.
+  const curKey = tab === "likes" ? "likes" : tab === "favorites" && coll ? `coll:${coll.id}` : null;
+  const keyRef = useRef(curKey);
+  keyRef.current = curKey;
+  useEffect(() => onMwChange(() => {
+    const k = keyRef.current;
+    setData(d => { const p = k && d?.items ? mwPatch(k, d) : d; if (k && p !== d) CACHE.set(k, p); return p; });
+  }), []);
 
   useEffect(() => {
     client.get("/makerworld/status").then(({ data }) => setStatus(data)).catch(() => setStatus({}));
@@ -117,12 +127,13 @@ export default function MakerWorldView({ onSearch }) {
         const fresh = new Map(data.items.map(x => [x.design_id, x]));
         data = { ...cached, items: cached.items.map(x => fresh.get(x.design_id) || x) };
       }
+      data = mwPatch(key, data);
       CACHE.set(key, data);
       setData(data);
       // Modeles sans fiche : lus en arriere-plan, on recharge une fois.
       if (data.pending && again) timer = setTimeout(() => load(false), 8000);
     }).catch(e => { if (!alive) return; setBusy(false); if (!cached) setData({ error: e.response?.data?.detail || e.message }); });
-    setData(cached || null);
+    setData(cached ? mwPatch(key, cached) : null);
     load(true);
     return () => { alive = false; clearTimeout(timer); };
   }, [tab, coll?.id, status?.connected, sq, picked.join(","), reload]);
@@ -141,8 +152,9 @@ export default function MakerWorldView({ onSearch }) {
         const next = { ...prev, has_more: d.has_more, total: d.total ?? prev.total,
           items: [...prev.items, ...(d.items || []).filter(x => !seen.has(x.design_id))] };
         if (!(d.items || []).length) next.has_more = false;
-        if (pageKey) CACHE.set(pageKey, next);
-        return next;
+        const patched = mwPatch(pageKey, next);
+        if (pageKey) CACHE.set(pageKey, patched);
+        return patched;
       }))
       .catch(() => {}).finally(() => setMore(false));
   };
@@ -276,7 +288,7 @@ export default function MakerWorldView({ onSearch }) {
 
         {model && <MakerWorldModelSheet designId={model.design_id} preview={model} onClose={() => setModel(null)} onSearch={onSearch}/>}
         {pickFor && (
-          <MakerWorldCollectionsPicker designId={pickFor.design_id} title={pickFor.title}
+          <MakerWorldCollectionsPicker designId={pickFor.design_id} title={pickFor.title} item={pickFor}
             onClose={() => setPickFor(null)} onSaved={() => tab === "favorites" && setReload(n => n + 1)}/>
         )}
         <div style={{ padding:"4px 0 16px" }}>
