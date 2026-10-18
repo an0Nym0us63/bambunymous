@@ -296,13 +296,74 @@ async def _debug_collections() -> dict:
     return {"path": "essais collections", "http": 200, "body": "\n".join(out)}
 
 
+async def _try(title: str, paths: list, head: str = "", n: int = 1200) -> dict:
+    """Essaie des chemins (GET seulement) et rend code + debut de reponse."""
+    import asyncio
+    from .makerworld import _get_json
+    tok = await token() or None
+    out = [head] if head else []
+    for p in paths:
+        c, r = await asyncio.to_thread(_get_json, p, tok)
+        out.append(f"\n== {p} → HTTP {c}\n" + (json.dumps(r, ensure_ascii=False)[:n] if r is not None else "(vide)"))
+    return {"path": title, "http": 200, "body": "\n".join(out)}
+
+
+async def _most_printed_design() -> str:
+    from sqlalchemy import select, func, desc
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    async with AsyncSessionLocal() as db:
+        row = (await db.execute(
+            select(Print.design_id, func.count().label("n")).where(Print.design_id.isnot(None),
+                                                                    Print.design_id != "0")
+            .group_by(Print.design_id).order_by(desc("n")).limit(1))).first()
+    return str(row[0]) if row else ""
+
+
+async def _debug_plates() -> dict:
+    """Plateaux d'un modele (le plus imprime) et ce que l'API dit d'imprime."""
+    import asyncio
+    from .makerworld import _get_json
+    did = await _most_printed_design()
+    if not did:
+        return {"path": "essais plateaux", "http": 200, "body": "Aucun print relié à MakerWorld"}
+    c, d = await asyncio.to_thread(_get_json, f"/design-service/design/{did}", await token() or None)
+    insts = (d or {}).get("instances") if isinstance(d, dict) else None
+    insts = insts if isinstance(insts, list) else []
+    head = (f"modèle {did} : {len(insts)} profil(s)\n" + json.dumps(
+        [{k: i.get(k) for k in ("id", "profileId", "title", "isDefault", "plates", "plateCount", "printCount")}
+         for i in insts[:3] if isinstance(i, dict)], ensure_ascii=False)[:2500])
+    ids = [i.get("id") for i in insts[:2] if isinstance(i, dict) and i.get("id")]
+    return await _try("essais plateaux", [f"/user-service/my/task/printedplates?instanceId={i}" for i in ids], head)
+
+
+DEBUG_TRIES = {
+    "essais_historique": lambda did: ("essais historique cloud", [
+        "/user-service/my/tasks?limit=3",
+        "/user-service/my/tasks?offset=0&limit=3"]),
+    "essais_recherche": lambda did: ("essais recherche", [
+        "/search-service/select/design2?keyword=panda&offset=0&limit=3",
+        "/search-service/select/design/search?keyword=panda&offset=0&limit=3",
+        "/search-service/design/search?keyword=panda&offset=0&limit=3",
+        "/search-service/search/design?keyword=panda&offset=0&limit=3"]),
+    "essais_similaires": lambda did: ("essais similaires", [
+        f"/search-service/design/{did}/relate?offset=0&limit=3&scene=1",
+        f"/design-service/design/{did}/remixed?offset=0&limit=3"]),
+}
+
+
 async def debug(name: str) -> dict:
     """Reponse brute d'un chemin de la liste fermee (pour adapter la lecture
-    si l'API change). Le jeton n'y figure jamais."""
+    si l'API change). Le jeton n'y figure jamais. Lecture seule (GET)."""
     import asyncio
     from .makerworld import _get_json
     if name == "essais_collections":
         return await _debug_collections()
+    if name == "essais_plateaux":
+        return await _debug_plates()
+    if name in DEBUG_TRIES:
+        title, paths = DEBUG_TRIES[name](await _most_printed_design() or "1400373")
+        return await _try(title, paths)
     if name not in DEBUG_PATHS:
         raise AccountError("Chemin inconnu")
     code, d = await asyncio.to_thread(_get_json, DEBUG_PATHS[name], await token() or None)
