@@ -46,6 +46,7 @@ export default function MakerWorldView({ onSearch }) {
   const [status, setStatus] = useState(null);
   const [navs, setNavs] = useState(null);          // Decouvrir : fils proposes par MakerWorld
   const [dk, setDk] = useState(null);              // Decouvrir : fil choisi
+  const [catsOpen, setCatsOpen] = useState(false); // Decouvrir : grille des categories depliee
   const [q, setQ] = useState("");                  // saisie de recherche
   const [sq, setSq] = useState("");                // recherche lancee
   const [more, setMore] = useState(false);         // page suivante en cours
@@ -311,21 +312,40 @@ export default function MakerWorldView({ onSearch }) {
             <CreatorPicker creators={creators} picked={picked}
               onClose={() => setPicker(false)} onApply={ids => { setPicked(ids); setPicker(false); }}/>
           )}
-          {tab === "discover" && navs && (
-            <div data-no-pull="" style={{ display:"flex", gap:6, marginTop:10, overflowX:"auto", paddingBottom:4,
-              scrollbarWidth:"none", WebkitOverflowScrolling:"touch" }}>
-              {navs.map(n => (
-                <button key={n.key} onClick={() => setDk(n.key)}
-                  style={{ flexShrink:0, padding:"4px 11px", borderRadius:20, fontSize:11.5, fontWeight:600, cursor:"pointer",
-                    whiteSpace:"nowrap",
-                    background: dk === n.key ? "rgba(59,130,246,0.15)" : "var(--surface2)",
-                    color: dk === n.key ? "#3b82f6" : "var(--text2)",
-                    border: dk === n.key ? "1px solid #3b82f6" : "1px solid var(--border)" }}>
-                  {n.key === "Foryou" ? "✨ " : n.key === "Trending" ? "🔥 " : ""}{n.name}
-                </button>
-              ))}
-            </div>
-          )}
+          {tab === "discover" && navs && (() => {
+            // Pas de rangee qui defile de cote : la coquille Android y arme le
+            // tirer-pour-rafraichir et le geste saccade. Les fils principaux
+            // restent en ligne, les categories se deplient en grille.
+            const main = navs.filter(n => !n.category);
+            const cats = navs.filter(n => n.category);
+            const curCat = cats.find(n => n.key === dk);
+            const pill = (on) => ({ padding:"4px 11px", borderRadius:20, fontSize:11.5, fontWeight:600, cursor:"pointer",
+              whiteSpace:"nowrap", background: on ? "rgba(59,130,246,0.15)" : "var(--surface2)",
+              color: on ? "#3b82f6" : "var(--text2)", border: on ? "1px solid #3b82f6" : "1px solid var(--border)" });
+            return (<>
+              <div style={{ display:"flex", gap:6, marginTop:10, flexWrap:"wrap" }}>
+                {main.map(n => (
+                  <button key={n.key} onClick={() => { setDk(n.key); setCatsOpen(false); }} style={pill(dk === n.key)}>
+                    {n.key === "Foryou" ? "✨ " : n.key === "Trending" ? "🔥 " : ""}{n.name}
+                  </button>
+                ))}
+                {cats.length > 0 && (
+                  <button onClick={() => setCatsOpen(v => !v)} style={pill(!!curCat)}>
+                    📂 {curCat ? curCat.name : "Catégories"} {catsOpen ? "▴" : "▾"}
+                  </button>
+                )}
+              </div>
+              {catsOpen && (
+                <div style={{ display:"flex", gap:6, marginTop:6, flexWrap:"wrap", padding:8, borderRadius:12,
+                  background:"var(--surface)", border:"1px solid var(--border)" }}>
+                  {cats.map(n => (
+                    <button key={n.key} onClick={() => { setDk(n.key); setCatsOpen(false); }} style={pill(dk === n.key)}>
+                      {n.name}</button>
+                  ))}
+                </div>
+              )}
+            </>);
+          })()}
           {tab === "search" && (
             <form onSubmit={e => { e.preventDefault(); setSq(q.trim()); }}
               style={{ display:"flex", gap:6, marginTop:10 }}>
