@@ -325,12 +325,18 @@ const WEIGHT_MODES = [
   ["scale", "Pesée",   "Poids sur la balance, support compris"],
 ];
 
-function WeightEditRow({ spoolId, current, total, tare, onUpdated }) {
+function WeightEditRow({ spoolId, filamentId, current, total, tare, onUpdated }) {
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState("set");
   const [val, setVal] = useState("");
+  // Support vide connu du filament (mis a jour si on le corrige ici).
+  const [savedTare, setSavedTare] = useState(tare);
   const [tareVal, setTareVal] = useState(tare != null ? String(Math.round(tare)) : "");
   const [saving, setSaving] = useState(false);
+  // Fenetre de validation, et correction du support vide depuis celle-ci.
+  const [asking, setAsking] = useState(false);
+  const [tareEdit, setTareEdit] = useState(null);     // null = ferme, sinon saisie
+  const [tareSaving, setTareSaving] = useState(false);
 
   const cur = current != null ? current : 0;
   const n = parseFloat(val);
@@ -342,35 +348,107 @@ function WeightEditRow({ spoolId, current, total, tare, onUpdated }) {
     : mode === "sub" ? cur - n
     : isNaN(t) ? null : n - t;
   const valide = next != null;
+  const fin = valide ? Math.max(0, next) : 0;
+  const g = x => `${Math.round(x)} g`;
 
-  const open = () => { setMode("set"); setVal(""); setTareVal(tare != null ? String(Math.round(tare)) : ""); setEditing(true); };
+  const open = () => { setMode("set"); setVal(""); setTareVal(savedTare != null ? String(Math.round(savedTare)) : ""); setEditing(true); };
 
-  const save = async () => {
-    if (!valide) return;
-    // Confirmation : le calcul en clair, puis le poids qui sera reellement enregistre.
-    const g = x => `${Math.round(x)} g`;
-    const fin = Math.max(0, next);
-    const calcul = mode === "set"   ? `Poids restant saisi : ${g(n)}`
-      : mode === "sub"   ? `${g(cur)} − ${g(n)} retirés`
-      : mode === "add"   ? `${g(cur)} + ${g(n)} ajoutés`
-      : `Balance ${g(n)} − support vide ${g(t)}`;
-    const notes = [
-      next < 0 ? "Le calcul passe sous 0 : la bobine sera mise à 0 g." : null,
-      total > 0 && fin > total ? `Attention : plus qu'une bobine neuve (${g(total)}).` : null,
-    ].filter(Boolean);
-    if (!(await showConfirm(
-      `${calcul}\n\nAvant : ${g(cur)}\nEnregistré : ${g(fin)}${notes.length ? `\n\n${notes.join("\n")}` : ""}`,
-      { title: "Valider le nouveau poids ?", confirmLabel: "Valider" }))) return;
+  const save = () => { if (valide) { setTareEdit(null); setAsking(true); } };
+
+  // Nouveau support vide : enregistre sur le FILAMENT (vaut pour ses autres
+  // bobines), applique au calcul, et la validation se repropose avec le
+  // nouveau poids final.
+  const applyTare = async () => {
+    const v = parseFloat(tareEdit);
+    if (isNaN(v) || v < 0) return;
+    setTareSaving(true);
+    try {
+      if (filamentId) await client.put(`/filaments/filaments/${filamentId}/spool-weight`, { spool_weight_g: v });
+      setSavedTare(v);
+      setTareVal(String(Math.round(v)));
+      setTareEdit(null);
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    finally { setTareSaving(false); }
+  };
+
+  const doSave = async () => {
     setSaving(true);
     try {
       // La pesee devient une valeur absolue (jamais sous 0 : support mal estime).
-      const body = mode === "scale" ? { mode:"set", value: Math.max(0, next) } : { mode, value: n };
+      const body = mode === "scale" ? { mode:"set", value: fin } : { mode, value: n };
       await client.post(`/filaments/spools/${spoolId}/weight`, body);
+      setAsking(false);
       onUpdated?.();
       setEditing(false);
     } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
   };
+
+  const confirmDlg = asking && valide && createPortal(
+    <div onClick={() => setAsking(false)}
+      style={{ position:"fixed", inset:0, zIndex:9000, background:"rgba(0,0,0,0.6)",
+        display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+      <div onClick={e => e.stopPropagation()} className="sheet-panel"
+        style={{ width:"100%", maxWidth:380, borderRadius:16, padding:20,
+          border:"1px solid var(--border)", boxShadow:"0 12px 48px rgba(0,0,0,0.4)" }}>
+        <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:"0 0 10px" }}>Valider le nouveau poids ?</p>
+        <div style={{ fontSize:13.5, color:"var(--text)", lineHeight:1.6 }}>
+          {mode === "set" && <div>Poids restant saisi : {g(n)}</div>}
+          {mode === "sub" && <div>{g(cur)} − {g(n)} retirés</div>}
+          {mode === "add" && <div>{g(cur)} + {g(n)} ajoutés</div>}
+          {mode === "scale" && (<>
+            <div>Balance : {g(n)}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+              <span>Support vide : − {g(t)}</span>
+              {tareEdit == null && (
+                <button onClick={() => setTareEdit(String(Math.round(t)))}
+                  style={{ padding:"2px 8px", borderRadius:6, fontSize:11, fontWeight:700, cursor:"pointer",
+                    background:"var(--surface2)", border:"1px solid var(--border)", color:"#60a5fa" }}>Changer</button>
+              )}
+            </div>
+            {tareEdit != null && (
+              <div style={{ margin:"6px 0 4px", padding:10, borderRadius:10, background:"var(--surface2)",
+                border:"1px solid var(--border)" }}>
+                <div style={{ fontSize:11, color:"var(--muted)", marginBottom:6 }}>
+                  Nouveau poids du support vide — enregistré sur le filament, pour toutes ses bobines
+                </div>
+                <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+                  <input type="number" inputMode="decimal" min="0" value={tareEdit} autoFocus
+                    onChange={e => setTareEdit(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter") applyTare(); if (e.key === "Escape") setTareEdit(null); }}
+                    style={{ flex:1, minWidth:0, padding:"6px 8px", borderRadius:7, fontSize:13, textAlign:"right",
+                      background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)", outline:"none",
+                      fontFamily:"JetBrains Mono,monospace" }}/>
+                  <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
+                  <button onClick={() => setTareEdit(null)}
+                    style={{ padding:"6px 8px", borderRadius:7, fontSize:12, cursor:"pointer",
+                      background:"var(--surface)", border:"1px solid var(--border)", color:"var(--muted)" }}>✕</button>
+                  <button onClick={applyTare} disabled={tareSaving || isNaN(parseFloat(tareEdit))}
+                    style={{ padding:"6px 10px", borderRadius:7, fontSize:12, fontWeight:700, cursor:"pointer",
+                      background:"#3b82f6", border:"none", color:"white" }}>{tareSaving ? "…" : "Appliquer"}</button>
+                </div>
+              </div>
+            )}
+          </>)}
+          <div style={{ marginTop:10 }}>Avant : {g(cur)}</div>
+          <div>Enregistré : <b>{g(fin)}</b></div>
+          {next < 0 && <div style={{ color:"#ef4444", marginTop:6 }}>Le calcul passe sous 0 : la bobine sera mise à 0 g.</div>}
+          {total > 0 && fin > total && <div style={{ color:"#f59e0b", marginTop:6 }}>Attention : plus qu'une bobine neuve ({g(total)}).</div>}
+        </div>
+        <div style={{ display:"flex", gap:8, justifyContent:"flex-end", marginTop:18 }}>
+          <button onClick={() => setAsking(false)}
+            style={{ padding:"9px 16px", borderRadius:10, border:"1px solid var(--border)",
+              background:"var(--surface2)", color:"var(--muted)", fontSize:13, fontWeight:600, cursor:"pointer" }}>Annuler</button>
+          <button onClick={doSave} disabled={saving || tareEdit != null}
+            title={tareEdit != null ? "Applique d'abord le nouveau support" : undefined}
+            style={{ padding:"9px 18px", borderRadius:10, border:"none", color:"white", fontSize:13, fontWeight:700,
+              background: tareEdit != null ? "var(--border)" : "#3b82f6",
+              cursor: saving || tareEdit != null ? "default" : "pointer" }}>{saving ? "…" : "Valider"}</button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
 
   const inputStyle = { width:"100%", padding:"8px 10px", borderRadius:8, fontSize:14,
     background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)",
@@ -427,7 +505,7 @@ function WeightEditRow({ spoolId, current, total, tare, onUpdated }) {
         )}
         {mode === "scale" && (
           <label style={{ fontSize:11, color:"var(--muted)" }}>
-            Support vide {tare == null && <span style={{ color:"#f59e0b" }}>(inconnu du filament : à saisir)</span>}
+            Support vide {savedTare == null && <span style={{ color:"#f59e0b" }}>(inconnu du filament : à saisir)</span>}
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:4 }}>
               <input type="number" inputMode="decimal" min="0" value={tareVal}
                 onChange={e => setTareVal(e.target.value)} style={inputStyle}/>
@@ -453,6 +531,7 @@ function WeightEditRow({ spoolId, current, total, tare, onUpdated }) {
         </div>
       </div>
     )}
+    {confirmDlg}
     </div>
   );
 }
@@ -839,7 +918,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:"0.08em", marginBottom:4 }}>Bobine #{spool.id}</p>
           <Row label="Emplacement"    value={spool.location}/>
-          <WeightEditRow spoolId={spool.id} current={remaining} total={total}
+          <WeightEditRow spoolId={spool.id} filamentId={spool.filament_id} current={remaining} total={total}
             tare={spool.filament_spool_weight_g} onUpdated={onClose}/>
           <PriceEditRow spoolId={spool.id} current={spool.price_override} filamentPrice={spool.filament_price} onUpdated={onClose}/>
           <TagEditRow spoolId={spool.id} current={spool.tag_number} onUpdated={onClose}/>

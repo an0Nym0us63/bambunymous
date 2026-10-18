@@ -526,6 +526,34 @@ async def price_review(
     return out
 
 
+class SpoolTare(BaseModel):
+    spool_weight_g: float   # poids du support vide, en grammes
+
+
+@router.put("/filaments/{fid}/spool-weight")
+async def set_spool_tare(
+    fid: int,
+    body: SpoolTare,
+    db: AsyncSession = Depends(get_db),
+    _: str = Depends(get_current_user),
+):
+    """
+    Pose le seul poids du support vide d'un filament (corrige depuis une pesee).
+
+    Route a part : le PATCH du filament recoit la fiche ENTIERE (ses champs
+    absents reprendraient leur valeur par defaut), il ne sert pas a un champ.
+    """
+    if body.spool_weight_g < 0 or body.spool_weight_g > 5000:
+        raise HTTPException(400, "Poids du support invalide")
+    f = await db.get(Filament, fid)
+    if not f:
+        raise HTTPException(404, "Filament introuvable")
+    f.spool_weight_g = round(body.spool_weight_g, 1)
+    await db.commit()
+    _clear_match_cache()
+    return {"ok": True, "spool_weight_g": f.spool_weight_g}
+
+
 @router.post("/filaments/{fid}/mark-swatch", response_model=FilamentOut)
 async def mark_swatch(
     fid: int,
