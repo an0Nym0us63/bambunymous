@@ -72,7 +72,9 @@ export default function MakerWorldCollectionsPicker({ designId, title, item, onC
             : (<>
               {!data.known && (
                 <p style={{ ...msg, color:"#f59e0b" }}>Je n'arrive pas à lire dans quelles collections est déjà ce modèle :
-                  enregistrer pourrait le retirer des autres, c'est donc bloqué. (Diagnostic : essais_appartenance.)</p>
+                  enregistrer pourrait le retirer des autres, c'est donc bloqué.
+                  {data.raw && <span style={{ display:"block", marginTop:6, fontFamily:"JetBrains Mono,monospace", fontSize:10.5,
+                    color:"var(--muted)", wordBreak:"break-all" }}>Réponse de MakerWorld : {data.raw}</span>}</p>
               )}
               {cols.map(c => (
                 <label key={c.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px", borderRadius:10,

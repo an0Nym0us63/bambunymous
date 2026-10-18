@@ -480,9 +480,22 @@ async def design_collections(design_id: str) -> dict:
     code, d = await asyncio.to_thread(_get_json, f"{MEMBERSHIP}?designId={did}", tok)
     # Reponse relevee le 18/10/2026 : {"designId": 2357097, "favoritesIds": [5143394]}.
     # Une reponse qui parle d'un autre modele ne vaut rien (l'ecriture remplace la liste).
-    same = not (isinstance(d, dict) and d.get("designId") is not None and str(d.get("designId")) != did)
-    ids = _membership_ids(d) if code == 200 and same else None
-    return {"collections": cols, "in": ids, "known": ids is not None}
+    # Modele range nulle part : « favoritesIds » vide ou null, et designId parfois a 0.
+    same = not (isinstance(d, dict) and d.get("designId") not in (None, 0, "0", "") and str(d.get("designId")) != did)
+    ids = None
+    if code == 200 and same:
+        if isinstance(d, dict) and "favoritesIds" in d and not d["favoritesIds"]:
+            ids = []
+        else:
+            ids = _membership_ids(d)
+    out = {"collections": cols, "in": ids, "known": ids is not None}
+    if ids is None:
+        import json as _json
+        try:
+            out["raw"] = f"HTTP {code} : " + _json.dumps(d, ensure_ascii=False)[:300]
+        except Exception:
+            out["raw"] = f"HTTP {code}"
+    return out
 
 
 async def set_design_collections(design_id: str, ids: list) -> dict:
