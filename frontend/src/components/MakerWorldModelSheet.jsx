@@ -45,6 +45,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [pick, setPick] = useState(false);
   const [sim, setSim] = useState(null);
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
+  const [plateSel, setPlateSel] = useState({});    // instance_id -> plateaux choisis (absent = tous)
   const [allProfiles, setAllProfiles] = useState(false);  // replie : seulement le profil principal
   const [showCom, setShowCom] = useState(false);   // commentaires replies (charges a l'ouverture)
   const [like, setLike] = useState(null);          // { liked } avec mon compte ; null = inconnu / pas connecte
@@ -244,14 +245,38 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                           <div style={{ fontSize:11, color:"var(--text2)", marginTop:2 }}>{stockSummary(m.stock[p.instance_id])}</div>
                         )}
                       </button>
-                      {(!allProfiles || isOpen) && <MwStockMatch items={m.stock?.[p.instance_id]} onNavigate={onClose}/>}
+                      {(!allProfiles || isOpen) && <MwStockMatch items={m.stock?.[p.instance_id]} plates={p.plates}
+                        selected={plateSel[p.instance_id]} onNavigate={onClose}/>}
+                      {isOpen && p.plates.length > 1 && (() => {
+                        const sel = plateSel[p.instance_id];
+                        const setSel = v => setPlateSel(s => ({ ...s, [p.instance_id]: v }));
+                        return (
+                          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"0 10px 8px", fontSize:11.5, color:"var(--text2)" }}>
+                            <span style={{ flex:1 }}>{sel ? `Stock calculé pour ${sel.length} plateau${sel.length > 1 ? "x" : ""} sur ${p.plates.length}`
+                              : "Stock calculé pour tous les plateaux"} · touche un plateau pour l'enlever</span>
+                            {sel && <button onClick={() => setSel(undefined)} style={{ ...textBtn, marginTop:0 }}>Tous</button>}
+                          </div>
+                        );
+                      })()}
                       {isOpen && (
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:8, padding:"0 10px 10px" }}>
                           {p.plates.map(pl => {
                             const ok = plateDone(p, pl.index);
+                            const sel = plateSel[p.instance_id];
+                            const on = !sel || sel.includes(pl.index);
+                            const toggle = () => setPlateSel(s => {
+                              const cur = s[p.instance_id] || p.plates.map(x => x.index);
+                              const next = on ? cur.filter(i => i !== pl.index) : [...cur, pl.index];
+                              return { ...s, [p.instance_id]: next.length === p.plates.length ? undefined : next };
+                            });
                             return (
-                              <div key={pl.index} style={{ borderRadius:8, overflow:"hidden", background:"var(--surface)",
-                                border: ok ? "2px solid #22c55e" : "1px solid var(--border)" }}>
+                              <div key={pl.index} onClick={p.plates.length > 1 ? toggle : undefined} role={p.plates.length > 1 ? "button" : undefined}
+                                aria-pressed={on} style={{ borderRadius:8, overflow:"hidden", background:"var(--surface)",
+                                cursor: p.plates.length > 1 ? "pointer" : "default", opacity: on ? 1 : 0.4, transition:"opacity .15s",
+                                position:"relative", border: ok ? "2px solid #22c55e" : "1px solid var(--border)" }}>
+                                {p.plates.length > 1 && <span style={{ position:"absolute", top:4, right:4, zIndex:1, width:18, height:18,
+                                  borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900,
+                                  color:"white", background: on ? "#3b82f6" : "rgba(0,0,0,0.45)", border:"1.5px solid white" }}>{on ? "✓" : ""}</span>}
                                 <div style={{ position:"relative" }}>
                                   {pl.thumb ? <MwImg src={pl.thumb} w={200}
                                     style={{ width:"100%", aspectRatio:"1", objectFit:"cover", display:"block" }}/>

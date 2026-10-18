@@ -21,25 +21,51 @@ export function stockSummary(items) {
     : ok ? `${ok} en stock` : "rien d'approchant en stock"}`;
 }
 
-export default function MwStockMatch({ items, onNavigate }) {
+const fkey = (type, color) => `${String(type || "").toUpperCase()}|${String(color || "").toUpperCase()}`;
+const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+
+// Besoins par filament du profil : tout le profil (plates = null) ou la
+// somme des plateaux choisis. Puis le total par filament propose : deux
+// couleurs qui tombent sur le meme filament du stock s'additionnent.
+export function stockNeeds(items, plates, selected) {
+  const need = items.map(x => {
+    if (!selected || !plates?.length) return num(x.g);
+    const k = fkey(x.type, x.color);
+    return plates.filter(pl => selected.includes(pl.index))
+      .reduce((s, pl) => s + (pl.filaments || []).filter(f => fkey(f.type, f.color) === k).reduce((a, f) => a + num(f.g), 0), 0);
+  });
+  const total = {};
+  items.forEach((x, i) => { const b = x.matches[0]; if (b && need[i] > 0) total[b.filament_id] = (total[b.filament_id] || 0) + need[i]; });
+  return { need, total };
+}
+
+export default function MwStockMatch({ items, plates, selected, onNavigate }) {
   const [open, setOpen] = useState(null);
   const nav = useNavigate();
   if (!items?.length) return null;
   const go = id => { onNavigate?.(); nav(`/filaments?id=${id}`); };
+  const { need, total } = stockNeeds(items, plates, selected);
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"0 10px 10px" }}>
       {items.map((x, i) => {
         const best = x.matches[0];
         const lv = best ? LEVEL[best.level] || LEVEL["différent"] : null;
         const isOpen = open === i;
+        const g = need[i];
+        const unused = selected && g <= 0;
+        const sum = best ? total[best.filament_id] || 0 : 0;
+        const shared = best && sum > g + 0.5;
+        const short = best && g > 0 && best.remaining_g < sum;
         return (
-          <div key={i} style={{ borderRadius:8, background:"var(--surface)", border:"1px solid var(--border)" }}>
+          <div key={i} style={{ borderRadius:8, background:"var(--surface)", border:"1px solid var(--border)",
+            opacity: unused ? 0.45 : 1, transition:"opacity .15s" }}>
             <button onClick={() => setOpen(isOpen ? null : i)} disabled={x.matches.length < 2 && !best}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"6px 8px", background:"none",
                 border:"none", cursor:"pointer", color:"var(--text)", textAlign:"left" }}>
               <Swatch color={x.color} title={x.color}/>
               <span style={{ fontSize:11.5, fontWeight:700, minWidth:0, flexShrink:0 }}>
-                {x.type || "?"}{x.g ? <span style={{ color:"var(--muted)", fontWeight:500 }}> · {Math.round(x.g)} g</span> : null}
+                {x.type || "?"}<span style={{ color:"var(--muted)", fontWeight:500 }}>
+                  {unused ? " · pas utilisé" : g ? ` · ${Math.round(g)} g` : ""}</span>
               </span>
               <span style={{ color:"var(--muted)", fontSize:11 }}>→</span>
               {best ? (<>
@@ -51,10 +77,13 @@ export default function MwStockMatch({ items, onNavigate }) {
                 <span style={{ flex:1, fontSize:11.5, color:"#ef4444" }}>Aucun {x.type || "filament"} en stock</span>
               )}
             </button>
-            {best && (isOpen ? x.matches : []).map(mt => <MatchRow key={mt.filament_id} mt={mt} g={x.g} onGo={go}/>)}
-            {best && !isOpen && !best.enough && x.g ? (
+            {best && (isOpen ? x.matches : []).map(mt => <MatchRow key={mt.filament_id} mt={mt} g={g} onGo={go}/>)}
+            {!unused && short ? (
               <div style={{ fontSize:10.5, color:"#f59e0b", padding:"0 8px 6px 30px" }}>
-                ⚠ il en faut {Math.round(x.g)} g, il en reste {best.remaining_g} g</div>
+                ⚠ il en faut {Math.round(sum)} g{shared ? " au total (filament partagé avec une autre couleur)" : ""}, il en reste {best.remaining_g} g</div>
+            ) : !unused && shared ? (
+              <div style={{ fontSize:10.5, color:"var(--muted)", padding:"0 8px 6px 30px" }}>
+                Partagé avec une autre couleur : {Math.round(sum)} g au total, il en reste {best.remaining_g} g</div>
             ) : null}
           </div>
         );
@@ -76,7 +105,7 @@ function MatchRow({ mt, g, onGo }) {
         <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
           {[mt.brand, mt.material, mt.multicolor ? "multicolore" : null,
             `${mt.remaining_g} g (${mt.spools} bobine${mt.spools > 1 ? "s" : ""})`, mt.where?.[0]].filter(Boolean).join(" · ")}
-          {g && !mt.enough ? <b style={{ color:"#f59e0b" }}> · pas assez</b> : null}
+          {g > 0 && mt.remaining_g < g ? <b style={{ color:"#f59e0b" }}> · pas assez</b> : null}
         </span>
       </span>
       <span style={{ textAlign:"right", flexShrink:0 }}>
