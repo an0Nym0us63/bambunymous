@@ -4,10 +4,16 @@ Declencheurs des notifications de l'imprimante et du stock.
 Deux entrees :
   - watch(state) : ecouteur de l'etat MQTT (subscribe_state). Il tourne dans le
     fil MQTT a chaque rapport : il ne fait QUE comparer a l'etat precedent, en
-    memoire, et confie tout envoi a un fil a part (ni base ni reseau ici).
-    Pause, bientot fini, alerte HMS, debut et fin de sechage.
+    memoire, et confie tout envoi a un minuteur ou a un fil a part (ni base ni
+    reseau ici). Pause, bientot fini, alerte HMS, debut et fin de sechage.
   - des fonctions appelees par le suivi des impressions et les routes :
     demarrage, 1re couche, fin, bobines apres deduction, ajout au panier.
+
+Temporisation : un changement d'etat vu par l'ecouteur n'est notifie que s'il
+TIENT quelques secondes (relu a l'echeance). L'imprimante oscille parfois en
+changeant d'etat (arret du sechage : fini, reparti, fini dans la meme
+seconde) ; un aller-retour bref n'envoie rien, et un etat deja notifie ne
+l'est pas deux fois.
 
 Au demarrage du serveur, le premier etat recu sert de reference : rien n'est
 envoye pour ce qui etait deja en cours (pas d'avalanche a chaque redemarrage).
@@ -27,6 +33,10 @@ LOW_SPOOL_PCT = 15     # memes seuils que les points d'attention
 STOCK_LOW_PCT = 25
 CANCELLED = 0x0300400C  # print_error : « tache annulee »
 
+STABLE_DRY = 20        # secondes : un changement de sechage doit tenir ce temps
+STABLE_PAUSE = 10
+STABLE_HMS = 10
+
 
 def _spawn(fn, *args):
     """Lance une coroutine dans son propre fil (boucle neuve), sans attendre."""
@@ -39,6 +49,40 @@ def _spawn(fn, *args):
         finally:
             loop.close()
     threading.Thread(target=_r, daemon=True).start()
+
+
+_GEN: dict = {}
+_GEN_LOCK = threading.Lock()
+
+
+def _settle(key: str, delay: float, still, fire) -> None:
+    """Rappelle fire() dans `delay` s si still() est encore vrai et qu'aucun
+    changement plus recent n'a ete programme sous la meme cle."""
+    with _GEN_LOCK:
+        gen = _GEN[key] = _GEN.get(key, 0) + 1
+
+    def run():
+        with _GEN_LOCK:
+            if _GEN.get(key) != gen:
+                return
+        try:
+            if still():
+                fire()
+        except Exception:
+            logger.exception(f"[NOTIF] temporisation {key}")
+    t = threading.Timer(delay, run)
+    t.daemon = True
+    t.start()
+
+
+def _cancel(key: str) -> None:
+    with _GEN_LOCK:
+        _GEN[key] = _GEN.get(key, 0) + 1
+
+
+def _state():
+    from ..core.mqtt import get_state
+    return get_state()
 
 
 def _fmt_dur(sec) -> str:
@@ -70,6 +114,15 @@ async def _send(cfg, event: str, title: str, message: str, link=None, priority=3
         logger.warning(f"[NOTIF] {event} : {e}")
 
 
+def _fil_label(f, with_brand=True) -> str:
+    """« Prune — PLA Matte · Bambu Lab »."""
+    name = f.translated_name or f.name
+    sub = f.fila_type or f.material
+    bits = [b for b in (sub if sub and sub.lower() not in name.lower() else None,
+                        f.manufacturer if with_brand else None) if b]
+    return f"{name} — {' · '.join(bits)}" if bits else name
+
+
 # ── Lecture des impressions ───────────────────────────────────────────────
 async def _print_info(pid: int) -> dict:
     """Ce qu'il faut pour ecrire une notification sur une impression."""
@@ -92,13 +145,14 @@ async def _print_info(pid: int) -> dict:
             cover = getattr(mw, "cover_url", None)
     fils = []
     for u, s, f in rows:
-        name = (f.translated_name or f.name) if f else (u.filament_type or "Filament")
+        label = _fil_label(f, with_brand=False) if f else (u.filament_type or "Filament inconnu")
         where = f" ({s.location})" if s is not None and s.location and s.location != "Tiroir" else ""
-        fils.append(f"{name}{where}")
+        grams = f" — {u.grams_used:.0f} g" if u.grams_used else ""
+        fils.append(f"{label}{grams}{where}")
     if cover and "bblmw.com" in cover and "?" not in cover:
         cover += "?x-oss-process=image/resize,w_600/format,webp"
     return {"id": p.id, "name": p.translated_name or p.file_name or p.original_name or f"Impression #{p.id}",
-            "design_id": p.design_id, "plate": p.plate_image, "est": p.estimated_seconds,
+            "design_id": p.design_id, "plate": p.plate_image, "plate_id": p.plate_id, "est": p.estimated_seconds,
             "dur": p.duration_seconds, "weight": p.total_weight_g, "cost": p.total_cost,
             "status": p.status, "fils": fils, "cover": cover}
 
@@ -106,6 +160,15 @@ async def _print_info(pid: int) -> dict:
 def _mw_action(info):
     did = info.get("design_id")
     return [("Fiche MakerWorld", f"https://makerworld.com/fr/models/{did}")] if did else []
+
+
+def _fils_lines(info) -> list:
+    f = info.get("fils") or []
+    if not f:
+        return []
+    if len(f) == 1:
+        return [f"🧵 {f[0]}"]
+    return ["🧵 Filaments :"] + [f"   • {x}" for x in f]
 
 
 def _image(info, *names):
@@ -132,6 +195,18 @@ async def _pid_of_job(job_id: str):
                                  .order_by(Print.id.desc()).limit(1))).scalar_one_or_none()
 
 
+def _reasons(hms, print_error) -> list:
+    out = []
+    try:
+        from .hms import decode_hms
+        out = [e["label"] or e["code"] for e in decode_hms(hms or [], schedule_fetch=False)]
+    except Exception:
+        pass
+    if not out and print_error and int(print_error) != CANCELLED:
+        out = [f"erreur {int(print_error):08X}"]
+    return out
+
+
 # ── Impressions ───────────────────────────────────────────────────────────
 async def print_started(pid: int, wait: float = 120):
     """Attend les metadonnees du 3MF (nom propre, apercu, duree estimee) un
@@ -149,18 +224,18 @@ async def print_started(pid: int, wait: float = 120):
     est = info["est"]
     if not est:
         try:
-            from ..core.mqtt import get_state
-            est = (get_state().remaining_minutes or 0) * 60
+            est = (_state().remaining_minutes or 0) * 60
         except Exception:
             est = 0
     if not _long_enough(cfg, "print_started", est):
         return
-    lines = [info["name"]]
-    bits = ([f"⏱ {_fmt_dur(est)}"] if est else []) + ([f"⚖️ {info['weight']:.0f} g"] if info["weight"] else [])
+    lines = [f"📄 {info['name']}"]
+    if info.get("plate_id") and str(info["plate_id"]) != "1":
+        lines.append(f"🗂 Plateau {info['plate_id']}")
+    bits = ([f"⏱ durée estimée {_fmt_dur(est)}"] if est else []) + ([f"⚖️ {info['weight']:.0f} g"] if info["weight"] else [])
     if bits:
         lines.append(" · ".join(bits))
-    if info["fils"]:
-        lines.append("🧵 " + ", ".join(info["fils"]))
+    lines += _fils_lines(info)
     img = _image(info, info["plate"])
     await _send(cfg, "print_started", "▶️ Impression démarrée", "\n".join(lines), link=f"/prints?id={pid}",
                 priority=2, file=img, filename="plateau.png", attach=None if img else info["cover"],
@@ -175,8 +250,15 @@ async def print_first_layer(pid: int):
     if not info or not _long_enough(cfg, "print_first_layer", info["est"]):
         return
     img = _image(info, f"prints/{pid}/snapshot-layer1.jpg")
-    await _send(cfg, "print_first_layer", "🔍 1re couche terminée",
-                f"{info['name']}\nVérifie l'adhérence" + ("" if img else " (pas de photo caméra)."),
+    lines = [f"📄 {info['name']}", "👀 Vérifie l'adhérence avant de laisser filer."
+             + ("" if img else " (pas de photo caméra)")]
+    try:
+        st = _state()
+        if st.total_layers:
+            lines.append(f"📶 couche {st.layer}/{st.total_layers} · reste {_fmt_dur((st.remaining_minutes or 0) * 60)}")
+    except Exception:
+        pass
+    await _send(cfg, "print_first_layer", "🔍 1re couche terminée", "\n".join(lines),
                 link=f"/prints?id={pid}", priority=3, file=img, filename="couche1.jpg")
 
 
@@ -186,6 +268,10 @@ async def print_finished(pid: int, status: str, pct: int = 0, print_error: int =
     event = "print_done" if ok else "print_failed"
     if not await _cfg_for(event):
         return
+    try:
+        hms = list(_state().hms_errors or [])
+    except Exception:
+        hms = []
     snap = None
     t0 = time.time()
     while time.time() - t0 < wait:
@@ -203,37 +289,40 @@ async def print_finished(pid: int, status: str, pct: int = 0, print_error: int =
     if ok:
         if not _long_enough(cfg, event, info["dur"] or info["est"]):
             return
-        bits = ([f"⏱ {_fmt_dur(info['dur'])}"] if info["dur"] else []) \
-            + ([f"⚖️ {info['weight']:.0f} g"] if info["weight"] else []) \
-            + ([f"💶 {_money(info['cost'])}"] if info["cost"] else [])
+        lines = [f"📄 {info['name']}"]
+        if info["dur"]:
+            lines.append(f"⏱ {_fmt_dur(info['dur'])}" + (f" (prévu {_fmt_dur(info['est'])})" if info["est"] else ""))
+        bits = ([f"⚖️ {info['weight']:.0f} g"] if info["weight"] else []) + ([f"💶 {_money(info['cost'])}"] if info["cost"] else [])
+        if bits:
+            lines.append(" · ".join(bits))
+        lines += _fils_lines(info)
         img = snap or _image(info, info["plate"])
-        await _send(cfg, event, "✅ Impression terminée", "\n".join([info["name"]] + ([" · ".join(bits)] if bits else [])),
+        await _send(cfg, event, "✅ Impression terminée", "\n".join(lines),
                     link=f"/prints?id={pid}", priority=3, file=img, filename="fin.jpg",
                     attach=None if img else info["cover"], actions=_mw_action(info))
     else:
         cancelled = int(print_error or 0) == CANCELLED
         title = "🚫 Impression annulée" if cancelled else "❌ Impression en échec"
-        await _send(cfg, event, title, f"{info['name']}\nArrêtée à {int(pct or 0)} %",
+        lines = [f"📄 {info['name']}", f"📉 Arrêtée à {int(pct or 0)} %"
+                 + (f" après {_fmt_dur(info['dur'])}" if info["dur"] else "")]
+        rs = [] if cancelled else _reasons(hms, print_error)
+        if rs:
+            lines.append("⚠️ " + " ; ".join(rs[:3]))
+        lines += _fils_lines(info)
+        await _send(cfg, event, title, "\n".join(lines),
                     link=f"/prints?id={pid}", priority=3 if cancelled else 5, file=snap, filename="arret.jpg")
 
 
-async def print_paused(job_id: str, pct: float, hms: list, print_error: int):
+async def print_paused(job_id: str, pct: float, hms: list, print_error: int, layer=0, total=0):
     cfg = await _cfg_for("print_paused")
     if not cfg:
         return
     pid = await _pid_of_job(job_id)
     info = await _print_info(pid) if pid else {}
-    reasons = []
-    try:
-        from .hms import decode_hms
-        reasons = [e["label"] or e["code"] for e in decode_hms(hms, schedule_fetch=False)]
-    except Exception:
-        pass
-    if not reasons and print_error:
-        reasons = [f"code {int(print_error):08X}"]
-    lines = [f"{info.get('name') or 'Impression'} · {int(pct or 0)} %"]
-    if reasons:
-        lines.append("Raison : " + " ; ".join(reasons[:3]))
+    lines = [f"📄 {info.get('name') or 'Impression'}",
+             f"📶 {int(pct or 0)} %" + (f" · couche {layer}/{total}" if total else "")]
+    rs = _reasons(hms, print_error)
+    lines.append(("⚠️ Raison : " + " ; ".join(rs[:3])) if rs else "Pause demandée (aucune erreur signalée).")
     await _send(cfg, "print_paused", "⏸️ Impression en pause", "\n".join(lines),
                 link=f"/prints?id={pid}" if pid else "/", priority=4)
 
@@ -244,8 +333,8 @@ async def print_near_end(job_id: str, minutes: int, pct: float):
         return
     pid = await _pid_of_job(job_id)
     info = await _print_info(pid) if pid else {}
-    await _send(cfg, "print_near_end", f"⏳ Fin dans {minutes} min",
-                f"{info.get('name') or 'Impression'} · {int(pct or 0)} %",
+    lines = [f"📄 {info.get('name') or 'Impression'}", f"📶 {int(pct or 0)} %"]
+    await _send(cfg, "print_near_end", f"⏳ Fin dans {minutes} min", "\n".join(lines),
                 link=f"/prints?id={pid}" if pid else "/", priority=3)
 
 
@@ -254,53 +343,74 @@ _LEVELS = {"serious": ("fatal", "serious"), "common": ("fatal", "serious", "comm
 _SEV_FR = {"fatal": "critique", "serious": "grave", "common": "courante", "info": "info"}
 
 
-async def printer_hms(entries: list):
+async def printer_hms(entries: list, job_id: str = "", printing: bool = False):
     cfg = await _cfg_for("printer_hms")
     if not cfg:
         return
     from .hms import decode_hms
     keep = _LEVELS[N.options_of(cfg, "printer_hms")["level"]]
+    name = None
+    if printing and job_id:
+        pid = await _pid_of_job(job_id)
+        name = (await _print_info(pid)).get("name") if pid else None
     for e in decode_hms(entries, schedule_fetch=False):
         if e["severity"] not in keep:
             continue
+        lines = [e["label"] or "Alerte sans libellé connu", f"🔢 {e['code']}"]
+        if name:
+            lines.append(f"📄 pendant : {name}")
         await _send(cfg, "printer_hms", f"⚠️ Alerte imprimante ({_SEV_FR.get(e['severity'], e['severity'])})",
-                    f"{e['label'] or 'Alerte sans libellé connu'}\n{e['code']}", link="/",
+                    "\n".join(lines), link="/",
                     priority=5 if e["severity"] == "fatal" else 4 if e["severity"] == "serious" else 3,
                     actions=[("Wiki Bambu", e["wiki"])])
 
 
 # ── Sechage ───────────────────────────────────────────────────────────────
-async def _spool_names(ids) -> list:
+async def _spool_lines(ids) -> list:
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.filament import Spool, Filament
     if not ids:
         return []
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(select(Spool.id, Filament.translated_name, Filament.name)
-                                 .join(Filament, Filament.id == Spool.filament_id)
+        rows = (await db.execute(select(Spool, Filament).join(Filament, Filament.id == Spool.filament_id)
                                  .where(Spool.id.in_(list(ids))))).all()
-    return [tn or n for _, tn, n in rows]
+    labels = [_fil_label(f) for _, f in rows]
+    if len(labels) == 1:
+        return [f"🧵 {labels[0]}"]
+    return [f"🧵 {len(labels)} bobines :"] + [f"   • {x}" for x in labels]
 
 
-async def dry_started(label: str, temp: int, hours: int, filament: str, spool_ids: list):
+async def dry_started(label: str, temp: int, hours: int, filament: str, spool_ids: list, humidity: int = 0):
     cfg = await _cfg_for("dry_started")
     if not cfg:
         return
-    names = await _spool_names(spool_ids)
     bits = ([f"🌡️ {temp} °C"] if temp else []) + ([f"⏱ {hours} h"] if hours else []) \
-        + ([filament] if filament else [])
-    lines = ([" · ".join(bits)] if bits else []) + (["🧵 " + ", ".join(names)] if names else [])
-    await _send(cfg, "dry_started", f"💧 Séchage démarré · {label}", "\n".join(lines) or label, link="/", priority=2)
+        + ([f"réglage {filament}"] if filament else [])
+    lines = ([" · ".join(bits)] if bits else []) + ([f"💧 humidité de l'AMS : {humidity} %"] if humidity else [])
+    lines += await _spool_lines(spool_ids) or ["Aucune bobine connue dans cette unité."]
+    await _send(cfg, "dry_started", f"💧 Séchage démarré · {label}", "\n".join(lines), link="/", priority=2)
 
 
-async def dry_done(label: str, spool_ids: list):
+async def dry_done(label: str, spool_ids: list, temp: int = 0, hours: int = 0, left_min: int = 0, humidity: int = 0):
     cfg = await _cfg_for("dry_done")
     if not cfg:
         return
-    names = await _spool_names(spool_ids)
-    await _send(cfg, "dry_done", f"☀️ Séchage terminé · {label}",
-                ("🧵 " + ", ".join(names)) if names else "Le cycle de séchage est fini.", link="/", priority=3)
+    stopped = left_min > 3
+    done_min = max(0, hours * 60 - left_min) if hours else 0
+    if stopped:
+        title = f"⏹️ Séchage arrêté · {label}"
+        head = f"Arrêté avant la fin : il restait {_fmt_dur(left_min * 60)}" + (f" sur {hours} h" if hours else "")
+    else:
+        title = f"☀️ Séchage terminé · {label}"
+        head = "Cycle complet" + (f" : {hours} h" if hours else "") + (f" à {temp} °C" if temp else "")
+    lines = [head]
+    if stopped and done_min:
+        lines.append(f"⏱ séché {_fmt_dur(done_min * 60)}" + (f" à {temp} °C" if temp else ""))
+    if humidity:
+        lines.append(f"💧 humidité de l'AMS : {humidity} %")
+    lines += await _spool_lines(spool_ids)
+    await _send(cfg, "dry_done", title, "\n".join(lines), link="/", priority=3)
 
 
 # ── Bobines ───────────────────────────────────────────────────────────────
@@ -314,8 +424,14 @@ async def fil_to_order(fid: int):
         f = await db.get(Filament, fid)
         if not f:
             return
-        name, brand = f.translated_name or f.name, f.manufacturer
-    await _send(cfg, "fil_to_order", "🛒 Ajouté au panier", " · ".join(x for x in (name, brand) if x),
+        name, brand, sub = f.translated_name or f.name, f.manufacturer, f.fila_type or f.material
+        n_sp = sum(1 for s in (f.spools or []) if not s.archived)
+        left = sum((s.remaining_weight_g or 0) for s in (f.spools or []) if not s.archived)
+    lines = [" · ".join(x for x in (name, brand) if x)]
+    if sub and sub.lower() not in name.lower():
+        lines.append(f"🧵 {sub}")
+    lines.append(f"📦 en stock : {n_sp} bobine{'s' if n_sp > 1 else ''}, {left:.0f} g" if n_sp else "📦 plus aucune bobine en stock")
+    await _send(cfg, "fil_to_order", "🛒 Ajouté au panier", "\n".join(lines),
                 link=f"/filaments?id={fid}", priority=2)
 
 
@@ -343,27 +459,30 @@ async def after_deduction(pid: int, changes: list):
         if not f:
             continue
         name = f.translated_name or f.name
+        full = _fil_label(f)
         nominal = f.filament_weight_g or 0
         if N.enabled_in(cfg, "spool_short") and c["grams"] > c["before"]:
             await _send(cfg, "spool_short", "⚠️ Pas assez de filament",
-                        f"{info.get('name') or 'Impression'}\n{name} (bobine #{c['spool_id']}) : il faut "
-                        f"{c['grams']:.0f} g, il reste {c['before']:.0f} g",
+                        f"📄 {info.get('name') or 'Impression'}\n🧵 {full} (bobine #{c['spool_id']})\n"
+                        f"Il faut {c['grams']:.0f} g, il reste {c['before']:.0f} g : il manque {c['grams'] - c['before']:.0f} g",
                         link=f"/prints?id={pid}", priority=4)
         if nominal <= 0:
             continue
         pct_b, pct_a = c["before"] / nominal * 100, c["after"] / nominal * 100
         if N.enabled_in(cfg, "spool_low") and pct_b >= LOW_SPOOL_PCT > pct_a:
             await _send(cfg, "spool_low", "🪫 Bobine bientôt vide",
-                        f"{name} · bobine #{c['spool_id']}\nReste {c['after']:.0f} g ({pct_a:.0f} %)",
+                        f"🧵 {full} · bobine #{c['spool_id']}\nReste {c['after']:.0f} g ({pct_a:.0f} %)"
+                        + (f"\n📦 {counts.get(f.id, 1) - 1} autre(s) bobine(s) en stock" if counts.get(f.id, 1) > 1 else ""),
                         link=f"/filaments?id={f.id}", priority=3)
         if N.enabled_in(cfg, "stock_low") and counts.get(f.id) == 1 and pct_b >= STOCK_LOW_PCT > pct_a:
             await _send(cfg, "stock_low", "📉 Fin de stock",
-                        f"{name} : dernière bobine, reste {c['after']:.0f} g ({pct_a:.0f} %)",
+                        f"🧵 {full}\nDernière bobine : reste {c['after']:.0f} g ({pct_a:.0f} %)\n🛒 pense à en racheter",
                         link=f"/filaments?id={f.id}", priority=3)
 
 
 # ── Ecouteur de l'etat MQTT ───────────────────────────────────────────────
-_W = {"init": False, "status": "", "hms": set(), "dry": {}, "near_sent": set(), "near_above": set()}
+_W = {"init": False, "status": "", "hms": set(), "hms_sent": set(), "dry": {}, "dry_sent": {},
+      "dry_left": {}, "dry_cfg": {}, "near_sent": set(), "near_above": set()}
 
 
 def _hms_key(e) -> str:
@@ -378,6 +497,10 @@ def watch(st) -> None:
         logger.exception("[NOTIF] ecouteur MQTT")
 
 
+def _ams_of(st, ams_id):
+    return next((a for a in (st.ams_list or []) if a.id == ams_id), None)
+
+
 def _watch(st) -> None:
     cfg = N.cached()
     if cfg is None:
@@ -387,15 +510,24 @@ def _watch(st) -> None:
     hms = list(st.hms_errors or [])
     codes = {_hms_key(e) for e in hms}
     dry = {a.id: (a.dry_time or 0) > 0 for a in (st.ams_list or [])}
+    for a in (st.ams_list or []):
+        if (a.dry_time or 0) > 0:
+            _W["dry_left"][a.id] = a.dry_time
+            _W["dry_cfg"][a.id] = (a.dry_temperature, a.dry_duration)
     if not _W["init"]:
-        _W.update(init=True, status=status, hms=codes, dry=dry)
+        _W.update(init=True, status=status, hms=codes, hms_sent=set(codes), dry=dict(dry), dry_sent=dict(dry))
         return
     prev = _W["status"]
     job = str(st.job_id or "")
 
-    # Pause
-    if status == "PAUSE" and prev and prev != "PAUSE" and on("print_paused"):
-        _spawn(print_paused, job, st.progress, hms, st.print_error)
+    # Pause : notifiee si elle tient STABLE_PAUSE s
+    if status == "PAUSE" and prev and prev != "PAUSE":
+        if on("print_paused"):
+            _settle("pause", STABLE_PAUSE, lambda: (_state().status or "").upper() == "PAUSE",
+                    lambda: _spawn(print_paused, job, _state().progress, list(_state().hms_errors or []),
+                                   _state().print_error, _state().layer, _state().total_layers))
+    elif status != "PAUSE" and prev == "PAUSE":
+        _cancel("pause")
 
     # Bientot fini : seulement si on a vu le temps restant au-dessus du seuil
     # pour ce travail (un print court ne previent pas des son demarrage).
@@ -409,31 +541,62 @@ def _watch(st) -> None:
             if on("print_near_end"):
                 _spawn(print_near_end, job, rem, st.progress)
 
-    # HMS : seulement les codes nouveaux
-    new = [e for e in hms if _hms_key(e) not in _W["hms"]]
+    # HMS : un code nouveau qui tient STABLE_HMS s, une fois tant qu'il reste
+    # present (s'il disparait puis revient, il est renotifie).
+    _W["hms_sent"] &= codes
+    new = [e for e in hms if _hms_key(e) not in _W["hms"] and _hms_key(e) not in _W["hms_sent"]]
     if new and on("printer_hms"):
-        _spawn(printer_hms, new)
+        keys = [_hms_key(e) for e in new]
 
-    # Sechage, unite par unite
+        def _fire_hms(keys=keys, new=new):
+            cur = {_hms_key(e) for e in (_state().hms_errors or [])}
+            left = [e for e, k in zip(new, keys) if k in cur and k not in _W["hms_sent"]]
+            _W["hms_sent"].update(_hms_key(e) for e in left)
+            if left:
+                s = _state()
+                _spawn(printer_hms, left, str(s.job_id or ""), (s.status or "").upper() in ("RUNNING", "PAUSE"))
+        _settle("hms:" + ",".join(sorted(keys)), STABLE_HMS, lambda: True, _fire_hms)
+
+    # Sechage, unite par unite : le nouvel etat doit tenir STABLE_DRY s, et
+    # n'est notifie que s'il differe du dernier etat notifie.
     for a in (st.ams_list or []):
         was, now = _W["dry"].get(a.id), dry[a.id]
         if was is None or was == now:
             continue
-        ids = [t.spool_id for t in a.trays if getattr(t, "spool_id", None)]
-        try:
-            from . import drying_slots
-            ids += [x for x in drying_slots.spools_in_ams(a.id) if x not in ids]
-        except Exception:
-            pass
-        try:
-            from ..core.mqtt import ams_label
-            label = ams_label(a.id)
-        except Exception:
-            label = f"AMS {a.id}"
-        if now and on("dry_started"):
-            _spawn(dry_started, label, a.dry_temperature, a.dry_duration, a.dry_filament, ids)
-        elif not now and on("dry_done"):
-            _spawn(dry_done, label, ids)
+        key = f"dry:{a.id}"
+        if _W["dry_sent"].get(a.id) == now:
+            _cancel(key)            # aller-retour bref : on revient a l'etat deja notifie
+            continue
+        if not on("dry_started" if now else "dry_done"):
+            _W["dry_sent"][a.id] = now
+            continue
+        left_before = _W["dry_left"].get(a.id, 0)
+        temp0, dur0 = _W["dry_cfg"].get(a.id, (0, 0))
+        aid = a.id
+
+        def _fire_dry(aid=aid, now=now, left_before=left_before, temp0=temp0, dur0=dur0):
+            _W["dry_sent"][aid] = now
+            cur = _ams_of(_state(), aid) or a
+            ids = [t.spool_id for t in cur.trays if getattr(t, "spool_id", None)]
+            try:
+                from . import drying_slots
+                ids += [x for x in drying_slots.spools_in_ams(aid) if x not in ids]
+            except Exception:
+                pass
+            try:
+                from ..core.mqtt import ams_label
+                label = ams_label(aid)
+            except Exception:
+                label = f"AMS {aid}"
+            if now:
+                _spawn(dry_started, label, cur.dry_temperature, cur.dry_duration, cur.dry_filament, ids, cur.humidity)
+            else:
+                _spawn(dry_done, label, ids, cur.dry_temperature or temp0, cur.dry_duration or dur0, left_before, cur.humidity)
+
+        def _still(aid=aid, now=now):
+            cur = _ams_of(_state(), aid)
+            return cur is not None and ((cur.dry_time or 0) > 0) == now
+        _settle(key, STABLE_DRY, _still, _fire_dry)
 
     _W["status"] = status
     _W["hms"] = codes

@@ -44,7 +44,7 @@ EVENTS = {
         "description": "Nom, aperçu du plateau, durée estimée et bobines utilisées.",
         "options": [_MIN_MINUTES],
         "sample": {"title": "▶️ Impression démarrée", "priority": 2, "link": "/prints",
-                   "message": "Kit de semis auto-arrosant\n⏱ 2 h 10 · ⚖️ 86 g\n🧵 PLA Basic Vert (AMS-A slot 2)",
+                   "message": "📄 Kit de semis auto-arrosant\n⏱ durée estimée 2 h 10 · ⚖️ 86 g\n🧵 Filaments :\n   • PLA Basic Vert — 80 g (AMS-A slot 2)\n   • PLA Basic Blanc — 6 g (AMS-A slot 4)",
                    "attach": _SAMPLE_COVER},
     },
     "print_first_layer": {
@@ -52,7 +52,8 @@ EVENTS = {
         "description": "Photo de la caméra après la 1re couche : le moment de vérifier l'adhérence.",
         "options": [_MIN_MINUTES],
         "sample": {"title": "🔍 1re couche terminée", "priority": 3, "link": "/prints",
-                   "message": "Kit de semis auto-arrosant : vérifie l'adhérence.", "attach": _SAMPLE_COVER},
+                   "message": "📄 Kit de semis auto-arrosant\n👀 Vérifie l'adhérence avant de laisser filer.\n📶 couche 2/180 · reste 2 h 04",
+                   "attach": _SAMPLE_COVER},
     },
     "print_near_end": {
         "section": "prints", "label": "Bientôt terminée",
@@ -60,14 +61,14 @@ EVENTS = {
         "options": [{"key": "minutes", "type": "number", "label": "Prévenir", "unit": "min avant la fin",
                      "default": 10, "min": 1, "max": 120}],
         "sample": {"title": "⏳ Fin dans 10 min", "priority": 3, "link": "/prints",
-                   "message": "Kit de semis auto-arrosant · 94 %"},
+                   "message": "📄 Kit de semis auto-arrosant\n📶 94 %"},
     },
     "print_done": {
         "section": "prints", "label": "Impression terminée",
         "description": "Photo finale, durée réelle, filament consommé et coût.",
         "options": [_MIN_MINUTES],
         "sample": {"title": "✅ Impression terminée", "priority": 3, "link": "/prints",
-                   "message": "Kit de semis auto-arrosant\n⏱ 2 h 14 · ⚖️ 86 g · 💶 2,31 €",
+                   "message": "📄 Kit de semis auto-arrosant\n⏱ 2 h 14 (prévu 2 h 10)\n⚖️ 86 g · 💶 2,31 €\n🧵 Filaments :\n   • PLA Basic Vert — 80 g\n   • PLA Basic Blanc — 6 g",
                    "attach": _SAMPLE_COVER},
     },
     "print_failed": {
@@ -75,14 +76,14 @@ EVENTS = {
         "description": "Photo au moment de l'arrêt et avancement atteint.",
         "options": [],
         "sample": {"title": "❌ Impression en échec", "priority": 5, "link": "/prints",
-                   "message": "Kit de semis auto-arrosant\nArrêtée à 37 % après 48 min"},
+                   "message": "📄 Kit de semis auto-arrosant\n📉 Arrêtée à 37 % après 48 min\n⚠️ Le plateau n'est pas en place."},
     },
     "print_paused": {
         "section": "prints", "label": "Impression en pause",
         "description": "Pause demandée ou imposée (fin de filament, bourrage…), avec la raison si connue.",
         "options": [],
         "sample": {"title": "⏸️ Impression en pause", "priority": 4, "link": "/",
-                   "message": "Kit de semis auto-arrosant · 52 %\nRaison : fin de filament (AMS-A slot 2)"},
+                   "message": "📄 Kit de semis auto-arrosant\n📶 52 % · couche 94/180\n⚠️ Raison : le filament de l'AMS-A slot 2 est épuisé."},
     },
     "printer_hms": {
         "section": "prints", "label": "Alerte de l'imprimante (HMS)",
@@ -91,7 +92,7 @@ EVENTS = {
                      "choices": [["serious", "Graves seulement"], ["common", "Graves et courantes"],
                                  ["all", "Toutes"]]}],
         "sample": {"title": "⚠️ Alerte imprimante (grave)", "priority": 4, "link": "/",
-                   "message": "Le filament de l'AMS-A slot 2 est épuisé.\n0700_2000_0002_0001",
+                   "message": "Le filament de l'AMS-A slot 2 est épuisé.\n🔢 0700_2000_0002_0001\n📄 pendant : Kit de semis auto-arrosant",
                    "actions": [("Wiki Bambu", "https://wiki.bambulab.com/fr/h2c/troubleshooting/hmscode/0700_2000_0002_0001")]},
     },
     # ── Sechage ──
@@ -100,14 +101,14 @@ EVENTS = {
         "description": "Unité, température, durée et bobines concernées.",
         "options": [],
         "sample": {"title": "💧 Séchage démarré · AMS-A", "priority": 2, "link": "/",
-                   "message": "🌡️ 55 °C · ⏱ 8 h\n🧵 PLA Basic Vert, PETG HF Noir"},
+                   "message": "🌡️ 55 °C · ⏱ 8 h · réglage PLA\n💧 humidité de l'AMS : 34 %\n🧵 2 bobines :\n   • Prune — PLA Matte · Bambu Lab\n   • Bleu glacier — PLA Basic · Bambu Lab"},
     },
     "dry_done": {
         "section": "dry", "label": "Séchage terminé",
         "description": "Quand une unité AMS termine son cycle de séchage.",
         "options": [],
         "sample": {"title": "☀️ Séchage terminé · AMS-A", "priority": 3, "link": "/",
-                   "message": "🧵 PLA Basic Vert, PETG HF Noir"},
+                   "message": "Cycle complet : 8 h à 55 °C\n💧 humidité de l'AMS : 12 %\n🧵 2 bobines :\n   • Prune — PLA Matte · Bambu Lab\n   • Bleu glacier — PLA Basic · Bambu Lab"},
     },
     # ── Bobines ──
     "fil_to_order": {
@@ -115,28 +116,28 @@ EVENTS = {
         "description": "Un filament est marqué « à commander ».",
         "options": [],
         "sample": {"title": "🛒 Ajouté au panier", "priority": 2, "link": "/filaments",
-                   "message": "PLA Basic Vert · Bambu Lab"},
+                   "message": "Vert · Bambu Lab\n🧵 PLA Basic\n📦 en stock : 1 bobine, 180 g"},
     },
     "spool_short": {
         "section": "spools", "label": "Pas assez de filament",
         "description": "Au démarrage d'une impression, une bobine a moins que ce qu'il faut.",
         "options": [],
         "sample": {"title": "⚠️ Pas assez de filament", "priority": 4, "link": "/prints",
-                   "message": "Kit de semis auto-arrosant\nPLA Basic Vert : il faut 86 g, il reste 52 g"},
+                   "message": "📄 Kit de semis auto-arrosant\n🧵 Vert — PLA Basic · Bambu Lab (bobine #42)\nIl faut 86 g, il reste 52 g : il manque 34 g"},
     },
     "spool_low": {
         "section": "spools", "label": "Bobine bientôt vide",
         "description": "Une bobine passe sous 15 % après une impression.",
         "options": [],
         "sample": {"title": "🪫 Bobine bientôt vide", "priority": 3, "link": "/filaments",
-                   "message": "PLA Basic Vert · bobine #42\nReste 120 g (12 %)"},
+                   "message": "🧵 Vert — PLA Basic · Bambu Lab · bobine #42\nReste 120 g (12 %)\n📦 1 autre(s) bobine(s) en stock"},
     },
     "stock_low": {
         "section": "spools", "label": "Fin de stock",
         "description": "La dernière bobine d'un filament passe sous 25 % : il est temps de racheter.",
         "options": [],
         "sample": {"title": "📉 Fin de stock", "priority": 3, "link": "/filaments",
-                   "message": "PLA Basic Vert : dernière bobine, reste 230 g (23 %)"},
+                   "message": "🧵 Vert — PLA Basic · Bambu Lab\nDernière bobine : reste 230 g (23 %)\n🛒 pense à en racheter"},
     },
     # ── MakerWorld ──
     "mw_new_model": {
