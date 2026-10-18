@@ -108,7 +108,7 @@ async def stock_rows():
             continue
         e = out.setdefault(f.id, {"f": f, "remaining_g": 0.0, "spools": 0, "where": [], "spool_g": []})
         e["remaining_g"] += rem
-        e["spool_g"].append(round(rem))
+        e["spool_g"].append((round(rem), s.location if s.location and s.location != "Tiroir" else None))
         e["spools"] += 1
         if s.location and s.location != "Tiroir":
             e["where"].append(s.location)
@@ -148,7 +148,10 @@ def best_matches(mw_type, color, grams, stock, n=6):
                     "multicolor_type": f.multicolor_type, "delta_e": round(de, 1), "level": level(de),
                     "same_material": fit == 2, "multicolor": multi, "bambu": is_bambu(f),
                     "remaining_g": round(e["remaining_g"]), "spools": e["spools"], "where": e["where"][:3],
-                    "spool_g": sorted(e["spool_g"], reverse=True),
+                    # Ordre d'usage probable : la bobine chargee dans l'AMS, puis la
+                    # plus entamee (on finit une bobine avant d'en ouvrir une autre).
+                    "spool_g": [g for g, _ in sorted(e["spool_g"], key=lambda x: (x[1] is None, x[0]))],
+                    "spool_where": [w for _, w in sorted(e["spool_g"], key=lambda x: (x[1] is None, x[0]))],
                     "enough": grams is None or e["remaining_g"] >= grams})
     return out
 

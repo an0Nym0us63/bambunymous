@@ -49,20 +49,36 @@ export function stockNeeds(items, plates, selected, choose = x => x.matches[0]) 
 
 const detailOf = mt => [mt.brand, mt.material !== mt.name ? mt.material : null, mt.multicolor ? "multicolore" : null]
   .filter(Boolean).join(" · ");
-// Combien de bobines il faudra entamer (les plus pleines d'abord) ; 0 si
-// rien n'est demande, null si tout le stock ne suffit pas.
-export const spoolsNeeded = (mt, g) => {
-  if (!(g > 0)) return 0;
-  let acc = 0, k = 0;
-  for (const w of mt.spool_g || [mt.remaining_g]) { acc += w; k += 1; if (acc >= g) return k; }
-  return null;
+// Bobine par bobine, dans l'ordre d'usage probable donne par le serveur (celle
+// chargee dans l'AMS, puis la plus entamee) : ce qui sera pris sur chacune.
+export const spoolPlan = (mt, g) => {
+  if (!(g > 0)) return null;
+  const ws = mt.spool_g?.length ? mt.spool_g : [mt.remaining_g];
+  let left = g;
+  const steps = [];
+  for (let i = 0; i < ws.length && left > 0; i++) {
+    const take = Math.min(ws[i], left);
+    steps.push({ w: ws[i], take: Math.round(take), rest: Math.round(ws[i] - take), where: mt.spool_where?.[i] });
+    left -= take;
+  }
+  return { steps, missing: Math.max(0, Math.round(left)) };
 };
-const spoolsText = (mt, g) => {
-  const k = spoolsNeeded(mt, g);
-  const n = mt.spools || (mt.spool_g || []).length || 1;
-  const list = mt.spool_g?.length > 1 ? ` (${mt.spool_g.map(w => `${w} g`).join(" + ")})` : "";
-  if (k > 1) return `il faudra ${k === n ? `les ${n}` : `${k} de tes ${n}`} bobines${list}`;
-  return n > 1 ? `${n} bobines${list}` : "";
+// Nombre de bobines touchees ; 0 si rien n'est demande, null si le stock ne suffit pas.
+export const spoolsNeeded = (mt, g) => { const p = spoolPlan(mt, g); return !p ? 0 : p.missing ? null : p.steps.length; };
+// Phrase explicite des que le filament a plusieurs bobines.
+const planText = (mt, g) => {
+  const p = spoolPlan(mt, g);
+  if (!p || (mt.spool_g?.length || 1) < 2) return null;
+  const nm = s => `la bobine de ${s.w} g${s.where ? ` (${s.where})` : ""}`;
+  const [a, ...next] = p.steps;
+  if (!next.length && !p.missing) return { warn: false, txt: `pris sur ${nm(a)} : il lui restera ${a.rest} g` };
+  let txt = `finira ${nm(a)}`;
+  next.forEach((s, i) => {
+    txt += i === next.length - 1 && !p.missing
+      ? `, puis entamera ${nm(s)} (${s.take} g, il lui restera ${s.rest} g)` : `, puis finira ${nm(s)}`;
+  });
+  if (p.missing) txt += ` — et il manquera encore ${p.missing} g`;
+  return { warn: true, txt };
 };
 const levelText = mt => mt.multicolor && mt.delta_e < 12 ? "teinte incluse" : (LEVEL[mt.level] || LEVEL["différent"]).t;
 const levelColor = mt => (LEVEL[mt.level] || LEVEL["différent"]).c;
@@ -112,9 +128,10 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
                         {short ? `manque ${-after} g` : `reste ${after} g`}</b></>}
                     {best.where?.[0] ? ` · ${best.where[0]}` : ""}
                   </span>
-                  {!unused && spoolsText(best, sum) && (
-                    <span style={{ display:"block", fontSize:10.5, lineHeight:1.35,
-                      color: spoolsNeeded(best, sum) > 1 ? "#3b82f6" : "var(--muted)" }}>🧵 {spoolsText(best, sum)}</span>
+                  {!unused && planText(best, sum) && (
+                    <span style={{ display:"block", fontSize:10.5, lineHeight:1.35, marginTop:1,
+                      color: planText(best, sum).warn ? "#3b82f6" : "var(--muted)", fontWeight: planText(best, sum).warn ? 700 : 400 }}>
+                      {planText(best, sum).warn ? "🔄 " : "🧵 "}{planText(best, sum).txt}</span>
                   )}
                 </span>
                 <span style={{ textAlign:"right", flexShrink:0 }}>
