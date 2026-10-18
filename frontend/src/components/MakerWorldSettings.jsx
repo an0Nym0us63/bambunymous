@@ -74,7 +74,7 @@ export default function MakerWorldSettings() {
       {/* ── Compte ── */}
       <div style={{ padding:12, borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)" }}>
         <div style={{ fontSize:12, fontWeight:700, color:"var(--text)", marginBottom:8 }}>
-          Compte — favoris et j'aime, avec « déjà imprimé » (Historique → bouton 🌐)
+          Compte — collections et j'aime, avec « déjà imprimé » (Historique → onglet MakerWorld)
         </div>
         {st?.connected ? (
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>

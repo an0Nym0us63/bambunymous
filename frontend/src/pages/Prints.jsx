@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Globe, RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
+import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import MakerWorldSheet from "../components/MakerWorldSheet";
+import MakerWorldView from "../components/MakerWorldView";
 import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
@@ -2213,7 +2213,6 @@ function countDisplayItems(list) {
 }
 
 export default function Prints() {
-  const [mwOpen, setMwOpen] = useState(false);     // mes modeles MakerWorld
   const [searchParams, setSearchParams] = useSearchParams();
   const [prints, setPrints]   = useState([]);
   const [total, setTotal]     = useState(0);
@@ -2277,7 +2276,7 @@ export default function Prints() {
   const [allFilaTypes, setAllFilaTypes] = useState([]);
   const [filSearch, setFilSearch] = useState("");
   const [sortF, setSortF]     = useState("recent");
-  const [viewMode, setViewMode] = useState("list"); // "list" | "gallery"
+  const [viewMode, setViewMode] = useState("list"); // "list" | "gallery" | "makerworld"
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   // Groupes selectionnes (appui long sur une tuile de groupe), dans l'ordre de
@@ -2506,9 +2505,9 @@ export default function Prints() {
       {/* Titre */}
       <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Historique</h1>
 
-      {/* Tabs Liste / Galerie */}
+      {/* Tabs Liste / Galerie / MakerWorld */}
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
-        {[["list","Liste"],["gallery","Galerie"]].map(([id,label])=>(
+        {[["list","Liste"],["gallery","Galerie"],["makerworld","MakerWorld"]].map(([id,label])=>(
           <button key={id} onClick={()=>setViewMode(id)} style={{
             flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
             background: viewMode===id ? "#3b82f6" : "transparent",
@@ -2518,8 +2517,14 @@ export default function Prints() {
         ))}
       </div>
 
+      {/* Onglet MakerWorld : collections, j'aime, « deja imprime ». Un clic
+          sur « imprime N fois » revient a la liste, recherche posee. */}
+      {viewMode==="makerworld" && (
+        <MakerWorldView onSearch={x => { setSearch(x.title || ""); setViewMode("list"); }}/>
+      )}
+
       {/* KPIs — données complètes depuis API (pas juste les éléments chargés) */}
-      {kpis && (
+      {kpis && viewMode!=="makerworld" && (
         <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
           {[
             [`${kpis.count}`, "prints", "#3b82f6"],
@@ -2537,7 +2542,7 @@ export default function Prints() {
       )}
 
       {/* Recherche + Filtres + .3mf */}
-      <div style={{ display:"flex", gap:8 }}>
+      {viewMode!=="makerworld" && <div style={{ display:"flex", gap:8 }}>
         <div style={{ position:"relative", flex:1 }}>
           <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un print…"
@@ -2563,14 +2568,6 @@ export default function Prints() {
             <Check size={14}/>
           </button></AdminOnly>
         )}
-        <button onClick={() => setMwOpen(true)} title="Mes modèles MakerWorld (favoris, j'aime)"
-          style={{ width:36, height:36, borderRadius:10, border:"1px solid var(--border)",
-            background:"var(--surface2)", color:"var(--muted)", cursor:"pointer",
-            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-          <Globe size={14}/>
-        </button>
-        {mwOpen && <MakerWorldSheet onClose={() => setMwOpen(false)}
-          onSearch={x => { setSearch(x.title || ""); setMwOpen(false); }}/>}
         <AdminOnly><label title="Importer .3mf"
           style={{ width:36, height:36, borderRadius:10, border:"1px solid var(--border)",
             background:"var(--surface2)", color:"var(--muted)", cursor:"pointer",
@@ -2579,7 +2576,7 @@ export default function Prints() {
           <input type="file" accept=".3mf" onChange={handleImport} style={{ display:"none" }}/>
         </label></AdminOnly>
 
-      </div>
+      </div>}
 
       {filterOpen && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:200, display:"flex", alignItems:"flex-end" }}

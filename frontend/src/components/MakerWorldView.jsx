@@ -1,14 +1,13 @@
 import React, { useEffect, useState } from "react";
-import { createPortal } from "react-dom";
 import client from "../api/client";
 
-// Mes modeles MakerWorld (compte connecte dans les Parametres) : collections
+// Onglet MakerWorld de l'Historique (compte connecte dans les Parametres) : collections
 // de favoris puis leurs modeles, et modeles aimes ; chacun avec « deja
 // imprime N fois » ou « jamais imprime », croise avec l'historique. Lecture
 // seule. Si l'API ne repond plus, la fenetre le dit et rien d'autre n'est touche.
 const TABS = [["favorites", "Favoris"], ["likes", "J'aime"]];
 
-export default function MakerWorldSheet({ onClose, onSearch }) {
+export default function MakerWorldView({ onSearch }) {
   const [tab, setTab] = useState("favorites");
   const [coll, setColl] = useState(null);          // collection ouverte { id, title }
   const [data, setData] = useState(null);          // { items } | { collections } | { error }
@@ -39,24 +38,18 @@ export default function MakerWorldSheet({ onClose, onSearch }) {
   const items = (data?.items || []).filter(x => !onlyNew || !x.printed);
   const nNew = (data?.items || []).filter(x => !x.printed).length;
 
-  return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4000, background:"rgba(0,0,0,0.6)",
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-        width:"100%", maxWidth:640, height:"85dvh", display:"flex", flexDirection:"column",
-        paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
-        <div style={{ padding:"14px 16px 8px", borderBottom:"1px solid var(--border)" }}>
+  return (
+      <div style={{ display:"flex", flexDirection:"column" }}>
+        <div style={{ padding:"2px 0 8px" }}>
           <div style={{ display:"flex", alignItems:"center", gap:8 }}>
             {coll && tab === "favorites" && (
               <button onClick={() => setColl(null)} title="Toutes les collections"
                 style={{ background:"none", border:"none", color:"var(--text)", fontSize:18, cursor:"pointer", padding:"0 4px 0 0" }}>‹</button>
             )}
-            <h3 style={{ flex:1, minWidth:0, fontSize:15, fontWeight:800, color:"var(--text)", margin:0,
-              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-              {coll && tab === "favorites" ? coll.title : "Mes modèles MakerWorld"}
-            </h3>
-            <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--muted)",
-              fontSize:18, cursor:"pointer" }}>✕</button>
+            {coll && tab === "favorites" && (
+              <h3 style={{ flex:1, minWidth:0, fontSize:15, fontWeight:800, color:"var(--text)", margin:0,
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{coll.title}</h3>
+            )}
           </div>
           {status?.connected && (
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:10, flexWrap:"wrap" }}>
@@ -77,7 +70,7 @@ export default function MakerWorldSheet({ onClose, onSearch }) {
           )}
         </div>
 
-        <div style={{ flex:1, overflowY:"auto", padding:"10px 16px 16px" }}>
+        <div style={{ padding:"4px 0 16px" }}>
           {status === null ? <p style={msg}>…</p>
             : !status.connected ? (
               <p style={msg}>Connecte ton compte MakerWorld dans <b>Paramètres → Données → MakerWorld</b> pour voir
@@ -138,8 +131,6 @@ export default function MakerWorldSheet({ onClose, onSearch }) {
             </>)}
         </div>
       </div>
-    </div>,
-    document.body
   );
 }
 
