@@ -272,7 +272,7 @@ export default function MakerWorldView({ onSearch }) {
                       <a href={x.url} onClick={e => { e.preventDefault(); setModel(x.design_id); }}
                         style={{ fontSize:12, fontWeight:700, color:"var(--text)", textDecoration:"none", lineHeight:1.3,
                           overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
-                        {x.title || `Modèle ${x.design_id}`}
+                        {x.title_fr || x.title || `Modèle ${x.design_id}`}
                       </a>
                       {x.creator_name && <span style={{ fontSize:10.5, color:"var(--muted)" }}>par {x.creator_name}
                         {x.published && ago(x.published) ? ` · ${ago(x.published)}` : ""}</span>}

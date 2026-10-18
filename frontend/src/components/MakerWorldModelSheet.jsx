@@ -16,6 +16,8 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
   const [id, setId] = useState(designId);          // permet d'ouvrir un similaire sans empiler
   const [m, setM] = useState(null);
   const [more, setMore] = useState(false);         // descriptif deplie
+  const [orig, setOrig] = useState(false);         // descriptif : original au lieu du francais
+  const [origC, setOrigC] = useState({});          // commentaires montres dans l'original
   const [open, setOpen] = useState(null);          // profil deplie (instance_id)
   const [com, setCom] = useState(null);            // { items, total }
   const [comBusy, setComBusy] = useState(false);
@@ -77,8 +79,8 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
               </div>
             )}
 
-            <h2 style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:"0 0 2px", lineHeight:1.3 }}>{m.title}</h2>
-            {m.title_fr && m.title_fr !== m.title && <div style={{ fontSize:12, color:"var(--muted)" }}>{m.title_fr}</div>}
+            <h2 style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:"0 0 2px", lineHeight:1.3 }}>{m.title_fr || m.title}</h2>
+            {m.title_fr && m.title_fr !== m.title && <div style={{ fontSize:12, color:"var(--muted)" }}>{m.title}</div>}
             <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"var(--muted)", margin:"6px 0" }}>
               {m.creator_avatar && <img src={m.creator_avatar} alt="" referrerPolicy="no-referrer" style={{ width:18, height:18, borderRadius:"50%" }}/>}
               <span>par <b style={{ color:"var(--text2)" }}>{m.creator_name}</b>{m.created ? ` · ${fmtDate(m.created)}` : ""}</span>
@@ -121,11 +123,17 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
               <Section title="Descriptif">
                 <div style={{ fontSize:13, color:"var(--text2)", lineHeight:1.55, whiteSpace:"pre-wrap",
                   ...(more ? null : { maxHeight:150, overflow:"hidden", maskImage:"linear-gradient(#000 70%, transparent)" }) }}>
-                  {m.description}
+                  {orig && m.description_original ? m.description_original : m.description}
                 </div>
-                {m.description.length > 300 && (
-                  <button onClick={() => setMore(v => !v)} style={textBtn}>{more ? "Réduire" : "Lire la suite"}</button>
-                )}
+                <div style={{ display:"flex", gap:14 }}>
+                  {m.description.length > 300 && (
+                    <button onClick={() => setMore(v => !v)} style={textBtn}>{more ? "Réduire" : "Lire la suite"}</button>
+                  )}
+                  {m.description_original && (
+                    <button onClick={() => setOrig(v => !v)} style={{ ...textBtn, color:"var(--muted)" }}>
+                      {orig ? "Afficher la traduction" : "Afficher l'original"}</button>
+                  )}
+                </div>
               </Section>
             )}
 
@@ -142,7 +150,8 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
                         style={{ width:"100%", textAlign:"left", padding:"9px 10px", background:"none", border:"none",
                           cursor:"pointer", color:"var(--text)" }}>
                         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                          <span style={{ flex:1, fontSize:13, fontWeight:700 }}>{p.title || "Profil"}{p.default ? " ★" : ""}</span>
+                          <span style={{ flex:1, fontSize:13, fontWeight:700 }} title={p.title_original || undefined}>
+                            {p.title || "Profil"}{p.default ? " ★" : ""}</span>
                           {nDone > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"white", background:"#22c55e",
                             padding:"1px 7px", borderRadius:20 }}>✓ {nDone}/{p.plates.length}</span>}
                           <span style={{ color:"var(--muted)", fontSize:12 }}>{isOpen ? "▾" : "▸"}</span>
@@ -210,7 +219,12 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
                         {c.score != null && <span style={{ color:"#f59e0b" }}> · {"★".repeat(Math.round(c.score))}</span>}
                       </div>
                       {c.text && <div style={{ fontSize:12.5, color:"var(--text)", lineHeight:1.45, whiteSpace:"pre-wrap",
-                        marginTop:2 }}>{c.text.trim()}</div>}
+                        marginTop:2 }}>{(origC[c.id] && c.original ? c.original : c.text).trim()}</div>}
+                      {c.original && (
+                        <button onClick={() => setOrigC(o => ({ ...o, [c.id]: !o[c.id] }))}
+                          style={{ ...textBtn, marginTop:2, fontSize:11, color:"var(--muted)" }}>
+                          {origC[c.id] ? "Afficher la traduction" : "Afficher l'original"}</button>
+                      )}
                       {c.images?.length > 0 && (
                         <div style={{ display:"flex", gap:4, marginTop:4, overflowX:"auto" }}>
                           {c.images.map((u, i) => <a key={i} href={u} target="_blank" rel="noopener noreferrer">
@@ -246,7 +260,7 @@ export default function MakerWorldModelSheet({ designId, onClose, onSearch }) {
                           padding:"1px 5px", borderRadius:20, background:"#22c55e", color:"white" }}>✓ IMPRIMÉ</span>}
                       </div>
                       <div style={{ fontSize:10.5, marginTop:3, lineHeight:1.25, overflow:"hidden", display:"-webkit-box",
-                        WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{x.title}</div>
+                        WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{x.title_fr || x.title}</div>
                     </button>
                   ))}
                 </div>

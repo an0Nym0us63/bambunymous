@@ -38,7 +38,11 @@ def _get_json(path: str, token: str = None):
     headers = {"User-Agent": "Mozilla/5.0 (BambuNymous)", "Accept": "application/json",
                # Categories rendues en francais ; le titre et les tags restent
                # dans la langue du createur.
-               "Accept-Language": "fr-FR,fr;q=0.9"}
+               "Accept-Language": "fr-FR,fr;q=0.9",
+               # ... et avec celui-ci, MakerWorld remplit lui-meme les champs
+               # *Translated (titre, descriptif, tags, profils, commentaires)
+               # en francais : rien a traduire de notre cote.
+               "x-bbl-language": "fr"}
     if token:
         headers["Authorization"] = f"Bearer {token}"
     code = 0
@@ -83,12 +87,15 @@ def _parse_design(code, d) -> dict:
     cats = [c.get("name") for c in lst(d.get("categories"))
             if isinstance(c, dict) and isinstance(c.get("name"), str) and c.get("name")]
     tags = [t for t in lst(d.get("tags")) if isinstance(t, str) and t.strip()]
+    # tags francais de MakerWorld en plus (la recherche les trouve aussi)
+    tags += [t for t in lst(d.get("tagsTranslated")) if isinstance(t, str) and t.strip() and t not in tags]
     num = lambda v: v if isinstance(v, int) and not isinstance(v, bool) else None
     # Texte seulement : une API qui change de forme ne doit rien faire lever.
     txt = lambda v, n: (v.strip()[:n] or None) if isinstance(v, str) else None
     return {
         "status": "ok",
-        "title": txt(d.get("titleTranslated"), 512) or txt(d.get("title"), 512),
+        "title": txt(d.get("title"), 512) or txt(d.get("titleTranslated"), 512),
+        "title_fr": txt(d.get("titleTranslated"), 512),
         "cover_url": txt(d.get("coverUrl"), 1024),
         "creator_name": txt(cr.get("name"), 256),
         "creator_handle": txt(cr.get("handle"), 256),
@@ -161,7 +168,8 @@ def _hit(h) -> dict:
         return None
     cr = h.get("designCreator") if isinstance(h.get("designCreator"), dict) else {}
     s = lambda v: v if isinstance(v, str) else None
-    return {"design_id": str(h["id"]), "title": s(h.get("title")), "cover_url": s(h.get("cover")),
+    return {"design_id": str(h["id"]), "title": s(h.get("title")), "title_fr": s(h.get("titleTranslated")),
+            "cover_url": s(h.get("cover")),
             "creator_name": s(cr.get("name")),
             "like_count": h.get("likeCount") if isinstance(h.get("likeCount"), int) else None,
             "print_count": h.get("printCount") if isinstance(h.get("printCount"), int) else None}
@@ -237,9 +245,11 @@ def _plate_detail(d) -> list:
                            "seconds": pl.get("prediction") if isinstance(pl.get("prediction"), (int, float)) else None,
                            "filaments": fils})
         ps = mi.get("projectSettings") if isinstance(mi.get("projectSettings"), dict) else {}
+        t_or = i.get("title") if isinstance(i.get("title"), str) else ""
+        t_fr = i.get("titleTranslated") if isinstance(i.get("titleTranslated"), str) and i.get("titleTranslated") else ""
         out.append({"instance_id": str(i.get("id") or ""), "profile_id": str(i.get("profileId") or ""),
-                    "title": i.get("title") if isinstance(i.get("title"), str) else "",
-                    "summary": _text(i.get("summary"))[:500],
+                    "title": t_fr or t_or, "title_original": t_or if t_fr and t_fr != t_or else None,
+                    "summary": _text(i.get("summaryTranslated") or i.get("summary"))[:500],
                     "default": i.get("id") == d.get("defaultInstanceId"),
                     "printer": comp.get("devProductName") if isinstance(comp.get("devProductName"), str) else None,
                     "weight_g": i.get("weight") if isinstance(i.get("weight"), (int, float)) else None,
@@ -281,6 +291,8 @@ async def model_detail(design_id: str) -> dict:
         base = {**{k: v for k, v in info.items() if k not in ("status", "profiles")},
                 "design_id": did, "url": model_url(did), "pictures": pics[:30],
                 "description": _text(d.get("summaryTranslated") or d.get("summary")),
+                "description_original": (_text(d.get("summary")) if d.get("summaryTranslated") else None),
+                "title_mw_fr": s(d.get("titleTranslated")),
                 "license": s(d.get("license")), "created": s(d.get("createTime")),
                 "comment_count": d.get("commentCount") if isinstance(d.get("commentCount"), int) else None,
                 "profiles": _plate_detail(d)}
@@ -292,7 +304,7 @@ async def model_detail(design_id: str) -> dict:
         rows = (await db.execute(select(Print.id, Print.status, Print.plate_id, Print.mw_profile_id)
                                  .where(Print.design_id == did))).all()
     done = [r for r in rows if r[1] in ("SUCCESS", "PARTIAL")]
-    return {**base, "title_fr": m.title_fr if m else None,
+    return {**base, "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
             "printed": len(done), "in_progress": sum(1 for r in rows if r[1] == "IN_PROGRESS"),
             "printed_plates": sorted({f"{r[3] or ''}:{r[2] or '1'}" for r in done})}
 
@@ -317,8 +329,10 @@ async def model_comments(design_id: str, offset: int = 0) -> dict:
         u = src.get("user") if isinstance(src.get("user"), dict) else (r or {}).get("creator") if r else {}
         u = u if isinstance(u, dict) else {}
         imgs = [x.get("url") if isinstance(x, dict) else x for x in (src.get("images") or [])]
-        out.append({"id": str(src.get("id") or ""), "text": (src.get("contentTranslated") or src.get("content") or "")
-                    if isinstance(src.get("content"), str) else "",
+        orig = src.get("content") if isinstance(src.get("content"), str) else ""
+        fr = src.get("contentTranslated") if isinstance(src.get("contentTranslated"), str) else ""
+        out.append({"id": str(src.get("id") or ""), "text": fr or orig,
+                    "original": orig if fr and fr.strip() != orig.strip() else None,
                     "score": r.get("score") if r and isinstance(r.get("score"), (int, float)) else None,
                     "when": src.get("createTime") if isinstance(src.get("createTime"), str) else None,
                     "likes": src.get("likeCount") if isinstance(src.get("likeCount"), int) else 0,
@@ -371,7 +385,7 @@ async def refresh(limit: int = 200, only: str = None) -> dict:
     # Titres traduits pour la recherche (« cochon » trouve « pig »), avec la
     # meme chaine de services que les noms de prints ; un echec laisse
     # title_fr vide, repris au passage suivant.
-    titles = [r["title"] for r in res.values() if r.get("status") == "ok" and r.get("title")]
+    titles = [r["title"] for r in res.values() if r.get("status") == "ok" and r.get("title") and not r.get("title_fr")]
     table = {}
     if titles:
         try:
@@ -397,7 +411,9 @@ async def refresh(limit: int = 200, only: str = None) -> dict:
                       "categories", "tags", "like_count", "download_count", "print_count",
                       "collection_count", "profiles"):
                 setattr(m, f, r.get(f))
-            if r.get("title") in table:
+            if r.get("title_fr"):
+                m.title_fr = r["title_fr"][:512]          # traduction de MakerWorld
+            elif r.get("title") in table:
                 tr, _ = table[r["title"]]
                 m.title_fr = (tr or r["title"])[:512]
         await db.commit()

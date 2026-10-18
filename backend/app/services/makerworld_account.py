@@ -169,6 +169,7 @@ def _design_of(it) -> dict:
         return None
     cr = d.get("designCreator") if isinstance(d.get("designCreator"), dict) else {}
     return {"design_id": str(did), "title": d.get("title"),
+            "title_fr": d.get("titleTranslated") if isinstance(d.get("titleTranslated"), str) and d.get("titleTranslated") else None,
             "cover_url": d.get("cover") or d.get("coverUrl"),
             "creator_name": cr.get("name")}
 
@@ -476,7 +477,7 @@ def _pub_hit(h, creator) -> dict:
     if not isinstance(h, dict) or not str(h.get("id") or "").isdigit():
         return None
     s = lambda v: v if isinstance(v, str) and v else None
-    return {"design_id": str(h["id"]), "title": s(h.get("title")),
+    return {"design_id": str(h["id"]), "title": s(h.get("title")), "title_fr": s(h.get("titleTranslated")),
             "cover_url": s(h.get("coverUrl")) or s(h.get("cover")),
             "creator_name": creator.get("name"), "creator_uid": creator["uid"],
             "published": s(h.get("publishTime")) or s(h.get("createTime"))}
