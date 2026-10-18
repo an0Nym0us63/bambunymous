@@ -3,6 +3,7 @@ import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle
 import { useSearchParams } from "react-router-dom";
 import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
+import MakerWorldModelSheet from "../components/MakerWorldModelSheet";
 import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
@@ -698,6 +699,7 @@ const fmtK = n => n == null ? null : n >= 1000 ? `${(n / 1000).toFixed(n >= 1000
 function MakerWorldCard({ designId, note, prints = [] }) {
   const [mw, setMw] = useState(undefined);       // undefined = en cours, null = rien
   const [pick, setPick] = useState(false);       // ranger dans mes collections
+  const [sheet, setSheet] = useState(null);      // fiche du modele (ou d'un similaire)
   useEffect(() => {
     let alive = true, timer = null;
     const load = (again) => client.get(`/prints/makerworld/${encodeURIComponent(designId)}`).then(({ data }) => {
@@ -725,8 +727,8 @@ function MakerWorldCard({ designId, note, prints = [] }) {
   return (
     <div style={{ marginBottom:14, borderRadius:12, border:"1px solid var(--border)",
       background:"var(--surface2)", overflow:"hidden" }}>
-      <a href={url} target="_blank" rel="noopener noreferrer"
-        style={{ display:"flex", gap:10, padding:10, textDecoration:"none", color:"var(--text)" }}>
+      <a href={url} onClick={e => { e.preventDefault(); setSheet(designId); }}
+        style={{ display:"flex", gap:10, padding:10, textDecoration:"none", color:"var(--text)", cursor:"pointer" }}>
         {mw.cover_url && (
           <img src={mw.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
             style={{ width:64, height:64, borderRadius:8, objectFit:"cover", flexShrink:0, background:"var(--surface)" }}/>
@@ -769,7 +771,8 @@ function MakerWorldCard({ designId, note, prints = [] }) {
           cursor:"pointer" }}>☆ Ranger dans mes collections</button>
       </AdminOnly>
       {pick && <MakerWorldCollectionsPicker designId={designId} title={mw.title} onClose={() => setPick(false)}/>}
-      <MakerWorldSimilar designId={designId}/>
+      <MakerWorldSimilar designId={designId} onOpen={setSheet}/>
+      {sheet && <MakerWorldModelSheet designId={sheet} onClose={() => setSheet(null)}/>}
     </div>
   );
 }
@@ -840,7 +843,7 @@ function MakerWorldPlates({ profiles, prints }) {
 }
 
 // Modeles similaires, charges a la demande (une requete, pas a l'ouverture).
-function MakerWorldSimilar({ designId }) {
+function MakerWorldSimilar({ designId, onOpen }) {
   const [sim, setSim] = useState(null);           // null = pas demande, undefined = en cours
   const load = () => {
     setSim(undefined);
@@ -859,7 +862,8 @@ function MakerWorldSimilar({ designId }) {
         : sim.length === 0 ? <div style={{ fontSize:11, color:"var(--muted)" }}>Rien trouvé.</div> : (
         <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:2 }}>
           {sim.map(x => (
-            <a key={x.design_id} href={x.url} target="_blank" rel="noopener noreferrer"
+            <a key={x.design_id} href={x.url} onClick={e => { if (onOpen) { e.preventDefault(); onOpen(x.design_id); } }}
+              target="_blank" rel="noopener noreferrer"
               style={{ flexShrink:0, width:96, textDecoration:"none", color:"var(--text)" }}>
               <div style={{ position:"relative", width:96, height:96, borderRadius:8, overflow:"hidden", background:"var(--surface)" }}>
                 {x.cover_url && <img src={x.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"

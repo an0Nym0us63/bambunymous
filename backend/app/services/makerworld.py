@@ -195,6 +195,140 @@ async def similar(design_id: str) -> dict:
     return await _public_list(f"/search-service/design/{did}/relate?offset=0&limit=12&scene=1")
 
 
+# ── Fiche complete d'un modele (lue a l'ouverture, 30 min en memoire) ───────
+_MODEL_CACHE = {}
+
+
+def _text(html: str) -> str:
+    """Descriptif HTML -> texte lisible (paragraphes, listes a puces). Rien
+    du HTML d'origine n'est rendu tel quel dans l'appli."""
+    import re, html as _h
+    if not isinstance(html, str):
+        return ""
+    t = re.sub(r"(?is)<(script|style).*?</\1>", "", html)
+    t = re.sub(r"(?i)<li[^>]*>", "\n• ", t)
+    t = re.sub(r"(?i)<br\s*/?>|</(p|div|h[1-6]|li|ul|ol|tr)>", "\n", t)
+    t = re.sub(r"<[^>]+>", "", t)
+    t = _h.unescape(t).replace("\xa0", " ")
+    t = re.sub(r"[ \t]+", " ", t)
+    t = re.sub(r"\n\s*\n\s*\n+", "\n\n", t)
+    return t.strip()[:20000]
+
+
+def _plate_detail(d) -> list:
+    """Profils et plateaux, avec filaments, poids, duree, compatibilite."""
+    out = []
+    for i in (d.get("instances") if isinstance(d.get("instances"), list) else []):
+        if not isinstance(i, dict):
+            continue
+        ext = i.get("extention") if isinstance(i.get("extention"), dict) else {}
+        mi = ext.get("modelInfo") if isinstance(ext.get("modelInfo"), dict) else {}
+        comp = mi.get("compatibility") if isinstance(mi.get("compatibility"), dict) else {}
+        plates = []
+        for pl in (mi.get("plates") if isinstance(mi.get("plates"), list) else []):
+            if not isinstance(pl, dict) or not isinstance(pl.get("index"), int):
+                continue
+            th = pl.get("thumbnail") if isinstance(pl.get("thumbnail"), dict) else {}
+            fils = [{"type": f.get("type"), "color": f.get("color"), "g": f.get("usedG")}
+                    for f in (pl.get("filaments") or []) if isinstance(f, dict)]
+            plates.append({"index": pl["index"], "name": pl.get("name") if isinstance(pl.get("name"), str) else "",
+                           "thumb": th.get("url") if isinstance(th.get("url"), str) else None,
+                           "weight_g": pl.get("weight") if isinstance(pl.get("weight"), (int, float)) else None,
+                           "seconds": pl.get("prediction") if isinstance(pl.get("prediction"), (int, float)) else None,
+                           "filaments": fils})
+        ps = mi.get("projectSettings") if isinstance(mi.get("projectSettings"), dict) else {}
+        out.append({"instance_id": str(i.get("id") or ""), "profile_id": str(i.get("profileId") or ""),
+                    "title": i.get("title") if isinstance(i.get("title"), str) else "",
+                    "summary": _text(i.get("summary"))[:500],
+                    "default": i.get("id") == d.get("defaultInstanceId"),
+                    "printer": comp.get("devProductName") if isinstance(comp.get("devProductName"), str) else None,
+                    "weight_g": i.get("weight") if isinstance(i.get("weight"), (int, float)) else None,
+                    "seconds": i.get("prediction") if isinstance(i.get("prediction"), (int, float)) else None,
+                    "settings": {k: ps.get(k) for k in ("layerHeight", "wallLoops", "sparseInfillDensity") if ps.get(k) is not None},
+                    "print_count": i.get("printCount") if isinstance(i.get("printCount"), int) else None,
+                    "plates": plates})
+    return out
+
+
+async def model_detail(design_id: str) -> dict:
+    """Fiche complete d'un modele pour l'appli : galerie, descriptif, profils
+    et plateaux, compteurs, et ce que l'historique en dit."""
+    import asyncio, time
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print, MakerWorldDesign as MW
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        return {"error": "Modèle inconnu"}
+    hit = _MODEL_CACHE.get(did)
+    if hit and time.time() - hit[0] < 1800:
+        base = hit[1]
+    else:
+        code, d = await asyncio.to_thread(_get_json, f"/design-service/design/{did}")
+        if not isinstance(d, dict) or not d.get("id"):
+            return {"error": "Modèle introuvable" if code == 404 else f"MakerWorld ne répond pas (HTTP {code})",
+                    "url": model_url(did)}
+        info = _parse_design(code, d)
+        ext = d.get("designExtension") if isinstance(d.get("designExtension"), dict) else {}
+        pics = []
+        for key in ("design_pictures", "real_pictures"):
+            for x in (ext.get(key) if isinstance(ext.get(key), list) else []):
+                if isinstance(x, dict) and isinstance(x.get("url"), str) and x["url"] not in pics:
+                    pics.append(x["url"])
+        if info.get("cover_url") and info["cover_url"] not in pics:
+            pics.insert(0, info["cover_url"])
+        s = lambda v: v if isinstance(v, str) and v else None
+        base = {**{k: v for k, v in info.items() if k not in ("status", "profiles")},
+                "design_id": did, "url": model_url(did), "pictures": pics[:30],
+                "description": _text(d.get("summaryTranslated") or d.get("summary")),
+                "license": s(d.get("license")), "created": s(d.get("createTime")),
+                "comment_count": d.get("commentCount") if isinstance(d.get("commentCount"), int) else None,
+                "profiles": _plate_detail(d)}
+        base["categories"] = [c for c in (base.get("categories") or "").split(",") if c]
+        base["tags"] = [t for t in (base.get("tags") or "").split(",") if t]
+        _MODEL_CACHE[did] = (time.time(), base)
+    async with AsyncSessionLocal() as db:
+        m = await db.get(MW, did)
+        rows = (await db.execute(select(Print.id, Print.status, Print.plate_id, Print.mw_profile_id)
+                                 .where(Print.design_id == did))).all()
+    done = [r for r in rows if r[1] in ("SUCCESS", "PARTIAL")]
+    return {**base, "title_fr": m.title_fr if m else None,
+            "printed": len(done), "in_progress": sum(1 for r in rows if r[1] == "IN_PROGRESS"),
+            "printed_plates": sorted({f"{r[3] or ''}:{r[2] or '1'}" for r in done})}
+
+
+async def model_comments(design_id: str, offset: int = 0) -> dict:
+    """Commentaires et avis d'un modele (publics), 10 par page."""
+    import asyncio
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        return {"items": [], "total": 0}
+    code, d = await asyncio.to_thread(
+        _get_json, f"/comment-service/commentandrating?designId={did}&offset={max(0, int(offset))}&limit=10&type=0&sort=0")
+    if not isinstance(d, dict):
+        return {"items": [], "total": 0, "error": f"MakerWorld ne répond pas (HTTP {code})"}
+    out = []
+    for h in (d.get("hits") if isinstance(d.get("hits"), list) else []):
+        if not isinstance(h, dict):
+            continue
+        c = h.get("comment") if isinstance(h.get("comment"), dict) else None
+        r = h.get("ratingItem") if isinstance(h.get("ratingItem"), dict) else None
+        src = c or r or {}
+        u = src.get("user") if isinstance(src.get("user"), dict) else (r or {}).get("creator") if r else {}
+        u = u if isinstance(u, dict) else {}
+        imgs = [x.get("url") if isinstance(x, dict) else x for x in (src.get("images") or [])]
+        out.append({"id": str(src.get("id") or ""), "text": (src.get("contentTranslated") or src.get("content") or "")
+                    if isinstance(src.get("content"), str) else "",
+                    "score": r.get("score") if r and isinstance(r.get("score"), (int, float)) else None,
+                    "when": src.get("createTime") if isinstance(src.get("createTime"), str) else None,
+                    "likes": src.get("likeCount") if isinstance(src.get("likeCount"), int) else 0,
+                    "replies": src.get("replyCount") if isinstance(src.get("replyCount"), int) else 0,
+                    "user": u.get("name") if isinstance(u.get("name"), str) else "",
+                    "avatar": u.get("avatar") if isinstance(u.get("avatar"), str) else None,
+                    "images": [x for x in imgs if isinstance(x, str)][:6]})
+    return {"items": out, "total": d.get("total") if isinstance(d.get("total"), int) else len(out)}
+
+
 async def _todo(limit: int, only: str = None) -> list:
     """design_id a lire : jamais lus, en erreur, ou vieux de plus de 30 jours."""
     from sqlalchemy import select, distinct

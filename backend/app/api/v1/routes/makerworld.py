@@ -112,6 +112,17 @@ async def mw_search(q: str = "", offset: int = 0, _: str = Depends(get_current_u
     return await _call(mw.search(q, offset))
 
 
+@router.get("/model/{design_id}")
+async def mw_model(design_id: str, _: str = Depends(get_current_user)):
+    """Fiche complete d'un modele (galerie, descriptif, profils, plateaux)."""
+    return await _call(mw.model_detail(design_id))
+
+
+@router.get("/model/{design_id}/comments")
+async def mw_model_comments(design_id: str, offset: int = 0, _: str = Depends(get_current_user)):
+    return await _call(mw.model_comments(design_id, offset))
+
+
 @router.get("/similar/{design_id}")
 async def mw_similar(design_id: str, _: str = Depends(get_current_user)):
     return await _call(mw.similar(design_id))

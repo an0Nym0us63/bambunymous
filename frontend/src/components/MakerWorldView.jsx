@@ -4,6 +4,7 @@ import client from "../api/client";
 import AdminOnly from "./AdminOnly";
 import { showAlert, showConfirm } from "../utils/dialog";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
+import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
 // Onglet MakerWorld de l'Historique (compte connecte dans les Parametres) : collections
 // de favoris puis leurs modeles, et modeles aimes ; chacun avec « deja
@@ -30,6 +31,7 @@ export default function MakerWorldView({ onSearch }) {
   const [picker, setPicker] = useState(false);     // Suivis : fenetre de choix des createurs
   const [progress, setProgress] = useState(null);  // Suivis : { done, total } pendant le chargement
   const [pickFor, setPickFor] = useState(null);    // modele a ranger dans mes collections
+  const [model, setModel] = useState(null);        // fiche ouverte (design_id)
   const [reload, setReload] = useState(0);         // relecture apres une ecriture
   const [nameEdit, setNameEdit] = useState(null);  // { mode: "new"|"rename", value }
   const [status, setStatus] = useState(null);
@@ -212,6 +214,7 @@ export default function MakerWorldView({ onSearch }) {
           )}
         </div>
 
+        {model && <MakerWorldModelSheet designId={model} onClose={() => setModel(null)} onSearch={onSearch}/>}
         {pickFor && (
           <MakerWorldCollectionsPicker designId={pickFor.design_id} title={pickFor.title}
             onClose={() => setPickFor(null)} onSaved={() => tab === "favorites" && setReload(n => n + 1)}/>
@@ -257,7 +260,7 @@ export default function MakerWorldView({ onSearch }) {
               <div style={grid}>
                 {items.map(x => (
                   <div key={x.design_id} style={{ ...card, ...(x.printed > 0 ? printedCard : null) }}>
-                    <a href={x.url} target="_blank" rel="noopener noreferrer" style={{ display:"block", position:"relative" }}>
+                    <a href={x.url} onClick={e => { e.preventDefault(); setModel(x.design_id); }} style={{ display:"block", position:"relative", cursor:"pointer" }}>
                       {x.cover_url
                         ? <img src={x.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
                             style={{ width:"100%", aspectRatio:"1", objectFit:"cover", display:"block", background:"var(--surface)" }}/>
@@ -266,7 +269,7 @@ export default function MakerWorldView({ onSearch }) {
                       {!x.printed && x.in_progress > 0 && <span style={ribbon("#f59e0b")}>EN COURS</span>}
                     </a>
                     <div style={{ padding:"7px 8px 8px", display:"flex", flexDirection:"column", gap:4, flex:1 }}>
-                      <a href={x.url} target="_blank" rel="noopener noreferrer"
+                      <a href={x.url} onClick={e => { e.preventDefault(); setModel(x.design_id); }}
                         style={{ fontSize:12, fontWeight:700, color:"var(--text)", textDecoration:"none", lineHeight:1.3,
                           overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
                         {x.title || `Modèle ${x.design_id}`}
