@@ -43,7 +43,7 @@ export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
     setBusy(true);
     try {
       await client.patch(`/filaments/spools/${spoolId}`,
-        { last_dried_at: `${new Date().toISOString().slice(0, 10)}T12:00:00` });
+        { last_dried_at: new Date().toISOString() });   // maintenant (UTC, avec son Z)
       if (where) {
         const [a, t] = where.split(":");
         await client.put(`/printer/ams/${a}/${t}/drying`, { spool_id: spoolId });

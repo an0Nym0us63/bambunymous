@@ -376,7 +376,8 @@ function WeightEditRow({ spoolId, current, onUpdated }) {
 // bobine lui-meme ; un sechage au four ou sans inserer la bobine se saisit ici.
 function DryEditRow({ spoolId, spoolName, current, aSecher, onUpdated }) {
   const [dryOpen, setDryOpen] = useState(false);
-  const today = () => new Date().toISOString().slice(0, 10);
+  // Date LOCALE du jour (toISOString donnerait celle d'UTC : la veille la nuit).
+  const today = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 10); };
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(current?.slice(0, 10) || today());
   const [saving, setSaving] = useState(false);
@@ -384,8 +385,11 @@ function DryEditRow({ spoolId, spoolName, current, aSecher, onUpdated }) {
   const save = async (day) => {
     setSaving(true);
     try {
-      // Midi : une date seule a minuit UTC tomberait la veille selon le fuseau.
-      await client.patch(`/filaments/spools/${spoolId}`, { last_dried_at: day ? `${day}T12:00:00` : null });
+      // Aujourd'hui : l'instant present (midi UTC serait « dans le futur » le
+      // matin). Un autre jour : midi, une date seule a minuit UTC tomberait la
+      // veille selon le fuseau.
+      const at = !day ? null : day === today() ? new Date().toISOString() : `${day}T12:00:00`;
+      await client.patch(`/filaments/spools/${spoolId}`, { last_dried_at: at });
       onUpdated?.();
       setEditing(false);
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }

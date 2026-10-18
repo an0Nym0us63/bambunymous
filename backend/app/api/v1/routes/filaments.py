@@ -1050,8 +1050,14 @@ async def update_spool(
         if d.tzinfo is not None:                     # stocke en UTC naif, comme l'AMS
             from datetime import timezone as _tz
             d = d.astimezone(_tz.utc).replace(tzinfo=None)
-        if d > datetime.utcnow() + timedelta(hours=1):
-            raise HTTPException(400, "La date de séchage ne peut pas être dans le futur")
+        # Un « aujourd'hui » envoye sans fuseau (midi naif lu en UTC) depasse
+        # l'heure presente le matin : on le ramene a maintenant. Seul un jour
+        # reellement a venir est refuse.
+        now = datetime.utcnow()
+        if d > now:
+            if d - now > timedelta(hours=36):
+                raise HTTPException(400, "La date de séchage ne peut pas être dans le futur")
+            d = now
         data["last_dried_at"] = d
 
     changed_price = "price_override" in data
