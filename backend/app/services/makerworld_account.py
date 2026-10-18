@@ -492,7 +492,7 @@ async def like_state(design_id: str) -> dict:
 
 
 async def set_like(design_id: str, liked: bool) -> dict:
-    """Aime / retire le j'aime. La requete du site est un INTERRUPTEUR : on lit
+    """Aime (POST) / retire le j'aime (DELETE, meme chemin, corps {id}). On lit
     l'etat d'abord, on n'envoie que s'il differe, et on reverifie apres."""
     import asyncio
     did = str(design_id or "").strip()
@@ -502,7 +502,8 @@ async def set_like(design_id: str, liked: bool) -> dict:
     if cur["liked"] == bool(liked):
         return cur
     tok = await _tok()
-    await asyncio.to_thread(_send, "POST", f"/design-service/design/{did}/like", {"id": int(did)}, tok)
+    await asyncio.to_thread(_send, "POST" if liked else "DELETE", f"/design-service/design/{did}/like",
+                            {"id": int(did)}, tok)
     _cache_clear()
     after = await like_state(did)
     logger.info(f"[MW] modele {did} : j'aime {'pose' if liked else 'retire'} ({after['liked']})")
