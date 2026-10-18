@@ -245,7 +245,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                           <div style={{ fontSize:11, color:"var(--text2)", marginTop:2 }}>{stockSummary(m.stock[p.instance_id])}</div>
                         )}
                       </button>
-                      {(!allProfiles || isOpen) && <MwStockMatch items={m.stock?.[p.instance_id]} plates={p.plates}
+                      {(!allProfiles || isOpen) && <MwStockMatch items={m.stock?.[p.instance_id]} plates={p.plates} scope={`${id}|${p.instance_id}`}
                         selected={plateSel[p.instance_id]} onNavigate={onClose}/>}
                       {isOpen && p.plates.length > 1 && (() => {
                         const sel = plateSel[p.instance_id];

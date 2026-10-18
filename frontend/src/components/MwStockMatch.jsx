@@ -24,10 +24,18 @@ export function stockSummary(items) {
 const fkey = (type, color) => `${String(type || "").toUpperCase()}|${String(color || "").toUpperCase()}`;
 const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 
-// Besoins par filament du profil : tout le profil (plates = null) ou la
-// somme des plateaux choisis. Puis le total par filament propose : deux
+// Filament retenu pour une ligne : la proposition choisie a la main (gardee
+// le temps de la session, par profil et par ligne), sinon la meilleure.
+const PICKS = new Map();      // `${scope}|${i}` -> filament_id
+export const chosenOf = (x, scope, i) => {
+  const id = PICKS.get(`${scope}|${i}`);
+  return x.matches.find(m => m.filament_id === id) || x.matches[0];
+};
+
+// Besoins par filament du profil : tout le profil (selected absent) ou la
+// somme des plateaux choisis. Puis le total par filament retenu : deux
 // couleurs qui tombent sur le meme filament du stock s'additionnent.
-export function stockNeeds(items, plates, selected) {
+export function stockNeeds(items, plates, selected, choose = x => x.matches[0]) {
   const need = items.map(x => {
     if (!selected || !plates?.length) return num(x.g);
     const k = fkey(x.type, x.color);
@@ -35,56 +43,99 @@ export function stockNeeds(items, plates, selected) {
       .reduce((s, pl) => s + (pl.filaments || []).filter(f => fkey(f.type, f.color) === k).reduce((a, f) => a + num(f.g), 0), 0);
   });
   const total = {};
-  items.forEach((x, i) => { const b = x.matches[0]; if (b && need[i] > 0) total[b.filament_id] = (total[b.filament_id] || 0) + need[i]; });
+  items.forEach((x, i) => { const b = choose(x, i); if (b && need[i] > 0) total[b.filament_id] = (total[b.filament_id] || 0) + need[i]; });
   return { need, total };
 }
 
-export default function MwStockMatch({ items, plates, selected, onNavigate }) {
+const detailOf = mt => [mt.brand, mt.material !== mt.name ? mt.material : null, mt.multicolor ? "multicolore" : null]
+  .filter(Boolean).join(" · ");
+// Combien de bobines il faudra entamer (les plus pleines d'abord) ; 0 si
+// rien n'est demande, null si tout le stock ne suffit pas.
+export const spoolsNeeded = (mt, g) => {
+  if (!(g > 0)) return 0;
+  let acc = 0, k = 0;
+  for (const w of mt.spool_g || [mt.remaining_g]) { acc += w; k += 1; if (acc >= g) return k; }
+  return null;
+};
+const spoolsText = (mt, g) => {
+  const k = spoolsNeeded(mt, g);
+  const n = mt.spools || (mt.spool_g || []).length || 1;
+  const list = mt.spool_g?.length > 1 ? ` (${mt.spool_g.map(w => `${w} g`).join(" + ")})` : "";
+  if (k > 1) return `il faudra ${k === n ? `les ${n}` : `${k} de tes ${n}`} bobines${list}`;
+  return n > 1 ? `${n} bobines${list}` : "";
+};
+const levelText = mt => mt.multicolor && mt.delta_e < 12 ? "teinte incluse" : (LEVEL[mt.level] || LEVEL["différent"]).t;
+const levelColor = mt => (LEVEL[mt.level] || LEVEL["différent"]).c;
+
+export default function MwStockMatch({ items, plates, selected, scope = "", onNavigate }) {
   const [open, setOpen] = useState(null);
+  const [, bump] = useState(0);
   const nav = useNavigate();
   if (!items?.length) return null;
   const go = id => { onNavigate?.(); nav(`/filaments?id=${id}`); };
-  const { need, total } = stockNeeds(items, plates, selected);
+  const choose = (x, i) => chosenOf(x, scope, i);
+  const pick = (i, id) => { PICKS.set(`${scope}|${i}`, id); setOpen(null); bump(n => n + 1); };
+  const { need, total } = stockNeeds(items, plates, selected, choose);
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"0 10px 10px" }}>
       {items.map((x, i) => {
-        const best = x.matches[0];
-        const lv = best ? LEVEL[best.level] || LEVEL["différent"] : null;
+        const best = choose(x, i);
+        const manual = best && best !== x.matches[0];
         const isOpen = open === i;
         const g = need[i];
         const unused = selected && g <= 0;
         const sum = best ? total[best.filament_id] || 0 : 0;
         const shared = best && sum > g + 0.5;
-        const short = best && g > 0 && best.remaining_g < sum;
+        const after = best ? Math.round(best.remaining_g - sum) : 0;
+        const short = best && g > 0 && after < 0;
         return (
           <div key={i} style={{ borderRadius:8, background:"var(--surface)", border:"1px solid var(--border)",
             opacity: unused ? 0.45 : 1, transition:"opacity .15s" }}>
-            <button onClick={() => setOpen(isOpen ? null : i)} disabled={x.matches.length < 2 && !best}
-              style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"6px 8px", background:"none",
-                border:"none", cursor:"pointer", color:"var(--text)", textAlign:"left" }}>
+            <button onClick={() => setOpen(isOpen ? null : i)} disabled={!best}
+              style={{ width:"100%", display:"flex", alignItems:"flex-start", gap:8, padding:"6px 8px", background:"none",
+                border:"none", cursor: best ? "pointer" : "default", color:"var(--text)", textAlign:"left" }}>
               <Swatch color={x.color} title={x.color}/>
-              <span style={{ fontSize:11.5, fontWeight:700, minWidth:0, flexShrink:0 }}>
+              <span style={{ fontSize:11.5, fontWeight:700, flexShrink:0, lineHeight:"16px" }}>
                 {x.type || "?"}<span style={{ color:"var(--muted)", fontWeight:500 }}>
                   {unused ? " · pas utilisé" : g ? ` · ${Math.round(g)} g` : ""}</span>
               </span>
-              <span style={{ color:"var(--muted)", fontSize:11 }}>→</span>
+              <span style={{ color:"var(--muted)", fontSize:11, lineHeight:"16px" }}>→</span>
               {best ? (<>
                 <Swatch f={best}/>
-                <span style={{ flex:1, minWidth:0, fontSize:11.5, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {best.name}</span>
-                <span style={{ fontSize:10, fontWeight:800, color: lv.c, whiteSpace:"nowrap" }}>{lv.t}</span>
+                <span style={{ flex:1, minWidth:0 }}>
+                  <span style={{ display:"block", fontSize:11.5, fontWeight:600, lineHeight:"16px", overflow:"hidden",
+                    textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{best.name}</span>
+                  <span style={{ display:"block", fontSize:10.5, color:"var(--muted)", lineHeight:1.35 }}>
+                    {detailOf(best)}{detailOf(best) ? " · " : ""}
+                    {unused || !g ? `${best.remaining_g} g en stock`
+                      : <>{best.remaining_g} g → <b style={{ color: short ? "#f59e0b" : "var(--text2)" }}>
+                        {short ? `manque ${-after} g` : `reste ${after} g`}</b></>}
+                    {best.where?.[0] ? ` · ${best.where[0]}` : ""}
+                  </span>
+                  {!unused && spoolsText(best, sum) && (
+                    <span style={{ display:"block", fontSize:10.5, lineHeight:1.35,
+                      color: spoolsNeeded(best, sum) > 1 ? "#3b82f6" : "var(--muted)" }}>🧵 {spoolsText(best, sum)}</span>
+                  )}
+                </span>
+                <span style={{ textAlign:"right", flexShrink:0 }}>
+                  <span style={{ display:"block", fontSize:10, fontWeight:800, color: levelColor(best), whiteSpace:"nowrap",
+                    lineHeight:"16px" }}>{levelText(best)}</span>
+                  {manual ? <span style={{ display:"block", fontSize:9.5, color:"#3b82f6", fontWeight:700 }}>choisi</span>
+                    : x.matches.length > 1 ? <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>
+                      {isOpen ? "▴" : `+${x.matches.length - 1} ▾`}</span> : null}
+                </span>
               </>) : (
-                <span style={{ flex:1, fontSize:11.5, color:"#ef4444" }}>Aucun {x.type || "filament"} en stock</span>
+                <span style={{ flex:1, fontSize:11.5, color:"#ef4444", lineHeight:"16px" }}>Aucun {x.type || "filament"} en stock</span>
               )}
             </button>
-            {best && (isOpen ? x.matches : []).map(mt => <MatchRow key={mt.filament_id} mt={mt} g={g} onGo={go}/>)}
-            {!unused && short ? (
-              <div style={{ fontSize:10.5, color:"#f59e0b", padding:"0 8px 6px 30px" }}>
-                ⚠ il en faut {Math.round(sum)} g{shared ? " au total (filament partagé avec une autre couleur)" : ""}, il en reste {best.remaining_g} g</div>
-            ) : !unused && shared ? (
-              <div style={{ fontSize:10.5, color:"var(--muted)", padding:"0 8px 6px 30px" }}>
-                Partagé avec une autre couleur : {Math.round(sum)} g au total, il en reste {best.remaining_g} g</div>
+            {!unused && shared ? (
+              <div style={{ fontSize:10.5, color: short ? "#f59e0b" : "var(--muted)", padding:"0 8px 6px 30px" }}>
+                {short ? "⚠ " : ""}Partagé avec une autre couleur : {Math.round(sum)} g au total sur ce filament</div>
             ) : null}
+            {isOpen && x.matches.map(mt => (
+              <MatchRow key={mt.filament_id} mt={mt} g={g} on={mt.filament_id === best.filament_id}
+                onPick={() => pick(i, mt.filament_id)} onGo={go}/>
+            ))}
           </div>
         );
       })}
@@ -92,29 +143,36 @@ export default function MwStockMatch({ items, plates, selected, onNavigate }) {
   );
 }
 
-function MatchRow({ mt, g, onGo }) {
-  const lv = LEVEL[mt.level] || LEVEL["différent"];
+// Une proposition : la toucher la retient pour cette ligne ; ↗ ouvre le filament.
+function MatchRow({ mt, g, on, onPick, onGo }) {
+  const after = Math.round(mt.remaining_g - (g || 0));
   return (
-    <button onClick={() => onGo(mt.filament_id)}
-      style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"6px 8px 6px 30px", background:"none",
-        border:"none", borderTop:"1px solid var(--border)", cursor:"pointer", color:"var(--text)", textAlign:"left" }}>
-      <Swatch f={mt} size={18}/>
-      <span style={{ flex:1, minWidth:0 }}>
-        <span style={{ display:"block", fontSize:11.5, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-          {mt.name}</span>
-        <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
-          {[mt.brand, mt.material, mt.multicolor ? "multicolore" : null,
-            `${mt.remaining_g} g (${mt.spools} bobine${mt.spools > 1 ? "s" : ""})`, mt.where?.[0]].filter(Boolean).join(" · ")}
-          {g > 0 && mt.remaining_g < g ? <b style={{ color:"#f59e0b" }}> · pas assez</b> : null}
+    <div style={{ display:"flex", alignItems:"center", borderTop:"1px solid var(--border)",
+      background: on ? "rgba(59,130,246,0.08)" : "none" }}>
+      <button onClick={onPick}
+        style={{ flex:1, minWidth:0, display:"flex", alignItems:"center", gap:8, padding:"6px 4px 6px 12px", background:"none",
+          border:"none", cursor:"pointer", color:"var(--text)", textAlign:"left" }}>
+        <span style={{ width:14, height:14, borderRadius:"50%", flexShrink:0, boxSizing:"border-box",
+          border: on ? "4px solid #3b82f6" : "1.5px solid var(--muted)" }}/>
+        <Swatch f={mt} size={18}/>
+        <span style={{ flex:1, minWidth:0 }}>
+          <span style={{ display:"block", fontSize:11.5, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {mt.name}</span>
+          <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
+            {[detailOf(mt), `${mt.remaining_g} g (${mt.spools} bobine${mt.spools > 1 ? "s" : ""})`].filter(Boolean).join(" · ")}
+            {g > 0 ? <b style={{ color: after < 0 ? "#f59e0b" : "var(--text2)" }}> · {after < 0 ? `manque ${-after} g` : `reste ${after} g`}</b> : null}
+            {spoolsNeeded(mt, g) > 1 ? <span style={{ color:"#3b82f6" }}> · {spoolsNeeded(mt, g)} bobines à entamer</span> : null}
+          </span>
         </span>
-      </span>
-      <span style={{ textAlign:"right", flexShrink:0 }}>
-        <span style={{ display:"block", fontSize:10, fontWeight:800, color: lv.c }}>
-          {mt.multicolor && mt.delta_e < 12 ? "teinte incluse" : lv.t}</span>
-        <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}
-          title="Écart de couleur perçu (ΔE 2000) : sous 2,5 l'œil ne voit pas la différence">ΔE {String(mt.delta_e).replace(".", ",")}</span>
-      </span>
-    </button>
+        <span style={{ textAlign:"right", flexShrink:0 }}>
+          <span style={{ display:"block", fontSize:10, fontWeight:800, color: levelColor(mt) }}>{levelText(mt)}</span>
+          <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}
+            title="Écart de couleur perçu (ΔE 2000) : sous 2,5 l'œil ne voit pas la différence">ΔE {String(mt.delta_e).replace(".", ",")}</span>
+        </span>
+      </button>
+      <button onClick={() => onGo(mt.filament_id)} title="Ouvrir ce filament" aria-label={`Ouvrir ${mt.name}`}
+        style={{ padding:"6px 10px", background:"none", border:"none", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>↗</button>
+    </div>
   );
 }
 

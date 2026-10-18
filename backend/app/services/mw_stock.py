@@ -106,15 +106,24 @@ async def stock_rows():
         rem = s.remaining_weight_g if s.remaining_weight_g is not None else (f.filament_weight_g or 0)
         if rem <= 0:
             continue
-        e = out.setdefault(f.id, {"f": f, "remaining_g": 0.0, "spools": 0, "where": []})
+        e = out.setdefault(f.id, {"f": f, "remaining_g": 0.0, "spools": 0, "where": [], "spool_g": []})
         e["remaining_g"] += rem
+        e["spool_g"].append(round(rem))
         e["spools"] += 1
         if s.location and s.location != "Tiroir":
             e["where"].append(s.location)
     return list(out.values())
 
 
-def best_matches(mw_type, color, grams, stock, n=3):
+BAMBU_BONUS = 3     # a ecart proche, une Bambu passe devant (meme profil de
+                    # tranchage, RFID) : 3 points de ΔE, la marge « tres proche »
+
+
+def is_bambu(f):
+    return "bambu" in (f.manufacturer or "").lower()
+
+
+def best_matches(mw_type, color, grams, stock, n=6):
     cands = []
     for e in stock:
         f = e["f"]
@@ -128,7 +137,7 @@ def best_matches(mw_type, color, grams, stock, n=3):
             continue
         multi = (f.multicolor_type or "monochrome") != "monochrome"
         de = min(des)
-        score = de + (0 if fit == 2 else 4) + (6 if multi else 0)
+        score = de + (0 if fit == 2 else 4) + (6 if multi else 0) - (BAMBU_BONUS if is_bambu(f) else 0)
         cands.append((score, de, fit, multi, e))
     cands.sort(key=lambda x: x[0])
     out = []
@@ -137,8 +146,9 @@ def best_matches(mw_type, color, grams, stock, n=3):
         out.append({"filament_id": f.id, "name": f.translated_name or f.name, "brand": f.manufacturer,
                     "material": f.fila_type or f.material, "color": f.color, "colors_array": f.colors_array,
                     "multicolor_type": f.multicolor_type, "delta_e": round(de, 1), "level": level(de),
-                    "same_material": fit == 2, "multicolor": multi,
+                    "same_material": fit == 2, "multicolor": multi, "bambu": is_bambu(f),
                     "remaining_g": round(e["remaining_g"]), "spools": e["spools"], "where": e["where"][:3],
+                    "spool_g": sorted(e["spool_g"], reverse=True),
                     "enough": grams is None or e["remaining_g"] >= grams})
     return out
 
