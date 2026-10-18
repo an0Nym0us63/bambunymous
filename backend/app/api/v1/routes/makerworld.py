@@ -86,6 +86,16 @@ async def mw_rename_collection(cid: str, body: dict = Body({}), _: str = Depends
     return await _call(acc.rename_collection(cid, str(body.get("title", ""))))
 
 
+@router.get("/model/{design_id}/like")
+async def mw_like_state(design_id: str, _: str = Depends(get_current_user)):
+    return await _call(acc.like_state(design_id))
+
+
+@router.put("/model/{design_id}/like")
+async def mw_set_like(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+    return await _call(acc.set_like(design_id, bool(body.get("liked"))))
+
+
 @router.delete("/collections/{cid}")
 async def mw_delete_collection(cid: str, _: str = Depends(require_admin)):
     return await _call(acc.delete_collection(cid))

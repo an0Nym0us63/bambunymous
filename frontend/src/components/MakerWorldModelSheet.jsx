@@ -5,6 +5,7 @@ import AdminOnly from "./AdminOnly";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
 import MwImg from "./MwImg";
 import Lightbox from "./Lightbox";
+import { showAlert } from "../utils/dialog";
 
 // Prechargement : la fiche est demandee des qu'on touche une tuile ; a
 // l'ouverture, la reponse est souvent deja la.
@@ -44,6 +45,23 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
   const [allProfiles, setAllProfiles] = useState(false);  // replie : seulement le profil principal
   const [showCom, setShowCom] = useState(false);   // commentaires replies (charges a l'ouverture)
+  const [like, setLike] = useState(null);          // { liked } avec mon compte ; null = inconnu / pas connecte
+  const [likeBusy, setLikeBusy] = useState(false);
+
+  // Etat du j'aime (compte connecte seulement ; sinon pas de bouton).
+  useEffect(() => {
+    let alive = true;
+    setLike(null);
+    client.get(`/makerworld/model/${id}/like`).then(({ data }) => alive && data.known && setLike(data)).catch(() => {});
+    return () => { alive = false; };
+  }, [id]);
+  const toggleLike = async () => {
+    const want = !like.liked;
+    setLike(l => ({ ...l, liked: want })); setLikeBusy(true);          // tout de suite a l'ecran
+    try { const { data } = await client.put(`/makerworld/model/${id}/like`, { liked: want }); setLike(data); }
+    catch (e) { setLike(l => ({ ...l, liked: !want })); showAlert(e.response?.data?.detail || e.message); }
+    setLikeBusy(false);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -149,6 +167,12 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
             <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
               <a href={m.url} target="_blank" rel="noopener noreferrer" style={linkBtn}>Ouvrir sur MakerWorld ↗</a>
+              {like && (
+                <AdminOnly><button onClick={toggleLike} disabled={likeBusy}
+                  style={{ ...linkBtn, cursor:"pointer", ...(like.liked ? { color:"#ef4444", background:"rgba(239,68,68,0.1)",
+                    borderColor:"rgba(239,68,68,0.35)" } : null) }}>
+                  {like.liked ? "❤ Aimé" : "♡ J'aime"}</button></AdminOnly>
+              )}
               <AdminOnly><button onClick={() => setPick(true)} style={{ ...linkBtn, cursor:"pointer" }}>☆ Collections</button></AdminOnly>
             </div>
             {zoom && <Lightbox images={zoom.images} index={zoom.index} onClose={() => setZoom(null)}/>}

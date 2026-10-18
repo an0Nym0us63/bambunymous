@@ -474,6 +474,41 @@ async def rename_collection(cid: str, title: str) -> dict:
     return {"ok": True}
 
 
+async def like_state(design_id: str) -> dict:
+    """Ai-je aime ce modele ? (fiche lue avec mon jeton : hasLike)."""
+    import asyncio
+    from .makerworld import _get_json
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        raise AccountError("Modèle inconnu")
+    tok = await _tok()
+    code, d = await asyncio.to_thread(_get_json, f"/design-service/design/{did}", tok)
+    if code == 401:
+        raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+    if not isinstance(d, dict) or not isinstance(d.get("hasLike"), bool):
+        return {"known": False, "liked": None, "count": None}
+    return {"known": True, "liked": d["hasLike"],
+            "count": d.get("likeCount") if isinstance(d.get("likeCount"), int) else None}
+
+
+async def set_like(design_id: str, liked: bool) -> dict:
+    """Aime / retire le j'aime. La requete du site est un INTERRUPTEUR : on lit
+    l'etat d'abord, on n'envoie que s'il differe, et on reverifie apres."""
+    import asyncio
+    did = str(design_id or "").strip()
+    cur = await like_state(did)
+    if not cur["known"]:
+        raise AccountError("État du j'aime illisible : rien n'a été envoyé")
+    if cur["liked"] == bool(liked):
+        return cur
+    tok = await _tok()
+    await asyncio.to_thread(_send, "POST", f"/design-service/design/{did}/like", {"id": int(did)}, tok)
+    _cache_clear()
+    after = await like_state(did)
+    logger.info(f"[MW] modele {did} : j'aime {'pose' if liked else 'retire'} ({after['liked']})")
+    return after
+
+
 async def delete_collection(cid: str) -> dict:
     """Supprime une de MES collections (les modeles restent sur MakerWorld)."""
     import asyncio
