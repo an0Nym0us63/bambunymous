@@ -960,7 +960,7 @@ async def prints_stats(
         def _p(r):
             return {
                 "id": r.id,
-                "name": _clean_name(r.translated_name or r.original_name or r.file_name),
+                "name": _clean_name(r.translated_name or r.file_name or r.original_name),
                 "duration_s": float(r.dur_s or 0),
                 "cost": round(float(r.total_cost or 0), 2),
                 "weight_g": round(float(r.total_weight_g or 0), 1),
