@@ -1,76 +1,50 @@
 """
 Met à jour la location des bobines selon leur emplacement AMS.
-Utilise une queue asyncio pour sérialiser les écritures et éviter
-les "database is locked" de SQLite.
+
+Appelee depuis core/mqtt, dans des fils qui ont chacun leur boucle asyncio,
+ouverte puis refermee aussitot l'appel fini. L'ancienne version passait par
+une file et une tache d'ecriture creee dans la PREMIERE boucle venue : la
+boucle refermee, la tache mourait avec, et l'ecriture se faisait ou non au
+hasard du minutage (une bobine retiree du support externe restait « Externe »
+au lieu de repartir en Tiroir). On ecrit donc directement, dans la boucle de
+l'appelant ; l'attente sur verrou SQLite (timeout de 30 s du moteur) suffit a
+eviter les « database is locked ».
 """
-import asyncio
 import logging
-from typing import Optional
+import threading
 
 logger = logging.getLogger(__name__)
 
-# State en mémoire
-_ACTIVE_AMS_SPOOLS: dict[int, str] = {}  # spool_id -> location AMS
-
-# Queue pour sérialiser les écritures DB
-_write_queue: Optional[asyncio.Queue] = None
-_worker_task: Optional[asyncio.Task] = None
-
-
-def _get_queue() -> asyncio.Queue:
-    global _write_queue, _worker_task
-    if _write_queue is None:
-        _write_queue = asyncio.Queue()
-    return _write_queue
-
-
-async def _db_writer():
-    """Worker qui traite les écritures une par une pour éviter les locks."""
-    from ..db.session import AsyncSessionLocal
-    from ..models.filament import Spool
-    queue = _get_queue()
-    while True:
-        try:
-            item = await asyncio.wait_for(queue.get(), timeout=60)
-            if item is None:
-                break
-            spool_id, location = item
-            try:
-                async with AsyncSessionLocal() as db:
-                    spool = await db.get(Spool, spool_id)
-                    if spool and spool.location != location:
-                        old = spool.location or ""
-                        spool.location = location
-                        await db.commit()
-                        logger.info(f"[LOCATION] Bobine #{spool_id}: {old!r} → {location!r}")
-            except Exception as e:
-                logger.debug(f"[LOCATION] write error spool #{spool_id}: {e}")
-            finally:
-                queue.task_done()
-        except asyncio.TimeoutError:
-            continue
-        except Exception as e:
-            logger.debug(f"[LOCATION] worker error: {e}")
-
-
-async def _ensure_worker():
-    global _worker_task
-    if _worker_task is None or _worker_task.done():
-        _worker_task = asyncio.create_task(_db_writer())
+# Derniere location ECRITE par bobine : evite de reecrire la meme a chaque
+# tick MQTT. Mise a jour seulement apres une ecriture reussie, pour qu'un
+# echec soit retente au passage suivant.
+_ACTIVE_AMS_SPOOLS: dict[int, str] = {}
+_lock = threading.Lock()
 
 
 async def update_spool_location(spool_id: int, location: str):
-    """Enfile une mise à jour de location (non bloquant)."""
-    prev = _ACTIVE_AMS_SPOOLS.get(spool_id)
-    if prev == location:
-        return
-    _ACTIVE_AMS_SPOOLS[spool_id] = location
-    await _ensure_worker()
-    await _get_queue().put((spool_id, location))
+    """Ecrit la location d'une bobine si elle a change."""
+    from ..db.session import AsyncSessionLocal
+    from ..models.filament import Spool
+    with _lock:
+        if _ACTIVE_AMS_SPOOLS.get(spool_id) == location:
+            return
+    try:
+        async with AsyncSessionLocal() as db:
+            spool = await db.get(Spool, spool_id)
+            if spool is None:
+                return
+            if spool.location != location:
+                old = spool.location or ""
+                spool.location = location
+                await db.commit()
+                logger.info(f"[LOCATION] Bobine #{spool_id}: {old!r} → {location!r}")
+        with _lock:
+            _ACTIVE_AMS_SPOOLS[spool_id] = location
+    except Exception as e:
+        logger.warning(f"[LOCATION] ecriture impossible pour la bobine #{spool_id} ({location!r}) : {e}")
 
 
 # NB : le retour en Tiroir n'est PAS gere ici mais dans core/mqtt, qui compare
 # les trays presents d'un tick a l'autre (cache _MATCH_CACHE). Ce module ne fait
-# qu'ecrire les emplacements. Une ancienne fonction mark_inactive_spools_as_drawer
-# vivait ici sans jamais etre appelee -- retiree pour ne pas laisser croire a un
-# second mecanisme concurrent.
+# qu'ecrire les emplacements.
