@@ -11,13 +11,11 @@ ne concerne QUE les prints -- le translated_name des filaments a sa propre
 source, le catalogue Bambu local, et n'a rien a voir avec ceci.
 
 Services, dans l'ordre : Google Cloud Translation si une cle est posee
-(Parametres ; 500 000 caracteres gratuits par mois, renouveles), puis
-l'endpoint public de Google, puis MyMemory, puis DeepL si une cle est posee. Les deux premiers sont gratuits,
-sans cle et bornes -- Google coupe vite (TooManyRequests), MyMemory plafonne
-a quelques milliers de caracteres par jour -- mais leurs limites se
-renouvellent. L'offre gratuite de DeepL est un credit qui ne se renouvelle
-pas (1 million de caracteres au total pour les comptes recents) : il ne sert
-donc qu'en dernier recours, pour ce que les deux autres n'ont pas traduit.
+(Parametres ; 500 000 caracteres gratuits par mois, renouveles), l'endpoint
+public de Google, DeepL si une cle est posee (credit gratuit qui ne se
+renouvelle pas : autant le consommer, et il detecte la langue source), puis
+MyMemory (gratuit, sans cle, quelques milliers de caracteres par jour, langue
+source supposee anglaise).
 
 Regle qui compte : un ECHEC n'est jamais pris pour « deja en francais ». Un
 service a bout de quota renvoie le texte tel quel ; l'ancienne version
@@ -150,9 +148,11 @@ def _translate_batch(payload: list, keys=None) -> tuple:
     deux listes de meme longueur que payload ; une traduction None = echec
     (rien ne doit etre enregistre), le service dit qui a repondu.
 
-    Les services gratuits qui se renouvellent passent d'abord ; DeepL, dont le
-    quota gratuit s'epuise pour de bon, ne recoit que ce qu'ils n'ont pas pu
-    traduire. keys = {"gcloud": ..., "deepl": ...} (cles facultatives)."""
+    Ordre : Google Cloud, Google public, DeepL, MyMemory. DeepL passe avant
+    MyMemory : il detecte la langue source (MyMemory suppose l'anglais), et
+    son credit gratuit autant le consommer. MyMemory ne sert qu'une fois
+    DeepL epuise ou sans cle. keys = {"gcloud": ..., "deepl": ...} (cles
+    facultatives)."""
     keys = keys if isinstance(keys, dict) else {"deepl": keys or ""}
     if keys.get("gcloud"):
         r = _gcloud_batch(payload, keys["gcloud"])
@@ -163,18 +163,15 @@ def _translate_batch(payload: list, keys=None) -> tuple:
         r = GoogleTranslator(source="auto", target="fr").translate_batch(payload)
         if r and len(r) == len(payload) and not any(_looks_bogus(x or "") for x in r):
             return r, ["google"] * len(r)
-        logger.warning("[TRAD] Google indisponible (page d'erreur) -> repli MyMemory")
+        logger.warning("[TRAD] Google indisponible (page d'erreur) -> repli")
     except Exception as e:
-        logger.warning(f"[TRAD] Google KO ({type(e).__name__}) -> repli MyMemory")
-    r = [_mymemory_one(x) for x in payload]
-    by = [("mymemory" if x is not None else None) for x in r]
-    reste = [i for i, x in enumerate(r) if x is None]
-    if reste and keys.get("deepl"):
-        d = _deepl_batch([payload[i] for i in reste], keys["deepl"])
+        logger.warning(f"[TRAD] Google KO ({type(e).__name__}) -> repli")
+    if keys.get("deepl"):
+        d = _deepl_batch(payload, keys["deepl"])
         if d is not None and not any(_looks_bogus(x or "") for x in d):
-            for i, x in zip(reste, d):
-                r[i], by[i] = x, "deepl"
-    return r, by
+            return d, ["deepl"] * len(d)
+    r = [_mymemory_one(x) for x in payload]
+    return r, [("mymemory" if x is not None else None) for x in r]
 
 
 def _merge(mot_a_mot: str, contextuel: str) -> str:

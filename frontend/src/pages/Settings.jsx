@@ -1007,13 +1007,13 @@ function TranslateNamesSection() {
       </p>
 
       {/* Ordre : Google Cloud (cle, gratuit jusqu'a 500 000 car./mois,
-          renouvele), Google public, MyMemory, puis DeepL (cle, credit gratuit
-          qui ne se renouvelle pas : dernier recours). */}
+          renouvele), Google public, DeepL (cle, credit gratuit qui ne se
+          renouvelle pas), puis MyMemory en dernier. */}
       <TranslateKeyRow label="Clé Google Cloud Translation" on={keysOn.gcloud}
         hint="Essayée en premier. 500 000 caractères gratuits par mois ; pose un plafond par jour dans la console pour ne jamais payer."
         placeholder="AIza…" onSave={k => saveKey("gcloud", k)}/>
       <TranslateKeyRow label="Clé DeepL" on={keysOn.deepl}
-        hint="Dernier recours, après Google et MyMemory : le crédit gratuit de DeepL ne se renouvelle pas."
+        hint="Après Google, avant MyMemory. Son crédit gratuit ne se renouvelle pas : une fois épuisé, MyMemory prend le relais."
         placeholder="xxxxxxxx-xxxx-…:fx" onSave={k => saveKey("deepl", k)}/>
 
       <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, color:"var(--text2)",
