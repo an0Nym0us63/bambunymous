@@ -175,6 +175,7 @@ def _search_condition(search: str):
     mots = [m for m in (search or "").split() if m]
     if not mots:
         return None
+    from ....models.print_history import MakerWorldDesign as _MW
 
     def motif(m):
         m = m.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -205,6 +206,13 @@ def _search_condition(search: str):
                 .join(_Sp, _Sp.id == _FU.spool_id)
                 .join(_Fil, _Fil.id == _Sp.filament_id)
                 .where(or_(*fil_cols))
+            ),
+            # Fiche MakerWorld du modele : titre (et sa traduction), tags,
+            # categories (en francais), createur.
+            Print.design_id.in_(
+                _sel(_MW.design_id).where(or_(
+                    lk(_MW.title), lk(_MW.title_fr), lk(_MW.tags),
+                    lk(_MW.categories), lk(_MW.creator_name)))
             ),
             # Le nom du groupe fait partie de la condition, et non plus un ajout
             # apres coup : ses prints passent ainsi par les autres filtres
@@ -1183,6 +1191,26 @@ async def debug_prints():  # noqa — public debug route
     return {"tables": tables, "prints": rows}
 
 
+@router.get("/{print_id}/makerworld")
+async def print_makerworld(print_id: int, _: str = Depends(get_current_user)):
+    """Fiche MakerWorld du modele de ce print (cache). Pas encore lue : lecture
+    lancee en arriere-plan, pending=True -- la fiche redemande un peu apres."""
+    from ....models.print_history import MakerWorldDesign as _MW
+    from ....services.makerworld import to_dict as _mw_dict, launch as _mw_launch
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Print introuvable")
+        did = str(p.design_id or "").strip()
+        if not did or did == "0":
+            return {"makerworld": None, "status": "none"}
+        m = await db.get(_MW, did)
+    if m is None:
+        _mw_launch(did)
+        return {"makerworld": None, "status": "pending"}
+    return {"makerworld": _mw_dict(m), "status": m.status}
+
+
 @router.get("/{print_id}")
 async def get_print(print_id: int, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:
@@ -1197,7 +1225,13 @@ async def get_print(print_id: int, _: str = Depends(get_current_user)):
     if not p: raise HTTPException(404, "Print introuvable")
     async with AsyncSessionLocal() as db2:
         await _enrich_filament_usage(db2, [p])
-    return _print_to_out(p)
+        out = _print_to_out(p)
+        out["makerworld"] = None
+        if p.design_id:
+            from ....models.print_history import MakerWorldDesign as _MW
+            from ....services.makerworld import to_dict as _mw_dict
+            out["makerworld"] = _mw_dict(await db2.get(_MW, str(p.design_id)))
+    return out
 
 
 @router.patch("/{print_id}")

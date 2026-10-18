@@ -690,6 +690,76 @@ const TRAD_BY = {
   manuel:    "Saisi à la main",
 };
 
+// Fiche publique du modele sur MakerWorld, lue en cache par le serveur. Pas
+// encore lue : le serveur la lance, on redemande 4 s plus tard (une fois).
+const fmtK = n => n == null ? null : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
+function MakerWorldCard({ printId, designId }) {
+  const [mw, setMw] = useState(undefined);       // undefined = en cours, null = rien
+  useEffect(() => {
+    let alive = true, timer = null;
+    const load = (again) => client.get(`/prints/${printId}/makerworld`).then(({ data }) => {
+      if (!alive) return;
+      setMw(data.makerworld || null);
+      if (data.status === "pending" && again) timer = setTimeout(() => load(false), 4000);
+    }).catch(() => alive && setMw(null));
+    load(true);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [printId]);
+
+  const url = mw?.url || `https://makerworld.com/fr/models/${designId}`;
+  if (!mw) return (
+    <a href={url} target="_blank" rel="noopener noreferrer"
+      style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+        width:"100%", padding:"8px", borderRadius:10, marginBottom:14,
+        border:"1px solid rgba(59,130,246,0.3)", background:"rgba(59,130,246,0.06)",
+        color:"#3b82f6", fontSize:12, fontWeight:700, textDecoration:"none" }}>
+      🌐 Voir sur MakerWorld
+    </a>
+  );
+  const stats = [["❤", mw.like_count, "j'aime"], ["⬇", mw.download_count, "téléchargements"],
+    ["🖨", mw.print_count, "impressions"], ["⭐", mw.collection_count, "mises en collection"]]
+    .filter(([, n]) => n != null);
+  return (
+    <div style={{ marginBottom:14, borderRadius:12, border:"1px solid var(--border)",
+      background:"var(--surface2)", overflow:"hidden" }}>
+      <a href={url} target="_blank" rel="noopener noreferrer"
+        style={{ display:"flex", gap:10, padding:10, textDecoration:"none", color:"var(--text)" }}>
+        {mw.cover_url && (
+          <img src={mw.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
+            style={{ width:64, height:64, borderRadius:8, objectFit:"cover", flexShrink:0, background:"var(--surface)" }}/>
+        )}
+        <div style={{ minWidth:0, flex:1 }}>
+          <div style={{ fontSize:10, fontWeight:700, color:"#3b82f6", letterSpacing:0.3, marginBottom:2 }}>MAKERWORLD ↗</div>
+          <div style={{ fontSize:13, fontWeight:700, lineHeight:1.3, overflow:"hidden",
+            display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{mw.title}</div>
+          {mw.title_fr && mw.title_fr !== mw.title && (
+            <div style={{ fontSize:11, color:"var(--muted)", marginTop:1, overflow:"hidden",
+              textOverflow:"ellipsis", whiteSpace:"nowrap" }} title="Titre traduit (recherche)">{mw.title_fr}</div>
+          )}
+          {mw.creator_name && (
+            <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"var(--muted)", marginTop:3 }}>
+              {mw.creator_avatar && <img src={mw.creator_avatar} alt="" referrerPolicy="no-referrer"
+                style={{ width:14, height:14, borderRadius:"50%" }}/>}
+              par {mw.creator_name}
+            </div>
+          )}
+        </div>
+      </a>
+      {(stats.length > 0 || mw.categories?.length > 0) && (
+        <div style={{ display:"flex", flexWrap:"wrap", alignItems:"center", gap:6, padding:"0 10px 10px" }}>
+          {mw.categories?.map(c => (
+            <span key={c} style={{ fontSize:10.5, padding:"2px 8px", borderRadius:20,
+              background:"rgba(59,130,246,0.1)", color:"#60a5fa", fontWeight:600 }}>{c}</span>
+          ))}
+          {stats.map(([ico, n, lbl]) => (
+            <span key={lbl} title={`${n} ${lbl}`} style={{ fontSize:11, color:"var(--muted)" }}>{ico} {fmtK(n)}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
   const [sharing, setSharing] = useState(false);   // partage Telegram
@@ -972,16 +1042,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             coverPhoto={p.cover_photo}
             onCoverChange={(name)=>{ setP(prev=>({ ...prev, cover_photo:name })); onChanged?.(); }}/>
 
-          {/* Bouton MakerWorld si design_id disponible */}
-          {p.design_id && (
-            <a href={`https://makerworld.com/en/models/${p.design_id}`} target="_blank" rel="noopener noreferrer"
-              style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-                width:"100%", padding:"8px", borderRadius:10, marginBottom:14,
-                border:"1px solid rgba(59,130,246,0.3)", background:"rgba(59,130,246,0.06)",
-                color:"#3b82f6", fontSize:12, fontWeight:700, textDecoration:"none" }}>
-              🌐 Voir sur MakerWorld
-            </a>
-          )}
+          {/* Fiche MakerWorld du modele (titre, createur, categories, compteurs),
+              ou a defaut le simple lien. */}
+          {p.design_id && <MakerWorldCard printId={p.id} designId={p.design_id}/>}
 
           {/* Creation d'objets : le bouton porte le quota et se desactive
               quand tout est cree, plutot que de laisser tenter puis echouer. */}

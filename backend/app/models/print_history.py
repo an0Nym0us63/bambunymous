@@ -162,3 +162,28 @@ class Group(Base):
         Index("idx_groups_external_ref", "external_ref"),
         Index("idx_groups_name", "name"),
     )
+
+
+class MakerWorldDesign(Base):
+    """
+    Fiche publique d'un modele MakerWorld, en cache (une par design_id, partagee
+    par tous les prints de ce modele). Lue sans compte sur l'API du site ;
+    rafraichie tous les 30 jours. status : ok / notfound / error.
+    """
+    __tablename__ = "makerworld_designs"
+
+    design_id      = Column(String(32),  primary_key=True)
+    status         = Column(String(16),  default="ok")
+    title          = Column(String(512), nullable=True)
+    title_fr       = Column(String(512), nullable=True)   # traduit pour la recherche
+    cover_url      = Column(String(1024), nullable=True)
+    creator_name   = Column(String(256), nullable=True)
+    creator_handle = Column(String(256), nullable=True)
+    creator_avatar = Column(String(1024), nullable=True)
+    categories     = Column(String(512), nullable=True)   # CSV, en francais
+    tags           = Column(Text,        nullable=True)   # CSV
+    like_count     = Column(Integer, nullable=True)
+    download_count = Column(Integer, nullable=True)
+    print_count    = Column(Integer, nullable=True)
+    collection_count = Column(Integer, nullable=True)
+    fetched_at     = Column(DateTime, nullable=True)

@@ -242,6 +242,12 @@ async def _create_print_locked(job_id: str, url: str, taskname: str,
         pid = p.id; await db.commit()
 
     logger.info(f"[PRINT] ✅ Print créé: id={pid} job={job_id} ams_mapping={ams_mapping}")
+    # Fiche MakerWorld du modele, en arriere-plan (une requete, en cache).
+    try:
+        from .makerworld import launch as _mw_launch
+        _mw_launch(_clean_design_id(design_id))
+    except Exception:
+        logger.exception("[MW] lancement impossible")
     st = _job(job_id)
     with _LOCK:
         st["print_id"]    = pid
