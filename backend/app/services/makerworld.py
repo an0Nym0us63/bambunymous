@@ -122,7 +122,7 @@ def _profiles(d) -> str:
                            "thumb": th.get("url") if isinstance(th.get("url"), str) else None,
                            "weight_g": p.get("weight") if isinstance(p.get("weight"), (int, float)) else None,
                            "seconds": p.get("prediction") if isinstance(p.get("prediction"), (int, float)) else None})
-        out.append({"profile_id": str(i.get("profileId") or ""), "title": i.get("title") if isinstance(i.get("title"), str) else "",
+        out.append({"profile_id": str(i.get("profileId") or ""), "instance_id": str(i.get("id") or ""), "title": i.get("title") if isinstance(i.get("title"), str) else "",
                     "default": i.get("id") == d.get("defaultInstanceId"), "plates": plates})
     return json.dumps(out, ensure_ascii=False) if out else None
 
@@ -213,7 +213,7 @@ async def _todo(limit: int, only: str = None) -> list:
         m = known.get(str(i))
         if m is None or m.status == "error" or not m.fetched_at or m.fetched_at < old \
                 or (m.status == "ok" and m.title and not m.title_fr) \
-                or (m.status == "ok" and m.profiles is None):
+                or (m.status == "ok" and m.profiles is None)                 or (m.status == "ok" and m.profiles not in (None, "[]") and '"instance_id"' not in m.profiles):
             out.append(str(i))
     return out[:limit]
 

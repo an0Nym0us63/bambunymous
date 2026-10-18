@@ -80,6 +80,12 @@ async def mw_similar(design_id: str, _: str = Depends(get_current_user)):
     return await _call(mw.similar(design_id))
 
 
+@router.post("/history")
+async def mw_history(apply: bool = False, _: str = Depends(require_admin)):
+    """Historique cloud -> liens MakerWorld des vieux prints. apply=0 : bilan."""
+    return await _call(acc.history_scan(apply))
+
+
 @router.get("/debug/{name}")
 async def mw_debug(name: str, _: str = Depends(require_admin)):
     return await _call(acc.debug(name))

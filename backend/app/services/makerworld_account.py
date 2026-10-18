@@ -296,7 +296,7 @@ async def _debug_collections() -> dict:
     return {"path": "essais collections", "http": 200, "body": "\n".join(out)}
 
 
-async def _try(title: str, paths: list, head: str = "", n: int = 1200) -> dict:
+async def _try(title: str, paths: list, head: str = "", n: int = 4000) -> dict:
     """Essaie des chemins (GET seulement) et rend code + debut de reponse."""
     import asyncio
     from .makerworld import _get_json
@@ -337,10 +337,115 @@ async def _debug_plates() -> dict:
     return await _try("essais plateaux", [f"/user-service/my/task/printedplates?instanceId={i}" for i in ids], head)
 
 
+# ── Historique cloud : retrouver les liens MakerWorld des vieux prints ──────
+TASKS = "/user-service/my/tasks?offset={offset}&limit={limit}"
+
+
+def _when(v):
+    """Date d'une tache cloud (ISO ou epoch s/ms), en UTC naif."""
+    from datetime import datetime, timezone
+    if isinstance(v, (int, float)) and v > 0:
+        v = v / 1000 if v > 1e11 else v
+        return datetime.fromtimestamp(v, tz=timezone.utc).replace(tzinfo=None)
+    if isinstance(v, str) and v:
+        try:
+            d = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            return d.astimezone(timezone.utc).replace(tzinfo=None) if d.tzinfo else d
+        except ValueError:
+            return None
+    return None
+
+
+async def _cloud_tasks(max_items: int = 3000) -> list:
+    import asyncio
+    from .makerworld import _get_json
+    tok = await token()
+    if not tok:
+        raise AccountError("Compte MakerWorld non connecté")
+    out, offset = [], 0
+    while len(out) < max_items:
+        code, d = await asyncio.to_thread(_get_json, TASKS.format(offset=offset, limit=50), tok)
+        if code == 401:
+            raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+        hits = _items(d)
+        if not hits:
+            break
+        for h in hits:
+            if not isinstance(h, dict):
+                continue
+            did = h.get("designId")
+            out.append({
+                "task_id": str(h.get("id") or ""),
+                "design_id": str(did) if isinstance(did, int) and did > 0 else None,
+                "instance_id": str(h.get("instanceId") or "") or None,
+                "title": h.get("designTitle") or h.get("title"),
+                "start": _when(h.get("startTime")) or _when(h.get("createTime")),
+            })
+        offset += 50
+        await asyncio.sleep(0.5)
+    return out
+
+
+async def history_scan(apply: bool = False) -> dict:
+    """Relie les prints de l'appli aux impressions cloud : par numero de
+    tache (job_id), sinon par heure de debut (a 10 min pres, une seule
+    correspondance possible). Ne remplit que les liens VIDES (design_id,
+    profil) ; n'ecrase jamais. Sans apply : bilan seulement."""
+    import json as _j
+    from datetime import timedelta
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print, MakerWorldDesign as MW
+    from .makerworld import launch_many
+    tasks = [t for t in await _cloud_tasks() if t["design_id"]]
+    async with AsyncSessionLocal() as db:
+        prints = (await db.execute(select(Print))).scalars().all()
+        by_job = {str(p.job_id): p for p in prints if p.job_id}
+        cache = {m.design_id: _j.loads(m.profiles or "[]") for m in (await db.execute(
+            select(MW).where(MW.design_id.in_({t["design_id"] for t in tasks})))).scalars().all()}
+        used, plan = set(), []
+        for t in tasks:
+            p, how = by_job.get(t["task_id"]), "tâche"
+            if p is None and t["start"]:
+                near = [x for x in prints if x.id not in used and x.print_date
+                        and abs((x.print_date - t["start"]).total_seconds()) <= 600]
+                p, how = (near[0], "heure") if len(near) == 1 else (None, None)
+            if p is None or p.id in used:
+                continue
+            used.add(p.id)
+            prof = next((x.get("profile_id") for x in cache.get(t["design_id"], [])
+                         if x.get("instance_id") == t["instance_id"]), None)
+            link = not (p.design_id or "").strip() or p.design_id == "0"
+            if link and p.design_id and p.design_id != t["design_id"]:
+                link = False
+            add_prof = bool(prof) and not p.mw_profile_id and (link or p.design_id == t["design_id"])
+            if link or add_prof:
+                plan.append((p, t, how, link, prof if add_prof else None))
+        if apply:
+            for p, t, how, link, prof in plan:
+                if link:
+                    p.design_id = t["design_id"]
+                if prof:
+                    p.mw_profile_id = prof
+            await db.commit()
+        res = {
+            "tasks": len(tasks), "matched": len(used),
+            "to_link": sum(1 for x in plan if x[3]), "to_profile": sum(1 for x in plan if x[4]),
+            "by_task": sum(1 for x in plan if x[2] == "tâche"), "by_time": sum(1 for x in plan if x[2] == "heure"),
+            "sample": [{"print": p.file_name, "model": t["title"], "how": how}
+                       for p, t, how, link, prof in plan[:8]],
+            "applied": bool(apply),
+        }
+    if apply:
+        new = list({t["design_id"] for p, t, how, link, prof in plan if t["design_id"] not in cache})
+        if new:
+            launch_many(new)
+    return res
+
+
 DEBUG_TRIES = {
     "essais_historique": lambda did: ("essais historique cloud", [
-        "/user-service/my/tasks?limit=3",
-        "/user-service/my/tasks?offset=0&limit=3"]),
+        "/user-service/my/tasks?offset=0&limit=1"]),
     "essais_recherche": lambda did: ("essais recherche", [
         "/search-service/select/design2?keyword=panda&offset=0&limit=3",
         "/search-service/select/design/search?keyword=panda&offset=0&limit=3",

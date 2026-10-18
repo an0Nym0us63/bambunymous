@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import client from "../api/client";
+import { isAndroid, handyPref, setHandyPref } from "../utils/mwlink";
 
 // Parametres MakerWorld : fiches publiques des modeles (cache), compte
 // (connexion, deconnexion) et diagnostic. API interne non officielle : tout
@@ -38,6 +39,12 @@ export default function MakerWorldSettings() {
     const { data } = await client.post("/makerworld/refresh");
     setInfo(data.started ? "Relecture lancée en arrière-plan (1,5 s par modèle)." : "Une relecture tourne déjà.");
     setTimeout(load, 3000);
+  });
+  const [handy, setHandy] = useState(handyPref());
+  const [hist, setHist] = useState(null);         // bilan du rattrapage historique cloud
+  const history = (apply) => run(async () => {
+    const { data } = await client.post("/makerworld/history", null, { params: { apply } });
+    setHist(data); if (apply) load();
   });
   const debug = (name) => run(async () => { const { data } = await client.get(`/makerworld/debug/${name}`); setDiag({ name, ...data }); });
 
@@ -123,6 +130,47 @@ export default function MakerWorldSettings() {
         {info && <p style={{ fontSize:12, color:"#3b82f6", margin:"8px 0 0" }}>{info}</p>}
         {err && <p style={{ fontSize:12, color:"#ef4444", margin:"8px 0 0" }}>{err}</p>}
       </div>
+
+      {/* ── Bambu Handy : reglage de CET appareil ── */}
+      {isAndroid() && (
+        <label style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, color:"var(--text2)",
+          marginTop:12, cursor:"pointer" }}>
+          <input type="checkbox" checked={handy} onChange={e => { setHandyPref(e.target.checked); setHandy(e.target.checked); }}/>
+          Ouvrir les liens MakerWorld dans Bambu Handy (cet appareil ; navigateur si Handy n'est pas installée)
+        </label>
+      )}
+
+      {/* ── Historique cloud : liens MakerWorld des vieux prints ── */}
+      {st?.connected && (
+        <div style={{ marginTop:12, padding:12, borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)" }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"var(--text)", marginBottom:4 }}>Historique cloud Bambu</div>
+          <p style={{ fontSize:11.5, color:"var(--muted)", margin:"0 0 8px", lineHeight:1.5 }}>
+            Retrouve le modèle MakerWorld (et son profil) des prints qui n'en ont pas, d'après tes impressions cloud :
+            par numéro de tâche, sinon par heure de début (à 10 min près, seulement si un seul print correspond).
+            Ne remplit que les liens vides, n'écrase jamais.
+          </p>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+            <button onClick={() => history(false)} disabled={busy} style={btn}>{busy ? "…" : "Analyser"}</button>
+            {hist && !hist.applied && hist.to_link + hist.to_profile > 0 && (
+              <button onClick={() => history(true)} disabled={busy} style={primary}>
+                Appliquer ({hist.to_link} lien{hist.to_link > 1 ? "s" : ""}{hist.to_profile ? `, ${hist.to_profile} profil${hist.to_profile > 1 ? "s" : ""}` : ""})
+              </button>
+            )}
+          </div>
+          {hist && (
+            <div style={{ fontSize:11.5, color:"var(--text2)", marginTop:8, lineHeight:1.6 }}>
+              {hist.applied ? "✓ Appliqué : " : ""}{hist.tasks} impressions cloud avec modèle · {hist.matched} retrouvées dans l'appli
+              · <b>{hist.to_link}</b> lien{hist.to_link > 1 ? "s" : ""} à ajouter ({hist.by_task} par tâche, {hist.by_time} par heure)
+              {hist.to_profile > 0 && <> · {hist.to_profile} profil{hist.to_profile > 1 ? "s" : ""}</>}
+              {hist.sample?.length > 0 && !hist.applied && (
+                <ul style={{ margin:"6px 0 0", paddingLeft:16, color:"var(--muted)" }}>
+                  {hist.sample.map((x, i) => <li key={i}>{x.print} → {x.model} <i>({x.how})</i></li>)}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── Diagnostic : reponse brute, pour adapter la lecture si l'API change ── */}
       {st?.connected && (

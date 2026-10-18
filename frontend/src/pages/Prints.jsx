@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import MakerWorldView from "../components/MakerWorldView";
+import { mwHref } from "../utils/mwlink";
 import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
@@ -709,7 +710,7 @@ function MakerWorldCard({ designId, note, prints = [] }) {
 
   const url = mw?.url || `https://makerworld.com/fr/models/${designId}`;
   if (!mw) return (
-    <a href={url} target="_blank" rel="noopener noreferrer"
+    <a href={mwHref(url)} target="_blank" rel="noopener noreferrer"
       style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6,
         width:"100%", padding:"8px", borderRadius:10, marginBottom:14,
         border:"1px solid rgba(59,130,246,0.3)", background:"rgba(59,130,246,0.06)",
@@ -723,7 +724,7 @@ function MakerWorldCard({ designId, note, prints = [] }) {
   return (
     <div style={{ marginBottom:14, borderRadius:12, border:"1px solid var(--border)",
       background:"var(--surface2)", overflow:"hidden" }}>
-      <a href={url} target="_blank" rel="noopener noreferrer"
+      <a href={mwHref(url)} target="_blank" rel="noopener noreferrer"
         style={{ display:"flex", gap:10, padding:10, textDecoration:"none", color:"var(--text)" }}>
         {mw.cover_url && (
           <img src={mw.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
@@ -846,7 +847,7 @@ function MakerWorldSimilar({ designId }) {
         : sim.length === 0 ? <div style={{ fontSize:11, color:"var(--muted)" }}>Rien trouvé.</div> : (
         <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:2 }}>
           {sim.map(x => (
-            <a key={x.design_id} href={x.url} target="_blank" rel="noopener noreferrer"
+            <a key={x.design_id} href={mwHref(x.url)} target="_blank" rel="noopener noreferrer"
               style={{ flexShrink:0, width:96, textDecoration:"none", color:"var(--text)" }}>
               <div style={{ position:"relative", width:96, height:96, borderRadius:8, overflow:"hidden", background:"var(--surface)" }}>
                 {x.cover_url && <img src={x.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
