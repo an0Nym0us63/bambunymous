@@ -5,6 +5,7 @@ import AdminOnly from "./AdminOnly";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
 import { mwLiked } from "../utils/mwSync";
 import MwImg from "./MwImg";
+import MwStockMatch, { stockSummary } from "./MwStockMatch";
 import Lightbox from "./Lightbox";
 import { showAlert } from "../utils/dialog";
 
@@ -239,7 +240,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                             p.settings?.sparseInfillDensity ? `remplissage ${p.settings.sparseInfillDensity}` : null,
                             p.print_count != null ? `${fmtK(p.print_count)} impressions` : null].filter(Boolean).join(" · ")}
                         </div>
+                        {allProfiles && !isOpen && stockSummary(m.stock?.[p.instance_id]) && (
+                          <div style={{ fontSize:11, color:"var(--text2)", marginTop:2 }}>{stockSummary(m.stock[p.instance_id])}</div>
+                        )}
                       </button>
+                      {(!allProfiles || isOpen) && <MwStockMatch items={m.stock?.[p.instance_id]} onNavigate={onClose}/>}
                       {isOpen && (
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:8, padding:"0 10px 10px" }}>
                           {p.plates.map(pl => {

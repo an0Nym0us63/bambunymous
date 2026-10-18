@@ -257,6 +257,22 @@ def _plate_detail(d) -> list:
                            "weight_g": pl.get("weight") if isinstance(pl.get("weight"), (int, float)) else None,
                            "seconds": pl.get("prediction") if isinstance(pl.get("prediction"), (int, float)) else None,
                            "filaments": fils})
+        # Filaments du profil (tous plateaux) : instanceFilaments, sinon la
+        # somme des plateaux par matiere et couleur.
+        inst = [f for f in (i.get("instanceFilaments") if isinstance(i.get("instanceFilaments"), list) else [])
+                if isinstance(f, dict) and f.get("color")]
+        if inst:
+            pfils = [{"type": f.get("type"), "color": f.get("color"), "g": f.get("usedG")} for f in inst]
+        else:
+            agg = {}
+            for pl in plates:
+                for f in pl["filaments"]:
+                    k = (f.get("type"), str(f.get("color") or "").upper())
+                    try:
+                        agg[k] = agg.get(k, 0) + float(f.get("g") or 0)
+                    except (TypeError, ValueError):
+                        agg.setdefault(k, 0)
+            pfils = [{"type": t, "color": c, "g": round(g) or None} for (t, c), g in agg.items() if c]
         ps = mi.get("projectSettings") if isinstance(mi.get("projectSettings"), dict) else {}
         t_or = i.get("title") if isinstance(i.get("title"), str) else ""
         t_fr = i.get("titleTranslated") if isinstance(i.get("titleTranslated"), str) and i.get("titleTranslated") else ""
@@ -269,7 +285,7 @@ def _plate_detail(d) -> list:
                     "seconds": i.get("prediction") if isinstance(i.get("prediction"), (int, float)) else None,
                     "settings": {k: ps.get(k) for k in ("layerHeight", "wallLoops", "sparseInfillDensity") if ps.get(k) is not None},
                     "print_count": i.get("printCount") if isinstance(i.get("printCount"), int) else None,
-                    "plates": plates})
+                    "filaments": pfils, "plates": plates})
     return out
 
 
@@ -317,7 +333,14 @@ async def model_detail(design_id: str) -> dict:
         rows = (await db.execute(select(Print.id, Print.status, Print.plate_id, Print.mw_profile_id)
                                  .where(Print.design_id == did))).all()
     done = [r for r in rows if r[1] in ("SUCCESS", "PARTIAL")]
-    return {**base, "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
+    # Filaments des profils face au stock (base locale seulement, a chaque appel).
+    try:
+        from .mw_stock import match_profiles
+        stock = await match_profiles(base.get("profiles") or [])
+    except Exception:
+        logger.exception("[MW] filaments face au stock")
+        stock = {}
+    return {**base, "stock": stock, "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
             "printed": len(done), "in_progress": sum(1 for r in rows if r[1] == "IN_PROGRESS"),
             "printed_plates": sorted({f"{r[3] or ''}:{r[2] or '1'}" for r in done})}
 
