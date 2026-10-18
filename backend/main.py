@@ -104,9 +104,10 @@ async def lifespan(app: FastAPI):
     # a redemarrer le container a la main. Tourne toutes les ~5 min (self-healing).
     import asyncio as _aio
     _reconciler_task = _aio.create_task(enrichment_reconciler())
-    # Démarrer le worker de location AMS (doit être dans le bon event loop)
-    from app.services.spool_location import _ensure_worker
-    await _ensure_worker()
+    # Noms francais restes vides (quota d'un service de traduction atteint) :
+    # repris toutes les 6 h, sans attendre un clic dans les reglages.
+    from app.services.translate import auto_backfill_loop
+    _trad_task = _aio.create_task(auto_backfill_loop())
     await mqtt_manager.start()
     # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.
@@ -132,6 +133,7 @@ async def lifespan(app: FastAPI):
     yield
     _stop_purge.set()
     _reconciler_task.cancel()
+    _trad_task.cancel()
     catalog_sync.stop()
     await mqtt_manager.stop()
 

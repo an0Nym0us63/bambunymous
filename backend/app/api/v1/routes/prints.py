@@ -1086,16 +1086,22 @@ async def reenrich_print(print_id: int, _: str = Depends(get_current_user)):
 
 @router.get("/translate-missing")
 async def translate_missing_status(_: str = Depends(get_current_user)):
-    """Le rattrapage tourne-t-il ? Un booleen, rien de plus."""
-    from ....services.translate import backfill_running
-    return {"running": backfill_running()}
+    """Le rattrapage tourne-t-il, bilan du dernier, une cle DeepL est-elle posee
+    (jamais la cle elle-meme)."""
+    from ....services.translate import backfill_running, backfill_last, DEEPL_KEY
+    from ....services.settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        has_key = bool((await get_setting(db, DEEPL_KEY, "") or "").strip())
+    return {"running": backfill_running(), "last": backfill_last(), "deepl": has_key}
 
 
 @router.post("/translate-missing")
-async def translate_missing_start(stop: bool = False,
+async def translate_missing_start(stop: bool = False, retry_same: bool = False,
                                   _: str = Depends(require_admin)):
     """
     Demarre le rattrapage en tache de fond, ou l'arrete avec ?stop=1.
+    ?retry_same=1 reprend aussi les noms restes identiques au nom d'origine
+    (ceux qu'un service a bout de quota a fait passer pour « deja francais »).
 
     En tache de fond et non par paquets pilotes depuis le navigateur : un
     rechargement de page tuait la boucle cliente sans laisser de trace, et il
@@ -1105,8 +1111,22 @@ async def translate_missing_start(stop: bool = False,
     if stop:
         stop_backfill()
         return {"running": backfill_running(), "stopping": True}
-    started = start_backfill()
+    started = start_backfill(retry_same=retry_same)
     return {"running": True, "started": started}
+
+
+@router.put("/translate-key")
+async def translate_set_key(body: dict, _: str = Depends(require_admin)):
+    """Pose (ou retire, avec "") la cle d'API DeepL. Saisie par l'utilisateur,
+    rangee dans les reglages ; jamais renvoyee au navigateur."""
+    from ....services.translate import DEEPL_KEY
+    from ....services.settings_service import set_setting
+    key = str(body.get("key") or "").strip()
+    if len(key) > 200:
+        raise HTTPException(400, "Clé trop longue")
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, DEEPL_KEY, key)
+    return {"deepl": bool(key)}
 
 
 @router.get("/kpis")

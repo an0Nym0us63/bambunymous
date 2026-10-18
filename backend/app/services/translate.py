@@ -9,11 +9,33 @@ ne remplace jamais le nom d'origine.
 Portage de la fonction de Spoolnymous, qui avait deja resolu le probleme. Elle
 ne concerne QUE les prints -- le translated_name des filaments a sa propre
 source, le catalogue Bambu local, et n'a rien a voir avec ceci.
+
+Services, dans l'ordre : DeepL si une cle est posee (Parametres, offre
+gratuite : 500 000 caracteres par mois), puis l'endpoint public de Google,
+puis MyMemory. Les deux derniers sont gratuits et sans cle, donc bornes :
+Google coupe vite (TooManyRequests), MyMemory plafonne a quelques milliers de
+caracteres par jour.
+
+Regle qui compte : un ECHEC n'est jamais pris pour « deja en francais ». Un
+service a bout de quota renvoie le texte tel quel ; l'ancienne version
+l'enregistrait alors comme nom francais, et le print n'etait plus jamais
+retente. Un echec rend desormais None et rien n'est ecrit : le prochain
+passage (automatique, toutes les 6 h) le reprend.
 """
 import logging
 import threading
+import time
 
 logger = logging.getLogger(__name__)
+
+DEEPL_KEY = "DEEPL_API_KEY"
+
+# MyMemory a bout de quota : on ne le sollicite plus jusqu'a cette heure.
+_MYMEMORY_PAUSE = {"until": 0.0}
+
+
+class TranslateUnavailable(Exception):
+    """Aucun service n'a pu traduire : rien ne doit etre enregistre."""
 
 
 def _looks_bogus(text: str) -> bool:
@@ -26,8 +48,8 @@ def _looks_bogus(text: str) -> bool:
     if not text:
         return False
     low = text.lower()
-    markers = ("that's an error", "that\u2019s an error", "that's all we know",
-               "that\u2019s all we know", "server error", "please try again later",
+    markers = ("that's an error", "that’s an error", "that's all we know",
+               "that’s all we know", "server error", "please try again later",
                "error 500", "error 429", "!!1", "<html", "</", "http://", "https://",
                "www.google.com",
                # erreurs renvoyees EN TEXTE (HTTP 200) par MyMemory
@@ -38,26 +60,66 @@ def _looks_bogus(text: str) -> bool:
     return len(text) > 300   # un nom traduit ne fait jamais 300+ caracteres
 
 
-def _mymemory_one(txt: str) -> str:
-    """Traduit UNE chaine via MyMemory (gratuit, sans cle), source auto-detectee.
-    Repli quand Google est indisponible."""
+def _deepl_batch(payload: list, key: str):
+    """Traduit via l'API DeepL (source detectee). None si indisponible."""
+    import requests
+    host = "api-free.deepl.com" if key.strip().endswith(":fx") else "api.deepl.com"
+    try:
+        r = requests.post(f"https://{host}/v2/translate", timeout=20,
+                          headers={"Authorization": f"DeepL-Auth-Key {key.strip()}"},
+                          json={"text": payload, "target_lang": "FR"})
+    except Exception as e:
+        logger.warning(f"[TRAD] DeepL injoignable ({type(e).__name__})")
+        return None
+    if r.status_code == 456:
+        logger.warning("[TRAD] DeepL : quota du mois atteint")
+        return None
+    if r.status_code in (401, 403):
+        logger.warning("[TRAD] DeepL : clé refusée")
+        return None
+    if r.status_code != 200:
+        logger.warning(f"[TRAD] DeepL : HTTP {r.status_code}")
+        return None
+    try:
+        out = [t.get("text", "") for t in r.json().get("translations", [])]
+    except ValueError:
+        return None
+    return out if len(out) == len(payload) else None
+
+
+def _mymemory_one(txt: str):
+    """Traduit UNE chaine via MyMemory (gratuit, sans cle). None si echec."""
+    if time.time() < _MYMEMORY_PAUSE["until"]:
+        return None
+    from deep_translator import MyMemoryTranslator
     # MyMemory exige une langue source ISO ('auto' est refuse). Les noms de print
     # sont quasi toujours en anglais (MakerWorld / trancheur) -> on force 'en'.
-    from deep_translator import MyMemoryTranslator
     for src in ("en-GB", "en-US", "en"):
         try:
             r = MyMemoryTranslator(source=src, target="fr-FR").translate(txt)
-            if r and not _looks_bogus(r):
-                return r
-        except Exception:
+        except Exception as e:
+            if "TooManyRequests" in type(e).__name__ or "quota" in str(e).lower():
+                break
             continue
-    return txt
+        if r and not _looks_bogus(r):
+            return r
+        if r and "you used all available" in r.lower():
+            break
+    else:
+        return None
+    # Quota du jour epuise : inutile d'insister avant quelques heures.
+    _MYMEMORY_PAUSE["until"] = time.time() + 6 * 3600
+    logger.warning("[TRAD] MyMemory : quota du jour atteint, pause de 6 h")
+    return None
 
 
-def _translate_batch(payload: list) -> list:
-    """Traduit une liste de chaines vers le FR. Google d'abord (rapide, un seul
-    appel) ; si indisponible ou page d'erreur HTML, repli MyMemory item par item.
-    Renvoie toujours une liste de meme longueur que payload."""
+def _translate_batch(payload: list, deepl_key: str = "") -> list:
+    """Traduit une liste de chaines vers le FR. Rend une liste de meme
+    longueur ; une entree None = echec (rien ne doit etre enregistre)."""
+    if deepl_key:
+        r = _deepl_batch(payload, deepl_key)
+        if r is not None and not any(_looks_bogus(x or "") for x in r):
+            return r
     from deep_translator import GoogleTranslator
     try:
         r = GoogleTranslator(source="auto", target="fr").translate_batch(payload)
@@ -69,9 +131,19 @@ def _translate_batch(payload: list) -> list:
     return [_mymemory_one(x) for x in payload]
 
 
-def translate_name(name: str) -> str:
+def _merge(mot_a_mot: str, contextuel: str) -> str:
+    seen, words = set(), []
+    for w in (mot_a_mot + " " + contextuel).split():
+        if w.lower() not in seen:
+            seen.add(w.lower())
+            words.append(w)
+    return " ".join(words)
+
+
+def translate_name(name: str, deepl_key: str = "") -> str:
     """
-    Traduit un nom vers le francais.
+    Traduit un nom vers le francais. Leve TranslateUnavailable si aucun
+    service n'a repondu.
 
     Double passage, repris tel quel de Spoolnymous, et c'est la ruse qui fait
     tout l'interet de la fonction :
@@ -88,31 +160,24 @@ def translate_name(name: str) -> str:
     """
     if not name or not name.strip():
         return ""
-
-    forced_input = "\n".join(name.split())
     original = name.strip()
-
-    try:
-        r = _translate_batch([forced_input, original])
-        mot_a_mot  = (r[0] or "").strip()
-        contextuel = (r[1] or "").strip()
-    except Exception:
-        return original
-    mot_a_mot = " ".join(mot_a_mot.split("\n")).strip()
-
+    r = _translate_batch(["\n".join(name.split()), original], deepl_key)
+    if r[0] is None or r[1] is None:
+        raise TranslateUnavailable()
+    mot_a_mot = " ".join((r[0] or "").strip().split("\n")).strip()
+    contextuel = (r[1] or "").strip()
     if _looks_bogus(contextuel) or _looks_bogus(mot_a_mot):
-        return ""              # page d'erreur Google : on ne stocke rien
-
+        raise TranslateUnavailable()
     if contextuel.lower() == original.lower():
         return contextuel
+    return _merge(mot_a_mot, contextuel)
 
-    seen, words = set(), []
-    for word in (mot_a_mot + " " + contextuel).split():
-        key = word.lower()
-        if key not in seen:
-            seen.add(key)
-            words.append(word)
-    return " ".join(words)
+
+async def _deepl_key() -> str:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        return (await get_setting(db, DEEPL_KEY, "") or "").strip()
 
 
 async def translate_print(pid: int) -> bool:
@@ -128,28 +193,33 @@ async def translate_print(pid: int) -> bool:
     d'un print : precisement la ou une pression d'ecriture supplementaire est
     le moins souhaitable.
     """
+    import asyncio
     from sqlalchemy import update
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
+    from .tmf_parser import _clean_name
 
     async with AsyncSessionLocal() as db:
         p = await db.get(Print, pid)
         if not p or (p.translated_name or "").strip():
             return False
-        source = (p.file_name or p.original_name or "").strip()
+        source = _clean_name(p.file_name or p.original_name or "").strip()
     if not source:
         return False
+    key = await _deepl_key()
 
     try:
-        tr = translate_name(source).strip()
+        tr = (await asyncio.to_thread(translate_name, source, key)).strip()
+    except TranslateUnavailable:
+        # Rien d'ecrit : le rattrapage automatique le reprendra.
+        logger.info(f"[TRAD] print #{pid} : services indisponibles, repris plus tard")
+        return False
     except Exception as e:
-        # L'endpoint public de Google n'est pas contractuel : il coupe ou
-        # limite le debit. Un nom non traduit n'est pas un incident, la
-        # recherche retombe simplement sur le nom d'origine.
         logger.warning(f"[TRAD] print #{pid} : {e}")
         return False
-    if not tr or tr.lower() == source.lower():
-        return False
+    # Deja francais : on inscrit le nom nettoye (vrai, et utile a la recherche),
+    # pour ne pas le representer a chaque rattrapage.
+    tr = tr or source
 
     async with AsyncSessionLocal() as db:
         await db.execute(update(Print).where(Print.id == pid)
@@ -163,7 +233,7 @@ def launch_translation(pid: int) -> None:
     """
     Lance la traduction sans rien bloquer. Un appel reseau vers un service tiers
     n'a rien a faire sur le chemin d'enregistrement d'un print : au pire le
-    champ reste vide et le bouton de rattrapage le reprendra.
+    champ reste vide et le rattrapage le reprendra.
     """
     def _run():
         import asyncio
@@ -183,36 +253,34 @@ def launch_translation(pid: int) -> None:
 _CHUNK = 20        # noms distincts par requête (soit 40 chaînes envoyées)
 
 
-def translate_names(names: list) -> dict:
+def translate_names(names: list, deepl_key: str = "") -> dict:
     """
     Traduit une liste de noms et rend {source: traduction}.
+
+    Valeur "" = rien a traduire (deja francais, intraduisible, sans lettre) ;
+    nom ABSENT du resultat = echec du service, a ne pas enregistrer.
 
     Trois economies par rapport a Spoolnymous, qui traitait un print a la fois :
 
       1. DEDOUBLONNAGE. Un meme modele reimprime dix fois porte dix fois le
          meme nom. On ne traduit qu'une fois et on applique partout.
-      2. GROUPAGE. translate_batch accepte une liste : 20 noms partent en UNE
-         requete au lieu de 20. Sur une bibliotheque fournie, c'est ce qui
-         evite de se faire couper pour abus.
+      2. GROUPAGE. 20 noms partent en UNE requete au lieu de 20. Sur une
+         bibliotheque fournie, c'est ce qui evite de se faire couper pour abus.
       3. TRI PREALABLE. Un nom sans la moindre lettre (« 20250807_163605 »)
          n'a rien a traduire : on ne le soumet pas.
     """
     import re as _re
-    import time
-    from deep_translator import GoogleTranslator, exceptions
 
-    uniques = []
+    out, uniques = {}, []
     for n in names:
         n = (n or "").strip()
-        if not n or n in uniques:
+        if not n or n in uniques or n in out:
             continue
         if not _re.search(r"[^\W\d_]", n, _re.UNICODE):   # aucune lettre
+            out[n] = ""
             continue
         uniques.append(n)
-    if not uniques:
-        return {}
 
-    out = {}
     for i in range(0, len(uniques), _CHUNK):
         chunk = uniques[i:i + _CHUNK]
         # Deux entrees par nom : mot a mot (un terme par ligne) puis contextuel.
@@ -222,132 +290,139 @@ def translate_names(names: list) -> dict:
             payload.append(n)
 
         try:
-            res = _translate_batch(payload)
+            res = _translate_batch(payload, deepl_key)
         except Exception as e:
             logger.warning(f"[TRAD] lot ignore : {e}")
             continue
 
+        failed = 0
         for k, n in enumerate(chunk):
-            mot_a_mot  = " ".join((res[2*k]     or "").split("\n")).strip()
-            contextuel = (res[2*k + 1] or "").strip()
-            if not contextuel or contextuel.lower() == n.lower():
-                continue          # deja francais, ou intraduisible
+            m, c = res[2 * k], res[2 * k + 1]
+            if m is None or c is None:
+                failed += 1
+                continue                      # echec : rien d'enregistre
+            mot_a_mot = " ".join((m or "").split("\n")).strip()
+            contextuel = (c or "").strip()
             if _looks_bogus(contextuel) or _looks_bogus(mot_a_mot):
-                continue          # page d'erreur Google : on ignore
-            seen, words = set(), []
-            for w in (mot_a_mot + " " + contextuel).split():
-                if w.lower() not in seen:
-                    seen.add(w.lower())
-                    words.append(w)
-            merged = " ".join(words)
-            if merged and merged.lower() != n.lower() and not _looks_bogus(merged):
-                out[n] = merged[:512]
+                failed += 1
+                continue
+            if not contextuel or contextuel.lower() == n.lower():
+                out[n] = ""                   # deja francais, ou intraduisible
+                continue
+            merged = _merge(mot_a_mot, contextuel)
+            out[n] = merged[:512] if merged.lower() != n.lower() else ""
 
-        # Respiration entre deux lots : l'endpoint est public, on ne le
-        # martele pas.
+        # Tout le lot en echec : les services sont a bout, inutile de
+        # continuer a les solliciter pour les lots suivants.
+        if failed == len(chunk):
+            logger.warning("[TRAD] services indisponibles, rattrapage remis a plus tard")
+            break
+        # Respiration entre deux lots : les endpoints sont publics.
         if i + _CHUNK < len(uniques):
             time.sleep(0.5)
     return out
 
 
-async def translate_missing_prints(limit: int = 40) -> dict:
+async def translate_missing_prints(limit: int = 40, retry_same: bool = False,
+                                   exclude: set = None) -> dict:
     """
     Traduit jusqu'a `limit` prints sans nom francais, et rend le reste a faire.
 
-    Volontairement borne et repetable plutot que lance en tache de fond : le
-    front rappelle jusqu'a ce qu'il ne reste rien, ce qui donne une progression
-    reelle sans etat serveur, sans thread et sans route de statut a maintenir.
+    retry_same : reprend AUSSI les prints dont le nom francais est simplement
+    leur nom d'origine nettoye -- ceux qu'un service a bout de quota a fait
+    passer pour « deja francais ». Un nom saisi a la main differe du nom
+    d'origine : il n'est jamais repris.
 
     Le travail se fait en TROIS temps -- lire, traduire hors boucle, ecrire --
     et non d'une traite. deep_translator est une bibliotheque bloquante :
     l'appeler dans une fonction async gele la boucle d'evenements, donc tout le
-    serveur, pendant chaque requete reseau. L'application devenait inutilisable
-    le temps du rattrapage. On sort donc la traduction dans un thread, et on ne
-    garde surtout pas la session SQL ouverte pendant ce temps-la.
+    serveur, pendant chaque requete reseau. On sort donc la traduction dans un
+    thread, et on ne garde surtout pas la session SQL ouverte pendant ce temps.
     """
     import asyncio
-    from sqlalchemy import select, or_, func, update
+    from sqlalchemy import select, or_, update
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
     from .tmf_parser import _clean_name
 
+    exclude = exclude if exclude is not None else set()
+
     # ── 1. Lecture, session refermee aussitot ────────────────────────────
     async with AsyncSessionLocal() as db:
-        base = select(Print).where(
-            or_(Print.translated_name.is_(None), Print.translated_name == ""))
+        q = select(Print.id, Print.file_name, Print.original_name, Print.translated_name)
+        if not retry_same:
+            q = q.where(or_(Print.translated_name.is_(None), Print.translated_name == ""))
         # Du plus recent au plus vieux : ce sont les prints recents qu'on
-        # cherche en premier. Sans order_by explicite, SQLite rendait l'ordre
-        # des rowid, donc les plus anciens d'abord -- exactement l'inverse de
-        # ce qui est utile si le rattrapage s'interrompt en cours de route.
-        rows = (await db.execute(
-            base.order_by(Print.print_date.desc()).limit(limit))).scalars().all()
-        # COUNT plutot que de charger toutes les lignes pour les compter : sur
-        # plusieurs centaines de prints, la difference est reelle.
-        remaining_before = (await db.execute(
-            select(func.count()).select_from(base.subquery()))).scalar_one()
-        if not rows:
-            return {"translated": 0, "skipped": 0, "remaining": 0}
+        # cherche en premier.
+        rows = (await db.execute(q.order_by(Print.print_date.desc()))).all()
 
-        # On traduit le nom NETTOYE : sans extension, sans underscore ni
-        # marqueur de version, le traducteur voit enfin des mots.
-        sources, fallback = {}, {}
-        for p in rows:
-            fallback[p.id] = (p.file_name or p.original_name or "")
-            src = _clean_name(fallback[p.id])
-            if src:
-                sources[p.id] = src
-        ids = [p.id for p in rows]
+    todo = []
+    for pid, fn, on, tn in rows:
+        if pid in exclude:
+            continue
+        src = _clean_name(fn or on or "").strip()
+        tn = (tn or "").strip()
+        if tn and not (retry_same and tn.lower() == src.lower()):
+            continue
+        todo.append((pid, src, fn or on or ""))
+    remaining_before = len(todo)
+    batch = todo[:limit]
+    if not batch:
+        return {"translated": 0, "skipped": 0, "failed": 0, "remaining": 0}
+    for pid, _, _ in batch:
+        exclude.add(pid)
 
     # ── 2. Traduction HORS de la boucle d'evenements ─────────────────────
-    # to_thread : le reste de l'application continue d'etre servi pendant les
-    # secondes d'attente reseau, au lieu de se figer.
-    table = await asyncio.to_thread(translate_names, list(sources.values()))
+    key = await _deepl_key()
+    table = await asyncio.to_thread(translate_names, [s for _, s, _ in batch if s], key)
 
     # ── 3. Ecriture, session rouverte ────────────────────────────────────
-    done = 0
+    done = skipped = failed = 0
     async with AsyncSessionLocal() as db:
-        for pid in ids:
-            tr = table.get(sources.get(pid, ""))
-            if not tr:
-                # Rien a traduire : deja francais, nom propre, ou sans lettre.
-                # On inscrit le nom NETTOYE plutot qu'un marqueur technique.
-                # C'est vrai -- le nom francais est bien celui-la --, ca reste
-                # utile a la recherche, et surtout ca evite de representer ce
-                # print a chaque passage suivant, ce qui bouclerait sans fin.
-                tr = (sources.get(pid) or fallback.get(pid) or "")
-            else:
+        for pid, src, raw in batch:
+            if src and src not in table:
+                failed += 1                 # echec du service : on n'ecrit rien
+                continue
+            tr = table.get(src, "")
+            if tr:
                 done += 1
+            else:
+                # Rien a traduire : on inscrit le nom NETTOYE plutot qu'un
+                # marqueur technique. C'est vrai, ca reste utile a la
+                # recherche, et ca evite de representer ce print a chaque
+                # passage suivant.
+                tr = src or raw
+                skipped += 1
             await db.execute(update(Print).where(Print.id == pid)
                              .values(translated_name=tr[:512]))
         await db.commit()
 
-    return {"translated": done, "skipped": len(ids) - done,
-            "remaining": max(0, remaining_before - len(ids))}
+    return {"translated": done, "skipped": skipped, "failed": failed,
+            "remaining": max(0, remaining_before - len(batch))}
 
 
 # ── Rattrapage en tache de fond ────────────────────────────────────────────
 #
-# La boucle vivait cote client : quitter la page ne l'arretait pas, mais un
-# rechargement la tuait sans que rien ne subsiste. Impossible, dans ces
-# conditions, de savoir en arrivant sur la page si un rattrapage est en cours.
-# Elle passe donc ici. L'etat tient en un booleen : c'est tout ce qu'on veut
-# savoir, et un booleen n'a pas besoin de base pour survivre a une navigation.
-#
-# En memoire du processus, volontairement : si le serveur redemarre, le thread
-# est mort avec lui et le drapeau doit repartir a faux. Le persister aurait
-# affiche "en cours" pour un travail qui ne tourne plus.
-_BACKFILL = {"running": False, "stop": False}
+# L'etat tient en un booleen, en memoire du processus, volontairement : si le
+# serveur redemarre, le thread est mort avec lui et le drapeau doit repartir a
+# faux.
+_BACKFILL = {"running": False, "stop": False, "last": None}
 
 
 def backfill_running() -> bool:
     return bool(_BACKFILL["running"])
 
 
+def backfill_last():
+    """Bilan du dernier rattrapage termine (ou None)."""
+    return _BACKFILL["last"]
+
+
 def stop_backfill() -> None:
     _BACKFILL["stop"] = True
 
 
-def start_backfill() -> bool:
+def start_backfill(retry_same: bool = False) -> bool:
     """Demarre le rattrapage. Rend False s'il tournait deja."""
     if _BACKFILL["running"]:
         return False
@@ -356,19 +431,41 @@ def start_backfill() -> bool:
     def _run():
         import asyncio
         loop = asyncio.new_event_loop()
-        total = 0
+        total = {"translated": 0, "skipped": 0, "failed": 0}
+        seen = set()
         try:
             while not _BACKFILL["stop"]:
-                r = loop.run_until_complete(translate_missing_prints(40))
-                total += r.get("translated", 0)
+                r = loop.run_until_complete(
+                    translate_missing_prints(40, retry_same=retry_same, exclude=seen))
+                for k in total:
+                    total[k] += r.get(k, 0)
                 if not r.get("remaining"):
+                    break
+                # Un lot entierement en echec : services a bout, on s'arrete
+                # (le passage automatique suivant reprendra).
+                if r.get("failed") and not (r.get("translated") or r.get("skipped")):
                     break
         except Exception:
             logger.exception("[TRAD] rattrapage interrompu")
         finally:
             loop.close()
-            _BACKFILL.update(running=False, stop=False)
-            logger.info(f"[TRAD] rattrapage termine, {total} nom(s) traduit(s)")
+            _BACKFILL.update(running=False, stop=False,
+                             last={**total, "at": time.strftime("%Y-%m-%dT%H:%M:%S")})
+            logger.info(f"[TRAD] rattrapage termine : {total['translated']} traduit(s), "
+                        f"{total['skipped']} deja en francais, {total['failed']} en echec")
 
     threading.Thread(target=_run, daemon=True).start()
     return True
+
+
+async def auto_backfill_loop(period_s: int = 6 * 3600, first_delay_s: int = 300):
+    """Reprend toutes les 6 h les prints restes sans nom francais (echecs de
+    quota) : un nom non traduit ne doit pas attendre un clic dans les reglages."""
+    import asyncio
+    await asyncio.sleep(first_delay_s)
+    while True:
+        try:
+            start_backfill()
+        except Exception:
+            logger.exception("[TRAD] rattrapage automatique")
+        await asyncio.sleep(period_s)
