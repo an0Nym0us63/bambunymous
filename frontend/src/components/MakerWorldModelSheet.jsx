@@ -42,20 +42,30 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [pick, setPick] = useState(false);
   const [sim, setSim] = useState(null);
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
+  const [allProfiles, setAllProfiles] = useState(false);  // replie : seulement le profil principal
+  const [showCom, setShowCom] = useState(false);   // commentaires replies (charges a l'ouverture)
 
   useEffect(() => {
     let alive = true;
-    setM(null); setCom(null); setSim(null); setMore(false);
+    setM(null); setCom(null); setSim(null); setMore(false); setAllProfiles(false); setShowCom(false);
     getModel(id).then(data => {
       if (!alive) return;
       setM(data);
       const p = (data.profiles || []).find(x => x.default) || (data.profiles || [])[0];
       setOpen(p?.instance_id || null);
     }).catch(e => alive && setM({ error: e.response?.data?.detail || e.message }));
-    client.get(`/makerworld/model/${id}/comments`).then(({ data }) => alive && setCom(data)).catch(() => alive && setCom({ items: [], total: 0 }));
     client.get(`/makerworld/similar/${id}`).then(({ data }) => alive && setSim(data.items || [])).catch(() => {});
     return () => { alive = false; };
   }, [id]);
+
+  // Commentaires lus seulement quand on deplie la section.
+  useEffect(() => {
+    if (!showCom || com) return;
+    let alive = true;
+    client.get(`/makerworld/model/${id}/comments`).then(({ data }) => alive && setCom(data))
+      .catch(() => alive && setCom({ items: [], total: 0 }));
+    return () => { alive = false; };
+  }, [showCom, id]);
 
   const moreComments = () => {
     setComBusy(true);
@@ -172,8 +182,9 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
             {/* Profils et plateaux */}
             {m.profiles?.length > 0 && (
-              <Section title={`Profils (${m.profiles.length})`}>
-                {m.profiles.map(p => {
+              <Section title={`Profils (${m.profiles.length})`}
+                open={allProfiles} onToggle={m.profiles.length > 1 ? () => setAllProfiles(v => !v) : null}>
+                {(allProfiles ? m.profiles : [m.profiles.find(x => x.default) || m.profiles[0]]).map(p => {
                   const isOpen = open === p.instance_id;
                   const nDone = p.plates.filter(pl => plateDone(p, pl.index)).length;
                   return (
@@ -235,12 +246,16 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                     </div>
                   );
                 })}
+                {!allProfiles && m.profiles.length > 1 && (
+                  <button onClick={() => setAllProfiles(true)} style={textBtn}>Voir les {m.profiles.length} profils</button>
+                )}
               </Section>
             )}
 
             {/* Commentaires */}
-            <Section title={`Commentaires${com?.total ? ` (${com.total})` : ""}`}>
-              {com === null ? <p style={msg}>…</p> : com.items.length === 0 ? <p style={msg}>Aucun commentaire.</p> : (<>
+            <Section title={`Commentaires${(m.comment_count ?? com?.total) ? ` (${m.comment_count ?? com?.total})` : ""}`}
+              open={showCom} onToggle={() => setShowCom(v => !v)}>
+              {!showCom ? null : com === null ? <p style={msg}>…</p> : com.items.length === 0 ? <p style={msg}>Aucun commentaire.</p> : (<>
                 {com.items.map(c => (
                   <div key={c.id} style={{ display:"flex", gap:8, padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
                     {c.avatar ? <MwImg src={c.avatar} w={52}
@@ -313,11 +328,19 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   );
 }
 
-function Section({ title, children }) {
+// Section, depliable si onToggle est donne (le titre garde son compte).
+function Section({ title, children, open, onToggle }) {
+  const head = { fontSize:12, fontWeight:800, color:"var(--text)", textTransform:"uppercase", letterSpacing:0.4 };
   return (
     <div style={{ marginBottom:16 }}>
-      <div style={{ fontSize:12, fontWeight:800, color:"var(--text)", textTransform:"uppercase", letterSpacing:0.4,
-        margin:"0 0 8px" }}>{title}</div>
+      {onToggle ? (
+        <button onClick={onToggle} style={{ ...head, display:"flex", alignItems:"center", gap:6, width:"100%",
+          background:"none", border:"none", padding:"0 0 8px", cursor:"pointer", textAlign:"left" }}>
+          <span style={{ flex:1 }}>{title}</span>
+          <span style={{ fontSize:11, fontWeight:600, color:"#3b82f6", textTransform:"none", letterSpacing:0 }}>
+            {open ? "Replier ▴" : "Déplier ▾"}</span>
+        </button>
+      ) : <div style={{ ...head, margin:"0 0 8px" }}>{title}</div>}
       {children}
     </div>
   );

@@ -229,6 +229,8 @@ def _text(html: str) -> str:
     t = re.sub(r"(?i)<br\s*/?>|</(p|div|h[1-6]|li|ul|ol|tr)>", "\n", t)
     t = re.sub(r"<[^>]+>", "", t)
     t = _h.unescape(t).replace("\xa0", " ")
+    # La traduction de MakerWorld rend le gras en Markdown (**mot**) : retire.
+    t = re.sub(r"\*\*(.+?)\*\*", r"\1", t, flags=re.S).replace("**", "")
     t = re.sub(r"[ \t]+", " ", t)
     t = re.sub(r"\n\s*\n\s*\n+", "\n\n", t)
     return t.strip()[:20000]
