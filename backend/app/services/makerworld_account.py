@@ -204,6 +204,9 @@ COLLECTIONS = "/design-service/my/favorites/listlite"
 COLLECTION_DESIGNS = "/design-service/favorites/{cid}/designs?offset={{offset}}&limit={{limit}}"
 
 
+DONE_STATUSES = ("SUCCESS", "PARTIAL")
+
+
 async def _enrich(items: list) -> dict:
     """Ajoute a chaque modele ce que l'appli en sait : fiche en cache et
     nombre de fois imprime. Les listes portent deja titre, couverture et
@@ -216,15 +219,25 @@ async def _enrich(items: list) -> dict:
     async with AsyncSessionLocal() as db:
         cache = {m.design_id: m for m in (await db.execute(
             select(MW).where(MW.design_id.in_(ids)))).scalars().all()} if ids else {}
-        printed = dict((await db.execute(
-            select(Print.design_id, func.count()).where(Print.design_id.in_(ids))
-            .group_by(Print.design_id))).all()) if ids else {}
+        rows = (await db.execute(
+            select(Print.design_id, Print.status, Print.plate_id).where(Print.design_id.in_(ids)))).all() if ids else []
+    # « Imprime » = termine (reussi ou partiel) ; un print en cours se compte
+    # a part. Plateaux distincts : 3 impressions peuvent etre 3 plateaux.
+    done, plates, running = {}, {}, {}
+    for did, st, plate in rows:
+        if st in DONE_STATUSES:
+            done[did] = done.get(did, 0) + 1
+            plates.setdefault(did, set()).add(str(plate or "1"))
+        elif st == "IN_PROGRESS":
+            running[did] = running.get(did, 0) + 1
     out = []
     for x in items:
         m = to_dict(cache.get(x["design_id"])) or {}
+        d = x["design_id"]
         out.append({**{k: v for k, v in m.items() if v}, **{k: v for k, v in x.items() if v},
-                    "printed": printed.get(x["design_id"], 0),
-                    "url": f"https://makerworld.com/fr/models/{x['design_id']}"})
+                    "printed": done.get(d, 0), "plates_printed": len(plates.get(d, ())),
+                    "in_progress": running.get(d, 0),
+                    "url": f"https://makerworld.com/fr/models/{d}"})
     missing = [x["design_id"] for x in out if not x.get("title")]
     if missing:
         launch_many(missing)

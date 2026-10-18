@@ -780,11 +780,14 @@ function MakerWorldPlates({ profiles, prints }) {
   const prof = avec.find(x => x.profile_id === pid) || guess;
   const deduit = !sure;
   // un print compte pour ce profil s'il en vient, ou si son profil est inconnu
-  const done = {};
+  // Termine (reussi / partiel) seulement ; un plateau en cours est signale a part.
+  const done = {}, running = {};
   prints.forEach(pr => {
     if (pr.mw_profile_id && pr.mw_profile_id !== prof.profile_id) return;
     const i = parseInt(pr.plate_id, 10);
-    if (i) done[i] = (done[i] || 0) + 1;
+    if (!i) return;
+    if (pr.status === "SUCCESS" || pr.status === "PARTIAL") done[i] = (done[i] || 0) + 1;
+    else if (pr.status === "IN_PROGRESS") running[i] = true;
   });
   const nDone = prof.plates.filter(pl => done[pl.index]).length;
   return (
@@ -805,16 +808,18 @@ function MakerWorldPlates({ profiles, prints }) {
       </div>
       <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:2 }}>
         {prof.plates.map(pl => {
-          const ok = !!done[pl.index];
+          const ok = !!done[pl.index], cours = !ok && running[pl.index];
           return (
             <div key={pl.index} title={`${pl.index}. ${pl.name || "Plateau"}${pl.weight_g ? ` · ${pl.weight_g} g` : ""}${ok ? ` · imprimé ${done[pl.index]}×` : " · pas encore imprimé"}`}
-              style={{ flexShrink:0, width:62, textAlign:"center", opacity: ok ? 1 : 0.55 }}>
+              style={{ flexShrink:0, width:62, textAlign:"center", opacity: ok || cours ? 1 : 0.55 }}>
               <div style={{ position:"relative", width:62, height:62, borderRadius:8, overflow:"hidden",
-                border: ok ? "2px solid #22c55e" : "1px dashed var(--border)", background:"var(--surface)" }}>
+                border: ok ? "2px solid #22c55e" : cours ? "2px solid #f59e0b" : "1px dashed var(--border)", background:"var(--surface)" }}>
                 {pl.thumb && <img src={pl.thumb} alt="" loading="lazy" referrerPolicy="no-referrer"
                   style={{ width:"100%", height:"100%", objectFit:"cover" }}/>}
                 {ok && <span style={{ position:"absolute", top:2, right:2, width:16, height:16, borderRadius:"50%",
                   background:"#22c55e", color:"white", fontSize:10, fontWeight:800, lineHeight:"16px" }}>✓</span>}
+                {cours && <span title="En cours d'impression" style={{ position:"absolute", top:2, right:2, width:16, height:16,
+                  borderRadius:"50%", background:"#f59e0b", color:"white", fontSize:9, lineHeight:"16px" }}>⏳</span>}
               </div>
               <div style={{ fontSize:9.5, color:"var(--muted)", marginTop:2, overflow:"hidden", textOverflow:"ellipsis",
                 whiteSpace:"nowrap" }}>{pl.index}. {pl.name || "Plateau"}</div>
@@ -851,8 +856,8 @@ function MakerWorldSimilar({ designId }) {
               <div style={{ position:"relative", width:96, height:96, borderRadius:8, overflow:"hidden", background:"var(--surface)" }}>
                 {x.cover_url && <img src={x.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
                   style={{ width:"100%", height:"100%", objectFit:"cover" }}/>}
-                {x.printed > 0 && <span style={{ position:"absolute", left:4, bottom:4, fontSize:9.5, fontWeight:700,
-                  padding:"1px 6px", borderRadius:20, background:"#22c55e", color:"white" }}>✓ {x.printed}×</span>}
+                {x.printed > 0 && <span style={{ position:"absolute", left:4, bottom:4, fontSize:9.5, fontWeight:800,
+                  padding:"1px 6px", borderRadius:20, background:"#22c55e", color:"white" }}>✓ IMPRIMÉ</span>}
               </div>
               <div style={{ fontSize:10.5, marginTop:3, lineHeight:1.25, overflow:"hidden", display:"-webkit-box",
                 WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{x.title}</div>

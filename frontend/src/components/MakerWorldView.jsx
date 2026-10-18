@@ -203,12 +203,14 @@ export default function MakerWorldView({ onSearch }) {
               )}
               <div style={grid}>
                 {items.map(x => (
-                  <div key={x.design_id} style={card}>
-                    <a href={x.url} target="_blank" rel="noopener noreferrer" style={{ display:"block" }}>
+                  <div key={x.design_id} style={{ ...card, ...(x.printed > 0 ? printedCard : null) }}>
+                    <a href={x.url} target="_blank" rel="noopener noreferrer" style={{ display:"block", position:"relative" }}>
                       {x.cover_url
                         ? <img src={x.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
                             style={{ width:"100%", aspectRatio:"1", objectFit:"cover", display:"block", background:"var(--surface)" }}/>
                         : <div style={{ width:"100%", aspectRatio:"1", background:"var(--surface)" }}/>}
+                      {x.printed > 0 && <span style={ribbon("#22c55e")}>✓ IMPRIMÉ</span>}
+                      {!x.printed && x.in_progress > 0 && <span style={ribbon("#f59e0b")}>EN COURS</span>}
                     </a>
                     <div style={{ padding:"7px 8px 8px", display:"flex", flexDirection:"column", gap:4, flex:1 }}>
                       <a href={x.url} target="_blank" rel="noopener noreferrer"
@@ -221,10 +223,12 @@ export default function MakerWorldView({ onSearch }) {
                       <div style={{ marginTop:"auto" }}>
                         {x.printed > 0 ? (
                           <button onClick={() => onSearch?.(x)} title="Voir ces prints dans l'historique"
-                            style={{ fontSize:11, fontWeight:700, color:"#22c55e", background:"rgba(34,197,94,0.1)",
-                              border:"none", borderRadius:20, padding:"2px 8px", cursor:"pointer" }}>
-                            ✓ imprimé {x.printed} fois
+                            style={{ fontSize:11, fontWeight:700, color:"#22c55e", background:"rgba(34,197,94,0.12)",
+                              border:"none", borderRadius:20, padding:"2px 8px", cursor:"pointer", textAlign:"left" }}>
+                            {printedLabel(x)}
                           </button>
+                        ) : x.in_progress > 0 ? (
+                          <span style={{ fontSize:11, fontWeight:600, color:"#f59e0b" }}>⏳ en cours d'impression</span>
                         ) : (
                           <span style={{ fontSize:11, color:"var(--muted)" }}>jamais imprimé</span>
                         )}
@@ -321,6 +325,16 @@ function Mosaic({ covers = [] }) {
     </div>
   );
 }
+
+// « 3 plateaux · 5 impressions » plutot qu'un « 5 fois » ambigu.
+function printedLabel(x) {
+  const n = x.printed, p = x.plates_printed || 1;
+  const det = p > 1 ? `${p} plateaux · ${n} impression${n > 1 ? "s" : ""}` : n > 1 ? `${n} impressions` : null;
+  return det ? `✓ Imprimé · ${det}` : "✓ Imprimé";
+}
+const printedCard = { border:"2px solid #22c55e", boxShadow:"0 0 0 3px rgba(34,197,94,0.12)" };
+const ribbon = c => ({ position:"absolute", top:6, left:6, fontSize:10, fontWeight:800, letterSpacing:0.4,
+  padding:"3px 8px", borderRadius:20, background:c, color:"white", boxShadow:"0 1px 4px rgba(0,0,0,0.35)" });
 
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };
 const grid = { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 };
