@@ -152,6 +152,27 @@ EVENTS = {
 }
 
 
+_SOURCE = {"key": "source", "type": "select", "label": "Prévenir pour", "default": "outside",
+           "choices": [["outside", "ce qui est fait sur MakerWorld ou Bambu Handy"],
+                       ["all", "tout, y compris depuis BambuNymous"]]}
+EVENTS["mw_coll_added"] = {
+    "section": "mw", "label": "Modèle ajouté à une collection",
+    "description": "Sur makerworld.com, Bambu Handy ou l'appli (vérifié toutes les 10 min).",
+    "options": [_SOURCE],
+    "sample": {"title": "➕ Ajouté à « Panier »", "priority": 2,
+               "message": "📄 Kit de semis auto-arrosant modulaire\n👤 Meyui\n🖨️ jamais imprimé\n📁 « Panier » · 38 modèles",
+               "click": "https://makerworld.com/fr/models/1400373", "attach": _SAMPLE_COVER,
+               "actions": [("Voir le modèle", "https://makerworld.com/fr/models/1400373")]},
+}
+EVENTS["mw_coll_changed"] = {
+    "section": "mw", "label": "Collection créée, renommée ou supprimée",
+    "description": "Mes collections MakerWorld (vérifié toutes les 10 min).",
+    "options": [_SOURCE],
+    "sample": {"title": "📁 Collection créée", "priority": 2, "link": "/prints",
+               "message": "« Idées Noël »\n📦 3 modèles"},
+}
+
+
 class NotifyError(Exception):
     pass
 

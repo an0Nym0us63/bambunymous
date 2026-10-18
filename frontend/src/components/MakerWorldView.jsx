@@ -228,6 +228,12 @@ export default function MakerWorldView({ onSearch }) {
                   {busy ? <span className="mw-spin" style={{ width:13, height:13 }}/> : "⟳"}
                 </button>
               )}
+              {tab === "favorites" && !coll && status.connected && !nameEdit && (
+                <AdminOnly>
+                  <button onClick={() => setNameEdit({ mode: "new", value: "" })} title="Nouvelle collection"
+                    style={{ ...iconBtn, padding:"4px 10px", fontWeight:800 }}>＋</button>
+                </AdminOnly>
+              )}
               {showModels && (
                 <select value={pf} onChange={e => setPf(e.target.value)}
                   style={{ marginLeft:"auto", fontSize:12, padding:"4px 8px", borderRadius:8, background:"var(--surface2)",
@@ -302,13 +308,6 @@ export default function MakerWorldView({ onSearch }) {
             : !showModels ? (
               (data.collections || []).length === 0 ? <p style={msg}>Aucune collection.</p> : (
                 <div style={grid}>
-                  <AdminOnly>
-                    <button onClick={() => setNameEdit({ mode: "new", value: "" })}
-                      style={{ ...card, cursor:"pointer", alignItems:"center", justifyContent:"center", minHeight:120,
-                        border:"1.5px dashed var(--border)", color:"var(--muted)", fontSize:13, fontWeight:600 }}>
-                      <span style={{ fontSize:26, lineHeight:1 }}>+</span>Nouvelle collection
-                    </button>
-                  </AdminOnly>
                   {data.collections.map(c => (
                     <button key={c.id} onClick={() => setColl(c)}
                       style={{ ...card, cursor:"pointer", padding:0, textAlign:"left", color:"var(--text)" }}>

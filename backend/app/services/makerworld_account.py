@@ -432,6 +432,9 @@ async def set_design_collections(design_id: str, ids: list) -> dict:
     await asyncio.to_thread(_send, "PUT", MEMBERSHIP,
                             {"designId": int(did), "favoritesIds": [int(i) for i in ids]}, tok)
     _cache_clear()
+    from .mw_watch import own
+    for i in ids:
+        own("add", i, did)
     logger.info(f"[MW] modele {did} range dans {len(ids)} collection(s)")
     return {"ok": True, "in": ids}
 
@@ -446,6 +449,8 @@ async def create_collection(title: str) -> dict:
                                 {"title": title, "status": 1, "description": "", "cover": "",
                                  "tags": [], "setAsDefault": False}, tok)
     _cache_clear()
+    from .mw_watch import own
+    own("create", title)
     logger.info(f"[MW] collection creee : {title}")
     cid = (d or {}).get("id") if isinstance(d, dict) else None
     return {"ok": True, "id": str(cid) if cid else None, "title": title}
@@ -470,6 +475,8 @@ async def rename_collection(cid: str, title: str) -> dict:
             "setAsDefault": bool(cur.get("isDefault"))}
     await asyncio.to_thread(_send, "PUT", f"/design-service/my/favorites/{cid}", body, tok)
     _cache_clear()
+    from .mw_watch import own
+    own("rename", cid)
     logger.info(f"[MW] collection {cid} renommee : {title}")
     return {"ok": True}
 
@@ -521,6 +528,8 @@ async def delete_collection(cid: str) -> dict:
         raise AccountError("Collection inconnue")
     await asyncio.to_thread(_send, "DELETE", f"/design-service/my/favorites/{cid}", {"id": int(cid)}, tok)
     _cache_clear()
+    from .mw_watch import own
+    own("delete", cid)
     logger.info(f"[MW] collection {cid} supprimee")
     return {"ok": True}
 
