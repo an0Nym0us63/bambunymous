@@ -4,22 +4,21 @@ import { useFriend } from "../store/friend";
 import { useIsHomeAdmin, ROLE_LABEL } from "../store/auth";
 import { showAlert, showConfirm } from "../utils/dialog";
 
-// ── Bandeau « chez un copain » : toujours visible, retour en un geste ──────
-export function FriendBanner() {
+// ── Pastille « chez un copain » : dans l'en-tete (mobile) ou le menu (PC) ──
+// Discrete mais toujours visible ; la toucher ramene chez moi.
+export function FriendChip({ block = false }) {
   const friend = useFriend((s) => s.friend);
   const visit = useFriend((s) => s.visit);
   if (!friend) return null;
   return (
-    <div style={{ position:"sticky", top:0, zIndex:50, display:"flex", alignItems:"center", gap:8,
-      padding:"8px 12px", margin:"0 0 10px", borderRadius:12, background:"linear-gradient(90deg,#f59e0b,#f97316)",
-      color:"white", fontSize:12.5, fontWeight:600, boxShadow:"0 4px 14px rgba(249,115,22,0.35)" }}>
-      <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-        👀 Chez <b>{friend.name}</b> · {ROLE_LABEL[friend.role] || "lecture seule"}
-      </span>
-      <button onClick={() => visit(null)}
-        style={{ flexShrink:0, padding:"5px 10px", borderRadius:20, border:"none", background:"rgba(255,255,255,0.25)",
-          color:"white", fontWeight:700, fontSize:12, cursor:"pointer" }}>🏠 Chez moi</button>
-    </div>
+    <button onClick={() => visit(null)} title="Revenir chez moi"
+      style={{ display:"flex", alignItems:"center", gap:6, minWidth:0, flexShrink: block ? 0 : 1,
+        width: block ? "100%" : "auto", padding: block ? "7px 10px" : "4px 9px", borderRadius:20, cursor:"pointer",
+        border:"1px solid rgba(249,115,22,0.45)", background:"rgba(249,115,22,0.12)", color:"#f97316",
+        fontSize:12, fontWeight:700 }}>
+      <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>👀 {friend.name}</span>
+      <span style={{ marginLeft: block ? "auto" : 0, flexShrink:0, opacity:0.8 }}>🏠</span>
+    </button>
   );
 }
 

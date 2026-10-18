@@ -9,6 +9,7 @@ import TarePicker, { useSpoolTares, tareForBrand } from "../components/TarePicke
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag, Sun } from "lucide-react";
 import client, { apiUrl } from "../api/client";
+import { useFriend } from "../store/friend";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
@@ -2767,6 +2768,7 @@ export default function Filaments() {
   // les autres pages, et les scans y sont recus par RfidScanBridge (Layout),
   // qui ramene ici avec la fiche ouverte.
   const scan = useRfidScan();
+  const friend = useFriend((st) => st.friend);   // chez un copain : pas de scan
   const rfidScan = { available: scan.available, listening: scan.listening,
     toggle: () => (scan.listening ? scan.stop() : scan.start()) };
 
@@ -2852,7 +2854,8 @@ export default function Filaments() {
       {/* Mobile : le bouton part dans le header (une ligne de gagnee).
           Desktop : le header mobile n'existe pas, on le garde dans le flux. */}
       <HeaderAction>
-        {rfidScan.available && (
+        {/* Chez un copain : rien a scanner (ses bobines ne sont pas ici). */}
+        {!friend && rfidScan.available && (
           <button onClick={rfidScan.toggle} aria-label="Scan RFID en continu"
             title={rfidScan.listening ? "Scan RFID actif" : "Scan RFID"}
             style={{ display:"flex", alignItems:"center", justifyContent:"center",
@@ -2864,19 +2867,19 @@ export default function Filaments() {
             <Nfc size={17}/>
           </button>
         )}
-        <button onClick={() => setScanOpen(true)} aria-label="Scanner un échantillon" title="Scanner un échantillon"
+        {!friend && <button onClick={() => setScanOpen(true)} aria-label="Scanner un échantillon" title="Scanner un échantillon"
           style={{ display:"flex", alignItems:"center", justifyContent:"center",
             width:34, height:34, borderRadius:"50%", border:"none", cursor:"pointer",
             background:"#3b82f6", color:"white" }}>
           <ScanLine size={17}/>
-        </button>
+        </button>}
       </HeaderAction>
 
       <div className="hidden-mobile" style={{ display:"none", alignItems:"center",
         justifyContent:"flex-end", gap:10 }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)",
           margin:0, marginRight:"auto" }}>Filaments</h1>
-        {rfidScan.available && (
+        {!friend && rfidScan.available && (
           <button onClick={rfidScan.toggle}
             aria-label="Scan RFID en continu" title={rfidScan.listening ? "Scan RFID actif" : "Scan RFID"}
             style={{ display:"flex", alignItems:"center", justifyContent:"center",
@@ -2888,13 +2891,13 @@ export default function Filaments() {
             <Nfc size={18}/>
           </button>
         )}
-        <button onClick={() => setScanOpen(true)}
+        {!friend && <button onClick={() => setScanOpen(true)}
           aria-label="Scanner un échantillon" title="Scanner un échantillon"
           style={{ display:"flex", alignItems:"center", justifyContent:"center",
             width:38, height:38, borderRadius:"50%", border:"none", cursor:"pointer",
             background:"#3b82f6", color:"white" }}>
           <ScanLine size={18}/>
-        </button>
+        </button>}
       </div>
 
       {/* Tabs */}

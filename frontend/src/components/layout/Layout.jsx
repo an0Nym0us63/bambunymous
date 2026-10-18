@@ -1,5 +1,6 @@
 import React, { useEffect } from "react";
-import { FriendBanner } from "../Friends";
+import { FriendChip } from "../Friends";
+import { useFriend } from "../../store/friend";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { Home, Settings, Package, History, ShoppingBag, BarChart2 } from "lucide-react";
 import UserMenu from "../UserMenu";
@@ -85,6 +86,7 @@ export default function Layout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const title = TITLES[pathname] ?? null;
+  const friend = useFriend((st) => st.friend);   // chez un copain
   const headerRef = React.useRef(null);
 
   // Le header mobile est fixed et sa hauteur VARIE selon la page (bouton scan sur
@@ -153,6 +155,8 @@ export default function Layout() {
             BambuNymous
           </span>
         </div>
+        {/* Chez un copain : rappel discret, retour en un geste. */}
+        {friend && <div style={{ padding:"0 12px 8px" }}><FriendChip block/></div>}
         {/* Suivi d'un partage Telegram en arriere-plan (ShareProgress, par portail). */}
         <div id="sidebar-status" style={{ display:"flex", flexDirection:"column", gap:6, padding:"0 12px" }}/>
         <nav style={S.nav}>
@@ -186,6 +190,7 @@ export default function Layout() {
           {/* Emplacement d'actions : les pages y injectent leurs boutons par
               portail (cf. Filaments -> Scanner). Sur mobile, cela evite qu'une
               barre d'actions occupe une ligne entiere sous le header. */}
+          <FriendChip/>
           <div id="header-actions" style={{ marginLeft:"auto", display:"flex",
             alignItems:"center", gap:6, flexShrink:0 }}/>
           {/* Suivi d'un partage Telegram en arriere-plan (ShareProgress y
@@ -197,9 +202,9 @@ export default function Layout() {
           {pathname === "/" && <UserMenu placement="bottom"/>}
         </header>
 
-        <main className="page-content" style={S.page}><FriendBanner/><Outlet /></main>
+        <main className="page-content" style={S.page}><Outlet /></main>
         <ShareProgress/>
-        <RfidScanBridge/>
+        {!friend && <RfidScanBridge/>}
         <Toast/>
         <NoAutofill/>
 

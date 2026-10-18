@@ -478,7 +478,10 @@ async def design_collections(design_id: str) -> dict:
     tok = await _tok()
     cols = (await collections())["collections"]
     code, d = await asyncio.to_thread(_get_json, f"{MEMBERSHIP}?designId={did}", tok)
-    ids = _membership_ids(d) if code == 200 else None
+    # Reponse relevee le 18/10/2026 : {"designId": 2357097, "favoritesIds": [5143394]}.
+    # Une reponse qui parle d'un autre modele ne vaut rien (l'ecriture remplace la liste).
+    same = not (isinstance(d, dict) and d.get("designId") is not None and str(d.get("designId")) != did)
+    ids = _membership_ids(d) if code == 200 and same else None
     return {"collections": cols, "in": ids, "known": ids is not None}
 
 
