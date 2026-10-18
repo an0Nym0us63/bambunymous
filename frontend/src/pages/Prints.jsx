@@ -729,7 +729,11 @@ function MakerWorldCard({ printId, designId }) {
             style={{ width:64, height:64, borderRadius:8, objectFit:"cover", flexShrink:0, background:"var(--surface)" }}/>
         )}
         <div style={{ minWidth:0, flex:1 }}>
-          <div style={{ fontSize:10, fontWeight:700, color:"#3b82f6", letterSpacing:0.3, marginBottom:2 }}>MAKERWORLD ↗</div>
+          <div style={{ fontSize:10, fontWeight:700, color:"#3b82f6", letterSpacing:0.3, marginBottom:2 }}>
+            MAKERWORLD ↗
+            <span title="Lu via une API interne de MakerWorld, non officielle : ces infos peuvent manquer ou disparaître."
+              style={{ fontWeight:500, color:"var(--muted)", opacity:0.7, letterSpacing:0, marginLeft:5 }}>· API non officielle</span>
+          </div>
           <div style={{ fontSize:13, fontWeight:700, lineHeight:1.3, overflow:"hidden",
             display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{mw.title}</div>
           {mw.title_fr && mw.title_fr !== mw.title && (
