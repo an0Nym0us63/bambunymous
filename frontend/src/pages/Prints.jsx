@@ -694,7 +694,7 @@ const TRAD_BY = {
 // Fiche publique du modele sur MakerWorld, lue en cache par le serveur. Pas
 // encore lue : le serveur la lance, on redemande 4 s plus tard (une fois).
 const fmtK = n => n == null ? null : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
-function MakerWorldCard({ designId, note }) {
+function MakerWorldCard({ designId, note, prints = [] }) {
   const [mw, setMw] = useState(undefined);       // undefined = en cours, null = rien
   useEffect(() => {
     let alive = true, timer = null;
@@ -760,6 +760,106 @@ function MakerWorldCard({ designId, note }) {
         </div>
       )}
       {note && <div style={{ fontSize:10.5, color:"var(--muted)", padding:"0 10px 8px" }}>{note}</div>}
+      <MakerWorldPlates profiles={mw.profiles || []} prints={prints}/>
+      <MakerWorldSimilar designId={designId}/>
+    </div>
+  );
+}
+
+// Plateaux du profil imprime, coches d'apres les prints (plate_id, et profil
+// MakerWorld quand l'imprimante l'a donne). Profil inconnu (vieux prints) :
+// on deduit -- profil unique, ou celui par defaut -- et on le dit.
+function MakerWorldPlates({ profiles, prints }) {
+  const avec = profiles.filter(x => x.plates?.length);
+  const known = {};
+  prints.forEach(pr => { if (pr.mw_profile_id) known[pr.mw_profile_id] = (known[pr.mw_profile_id] || 0) + 1; });
+  const sure = avec.find(x => known[x.profile_id] && known[x.profile_id] === Math.max(...Object.values(known)));
+  const guess = sure || (avec.length === 1 ? avec[0] : avec.find(x => x.default) || avec[0]);
+  const [pid, setPid] = useState(null);
+  if (!avec.length || !prints.length) return null;
+  const prof = avec.find(x => x.profile_id === pid) || guess;
+  const deduit = !sure;
+  // un print compte pour ce profil s'il en vient, ou si son profil est inconnu
+  const done = {};
+  prints.forEach(pr => {
+    if (pr.mw_profile_id && pr.mw_profile_id !== prof.profile_id) return;
+    const i = parseInt(pr.plate_id, 10);
+    if (i) done[i] = (done[i] || 0) + 1;
+  });
+  const nDone = prof.plates.filter(pl => done[pl.index]).length;
+  return (
+    <div style={{ padding:"8px 10px 10px", borderTop:"1px solid var(--border)" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginBottom:6 }}>
+        <span style={{ fontSize:11.5, fontWeight:700, color:"var(--text)" }}>
+          Plateaux · {nDone}/{prof.plates.length} imprimé{nDone > 1 ? "s" : ""}
+        </span>
+        {avec.length > 1 ? (
+          <select value={prof.profile_id} onChange={e => setPid(e.target.value)}
+            style={{ maxWidth:"100%", fontSize:11, padding:"2px 6px", borderRadius:6, background:"var(--surface)",
+              border:"1px solid var(--border)", color:"var(--muted)" }}>
+            {avec.map(x => <option key={x.profile_id} value={x.profile_id}>{x.title || `Profil ${x.profile_id}`}</option>)}
+          </select>
+        ) : <span style={{ fontSize:11, color:"var(--muted)" }}>{prof.title}</span>}
+        {deduit && !pid && <span title="L'imprimante n'a pas donné le profil de ces prints : profil déduit"
+          style={{ fontSize:10, color:"var(--muted)", opacity:0.8 }}>(profil déduit)</span>}
+      </div>
+      <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:2 }}>
+        {prof.plates.map(pl => {
+          const ok = !!done[pl.index];
+          return (
+            <div key={pl.index} title={`${pl.index}. ${pl.name || "Plateau"}${pl.weight_g ? ` · ${pl.weight_g} g` : ""}${ok ? ` · imprimé ${done[pl.index]}×` : " · pas encore imprimé"}`}
+              style={{ flexShrink:0, width:62, textAlign:"center", opacity: ok ? 1 : 0.55 }}>
+              <div style={{ position:"relative", width:62, height:62, borderRadius:8, overflow:"hidden",
+                border: ok ? "2px solid #22c55e" : "1px dashed var(--border)", background:"var(--surface)" }}>
+                {pl.thumb && <img src={pl.thumb} alt="" loading="lazy" referrerPolicy="no-referrer"
+                  style={{ width:"100%", height:"100%", objectFit:"cover" }}/>}
+                {ok && <span style={{ position:"absolute", top:2, right:2, width:16, height:16, borderRadius:"50%",
+                  background:"#22c55e", color:"white", fontSize:10, fontWeight:800, lineHeight:"16px" }}>✓</span>}
+              </div>
+              <div style={{ fontSize:9.5, color:"var(--muted)", marginTop:2, overflow:"hidden", textOverflow:"ellipsis",
+                whiteSpace:"nowrap" }}>{pl.index}. {pl.name || "Plateau"}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Modeles similaires, charges a la demande (une requete, pas a l'ouverture).
+function MakerWorldSimilar({ designId }) {
+  const [sim, setSim] = useState(null);           // null = pas demande, undefined = en cours
+  const load = () => {
+    setSim(undefined);
+    client.get(`/makerworld/similar/${encodeURIComponent(designId)}`)
+      .then(({ data }) => setSim(data.items || [])).catch(() => setSim([]));
+  };
+  if (sim === null) return (
+    <button onClick={load} style={{ display:"block", width:"100%", padding:"7px", border:"none",
+      borderTop:"1px solid var(--border)", background:"none", color:"#3b82f6", fontSize:11.5, fontWeight:600,
+      cursor:"pointer" }}>Modèles similaires</button>
+  );
+  return (
+    <div style={{ padding:"8px 10px 10px", borderTop:"1px solid var(--border)" }}>
+      <div style={{ fontSize:11.5, fontWeight:700, color:"var(--text)", marginBottom:6 }}>Modèles similaires</div>
+      {sim === undefined ? <div style={{ fontSize:11, color:"var(--muted)" }}>…</div>
+        : sim.length === 0 ? <div style={{ fontSize:11, color:"var(--muted)" }}>Rien trouvé.</div> : (
+        <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:2 }}>
+          {sim.map(x => (
+            <a key={x.design_id} href={x.url} target="_blank" rel="noopener noreferrer"
+              style={{ flexShrink:0, width:96, textDecoration:"none", color:"var(--text)" }}>
+              <div style={{ position:"relative", width:96, height:96, borderRadius:8, overflow:"hidden", background:"var(--surface)" }}>
+                {x.cover_url && <img src={x.cover_url} alt="" loading="lazy" referrerPolicy="no-referrer"
+                  style={{ width:"100%", height:"100%", objectFit:"cover" }}/>}
+                {x.printed > 0 && <span style={{ position:"absolute", left:4, bottom:4, fontSize:9.5, fontWeight:700,
+                  padding:"1px 6px", borderRadius:20, background:"#22c55e", color:"white" }}>✓ {x.printed}×</span>}
+              </div>
+              <div style={{ fontSize:10.5, marginTop:3, lineHeight:1.25, overflow:"hidden", display:"-webkit-box",
+                WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{x.title}</div>
+            </a>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1048,7 +1148,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
           {/* Fiche MakerWorld du modele (titre, createur, categories, compteurs),
               ou a defaut le simple lien. */}
-          {p.design_id && <MakerWorldCard designId={p.design_id}/>}
+          {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]}/>}
 
           {/* Creation d'objets : le bouton porte le quota et se desactive
               quand tout est cree, plutot que de laisser tenter puis echouer. */}
@@ -1454,6 +1554,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
             const ds = Object.keys(cpt).sort((a, b) => cpt[b] - cpt[a]);
             return ds.map(d => (
               <MakerWorldCard key={d} designId={d}
+                prints={localPrints.filter(pr => String(pr.design_id || "").trim() === d)}
                 note={ds.length > 1 || cpt[d] < localPrints.length
                   ? `${cpt[d]} print${cpt[d] > 1 ? "s" : ""} sur ${localPrints.length} de ce modèle` : null}/>
             ));

@@ -69,6 +69,17 @@ async def mw_collection(kind: str, _: str = Depends(get_current_user)):
     return await _call(acc.collection(kind))
 
 
+@router.get("/search")
+async def mw_search(q: str = "", offset: int = 0, _: str = Depends(get_current_user)):
+    """Recherche publique MakerWorld, avec « deja imprime »."""
+    return await _call(mw.search(q, offset))
+
+
+@router.get("/similar/{design_id}")
+async def mw_similar(design_id: str, _: str = Depends(get_current_user)):
+    return await _call(mw.similar(design_id))
+
+
 @router.get("/debug/{name}")
 async def mw_debug(name: str, _: str = Depends(require_admin)):
     return await _call(acc.debug(name))

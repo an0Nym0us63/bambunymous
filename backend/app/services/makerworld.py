@@ -95,11 +95,36 @@ def _parse_design(code, d) -> dict:
         "creator_avatar": txt(cr.get("avatar"), 1024),
         "categories": ",".join(c.replace(",", " ") for c in cats)[:512] or None,
         "tags": ",".join(t.replace(",", " ").strip() for t in tags) or None,
+        "profiles": _profiles(d) or "[]",
         "like_count": num(d.get("likeCount")),
         "download_count": num(d.get("downloadCount")),
         "print_count": num(d.get("printCount")),
         "collection_count": num(d.get("collectionCount")),
     }
+
+
+def _profiles(d) -> str:
+    """Profils (instances) et leurs plateaux, en JSON compact. Rien d'exige :
+    une forme inattendue donne simplement une liste plus courte."""
+    import json
+    out = []
+    for i in (d.get("instances") if isinstance(d.get("instances"), list) else []):
+        if not isinstance(i, dict):
+            continue
+        ext = i.get("extention") if isinstance(i.get("extention"), dict) else {}
+        mi = ext.get("modelInfo") if isinstance(ext.get("modelInfo"), dict) else {}
+        plates = []
+        for p in (mi.get("plates") if isinstance(mi.get("plates"), list) else []):
+            if not isinstance(p, dict) or not isinstance(p.get("index"), int):
+                continue
+            th = p.get("thumbnail") if isinstance(p.get("thumbnail"), dict) else {}
+            plates.append({"index": p["index"], "name": p.get("name") if isinstance(p.get("name"), str) else "",
+                           "thumb": th.get("url") if isinstance(th.get("url"), str) else None,
+                           "weight_g": p.get("weight") if isinstance(p.get("weight"), (int, float)) else None,
+                           "seconds": p.get("prediction") if isinstance(p.get("prediction"), (int, float)) else None})
+        out.append({"profile_id": str(i.get("profileId") or ""), "title": i.get("title") if isinstance(i.get("title"), str) else "",
+                    "default": i.get("id") == d.get("defaultInstanceId"), "plates": plates})
+    return json.dumps(out, ensure_ascii=False) if out else None
 
 
 def to_dict(m) -> dict:
@@ -117,7 +142,57 @@ def to_dict(m) -> dict:
         "like_count": m.like_count, "download_count": m.download_count,
         "print_count": m.print_count, "collection_count": m.collection_count,
         "fetched_at": m.fetched_at.isoformat() if m.fetched_at else None,
+        "profiles": _load(m.profiles),
     }
+
+
+def _load(s):
+    import json
+    try:
+        v = json.loads(s) if s else []
+        return v if isinstance(v, list) else []
+    except ValueError:
+        return []
+
+
+def _hit(h) -> dict:
+    """Un modele d'une liste de recherche / de similaires."""
+    if not isinstance(h, dict) or not str(h.get("id") or "").isdigit():
+        return None
+    cr = h.get("designCreator") if isinstance(h.get("designCreator"), dict) else {}
+    s = lambda v: v if isinstance(v, str) else None
+    return {"design_id": str(h["id"]), "title": s(h.get("title")), "cover_url": s(h.get("cover")),
+            "creator_name": s(cr.get("name")),
+            "like_count": h.get("likeCount") if isinstance(h.get("likeCount"), int) else None,
+            "print_count": h.get("printCount") if isinstance(h.get("printCount"), int) else None}
+
+
+async def _public_list(path: str) -> dict:
+    """Liste publique (recherche, similaires), enrichie de « deja imprime »."""
+    import asyncio
+    from .makerworld_account import _enrich
+    code, d = await asyncio.to_thread(_get_json, path)
+    if not isinstance(d, dict):
+        return {"items": [], "total": 0, "error": f"MakerWorld ne répond pas (HTTP {code})"}
+    hits = [x for x in (_hit(h) for h in (d.get("hits") if isinstance(d.get("hits"), list) else [])) if x]
+    res = await _enrich(hits)
+    total = d.get("total") if isinstance(d.get("total"), int) else len(hits)
+    return {"items": res["items"], "total": total}
+
+
+async def search(q: str, offset: int = 0) -> dict:
+    from urllib.parse import quote
+    q = (q or "").strip()[:100]
+    if not q:
+        return {"items": [], "total": 0}
+    return await _public_list(f"/search-service/select/design2?keyword={quote(q)}&offset={max(0, int(offset))}&limit=24")
+
+
+async def similar(design_id: str) -> dict:
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        return {"items": [], "total": 0}
+    return await _public_list(f"/search-service/design/{did}/relate?offset=0&limit=12&scene=1")
 
 
 async def _todo(limit: int, only: str = None) -> list:
@@ -137,7 +212,8 @@ async def _todo(limit: int, only: str = None) -> list:
     for i in ids:
         m = known.get(str(i))
         if m is None or m.status == "error" or not m.fetched_at or m.fetched_at < old \
-                or (m.status == "ok" and m.title and not m.title_fr):
+                or (m.status == "ok" and m.title and not m.title_fr) \
+                or (m.status == "ok" and m.profiles is None):
             out.append(str(i))
     return out[:limit]
 
@@ -185,7 +261,7 @@ async def refresh(limit: int = 200, only: str = None) -> dict:
             ok += 1
             for f in ("title", "cover_url", "creator_name", "creator_handle", "creator_avatar",
                       "categories", "tags", "like_count", "download_count", "print_count",
-                      "collection_count"):
+                      "collection_count", "profiles"):
                 setattr(m, f, r.get(f))
             if r.get("title") in table:
                 tr, _ = table[r["title"]]

@@ -82,6 +82,8 @@ async def _migrate():
         ("filaments", "profile_id",           "TEXT"),
         ("filaments", "spool_weight_g",       "REAL"),
         ("filaments", "spool_tare_name",      "TEXT"),
+        ("prints",    "mw_profile_id",        "TEXT"),
+        ("makerworld_designs", "profiles",     "TEXT"),
         ("filaments", "multicolor_type",      "TEXT DEFAULT 'monochrome'"),
         ("filaments", "colors_array",         "TEXT"),
         ("filaments", "swatch",               "INTEGER DEFAULT 0"),

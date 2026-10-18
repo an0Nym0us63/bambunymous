@@ -186,6 +186,21 @@ async def _snap(print_id: int, trigger: str):
 
 
 # ── MakerWorld design_id ─────────────────────────────────────────────────────
+def _current_profile(design_id) -> str | None:
+    """Profil MakerWorld du print en cours (MQTT), seulement si l'etat parle
+    bien du meme modele : un profil reste d'un print precedent serait faux."""
+    try:
+        from ..core.mqtt import get_state
+        st = get_state()
+        did = _clean_design_id(design_id)
+        prof = str(getattr(st, "profile_id", "") or "").strip()
+        if did and prof and prof != "0" and str(getattr(st, "design_id", "")).strip() == did:
+            return prof[:32]
+    except Exception:
+        pass
+    return None
+
+
 def _clean_design_id(raw) -> str | None:
     """Normalise l'ID MakerWorld recu du MQTT. On ignore les valeurs vides ET les
     zeros ("0", 0), que la machine renvoie parfois quand il n'y a pas de modele
@@ -233,6 +248,7 @@ async def _create_print_locked(job_id: str, url: str, taskname: str,
             print_type=print_type,
             status="IN_PROGRESS",
             design_id=_clean_design_id(design_id),
+            mw_profile_id=_current_profile(design_id),
             # Persistes pour pouvoir REPRENDRE l'enrichissement apres un
             # redemarrage : le thread _enrich meurt avec le process.
             task_name=taskname or None,

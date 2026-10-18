@@ -57,6 +57,9 @@ class Print(Base):
 
     plate_id            = Column(String(8),   default="1")
     design_id           = Column(String(128), nullable=True)
+    # Profil MakerWorld imprime (profile_id du MQTT) : dit, avec plate_id,
+    # quel plateau de quel profil -- pour cocher les plateaux d'un groupe.
+    mw_profile_id       = Column(String(32),  nullable=True)
     printer_model       = Column(String(32),  default="H2C")
 
     group_id            = Column(Integer, ForeignKey("groups.id", ondelete="SET NULL"), nullable=True)
@@ -186,4 +189,7 @@ class MakerWorldDesign(Base):
     download_count = Column(Integer, nullable=True)
     print_count    = Column(Integer, nullable=True)
     collection_count = Column(Integer, nullable=True)
+    # Profils et leurs plateaux (JSON) : [{profile_id, title, plates:[{index,
+    # name, thumb, weight_g, seconds}]}]
+    profiles       = Column(Text, nullable=True)
     fetched_at     = Column(DateTime, nullable=True)
