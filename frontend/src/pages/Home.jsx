@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
 import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
-import client from "../api/client";
+import client, { apiUrl } from "../api/client";
 import AttentionSection from "../components/AttentionSection";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel } from "../utils/ams";
@@ -68,7 +68,7 @@ function StatusBanner({ status }) {
   const tickCam = () => {
     if (inFlightRef.current || !camRef.current) return;
     inFlightRef.current = true;
-    camRef.current.src = `/api/v1/camera/snapshot?t=${Date.now()}`;
+    camRef.current.src = apiUrl(`/camera/snapshot?t=${Date.now()}`);
   };
   const startCam = () => {
     if (timerRef.current) return;
@@ -188,7 +188,7 @@ function StatusBanner({ status }) {
           <div style={{ width:72, height:72, borderRadius:10, overflow:"hidden", flexShrink:0,
             background:"var(--surface2)" }}>
             {printInfo?.plate_image && (
-              <img src={`/api/v1/prints/${printInfo.id}/image`} alt=""
+              <img src={apiUrl(`/prints/${printInfo.id}/image`)} alt=""
                 style={{ width:"100%", height:"100%", objectFit:"cover" }}
                 onError={e => e.currentTarget.style.display="none"}/>
             )}

@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { LogOut } from "lucide-react";
 import { useAuth, ROLE_LABEL, ROLE_ADMIN } from "../store/auth";
+import { FriendPicker } from "./Friends";
 
 // Violet du scrim natif de la coquille Android : le meme, pour que la pastille
 // se lise comme une continuite de l'application et non comme un accent de plus.
@@ -96,6 +97,7 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
               </p>
               <p style={{ margin:"2px 0 0", fontSize:11, color:"var(--muted)" }}>{roleLabel}</p>
             </div>
+            <FriendPicker onDone={() => setRect(null)}/>
             <button onClick={doLogout}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
                 padding:"12px 14px", background:"none", border:"none", cursor:"pointer",

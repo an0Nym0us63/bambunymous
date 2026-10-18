@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
-import client from "../api/client";
+import client, { apiUrl } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import CategoryPicker from "../components/CategoryPicker";
 import Select from "../components/Select";
@@ -156,7 +156,7 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
               background:"var(--surface2)", border:"1px solid var(--border)", padding:6,
               display:"flex", alignItems:"center", justifyContent:"center", boxSizing:"border-box" }}>
               {d.has_image
-                ? <img src={`/api/v1/objects/accessories/${accId}/image?v=${imgV}`} alt=""
+                ? <img src={apiUrl(`/objects/accessories/${accId}/image?v=${imgV}`)} alt=""
                     style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}/>
                 : <Package size={30} style={{ color:"var(--muted)" }}/>}
             </div>
@@ -337,7 +337,7 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
                   border:"1px solid var(--border)" }}>
                   <div style={{ width:28, height:28, borderRadius:6, overflow:"hidden", flexShrink:0,
                     background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <img src={`/api/v1/objects/objects/${o.id}/image`} alt=""
+                    <img src={apiUrl(`/objects/objects/${o.id}/image`)} alt=""
                       style={{ width:"100%", height:"100%", objectFit:"cover" }}
                       onError={e=>e.currentTarget.style.display="none"}/>
                   </div>
@@ -603,7 +603,7 @@ function AccessoryCard({ acc, onClick, onLongPress, selectMode, selected }) {
         alignItems:"center", justifyContent:"center", overflow:"hidden", padding:8,
         boxSizing:"border-box" }}>
         {acc.has_image
-          ? <img src={`/api/v1/objects/accessories/${acc.id}/image`} alt={acc.name}
+          ? <img src={apiUrl(`/objects/accessories/${acc.id}/image`)} alt={acc.name}
               // contain : l'image entiere est visible, plus de rognage.
               style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}
               onError={e => e.currentTarget.style.display="none"}/>
@@ -830,7 +830,7 @@ function AccessoryPicker({ accessories, onClose, onConfirm, multiplier = 1 }) {
                   border: active ? "1px solid #3b82f6" : "1px solid var(--border)" }}>
                 <div style={{ width:36, height:36, borderRadius:6, overflow:"hidden", flexShrink:0,
                   background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <img src={`/api/v1/objects/accessories/${a.id}/image`} alt=""
+                  <img src={apiUrl(`/objects/accessories/${a.id}/image`)} alt=""
                     style={{ width:"100%", height:"100%", objectFit:"cover" }}
                     onError={e=>e.currentTarget.style.display="none"}/>
                 </div>
@@ -1028,7 +1028,7 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
 
         {/* Header */}
         <div style={{ display:"flex", gap:12, marginBottom:14 }}>
-          <img src={`/api/v1/objects/objects/${obj.id}/image`} alt=""
+          <img src={apiUrl(`/objects/objects/${obj.id}/image`)} alt=""
             style={{ width:72, height:72, borderRadius:10, objectFit:"cover", flexShrink:0, background:"var(--surface2)" }}
             onError={e=>e.currentTarget.style.display="none"}/>
           <div>
@@ -1136,7 +1136,7 @@ export function ObjectSheet({ obj, onClose, onUpdated }) {
               background:"var(--surface2)", borderRadius:8, marginBottom:5, border:"1px solid var(--border)" }}>
               <div style={{ width:28, height:28, borderRadius:6, overflow:"hidden", flexShrink:0,
                 background:"var(--bg)", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <img src={`/api/v1/objects/accessories/${a.accessory_id}/image`} alt=""
+                <img src={apiUrl(`/objects/accessories/${a.accessory_id}/image`)} alt=""
                   style={{ width:"100%", height:"100%", objectFit:"cover" }}
                   onError={e=>e.currentTarget.style.display="none"}/>
               </div>
@@ -1575,7 +1575,7 @@ function ObjectCard({ obj, onClick, onLongPress, selectMode, selected, onToggleS
       )}
       <div style={{ position:"relative", height:130, background:"var(--surface2)",
         display:"flex", alignItems:"center", justifyContent:"center" }}>
-        <img src={`/api/v1/objects/objects/${obj.id}/image`} alt=""
+        <img src={apiUrl(`/objects/objects/${obj.id}/image`)} alt=""
           style={{ width:"100%", height:"100%", objectFit:"cover" }}
           onError={e => e.currentTarget.style.display="none"}/>
         <span style={{ position:"absolute", top:6, left:6,
@@ -1803,7 +1803,7 @@ function ObjectGroupTile({ group, objects, sectionStatus, totalCount, onChanged 
       style={{ padding:0, overflow:"hidden", cursor:"pointer", position:"relative" }}>
       <div style={{ position:"relative", height:130, background:"var(--surface2)",
         display:"flex", alignItems:"center", justifyContent:"center" }}>
-        {cover && <img src={`/api/v1/objects/objects/${cover.id}/image`} alt=""
+        {cover && <img src={apiUrl(`/objects/objects/${cover.id}/image`)} alt=""
           style={{ width:"100%", height:"100%", objectFit:"cover" }}
           onError={e => e.currentTarget.style.display="none"}/>}
         <div style={{ position:"absolute", inset:0, background:"rgba(167,139,250,0.12)" }}/>

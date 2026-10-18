@@ -124,6 +124,13 @@ async def mw_search(q: str = "", offset: int = 0, _: str = Depends(get_current_u
     return await _call(mw.search(q, offset))
 
 
+@router.get("/mine")
+async def mw_mine(ids: str = "", _: str = Depends(get_current_user)):
+    """Ce que J'AI de ces modeles (imprimes, collections, j'aime) : pour les
+    reperer en parcourant le BambuNymous d'un copain."""
+    return await _call(acc.mine(ids.split(",")))
+
+
 @router.get("/discover/navs")
 async def mw_discover_navs(fresh: bool = False, _: str = Depends(get_current_user)):
     """Fils de la page d'accueil MakerWorld (Pour vous, Tendance, categories…)."""

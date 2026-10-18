@@ -73,6 +73,7 @@ async def _migrate():
         ("users",     "totp_enabled",         "INTEGER DEFAULT 0"),
         ("users",     "totp_last_step",       "INTEGER"),
         ("users",     "totp_recovery",        "TEXT"),
+        ("users",     "friend_key_hash",      "TEXT"),
         ("groups",    "cover_photo",          "TEXT"),
         ("prints",    "translated_name",      "TEXT"),
         ("prints",    "translated_by",        "TEXT"),

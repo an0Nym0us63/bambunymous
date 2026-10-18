@@ -265,6 +265,70 @@ def _cache_put(key, val):
 
 def _cache_clear():
     _LIST_CACHE.clear()
+    _MINE[:] = [0.0, None]
+
+
+# ── « Deja chez moi ? » (en parcourant chez un copain) ─────────────────────
+# Index modele -> mes collections et mes j'aime, construit en parcourant mes
+# listes (pages en cache), garde 30 min et vide a chaque ecriture.
+_MINE = [0.0, None]
+MINE_TTL = 1800
+MINE_MAX = 600            # modeles lus au plus par liste
+
+
+async def _mine_index() -> dict:
+    import time
+    if _MINE[1] is not None and time.time() - _MINE[0] < MINE_TTL:
+        return _MINE[1]
+    idx = {"colls": {}, "likes": set()}
+    if await token():
+        for c in (await collections())["collections"]:
+            off = 0
+            while off < MINE_MAX:
+                p = await _page(COLLECTION_DESIGNS.format(cid=c["id"]), off, 50)
+                for x in p["items"]:
+                    idx["colls"].setdefault(x["design_id"], []).append(c["title"])
+                if len(p["items"]) < 50 or (p["total"] is not None and off + 50 >= p["total"]):
+                    break
+                off += 50
+        off = 0
+        while off < MINE_MAX:
+            p = await _page(LISTS["likes"], off, 50)
+            idx["likes"].update(x["design_id"] for x in p["items"])
+            if len(p["items"]) < 50 or (p["total"] is not None and off + 50 >= p["total"]):
+                break
+            off += 50
+    _MINE[:] = [time.time(), idx]
+    return idx
+
+
+async def mine(ids: list) -> dict:
+    """Pour chaque modele : imprime chez moi (combien, plateaux), dans quelles
+    de mes collections, aime par moi."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    ids = [str(i) for i in ids if str(i).isdigit()][:200]
+    out = {i: {"printed": 0, "in_progress": 0, "collections": [], "liked": False} for i in ids}
+    if not ids:
+        return {"items": out}
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.design_id, Print.status).where(Print.design_id.in_(ids)))).all()
+    for did, st in rows:
+        if st in DONE_STATUSES:
+            out[did]["printed"] += 1
+        elif st == "IN_PROGRESS":
+            out[did]["in_progress"] += 1
+    try:
+        idx = await _mine_index()
+        for i in ids:
+            out[i]["collections"] = idx["colls"].get(i, [])
+            out[i]["liked"] = i in idx["likes"]
+        known = True
+    except Exception as e:
+        logger.info(f"[MW] index « chez moi » indisponible : {e}")
+        known = False
+    return {"items": out, "collections_known": known}
 
 
 async def _page(path_fmt: str, offset: int, limit: int, fresh: bool = False) -> dict:

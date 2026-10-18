@@ -192,12 +192,12 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
               <a href={m.url} target="_blank" rel="noopener noreferrer" style={linkBtn}>Ouvrir sur MakerWorld ↗</a>
               {like && (
-                <AdminOnly><button onClick={toggleLike} disabled={likeBusy}
+                <AdminOnly home><button onClick={toggleLike} disabled={likeBusy}
                   style={{ ...linkBtn, cursor:"pointer", ...(like.liked ? { color:"#ef4444", background:"rgba(239,68,68,0.1)",
                     borderColor:"rgba(239,68,68,0.35)" } : null) }}>
                   {like.liked ? "❤ Aimé" : "♡ J'aime"}</button></AdminOnly>
               )}
-              <AdminOnly><button onClick={() => setPick(true)} style={{ ...linkBtn, cursor:"pointer" }}>☆ Collections</button></AdminOnly>
+              <AdminOnly home><button onClick={() => setPick(true)} style={{ ...linkBtn, cursor:"pointer" }}>☆ Collections</button></AdminOnly>
             </div>
             {zoom && <Lightbox images={zoom.images} index={zoom.index} onClose={() => setZoom(null)}/>}
             {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} item={tile()} onClose={() => setPick(false)}/>}

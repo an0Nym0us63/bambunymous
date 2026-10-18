@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
+import { FriendsCard, FriendKeyButtons } from "../components/Friends";
 import { showAlert, showConfirm } from "../utils/dialog";
 import PriceReview from "../components/PriceReview";
 import Select from "../components/Select";
@@ -565,6 +566,8 @@ function UsersSection() {
                   style={pill("var(--muted)")}>
                   Mot de passe
                 </button>
+                {/* Un copain parcourt ce BambuNymous avec les droits de ce compte. */}
+                {u.role !== ROLE_ADMIN && u.active && <FriendKeyButtons user={u} onChanged={load} pill={pill}/>}
               </div>
               {pwdFor === u.id && (
                 <div style={{ display:"flex", gap:6, marginTop:8 }}>
@@ -1869,6 +1872,7 @@ export default function Settings() {
       <MyAccountSection/>
       <TwoFactorCard/>
       <UsersSection/>
+      <FriendsCard/>
       <ActivitySection/>
       </>)}
 

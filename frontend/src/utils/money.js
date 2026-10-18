@@ -1,4 +1,4 @@
-import { useAuth, ROLE_READONLY } from "../store/auth";
+import { effectiveRole, ROLE_READONLY } from "../store/auth";
 
 /** Symbole affiche a la place d'un montant masque. */
 export const MONEY_MASK = "—";
@@ -9,7 +9,7 @@ export const MONEY_MASK = "—";
  * Lecture synchrone du store : utilisable dans des fonctions de formatage qui
  * ne sont pas des composants React.
  */
-export const isMoneyHidden = () => useAuth.getState().role === ROLE_READONLY;
+export const isMoneyHidden = () => effectiveRole() === ROLE_READONLY;
 
 /**
  * Formate un nombre en montant, ou renvoie le masque en lecture seule.

@@ -5,10 +5,11 @@ import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
 import MwImg from "../components/MwImg";
-import client from "../api/client";
+import client, { apiUrl } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
+import { useMine, MineBadge } from "../components/Friends";
 import ShareSheet from "../components/ShareSheet";
 import { useIsAdmin } from "../store/auth";
 import { useTrackDetail } from "../utils/track";
@@ -698,6 +699,7 @@ const TRAD_BY = {
 // encore lue : le serveur la lance, on redemande 4 s plus tard (une fois).
 const fmtK = n => n == null ? null : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
 function MakerWorldCard({ designId, note, prints = [] }) {
+  const mineOf = useMine([designId]);            // chez un copain : l'ai-je deja ?
   const [mw, setMw] = useState(undefined);       // undefined = en cours, null = rien
   const [pick, setPick] = useState(false);       // ranger dans mes collections
   const [sheet, setSheet] = useState(null);      // fiche du modele (ou d'un similaire)
@@ -765,8 +767,9 @@ function MakerWorldCard({ designId, note, prints = [] }) {
         </div>
       )}
       {note && <div style={{ fontSize:10.5, color:"var(--muted)", padding:"0 10px 8px" }}>{note}</div>}
+      {mineOf && <div style={{ padding:"0 10px 8px" }}><MineBadge m={mineOf(designId)}/></div>}
       <MakerWorldPlates profiles={mw.profiles || []} prints={prints}/>
-      <AdminOnly>
+      <AdminOnly home>
         <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",
           borderTop:"1px solid var(--border)", background:"none", color:"#3b82f6", fontSize:11.5, fontWeight:600,
           cursor:"pointer" }}>☆ Ranger dans mes collections</button>
@@ -975,7 +978,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
         {/* Image vignette */}
         <div style={{ width:"100%", background:"var(--surface2)", position:"relative",
           minHeight:160, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <img src={"/api/v1/prints/" + p.id + "/image"} alt=""
+          <img src={apiUrl("/prints/" + p.id + "/image")} alt=""
             style={{ width:"100%", maxHeight:280, objectFit:"contain" }}
             onError={e => { e.currentTarget.parentElement.style.minHeight=0; e.currentTarget.style.display="none"; }}/>
         </div>
@@ -1633,7 +1636,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                 </button></AdminOnly>
                 <div onClick={()=>setSelectedPrint(p)} style={{ cursor:"pointer" }}>
                 <div style={{ position:"relative", paddingTop:"75%", background:"var(--surface2)" }}>
-                  <img src={"/api/v1/prints/"+p.id+"/image"} alt="" style={{
+                  <img src={apiUrl("/prints/"+p.id+"/image")} alt="" style={{
                     position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
                     onError={e=>{e.currentTarget.style.display="none"}}/>
                   <StatusBadge status={p.status} style={{ position:"absolute", bottom:4, right:4 }}/>
@@ -1733,7 +1736,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
     const ids = prints.map(pr => pr.id).filter(Boolean);
     const i = cover_print_id ? ids.indexOf(cover_print_id) : -1;
     const ordered = i > 0 ? [ids[i], ...ids.slice(0, i), ...ids.slice(i + 1)] : ids;
-    return ordered.map(id => `/api/v1/prints/${id}/image`);
+    return ordered.map(id => apiUrl(`/prints/${id}/image`));
   }, [prints, cover_print_id]);
 
   // Seul "en cours" est remonte sur la carte du groupe : un echec ou un partiel
@@ -1910,7 +1913,7 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
       {/* Vignette pleine largeur ratio 4/3 */}
       <div style={{ position:"relative", paddingTop:"75%",
         background:"var(--surface2)", overflow:"hidden" }}>
-        <img src={"/api/v1/prints/" + p.id + "/image"} alt="" draggable={false}
+        <img src={apiUrl("/prints/" + p.id + "/image")} alt="" draggable={false}
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover",
             WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
           onError={e => { e.currentTarget.style.display="none"; }}/>
@@ -2057,7 +2060,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
                    : (FNAME_LABELS[fname] || fname) };
       })
     : (snaps||[]).map(s => ({
-        url: "/api/v1/prints/" + printId + "/snapshot/" + s.trigger,
+        url: apiUrl("/prints/" + printId + "/snapshot/" + s.trigger),
         name: "snapshot-" + s.trigger + ".jpg", snap: s,
         label: LABELS[s.trigger] || s.trigger,
       }));

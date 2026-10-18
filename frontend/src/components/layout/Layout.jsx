@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { FriendBanner } from "../Friends";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { Home, Settings, Package, History, ShoppingBag, BarChart2 } from "lucide-react";
 import UserMenu from "../UserMenu";
@@ -196,7 +197,7 @@ export default function Layout() {
           {pathname === "/" && <UserMenu placement="bottom"/>}
         </header>
 
-        <main className="page-content" style={S.page}><Outlet /></main>
+        <main className="page-content" style={S.page}><FriendBanner/><Outlet /></main>
         <ShareProgress/>
         <RfidScanBridge/>
         <Toast/>

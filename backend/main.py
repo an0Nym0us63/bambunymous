@@ -385,6 +385,9 @@ async def enforce_readonly(request, call_next):
             and request.method not in ("GET", "HEAD", "OPTIONS")
             and path not in _READONLY_ALLOWED_PATHS):
         auth = request.headers.get("authorization") or ""
+        if auth.lower().startswith("bearer ") and auth.split(" ", 1)[1].strip().startswith("fk_"):
+            # Cle copain : lecture seule, toujours.
+            return JSONResponse(status_code=403, content={"detail": "Accès copain : lecture seule"})
         if auth.lower().startswith("bearer "):
             payload = decode_token_payload(auth.split(" ", 1)[1].strip())
             # Test sur "different de admin" et non sur une liste de roles brides :

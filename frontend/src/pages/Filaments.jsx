@@ -8,7 +8,7 @@ import DryNowDialog from "../components/DryNowDialog";
 import TarePicker, { useSpoolTares, tareForBrand } from "../components/TarePicker";
 import HeaderAction from "../components/HeaderAction";
 import { Plus, Search, Archive, X, Save, RefreshCw, Pencil, SlidersHorizontal, ScanLine, Droplets, Nfc, Palette, Tag, Sun } from "lucide-react";
-import client from "../api/client";
+import client, { apiUrl } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal, isMoneyHidden, MONEY_MASK } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
@@ -1069,7 +1069,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
                   padding:"8px 10px", background:"var(--surface2)",
                   borderRadius:10, border:"1px solid var(--border)" }}>
                   {/* Vignette */}
-                  <img src={`/api/v1/prints/${u.print_id}/image`} alt=""
+                  <img src={apiUrl(`/prints/${u.print_id}/image`)} alt=""
                     style={{ width:44, height:44, objectFit:"cover", borderRadius:6, flexShrink:0 }}
                     onError={e=>e.currentTarget.style.display="none"}/>
                   {/* Infos */}

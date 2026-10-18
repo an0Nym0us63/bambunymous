@@ -93,6 +93,15 @@ async def _resolve(token: str, db: AsyncSession) -> tuple[str, str]:
     Le role est donc relu en base a chaque requete, et tout jeton emis avant
     tokens_valid_from est refuse.
     """
+    if token and token.startswith("fk_"):
+        # Cle d'un copain (invitation) : les droits du compte auquel elle est
+        # liee, jamais administrateur (lecture seule quoi qu'il arrive).
+        import hashlib
+        h = hashlib.sha256(token.encode()).hexdigest()
+        user = (await db.execute(select(User).where(User.friend_key_hash == h))).scalar_one_or_none()
+        if not user or not user.active:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Invitation révoquée")
+        return user.username, (user.role if user.role != ROLE_ADMIN else "readonly_prices")
     payload = decode_token_payload(token)
     if not payload:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Token invalide")

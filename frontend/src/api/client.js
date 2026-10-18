@@ -1,10 +1,34 @@
 import axios from "axios";
 import { currentDetail, registerBeacon, isActive } from "../utils/track";
+import { currentFriend } from "../store/friend";
+
+// Chez un copain : les LECTURES de ses donnees passent par le relais de mon
+// serveur (/friends/{id}/p/...). Restent chez moi : mon compte et mes
+// reglages, la fiche MakerWorld (enrichie de MES impressions et de MON stock),
+// « deja chez moi ? », et toute ecriture -- chez lui je ne peux rien ecrire,
+// une ecriture est donc forcement une action sur MES collections MakerWorld.
+const HOME_PREFIXES = ["/auth", "/friends", "/users", "/settings", "/notify",
+  "/makerworld/mine", "/makerworld/model/", "/makerworld/similar/", "/makerworld/design/"];
+const isHome = (url) => HOME_PREFIXES.some(p => url === p || url.startsWith(p.endsWith("/") ? p : p + "/") || url.startsWith(p + "?"));
+
+/** URL d'une image (ou d'un fichier) de l'API, chez moi ou chez le copain
+ *  visite. Une <img> n'envoie pas d'en-tete : le relais recoit le jeton en _t. */
+export function apiUrl(path) {
+  const f = currentFriend();
+  if (!f) return `/api/v1${path}`;
+  const t = localStorage.getItem("token") || "";
+  return `/api/v1/friends/${f.id}/p${path}${path.includes("?") ? "&" : "?"}_t=${encodeURIComponent(t)}`;
+}
 
 const client = axios.create({ baseURL: "/api/v1" });
 
 // Inject token + page courante
 client.interceptors.request.use((config) => {
+  const f = currentFriend();
+  const url = config.url || "";
+  if (f && !config.home && (config.method || "get").toLowerCase() === "get" && !isHome(url)) {
+    config.url = `/friends/${f.id}/p${url.startsWith("/") ? url : "/" + url}`;
+  }
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   // L'application est en page unique : le serveur ne voit aucune navigation et
@@ -32,9 +56,18 @@ client.interceptors.request.use((config) => {
 // serveur. La requete est vide, son seul role est de porter les en-tetes.
 registerBeacon(() => { client.get("/users/activity/ping").catch(() => {}); });
 
+// Chez un copain, ses reponses contiennent des adresses « /api/v1/... »
+// (photos, fichiers) qui pointeraient chez moi : on les fait passer par le relais.
+const rewrite = (v) => {
+  if (typeof v === "string") return v.startsWith("/api/v1/") ? apiUrl(v.slice(7)) : v;
+  if (Array.isArray(v)) return v.map(rewrite);
+  if (v && typeof v === "object") { for (const k of Object.keys(v)) v[k] = rewrite(v[k]); return v; }
+  return v;
+};
+
 // Auto-logout on 401
 client.interceptors.response.use(
-  (r) => r,
+  (r) => { if (/^\/friends\/[^/]+\/p\//.test(r.config?.url || "") && r.data && typeof r.data === "object") rewrite(r.data); return r; },
   (err) => {
     // Sauf pour la connexion elle-meme : son 401 est une REPONSE (mauvais mot de
     // passe, ou code de double authentification demande) que l'ecran affiche.

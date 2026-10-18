@@ -36,6 +36,10 @@ class User(Base):
     totp_enabled   = Column(Boolean, default=False, server_default=text("0"), nullable=False)
     totp_last_step = Column(Integer, nullable=True)
     totp_recovery  = Column(Text, nullable=True)
+    # Invitation copain : empreinte SHA-256 de la cle d'acces (fk_…) donnee a
+    # un ami pour parcourir ce BambuNymous avec les droits de ce compte, en
+    # lecture seule. Revocable ; la cle elle-meme n'est jamais gardee.
+    friend_key_hash = Column(String(64), nullable=True)
     created_at    = Column(DateTime, default=datetime.utcnow)
     updated_at    = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

@@ -1,7 +1,7 @@
 """Routes de gestion des comptes utilisateurs (reservees aux administrateurs)."""
 from datetime import datetime
 from typing import Optional, List
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,6 +23,7 @@ class UserOut(BaseModel):
     last_seen: Optional[str] = None   # derniere activite (ISO)
     protected: bool = False   # compte admin d'origine : non modifiable
     totp_enabled: bool = False   # double authentification active
+    has_friend_key: bool = False  # invitation copain en cours
 
 
 class UserCreate(BaseModel):
@@ -40,6 +41,7 @@ class UserUpdate(BaseModel):
 def _out(u: User, protected: bool = False) -> UserOut:
     return UserOut(id=u.id, username=u.username, role=u.role, active=u.active,
                    protected=protected, totp_enabled=bool(getattr(u, "totp_enabled", False)),
+                   has_friend_key=bool(getattr(u, "friend_key_hash", None)),
                    last_seen=(str(u.last_seen) if getattr(u, "last_seen", None) else None))
 
 
@@ -265,6 +267,40 @@ async def make_primary(uid: int, db: AsyncSession = Depends(get_db), _: str = De
         raise HTTPException(400, "Seul un administrateur actif peut devenir le compte principal")
     await set_setting(db, PRIMARY_KEY, str(u.id))
     return _out(u, protected=True)
+
+
+@router.post("/{uid}/friend-key")
+async def make_friend_key(uid: int, body: dict = Body(None), db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    """
+    Invitation copain pour ce compte : une cle neuve (l'ancienne cesse de
+    marcher) et le texte a envoyer a l'ami. Rendue UNE fois ; seule son
+    empreinte est gardee. Pas pour un administrateur : l'acces copain est en
+    lecture seule et doit le rester.
+    """
+    import hashlib, secrets
+    from ....services.friends import make_invitation
+    u = await db.get(User, uid)
+    if not u:
+        raise HTTPException(404, "Utilisateur introuvable")
+    if u.role == ROLE_ADMIN:
+        raise HTTPException(400, "Invitation copain : choisis un compte en lecture seule (avec ou sans prix)")
+    origin = str((body or {}).get("origin") or "").strip().rstrip("/")
+    if not origin.startswith(("http://", "https://")):
+        raise HTTPException(400, "Adresse de ce BambuNymous manquante")
+    key = "fk_" + secrets.token_urlsafe(32)
+    u.friend_key_hash = hashlib.sha256(key.encode()).hexdigest()
+    await db.commit()
+    return {"invitation": make_invitation(origin, key, u.username), "user": _out(u)}
+
+
+@router.delete("/{uid}/friend-key")
+async def revoke_friend_key(uid: int, db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    u = await db.get(User, uid)
+    if not u:
+        raise HTTPException(404, "Utilisateur introuvable")
+    u.friend_key_hash = None
+    await db.commit()
+    return _out(u)
 
 
 @router.post("/{uid}/2fa/reset")

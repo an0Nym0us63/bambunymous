@@ -7,6 +7,8 @@ import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
 import { mwPatch, onMwChange } from "../utils/mwSync";
+import { useFriend } from "../store/friend";
+import { useMine, MineBadge } from "./Friends";
 
 // Cache de la vue (le temps de la session) : revenir sur un onglet ou une
 // collection affiche aussitot ce qu'on avait, puis se met a jour en fond.
@@ -223,8 +225,10 @@ export default function MakerWorldView({ onSearch }) {
   };
 
   const showModels = tab !== "favorites" || !!coll;
+  const friend = useFriend((s) => s.friend);
   const all = data?.items || [];
   const items = all.filter(x => pf === "all" || (pf === "new" ? !x.printed : x.printed > 0));
+  const mineOf = useMine(showModels ? all.map(x => x.design_id) : []);   // chez un copain : « deja chez moi ? »
   const count = { all: all.length, printed: all.filter(x => x.printed > 0).length, new: all.filter(x => !x.printed).length };
 
   return (
@@ -427,8 +431,9 @@ export default function MakerWorldView({ onSearch }) {
                         ) : (
                           <span style={{ fontSize:11, color:"var(--muted)" }}>jamais imprimé</span>
                         )}
-                        {status?.connected && (
-                          <AdminOnly>
+                        {mineOf && <MineBadge m={mineOf(x.design_id)}/>}
+                        {(status?.connected || friend) && (
+                          <AdminOnly home>
                             <button onClick={() => setPickFor(x)} title="Ranger dans mes collections"
                               style={{ display:"block", marginTop:5, fontSize:11, fontWeight:600, color:"#3b82f6", background:"none",
                                 border:"none", padding:0, cursor:"pointer" }}>☆ Collections</button>

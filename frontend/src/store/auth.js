@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import client from "../api/client";
+import { useFriend } from "./friend";
 
 // Roles applicatifs. Par defaut on considere "admin" : les anciens jetons (et les
 // sessions ouvertes avant la mise a jour) ne portent pas de role, et on ne veut
@@ -78,7 +79,19 @@ export const ROLE_BADGE = {
 };
 
 // Raccourcis pour les composants.
-export const useIsAdmin    = () => useAuth((s) => (s.role || ROLE_ADMIN) === ROLE_ADMIN);
+// Role effectif : chez un copain, celui de mon compte chez lui (jamais admin).
+export const useRole = () => {
+  const mine = useAuth((s) => s.role || ROLE_ADMIN);
+  const friend = useFriend((s) => s.friend);
+  return friend ? (friend.role || ROLE_READONLY) : mine;
+};
+export const effectiveRole = () => {
+  const f = useFriend.getState().friend;
+  return f ? (f.role || ROLE_READONLY) : (useAuth.getState().role || ROLE_ADMIN);
+};
+export const useIsAdmin    = () => useRole() === ROLE_ADMIN;
 // Non-admin = lecture seule, quel que soit le role. Enumerer les roles brides
 // ici ferait passer tout nouveau role pour un administrateur.
-export const useIsReadOnly = () => useAuth((s) => (s.role || ROLE_ADMIN) !== ROLE_ADMIN);
+export const useIsReadOnly = () => useRole() !== ROLE_ADMIN;
+// Mes droits A MOI (actions sur mes collections MakerWorld, meme chez un copain).
+export const useIsHomeAdmin = () => useAuth((s) => (s.role || ROLE_ADMIN) === ROLE_ADMIN);
