@@ -113,22 +113,24 @@ def _mymemory_one(txt: str):
     return None
 
 
-def _translate_batch(payload: list, deepl_key: str = "") -> list:
-    """Traduit une liste de chaines vers le FR. Rend une liste de meme
-    longueur ; une entree None = echec (rien ne doit etre enregistre)."""
+def _translate_batch(payload: list, deepl_key: str = "") -> tuple:
+    """Traduit une liste de chaines vers le FR. Rend (traductions, services),
+    deux listes de meme longueur que payload ; une traduction None = echec
+    (rien ne doit etre enregistre), le service dit qui a repondu."""
     if deepl_key:
         r = _deepl_batch(payload, deepl_key)
         if r is not None and not any(_looks_bogus(x or "") for x in r):
-            return r
+            return r, ["deepl"] * len(r)
     from deep_translator import GoogleTranslator
     try:
         r = GoogleTranslator(source="auto", target="fr").translate_batch(payload)
         if r and len(r) == len(payload) and not any(_looks_bogus(x or "") for x in r):
-            return r
+            return r, ["google"] * len(r)
         logger.warning("[TRAD] Google indisponible (page d'erreur) -> repli MyMemory")
     except Exception as e:
         logger.warning(f"[TRAD] Google KO ({type(e).__name__}) -> repli MyMemory")
-    return [_mymemory_one(x) for x in payload]
+    r = [_mymemory_one(x) for x in payload]
+    return r, [("mymemory" if x is not None else None) for x in r]
 
 
 def _merge(mot_a_mot: str, contextuel: str) -> str:
@@ -140,9 +142,10 @@ def _merge(mot_a_mot: str, contextuel: str) -> str:
     return " ".join(words)
 
 
-def translate_name(name: str, deepl_key: str = "") -> str:
+def translate_name(name: str, deepl_key: str = "") -> tuple:
     """
-    Traduit un nom vers le francais. Leve TranslateUnavailable si aucun
+    Traduit un nom vers le francais : rend (texte, service), service valant
+    "identique" si le nom est deja francais. Leve TranslateUnavailable si aucun
     service n'a repondu.
 
     Double passage, repris tel quel de Spoolnymous, et c'est la ruse qui fait
@@ -159,9 +162,9 @@ def translate_name(name: str, deepl_key: str = "") -> str:
     francais (ou intraduisible) et on s'arrete la.
     """
     if not name or not name.strip():
-        return ""
+        return "", "identique"
     original = name.strip()
-    r = _translate_batch(["\n".join(name.split()), original], deepl_key)
+    r, by = _translate_batch(["\n".join(name.split()), original], deepl_key)
     if r[0] is None or r[1] is None:
         raise TranslateUnavailable()
     mot_a_mot = " ".join((r[0] or "").strip().split("\n")).strip()
@@ -169,8 +172,9 @@ def translate_name(name: str, deepl_key: str = "") -> str:
     if _looks_bogus(contextuel) or _looks_bogus(mot_a_mot):
         raise TranslateUnavailable()
     if contextuel.lower() == original.lower():
-        return contextuel
-    return _merge(mot_a_mot, contextuel)
+        return contextuel, "identique"
+    merged = _merge(mot_a_mot, contextuel)
+    return merged, (by[1] if merged.lower() != original.lower() else "identique")
 
 
 async def _deepl_key() -> str:
@@ -209,7 +213,8 @@ async def translate_print(pid: int) -> bool:
     key = await _deepl_key()
 
     try:
-        tr = (await asyncio.to_thread(translate_name, source, key)).strip()
+        tr, by = await asyncio.to_thread(translate_name, source, key)
+        tr = tr.strip()
     except TranslateUnavailable:
         # Rien d'ecrit : le rattrapage automatique le reprendra.
         logger.info(f"[TRAD] print #{pid} : services indisponibles, repris plus tard")
@@ -219,13 +224,14 @@ async def translate_print(pid: int) -> bool:
         return False
     # Deja francais : on inscrit le nom nettoye (vrai, et utile a la recherche),
     # pour ne pas le representer a chaque rattrapage.
-    tr = tr or source
+    if not tr or tr.lower() == source.lower():
+        tr, by = source, "identique"
 
     async with AsyncSessionLocal() as db:
         await db.execute(update(Print).where(Print.id == pid)
-                         .values(translated_name=tr[:512]))
+                         .values(translated_name=tr[:512], translated_by=by))
         await db.commit()
-    logger.info(f"[TRAD] print #{pid} : {source!r} → {tr!r}")
+    logger.info(f"[TRAD] print #{pid} : {source!r} → {tr!r} ({by})")
     return True
 
 
@@ -257,8 +263,9 @@ def translate_names(names: list, deepl_key: str = "") -> dict:
     """
     Traduit une liste de noms et rend {source: traduction}.
 
-    Valeur "" = rien a traduire (deja francais, intraduisible, sans lettre) ;
-    nom ABSENT du resultat = echec du service, a ne pas enregistrer.
+    Valeur (traduction, service) ; ("", "identique") = rien a traduire (deja
+    francais, intraduisible, sans lettre) ; nom ABSENT du resultat = echec du
+    service, a ne pas enregistrer.
 
     Trois economies par rapport a Spoolnymous, qui traitait un print a la fois :
 
@@ -277,7 +284,7 @@ def translate_names(names: list, deepl_key: str = "") -> dict:
         if not n or n in uniques or n in out:
             continue
         if not _re.search(r"[^\W\d_]", n, _re.UNICODE):   # aucune lettre
-            out[n] = ""
+            out[n] = ("", "identique")
             continue
         uniques.append(n)
 
@@ -290,7 +297,7 @@ def translate_names(names: list, deepl_key: str = "") -> dict:
             payload.append(n)
 
         try:
-            res = _translate_batch(payload, deepl_key)
+            res, by = _translate_batch(payload, deepl_key)
         except Exception as e:
             logger.warning(f"[TRAD] lot ignore : {e}")
             continue
@@ -307,10 +314,11 @@ def translate_names(names: list, deepl_key: str = "") -> dict:
                 failed += 1
                 continue
             if not contextuel or contextuel.lower() == n.lower():
-                out[n] = ""                   # deja francais, ou intraduisible
+                out[n] = ("", "identique")    # deja francais, ou intraduisible
                 continue
             merged = _merge(mot_a_mot, contextuel)
-            out[n] = merged[:512] if merged.lower() != n.lower() else ""
+            out[n] = ((merged[:512], by[2 * k + 1]) if merged.lower() != n.lower()
+                      else ("", "identique"))
 
         # Tout le lot en echec : les services sont a bout, inutile de
         # continuer a les solliciter pour les lots suivants.
@@ -383,7 +391,7 @@ async def translate_missing_prints(limit: int = 40, retry_same: bool = False,
             if src and src not in table:
                 failed += 1                 # echec du service : on n'ecrit rien
                 continue
-            tr = table.get(src, "")
+            tr, by = table.get(src, ("", "identique"))
             if tr:
                 done += 1
             else:
@@ -391,10 +399,10 @@ async def translate_missing_prints(limit: int = 40, retry_same: bool = False,
                 # marqueur technique. C'est vrai, ca reste utile a la
                 # recherche, et ca evite de representer ce print a chaque
                 # passage suivant.
-                tr = src or raw
+                tr, by = src or raw, "identique"
                 skipped += 1
             await db.execute(update(Print).where(Print.id == pid)
-                             .values(translated_name=tr[:512]))
+                             .values(translated_name=tr[:512], translated_by=by))
         await db.commit()
 
     return {"translated": done, "skipped": skipped, "failed": failed,

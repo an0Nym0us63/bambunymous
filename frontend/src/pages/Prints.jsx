@@ -680,6 +680,15 @@ function PrintEditSheet({ p, onClose, onSaved }) {
   );
 }
 
+// Qui a fourni le nom de recherche (prints.translated_by), montre au survol.
+const TRAD_BY = {
+  deepl:     "Traduit par DeepL",
+  google:    "Traduit par Google",
+  mymemory:  "Traduit par MyMemory",
+  identique: "Déjà en français : nom d'origine repris tel quel",
+  manuel:    "Saisi à la main",
+};
+
 export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
   const [sharing, setSharing] = useState(false);   // partage Telegram
@@ -817,7 +826,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
                     const v = frVal.trim();
                     try {
                       await client.patch(`/prints/${p.id}`, { translated_name: v });
-                      setP(prev => ({ ...prev, translated_name: v }));
+                      setP(prev => ({ ...prev, translated_name: v, translated_by: v ? "manuel" : null }));
                       onChanged && onChanged();
                     } catch(e) { showAlert(e.response?.data?.detail || e.message); }
                     setEditFr(false);
@@ -832,6 +841,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
             ) : (
               <AdminOnly>
                 <button onClick={()=>{ setFrVal(p.translated_name || ""); setEditFr(true); }}
+                  title={p.translated_name ? (TRAD_BY[p.translated_by] || "Origine inconnue (traduit avant le suivi du service)") : undefined}
                   style={{ display:"flex", alignItems:"center", gap:5, fontSize:11,
                     padding:"2px 9px", borderRadius:20, cursor:"pointer",
                     border:"1px solid var(--border)", background:"transparent",

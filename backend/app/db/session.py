@@ -75,6 +75,7 @@ async def _migrate():
         ("users",     "totp_recovery",        "TEXT"),
         ("groups",    "cover_photo",          "TEXT"),
         ("prints",    "translated_name",      "TEXT"),
+        ("prints",    "translated_by",        "TEXT"),
         ("filaments", "translated_name",      "TEXT"),
         ("filaments", "external_filament_id", "TEXT"),
         ("filaments", "reference_id",         "TEXT"),

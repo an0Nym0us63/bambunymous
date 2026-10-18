@@ -1234,6 +1234,8 @@ async def update_print(print_id: int, body: dict, _: str = Depends(get_current_u
                             pass  # format inattendu -> on ne touche pas
             else:
                 setattr(p, k, v)
+                if k == "translated_name":
+                    p.translated_by = "manuel" if str(v or "").strip() else None
         p.updated_at = datetime.utcnow()
         await db.commit()
     return {"ok": True}

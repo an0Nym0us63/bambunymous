@@ -20,6 +20,9 @@ class Print(Base):
     # N'a aucun rapport avec filaments.translated_name, qui vient du catalogue
     # Bambu local.
     translated_name     = Column(String(512), nullable=True)
+    # D'ou vient ce nom : deepl / google / mymemory (traduit), identique (deja
+    # francais, inscrit tel quel), manuel (saisi a la main). Montre au survol.
+    translated_by       = Column(String(16),  nullable=True)
     print_type          = Column(String(32),  default="cloud")
 
     status              = Column(String(32),  default="IN_PROGRESS")
