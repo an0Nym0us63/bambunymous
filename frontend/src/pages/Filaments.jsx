@@ -314,58 +314,131 @@ function WeightAdjustInline({ spoolId, current, onUpdated, isPrix = false }) {
   );
 }
 
-function WeightEditRow({ spoolId, current, onUpdated }) {
+// Poids restant : plusieurs facons de le corriger. « Restant » le pose tel
+// quel ; « Retirer » / « Ajouter » appliquent un ecart (un bout coupe, un
+// reste rembobine) ; « Pesee » part du poids lu sur la balance, support compris,
+// et en deduit le support vide (poids support du filament, modifiable ici).
+const WEIGHT_MODES = [
+  ["set",   "Restant", "Poids restant de filament"],
+  ["sub",   "Retirer", "Grammes à retirer"],
+  ["add",   "Ajouter", "Grammes à ajouter"],
+  ["scale", "Pesée",   "Poids sur la balance, support compris"],
+];
+
+function WeightEditRow({ spoolId, current, total, tare, onUpdated }) {
   const [editing, setEditing] = useState(false);
-  const [val, setVal] = useState(current != null ? String(Math.round(current)) : "");
+  const [mode, setMode] = useState("set");
+  const [val, setVal] = useState("");
+  const [tareVal, setTareVal] = useState(tare != null ? String(Math.round(tare)) : "");
   const [saving, setSaving] = useState(false);
 
+  const cur = current != null ? current : 0;
+  const n = parseFloat(val);
+  const t = parseFloat(tareVal);
+  // Resultat attendu, montre avant d'enregistrer.
+  const next = isNaN(n) || n < 0 ? null
+    : mode === "set" ? n
+    : mode === "add" ? cur + n
+    : mode === "sub" ? cur - n
+    : isNaN(t) ? null : n - t;
+  const valide = next != null;
+
+  const open = () => { setMode("set"); setVal(""); setTareVal(tare != null ? String(Math.round(tare)) : ""); setEditing(true); };
+
   const save = async () => {
-    const n = parseFloat(val);
-    if (isNaN(n) || n < 0) return;
+    if (!valide) return;
     setSaving(true);
     try {
-      await client.post(`/filaments/spools/${spoolId}/weight`, { mode:"set", value: n });
+      // La pesee devient une valeur absolue (jamais sous 0 : support mal estime).
+      const body = mode === "scale" ? { mode:"set", value: Math.max(0, next) } : { mode, value: n };
+      await client.post(`/filaments/spools/${spoolId}/weight`, body);
       onUpdated?.();
       setEditing(false);
     } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setSaving(false); }
   };
 
+  const inputStyle = { width:"100%", padding:"8px 10px", borderRadius:8, fontSize:14,
+    background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text)",
+    outline:"none", textAlign:"right", fontFamily:"JetBrains Mono,monospace", boxSizing:"border-box" };
+
   return (
-    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
-      padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+    <div style={{ padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
       <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>Poids restant</span>
-      {editing ? (
-        <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-          <input type="number" min="0" value={val} autoFocus
-            onChange={e => setVal(e.target.value)}
-            onKeyDown={e => { if(e.key==="Enter") save(); if(e.key==="Escape") setEditing(false); }}
-            style={{ width:80, padding:"4px 8px", borderRadius:7, fontSize:13,
-              background:"var(--surface2)", border:"1px solid var(--border)",
-              color:"var(--text)", outline:"none", textAlign:"right" }}/>
-          <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
-          <button onClick={save} disabled={saving}
-            style={{ padding:"4px 10px", borderRadius:7, fontSize:12, fontWeight:700,
-              background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
-            {saving ? "…" : "OK"}
-          </button>
-          <button onClick={() => setEditing(false)}
-            style={{ padding:"4px 8px", borderRadius:7, fontSize:12,
-              background:"var(--surface2)", border:"1px solid var(--border)",
-              color:"var(--muted)", cursor:"pointer" }}>✕</button>
-        </div>
-      ) : (
+      {(
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:13, fontWeight:600, fontFamily:"JetBrains Mono,monospace",
             color:"var(--text)" }}>
             {current != null ? `${Math.round(current)} g` : <span style={{color:"var(--muted)",fontWeight:400}}>—</span>}
           </span>
-          <AdminOnly><button onClick={() => { setVal(current != null ? String(Math.round(current)) : ""); setEditing(true); }}
-            style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2, display:"flex" }}
+          <AdminOnly><button onClick={() => editing ? setEditing(false) : open()}
+            style={{ background:"none", border:"none", cursor:"pointer", color: editing ? "#3b82f6" : "var(--muted)", padding:2, display:"flex" }}
             onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
-            onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}><Pencil size={13}/></button></AdminOnly>
+            onMouseLeave={e=>e.currentTarget.style.color= editing ? "#3b82f6" : "var(--muted)"}><Pencil size={13}/></button></AdminOnly>
         </div>
       )}
+    </div>
+    {editing && (
+      <div style={{ marginTop:8, padding:10, borderRadius:10, background:"var(--surface2)",
+        border:"1px solid var(--border)", display:"flex", flexDirection:"column", gap:8 }}>
+        <div style={{ display:"flex", gap:4 }}>
+          {WEIGHT_MODES.map(([m, l]) => (
+            <button key={m} onClick={() => { setMode(m); setVal(""); }}
+              style={{ flex:1, padding:"6px 0", borderRadius:7, fontSize:11, fontWeight:700, cursor:"pointer",
+                background: mode===m ? "#3b82f6" : "var(--surface)",
+                color: mode===m ? "white" : "var(--muted)",
+                border: mode===m ? "1px solid #3b82f6" : "1px solid var(--border)" }}>{l}</button>
+          ))}
+        </div>
+        <label style={{ fontSize:11, color:"var(--muted)" }}>
+          {WEIGHT_MODES.find(x => x[0] === mode)[2]}
+          <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:4 }}>
+            <input type="number" inputMode="decimal" min="0" value={val} autoFocus key={mode}
+              placeholder={mode === "set" ? String(Math.round(cur)) : mode === "scale" ? "ex. 742" : "ex. 50"}
+              onChange={e => setVal(e.target.value)}
+              onKeyDown={e => { if(e.key==="Enter") save(); if(e.key==="Escape") setEditing(false); }}
+              style={inputStyle}/>
+            <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
+          </div>
+        </label>
+        {mode === "set" && total > 0 && (
+          <div style={{ display:"flex", gap:4 }}>
+            {[[0, "Vide"], [0.25, "¼"], [0.5, "½"], [0.75, "¾"], [1, "Pleine"]].map(([f, l]) => (
+              <button key={l} onClick={() => setVal(String(Math.round(total * f)))}
+                style={{ flex:1, padding:"4px 0", borderRadius:6, fontSize:10.5, fontWeight:600, cursor:"pointer",
+                  background:"var(--surface)", border:"1px solid var(--border)", color:"var(--muted)" }}>{l}</button>
+            ))}
+          </div>
+        )}
+        {mode === "scale" && (
+          <label style={{ fontSize:11, color:"var(--muted)" }}>
+            Support vide {tare == null && <span style={{ color:"#f59e0b" }}>(inconnu du filament : à saisir)</span>}
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:4 }}>
+              <input type="number" inputMode="decimal" min="0" value={tareVal}
+                onChange={e => setTareVal(e.target.value)} style={inputStyle}/>
+              <span style={{ fontSize:12, color:"var(--muted)" }}>g</span>
+            </div>
+          </label>
+        )}
+        <div style={{ fontSize:12, color:"var(--muted)", textAlign:"center", minHeight:16 }}>
+          {valide && (<>
+            {Math.round(cur)} g → <b style={{ color: next < 0 ? "#ef4444" : "var(--text)" }}>{Math.max(0, Math.round(next))} g</b>
+            {next < 0 && <span style={{ color:"#ef4444" }}> (plafonné à 0)</span>}
+            {total > 0 && next > total && <span style={{ color:"#f59e0b" }}> (plus que la bobine neuve : {Math.round(total)} g)</span>}
+          </>)}
+        </div>
+        <div style={{ display:"flex", gap:6 }}>
+          <button onClick={() => setEditing(false)}
+            style={{ flex:1, padding:8, borderRadius:8, fontSize:12, background:"var(--surface)",
+              border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>Annuler</button>
+          <button onClick={save} disabled={saving || !valide}
+            style={{ flex:2, padding:8, borderRadius:8, fontSize:12, fontWeight:700, border:"none", color:"white",
+              background: saving || !valide ? "var(--border)" : "#3b82f6",
+              cursor: saving || !valide ? "default" : "pointer" }}>{saving ? "…" : "Enregistrer"}</button>
+        </div>
+      </div>
+    )}
     </div>
   );
 }
@@ -752,7 +825,8 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
             letterSpacing:"0.08em", marginBottom:4 }}>Bobine #{spool.id}</p>
           <Row label="Emplacement"    value={spool.location}/>
-          <WeightEditRow spoolId={spool.id} current={remaining} onUpdated={onClose}/>
+          <WeightEditRow spoolId={spool.id} current={remaining} total={total}
+            tare={spool.filament_spool_weight_g} onUpdated={onClose}/>
           <PriceEditRow spoolId={spool.id} current={spool.price_override} filamentPrice={spool.filament_price} onUpdated={onClose}/>
           <TagEditRow spoolId={spool.id} current={spool.tag_number} onUpdated={onClose}/>
           <Row label="Tray AMS"       value={spool.ams_tray}/>
