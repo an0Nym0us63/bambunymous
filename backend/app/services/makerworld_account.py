@@ -227,9 +227,38 @@ async def collection(kind: str) -> dict:
         out.append({**x, **{k: v for k, v in m.items() if v}, "printed": printed.get(x["design_id"], 0),
                     "url": f"https://makerworld.com/fr/models/{x['design_id']}"})
     missing = [i for i in ids if i not in cache]
+    # Favoris : la liste rend des COLLECTIONS, pas des modeles (format a
+    # confirmer par le diagnostic) -- on ne lit pas leurs ids comme des modeles.
+    if kind == "favorites":
+        missing = []
     if missing:
         launch_many(missing)
     return {"items": out, "pending": len(missing)}
+
+
+async def _debug_collections() -> dict:
+    """Essais pour lire le CONTENU d'une collection : prend la premiere de la
+    liste et tente les chemins plausibles (non documentes), avec le code et le
+    debut de chaque reponse."""
+    import asyncio
+    from .makerworld import _get_json
+    tok = await token() or None
+    code, d = await asyncio.to_thread(_get_json, DEBUG_PATHS["favoris_ids"], tok)
+    first = next((it for it in _items(d) if isinstance(it, dict) and it.get("id")), None)
+    if not first:
+        return {"path": "essais", "http": code, "body": "Aucune collection trouvée dans favoris_ids"}
+    cid = first["id"]
+    tries = [f"/design-service/my/favorites/{cid}",
+             f"/design-service/my/favorites/{cid}/designs?offset=0&limit=5",
+             f"/design-service/favorites/{cid}/designs?offset=0&limit=5",
+             f"/design-service/favorites/{cid}?offset=0&limit=5",
+             f"/design-service/my/favorites/designs?favoritesId={cid}&offset=0&limit=5",
+             "/design-service/my/favorites?offset=0&limit=5"]
+    out = [f"collection d'essai : {json.dumps(first, ensure_ascii=False)[:400]}"]
+    for p in tries:
+        c, r = await asyncio.to_thread(_get_json, p, tok)
+        out.append(f"\n== {p} → HTTP {c}\n" + (json.dumps(r, ensure_ascii=False)[:1500] if r is not None else "(vide)"))
+    return {"path": "essais collections", "http": 200, "body": "\n".join(out)}
 
 
 async def debug(name: str) -> dict:
@@ -237,6 +266,8 @@ async def debug(name: str) -> dict:
     si l'API change). Le jeton n'y figure jamais."""
     import asyncio
     from .makerworld import _get_json
+    if name == "essais_collections":
+        return await _debug_collections()
     if name not in DEBUG_PATHS:
         raise AccountError("Chemin inconnu")
     code, d = await asyncio.to_thread(_get_json, DEBUG_PATHS[name], await token() or None)

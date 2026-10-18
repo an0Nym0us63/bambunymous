@@ -129,10 +129,18 @@ export default function MakerWorldSettings() {
         <details style={{ marginTop:12 }}>
           <summary style={{ fontSize:12, color:"var(--muted)", cursor:"pointer" }}>Diagnostic de l'API</summary>
           <div style={{ display:"flex", gap:6, flexWrap:"wrap", margin:"8px 0" }}>
-            {["profil", "favoris", "favoris_ids", "aimes"].map(n => (
+            {["profil", "favoris", "favoris_ids", "aimes", "essais_collections"].map(n => (
               <button key={n} onClick={() => debug(n)} disabled={busy} style={{ ...btn, padding:"4px 10px", fontWeight:500 }}>{n}</button>
             ))}
           </div>
+          {diag && (
+            <button onClick={() => {
+                const t = `${diag.path} → HTTP ${diag.http}\n${diag.body ?? "(vide)"}`;
+                (navigator.clipboard?.writeText(t) || Promise.reject()).then(
+                  () => setInfo("Copié."), () => setInfo("Copie impossible : sélectionne le texte à la main."));
+              }}
+              style={{ ...btn, padding:"4px 10px", fontWeight:500, marginBottom:6 }}>📋 Copier</button>
+          )}
           {diag && (
             <pre style={{ fontSize:10.5, maxHeight:240, overflow:"auto", padding:8, borderRadius:8,
               background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text2)",
