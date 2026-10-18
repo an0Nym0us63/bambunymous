@@ -207,6 +207,69 @@ async def search(q: str, offset: int = 0) -> dict:
     return await _public_list(f"/search-service/select/design2?keyword={quote(q)}&offset={max(0, int(offset))}&limit=24")
 
 
+# ── Decouvrir : les fils de la page d'accueil MakerWorld ─────────────────
+# Pastilles (Pour vous, Tendance, evenement du moment, categories) lues chez
+# MakerWorld : elles suivent les saisons sans rien changer ici. Tout est
+# public, sauf « Pour vous », personnalise par le compte.
+NAVS = "/search-service/homepage/nav"
+NAV_FEED = "/search-service/select/design/nav?navKey={key}&offset={offset}&limit={limit}"
+_NAVS_CACHE = [0.0, None]           # 6 h
+_FEED_CACHE = {}                    # (cle, offset, compte?) -> (instant, hits, total) ; 10 min
+PERSONAL = ("Foryou",)
+
+
+async def discover_navs(fresh: bool = False) -> dict:
+    import asyncio, time
+    if not fresh and _NAVS_CACHE[1] and time.time() - _NAVS_CACHE[0] < 6 * 3600:
+        return _NAVS_CACHE[1]
+    code, d = await asyncio.to_thread(_get_json, NAVS)
+    navs = []
+    for n in (d.get("navs") if isinstance(d, dict) and isinstance(d.get("navs"), list) else []):
+        if not isinstance(n, dict) or not isinstance(n.get("key"), str) or n["key"] == "Following":
+            continue
+        navs.append({"key": n["key"], "name": n.get("name") if isinstance(n.get("name"), str) else n["key"],
+                     "personal": n["key"] in PERSONAL, "category": n["key"].startswith("category_")})
+    if not navs:                    # API muette : au moins la tendance
+        return {"navs": [{"key": "Trending", "name": "Tendance", "personal": False, "category": False}],
+                "error": f"Liste des fils indisponible (HTTP {code})"}
+    out = {"navs": navs}
+    _NAVS_CACHE[:] = [time.time(), out]
+    return out
+
+
+async def discover(key: str, offset: int = 0, fresh: bool = False) -> dict:
+    """Un fil de la page d'accueil, 24 modeles par page, avec « deja imprime »."""
+    import asyncio, re, time
+    from urllib.parse import quote
+    from .makerworld_account import _enrich, token
+    key = str(key or "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9_:\-]{1,80}", key):
+        return {"items": [], "total": 0, "error": "Fil inconnu"}
+    offset = max(0, int(offset or 0))
+    tok = None
+    if key in PERSONAL:
+        tok = await token()
+        if not tok:
+            return {"items": [], "total": 0,
+                    "error": "« Pour vous » demande ton compte MakerWorld (Paramètres → Données → MakerWorld)."}
+    ck = (key, offset, bool(tok))
+    hit = None if fresh else _FEED_CACHE.get(ck)
+    if hit and time.time() - hit[0] < 600:
+        hits, total = hit[1], hit[2]
+    else:
+        code, d = await asyncio.to_thread(_get_json, NAV_FEED.format(key=quote(key, safe=""), offset=offset, limit=24), tok)
+        if not isinstance(d, dict):
+            return {"items": [], "total": 0, "error": f"MakerWorld ne répond pas (HTTP {code})"}
+        hits = [x for x in (_hit(h) for h in (d.get("hits") if isinstance(d.get("hits"), list) else [])) if x]
+        total = d.get("total") if isinstance(d.get("total"), int) else len(hits)
+        _FEED_CACHE[ck] = (time.time(), hits, total)
+    res = await _enrich(hits)
+    out = {"items": res["items"], "total": total}
+    if key in PERSONAL and not hits and offset == 0:
+        out["error"] = "MakerWorld n'a rien renvoyé pour « Pour vous » avec ce compte."
+    return out
+
+
 async def similar(design_id: str) -> dict:
     did = str(design_id or "").strip()
     if not did.isdigit():

@@ -124,6 +124,17 @@ async def mw_search(q: str = "", offset: int = 0, _: str = Depends(get_current_u
     return await _call(mw.search(q, offset))
 
 
+@router.get("/discover/navs")
+async def mw_discover_navs(fresh: bool = False, _: str = Depends(get_current_user)):
+    """Fils de la page d'accueil MakerWorld (Pour vous, Tendance, categories…)."""
+    return await _call(mw.discover_navs(fresh))
+
+
+@router.get("/discover")
+async def mw_discover(key: str = "Trending", offset: int = 0, fresh: bool = False, _: str = Depends(get_current_user)):
+    return await _call(mw.discover(key, offset, fresh))
+
+
 @router.get("/model/{design_id}")
 async def mw_model(design_id: str, _: str = Depends(get_current_user)):
     """Fiche complete d'un modele (galerie, descriptif, profils, plateaux)."""

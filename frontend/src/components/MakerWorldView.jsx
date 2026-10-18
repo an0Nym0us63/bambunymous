@@ -18,7 +18,9 @@ const sameIds = (a, b) => a.length >= b.length && b.every((x, i) => a[i]?.design
 // imprime N fois » ou « jamais imprime », croise avec l'historique. Lecture
 // seule. Si l'API ne repond plus, la fenetre le dit et rien d'autre n'est touche.
 // La recherche MakerWorld est publique : elle marche sans compte.
-const TABS = [["favorites", "Collections"], ["likes", "J'aime"], ["following", "Suivis"], ["search", "Recherche"]];
+const TABS = [["favorites", "Collections"], ["likes", "J'aime"], ["following", "Suivis"], ["discover", "Découvrir"],
+  ["search", "Recherche"]];
+const PUBLIC_TABS = ["search", "discover"];      // sans compte (sauf « Pour vous »)
 // « Il y a 3 j » : date de publication (Suivis).
 const ago = iso => {
   const d = (Date.now() - new Date(iso).getTime()) / 86400000;
@@ -42,6 +44,8 @@ export default function MakerWorldView({ onSearch }) {
   const [reload, setReload] = useState(0);         // relecture apres une ecriture
   const [nameEdit, setNameEdit] = useState(null);  // { mode: "new"|"rename", value }
   const [status, setStatus] = useState(null);
+  const [navs, setNavs] = useState(null);          // Decouvrir : fils proposes par MakerWorld
+  const [dk, setDk] = useState(null);              // Decouvrir : fil choisi
   const [q, setQ] = useState("");                  // saisie de recherche
   const [sq, setSq] = useState("");                // recherche lancee
   const [more, setMore] = useState(false);         // page suivante en cours
@@ -62,7 +66,30 @@ export default function MakerWorldView({ onSearch }) {
     client.get("/makerworld/status").then(({ data }) => setStatus(data)).catch(() => setStatus({}));
   }, []);
 
+  // Decouvrir : liste des fils, puis « Pour vous » si le compte est connecte.
   useEffect(() => {
+    if (tab !== "discover" || navs || status === null) return;
+    client.get("/makerworld/discover/navs").then(({ data }) => {
+      const list = data.navs || [];
+      setNavs(list);
+      setDk(k => k || (status?.connected && list.some(n => n.key === "Foryou") ? "Foryou" : "Trending"));
+    }).catch(() => { setNavs([{ key: "Trending", name: "Tendance" }]); setDk(k => k || "Trending"); });
+  }, [tab, status]);
+
+  useEffect(() => {
+    if (tab === "discover") {
+      if (!dk) { setData(null); return; }
+      let alive = true;
+      const key = `disc:${dk}`;
+      const fresh = freshRef.current;
+      freshRef.current = false;
+      setData(CACHE.get(key) || null);
+      client.get("/makerworld/discover", { params: { key: dk, ...(fresh ? { fresh: 1 } : {}) } })
+        .then(({ data }) => { if (!alive) return; setBusy(false); const c = CACHE.get(key);
+          if (fresh || !(c && sameIds(c.items, data.items))) { CACHE.set(key, data); setData(data); } })
+        .catch(e => { if (alive) { setBusy(false); setData({ error: e.response?.data?.detail || e.message }); } });
+      return () => { alive = false; };
+    }
     if (tab === "search") {
       if (!sq) { setData({ items: [] }); return; }
       let alive = true;
@@ -136,17 +163,17 @@ export default function MakerWorldView({ onSearch }) {
     setData(cached ? mwPatch(key, cached) : null);
     load(true);
     return () => { alive = false; clearTimeout(timer); };
-  }, [tab, coll?.id, status?.connected, sq, picked.join(","), reload]);
+  }, [tab, coll?.id, status?.connected, sq, dk, picked.join(","), reload]);
 
-  const pageUrl = tab === "search" ? "/makerworld/search" : tab === "likes" ? "/makerworld/collection/likes"
+  const pageUrl = tab === "discover" ? "/makerworld/discover" : tab === "search" ? "/makerworld/search" : tab === "likes" ? "/makerworld/collection/likes"
     : coll ? `/makerworld/collections/${coll.id}` : null;
-  const pageKey = tab === "search" ? `search:${sq}` : tab === "likes" ? "likes" : coll ? `coll:${coll.id}` : null;
-  const hasMore = !!data?.items && (tab === "search" ? data.total > data.items.length
+  const pageKey = tab === "discover" ? `disc:${dk}` : tab === "search" ? `search:${sq}` : tab === "likes" ? "likes" : coll ? `coll:${coll.id}` : null;
+  const hasMore = !!data?.items && (PUBLIC_TABS.includes(tab) ? data.total > data.items.length
     : (tab === "likes" || coll) ? !!data.has_more : false);
   const loadMore = () => {
     if (more || !pageUrl) return;
     setMore(true);
-    client.get(pageUrl, { params: { ...(tab === "search" ? { q: sq } : {}), offset: data.items.length } })
+    client.get(pageUrl, { params: { ...(tab === "search" ? { q: sq } : tab === "discover" ? { key: dk } : {}), offset: data.items.length } })
       .then(({ data: d }) => setData(prev => {
         const seen = new Set(prev.items.map(y => y.design_id));
         const next = { ...prev, has_more: d.has_more, total: d.total ?? prev.total,
@@ -221,7 +248,7 @@ export default function MakerWorldView({ onSearch }) {
                     background: tab === k ? "#3b82f6" : "var(--surface2)", color: tab === k ? "white" : "var(--muted)",
                     border: tab === k ? "none" : "1px solid var(--border)" }}>{l}</button>
               ))}
-              {(tab !== "search" ? status.connected : !!sq) && (
+              {(tab === "search" ? !!sq : tab === "discover" ? !!dk : status.connected) && (
                 <button onClick={() => { freshRef.current = true; setBusy(true); setReload(n => n + 1); }} disabled={busy}
                   title="Interroger MakerWorld maintenant"
                   style={{ ...iconBtn, padding:"4px 9px", display:"inline-flex", alignItems:"center" }}>
@@ -278,6 +305,21 @@ export default function MakerWorldView({ onSearch }) {
             <CreatorPicker creators={creators} picked={picked}
               onClose={() => setPicker(false)} onApply={ids => { setPicked(ids); setPicker(false); }}/>
           )}
+          {tab === "discover" && navs && (
+            <div data-no-pull="" style={{ display:"flex", gap:6, marginTop:10, overflowX:"auto", paddingBottom:4,
+              scrollbarWidth:"none", WebkitOverflowScrolling:"touch" }}>
+              {navs.map(n => (
+                <button key={n.key} onClick={() => setDk(n.key)}
+                  style={{ flexShrink:0, padding:"4px 11px", borderRadius:20, fontSize:11.5, fontWeight:600, cursor:"pointer",
+                    whiteSpace:"nowrap",
+                    background: dk === n.key ? "rgba(59,130,246,0.15)" : "var(--surface2)",
+                    color: dk === n.key ? "#3b82f6" : "var(--text2)",
+                    border: dk === n.key ? "1px solid #3b82f6" : "1px solid var(--border)" }}>
+                  {n.key === "Foryou" ? "✨ " : n.key === "Trending" ? "🔥 " : ""}{n.name}
+                </button>
+              ))}
+            </div>
+          )}
           {tab === "search" && (
             <form onSubmit={e => { e.preventDefault(); setSq(q.trim()); }}
               style={{ display:"flex", gap:6, marginTop:10 }}>
@@ -300,7 +342,7 @@ export default function MakerWorldView({ onSearch }) {
         <div style={{ padding:"4px 0 16px" }}>
           {status === null ? <p style={msg}>…</p>
             : tab === "search" && !sq ? <p style={msg}>Cherche un modèle sur MakerWorld : ceux que tu as déjà imprimés sont signalés.</p>
-            : tab !== "search" && !status.connected ? (
+            : !PUBLIC_TABS.includes(tab) && !status.connected ? (
               <p style={msg}>Connecte ton compte MakerWorld dans <b>Paramètres → Données → MakerWorld</b> pour voir
                 tes collections et tes j'aime ici.</p>
             ) : data === null ? <Skeleton/>
@@ -322,7 +364,7 @@ export default function MakerWorldView({ onSearch }) {
               )
             ) : items.length === 0 ? <p style={msg}>{pf === "new" && all.length ? "Tout a déjà été imprimé 🎉"
                 : pf === "printed" && all.length ? "Aucun n'a encore été imprimé."
-                : tab === "search" ? "Aucun résultat."
+                : tab === "search" ? "Aucun résultat." : tab === "discover" ? "Rien dans ce fil pour l'instant."
                 : tab === "following" ? "Aucun modèle (ou aucun créateur suivi)." : "Rien dans cette liste."}</p>
             : (<>
               {data.pending > 0 && (
