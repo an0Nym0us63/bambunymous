@@ -2623,7 +2623,7 @@ export default function Prints() {
     <div style={{ maxWidth:960, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
 
       {/* Titre */}
-      <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Historique</h1>
+      <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Impressions</h1>
 
       {/* Tabs Liste / Galerie / MakerWorld */}
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>

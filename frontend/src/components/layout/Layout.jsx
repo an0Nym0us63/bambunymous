@@ -9,7 +9,7 @@ import NoAutofill from "../NoAutofill";
 
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil"    },
-  { to: "/prints",    icon: History,    label: "Historique" },
+  { to: "/prints",    icon: History,    label: "Impressions" },
   { to: "/filaments", icon: Package,    label: "Filaments"  },
   { to: "/objects",   icon: ShoppingBag,label: "Objets"     },
   { to: "/stats",     icon: BarChart2,  label: "Stats"      },
@@ -19,7 +19,7 @@ const nav = [
 // Titre affiche dans le header mobile : evite de redonder le <h1> de chaque page.
 const TITLES = {
   "/":          null,            // l'accueil n'a pas de titre propre
-  "/prints":    "Historique",
+  "/prints":    "Impressions",
   "/filaments": "Filaments",
   "/objects":   "Objets & Accessoires",
   "/stats":     "Statistiques",
