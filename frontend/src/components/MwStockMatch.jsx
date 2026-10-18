@@ -122,7 +122,7 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
                     lineHeight:"16px" }}>{levelText(best)}</span>
                   {manual ? <span style={{ display:"block", fontSize:9.5, color:"#3b82f6", fontWeight:700 }}>choisi</span>
                     : x.matches.length > 1 ? <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>
-                      {isOpen ? "▴" : `+${x.matches.length - 1} ▾`}</span> : null}
+                      {isOpen ? "masquer ▴" : `${x.matches.length - 1} autre${x.matches.length > 2 ? "s" : ""} ▾`}</span> : null}
                 </span>
               </>) : (
                 <span style={{ flex:1, fontSize:11.5, color:"#ef4444", lineHeight:"16px" }}>Aucun {x.type || "filament"} en stock</span>
