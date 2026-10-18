@@ -6,7 +6,7 @@ import client from "../api/client";
 // imprime N fois » ou « jamais imprime », croise avec l'historique. Lecture
 // seule. Si l'API ne repond plus, la fenetre le dit et rien d'autre n'est touche.
 // La recherche MakerWorld est publique : elle marche sans compte.
-const TABS = [["favorites", "Favoris"], ["likes", "J'aime"], ["search", "Recherche"]];
+const TABS = [["favorites", "Collections"], ["likes", "J'aime"], ["search", "Recherche"]];
 
 export default function MakerWorldView({ onSearch }) {
   const [tab, setTab] = useState("favorites");
@@ -180,12 +180,15 @@ function Mosaic({ covers = [] }) {
   const c = covers.slice(0, 4);
   if (!c.length) return <div style={{ width:"100%", aspectRatio:"1", background:"var(--surface)" }}/>;
   return (
-    <div style={{ width:"100%", aspectRatio:"1", display:"grid", gap:1, background:"var(--border)",
-      gridTemplateColumns: c.length > 1 ? "1fr 1fr" : "1fr", gridTemplateRows: c.length > 2 ? "1fr 1fr" : "1fr" }}>
+    // Carre fixe quoi qu'il arrive : sans minHeight/minWidth a 0, une image
+    // haute etirait sa rangee et la tuile depassait ses voisines.
+    <div style={{ width:"100%", aspectRatio:"1", display:"grid", gap:1, background:"var(--border)", overflow:"hidden",
+      gridTemplateColumns: c.length > 1 ? "minmax(0,1fr) minmax(0,1fr)" : "minmax(0,1fr)",
+      gridTemplateRows: c.length > 2 ? "minmax(0,1fr) minmax(0,1fr)" : "minmax(0,1fr)" }}>
       {c.map((u, i) => (
         <img key={i} src={u} alt="" loading="lazy" referrerPolicy="no-referrer"
-          style={{ width:"100%", height:"100%", objectFit:"cover", display:"block", background:"var(--surface)",
-            gridRow: c.length === 3 && i === 0 ? "span 2" : undefined }}/>
+          style={{ width:"100%", height:"100%", minWidth:0, minHeight:0, objectFit:"cover", display:"block",
+            background:"var(--surface)", gridRow: c.length === 3 && i === 0 ? "span 2" : undefined }}/>
       ))}
     </div>
   );

@@ -451,6 +451,13 @@ DEBUG_TRIES = {
         "/search-service/select/design/search?keyword=panda&offset=0&limit=3",
         "/search-service/design/search?keyword=panda&offset=0&limit=3",
         "/search-service/search/design?keyword=panda&offset=0&limit=3"]),
+    "essais_suivis": lambda did: ("essais suivis", [
+        "/design-user-service/my/follow/following?offset=0&limit=3",
+        "/design-user-service/my/following?offset=0&limit=3",
+        "/design-user-service/my/follow/list?type=1&offset=0&limit=3",
+        "/design-user-service/my/follow/mutual",
+        "/design-recommend-service/my/following?offset=0&limit=3",
+        "/design-recommend-service/my/follow?offset=0&limit=3"]),
     "essais_similaires": lambda did: ("essais similaires", [
         f"/search-service/design/{did}/relate?offset=0&limit=3&scene=1",
         f"/design-service/design/{did}/remixed?offset=0&limit=3"]),
