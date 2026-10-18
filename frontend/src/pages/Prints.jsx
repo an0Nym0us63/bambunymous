@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
+import { Globe, RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
+import MakerWorldSheet from "../components/MakerWorldSheet";
 import client from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
@@ -731,8 +732,6 @@ function MakerWorldCard({ designId, note }) {
         <div style={{ minWidth:0, flex:1 }}>
           <div style={{ fontSize:10, fontWeight:700, color:"#3b82f6", letterSpacing:0.3, marginBottom:2 }}>
             MAKERWORLD ↗
-            <span title="Lu via une API interne de MakerWorld, non officielle : ces infos peuvent manquer ou disparaître."
-              style={{ fontWeight:500, color:"var(--muted)", opacity:0.7, letterSpacing:0, marginLeft:5 }}>· API non officielle</span>
           </div>
           <div style={{ fontSize:13, fontWeight:700, lineHeight:1.3, overflow:"hidden",
             display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{mw.title}</div>
@@ -2214,6 +2213,7 @@ function countDisplayItems(list) {
 }
 
 export default function Prints() {
+  const [mwOpen, setMwOpen] = useState(false);     // mes modeles MakerWorld
   const [searchParams, setSearchParams] = useSearchParams();
   const [prints, setPrints]   = useState([]);
   const [total, setTotal]     = useState(0);
@@ -2563,6 +2563,14 @@ export default function Prints() {
             <Check size={14}/>
           </button></AdminOnly>
         )}
+        <button onClick={() => setMwOpen(true)} title="Mes modèles MakerWorld (favoris, j'aime)"
+          style={{ width:36, height:36, borderRadius:10, border:"1px solid var(--border)",
+            background:"var(--surface2)", color:"var(--muted)", cursor:"pointer",
+            display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+          <Globe size={14}/>
+        </button>
+        {mwOpen && <MakerWorldSheet onClose={() => setMwOpen(false)}
+          onSearch={x => { setSearch(x.title || ""); setMwOpen(false); }}/>}
         <AdminOnly><label title="Importer .3mf"
           style={{ width:36, height:36, borderRadius:10, border:"1px solid var(--border)",
             background:"var(--surface2)", color:"var(--muted)", cursor:"pointer",

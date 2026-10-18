@@ -19,58 +19,86 @@ from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-API = "https://makerworld.com/api/v1/design-service/design/{}"
+# Deux portes vers la meme API : le site (derriere Cloudflare, qui peut
+# filtrer) puis l'hote de l'API Bambu (sans Cloudflare). La seconde ne sert
+# que si la premiere refuse.
+HOSTS = ("https://makerworld.com/api/v1", "https://api.bambulab.com/v1")
 REFRESH_DAYS = 30
 _RUNNING = {"on": False}
+_LAST = {"run": None}          # bilan du dernier passage, pour les Parametres
 
 
 def model_url(design_id) -> str:
     return f"https://makerworld.com/fr/models/{design_id}"
 
 
+def _get_json(path: str, token: str = None):
+    """GET sur l'API, en essayant les deux portes. Rend (code, json|None)."""
+    import requests
+    headers = {"User-Agent": "Mozilla/5.0 (BambuNymous)", "Accept": "application/json",
+               # Categories rendues en francais ; le titre et les tags restent
+               # dans la langue du createur.
+               "Accept-Language": "fr-FR,fr;q=0.9"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    code = 0
+    for host in HOSTS:
+        try:
+            r = requests.get(host + path, timeout=20, headers=headers)
+        except Exception as e:
+            logger.info(f"[MW] {host}{path} : injoignable ({type(e).__name__})")
+            continue
+        code = r.status_code
+        if code in (401, 404):
+            return code, None
+        if code == 200 and "json" in r.headers.get("content-type", ""):
+            try:
+                return code, r.json()
+            except ValueError:
+                pass
+        # 403 + page Cloudflare, 5xx... : porte suivante
+    return code, None
+
+
 def fetch_design(design_id: str) -> dict:
     """Lit la fiche d'un modele. Rend {"status": "ok", ...champs},
-    {"status": "notfound"} ou {"status": "error"} (a reessayer)."""
-    import requests
+    {"status": "notfound"} ou {"status": "error"} (a reessayer). Ne leve
+    jamais : un changement de l'API ne doit rien casser d'autre."""
     try:
-        r = requests.get(API.format(design_id), timeout=20, headers={
-            "User-Agent": "Mozilla/5.0 (BambuNymous)",
-            "Accept": "application/json",
-            # Categories rendues en francais ; le titre et les tags restent
-            # dans la langue du createur.
-            "Accept-Language": "fr-FR,fr;q=0.9",
-        })
+        return _parse_design(*_get_json(f"/design-service/design/{design_id}"))
     except Exception as e:
-        logger.info(f"[MW] {design_id} : injoignable ({type(e).__name__})")
+        logger.info(f"[MW] {design_id} : reponse inattendue ({type(e).__name__})")
         return {"status": "error"}
-    if r.status_code == 404:
+
+
+def _parse_design(code, d) -> dict:
+    if code == 404:
         return {"status": "notfound"}
-    if r.status_code != 200 or "json" not in r.headers.get("content-type", ""):
-        # 403 + page Cloudflare : le site filtre, on reessaiera plus tard.
-        logger.info(f"[MW] {design_id} : HTTP {r.status_code}")
-        return {"status": "error"}
-    try:
-        d = r.json()
-    except ValueError:
+    if not isinstance(d, dict):
         return {"status": "error"}
     if not d.get("id"):
         return {"status": "notfound"}
-    cr = d.get("designCreator") or {}
-    cats = [c.get("name") for c in (d.get("categories") or []) if isinstance(c, dict) and c.get("name")]
-    tags = [t for t in (d.get("tags") or []) if isinstance(t, str) and t.strip()]
+    cr = d.get("designCreator") if isinstance(d.get("designCreator"), dict) else {}
+    lst = lambda v: v if isinstance(v, list) else []
+    cats = [c.get("name") for c in lst(d.get("categories"))
+            if isinstance(c, dict) and isinstance(c.get("name"), str) and c.get("name")]
+    tags = [t for t in lst(d.get("tags")) if isinstance(t, str) and t.strip()]
+    num = lambda v: v if isinstance(v, int) and not isinstance(v, bool) else None
+    # Texte seulement : une API qui change de forme ne doit rien faire lever.
+    txt = lambda v, n: (v.strip()[:n] or None) if isinstance(v, str) else None
     return {
         "status": "ok",
-        "title": (d.get("titleTranslated") or d.get("title") or "").strip()[:512] or None,
-        "cover_url": (d.get("coverUrl") or "")[:1024] or None,
-        "creator_name": (cr.get("name") or "")[:256] or None,
-        "creator_handle": (cr.get("handle") or "")[:256] or None,
-        "creator_avatar": (cr.get("avatar") or "")[:1024] or None,
+        "title": txt(d.get("titleTranslated"), 512) or txt(d.get("title"), 512),
+        "cover_url": txt(d.get("coverUrl"), 1024),
+        "creator_name": txt(cr.get("name"), 256),
+        "creator_handle": txt(cr.get("handle"), 256),
+        "creator_avatar": txt(cr.get("avatar"), 1024),
         "categories": ",".join(c.replace(",", " ") for c in cats)[:512] or None,
         "tags": ",".join(t.replace(",", " ").strip() for t in tags) or None,
-        "like_count": d.get("likeCount"),
-        "download_count": d.get("downloadCount"),
-        "print_count": d.get("printCount"),
-        "collection_count": d.get("collectionCount"),
+        "like_count": num(d.get("likeCount")),
+        "download_count": num(d.get("downloadCount")),
+        "print_count": num(d.get("printCount")),
+        "collection_count": num(d.get("collectionCount")),
     }
 
 
@@ -98,7 +126,7 @@ async def _todo(limit: int, only: str = None) -> list:
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print, MakerWorldDesign as MW
     async with AsyncSessionLocal() as db:
-        ids = [only] if only else [
+        ids = ([str(x) for x in only] if isinstance(only, (list, tuple, set)) else [only]) if only else [
             x for x in (await db.execute(
                 select(distinct(Print.design_id)).where(Print.design_id.isnot(None))
             )).scalars().all() if x and str(x).strip() not in ("", "0")]
@@ -164,7 +192,63 @@ async def refresh(limit: int = 200, only: str = None) -> dict:
                 m.title_fr = (tr or r["title"])[:512]
         await db.commit()
     logger.info(f"[MW] {len(todo)} modele(s) lu(s), {ok} fiche(s) a jour")
+    _LAST["run"] = {"read": len(todo), "ok": ok, "at": datetime.utcnow().isoformat()}
     return {"read": len(todo), "ok": ok}
+
+
+async def stats() -> dict:
+    """Etat du cache, pour les Parametres."""
+    from sqlalchemy import select, func, distinct
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print, MakerWorldDesign as MW
+    async with AsyncSessionLocal() as db:
+        by = dict((await db.execute(select(MW.status, func.count()).group_by(MW.status))).all())
+        n = (await db.execute(select(func.count(distinct(Print.design_id)))
+                              .where(Print.design_id.isnot(None), Print.design_id != "0"))).scalar_one()
+    return {"models": n, "ok": by.get("ok", 0), "notfound": by.get("notfound", 0),
+            "error": by.get("error", 0), "last": _LAST["run"], "running": _RUNNING["on"]}
+
+
+def launch_refresh() -> bool:
+    """Passage complet a la demande (Parametres). False s'il tourne deja."""
+    if _RUNNING["on"]:
+        return False
+    _RUNNING["on"] = True
+
+    def _run():
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(refresh(1000))
+        except Exception:
+            logger.exception("[MW] passage a la demande")
+        finally:
+            _RUNNING["on"] = False
+            loop.close()
+    threading.Thread(target=_run, daemon=True).start()
+    return True
+
+
+_MANY = {"on": False}
+
+
+def launch_many(ids) -> None:
+    """Lit une liste de modeles en arriere-plan (favoris, j'aime), un seul
+    passage a la fois ; les suivants sont repris au passage automatique."""
+    ids = [str(i) for i in ids if str(i).isdigit()][:300]
+    if not ids or _MANY["on"]:
+        return
+    _MANY["on"] = True
+
+    def _run():
+        loop = asyncio.new_event_loop()
+        try:
+            loop.run_until_complete(refresh(len(ids), only=ids))
+        except Exception:
+            logger.exception("[MW] lecture des modeles du compte")
+        finally:
+            _MANY["on"] = False
+            loop.close()
+    threading.Thread(target=_run, daemon=True).start()
 
 
 def launch(design_id) -> None:

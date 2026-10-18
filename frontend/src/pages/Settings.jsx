@@ -14,6 +14,7 @@ import AdminOnly from "../components/AdminOnly";
 import TelegramSettings from "../components/TelegramSettings";
 import DryRulesCard from "../components/DryRulesCard";
 import SpoolTaresCard from "../components/SpoolTaresCard";
+import MakerWorldSettings from "../components/MakerWorldSettings";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
 import { amsName, slotCount, lireDisposition, dispositionParDefaut, MAX_LIGNES, MAX_COLONNES } from "../utils/ams";
@@ -1862,6 +1863,7 @@ export default function Settings() {
         <RecalculateSection/>
         <PriceReviewSection/>
         <TranslateNamesSection/>
+        <MakerWorldSettings/>
         <SpoolnymousImport/>
         <RfidDebugSection/>
       </AdminOnly>

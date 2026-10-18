@@ -4,6 +4,7 @@ API REST — Historique des impressions.
 import asyncio
 import os, shutil
 import html
+import logging
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, List
@@ -1199,12 +1200,17 @@ async def _makerworld_for(design_id) -> dict:
     did = str(design_id or "").strip()
     if not did or did == "0" or not did.isdigit():
         return {"makerworld": None, "status": "none"}
-    async with AsyncSessionLocal() as db:
-        m = await db.get(_MW, did)
-    if m is None:
-        _mw_launch(did)
-        return {"makerworld": None, "status": "pending"}
-    return {"makerworld": _mw_dict(m), "status": m.status}
+    # Jamais d'erreur vers la fiche : sans fiche MakerWorld, elle montre le lien.
+    try:
+        async with AsyncSessionLocal() as db:
+            m = await db.get(_MW, did)
+        if m is None:
+            _mw_launch(did)
+            return {"makerworld": None, "status": "pending"}
+        return {"makerworld": _mw_dict(m), "status": m.status}
+    except Exception:
+        logging.getLogger(__name__).exception("[MW] fiche du modele")
+        return {"makerworld": None, "status": "error"}
 
 
 @router.get("/makerworld/{design_id}")
