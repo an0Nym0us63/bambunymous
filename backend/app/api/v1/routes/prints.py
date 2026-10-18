@@ -1191,24 +1191,36 @@ async def debug_prints():  # noqa — public debug route
     return {"tables": tables, "prints": rows}
 
 
-@router.get("/{print_id}/makerworld")
-async def print_makerworld(print_id: int, _: str = Depends(get_current_user)):
-    """Fiche MakerWorld du modele de ce print (cache). Pas encore lue : lecture
-    lancee en arriere-plan, pending=True -- la fiche redemande un peu apres."""
+async def _makerworld_for(design_id) -> dict:
+    """Fiche MakerWorld d'un modele (cache). Pas encore lue : lecture lancee en
+    arriere-plan, status "pending" -- la fiche redemande un peu apres."""
     from ....models.print_history import MakerWorldDesign as _MW
     from ....services.makerworld import to_dict as _mw_dict, launch as _mw_launch
+    did = str(design_id or "").strip()
+    if not did or did == "0" or not did.isdigit():
+        return {"makerworld": None, "status": "none"}
     async with AsyncSessionLocal() as db:
-        p = await db.get(Print, print_id)
-        if not p:
-            raise HTTPException(404, "Print introuvable")
-        did = str(p.design_id or "").strip()
-        if not did or did == "0":
-            return {"makerworld": None, "status": "none"}
         m = await db.get(_MW, did)
     if m is None:
         _mw_launch(did)
         return {"makerworld": None, "status": "pending"}
     return {"makerworld": _mw_dict(m), "status": m.status}
+
+
+@router.get("/makerworld/{design_id}")
+async def design_makerworld(design_id: str, _: str = Depends(get_current_user)):
+    """Fiche MakerWorld par modele : sert a la fiche d'un print comme a celle
+    d'un groupe (ses prints partagent normalement le meme modele)."""
+    return await _makerworld_for(design_id)
+
+
+@router.get("/{print_id}/makerworld")
+async def print_makerworld(print_id: int, _: str = Depends(get_current_user)):
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404, "Print introuvable")
+    return await _makerworld_for(p.design_id)
 
 
 @router.get("/{print_id}")

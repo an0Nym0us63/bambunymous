@@ -693,18 +693,18 @@ const TRAD_BY = {
 // Fiche publique du modele sur MakerWorld, lue en cache par le serveur. Pas
 // encore lue : le serveur la lance, on redemande 4 s plus tard (une fois).
 const fmtK = n => n == null ? null : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
-function MakerWorldCard({ printId, designId }) {
+function MakerWorldCard({ designId, note }) {
   const [mw, setMw] = useState(undefined);       // undefined = en cours, null = rien
   useEffect(() => {
     let alive = true, timer = null;
-    const load = (again) => client.get(`/prints/${printId}/makerworld`).then(({ data }) => {
+    const load = (again) => client.get(`/prints/makerworld/${encodeURIComponent(designId)}`).then(({ data }) => {
       if (!alive) return;
       setMw(data.makerworld || null);
       if (data.status === "pending" && again) timer = setTimeout(() => load(false), 4000);
     }).catch(() => alive && setMw(null));
     load(true);
     return () => { alive = false; clearTimeout(timer); };
-  }, [printId]);
+  }, [designId]);
 
   const url = mw?.url || `https://makerworld.com/fr/models/${designId}`;
   if (!mw) return (
@@ -760,6 +760,7 @@ function MakerWorldCard({ printId, designId }) {
           ))}
         </div>
       )}
+      {note && <div style={{ fontSize:10.5, color:"var(--muted)", padding:"0 10px 8px" }}>{note}</div>}
     </div>
   );
 }
@@ -1048,7 +1049,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
           {/* Fiche MakerWorld du modele (titre, createur, categories, compteurs),
               ou a defaut le simple lien. */}
-          {p.design_id && <MakerWorldCard printId={p.id} designId={p.design_id}/>}
+          {p.design_id && <MakerWorldCard designId={p.design_id}/>}
 
           {/* Creation d'objets : le bouton porte le quota et se desactive
               quand tout est cree, plutot que de laisser tenter puis echouer. */}
@@ -1443,6 +1444,21 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
               )}
             </div>
           )}
+
+          {/* Modele(s) MakerWorld du groupe : normalement un seul, ses prints
+              etant des plateaux du meme modele ; s'il y en a plusieurs, le
+              plus imprime d'abord. */}
+          {(() => {
+            const cpt = {};
+            localPrints.forEach(pr => { const d = String(pr.design_id || "").trim();
+              if (d && d !== "0") cpt[d] = (cpt[d] || 0) + 1; });
+            const ds = Object.keys(cpt).sort((a, b) => cpt[b] - cpt[a]);
+            return ds.map(d => (
+              <MakerWorldCard key={d} designId={d}
+                note={ds.length > 1 || cpt[d] < localPrints.length
+                  ? `${cpt[d]} print${cpt[d] > 1 ? "s" : ""} sur ${localPrints.length} de ce modèle` : null}/>
+            ));
+          })()}
 
           {/* Filaments agrégés — accordéon */}
           {filaments.length > 0 && <FilamentAccordion filaments={filaments} onSpoolClick={setSelSpoolG} onUnmap={setUnmappingG}/>}
