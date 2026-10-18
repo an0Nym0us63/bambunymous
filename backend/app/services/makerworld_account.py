@@ -335,13 +335,17 @@ async def _published(creator: dict, limit: int) -> list:
     return items
 
 
-async def feed(creator_uid: str = "") -> dict:
-    """Modeles recents des createurs suivis, fusionnes du plus recent au plus
-    ancien, avec « deja imprime ». Un createur choisi : ses 60 derniers."""
+async def feed(uids: str = "", per: int = 12) -> dict:
+    """Modeles recents d'un LOT de createurs suivis (uids separes par des
+    virgules, 25 au plus), fusionnes du plus recent au plus ancien, avec
+    « deja imprime ». Le front enchaine les lots : les premiers modeles
+    s'affichent sans attendre les 250 createurs. Seuls des createurs de MA
+    liste sont lus."""
     import asyncio
-    creators = await following()
-    pick = [c for c in creators if c["uid"] == str(creator_uid)] if creator_uid else creators
-    per = 60 if creator_uid else 12
+    creators = {c["uid"]: c for c in await following()}
+    wanted = list(dict.fromkeys(u.strip() for u in str(uids or "").split(",") if u.strip()))[:25]
+    pick = [creators[u] for u in wanted if u in creators]
+    per = max(1, min(int(per or 12), 60))
     sem = asyncio.Semaphore(5)              # pas plus de 5 requetes a la fois
 
     async def one(c):
@@ -353,7 +357,7 @@ async def feed(creator_uid: str = "") -> dict:
     lists = await asyncio.gather(*(one(c) for c in pick))
     items = sorted((x for l in lists for x in l), key=lambda x: x.get("published") or "", reverse=True)
     res = await _enrich(items)
-    return {"creators": creators, "items": res["items"], "pending": res["pending"]}
+    return {"items": res["items"], "pending": res["pending"], "creators_read": len(pick)}
 
 
 async def _debug_collections() -> dict:

@@ -64,10 +64,16 @@ async def mw_collection_designs(cid: str, _: str = Depends(get_current_user)):
     return await _call(acc.collection_designs(cid))
 
 
+@router.get("/following/creators")
+async def mw_following_creators(_: str = Depends(get_current_user)):
+    """Createurs suivis (vraie liste du profil), pour le filtre."""
+    return {"creators": await _call(acc.following())}
+
+
 @router.get("/following")
-async def mw_following(creator: str = "", _: str = Depends(get_current_user)):
-    """Modeles des createurs suivis (tous, ou un seul avec ?creator=uid)."""
-    return await _call(acc.feed(creator))
+async def mw_following(uids: str = "", per: int = 12, _: str = Depends(get_current_user)):
+    """Modeles d'un lot de createurs suivis (uids=1,2,3 ; 25 au plus)."""
+    return await _call(acc.feed(uids, per))
 
 
 @router.get("/collection/{kind}")

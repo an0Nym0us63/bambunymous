@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import client from "../api/client";
 
 // Onglet MakerWorld de l'Historique (compte connecte dans les Parametres) : collections
@@ -21,8 +22,10 @@ export default function MakerWorldView({ onSearch }) {
   const [coll, setColl] = useState(null);          // collection ouverte { id, title }
   const [data, setData] = useState(null);          // { items } | { collections } | { error }
   const [pf, setPf] = useState("all");           // tous / deja imprimes / jamais imprimes
-  const [creator, setCreator] = useState("");      // Suivis : un seul createur (uid)
-  const [creators, setCreators] = useState([]);    // Suivis : pastilles, gardees pendant un rechargement
+  const [creators, setCreators] = useState(null);  // Suivis : createurs suivis (liste du profil)
+  const [picked, setPicked] = useState([]);        // Suivis : createurs choisis (vide = tous)
+  const [picker, setPicker] = useState(false);     // Suivis : fenetre de choix des createurs
+  const [progress, setProgress] = useState(null);  // Suivis : { done, total } pendant le chargement
   const [status, setStatus] = useState(null);
   const [q, setQ] = useState("");                  // saisie de recherche
   const [sq, setSq] = useState("");                // recherche lancee
@@ -44,20 +47,49 @@ export default function MakerWorldView({ onSearch }) {
     }
     if (!status?.connected) return;
     let alive = true, timer = null;
+    if (tab === "following") {
+      // Par lots de 20 createurs : les premiers modeles s'affichent tout de
+      // suite, la suite se complete (250 suivis ne font pas attendre).
+      setData(null); setProgress(null);
+      (async () => {
+        try {
+          let list = creators;
+          if (!list) {
+            list = (await client.get("/makerworld/following/creators")).data.creators || [];
+            if (!alive) return;
+            setCreators(list);
+          }
+          const target = picked.length ? picked : list.map(c => c.uid);
+          const per = target.length <= 5 ? 40 : 12;
+          let acc = [];
+          setProgress({ done: 0, total: target.length });
+          if (!target.length) { setData({ items: [] }); return; }
+          for (let i = 0; i < target.length && alive; i += 20) {
+            const { data: d } = await client.get("/makerworld/following",
+              { params: { uids: target.slice(i, i + 20).join(","), per } });
+            if (!alive) return;
+            const seen = new Set(acc.map(x => x.design_id));
+            acc = [...acc, ...(d.items || []).filter(x => !seen.has(x.design_id))]
+              .sort((a, b) => (b.published || "").localeCompare(a.published || ""));
+            setData({ items: acc });
+            setProgress({ done: Math.min(i + 20, target.length), total: target.length });
+          }
+        } catch (e) { alive && setData({ error: e.response?.data?.detail || e.message }); }
+      })();
+      return () => { alive = false; };
+    }
     const url = tab === "likes" ? "/makerworld/collection/likes"
-      : tab === "following" ? `/makerworld/following${creator ? `?creator=${creator}` : ""}`
       : coll ? `/makerworld/collections/${coll.id}` : "/makerworld/collections";
     const load = (again) => client.get(url).then(({ data }) => {
       if (!alive) return;
       setData(data);
-      if (data.creators) setCreators(data.creators);
       // Modeles sans fiche : lus en arriere-plan, on recharge une fois.
       if (data.pending && again) timer = setTimeout(() => load(false), 8000);
     }).catch(e => alive && setData({ error: e.response?.data?.detail || e.message }));
     setData(null);
     load(true);
     return () => { alive = false; clearTimeout(timer); };
-  }, [tab, coll?.id, status?.connected, sq, creator]);
+  }, [tab, coll?.id, status?.connected, sq, picked.join(",")]);
 
   const loadMore = () => {
     setMore(true);
@@ -88,7 +120,7 @@ export default function MakerWorldView({ onSearch }) {
           {status && (
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:10, flexWrap:"wrap" }}>
               {TABS.map(([k, l]) => (
-                <button key={k} onClick={() => { setTab(k); if (k !== "favorites") setColl(null); if (k !== "following") setCreator(""); }}
+                <button key={k} onClick={() => { setTab(k); if (k !== "favorites") setColl(null); }}
                   style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer",
                     background: tab === k ? "#3b82f6" : "var(--surface2)", color: tab === k ? "white" : "var(--muted)",
                     border: tab === k ? "none" : "1px solid var(--border)" }}>{l}</button>
@@ -102,21 +134,27 @@ export default function MakerWorldView({ onSearch }) {
               )}
             </div>
           )}
-          {tab === "following" && creators.length > 0 && (
-            <div style={{ display:"flex", gap:6, overflowX:"auto", marginTop:10, paddingBottom:2 }}>
-              {[{ uid: "", name: "Tous" }, ...creators].map(c => (
-                <button key={c.uid || "tous"} onClick={() => setCreator(c.uid)}
-                  style={{ flexShrink:0, display:"flex", alignItems:"center", gap:5, padding:"3px 10px 3px 4px",
-                    borderRadius:20, fontSize:11.5, fontWeight:600, cursor:"pointer",
-                    background: creator === c.uid ? "rgba(59,130,246,0.15)" : "var(--surface2)",
-                    color: creator === c.uid ? "#3b82f6" : "var(--text2)",
-                    border: creator === c.uid ? "1px solid #3b82f6" : "1px solid var(--border)" }}>
-                  {c.avatar ? <img src={c.avatar} alt="" referrerPolicy="no-referrer"
-                    style={{ width:20, height:20, borderRadius:"50%" }}/> : <span style={{ width:6 }}/>}
-                  {c.name || c.handle}
-                </button>
-              ))}
+          {tab === "following" && creators && (
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:10, flexWrap:"wrap" }}>
+              <button onClick={() => setPicker(true)}
+                style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:600, cursor:"pointer",
+                  background: picked.length ? "rgba(59,130,246,0.15)" : "var(--surface2)",
+                  color: picked.length ? "#3b82f6" : "var(--text2)",
+                  border: picked.length ? "1px solid #3b82f6" : "1px solid var(--border)" }}>
+                👤 {picked.length ? `${picked.length} créateur${picked.length > 1 ? "s" : ""}` : `Tous les créateurs (${creators.length})`}
+              </button>
+              {picked.length > 0 && (
+                <button onClick={() => setPicked([])} title="Tous les créateurs"
+                  style={{ background:"none", border:"none", color:"var(--muted)", cursor:"pointer", fontSize:13 }}>✕</button>
+              )}
+              {progress && progress.done < progress.total && (
+                <span style={{ fontSize:11.5, color:"#3b82f6" }}>Chargement {progress.done} / {progress.total} créateurs…</span>
+              )}
             </div>
+          )}
+          {picker && creators && (
+            <CreatorPicker creators={creators} picked={picked}
+              onClose={() => setPicker(false)} onApply={ids => { setPicked(ids); setPicker(false); }}/>
           )}
           {tab === "search" && (
             <form onSubmit={e => { e.preventDefault(); setSq(q.trim()); }}
@@ -204,6 +242,64 @@ export default function MakerWorldView({ onSearch }) {
             </>)}
         </div>
       </div>
+  );
+}
+
+// Choix des createurs suivis : recherche dynamique (nom ou pseudo qui
+// contient le texte, sans tenir compte des accents), cases a cocher.
+const norm = t => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function CreatorPicker({ creators, picked, onClose, onApply }) {
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState(new Set(picked));
+  const n = norm(q.trim());
+  const shown = creators.filter(c => !n || norm(c.name).includes(n) || norm(c.handle).includes(n));
+  const toggle = uid => setSel(s => { const x = new Set(s); x.has(uid) ? x.delete(uid) : x.add(uid); return x; });
+  return createPortal(
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4000, background:"rgba(0,0,0,0.6)",
+      display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
+        width:"100%", maxWidth:520, height:"80dvh", display:"flex", flexDirection:"column",
+        paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
+        <div style={{ padding:"14px 16px 10px", borderBottom:"1px solid var(--border)" }}>
+          <div style={{ display:"flex", alignItems:"center", marginBottom:10 }}>
+            <h3 style={{ flex:1, fontSize:15, fontWeight:800, color:"var(--text)", margin:0 }}>
+              Créateurs suivis <span style={{ color:"var(--muted)", fontWeight:500 }}>({creators.length})</span></h3>
+            <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--muted)", fontSize:18, cursor:"pointer" }}>✕</button>
+          </div>
+          <input value={q} onChange={e => setQ(e.target.value)} placeholder="Chercher un créateur…" autoFocus
+            autoComplete="off" style={{ width:"100%", boxSizing:"border-box", padding:"8px 10px", borderRadius:10, fontSize:13,
+              background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)", outline:"none" }}/>
+        </div>
+        <div style={{ flex:1, overflowY:"auto", padding:"4px 8px" }}>
+          {shown.length === 0 && <p style={msg}>Aucun créateur ne correspond.</p>}
+          {shown.map(c => (
+            <label key={c.uid} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 8px",
+              borderRadius:10, cursor:"pointer", background: sel.has(c.uid) ? "rgba(59,130,246,0.08)" : "none" }}>
+              <input type="checkbox" checked={sel.has(c.uid)} onChange={() => toggle(c.uid)}/>
+              {c.avatar ? <img src={c.avatar} alt="" loading="lazy" referrerPolicy="no-referrer"
+                style={{ width:28, height:28, borderRadius:"50%", flexShrink:0 }}/>
+                : <span style={{ width:28, height:28, borderRadius:"50%", background:"var(--surface2)", flexShrink:0 }}/>}
+              <span style={{ minWidth:0, flex:1 }}>
+                <span style={{ display:"block", fontSize:13, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis",
+                  whiteSpace:"nowrap" }}>{c.name || c.handle}</span>
+                {c.handle && <span style={{ fontSize:11, color:"var(--muted)" }}>@{c.handle}</span>}
+              </span>
+            </label>
+          ))}
+        </div>
+        <div style={{ display:"flex", gap:8, padding:"10px 16px", borderTop:"1px solid var(--border)" }}>
+          <button onClick={() => setSel(new Set())}
+            style={{ flex:1, padding:9, borderRadius:10, fontSize:12.5, fontWeight:600, cursor:"pointer",
+              background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" }}>Tous</button>
+          <button onClick={() => onApply([...sel])}
+            style={{ flex:2, padding:9, borderRadius:10, fontSize:12.5, fontWeight:700, cursor:"pointer",
+              background:"#3b82f6", border:"none", color:"white" }}>
+            {sel.size ? `Voir ${sel.size} créateur${sel.size > 1 ? "s" : ""}` : "Voir tous les créateurs"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 
