@@ -131,8 +131,9 @@ async def mw_discover_navs(fresh: bool = False, _: str = Depends(get_current_use
 
 
 @router.get("/discover")
-async def mw_discover(key: str = "Trending", offset: int = 0, fresh: bool = False, _: str = Depends(get_current_user)):
-    return await _call(mw.discover(key, offset, fresh))
+async def mw_discover(key: str = "Trending", offset: int = 0, fresh: bool = False, seed: int = 0,
+                      _: str = Depends(get_current_user)):
+    return await _call(mw.discover(key, offset, fresh, seed))
 
 
 @router.get("/model/{design_id}")

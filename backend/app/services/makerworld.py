@@ -216,6 +216,12 @@ NAV_FEED = "/search-service/select/design/nav?navKey={key}&offset={offset}&limit
 _NAVS_CACHE = [0.0, None]           # 6 h
 _FEED_CACHE = {}                    # (cle, offset, compte?) -> (instant, hits, total) ; 10 min
 PERSONAL = ("Foryou",)
+# « Pour vous » ne passe pas par les fils de la page d'accueil : le site lit
+# un service de recommandation (releve sur makerworld.com le 18/10/2026).
+# Sans compte il renvoie une selection generale, avec le jeton une selection
+# personnelle. Pas de total : « surplus » dit combien il en reste ; la graine
+# (seed) rendue par la 1re page garde les pages suivantes coherentes.
+FOR_YOU = "/design-recommend-service/my/for-you?limit={limit}&offset={offset}&seed={seed}&acceptTypes=0%2C1%2C2%2C3%2C4%2C5%2C7"
 
 
 async def discover_navs(fresh: bool = False) -> dict:
@@ -237,7 +243,29 @@ async def discover_navs(fresh: bool = False) -> dict:
     return out
 
 
-async def discover(key: str, offset: int = 0, fresh: bool = False) -> dict:
+async def _for_you(offset: int, seed: int, tok, fresh: bool) -> dict:
+    import asyncio, time
+    from .makerworld_account import _enrich
+    ck = ("Foryou", offset, seed, bool(tok))
+    hit = None if fresh else _FEED_CACHE.get(ck)
+    if hit and time.time() - hit[0] < 600:
+        hits, total, seed2 = hit[1], hit[2], hit[3]
+    else:
+        code, d = await asyncio.to_thread(_get_json, FOR_YOU.format(limit=24, offset=offset, seed=seed), tok)
+        if not isinstance(d, dict) or not isinstance(d.get("hits"), list):
+            return {"items": [], "total": 0, "error": f"MakerWorld ne répond pas (HTTP {code})"}
+        hits = [x for x in (_hit(h.get("design")) for h in d["hits"]
+                            if isinstance(h, dict) and h.get("type") == 0 and isinstance(h.get("design"), dict)) if x]
+        surplus = d.get("surplus") if isinstance(d.get("surplus"), int) else 0
+        total = offset + len(d["hits"]) + max(0, surplus)
+        seed2 = d.get("seed") if isinstance(d.get("seed"), int) and not seed else seed
+        _FEED_CACHE[ck] = (time.time(), hits, total, seed2)
+    res = await _enrich(hits)
+    return {"items": res["items"], "total": total, "seed": seed2, "personal": bool(tok),
+            "next_offset": offset + 24}
+
+
+async def discover(key: str, offset: int = 0, fresh: bool = False, seed: int = 0) -> dict:
     """Un fil de la page d'accueil, 24 modeles par page, avec « deja imprime »."""
     import asyncio, re, time
     from urllib.parse import quote
@@ -248,10 +276,7 @@ async def discover(key: str, offset: int = 0, fresh: bool = False) -> dict:
     offset = max(0, int(offset or 0))
     tok = None
     if key in PERSONAL:
-        tok = await token()
-        if not tok:
-            return {"items": [], "total": 0,
-                    "error": "« Pour vous » demande ton compte MakerWorld (Paramètres → Données → MakerWorld)."}
+        return await _for_you(offset, max(0, int(seed or 0)), await token() or None, fresh)
     ck = (key, offset, bool(tok))
     hit = None if fresh else _FEED_CACHE.get(ck)
     if hit and time.time() - hit[0] < 600:
@@ -264,10 +289,7 @@ async def discover(key: str, offset: int = 0, fresh: bool = False) -> dict:
         total = d.get("total") if isinstance(d.get("total"), int) else len(hits)
         _FEED_CACHE[ck] = (time.time(), hits, total)
     res = await _enrich(hits)
-    out = {"items": res["items"], "total": total}
-    if key in PERSONAL and not hits and offset == 0:
-        out["error"] = "MakerWorld n'a rien renvoyé pour « Pour vous » avec ce compte."
-    return out
+    return {"items": res["items"], "total": total}
 
 
 async def similar(design_id: str) -> dict:

@@ -38,8 +38,18 @@ export function installPullRefreshGuard() {
     try { window.BambuScan.setAtTop(!touching && !sheetOpen() && pageTop()); } catch { /* coquille absente */ }
   };
   // Differe : passe toujours APRES l'ecouteur de la coquille, quel que soit
-  // l'ordre dans lequel ils ont ete poses.
-  window.addEventListener("scroll", () => setTimeout(report, 0), true);
+  // l'ordre dans lequel ils ont ete poses. La coquille ne se trompe que quand
+  // l'element qui defile est en haut (scrollTop 0 : rangee horizontale, haut
+  // d'une liste interne) : seulement la, et une fois par image au plus.
+  // Avant, chaque evenement de defilement relancait un appel a la coquille.
+  let pending = false;
+  window.addEventListener("scroll", e => {
+    const t = e.target;
+    const top = t && t.scrollTop !== undefined ? t.scrollTop : (window.scrollY || 0);
+    if (top > 0 || pending) return;
+    pending = true;
+    setTimeout(() => { pending = false; report(); }, 0);
+  }, { capture: true, passive: true });
   document.addEventListener("touchstart", e => {
     if (inHorizontalScroller(e.target)) { touching = true; report(); }
   }, { capture: true, passive: true });

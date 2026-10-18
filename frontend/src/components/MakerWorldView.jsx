@@ -173,10 +173,12 @@ export default function MakerWorldView({ onSearch }) {
   const loadMore = () => {
     if (more || !pageUrl) return;
     setMore(true);
-    client.get(pageUrl, { params: { ...(tab === "search" ? { q: sq } : tab === "discover" ? { key: dk } : {}), offset: data.items.length } })
+    client.get(pageUrl, { params: { ...(tab === "search" ? { q: sq } : tab === "discover" ? { key: dk, ...(data.seed ? { seed: data.seed } : {}) } : {}),
+      offset: data.next_offset ?? data.items.length } })
       .then(({ data: d }) => setData(prev => {
         const seen = new Set(prev.items.map(y => y.design_id));
         const next = { ...prev, has_more: d.has_more, total: d.total ?? prev.total,
+          next_offset: d.next_offset,
           items: [...prev.items, ...(d.items || []).filter(x => !seen.has(x.design_id))] };
         if (!(d.items || []).length) next.has_more = false;
         const patched = mwPatch(pageKey, next);
@@ -191,12 +193,16 @@ export default function MakerWorldView({ onSearch }) {
     // Defilement infini : observateur + controle au defilement (la page
     // defile dans un conteneur, et certains navigateurs integres retardent
     // l'observateur).
-    const check = () => { const r = el.getBoundingClientRect(); if (r.top < window.innerHeight + 600) loadMore(); };
+    let raf = 0;
+    const check = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = 0; const r = el.getBoundingClientRect(); if (r.top < window.innerHeight + 600) loadMore(); });
+    };
     const io = new IntersectionObserver(es => { if (es[0].isIntersecting) loadMore(); }, { rootMargin: "600px" });
     io.observe(el);
-    document.addEventListener("scroll", check, true);
+    document.addEventListener("scroll", check, { capture: true, passive: true });
     check();
-    return () => { io.disconnect(); document.removeEventListener("scroll", check, true); };
+    return () => { io.disconnect(); cancelAnimationFrame(raf); document.removeEventListener("scroll", check, true); };
   });
 
   const saveName = async () => {
@@ -372,7 +378,7 @@ export default function MakerWorldView({ onSearch }) {
               )}
               <div style={grid}>
                 {items.map(x => (
-                  <div key={x.design_id} style={{ ...card, ...(x.printed > 0 ? printedCard : null) }}>
+                  <div key={x.design_id} style={{ ...tileCard, ...(x.printed > 0 ? printedCard : null) }}>
                     <a href={x.url} onClick={e => { e.preventDefault(); setModel(x); }} onPointerDown={() => prefetchModel(x.design_id)}
                       style={{ display:"block", position:"relative", cursor:"pointer", background:"var(--surface)" }}>
                       {x.cover_url
@@ -538,3 +544,6 @@ const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, l
 const grid = { display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 };
 const card = { borderRadius:12, border:"1px solid var(--border)", background:"var(--surface2)",
   overflow:"hidden", display:"flex", flexDirection:"column" };
+// Une longue grille (centaines de tuiles) : le navigateur saute celles qui
+// sont loin de l'ecran.
+const tileCard = { ...card, contentVisibility:"auto", containIntrinsicSize:"auto 260px" };
