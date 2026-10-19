@@ -212,20 +212,34 @@ const relayed = (u) => {
   const t = localStorage.getItem("token") || "";
   return `${u}${u.includes("?") ? "&" : "?"}_t=${encodeURIComponent(t)}`;
 };
-const STATUS_TXT = { offline: "injoignable", outdated: "BambuNymous pas à jour", forbidden: "accès refusé" };
+
+// Lecture « chez les copains » d'une adresse, gardee 5 min : la section ne
+// s'affiche que s'il y a quelque chose, il faut donc lire avant d'afficher.
+const _shared = new Map();      // url -> { t, p }
+export function useShared(url, enabled = true) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    if (!enabled || !url) { setData(null); return; }
+    let alive = true;
+    let hit = _shared.get(url);
+    if (!hit || Date.now() - hit.t > 300000) {
+      hit = { t: Date.now(), p: client.get(url).then(r => r.data).catch(e => ({ error: e.response?.data?.detail || e.message })) };
+      _shared.set(url, hit);
+    }
+    hit.p.then(d => alive && setData(d));
+    return () => { alive = false; };
+  }, [url, enabled]);
+  return data;
+}
+export const sharedCount = (d) => (d?.friends || []).reduce((t, f) => t + (f.status === "ok" ? f.prints?.length || 0 : 0), 0);
 
 // Impressions de mes copains (meme filament, ou meme modele), par copain ;
-// toucher une vignette ouvre ses photos en grand.
-export function FriendsPrints({ url, empty = "Rien chez eux pour l'instant." }) {
-  const [data, setData] = useState(null);
+// toucher une vignette ouvre ses photos en grand. Seuls les copains qui ont
+// quelque chose sont listes.
+export function FriendsPrints({ url, data: given, empty = "Rien chez eux pour l'instant." }) {
+  const read = useShared(given ? null : url);
+  const data = given || read;
   const [view, setView] = useState(null);       // { images, index }
-  useEffect(() => {
-    let alive = true;
-    setData(null);
-    client.get(url).then(({ data }) => alive && setData(data))
-      .catch(e => alive && setData({ error: e.response?.data?.detail || e.message }));
-    return () => { alive = false; };
-  }, [url]);
   const muted = { color: "var(--muted)", fontSize: 12.5, textAlign: "center", padding: 18, margin: 0 };
   if (!data) return <p style={muted}>Je demande à tes copains…</p>;
   if (data.error) return <p style={{ ...muted, color: "#ef4444" }}>⚠ {data.error}</p>;
@@ -235,14 +249,14 @@ export function FriendsPrints({ url, empty = "Rien chez eux pour l'instant." }) 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {!any && <p style={muted}>{empty}</p>}
-      {(data.friends || []).map(f => (f.status !== "ok" || f.prints?.length) ? (
+      {(data.friends || []).map(f => (f.status === "ok" && f.prints?.length) ? (
         <div key={f.id}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
             <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)" }}>👀 {f.name}</span>
-            <span style={{ fontSize: 11, color: f.status === "ok" ? "var(--muted)" : "#f59e0b" }}>
-              {f.status === "ok" ? `${f.prints.length} impression${f.prints.length > 1 ? "s" : ""}` : STATUS_TXT[f.status] || f.status}</span>
+            <span style={{ fontSize: 11, color: "var(--muted)" }}>
+              {f.prints.length} impression{f.prints.length > 1 ? "s" : ""}</span>
           </div>
-          {f.status === "ok" && (
+          {(
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(110px,1fr))", gap: 8 }}>
               {f.prints.map(p => {
                 const imgs = (p.photos?.length ? p.photos : [p.image]).map(relayed);
@@ -272,4 +286,33 @@ export function FriendsPrints({ url, empty = "Rien chez eux pour l'instant." }) 
       {view && <Lightbox images={view.images} index={view.index} onClose={() => setView(null)}/>}
     </div>
   );
+}
+
+// Bouton « 👀 Chez les copains (n) » d'un modele, seulement s'il y a quelque
+// chose chez eux ; ouvre la liste dans une fenetre.
+export function FriendsDesignButton({ designId, style }) {
+  const has = useHasFriends();
+  const url = designId ? `/friends/shared/design/${encodeURIComponent(designId)}` : null;
+  const data = useShared(url, has && !!designId);
+  const [open, setOpen] = useState(false);
+  const n = sharedCount(data);
+  if (!n) return null;
+  return (<>
+    <button onClick={e => { e.stopPropagation(); setOpen(true); }} style={style}>👀 Chez les copains ({n})</button>
+    {open && (
+      <div data-no-pull="" onClick={e => { e.stopPropagation(); setOpen(false); }} style={{ position: "fixed", inset: 0, zIndex: 2600,
+        background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+        <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width: "100%", maxWidth: 720, maxHeight: "85vh",
+          overflowY: "auto", borderRadius: "18px 18px 0 0", padding: "12px 14px calc(16px + env(safe-area-inset-bottom,0px))",
+          border: "1px solid var(--border)" }}>
+          <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
+            <span style={{ flex: 1, fontSize: 15, fontWeight: 800, color: "var(--text)" }}>👀 Chez les copains</span>
+            <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "var(--muted)",
+              fontSize: 18, cursor: "pointer" }}>✕</button>
+          </div>
+          <FriendsPrints data={data}/>
+        </div>
+      </div>
+    )}
+  </>);
 }

@@ -9,7 +9,7 @@ import client, { apiUrl } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
-import { useMine, MineBadge, FriendsPrints, useHasFriends } from "../components/Friends";
+import { useMine, MineBadge, FriendsPrints, useHasFriends, useShared, sharedCount, FriendsDesignButton } from "../components/Friends";
 import { useMwAssign } from "../store/mwAssign";
 import MwQueue from "../components/MwQueue";
 import { mwImg } from "../components/MwImg";
@@ -709,6 +709,8 @@ function MakerWorldCard({ designId, note, prints = [] }) {
   const [pick, setPick] = useState(false);       // ranger dans mes collections
   const [sheet, setSheet] = useState(null);      // fiche du modele (ou d'un similaire)
   const hasFriends = useHasFriends();
+  const shared = useShared(`/friends/shared/design/${encodeURIComponent(designId)}`, hasFriends && !!designId);
+  const nShared = sharedCount(shared);           // section seulement s'il y a quelque chose chez eux
   const [showFr, setShowFr] = useState(false);   // « Chez les copains » : meme modele chez eux
   useEffect(() => {
     let alive = true, timer = null;
@@ -782,13 +784,11 @@ function MakerWorldCard({ designId, note, prints = [] }) {
           cursor:"pointer" }}>☆ Ranger dans mes collections</button>
       </AdminOnly>
       {pick && <MakerWorldCollectionsPicker designId={designId} title={mw.title} onClose={() => setPick(false)}/>}
-      {hasFriends && (<>
+      {nShared > 0 && (<>
         <button onClick={() => setShowFr(v => !v)} style={{ display:"flex", width:"100%", padding:"7px 10px", border:"none",
           borderTop:"1px solid var(--border)", background:"none", color:"#3b82f6", fontSize:11.5, fontWeight:600, cursor:"pointer" }}>
-          <span style={{ flex:1, textAlign:"left" }}>👀 Chez les copains</span><span>{showFr ? "▴" : "▾"}</span></button>
-        {showFr && <div style={{ padding:"4px 10px 10px" }}>
-          <FriendsPrints url={`/friends/shared/design/${encodeURIComponent(designId)}`}
-            empty="Aucun copain n'a encore imprimé ce modèle."/></div>}
+          <span style={{ flex:1, textAlign:"left" }}>👀 Chez les copains ({nShared})</span><span>{showFr ? "▴" : "▾"}</span></button>
+        {showFr && <div style={{ padding:"4px 10px 10px" }}><FriendsPrints data={shared}/></div>}
       </>)}
       <MakerWorldSimilar designId={designId} onOpen={setSheet}/>
       {sheet && <MakerWorldModelSheet designId={sheet} onClose={() => setSheet(null)}/>}
@@ -2309,6 +2309,9 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
         if (it.kind==="group") setSelectedGroup(it);
         else setSelectedPrint(it);
       }}
+      renderCarouselActions={it => it.design_id ? <FriendsDesignButton designId={it.design_id}
+        style={{ padding:"6px 14px", borderRadius:20, background:"var(--surface2)", color:"var(--text)",
+          border:"1px solid var(--border)", cursor:"pointer", fontSize:12, fontWeight:700 }}/> : null}
       compareFields={[
         ["Coût",   it => it.total_cost ? `${moneyVal(it.total_cost, 2)}€` : null],
         ["Durée",  it => fmtDur(it.duration_seconds)],

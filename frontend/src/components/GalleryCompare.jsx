@@ -21,7 +21,7 @@ export default function GalleryCompare({
   maxCompare = 6, emptyLabel = "Aucun élément", pageSize = 30,
   enableCompare = true, renderCover = null, swatchMode = false, swatchInfo = false, getTone = null,
   selectMode: selectModeProp = false, onSelectModeChange = null,
-  onItemClick = null,
+  onItemClick = null, renderCarouselActions = null,
 }) {
   const [selected, setSelected]   = useState(new Map());
   const [selectMode, setSelectMode] = useState(selectModeProp);
@@ -343,6 +343,7 @@ export default function GalleryCompare({
                   Fiche
                 </button>
               )}
+              {renderCarouselActions?.(carousel.item)}
               {/* Actions photo : elles etaient cablees en dur sur
                   /api/v1/filaments/{id}/photo/... et s'affichaient des que
                   onItemClick etait fourni -- y compris dans la galerie des PRINTS,

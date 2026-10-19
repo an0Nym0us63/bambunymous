@@ -446,13 +446,15 @@ async def prints_gallery(_: str = Depends(get_current_user)):
                 "number_of_items": (p.group.number_of_items if p.group else None) or 1,
                 "cover_print_id":  p.group.cover_print_id if p.group else None,
                 "cover_photo":     p.group.cover_photo if p.group else None,
-                "prints": 0, "photos": [],
+                "prints": 0, "photos": [], "_designs": set(),
                 "total_weight_g": 0.0, "total_cost_filament": 0.0,
                 "electric_cost": 0.0, "total_cost": 0.0, "duration_seconds": 0.0,
                 "latest_date": None,
             })
             acc["prints"]              += 1
             acc["photos"].extend(photos)
+            if p.design_id:
+                acc["_designs"].add(str(p.design_id))
             acc["total_weight_g"]      += p.total_weight_g or 0
             acc["total_cost_filament"] += p.total_cost_filament or 0
             acc["electric_cost"]       += p.electric_cost or 0
@@ -471,6 +473,7 @@ async def prints_gallery(_: str = Depends(get_current_user)):
                 "number_of_items": nb,
                 "cost_per_item": round(tc / nb, 2) if nb > 1 else None,
                 "photos": photos,
+                "design_id": str(p.design_id) if p.design_id else None,
             })
 
     # Photos uploadées directement dans le dossier du groupe (pas via un print précis)
@@ -492,7 +495,8 @@ async def prints_gallery(_: str = Depends(get_current_user)):
         # cover_photo est CONSERVE dans la reponse : la mosaique s'en sert pour
         # donner la place dominante a la photo choisie. Il etait filtre quand il
         # ne servait qu'au tri interne.
-        {**g,
+        {**{k: v for k, v in g.items() if k != "_designs"},
+         "design_id": next(iter(g["_designs"])) if len(g["_designs"]) == 1 else None,
          "cost_per_item": round(g["total_cost"] / g["number_of_items"], 2) if g.get("number_of_items", 1) > 1 else None}
         for g in group_acc.values() if g["photos"]
     ]

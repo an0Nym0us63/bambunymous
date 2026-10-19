@@ -21,7 +21,7 @@ import { colorBg, parseColorsList } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import GalleryCompare from "../components/GalleryCompare";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
-import { FriendsPrints, useHasFriends } from "../components/Friends";
+import { FriendsPrints, useHasFriends, useShared, sharedCount } from "../components/Friends";
 
 const MATERIALS = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","BVOH","PLA-CF","PETG-CF","PA-CF","PPS"];
 
@@ -1991,6 +1991,8 @@ function FilamentCard({ f, onClick, extra = null, menu }) {
 // la meme fiche que l'historique (photos comprises).
 function FilamentPrintsSheet({ f, onClose }) {
   const hasFriends = useHasFriends();
+  const shared = useShared(`/friends/shared/filament/${f.id}`, hasFriends);
+  const nShared = sharedCount(shared);                 // onglet seulement s'il y a quelque chose chez eux
   const [tab, setTab] = useState("mine");             // mine | friends
   const [prints, setPrints] = useState(null);
   const [err, setErr] = useState(null);
@@ -2058,18 +2060,17 @@ function FilamentPrintsSheet({ f, onClose }) {
           <button onClick={onClose} aria-label="Fermer" style={{ background:"none", border:"none",
             color:"var(--muted)", cursor:"pointer", padding:4 }}><X size={18}/></button>
         </div>
-        {hasFriends && (
+        {nShared > 0 && (
           <div style={{ display:"flex", gap:4, margin:"10px 12px 0", background:"var(--surface2)", borderRadius:12, padding:4,
             border:"1px solid var(--border)" }}>
-            {[["mine", `Mes impressions${prints ? ` (${prints.length})` : ""}`], ["friends", "👀 Chez les copains"]].map(([k, l]) => (
+            {[["mine", `Mes impressions${prints ? ` (${prints.length})` : ""}`], ["friends", `👀 Chez les copains (${nShared})`]].map(([k, l]) => (
               <button key={k} onClick={() => setTab(k)} style={{ flex:1, padding:"7px 8px", borderRadius:8, fontSize:12, fontWeight:700,
                 cursor:"pointer", border:"none", background: tab === k ? "#3b82f6" : "transparent", color: tab === k ? "white" : "var(--muted)" }}>{l}</button>
             ))}
           </div>
         )}
         <div style={{ flex:1, overflowY:"auto", padding:12 }}>
-          {tab === "friends" ? <FriendsPrints url={`/friends/shared/filament/${f.id}`}
-            empty="Aucun copain n'a imprimé avec ce filament (même référence et même couleur)."/> : (<>
+          {tab === "friends" && nShared > 0 ? <FriendsPrints data={shared}/> : (<>
           {err && <p style={{ color:"#ef4444", fontSize:13 }}>⚠ {err}</p>}
           {!prints && !err && <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:24 }}>Chargement…</p>}
           {prints && !prints.length && (
