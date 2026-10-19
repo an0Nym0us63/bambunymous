@@ -74,6 +74,54 @@ export function RateButton({ did, style, label = "⭐ Évaluer" }) {
     )}
   </>);
 }
+// Fiche d'un groupe : ses modeles imprimes pas encore evalues, et une seule
+// evaluation pour tous ceux que MakerWorld attend.
+export function GroupToRate({ designs, name, enabled = true }) {
+  const d = useToRate(enabled);
+  const [open, setOpen] = useState(false);
+  const ids = new Set((designs || []).map(String));
+  const items = (d?.items || []).filter(x => ids.has(String(x.design_id)));
+  if (!items.length) return null;
+  const ready = items.filter(x => x.rating_id);
+  const photos = [...new Set(items.flatMap(x => x.photos || []))];
+  const btn = { padding: "5px 11px", borderRadius: 10, fontSize: 11.5, fontWeight: 700, background: "#f59e0b", color: "white",
+    border: "1px solid #f59e0b", textDecoration: "none" };
+  return (
+    <div style={{ margin: "0 16px 12px", padding: 10, borderRadius: 12, border: "1px solid rgba(245,158,11,0.4)",
+      background: "rgba(245,158,11,0.08)", display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <span style={{ flex: 1, fontSize: 12.5, fontWeight: 700, color: "#f59e0b" }}>
+          ⭐ {items.length} modèle{items.length > 1 ? "s" : ""} à évaluer dans ce groupe</span>
+        {ready.length > 1 && <button onClick={() => setOpen(true)} style={{ ...btn, cursor: "pointer" }}>⭐ Tout évaluer ({ready.length})</button>}
+      </div>
+      {items.map(x => (
+        <div key={x.design_id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 12, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis",
+            whiteSpace: "nowrap" }}>{x.title || `Modèle ${x.design_id}`}</span>
+          <RateButton did={x.design_id} style={btn}/>
+        </div>
+      ))}
+      {open && (
+        <div data-no-pull="" onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4300, background: "rgba(0,0,0,0.6)",
+          display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width: "100%", maxWidth: 520, maxHeight: "90vh",
+            overflowY: "auto", borderRadius: 16, border: "1px solid var(--border)", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)" }}>⭐ {name}</div>
+                <div style={{ fontSize: 11, color: "var(--muted)" }}>Même évaluation pour : {ready.map(x => x.title || x.design_id).join(", ")}</div>
+              </div>
+              <button onClick={() => setOpen(false)} aria-label="Fermer" style={{ background: "none", border: "none", color: "var(--muted)",
+                fontSize: 20, cursor: "pointer" }}>✕</button>
+            </div>
+            <RateForm x={{ ...ready[0], photos }} targets={ready} onDone={() => setOpen(false)}/>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export const rateUrl = (did) => `https://makerworld.com/fr/models/${did}`;
 
 const day = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "";
@@ -98,7 +146,7 @@ export function ToRateTile({ data, onClick, card }) {
 }
 
 // Evaluer sans quitter l'appli : note, texte et mes photos, envoyes a MakerWorld.
-function RateForm({ x, onDone }) {
+function RateForm({ x, targets, onDone }) {
   const [score, setScore] = useState(5);
   const [text, setText] = useState("");
   const [picked, setPicked] = useState(() => new Set((x.photos || []).slice(0, 8)));
@@ -114,11 +162,14 @@ function RateForm({ x, onDone }) {
   // photos) : le modele quitte la liste tout de suite, et y revient en cas d'echec.
   const send = () => {
     if (!window.confirm(`Publier sur MakerWorld : ${score} étoile${score > 1 ? "s" : ""}, ${picked.size} photo${picked.size > 1 ? "s" : ""} ?`)) return;
-    const body = { rating_id: x.rating_id, score, content: text, photos: [...picked] };
-    useShares.getState().rate(x.title || `Modèle ${x.design_id}`,
-      () => client.post(`/makerworld/rate/${x.design_id}`, body, { timeout: 5 * 60 * 1000 }))
-      .catch(() => { forgetToRate(); readToRate(); });
-    markRated(x.design_id);
+    // Un groupe : la meme note pour chacun de ses modeles attendus.
+    for (const t of targets || [x]) {
+      const body = { rating_id: t.rating_id, score, content: text, photos: [...picked] };
+      useShares.getState().rate(t.title || `Modèle ${t.design_id}`,
+        () => client.post(`/makerworld/rate/${t.design_id}`, body, { timeout: 5 * 60 * 1000 }))
+        .catch(() => { forgetToRate(); readToRate(); });
+      markRated(t.design_id);
+    }
     onDone();
   };
   return (

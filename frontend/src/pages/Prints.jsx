@@ -5,7 +5,7 @@ import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
 import { openCreator } from "../components/MwCreatorPage";
-import { useToRateSet, RateButton } from "../components/MwToRate";
+import { useToRateSet, RateButton, GroupToRate } from "../components/MwToRate";
 import { useFriend } from "../store/friend";
 import MwImg from "../components/MwImg";
 import client, { apiUrl } from "../api/client";
@@ -1343,6 +1343,7 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
 export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
   useTrackDetail(`Fiche groupe · ${name || "#" + groupId}`);
   const [localPrints, setLocalPrints] = useState([]);
+  const groupVisiting = useFriend((s) => s.friend);
   const [sharing, setSharing] = useState(false);   // partage Telegram
   const [nbItems, setNbItems]         = useState(nbItemsProp || 1);
   const [editNb, setEditNb]           = useState(false);
@@ -1597,6 +1598,9 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
             </div>
           )}
 
+          <GroupToRate name={name} enabled={!groupVisiting}
+            designs={localPrints.filter(pr => pr.status === "SUCCESS" || pr.status === "PARTIAL").map(pr => String(pr.design_id || "").trim()).filter(Boolean)}/>
+
           {/* Modele(s) MakerWorld du groupe : normalement un seul, ses prints
               etant des plateaux du meme modele ; s'il y en a plusieurs, le
               plus imprime d'abord. */}
@@ -1746,6 +1750,9 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
   const isAdmin = useIsAdmin();
   const [mw, setMw] = useState(null);
   const designs = [...new Set(prints.map(pr => String(pr.design_id || "").trim()).filter(Boolean))];
+  const tileVisiting = useFriend((s) => s.friend);
+  const toRateSet = useToRateSet(!tileVisiting && designs.length > 0);
+  const nToRate = designs.filter(d => toRateSet.has(d)).length;
   const ungroup = async () => {
     if (!(await showConfirm(`Dégrouper "${name}" (les prints resteront) ?`, { confirmLabel: "Dégrouper" }))) return;
     try { await client.delete(`/prints/groups/${groupId}`); onUngroup?.(); }
@@ -1815,6 +1822,11 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
               fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
               ×{number_of_items}
             </span>
+          )}
+          {nToRate > 0 && !selectMode && (
+            <span title={`${nToRate} modèle${nToRate > 1 ? "s" : ""} à évaluer`} style={{ position:"absolute", bottom:6, right:6,
+              background:"rgba(245,158,11,0.92)", color:"white", fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
+              ⭐ {nToRate > 1 ? `${nToRate} à évaluer` : "À évaluer"}</span>
           )}
           {aggCfg && (
             <span style={{ position:"absolute", bottom:6, left:6, display:"inline-flex",
