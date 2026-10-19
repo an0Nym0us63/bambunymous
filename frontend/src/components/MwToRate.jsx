@@ -5,17 +5,32 @@ import Lightbox from "./Lightbox";
 
 // « ⭐ À évaluer » : mes impressions de modèles MakerWorld pas encore évaluées,
 // avec mes photos (du print, sinon de son groupe) prêtes à joindre.
-let _last = null;                                   // derniere lecture (affichage immediat)
+// Une seule lecture partagee (gardee 5 min) : la liste, les vignettes de
+// l'historique et les fiches s'en servent toutes.
+let _last = null, _p = null, _t = 0;
+function readToRate() {
+  if (!_p || Date.now() - _t > 300000) {
+    _t = Date.now();
+    _p = client.get("/makerworld/to-rate").then(({ data }) => (_last = data)).catch(() => _last);
+  }
+  return _p;
+}
 export function useToRate(enabled) {
   const [data, setData] = useState(_last);
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
-    client.get("/makerworld/to-rate").then(({ data }) => { _last = data; if (alive) setData(data); }).catch(() => {});
+    readToRate().then(d => alive && d && setData(d));
     return () => { alive = false; };
   }, [enabled]);
-  return data;
+  return enabled ? data : null;           // chez un copain : rien de ma liste
 }
+// Modeles a evaluer (ensemble d'identifiants), chez moi seulement.
+export function useToRateSet(enabled = true) {
+  const d = useToRate(enabled);
+  return new Set((d?.items || []).map(x => String(x.design_id)));
+}
+export const rateUrl = (did) => `https://makerworld.com/fr/models/${did}`;
 
 const day = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "";
 

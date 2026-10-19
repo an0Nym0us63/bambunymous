@@ -10,6 +10,7 @@ import MwImg from "./MwImg";
 import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf } from "./MwStockMatch";
 import Lightbox from "./Lightbox";
 import { openCreator } from "./MwCreatorPage";
+import { useToRateSet, rateUrl } from "./MwToRate";
 import { showAlert, showConfirm } from "../utils/dialog";
 
 // Prechargement : la fiche est demandee des qu'on touche une tuile ; a
@@ -79,6 +80,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
   // Boost : le droit a depenser pour CE modele et mes boosts disponibles
   // (compte connecte seulement ; sans droit, pas de bouton).
+  const toRate = useToRateSet(!friend);           // imprime, pas encore evalue
   const [boost, setBoost] = useState(null);       // { can, available }
   const [boostBusy, setBoostBusy] = useState(false);
   useEffect(() => {
@@ -283,6 +285,10 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                   style={{ ...linkBtn, cursor: boost.done ? "default" : "pointer", color:"#f59e0b", borderColor:"rgba(245,158,11,0.4)",
                     background:"rgba(245,158,11,0.08)" }}>
                   {boost.done ? "⚡ Boosté" : `⚡ ${boost.boosted ? "Booster encore" : "Booster"}${boost.available != null ? ` · ${boost.available} dispo` : ""}`}</button></AdminOnly>
+              )}
+              {toRate.has(String(id)) && (
+                <a href={rateUrl(id)} target="_blank" rel="noopener noreferrer" title="Tu l'as imprimé, pas encore évalué"
+                  style={{ ...linkBtn, color:"white", background:"#f59e0b", borderColor:"#f59e0b" }}>⭐ Évaluer ↗</a>
               )}
               {/* Pas de boost possible : la raison, discrete (deja booste, limite par createur, plus de boost). */}
               {boost && !boost.can && !boost.done && boost.reason && (

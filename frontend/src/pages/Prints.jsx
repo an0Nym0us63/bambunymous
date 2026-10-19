@@ -5,6 +5,8 @@ import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
 import { openCreator } from "../components/MwCreatorPage";
+import { useToRateSet, rateUrl } from "../components/MwToRate";
+import { useFriend } from "../store/friend";
 import MwImg from "../components/MwImg";
 import client, { apiUrl } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
@@ -706,6 +708,8 @@ const TRAD_BY = {
 const fmtK = n => n == null ? null : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
 function MakerWorldCard({ designId, note, prints = [] }) {
   const mineOf = useMine([designId]);            // chez un copain : l'ai-je deja ?
+  const visiting = useFriend((s) => s.friend);
+  const toRate = useToRateSet(!visiting);
   const [mw, setMw] = useState(undefined);       // undefined = en cours, null = rien
   const [pick, setPick] = useState(false);       // ranger dans mes collections
   const [sheet, setSheet] = useState(null);      // fiche du modele (ou d'un similaire)
@@ -782,6 +786,13 @@ function MakerWorldCard({ designId, note, prints = [] }) {
       )}
       {note && <div style={{ fontSize:10.5, color:"var(--muted)", padding:"0 10px 8px" }}>{note}</div>}
       {mineOf && <div style={{ padding:"0 10px 8px" }}><MineBadge m={mineOf(designId)}/></div>}
+      {toRate.has(String(designId)) && (
+        <div style={{ display:"flex", alignItems:"center", gap:8, padding:"0 10px 10px", flexWrap:"wrap" }}>
+          <span style={{ fontSize:11, fontWeight:700, color:"#f59e0b" }}>⭐ Pas encore évalué</span>
+          <a href={rateUrl(designId)} target="_blank" rel="noopener noreferrer" style={{ fontSize:11.5, fontWeight:700,
+            padding:"4px 10px", borderRadius:10, background:"#f59e0b", color:"white", textDecoration:"none" }}>Évaluer sur MakerWorld ↗</a>
+        </div>
+      )}
       <MakerWorldPlates profiles={mw.profiles || []} prints={prints}/>
       <AdminOnly home>
         <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",
@@ -1893,6 +1904,8 @@ function QuantityEditor({ id, type, value, onChange }) {
 
 function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onToggleSelect, onLongPress }) {
   const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.5)", color:"white", label: p.status || "?" };
+  const visiting = useFriend((s) => s.friend);
+  const toRate = useToRateSet(!visiting && !!p.design_id);
   const isAdmin = useIsAdmin();
   const [full, setFull] = useState(null);           // { mode: "edit" | "delete", p } : fiche complete lue a la demande
   const [mw, setMw] = useState(false);
@@ -1952,6 +1965,11 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
             visibility: selectMode ? "hidden" : "visible" }}>
             {statusCfg.label}
           </span>
+        )}
+        {/* Modele MakerWorld imprime mais pas encore evalue */}
+        {p.status === "SUCCESS" && p.design_id && toRate.has(String(p.design_id)) && (
+          <span title="À évaluer sur MakerWorld" style={{ position:"absolute", bottom:6, right:6, fontSize:11,
+            background:"rgba(0,0,0,0.55)", borderRadius:20, padding:"1px 6px", lineHeight:1.5 }}>⭐</span>
         )}
         {/* Pastilles filament */}
         {p.filament_usage?.length > 0 && (
