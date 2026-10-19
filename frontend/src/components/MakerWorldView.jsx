@@ -69,6 +69,28 @@ export default function MakerWorldView({ onSearch }) {
     client.get("/makerworld/status").then(({ data }) => setStatus(data)).catch(() => setStatus({}));
   }, []);
 
+  // Ouvrir une collection = une etape dans l'historique : le geste « retour »
+  // (Android), le bouton retour du navigateur et « ‹ » la referment, au lieu de
+  // quitter la page.
+  const openColl = (c) => {
+    try { window.history.pushState({ ...(window.history.state || {}), mwColl: c.id }, ""); } catch { /* rien */ }
+    setColl(c);
+  };
+  const closeColl = () => {
+    if (window.history.state?.mwColl) window.history.back();   // popstate referme
+    else setColl(null);
+  };
+  useEffect(() => {
+    // Trace laissee par une page rechargee collection ouverte : on l'efface.
+    if (window.history.state?.mwColl) {
+      const { mwColl, ...rest } = window.history.state;
+      try { window.history.replaceState(rest, ""); } catch { /* rien */ }
+    }
+    const onPop = () => { if (!window.history.state?.mwColl) setColl(null); };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   // Une recherche lancee dans Decouvrir remplace le fil par ses resultats.
   const view = tab === "discover" && sq ? "search" : tab;
 
@@ -236,24 +258,27 @@ export default function MakerWorldView({ onSearch }) {
 
   return (
       <div style={{ display:"flex", flexDirection:"column" }}>
+        {/* Collection ouverte : sa ligne (‹ titre) reste en haut au defilement. */}
+        <div style={{ display:"flex", alignItems:"center", gap:8,
+          ...(coll && tab === "favorites" ? { position:"sticky", top:0, zIndex:20,
+            background:"var(--bg)", margin:"0 -4px", padding:"8px 4px", borderBottom:"1px solid var(--border)" } : null) }}>
+          {coll && tab === "favorites" && (
+            <button onClick={closeColl} title="Toutes les collections"
+              style={{ background:"none", border:"none", color:"var(--text)", fontSize:18, cursor:"pointer", padding:"0 4px 0 0" }}>‹</button>
+          )}
+          {coll && tab === "favorites" && (
+            <h3 style={{ flex:1, minWidth:0, fontSize:15, fontWeight:800, color:"var(--text)", margin:0,
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{coll.title}</h3>
+          )}
+          {coll && tab === "favorites" && status?.connected && (
+            <AdminOnly>
+              <button onClick={() => setNameEdit({ mode: "rename", value: coll.title })} title="Renommer"
+                style={iconBtn}>✎</button>
+              <button onClick={delColl} title="Supprimer la collection" style={{ ...iconBtn, color:"#ef4444" }}>🗑</button>
+            </AdminOnly>
+          )}
+        </div>
         <div style={{ padding:"2px 0 8px" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-            {coll && tab === "favorites" && (
-              <button onClick={() => setColl(null)} title="Toutes les collections"
-                style={{ background:"none", border:"none", color:"var(--text)", fontSize:18, cursor:"pointer", padding:"0 4px 0 0" }}>‹</button>
-            )}
-            {coll && tab === "favorites" && (
-              <h3 style={{ flex:1, minWidth:0, fontSize:15, fontWeight:800, color:"var(--text)", margin:0,
-                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{coll.title}</h3>
-            )}
-            {coll && tab === "favorites" && status?.connected && (
-              <AdminOnly>
-                <button onClick={() => setNameEdit({ mode: "rename", value: coll.title })} title="Renommer"
-                  style={iconBtn}>✎</button>
-                <button onClick={delColl} title="Supprimer la collection" style={{ ...iconBtn, color:"#ef4444" }}>🗑</button>
-              </AdminOnly>
-            )}
-          </div>
           {status && (
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:10, flexWrap:"wrap" }}>
               {TABS.map(([k, l]) => (
@@ -389,7 +414,7 @@ export default function MakerWorldView({ onSearch }) {
               (data.collections || []).length === 0 ? <p style={msg}>Aucune collection.</p> : (
                 <div style={grid}>
                   {data.collections.map(c => (
-                    <button key={c.id} onClick={() => setColl(c)}
+                    <button key={c.id} onClick={() => openColl(c)}
                       style={{ ...card, cursor:"pointer", padding:0, textAlign:"left", color:"var(--text)" }}>
                       <Mosaic covers={c.covers}/>
                       <div style={{ padding:"7px 8px 8px" }}>
