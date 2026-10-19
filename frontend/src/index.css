@@ -134,3 +134,6 @@ body {
   width: 18px; height: 18px; border-radius: 50%; display: inline-block;
   border: 2px solid var(--border); border-top-color: #3b82f6; animation: spin .8s linear infinite;
 }
+
+/* Defilement horizontal sans barre (bandeaux de l'accueil). */
+.no-scrollbar::-webkit-scrollbar { display: none; }

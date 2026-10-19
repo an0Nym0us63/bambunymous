@@ -119,6 +119,38 @@ async def gallery() -> dict:
                          "count": len(f.get("prints") or []) + len(f.get("groups") or [])} for f in res["friends"]]}
 
 
+LIVE = ("RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING")
+
+
+async def printing() -> dict:
+    """Les copains dont l'imprimante tourne en ce moment : etat, avancement, et
+    l'impression en cours (nom, vignette par le relais). Les autres sont omis."""
+    friends = await _load()
+
+    async def one(f):
+        try:
+            st = await _ask(f, "printer/status")
+            if str(st.get("status") or "").upper() not in LIVE:
+                return None
+            cur = None
+            try:
+                lst = (await _ask(f, "prints", {"limit": 1, "status": "IN_PROGRESS"})).get("prints") or []
+                if lst:
+                    p = lst[0]
+                    cur = {"id": p.get("id"), "name": p.get("translated_name") or p.get("file_name"),
+                           "design_id": p.get("design_id"), "image": f"/api/v1/prints/{p.get('id')}/image"}
+            except FriendError:
+                pass
+            return _proxied({"id": f["id"], "name": f.get("name"),
+                             **{k: st.get(k) for k in ("status", "progress", "remaining_minutes", "layer",
+                                                       "total_layers", "print_name")},
+                             "print": cur}, f["id"])
+        except Exception:
+            return None
+    res = await asyncio.gather(*(one(f) for f in friends))
+    return {"printing": [r for r in res if r]}
+
+
 async def for_design(design_id: str) -> dict:
     did = str(design_id or "").strip()
     if not did.isdigit():

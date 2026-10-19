@@ -3,6 +3,7 @@ import { usePrinter } from "../store/printer";
 import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
 import client, { apiUrl } from "../api/client";
 import AttentionSection from "../components/AttentionSection";
+import { useHasFriends, relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel } from "../utils/ams";
 
@@ -52,6 +53,95 @@ const HMS_SEV = {
   common:  { label: "Courant", color: "#f59e0b" },
   info:    { label: "Info",    color: "#3b82f6" },
 };
+
+// ── Copains qui impriment ────────────────────────────────────────────────────
+// Lu toutes les 30 s (et au retour sur l'appli), seulement chez moi.
+function useFriendsPrinting() {
+  const has = useHasFriends();
+  const [list, setList] = useState([]);
+  useEffect(() => {
+    if (!has) { setList([]); return; }
+    let alive = true;
+    const load = () => { if (document.hidden) return;
+      client.get("/friends/shared/printing").then(({ data }) => alive && setList(data.printing || [])).catch(() => {}); };
+    load();
+    const t = setInterval(load, 30000);
+    const vis = () => { if (!document.hidden) load(); };
+    document.addEventListener("visibilitychange", vis);
+    return () => { alive = false; clearInterval(t); document.removeEventListener("visibilitychange", vis); };
+  }, [has]);
+  return list;
+}
+
+const FR_STATUS = { RUNNING: "En cours", PAUSE: "En pause", PAUSED: "En pause", PREPARE: "Préparation", SLICING: "Préparation" };
+const FR_ACCENT = "#8b5cf6";      // violet : jamais confondu avec mon bandeau (bleu)
+
+// Bandeau d'un copain : meme lecture que le mien, en plus sobre, et marque « Chez … ».
+function FriendBanner({ f }) {
+  const pct = Math.round(f.progress ?? 0);
+  return (
+    <div className="card" style={{ padding:"12px 14px", border:`1.5px solid ${FR_ACCENT}`,
+      background:"linear-gradient(135deg, rgba(139,92,246,0.07), transparent 60%)" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
+        <span style={{ fontSize:11, fontWeight:800, color:"white", background:FR_ACCENT, borderRadius:20, padding:"2px 9px" }}>
+          👀 Chez {f.name}</span>
+        <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:700, color:"var(--text)", overflow:"hidden",
+          textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.print?.name || f.print_name || "Impression"}</span>
+      </div>
+      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+        {f.print?.image
+          ? <img src={relayed(f.print.image)} alt="" style={{ width:56, height:56, borderRadius:10, objectFit:"cover",
+              background:"var(--surface2)", flexShrink:0 }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
+          : <span style={{ width:56, height:56, borderRadius:10, background:"var(--surface2)", flexShrink:0 }}/>}
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:11, color:FR_ACCENT, fontWeight:700, marginBottom:4 }}>{FR_STATUS[f.status] || f.status}</div>
+          <div style={{ height:8, borderRadius:8, background:"var(--surface2)", overflow:"hidden" }}>
+            <div style={{ width:`${pct}%`, height:"100%", background:FR_ACCENT, borderRadius:8 }}/>
+          </div>
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:5, fontSize:11, color:"var(--muted)" }}>
+            {f.remaining_minutes > 0 && <span><Clock size={11} style={{ verticalAlign:"-1px" }}/> {fmtTime(f.remaining_minutes)}</span>}
+            {f.total_layers > 0 && <span><Layers size={11} style={{ verticalAlign:"-1px" }}/> {f.layer}/{f.total_layers}</span>}
+            {f.remaining_minutes > 0 && (() => { const fin = fmtFinishTime(f.remaining_minutes);
+              return <span><Calendar size={11} style={{ verticalAlign:"-1px" }}/> {fin.time}
+                {fin.dayDiff > 0 && <sup style={{ fontSize:9, fontWeight:800, color:FR_ACCENT, marginLeft:1 }}>+{fin.dayDiff}</sup>}</span>; })()}
+          </div>
+        </div>
+        <span style={{ fontSize:22, fontWeight:800, color:FR_ACCENT }}>{pct}%</span>
+      </div>
+    </div>
+  );
+}
+
+// Mon bandeau, puis ceux des copains qui impriment : on fait glisser de l'un
+// a l'autre. Sans copain en train d'imprimer, rien ne change.
+function BannerCarousel({ status }) {
+  const friends = useFriendsPrinting();
+  const box = useRef(null);
+  const [cur, setCur] = useState(0);
+  if (!friends.length) return <StatusBanner status={status}/>;
+  const go = i => { const el = box.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); };
+  const chip = (on, c) => ({ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, cursor:"pointer",
+    border:`1px solid ${on ? c : "var(--border)"}`, background: on ? c : "var(--surface2)", color: on ? "white" : "var(--muted)" });
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+      <div ref={box} className="no-scrollbar" onScroll={e => setCur(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}
+        style={{ display:"flex", overflowX:"auto", scrollSnapType:"x mandatory", alignItems:"flex-start",
+          scrollbarWidth:"none", overscrollBehaviorX:"contain" }}>
+        <div style={{ flex:"0 0 100%", minWidth:0, scrollSnapAlign:"start" }}><StatusBanner status={status}/></div>
+        {friends.map(f => (
+          <div key={f.id} style={{ flex:"0 0 100%", minWidth:0, scrollSnapAlign:"start", paddingLeft:2 }}><FriendBanner f={f}/></div>
+        ))}
+      </div>
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"center" }}>
+        <button onClick={() => go(0)} style={chip(cur === 0, "#3b82f6")}>Ma machine</button>
+        {friends.map((f, i) => (
+          <button key={f.id} onClick={() => go(i + 1)} style={chip(cur === i + 1, FR_ACCENT)}>
+            👀 {f.name} · {Math.round(f.progress ?? 0)}%</button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StatusBanner({ status }) {
   const [expanded, setExpanded] = useState(false);
@@ -756,7 +846,7 @@ export default function Home() {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, maxWidth:640, margin:"0 auto" }}>
-      <StatusBanner status={status} />
+      <BannerCarousel status={status} />
       {(status?.status === "RUNNING" || status?.status === "PAUSED" || (status?.ams_list?.length > 0)) && <DeviceGrid key={visKey}
         amsList={status?.ams_list ?? []}
         activeAmsId={isRunning ? (status?.active_ams_id ?? -1) : -1}
