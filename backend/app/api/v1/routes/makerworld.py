@@ -162,6 +162,22 @@ async def mw_model_exact(design_id: str, instance_id: str, _: str = Depends(requ
     return {**d, "exact_read": {"instance_id": instance_id, "cached": r["cached"], "slots": len(r["slots"])}}
 
 
+@router.get("/model/{design_id}/studio/{instance_id}")
+async def mw_model_studio(design_id: str, instance_id: str, dev_model: str = "", _: str = Depends(require_admin)):
+    """Lien du 3MF d'un profil pour l'ouvrir dans Bambu Studio (compte connecte)."""
+    import asyncio
+    from ....services.mw_3mf import download_link, ExactError
+    if not instance_id.isdigit():
+        raise HTTPException(400, "Profil inconnu")
+    tok = await acc.token()
+    if not tok:
+        raise HTTPException(400, "Compte MakerWorld non connecté (Paramètres → Données → MakerWorld)")
+    try:
+        return await asyncio.to_thread(download_link, instance_id, tok, (dev_model or "")[:40])
+    except ExactError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.get("/model/{design_id}/comments")
 async def mw_model_comments(design_id: str, offset: int = 0, _: str = Depends(get_current_user)):
     return await _call(mw.model_comments(design_id, offset))

@@ -77,6 +77,32 @@ def parse_project(data: bytes) -> list:
     return out
 
 
+def download_link(iid: str, tok: str, dev_model: str = "") -> dict:
+    """Lien signe (temporaire) du 3MF d'un profil, comme le bouton « Ouvrir
+    dans Bambu Studio » du site (releve le 19/10/2026). Compte comme un
+    telechargement sur MakerWorld."""
+    from urllib.parse import quote
+    from .makerworld import session
+    from .makerworld_account import WRITE_HOST
+    h = {"User-Agent": "Mozilla/5.0 (BambuNymous)", "Accept": "application/json", "Authorization": f"Bearer {tok}"}
+    url = WRITE_HOST + DOWNLOAD.format(iid=iid) + (f"&devModelName={quote(dev_model)}" if dev_model else "")
+    try:
+        r = session().get(url, headers=h, timeout=20)
+    except Exception as e:
+        raise ExactError(f"MakerWorld injoignable ({type(e).__name__})")
+    if r.status_code == 401:
+        raise ExactError("Jeton refusé ou expiré : reconnecte le compte")
+    try:
+        d = r.json()
+    except ValueError:
+        d = None
+    link = d.get("url") if isinstance(d, dict) else None
+    if r.status_code >= 400 or not isinstance(link, str) or not link.startswith("http"):
+        msg = (d or {}).get("message") or (d or {}).get("error") if isinstance(d, dict) else None
+        raise ExactError(f"Lien du 3MF non obtenu (HTTP {r.status_code}{' : ' + str(msg) if msg else ''})")
+    return {"url": link, "name": d.get("name") if isinstance(d.get("name"), str) else f"{iid}.3mf"}
+
+
 def _download(iid: str, tok: str) -> bytes:
     from .makerworld import session
     from .makerworld_account import WRITE_HOST

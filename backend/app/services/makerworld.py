@@ -372,6 +372,7 @@ def _plate_detail(d) -> list:
                     "summary": _text(i.get("summaryTranslated") or i.get("summary"))[:500],
                     "default": i.get("id") == d.get("defaultInstanceId"),
                     "printer": comp.get("devProductName") if isinstance(comp.get("devProductName"), str) else None,
+                    "dev_model": comp.get("devModelName") if isinstance(comp.get("devModelName"), str) else None,
                     "also_for": others,
                     "by_designer": bool(ic.get("uid")) and ic.get("uid") == dc.get("uid"),
                     "author": ic.get("name") if isinstance(ic.get("name"), str) else None,
