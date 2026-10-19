@@ -62,6 +62,13 @@ async def friends_shared_filament(filament_id: int, _: str = Depends(get_current
     return await FS.for_filament(f)
 
 
+@router.get("/shared/gallery")
+async def friends_shared_gallery(_: str = Depends(get_current_user)):
+    """Galeries de mes copains, reunies."""
+    from ....services import friends_shared as FS
+    return await FS.gallery()
+
+
 @router.get("/shared/design/{design_id}")
 async def friends_shared_design(design_id: str, _: str = Depends(get_current_user)):
     """Impressions de mes copains du meme modele MakerWorld."""

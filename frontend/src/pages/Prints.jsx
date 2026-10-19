@@ -9,7 +9,7 @@ import client, { apiUrl } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
-import { useMine, MineBadge, FriendsPrints, useHasFriends, useShared, sharedCount, FriendsDesignButton } from "../components/Friends";
+import { useMine, MineBadge, FriendsPrints, useHasFriends, useShared, sharedCount, relayed } from "../components/Friends";
 import { useMwAssign } from "../store/mwAssign";
 import MwQueue from "../components/MwQueue";
 import { mwImg } from "../components/MwImg";
@@ -2252,7 +2252,67 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
 
 
 
+// Galerie : la mienne, ou celles de mes copains reunies (onglet a part, en
+// lecture seule : on regarde leurs photos, rien ne se melange a la mienne).
 function PrintsGalleryView({ search, sortF = "recent" }) {
+  const hasFriends = useHasFriends();
+  const [who, setWho] = useState("mine");          // mine | friends
+  return (<>
+    {hasFriends && (
+      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4,
+        border:"1px solid var(--border)", marginBottom:10 }}>
+        {[["mine", "Ma galerie"], ["friends", "👀 Chez les copains"]].map(([k, l]) => (
+          <button key={k} onClick={() => setWho(k)} style={{ flex:1, padding:"7px 8px", borderRadius:8, fontSize:12,
+            fontWeight:700, cursor:"pointer", border:"none", background: who === k ? "#3b82f6" : "transparent",
+            color: who === k ? "white" : "var(--muted)" }}>{l}</button>
+        ))}
+      </div>
+    )}
+    {who === "friends" && hasFriends ? <FriendsGalleryView search={search}/> : <MyGalleryView search={search} sortF={sortF}/>}
+  </>);
+}
+
+function FriendsGalleryView({ search }) {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    client.get("/friends/shared/gallery").then(r => alive && setData(r.data))
+      .catch(e => alive && setData({ error: e.response?.data?.detail || e.message }));
+    return () => { alive = false; };
+  }, []);
+  if (!data) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"40px 0" }}>Je demande à tes copains…</p>;
+  if (data.error) return <p style={{ textAlign:"center", color:"#ef4444", padding:"40px 0" }}>⚠ {data.error}</p>;
+  let items = data.items.map(it => ({ ...it, title: it.kind === "group" ? it.name : (it.title || it.file_name),
+    photos: (it.photos || []).map(ph => ({ ...ph, url: relayed(ph.url) })) }));
+  if (search?.trim()) {
+    const q = search.trim().toLowerCase();
+    items = items.filter(it => `${it.title || ""} ${it.friend_name || ""}`.toLowerCase().includes(q));
+  }
+  const off = (data.friends || []).filter(f => f.status !== "ok");
+  return (<>
+    {off.length > 0 && (
+      <p style={{ fontSize:11.5, color:"var(--muted)", margin:"0 0 8px" }}>
+        Pas joignable pour l'instant : {off.map(f => f.name).join(", ")}</p>
+    )}
+    <GalleryCompare
+      items={items}
+      getId={it => `${it.friend_id}-${it.kind}-${it.id}`}
+      getCoverImage={it => it.photos?.[0]?.url || null}
+      getPhotos={it => it.photos || []}
+      getTitle={it => it.title || "Sans nom"}
+      getSubtitle={it => `👀 ${it.friend_name}${it.kind === "group" ? ` · 📁 ${it.prints} prints` : it.print_date ? ` · ${fmtDate(it.print_date)}` : ""}`}
+      renderCover={it => <GroupMosaic photos={it.photos} title={it.title} cover={it.kind === "group" ? it.cover_photo : null}/>}
+      emptyLabel="Aucune photo chez tes copains"
+      compareFields={[
+        ["Chez", it => it.friend_name],
+        ["Durée", it => fmtDur(it.duration_seconds)],
+        ["Poids", it => it.total_weight_g ? `${it.total_weight_g.toFixed(0)}g` : null],
+      ]}
+    />
+  </>);
+}
+
+function MyGalleryView({ search, sortF = "recent" }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedPrint, setSelectedPrint] = useState(null);
@@ -2309,9 +2369,7 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
         if (it.kind==="group") setSelectedGroup(it);
         else setSelectedPrint(it);
       }}
-      renderCarouselActions={it => it.design_id ? <FriendsDesignButton designId={it.design_id}
-        style={{ padding:"6px 14px", borderRadius:20, background:"var(--surface2)", color:"var(--text)",
-          border:"1px solid var(--border)", cursor:"pointer", fontSize:12, fontWeight:700 }}/> : null}
+
       compareFields={[
         ["Coût",   it => it.total_cost ? `${moneyVal(it.total_cost, 2)}€` : null],
         ["Durée",  it => fmtDur(it.duration_seconds)],

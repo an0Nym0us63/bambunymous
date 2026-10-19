@@ -207,7 +207,7 @@ export function useHasFriends() {
 }
 
 // Image relayee par mon serveur : une <img> n'envoie pas d'en-tete, le jeton part en _t.
-const relayed = (u) => {
+export const relayed = (u) => {
   if (!u || !u.startsWith("/api/v1/friends/")) return u;
   const t = localStorage.getItem("token") || "";
   return `${u}${u.includes("?") ? "&" : "?"}_t=${encodeURIComponent(t)}`;
@@ -286,33 +286,4 @@ export function FriendsPrints({ url, data: given, empty = "Rien chez eux pour l'
       {view && <Lightbox images={view.images} index={view.index} onClose={() => setView(null)}/>}
     </div>
   );
-}
-
-// Bouton « 👀 Chez les copains (n) » d'un modele, seulement s'il y a quelque
-// chose chez eux ; ouvre la liste dans une fenetre.
-export function FriendsDesignButton({ designId, style }) {
-  const has = useHasFriends();
-  const url = designId ? `/friends/shared/design/${encodeURIComponent(designId)}` : null;
-  const data = useShared(url, has && !!designId);
-  const [open, setOpen] = useState(false);
-  const n = sharedCount(data);
-  if (!n) return null;
-  return (<>
-    <button onClick={e => { e.stopPropagation(); setOpen(true); }} style={style}>👀 Chez les copains ({n})</button>
-    {open && (
-      <div data-no-pull="" onClick={e => { e.stopPropagation(); setOpen(false); }} style={{ position: "fixed", inset: 0, zIndex: 2600,
-        background: "rgba(0,0,0,0.6)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-        <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width: "100%", maxWidth: 720, maxHeight: "85vh",
-          overflowY: "auto", borderRadius: "18px 18px 0 0", padding: "12px 14px calc(16px + env(safe-area-inset-bottom,0px))",
-          border: "1px solid var(--border)" }}>
-          <div style={{ display: "flex", alignItems: "center", marginBottom: 10 }}>
-            <span style={{ flex: 1, fontSize: 15, fontWeight: 800, color: "var(--text)" }}>👀 Chez les copains</span>
-            <button onClick={() => setOpen(false)} style={{ background: "none", border: "none", color: "var(--muted)",
-              fontSize: 18, cursor: "pointer" }}>✕</button>
-          </div>
-          <FriendsPrints data={data}/>
-        </div>
-      </div>
-    )}
-  </>);
 }

@@ -102,6 +102,23 @@ async def for_filament(filament) -> dict:
     return await _each(job)
 
 
+async def gallery() -> dict:
+    """Galeries de tous mes copains reunies (prints et groupes), du plus recent
+    au plus ancien, chaque element marque du copain."""
+    res = await _each(lambda f: _ask(f, "prints/gallery"))
+    items = []
+    for fr in res["friends"]:
+        if fr["status"] != "ok":
+            continue
+        who = {"friend_id": fr["id"], "friend_name": fr["name"]}
+        items += [{**p, "kind": "print", **who} for p in fr.get("prints") or []]
+        items += [{**g, "kind": "group", **who} for g in fr.get("groups") or []]
+    items.sort(key=lambda it: str(it.get("print_date") or it.get("latest_date") or ""), reverse=True)
+    return {"items": items,
+            "friends": [{"id": f["id"], "name": f["name"], "status": f["status"],
+                         "count": len(f.get("prints") or []) + len(f.get("groups") or [])} for f in res["friends"]]}
+
+
 async def for_design(design_id: str) -> dict:
     did = str(design_id or "").strip()
     if not did.isdigit():
