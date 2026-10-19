@@ -794,7 +794,7 @@ function MakerWorldCard({ designId, note, prints = [] }) {
         </div>
       )}
       <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints}/>
-      <AdminOnly home>
+      <AdminOnly home mw>
         <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",
           borderTop:"1px solid var(--border)", background:"none", color:"#3b82f6", fontSize:11.5, fontWeight:600,
           cursor:"pointer" }}>☆ Ranger dans mes collections</button>

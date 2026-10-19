@@ -14,7 +14,7 @@ import { mwPatch, onMwChange } from "../utils/mwSync";
 import { useFriend } from "../store/friend";
 import { useMine, MineBadge } from "./Friends";
 import { Pressable } from "./ContextMenu";
-import { useIsAdmin, useIsHomeAdmin } from "../store/auth";
+import { useIsAdmin, useIsHomeAdmin, useCanMw } from "../store/auth";
 import { useMwAssign } from "../store/mwAssign";
 
 // Cache de la vue (le temps de la session) : revenir sur un onglet ou une
@@ -265,6 +265,7 @@ export default function MakerWorldView({ onSearch }) {
   const showModels = (tab !== "favorites" && tab !== "creator") || !!coll;
   const friend = useFriend((s) => s.friend);
   const isAdmin = useIsAdmin();
+  const canMw = useCanMw();
   const isHomeAdmin = useIsHomeAdmin();
   const startAssign = useMwAssign((s) => s.start);
   // Menus d'appui long / clic droit : collection, modele.
@@ -272,9 +273,9 @@ export default function MakerWorldView({ onSearch }) {
     title: c.title, subtitle: c.count != null ? `${c.count} modèle${c.count > 1 ? "s" : ""}` : null,
     items: [
       { icon: "📂", label: "Ouvrir", onClick: () => openColl(c) },
-      isAdmin && status?.connected && "-",
-      isAdmin && status?.connected && { icon: "✎", label: "Renommer", onClick: () => setNameEdit({ mode: "rename", value: c.title, id: c.id }) },
-      isAdmin && status?.connected && { icon: "🗑", label: "Supprimer…", hint: "Sur MakerWorld ; les modèles restent", danger: true, onClick: () => delColl(c) },
+      canMw && status?.connected && "-",
+      canMw && status?.connected && { icon: "✎", label: "Renommer", onClick: () => setNameEdit({ mode: "rename", value: c.title, id: c.id }) },
+      canMw && status?.connected && { icon: "🗑", label: "Supprimer…", hint: "Sur MakerWorld ; les modèles restent", danger: true, onClick: () => delColl(c) },
     ],
   });
   const modelMenu = x => ({
@@ -312,7 +313,7 @@ export default function MakerWorldView({ onSearch }) {
               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{coll.title}</h3>
           )}
           {coll && tab === "favorites" && status?.connected && (
-            <AdminOnly>
+            <AdminOnly mw>
               <button onClick={() => setNameEdit({ mode: "rename", value: coll.title })} title="Renommer"
                 style={iconBtn}>✎</button>
               <button onClick={() => delColl()} title="Supprimer la collection" style={{ ...iconBtn, color:"#ef4444" }}>🗑</button>
@@ -341,7 +342,7 @@ export default function MakerWorldView({ onSearch }) {
                 </button>
               )}
               {tab === "favorites" && !coll && status.connected && !nameEdit && (
-                <AdminOnly>
+                <AdminOnly mw>
                   <button onClick={() => setNameEdit({ mode: "new", value: "" })} title="Nouvelle collection"
                     style={{ ...iconBtn, padding:"4px 10px", fontWeight:800 }}>＋</button>
                 </AdminOnly>
@@ -525,7 +526,7 @@ export default function MakerWorldView({ onSearch }) {
                         )}
                         {mineOf && <MineBadge m={mineOf(x.design_id)}/>}
                         {(status?.connected || friend) && (
-                          <AdminOnly home>
+                          <AdminOnly home mw>
                             <button onClick={() => setPickFor(x)} title="Ranger dans mes collections"
                               style={{ display:"block", marginTop:5, fontSize:11, fontWeight:600, color:"#3b82f6", background:"none",
                                 border:"none", padding:0, cursor:"pointer" }}>☆ Collections</button>

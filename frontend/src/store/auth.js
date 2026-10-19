@@ -18,6 +18,7 @@ export const useAuth = create(
       isAuthenticated: false,
       role: ROLE_ADMIN,
       username: "",
+      mwWrite: false,         // droit d'agir sur MakerWorld (relu par refreshMe)
 
       // otp : code de l'application (ou code de secours) si le compte a la
       // double authentification ; le serveur repond 401 « 2FA_REQUIRED » sinon.
@@ -34,6 +35,7 @@ export const useAuth = create(
           role: data.role || ROLE_ADMIN,
           username: data.username || username,
         });
+        get().refreshMe();
         return true;
       },
 
@@ -43,7 +45,8 @@ export const useAuth = create(
         if (!get().token) return;
         try {
           const { data } = await client.get("/auth/me");
-          set({ role: data.role || ROLE_ADMIN, username: data.username || "" });
+          set({ role: data.role || ROLE_ADMIN, username: data.username || "",
+                mwWrite: data.mw_write ?? ((data.role || ROLE_ADMIN) === ROLE_ADMIN) });
         } catch { /* backend pas encore a jour : on garde l'etat courant */ }
       },
 
@@ -59,6 +62,7 @@ export const useAuth = create(
         isAuthenticated: s.isAuthenticated,
         role: s.role,
         username: s.username,
+        mwWrite: s.mwWrite,
       }),
     }
   )
@@ -95,3 +99,8 @@ export const useIsAdmin    = () => useRole() === ROLE_ADMIN;
 export const useIsReadOnly = () => useRole() !== ROLE_ADMIN;
 // Mes droits A MOI (actions sur mes collections MakerWorld, meme chez un copain).
 export const useIsHomeAdmin = () => useAuth((s) => (s.role || ROLE_ADMIN) === ROLE_ADMIN);
+// Droit MakerWorld (j'aime, collections, boosts, evaluations, « A faire »...) :
+// administrateur, ou case cochee sur le compte. « Home » : sur mon compte
+// MakerWorld, meme en visite chez un copain ; sinon pas en visite (ses donnees).
+export const useCanMwHome = () => useAuth((s) => (s.role || ROLE_ADMIN) === ROLE_ADMIN || !!s.mwWrite);
+export const useCanMw = () => { const home = useCanMwHome(); const friend = useFriend((s) => s.friend); return home && !friend; };

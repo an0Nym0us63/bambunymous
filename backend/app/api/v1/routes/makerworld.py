@@ -5,7 +5,7 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 
-from .auth import get_current_user, require_admin
+from .auth import get_current_user, require_admin, require_mw
 from ....services import makerworld as mw
 from ....services import makerworld_account as acc
 
@@ -79,12 +79,12 @@ async def mw_following(uids: str = "", per: int = 10, fresh: bool = False, _: st
 
 
 @router.post("/collections")
-async def mw_create_collection(body: dict = Body({}), _: str = Depends(require_admin)):
+async def mw_create_collection(body: dict = Body({}), _: str = Depends(require_mw)):
     return await _call(acc.create_collection(str(body.get("title", ""))))
 
 
 @router.put("/collections/{cid}")
-async def mw_rename_collection(cid: str, body: dict = Body({}), _: str = Depends(require_admin)):
+async def mw_rename_collection(cid: str, body: dict = Body({}), _: str = Depends(require_mw)):
     return await _call(acc.rename_collection(cid, str(body.get("title", ""))))
 
 
@@ -94,12 +94,12 @@ async def mw_like_state(design_id: str, _: str = Depends(get_current_user)):
 
 
 @router.put("/model/{design_id}/like")
-async def mw_set_like(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+async def mw_set_like(design_id: str, body: dict = Body({}), _: str = Depends(require_mw)):
     return await _call(acc.set_like(design_id, bool(body.get("liked"))))
 
 
 @router.delete("/collections/{cid}")
-async def mw_delete_collection(cid: str, _: str = Depends(require_admin)):
+async def mw_delete_collection(cid: str, _: str = Depends(require_mw)):
     return await _call(acc.delete_collection(cid))
 
 
@@ -109,7 +109,7 @@ async def mw_design_collections(design_id: str, _: str = Depends(get_current_use
 
 
 @router.put("/design/{design_id}/collections")
-async def mw_set_design_collections(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+async def mw_set_design_collections(design_id: str, body: dict = Body({}), _: str = Depends(require_mw)):
     return await _call(acc.set_design_collections(design_id, body.get("ids") or []))
 
 
@@ -167,13 +167,13 @@ async def mw_queue_config(_: str = Depends(get_current_user)):
 
 
 @router.put("/queue/collections")
-async def mw_queue_collections(body: dict = Body({}), _: str = Depends(require_admin)):
+async def mw_queue_collections(body: dict = Body({}), _: str = Depends(require_mw)):
     from ....services import mw_queue as Q
     return await Q.set_collections(body.get("ids") or [])
 
 
 @router.put("/queue/plan/{design_id}")
-async def mw_queue_plan(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+async def mw_queue_plan(design_id: str, body: dict = Body({}), _: str = Depends(require_mw)):
     """Profil, plateaux et filaments retenus pour ce modele (depuis sa fiche)."""
     from ....services import mw_queue as Q
     try:
@@ -183,14 +183,14 @@ async def mw_queue_plan(design_id: str, body: dict = Body({}), _: str = Depends(
 
 
 @router.put("/queue/order")
-async def mw_queue_order(body: dict = Body({}), _: str = Depends(require_admin)):
+async def mw_queue_order(body: dict = Body({}), _: str = Depends(require_mw)):
     """Ordre de priorite de la file."""
     from ....services import mw_queue as Q
     return {"order": await Q.set_order(body.get("ids") or [])}
 
 
 @router.put("/queue/qty/{design_id}")
-async def mw_queue_qty(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+async def mw_queue_qty(design_id: str, body: dict = Body({}), _: str = Depends(require_mw)):
     """Nombre d'exemplaires voulus pour ce modele."""
     from ....services import mw_queue as Q
     try:
@@ -200,7 +200,7 @@ async def mw_queue_qty(design_id: str, body: dict = Body({}), _: str = Depends(r
 
 
 @router.delete("/queue/plan/{design_id}")
-async def mw_queue_plan_delete(design_id: str, _: str = Depends(require_admin)):
+async def mw_queue_plan_delete(design_id: str, _: str = Depends(require_mw)):
     from ....services import mw_queue as Q
     try:
         await Q.set_plan(design_id, None)
@@ -244,13 +244,13 @@ async def mw_rate_templates(_: str = Depends(get_current_user)):
 
 
 @router.put("/rate-templates")
-async def mw_rate_templates_set(body: dict = Body({}), _: str = Depends(require_admin)):
+async def mw_rate_templates_set(body: dict = Body({}), _: str = Depends(require_mw)):
     from ....services import mw_rate
     return {"families": await mw_rate.set_templates(body.get("families"))}
 
 
 @router.post("/rate-photo")
-async def mw_rate_photo(file: UploadFile = File(...), _: str = Depends(require_admin)):
+async def mw_rate_photo(file: UploadFile = File(...), _: str = Depends(require_mw)):
     """Photo hors galerie pour une evaluation ; rend l'identifiant a joindre."""
     from ....services import mw_rate
     raw = await file.read()
@@ -258,7 +258,7 @@ async def mw_rate_photo(file: UploadFile = File(...), _: str = Depends(require_a
 
 
 @router.post("/rate/{design_id}")
-async def mw_rate_submit(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+async def mw_rate_submit(design_id: str, body: dict = Body({}), _: str = Depends(require_mw)):
     """Met mon evaluation (note, texte, mes photos) en file de publication ; rend la main tout de suite."""
     from ....services import mw_rate
     try:
@@ -269,7 +269,7 @@ async def mw_rate_submit(design_id: str, body: dict = Body({}), _: str = Depends
 
 
 @router.post("/rate/{design_id}/forget")
-async def mw_rate_forget(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+async def mw_rate_forget(design_id: str, body: dict = Body({}), _: str = Depends(require_mw)):
     """Oublie sur MakerWorld les evaluations a faire de ce modele (sans evaluer), via la file."""
     from ....services import mw_rate
     try:
@@ -287,7 +287,7 @@ async def mw_rate_queue(_: str = Depends(get_current_user)):
 
 
 @router.delete("/rate-queue/{job_id}")
-async def mw_rate_queue_dismiss(job_id: str, _: str = Depends(require_admin)):
+async def mw_rate_queue_dismiss(job_id: str, _: str = Depends(require_mw)):
     from ....services import mw_rate
     mw_rate.dismiss(job_id)
     return {"ok": True}
@@ -319,7 +319,7 @@ async def mw_boost_state(design_id: str, _: str = Depends(get_current_user)):
 
 
 @router.post("/model/{design_id}/boost")
-async def mw_boost(design_id: str, _: str = Depends(require_admin)):
+async def mw_boost(design_id: str, _: str = Depends(require_mw)):
     """Booster un modele (depense un de mes boosts)."""
     from ....services import makerworld_account as A
     return await _call(A.boost(design_id))
@@ -344,7 +344,7 @@ async def mw_model(design_id: str, _: str = Depends(get_current_user)):
 
 
 @router.post("/model/{design_id}/exact/{instance_id}")
-async def mw_model_exact(design_id: str, instance_id: str, _: str = Depends(require_admin)):
+async def mw_model_exact(design_id: str, instance_id: str, _: str = Depends(require_mw)):
     """Lit le 3MF d'un profil (compte comme un telechargement sur MakerWorld,
     une seule fois : garde sur disque) et rend la fiche recalculee."""
     from ....services.mw_3mf import exact_filaments, ExactError
@@ -357,7 +357,7 @@ async def mw_model_exact(design_id: str, instance_id: str, _: str = Depends(requ
 
 
 @router.get("/model/{design_id}/studio/{instance_id}")
-async def mw_model_studio(design_id: str, instance_id: str, dev_model: str = "", _: str = Depends(require_admin)):
+async def mw_model_studio(design_id: str, instance_id: str, dev_model: str = "", _: str = Depends(require_mw)):
     """Lien du 3MF d'un profil pour l'ouvrir dans Bambu Studio (compte connecte)."""
     import asyncio
     from ....services.mw_3mf import download_link, ExactError

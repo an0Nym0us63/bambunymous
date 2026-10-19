@@ -19,6 +19,10 @@ class User(Base):
     # 32 caracteres : "readonly_prices" en occupait deja 15 sur 16.
     role          = Column(String(32), nullable=False, default=ROLE_ADMIN)
     active        = Column(Boolean, default=True, nullable=False)
+    # Droit d'agir sur MakerWorld (j'aime, collections, boosts, evaluations) avec
+    # le compte MakerWorld de la maison, quel que soit le role. Toujours vrai
+    # pour un administrateur ; jamais pour une invitation de copain.
+    mw_write      = Column(Boolean, default=False, server_default=text("0"), nullable=False)
     last_seen     = Column(DateTime, nullable=True)   # derniere activite
     # Tout jeton emis AVANT cette date est refuse. Un JWT est sans etat : sans
     # ce garde-fou, changer un mot de passe ou retrograder un role n'a aucun

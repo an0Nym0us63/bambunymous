@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { showConfirm, showAlert } from "../utils/dialog";
+import { useCanMwHome } from "../store/auth";
 import client from "../api/client";
 import { useShares, setOnRateFailed } from "../store/shares";
 import MwImg from "./MwImg";
@@ -68,7 +69,9 @@ export function RateButton({ did, style, label = "⭐ Évaluer" }) {
   const d = useToRate(true);
   const [open, setOpen] = useState(false);
   const [gone, setGone] = useState(false);
-  const x = (d?.items || []).find(i => String(i.design_id) === String(did));
+  const x0 = (d?.items || []).find(i => String(i.design_id) === String(did));
+  const can = useCanMwHome();
+  const x = can ? x0 : x0 && { ...x0, rating_id: null };
   if (gone) return <span style={{ ...style, background: "none", color: "#22c55e", borderColor: "transparent" }}>✓ Évalué</span>;
   if (!x?.rating_id) return <a href={x?.url || rateUrl(did)} target="_blank" rel="noopener noreferrer" style={style}>{label} ↗</a>;
   return (<>
@@ -99,9 +102,10 @@ export function GroupToRate({ designs, name, enabled = true }) {
   const d = useToRate(enabled);
   const [open, setOpen] = useState(false);
   const ids = new Set((designs || []).map(String));
+  const can = useCanMwHome();
   const items = (d?.items || []).filter(x => ids.has(String(x.design_id)));
   if (!items.length) return null;
-  const ready = items.filter(x => x.rating_id);
+  const ready = can ? items.filter(x => x.rating_id) : [];
   const photos = [...new Set(items.flatMap(x => x.photos || []))];
   const btn = { padding: "5px 11px", borderRadius: 10, fontSize: 11.5, fontWeight: 700, background: "#f59e0b", color: "white",
     border: "1px solid #f59e0b", textDecoration: "none" };
@@ -333,7 +337,8 @@ export function ToRateSheet({ data, onClose, onOpen }) {
   const [view, setView] = useState(null);
   const [open, setOpen] = useState(null);
   const [done, setDone] = useState(() => new Set());
-  const items = (data?.items || []).filter(x => !done.has(x.design_id));
+  const can = useCanMwHome();
+  const items = (data?.items || []).filter(x => !done.has(x.design_id)).map(x => can ? x : { ...x, rating_id: null });
   return (
     <div data-no-pull="" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 4100, background: "rgba(0,0,0,0.6)",
       display: "flex", alignItems: "flex-end", justifyContent: "center" }}>

@@ -154,6 +154,23 @@ async def get_current_role(
     return role
 
 
+async def require_mw(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> str:
+    """Actions MakerWorld (j'aime, collections, boosts, evaluations) : un
+    administrateur, ou un compte a qui ce droit a ete donne. Jamais une
+    invitation de copain."""
+    username, role = await _resolve(token, db)
+    if role == ROLE_ADMIN and not (token or "").startswith("fk_"):
+        return username
+    if not (token or "").startswith("fk_"):
+        user = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+        if user and getattr(user, "mw_write", False):
+            return username
+    raise HTTPException(status.HTTP_403_FORBIDDEN, "Action MakerWorld non autorisée pour ce compte")
+
+
 async def require_admin(role: str = Depends(get_current_role)) -> str:
     """A poser sur toute route reservee aux administrateurs."""
     if role != ROLE_ADMIN:
@@ -165,7 +182,14 @@ async def require_admin(role: str = Depends(get_current_role)) -> str:
 async def me(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)):
     """Identite et role REELS du porteur (l'interface s'y fie pour l'affichage)."""
     username, role = await _resolve(token, db)
-    return {"username": username, "role": role}
+    mw = False
+    if not (token or "").startswith("fk_"):
+        if role == ROLE_ADMIN:
+            mw = True
+        else:
+            u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+            mw = bool(u and getattr(u, "mw_write", False))
+    return {"username": username, "role": role, "mw_write": mw}
 
 
 # ── Double authentification (activee par chacun pour son compte) ─────────────

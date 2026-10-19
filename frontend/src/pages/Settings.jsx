@@ -535,6 +535,17 @@ function UsersSection() {
                     → {l}
                   </button>
                 ))}
+                {/* Droit MakerWorld : j'aime, collections, boosts, evaluations, « A faire »
+                    avec le compte MakerWorld de la maison (un admin l'a d'office). */}
+                {u.role !== ROLE_ADMIN && (
+                  <label style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11.5, fontWeight:600,
+                    color:"var(--text)", cursor: busy ? "default" : "pointer" }}
+                    title="J'aime, collections, boosts, évaluations et « À faire » avec le compte MakerWorld de la maison">
+                    <input type="checkbox" checked={!!u.mw_write} disabled={busy}
+                      onChange={e => act(() => client.patch(`/users/${u.id}`, { mw_write: e.target.checked }))}/>
+                    Actions MakerWorld
+                  </label>
+                )}
                 {/* Telephone perdu sans code de secours : un admin retire la 2FA,
                     l'utilisateur la reactivera lui-meme. */}
                 {u.totp_enabled && (
@@ -1904,7 +1915,7 @@ export default function Settings() {
       <TwoFactorCard/>
       <UsersSection/>
       <AdminOnly><MakerWorldSettings/></AdminOnly>
-      <AdminOnly><RateTemplatesSettings/></AdminOnly>
+      <AdminOnly home mw><RateTemplatesSettings/></AdminOnly>
       <FriendsCard/>
       <ActivitySection/>
       </>)}

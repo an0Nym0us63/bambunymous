@@ -4,7 +4,7 @@ import client from "../api/client";
 import MwImg from "./MwImg";
 import AdminOnly from "./AdminOnly";
 import { Pressable } from "./ContextMenu";
-import { useIsAdmin } from "../store/auth";
+import { useCanMw } from "../store/auth";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import { colorBg, parseColorsList } from "../utils/colors";
 import { moneyVal } from "../utils/money";
@@ -57,7 +57,7 @@ export default function MwQueue() {
     try { v.length ? localStorage.setItem("mwQueuePick", JSON.stringify(v)) : localStorage.removeItem("mwQueuePick"); } catch { /* stockage indisponible */ }
   };
   const toggleChosen = did => setChosen(chosen.includes(did) ? chosen.filter(x => x !== did) : [...chosen, did]);
-  const isAdmin = useIsAdmin();
+  const isAdmin = useCanMw();            // gerer « A faire » : droit MakerWorld
   const fresh = useRef(false);
   const staleT = useRef(null);
   useEffect(() => () => clearTimeout(staleT.current), []);
@@ -154,7 +154,7 @@ export default function MwQueue() {
           <span key={c.id} style={{ fontSize:11.5, fontWeight:700, padding:"3px 9px", borderRadius:20,
             background:"rgba(59,130,246,0.12)", color:"#3b82f6" }}>📁 {c.title}</span>
         )) : <span style={{ fontSize:12, color:"#f59e0b" }}>aucune choisie</span>}
-        <AdminOnly><button onClick={() => setPick(true)} style={btn}>⚙ Choisir</button></AdminOnly>
+        <AdminOnly mw><button onClick={() => setPick(true)} style={btn}>⚙ Choisir</button></AdminOnly>
         <button onClick={refresh} disabled={busy} title="Relire maintenant" style={{ ...btn, marginLeft:"auto" }}>
           {busy || q.stale ? <span className="mw-spin" style={{ width:12, height:12 }}/> : "⟳"}</button>
       </div>
@@ -222,7 +222,7 @@ export default function MwQueue() {
             style={{ ...pill(cutting || (!!cutRow && !picked)), marginLeft:"auto" }}>✂ Jusqu'ici</button>}
           {!sorting && <button onClick={() => { setCutting(false); setChoosing(v => !v); }} title="Stats sur les modèles que tu coches"
             style={pill(choosing || !!picked)}>☑ Choisir</button>}
-          <AdminOnly><button onClick={() => { setSorting(v => !v); setCutting(false); }} style={{ ...pill(sorting), marginLeft: sorting ? "auto" : 0 }}>
+          <AdminOnly mw><button onClick={() => { setSorting(v => !v); setCutting(false); }} style={{ ...pill(sorting), marginLeft: sorting ? "auto" : 0 }}>
             {sorting ? "✓ Terminé" : "↕ Réorganiser"}</button></AdminOnly>
         </div>
 
@@ -351,7 +351,7 @@ function Qty({ value, onChange }) {
   const b = { width:24, height:24, borderRadius:7, border:"1px solid var(--border)", background:"var(--surface)",
     color:"var(--text)", fontSize:14, fontWeight:800, cursor:"pointer", lineHeight:1, padding:0 };
   return (
-    <AdminOnly fallback={value > 1 ? <span style={{ fontSize:11.5, fontWeight:800 }}>×{value}</span> : null}>
+    <AdminOnly mw fallback={value > 1 ? <span style={{ fontSize:11.5, fontWeight:800 }}>×{value}</span> : null}>
       <span onClick={e => e.stopPropagation()} style={{ display:"flex", alignItems:"center", gap:4 }}>
         <button onClick={() => value > 1 && onChange(value - 1)} disabled={value <= 1} aria-label="Un de moins" style={b}>‒</button>
         <span style={{ minWidth:22, textAlign:"center", fontSize:12, fontWeight:800 }}>×{value}</span>

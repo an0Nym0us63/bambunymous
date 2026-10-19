@@ -1,4 +1,4 @@
-import { useIsAdmin, useIsHomeAdmin } from "../store/auth";
+import { useIsAdmin, useIsHomeAdmin, useCanMw, useCanMwHome } from "../store/auth";
 
 /**
  * N'affiche ses enfants que pour un administrateur.
@@ -8,7 +8,9 @@ import { useIsAdmin, useIsHomeAdmin } from "../store/auth";
  */
 // home : action sur MES donnees (mes collections MakerWorld), qui reste
 // possible quand je parcours le BambuNymous d'un copain.
-export default function AdminOnly({ children, fallback = null, home = false }) {
-  const mine = useIsHomeAdmin(), here = useIsAdmin();
-  return (home ? mine : here) ? children : fallback;
+// mw : action MakerWorld, ouverte aussi aux comptes qui en ont le droit.
+export default function AdminOnly({ children, fallback = null, home = false, mw = false }) {
+  const mine = useIsHomeAdmin(), here = useIsAdmin(), mwHome = useCanMwHome(), mwHere = useCanMw();
+  const ok = mw ? (home ? mwHome : mwHere) : (home ? mine : here);
+  return ok ? children : fallback;
 }

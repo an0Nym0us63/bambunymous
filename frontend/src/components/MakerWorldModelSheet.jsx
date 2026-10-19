@@ -273,13 +273,13 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
               <a href={m.url} target="_blank" rel="noopener noreferrer" style={linkBtn}>Ouvrir sur MakerWorld ↗</a>
               {like && (
-                <AdminOnly home><button onClick={toggleLike} disabled={likeBusy}
+                <AdminOnly home mw><button onClick={toggleLike} disabled={likeBusy}
                   style={{ ...linkBtn, cursor:"pointer", ...(like.liked ? { color:"#ef4444", background:"rgba(239,68,68,0.1)",
                     borderColor:"rgba(239,68,68,0.35)" } : null) }}>
                   {like.liked ? "❤ Aimé" : "♡ J'aime"}</button></AdminOnly>
               )}
               {boost && (boost.can || boost.done) && (
-                <AdminOnly home><button onClick={doBoost} disabled={boostBusy || boost.done}
+                <AdminOnly home mw><button onClick={doBoost} disabled={boostBusy || boost.done}
                   title={[boost.available != null && `${boost.available} boost(s) disponible(s)`,
                     boost.creator_max != null && `${boost.creator ?? 0}/${boost.creator_max} donnés à ce créateur cette année`]
                     .filter(Boolean).join(" · ") || undefined}
@@ -292,7 +292,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
               )}
               {/* Pas de boost possible : la raison, discrete (deja booste, limite par createur, plus de boost). */}
               {boost && !boost.can && !boost.done && boost.reason && (
-                <AdminOnly home><span title="Règle de MakerWorld" style={{ ...linkBtn, color:"var(--muted)", cursor:"default",
+                <AdminOnly home mw><span title="Règle de MakerWorld" style={{ ...linkBtn, color:"var(--muted)", cursor:"default",
                   background:"none", borderStyle:"dashed" }}>⚡ {boost.reason}</span></AdminOnly>
               )}
               {!friend && (
@@ -300,7 +300,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                   title="Choisir les impressions de ce modèle dans l'historique" style={{ ...linkBtn, cursor:"pointer" }}>
                   🔗 Associer à un print</button></AdminOnly>
               )}
-              <AdminOnly home><button onClick={() => setPick(true)} style={{ ...linkBtn, cursor:"pointer" }}>☆ Collections</button></AdminOnly>
+              <AdminOnly home mw><button onClick={() => setPick(true)} style={{ ...linkBtn, cursor:"pointer" }}>☆ Collections</button></AdminOnly>
             </div>
             {zoom && <Lightbox images={zoom.images} index={zoom.index} onClose={() => setZoom(null)}/>}
             {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} item={tile()} onClose={() => setPick(false)}/>}
@@ -386,7 +386,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                       {isOpen && (
                         <div style={{ display:"flex", gap:6, padding:"0 10px 8px", flexWrap:"wrap" }}>
                           {!friend && (
-                            <AdminOnly>
+                            <AdminOnly mw>
                               <button onClick={() => pinPlan(p)} disabled={planBusy}
                                 title="La file d'attente utilisera ce profil, ces plateaux et ces filaments"
                                 style={{ ...linkBtn, padding:"5px 10px", fontSize:11.5, cursor:"pointer",
@@ -402,7 +402,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                             <a href={handyUrl(id, p)} target="_blank" rel="noopener noreferrer"
                               style={{ ...linkBtn, padding:"5px 10px", fontSize:11.5 }}>📱 Ouvrir ce profil dans Bambu Handy</a>
                           ) : (
-                            <AdminOnly home><button onClick={() => openStudio(p)} disabled={studioBusy === p.instance_id}
+                            <AdminOnly home mw><button onClick={() => openStudio(p)} disabled={studioBusy === p.instance_id}
                               title="Compte MakerWorld requis ; compte comme un téléchargement"
                               style={{ ...linkBtn, padding:"5px 10px", fontSize:11.5, cursor:"pointer" }}>
                               {studioBusy === p.instance_id ? "…" : "🖥️ Ouvrir ce profil dans Bambu Studio"}</button></AdminOnly>
@@ -411,7 +411,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                       )}
                       {isOpen && m.stock?.[p.instance_id]?.length > 0
                         && !m.stock[p.instance_id].some(x => x.exact) && (
-                        <AdminOnly>
+                        <AdminOnly mw>
                           <button onClick={() => readExact(p)} disabled={exactBusy === p.instance_id}
                             style={{ ...textBtn, margin:"0 10px 6px", display:"flex", alignItems:"center", gap:6 }}>
                             {exactBusy === p.instance_id ? <><span className="mw-spin"/> Lecture du 3MF…</>

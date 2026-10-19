@@ -24,6 +24,7 @@ class UserOut(BaseModel):
     protected: bool = False   # compte admin d'origine : non modifiable
     totp_enabled: bool = False   # double authentification active
     has_friend_key: bool = False  # invitation copain en cours
+    mw_write: bool = False        # peut agir sur MakerWorld (j'aime, collections...)
 
 
 class UserCreate(BaseModel):
@@ -36,12 +37,14 @@ class UserUpdate(BaseModel):
     role: Optional[str] = None
     active: Optional[bool] = None
     password: Optional[str] = None
+    mw_write: Optional[bool] = None
 
 
 def _out(u: User, protected: bool = False) -> UserOut:
     return UserOut(id=u.id, username=u.username, role=u.role, active=u.active,
                    protected=protected, totp_enabled=bool(getattr(u, "totp_enabled", False)),
                    has_friend_key=bool(getattr(u, "friend_key_hash", None)),
+                   mw_write=bool(getattr(u, "mw_write", False)) or u.role == ROLE_ADMIN,
                    last_seen=(str(u.last_seen) if getattr(u, "last_seen", None) else None))
 
 
@@ -242,6 +245,8 @@ async def update_user(
         if u.active and not body.active:
             invalidate = True      # desactivation : coupe l'acces immediatement
         u.active = body.active
+    if body.mw_write is not None:
+        u.mw_write = bool(body.mw_write)
     if body.password:
         if len(body.password) < 4:
             raise HTTPException(400, "Mot de passe trop court (4 caracteres minimum)")
