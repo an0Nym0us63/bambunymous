@@ -226,16 +226,21 @@ function RateForm({ x, targets, onDone }) {
   // Publication en arriere-plan, suivie par la puce d'etat (comme l'ajout de
   // photos) : le modele quitte la liste tout de suite, et y revient en cas d'echec.
   const send = async () => {
-    const n = (targets || [x]).length;
+    const n = (targets || [x]).reduce((s, t) => s + (t.profiles?.length || 1), 0);
     if (!(await showConfirm(`${score} étoile${score > 1 ? "s" : ""}, ${picked.size} photo${picked.size > 1 ? "s" : ""}`
-      + (n > 1 ? `, pour ${n} modèles` : ""), { title: "Publier sur MakerWorld ?", confirmLabel: "Publier" }))) return;
+      + (n > 1 ? `, sur ${n} profils` : ""), { title: "Publier sur MakerWorld ?", confirmLabel: "Publier" }))) return;
     // Un groupe : la meme note pour chacun de ses modeles attendus. Chaque
     // evaluation part dans la file du serveur, qui les publie l'une apres l'autre.
     setBusy(true);
+    // ... et chaque PROFIL imprime de ce modele (MakerWorld attend une note par profil).
     for (const t of targets || [x]) {
-      const body = { rating_id: t.rating_id, score, content: text, photos: [...picked] };
+      const profs = t.profiles?.length ? t.profiles : [{ rating_id: t.rating_id }];
       try {
-        await useShares.getState().rate(body, t.design_id, t.title || `Modèle ${t.design_id}`);
+        for (const pf of profs) {
+          const body = { rating_id: pf.rating_id, score, content: text, photos: [...picked] };
+          await useShares.getState().rate(body, t.design_id,
+            (t.title || `Modèle ${t.design_id}`) + (profs.length > 1 && pf.title ? ` · ${pf.title}` : ""));
+        }
         markRated(t.design_id);
       } catch (e) {
         setErr(e.response?.data?.detail || e.message);

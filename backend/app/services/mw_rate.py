@@ -73,14 +73,31 @@ async def my_ratings(fresh: bool = False):
                 continue
             if _is_rated(h):
                 rated.add(did)
-            elif did not in pending and h.get("userCanRating", True):
-                pending[did] = _pending_of(h)
+            elif h.get("userCanRating", True):
+                pd = _pending_of(h)
+                lst = pending.setdefault(did, [])
+                if pd["rating_id"] and all(x["rating_id"] != pd["rating_id"] for x in lst):
+                    lst.append(pd)
         if len(hits) < 50:
             break
         off += 50
     out = (rated, pending)
     _CACHE["ratings"] = (time.time(), out)
     return out
+
+
+def _forget_pending(did: str, rid: str):
+    """Fiche publiee : retiree de la liste en memoire (sans tout relire chez MakerWorld)."""
+    hit = _CACHE.get("ratings")
+    if not hit:
+        return
+    rated, pending = hit[1]
+    left = [x for x in pending.get(did, []) if str(x.get("rating_id")) != rid]
+    if left:
+        pending[did] = left
+    else:
+        pending.pop(did, None)
+        rated.add(did)
 
 
 async def rated_designs(fresh: bool = False):
@@ -166,7 +183,10 @@ async def to_rate(fresh: bool = False) -> dict:
             it["print_name"] = g.get("name")
     # Ce que MakerWorld attend : lien direct vers le profil imprime, et les
     # impressions partagees absentes de mon historique local.
-    for did, pd in pending.items():
+    # MakerWorld cree une fiche a remplir par PROFIL imprime : un modele peut en
+    # attendre plusieurs ; une seule evaluation dans l'appli les remplit toutes.
+    for did, pds in pending.items():
+        pd = pds[0]
         it = items.get(did)
         if it is None:
             m = mws.get(did)
@@ -176,7 +196,9 @@ async def to_rate(fresh: bool = False) -> dict:
                                "printed": 0, "last_date": pd["date"], "photos": [], "photo_source": None, "print_ids": []}
         it["awaited"] = True
         it["rating_id"] = str(pd["rating_id"]) if pd.get("rating_id") else None
-        it["profile_title"] = pd["profile_title"]
+        it["rating_ids"] = [str(x["rating_id"]) for x in pds if x.get("rating_id")]
+        it["profiles"] = [{"rating_id": str(x["rating_id"]), "title": x["profile_title"]} for x in pds if x.get("rating_id")]
+        it["profile_title"] = pd["profile_title"] if len(pds) == 1 else f"{len(pds)} profils"
         if pd["profile_id"]:
             it["url"] = f"https://makerworld.com/fr/models/{did}#profileId-{pd['profile_id']}"
         else:
@@ -338,8 +360,8 @@ async def submit(design_id: str, rating_id: str, score: int, content: str, photo
 async def _submit(design_id: str, rating_id: str, score: int, content: str, photos: list) -> dict:
     from .makerworld_account import _send, _tok, AccountError
     did, rid = str(design_id or "").strip(), str(rating_id or "").strip()
-    pend = (await pending_ratings(True)).get(did)
-    if not pend or str(pend.get("rating_id")) != rid:
+    pend = (await pending_ratings()).get(did) or []      # liste gardee 30 min, tenue a jour ci-dessous
+    if rid not in {str(x.get("rating_id")) for x in pend}:
         raise AccountError("Cette évaluation n'est plus attendue par MakerWorld (déjà faite ?)")
     try:
         score = int(score)
@@ -364,7 +386,7 @@ async def _submit(design_id: str, rating_id: str, score: int, content: str, phot
                             {"score": score, "content": content, "images": images,
                              "ratingExtension": {"lowScoreDetails": []}}, tok)
     logger.info(f"[MW] evaluation publiee : modele {did}, {score} etoiles, {len(images)} photo(s)")
-    _CACHE.pop("ratings", None)
+    _forget_pending(did, rid)
     for f in files:                               # photos ajoutees : plus utiles une fois publiees
         if f.parent == _tmp_dir():
             f.unlink(missing_ok=True)
