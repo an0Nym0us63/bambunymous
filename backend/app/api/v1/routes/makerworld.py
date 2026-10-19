@@ -173,6 +173,13 @@ async def mw_queue_plan(design_id: str, body: dict = Body({}), _: str = Depends(
         raise HTTPException(400, str(e))
 
 
+@router.put("/queue/order")
+async def mw_queue_order(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Ordre de priorite de la file."""
+    from ....services import mw_queue as Q
+    return {"order": await Q.set_order(body.get("ids") or [])}
+
+
 @router.put("/queue/qty/{design_id}")
 async def mw_queue_qty(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
     """Nombre d'exemplaires voulus pour ce modele."""

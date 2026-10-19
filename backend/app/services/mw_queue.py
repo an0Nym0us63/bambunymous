@@ -47,6 +47,7 @@ async def _load() -> dict:
     d = d if isinstance(d, dict) else {}
     d.setdefault("collections", [])
     d.setdefault("plans", {})
+    d.setdefault("order", [])
     return d
 
 
@@ -100,6 +101,19 @@ def _qty(v) -> int:
         return max(1, min(99, int(v)))
     except (TypeError, ValueError):
         return 1
+
+
+async def set_order(ids: list) -> list:
+    """Ordre de priorite de la file (les modeles absents de la liste passent en tete)."""
+    d = await _load()
+    seen, order = set(), []
+    for i in ids or []:
+        i = str(i)
+        if i.isdigit() and i not in seen:
+            seen.add(i); order.append(i)
+    d["order"] = order[:2000]
+    await _save(d)
+    return d["order"]
 
 
 async def set_qty(design_id: str, qty) -> dict:
@@ -217,6 +231,7 @@ async def queue(fresh: bool = False) -> dict:
         row = {"design_id": did, "title": base.get("title"), "title_fr": base.get("title_fr") or m.get("title_fr"),
                "cover_url": base.get("cover_url") or m.get("cover_url"), "collections": where.get(did, []),
                "printed": m.get("printed") or 0, "planned": chosen_plan, "qty": qty, "error": m.get("error"),
+               "plates_ready": [], "plates_count": 0,
                "profile": None, "seconds": None, "weight_g": 0.0, "filaments": [], "status": "unknown"}
         if prof:
             sel = plan.get("plates") if plan and plan.get("instance_id") == prof.get("instance_id") else None
@@ -228,6 +243,9 @@ async def queue(fresh: bool = False) -> dict:
             one = sum(_num(pl.get("seconds")) for pl in plates) if sel is not None else _num(prof.get("seconds"))
             row["seconds"] = one * qty if one else None
             ok_stock = ok_ams = True
+            fid_of = {}                                   # cle TYPE|COULEUR -> filament retenu
+            one_of = {}                                   # filament retenu -> grammes pour UN exemplaire
+            missing = False                               # une couleur sans filament en stock
             for it in items:
                 k = fkey(it.get("type"), it.get("color"))
                 if sel is None:
@@ -243,6 +261,8 @@ async def queue(fresh: bool = False) -> dict:
                 fil = None
                 if pick:
                     fid = pick["filament_id"]
+                    fid_of[k] = fid
+                    one_of[fid] = one_of.get(fid, 0) + g / qty
                     stock_of[fid] = {"filament_id": fid, "name": pick["name"], "brand": pick.get("brand"),
                                      "material": pick.get("material"), "color": pick.get("color"),
                                      "colors_array": pick.get("colors_array"), "multicolor_type": pick.get("multicolor_type"),
@@ -260,14 +280,34 @@ async def queue(fresh: bool = False) -> dict:
                            "in_ams": fid in ams, "enough_stock": enough_stock, "enough_ams": enough_ams}
                 else:
                     ok_stock = ok_ams = False
+                    missing = True
                     u = unmatched.setdefault(k, {"type": it.get("type"), "color": it.get("color"), "need_g": 0.0, "models": 0})
                     u["need_g"] += g
                     u["models"] += 1
                 row["filaments"].append({"type": it.get("type"), "color": it.get("color"), "g": round(g, 1), "chosen": fil})
-            row["status"] = "ams" if ok_ams and items else "stock" if ok_stock and items else "short" if items else "unknown"
+            # Plateau par plateau : un exemplaire du plateau est-il faisable avec l'AMS ?
+            ready = []
+            for pl in plates:
+                fl = [f for f in pl.get("filaments") or [] if _num(f.get("g")) > 0]
+                if fl and all(fkey(f.get("type"), f.get("color")) in fid_of
+                              and ams.get(fid_of[fkey(f.get("type"), f.get("color"))], {}).get("g", 0) >= _num(f.get("g"))
+                              for f in fl):
+                    ready.append(pl.get("index"))
+            row["plates_ready"] = ready
+            row["plates_count"] = len(plates)
+            row["stock_ok"] = bool(ok_stock and items)    # tout le modele faisable avec le stock
+            # Exemplaires complets faisables tout de suite avec l'AMS (sur la quantite voulue).
+            row["copies_ready"] = (min(qty, min(int(ams.get(f, {}).get("g", 0) // n) for f, n in one_of.items() if n > 0))
+                                   if one_of and not missing else 0)
+            row["status"] = ("ams" if ok_ams and items else "partial" if ready else
+                             "stock" if ok_stock and items else "short" if items else "unknown")
         row["weight_g"] = round(row["weight_g"], 1)
         models.append(row)
 
+    rank = {did: i for i, did in enumerate(cfg.get("order") or [])}
+    models.sort(key=lambda r: (r["design_id"] in rank, rank.get(r["design_id"], 0)))
+    for r in models:
+        r["new"] = r["design_id"] not in rank
     prices = await _prices(stock_of.keys())
     cost_total = 0.0
     for r in models:
@@ -295,6 +335,7 @@ async def queue(fresh: bool = False) -> dict:
         "totals": {"models": len(models), "seconds": sum(r["seconds"] or 0 for r in models),
                    "weight_g": round(sum(r["weight_g"] for r in models), 1), "cost": round(cost_total, 2),
                    "ams": sum(1 for r in models if r["status"] == "ams"),
+                   "partial": sum(1 for r in models if r["status"] == "partial"),
                    "stock": sum(1 for r in models if r["status"] == "stock"),
                    "short": sum(1 for r in models if r["status"] == "short"),
                    "printed": sum(1 for r in models if r["printed"])},

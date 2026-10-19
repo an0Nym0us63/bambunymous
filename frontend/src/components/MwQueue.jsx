@@ -17,10 +17,20 @@ const g = v => `${Math.round(v || 0).toLocaleString("fr-FR")} g`;
 const STATUS = {
   ams: ["✅ Prêt (AMS)", "#22c55e", "Tous les filaments choisis sont chargés dans l'AMS, en quantité suffisante."],
   stock: ["🟡 Stock OK", "#f59e0b", "Assez en stock, mais pas tout dans l'AMS : à charger avant."],
+  partial: ["🟩 En partie", "#16a34a", "Une partie est faisable tout de suite avec l'AMS (plateaux ou exemplaires)."],
   short: ["🔴 Manque", "#ef4444", "Un filament manque ou n'a pas d'équivalent en stock."],
   unknown: ["— Inconnu", "var(--muted)", "Fiche ou profil illisible."],
 };
-const FILTERS = [["all", "Tous"], ["ams", "Prêts (AMS)"], ["stock", "Stock OK"], ["short", "Manque"]];
+const FILTERS = [["all", "Tous"], ["ams", "Prêts (AMS)"], ["partial", "En partie"], ["stock", "Stock OK"], ["short", "Manque"]];
+
+// Libelle d'etat precis : plateaux ou exemplaires faisables avec l'AMS.
+function statusText(r) {
+  if (r.status !== "partial") return (STATUS[r.status] || STATUS.unknown)[0];
+  const bits = [];
+  if (r.plates_count > 1 && r.plates_ready?.length) bits.push(`${r.plates_ready.length}/${r.plates_count} plateaux`);
+  if ((r.qty || 1) > 1 && r.copies_ready > 0) bits.push(`${r.copies_ready}/${r.qty} ex.`);
+  return `🟩 ${bits.join(" · ") || "en partie"} prêt${bits.length ? "s" : ""}`;
+}
 
 export default function MwQueue() {
   const [q, setQ] = useState(null);
@@ -30,7 +40,8 @@ export default function MwQueue() {
   const [pick, setPick] = useState(false);
   const [filter, setFilter] = useState("all");
   const [model, setModel] = useState(null);
-  const [showFil, setShowFil] = useState(true);
+  const [tab, setTab] = useState("models");        // models | filaments
+  const [sorting, setSorting] = useState(false);   // mode « Réorganiser »
 
   useEffect(() => {
     let alive = true;
@@ -48,10 +59,21 @@ export default function MwQueue() {
     setQ(x => ({ ...x, models: x.models.map(r => r.design_id === did ? { ...r, qty: n } : r) }));
     try { await client.put(`/makerworld/queue/qty/${did}`, { qty: n }); refresh(); } catch { refresh(); }
   };
+  // Ordre de priorite : deplace, enregistre l'ordre complet (les nouveaux y entrent).
+  const move = async (did, to) => {
+    const ids = q.models.map(r => r.design_id);
+    const i = ids.indexOf(did);
+    const j = to === "top" ? 0 : to === "bottom" ? ids.length - 1 : Math.max(0, Math.min(ids.length - 1, i + to));
+    if (i < 0 || i === j) return;
+    ids.splice(j, 0, ids.splice(i, 1)[0]);
+    const byId = Object.fromEntries(q.models.map(r => [r.design_id, r]));
+    setQ(x => ({ ...x, models: ids.map(d => ({ ...byId[d], new: false })) }));
+    try { await client.put("/makerworld/queue/order", { ids }); } catch { refresh(); }
+  };
   if (err) return <p style={msg}>{err}</p>;
   if (!q) return <p style={msg}>Lecture de la file… (la première fois, chaque fiche est lue sur MakerWorld)</p>;
   const t = q.totals;
-  const rows = q.models.filter(r => filter === "all" || r.status === filter);
+  const rows = q.models.filter(r => sorting || filter === "all" || r.status === filter);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, paddingBottom:16 }}>
@@ -72,7 +94,7 @@ export default function MwQueue() {
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(104px,1fr))", gap:8 }}>
           {[[t.models, "modèles"], [fmtDur(t.seconds), "temps total"], [g(t.weight_g), "filament"],
             [t.cost ? `${moneyVal(t.cost, 2)} €` : "—", "coût estimé"], [t.ams, "prêts (AMS)", "#22c55e"],
-            [t.stock, "stock OK", "#f59e0b"], [t.short, "à compléter", "#ef4444"], [t.printed, "déjà imprimés"]].map(([v, l, c]) => (
+            [t.partial ?? 0, "en partie (AMS)", "#16a34a"], [t.stock, "stock OK", "#f59e0b"], [t.short, "à compléter", "#ef4444"], [t.printed, "déjà imprimés"]].map(([v, l, c]) => (
             <div key={l} style={card}>
               <div style={{ fontSize:15, fontWeight:800, color: c || "var(--text)" }}>{v}</div>
               <div style={{ fontSize:10.5, color:"var(--muted)" }}>{l}</div>
@@ -80,14 +102,16 @@ export default function MwQueue() {
           ))}
         </div>
 
-        {/* Filaments pour tout imprimer */}
-        <div className="card" style={{ padding:"10px 12px" }}>
-          <button onClick={() => setShowFil(v => !v)} style={{ display:"flex", width:"100%", alignItems:"center", background:"none",
-            border:"none", padding:0, cursor:"pointer", color:"var(--text)" }}>
-            <span style={{ flex:1, textAlign:"left", fontSize:13, fontWeight:800 }}>🧵 Filaments pour tout imprimer</span>
-            <span style={{ fontSize:12, color:"var(--muted)" }}>{showFil ? "▴" : "▾"}</span>
-          </button>
-          {showFil && (<>
+        <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
+          {[["models", `Modèles (${t.models})`], ["filaments", "🧵 Filaments pour tout imprimer"]].map(([k, l]) => (
+            <button key={k} onClick={() => setTab(k)} style={{ flex:1, padding:"7px 8px", borderRadius:8, fontSize:12, fontWeight:700,
+              cursor:"pointer", border:"none", background: tab === k ? "#3b82f6" : "transparent", color: tab === k ? "white" : "var(--muted)" }}>{l}</button>
+          ))}
+        </div>
+
+        {tab === "filaments" && (
+        <div className="card" style={{ padding:"4px 12px 10px" }}>
+          {(<>
             {q.filaments.map(f => (
               <div key={f.filament_id} style={{ display:"flex", alignItems:"center", gap:8, padding:"7px 0", borderTop:"1px solid var(--border)" }}>
                 <Swatch f={f}/>
@@ -112,13 +136,19 @@ export default function MwQueue() {
               </div>
             ))}
           </>)}
+          {q.filaments.length === 0 && q.unmatched.length === 0 && <p style={msg}>Aucun filament à prévoir.</p>}
         </div>
+        )}
 
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-          {FILTERS.map(([k, l]) => (
+        {tab === "models" && (<>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+          {!sorting && FILTERS.map(([k, l]) => (
             <button key={k} onClick={() => setFilter(k)} style={pill(filter === k)}>
               {l} ({k === "all" ? t.models : t[k] ?? 0})</button>
           ))}
+          {sorting && <span style={{ fontSize:12, color:"var(--muted)" }}>Ordre de priorité : ⤒ en haut, ↑ ↓, ⤓ en bas.</span>}
+          <AdminOnly><button onClick={() => setSorting(v => !v)} style={{ ...pill(sorting), marginLeft:"auto" }}>
+            {sorting ? "✓ Terminé" : "↕ Réorganiser"}</button></AdminOnly>
         </div>
 
         <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
@@ -134,7 +164,16 @@ export default function MwQueue() {
                   : <span style={{ width:54, height:54, borderRadius:8, background:"var(--surface)", flexShrink:0 }}/>}
                 <span style={{ flex:1, minWidth:0 }}>
                   <span style={{ display:"block", fontSize:12.5, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                    {r.planned && <span title="Profil et filaments retenus">📌 </span>}{r.title_fr || r.title || `Modèle ${r.design_id}`}</span>
+                    {r.title_fr || r.title || `Modèle ${r.design_id}`}</span>
+                  <span style={{ display:"flex", gap:4, flexWrap:"wrap", margin:"2px 0 1px" }}>
+                    {r.new && <span style={{ ...tag, color:"#3b82f6", background:"rgba(59,130,246,0.12)" }}>Nouveau</span>}
+                    {r.planned
+                      ? <span title="Profil, plateaux et filaments retenus depuis la fiche" style={{ ...tag, color:"#16a34a", background:"rgba(34,197,94,0.12)" }}>📌 Retenu</span>
+                      : <span title="Profil retenu par l'appli, tous les plateaux, filament le plus proche du stock" style={{ ...tag, color:"var(--muted)", background:"var(--surface)", border:"1px dashed var(--border)" }}>Par défaut</span>}
+                    {r.status === "partial" && (r.stock_ok
+                      ? <span title="Le reste (autres plateaux ou exemplaires) est faisable avec le stock, à charger dans l'AMS" style={{ ...tag, color:"#f59e0b", background:"rgba(245,158,11,0.12)" }}>reste : stock OK</span>
+                      : <span title="Pour le reste, un filament manque en stock" style={{ ...tag, color:"#ef4444", background:"rgba(239,68,68,0.12)" }}>reste : manque</span>)}
+                  </span>
                   <span style={{ display:"block", fontSize:10.5, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {r.profile ? `${r.profile.title || "Profil"}${r.profile.plates < r.profile.plates_total ? ` · ${r.profile.plates}/${r.profile.plates_total} plateaux` : ""}` : "profil inconnu"}
                     {" · "}{fmtDur(r.seconds)} · {g(r.weight_g)}{r.cost != null ? ` · ${moneyVal(r.cost, 2)} €` : ""}{r.printed ? ` · imprimé ${r.printed}×` : ""}</span>
@@ -149,8 +188,14 @@ export default function MwQueue() {
                   </span>
                 </span>
                 <span style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5, flexShrink:0 }}>
-                  <span title={help} style={{ fontSize:10.5, fontWeight:800, color, whiteSpace:"nowrap" }}>{label}</span>
-                  <Qty value={r.qty || 1} onChange={n => setQty(r.design_id, n)}/>
+                  <span title={help} style={{ fontSize:10.5, fontWeight:800, color, whiteSpace:"nowrap" }}>{statusText(r)}</span>
+                  {sorting ? (
+                    <span onClick={e => e.stopPropagation()} style={{ display:"flex", gap:3 }}>
+                      {[["top", "⤒", "En haut"], [-1, "↑", "Monter"], [1, "↓", "Descendre"], ["bottom", "⤓", "En bas"]].map(([to, ic, l]) => (
+                        <button key={l} onClick={() => move(r.design_id, to)} aria-label={l} title={l} style={mv}>{ic}</button>
+                      ))}
+                    </span>
+                  ) : <Qty value={r.qty || 1} onChange={n => setQty(r.design_id, n)}/>}
                 </span>
               </div>
             );
@@ -159,7 +204,9 @@ export default function MwQueue() {
         <p style={{ fontSize:11, color:"var(--muted)", margin:0, lineHeight:1.5 }}>
           Ouvre un modèle, déplie son profil, choisis plateaux et filaments, puis « 📌 Retenir pour la file ». Sans
           cela, la file prend le profil retenu, tous les plateaux et le filament le plus proche de ton stock.
-          Pastilles : vert = dans l'AMS, orange = en stock, rouge = manque.</p>
+          Pastilles : vert = dans l'AMS, orange = en stock, rouge = manque. Un modèle arrivé dans la file sans place
+          définie se met en haut (« Nouveau »).</p>
+        </>)}
       </>)}
 
       {pick && <CollectionsPicker chosen={q.collections.map(c => c.id)} onClose={() => setPick(false)}
@@ -227,6 +274,9 @@ function Swatch({ f }) {
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };
 const btn = { padding:"6px 11px", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer",
   background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" };
+const tag = { fontSize:9.5, fontWeight:800, padding:"1px 6px", borderRadius:20, lineHeight:1.5 };
+const mv = { width:26, height:26, borderRadius:7, border:"1px solid var(--border)", background:"var(--surface)",
+  color:"var(--text)", fontSize:13, fontWeight:800, cursor:"pointer", padding:0, lineHeight:1 };
 const card = { padding:"8px 10px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)" };
 const pill = on => ({ padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer",
   background: on ? "rgba(59,130,246,0.15)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--text2)",
