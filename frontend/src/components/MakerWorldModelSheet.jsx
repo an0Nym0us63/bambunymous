@@ -116,8 +116,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     getModel(id).then(data => {
       if (!alive) return;
       setM(data);
-      const p = (data.profiles || []).find(x => x.main) || (data.profiles || [])[0];
-      setOpen(p?.instance_id || null);
+      setOpen(null);          // profils replies a l'ouverture : on deplie celui qu'on veut voir
     }).catch(e => alive && setM({ error: e.response?.data?.detail || e.message }));
     client.get(`/makerworld/similar/${id}`).then(({ data }) => alive && setSim(data.items || [])).catch(() => {});
     return () => { alive = false; };
