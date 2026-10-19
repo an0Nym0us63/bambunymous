@@ -6,6 +6,7 @@ import { showAlert, showConfirm } from "../utils/dialog";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
+import MwCreator from "./MwCreator";
 import { mwPatch, onMwChange } from "../utils/mwSync";
 import { useFriend } from "../store/friend";
 import { useMine, MineBadge } from "./Friends";
@@ -21,7 +22,8 @@ const sameIds = (a, b) => a.length >= b.length && b.every((x, i) => a[i]?.design
 // seule. Si l'API ne repond plus, la fenetre le dit et rien d'autre n'est touche.
 // La recherche MakerWorld est publique : elle marche sans compte.
 // La recherche vit dans Découvrir (champ en tete) : un onglet de moins.
-const TABS = [["favorites", "Collections"], ["likes", "J'aime"], ["following", "Suivis"], ["discover", "Découvrir"]];
+const TABS = [["favorites", "Collections"], ["likes", "J'aime"], ["following", "Suivis"], ["discover", "Découvrir"],
+  ["creator", "Créateur"]];
 const PUBLIC_TABS = ["search", "discover"];      // sans compte (sauf « Pour vous »)
 // « Il y a 3 j » : date de publication (Suivis).
 const ago = iso => {
@@ -129,7 +131,7 @@ export default function MakerWorldView({ onSearch }) {
         .catch(e => alive && setData({ error: e.response?.data?.detail || e.message }));
       return () => { alive = false; };
     }
-    if (!status?.connected) return;
+    if (!status?.connected || tab === "creator") return;   // Createur : son propre composant
     let alive = true, timer = null;
     const fresh = freshRef.current;
     freshRef.current = false;
@@ -249,7 +251,7 @@ export default function MakerWorldView({ onSearch }) {
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
 
-  const showModels = tab !== "favorites" || !!coll;
+  const showModels = (tab !== "favorites" && tab !== "creator") || !!coll;
   const friend = useFriend((s) => s.friend);
   const all = data?.items || [];
   const items = all.filter(x => pf === "all" || (pf === "new" ? !x.printed : x.printed > 0));
@@ -281,7 +283,7 @@ export default function MakerWorldView({ onSearch }) {
         <div style={{ padding:"2px 0 8px" }}>
           {status && (
             <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:10, flexWrap:"wrap" }}>
-              {TABS.map(([k, l]) => (
+              {TABS.filter(([k]) => k !== "creator" || status.connected).map(([k, l]) => (
                 <button key={k} onClick={() => { setTab(k); if (k !== "favorites") setColl(null); }}
                   style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer",
                     background: tab === k ? "#3b82f6" : "var(--surface2)", color: tab === k ? "white" : "var(--muted)",
@@ -408,6 +410,8 @@ export default function MakerWorldView({ onSearch }) {
             : !PUBLIC_TABS.includes(tab) && !status.connected ? (
               <p style={msg}>Connecte ton compte MakerWorld dans <b>Paramètres → Données → MakerWorld</b> pour voir
                 tes collections et tes j'aime ici.</p>
+            ) : tab === "creator" ? (
+              <MwCreator reload={reload} onOpen={setModel} onLoaded={() => setBusy(false)}/>
             ) : data === null ? <Skeleton/>
             : data.error ? <p style={{ ...msg, color:"#f59e0b" }}>MakerWorld ne répond pas comme prévu : {data.error}</p>
             : !showModels ? (

@@ -173,6 +173,38 @@ EVENTS["mw_coll_changed"] = {
 }
 
 
+# Mon activite de createur MakerWorld (services/mw_creator.py, toutes les 30 min).
+EVENTS["mw_points"] = {
+    "section": "mw", "label": "Points MakerWorld reçus",
+    "description": "Résumé de chaque versement (par modèle et profil), avec le solde.",
+    "options": [],
+    "sample": {"title": "💰 +18,5 points MakerWorld", "priority": 2,
+               "message": "🪙 Solde : 218 points\n   • Pacman Ghost - Tea Light +10,83\n   • Toilet Signs Woman Man Fun +3\n   • Xbox Medallion +4,67"},
+}
+EVENTS["mw_boost"] = {
+    "section": "mw", "label": "Boost reçu",
+    "description": "Quelqu'un a boosté un de tes modèles.",
+    "options": [],
+    "sample": {"title": "⚡ Boost reçu", "priority": 3, "attach": _SAMPLE_COVER,
+               "message": "📄 Pacman Ghost - Tea Light Candle Halloween\n⚡ 12 boosts au total"},
+}
+EVENTS["mw_fans"] = {
+    "section": "mw", "label": "Nouveaux abonnés",
+    "description": "Ton nombre d'abonnés MakerWorld augmente.",
+    "options": [],
+    "sample": {"title": "👥 +3 abonnés sur MakerWorld", "priority": 2, "message": "Tu as maintenant 274 abonnés."},
+}
+EVENTS["mw_milestone"] = {
+    "section": "mw", "label": "Palier franchi par un de mes modèles",
+    "description": "50, 100, 250, 500, 1 000, 2 500… téléchargements ou impressions.",
+    "options": [{"key": "metric", "type": "select", "label": "Compter", "default": "both",
+                 "choices": [["both", "téléchargements et impressions"], ["downloads", "téléchargements"],
+                             ["prints", "impressions"]]}],
+    "sample": {"title": "🏁 500 téléchargements !", "priority": 3, "attach": _SAMPLE_COVER,
+               "message": "📄 Irony — Casse-tête 6 pièces\n⬇️ 500 téléchargements · 🖨️ 312 impressions"},
+}
+
+
 class NotifyError(Exception):
     pass
 
@@ -317,7 +349,7 @@ def _error_of(r) -> str:
 
 
 def _post_ntfy(n: dict, title: str, message: str, click=None, attach=None, tags=None, priority=None,
-               actions=None, file=None, filename=None):
+               actions=None, file=None, filename=None, icon=None):
     """Publie. file (chemin ou octets) part en piece jointe (l'image s'affiche
     en grand) ; si le serveur ne prend pas les pieces jointes, on renvoie sans."""
     from .makerworld import session
@@ -339,6 +371,7 @@ def _post_ntfy(n: dict, title: str, message: str, click=None, attach=None, tags=
         if tags: params["tags"] = ",".join(tags)
         if priority: params["priority"] = str(priority)
         if acts: params["actions"] = json.dumps(acts, ensure_ascii=False)
+        if icon: params["icon"] = icon
         try:
             r = session().put(f"{base}/{n['topic']}", data=bytes(data), params=params, headers=auth, timeout=30)
         except Exception as e:
@@ -354,6 +387,7 @@ def _post_ntfy(n: dict, title: str, message: str, click=None, attach=None, tags=
     if tags: body["tags"] = tags
     if priority: body["priority"] = int(priority)
     if acts: body["actions"] = acts
+    if icon: body["icon"] = icon
     try:
         r = session().post(base, json=body, headers={"Content-Type": "application/json", **auth}, timeout=15)
     except Exception as e:
@@ -363,11 +397,14 @@ def _post_ntfy(n: dict, title: str, message: str, click=None, attach=None, tags=
 
 
 async def send(title: str, message: str = "", click=None, attach=None, tags=None, priority=None,
-               actions=None, file=None, filename=None) -> None:
+               actions=None, file=None, filename=None, icon=None) -> None:
+    """icon : petite image de la notification (Android ; iOS l'ignore). Par
+    defaut le logo BambuNymous, servi par l'appli si son adresse est connue."""
     import asyncio
     cfg = await _load()
+    icon = icon or app_link(cfg, "/icon-192.png")
     await asyncio.to_thread(_post_ntfy, cfg["ntfy"], title, message, click, attach, tags, priority,
-                            actions, file, filename)
+                            actions, file, filename, icon)
 
 
 async def notify(event: str, title: str, message: str = "", **kw) -> bool:

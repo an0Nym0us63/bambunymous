@@ -118,6 +118,9 @@ async def lifespan(app: FastAPI):
     # Collections MakerWorld (ajouts, creations…) pour les notifications : 10 min.
     from app.services.mw_watch import watch_loop as _mw_watch
     _mw_watch_task = _aio.create_task(_mw_watch())
+    # Mon activite de createur (points, boosts, abonnes, paliers) : 30 min.
+    from app.services.mw_creator import watch_loop as _mw_creator
+    _mw_creator_task = _aio.create_task(_mw_creator())
     # Notifications de l'imprimante (pause, fin proche, HMS, sechage) : la
     # config est lue une fois pour l'ecouteur, qui ne touche pas a la base.
     from app.services import notify as _notify, notify_events as _nev
@@ -156,6 +159,7 @@ async def lifespan(app: FastAPI):
     _mw_task.cancel()
     _mw_warm_task.cancel()
     _mw_watch_task.cancel()
+    _mw_creator_task.cancel()
     catalog_sync.stop()
     await mqtt_manager.stop()
 

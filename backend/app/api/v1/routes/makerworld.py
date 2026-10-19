@@ -124,6 +124,25 @@ async def mw_search(q: str = "", offset: int = 0, _: str = Depends(get_current_u
     return await _call(mw.search(q, offset))
 
 
+@router.get("/creator")
+async def mw_creator(fresh: bool = False, _: str = Depends(get_current_user)):
+    """Ma page createur : profil et points, mes modeles (avec points sur 30 j)."""
+    from ....services import mw_creator as C
+    try:
+        return await C.overview(fresh)
+    except C.CreatorError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/creator/points")
+async def mw_creator_points(offset: int = 0, _: str = Depends(get_current_user)):
+    from ....services import mw_creator as C
+    try:
+        return await C.points(offset, 30)
+    except C.CreatorError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.get("/mine")
 async def mw_mine(ids: str = "", _: str = Depends(get_current_user)):
     """Ce que J'AI de ces modeles (imprimes, collections, j'aime) : pour les
