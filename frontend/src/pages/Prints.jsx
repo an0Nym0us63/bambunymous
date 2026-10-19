@@ -815,10 +815,22 @@ function MakerWorldCard({ designId, note, prints = [] }) {
 // Plateaux du profil imprime, coches d'apres les prints (plate_id, et profil
 // MakerWorld quand l'imprimante l'a donne). Profil inconnu (vieux prints) :
 // on deduit -- profil unique, ou celui par defaut -- et on le dit.
-function MakerWorldPlates({ profiles, prints }) {
+// Plateaux choisis a la main sur un print ({profile, plates}) : passent avant
+// le numero de plateau lu dans le fichier (renumerote dans mon projet, ou
+// plusieurs plateaux MakerWorld regroupes sur un seul).
+const manualPlates = (raw) => { try { const m = JSON.parse(raw || "null"); return m && Array.isArray(m.plates) ? m : null; } catch { return null; } };
+
+function MakerWorldPlates({ profiles, prints: printsIn }) {
+  const [over, setOver] = useState({});          // corrections faites ici, avant relecture
+  const isAdmin = useIsAdmin();
+  const visiting = useFriend((s) => s.friend);
+  const prints = printsIn.map(pr => pr.id in over ? { ...pr, mw_plates: over[pr.id] } : pr);
   const avec = profiles.filter(x => x.plates?.length);
   const known = {};
-  prints.forEach(pr => { if (pr.mw_profile_id) known[pr.mw_profile_id] = (known[pr.mw_profile_id] || 0) + 1; });
+  prints.forEach(pr => {
+    const pp = manualPlates(pr.mw_plates)?.profile || pr.mw_profile_id;
+    if (pp) known[pp] = (known[pp] || 0) + 1;
+  });
   const sure = avec.find(x => known[x.profile_id] && known[x.profile_id] === Math.max(...Object.values(known)));
   const guess = sure || (avec.length === 1 ? avec[0] : avec.find(x => x.default) || avec[0]);
   const [pid, setPid] = useState(null);
@@ -831,14 +843,48 @@ function MakerWorldPlates({ profiles, prints }) {
   // Termine (reussi / partiel) seulement ; un plateau en cours est signale a part.
   const withPlates = new Set(avec.map(x => String(x.profile_id)));
   const done = {}, running = {};
-  prints.forEach(pr => {
+  // Plateaux de ce profil couverts par un print (choix manuel, sinon detection).
+  const platesOf = (pr) => {
+    const m = manualPlates(pr.mw_plates);
+    if (m) return !m.profile || String(m.profile) === String(prof.profile_id) ? m.plates : null;
     const pp = pr.mw_profile_id ? String(pr.mw_profile_id) : null;
-    if (pp && pp !== String(prof.profile_id) && withPlates.has(pp)) return;
+    if (pp && pp !== String(prof.profile_id) && withPlates.has(pp)) return null;
     const i = parseInt(pr.plate_id, 10);
-    if (!i) return;
-    if (pr.status === "SUCCESS" || pr.status === "PARTIAL") done[i] = (done[i] || 0) + 1;
-    else if (pr.status === "IN_PROGRESS") running[i] = true;
+    return i ? [i] : null;
+  };
+  prints.forEach(pr => {
+    (platesOf(pr) || []).forEach(i => {
+      if (pr.status === "SUCCESS" || pr.status === "PARTIAL") done[i] = (done[i] || 0) + 1;
+      else if (pr.status === "IN_PROGRESS") running[i] = true;
+    });
   });
+  const save = async (pr, plates, reset = false) => {
+    try {
+      const { data } = await client.put(`/prints/${pr.id}/mw-plates`, { profile: prof.profile_id, plates, reset });
+      setOver(o => ({ ...o, [pr.id]: data.mw_plates }));
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+  };
+  // Touche sur un plateau : quels prints l'ont imprime (plusieurs plateaux
+  // peuvent venir d'un meme print).
+  const pick = (e, pl) => {
+    if (!isAdmin || visiting) return;
+    openMenu(e, {
+      title: `${pl.index}. ${pl.name || "Plateau"}`, subtitle: "Imprimé par…",
+      items: [
+        ...prints.map(pr => {
+          const cur = platesOf(pr) || [];
+          const on = cur.includes(pl.index);
+          return { icon: on ? "✅" : "⬜", label: pr.translated_name || pr.file_name,
+            hint: [fmtDate(pr.print_date), STATUS_CFG[pr.status]?.label].filter(Boolean).join(" · "),
+            onClick: () => save(pr, on ? cur.filter(i => i !== pl.index) : [...cur, pl.index]) };
+        }),
+        prints.some(pr => manualPlates(pr.mw_plates)) && "-",
+        prints.some(pr => manualPlates(pr.mw_plates)) && { icon: "↺", label: "Revenir à la détection",
+          hint: "Oublie les choix faits à la main sur ces prints",
+          onClick: () => prints.filter(pr => manualPlates(pr.mw_plates)).forEach(pr => save(pr, [], true)) },
+      ],
+    });
+  };
   const nDone = prof.plates.filter(pl => done[pl.index]).length;
   return (
     <div style={{ padding:"8px 10px 10px", borderTop:"1px solid var(--border)" }}>
@@ -855,13 +901,16 @@ function MakerWorldPlates({ profiles, prints }) {
         ) : <span style={{ fontSize:11, color:"var(--muted)" }}>{prof.title}</span>}
         {deduit && !pid && <span title="L'imprimante n'a pas donné le profil de ces prints : profil déduit"
           style={{ fontSize:10, color:"var(--muted)", opacity:0.8 }}>(profil déduit)</span>}
+        {isAdmin && !visiting && <span style={{ fontSize:10, color:"var(--muted)", opacity:0.8 }}>· touche un plateau pour corriger</span>}
       </div>
       <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:2 }}>
         {prof.plates.map(pl => {
           const ok = !!done[pl.index], cours = !ok && running[pl.index];
           return (
             <div key={pl.index} title={`${pl.index}. ${pl.name || "Plateau"}${pl.weight_g ? ` · ${pl.weight_g} g` : ""}${ok ? ` · imprimé ${done[pl.index]}×` : " · pas encore imprimé"}`}
-              style={{ flexShrink:0, width:62, textAlign:"center", opacity: ok || cours ? 1 : 0.55 }}>
+              onClick={e => pick(e, pl)}
+              style={{ flexShrink:0, width:62, textAlign:"center", opacity: ok || cours ? 1 : 0.55,
+                cursor: isAdmin && !visiting ? "pointer" : "default" }}>
               <div style={{ position:"relative", width:62, height:62, borderRadius:8, overflow:"hidden",
                 border: ok ? "2px solid #22c55e" : cours ? "2px solid #f59e0b" : "1px dashed var(--border)", background:"var(--surface)" }}>
                 {pl.thumb && <MwImg src={pl.thumb} w={62}

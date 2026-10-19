@@ -1325,6 +1325,24 @@ async def get_print(print_id: int, _: str = Depends(get_current_user)):
     return out
 
 
+@router.put("/{print_id}/mw-plates")
+async def set_mw_plates(print_id: int, body: dict, _: str = Depends(get_current_user)):
+    """Plateaux MakerWorld imprimes par ce print (choisis a la main). Une liste
+    vide dit « aucun plateau de ce profil » ; reset revient a la detection."""
+    import json as _json
+    plates = sorted({int(x) for x in (body.get("plates") or []) if str(x).isdigit() and 0 < int(x) < 1000})
+    prof = str(body.get("profile") or "").strip()
+    if prof and not prof.isdigit():
+        raise HTTPException(400, "Profil invalide")
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+        if not p:
+            raise HTTPException(404)
+        p.mw_plates = None if body.get("reset") else _json.dumps({"profile": prof or None, "plates": plates})
+        await db.commit()
+        return {"id": print_id, "mw_plates": p.mw_plates}
+
+
 @router.patch("/{print_id}")
 async def update_print(print_id: int, body: dict, _: str = Depends(get_current_user)):
     allowed = {"file_name","status","status_note","number_of_items",

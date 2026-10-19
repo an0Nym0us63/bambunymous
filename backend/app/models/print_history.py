@@ -60,6 +60,10 @@ class Print(Base):
     # Profil MakerWorld imprime (profile_id du MQTT) : dit, avec plate_id,
     # quel plateau de quel profil -- pour cocher les plateaux d'un groupe.
     mw_profile_id       = Column(String(32),  nullable=True)
+    # Plateaux MakerWorld designes a la main (JSON {"profile": id, "plates": [2, 4]}) :
+    # un plateau renumerote dans mon projet, ou plusieurs plateaux regroupes en un.
+    # Passe avant plate_id.
+    mw_plates           = Column(Text, nullable=True)
     printer_model       = Column(String(32),  default="H2C")
 
     group_id            = Column(Integer, ForeignKey("groups.id", ondelete="SET NULL"), nullable=True)

@@ -697,7 +697,7 @@ async def model_detail(design_id: str, stale_ok: bool = False) -> dict:
         return base
     async with AsyncSessionLocal() as db:
         m = await db.get(MW, did)
-        rows = (await db.execute(select(Print.id, Print.status, Print.plate_id, Print.mw_profile_id)
+        rows = (await db.execute(select(Print.id, Print.status, Print.plate_id, Print.mw_profile_id, Print.mw_plates)
                                  .where(Print.design_id == did))).all()
     done = [r for r in rows if r[1] in ("SUCCESS", "PARTIAL")]
     # Filaments des profils face au stock (base locale seulement, a chaque appel).
@@ -710,7 +710,19 @@ async def model_detail(design_id: str, stale_ok: bool = False) -> dict:
     printer = await my_printer()
     return {**base, "stock": stock, "printer": printer, "profiles": rank_profiles(base.get("profiles") or [], printer), "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
             "printed": len(done), "in_progress": sum(1 for r in rows if r[1] == "IN_PROGRESS"),
-            "printed_plates": sorted({f"{r[3] or ''}:{r[2] or '1'}" for r in done})}
+            "printed_plates": sorted({k for r in done for k in plate_keys(r[2], r[3], r[4])})}
+
+
+def plate_keys(plate_id, profile_id, manual) -> list:
+    """Plateaux MakerWorld couverts par un print, en « profil:plateau » ; un
+    choix fait a la main (mw_plates) passe avant le numero lu dans le fichier."""
+    try:
+        m = json.loads(manual) if manual else None
+    except ValueError:
+        m = None
+    if isinstance(m, dict) and isinstance(m.get("plates"), list):
+        return [f"{m.get('profile') or ''}:{i}" for i in m["plates"]]
+    return [f"{profile_id or ''}:{plate_id or '1'}"]
 
 
 async def model_comments(design_id: str, offset: int = 0) -> dict:

@@ -232,14 +232,16 @@ async def _enrich(items: list) -> dict:
         cache = {m.design_id: m for m in (await db.execute(
             select(MW).where(MW.design_id.in_(ids)))).scalars().all()} if ids else {}
         rows = (await db.execute(
-            select(Print.design_id, Print.status, Print.plate_id).where(Print.design_id.in_(ids)))).all() if ids else []
+            select(Print.design_id, Print.status, Print.plate_id, Print.mw_profile_id, Print.mw_plates)
+            .where(Print.design_id.in_(ids)))).all() if ids else []
     # « Imprime » = termine (reussi ou partiel) ; un print en cours se compte
     # a part. Plateaux distincts : 3 impressions peuvent etre 3 plateaux.
     done, plates, running = {}, {}, {}
-    for did, st, plate in rows:
+    from .makerworld import plate_keys
+    for did, st, plate, prof, manual in rows:
         if st in DONE_STATUSES:
             done[did] = done.get(did, 0) + 1
-            plates.setdefault(did, set()).add(str(plate or "1"))
+            plates.setdefault(did, set()).update(k.split(":", 1)[1] for k in plate_keys(plate, prof, manual))
         elif st == "IN_PROGRESS":
             running[did] = running.get(did, 0) + 1
     out = []

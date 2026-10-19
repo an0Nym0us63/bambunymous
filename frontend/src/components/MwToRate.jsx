@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { showConfirm } from "../utils/dialog";
 import client from "../api/client";
 import { useShares } from "../store/shares";
 import MwImg from "./MwImg";
@@ -54,7 +56,7 @@ export function RateButton({ did, style, label = "⭐ Évaluer" }) {
   if (!x?.rating_id) return <a href={x?.url || rateUrl(did)} target="_blank" rel="noopener noreferrer" style={style}>{label} ↗</a>;
   return (<>
     <button onClick={() => setOpen(true)} style={{ ...style, cursor: "pointer" }}>{label}</button>
-    {open && (
+    {open && createPortal(
       <div data-no-pull="" onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4300, background: "rgba(0,0,0,0.6)",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
         <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto",
@@ -70,7 +72,7 @@ export function RateButton({ did, style, label = "⭐ Évaluer" }) {
           </div>
           <RateForm x={x} onDone={() => { setOpen(false); setGone(true); }}/>
         </div>
-      </div>
+      </div>, document.body
     )}
   </>);
 }
@@ -101,7 +103,7 @@ export function GroupToRate({ designs, name, enabled = true }) {
           <RateButton did={x.design_id} style={btn}/>
         </div>
       ))}
-      {open && (
+      {open && createPortal(
         <div data-no-pull="" onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4300, background: "rgba(0,0,0,0.6)",
           display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
           <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width: "100%", maxWidth: 520, maxHeight: "90vh",
@@ -116,7 +118,7 @@ export function GroupToRate({ designs, name, enabled = true }) {
             </div>
             <RateForm x={{ ...ready[0], photos }} targets={ready} onDone={() => setOpen(false)}/>
           </div>
-        </div>
+        </div>, document.body
       )}
     </div>
   );
@@ -160,8 +162,10 @@ function RateForm({ x, targets, onDone }) {
   });
   // Publication en arriere-plan, suivie par la puce d'etat (comme l'ajout de
   // photos) : le modele quitte la liste tout de suite, et y revient en cas d'echec.
-  const send = () => {
-    if (!window.confirm(`Publier sur MakerWorld : ${score} étoile${score > 1 ? "s" : ""}, ${picked.size} photo${picked.size > 1 ? "s" : ""} ?`)) return;
+  const send = async () => {
+    const n = (targets || [x]).length;
+    if (!(await showConfirm(`${score} étoile${score > 1 ? "s" : ""}, ${picked.size} photo${picked.size > 1 ? "s" : ""}`
+      + (n > 1 ? `, pour ${n} modèles` : ""), { title: "Publier sur MakerWorld ?", confirmLabel: "Publier" }))) return;
     // Un groupe : la meme note pour chacun de ses modeles attendus.
     for (const t of targets || [x]) {
       const body = { rating_id: t.rating_id, score, content: text, photos: [...picked] };
