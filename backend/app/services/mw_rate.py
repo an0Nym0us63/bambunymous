@@ -181,7 +181,11 @@ async def to_rate(fresh: bool = False) -> dict:
             it["url"] = f"https://makerworld.com/fr/models/{did}#profileId-{pd['profile_id']}"
         else:
             it.setdefault("url", f"https://makerworld.com/fr/models/{did}")
-    out = sorted(items.values(), key=lambda x: x["last_date"] or "", reverse=True)
+    # Mes evaluations lues : seul ce que MakerWorld attend vraiment est « a
+    # evaluer » (une impression qu'il n'attend pas est deja notee, ou ne peut
+    # pas l'etre). Illisibles : on montre tout, faute de mieux.
+    vals = [x for x in items.values() if x.get("awaited")] if rated is not None else list(items.values())
+    out = sorted(vals, key=lambda x: x["last_date"] or "", reverse=True)
     out.sort(key=lambda x: not x["photos"])                 # avec photos d'abord, puis les plus recents
     return {"items": out, "rated_known": rated is not None, "stats": stats}
 
