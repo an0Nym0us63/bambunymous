@@ -60,9 +60,10 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
         { params: p.dev_model ? { dev_model: p.dev_model } : {} });
       // Meme forme que le site : lien du fichier + nom, encodes ensemble.
       const n = encodeURIComponent(`${data.url}&name=${String(data.name || "modele.3mf").replace(/[\\/:*?"<>|&\s#]/g, "_")}`);
-      // bambustudio://open (seule forme qui ouvre le fichier chez nous ; l'ancien
+      // La forme qui charge le fichier depend du systeme (essais du 19/10/2026) :
+      // bambustudioopen:// sur Mac, bambustudio://open?file= sur Windows (ou
       // bambustudioopen:// lancait Studio sans rien charger).
-      launch(`bambustudio://open?file=${n}`);
+      launch(IS_MAC ? `bambustudioopen://${n}` : `bambustudio://open?file=${n}`);
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setStudioBusy(false);
   };
@@ -466,6 +467,10 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 }
 
 // Section, depliable si onToggle est donne (le titre garde son compte).
+// Mac (pas un iPad, qui se dit aussi « Mac » mais a un ecran tactile).
+const IS_MAC = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform || navigator.userAgent)
+  && !(navigator.maxTouchPoints > 1);
+
 // Telephone ou tablette (iPad compris, qui se dit « Mac ») : pas de Bambu Studio.
 const IS_MOBILE = typeof navigator !== "undefined" && (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
   || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
