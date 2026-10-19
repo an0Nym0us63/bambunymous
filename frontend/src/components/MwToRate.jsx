@@ -154,6 +154,28 @@ function RateForm({ x, targets, onDone }) {
   const [picked, setPicked] = useState(() => new Set((x.photos || []).slice(0, 8)));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  // Photos prises ailleurs que dans la galerie : envoyees au serveur tout de
+  // suite (gardees le temps de publier), apercu local en attendant.
+  const [extras, setExtras] = useState([]);       // [{ id, preview, sending }]
+  const fileRef = React.useRef(null);
+  const addFiles = async (list) => {
+    for (const f of [...list]) {
+      if (picked.size + extras.filter(e => e.sending).length >= 8) break;
+      const preview = URL.createObjectURL(f);
+      const key = preview;
+      setExtras(x => [...x, { key, preview, sending: true }]);
+      try {
+        const fd = new FormData();
+        fd.append("file", f);
+        const { data } = await client.post("/makerworld/rate-photo", fd, { timeout: 120000 });
+        setExtras(x => x.map(e => e.key === key ? { ...e, id: data.id, sending: false } : e));
+        setPicked(s => new Set(s).add(data.id));
+      } catch (e) {
+        setExtras(x => x.filter(e2 => e2.key !== key));
+        setErr(e.response?.data?.detail || e.message);
+      }
+    }
+  };
   const low = score < 4;
   const toggle = u => setPicked(s => {
     const n = new Set(s);
@@ -189,19 +211,32 @@ function RateForm({ x, targets, onDone }) {
         placeholder={low ? "Qu'est-ce qui n'a pas marché ? (obligatoire)" : "Ton avis (facultatif)"}
         style={{ width: "100%", boxSizing: "border-box", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)",
           color: "var(--text)", padding: 8, fontSize: 13, resize: "vertical", fontFamily: "inherit" }}/>
-      {x.photos?.length > 0 && (
-        <div>
-          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Photos jointes ({picked.size}) : touche pour retirer ou ajouter</div>
-          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {x.photos.map(u => (
-              <img key={u} src={u} alt="" onClick={() => toggle(u)} style={{ width: 58, height: 58, borderRadius: 8, objectFit: "cover",
-                cursor: "pointer", border: picked.has(u) ? "2px solid #f59e0b" : "2px solid transparent", opacity: picked.has(u) ? 1 : 0.4 }}/>
-            ))}
-          </div>
+      <div>
+        <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>
+          {picked.size ? `Photos jointes (${picked.size}) : touche pour retirer ou ajouter` : "Sans photo, c'est possible aussi"}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+          {(x.photos || []).map(u => (
+            <img key={u} src={u} alt="" onClick={() => toggle(u)} style={{ width: 58, height: 58, borderRadius: 8, objectFit: "cover",
+              cursor: "pointer", border: picked.has(u) ? "2px solid #f59e0b" : "2px solid transparent", opacity: picked.has(u) ? 1 : 0.4 }}/>
+          ))}
+          {extras.map(e => (
+            <div key={e.key} style={{ position: "relative" }}>
+              <img src={e.preview} alt="" onClick={() => e.id && toggle(e.id)} style={{ width: 58, height: 58, borderRadius: 8, objectFit: "cover",
+                cursor: "pointer", border: e.id && picked.has(e.id) ? "2px solid #f59e0b" : "2px solid transparent",
+                opacity: e.sending ? 0.5 : e.id && picked.has(e.id) ? 1 : 0.4 }}/>
+              {e.sending && <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 11, color: "white", fontWeight: 700 }}>…</span>}
+            </div>
+          ))}
+          <button onClick={() => fileRef.current?.click()} disabled={picked.size >= 8} title="Ajouter une photo (hors galerie)"
+            style={{ width: 58, height: 58, borderRadius: 8, border: "1.5px dashed var(--border)", background: "var(--surface)",
+              color: "var(--muted)", fontSize: 22, cursor: "pointer", opacity: picked.size >= 8 ? 0.4 : 1 }}>+</button>
+          <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden
+            onChange={e => { addFiles(e.target.files); e.target.value = ""; }}/>
         </div>
-      )}
+      </div>
       {err && <div style={{ fontSize: 12, color: "#ef4444" }}>{err}</div>}
-      <button onClick={send} disabled={busy || (low && text.trim().length < 10)} style={{ alignSelf: "flex-start", padding: "7px 16px",
+      <button onClick={send} disabled={busy || extras.some(e => e.sending) || (low && text.trim().length < 10)} style={{ alignSelf: "flex-start", padding: "7px 16px",
         borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: "#f59e0b", color: "white", border: "none",
         opacity: busy || (low && text.trim().length < 10) ? 0.5 : 1 }}>{busy ? "Publication…" : "Publier l'évaluation"}</button>
     </div>

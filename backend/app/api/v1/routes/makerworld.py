@@ -1,8 +1,9 @@
 """MakerWorld : etat du cache des modeles, compte (connexion, j'aime,
 favoris) et diagnostic. Lecture seule cote MakerWorld."""
+import asyncio
 import logging
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
 
 from .auth import get_current_user, require_admin
 from ....services import makerworld as mw
@@ -233,6 +234,14 @@ async def mw_plate_guess(design_id: str, ids: str = "", _: str = Depends(get_cur
     """Plateau probable de chaque print (par la silhouette de son apercu)."""
     from ....services import mw_plate_guess
     return await _call(mw_plate_guess.guess(design_id, ids.split(",")))
+
+
+@router.post("/rate-photo")
+async def mw_rate_photo(file: UploadFile = File(...), _: str = Depends(require_admin)):
+    """Photo hors galerie pour une evaluation ; rend l'identifiant a joindre."""
+    from ....services import mw_rate
+    raw = await file.read()
+    return {"id": await _call(asyncio.to_thread(mw_rate.save_extra, raw, file.content_type))}
 
 
 @router.post("/rate/{design_id}")

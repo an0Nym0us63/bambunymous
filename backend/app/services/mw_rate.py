@@ -196,10 +196,43 @@ MAX_PHOTOS = 8
 _MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 
 
+def _tmp_dir():
+    import os
+    from pathlib import Path
+    return Path(os.getenv("DATA_DIR", "/data")) / "mw_rate_tmp"
+
+
+def save_extra(raw: bytes, content_type: str) -> str:
+    """Photo choisie hors de la galerie, gardee le temps de publier l'evaluation."""
+    import time, uuid
+    from .makerworld_account import AccountError
+    ext = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}.get((content_type or "").lower())
+    if not ext:
+        raise AccountError("Photo JPEG, PNG ou WebP seulement")
+    if not raw or len(raw) > 15 * 1024 * 1024:
+        raise AccountError("Photo vide ou trop lourde (15 Mo au plus)")
+    d = _tmp_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    for old in d.iterdir():                       # menage : oubliees depuis un jour
+        try:
+            if time.time() - old.stat().st_mtime > 86400:
+                old.unlink()
+        except OSError:
+            pass
+    name = uuid.uuid4().hex + ext
+    (d / name).write_bytes(raw)
+    return f"tmp:{name}"
+
+
 def _local_photo(url: str):
-    """/api/v1/prints/{id}/file/{nom} -> fichier sur disque (dans le dossier du print)."""
+    """/api/v1/prints/{id}/file/{nom} (galerie) ou tmp:{nom} (photo ajoutee
+    pour l'evaluation) -> fichier sur disque."""
     import os, re
     from pathlib import Path
+    t = re.fullmatch(r"tmp:([0-9a-f]{32}\.(?:jpg|png|webp))", url or "")
+    if t:
+        f = _tmp_dir() / t.group(1)
+        return f if f.is_file() else None
     m = re.fullmatch(r"/api/v1/prints/(\d+)/file/([^/\\]+)", url or "")
     if not m:
         return None
@@ -304,4 +337,7 @@ async def submit(design_id: str, rating_id: str, score: int, content: str, photo
                              "ratingExtension": {"lowScoreDetails": []}}, tok)
     logger.info(f"[MW] evaluation publiee : modele {did}, {score} etoiles, {len(images)} photo(s)")
     _CACHE.pop("ratings", None)
+    for f in files:                               # photos ajoutees : plus utiles une fois publiees
+        if f.parent == _tmp_dir():
+            f.unlink(missing_ok=True)
     return {"ok": True, "photos": len(images)}
