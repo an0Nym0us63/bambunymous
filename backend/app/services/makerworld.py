@@ -266,6 +266,61 @@ async def _for_you(offset: int, seed: int, tok, fresh: bool) -> dict:
             "next_offset": offset + 24}
 
 
+# ── Concours (liste publique) ────────────────────────────────────────────────
+# Etats relevés sur les dates : 1 a venir, 2 en cours, 4 deliberation, 3 termine.
+CONTEST_STATUS = {1: "upcoming", 2: "open", 3: "ended", 4: "judging"}
+_CONTESTS = {}
+
+
+async def contests(offset: int = 0, limit: int = 12, fresh: bool = False) -> dict:
+    """Concours MakerWorld, les plus recents d'abord : dates, recompenses, et
+    leurs modeles (en vue pour un concours en cours, primes pour un termine),
+    avec « deja imprime »."""
+    import asyncio, time
+    from .makerworld_account import _enrich
+    offset, limit = max(0, int(offset or 0)), max(1, min(30, int(limit or 12)))
+    ck = (offset, limit)
+    hit = None if fresh else _CONTESTS.get(ck)
+    if hit and time.time() - hit[0] < 900:
+        return hit[1]
+    code, d = await asyncio.to_thread(_get_json, f"/design-service/contest/list?offset={offset}&limit={limit}")
+    if not isinstance(d, dict) or not isinstance(d.get("hits"), list):
+        return {"contests": [], "total": 0, "error": f"MakerWorld ne répond pas (HTTP {code})"}
+    out = []
+    s = lambda v: v if isinstance(v, str) else None
+    for c in d["hits"]:
+        if not isinstance(c, dict) or not c.get("id"):
+            continue
+        st = CONTEST_STATUS.get(c.get("status"), "unknown")
+        src = c.get("awardedDesigns") if st == "ended" and c.get("awardedDesigns") else c.get("hotDesigns")
+        designs = [x for x in (_hit(h) for h in (src if isinstance(src, list) else [])) if x]
+        for x, h in zip(designs, [h for h in src or [] if isinstance(h, dict) and str(h.get("id") or "").isdigit()]):
+            r = (h.get("contest") or {}).get("rank") if isinstance(h.get("contest"), dict) else None
+            x["rank"] = r if isinstance(r, int) and r > 0 else None
+        out.append({
+            "id": c["id"], "name": s(c.get("contestName")) or s(c.get("theme")) or f"Concours {c['id']}",
+            "desc": s(c.get("contestDesc")), "cover": s(c.get("cover")), "status": st,
+            "start": s(c.get("startTime")), "end": s(c.get("endTime")),
+            "review_end": s(c.get("reviewEndTime")), "results": s(c.get("publicityTime")),
+            "contestants": c.get("contestantsCount"), "entries": c.get("competeDesignCount"),
+            "views": c.get("viewCount"),
+            "rewards": [{"rank": r.get("rank"), "count": r.get("count"), "reward": s(r.get("reward")), "pic": s(r.get("awardPic"))}
+                        for r in (c.get("incentiveInfo") or []) if isinstance(r, dict)],
+            "url": f"https://makerworld.com/fr/contests/{c['id']}",
+            "designs": designs, "designs_kind": "awarded" if src is c.get("awardedDesigns") and st == "ended" else "hot",
+        })
+    # « deja imprime » sur tous les modeles d'un coup
+    allx = [x for c in out for x in c["designs"]]
+    if allx:
+        enr = {x["design_id"]: x for x in (await _enrich(allx))["items"]}
+        for c in out:
+            c["designs"] = [{**x, **enr.get(x["design_id"], {})} for x in c["designs"]]
+    res = {"contests": out, "total": d.get("total") if isinstance(d.get("total"), int) else len(out),
+           "next_offset": offset + limit}
+    _CONTESTS[ck] = (time.time(), res)
+    return res
+
+
 async def discover(key: str, offset: int = 0, fresh: bool = False, seed: int = 0) -> dict:
     """Un fil de la page d'accueil, 24 modeles par page, avec « deja imprime »."""
     import asyncio, re, time

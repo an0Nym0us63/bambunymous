@@ -215,6 +215,32 @@ async def mw_mine(ids: str = "", _: str = Depends(get_current_user)):
     return await _call(acc.mine(ids.split(",")))
 
 
+@router.get("/contests")
+async def mw_contests(offset: int = 0, fresh: bool = False, _: str = Depends(get_current_user)):
+    """Concours MakerWorld (publics)."""
+    return await _call(mw.contests(offset, 12, fresh))
+
+
+@router.get("/boosts")
+async def mw_boosts(_: str = Depends(get_current_user)):
+    """Mes boosts disponibles."""
+    from ....services import makerworld_account as A
+    return await _call(A.boosts())
+
+
+@router.get("/model/{design_id}/boost")
+async def mw_boost_state(design_id: str, _: str = Depends(get_current_user)):
+    from ....services import makerworld_account as A
+    return await _call(A.boost_state(design_id))
+
+
+@router.post("/model/{design_id}/boost")
+async def mw_boost(design_id: str, _: str = Depends(require_admin)):
+    """Booster un modele (depense un de mes boosts)."""
+    from ....services import makerworld_account as A
+    return await _call(A.boost(design_id))
+
+
 @router.get("/discover/navs")
 async def mw_discover_navs(fresh: bool = False, _: str = Depends(get_current_user)):
     """Fils de la page d'accueil MakerWorld (Pour vous, Tendance, categories…)."""

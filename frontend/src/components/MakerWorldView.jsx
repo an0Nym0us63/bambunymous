@@ -7,6 +7,7 @@ import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
 import MwCreator from "./MwCreator";
+import MwContests from "./MwContests";
 import { mwPatch, onMwChange } from "../utils/mwSync";
 import { useFriend } from "../store/friend";
 import { useMine, MineBadge } from "./Friends";
@@ -112,6 +113,7 @@ export default function MakerWorldView({ onSearch }) {
   useEffect(() => {
     if (view === "discover") {
       if (!dk) { setData(null); return; }
+      if (dk === "__contests") { setData({ items: [] }); setBusy(false); return; }   // vue a part (MwContests)
       let alive = true;
       const key = `disc:${dk}`;
       const fresh = freshRef.current;
@@ -339,7 +341,7 @@ export default function MakerWorldView({ onSearch }) {
                     style={{ ...iconBtn, padding:"4px 10px", fontWeight:800 }}>＋</button>
                 </AdminOnly>
               )}
-              {showModels && (
+              {showModels && !(view === "discover" && dk === "__contests") && (
                 <select value={pf} onChange={e => setPf(e.target.value)}
                   style={{ marginLeft:"auto", fontSize:12, padding:"4px 8px", borderRadius:8, background:"var(--surface2)",
                     border:"1px solid var(--border)", color:"var(--text2)" }}>
@@ -418,6 +420,8 @@ export default function MakerWorldView({ onSearch }) {
                     {n.key === "Foryou" ? "✨ " : n.key === "Trending" ? "🔥 " : ""}{n.name}
                   </button>
                 ))}
+                <button onClick={() => { setDk("__contests"); setCatsOpen(false); setSq(""); setQ(""); }}
+                  style={pill(!sq && dk === "__contests")}>🏆 Concours</button>
                 {cats.length > 0 && (
                   <button onClick={() => setCatsOpen(v => !v)} style={pill(!!curCat)}>
                     📂 {curCat ? curCat.name : "Catégories"} {catsOpen ? "▴" : "▾"}
@@ -450,6 +454,8 @@ export default function MakerWorldView({ onSearch }) {
                 tes collections et tes j'aime ici.</p>
             ) : tab === "creator" ? (
               <MwCreator reload={reload} onOpen={setModel} onLoaded={() => setBusy(false)}/>
+            ) : view === "discover" && dk === "__contests" ? (
+              <MwContests reload={reload} onOpen={setModel}/>
             ) : data === null ? <Skeleton/>
             : data.error ? <p style={{ ...msg, color:"#f59e0b" }}>MakerWorld ne répond pas comme prévu : {data.error}</p>
             : !showModels ? (

@@ -39,6 +39,8 @@ DEBUG_PATHS = {
     "createur_modeles": "/design-user-service/my/creatortools/design/list?offset=0&limit=3",
     "points_historique": "/point-service/point-bill/my?offset=0&limit=5",
     "points_progression": "/point-service/point-bill/progress",
+    # Boosts : droits disponibles (le reste se lit par modele).
+    "boosts_dispos": "/point-service/boost/boostingright?filter=available&offset=0&limit=5",
 }
 
 
@@ -600,6 +602,65 @@ async def set_like(design_id: str, liked: bool) -> dict:
     after = await like_state(did)
     logger.info(f"[MW] modele {did} : j'aime {'pose' if liked else 'retire'} ({after['liked']})")
     return after
+
+
+# ── Boosts ───────────────────────────────────────────────────────────────────
+# Meme enchainement que le site : l'etat de boost du modele donne le droit a
+# depenser (availableBoostingRight), puis POST avec ce droit et un horodatage.
+def _count(d):
+    if not isinstance(d, dict):
+        return None
+    for k in ("total", "count", "totalCount"):
+        if isinstance(d.get(k), int):
+            return d[k]
+    for k in ("hits", "list", "items", "boostingRights", "rights"):
+        if isinstance(d.get(k), list):
+            return len(d[k])
+    return None
+
+
+async def boosts() -> dict:
+    """Mes boosts disponibles."""
+    import asyncio
+    from .makerworld import _get_json
+    tok = await _tok()
+    code, d = await asyncio.to_thread(_get_json, "/point-service/boost/boostingright?filter=available&offset=0&limit=50", tok)
+    n = _count(d)
+    if n is None:
+        return {"available": None, "error": f"Boosts illisibles (HTTP {code})"}
+    return {"available": n}
+
+
+async def boost_state(design_id: str) -> dict:
+    """Etat de boost d'un modele : puis-je le booster (droit disponible) ?"""
+    import asyncio
+    from .makerworld import _get_json
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        raise AccountError("Modèle inconnu")
+    tok = await _tok()
+    code, d = await asyncio.to_thread(_get_json, f"/point-service/boost/boostdesign?designId={did}", tok)
+    if not isinstance(d, dict):
+        return {"known": False, "can": False, "error": f"État du boost illisible (HTTP {code})"}
+    right = d.get("availableBoostingRight") if isinstance(d.get("availableBoostingRight"), dict) else None
+    return {"known": True, "can": bool(right and right.get("id")), "right_id": (right or {}).get("id"),
+            "reason": d.get("reason") or d.get("message") if not right else None}
+
+
+async def boost(design_id: str) -> dict:
+    """Booste un modele avec un de mes droits (action volontaire, confirmee dans l'appli)."""
+    import asyncio, time
+    did = str(design_id or "").strip()
+    st = await boost_state(did)
+    if not st.get("can"):
+        raise AccountError(st.get("reason") or "Aucun boost disponible pour ce modèle")
+    tok = await _tok()
+    await asyncio.to_thread(_send, "POST", "/point-service/boost/boostdesign",
+                            {"designId": int(did), "boostingRightId": st["right_id"],
+                             "random": str(int(time.time() * 1000))}, tok)
+    logger.info(f"[MW] modele {did} booste")
+    after = await boosts()
+    return {"ok": True, "available": after.get("available")}
 
 
 async def delete_collection(cid: str) -> dict:

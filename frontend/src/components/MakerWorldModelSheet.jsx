@@ -76,6 +76,30 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [like, setLike] = useState(null);          // { liked } avec mon compte ; null = inconnu / pas connecte
   const [likeBusy, setLikeBusy] = useState(false);
 
+  // Boost : le droit a depenser pour CE modele et mes boosts disponibles
+  // (compte connecte seulement ; sans droit, pas de bouton).
+  const [boost, setBoost] = useState(null);       // { can, available }
+  const [boostBusy, setBoostBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setBoost(null);
+    Promise.all([client.get(`/makerworld/model/${id}/boost`), client.get("/makerworld/boosts")])
+      .then(([a, b]) => alive && a.data.known && setBoost({ can: a.data.can, available: b.data.available }))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [id]);
+  const doBoost = async () => {
+    const n = boost?.available;
+    if (!await showConfirm(`Booster « ${m?.title_fr || m?.title || "ce modèle"} » ? Ça utilise un de tes boosts`
+      + (n != null ? ` (il t'en reste ${n}).` : "."), { confirmLabel: "⚡ Booster" })) return;
+    setBoostBusy(true);
+    try {
+      const { data } = await client.post(`/makerworld/model/${id}/boost`);
+      setBoost({ can: false, available: data.available, done: true });
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    setBoostBusy(false);
+  };
+
   // Etat du j'aime (compte connecte seulement ; sinon pas de bouton).
   useEffect(() => {
     let alive = true;
@@ -245,6 +269,13 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                   style={{ ...linkBtn, cursor:"pointer", ...(like.liked ? { color:"#ef4444", background:"rgba(239,68,68,0.1)",
                     borderColor:"rgba(239,68,68,0.35)" } : null) }}>
                   {like.liked ? "❤ Aimé" : "♡ J'aime"}</button></AdminOnly>
+              )}
+              {boost && (boost.can || boost.done) && (
+                <AdminOnly home><button onClick={doBoost} disabled={boostBusy || boost.done}
+                  title={boost.available != null ? `${boost.available} boost(s) disponible(s)` : undefined}
+                  style={{ ...linkBtn, cursor: boost.done ? "default" : "pointer", color:"#f59e0b", borderColor:"rgba(245,158,11,0.4)",
+                    background:"rgba(245,158,11,0.08)" }}>
+                  {boost.done ? "⚡ Boosté" : `⚡ Booster${boost.available != null ? ` · ${boost.available} dispo` : ""}`}</button></AdminOnly>
               )}
               {!friend && (
                 <AdminOnly><button onClick={() => { startAssign(tile()); onClose(); }}
