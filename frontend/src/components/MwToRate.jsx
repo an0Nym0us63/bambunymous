@@ -8,10 +8,18 @@ import Lightbox from "./Lightbox";
 // Une seule lecture partagee (gardee 5 min) : la liste, les vignettes de
 // l'historique et les fiches s'en servent toutes.
 let _last = null, _p = null, _t = 0;
+const _subs = new Set();                    // tous les ecrans qui affichent la liste
+const _notify = () => _subs.forEach(f => f(_last));
+// Evaluation publiee : le modele quitte la liste partout, tout de suite.
+export function markRated(did) {
+  if (_last) _last = { ..._last, items: (_last.items || []).filter(x => String(x.design_id) !== String(did)) };
+  _p = Promise.resolve(_last);
+  _notify();
+}
 function readToRate() {
   if (!_p || Date.now() - _t > 300000) {
     _t = Date.now();
-    _p = client.get("/makerworld/to-rate").then(({ data }) => (_last = data)).catch(() => _last);
+    _p = client.get("/makerworld/to-rate").then(({ data }) => { _last = data; _notify(); return data; }).catch(() => _last);
   }
   return _p;
 }
@@ -20,8 +28,10 @@ export function useToRate(enabled) {
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
+    const f = d => alive && setData(d);
+    _subs.add(f);
     readToRate().then(d => alive && d && setData(d));
-    return () => { alive = false; };
+    return () => { alive = false; _subs.delete(f); };
   }, [enabled]);
   return enabled ? data : null;           // chez un copain : rien de ma liste
 }
@@ -30,7 +40,7 @@ export function useToRateSet(enabled = true) {
   const d = useToRate(enabled);
   return new Set((d?.items || []).map(x => String(x.design_id)));
 }
-export function forgetToRate() { _p = null; _t = 0; }
+export function forgetToRate() { _p = null; _t = 0; }  // relire au prochain affichage
 
 // Bouton « Évaluer » pour un modele : formulaire dans l'appli quand MakerWorld
 // attend l'evaluation (on connait sa fiche), sinon lien vers MakerWorld.
@@ -104,7 +114,7 @@ function RateForm({ x, onDone }) {
     setBusy(true); setErr(null);
     try {
       await client.post(`/makerworld/rate/${x.design_id}`, { rating_id: x.rating_id, score, content: text, photos: [...picked] });
-      forgetToRate();
+      markRated(x.design_id);
       onDone();
     } catch (e) {
       setErr(e.response?.data?.detail || e.message);
