@@ -13,6 +13,7 @@ par print, espacees de 1,5 s pour ne pas marteler le site.
 """
 import asyncio
 import logging
+import json
 import threading
 import time
 from datetime import datetime, timedelta
@@ -431,7 +432,102 @@ def rank_profiles(profiles: list, printer: str) -> list:
     return out
 
 
-async def model_detail(design_id: str) -> dict:
+# Fiche MakerWorld gardee aussi sur disque (data/mw_models/<id>.json) : un
+# redemarrage ou une longue liste (la File) ne relit pas tout. 30 min pour la
+# fiche ouverte ; jusqu'a 7 jours pour la File, relue en arriere-plan apres 6 h.
+# Si MakerWorld ne repond plus, la derniere fiche connue sert quand meme.
+DISK_TTL, STALE_MAX, STALE_REFRESH = 1800, 7 * 86400, 6 * 3600
+_REFRESHING = set()
+
+
+def _disk_path(did):
+    from pathlib import Path
+    from ..core.config import settings
+    d = Path(settings.DATA_DIR) / "mw_models"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / f"{did}.json"
+
+
+def _disk_get(did):
+    try:
+        x = json.loads(_disk_path(did).read_text(encoding="utf-8"))
+        return float(x["t"]), x["base"]
+    except Exception:
+        return None
+
+
+def _disk_put(did, base):
+    try:
+        _disk_path(did).write_text(json.dumps({"t": time.time(), "base": base}, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        logger.exception("[MW] fiche non gardee sur disque")
+
+
+async def _fetch_base(did: str) -> dict:
+    import asyncio
+    code, d = await asyncio.to_thread(_get_json, f"/design-service/design/{did}")
+    if not isinstance(d, dict) or not d.get("id"):
+        return {"error": "Modèle introuvable" if code == 404 else f"MakerWorld ne répond pas (HTTP {code})",
+                "url": model_url(did)}
+    info = _parse_design(code, d)
+    ext = d.get("designExtension") if isinstance(d.get("designExtension"), dict) else {}
+    pics = []
+    for key in ("design_pictures", "real_pictures"):
+        for x in (ext.get(key) if isinstance(ext.get(key), list) else []):
+            if isinstance(x, dict) and isinstance(x.get("url"), str) and x["url"] not in pics:
+                pics.append(x["url"])
+    if info.get("cover_url") and info["cover_url"] not in pics:
+        pics.insert(0, info["cover_url"])
+    s = lambda v: v if isinstance(v, str) and v else None
+    base = {**{k: v for k, v in info.items() if k not in ("status", "profiles")},
+            "design_id": did, "url": model_url(did), "pictures": pics[:30],
+            "description": _text(d.get("summaryTranslated") or d.get("summary")),
+            "description_original": (_text(d.get("summary")) if d.get("summaryTranslated") else None),
+            "title_mw_fr": s(d.get("titleTranslated")),
+            "license": s(d.get("license")), "created": s(d.get("createTime")),
+            "comment_count": d.get("commentCount") if isinstance(d.get("commentCount"), int) else None,
+            "profiles": _plate_detail(d)}
+    base["categories"] = [c for c in (base.get("categories") or "").split(",") if c]
+    base["tags"] = [t for t in (base.get("tags") or "").split(",") if t]
+    return base
+
+
+async def _base(did: str, stale_ok: bool = False) -> dict:
+    import asyncio
+    hit = _MODEL_CACHE.get(did)
+    if hit and time.time() - hit[0] < DISK_TTL:
+        return hit[1]
+    disk = await asyncio.to_thread(_disk_get, did)
+    if disk:
+        age = time.time() - disk[0]
+        if age < DISK_TTL or (stale_ok and age < STALE_MAX):
+            if stale_ok and age > STALE_REFRESH and did not in _REFRESHING:
+                _REFRESHING.add(did)
+                asyncio.create_task(_refresh(did))
+            _MODEL_CACHE[did] = disk
+            return disk[1]
+    base = await _fetch_base(did)
+    if "error" in base:
+        return disk[1] if disk else base          # MakerWorld muet : derniere fiche connue
+    _MODEL_CACHE[did] = (time.time(), base)
+    await asyncio.to_thread(_disk_put, did, base)
+    return base
+
+
+async def _refresh(did: str):
+    import asyncio
+    try:
+        base = await _fetch_base(did)
+        if "error" not in base:
+            _MODEL_CACHE[did] = (time.time(), base)
+            await asyncio.to_thread(_disk_put, did, base)
+    except Exception:
+        logger.exception(f"[MW] relecture de la fiche {did}")
+    finally:
+        _REFRESHING.discard(did)
+
+
+async def model_detail(design_id: str, stale_ok: bool = False) -> dict:
     """Fiche complete d'un modele pour l'appli : galerie, descriptif, profils
     et plateaux, compteurs, et ce que l'historique en dit."""
     import asyncio, time
@@ -441,35 +537,9 @@ async def model_detail(design_id: str) -> dict:
     did = str(design_id or "").strip()
     if not did.isdigit():
         return {"error": "Modèle inconnu"}
-    hit = _MODEL_CACHE.get(did)
-    if hit and time.time() - hit[0] < 1800:
-        base = hit[1]
-    else:
-        code, d = await asyncio.to_thread(_get_json, f"/design-service/design/{did}")
-        if not isinstance(d, dict) or not d.get("id"):
-            return {"error": "Modèle introuvable" if code == 404 else f"MakerWorld ne répond pas (HTTP {code})",
-                    "url": model_url(did)}
-        info = _parse_design(code, d)
-        ext = d.get("designExtension") if isinstance(d.get("designExtension"), dict) else {}
-        pics = []
-        for key in ("design_pictures", "real_pictures"):
-            for x in (ext.get(key) if isinstance(ext.get(key), list) else []):
-                if isinstance(x, dict) and isinstance(x.get("url"), str) and x["url"] not in pics:
-                    pics.append(x["url"])
-        if info.get("cover_url") and info["cover_url"] not in pics:
-            pics.insert(0, info["cover_url"])
-        s = lambda v: v if isinstance(v, str) and v else None
-        base = {**{k: v for k, v in info.items() if k not in ("status", "profiles")},
-                "design_id": did, "url": model_url(did), "pictures": pics[:30],
-                "description": _text(d.get("summaryTranslated") or d.get("summary")),
-                "description_original": (_text(d.get("summary")) if d.get("summaryTranslated") else None),
-                "title_mw_fr": s(d.get("titleTranslated")),
-                "license": s(d.get("license")), "created": s(d.get("createTime")),
-                "comment_count": d.get("commentCount") if isinstance(d.get("commentCount"), int) else None,
-                "profiles": _plate_detail(d)}
-        base["categories"] = [c for c in (base.get("categories") or "").split(",") if c]
-        base["tags"] = [t for t in (base.get("tags") or "").split(",") if t]
-        _MODEL_CACHE[did] = (time.time(), base)
+    base = await _base(did, stale_ok)
+    if "error" in base:
+        return base
     async with AsyncSessionLocal() as db:
         m = await db.get(MW, did)
         rows = (await db.execute(select(Print.id, Print.status, Print.plate_id, Print.mw_profile_id)

@@ -212,7 +212,7 @@ async def queue(fresh: bool = False) -> dict:
     async def detail(did):
         async with sem:
             try:
-                return did, await model_detail(did)
+                return did, await model_detail(did, stale_ok=True)   # fiche sur disque, relue en fond
             except Exception as e:
                 return did, {"error": f"{type(e).__name__}"}
     details = dict(await asyncio.gather(*(detail(d) for d in designs)))
