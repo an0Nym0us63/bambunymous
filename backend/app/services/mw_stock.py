@@ -136,10 +136,12 @@ def _same_finish(sub: str, f) -> bool:
     return bool(s) and s in {_norm(f.fila_type), _norm(f.name), _norm(f.name_en)}
 
 
-def best_matches(mw_type, color, grams, stock, n=6, exact=None):
+def best_matches(mw_type, color, grams, stock, n=6, exact=None, other=False):
     """exact : l'emplacement lu dans le 3MF du profil (reference, finition,
     marque). Meme reference Bambu (GFA01…) = -10 ; meme finition = -6 (plus que
-    le seul bonus Bambu : un Silk demande passe devant un Basic Bambu)."""
+    le seul bonus Bambu : un Silk demande passe devant un Basic Bambu).
+    other : au contraire, les filaments d'une AUTRE matiere, par couleur seule
+    (pour simuler une substitution : PLA Silk a la place d'un ABS…)."""
     ref = (exact or {}).get("id") or ""
     sub = (exact or {}).get("subtype") or ""
     vendor = ((exact or {}).get("vendor") or "").lower()
@@ -148,7 +150,10 @@ def best_matches(mw_type, color, grams, stock, n=6, exact=None):
     for e in stock:
         f = e["f"]
         fit = material_fit(mw_type, f)
-        if not fit:
+        if other:
+            if fit:
+                continue
+        elif not fit:
             continue
         colors = [f.color] + ([c for c in (f.colors_array or "").split(",") if c.strip()]
                               if (f.multicolor_type or "monochrome") != "monochrome" else [])
@@ -169,7 +174,7 @@ def best_matches(mw_type, color, grams, stock, n=6, exact=None):
         out.append({"filament_id": f.id, "name": f.translated_name or f.name, "brand": f.manufacturer,
                     "material": f.fila_type or f.material, "color": f.color, "colors_array": f.colors_array,
                     "multicolor_type": f.multicolor_type, "delta_e": round(de, 1), "level": level(de),
-                    "same_material": fit == 2, "multicolor": multi, "bambu": is_bambu(f),
+                    "same_material": fit == 2, "other_material": fit == 0, "multicolor": multi, "bambu": is_bambu(f),
                     "same_ref": same_ref, "same_finish": same_fin if sub else None,
                     "remaining_g": round(e["remaining_g"]), "spools": e["spools"], "where": e["where"][:3],
                     # Ordre d'usage probable : la bobine chargee dans l'AMS, puis la
@@ -202,6 +207,7 @@ async def match_profiles(profiles: list) -> dict:
             ex = slot_for(slots, fl.get("type"), fl.get("color")) if slots else None
             items.append({"type": fl.get("type"), "color": fl.get("color"), "g": g,
                           "exact": {k: ex[k] for k in ("id", "setting", "subtype", "vendor")} if ex else None,
-                          "matches": best_matches(fl.get("type"), fl.get("color"), g, stock, exact=ex)})
+                          "matches": best_matches(fl.get("type"), fl.get("color"), g, stock, exact=ex),
+                          "others": best_matches(fl.get("type"), fl.get("color"), g, stock, n=5, other=True)})
         res[p.get("instance_id")] = items
     return res

@@ -29,7 +29,8 @@ const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const PICKS = new Map();      // `${scope}|${i}` -> filament_id
 export const chosenOf = (x, scope, i) => {
   const id = PICKS.get(`${scope}|${i}`);
-  return x.matches.find(m => m.filament_id === id) || x.matches[0];
+  // Choix possible aussi parmi les « autre matiere » (simulation d'une substitution).
+  return x.matches.find(m => m.filament_id === id) || (x.others || []).find(m => m.filament_id === id) || x.matches[0];
 };
 
 // Besoins par filament du profil : tout le profil (selected absent) ou la
@@ -97,6 +98,8 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
       {items.map((x, i) => {
         const best = choose(x, i);
         const manual = best && best !== x.matches[0];
+        const others = x.others || [];
+        const nAlt = Math.max(0, x.matches.length - 1) + others.length;
         const isOpen = open === i;
         const g = need[i];
         const unused = selected && g <= 0;
@@ -107,9 +110,9 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
         return (
           <div key={i} style={{ borderRadius:8, background:"var(--surface)", border:"1px solid var(--border)",
             opacity: unused ? 0.45 : 1, transition:"opacity .15s" }}>
-            <button onClick={() => setOpen(isOpen ? null : i)} disabled={!best}
+            <button onClick={() => setOpen(isOpen ? null : i)} disabled={!best && !others.length}
               style={{ width:"100%", display:"flex", alignItems:"flex-start", gap:8, padding:"6px 8px", background:"none",
-                border:"none", cursor: best ? "pointer" : "default", color:"var(--text)", textAlign:"left" }}>
+                border:"none", cursor: best || others.length ? "pointer" : "default", color:"var(--text)", textAlign:"left" }}>
               <Swatch color={x.color} title={x.color}/>
               <span title={x.exact?.setting || undefined}
                 style={{ fontSize:11.5, fontWeight:700, flexShrink:0, lineHeight:"16px", maxWidth:"34%" }}>
@@ -124,7 +127,9 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
                 <span style={{ flex:1, minWidth:0 }}>
                   <span style={{ display:"block", fontSize:11.5, fontWeight:600, lineHeight:"16px", overflow:"hidden",
                     textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{best.name}</span>
-                  {x.exact && <RefBadge mt={best}/>}
+                  {x.exact && !best.other_material && <RefBadge mt={best}/>}
+                  {best.other_material && <span style={{ display:"block", fontSize:9.5, fontWeight:800, color:"#f59e0b", lineHeight:1.3 }}>
+                    ⚠ {best.material} au lieu de {x.exact?.subtype || x.type}</span>}
                   <span style={{ display:"block", fontSize:10.5, color:"var(--muted)", lineHeight:1.35 }}>
                     {detailOf(best)}{detailOf(best) ? " · " : ""}
                     {unused || !g ? `${best.remaining_g} g en stock`
@@ -142,11 +147,13 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
                   <span style={{ display:"block", fontSize:10, fontWeight:800, color: levelColor(best), whiteSpace:"nowrap",
                     lineHeight:"16px" }}>{levelText(best)}</span>
                   {manual ? <span style={{ display:"block", fontSize:9.5, color:"#3b82f6", fontWeight:700 }}>choisi</span>
-                    : x.matches.length > 1 ? <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>
-                      {isOpen ? "masquer ▴" : `${x.matches.length - 1} autre${x.matches.length > 2 ? "s" : ""} ▾`}</span> : null}
+                    : nAlt > 0 ? <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>
+                      {isOpen ? "masquer ▴" : `${nAlt} autre${nAlt > 1 ? "s" : ""} ▾`}</span> : null}
                 </span>
               </>) : (
-                <span style={{ flex:1, fontSize:11.5, color:"#ef4444", lineHeight:"16px" }}>Aucun {x.type || "filament"} en stock</span>
+                <span style={{ flex:1, fontSize:11.5, color:"#ef4444", lineHeight:"16px" }}>Aucun {x.type || "filament"} en stock
+                  {others.length > 0 && <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
+                    {isOpen ? "masquer ▴" : "choisir une autre matière pour simuler ▾"}</span>}</span>
               )}
             </button>
             {!unused && shared ? (
@@ -154,9 +161,18 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
                 {short ? "⚠ " : ""}Partagé avec une autre couleur : {Math.round(sum)} g au total sur ce filament</div>
             ) : null}
             {isOpen && x.matches.map(mt => (
-              <MatchRow key={mt.filament_id} mt={mt} g={g} on={mt.filament_id === best.filament_id}
+              <MatchRow key={mt.filament_id} mt={mt} g={g} on={mt.filament_id === best?.filament_id}
                 onPick={() => pick(i, mt.filament_id)} onGo={go}/>
             ))}
+            {/* Autre matiere : pour simuler (un PLA Silk a la place d'un ABS…) ; plus proches en couleur. */}
+            {isOpen && others.length > 0 && (<>
+              <div style={{ fontSize:10, fontWeight:800, color:"#f59e0b", textTransform:"uppercase", letterSpacing:0.4,
+                padding:"7px 12px 3px", borderTop:"1px solid var(--border)" }}>Autre matière · pour simuler</div>
+              {others.map(mt => (
+                <MatchRow key={"o" + mt.filament_id} mt={mt} g={g} on={mt.filament_id === best?.filament_id}
+                  onPick={() => pick(i, mt.filament_id)} onGo={go}/>
+              ))}
+            </>)}
           </div>
         );
       })}

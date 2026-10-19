@@ -292,13 +292,13 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                           {p.rating != null && <span style={pBadge}>⭐ {p.rating.toFixed(1).replace(".", ",")}
                             {p.rating_count ? ` (${fmtK(p.rating_count)} avis)` : ""}</span>}
                         </div>
-                        {allProfiles && !isOpen && stockSummary(m.stock?.[p.instance_id]) && (
+                        {!isOpen && stockSummary(m.stock?.[p.instance_id]) && (
                           <div style={{ fontSize:11, color:"var(--text2)", marginTop:2 }}>{stockSummary(m.stock[p.instance_id])}</div>
                         )}
                       </button>
                       {/* Imprimer CE profil : Handy (telephone, page open-app de MakerWorld)
                           ou Bambu Studio (ordinateur, lien du 3MF de ce profil). */}
-                      {(!allProfiles || isOpen) && (
+                      {isOpen && (
                         <div style={{ display:"flex", gap:6, padding:"0 10px 8px", flexWrap:"wrap" }}>
                           {IS_MOBILE ? (
                             <a href={handyUrl(id, p)} target="_blank" rel="noopener noreferrer"
@@ -311,7 +311,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                           )}
                         </div>
                       )}
-                      {(!allProfiles || isOpen) && m.stock?.[p.instance_id]?.length > 0
+                      {isOpen && m.stock?.[p.instance_id]?.length > 0
                         && !m.stock[p.instance_id].some(x => x.exact) && (
                         <AdminOnly>
                           <button onClick={() => readExact(p)} disabled={exactBusy === p.instance_id}
@@ -320,7 +320,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                               : "🔎 Filaments exacts (finition, référence) — lire le 3MF"}</button>
                         </AdminOnly>
                       )}
-                      {(!allProfiles || isOpen) && <MwStockMatch items={m.stock?.[p.instance_id]} plates={p.plates} scope={`${id}|${p.instance_id}`}
+                      {isOpen && <MwStockMatch items={m.stock?.[p.instance_id]} plates={p.plates} scope={`${id}|${p.instance_id}`}
                         selected={plateSel[p.instance_id]} onNavigate={onClose}/>}
                       {isOpen && p.plates.length > 1 && (() => {
                         const sel = plateSel[p.instance_id];
