@@ -196,10 +196,9 @@ export default function Layout() {
           {/* Suivi d'un partage Telegram en arriere-plan (ShareProgress y
               injecte sa puce par portail) : visible sur toutes les pages. */}
           <div id="header-status" style={{ display:"flex", alignItems:"center", flexShrink:0 }}/>
-          {/* Accueil uniquement : ailleurs le header porte deja un titre et les
-              actions de la page, et la pastille encombrerait une barre etroite.
-              Placee apres le point d'injection, elle reste la plus a droite. */}
-          {pathname === "/" && <UserMenu placement="bottom"/>}
+          {/* Profil sur toutes les pages, toujours le plus a droite (apres le
+              point d'injection des actions de la page). */}
+          <UserMenu placement="bottom"/>
         </header>
 
         <main className="page-content" style={S.page}><Outlet /></main>
