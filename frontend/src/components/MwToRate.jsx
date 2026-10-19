@@ -148,9 +148,13 @@ export function ToRateTile({ data, onClick, card }) {
   const covers = (data?.items || []).flatMap(x => x.photos?.length ? [x.photos[0]] : x.cover_url ? [x.cover_url] : []).slice(0, 4);
   return (
     <button onClick={onClick} style={{ ...card, cursor: "pointer", padding: 0, textAlign: "left", color: "var(--text)" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", aspectRatio: "1", background: "var(--surface)", position: "relative" }}>
-        {covers.map((u, i) => u.startsWith("/api/") ? <img key={i} src={u} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
-          : <MwImg key={i} src={u} w={160} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>)}
+      {/* Carre fixe, 2x2 cases fixes : une photo en portrait ne doit pas etirer la tuile. */}
+      <div style={{ position: "relative", aspectRatio: "1", background: "var(--surface)", overflow: "hidden" }}>
+        <div style={{ position: "absolute", inset: 0, display: "grid", gridTemplateColumns: "1fr 1fr", gridTemplateRows: "1fr 1fr" }}>
+          {covers.map((u, i) => u.startsWith("/api/")
+            ? <img key={i} src={u} alt="" style={{ width: "100%", height: "100%", minHeight: 0, objectFit: "cover", display: "block" }}/>
+            : <MwImg key={i} src={u} w={160} style={{ width: "100%", height: "100%", minHeight: 0, objectFit: "cover", display: "block" }}/>)}
+        </div>
         <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 34,
           textShadow: "0 2px 8px rgba(0,0,0,0.6)" }}>⭐</span>
       </div>
