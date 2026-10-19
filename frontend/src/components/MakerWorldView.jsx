@@ -468,7 +468,7 @@ export default function MakerWorldView({ onSearch }) {
               (data.collections || []).length === 0 && !toRate?.items?.length ? <p style={msg}>Aucune collection.</p> : (
                 <div style={grid}>
                   {!friend && toRate?.items?.length > 0 && <ToRateTile data={toRate} card={card} onClick={() => setRateOpen(true)}/>}
-                  {data.collections.map(c => (
+                  {(data.collections || []).map(c => (
                     <Pressable as="button" key={c.id} onClick={() => openColl(c)} menu={() => collMenu(c)}
                       style={{ ...card, cursor:"pointer", padding:0, textAlign:"left", color:"var(--text)" }}>
                       <Mosaic covers={c.covers}/>
