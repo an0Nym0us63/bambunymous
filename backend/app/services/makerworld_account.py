@@ -34,6 +34,11 @@ DEBUG_PATHS = {
     "aimes": "/design-service/my/design/like?offset=0&limit=5",
     "favoris": "/design-service/my/favorites",
     "favoris_ids": "/design-service/my/favorites/listlite",
+    # Createur (statistiques, points) : formes a relever avant de s'en servir.
+    "createur_profil": "/design-user-service/my/profile",
+    "createur_modeles": "/design-user-service/my/creatortools/design/list?offset=0&limit=3",
+    "points_historique": "/point-service/point-bill/my?offset=0&limit=5",
+    "points_progression": "/point-service/point-bill/progress",
 }
 
 
