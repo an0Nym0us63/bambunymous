@@ -125,11 +125,11 @@ async def mw_search(q: str = "", offset: int = 0, _: str = Depends(get_current_u
 
 
 @router.get("/creator")
-async def mw_creator(fresh: bool = False, _: str = Depends(get_current_user)):
+async def mw_creator(fresh: bool = False, period: str = "30", _: str = Depends(get_current_user)):
     """Ma page createur : profil et points, mes modeles (avec points sur 30 j)."""
     from ....services import mw_creator as C
     try:
-        return await C.overview(fresh)
+        return await C.overview(fresh, period)
     except C.CreatorError as e:
         raise HTTPException(400, str(e))
 

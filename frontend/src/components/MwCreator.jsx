@@ -8,13 +8,16 @@ import { prefetchModel } from "./MakerWorldModelSheet";
 // sont ceux reellement verses par MakerWorld (point-bill), pas recalcules.
 const fmt = (v, d = 0) => v == null ? "—" : Number(v).toLocaleString("fr-FR", { maximumFractionDigits: d });
 const pts = v => fmt(v, 2);
-const SORTS = [["points30", "Points 30 j"], ["downloads", "Téléchargements"], ["prints", "Impressions"],
-  ["boosts", "Boosts"], ["likes", "J'aime"], ["created", "Plus récents"]];
+const PERIODS = [["7", "7 jours"], ["30", "30 jours"], ["90", "90 jours"], ["365", "1 an"], ["all", "Depuis le début"]];
+const TYPES = [["points", "Points", "pts"], ["downloads", "Téléchargements", "téléch."], ["prints", "Impressions", "impr."],
+  ["boosts", "Boosts", "boosts"], ["likes", "J'aime", "j'aime"]];
+const SHORT = { "7": "7 j", "30": "30 j", "90": "90 j", "365": "1 an", "all": "total" };
 
 export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
-  const [sort, setSort] = useState("points30");
+  const [period, setPeriod] = useState("30");
+  const [type, setType] = useState("points");
   const [hist, setHist] = useState(null);        // { items, total }
   const [more, setMore] = useState(false);
   const [view, setView] = useState("models");    // models | points
@@ -22,12 +25,14 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   useEffect(() => {
     let alive = true;
     setErr(null);
-    client.get("/makerworld/creator", { params: reload ? { fresh: 1 } : {} })
+    client.get("/makerworld/creator", { params: { period, ...(reload ? { fresh: 1 } : {}) } })
       .then(({ data }) => { if (alive) setData(data); })
       .catch(e => { if (alive) setErr(e.response?.data?.detail || e.message); })
       .finally(() => onLoaded?.());
-    client.get("/makerworld/creator/points").then(({ data }) => alive && setHist(data)).catch(() => {});
     return () => { alive = false; };
+  }, [reload, period]);
+  useEffect(() => {
+    client.get("/makerworld/creator/points").then(({ data }) => setHist(data)).catch(() => {});
   }, [reload]);
 
   const loadMore = () => {
@@ -40,8 +45,12 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   if (err) return <p style={msg}>MakerWorld ne répond pas comme prévu : {err}</p>;
   if (!data) return <p style={msg}>…</p>;
   const p = data.profile;
-  const models = [...data.models].sort((a, b) => sort === "created"
-    ? String(b.created || "").localeCompare(String(a.created || "")) : (b[sort] || 0) - (a[sort] || 0));
+  const val = m => m.period?.[type] ?? 0;
+  const models = [...data.models].sort((a, b) => val(b) - val(a) || (b[type] || 0) - (a[type] || 0));
+  const typeShort = TYPES.find(t => t[0] === type)?.[2];
+  // Compteurs (hors points) : releves journaliers pris par l'appli, depuis peu.
+  const partial = type !== "points" && period !== "all" && data.counters_partial;
+  const since = data.counters_since ? new Date(data.counters_since + "T12:00:00").toLocaleDateString("fr-FR", { day:"numeric", month:"short" }) : null;
 
   // historique groupe par jour de versement
   const days = [];
@@ -84,13 +93,23 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
           <button key={k} onClick={() => setView(k)} style={pill(view === k)}>{l}</button>
         ))}
         {view === "models" && (
-          <select value={sort} onChange={e => setSort(e.target.value)}
-            style={{ marginLeft:"auto", fontSize:12, padding:"4px 8px", borderRadius:8, background:"var(--surface2)",
-              border:"1px solid var(--border)", color:"var(--text2)" }}>
-            {SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-          </select>
+          <span style={{ marginLeft:"auto", display:"flex", gap:6 }}>
+            <select value={type} onChange={e => setType(e.target.value)} aria-label="Type" style={sel}>
+              {TYPES.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+            <select value={period} onChange={e => setPeriod(e.target.value)} aria-label="Période" style={sel}>
+              {PERIODS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+            </select>
+          </span>
         )}
+
       </div>
+      {view === "models" && partial && (
+        <p style={{ fontSize:11.5, color:"#f59e0b", margin:"-4px 0 0", lineHeight:1.45 }}>
+          L'appli note les compteurs de tes modèles chaque jour depuis le {since} : sur cette période, les
+          {" "}{TYPES.find(t => t[0] === type)?.[1].toLowerCase()} ne sont comptés que depuis cette date. Les points, eux, sont complets.
+        </p>
+      )}
 
       {view === "models" ? (
         <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
@@ -108,9 +127,9 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
                   ⬇️ {fmt(m.downloads)} · 🖨️ {fmt(m.prints)} · ⚡ {fmt(m.boosts)} · ❤ {fmt(m.likes)}</span>
               </span>
               <span style={{ textAlign:"right", flexShrink:0 }}>
-                <span style={{ display:"block", fontSize:13, fontWeight:800, color: m.points30 ? "#22c55e" : "var(--muted)" }}>
-                  {m.points30 ? `+${pts(m.points30)}` : "0"}</span>
-                <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>pts 30 j</span>
+                <span style={{ display:"block", fontSize:13, fontWeight:800, color: val(m) ? "#22c55e" : "var(--muted)" }}>
+                  {val(m) ? `${period === "all" ? "" : "+"}${type === "points" ? pts(val(m)) : fmt(val(m))}` : "0"}</span>
+                <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>{typeShort} {SHORT[period]}</span>
               </span>
             </button>
           ))}
@@ -149,6 +168,8 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   );
 }
 
+const sel = { fontSize:12, padding:"4px 8px", borderRadius:8, background:"var(--surface2)",
+  border:"1px solid var(--border)", color:"var(--text2)" };
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };
 const pill = on => ({ padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer",
   background: on ? "rgba(59,130,246,0.15)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--text2)",

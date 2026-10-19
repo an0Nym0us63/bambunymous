@@ -104,9 +104,9 @@ async def points(offset: int = 0, limit: int = 30) -> dict:
             "income": _num(d.get("totalIncome")), "expense": _num(d.get("totalExpense"))}
 
 
-async def recent_points(days: int = 30, max_pages: int = 10) -> list:
+async def recent_points(days: int = 30, max_pages: int = 10, fresh: bool = False) -> list:
     """Lignes de points des `days` derniers jours (gains seulement)."""
-    hit = _cached(("recent", days), False)
+    hit = _cached(("recent", days), fresh)
     if hit is not None:
         return hit
     since = datetime.now(timezone.utc) - timedelta(days=days)
@@ -157,10 +157,63 @@ async def models(fresh: bool = False) -> list:
     return out
 
 
-async def overview(fresh: bool = False) -> dict:
+# ── Evolution par periode ──────────────────────────────────────────────────
+# MakerWorld ne donne que des TOTAUX par modele : on note chaque jour les
+# compteurs de mes modeles (reglage MW_CREATOR_DAILY) et l'ecart sur une
+# periode se lit entre aujourd'hui et le releve d'il y a N jours. Les points,
+# eux, ont leur historique complet chez MakerWorld.
+K_DAILY = "MW_CREATOR_DAILY"
+DAILY_KEEP = 400
+METRICS = ("downloads", "prints", "boosts", "likes")
+
+
+async def _daily_get() -> dict:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, K_DAILY, "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+async def record_daily(ms: list) -> dict:
+    """Releve du jour (remplace celui deja pris aujourd'hui) ; rend tous les releves."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    d = await _daily_get()
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    d[today] = {m["design_id"]: [m[k] for k in METRICS] for m in ms}
+    for k in sorted(d)[:-DAILY_KEEP]:
+        del d[k]
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, K_DAILY, json.dumps(d, separators=(",", ":")))
+    return d
+
+
+def _baseline(daily: dict, days):
+    """Releve servant de point de depart : le plus recent qui a au moins `days`
+    jours ; a defaut, le plus ancien (periode incomplete)."""
+    if not daily or days is None:
+        return None, None
+    target = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
+    older = [k for k in sorted(daily) if k <= target]
+    key = older[-1] if older else sorted(daily)[0]
+    return key, daily[key]
+
+
+PERIODS = {"7": 7, "30": 30, "90": 90, "365": 365, "all": None}
+
+
+async def overview(fresh: bool = False, period: str = "30") -> dict:
     prof = await profile(fresh)
     ms = await models(fresh)
-    recent = await recent_points(30)
+    days = PERIODS.get(str(period), 30)
+    daily = await record_daily(ms)
+    # points : 7 et 30 jours pour l'en-tete, et la periode choisie par modele
+    recent = await recent_points(max(30, days or 3650), max_pages=40, fresh=fresh)
     now = datetime.now(timezone.utc)
     per, e7, e30 = {}, 0.0, 0.0
     for x in recent:
@@ -170,14 +223,31 @@ async def overview(fresh: bool = False) -> dict:
             continue
         if x["points"] <= 0:
             continue
-        e30 += x["points"]
-        if now - t <= timedelta(days=7):
+        age = now - t
+        if age <= timedelta(days=30):
+            e30 += x["points"]
+        if age <= timedelta(days=7):
             e7 += x["points"]
-        if x.get("design_id"):
+        if x.get("design_id") and (days is None or age <= timedelta(days=days)):
             per[x["design_id"]] = per.get(x["design_id"], 0) + x["points"]
+    since, base = _baseline(daily, days)
     for m in ms:
-        m["points30"] = round(per.get(m["design_id"], 0), 2)
-    return {"profile": prof, "models": ms, "earned7": round(e7, 2), "earned30": round(e30, 2)}
+        b = (base or {}).get(m["design_id"])
+        period_vals = {"points": round(per.get(m["design_id"], 0), 2)}
+        for i, k in enumerate(METRICS):
+            if days is None:
+                period_vals[k] = m[k]
+            elif b is None:                         # modele absent du releve de depart
+                period_vals[k] = m[k] if since and str(m.get("created") or "")[:10] >= since else 0
+            else:
+                period_vals[k] = max(0, m[k] - b[i])
+        m["period"] = period_vals
+        m["points30"] = round(per.get(m["design_id"], 0), 2) if days == 30 else m.get("points30")
+    target = (now - timedelta(days=days)).strftime("%Y-%m-%d") if days else None
+    return {"profile": prof, "models": ms, "earned7": round(e7, 2), "earned30": round(e30, 2),
+            "period": str(period), "counters_since": since,
+            # periode plus longue que les releves pris : les compteurs ne couvrent qu'une partie
+            "counters_partial": bool(days and since and since > target)}
 
 
 # ── Notifications ──────────────────────────────────────────────────────────
@@ -226,6 +296,7 @@ async def check_creator() -> int:
         return 0
     prof = await profile(fresh=True)
     ms = await models(fresh=True)
+    await record_daily(ms)
     first = await points(0, 50)
     old = await _snap_get()
     snap = {"last_time": max((x["time"] or "" for x in first["items"]), default=(old or {}).get("last_time") or ""),
