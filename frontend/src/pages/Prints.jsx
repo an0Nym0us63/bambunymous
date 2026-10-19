@@ -2265,18 +2265,30 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
   const fdata = useShared("/friends/shared/gallery", hasFriends);
   const q = (search || "").trim().toLowerCase();
   const nFr = fdata?.items ? (q ? fdata.items.filter(it => friendMatch(it, q)).length : fdata.items.length) : null;
+  // Ma galerie, lue ici pour compter aussi ses elements selon la recherche.
+  const [mine, setMine] = useState(null);
+  const [mineLoading, setMineLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    client.get("/prints/gallery")
+      .then(r => { if (!cancelled) setMine(r.data); })
+      .finally(() => { if (!cancelled) setMineLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+  const nMine = mine ? [...(mine.prints || []).map(p => p.title || p.file_name), ...(mine.groups || []).map(g => g.name)]
+    .filter(t => !q || (t || "").toLowerCase().includes(q)).length : null;
   return (<>
     {hasFriends && (
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4,
         border:"1px solid var(--border)", marginBottom:10 }}>
-        {[["mine", "Ma galerie"], ["friends", `👀 Chez les copains${nFr != null ? ` (${nFr})` : ""}`]].map(([k, l]) => (
+        {[["mine", `Ma galerie${nMine != null ? ` (${nMine})` : ""}`], ["friends", `👀 Chez les copains${nFr != null ? ` (${nFr})` : ""}`]].map(([k, l]) => (
           <button key={k} onClick={() => setWho(k)} style={{ flex:1, padding:"7px 8px", borderRadius:8, fontSize:12,
             fontWeight:700, cursor:"pointer", border:"none", background: who === k ? "#3b82f6" : "transparent",
             color: who === k ? "white" : "var(--muted)" }}>{l}</button>
         ))}
       </div>
     )}
-    {who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata}/> : <MyGalleryView search={search} sortF={sortF}/>}
+    {who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata}/> : <MyGalleryView search={search} sortF={sortF} data={mine} loading={mineLoading}/>}
   </>);
 }
 
@@ -2313,20 +2325,9 @@ function FriendsGalleryView({ search, data }) {
   </>);
 }
 
-function MyGalleryView({ search, sortF = "recent" }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+function MyGalleryView({ search, sortF = "recent", data, loading }) {
   const [selectedPrint, setSelectedPrint] = useState(null);
   const [selectedGroup, setSelectedGroup] = useState(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    client.get("/prints/gallery")
-      .then(r => { if (!cancelled) setData(r.data); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, []);
 
   if (loading) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"40px 0" }}>Chargement…</p>;
   if (!data) return null;
