@@ -889,9 +889,10 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn }) {
   const pick = (e, pl) => {
     if (!isAdmin || visiting) return;
     openMenu(e, {
-      title: `${pl.index}. ${pl.name || "Plateau"}`, subtitle: "Imprimé par…",
+      title: `${pl.index}. ${pl.name || "Plateau"}`, subtitle: "Imprimé par…", img: pl.thumb ? mwImg(pl.thumb, 120) : null,
       items: [
-        ...(probable[pl.index] || []).map(({ pr, score, sure }) => ({ icon: "💡", label: `Valider : ${pr.translated_name || pr.file_name}`,
+        ...(probable[pl.index] || []).map(({ pr, score, sure }) => ({ icon: "💡", img: apiUrl(`/prints/${pr.id}/image`),
+          label: `Valider : ${pr.translated_name || pr.file_name}`,
           hint: `Reconnu à l'image (ressemblance ${Math.round(score * 100)} %)`
             + (sure === false ? " · d'autres plateaux se ressemblent : le plus proche, départagé au poids" : ""),
           onClick: () => save(pr, [pl.index]) })),
@@ -899,7 +900,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn }) {
         ...prints.map(pr => {
           const cur = platesOf(pr) || [];
           const on = cur.includes(pl.index);
-          return { icon: on ? "✅" : "⬜", label: pr.translated_name || pr.file_name,
+          return { icon: on ? "✅" : "⬜", img: apiUrl(`/prints/${pr.id}/image`), label: pr.translated_name || pr.file_name,
             hint: [fmtDate(pr.print_date), STATUS_CFG[pr.status]?.label].filter(Boolean).join(" · "),
             onClick: () => save(pr, on ? cur.filter(i => i !== pl.index) : [...cur, pl.index]) };
         }),

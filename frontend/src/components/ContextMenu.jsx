@@ -105,16 +105,23 @@ export function ContextMenuHost() {
       onMouseEnter={e => { if (!it.disabled) e.currentTarget.style.background = "var(--surface2)"; }}
       onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
       <span style={{ width: 20, textAlign: "center", flexShrink: 0 }}>{it.icon || ""}</span>
+      {it.img && <img src={it.img} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0,
+        background: "var(--surface2)", border: "1px solid var(--border)" }}/>}
       <span style={{ flex: 1, minWidth: 0 }}>{it.label}
         {it.hint && <span style={{ display: "block", fontSize: 11, fontWeight: 500, color: "var(--muted)" }}>{it.hint}</span>}
       </span>
     </button>
   ));
   const head = (menu.title || menu.subtitle) && (
-    <div style={{ padding: sheet ? "4px 12px 10px" : "4px 10px 6px", borderBottom: "1px solid var(--border)", marginBottom: 4 }}>
-      {menu.title && <div style={{ fontSize: sheet ? 14 : 12.5, fontWeight: 800, color: "var(--text)",
-        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{menu.title}</div>}
-      {menu.subtitle && <div style={{ fontSize: 11, color: "var(--muted)" }}>{menu.subtitle}</div>}
+    <div style={{ padding: sheet ? "4px 12px 10px" : "4px 10px 6px", borderBottom: "1px solid var(--border)", marginBottom: 4,
+      display: "flex", alignItems: "center", gap: 10 }}>
+      {menu.img && <img src={menu.img} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", flexShrink: 0,
+        background: "var(--surface2)", border: "1px solid var(--border)" }}/>}
+      <div style={{ minWidth: 0 }}>
+        {menu.title && <div style={{ fontSize: sheet ? 14 : 12.5, fontWeight: 800, color: "var(--text)",
+          overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{menu.title}</div>}
+        {menu.subtitle && <div style={{ fontSize: 11, color: "var(--muted)" }}>{menu.subtitle}</div>}
+      </div>
     </div>
   );
 
