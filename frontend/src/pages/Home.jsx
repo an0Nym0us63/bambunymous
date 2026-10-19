@@ -73,77 +73,50 @@ function useFriendsPrinting() {
   return list;
 }
 
-const FR_STATUS = { RUNNING: "En cours", PAUSE: "En pause", PAUSED: "En pause", PREPARE: "Préparation", SLICING: "Préparation" };
-const FR_ACCENT = "#8b5cf6";      // violet : jamais confondu avec mon bandeau (bleu)
+const FR_ACCENT = "#8b5cf6";      // violet : le bandeau d'un copain ne se confond pas avec le mien
 
-// Bandeau d'un copain : meme lecture que le mien, en plus sobre, et marque « Chez … ».
-function FriendBanner({ f }) {
-  const pct = Math.round(f.progress ?? 0);
-  return (
-    <div className="card" style={{ padding:"12px 14px", border:`1.5px solid ${FR_ACCENT}`,
-      background:"linear-gradient(135deg, rgba(139,92,246,0.07), transparent 60%)" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-        <span style={{ fontSize:11, fontWeight:800, color:"white", background:FR_ACCENT, borderRadius:20, padding:"2px 9px" }}>
-          👀 Chez {f.name}</span>
-        <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:700, color:"var(--text)", overflow:"hidden",
-          textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.print?.name || f.print_name || "Impression"}</span>
-      </div>
-      <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-        {f.print?.image
-          ? <img src={relayed(f.print.image)} alt="" style={{ width:56, height:56, borderRadius:10, objectFit:"cover",
-              background:"var(--surface2)", flexShrink:0 }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
-          : <span style={{ width:56, height:56, borderRadius:10, background:"var(--surface2)", flexShrink:0 }}/>}
-        <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:11, color:FR_ACCENT, fontWeight:700, marginBottom:4 }}>{FR_STATUS[f.status] || f.status}</div>
-          <div style={{ height:8, borderRadius:8, background:"var(--surface2)", overflow:"hidden" }}>
-            <div style={{ width:`${pct}%`, height:"100%", background:FR_ACCENT, borderRadius:8 }}/>
-          </div>
-          <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:5, fontSize:11, color:"var(--muted)" }}>
-            {f.remaining_minutes > 0 && <span><Clock size={11} style={{ verticalAlign:"-1px" }}/> {fmtTime(f.remaining_minutes)}</span>}
-            {f.total_layers > 0 && <span><Layers size={11} style={{ verticalAlign:"-1px" }}/> {f.layer}/{f.total_layers}</span>}
-            {f.remaining_minutes > 0 && (() => { const fin = fmtFinishTime(f.remaining_minutes);
-              return <span><Calendar size={11} style={{ verticalAlign:"-1px" }}/> {fin.time}
-                {fin.dayDiff > 0 && <sup style={{ fontSize:9, fontWeight:800, color:FR_ACCENT, marginLeft:1 }}>+{fin.dayDiff}</sup>}</span>; })()}
-          </div>
-        </div>
-        <span style={{ fontSize:22, fontWeight:800, color:FR_ACCENT }}>{pct}%</span>
-      </div>
-    </div>
-  );
-}
-
-// Mon bandeau, puis ceux des copains qui impriment : on fait glisser de l'un
-// a l'autre. Sans copain en train d'imprimer, rien ne change.
-function BannerCarousel({ status }) {
+// Mon bandeau, ou celui d'un copain qui imprime (le VRAI bandeau : camera,
+// temperatures, alertes de chez lui). Le choix se fait dans le bandeau.
+function BannerSwitch({ status }) {
   const friends = useFriendsPrinting();
-  const box = useRef(null);
-  const [cur, setCur] = useState(0);
-  if (!friends.length) return <StatusBanner status={status}/>;
-  const go = i => { const el = box.current; if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" }); };
-  const chip = (on, c) => ({ fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:20, cursor:"pointer",
-    border:`1px solid ${on ? c : "var(--border)"}`, background: on ? c : "var(--surface2)", color: on ? "white" : "var(--muted)" });
-  return (
-    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-      <div ref={box} className="no-scrollbar" onScroll={e => setCur(Math.round(e.currentTarget.scrollLeft / Math.max(1, e.currentTarget.clientWidth)))}
-        style={{ display:"flex", overflowX:"auto", scrollSnapType:"x mandatory", alignItems:"flex-start",
-          scrollbarWidth:"none", overscrollBehaviorX:"contain" }}>
-        <div style={{ flex:"0 0 100%", minWidth:0, scrollSnapAlign:"start" }}><StatusBanner status={status}/></div>
-        {friends.map(f => (
-          <div key={f.id} style={{ flex:"0 0 100%", minWidth:0, scrollSnapAlign:"start", paddingLeft:2 }}><FriendBanner f={f}/></div>
-        ))}
-      </div>
-      <div style={{ display:"flex", gap:6, flexWrap:"wrap", justifyContent:"center" }}>
-        <button onClick={() => go(0)} style={chip(cur === 0, "#3b82f6")}>Ma machine</button>
-        {friends.map((f, i) => (
-          <button key={f.id} onClick={() => go(i + 1)} style={chip(cur === i + 1, FR_ACCENT)}>
-            👀 {f.name} · {Math.round(f.progress ?? 0)}%</button>
-        ))}
-      </div>
-    </div>
+  const [sel, setSel] = useState(null);        // { id, name } : copain affiche
+  const [fst, setFst] = useState(null);
+  useEffect(() => {
+    setFst(null);
+    if (!sel) return;
+    let alive = true;
+    const load = () => { if (document.hidden) return;
+      client.get(`/friends/${sel.id}/p/printer/status`).then(({ data }) => alive && setFst(data)).catch(() => {}); };
+    load();
+    const t = setInterval(load, 3000);
+    return () => { alive = false; clearInterval(t); };
+  }, [sel?.id]);
+  const pctOf = f => Math.round(f.progress ?? 0);
+  // Discret : une petite pastille grise, sans couleur forte.
+  const pill = { fontSize:10.5, fontWeight:600, padding:"2px 8px", borderRadius:20, cursor:"pointer",
+    border:"1px solid var(--border)", background:"transparent", color:"var(--muted)", whiteSpace:"nowrap" };
+  const stop = e => e.stopPropagation();
+  let switcher = null;
+  if (sel) switcher = <button onClick={e => { stop(e); setSel(null); }} style={pill}>↩ Ma machine</button>;
+  else if (friends.length === 1) switcher = <button onClick={e => { stop(e); setSel({ id: friends[0].id, name: friends[0].name }); }}
+    style={pill}>👀 {friends[0].name} · {pctOf(friends[0])}%</button>;
+  else if (friends.length > 1) switcher = (
+    <select value="" onClick={stop} onChange={e => { const f = friends.find(x => x.id === e.target.value); if (f) setSel({ id: f.id, name: f.name }); }}
+      style={{ ...pill, padding:"2px 4px", maxWidth:150 }}>
+      <option value="">👀 {friends.length} copains</option>
+      {friends.map(f => <option key={f.id} value={f.id}>{f.name} · {pctOf(f)}%</option>)}
+    </select>
   );
+  // Avant la 1re lecture complete, le resume de la liste suffit a afficher le bandeau.
+  const summary = sel ? friends.find(f => f.id === sel.id) : null;
+  const st = sel ? (fst || (summary && { ...summary, connected: true, nozzles: [] })) : status;
+  return <StatusBanner status={st} friend={sel} switcher={switcher}/>;
 }
 
-function StatusBanner({ status }) {
+function StatusBanner({ status, friend = null, switcher = null }) {
+  // Chez un copain : ses donnees (impression en cours, camera) passent par le relais.
+  const via = (path) => friend ? `/friends/${friend.id}/p${path}` : path;
+  const img = (path) => friend ? relayed(`/api/v1/friends/${friend.id}/p${path}`) : apiUrl(path);
   const [expanded, setExpanded] = useState(false);
   const camRef      = useRef(null);
   const timerRef    = useRef(null);
@@ -158,7 +131,7 @@ function StatusBanner({ status }) {
   const tickCam = () => {
     if (inFlightRef.current || !camRef.current) return;
     inFlightRef.current = true;
-    camRef.current.src = apiUrl(`/camera/snapshot?t=${Date.now()}`);
+    camRef.current.src = img(`/camera/snapshot?t=${Date.now()}`);
   };
   const startCam = () => {
     if (timerRef.current) return;
@@ -199,10 +172,10 @@ function StatusBanner({ status }) {
   useEffect(() => {
     if (!status?.status) return;
     const live = ["RUNNING", "PAUSE", "PREPARE", "SLICING"].includes(status.status);
-    client.get("/prints", { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
-      .then(r => { const p = r.data?.prints?.[0]; if (p) setPrintInfo(p); })
+    client.get(via("/prints"), { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
+      .then(r => { const p = r.data?.prints?.[0]; setPrintInfo(p || null); })
       .catch(() => {});
-  }, [status?.status, status?.job_id]);
+  }, [status?.status, status?.job_id, friend?.id]);
 
   if (!status) return <div className="card" style={{ height:56, animation:"pulse 2s infinite" }} />;
   const cfg    = STATUS_CFG[status.status] ?? STATUS_CFG.IDLE;
@@ -243,19 +216,20 @@ function StatusBanner({ status }) {
   };
 
   return (
-    <div className="card" style={{ overflow:"hidden" }}>
+    <div className="card" style={{ overflow:"hidden", ...(friend ? { borderColor:"rgba(139,92,246,0.45)" } : null) }}>
 
-      {/* Header cliquable */}
-      <button onClick={() => setExpanded(e => !e)}
+      {/* Header cliquable (div : il peut contenir le selecteur des copains) */}
+      <div role="button" tabIndex={0} onClick={() => setExpanded(e => !e)}
         style={{ width:"100%", background:"none", border:"none", cursor:"pointer", padding:0, position:"relative", zIndex:1 }}>
 
         {/* Nom du print — ligne complète en haut */}
         <div style={{ padding:"10px 16px 4px", display:"flex", alignItems:"center", gap:8 }}>
           <div style={{ width:8, height:8, borderRadius:"50%", backgroundColor:cfg.dot, flexShrink:0,
             animation:isRunning?"livePulse 2s infinite":"none" }} />
+          {friend && <span style={{ fontSize:11, fontWeight:600, color:FR_ACCENT, flexShrink:0 }}>👀 {friend.name} ·</span>}
           <p style={{ fontWeight:700, fontSize:14, color:"var(--text)", margin:0,
             flex:1, textAlign:"left", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"clip" }}>
-            {printInfo?.file_name || cfg.label}
+            {printInfo?.file_name || status.print_name || cfg.label}
           </p>
           {hasUnmatched && (
             <span title="Au moins un filament détecté par l'imprimante est introuvable en base">
@@ -278,7 +252,7 @@ function StatusBanner({ status }) {
           <div style={{ width:72, height:72, borderRadius:10, overflow:"hidden", flexShrink:0,
             background:"var(--surface2)" }}>
             {printInfo?.plate_image && (
-              <img src={apiUrl(`/prints/${printInfo.id}/image`)} alt=""
+              <img src={img(`/prints/${printInfo.id}/image`)} alt=""
                 style={{ width:"100%", height:"100%", objectFit:"cover" }}
                 onError={e => e.currentTarget.style.display="none"}/>
             )}
@@ -311,12 +285,15 @@ function StatusBanner({ status }) {
               </div>
             )}
           </div>
-          {isRunning && (
-            <span style={{ fontSize:24, fontWeight:800, fontFamily:"monospace",
-              color:cfg.color, flexShrink:0, letterSpacing:"-0.02em" }}>{pct}%</span>
+          {(isRunning || switcher) && (
+            <span style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6, flexShrink:0 }}>
+              {isRunning && <span style={{ fontSize:24, fontWeight:800, fontFamily:"monospace",
+                color: friend ? FR_ACCENT : cfg.color, letterSpacing:"-0.02em" }}>{pct}%</span>}
+              {switcher}
+            </span>
           )}
         </div>
-      </button>
+      </div>
 
       {/* Panneau déplié */}
       {expanded && (
@@ -846,7 +823,7 @@ export default function Home() {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, maxWidth:640, margin:"0 auto" }}>
-      <BannerCarousel status={status} />
+      <BannerSwitch status={status} />
       {(status?.status === "RUNNING" || status?.status === "PAUSED" || (status?.ams_list?.length > 0)) && <DeviceGrid key={visKey}
         amsList={status?.ams_list ?? []}
         activeAmsId={isRunning ? (status?.active_ams_id ?? -1) : -1}
