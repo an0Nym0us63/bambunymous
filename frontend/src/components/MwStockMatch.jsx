@@ -165,7 +165,7 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
               </>) : (
                 <span style={{ flex:1, fontSize:11.5, color:"#ef4444", lineHeight:"16px" }}>Aucun {x.type || "filament"} en stock
                   {others.length > 0 && <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
-                    {isOpen ? "masquer ▴" : "choisir une autre matière pour simuler ▾"}</span>}</span>
+                    {isOpen ? "masquer ▴" : "choisir une autre matière ▾"}</span>}</span>
               )}
             </button>
             {!unused && shared ? (
@@ -179,7 +179,7 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
             {/* Autre matiere : pour simuler (un PLA Silk a la place d'un ABS…) ; plus proches en couleur. */}
             {isOpen && others.length > 0 && (<>
               <div style={{ fontSize:10, fontWeight:800, color:"#f59e0b", textTransform:"uppercase", letterSpacing:0.4,
-                padding:"7px 12px 3px", borderTop:"1px solid var(--border)" }}>Autre matière · pour simuler</div>
+                padding:"7px 12px 3px", borderTop:"1px solid var(--border)" }}>Autre matière</div>
               {others.map(mt => (
                 <MatchRow key={"o" + mt.filament_id} mt={mt} g={g} on={mt.filament_id === best?.filament_id}
                   onPick={() => pick(i, mt.filament_id)} onGo={go}/>

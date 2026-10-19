@@ -72,7 +72,6 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const startAssign = useMwAssign((s) => s.start);
   const friend = useFriend((s) => s.friend); // profil dont le 3MF est en lecture
   const [plateSel, setPlateSel] = useState({});    // instance_id -> plateaux choisis (absent = tous)
-  const [allProfiles, setAllProfiles] = useState(false);  // replie : seulement le profil principal
   const [showCom, setShowCom] = useState(false);   // commentaires replies (charges a l'ouverture)
   const [like, setLike] = useState(null);          // { liked } avec mon compte ; null = inconnu / pas connecte
   const [likeBusy, setLikeBusy] = useState(false);
@@ -130,7 +129,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
   useEffect(() => {
     let alive = true;
-    setM(null); setCom(null); setSim(null); setMore(false); setAllProfiles(false); setShowCom(false);
+    setM(null); setCom(null); setSim(null); setMore(false); setShowCom(false);
     getModel(id).then(data => {
       if (!alive) return;
       setM(data);
@@ -284,9 +283,9 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
             {/* Profils et plateaux */}
             {m.profiles?.length > 0 && (
-              <Section title={`Profils (${m.profiles.length})`}
-                open={allProfiles} onToggle={m.profiles.length > 1 ? () => setAllProfiles(v => !v) : null}>
-                {(allProfiles ? m.profiles : [m.profiles.find(x => x.main) || m.profiles[0]]).map(p => {
+              <Section title={`Profils (${m.profiles.length})`}>
+                {/* Tous les profils listes, chacun replie : on voit d'un coup combien il y en a. */}
+                {m.profiles.map(p => {
                   const isOpen = open === p.instance_id;
                   const nDone = p.plates.filter(pl => plateDone(p, pl.index)).length;
                   return (
@@ -423,9 +422,6 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                     </div>
                   );
                 })}
-                {!allProfiles && m.profiles.length > 1 && (
-                  <button onClick={() => setAllProfiles(true)} style={textBtn}>Voir les {m.profiles.length} profils</button>
-                )}
               </Section>
             )}
 
