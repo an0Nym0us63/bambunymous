@@ -345,3 +345,59 @@ async def submit(design_id: str, rating_id: str, score: int, content: str, photo
         if f.parent == _tmp_dir():
             f.unlink(missing_ok=True)
     return {"ok": True, "photos": len(images)}
+
+
+# ── Messages d'evaluation tout faits, ranges par familles ────────────────────
+# Une famille = un nom et autant de messages qu'on veut ; a l'evaluation, on
+# choisit la famille et un message est tire au hasard. {modèle} et {créateur}
+# sont remplaces dans l'appli. La premiere famille est celle proposee d'office.
+K_TEMPLATES = "MW_RATE_TEMPLATES"
+DEFAULT_TEMPLATES = [{"name": "Générique", "messages": [
+    "Très belle impression, sortie propre du premier coup. Le modèle est bien conçu et le profil fourni "
+    "fonctionne parfaitement, je n'ai rien eu à ajuster. Merci {créateur} pour le partage !",
+    "Excellent modèle ! L'impression s'est très bien déroulée et le résultat est vraiment réussi, fidèle "
+    "aux photos. On sent le soin apporté à la conception. Je recommande sans hésiter.",
+    "Impression réussie et rendu impeccable. Les réglages proposés sont bien pensés et le résultat final "
+    "est à la hauteur. Merci beaucoup pour ce partage, {modèle} est une vraie réussite.",
+    "Rien à redire : le fichier est propre, l'impression se passe sans accroc et le résultat est très "
+    "satisfaisant. Un modèle de qualité, merci {créateur} pour ton travail !",
+    "Super modèle, très agréable à imprimer. La finition est soignée et tout s'est déroulé comme prévu "
+    "du début à la fin. Merci pour le partage et bravo pour la conception !",
+]}]
+
+
+def _clean_templates(fams) -> list:
+    out, seen = [], set()
+    for f in fams if isinstance(fams, list) else []:
+        if not isinstance(f, dict):
+            continue
+        name = str(f.get("name") or "").strip()[:60]
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        msgs = [str(m).strip()[:2000] for m in (f.get("messages") or []) if str(m or "").strip()][:200]
+        out.append({"name": name, "messages": msgs})
+    return out[:50]
+
+
+async def templates() -> list:
+    import json
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, K_TEMPLATES, "")
+    try:
+        fams = _clean_templates(json.loads(raw)) if raw else None
+    except ValueError:
+        fams = None
+    return fams if fams is not None else DEFAULT_TEMPLATES
+
+
+async def set_templates(fams) -> list:
+    import json
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    clean = _clean_templates(fams)
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, K_TEMPLATES, json.dumps(clean, ensure_ascii=False))
+    return clean

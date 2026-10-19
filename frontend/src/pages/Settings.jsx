@@ -16,6 +16,7 @@ import TelegramSettings from "../components/TelegramSettings";
 import DryRulesCard from "../components/DryRulesCard";
 import SpoolTaresCard from "../components/SpoolTaresCard";
 import MakerWorldSettings from "../components/MakerWorldSettings";
+import RateTemplatesSettings from "../components/RateTemplatesSettings";
 import NotificationsSettings from "../components/NotificationsSettings";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
@@ -1903,6 +1904,7 @@ export default function Settings() {
       <TwoFactorCard/>
       <UsersSection/>
       <AdminOnly><MakerWorldSettings/></AdminOnly>
+      <AdminOnly><RateTemplatesSettings/></AdminOnly>
       <FriendsCard/>
       <ActivitySection/>
       </>)}

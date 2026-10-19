@@ -43,6 +43,20 @@ export function useToRateSet(enabled = true) {
   const d = useToRate(enabled);
   return new Set((d?.items || []).map(x => String(x.design_id)));
 }
+// Familles de messages tout faits (Parametres), lues une fois.
+let _tpl = null;
+export function forgetTemplates() { _tpl = null; }
+function useTemplates() {
+  const [fams, setFams] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    _tpl = _tpl || client.get("/makerworld/rate-templates").then(({ data }) => data.families || []).catch(() => { _tpl = null; return []; });
+    _tpl.then(f => alive && setFams(f));
+    return () => { alive = false; };
+  }, []);
+  return fams;
+}
+
 export function forgetToRate() { _p = null; _t = 0; }  // relire au prochain affichage
 
 // Bouton « Évaluer » pour un modele : formulaire dans l'appli quand MakerWorld
@@ -154,6 +168,23 @@ function RateForm({ x, targets, onDone }) {
   const [picked, setPicked] = useState(() => new Set((x.photos || []).slice(0, 8)));
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  // Message tout fait (5 etoiles) : famille choisie, tirage au hasard ; tant
+  // qu'on ne le touche pas, il suit la famille et s'efface sous 5 etoiles.
+  const fams = useTemplates();
+  const [fam, setFam] = useState(0);
+  const [auto, setAuto] = useState(false);
+  const many = (targets || [x]).length > 1;
+  const fill = m => m.replaceAll("{modèle}", many ? "ce modèle" : (x.title || "ce modèle"))
+    .replaceAll("{créateur}", !many && x.creator_name ? x.creator_name : "au créateur");
+  const draw = (fi = fam, avoid = text) => {
+    const msgs = (fams?.[fi]?.messages || []).filter(Boolean).map(fill);
+    if (!msgs.length) return;
+    const pool = msgs.length > 1 ? msgs.filter(m => m !== avoid) : msgs;
+    setText(pool[Math.floor(Math.random() * pool.length)]);
+    setAuto(true);
+  };
+  useEffect(() => { if (fams?.length && score === 5 && !text) draw(0, ""); }, [fams]);   // a l'ouverture
+  useEffect(() => { if (score < 5 && auto) { setText(""); setAuto(false); } }, [score]);
   // Photos prises ailleurs que dans la galerie : envoyees au serveur tout de
   // suite (gardees le temps de publier), apercu local en attendant.
   const [extras, setExtras] = useState([]);       // [{ id, preview, sending }]
@@ -207,7 +238,18 @@ function RateForm({ x, targets, onDone }) {
             cursor: "pointer", fontSize: 26, lineHeight: 1, color: n <= score ? "#f59e0b" : "var(--border)" }}>★</button>
         ))}
       </div>
-      <textarea value={text} onChange={e => setText(e.target.value)} rows={3} maxLength={2000}
+      {score === 5 && fams?.length > 0 && (
+        <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <select value={fam} onChange={e => { const i = Number(e.target.value); setFam(i); draw(i); }}
+            style={{ flex: 1, minWidth: 0, borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)",
+              color: "var(--text)", padding: "6px 8px", fontSize: 12.5 }}>
+            {fams.map((f, i) => <option key={i} value={i}>{f.name} ({f.messages.length})</option>)}
+          </select>
+          <button onClick={() => draw()} title="Un autre message de cette famille" style={{ padding: "5px 10px", borderRadius: 8, fontSize: 13,
+            cursor: "pointer", background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)" }}>🔀</button>
+        </div>
+      )}
+      <textarea value={text} onChange={e => { setText(e.target.value); setAuto(false); }} rows={4} maxLength={2000}
         placeholder={low ? "Qu'est-ce qui n'a pas marché ? (obligatoire)" : "Ton avis (facultatif)"}
         style={{ width: "100%", boxSizing: "border-box", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)",
           color: "var(--text)", padding: 8, fontSize: 13, resize: "vertical", fontFamily: "inherit" }}/>

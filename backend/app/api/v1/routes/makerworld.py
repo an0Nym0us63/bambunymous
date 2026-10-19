@@ -236,6 +236,19 @@ async def mw_plate_guess(design_id: str, ids: str = "", _: str = Depends(get_cur
     return await _call(mw_plate_guess.guess(design_id, ids.split(",")))
 
 
+@router.get("/rate-templates")
+async def mw_rate_templates(_: str = Depends(get_current_user)):
+    """Familles de messages d'evaluation tout faits."""
+    from ....services import mw_rate
+    return {"families": await mw_rate.templates()}
+
+
+@router.put("/rate-templates")
+async def mw_rate_templates_set(body: dict = Body({}), _: str = Depends(require_admin)):
+    from ....services import mw_rate
+    return {"families": await mw_rate.set_templates(body.get("families"))}
+
+
 @router.post("/rate-photo")
 async def mw_rate_photo(file: UploadFile = File(...), _: str = Depends(require_admin)):
     """Photo hors galerie pour une evaluation ; rend l'identifiant a joindre."""
