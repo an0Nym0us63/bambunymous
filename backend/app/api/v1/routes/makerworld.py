@@ -143,6 +143,56 @@ async def mw_creator_points(offset: int = 0, _: str = Depends(get_current_user))
         raise HTTPException(400, str(e))
 
 
+@router.get("/queue")
+async def mw_queue(fresh: bool = False, _: str = Depends(get_current_user)):
+    """File d'attente : modeles des collections choisies, profils et filaments
+    retenus, besoins additionnes, imprimable maintenant (AMS) ou avec le stock."""
+    from ....services import mw_queue as Q
+    return await _call(Q.queue(fresh))
+
+
+@router.get("/queue/config")
+async def mw_queue_config(_: str = Depends(get_current_user)):
+    from ....services import mw_queue as Q
+    return await Q.config()
+
+
+@router.put("/queue/collections")
+async def mw_queue_collections(body: dict = Body({}), _: str = Depends(require_admin)):
+    from ....services import mw_queue as Q
+    return await Q.set_collections(body.get("ids") or [])
+
+
+@router.put("/queue/plan/{design_id}")
+async def mw_queue_plan(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+    """Profil, plateaux et filaments retenus pour ce modele (depuis sa fiche)."""
+    from ....services import mw_queue as Q
+    try:
+        return await Q.set_plan(design_id, body)
+    except Q.QueueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.put("/queue/qty/{design_id}")
+async def mw_queue_qty(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+    """Nombre d'exemplaires voulus pour ce modele."""
+    from ....services import mw_queue as Q
+    try:
+        return await Q.set_qty(design_id, body.get("qty", 1))
+    except Q.QueueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.delete("/queue/plan/{design_id}")
+async def mw_queue_plan_delete(design_id: str, _: str = Depends(require_admin)):
+    from ....services import mw_queue as Q
+    try:
+        await Q.set_plan(design_id, None)
+    except Q.QueueError as e:
+        raise HTTPException(400, str(e))
+    return {"ok": True}
+
+
 @router.get("/mine")
 async def mw_mine(ids: str = "", _: str = Depends(get_current_user)):
     """Ce que J'AI de ces modeles (imprimes, collections, j'aime) : pour les

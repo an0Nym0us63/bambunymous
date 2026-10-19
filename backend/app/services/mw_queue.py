@@ -1,0 +1,303 @@
+"""
+File d'attente d'impression : les modeles d'une ou plusieurs de mes
+collections MakerWorld (« A imprimer »…), avec, pour chacun, le profil et les
+filaments que je compte utiliser, et les totaux.
+
+Reglage MW_QUEUE (JSON) :
+  {"collections": ["30919606", ...],
+   "plans": {"<design_id>": {"instance_id": "1452154", "plates": [1, 3] | null,
+                             "picks": {"PLA|#646941": 12, ...}, "qty": 2}}}
+qty : nombre d'exemplaires voulus (temps, filament, cout et stock multiplies).
+Un plan est retenu depuis la fiche du modele (profil, plateaux, filaments
+choisis). Sans plan : le profil retenu par l'appli, tous les plateaux, et le
+filament le plus proche du stock pour chaque couleur.
+
+Pour chaque modele : temps, poids, cout, et s'il est imprimable
+  - maintenant : chaque filament choisi est charge dans l'AMS, assez rempli ;
+  - avec le stock : assez de chaque filament en stock (bobines comprises) ;
+  - sinon : ce qui manque.
+Les besoins de toute la file sont additionnes par filament du stock.
+"""
+import asyncio
+import json
+import logging
+import time
+
+logger = logging.getLogger(__name__)
+
+KEY = "MW_QUEUE"
+MAX_PER_COLLECTION = 300
+_CACHE = [0.0, None]
+TTL = 300
+
+
+class QueueError(Exception):
+    pass
+
+
+async def _load() -> dict:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, KEY, "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    d = d if isinstance(d, dict) else {}
+    d.setdefault("collections", [])
+    d.setdefault("plans", {})
+    return d
+
+
+async def _save(d: dict) -> None:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, KEY, json.dumps(d, ensure_ascii=False))
+    _CACHE[:] = [0.0, None]
+
+
+async def config() -> dict:
+    d = await _load()
+    return {"collections": d["collections"], "plans": d["plans"]}
+
+
+async def set_collections(ids: list) -> dict:
+    d = await _load()
+    d["collections"] = [str(i) for i in (ids or []) if str(i).isdigit()][:20]
+    await _save(d)
+    return await config()
+
+
+async def set_plan(design_id: str, plan) -> dict:
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        raise QueueError("Modèle inconnu")
+    d = await _load()
+    if plan is None:
+        # oublier le plan, mais garder la quantite si elle a ete reglee
+        q = _qty((d["plans"].get(did) or {}).get("qty", 1))
+        if q > 1:
+            d["plans"][did] = {"instance_id": None, "plates": None, "picks": {}, "qty": q}
+        else:
+            d["plans"].pop(did, None)
+    else:
+        iid = str((plan or {}).get("instance_id") or "")
+        if not iid.isdigit():
+            raise QueueError("Profil inconnu")
+        plates = plan.get("plates")
+        plates = [int(p) for p in plates if str(p).isdigit()] if isinstance(plates, list) else None
+        picks = {str(k)[:40]: int(v) for k, v in (plan.get("picks") or {}).items() if str(v).isdigit()}
+        qty = _qty(plan.get("qty", (d["plans"].get(did) or {}).get("qty", 1)))
+        d["plans"][did] = {"instance_id": iid, "plates": plates, "picks": picks, "qty": qty}
+    await _save(d)
+    return d["plans"].get(did) or {}
+
+
+def _qty(v) -> int:
+    try:
+        return max(1, min(99, int(v)))
+    except (TypeError, ValueError):
+        return 1
+
+
+async def set_qty(design_id: str, qty) -> dict:
+    """Nombre d'exemplaires d'un modele (sans toucher au reste du plan)."""
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        raise QueueError("Modèle inconnu")
+    d = await _load()
+    pl = d["plans"].setdefault(did, {"instance_id": None, "plates": None, "picks": {}})
+    pl["qty"] = _qty(qty)
+    await _save(d)
+    return pl
+
+
+def fkey(t, c) -> str:
+    return f"{str(t or '').upper()}|{str(c or '').upper()}"
+
+
+def _num(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+async def _collection_designs(cid: str) -> list:
+    from . import makerworld_account as A
+    out, off = [], 0
+    while off < MAX_PER_COLLECTION:
+        p = await A.collection_designs(cid, off, 60)
+        got = p.get("items") or []
+        out += got
+        if not got or not p.get("has_more"):
+            break
+        off += 60
+    return out
+
+
+async def _ams_stock() -> dict:
+    """Ce qui est charge dans l'AMS : filament -> grammes restants des bobines
+    inserees (une bobine seulement posee pour le sechage ne compte pas)."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.filament import Spool
+    ids = set()
+    try:
+        from ..core.mqtt import get_state
+        for a in get_state().ams_list or []:
+            for t in a.trays or []:
+                if getattr(t, "spool_id", None):
+                    ids.add(int(t.spool_id))
+    except Exception:
+        logger.exception("[FILE] lecture de l'AMS")
+    if not ids:
+        return {}
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Spool.id, Spool.filament_id, Spool.remaining_weight_g)
+                                 .where(Spool.id.in_(ids)))).all()
+    out = {}
+    for sid, fid, rem in rows:
+        e = out.setdefault(int(fid), {"g": 0.0, "spools": []})
+        e["g"] += _num(rem)
+        e["spools"].append(int(sid))
+    return out
+
+
+async def _prices(fids) -> dict:
+    """Prix au gramme des filaments (prix de la bobine / poids nominal)."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.filament import Filament
+    if not fids:
+        return {}
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Filament.id, Filament.price, Filament.filament_weight_g)
+                                 .where(Filament.id.in_(list(fids))))).all()
+    return {i: (p / w if p and w else None) for i, p, w in rows}
+
+
+async def queue(fresh: bool = False) -> dict:
+    if not fresh and _CACHE[1] is not None and time.time() - _CACHE[0] < TTL:
+        return _CACHE[1]
+    from . import makerworld_account as A
+    from .makerworld import model_detail
+    cfg = await _load()
+    colls = {c["id"]: c["title"] for c in (await A.collections())["collections"]}
+    chosen = [c for c in cfg["collections"] if c in colls]
+    designs, where = {}, {}
+    for cid in chosen:
+        for x in await _collection_designs(cid):
+            designs.setdefault(x["design_id"], x)
+            where.setdefault(x["design_id"], []).append(colls[cid])
+
+    sem = asyncio.Semaphore(4)
+
+    async def detail(did):
+        async with sem:
+            try:
+                return did, await model_detail(did)
+            except Exception as e:
+                return did, {"error": f"{type(e).__name__}"}
+    details = dict(await asyncio.gather(*(detail(d) for d in designs)))
+    ams = await _ams_stock()
+
+    models, totals_need, stock_of, unmatched = [], {}, {}, {}
+    for did, base in designs.items():
+        m = details.get(did) or {}
+        plan = cfg["plans"].get(did)
+        qty = _qty((plan or {}).get("qty", 1))
+        # un plan qui ne porte qu'une quantite ne compte pas comme « retenu »
+        chosen_plan = bool(plan and plan.get("instance_id"))
+        profiles = m.get("profiles") or []
+        prof = next((p for p in profiles if plan and p.get("instance_id") == plan.get("instance_id")), None) \
+            or next((p for p in profiles if p.get("main")), None) or (profiles[0] if profiles else None)
+        row = {"design_id": did, "title": base.get("title"), "title_fr": base.get("title_fr") or m.get("title_fr"),
+               "cover_url": base.get("cover_url") or m.get("cover_url"), "collections": where.get(did, []),
+               "printed": m.get("printed") or 0, "planned": chosen_plan, "qty": qty, "error": m.get("error"),
+               "profile": None, "seconds": None, "weight_g": 0.0, "filaments": [], "status": "unknown"}
+        if prof:
+            sel = plan.get("plates") if plan and plan.get("instance_id") == prof.get("instance_id") else None
+            plates = [pl for pl in prof.get("plates") or [] if sel is None or pl.get("index") in sel]
+            items = (m.get("stock") or {}).get(prof.get("instance_id")) or []
+            picks = (plan or {}).get("picks") or {}
+            row["profile"] = {"instance_id": prof.get("instance_id"), "title": prof.get("title"),
+                              "printer": prof.get("printer"), "plates": len(plates), "plates_total": len(prof.get("plates") or [])}
+            one = sum(_num(pl.get("seconds")) for pl in plates) if sel is not None else _num(prof.get("seconds"))
+            row["seconds"] = one * qty if one else None
+            ok_stock = ok_ams = True
+            for it in items:
+                k = fkey(it.get("type"), it.get("color"))
+                if sel is None:
+                    g = _num(it.get("g"))
+                else:
+                    g = sum(_num(f.get("g")) for pl in plates for f in pl.get("filaments") or [] if fkey(f.get("type"), f.get("color")) == k)
+                if g <= 0:
+                    continue
+                g *= qty
+                cands = (it.get("matches") or []) + (it.get("others") or [])
+                pick = next((c for c in cands if c["filament_id"] == picks.get(k)), None) or (it.get("matches") or [None])[0]
+                row["weight_g"] += g
+                fil = None
+                if pick:
+                    fid = pick["filament_id"]
+                    stock_of[fid] = {"filament_id": fid, "name": pick["name"], "brand": pick.get("brand"),
+                                     "material": pick.get("material"), "color": pick.get("color"),
+                                     "colors_array": pick.get("colors_array"), "multicolor_type": pick.get("multicolor_type"),
+                                     "stock_g": pick.get("remaining_g") or 0, "ams_g": round(ams.get(fid, {}).get("g", 0))}
+                    totals_need.setdefault(fid, {"need_g": 0.0, "models": 0})
+                    totals_need[fid]["need_g"] += g
+                    totals_need[fid]["models"] += 1
+                    enough_stock = (pick.get("remaining_g") or 0) >= g
+                    enough_ams = ams.get(fid, {}).get("g", 0) >= g
+                    ok_stock &= enough_stock
+                    ok_ams &= enough_ams
+                    fil = {"filament_id": fid, "name": pick["name"], "color": pick.get("color"),
+                           "colors_array": pick.get("colors_array"), "multicolor_type": pick.get("multicolor_type"),
+                           "level": pick.get("level"), "other_material": pick.get("other_material"),
+                           "in_ams": fid in ams, "enough_stock": enough_stock, "enough_ams": enough_ams}
+                else:
+                    ok_stock = ok_ams = False
+                    u = unmatched.setdefault(k, {"type": it.get("type"), "color": it.get("color"), "need_g": 0.0, "models": 0})
+                    u["need_g"] += g
+                    u["models"] += 1
+                row["filaments"].append({"type": it.get("type"), "color": it.get("color"), "g": round(g, 1), "chosen": fil})
+            row["status"] = "ams" if ok_ams and items else "stock" if ok_stock and items else "short" if items else "unknown"
+        row["weight_g"] = round(row["weight_g"], 1)
+        models.append(row)
+
+    prices = await _prices(stock_of.keys())
+    cost_total = 0.0
+    for r in models:
+        c = 0.0
+        known = True
+        for f in r["filaments"]:
+            pg = prices.get((f.get("chosen") or {}).get("filament_id"))
+            if pg is None:
+                known = False
+            else:
+                c += pg * f["g"]
+        r["cost"] = round(c, 2) if known and r["filaments"] else None
+        cost_total += c
+    filaments = []
+    for fid, t in totals_need.items():
+        s = stock_of[fid]
+        filaments.append({**s, "need_g": round(t["need_g"], 1), "models": t["models"],
+                          "missing_g": round(max(0.0, t["need_g"] - s["stock_g"]), 1)})
+    filaments.sort(key=lambda f: (-f["missing_g"], -f["need_g"]))
+    out = {
+        "collections": [{"id": c, "title": colls[c]} for c in chosen],
+        "models": models,
+        "filaments": filaments,
+        "unmatched": sorted(unmatched.values(), key=lambda u: -u["need_g"]),
+        "totals": {"models": len(models), "seconds": sum(r["seconds"] or 0 for r in models),
+                   "weight_g": round(sum(r["weight_g"] for r in models), 1), "cost": round(cost_total, 2),
+                   "ams": sum(1 for r in models if r["status"] == "ams"),
+                   "stock": sum(1 for r in models if r["status"] == "stock"),
+                   "short": sum(1 for r in models if r["status"] == "short"),
+                   "printed": sum(1 for r in models if r["printed"])},
+    }
+    _CACHE[:] = [time.time(), out]
+    return out

@@ -11,6 +11,7 @@ import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { useMine, MineBadge } from "../components/Friends";
 import { useMwAssign } from "../store/mwAssign";
+import MwQueue from "../components/MwQueue";
 import { mwImg } from "../components/MwImg";
 import { toast } from "../store/toast";
 import ShareSheet from "../components/ShareSheet";
@@ -2657,7 +2658,7 @@ export default function Prints() {
 
       {/* Tabs Liste / Galerie / MakerWorld */}
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
-        {[["list","Liste"],["gallery","Galerie"],["makerworld","MakerWorld"]].map(([id,label])=>(
+        {[["list","Liste"],["gallery","Galerie"],["makerworld","MakerWorld"],["queue","File"]].map(([id,label])=>(
           <button key={id} onClick={()=>setViewMode(id)} style={{
             flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
             background: viewMode===id ? "#3b82f6" : "transparent",
@@ -2669,12 +2670,14 @@ export default function Prints() {
 
       {/* Onglet MakerWorld : collections, j'aime, « deja imprime ». Un clic
           sur « imprime N fois » revient a la liste, recherche posee. */}
+      {/* File : modeles des collections « a imprimer », besoins en filament, pret / stock / manque. */}
+      {viewMode==="queue" && <MwQueue/>}
       {viewMode==="makerworld" && (
         <MakerWorldView onSearch={x => { setSearch(x.title || ""); setViewMode("list"); }}/>
       )}
 
       {/* KPIs — données complètes depuis API (pas juste les éléments chargés) */}
-      {kpis && viewMode!=="makerworld" && (
+      {kpis && viewMode!=="makerworld" && viewMode!=="queue" && (
         <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
           {[
             [`${kpis.count}`, "prints", "#3b82f6"],
@@ -2692,7 +2695,7 @@ export default function Prints() {
       )}
 
       {/* Recherche + Filtres + .3mf */}
-      {viewMode!=="makerworld" && <div style={{ display:"flex", gap:8 }}>
+      {viewMode!=="makerworld" && viewMode!=="queue" && <div style={{ display:"flex", gap:8 }}>
         <div style={{ position:"relative", flex:1 }}>
           <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Rechercher un print…"

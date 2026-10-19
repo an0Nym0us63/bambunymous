@@ -7,7 +7,7 @@ import { mwLiked } from "../utils/mwSync";
 import { useMwAssign } from "../store/mwAssign";
 import { useFriend } from "../store/friend";
 import MwImg from "./MwImg";
-import MwStockMatch, { stockSummary } from "./MwStockMatch";
+import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf } from "./MwStockMatch";
 import Lightbox from "./Lightbox";
 import { showAlert, showConfirm } from "../utils/dialog";
 
@@ -48,6 +48,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [sim, setSim] = useState(null);
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
   const [exactBusy, setExactBusy] = useState(null);
+  const [plan, setPlan] = useState(null);            // plan retenu pour la file (profil, plateaux, filaments)
+  const [planBusy, setPlanBusy] = useState(false);
   const [studioBusy, setStudioBusy] = useState(false);
   // Profil a imprimer : celui qui est deplie, sinon celui retenu.
   const printProfile = () => (m?.profiles || []).find(p => p.instance_id === open)
@@ -99,6 +101,22 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setExactBusy(null);
   };
+  const pinPlan = async (p) => {
+    setPlanBusy(true);
+    try {
+      const body = { instance_id: p.instance_id, plates: plateSel[p.instance_id] || null,
+        picks: picksOf(`${id}|${p.instance_id}`, m.stock?.[p.instance_id]) };
+      const { data } = await client.put(`/makerworld/queue/plan/${id}`, body);
+      setPlan(data);
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    setPlanBusy(false);
+  };
+  const unpinPlan = async () => {
+    setPlanBusy(true);
+    try { await client.delete(`/makerworld/queue/plan/${id}`); setPlan(null); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    setPlanBusy(false);
+  };
   const toggleLike = async () => {
     const want = !like.liked;
     setLike(l => ({ ...l, liked: want })); setLikeBusy(true);          // tout de suite a l'ecran
@@ -117,6 +135,15 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
       if (!alive) return;
       setM(data);
       setOpen(null);          // profils replies a l'ouverture : on deplie celui qu'on veut voir
+      // Plan deja retenu pour la file : on le remet (profil deplie, plateaux, filaments).
+      client.get("/makerworld/queue/config").then(({ data: c }) => {
+        const pl = c.plans?.[String(id)];
+        if (!alive || !pl) { if (alive) setPlan(null); return; }
+        setPlan(pl);
+        setPicksFromPlan(`${id}|${pl.instance_id}`, data.stock?.[pl.instance_id], pl.picks);
+        if (pl.plates) setPlateSel(s => ({ ...s, [pl.instance_id]: pl.plates }));
+        setOpen(pl.instance_id);
+      }).catch(() => {});
     }).catch(e => alive && setM({ error: e.response?.data?.detail || e.message }));
     client.get(`/makerworld/similar/${id}`).then(({ data }) => alive && setSim(data.items || [])).catch(() => {});
     return () => { alive = false; };
@@ -300,6 +327,19 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                           ou Bambu Studio (ordinateur, lien du 3MF de ce profil). */}
                       {isOpen && (
                         <div style={{ display:"flex", gap:6, padding:"0 10px 8px", flexWrap:"wrap" }}>
+                          {!friend && (
+                            <AdminOnly>
+                              <button onClick={() => pinPlan(p)} disabled={planBusy}
+                                title="La file d'attente utilisera ce profil, ces plateaux et ces filaments"
+                                style={{ ...linkBtn, padding:"5px 10px", fontSize:11.5, cursor:"pointer",
+                                  ...(plan?.instance_id === p.instance_id ? { color:"#22c55e", borderColor:"rgba(34,197,94,0.4)" } : null) }}>
+                                {plan?.instance_id === p.instance_id ? "📌 Retenu pour la file · mettre à jour" : "📌 Retenir pour la file"}</button>
+                              {plan?.instance_id === p.instance_id && (
+                                <button onClick={unpinPlan} disabled={planBusy} title="Oublier ce choix"
+                                  style={{ ...linkBtn, padding:"5px 9px", fontSize:11.5, cursor:"pointer", color:"var(--muted)" }}>✕</button>
+                              )}
+                            </AdminOnly>
+                          )}
                           {IS_MOBILE ? (
                             <a href={handyUrl(id, p)} target="_blank" rel="noopener noreferrer"
                               style={{ ...linkBtn, padding:"5px 10px", fontSize:11.5 }}>📱 Ouvrir ce profil dans Bambu Handy</a>

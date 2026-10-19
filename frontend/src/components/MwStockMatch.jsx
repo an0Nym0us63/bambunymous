@@ -27,6 +27,18 @@ const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 // Filament retenu pour une ligne : la proposition choisie a la main (gardee
 // le temps de la session, par profil et par ligne), sinon la meilleure.
 const PICKS = new Map();      // `${scope}|${i}` -> filament_id
+// Plan retenu pour la file : cle « TYPE|#COULEUR » -> filament choisi a la main.
+export function setPicksFromPlan(scope, items, picks) {
+  (items || []).forEach((x, i) => { const id = picks?.[fkey(x.type, x.color)]; if (id) PICKS.set(`${scope}|${i}`, id); });
+}
+export function picksOf(scope, items) {
+  const out = {};
+  (items || []).forEach((x, i) => {
+    const c = chosenOf(x, scope, i);
+    if (c && c !== x.matches[0]) out[fkey(x.type, x.color)] = c.filament_id;
+  });
+  return out;
+}
 export const chosenOf = (x, scope, i) => {
   const id = PICKS.get(`${scope}|${i}`);
   // Choix possible aussi parmi les « autre matiere » (simulation d'une substitution).
