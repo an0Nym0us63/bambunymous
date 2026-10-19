@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router-dom";
 import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
+import { openCreator } from "../components/MwCreatorPage";
 import MwImg from "../components/MwImg";
 import client, { apiUrl } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
@@ -759,7 +760,11 @@ function MakerWorldCard({ designId, note, prints = [] }) {
             <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:"var(--muted)", marginTop:3 }}>
               {mw.creator_avatar && <MwImg src={mw.creator_avatar} w={28}
                 style={{ width:14, height:14, borderRadius:"50%" }}/>}
-              par {mw.creator_name}
+              par {mw.creator_uid
+                ? <span role="button" title="Tous ses modèles"
+                    onClick={e => { e.preventDefault(); e.stopPropagation(); openCreator({ uid: mw.creator_uid, name: mw.creator_name }); }}
+                    style={{ color:"#3b82f6", fontWeight:600, cursor:"pointer" }}>{mw.creator_name}</span>
+                : mw.creator_name}
             </div>
           )}
         </div>

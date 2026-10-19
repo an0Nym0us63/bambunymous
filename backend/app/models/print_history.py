@@ -183,6 +183,7 @@ class MakerWorldDesign(Base):
     creator_name   = Column(String(256), nullable=True)
     creator_handle = Column(String(256), nullable=True)
     creator_avatar = Column(String(1024), nullable=True)
+    creator_uid    = Column(String(32), nullable=True)      # page du createur (tous ses modeles)
     categories     = Column(String(512), nullable=True)   # CSV, en francais
     tags           = Column(Text,        nullable=True)   # CSV
     like_count     = Column(Integer, nullable=True)

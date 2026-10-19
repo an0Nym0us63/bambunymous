@@ -156,7 +156,7 @@ def to_dict(m) -> dict:
         "design_id": m.design_id, "url": model_url(m.design_id),
         "title": m.title, "title_fr": m.title_fr, "cover_url": m.cover_url,
         "creator_name": m.creator_name, "creator_handle": m.creator_handle,
-        "creator_avatar": m.creator_avatar,
+        "creator_avatar": m.creator_avatar, "creator_uid": m.creator_uid,
         "creator_url": f"https://makerworld.com/fr/@{m.creator_handle}" if m.creator_handle else None,
         "categories": split(m.categories), "tags": split(m.tags),
         "like_count": m.like_count, "download_count": m.download_count,
@@ -636,23 +636,34 @@ async def _fetch_base(did: str) -> dict:
     return base
 
 
+# Une fiche gardee avant l'ajout d'un champ (ici creator_uid, pour la page du
+# createur) est relue : sinon le champ manquerait jusqu'a l'expiration du cache.
+def _current(base) -> bool:
+    return isinstance(base, dict) and "creator_uid" in base
+
+
 async def _base(did: str, stale_ok: bool = False) -> dict:
     import asyncio
     hit = _MODEL_CACHE.get(did)
-    if hit and time.time() - hit[0] < DISK_TTL:
+    if hit and time.time() - hit[0] < DISK_TTL and _current(hit[1]):
         return hit[1]
     disk = await asyncio.to_thread(_disk_get, did)
+    if disk and not _current(disk[1]) and not stale_ok:
+        disk_old, disk = disk, None              # ancien format : relue maintenant (repli si MakerWorld est muet)
+    else:
+        disk_old = None
     if disk:
         age = time.time() - disk[0]
         if age < DISK_TTL or (stale_ok and age < STALE_MAX):
-            if stale_ok and age > STALE_REFRESH and did not in _REFRESHING:
+            if stale_ok and (age > STALE_REFRESH or not _current(disk[1])) and did not in _REFRESHING:
                 _REFRESHING.add(did)
                 asyncio.create_task(_refresh(did))
             _MODEL_CACHE[did] = disk
             return disk[1]
     base = await _fetch_base(did)
     if "error" in base:
-        return disk[1] if disk else base          # MakerWorld muet : derniere fiche connue
+        old = disk or disk_old
+        return old[1] if old else base            # MakerWorld muet : derniere fiche connue
     _MODEL_CACHE[did] = (time.time(), base)
     await asyncio.to_thread(_disk_put, did, base)
     return base
@@ -754,7 +765,7 @@ async def _todo(limit: int, only: str = None) -> list:
         m = known.get(str(i))
         if m is None or m.status == "error" or not m.fetched_at or m.fetched_at < old \
                 or (m.status == "ok" and m.title and not m.title_fr) \
-                or (m.status == "ok" and m.profiles is None)                 or (m.status == "ok" and m.profiles not in (None, "[]") and '"instance_id"' not in m.profiles):
+                or (m.status == "ok" and m.profiles is None)                 or (m.status == "ok" and m.profiles not in (None, "[]") and '"instance_id"' not in m.profiles)                 or (m.status == "ok" and not m.creator_uid):          # page du createur
             out.append(str(i))
     return out[:limit]
 
@@ -800,7 +811,7 @@ async def refresh(limit: int = 200, only: str = None) -> dict:
             if r["status"] != "ok":
                 continue
             ok += 1
-            for f in ("title", "cover_url", "creator_name", "creator_handle", "creator_avatar",
+            for f in ("title", "cover_url", "creator_name", "creator_handle", "creator_avatar", "creator_uid",
                       "categories", "tags", "like_count", "download_count", "print_count",
                       "collection_count", "profiles"):
                 setattr(m, f, r.get(f))
