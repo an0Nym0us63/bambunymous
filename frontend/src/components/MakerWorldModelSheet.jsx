@@ -41,6 +41,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [id, setId] = useState(designId);          // permet d'ouvrir un similaire sans empiler
   const [m, setM] = useState(null);
   const [more, setMore] = useState(false);         // descriptif deplie
+  const [allProfs, setAllProfs] = useState(false); // profils : les 4 premiers, puis « voir plus »
   const [orig, setOrig] = useState(false);         // descriptif : original au lieu du francais
   const [origC, setOrigC] = useState({});          // commentaires montres dans l'original
   const [open, setOpen] = useState(null);          // profil deplie (instance_id)
@@ -156,7 +157,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
   useEffect(() => {
     let alive = true;
-    setM(null); setCom(null); setSim(null); setMore(false); setShowCom(false);
+    setM(null); setCom(null); setSim(null); setMore(false); setAllProfs(false); setShowCom(false);
     getModel(id).then(data => {
       if (!alive) return;
       setM(data);
@@ -335,7 +336,15 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             {m.profiles?.length > 0 && (
               <Section title={`Profils (${m.profiles.length})`}>
                 {/* Tous les profils listes, chacun replie : on voit d'un coup combien il y en a. */}
-                {m.profiles.map(p => {
+                {(() => {
+                  // Le profil retenu pour « A faire » d'abord, toujours ; puis l'ordre de l'appli.
+                  const ps = [...m.profiles].sort((a, b) => (b.instance_id === plan?.instance_id) - (a.instance_id === plan?.instance_id));
+                  const LIMIT = 4;
+                  // Un profil deplie reste visible meme au-dela des premiers.
+                  const shown = allProfs || ps.length <= LIMIT + 1 ? ps
+                    : ps.filter((p, i) => i < LIMIT || p.instance_id === open);
+                  return (<>
+                {shown.map(p => {
                   const isOpen = open === p.instance_id;
                   const nDone = p.plates.filter(pl => plateDone(p, pl.index)).length;
                   return (
@@ -473,6 +482,14 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                     </div>
                   );
                 })}
+                {ps.length > shown.length && (
+                  <button onClick={() => setAllProfs(true)} style={textBtn}>Voir les {ps.length - shown.length} autres profils</button>
+                )}
+                {allProfs && ps.length > LIMIT + 1 && (
+                  <button onClick={() => setAllProfs(false)} style={textBtn}>Réduire</button>
+                )}
+                  </>);
+                })()}
               </Section>
             )}
 
