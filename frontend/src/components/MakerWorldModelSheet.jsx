@@ -10,7 +10,7 @@ import MwImg from "./MwImg";
 import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf } from "./MwStockMatch";
 import Lightbox from "./Lightbox";
 import { openCreator } from "./MwCreatorPage";
-import { useToRateSet, rateUrl } from "./MwToRate";
+import { useToRateSet, RateButton } from "./MwToRate";
 import { showAlert, showConfirm } from "../utils/dialog";
 
 // Prechargement : la fiche est demandee des qu'on touche une tuile ; a
@@ -288,8 +288,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                   {boost.done ? "⚡ Boosté" : `⚡ ${boost.boosted ? "Booster encore" : "Booster"}${boost.available != null ? ` · ${boost.available} dispo` : ""}`}</button></AdminOnly>
               )}
               {toRate.has(String(id)) && (
-                <a href={rateUrl(id)} target="_blank" rel="noopener noreferrer" title="Tu l'as imprimé, pas encore évalué"
-                  style={{ ...linkBtn, color:"white", background:"#f59e0b", borderColor:"#f59e0b" }}>⭐ Évaluer ↗</a>
+                <RateButton did={id} style={{ ...linkBtn, color:"white", background:"#f59e0b", borderColor:"#f59e0b" }}/>
               )}
               {/* Pas de boost possible : la raison, discrete (deja booste, limite par createur, plus de boost). */}
               {boost && !boost.can && !boost.done && boost.reason && (

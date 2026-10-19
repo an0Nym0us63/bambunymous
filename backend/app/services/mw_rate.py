@@ -120,6 +120,7 @@ async def to_rate(fresh: bool = False) -> dict:
     from .makerworld_account import DONE_STATUSES
     rated = await rated_designs(fresh)
     pending = await pending_ratings()
+    stats = {"rated": len(rated), "pending": len(pending)} if rated is not None else None
     my_uid, mine = await own_designs()
     async with AsyncSessionLocal() as db:
         prints = (await db.execute(
@@ -138,7 +139,7 @@ async def to_rate(fresh: bool = False) -> dict:
             prints = [p for p in prints if str(p.design_id) not in own_mw]
         pending = {k: v for k, v in pending.items() if k not in mine and k not in own_mw}
         if not prints and not pending:
-            return {"items": [], "rated_known": rated is not None}
+            return {"items": [], "rated_known": rated is not None, "stats": stats}
         gal = await gallery_items(db, prints, {}) if prints else {"prints": []}
         ids = list({str(p.design_id) for p in prints} | set(pending))
         mws = {m.design_id: m for m in (await db.execute(select(MW).where(MW.design_id.in_(ids)))).scalars().all()}
@@ -181,7 +182,7 @@ async def to_rate(fresh: bool = False) -> dict:
             it.setdefault("url", f"https://makerworld.com/fr/models/{did}")
     out = sorted(items.values(), key=lambda x: x["last_date"] or "", reverse=True)
     out.sort(key=lambda x: not x["photos"])                 # avec photos d'abord, puis les plus recents
-    return {"items": out, "rated_known": rated is not None}
+    return {"items": out, "rated_known": rated is not None, "stats": stats}
 
 
 # ── Publier une evaluation depuis l'appli (geste explicite de l'utilisateur) ──

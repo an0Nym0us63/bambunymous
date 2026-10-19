@@ -31,6 +31,38 @@ export function useToRateSet(enabled = true) {
   return new Set((d?.items || []).map(x => String(x.design_id)));
 }
 export function forgetToRate() { _p = null; _t = 0; }
+
+// Bouton « Évaluer » pour un modele : formulaire dans l'appli quand MakerWorld
+// attend l'evaluation (on connait sa fiche), sinon lien vers MakerWorld.
+export function RateButton({ did, style, label = "⭐ Évaluer" }) {
+  const d = useToRate(true);
+  const [open, setOpen] = useState(false);
+  const [gone, setGone] = useState(false);
+  const x = (d?.items || []).find(i => String(i.design_id) === String(did));
+  if (gone) return <span style={{ ...style, background: "none", color: "#22c55e", borderColor: "transparent" }}>✓ Évalué</span>;
+  if (!x?.rating_id) return <a href={x?.url || rateUrl(did)} target="_blank" rel="noopener noreferrer" style={style}>{label} ↗</a>;
+  return (<>
+    <button onClick={() => setOpen(true)} style={{ ...style, cursor: "pointer" }}>{label}</button>
+    {open && (
+      <div data-no-pull="" onClick={() => setOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 4300, background: "rgba(0,0,0,0.6)",
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width: "100%", maxWidth: 520, maxHeight: "90vh", overflowY: "auto",
+          borderRadius: 16, border: "1px solid var(--border)", padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                ⭐ {x.title || `Modèle ${did}`}</div>
+              {x.profile_title && <div style={{ fontSize: 11, color: "var(--muted)" }}>Profil « {x.profile_title} »</div>}
+            </div>
+            <button onClick={() => setOpen(false)} aria-label="Fermer" style={{ background: "none", border: "none", color: "var(--muted)",
+              fontSize: 20, cursor: "pointer" }}>✕</button>
+          </div>
+          <RateForm x={x} onDone={() => { setOpen(false); setGone(true); }}/>
+        </div>
+      </div>
+    )}
+  </>);
+}
 export const rateUrl = (did) => `https://makerworld.com/fr/models/${did}`;
 
 const day = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "";
@@ -126,7 +158,8 @@ export function ToRateSheet({ data, onClose, onOpen }) {
             <div style={{ fontSize: 15, fontWeight: 800, color: "var(--text)" }}>⭐ À évaluer</div>
             <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
               {data?.rated_known === false ? "Tes évaluations n'ont pas pu être lues : tout est listé."
-                : "Imprimés, pas encore évalués. Tes photos sont prêtes à joindre."}</div>
+                : "Imprimés, pas encore évalués. Tes photos sont prêtes à joindre."}
+              {data?.stats && <span> · MakerWorld : {data.stats.pending} en attente, {data.stats.rated} déjà notés</span>}</div>
           </div>
           <button onClick={onClose} aria-label="Fermer" style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 20,
             cursor: "pointer", padding: 4 }}>✕</button>

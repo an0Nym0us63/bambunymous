@@ -5,7 +5,7 @@ import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
 import { openCreator } from "../components/MwCreatorPage";
-import { useToRateSet, rateUrl } from "../components/MwToRate";
+import { useToRateSet, RateButton } from "../components/MwToRate";
 import { useFriend } from "../store/friend";
 import MwImg from "../components/MwImg";
 import client, { apiUrl } from "../api/client";
@@ -789,8 +789,8 @@ function MakerWorldCard({ designId, note, prints = [] }) {
       {toRate.has(String(designId)) && (
         <div style={{ display:"flex", alignItems:"center", gap:8, padding:"0 10px 10px", flexWrap:"wrap" }}>
           <span style={{ fontSize:11, fontWeight:700, color:"#f59e0b" }}>⭐ Pas encore évalué</span>
-          <a href={rateUrl(designId)} target="_blank" rel="noopener noreferrer" style={{ fontSize:11.5, fontWeight:700,
-            padding:"4px 10px", borderRadius:10, background:"#f59e0b", color:"white", textDecoration:"none" }}>Évaluer sur MakerWorld ↗</a>
+          <RateButton did={designId} style={{ fontSize:11.5, fontWeight:700, padding:"4px 10px", borderRadius:10, background:"#f59e0b",
+            color:"white", textDecoration:"none", border:"1px solid #f59e0b" }}/>
         </div>
       )}
       <MakerWorldPlates profiles={mw.profiles || []} prints={prints}/>
