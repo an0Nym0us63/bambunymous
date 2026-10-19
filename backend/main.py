@@ -297,8 +297,19 @@ async def track_activity(request, call_next):
 
         username = None
         auth = request.headers.get("authorization") or ""
-        if auth.lower().startswith("bearer "):
-            payload = decode_token_payload(auth.split(" ", 1)[1].strip())
+        bearer = auth.split(" ", 1)[1].strip() if auth.lower().startswith("bearer ") else ""
+        if bearer.startswith("fk_"):
+            # Visite d'un copain (cle d'invitation) : le compte auquel elle est
+            # liee, pour son journal et sa derniere visite.
+            import hashlib
+            from sqlalchemy import select as _sel
+            from app.db.session import AsyncSessionLocal as _ASL
+            from app.models.user import User as _U
+            async with _ASL() as _db:
+                username = (await _db.execute(_sel(_U.username).where(
+                    _U.friend_key_hash == hashlib.sha256(bearer.encode()).hexdigest()))).scalar_one_or_none()
+        elif bearer:
+            payload = decode_token_payload(bearer)
             if payload:
                 username = payload.get("sub")
         is_login = path.endswith("/auth/login") and response.status_code < 400

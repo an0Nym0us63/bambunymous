@@ -53,11 +53,13 @@ async def _viewer(request: Request, db: AsyncSession = Depends(get_db)) -> str:
 async def friends_proxy(fid: str, path: str, request: Request, _: str = Depends(_viewer)):
     params = [(k, v) for k, v in request.query_params.multi_items() if k != "_t"]
     try:
-        code, ctype, content = await F.proxy(fid, path, params)
+        code, ctype, content = await F.proxy(fid, path, params, dict(request.headers))
     except F.FriendError as e:
         raise HTTPException(502 if "injoignable" in str(e) else 400, str(e))
     if code == 401:
         # Pas de deconnexion chez moi : c'est l'acces au copain qui est refuse.
         raise HTTPException(403, "Accès refusé par le BambuNymous du copain (invitation révoquée ?)")
+    if code == 204:
+        return Response(status_code=204)
     return Response(content=content, status_code=code, media_type=ctype,
                     headers={"Cache-Control": "private, max-age=300"} if ctype.startswith("image/") else None)

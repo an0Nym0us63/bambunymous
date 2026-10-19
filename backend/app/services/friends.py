@@ -74,11 +74,12 @@ async def list_friends() -> list:
     return [_public(f) for f in await _load()]
 
 
-def _get(url: str, key: str, path: str, params=None, timeout=20):
+def _get(url: str, key: str, path: str, params=None, timeout=20, extra=None):
     from .makerworld import session
     try:
         return session().get(f"{url}/api/v1/{path.lstrip('/')}", params=params or {}, timeout=timeout,
-                             headers={"Authorization": f"Bearer {key}", "User-Agent": "BambuNymous-copain"})
+                             headers={"Authorization": f"Bearer {key}", "User-Agent": "BambuNymous-copain",
+                                      **(extra or {})})
     except Exception as e:
         raise FriendError(f"BambuNymous du copain injoignable ({type(e).__name__})")
 
@@ -121,16 +122,22 @@ async def rename_friend(fid: str, name: str) -> dict:
     return _public(f)
 
 
-async def proxy(fid: str, path: str, params: dict):
+# En-tetes de suivi transmis au copain : sa page Activite et la derniere
+# visite du compte se mettent a jour comme si on etait chez lui.
+TRACK_HEADERS = ("x-app-page", "x-app-detail", "x-app-active")
+
+
+async def proxy(fid: str, path: str, params: dict, headers=None):
     """Relaie une lecture (GET) vers le BambuNymous du copain."""
     import asyncio
     f = next((x for x in await _load() if x["id"] == fid), None)
     if not f:
         raise FriendError("Copain inconnu")
     p = str(path or "").lstrip("/")
-    if ".." in p or p.startswith(("friends", "auth/login", "users")):
+    if ".." in p or p.startswith(("friends", "auth/login")) or (p.startswith("users") and p != "users/activity/ping"):
         raise FriendError("Chemin non relayé")
-    r = await asyncio.to_thread(_get, f["url"], f["key"], p, params, 60)
+    extra = {k: v for k, v in (headers or {}).items() if k.lower() in TRACK_HEADERS}
+    r = await asyncio.to_thread(_get, f["url"], f["key"], p, params, 60, extra)
     if p == "auth/me" and r.status_code < 400:
         try:
             role = r.json().get("role")
