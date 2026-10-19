@@ -121,22 +121,27 @@ function StatusBanner({ status, friend = null, switcher = null }) {
   const camRef      = useRef(null);
   const timerRef    = useRef(null);
   const inFlightRef = useRef(false);
+  // Adresse de la camera lue a chaque image : changer de machine (moi / un
+  // copain) ne laisse jamais tourner le flux de l'autre.
+  const camUrl = useRef(null);
+  camUrl.current = () => img(`/camera/snapshot?t=${Date.now()}`);
 
   const stopCam = () => {
     if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; }
     inFlightRef.current = false;
     // Réinitialiser l'image pour éviter l'icône cassée au prochain déploi
-    if (camRef.current) { camRef.current.src = ""; }
+    if (camRef.current) { camRef.current.removeAttribute("src"); camRef.current.style.display = ""; }
   };
   const tickCam = () => {
     if (inFlightRef.current || !camRef.current) return;
     inFlightRef.current = true;
-    camRef.current.src = img(`/camera/snapshot?t=${Date.now()}`);
+    camRef.current.src = camUrl.current();
   };
   const startCam = () => {
     if (timerRef.current) return;
     tickCam();
-    timerRef.current = setInterval(tickCam, 1500);
+    // Chez un copain, tout passe par le relais : une image toutes les 3 s suffit.
+    timerRef.current = setInterval(tickCam, friend ? 3000 : 1500);
   };
 
   const isRunning = status?.status === "RUNNING";
@@ -152,9 +157,10 @@ function StatusBanner({ status, friend = null, switcher = null }) {
   // et il fallait replier/deplier. Le cleanup (stopCam) remet timer, inFlightRef
   // et l'img a zero, puis startCam repart proprement.
   useEffect(() => {
+
     if (expanded) startCam(); else stopCam();
     return stopCam;
-  }, [expanded, isRunning, visKey]);
+  }, [expanded, isRunning, visKey, friend?.id]);
 
   const [printInfo, setPrintInfo] = useState(null);
 
@@ -253,8 +259,8 @@ function StatusBanner({ status, friend = null, switcher = null }) {
           {/* Vignette */}
           <div style={{ width:72, height:72, borderRadius:10, overflow:"hidden", flexShrink:0,
             background:"var(--surface2)" }}>
-            {printInfo?.plate_image && (
-              <img src={img(`/prints/${printInfo.id}/image`)} alt=""
+            {printInfo && (friend || printInfo.plate_image) && (
+              <img key={`${friend?.id || "me"}-${printInfo.id}`} src={img(`/prints/${printInfo.id}/image`)} alt=""
                 style={{ width:"100%", height:"100%", objectFit:"cover" }}
                 onError={e => e.currentTarget.style.display="none"}/>
             )}
@@ -301,12 +307,15 @@ function StatusBanner({ status, friend = null, switcher = null }) {
       {expanded && (
         <div style={{ borderTop:"1px solid var(--border)" }}>
           {/* Caméra */}
+          {/* Camera injoignable (chez un copain notamment) : le bloc disparait, le panneau se reduit. */}
           <img ref={camRef} alt="Camera"
             style={{ width:"100%", display:"block", maxHeight:280, objectFit:"cover",
               background:"#111" }}
-            onLoad={() => { inFlightRef.current = false; }}
-            onError={e => { inFlightRef.current = false; e.currentTarget.style.display="none"; }}
+            onLoad={e => { inFlightRef.current = false; e.currentTarget.style.display = ""; }}
+            onError={e => { inFlightRef.current = false; if (!e.currentTarget.getAttribute("src")) return;
+              e.currentTarget.style.display="none"; }}
           />
+
           {/* Températures + infos */}
           <div style={{ padding:12, display:"flex", flexDirection:"column", gap:10 }}>
             {/* Buses */}
