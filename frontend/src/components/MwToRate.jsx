@@ -45,6 +45,7 @@ export function useToRateSet(enabled = true) {
 }
 // Familles de messages tout faits (Parametres), lues une fois.
 let _tpl = null;
+let _lastDrawn = null;                 // dernier message tire : jamais le meme deux ouvertures de suite
 export function forgetTemplates() { _tpl = null; }
 function useTemplates() {
   const [fams, setFams] = useState(null);
@@ -177,13 +178,16 @@ function RateForm({ x, targets, onDone }) {
   const fill = m => m.replaceAll("{modèle}", many ? "ce modèle" : (x.title || "ce modèle"))
     .replaceAll("{créateur}", !many && x.creator_name ? x.creator_name : "au créateur");
   const draw = (fi = fam, avoid = text) => {
-    const msgs = (fams?.[fi]?.messages || []).filter(Boolean).map(fill);
-    if (!msgs.length) return;
-    const pool = msgs.length > 1 ? msgs.filter(m => m !== avoid) : msgs;
-    setText(pool[Math.floor(Math.random() * pool.length)]);
+    const raw = (fams?.[fi]?.messages || []).filter(Boolean);
+    if (!raw.length) return;
+    const pool = raw.length > 1 ? raw.filter(m => m !== _lastDrawn && fill(m) !== avoid) : raw;
+    const pick = (pool.length ? pool : raw)[Math.floor(Math.random() * (pool.length || raw.length))];
+    _lastDrawn = pick;
+    setText(fill(pick));
     setAuto(true);
   };
-  useEffect(() => { if (fams?.length && score === 5 && !text) draw(0, ""); }, [fams]);   // a l'ouverture
+  // A l'ouverture, des que les familles sont lues : un message au hasard.
+  useEffect(() => { if (fams?.length && score === 5 && !text) draw(0, ""); }, [fams]);
   useEffect(() => { if (score < 5 && auto) { setText(""); setAuto(false); } }, [score]);
   // Photos prises ailleurs que dans la galerie : envoyees au serveur tout de
   // suite (gardees le temps de publier), apercu local en attendant.
