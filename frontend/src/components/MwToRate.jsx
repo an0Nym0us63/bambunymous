@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { showConfirm } from "../utils/dialog";
+import { showConfirm, showAlert } from "../utils/dialog";
 import client from "../api/client";
 import { useShares, setOnRateFailed } from "../store/shares";
 import MwImg from "./MwImg";
@@ -168,6 +168,23 @@ export function ToRateTile({ data, onClick, card }) {
   );
 }
 
+// Oublier sans evaluer : MakerWorld ne demande plus d'evaluation pour ce modele
+// (toutes ses fiches a faire, une par profil imprime). Par la file du serveur.
+export async function forgetIt(x, onDone) {
+  const ids = x.rating_ids?.length ? x.rating_ids : x.rating_id ? [x.rating_id] : [];
+  if (!ids.length) return;
+  if (!(await showConfirm(`MakerWorld ne te demandera plus d'évaluer « ${x.title || `Modèle ${x.design_id}`} »`
+      + (ids.length > 1 ? ` (${ids.length} profils)` : "") + ". C'est définitif.",
+    { title: "Oublier sans évaluer ?", confirmLabel: "Oublier", danger: true }))) return;
+  try {
+    await useShares.getState().forgetRating(x.design_id, ids, x.title || `Modèle ${x.design_id}`);
+    markRated(x.design_id);
+    onDone?.();
+  } catch (e) {
+    showAlert(e.response?.data?.detail || e.message);
+  }
+}
+
 // Evaluer sans quitter l'appli : note, texte et mes photos, envoyes a MakerWorld.
 function RateForm({ x, targets, onDone }) {
   const [score, setScore] = useState(5);
@@ -300,9 +317,14 @@ function RateForm({ x, targets, onDone }) {
         </div>
       </div>
       {err && <div style={{ fontSize: 12, color: "#ef4444" }}>{err}</div>}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
       <button onClick={send} disabled={busy || extras.some(e => e.sending) || (low && text.trim().length < 10)} style={{ alignSelf: "flex-start", padding: "7px 16px",
         borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: "#f59e0b", color: "white", border: "none",
         opacity: busy || (low && text.trim().length < 10) ? 0.5 : 1 }}>{busy ? "Publication…" : "Publier l'évaluation"}</button>
+        {!targets && <button onClick={() => forgetIt(x, onDone)} disabled={busy} title="Supprime la demande d'évaluation sur MakerWorld"
+          style={{ background: "none", border: "none", padding: 0, cursor: "pointer", fontSize: 12, fontWeight: 600, color: "var(--muted)",
+            textDecoration: "underline" }}>Oublier sans évaluer</button>}
+      </div>
     </div>
   );
 }
@@ -360,6 +382,11 @@ export function ToRateSheet({ data, onClose, onOpen }) {
                     fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#f59e0b", color: "white", border: "none" }}>
                     {open === x.design_id ? "Fermer" : "⭐ Évaluer ici"}</button>
                 ) : null}
+                {x.rating_id && (
+                  <button onClick={() => forgetIt(x, () => setDone(s => new Set(s).add(x.design_id)))} title="Ne plus me demander d'évaluer ce modèle"
+                    style={{ padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                      background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--muted)" }}>Oublier</button>
+                )}
                 <a href={x.url} target="_blank" rel="noopener noreferrer" style={{ padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 700,
                   textDecoration: "none", ...(x.rating_id ? { background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)" }
                     : { background: "#f59e0b", color: "white" }) }}>{x.rating_id ? "MakerWorld ↗" : "⭐ Évaluer sur MakerWorld ↗"}</a>

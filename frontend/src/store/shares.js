@@ -56,6 +56,11 @@ export const useShares = create((set, get) => ({
     await client.post(`/makerworld/rate/${designId}`, { ...body, title });
     get().syncRates();
   },
+  // Oublier (sans evaluer) les fiches a faire d'un modele : meme file.
+  forgetRating: async (designId, ratingIds, title) => {
+    await client.post(`/makerworld/rate/${designId}/forget`, { rating_ids: ratingIds, title });
+    get().syncRates();
+  },
   _ratePoll: null,
   _rateSeen: {},                // job serveur -> statut deja vu (echecs signales une fois)
   syncRates: async () => {
@@ -69,17 +74,17 @@ export const useShares = create((set, get) => ({
       const prev = seen[j.id];
       seen[j.id] = j.status;
       if (j.status === "done") {
-        if (prev && prev !== "done") shown.push({ id: `r${j.id}`, kind: "rate", title: j.title, status: "done", detail: "", count: 1, sid: j.id });
+        if (prev && prev !== "done") shown.push({ id: `r${j.id}`, kind: "rate", forget: j.action === "forget", title: j.title, status: "done", detail: "", count: 1, sid: j.id });
         continue;
       }
       if (j.status === "error") {
-        shown.push({ id: `r${j.id}`, kind: "rate", title: j.title, status: "error", count: 1, sid: j.id,
-          detail: `Évaluation de « ${j.title} » non publiée : ${j.detail}` });
+        shown.push({ id: `r${j.id}`, kind: "rate", forget: j.action === "forget", title: j.title, status: "error", count: 1, sid: j.id,
+          detail: j.action === "forget" ? `« ${j.title} » non oublié : ${j.detail}` : `Évaluation de « ${j.title} » non publiée : ${j.detail}` });
         if (prev && prev !== "error") onRateFailed?.();
         continue;
       }
       // Une seule puce pour la file : celle en cours, avec le nombre restant.
-      if (j.status === "sending") shown.push({ id: `r${j.id}`, kind: "rate", title: j.title, status: "sending", count: queued + 1, sid: j.id,
+      if (j.status === "sending") shown.push({ id: `r${j.id}`, kind: "rate", forget: j.action === "forget", title: j.title, status: "sending", count: queued + 1, sid: j.id,
         detail: queued ? `${queued} en attente` : "" });
     }
     set({ jobs: [...others, ...shown], _rateSeen: seen });

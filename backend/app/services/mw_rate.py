@@ -345,16 +345,41 @@ PAUSE_S = (4.0, 9.0)                      # entre deux publications (tirage dans
 _last_done = [0.0]
 
 
-async def submit(design_id: str, rating_id: str, score: int, content: str, photos: list) -> dict:
+async def _one_at_a_time(coro_fn):
     import random
     async with _ONE_AT_A_TIME:
         wait = _last_done[0] + random.uniform(*PAUSE_S) - time.time()
         if wait > 0:
             await asyncio.sleep(wait)
         try:
-            return await _submit(design_id, rating_id, score, content, photos)
+            return await coro_fn()
         finally:
             _last_done[0] = time.time()
+
+
+async def submit(design_id: str, rating_id: str, score: int, content: str, photos: list) -> dict:
+    return await _one_at_a_time(lambda: _submit(design_id, rating_id, score, content, photos))
+
+
+async def forget(design_id: str, rating_id: str) -> dict:
+    """Oublie sur MakerWorld une evaluation A FAIRE (fiche vide), sans evaluer.
+    Requete relevee sur makerworld.com (19/10/2026) :
+    DELETE /comment-service/rating/{id} {ratingId}. Seulement une fiche que
+    MakerWorld attend encore : jamais une evaluation deja remplie."""
+    return await _one_at_a_time(lambda: _forget(design_id, rating_id))
+
+
+async def _forget(design_id: str, rating_id: str) -> dict:
+    from .makerworld_account import _send, _tok, AccountError
+    did, rid = str(design_id or "").strip(), str(rating_id or "").strip()
+    pend = (await pending_ratings()).get(did) or []
+    if not rid.isdigit() or rid not in {str(x.get("rating_id")) for x in pend}:
+        raise AccountError("Cette évaluation n'est plus attendue par MakerWorld (déjà faite ou oubliée ?)")
+    tok = await _tok()
+    await asyncio.to_thread(_send, "DELETE", f"/comment-service/rating/{rid}", {"ratingId": int(rid)}, tok)
+    logger.info(f"[MW] evaluation a faire oubliee : modele {did}, fiche {rid}")
+    _forget_pending(did, rid)
+    return {"ok": True}
 
 
 async def _submit(design_id: str, rating_id: str, score: int, content: str, photos: list) -> dict:
@@ -473,7 +498,7 @@ def _persist():
 
 
 def _public(j) -> dict:
-    return {k: j[k] for k in ("id", "design_id", "title", "status", "detail", "ts")}
+    return {**{k: j[k] for k in ("id", "design_id", "title", "status", "detail", "ts")}, "action": j.get("action", "rate")}
 
 
 def queue_state() -> dict:
@@ -482,14 +507,14 @@ def queue_state() -> dict:
     return {"jobs": [_public(j) for j in _JOBS]}
 
 
-def enqueue(design_id, rating_id, score, content, photos, title=None) -> dict:
+def enqueue(design_id, rating_id, score, content, photos, title=None, action="rate") -> dict:
     import uuid
     from .makerworld_account import AccountError
     try:
         score = int(score)
     except (TypeError, ValueError):
         score = 0
-    if not 1 <= score <= 5:
+    if action == "rate" and not 1 <= score <= 5:
         raise AccountError("Choisis une note de 1 à 5 étoiles")
     did, rid = str(design_id or "").strip(), str(rating_id or "").strip()
     if not did.isdigit() or not rid.isdigit():
@@ -497,6 +522,7 @@ def enqueue(design_id, rating_id, score, content, photos, title=None) -> dict:
     if any(j["rating_id"] == rid and j["status"] in ("queued", "sending") for j in _JOBS):
         raise AccountError("Cette évaluation est déjà en file")
     j = {"id": uuid.uuid4().hex[:12], "design_id": did, "title": (title or "")[:200] or f"Modèle {did}",
+         "action": "forget" if action == "forget" else "rate",
          "rating_id": rid, "score": score, "content": content or "", "photos": list(photos or [])[:MAX_PHOTOS],
          "status": "queued", "detail": "", "ts": time.time()}
     _JOBS.append(j)
@@ -522,8 +548,12 @@ async def _work():
             return
         j["status"], j["ts"] = "sending", time.time()
         try:
-            r = await submit(j["design_id"], j["rating_id"], j["score"], j["content"], j["photos"])
-            j["status"], j["detail"] = "done", f"{r.get('photos', 0)} photo(s)"
+            if j.get("action") == "forget":
+                await forget(j["design_id"], j["rating_id"])
+                j["status"], j["detail"] = "done", ""
+            else:
+                r = await submit(j["design_id"], j["rating_id"], j["score"], j["content"], j["photos"])
+                j["status"], j["detail"] = "done", f"{r.get('photos', 0)} photo(s)"
         except AccountError as e:
             j["status"], j["detail"] = "error", str(e)
         except Exception as e:

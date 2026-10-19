@@ -268,6 +268,17 @@ async def mw_rate_submit(design_id: str, body: dict = Body({}), _: str = Depends
         raise HTTPException(400, str(e))
 
 
+@router.post("/rate/{design_id}/forget")
+async def mw_rate_forget(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+    """Oublie sur MakerWorld les evaluations a faire de ce modele (sans evaluer), via la file."""
+    from ....services import mw_rate
+    try:
+        return {"jobs": [mw_rate.enqueue(design_id, rid, 0, "", [], body.get("title"), action="forget")
+                         for rid in (body.get("rating_ids") or [])[:50]]}
+    except acc.AccountError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.get("/rate-queue")
 async def mw_rate_queue(_: str = Depends(get_current_user)):
     """Publications en file, en cours et recentes (pour la puce d'etat)."""
