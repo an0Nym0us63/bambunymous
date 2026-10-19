@@ -846,9 +846,23 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn }) {
   // faible -- profil reconnu a l'image de l'apercu, puis plateaux qui collent
   // (le numero de plateau existe dans ce profil, poids voisin de celui du
   // plateau). A egalite, l'ordre recu (deja classe pour mon imprimante).
+  // Nom de la tache (sous-tache envoyee a l'imprimante) : lance depuis Studio,
+  // il reprend souvent le titre du profil MakerWorld, en tout ou en partie.
+  const words = (t) => new Set(String(t || "").toLowerCase().normalize("NFD").replace(/\p{M}/gu, "")
+    .split(/[^a-z0-9.]+/).filter(w => w.length > 1 && !/^(plate|plateau|the|and|for|with|de|du|la|le|les|et)$/.test(w)));
+  const nameScore = (pr, x) => {
+    const name = `${pr.original_name || ""} ${pr.task_name || ""} ${pr.file_name || ""}`;
+    const pw = words(x.title);
+    if (pw.size < 2) return 0;
+    const nw = words(name);
+    const common = [...pw].filter(w => nw.has(w)).length;
+    return common / pw.size;                  // part du titre du profil retrouvee dans le nom
+  };
   const scoreOf = (x) => {
     let sc = 0;
     prints.forEach(pr => {
+      const ns = nameScore(pr, x);
+      if (ns >= 0.5) sc += 12 * ns;            // indice fort : le nom de la tache cite ce profil
       const g = imgGuess[pr.id];
       if (g && String(g.profile) === String(x.profile_id)) sc += g.sure === false ? 6 : 10;
       const i = parseInt(pr.plate_id, 10);
