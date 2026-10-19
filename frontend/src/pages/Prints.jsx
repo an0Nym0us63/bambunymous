@@ -2254,39 +2254,40 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
 
 // Galerie : la mienne, ou celles de mes copains reunies (onglet a part, en
 // lecture seule : on regarde leurs photos, rien ne se melange a la mienne).
+// Recherche dans la galerie des copains : titre ou nom du copain.
+const friendMatch = (it, q) => `${it.kind === "group" ? it.name : (it.title || it.file_name) || ""} ${it.friend_name || ""}`
+  .toLowerCase().includes(q);
+
 function PrintsGalleryView({ search, sortF = "recent" }) {
   const hasFriends = useHasFriends();
   const [who, setWho] = useState("mine");          // mine | friends
+  // Lue des l'ouverture (gardee 5 min) : le nombre d'elements suit la recherche.
+  const fdata = useShared("/friends/shared/gallery", hasFriends);
+  const q = (search || "").trim().toLowerCase();
+  const nFr = fdata?.items ? (q ? fdata.items.filter(it => friendMatch(it, q)).length : fdata.items.length) : null;
   return (<>
     {hasFriends && (
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4,
         border:"1px solid var(--border)", marginBottom:10 }}>
-        {[["mine", "Ma galerie"], ["friends", "👀 Chez les copains"]].map(([k, l]) => (
+        {[["mine", "Ma galerie"], ["friends", `👀 Chez les copains${nFr != null ? ` (${nFr})` : ""}`]].map(([k, l]) => (
           <button key={k} onClick={() => setWho(k)} style={{ flex:1, padding:"7px 8px", borderRadius:8, fontSize:12,
             fontWeight:700, cursor:"pointer", border:"none", background: who === k ? "#3b82f6" : "transparent",
             color: who === k ? "white" : "var(--muted)" }}>{l}</button>
         ))}
       </div>
     )}
-    {who === "friends" && hasFriends ? <FriendsGalleryView search={search}/> : <MyGalleryView search={search} sortF={sortF}/>}
+    {who === "friends" && hasFriends ? <FriendsGalleryView search={search} data={fdata}/> : <MyGalleryView search={search} sortF={sortF}/>}
   </>);
 }
 
-function FriendsGalleryView({ search }) {
-  const [data, setData] = useState(null);
-  useEffect(() => {
-    let alive = true;
-    client.get("/friends/shared/gallery").then(r => alive && setData(r.data))
-      .catch(e => alive && setData({ error: e.response?.data?.detail || e.message }));
-    return () => { alive = false; };
-  }, []);
+function FriendsGalleryView({ search, data }) {
   if (!data) return <p style={{ textAlign:"center", color:"var(--muted)", padding:"40px 0" }}>Je demande à tes copains…</p>;
   if (data.error) return <p style={{ textAlign:"center", color:"#ef4444", padding:"40px 0" }}>⚠ {data.error}</p>;
   let items = data.items.map(it => ({ ...it, title: it.kind === "group" ? it.name : (it.title || it.file_name),
     photos: (it.photos || []).map(ph => ({ ...ph, url: relayed(ph.url) })) }));
   if (search?.trim()) {
     const q = search.trim().toLowerCase();
-    items = items.filter(it => `${it.title || ""} ${it.friend_name || ""}`.toLowerCase().includes(q));
+    items = items.filter(it => friendMatch(it, q));
   }
   const off = (data.friends || []).filter(f => f.status !== "ok");
   return (<>
