@@ -5,9 +5,9 @@ L'aperçu d'un print (plate.png, rendu par Bambu Studio) et les vignettes des
 plateaux sur MakerWorld (même rendu, côté créateur) montrent la même pièce
 sous le même angle. On compare leurs SILHOUETTES : découpées au cadre de la
 pièce puis ramenées à la même taille, une pièce redimensionnée ou d'une autre
-couleur se reconnaît. Une simple proposition : affichée « probable », jamais
-comptée tant qu'on ne l'a pas validée, et seulement quand l'écart avec le
-second plateau est net (deux carrés se ressemblent trop pour trancher).
+couleur se reconnaît. Entre des formes proches, le poids départage. Une simple
+proposition : affichée « probable », jamais comptée tant qu'on ne l'a pas
+validée.
 """
 import asyncio
 import hashlib
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 SIDE = 40                 # silhouette ramenee a SIDE x SIDE
 MIN_SCORE = 0.62          # ressemblance minimale (recouvrement des silhouettes)
-MIN_GAP = 0.08            # avance minimale sur le 2e plateau le plus proche
+MIN_GAP = 0.08            # en deca, deux plateaux sont « proches » : le poids departage
 _MASKS = {}               # adresse de vignette -> silhouette (memoire)
 
 
@@ -71,14 +71,24 @@ def similarity(a, b) -> float:
     return inter / union if union else 0.0
 
 
-def best(sil, plates):
-    """plates : [(cle, silhouette)] -> (cle, score) si un plateau se detache, sinon None."""
-    scored = sorted(((similarity(sil, s), k) for k, s in plates if s), reverse=True)
+def best(sil, plates, weight=None):
+    """plates : [(cle, silhouette, poids g|None)] -> (cle, score, sur) ou None.
+
+    Le plateau le plus ressemblant, des que la ressemblance suffit. Entre des
+    formes proches (plusieurs cubes...), la silhouette ne voit pas la taille :
+    on departage au poids, celui du print face a celui du plateau. « sur » dit
+    si le plateau se detachait nettement des autres."""
+    scored = sorted(((similarity(sil, p[1]), p[0], p[2] if len(p) > 2 else None) for p in plates if p[1]),
+                    key=lambda x: -x[0])
     if not scored or scored[0][0] < MIN_SCORE:
         return None
-    if len(scored) > 1 and scored[0][0] - scored[1][0] < MIN_GAP:
-        return None
-    return scored[0][1], round(scored[0][0], 2)
+    close = [x for x in scored if scored[0][0] - x[0] < MIN_GAP]
+    if len(close) > 1 and weight:
+        weighed = [x for x in close if x[2]]
+        if weighed:
+            pick = min(weighed, key=lambda x: abs(x[2] - weight) / max(x[2], weight))
+            return pick[1], round(pick[0], 2), False
+    return scored[0][1], round(scored[0][0], 2), len(close) == 1
 
 
 def _thumb_mask(url: str):
@@ -121,20 +131,20 @@ def _print_mask(pid: int):
     return None
 
 
-def _guess(profiles: list, print_ids: list) -> dict:
-    plates = [((str(p.get("profile_id")), pl["index"]), _thumb_mask(pl["thumb"]))
+def _guess(profiles: list, print_ids: list, weights: dict) -> dict:
+    plates = [((str(p.get("profile_id")), pl["index"]), _thumb_mask(pl["thumb"]), pl.get("weight_g"))
               for p in profiles for pl in (p.get("plates") or []) if pl.get("thumb")]
     out = {}
     for pid in print_ids:
-        hit = best(_print_mask(pid), plates)
+        hit = best(_print_mask(pid), plates, weights.get(pid))
         if hit:
-            (prof, idx), score = hit
-            out[str(pid)] = {"profile": prof, "plate": idx, "score": score}
+            (prof, idx), score, sure = hit
+            out[str(pid)] = {"profile": prof, "plate": idx, "score": score, "sure": sure}
     return out
 
 
 async def guess(design_id: str, print_ids: list) -> dict:
-    """Plateau probable de chaque print du modele (seulement quand il se detache)."""
+    """Plateau le plus probable de chaque print du modele."""
     from .makerworld import _base
     did = str(design_id or "").strip()
     ids = [int(x) for x in print_ids if str(x).isdigit()][:60]
@@ -144,4 +154,10 @@ async def guess(design_id: str, print_ids: list) -> dict:
     profiles = [p for p in (base.get("profiles") or []) if p.get("plates")]
     if not profiles:
         return {"guesses": {}}
-    return {"guesses": await asyncio.to_thread(_guess, profiles, ids)}
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    async with AsyncSessionLocal() as db:
+        weights = {i: w for i, w in (await db.execute(
+            select(Print.id, Print.total_weight_g).where(Print.id.in_(ids)))).all() if w}
+    return {"guesses": await asyncio.to_thread(_guess, profiles, ids, weights)}

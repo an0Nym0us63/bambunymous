@@ -874,7 +874,7 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn }) {
     const g = imgGuess[pr.id];
     if (!g || manualPlates(pr.mw_plates) || String(g.profile) !== String(prof.profile_id)) return;
     if ((platesOf(pr) || []).includes(g.plate) || done[g.plate]) return;
-    (probable[g.plate] = probable[g.plate] || []).push({ pr, score: g.score });
+    (probable[g.plate] = probable[g.plate] || []).push({ pr, score: g.score, sure: g.sure });
   });
   const nProbable = Object.keys(probable).length;
   const acceptAll = () => Object.entries(probable).forEach(([i, l]) => l.forEach(({ pr }) => save(pr, [Number(i)])));
@@ -891,8 +891,10 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn }) {
     openMenu(e, {
       title: `${pl.index}. ${pl.name || "Plateau"}`, subtitle: "Imprimé par…",
       items: [
-        ...(probable[pl.index] || []).map(({ pr, score }) => ({ icon: "💡", label: `Valider : ${pr.translated_name || pr.file_name}`,
-          hint: `Reconnu à l'image (ressemblance ${Math.round(score * 100)} %)`, onClick: () => save(pr, [pl.index]) })),
+        ...(probable[pl.index] || []).map(({ pr, score, sure }) => ({ icon: "💡", label: `Valider : ${pr.translated_name || pr.file_name}`,
+          hint: `Reconnu à l'image (ressemblance ${Math.round(score * 100)} %)`
+            + (sure === false ? " · d'autres plateaux se ressemblent : le plus proche, départagé au poids" : ""),
+          onClick: () => save(pr, [pl.index]) })),
         probable[pl.index] && "-",
         ...prints.map(pr => {
           const cur = platesOf(pr) || [];
