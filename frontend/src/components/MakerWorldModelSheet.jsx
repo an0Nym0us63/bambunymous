@@ -4,6 +4,8 @@ import client from "../api/client";
 import AdminOnly from "./AdminOnly";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
 import { mwLiked } from "../utils/mwSync";
+import { useMwAssign } from "../store/mwAssign";
+import { useFriend } from "../store/friend";
 import MwImg from "./MwImg";
 import MwStockMatch, { stockSummary } from "./MwStockMatch";
 import Lightbox from "./Lightbox";
@@ -45,7 +47,9 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [pick, setPick] = useState(false);
   const [sim, setSim] = useState(null);
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
-  const [exactBusy, setExactBusy] = useState(null); // profil dont le 3MF est en lecture
+  const [exactBusy, setExactBusy] = useState(null);
+  const startAssign = useMwAssign((s) => s.start);
+  const friend = useFriend((s) => s.friend); // profil dont le 3MF est en lecture
   const [plateSel, setPlateSel] = useState({});    // instance_id -> plateaux choisis (absent = tous)
   const [allProfiles, setAllProfiles] = useState(false);  // replie : seulement le profil principal
   const [showCom, setShowCom] = useState(false);   // commentaires replies (charges a l'ouverture)
@@ -196,6 +200,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                   style={{ ...linkBtn, cursor:"pointer", ...(like.liked ? { color:"#ef4444", background:"rgba(239,68,68,0.1)",
                     borderColor:"rgba(239,68,68,0.35)" } : null) }}>
                   {like.liked ? "❤ Aimé" : "♡ J'aime"}</button></AdminOnly>
+              )}
+              {!friend && (
+                <AdminOnly><button onClick={() => { startAssign(tile()); onClose(); }}
+                  title="Choisir les impressions de ce modèle dans l'historique" style={{ ...linkBtn, cursor:"pointer" }}>
+                  🔗 Associer à un print</button></AdminOnly>
               )}
               <AdminOnly home><button onClick={() => setPick(true)} style={{ ...linkBtn, cursor:"pointer" }}>☆ Collections</button></AdminOnly>
             </div>

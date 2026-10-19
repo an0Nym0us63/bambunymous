@@ -10,6 +10,9 @@ import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
 import { useMine, MineBadge } from "../components/Friends";
+import { useMwAssign } from "../store/mwAssign";
+import { mwImg } from "../components/MwImg";
+import { toast } from "../store/toast";
 import ShareSheet from "../components/ShareSheet";
 import { useIsAdmin } from "../store/auth";
 import { useTrackDetail } from "../utils/track";
@@ -2419,6 +2422,30 @@ export default function Prints() {
   };
   const toggleGroup = (g) => setSelectedGroups(prev =>
     prev.some(x => x.groupId === g.groupId) ? prev.filter(x => x.groupId !== g.groupId) : [...prev, g]);
+  // Association a un modele MakerWorld (lancee depuis sa fiche) : la liste
+  // passe en selection, la bulle du bas rappelle le modele et valide.
+  const assign = useMwAssign((s) => s.item);
+  const clearAssign = useMwAssign((s) => s.clear);
+  const [assignBusy, setAssignBusy] = useState(false);
+  useEffect(() => {
+    if (!assign) return;
+    setViewMode("list"); setSelectMode(true); setSelectedIds(new Set()); setSelectedGroups([]);
+  }, [assign]);
+  const cancelAssign = () => { clearAssign(); setSelectMode(false); setSelectedIds(new Set()); setSelectedGroups([]); };
+  const applyAssign = async () => {
+    const n = selectedIds.size + selectedGroups.reduce((s, g) => s + (g.prints?.length || 0), 0);
+    if (!await showConfirm(`Associer « ${assign.title_fr || assign.title || "ce modèle"} » à ${n} impression${n > 1 ? "s" : ""} ?`
+      + (selectedGroups.length ? "\nLes groupes choisis sont associés en entier." : ""), { confirmLabel:"Associer" })) return;
+    setAssignBusy(true);
+    try {
+      const { data } = await client.post("/prints/makerworld/assign", { design_id: assign.design_id,
+        print_ids: [...selectedIds], group_ids: selectedGroups.map(g => g.groupId) });
+      toast(`Modèle associé à ${data.count} impression${data.count > 1 ? "s" : ""}`, "success");
+      cancelAssign(); load();
+    } catch (e) { toast(e.response?.data?.detail || e.message, "error"); }
+    setAssignBusy(false);
+  };
+
   const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); setSelectedGroups([]); setConfirmDelete(false); setMergeOpen(false); };
 
   // Suppression des prints selectionnes (pas d'endpoint bulk -> un par un, comme
@@ -3012,7 +3039,35 @@ export default function Prints() {
         onChanged={() => { load(); loadGroups(); }}/>}
 
       {/* Barre flottante de sélection multiple */}
-      {selectMode && (selectedIds.size > 0 || selectedGroups.length > 0) && (
+      {assign && (
+        <div style={{ position:"fixed", bottom:"calc(76px + env(safe-area-inset-bottom,0px))", left:12, right:12, zIndex:500,
+          background:"var(--sheet-bg)", border:"1px solid var(--border)", borderRadius:14, padding:8,
+          display:"flex", alignItems:"center", gap:8, boxShadow:"0 4px 24px rgba(0,0,0,0.35)" }}>
+          {assign.cover_url
+            ? <img src={mwImg(assign.cover_url, 44)} alt="" style={{ width:40, height:40, borderRadius:8, objectFit:"cover", flexShrink:0 }}/>
+            : <span style={{ width:40, height:40, borderRadius:8, background:"var(--surface2)", flexShrink:0 }}/>}
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:12.5, fontWeight:700, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis",
+              whiteSpace:"nowrap" }}>🔗 {assign.title_fr || assign.title || `Modèle ${assign.design_id}`}</div>
+            <div style={{ fontSize:11, color:"var(--muted)" }}>
+              {selectedIds.size + selectedGroups.length
+                ? [selectedIds.size && `${selectedIds.size} print${selectedIds.size > 1 ? "s" : ""}`,
+                   selectedGroups.length && `${selectedGroups.length} groupe${selectedGroups.length > 1 ? "s" : ""}`].filter(Boolean).join(" + ")
+                : "Cherche et touche les impressions ou groupes"}
+            </div>
+          </div>
+          <button onClick={applyAssign} disabled={assignBusy || !(selectedIds.size + selectedGroups.length)}
+            style={{ padding:"7px 12px", borderRadius:8, fontSize:12, fontWeight:700, flexShrink:0, border:"none",
+              background: selectedIds.size + selectedGroups.length ? "#3b82f6" : "var(--border)",
+              color: selectedIds.size + selectedGroups.length ? "white" : "var(--muted)",
+              cursor: selectedIds.size + selectedGroups.length ? "pointer" : "default" }}>{assignBusy ? "…" : "Valider"}</button>
+          <button onClick={cancelAssign} aria-label="Annuler l'association"
+            style={{ padding:"6px 10px", borderRadius:8, fontSize:12, flexShrink:0, background:"none",
+              border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>✕</button>
+        </div>
+      )}
+
+      {!assign && selectMode && (selectedIds.size > 0 || selectedGroups.length > 0) && (
         /* Deux rangees plutot qu'une seule : quatre elements cote a cote
            debordaient de l'ecran sur telephone, "Annuler" se retrouvait coupe.
            Le compte et l'abandon tiennent sur la premiere ligne, les deux

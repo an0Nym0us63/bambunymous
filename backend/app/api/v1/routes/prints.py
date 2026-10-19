@@ -1213,6 +1213,38 @@ async def _makerworld_for(design_id) -> dict:
         return {"makerworld": None, "status": "error"}
 
 
+@router.post("/makerworld/assign")
+async def assign_makerworld(body: dict = Body({}), _: str = Depends(require_admin)):
+    """
+    Associe un modele MakerWorld a des impressions choisies a la main : les
+    prints donnes, et tous ceux des groupes donnes. Le profil MakerWorld
+    eventuel est oublie (il venait d'un autre modele). La fiche du modele est
+    lue en arriere-plan.
+    """
+    from sqlalchemy import select as _s, update as _u
+    from ....db.session import AsyncSessionLocal as _ASL
+    did = str(body.get("design_id") or "").strip()
+    if not did.isdigit() or did == "0":
+        raise HTTPException(400, "Modèle MakerWorld invalide")
+    pids = {int(x) for x in (body.get("print_ids") or []) if str(x).isdigit()}
+    gids = {int(x) for x in (body.get("group_ids") or []) if str(x).isdigit()}
+    if not pids and not gids:
+        raise HTTPException(400, "Choisis au moins une impression ou un groupe")
+    async with _ASL() as db:
+        if gids:
+            pids |= set((await db.execute(_s(Print.id).where(Print.group_id.in_(gids)))).scalars().all())
+        n = (await db.execute(_u(Print).where(Print.id.in_(pids))
+                              .values(design_id=did, mw_profile_id=None))).rowcount
+        await db.commit()
+    try:
+        from ....services.makerworld import launch as _mw_launch
+        _mw_launch(did)
+    except Exception:
+        logging.getLogger(__name__).exception("[MW] lancement impossible")
+    logging.getLogger(__name__).info(f"[MW] modele {did} associe a {n} impression(s)")
+    return {"ok": True, "count": n, "design_id": did}
+
+
 @router.get("/makerworld/{design_id}")
 async def design_makerworld(design_id: str, _: str = Depends(get_current_user)):
     """Fiche MakerWorld par modele : sert a la fiche d'un print comme a celle
