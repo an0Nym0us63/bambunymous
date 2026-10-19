@@ -9,6 +9,7 @@ import MwImg from "./MwImg";
 import MwCreator from "./MwCreator";
 import MwContests from "./MwContests";
 import { openCreator } from "./MwCreatorPage";
+import { useToRate, ToRateTile, ToRateSheet } from "./MwToRate";
 import { mwPatch, onMwChange } from "../utils/mwSync";
 import { useFriend } from "../store/friend";
 import { useMine, MineBadge } from "./Friends";
@@ -288,6 +289,9 @@ export default function MakerWorldView({ onSearch }) {
         onClick: () => startAssign({ design_id: x.design_id, title: x.title, title_fr: x.title_fr, cover_url: x.cover_url }) },
     ],
   });
+  // « A evaluer » : tuile en tete des collections (chez moi seulement).
+  const toRate = useToRate(tab === "favorites" && !coll && !friend);
+  const [rateOpen, setRateOpen] = useState(false);
   const all = data?.items || [];
   const items = all.filter(x => pf === "all" || (pf === "new" ? !x.printed : x.printed > 0));
   const mineOf = useMine(showModels ? all.map(x => x.design_id) : []);   // chez un copain : « deja chez moi ? »
@@ -444,6 +448,7 @@ export default function MakerWorldView({ onSearch }) {
         </div>
 
         {model && <MakerWorldModelSheet designId={model.design_id} preview={model} onClose={() => setModel(null)} onSearch={onSearch}/>}
+        {rateOpen && <ToRateSheet data={toRate} onClose={() => setRateOpen(false)} onOpen={x => setModel(x)}/>}
         {pickFor && (
           <MakerWorldCollectionsPicker designId={pickFor.design_id} title={pickFor.title} item={pickFor}
             onClose={() => setPickFor(null)} onSaved={() => tab === "favorites" && setReload(n => n + 1)}/>
@@ -460,8 +465,9 @@ export default function MakerWorldView({ onSearch }) {
             ) : data === null ? <Skeleton/>
             : data.error ? <p style={{ ...msg, color:"#f59e0b" }}>MakerWorld ne répond pas comme prévu : {data.error}</p>
             : !showModels ? (
-              (data.collections || []).length === 0 ? <p style={msg}>Aucune collection.</p> : (
+              (data.collections || []).length === 0 && !toRate?.items?.length ? <p style={msg}>Aucune collection.</p> : (
                 <div style={grid}>
+                  {!friend && toRate?.items?.length > 0 && <ToRateTile data={toRate} card={card} onClick={() => setRateOpen(true)}/>}
                   {data.collections.map(c => (
                     <Pressable as="button" key={c.id} onClick={() => openColl(c)} menu={() => collMenu(c)}
                       style={{ ...card, cursor:"pointer", padding:0, textAlign:"left", color:"var(--text)" }}>

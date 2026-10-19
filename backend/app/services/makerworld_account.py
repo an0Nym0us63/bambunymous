@@ -41,6 +41,8 @@ DEBUG_PATHS = {
     "points_progression": "/point-service/point-bill/progress",
     # Boosts : droits disponibles (le reste se lit par modele).
     "boosts_dispos": "/point-service/boost/boostingright?filter=available&offset=0&limit=5",
+    # Mes evaluations publiees (« A evaluer » les retire).
+    "mes_evaluations": "/comment-service/rating/my?offset=0&limit=3",
 }
 
 
