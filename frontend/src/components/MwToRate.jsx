@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import client from "../api/client";
+import { useShares } from "../store/shares";
 import MwImg from "./MwImg";
 import Lightbox from "./Lightbox";
 
@@ -109,17 +110,16 @@ function RateForm({ x, onDone }) {
     n.has(u) ? n.delete(u) : n.size < 8 && n.add(u);
     return n;
   });
-  const send = async () => {
+  // Publication en arriere-plan, suivie par la puce d'etat (comme l'ajout de
+  // photos) : le modele quitte la liste tout de suite, et y revient en cas d'echec.
+  const send = () => {
     if (!window.confirm(`Publier sur MakerWorld : ${score} étoile${score > 1 ? "s" : ""}, ${picked.size} photo${picked.size > 1 ? "s" : ""} ?`)) return;
-    setBusy(true); setErr(null);
-    try {
-      await client.post(`/makerworld/rate/${x.design_id}`, { rating_id: x.rating_id, score, content: text, photos: [...picked] });
-      markRated(x.design_id);
-      onDone();
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
-    }
-    setBusy(false);
+    const body = { rating_id: x.rating_id, score, content: text, photos: [...picked] };
+    useShares.getState().rate(x.title || `Modèle ${x.design_id}`,
+      () => client.post(`/makerworld/rate/${x.design_id}`, body, { timeout: 5 * 60 * 1000 }))
+      .catch(() => { forgetToRate(); readToRate(); });
+    markRated(x.design_id);
+    onDone();
   };
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, borderRadius: 10, background: "var(--surface2)",

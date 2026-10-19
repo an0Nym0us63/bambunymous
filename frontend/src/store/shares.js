@@ -46,5 +46,16 @@ export const useShares = create((set, get) => ({
       });
   },
 
+  // Publication d'une evaluation MakerWorld (envoi des photos puis de la note).
+  rate: (title, run) => {
+    const jid = get()._add({ kind: "rate", title });
+    return run()
+      .then((r) => { get()._update(jid, { status: "done" }); setTimeout(() => get().dismiss(jid), 4000); return r; })
+      .catch((e) => {
+        get()._update(jid, { status: "error", detail: `Évaluation de « ${title} » non publiée : ${e.response?.data?.detail || e.message}` });
+        throw e;
+      });
+  },
+
   dismiss: (jobId) => set({ jobs: get().jobs.filter(j => j.id !== jobId) }),
 }));

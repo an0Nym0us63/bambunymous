@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { Send, Check, AlertTriangle, X, ImagePlus } from "lucide-react";
+import { Send, Check, AlertTriangle, X, ImagePlus, Star } from "lucide-react";
 import { useShares } from "../store/shares";
 import { showAlert } from "../utils/dialog";
 
@@ -10,17 +10,22 @@ import { showAlert } from "../utils/dialog";
 // Telephone : une puce compacte DANS le header (#header-status). Ordinateur
 // (pas de header) : sous le logo de la barre laterale (#sidebar-status).
 const up = (j) => j.kind === "upload";
+const rt = (j) => j.kind === "rate";
 const TONE = {
   sending: { bg: "#229ED9", icon: null,
-    long: (j) => up(j) ? `Ajout de ${j.title}…` : `Envoi Telegram · ${j.title}`, short: (j) => up(j) ? (j.video ? "Vidéo" : "Photo") : "Envoi" },
+    long: (j) => rt(j) ? `Évaluation · ${j.title}…` : up(j) ? `Ajout de ${j.title}…` : `Envoi Telegram · ${j.title}`,
+    short: (j) => rt(j) ? "Évaluation" : up(j) ? (j.video ? "Vidéo" : "Photo") : "Envoi" },
   done:    { bg: "#22c55e", icon: Check,
-    long: (j) => up(j) ? `${j.video ? "Vidéo ajoutée" : "Photo ajoutée"}` : `Envoyé · ${j.detail}`, short: (j) => up(j) ? "Ajoutée" : "Envoyé" },
+    long: (j) => rt(j) ? `Évaluation publiée · ${j.title}` : up(j) ? `${j.video ? "Vidéo ajoutée" : "Photo ajoutée"}` : `Envoyé · ${j.detail}`,
+    short: (j) => rt(j) ? "Publiée" : up(j) ? "Ajoutée" : "Envoyé" },
   partial: { bg: "#f59e0b", icon: AlertTriangle,
     long: (j) => `Envoi partiel · ${j.title}`, short: () => "Partiel" },
   error:   { bg: "#ef4444", icon: AlertTriangle,
-    long: (j) => up(j) ? `Échec de l'ajout · ${j.title}` : `Échec de l'envoi · ${j.title}`, short: () => "Échec" },
+    long: (j) => rt(j) ? `Évaluation non publiée · ${j.title}` : up(j) ? `Échec de l'ajout · ${j.title}` : `Échec de l'envoi · ${j.title}`,
+    short: () => "Échec" },
 };
-const KindIcon = ({ j, size }) => up(j) ? <ImagePlus size={size} style={{ flexShrink:0, opacity:0.85 }}/>
+const KindIcon = ({ j, size }) => rt(j) ? <Star size={size} style={{ flexShrink:0, opacity:0.85 }}/>
+                                : up(j) ? <ImagePlus size={size} style={{ flexShrink:0, opacity:0.85 }}/>
                                         : <Send size={size} style={{ flexShrink:0, opacity:0.85 }}/>;
 const MOBILE = "(max-width: 767px)";
 
@@ -45,7 +50,8 @@ const Spinner = ({ size = 12 }) => (
 // un envoi termine se ferme en plus.
 function open(j, dismiss) {
   if (j.status === "sending") {
-    showAlert(up(j) ? `Ajout de ${j.title} en cours (envoi puis compression).`
+    showAlert(rt(j) ? `Publication de l'évaluation de « ${j.title} » en cours (photos puis note).`
+      : up(j) ? `Ajout de ${j.title} en cours (envoi puis compression).`
       : `Envoi Telegram en cours : « ${j.title} »` + (j.count > 1 ? ` vers ${j.count} destinations.` : "."));
     return;
   }
