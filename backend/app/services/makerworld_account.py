@@ -178,7 +178,9 @@ def _design_of(it) -> dict:
     return {"design_id": str(did), "title": d.get("title"),
             "title_fr": d.get("titleTranslated") if isinstance(d.get("titleTranslated"), str) and d.get("titleTranslated") else None,
             "cover_url": d.get("cover") or d.get("coverUrl"),
-            "creator_name": cr.get("name")}
+            "creator_name": cr.get("name"),
+            # pour ouvrir la page du createur depuis une tuile (collections, j'aime)
+            "creator_uid": str(cr.get("uid")) if str(cr.get("uid") or "").isdigit() else None}
 
 
 async def _list(path_fmt: str, max_items: int = 300) -> list:
