@@ -2656,7 +2656,7 @@ export default function Prints() {
 
       {/* Tabs Liste / Galerie / MakerWorld */}
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
-        {[["list","Liste"],["gallery","Galerie"],["makerworld","MakerWorld"],["queue","À imprimer"]].map(([id,label])=>(
+        {[["list","Liste"],["gallery","Galerie"],["makerworld","MakerWorld"],["queue","À faire"]].map(([id,label])=>(
           <button key={id} onClick={()=>setViewMode(id)} style={{
             flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
             background: viewMode===id ? "#3b82f6" : "transparent",

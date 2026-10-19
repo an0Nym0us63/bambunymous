@@ -142,7 +142,7 @@ export default function MwQueue() {
       </div>
 
       {q.collections.length === 0 ? (
-        <p style={msg}>Choisis une ou plusieurs collections MakerWorld (par exemple « À imprimer ») : leurs modèles forment la liste « À imprimer ».</p>
+        <p style={msg}>Choisis une ou plusieurs collections MakerWorld (par exemple « À faire ») : leurs modèles forment la liste « À faire ».</p>
       ) : (<>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(104px,1fr))", gap:8 }}>
           {[[t.models, "modèles"], [fmtDur(t.seconds), "temps total"], [g(t.weight_g), "filament"],
@@ -272,7 +272,7 @@ export default function MwQueue() {
           })}
         </div>
         <p style={{ fontSize:11, color:"var(--muted)", margin:0, lineHeight:1.5 }}>
-          Ouvre un modèle, déplie son profil, choisis plateaux et filaments, puis « 📌 Retenir pour « À imprimer » ». Sans
+          Ouvre un modèle, déplie son profil, choisis plateaux et filaments, puis « 📌 Retenir pour « À faire » ». Sans
           cela, la liste prend le profil retenu, tous les plateaux et le filament le plus proche de ton stock.
           Pastilles : vert = dans l'AMS, orange = en stock, rouge = manque. Un modèle arrivé dans la liste sans place
           définie se met en haut (« Nouveau »).</p>
@@ -333,7 +333,7 @@ function CollectionsPicker({ chosen, onClose, onSaved }) {
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
         maxWidth:520, maxHeight:"75dvh", display:"flex", flexDirection:"column", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
-        <h3 style={{ margin:0, padding:"14px 16px 6px", fontSize:15, fontWeight:800, color:"var(--text)" }}>Collections « À imprimer »</h3>
+        <h3 style={{ margin:0, padding:"14px 16px 6px", fontSize:15, fontWeight:800, color:"var(--text)" }}>Collections « À faire »</h3>
         <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"var(--muted)" }}>Leurs modèles forment la liste (sans doublon).</p>
         <div style={{ flex:1, overflowY:"auto", padding:"0 8px" }}>
           {list === null ? <p style={msg}>…</p> : list.map(c => (

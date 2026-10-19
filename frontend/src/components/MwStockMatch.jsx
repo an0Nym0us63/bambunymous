@@ -31,7 +31,7 @@ const PICKS = new Map();      // `${scope}|${i}` -> filament_id
 // Filament trouve par la recherche dans tout le stock (hors propositions) : `${scope}|${i}` -> proposition.
 const EXTRA = new Map();
 const inLists = (x, id) => x.matches.some(m => m.filament_id === id) || (x.others || []).some(m => m.filament_id === id);
-// Plan retenu pour « À imprimer » : cle « TYPE|#COULEUR » -> filament choisi a la main.
+// Plan retenu pour « À faire » : cle « TYPE|#COULEUR » -> filament choisi a la main.
 // Un choix fait par recherche est relu dans le stock (promesse resolue une fois tout pret).
 export function setPicksFromPlan(scope, items, picks) {
   const asks = [];

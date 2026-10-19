@@ -334,7 +334,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                 title="La file d'attente utilisera ce profil, ces plateaux et ces filaments"
                                 style={{ ...linkBtn, padding:"5px 10px", fontSize:11.5, cursor:"pointer",
                                   ...(plan?.instance_id === p.instance_id ? { color:"#22c55e", borderColor:"rgba(34,197,94,0.4)" } : null) }}>
-                                {plan?.instance_id === p.instance_id ? "📌 Retenu pour « À imprimer » · mettre à jour" : "📌 Retenir pour « À imprimer »"}</button>
+                                {plan?.instance_id === p.instance_id ? "📌 Retenu pour « À faire » · mettre à jour" : "📌 Retenir pour « À faire »"}</button>
                               {plan?.instance_id === p.instance_id && (
                                 <button onClick={unpinPlan} disabled={planBusy} title="Oublier ce choix"
                                   style={{ ...linkBtn, padding:"5px 9px", fontSize:11.5, cursor:"pointer", color:"var(--muted)" }}>✕</button>
