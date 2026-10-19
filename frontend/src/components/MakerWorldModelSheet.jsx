@@ -49,21 +49,21 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [zoom, setZoom] = useState(null);          // galerie plein ecran { images, index }
   const [exactBusy, setExactBusy] = useState(null);
   const [studioBusy, setStudioBusy] = useState(false);
-  const [studioAlt, setStudioAlt] = useState(null);   // lien de secours (autre forme du schema)
   // Profil a imprimer : celui qui est deplie, sinon celui retenu.
   const printProfile = () => (m?.profiles || []).find(p => p.instance_id === open)
     || (m?.profiles || []).find(p => p.main) || m?.profiles?.[0] || null;
   const openStudio = async () => {
     const p = printProfile();
     if (!p) return showAlert("Aucun profil imprimable sur ce modèle.");
-    setStudioBusy(true); setStudioAlt(null);
+    setStudioBusy(true);
     try {
       const { data } = await client.get(`/makerworld/model/${id}/studio/${p.instance_id}`,
         { params: p.dev_model ? { dev_model: p.dev_model } : {} });
       // Meme forme que le site : lien du fichier + nom, encodes ensemble.
       const n = encodeURIComponent(`${data.url}&name=${String(data.name || "modele.3mf").replace(/[\\/:*?"<>|&\s#]/g, "_")}`);
-      launch(`bambustudioopen://${n}`);
-      setStudioAlt(`bambustudio://open?file=${n}`);
+      // bambustudio://open (seule forme qui ouvre le fichier chez nous ; l'ancien
+      // bambustudioopen:// lancait Studio sans rien charger).
+      launch(`bambustudio://open?file=${n}`);
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setStudioBusy(false);
   };
@@ -218,8 +218,10 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                   Telephone : la page « open-app » de MakerWorld (ouvre Handy, ou propose de
                   l'installer) -- un lien https, sans risque pour la coquille Android.
                   Ordinateur : Bambu Studio, avec le lien du 3MF comme le bouton du site. */}
-              <a href={handyUrl(id, printProfile())} target="_blank" rel="noopener noreferrer"
-                title="Ouvrir ce modèle et ce profil dans l'appli Bambu Handy" style={linkBtn}>📱 Bambu Handy</a>
+              {IS_MOBILE && (
+                <a href={handyUrl(id, printProfile())} target="_blank" rel="noopener noreferrer"
+                  title="Ouvrir ce modèle et ce profil dans l'appli Bambu Handy" style={linkBtn}>📱 Bambu Handy</a>
+              )}
               {!IS_MOBILE && (
                 <AdminOnly home><button onClick={openStudio} disabled={studioBusy}
                   title="Ouvrir ce profil dans Bambu Studio (compte MakerWorld requis ; compte comme un téléchargement)"
@@ -238,12 +240,6 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
               )}
               <AdminOnly home><button onClick={() => setPick(true)} style={{ ...linkBtn, cursor:"pointer" }}>☆ Collections</button></AdminOnly>
             </div>
-            {studioAlt && (
-              <p style={{ fontSize:11.5, color:"var(--muted)", margin:"-6px 0 12px", lineHeight:1.45 }}>
-                Bambu Studio ne s'ouvre pas ? <a href={studioAlt} style={{ color:"#3b82f6" }}>Essayer l'autre lien</a>
-                {" "}(selon la version de Bambu Studio installée).
-              </p>
-            )}
             {zoom && <Lightbox images={zoom.images} index={zoom.index} onClose={() => setZoom(null)}/>}
             {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} item={tile()} onClose={() => setPick(false)}/>}
 
