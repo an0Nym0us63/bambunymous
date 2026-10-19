@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import MwImg from "./MwImg";
@@ -42,18 +42,34 @@ export default function MwQueue() {
   const [model, setModel] = useState(null);
   const [tab, setTab] = useState("models");        // models | filaments
   const [sorting, setSorting] = useState(false);   // mode « Réorganiser »
+  // « Jusqu'ici » : les stats ne portent que sur le debut de la file (garde dans ce navigateur).
+  const [until, setUntilState] = useState(() => { try { return localStorage.getItem("mwQueueUntil") || null; } catch { return null; } });
+  const [cutting, setCutting] = useState(false);
+  const fresh = useRef(false);
+  const setUntil = v => {
+    setUntilState(v);
+    try { v ? localStorage.setItem("mwQueueUntil", v) : localStorage.removeItem("mwQueueUntil"); } catch { /* stockage indisponible */ }
+  };
 
   useEffect(() => {
     let alive = true;
     setErr(null);
-    client.get("/makerworld/queue", { params: reload ? { fresh: 1 } : {} })
-      .then(({ data }) => alive && setQ(data))
+    const params = {};
+    if (fresh.current) params.fresh = 1;
+    if (until) params.until = until;
+    fresh.current = false;
+    client.get("/makerworld/queue", { params })
+      .then(({ data }) => {
+        if (!alive) return;
+        setQ(data);
+        if (until && !data.until) setUntil(null);    // modele sorti de la file : on revient au tout
+      })
       .catch(e => alive && setErr(e.response?.data?.detail || e.message))
       .finally(() => alive && setBusy(false));
     return () => { alive = false; };
-  }, [reload]);
+  }, [reload, until]);
 
-  const refresh = () => { setBusy(true); setReload(n => n + 1); };
+  const refresh = () => { fresh.current = true; setBusy(true); setReload(n => n + 1); };
   // Nombre d'exemplaires : affiche tout de suite, totaux recalcules par le serveur.
   const setQty = async (did, n) => {
     setQ(x => ({ ...x, models: x.models.map(r => r.design_id === did ? { ...r, qty: n } : r) }));
@@ -73,10 +89,13 @@ export default function MwQueue() {
   if (err) return <p style={msg}>{err}</p>;
   if (!q) return <p style={msg}>Lecture de la file… (la première fois, chaque fiche est lue sur MakerWorld)</p>;
   const t = q.totals;
-  const rows = q.models.filter(r => sorting || filter === "all" || r.status === filter);
+  const rows = q.models.filter(r => sorting || cutting || filter === "all" || r.status === filter);
+  const cutAt = q.until ? q.models.findIndex(r => r.design_id === q.until.design_id) : -1;
+  const pos = Object.fromEntries(q.models.map((r, i) => [r.design_id, i]));
+  const cutRow = cutAt >= 0 ? q.models[cutAt] : null;
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:12, paddingBottom:16 }}>
+    <div style={{ display:"flex", flexDirection:"column", gap:12, paddingBottom: cutting || cutRow ? 80 : 16 }}>
       <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
         <span style={{ fontSize:12, color:"var(--muted)" }}>Collections :</span>
         {q.collections.length ? q.collections.map(c => (
@@ -142,24 +161,30 @@ export default function MwQueue() {
 
         {tab === "models" && (<>
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-          {!sorting && FILTERS.map(([k, l]) => (
+          {!sorting && !cutting && FILTERS.map(([k, l]) => (
             <button key={k} onClick={() => setFilter(k)} style={pill(filter === k)}>
               {l} ({k === "all" ? t.models : t[k] ?? 0})</button>
           ))}
           {sorting && <span style={{ fontSize:12, color:"var(--muted)" }}>Ordre de priorité : ⤒ en haut, ↑ ↓, ⤓ en bas.</span>}
-          <AdminOnly><button onClick={() => setSorting(v => !v)} style={{ ...pill(sorting), marginLeft:"auto" }}>
+          {!sorting && <button onClick={() => setCutting(v => !v)} title="Stats limitées aux premiers modèles de la file"
+            style={{ ...pill(cutting || !!cutRow), marginLeft:"auto" }}>✂ Jusqu'ici</button>}
+          <AdminOnly><button onClick={() => { setSorting(v => !v); setCutting(false); }} style={{ ...pill(sorting), marginLeft: sorting ? "auto" : 0 }}>
             {sorting ? "✓ Terminé" : "↕ Réorganiser"}</button></AdminOnly>
         </div>
 
         <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
           {rows.map(r => {
             const [label, color, help] = STATUS[r.status] || STATUS.unknown;
+            const out = cutAt >= 0 && pos[r.design_id] > cutAt;
             return (
-              <div key={r.design_id} role="button" tabIndex={0}
-                onClick={() => setModel({ design_id: r.design_id, title: r.title, title_fr: r.title_fr, cover_url: r.cover_url })}
+              <React.Fragment key={r.design_id}>
+              <div role="button" tabIndex={0}
+                onClick={() => cutting ? (setUntil(r.design_id), setCutting(false))
+                  : setModel({ design_id: r.design_id, title: r.title, title_fr: r.title_fr, cover_url: r.cover_url })}
                 onPointerDown={() => prefetchModel(r.design_id)}
                 style={{ display:"flex", alignItems:"center", gap:10, padding:8, borderRadius:12, cursor:"pointer", textAlign:"left",
-                  background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" }}>
+                  background:"var(--surface2)", color:"var(--text)", opacity: out ? 0.45 : 1,
+                  border: cutting ? "1px dashed #3b82f6" : "1px solid var(--border)" }}>
                 {r.cover_url ? <MwImg src={r.cover_url} w={110} style={{ width:54, height:54, borderRadius:8, objectFit:"cover", flexShrink:0 }}/>
                   : <span style={{ width:54, height:54, borderRadius:8, background:"var(--surface)", flexShrink:0 }}/>}
                 <span style={{ flex:1, minWidth:0 }}>
@@ -198,6 +223,12 @@ export default function MwQueue() {
                   ) : <Qty value={r.qty || 1} onChange={n => setQty(r.design_id, n)}/>}
                 </span>
               </div>
+              {!cutting && pos[r.design_id] === cutAt && cutAt < q.models.length - 1 && (
+                <div style={{ display:"flex", alignItems:"center", gap:8, color:"#3b82f6", fontSize:11, fontWeight:800 }}>
+                  <span style={{ flex:1, borderTop:"2px dashed #3b82f6" }}/>✂ jusqu'ici<span style={{ flex:1, borderTop:"2px dashed #3b82f6" }}/>
+                </div>
+              )}
+              </React.Fragment>
             );
           })}
         </div>
@@ -209,6 +240,23 @@ export default function MwQueue() {
         </>)}
       </>)}
 
+      {(cutting || cutRow) && (
+        <div style={{ position:"fixed", bottom:"calc(76px + env(safe-area-inset-bottom,0px))", left:12, right:12, zIndex:500,
+          maxWidth:560, margin:"0 auto", display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:14,
+          background:"var(--sheet-bg)", border:"1px solid #3b82f6", boxShadow:"0 8px 24px rgba(0,0,0,0.3)" }}>
+          <span style={{ fontSize:18 }}>✂</span>
+          <span style={{ flex:1, minWidth:0, fontSize:12.5, lineHeight:1.35 }}>
+            {cutting ? <b>Touche le dernier modèle à compter</b> : (<>
+              <b>{q.until.count} élément{q.until.count > 1 ? "s" : ""}</b> jusqu'à « <span style={{ fontWeight:700 }}>
+                {cutRow.title_fr || cutRow.title || `Modèle ${cutRow.design_id}`}</span> »
+              <span style={{ display:"block", fontSize:11, color:"var(--muted)" }}>Stats et filaments limités à ce début de file.</span></>)}
+          </span>
+          {!cutting && <button onClick={() => setCutting(true)} style={btn}>Changer</button>}
+          <button onClick={() => cutting ? setCutting(false) : setUntil(null)}
+            title={cutting ? "Ne rien changer" : "Revenir à toute la file"}
+            style={{ ...btn, background:"#3b82f6", color:"white", border:"none" }}>Annuler</button>
+        </div>
+      )}
       {pick && <CollectionsPicker chosen={q.collections.map(c => c.id)} onClose={() => setPick(false)}
         onSaved={() => { setPick(false); refresh(); }}/>}
       {model && <MakerWorldModelSheet designId={model.design_id} preview={model}

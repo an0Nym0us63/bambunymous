@@ -144,11 +144,11 @@ async def mw_creator_points(offset: int = 0, _: str = Depends(get_current_user))
 
 
 @router.get("/queue")
-async def mw_queue(fresh: bool = False, _: str = Depends(get_current_user)):
+async def mw_queue(fresh: bool = False, until: str | None = None, _: str = Depends(get_current_user)):
     """File d'attente : modeles des collections choisies, profils et filaments
     retenus, besoins additionnes, imprimable maintenant (AMS) ou avec le stock."""
     from ....services import mw_queue as Q
-    return await _call(Q.queue(fresh))
+    return await _call(Q.queue(fresh, until))
 
 
 @router.get("/queue/config")

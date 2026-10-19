@@ -193,9 +193,59 @@ async def _prices(fids) -> dict:
     return {i: (p / w if p and w else None) for i, p, w in rows}
 
 
-async def queue(fresh: bool = False) -> dict:
-    if not fresh and _CACHE[1] is not None and time.time() - _CACHE[0] < TTL:
-        return _CACHE[1]
+async def queue(fresh: bool = False, until: str | None = None) -> dict:
+    """File complete ; avec `until`, les stats (totaux, filaments, manques) ne
+    portent que sur les modeles jusqu'a celui-la inclus, dans l'ordre de priorite."""
+    if fresh or _CACHE[1] is None or time.time() - _CACHE[0] >= TTL:
+        _CACHE[:] = [time.time(), await _compute()]
+    raw = _CACHE[1]
+    models = raw["models"]
+    ids = [r["design_id"] for r in models]
+    upto = models
+    if until and str(until) in ids:
+        upto = models[:ids.index(str(until)) + 1]
+    out = {"collections": raw["collections"],
+           "models": [{k: v for k, v in r.items() if not k.startswith("_")} for r in models],
+           **_aggregate(upto, raw["stock_of"])}
+    if upto is not models:
+        out["until"] = {"design_id": str(until), "count": len(upto)}
+    return out
+
+
+def _aggregate(models: list, stock_of: dict) -> dict:
+    need, unmatched = {}, {}
+    for r in models:
+        for fid, g in r["_need"].items():
+            t = need.setdefault(fid, {"need_g": 0.0, "models": 0})
+            t["need_g"] += g
+            t["models"] += 1
+        for k, x in r["_miss"].items():
+            u = unmatched.setdefault(k, {"type": x["type"], "color": x["color"], "need_g": 0.0, "models": 0})
+            u["need_g"] += x["g"]
+            u["models"] += 1
+    filaments = []
+    for fid, t in need.items():
+        st = stock_of[fid]
+        filaments.append({**st, "need_g": round(t["need_g"], 1), "models": t["models"],
+                          "missing_g": round(max(0.0, t["need_g"] - st["stock_g"]), 1)})
+    filaments.sort(key=lambda f: (-f["missing_g"], -f["need_g"]))
+    for u in unmatched.values():
+        u["need_g"] = round(u["need_g"], 1)
+    return {
+        "filaments": filaments,
+        "unmatched": sorted(unmatched.values(), key=lambda u: -u["need_g"]),
+        "totals": {"models": len(models), "seconds": sum(r["seconds"] or 0 for r in models),
+                   "weight_g": round(sum(r["weight_g"] for r in models), 1),
+                   "cost": round(sum(r["_cost"] for r in models), 2),
+                   "ams": sum(1 for r in models if r["status"] == "ams"),
+                   "partial": sum(1 for r in models if r["status"] == "partial"),
+                   "stock": sum(1 for r in models if r["status"] == "stock"),
+                   "short": sum(1 for r in models if r["status"] == "short"),
+                   "printed": sum(1 for r in models if r["printed"])},
+    }
+
+
+async def _compute() -> dict:
     from . import makerworld_account as A
     from .makerworld import model_detail
     cfg = await _load()
@@ -218,7 +268,7 @@ async def queue(fresh: bool = False) -> dict:
     details = dict(await asyncio.gather(*(detail(d) for d in designs)))
     ams = await _ams_stock()
 
-    models, totals_need, stock_of, unmatched = [], {}, {}, {}
+    models, stock_of = [], {}
     for did, base in designs.items():
         m = details.get(did) or {}
         plan = cfg["plans"].get(did)
@@ -231,7 +281,7 @@ async def queue(fresh: bool = False) -> dict:
         row = {"design_id": did, "title": base.get("title"), "title_fr": base.get("title_fr") or m.get("title_fr"),
                "cover_url": base.get("cover_url") or m.get("cover_url"), "collections": where.get(did, []),
                "printed": m.get("printed") or 0, "planned": chosen_plan, "qty": qty, "error": m.get("error"),
-               "plates_ready": [], "plates_count": 0,
+               "plates_ready": [], "plates_count": 0, "_need": {}, "_miss": {},
                "profile": None, "seconds": None, "weight_g": 0.0, "filaments": [], "status": "unknown"}
         if prof:
             sel = plan.get("plates") if plan and plan.get("instance_id") == prof.get("instance_id") else None
@@ -267,9 +317,7 @@ async def queue(fresh: bool = False) -> dict:
                                      "material": pick.get("material"), "color": pick.get("color"),
                                      "colors_array": pick.get("colors_array"), "multicolor_type": pick.get("multicolor_type"),
                                      "stock_g": pick.get("remaining_g") or 0, "ams_g": round(ams.get(fid, {}).get("g", 0))}
-                    totals_need.setdefault(fid, {"need_g": 0.0, "models": 0})
-                    totals_need[fid]["need_g"] += g
-                    totals_need[fid]["models"] += 1
+                    row["_need"][fid] = row["_need"].get(fid, 0.0) + g
                     enough_stock = (pick.get("remaining_g") or 0) >= g
                     enough_ams = ams.get(fid, {}).get("g", 0) >= g
                     ok_stock &= enough_stock
@@ -281,9 +329,8 @@ async def queue(fresh: bool = False) -> dict:
                 else:
                     ok_stock = ok_ams = False
                     missing = True
-                    u = unmatched.setdefault(k, {"type": it.get("type"), "color": it.get("color"), "need_g": 0.0, "models": 0})
-                    u["need_g"] += g
-                    u["models"] += 1
+                    x = row["_miss"].setdefault(k, {"type": it.get("type"), "color": it.get("color"), "g": 0.0})
+                    x["g"] += g
                 row["filaments"].append({"type": it.get("type"), "color": it.get("color"), "g": round(g, 1), "chosen": fil})
             # Plateau par plateau : un exemplaire du plateau est-il faisable avec l'AMS ?
             ready = []
@@ -309,7 +356,6 @@ async def queue(fresh: bool = False) -> dict:
     for r in models:
         r["new"] = r["design_id"] not in rank
     prices = await _prices(stock_of.keys())
-    cost_total = 0.0
     for r in models:
         c = 0.0
         known = True
@@ -320,25 +366,5 @@ async def queue(fresh: bool = False) -> dict:
             else:
                 c += pg * f["g"]
         r["cost"] = round(c, 2) if known and r["filaments"] else None
-        cost_total += c
-    filaments = []
-    for fid, t in totals_need.items():
-        s = stock_of[fid]
-        filaments.append({**s, "need_g": round(t["need_g"], 1), "models": t["models"],
-                          "missing_g": round(max(0.0, t["need_g"] - s["stock_g"]), 1)})
-    filaments.sort(key=lambda f: (-f["missing_g"], -f["need_g"]))
-    out = {
-        "collections": [{"id": c, "title": colls[c]} for c in chosen],
-        "models": models,
-        "filaments": filaments,
-        "unmatched": sorted(unmatched.values(), key=lambda u: -u["need_g"]),
-        "totals": {"models": len(models), "seconds": sum(r["seconds"] or 0 for r in models),
-                   "weight_g": round(sum(r["weight_g"] for r in models), 1), "cost": round(cost_total, 2),
-                   "ams": sum(1 for r in models if r["status"] == "ams"),
-                   "partial": sum(1 for r in models if r["status"] == "partial"),
-                   "stock": sum(1 for r in models if r["status"] == "stock"),
-                   "short": sum(1 for r in models if r["status"] == "short"),
-                   "printed": sum(1 for r in models if r["printed"])},
-    }
-    _CACHE[:] = [time.time(), out]
-    return out
+        r["_cost"] = c
+    return {"collections": [{"id": c, "title": colls[c]} for c in chosen], "models": models, "stock_of": stock_of}
