@@ -3,6 +3,7 @@ import client from "../api/client";
 import { useFriend } from "../store/friend";
 import { useIsHomeAdmin, ROLE_LABEL } from "../store/auth";
 import { showAlert, showConfirm } from "../utils/dialog";
+import { Pressable } from "./ContextMenu";
 
 // ── Pastille « chez un copain » : dans l'en-tete (mobile) ou le menu (PC) ──
 // Discrete mais toujours visible ; la toucher ramene chez moi.
@@ -80,7 +81,11 @@ export function FriendsCard() {
         Chez lui, ☆ range toujours dans <b>tes</b> collections, et l'appli te dit si tu as déjà le modèle.
       </p>
       {list === null ? <p style={{ fontSize:12, color:"var(--muted)" }}>…</p> : list.map(f => (
-        <div key={f.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderTop:"1px solid var(--border)" }}>
+        <Pressable key={f.id} menu={() => ({ title: f.name, subtitle: f.url, items: [
+            { icon: "👀", label: "Visiter", onClick: () => visit(f) },
+            { icon: "🗑", label: "Retirer de mes copains…", danger: true, onClick: () => remove(f) },
+          ] })}
+          style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0", borderTop:"1px solid var(--border)" }}>
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{f.name}</div>
             <div style={{ fontSize:11, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -88,7 +93,7 @@ export function FriendsCard() {
           </div>
           <button onClick={() => visit(f)} style={{ ...btn, color:"#3b82f6" }}>Visiter</button>
           <button onClick={() => remove(f)} style={{ ...btn, color:"var(--muted)" }}>✕</button>
-        </div>
+        </Pressable>
       ))}
       <div style={{ display:"flex", flexDirection:"column", gap:6, marginTop:10 }}>
         <textarea value={inv} onChange={e => setInv(e.target.value)} placeholder="Coller l'invitation (bnym1.…)" rows={2}

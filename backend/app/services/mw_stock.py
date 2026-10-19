@@ -168,21 +168,57 @@ def best_matches(mw_type, color, grams, stock, n=6, exact=None, other=False):
                  - (10 if same_ref else 6 if same_fin else 0))
         cands.append((score, de, fit, multi, e, same_ref, same_fin))
     cands.sort(key=lambda x: x[0])
+    return [_cand(e, de, fit, multi, grams, same_ref, same_fin if sub else None)
+            for score, de, fit, multi, e, same_ref, same_fin in cands[:n]]
+
+
+def _cand(e, de, fit, multi, grams, same_ref=False, same_finish=None):
+    """Une proposition, au format commun (fiche, liste « À imprimer », recherche)."""
+    f = e["f"]
+    return {"filament_id": f.id, "name": f.translated_name or f.name, "brand": f.manufacturer,
+            "material": f.fila_type or f.material, "color": f.color, "colors_array": f.colors_array,
+            "multicolor_type": f.multicolor_type, "delta_e": round(de, 1), "level": level(de),
+            "same_material": fit == 2, "other_material": fit == 0, "multicolor": multi, "bambu": is_bambu(f),
+            "same_ref": same_ref, "same_finish": same_finish,
+            "remaining_g": round(e["remaining_g"]), "spools": e["spools"], "where": e["where"][:3],
+            # Ordre d'usage probable : la bobine chargee dans l'AMS, puis la
+            # plus entamee (on finit une bobine avant d'en ouvrir une autre).
+            "spool_g": [g for g, _ in sorted(e["spool_g"], key=lambda x: (x[1] is None, x[0]))],
+            "spool_where": [w for _, w in sorted(e["spool_g"], key=lambda x: (x[1] is None, x[0]))],
+            "enough": grams is None or e["remaining_g"] >= grams}
+
+
+def _colors_de(f, color):
+    colors = [f.color] + ([c for c in (f.colors_array or "").split(",") if c.strip()]
+                          if (f.multicolor_type or "monochrome") != "monochrome" else [])
+    des = [d for d in (delta_e(color, c) for c in colors) if d is not None]
+    return min(des) if des else 99.0
+
+
+def _fold(t):
+    import unicodedata
+    return "".join(ch for ch in unicodedata.normalize("NFD", str(t or "").lower()) if unicodedata.category(ch) != "Mn")
+
+
+def search(stock, mw_type, color, grams=None, q="", ids=None, n=40):
+    """Tout le stock (toutes matieres), filtre par texte (nom, marque, matiere,
+    couleur, #id) ou par ids, du plus proche en couleur au plus eloigne."""
+    words = [w for w in _fold(q).split() if w]
+    want = {int(i) for i in ids or [] if str(i).isdigit()}
     out = []
-    for score, de, fit, multi, e, same_ref, same_fin in cands[:n]:
+    for e in stock:
         f = e["f"]
-        out.append({"filament_id": f.id, "name": f.translated_name or f.name, "brand": f.manufacturer,
-                    "material": f.fila_type or f.material, "color": f.color, "colors_array": f.colors_array,
-                    "multicolor_type": f.multicolor_type, "delta_e": round(de, 1), "level": level(de),
-                    "same_material": fit == 2, "other_material": fit == 0, "multicolor": multi, "bambu": is_bambu(f),
-                    "same_ref": same_ref, "same_finish": same_fin if sub else None,
-                    "remaining_g": round(e["remaining_g"]), "spools": e["spools"], "where": e["where"][:3],
-                    # Ordre d'usage probable : la bobine chargee dans l'AMS, puis la
-                    # plus entamee (on finit une bobine avant d'en ouvrir une autre).
-                    "spool_g": [g for g, _ in sorted(e["spool_g"], key=lambda x: (x[1] is None, x[0]))],
-                    "spool_where": [w for _, w in sorted(e["spool_g"], key=lambda x: (x[1] is None, x[0]))],
-                    "enough": grams is None or e["remaining_g"] >= grams})
-    return out
+        if want and f.id not in want:
+            continue
+        if words:
+            hay = _fold(" ".join(str(x or "") for x in (f.translated_name, f.name, f.name_en, f.manufacturer, f.material,
+                                                         f.fila_type, f.color, f.colors_array, f"#{f.id}")))
+            if not all(w in hay for w in words):
+                continue
+        multi = (f.multicolor_type or "monochrome") != "monochrome"
+        out.append(_cand(e, _colors_de(f, color), material_fit(mw_type, f), multi, grams))
+    out.sort(key=lambda c: (c["delta_e"], c["other_material"]))
+    return out[:n]
 
 
 def _grams(v):

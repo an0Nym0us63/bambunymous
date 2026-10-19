@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import client from "../api/client";
 import AdminOnly from "./AdminOnly";
+import { Pressable } from "./ContextMenu";
 import AllAlertsModal from "./AllAlertsModal";
 import { ChevronDown, ChevronRight, List } from "lucide-react";
 import { colorBg, parseColorsList } from "../utils/colors";
@@ -212,7 +213,7 @@ export default function AttentionSection() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               {c.alerts.slice(0, c.shown ?? 3).map(a => (
-                <div key={a.key}
+                <Pressable key={a.key} onLong={() => setMenu(a)}
                   onClick={() => openAlert(a)}
                   style={{ display: "flex", alignItems: "center", gap: 10,
                     padding: "8px 10px", borderRadius: 10,
@@ -259,7 +260,7 @@ export default function AttentionSection() {
                       color: "var(--muted)", fontSize: 15, padding: "0 2px", flexShrink: 0 }}>
                     ⋯
                   </button>
-                </div>
+                </Pressable>
               ))}
             </div>
           </div>

@@ -3,6 +3,8 @@ import { createPortal } from "react-dom";
 import client from "../api/client";
 import MwImg from "./MwImg";
 import AdminOnly from "./AdminOnly";
+import { Pressable } from "./ContextMenu";
+import { useIsAdmin } from "../store/auth";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import { colorBg, parseColorsList } from "../utils/colors";
 import { moneyVal } from "../utils/money";
@@ -45,6 +47,7 @@ export default function MwQueue() {
   // « Jusqu'ici » : les stats ne portent que sur le debut de la file (garde dans ce navigateur).
   const [until, setUntilState] = useState(() => { try { return localStorage.getItem("mwQueueUntil") || null; } catch { return null; } });
   const [cutting, setCutting] = useState(false);
+  const isAdmin = useIsAdmin();
   const fresh = useRef(false);
   const setUntil = v => {
     setUntilState(v);
@@ -86,8 +89,39 @@ export default function MwQueue() {
     setQ(x => ({ ...x, models: ids.map(d => ({ ...byId[d], new: false })) }));
     try { await client.put("/makerworld/queue/order", { ids }); } catch { refresh(); }
   };
+  const forget = async did => {
+    try { await client.delete(`/makerworld/queue/plan/${did}`); } finally { refresh(); }
+  };
+  // Menu de la ligne (appui long / clic droit).
+  const rowMenu = r => {
+    const i = q.models.findIndex(x => x.design_id === r.design_id);
+    const last = q.models.length - 1;
+    const isCut = q.until?.design_id === r.design_id;
+    const open = () => setModel({ design_id: r.design_id, title: r.title, title_fr: r.title_fr, cover_url: r.cover_url });
+    return {
+      title: r.title_fr || r.title || `Modèle ${r.design_id}`,
+      subtitle: statusText(r),
+      items: [
+        { icon: "📄", label: "Ouvrir la fiche", onClick: open },
+        { icon: "🌐", label: "Voir sur MakerWorld", onClick: () => window.open(`https://makerworld.com/fr/models/${r.design_id}`, "_blank", "noopener") },
+        "-",
+        isCut ? { icon: "↺", label: "Revenir à toute la liste", onClick: () => setUntil(null) }
+          : { icon: "✂", label: "Compter jusqu'ici", hint: `Stats sur les ${i + 1} premier${i ? "s" : ""}`, onClick: () => setUntil(r.design_id) },
+        isAdmin && "-",
+        isAdmin && i > 0 && { icon: "⤒", label: "Mettre en tête", onClick: () => move(r.design_id, "top") },
+        isAdmin && i > 0 && { icon: "↑", label: "Monter d'un cran", onClick: () => move(r.design_id, -1) },
+        isAdmin && i < last && { icon: "↓", label: "Descendre d'un cran", onClick: () => move(r.design_id, 1) },
+        isAdmin && i < last && { icon: "⤓", label: "Mettre en bas", onClick: () => move(r.design_id, "bottom") },
+        isAdmin && { icon: "↕", label: "Réorganiser toute la liste", onClick: () => { setCutting(false); setSorting(true); } },
+        isAdmin && "-",
+        isAdmin && { icon: "＋", label: `Un exemplaire de plus (×${(r.qty || 1) + 1})`, onClick: () => setQty(r.design_id, Math.min(99, (r.qty || 1) + 1)) },
+        isAdmin && (r.qty || 1) > 1 && { icon: "－", label: `Un de moins (×${r.qty - 1})`, onClick: () => setQty(r.design_id, r.qty - 1) },
+        isAdmin && r.planned && { icon: "📌", label: "Oublier le plan retenu", hint: "Revient au profil et aux filaments par défaut", danger: true, onClick: () => forget(r.design_id) },
+      ],
+    };
+  };
   if (err) return <p style={msg}>{err}</p>;
-  if (!q) return <p style={msg}>Lecture de la file… (la première fois, chaque fiche est lue sur MakerWorld)</p>;
+  if (!q) return <p style={msg}>Lecture de la liste… (la première fois, chaque fiche est lue sur MakerWorld)</p>;
   const t = q.totals;
   const rows = q.models.filter(r => sorting || cutting || filter === "all" || r.status === filter);
   const cutAt = q.until ? q.models.findIndex(r => r.design_id === q.until.design_id) : -1;
@@ -108,7 +142,7 @@ export default function MwQueue() {
       </div>
 
       {q.collections.length === 0 ? (
-        <p style={msg}>Choisis une ou plusieurs collections MakerWorld (par exemple « À imprimer ») : leurs modèles forment la file.</p>
+        <p style={msg}>Choisis une ou plusieurs collections MakerWorld (par exemple « À imprimer ») : leurs modèles forment la liste « À imprimer ».</p>
       ) : (<>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(104px,1fr))", gap:8 }}>
           {[[t.models, "modèles"], [fmtDur(t.seconds), "temps total"], [g(t.weight_g), "filament"],
@@ -166,7 +200,7 @@ export default function MwQueue() {
               {l} ({k === "all" ? t.models : t[k] ?? 0})</button>
           ))}
           {sorting && <span style={{ fontSize:12, color:"var(--muted)" }}>Ordre de priorité : ⤒ en haut, ↑ ↓, ⤓ en bas.</span>}
-          {!sorting && <button onClick={() => setCutting(v => !v)} title="Stats limitées aux premiers modèles de la file"
+          {!sorting && <button onClick={() => setCutting(v => !v)} title="Stats limitées aux premiers modèles de la liste"
             style={{ ...pill(cutting || !!cutRow), marginLeft:"auto" }}>✂ Jusqu'ici</button>}
           <AdminOnly><button onClick={() => { setSorting(v => !v); setCutting(false); }} style={{ ...pill(sorting), marginLeft: sorting ? "auto" : 0 }}>
             {sorting ? "✓ Terminé" : "↕ Réorganiser"}</button></AdminOnly>
@@ -178,7 +212,7 @@ export default function MwQueue() {
             const out = cutAt >= 0 && pos[r.design_id] > cutAt;
             return (
               <React.Fragment key={r.design_id}>
-              <div role="button" tabIndex={0}
+              <Pressable role="button" tabIndex={0} menu={sorting || cutting ? null : () => rowMenu(r)}
                 onClick={() => cutting ? (setUntil(r.design_id), setCutting(false))
                   : setModel({ design_id: r.design_id, title: r.title, title_fr: r.title_fr, cover_url: r.cover_url })}
                 onPointerDown={() => prefetchModel(r.design_id)}
@@ -227,7 +261,7 @@ export default function MwQueue() {
                     </span>
                   ) : <Qty value={r.qty || 1} onChange={n => setQty(r.design_id, n)}/>}
                 </span>
-              </div>
+              </Pressable>
               {!cutting && pos[r.design_id] === cutAt && cutAt < q.models.length - 1 && (
                 <div style={{ display:"flex", alignItems:"center", gap:8, color:"#3b82f6", fontSize:11, fontWeight:800 }}>
                   <span style={{ flex:1, borderTop:"2px dashed #3b82f6" }}/>✂ jusqu'ici<span style={{ flex:1, borderTop:"2px dashed #3b82f6" }}/>
@@ -238,9 +272,9 @@ export default function MwQueue() {
           })}
         </div>
         <p style={{ fontSize:11, color:"var(--muted)", margin:0, lineHeight:1.5 }}>
-          Ouvre un modèle, déplie son profil, choisis plateaux et filaments, puis « 📌 Retenir pour la file ». Sans
-          cela, la file prend le profil retenu, tous les plateaux et le filament le plus proche de ton stock.
-          Pastilles : vert = dans l'AMS, orange = en stock, rouge = manque. Un modèle arrivé dans la file sans place
+          Ouvre un modèle, déplie son profil, choisis plateaux et filaments, puis « 📌 Retenir pour « À imprimer » ». Sans
+          cela, la liste prend le profil retenu, tous les plateaux et le filament le plus proche de ton stock.
+          Pastilles : vert = dans l'AMS, orange = en stock, rouge = manque. Un modèle arrivé dans la liste sans place
           définie se met en haut (« Nouveau »).</p>
         </>)}
       </>)}
@@ -254,11 +288,11 @@ export default function MwQueue() {
             {cutting ? <b>Touche le dernier modèle à compter</b> : (<>
               <b>{q.until.count} élément{q.until.count > 1 ? "s" : ""}</b> jusqu'à « <span style={{ fontWeight:700 }}>
                 {cutRow.title_fr || cutRow.title || `Modèle ${cutRow.design_id}`}</span> »
-              <span style={{ display:"block", fontSize:11, color:"var(--muted)" }}>Stats et filaments limités à ce début de file.</span></>)}
+              <span style={{ display:"block", fontSize:11, color:"var(--muted)" }}>Stats et filaments limités à ce début de liste.</span></>)}
           </span>
           {!cutting && <button onClick={() => setCutting(true)} style={btn}>Changer</button>}
           <button onClick={() => cutting ? setCutting(false) : setUntil(null)}
-            title={cutting ? "Ne rien changer" : "Revenir à toute la file"}
+            title={cutting ? "Ne rien changer" : "Revenir à toute la liste"}
             style={{ ...btn, background:"#3b82f6", color:"white", border:"none" }}>Annuler</button>
         </div>
       )}
@@ -299,8 +333,8 @@ function CollectionsPicker({ chosen, onClose, onSaved }) {
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
       <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
         maxWidth:520, maxHeight:"75dvh", display:"flex", flexDirection:"column", paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
-        <h3 style={{ margin:0, padding:"14px 16px 6px", fontSize:15, fontWeight:800, color:"var(--text)" }}>Collections de la file</h3>
-        <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"var(--muted)" }}>Leurs modèles forment la file (sans doublon).</p>
+        <h3 style={{ margin:0, padding:"14px 16px 6px", fontSize:15, fontWeight:800, color:"var(--text)" }}>Collections « À imprimer »</h3>
+        <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"var(--muted)" }}>Leurs modèles forment la liste (sans doublon).</p>
         <div style={{ flex:1, overflowY:"auto", padding:"0 8px" }}>
           {list === null ? <p style={msg}>…</p> : list.map(c => (
             <label key={c.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 8px", cursor:"pointer", fontSize:13, color:"var(--text)" }}>

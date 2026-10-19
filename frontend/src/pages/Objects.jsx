@@ -9,6 +9,7 @@ import AdminOnly from "../components/AdminOnly";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { useTrackDetail } from "../utils/track";
 import { useKeyboardInset } from "../utils/keyboard";
+import { useLongPress, openMenu } from "../components/ContextMenu";
 
 // Les montants sont masques pour les comptes en lecture seule.
 function fmtPrice(v) {
@@ -541,46 +542,19 @@ function BulkCategorySheet({ ids, onClose, onDone }) {
 }
 
 function AccessoryCard({ acc, onClick, onLongPress, selectMode, selected }) {
-  // Appui long sur la carte, comme sur les prints.
-  const timer = React.useRef(null);
-  const moved = React.useRef(false);
-  const from  = React.useRef(null);
-
-  const start = (e) => {
-    // Reinitialiser AVANT toute sortie anticipee. La version precedente
-    // sortait des l'entree en mode selection sans remettre "moved" a faux :
-    // une carte ou le doigt avait bouge une fois gardait le drapeau leve pour
-    // toujours, et son clic etait ignore indefiniment. D'ou des cartes qui
-    // refusaient de se cocher, au hasard de celles qu'on avait effleurees.
-    moved.current = false;
-    const t = e && e.touches && e.touches[0];
-    from.current = t ? { x: t.clientX, y: t.clientY } : null;
-    if (selectMode) return;   // en selection, pas d'appui long a armer
-    timer.current = setTimeout(() => { if (!moved.current) onLongPress && onLongPress(); }, 480);
-  };
-
-  // Seuil de 8px : le moindre fremissement du doigt marquait un deplacement,
-  // alors qu'un appui parfaitement immobile n'existe pas sur un ecran tactile.
-  const onMove = (e) => {
-    if (!from.current) return;
-    const t = e && e.touches && e.touches[0];
-    if (!t) return;
-    if (Math.abs(t.clientX - from.current.x) > 8 ||
-        Math.abs(t.clientY - from.current.y) > 8) {
-      moved.current = true;
-      clearTimeout(timer.current);
-    }
-  };
-  const cancel = () => clearTimeout(timer.current);
+  // Appui long / clic droit : menu (ouvrir, selectionner).
+  const [press, guard] = useLongPress(e => openMenu(e, {
+    title: acc.name || "Accessoire", subtitle: acc.quantity != null ? `Stock : ${acc.quantity}` : null,
+    items: [
+      onClick && { icon: "📄", label: "Ouvrir", onClick },
+      onLongPress && { icon: "☑", label: "Sélectionner", hint: "Pour changer la catégorie de plusieurs", onClick: onLongPress },
+    ],
+  }), { disabled: selectMode });
 
   return (
-    <div className="card"
-      onClick={() => { if (!selectMode && moved.current) return; onClick && onClick(); }}
-      onTouchStart={start} onTouchMove={onMove}
-      onTouchEnd={cancel} onTouchCancel={cancel}
-      onMouseDown={start} onMouseUp={cancel} onMouseLeave={cancel}
-      onContextMenu={e => e.preventDefault()}
-      style={{ padding:0, overflow:"hidden", cursor: onClick ? "pointer" : "default",
+    <div className="card" {...press}
+      onClick={guard(() => onClick && onClick())}
+      style={{ WebkitTouchCallout:"none", userSelect:"none", padding:0, overflow:"hidden", cursor: onClick ? "pointer" : "default",
         position:"relative",
         // Rupture signalee sur la CARTE ENTIERE et pas seulement par le chiffre
         // du stock : dans une grille qu'on parcourt, un 0 en rouge se lit trop
@@ -1533,37 +1507,21 @@ function ObjectGroupPickerSheet({ title, onClose, onPick }) {
 function ObjectCard({ obj, onClick, onLongPress, selectMode, selected, onToggleSelect }) {
   const st = objStatus(obj);
   const cfg = OBJ_STATUS[st];
-  // Appui long -> selection multiple, comme sur les prints/accessoires.
-  const timer = React.useRef(null);
-  const moved = React.useRef(false);
-  const from  = React.useRef(null);
-  const start = (e) => {
-    moved.current = false;
-    const t = e && e.touches && e.touches[0];
-    from.current = t ? { x: t.clientX, y: t.clientY } : null;
-    if (selectMode) return;
-    timer.current = setTimeout(() => { if (!moved.current) onLongPress && onLongPress(); }, 480);
-  };
-  const onMove = (e) => {
-    if (!from.current) return;
-    const t = e && e.touches && e.touches[0];
-    if (!t) return;
-    if (Math.abs(t.clientX - from.current.x) > 8 || Math.abs(t.clientY - from.current.y) > 8) {
-      moved.current = true; clearTimeout(timer.current);
-    }
-  };
-  const cancel = () => clearTimeout(timer.current);
-  const handleClick = () => {
+  // Appui long / clic droit : menu (ouvrir, selectionner).
+  const [press, guard] = useLongPress(e => openMenu(e, {
+    title: obj.name || "Objet", subtitle: cfg?.label || null,
+    items: [
+      onClick && { icon: "📄", label: "Ouvrir", onClick },
+      onLongPress && { icon: "☑", label: "Sélectionner", hint: "Pour ajouter plusieurs objets à un groupe", onClick: onLongPress },
+    ],
+  }), { disabled: selectMode });
+  const handleClick = guard(() => {
     if (selectMode) { onToggleSelect && onToggleSelect(obj.id); return; }
-    if (moved.current) return;
     onClick && onClick();
-  };
+  });
   return (
-    <div className="card" onClick={handleClick}
-      onTouchStart={start} onTouchMove={onMove} onTouchEnd={cancel} onTouchCancel={cancel}
-      onMouseDown={start} onMouseUp={cancel} onMouseLeave={cancel}
-      onContextMenu={e => e.preventDefault()}
-      style={{ padding:0, overflow:"hidden", cursor:"pointer", position:"relative",
+    <div className="card" onClick={handleClick} {...press}
+      style={{ WebkitTouchCallout:"none", userSelect:"none", padding:0, overflow:"hidden", cursor:"pointer", position:"relative",
         outline: selected ? "2px solid #3b82f6" : "none", outlineOffset:-2 }}>
       {selectMode && (
         <span style={{ position:"absolute", top:6, right:6, zIndex:3, width:22, height:22,

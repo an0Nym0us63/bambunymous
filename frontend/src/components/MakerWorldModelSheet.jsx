@@ -139,7 +139,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
         const pl = c.plans?.[String(id)];
         if (!alive || !pl) { if (alive) setPlan(null); return; }
         setPlan(pl);
-        setPicksFromPlan(`${id}|${pl.instance_id}`, data.stock?.[pl.instance_id], pl.picks);
+        setPicksFromPlan(`${id}|${pl.instance_id}`, data.stock?.[pl.instance_id], pl.picks)
+          .then(() => alive && setM(x => x && { ...x }));     // choix trouves par recherche : relus, on redessine
         if (pl.plates) setPlateSel(s => ({ ...s, [pl.instance_id]: pl.plates }));
         setOpen(pl.instance_id);
       }).catch(() => {});
@@ -333,7 +334,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                 title="La file d'attente utilisera ce profil, ces plateaux et ces filaments"
                                 style={{ ...linkBtn, padding:"5px 10px", fontSize:11.5, cursor:"pointer",
                                   ...(plan?.instance_id === p.instance_id ? { color:"#22c55e", borderColor:"rgba(34,197,94,0.4)" } : null) }}>
-                                {plan?.instance_id === p.instance_id ? "📌 Retenu pour la file · mettre à jour" : "📌 Retenir pour la file"}</button>
+                                {plan?.instance_id === p.instance_id ? "📌 Retenu pour « À imprimer » · mettre à jour" : "📌 Retenir pour « À imprimer »"}</button>
                               {plan?.instance_id === p.instance_id && (
                                 <button onClick={unpinPlan} disabled={planBusy} title="Oublier ce choix"
                                   style={{ ...linkBtn, padding:"5px 9px", fontSize:11.5, cursor:"pointer", color:"var(--muted)" }}>✕</button>

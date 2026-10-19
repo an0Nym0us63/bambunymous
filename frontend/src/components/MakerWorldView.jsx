@@ -10,6 +10,9 @@ import MwCreator from "./MwCreator";
 import { mwPatch, onMwChange } from "../utils/mwSync";
 import { useFriend } from "../store/friend";
 import { useMine, MineBadge } from "./Friends";
+import { Pressable } from "./ContextMenu";
+import { useIsAdmin, useIsHomeAdmin } from "../store/auth";
+import { useMwAssign } from "../store/mwAssign";
 
 // Cache de la vue (le temps de la session) : revenir sur un onglet ou une
 // collection affiche aussitot ce qu'on avait, puis se met a jour en fond.
@@ -240,19 +243,48 @@ export default function MakerWorldView({ onSearch }) {
     if (!v) return;
     try {
       if (nameEdit.mode === "new") await client.post("/makerworld/collections", { title: v });
-      else { await client.put(`/makerworld/collections/${coll.id}`, { title: v }); setColl(c => ({ ...c, title: v })); }
+      else {
+        const id = nameEdit.id || coll.id;
+        await client.put(`/makerworld/collections/${id}`, { title: v });
+        setColl(c => c && c.id === id ? { ...c, title: v } : c);
+      }
       setNameEdit(null); setReload(n => n + 1);
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
-  const delColl = async () => {
-    if (!(await showConfirm(`Supprimer la collection « ${coll.title} » sur MakerWorld ? Les modèles, eux, restent.`,
+  const delColl = async (c = coll) => {
+    if (!(await showConfirm(`Supprimer la collection « ${c.title} » sur MakerWorld ? Les modèles, eux, restent.`,
       { danger: true, confirmLabel: "Supprimer" }))) return;
-    try { await client.delete(`/makerworld/collections/${coll.id}`); setColl(null); setReload(n => n + 1); }
+    try { await client.delete(`/makerworld/collections/${c.id}`); setColl(null); setReload(n => n + 1); }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
   };
 
   const showModels = (tab !== "favorites" && tab !== "creator") || !!coll;
   const friend = useFriend((s) => s.friend);
+  const isAdmin = useIsAdmin();
+  const isHomeAdmin = useIsHomeAdmin();
+  const startAssign = useMwAssign((s) => s.start);
+  // Menus d'appui long / clic droit : collection, modele.
+  const collMenu = c => ({
+    title: c.title, subtitle: c.count != null ? `${c.count} modèle${c.count > 1 ? "s" : ""}` : null,
+    items: [
+      { icon: "📂", label: "Ouvrir", onClick: () => openColl(c) },
+      isAdmin && status?.connected && "-",
+      isAdmin && status?.connected && { icon: "✎", label: "Renommer", onClick: () => setNameEdit({ mode: "rename", value: c.title, id: c.id }) },
+      isAdmin && status?.connected && { icon: "🗑", label: "Supprimer…", hint: "Sur MakerWorld ; les modèles restent", danger: true, onClick: () => delColl(c) },
+    ],
+  });
+  const modelMenu = x => ({
+    title: x.title_fr || x.title || `Modèle ${x.design_id}`, subtitle: x.creator_name ? `par ${x.creator_name}` : null,
+    items: [
+      { icon: "📄", label: "Ouvrir la fiche", onClick: () => setModel(x) },
+      x.url && { icon: "🌐", label: "Voir sur MakerWorld", onClick: () => window.open(x.url, "_blank", "noopener") },
+      x.printed > 0 && onSearch && { icon: "🖨️", label: "Voir mes impressions", hint: printedLabel(x), onClick: () => onSearch(x) },
+      "-",
+      (status?.connected || friend) && isHomeAdmin && { icon: "☆", label: "Ranger dans mes collections…", onClick: () => setPickFor(x) },
+      isAdmin && !friend && { icon: "🔗", label: "Associer à un print", hint: "Choisir les impressions de ce modèle",
+        onClick: () => startAssign({ design_id: x.design_id, title: x.title, title_fr: x.title_fr, cover_url: x.cover_url }) },
+    ],
+  });
   const all = data?.items || [];
   const items = all.filter(x => pf === "all" || (pf === "new" ? !x.printed : x.printed > 0));
   const mineOf = useMine(showModels ? all.map(x => x.design_id) : []);   // chez un copain : « deja chez moi ? »
@@ -276,7 +308,7 @@ export default function MakerWorldView({ onSearch }) {
             <AdminOnly>
               <button onClick={() => setNameEdit({ mode: "rename", value: coll.title })} title="Renommer"
                 style={iconBtn}>✎</button>
-              <button onClick={delColl} title="Supprimer la collection" style={{ ...iconBtn, color:"#ef4444" }}>🗑</button>
+              <button onClick={() => delColl()} title="Supprimer la collection" style={{ ...iconBtn, color:"#ef4444" }}>🗑</button>
             </AdminOnly>
           )}
         </div>
@@ -418,14 +450,14 @@ export default function MakerWorldView({ onSearch }) {
               (data.collections || []).length === 0 ? <p style={msg}>Aucune collection.</p> : (
                 <div style={grid}>
                   {data.collections.map(c => (
-                    <button key={c.id} onClick={() => openColl(c)}
+                    <Pressable as="button" key={c.id} onClick={() => openColl(c)} menu={() => collMenu(c)}
                       style={{ ...card, cursor:"pointer", padding:0, textAlign:"left", color:"var(--text)" }}>
                       <Mosaic covers={c.covers}/>
                       <div style={{ padding:"7px 8px 8px" }}>
                         <div style={{ fontSize:12.5, fontWeight:700 }}>{c.title}</div>
                         {c.count != null && <div style={{ fontSize:10.5, color:"var(--muted)" }}>{c.count} modèle{c.count > 1 ? "s" : ""}</div>}
                       </div>
-                    </button>
+                    </Pressable>
                   ))}
                 </div>
               )
@@ -439,7 +471,7 @@ export default function MakerWorldView({ onSearch }) {
               )}
               <div style={grid}>
                 {items.map(x => (
-                  <div key={x.design_id} style={{ ...tileCard, ...(x.printed > 0 ? printedCard : null) }}>
+                  <Pressable key={x.design_id} menu={() => modelMenu(x)} style={{ ...tileCard, ...(x.printed > 0 ? printedCard : null) }}>
                     <a href={x.url} onClick={e => { e.preventDefault(); setModel(x); }} onPointerDown={() => prefetchModel(x.design_id)}
                       style={{ display:"block", position:"relative", cursor:"pointer", background:"var(--surface)" }}>
                       {x.cover_url
@@ -478,7 +510,7 @@ export default function MakerWorldView({ onSearch }) {
                         )}
                       </div>
                     </div>
-                  </div>
+                  </Pressable>
                 ))}
               </div>
               {hasMore && (

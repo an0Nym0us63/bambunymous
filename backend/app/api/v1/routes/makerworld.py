@@ -143,6 +143,14 @@ async def mw_creator_points(offset: int = 0, _: str = Depends(get_current_user))
         raise HTTPException(400, str(e))
 
 
+@router.get("/stock/search")
+async def mw_stock_search(type: str = "", color: str = "", g: float | None = None, q: str = "", ids: str = "",
+                          _: str = Depends(get_current_user)):
+    """Chercher dans tout le stock pour remplacer un filament de profil."""
+    from ....services.mw_stock import stock_rows, search
+    return {"items": search(await stock_rows(), type, color, g, q[:80], [i for i in ids.split(",") if i][:20])}
+
+
 @router.get("/queue")
 async def mw_queue(fresh: bool = False, until: str | None = None, _: str = Depends(get_current_user)):
     """File d'attente : modeles des collections choisies, profils et filaments

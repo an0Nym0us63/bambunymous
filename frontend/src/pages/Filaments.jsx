@@ -16,6 +16,7 @@ import AdminOnly from "../components/AdminOnly";
 import { useTrackDetail } from "../utils/track";
 import Select from "../components/Select";
 import { useIsAdmin } from "../store/auth";
+import { Pressable } from "../components/ContextMenu";
 import { colorBg, parseColorsList } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import GalleryCompare from "../components/GalleryCompare";
@@ -1151,7 +1152,7 @@ function KpiBar({ kpis }) {
   );
 }
 
-function SpoolCard({ s, colorsList, onClick }) {
+function SpoolCard({ s, colorsList, onClick, menu }) {
   const total = s.filament_weight_g || 1000;
   const rem   = s.remaining_weight_g;
   const pct   = rem != null ? Math.max(0, Math.min(100, Math.round(rem / total * 100))) : 0;
@@ -1162,7 +1163,7 @@ function SpoolCard({ s, colorsList, onClick }) {
   const sub = s.filament_fila_type || s.filament_material;
 
   return (
-    <div onClick={onClick} className="card-sm"
+    <Pressable onClick={onClick} menu={menu} className="card-sm"
       style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
         display:"flex", flexDirection:"column",
         background:"var(--surface)", border:"1px solid var(--border)" }}>
@@ -1249,7 +1250,7 @@ function SpoolCard({ s, colorsList, onClick }) {
           {pct}%
         </span>
       )}
-    </div>
+    </Pressable>
   );
 }
 
@@ -1418,6 +1419,40 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose 
 }
 
 function SpoolsView({ filaments, showArchived }) {
+  const isAdmin = useIsAdmin();
+  const [selFil, setSelFil] = useState(null);
+  // Appui long / clic droit sur une bobine.
+  const spoolMenu = s => {
+    const fil = (filaments || []).find(f => f.id === s.filament_id);
+    const name = s.filament_translated_name || s.filament_name || `Bobine #${s.id}`;
+    return {
+      title: name, subtitle: `#${s.id}${s.remaining_weight_g != null ? ` · ${Math.round(s.remaining_weight_g)} g` : ""}`,
+      items: [
+        { icon: "📄", label: "Ouvrir la bobine", onClick: () => setSelected(s) },
+        fil && { icon: "🧵", label: "Voir le filament", onClick: () => setSelFil(fil) },
+        isAdmin && fil && { icon: "＋", label: "Ajouter une bobine de ce filament", onClick: () => setShowAdd(fil.id) },
+        isAdmin && !s.archived && "-",
+        isAdmin && !s.archived && { icon: "📦", label: "Archiver…", hint: "Quantité remise à 0, sort du stock", onClick: async () => {
+          if (!(await showConfirm(`Archiver la bobine #${s.id} ? Elle passera en Archives avec une quantité remise à 0 et sortira du stock.`,
+            { confirmLabel: "Archiver" }))) return;
+          try { await client.delete(`/filaments/spools/${s.id}`); load(); }
+          catch (e) { showAlert(e.response?.data?.detail || e.message); }
+        } },
+        isAdmin && { icon: "🗑", label: "Supprimer définitivement…", danger: true, onClick: async () => {
+          if (!(await showConfirm(`Supprimer définitivement la bobine #${s.id} ?`, { danger: true, confirmLabel: "Supprimer" }))) return;
+          try {
+            let r = await client.delete(`/filaments/spools/${s.id}/permanent`, { params: { force: false } });
+            if (r.data.confirm_required) {
+              if (!(await showConfirm(r.data.message || `Bobine utilisée par ${r.data.usage_count} impression(s). Supprimer quand même ?`,
+                { danger: true, confirmLabel: "Supprimer" }))) return;
+              await client.delete(`/filaments/spools/${s.id}/permanent`, { params: { force: true } });
+            }
+            load();
+          } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+        } },
+      ],
+    };
+  };
   const [allSpools, setAllSpools] = useState([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -1550,11 +1585,13 @@ function SpoolsView({ filaments, showArchived }) {
         {spools.map(s => {
           const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
           return (
-            <SpoolCard key={s.id} s={s} colorsList={colorsList} onClick={()=>setSelected(s)}/>
+            <SpoolCard key={s.id} s={s} colorsList={colorsList} onClick={()=>setSelected(s)} menu={() => spoolMenu(s)}/>
           );
         })}
       </div>
-      {showAdd && <AddSpoolModal filaments={filaments} onSave={()=>{ setShowAdd(false); load(); }} onClose={()=>setShowAdd(false)}/>}
+      {showAdd && <AddSpoolModal filaments={filaments} preselect={showAdd === true ? undefined : showAdd}
+        onSave={()=>{ setShowAdd(false); load(); }} onClose={()=>setShowAdd(false)}/>}
+      {selFil && <FilamentSheet f={selFil} onClose={() => setSelFil(null)} onDeleted={() => { setSelFil(null); load(); }}/>}
       {selected && (
         <SpoolBottomSheet
           spool={selected}
@@ -1908,11 +1945,11 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
 // Stock lisible : grammes sous le kilo, kilos au-dela.
 const fmtStock = (g) => g >= 1000 ? `${(g / 1000).toFixed(2).replace(".", ",")} kg` : `${Math.round(g)} g`;
 
-function FilamentCard({ f, onClick, extra = null }) {
+function FilamentCard({ f, onClick, extra = null, menu }) {
   const colorsList = parseColorsList(f.color, f.colors_array);
   const flt = "drop-shadow(0 1px 4px rgba(0,0,0,0.95)) drop-shadow(0 2px 10px rgba(0,0,0,0.6))";
   return (
-    <div onClick={onClick} className="card-sm"
+    <Pressable onClick={onClick} menu={menu} className="card-sm"
       style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative" }}>
       {/* fond couleur (damier de transparence géré par colorBg) */}
       <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>
@@ -1942,7 +1979,7 @@ function FilamentCard({ f, onClick, extra = null }) {
           {f.active_spool_count>0 && f.remaining_weight_total_g > 0 && ` · ${fmtStock(f.remaining_weight_total_g)}`}
         </>)}
       </span>
-    </div>
+    </Pressable>
   );
 }
 
@@ -2118,6 +2155,16 @@ function FilamentPrintsSheet({ f, onClose }) {
 }
 
 function FilamentsView() {
+  const isAdmin = useIsAdmin();
+  const [addFor, setAddFor] = useState(null);
+  const filMenu = f => ({
+    title: f.translated_name || f.name || `Filament #${f.id}`,
+    subtitle: [f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ") || null,
+    items: [
+      { icon: "📄", label: "Ouvrir", onClick: () => setSelectedFil(f) },
+      isAdmin && { icon: "＋", label: "Ajouter une bobine", onClick: () => setAddFor(f.id) },
+    ],
+  });
   const [allFilaments, setAllFilaments] = useState([]);
   const [q, setQ] = useState("");
   const [loading, setLoading] = useState(true);
@@ -2214,7 +2261,7 @@ function FilamentsView() {
         <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Chargement…</p>
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
-          {filaments.map(f => <FilamentCard key={f.id} f={f} onClick={() => setSelectedFil(f)}/>)}
+          {filaments.map(f => <FilamentCard key={f.id} f={f} onClick={() => setSelectedFil(f)} menu={() => filMenu(f)}/>)}
           {!filaments.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
         </div>
       )}
@@ -2222,6 +2269,7 @@ function FilamentsView() {
         onDeleted={() => { setSelectedFil(null); load(); }}
         onUpdated={load}/>}
       {createOpen && <FilamentCreateSheet onClose={() => setCreateOpen(false)} onCreated={() => { setCreateOpen(false); load(); }}/>}
+      {addFor && <AddSpoolModal preselect={addFor} onSave={() => { setAddFor(null); load(); }} onClose={() => setAddFor(null)}/>}
     </div>
   );
 }

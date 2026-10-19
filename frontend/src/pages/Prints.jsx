@@ -25,6 +25,7 @@ import GroupMosaic from "../components/GroupMosaic";
 import ObjectCreateSheet from "../components/ObjectCreateSheet";
 import ObjectQuotaButton from "../components/ObjectQuotaButton";
 import Select from "../components/Select";
+import { useLongPress, openMenu } from "../components/ContextMenu";
 
 // PARTIAL et TO_REDO viennent de Spoolnymous, qui gerait cinq statuts. Les
 // prints importes les portent toujours, mais l'application ne les connaissait
@@ -1716,22 +1717,27 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
   const [sheetOpen, setSheetOpen] = useState(false);
   // Appui long : passe en selection avec ce groupe coche (meme geste que sur
   // une carte de print) ; en selection, un appui coche / decoche.
-  const pressTimer = useRef(null);
-  const longPressed = useRef(false);
-  const startPress = () => {
-    if (selectMode || !onLongPress) return;
-    longPressed.current = false;
-    pressTimer.current = setTimeout(() => {
-      longPressed.current = true;
-      if (navigator.vibrate) navigator.vibrate(15);
-      onLongPress(groupId);
-    }, 480);
+  const isAdmin = useIsAdmin();
+  const [mw, setMw] = useState(null);
+  const designs = [...new Set(prints.map(pr => String(pr.design_id || "").trim()).filter(Boolean))];
+  const ungroup = async () => {
+    if (!(await showConfirm(`Dégrouper "${name}" (les prints resteront) ?`, { confirmLabel: "Dégrouper" }))) return;
+    try { await client.delete(`/prints/groups/${groupId}`); onUngroup?.(); }
+    catch (e) { showAlert("Erreur: " + (e.response?.data?.detail || e.message)); }
   };
-  const cancelPress = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
-  const handleClick = () => {
-    if (longPressed.current) { longPressed.current = false; return; }
+  const [press, guard] = useLongPress(e => openMenu(e, {
+    title: name, subtitle: `${prints.length} prints · ${fmtDate(latestDate)}`,
+    items: [
+      { icon: "📄", label: "Ouvrir le groupe", onClick: () => setSheetOpen(true) },
+      onLongPress && { icon: "☑", label: "Sélectionner", hint: "Pour fusionner ou supprimer plusieurs groupes", onClick: () => onLongPress(groupId) },
+      designs.length === 1 && { icon: "🌐", label: "Modèle MakerWorld", onClick: () => setMw(designs[0]) },
+      isAdmin && "-",
+      isAdmin && { icon: "⛓", label: "Dégrouper…", hint: "Les prints restent", onClick: ungroup },
+    ],
+  }), { disabled: selectMode });
+  const handleClick = guard(() => {
     if (selectMode && onToggleSelect) onToggleSelect(groupId); else setSheetOpen(true);
-  };
+  });
   // Mosaique des prints du groupe, le print de couverture en tete. Une seule
   // vignette ne montrait qu'une piece sur N et ne laissait pas deviner ce que
   // le groupe contient -- c'est pourtant la question qu'on se pose en
@@ -1753,10 +1759,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
 
   return (
     <>
-      <div className="card" onClick={handleClick}
-        onTouchStart={startPress} onTouchEnd={cancelPress} onTouchMove={cancelPress}
-        onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
-        onContextMenu={e => e.preventDefault()}
+      <div className="card" onClick={handleClick} {...press}
         style={{ overflow:"hidden", display:"flex", flexDirection:"column",
           position:"relative", padding:0, cursor:"pointer",
           outline: selected ? "2px solid #3b82f6" : "none",
@@ -1815,6 +1818,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
           onUngroup={onUngroup}
           onDelete={id => { onDelete(id); }}/>
       )}
+      {mw && <MakerWorldModelSheet designId={mw} onClose={() => setMw(null)}/>}
     </>
   );
 }
@@ -1872,43 +1876,29 @@ function QuantityEditor({ id, type, value, onChange }) {
   );
 }
 
-function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect, onLongPress }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [confirming, setConfirming] = useState(false);
+function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onToggleSelect, onLongPress }) {
   const statusCfg = STATUS_CFG[p.status] || { bg:"rgba(0,0,0,0.5)", color:"white", label: p.status || "?" };
-  const pressTimer = useRef(null);
-  const longPressed = useRef(false);
+  const isAdmin = useIsAdmin();
+  const [full, setFull] = useState(null);           // { mode: "edit" | "delete", p } : fiche complete lue a la demande
+  const [mw, setMw] = useState(false);
+  const loadFull = mode => client.get("/prints/" + p.id).then(r => setFull({ mode, p: r.data }))
+    .catch(e => showAlert("Erreur: " + (e.response?.data?.detail || e.message)));
+  // Appui long / clic droit : menu du print (hors mode selection).
+  const [press, guard] = useLongPress(e => openMenu(e, {
+    title: p.file_name || "Sans nom", subtitle: fmtDate(p.print_date),
+    items: [
+      { icon: "📄", label: "Ouvrir", onClick },
+      onLongPress && { icon: "☑", label: "Sélectionner", hint: "Pour grouper ou supprimer plusieurs prints", onClick: () => onLongPress(p.id) },
+      p.design_id && { icon: "🌐", label: "Modèle MakerWorld", onClick: () => setMw(true) },
+      isAdmin && "-",
+      isAdmin && { icon: "✏️", label: "Modifier", onClick: () => loadFull("edit") },
+      isAdmin && { icon: "🗑", label: "Supprimer…", danger: true, onClick: () => loadFull("delete") },
+    ],
+  }), { disabled: selectMode });
+  const handleClick = guard(() => { if (selectMode) onToggleSelect(p.id); else onClick(); });
 
-  const startPress = () => {
-    if (selectMode) return;
-    longPressed.current = false;
-    pressTimer.current = setTimeout(() => {
-      longPressed.current = true;
-      if (navigator.vibrate) navigator.vibrate(15);
-      onLongPress?.(p.id);
-    }, 480);
-  };
-  const cancelPress = () => { if (pressTimer.current) clearTimeout(pressTimer.current); };
-  const handleClick = () => {
-    if (longPressed.current) { longPressed.current = false; return; } // évite d'ouvrir la fiche juste après le long-press
-    if (selectMode) onToggleSelect(p.id); else onClick();
-  };
-
-  const handleDelete = async (e) => {
-    e.stopPropagation();
-    if (!confirming) { setConfirming(true); return; }
-    try {
-      await client.delete("/prints/" + p.id);
-      onDelete(p.id);
-    } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
-    setMenuOpen(false); setConfirming(false);
-  };
-
-  return (
-    <div className="card" onClick={handleClick}
-      onTouchStart={startPress} onTouchEnd={cancelPress} onTouchMove={cancelPress}
-      onMouseDown={startPress} onMouseUp={cancelPress} onMouseLeave={cancelPress}
-      onContextMenu={e => e.preventDefault()}
+  return (<>
+    <div className="card" onClick={handleClick} {...press}
       style={{ overflow:"hidden", display:"flex",
       flexDirection:"column", position:"relative", padding:0, cursor:"pointer",
       outline: selected ? "2px solid #3b82f6" : "none",
@@ -1977,7 +1967,15 @@ function PrintCard({ p, onClick, onDelete, selectMode, selected, onToggleSelect,
         </div>
       </div>
     </div>
-  );
+    {mw && <MakerWorldModelSheet designId={String(p.design_id)} onClose={() => setMw(false)}/>}
+    {full?.mode === "edit" && <PrintEditSheet p={full.p} onClose={() => setFull(null)}
+      onSaved={() => { setFull(null); onChanged?.(); }}/>}
+    {full?.mode === "delete" && <DeletePrintConfirm p={full.p} onCancel={() => setFull(null)}
+      onConfirm={async fracs => {
+        if (Object.values(fracs).some(v => v > 0)) await client.post("/prints/" + p.id + "/restore-weights", { fracs }).catch(() => {});
+        client.delete("/prints/" + p.id).then(() => { setFull(null); onDelete?.(p.id); }).catch(() => showAlert("Erreur"));
+      }}/>}
+  </>);
 }
 
 
@@ -2658,7 +2656,7 @@ export default function Prints() {
 
       {/* Tabs Liste / Galerie / MakerWorld */}
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
-        {[["list","Liste"],["gallery","Galerie"],["makerworld","MakerWorld"],["queue","File"]].map(([id,label])=>(
+        {[["list","Liste"],["gallery","Galerie"],["makerworld","MakerWorld"],["queue","À imprimer"]].map(([id,label])=>(
           <button key={id} onClick={()=>setViewMode(id)} style={{
             flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
             background: viewMode===id ? "#3b82f6" : "transparent",
@@ -2934,7 +2932,7 @@ export default function Prints() {
         if (groupF) {
           return (
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(160px, 1fr))", gap:10 }}>
-              {prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete} onLongPress={id=>{ setSelectMode(true); setSelectedIds(new Set([id])); }}/>)}
+              {prints.map(p => <PrintCard key={p.id} p={p} onClick={()=>setSelected(p)} onDelete={onDelete} onChanged={() => load()} onLongPress={id=>{ setSelectMode(true); setSelectedIds(new Set([id])); }}/>)}
             </div>
           );
         }
@@ -3000,6 +2998,7 @@ export default function Prints() {
               <PrintCard key={item.p.id} p={item.p}
                 onClick={()=>setSelected(item.p)}
                 onDelete={onDelete}
+                onChanged={() => load()}
                 selectMode={selectMode}
                 selected={selectedIds.has(item.p.id)}
                 onToggleSelect={toggleSelect}

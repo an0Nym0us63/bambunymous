@@ -288,6 +288,7 @@ async def _compute() -> dict:
     ams = await _ams_stock()
 
     models, stock_of = [], {}
+    stock_all = None                                  # tout le stock, lu seulement si un choix sort des propositions
     for did, base in designs.items():
         m = details.get(did) or {}
         plan = cfg["plans"].get(did)
@@ -325,7 +326,14 @@ async def _compute() -> dict:
                     continue
                 g *= qty
                 cands = (it.get("matches") or []) + (it.get("others") or [])
-                pick = next((c for c in cands if c["filament_id"] == picks.get(k)), None) or (it.get("matches") or [None])[0]
+                pick = next((c for c in cands if c["filament_id"] == picks.get(k)), None)
+                if not pick and picks.get(k):
+                    if stock_all is None:
+                        from .mw_stock import stock_rows
+                        stock_all = await stock_rows()
+                    from .mw_stock import search as stock_search
+                    pick = (stock_search(stock_all, it.get("type"), it.get("color"), ids=[picks[k]]) or [None])[0]
+                pick = pick or (it.get("matches") or [None])[0]
                 row["weight_g"] += g
                 fil = None
                 if pick:

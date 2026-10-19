@@ -11,6 +11,7 @@ import Objects from "./pages/Objects";
 import Filaments from "./pages/Filaments";
 import Prints from "./pages/Prints";
 import DialogHost from "./components/DialogHost";
+import { ContextMenuHost } from "./components/ContextMenu";
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -44,6 +45,7 @@ export default function App() {
       </Route>
     </Routes>
     <DialogHost />
+    <ContextMenuHost />
     </>
   );
 }

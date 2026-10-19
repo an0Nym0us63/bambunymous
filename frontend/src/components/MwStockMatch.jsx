@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import client from "../api/client";
 import { useNavigate } from "react-router-dom";
 import { colorBg, parseColorsList } from "../utils/colors";
 
@@ -27,9 +28,21 @@ const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 // Filament retenu pour une ligne : la proposition choisie a la main (gardee
 // le temps de la session, par profil et par ligne), sinon la meilleure.
 const PICKS = new Map();      // `${scope}|${i}` -> filament_id
-// Plan retenu pour la file : cle « TYPE|#COULEUR » -> filament choisi a la main.
+// Filament trouve par la recherche dans tout le stock (hors propositions) : `${scope}|${i}` -> proposition.
+const EXTRA = new Map();
+const inLists = (x, id) => x.matches.some(m => m.filament_id === id) || (x.others || []).some(m => m.filament_id === id);
+// Plan retenu pour « À imprimer » : cle « TYPE|#COULEUR » -> filament choisi a la main.
+// Un choix fait par recherche est relu dans le stock (promesse resolue une fois tout pret).
 export function setPicksFromPlan(scope, items, picks) {
-  (items || []).forEach((x, i) => { const id = picks?.[fkey(x.type, x.color)]; if (id) PICKS.set(`${scope}|${i}`, id); });
+  const asks = [];
+  (items || []).forEach((x, i) => {
+    const id = picks?.[fkey(x.type, x.color)];
+    if (!id) return;
+    PICKS.set(`${scope}|${i}`, id);
+    if (!inLists(x, id)) asks.push(client.get("/makerworld/stock/search", { params: { type: x.type, color: x.color, ids: String(id) } })
+      .then(({ data }) => { if (data.items?.[0]) EXTRA.set(`${scope}|${i}`, data.items[0]); }).catch(() => {}));
+  });
+  return Promise.all(asks);
 }
 export function picksOf(scope, items) {
   const out = {};
@@ -41,8 +54,10 @@ export function picksOf(scope, items) {
 }
 export const chosenOf = (x, scope, i) => {
   const id = PICKS.get(`${scope}|${i}`);
-  // Choix possible aussi parmi les « autre matiere » (simulation d'une substitution).
-  return x.matches.find(m => m.filament_id === id) || (x.others || []).find(m => m.filament_id === id) || x.matches[0];
+  const ex = EXTRA.get(`${scope}|${i}`);
+  // Choix possible aussi parmi les « autre matiere », ou trouve par recherche dans tout le stock.
+  return x.matches.find(m => m.filament_id === id) || (x.others || []).find(m => m.filament_id === id)
+    || (ex && ex.filament_id === id ? ex : null) || x.matches[0];
 };
 
 // Besoins par filament du profil : tout le profil (selected absent) ou la
@@ -104,6 +119,7 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
   const go = id => { onNavigate?.(); nav(`/filaments?id=${id}`); };
   const choose = (x, i) => chosenOf(x, scope, i);
   const pick = (i, id) => { PICKS.set(`${scope}|${i}`, id); setOpen(null); bump(n => n + 1); };
+  const pickFound = (i, mt) => { EXTRA.set(`${scope}|${i}`, mt); pick(i, mt.filament_id); };
   const { need, total } = stockNeeds(items, plates, selected, choose);
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"0 10px 10px" }}>
@@ -122,9 +138,9 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
         return (
           <div key={i} style={{ borderRadius:8, background:"var(--surface)", border:"1px solid var(--border)",
             opacity: unused ? 0.45 : 1, transition:"opacity .15s" }}>
-            <button onClick={() => setOpen(isOpen ? null : i)} disabled={!best && !others.length}
+            <button onClick={() => setOpen(isOpen ? null : i)}
               style={{ width:"100%", display:"flex", alignItems:"flex-start", gap:8, padding:"6px 8px", background:"none",
-                border:"none", cursor: best || others.length ? "pointer" : "default", color:"var(--text)", textAlign:"left" }}>
+                border:"none", cursor:"pointer", color:"var(--text)", textAlign:"left" }}>
               <Swatch color={x.color} title={x.color}/>
               <span title={x.exact?.setting || undefined}
                 style={{ fontSize:11.5, fontWeight:700, flexShrink:0, lineHeight:"16px", maxWidth:"34%" }}>
@@ -159,13 +175,13 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
                   <span style={{ display:"block", fontSize:10, fontWeight:800, color: levelColor(best), whiteSpace:"nowrap",
                     lineHeight:"16px" }}>{levelText(best)}</span>
                   {manual ? <span style={{ display:"block", fontSize:9.5, color:"#3b82f6", fontWeight:700 }}>choisi</span>
-                    : nAlt > 0 ? <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>
-                      {isOpen ? "masquer ▴" : `${nAlt} autre${nAlt > 1 ? "s" : ""} ▾`}</span> : null}
+                    : <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>
+                      {isOpen ? "masquer ▴" : nAlt > 0 ? `${nAlt} autre${nAlt > 1 ? "s" : ""} ▾` : "changer ▾"}</span>}
                 </span>
               </>) : (
                 <span style={{ flex:1, fontSize:11.5, color:"#ef4444", lineHeight:"16px" }}>Aucun {x.type || "filament"} en stock
-                  {others.length > 0 && <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
-                    {isOpen ? "masquer ▴" : "choisir une autre matière ▾"}</span>}</span>
+                  <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
+                    {isOpen ? "masquer ▴" : others.length ? "choisir une autre matière ▾" : "chercher dans mon stock ▾"}</span></span>
               )}
             </button>
             {!unused && shared ? (
@@ -185,9 +201,50 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
                   onPick={() => pick(i, mt.filament_id)} onGo={go}/>
               ))}
             </>)}
+            {isOpen && <StockSearch x={x} g={g} chosen={best} onPick={mt => pickFound(i, mt)} onGo={go}/>}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Chercher dans tout le stock (toutes matieres, nom, marque, couleur, #id),
+// du plus proche en couleur au plus eloigne.
+function StockSearch({ x, g, chosen, onPick, onGo }) {
+  const [on, setOn] = useState(false);
+  const [q, setQ] = useState("");
+  const [res, setRes] = useState(null);
+  useEffect(() => {
+    if (!on) return;
+    let alive = true;
+    const t = setTimeout(() => {
+      client.get("/makerworld/stock/search", { params: { type: x.type, color: x.color, g: g || undefined, q } })
+        .then(({ data }) => alive && setRes(data.items || [])).catch(() => alive && setRes([]));
+    }, q ? 250 : 0);
+    return () => { alive = false; clearTimeout(t); };
+  }, [on, q, x.type, x.color, g]);
+  if (!on) return (
+    <button onClick={() => setOn(true)} style={{ width:"100%", textAlign:"left", padding:"8px 12px", background:"none",
+      border:"none", borderTop:"1px solid var(--border)", color:"#3b82f6", fontSize:11.5, fontWeight:700, cursor:"pointer" }}>
+      🔍 Chercher dans tout mon stock</button>
+  );
+  return (
+    <div style={{ borderTop:"1px solid var(--border)" }}>
+      <div style={{ padding:"7px 10px 5px" }}>
+        <input value={q} onChange={e => setQ(e.target.value)} autoFocus autoComplete="off" spellCheck={false}
+          placeholder="Nom, marque, matière, couleur…"
+          style={{ width:"100%", boxSizing:"border-box", padding:"7px 10px", borderRadius:8, fontSize:12.5,
+            background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)", outline:"none" }}/>
+      </div>
+      {res === null ? <div style={{ padding:"4px 12px 8px", fontSize:11, color:"var(--muted)" }}>…</div>
+        : !res.length ? <div style={{ padding:"4px 12px 8px", fontSize:11, color:"var(--muted)" }}>Rien dans le stock.</div>
+        : (<div style={{ maxHeight:300, overflowY:"auto" }}>
+          {res.map(mt => (
+            <MatchRow key={"s" + mt.filament_id} mt={mt} g={g} on={mt.filament_id === chosen?.filament_id}
+              onPick={() => onPick(mt)} onGo={onGo}/>
+          ))}
+        </div>)}
     </div>
   );
 }
