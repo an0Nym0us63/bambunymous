@@ -793,7 +793,7 @@ function MakerWorldCard({ designId, note, prints = [] }) {
             color:"white", textDecoration:"none", border:"1px solid #f59e0b" }}/>
         </div>
       )}
-      <MakerWorldPlates profiles={mw.profiles || []} prints={prints}/>
+      <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints}/>
       <AdminOnly home>
         <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",
           borderTop:"1px solid var(--border)", background:"none", color:"#3b82f6", fontSize:11.5, fontWeight:600,
@@ -820,8 +820,18 @@ function MakerWorldCard({ designId, note, prints = [] }) {
 // plusieurs plateaux MakerWorld regroupes sur un seul).
 const manualPlates = (raw) => { try { const m = JSON.parse(raw || "null"); return m && Array.isArray(m.plates) ? m : null; } catch { return null; } };
 
-function MakerWorldPlates({ profiles, prints: printsIn }) {
+function MakerWorldPlates({ designId, profiles, prints: printsIn }) {
   const [over, setOver] = useState({});          // corrections faites ici, avant relecture
+  const [imgGuess, setImgGuess] = useState({});        // plateau probable par print (silhouette de son apercu)
+  const guessIds = printsIn.filter(pr => !manualPlates(pr.mw_plates) && pr.status !== "FAILED" && pr.status !== "CANCELLED")
+    .map(pr => pr.id).join(",");
+  useEffect(() => {
+    if (!designId || !guessIds) return;
+    let alive = true;
+    client.get(`/makerworld/model/${designId}/plate-guess`, { params: { ids: guessIds } })
+      .then(({ data }) => alive && setImgGuess(data.guesses || {})).catch(() => {});
+    return () => { alive = false; };
+  }, [designId, guessIds]);
   const isAdmin = useIsAdmin();
   const visiting = useFriend((s) => s.friend);
   const prints = printsIn.map(pr => pr.id in over ? { ...pr, mw_plates: over[pr.id] } : pr);
@@ -858,6 +868,16 @@ function MakerWorldPlates({ profiles, prints: printsIn }) {
       else if (pr.status === "IN_PROGRESS") running[i] = true;
     });
   });
+  // Propositions : plateau reconnu a l'image, pas encore couvert par le print.
+  const probable = {};
+  prints.forEach(pr => {
+    const g = imgGuess[pr.id];
+    if (!g || manualPlates(pr.mw_plates) || String(g.profile) !== String(prof.profile_id)) return;
+    if ((platesOf(pr) || []).includes(g.plate) || done[g.plate]) return;
+    (probable[g.plate] = probable[g.plate] || []).push({ pr, score: g.score });
+  });
+  const nProbable = Object.keys(probable).length;
+  const acceptAll = () => Object.entries(probable).forEach(([i, l]) => l.forEach(({ pr }) => save(pr, [Number(i)])));
   const save = async (pr, plates, reset = false) => {
     try {
       const { data } = await client.put(`/prints/${pr.id}/mw-plates`, { profile: prof.profile_id, plates, reset });
@@ -871,6 +891,9 @@ function MakerWorldPlates({ profiles, prints: printsIn }) {
     openMenu(e, {
       title: `${pl.index}. ${pl.name || "Plateau"}`, subtitle: "Imprimé par…",
       items: [
+        ...(probable[pl.index] || []).map(({ pr, score }) => ({ icon: "💡", label: `Valider : ${pr.translated_name || pr.file_name}`,
+          hint: `Reconnu à l'image (ressemblance ${Math.round(score * 100)} %)`, onClick: () => save(pr, [pl.index]) })),
+        probable[pl.index] && "-",
         ...prints.map(pr => {
           const cur = platesOf(pr) || [];
           const on = cur.includes(pl.index);
@@ -902,21 +925,31 @@ function MakerWorldPlates({ profiles, prints: printsIn }) {
         {deduit && !pid && <span title="L'imprimante n'a pas donné le profil de ces prints : profil déduit"
           style={{ fontSize:10, color:"var(--muted)", opacity:0.8 }}>(profil déduit)</span>}
         {isAdmin && !visiting && <span style={{ fontSize:10, color:"var(--muted)", opacity:0.8 }}>· touche un plateau pour corriger</span>}
+        {isAdmin && !visiting && nProbable > 0 && (
+          <button onClick={acceptAll} title="Plateaux reconnus à l'image de tes prints"
+            style={{ fontSize:10.5, fontWeight:700, padding:"2px 8px", borderRadius:10, cursor:"pointer",
+              background:"rgba(59,130,246,0.12)", color:"#3b82f6", border:"1px solid rgba(59,130,246,0.4)" }}>
+            💡 Valider {nProbable} plateau{nProbable > 1 ? "x" : ""} reconnu{nProbable > 1 ? "s" : ""}</button>
+        )}
       </div>
       <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:2 }}>
         {prof.plates.map(pl => {
-          const ok = !!done[pl.index], cours = !ok && running[pl.index];
+          const ok = !!done[pl.index], cours = !ok && running[pl.index], maybe = !ok && !cours && probable[pl.index];
           return (
             <div key={pl.index} title={`${pl.index}. ${pl.name || "Plateau"}${pl.weight_g ? ` · ${pl.weight_g} g` : ""}${ok ? ` · imprimé ${done[pl.index]}×` : " · pas encore imprimé"}`}
               onClick={e => pick(e, pl)}
-              style={{ flexShrink:0, width:62, textAlign:"center", opacity: ok || cours ? 1 : 0.55,
+              style={{ flexShrink:0, width:62, textAlign:"center", opacity: ok || cours || maybe ? 1 : 0.55,
                 cursor: isAdmin && !visiting ? "pointer" : "default" }}>
               <div style={{ position:"relative", width:62, height:62, borderRadius:8, overflow:"hidden",
-                border: ok ? "2px solid #22c55e" : cours ? "2px solid #f59e0b" : "1px dashed var(--border)", background:"var(--surface)" }}>
+                border: ok ? "2px solid #22c55e" : cours ? "2px solid #f59e0b" : maybe ? "2px dashed #3b82f6" : "1px dashed var(--border)",
+                background:"var(--surface)" }}>
                 {pl.thumb && <MwImg src={pl.thumb} w={62}
                   style={{ width:"100%", height:"100%", objectFit:"cover" }}/>}
                 {ok && <span style={{ position:"absolute", top:2, right:2, width:16, height:16, borderRadius:"50%",
                   background:"#22c55e", color:"white", fontSize:10, fontWeight:800, lineHeight:"16px" }}>✓</span>}
+                {maybe && <span title={`Probablement imprimé par ${maybe[0].pr.translated_name || maybe[0].pr.file_name}`}
+                  style={{ position:"absolute", top:2, right:2, width:16, height:16, borderRadius:"50%", background:"#3b82f6",
+                    color:"white", fontSize:10, fontWeight:800, lineHeight:"16px" }}>?</span>}
                 {cours && <span title="En cours d'impression" style={{ position:"absolute", top:2, right:2, width:16, height:16,
                   borderRadius:"50%", background:"#f59e0b", color:"white", fontSize:9, lineHeight:"16px" }}>⏳</span>}
               </div>

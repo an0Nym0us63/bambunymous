@@ -228,6 +228,13 @@ async def mw_to_rate(fresh: bool = False, _: str = Depends(get_current_user)):
     return await _call(mw_rate.to_rate(fresh))
 
 
+@router.get("/model/{design_id}/plate-guess")
+async def mw_plate_guess(design_id: str, ids: str = "", _: str = Depends(get_current_user)):
+    """Plateau probable de chaque print (par la silhouette de son apercu)."""
+    from ....services import mw_plate_guess
+    return await _call(mw_plate_guess.guess(design_id, ids.split(",")))
+
+
 @router.post("/rate/{design_id}")
 async def mw_rate_submit(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
     """Publie mon evaluation (note, texte, mes photos) sur MakerWorld."""
