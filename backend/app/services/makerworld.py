@@ -112,6 +112,7 @@ def _parse_design(code, d) -> dict:
         "creator_name": txt(cr.get("name"), 256),
         "creator_handle": txt(cr.get("handle"), 256),
         "creator_avatar": txt(cr.get("avatar"), 1024),
+        "creator_uid": str(cr.get("uid")) if str(cr.get("uid") or "").isdigit() else None,
         "categories": ",".join(c.replace(",", " ") for c in cats)[:512] or None,
         "tags": ",".join(t.replace(",", " ").strip() for t in tags) or None,
         "profiles": _profiles(d) or "[]",
@@ -183,6 +184,7 @@ def _hit(h) -> dict:
     return {"design_id": str(h["id"]), "title": s(h.get("title")), "title_fr": s(h.get("titleTranslated")),
             "cover_url": s(h.get("cover")),
             "creator_name": s(cr.get("name")),
+            "creator_uid": str(cr.get("uid")) if str(cr.get("uid") or "").isdigit() else None,
             "like_count": h.get("likeCount") if isinstance(h.get("likeCount"), int) else None,
             "print_count": h.get("printCount") if isinstance(h.get("printCount"), int) else None}
 
@@ -264,6 +266,47 @@ async def _for_you(offset: int, seed: int, tok, fresh: bool) -> dict:
     res = await _enrich(hits)
     return {"items": res["items"], "total": total, "seed": seed2, "personal": bool(tok),
             "next_offset": offset + 24}
+
+
+# ── Un createur : son profil et tous ses modeles (public) ─────────────────────
+_CREATOR = {}
+
+
+async def creator_page(uid: str, offset: int = 0, fresh: bool = False) -> dict:
+    """Profil public d'un createur et ses modeles publies (24 par page), avec
+    « deja imprime »."""
+    import asyncio, time
+    from .makerworld_account import _enrich, _pub_hit
+    uid = str(uid or "").strip()
+    if not uid.isdigit():
+        return {"creator": None, "items": [], "total": 0, "error": "Créateur inconnu"}
+    offset = max(0, int(offset or 0))
+    ck = (uid, offset)
+    hit = None if fresh else _CREATOR.get(ck)
+    if hit and time.time() - hit[0] < 900:
+        return hit[1]
+    (pc, p), (lc, lst) = await asyncio.gather(
+        asyncio.to_thread(_get_json, f"/design-user-service/user/profile/{uid}"),
+        asyncio.to_thread(_get_json, f"/design-service/published/{uid}/design?offset={offset}&limit=24"))
+    if not isinstance(lst, dict):
+        return {"creator": None, "items": [], "total": 0, "error": f"MakerWorld ne répond pas (HTTP {lc})"}
+    p = p if isinstance(p, dict) else {}
+    s = lambda v: v if isinstance(v, str) and v else None
+    n = lambda v: v if isinstance(v, int) and not isinstance(v, bool) else None
+    mw = p.get("MWCount") if isinstance(p.get("MWCount"), dict) else {}
+    creator = {"uid": uid, "name": s(p.get("name")), "handle": s(p.get("handle")), "avatar": s(p.get("avatar")),
+               "fans": n(p.get("fanCount")), "designs": n(mw.get("designCount")), "likes": n(p.get("likeCount")),
+               "downloads": n(p.get("downloadCount")), "prints": n(mw.get("myDesignPrintCount")),
+               "boosts": n(p.get("boostGained")), "contest_wins": n(p.get("winContestTimes")),
+               "url": f"https://makerworld.com/fr/@{p['handle']}" if s(p.get("handle")) else None}
+    hits = lst.get("hits") if isinstance(lst.get("hits"), list) else []
+    items = [x for x in (_pub_hit(h, {"uid": uid, "name": creator["name"]}) for h in hits) if x]
+    for x, h in zip(items, [h for h in hits if isinstance(h, dict) and str(h.get("id") or "").isdigit()]):
+        x["like_count"], x["print_count"] = n(h.get("likeCount")), n(h.get("printCount"))
+    res = {"creator": creator, "items": (await _enrich(items))["items"] if items else [],
+           "total": n(lst.get("total")) or len(items), "next_offset": offset + 24}
+    _CREATOR[ck] = (time.time(), res)
+    return res
 
 
 # ── Concours (liste publique) ────────────────────────────────────────────────

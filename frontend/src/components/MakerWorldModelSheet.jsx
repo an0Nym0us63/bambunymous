@@ -9,6 +9,7 @@ import { useFriend } from "../store/friend";
 import MwImg from "./MwImg";
 import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf } from "./MwStockMatch";
 import Lightbox from "./Lightbox";
+import { openCreator } from "./MwCreatorPage";
 import { showAlert, showConfirm } from "../utils/dialog";
 
 // Prechargement : la fiche est demandee des qu'on touche une tuile ; a
@@ -240,7 +241,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             {m.title_fr && m.title_fr !== m.title && <div style={{ fontSize:12, color:"var(--muted)" }}>{m.title}</div>}
             <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"var(--muted)", margin:"6px 0" }}>
               {m.creator_avatar && <MwImg src={m.creator_avatar} w={36} style={{ width:18, height:18, borderRadius:"50%" }}/>}
-              <span>par <b style={{ color:"var(--text2)" }}>{m.creator_name}</b>{m.created ? ` · ${fmtDate(m.created)}` : ""}</span>
+              <span>par {m.creator_uid
+                ? <button onClick={() => { onClose?.(); openCreator({ uid: m.creator_uid, name: m.creator_name }); }}
+                    title="Tous ses modèles" style={{ background:"none", border:"none", padding:0, cursor:"pointer",
+                      fontWeight:700, color:"#3b82f6", fontSize:"inherit" }}>{m.creator_name}</button>
+                : <b style={{ color:"var(--text2)" }}>{m.creator_name}</b>}{m.created ? ` · ${fmtDate(m.created)}` : ""}</span>
             </div>
             <div style={{ display:"flex", flexWrap:"wrap", gap:10, fontSize:12, color:"var(--muted)", margin:"4px 0 10px" }}>
               {[["❤", m.like_count, "j'aime"], ["⬇", m.download_count, "téléchargements"], ["🖨", m.print_count, "impressions"],

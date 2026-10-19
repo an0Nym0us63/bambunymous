@@ -215,6 +215,12 @@ async def mw_mine(ids: str = "", _: str = Depends(get_current_user)):
     return await _call(acc.mine(ids.split(",")))
 
 
+@router.get("/creators/{uid}")
+async def mw_creator_page(uid: str, offset: int = 0, fresh: bool = False, _: str = Depends(get_current_user)):
+    """Profil public d'un createur et tous ses modeles."""
+    return await _call(mw.creator_page(uid, offset, fresh))
+
+
 @router.get("/contests")
 async def mw_contests(offset: int = 0, fresh: bool = False, _: str = Depends(get_current_user)):
     """Concours MakerWorld (publics)."""

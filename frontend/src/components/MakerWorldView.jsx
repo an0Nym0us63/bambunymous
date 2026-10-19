@@ -8,6 +8,7 @@ import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
 import MwImg from "./MwImg";
 import MwCreator from "./MwCreator";
 import MwContests from "./MwContests";
+import { openCreator } from "./MwCreatorPage";
 import { mwPatch, onMwChange } from "../utils/mwSync";
 import { useFriend } from "../store/friend";
 import { useMine, MineBadge } from "./Friends";
@@ -498,7 +499,11 @@ export default function MakerWorldView({ onSearch }) {
                           overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
                         {x.title_fr || x.title || `Modèle ${x.design_id}`}
                       </a>
-                      {x.creator_name && <span style={{ fontSize:10.5, color:"var(--muted)" }}>par {x.creator_name}
+                      {x.creator_name && <span style={{ fontSize:10.5, color:"var(--muted)" }}>par {x.creator_uid
+                        ? <button onClick={() => openCreator({ uid: x.creator_uid, name: x.creator_name })} title="Tous ses modèles"
+                            style={{ background:"none", border:"none", padding:0, cursor:"pointer", color:"var(--text2)",
+                              fontWeight:600, fontSize:"inherit", textDecoration:"underline dotted" }}>{x.creator_name}</button>
+                        : x.creator_name}
                         {x.published && ago(x.published) ? ` · ${ago(x.published)}` : ""}</span>}
                       <div style={{ marginTop:"auto" }}>
                         {x.printed > 0 ? (
@@ -578,6 +583,9 @@ export function CreatorPicker({ creators, picked, onClose, onApply, applyLabel }
                 <span style={{ display:"block", fontSize:13, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis",
                   whiteSpace:"nowrap" }}>{c.name || c.handle}</span>
                 {c.handle && <span style={{ fontSize:11, color:"var(--muted)" }}>@{c.handle}</span>}
+                <button onClick={e => { e.preventDefault(); e.stopPropagation(); openCreator({ uid: c.uid, name: c.name }); }}
+                  style={{ display:"block", background:"none", border:"none", padding:0, marginTop:1, cursor:"pointer",
+                    fontSize:11, fontWeight:600, color:"#3b82f6" }}>Voir ses modèles ›</button>
               </span>
             </label>
           ))}

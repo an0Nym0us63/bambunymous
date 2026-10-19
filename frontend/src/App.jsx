@@ -12,6 +12,7 @@ import Filaments from "./pages/Filaments";
 import Prints from "./pages/Prints";
 import DialogHost from "./components/DialogHost";
 import { ContextMenuHost } from "./components/ContextMenu";
+import { CreatorPageHost } from "./components/MwCreatorPage";
 
 function PrivateRoute({ children }) {
   const { isAuthenticated } = useAuth();
@@ -46,6 +47,7 @@ export default function App() {
     </Routes>
     <DialogHost />
     <ContextMenuHost />
+    <CreatorPageHost />
     </>
   );
 }

@@ -100,8 +100,11 @@ def _bill_item(h: dict) -> dict:
 async def points(offset: int = 0, limit: int = 30) -> dict:
     d = await _get(BILL.format(offset=max(0, int(offset)), limit=max(1, min(int(limit), 50))))
     hits = [_bill_item(h) for h in (d.get("hits") or []) if isinstance(h, dict)]
+    # Totaux depuis toujours (page Transactions du site) : revenus et depenses,
+    # points normaux + points exclusifs.
     return {"items": hits, "total": _num(d.get("total")),
-            "income": _num(d.get("totalIncome")), "expense": _num(d.get("totalExpense"))}
+            "income": round(_num(d.get("totalRegularIncome")) + _num(d.get("totalExclusiveIncome")), 3),
+            "expense": round(_num(d.get("totalRegularExpense")) + _num(d.get("totalExclusiveExpense")), 3)}
 
 
 async def recent_points(days: int = 30, max_pages: int = 10, fresh: bool = False) -> list:
@@ -244,7 +247,12 @@ async def overview(fresh: bool = False, period: str = "30") -> dict:
         m["period"] = period_vals
         m["points30"] = round(per.get(m["design_id"], 0), 2) if days == 30 else m.get("points30")
     target = (now - timedelta(days=days)).strftime("%Y-%m-%d") if days else None
+    try:
+        tot = await points(0, 1)
+    except Exception:
+        tot = {}
     return {"profile": prof, "models": ms, "earned7": round(e7, 2), "earned30": round(e30, 2),
+            "earned_total": tot.get("income") or None, "spent_total": tot.get("expense") or None,
             "period": str(period), "counters_since": since,
             # periode plus longue que les releves pris : les compteurs ne couvrent qu'une partie
             "counters_partial": bool(days and since and since > target)}

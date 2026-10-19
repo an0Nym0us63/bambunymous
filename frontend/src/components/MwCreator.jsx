@@ -82,7 +82,8 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
           </div>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(96px,1fr))", gap:8, marginTop:12 }}>
-          {[["+" + pts(data.earned7), "points 7 j", "#22c55e"], ["+" + pts(data.earned30), "points 30 j", "#22c55e"],
+          {[...(data.earned_total != null ? [[pts(data.earned_total), "points gagnés au total", "#f59e0b"]] : []),
+            ["+" + pts(data.earned7), "points 7 j", "#22c55e"], ["+" + pts(data.earned30), "points 30 j", "#22c55e"],
             [fmt(p.fans), "abonnés"], [fmt(p.designs), "modèles"], [fmt(p.downloads), "téléchargements"],
             [fmt(p.prints), "impressions"], [fmt(p.boosts), "boosts reçus"], [fmt(p.likes), "j'aime"],
             ...(myBoosts != null ? [[`⚡ ${myBoosts}`, "boosts à donner", "#f59e0b"]] : [])].map(([v, l, c]) => (
