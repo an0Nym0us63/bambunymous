@@ -47,9 +47,16 @@ export const useShares = create((set, get) => ({
   },
 
   // Publication d'une evaluation MakerWorld (envoi des photos puis de la note).
+  // En file : chacune attend la fin de la precedente (le serveur les espace
+  // en plus de quelques secondes), jamais deux en meme temps.
+  _rateChain: Promise.resolve(),
   rate: (title, run) => {
     const jid = get()._add({ kind: "rate", title });
-    return run()
+    const ahead = get().jobs.filter(j => j.kind === "rate" && j.status === "sending" && j.id !== jid).length;
+    if (ahead) get()._update(jid, { detail: `en attente (${ahead} avant)` });
+    const p = get()._rateChain.then(() => { get()._update(jid, { detail: "" }); return run(); });
+    set({ _rateChain: p.catch(() => {}) });
+    return p
       .then((r) => { get()._update(jid, { status: "done" }); setTimeout(() => get().dismiss(jid), 4000); return r; })
       .catch((e) => {
         get()._update(jid, { status: "error", detail: `Évaluation de « ${title} » non publiée : ${e.response?.data?.detail || e.message}` });

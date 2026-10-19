@@ -13,7 +13,7 @@ const up = (j) => j.kind === "upload";
 const rt = (j) => j.kind === "rate";
 const TONE = {
   sending: { bg: "#229ED9", icon: null,
-    long: (j) => rt(j) ? `Évaluation · ${j.title}…` : up(j) ? `Ajout de ${j.title}…` : `Envoi Telegram · ${j.title}`,
+    long: (j) => rt(j) ? `Évaluation · ${j.title}${j.detail ? ` · ${j.detail}` : "…"}` : up(j) ? `Ajout de ${j.title}…` : `Envoi Telegram · ${j.title}`,
     short: (j) => rt(j) ? "Évaluation" : up(j) ? (j.video ? "Vidéo" : "Photo") : "Envoi" },
   done:    { bg: "#22c55e", icon: Check,
     long: (j) => rt(j) ? `Évaluation publiée · ${j.title}` : up(j) ? `${j.video ? "Vidéo ajoutée" : "Photo ajoutée"}` : `Envoyé · ${j.detail}`,

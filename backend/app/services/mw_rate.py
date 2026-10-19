@@ -311,7 +311,27 @@ def _upload_photo(f, tok: str) -> str:
     raise AccountError("Photo envoyée mais son adresse publique est introuvable : évaluation non publiée")
 
 
+# Une evaluation a la fois, photos comprises, avec une pause entre deux : si
+# on en enchaine plusieurs (ou depuis deux appareils), MakerWorld les recoit
+# l'une apres l'autre, comme depuis le site, jamais en rafale.
+_ONE_AT_A_TIME = asyncio.Lock()
+PAUSE_S = (4.0, 9.0)                      # entre deux publications (tirage dans l'intervalle)
+_last_done = [0.0]
+
+
 async def submit(design_id: str, rating_id: str, score: int, content: str, photos: list) -> dict:
+    import random
+    async with _ONE_AT_A_TIME:
+        wait = _last_done[0] + random.uniform(*PAUSE_S) - time.time()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        try:
+            return await _submit(design_id, rating_id, score, content, photos)
+        finally:
+            _last_done[0] = time.time()
+
+
+async def _submit(design_id: str, rating_id: str, score: int, content: str, photos: list) -> dict:
     from .makerworld_account import _send, _tok, AccountError
     did, rid = str(design_id or "").strip(), str(rating_id or "").strip()
     pend = (await pending_ratings(True)).get(did)
