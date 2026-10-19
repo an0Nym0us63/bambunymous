@@ -314,13 +314,18 @@ export default function MakerWorldView({ onSearch }) {
         </div>
         <div style={{ padding:"2px 0 8px" }}>
           {status && (
-            <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:10, flexWrap:"wrap" }}>
+            <>
+            {/* Onglets sur une seule ligne, meme sur telephone ; les actions passent dessous. */}
+            <div style={{ display:"flex", gap:4, marginTop:10 }}>
               {TABS.filter(([k]) => k !== "creator" || status.connected).map(([k, l]) => (
                 <button key={k} onClick={() => { setTab(k); if (k !== "favorites") setColl(null); }}
-                  style={{ padding:"5px 12px", borderRadius:20, fontSize:12, fontWeight:700, cursor:"pointer",
+                  style={{ flex:"1 1 auto", minWidth:0, padding:"5px 6px", borderRadius:20, fontSize:12, fontWeight:700,
+                    cursor:"pointer", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
                     background: tab === k ? "#3b82f6" : "var(--surface2)", color: tab === k ? "white" : "var(--muted)",
-                    border: tab === k ? "none" : "1px solid var(--border)" }}>{l}</button>
+                    border: tab === k ? "1px solid #3b82f6" : "1px solid var(--border)" }}>{l}</button>
               ))}
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:8, flexWrap:"wrap" }}>
               {(view === "search" ? !!sq : view === "discover" ? !!dk : status.connected) && (
                 <button onClick={() => { freshRef.current = true; setBusy(true); setReload(n => n + 1); }} disabled={busy}
                   title="Interroger MakerWorld maintenant"
@@ -342,6 +347,7 @@ export default function MakerWorldView({ onSearch }) {
                 </select>
               )}
             </div>
+            </>
           )}
           {nameEdit && (
             <div style={{ display:"flex", gap:6, marginTop:10 }}>

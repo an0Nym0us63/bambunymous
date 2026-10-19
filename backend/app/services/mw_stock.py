@@ -80,6 +80,10 @@ def _norm(t):
     return re.sub(r"[\s_]+", " ", str(t or "").upper()).strip()
 
 
+def _flat(t):
+    return re.sub(r"[^A-Z0-9+]", "", str(t or "").upper())
+
+
 def material_fit(mw_type, fil):
     """2 = meme matiere, 1 = meme famille (PLA-CF pour PLA…), 0 = autre."""
     t = re.sub(r"-AMS$", "", _norm(mw_type))          # TPU-AMS : du TPU pour l'AMS
@@ -89,7 +93,7 @@ def material_fit(mw_type, fil):
     # Un support ne se remplace que par un support, et inversement.
     if is_support(t) != any(is_support(n) for n in names):
         return 0
-    if t in names:
+    if t in names or _flat(t) in {_flat(n) for n in names}:
         return 2
     fam = re.split(r"[ \-+]", t)[0]
     fams = {re.split(r"[ \-+]", n)[0] for n in names}
@@ -131,6 +135,34 @@ def is_bambu(f):
     return "bambu" in (f.manufacturer or "").lower()
 
 
+# Finitions reconnues dans un type ou un nom de filament. « Basic » n'en est pas une.
+FINISHES = {"SILK", "MATTE", "SPARKLE", "GALAXY", "MARBLE", "GLOW", "METAL", "METALLIC", "WOOD", "TRANSLUCENT",
+            "TRANSPARENT", "CF", "GF", "GRADIENT", "DUAL", "TRI", "AERO", "GLITTER", "RAINBOW", "SATIN", "PEARL",
+            "LUMINOUS", "STONE", "CHAMELEON", "FLUO", "NEON", "HF", "TOUGH"}
+_ALIAS = {"METALLIC": "METAL", "TRANSPARENT": "TRANSLUCENT", "LUMINOUS": "GLOW", "GLITTER": "SPARKLE",
+          "RAINBOW": "GRADIENT", "FLUO": "NEON"}
+
+
+def finishes(*texts) -> set:
+    out = set()
+    for t in texts:
+        for w in re.split(r"[^A-Z0-9]+", str(t or "").upper()):
+            if w in FINISHES:
+                out.add(_ALIAS.get(w, w))
+    return out
+
+
+def finish_penalty(want: set, f) -> float:
+    """Ecart de finition : un profil « PLA » attend un Basic (un Matte passe, un
+    Silk ou un Sparkle se voient) ; un profil « PLA Silk » attend du Silk."""
+    have = finishes(f.fila_type, f.name, f.name_en)
+    if not want:
+        return sum(1.5 if x in ("MATTE", "HF", "TOUGH") else 6 for x in have)
+    if want <= have:
+        return -3 + 2 * len(have - want)
+    return 7 + 2 * len(have - want)
+
+
 def _same_finish(sub: str, f) -> bool:
     s = _norm(sub)
     return bool(s) and s in {_norm(f.fila_type), _norm(f.name), _norm(f.name_en)}
@@ -164,11 +196,15 @@ def best_matches(mw_type, color, grams, stock, n=6, exact=None, other=False):
         de = min(des)
         same_ref = bool(ref) and (f.profile_id or "").upper() == ref.upper()
         same_fin = same_ref or _same_finish(sub, f)
+        want = finishes(sub) if sub else finishes(mw_type)
+        short = grams is not None and e["remaining_g"] < grams
         score = (de + (0 if fit == 2 else 4) + (6 if multi else 0) - (BAMBU_BONUS if bambu_ok and is_bambu(f) else 0)
-                 - (10 if same_ref else 6 if same_fin else 0))
+                 - (10 if same_ref else 6 if same_fin else 0)
+                 + (0 if same_ref else finish_penalty(want, f))
+                 + (2 if short else 0))               # manque : un avertissement, pas une autre couleur
         cands.append((score, de, fit, multi, e, same_ref, same_fin))
     cands.sort(key=lambda x: x[0])
-    return [_cand(e, de, fit, multi, grams, same_ref, same_fin if sub else None)
+    return [{**_cand(e, de, fit, multi, grams, same_ref, same_fin if sub else None), "score": round(score, 1)}
             for score, de, fit, multi, e, same_ref, same_fin in cands[:n]]
 
 
@@ -245,5 +281,59 @@ async def match_profiles(profiles: list) -> dict:
                           "exact": {k: ex[k] for k in ("id", "setting", "subtype", "vendor")} if ex else None,
                           "matches": best_matches(fl.get("type"), fl.get("color"), g, stock, exact=ex),
                           "others": best_matches(fl.get("type"), fl.get("color"), g, stock, n=5, other=True)})
+        assign(items)
         res[p.get("instance_id")] = items
     return res
+
+
+def assign(items: list) -> list:
+    """Attribution d'ensemble pour un profil : chaque couleur prend sa meilleure
+    proposition, puis on corrige ce qui ne tient qu'ensemble :
+      - deux couleurs nettement differentes du profil sur le MEME filament ;
+      - un filament qui ne suffit plus une fois les couleurs additionnees.
+    La proposition retenue passe en tete de chaque liste (matches[0])."""
+    n = len(items)
+    if n < 2:
+        return items
+    opts = [x.get("matches") or [] for x in items]
+    g = [_grams(x.get("g")) or 0 for x in items]
+    ch = [0 if o else -1 for o in opts]
+
+    def cost(c):
+        tot, use, cols = 0.0, {}, {}
+        for i, k in enumerate(c):
+            if k < 0:
+                continue
+            m = opts[i][k]
+            tot += m.get("score", m.get("delta_e", 0))
+            fid = m["filament_id"]
+            use[fid] = use.get(fid, 0) + g[i]
+            cols.setdefault(fid, []).append((items[i].get("color"), m["remaining_g"]))
+        for fid, cl in cols.items():
+            for a in range(len(cl)):
+                for b in range(a + 1, len(cl)):
+                    d = delta_e(cl[a][0], cl[b][0])
+                    if d is not None and d > 8:
+                        tot += 14                      # deux teintes du modele confondues
+            if len(cl) > 1 and use[fid] > cl[0][1]:
+                tot += 3                               # assez pour chaque couleur, plus une fois additionne
+        return tot
+
+    best = cost(ch)
+    for _ in range(6):
+        better = False
+        for i in range(n):
+            for k in range(len(opts[i])):
+                if k == ch[i]:
+                    continue
+                t = ch[:]
+                t[i] = k
+                c = cost(t)
+                if c < best - 0.01:
+                    ch, best, better = t, c, True
+        if not better:
+            break
+    for i, k in enumerate(ch):
+        if k > 0:
+            opts[i].insert(0, opts[i].pop(k))
+    return items

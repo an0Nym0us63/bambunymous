@@ -152,11 +152,11 @@ async def mw_stock_search(type: str = "", color: str = "", g: float | None = Non
 
 
 @router.get("/queue")
-async def mw_queue(fresh: bool = False, until: str | None = None, _: str = Depends(get_current_user)):
+async def mw_queue(fresh: bool = False, until: str | None = None, ids: str = "", _: str = Depends(get_current_user)):
     """File d'attente : modeles des collections choisies, profils et filaments
     retenus, besoins additionnes, imprimable maintenant (AMS) ou avec le stock."""
     from ....services import mw_queue as Q
-    return await _call(Q.queue(fresh, until))
+    return await _call(Q.queue(fresh, until, [i for i in ids.split(",") if i.strip()][:500]))
 
 
 @router.get("/queue/config")

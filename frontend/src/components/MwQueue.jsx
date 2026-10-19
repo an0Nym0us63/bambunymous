@@ -47,6 +47,16 @@ export default function MwQueue() {
   // « Jusqu'ici » : les stats ne portent que sur le debut de la file (garde dans ce navigateur).
   const [until, setUntilState] = useState(() => { try { return localStorage.getItem("mwQueueUntil") || null; } catch { return null; } });
   const [cutting, setCutting] = useState(false);
+  // « Choisir » : stats sur des modeles coches un a un (garde dans ce navigateur).
+  const [chosen, setChosenState] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("mwQueuePick") || "[]"); } catch { return []; }
+  });
+  const [choosing, setChoosing] = useState(false);
+  const setChosen = v => {
+    setChosenState(v);
+    try { v.length ? localStorage.setItem("mwQueuePick", JSON.stringify(v)) : localStorage.removeItem("mwQueuePick"); } catch { /* stockage indisponible */ }
+  };
+  const toggleChosen = did => setChosen(chosen.includes(did) ? chosen.filter(x => x !== did) : [...chosen, did]);
   const isAdmin = useIsAdmin();
   const fresh = useRef(false);
   const staleT = useRef(null);
@@ -61,20 +71,22 @@ export default function MwQueue() {
     setErr(null);
     const params = {};
     if (fresh.current) params.fresh = 1;
-    if (until) params.until = until;
+    if (chosen.length) params.ids = chosen.join(",");
+    else if (until) params.until = until;
     fresh.current = false;
     client.get("/makerworld/queue", { params })
       .then(({ data }) => {
         if (!alive) return;
         setQ(data);
-        if (until && !data.until) setUntil(null);    // modele sorti de la file : on revient au tout
+        if (until && !chosen.length && !data.until) setUntil(null);    // modele sorti de la liste : on revient au tout
+        if (chosen.length && !data.picked) setChosen([]);
         // Ancien calcul (redemarrage) : affiche tout de suite, on redemande jusqu'au nouveau.
         if (data.stale) staleT.current = setTimeout(() => setReload(n => n + 1), 3000);
       })
       .catch(e => alive && setErr(e.response?.data?.detail || e.message))
       .finally(() => alive && setBusy(false));
     return () => { alive = false; };
-  }, [reload, until]);
+  }, [reload, until, chosen.join(",")]);
 
   const refresh = () => { fresh.current = true; setBusy(true); setReload(n => n + 1); };
   // Nombre d'exemplaires : affiche tout de suite, totaux recalcules par le serveur.
@@ -127,13 +139,15 @@ export default function MwQueue() {
   if (err) return <p style={msg}>{err}</p>;
   if (!q) return <p style={msg}>Lecture de la liste… (la première fois, chaque fiche est lue sur MakerWorld)</p>;
   const t = q.totals;
-  const rows = q.models.filter(r => sorting || cutting || filter === "all" || r.status === filter);
+  const rows = q.models.filter(r => sorting || cutting || choosing || filter === "all" || r.status === filter);
   const cutAt = q.until ? q.models.findIndex(r => r.design_id === q.until.design_id) : -1;
+  const picked = q.picked ? new Set(q.picked.ids) : null;
+  const marks = choosing || picked;                // cases a cocher visibles
   const pos = Object.fromEntries(q.models.map((r, i) => [r.design_id, i]));
   const cutRow = cutAt >= 0 ? q.models[cutAt] : null;
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:12, paddingBottom: cutting || cutRow ? 80 : 16 }}>
+    <div style={{ display:"flex", flexDirection:"column", gap:12, paddingBottom: cutting || cutRow || choosing || picked ? 80 : 16 }}>
       <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
         <span style={{ fontSize:12, color:"var(--muted)" }}>Collections :</span>
         {q.collections.length ? q.collections.map(c => (
@@ -199,13 +213,15 @@ export default function MwQueue() {
 
         {tab === "models" && (<>
         <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
-          {!sorting && !cutting && FILTERS.map(([k, l]) => (
+          {!sorting && !cutting && !choosing && FILTERS.map(([k, l]) => (
             <button key={k} onClick={() => setFilter(k)} style={pill(filter === k)}>
               {l} ({k === "all" ? t.models : t[k] ?? 0})</button>
           ))}
           {sorting && <span style={{ fontSize:12, color:"var(--muted)" }}>Ordre de priorité : ⤒ en haut, ↑ ↓, ⤓ en bas.</span>}
-          {!sorting && <button onClick={() => setCutting(v => !v)} title="Stats limitées aux premiers modèles de la liste"
-            style={{ ...pill(cutting || !!cutRow), marginLeft:"auto" }}>✂ Jusqu'ici</button>}
+          {!sorting && <button onClick={() => { setChoosing(false); setCutting(v => !v); }} title="Stats limitées aux premiers modèles de la liste"
+            style={{ ...pill(cutting || (!!cutRow && !picked)), marginLeft:"auto" }}>✂ Jusqu'ici</button>}
+          {!sorting && <button onClick={() => { setCutting(false); setChoosing(v => !v); }} title="Stats sur les modèles que tu coches"
+            style={pill(choosing || !!picked)}>☑ Choisir</button>}
           <AdminOnly><button onClick={() => { setSorting(v => !v); setCutting(false); }} style={{ ...pill(sorting), marginLeft: sorting ? "auto" : 0 }}>
             {sorting ? "✓ Terminé" : "↕ Réorganiser"}</button></AdminOnly>
         </div>
@@ -213,16 +229,21 @@ export default function MwQueue() {
         <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
           {rows.map(r => {
             const [label, color, help] = STATUS[r.status] || STATUS.unknown;
-            const out = cutAt >= 0 && pos[r.design_id] > cutAt;
+            const isPicked = choosing ? chosen.includes(r.design_id) : !!picked?.has(r.design_id);
+            const out = picked ? !isPicked && !choosing : cutAt >= 0 && pos[r.design_id] > cutAt;
             return (
               <React.Fragment key={r.design_id}>
-              <Pressable role="button" tabIndex={0} menu={sorting || cutting ? null : () => rowMenu(r)}
-                onClick={() => cutting ? (setUntil(r.design_id), setCutting(false))
+              <Pressable role="button" tabIndex={0} menu={sorting || cutting || choosing ? null : () => rowMenu(r)}
+                onClick={() => choosing ? toggleChosen(r.design_id) : cutting ? (setChosen([]), setUntil(r.design_id), setCutting(false))
                   : setModel({ design_id: r.design_id, title: r.title, title_fr: r.title_fr, cover_url: r.cover_url })}
                 onPointerDown={() => prefetchModel(r.design_id)}
                 style={{ display:"flex", alignItems:"center", gap:10, padding:8, borderRadius:12, cursor:"pointer", textAlign:"left",
                   background:"var(--surface2)", color:"var(--text)", opacity: out ? 0.45 : 1,
-                  border: cutting ? "1px dashed #3b82f6" : r.printing ? "1.5px solid #3b82f6" : "1px solid var(--border)" }}>
+                  border: cutting || choosing ? "1px dashed #3b82f6" : r.printing ? "1.5px solid #3b82f6" : "1px solid var(--border)" }}>
+                {marks && <span style={{ width:20, height:20, borderRadius:6, flexShrink:0, display:"flex", alignItems:"center",
+                  justifyContent:"center", fontSize:13, fontWeight:900, color:"white",
+                  background: isPicked ? "#3b82f6" : "transparent", border: isPicked ? "none" : "1.5px solid var(--muted)" }}>
+                  {isPicked ? "✓" : ""}</span>}
                 {r.cover_url ? <MwImg src={r.cover_url} w={110} style={{ width:54, height:54, borderRadius:8, objectFit:"cover", flexShrink:0 }}/>
                   : <span style={{ width:54, height:54, borderRadius:8, background:"var(--surface)", flexShrink:0 }}/>}
                 <span style={{ flex:1, minWidth:0 }}>
@@ -266,7 +287,7 @@ export default function MwQueue() {
                   ) : <Qty value={r.qty || 1} onChange={n => setQty(r.design_id, n)}/>}
                 </span>
               </Pressable>
-              {!cutting && pos[r.design_id] === cutAt && cutAt < q.models.length - 1 && (
+              {!cutting && !marks && pos[r.design_id] === cutAt && cutAt < q.models.length - 1 && (
                 <div style={{ display:"flex", alignItems:"center", gap:8, color:"#3b82f6", fontSize:11, fontWeight:800 }}>
                   <span style={{ flex:1, borderTop:"2px dashed #3b82f6" }}/>✂ jusqu'ici<span style={{ flex:1, borderTop:"2px dashed #3b82f6" }}/>
                 </div>
@@ -283,7 +304,24 @@ export default function MwQueue() {
         </>)}
       </>)}
 
-      {(cutting || cutRow) && (
+      {(choosing || picked) && !cutting && (
+        <div style={{ position:"fixed", bottom:"calc(76px + env(safe-area-inset-bottom,0px))", left:12, right:12, zIndex:500,
+          maxWidth:560, margin:"0 auto", display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:14,
+          background:"var(--sheet-bg)", border:"1px solid #3b82f6", boxShadow:"0 8px 24px rgba(0,0,0,0.3)" }}>
+          <span style={{ fontSize:18 }}>☑</span>
+          <span style={{ flex:1, minWidth:0, fontSize:12.5, lineHeight:1.35 }}>
+            <b>{chosen.length} modèle{chosen.length > 1 ? "s" : ""} choisi{chosen.length > 1 ? "s" : ""}</b>
+            <span style={{ display:"block", fontSize:11, color:"var(--muted)" }}>
+              {choosing ? "Touche les modèles à compter." : "Stats et filaments limités à ces modèles."}</span>
+          </span>
+          {choosing
+            ? <button onClick={() => setChoosing(false)} style={btn}>OK</button>
+            : <button onClick={() => setChoosing(true)} style={btn}>Changer</button>}
+          <button onClick={() => { setChoosing(false); setChosen([]); }} title="Revenir à toute la liste"
+            style={{ ...btn, background:"#3b82f6", color:"white", border:"none" }}>Annuler</button>
+        </div>
+      )}
+      {(cutting || (cutRow && !picked)) && !choosing && (
         <div style={{ position:"fixed", bottom:"calc(76px + env(safe-area-inset-bottom,0px))", left:12, right:12, zIndex:500,
           maxWidth:560, margin:"0 auto", display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:14,
           background:"var(--sheet-bg)", border:"1px solid #3b82f6", boxShadow:"0 8px 24px rgba(0,0,0,0.3)" }}>

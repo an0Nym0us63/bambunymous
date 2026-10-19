@@ -252,7 +252,7 @@ async def _prices(fids) -> dict:
     return {i: (p / w if p and w else None) for i, p, w in rows}
 
 
-async def queue(fresh: bool = False, until: str | None = None) -> dict:
+async def queue(fresh: bool = False, until: str | None = None, pick: list | None = None) -> dict:
     """File complete ; avec `until`, les stats (totaux, filaments, manques) ne
     portent que sur les modeles jusqu'a celui-la inclus, dans l'ordre de priorite."""
     stale = False
@@ -282,10 +282,15 @@ async def queue(fresh: bool = False, until: str | None = None) -> dict:
     upto = models
     if until and str(until) in ids:
         upto = models[:ids.index(str(until)) + 1]
+    chosen = {str(i) for i in pick or []} & set(ids)
+    if chosen:                                       # modeles choisis un a un (prioritaire sur « jusqu'ici »)
+        upto = [r for r in models if r["design_id"] in chosen]
     out = {"collections": raw["collections"],
            "models": [{k: v for k, v in r.items() if not k.startswith("_")} for r in models],
            **_aggregate(upto, raw["stock_of"])}
-    if upto is not models:
+    if chosen:
+        out["picked"] = {"ids": [r["design_id"] for r in upto], "count": len(upto)}
+    elif upto is not models:
         out["until"] = {"design_id": str(until), "count": len(upto)}
     if stale:
         out["stale"] = True
