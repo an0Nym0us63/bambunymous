@@ -1946,11 +1946,11 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
 // Stock lisible : grammes sous le kilo, kilos au-dela.
 const fmtStock = (g) => g >= 1000 ? `${(g / 1000).toFixed(2).replace(".", ",")} kg` : `${Math.round(g)} g`;
 
-function FilamentCard({ f, onClick, extra = null, menu }) {
+function FilamentCard({ f, onClick, extra = null, menu, onLong }) {
   const colorsList = parseColorsList(f.color, f.colors_array);
   const flt = "drop-shadow(0 1px 4px rgba(0,0,0,0.95)) drop-shadow(0 2px 10px rgba(0,0,0,0.6))";
   return (
-    <Pressable onClick={onClick} menu={menu} className="card-sm"
+    <Pressable onClick={onClick} menu={menu} onLong={onLong} className="card-sm"
       style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative" }}>
       {/* fond couleur (damier de transparence géré par colorBg) */}
       <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>
@@ -2678,7 +2678,7 @@ function compareHue(a, b) {
   return (ka[0]-kb[0]) || (ka[1]-kb[1]) || (ka[2]-kb[2]);
 }
 
-function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeChange, onItemClick, onReload }) {
+function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeChange, onItemClick, onReload, preselect }) {
   // Filaments déjà filtrés ET triés par le parent
 
 
@@ -2689,6 +2689,7 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
         items={allFilaments}
         selectMode={selectMode}
         onSelectModeChange={onSelectModeChange}
+        preselect={preselect}
         onItemClick={onItemClick}
         getId={f => f.id}
         getTitle={f => f.translated_name || f.name}
@@ -2775,6 +2776,7 @@ export default function Filaments() {
   const [galFilters, setGalFilters] = useState({ brand:[], mat:[], sub:[], stock:"all" });
   const [galSort, setGalSort] = useState("hue");
   const [galSelectMode, setGalSelectMode] = useState(false);
+  const [galPreselect, setGalPreselect] = useState(null);   // filament coche en arrivant de la vue Photos
   const [galSelected, setGalSelected] = useState(null);
   // Impressions par filament (badge des cartes de la galerie Photos), et le
   // filament dont la galerie d'impressions est ouverte.
@@ -3003,7 +3005,7 @@ export default function Filaments() {
           {/* Switch Photos / Nuancier + bouton Sélectionner */}
           <div style={{ display:"flex", gap:6, alignItems:"center" }}>
             {[["photos","Photos"],["swatch","Nuancier"]].map(([id,label]) => (
-              <button key={id} onClick={()=>{ setGalleryMode(id); setGalSelectMode(false); }} style={{
+              <button key={id} onClick={()=>{ setGalleryMode(id); setGalSelectMode(false); setGalPreselect(null); }} style={{
                 padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer",
                 background: galleryMode===id ? "#3b82f6" : "var(--surface2)",
                 color: galleryMode===id ? "white" : "var(--muted)",
@@ -3012,15 +3014,15 @@ export default function Filaments() {
                 {label}
               </button>
             ))}
-            <div style={{ marginLeft:"auto", visibility: galleryMode === "swatch" ? "visible" : "hidden" }}>
+            <div style={{ marginLeft:"auto" }}>
               {galSelectMode ? (
-                <button onClick={()=>setGalSelectMode(false)}
+                <button onClick={()=>{ setGalSelectMode(false); setGalPreselect(null); }}
                   style={{ padding:"5px 12px", borderRadius:20, fontSize:11, border:"1px solid var(--border)",
                     background:"var(--surface2)", color:"var(--muted)", cursor:"pointer" }}>
                   Annuler
                 </button>
               ) : (
-                <button onClick={()=>setGalSelectMode(true)}
+                <button onClick={()=>{ setGalleryMode("swatch"); setGalSelectMode(true); }} title="Choisir des filaments à comparer"
                   style={{ padding:"5px 12px", borderRadius:20, fontSize:11, border:"1px solid var(--border)",
                     background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>
                   Sélectionner
@@ -3033,7 +3035,9 @@ export default function Filaments() {
             <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
               {filaments.map(f => {
                 const n = printCounts[String(f.id)] || 0;
+                // Appui long : comparer, dans le nuancier (la comparaison y vit), ce filament deja coche.
                 return <FilamentCard key={f.id} f={f} onClick={() => setGalPrintsOf(f)}
+                  onLong={() => { setGalPreselect([f]); setGalleryMode("swatch"); setGalSelectMode(true); }}
                   extra={n ? `${n} impression${n > 1 ? "s" : ""}` : "0 impression"}/>;
               })}
               {!filaments.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)",
@@ -3042,7 +3046,8 @@ export default function Filaments() {
           )}
           {galPrintsOf && <FilamentPrintsSheet f={galPrintsOf} onClose={() => setGalPrintsOf(null)}/>}
           {galSelected && <FilamentSheet f={galSelected} onClose={()=>setGalSelected(null)} onDeleted={()=>{setGalSelected(null); client.get("/filaments/filaments").then(r=>setAllFilaments(r.data));}} onUpdated={()=>client.get("/filaments/filaments").then(r=>setAllFilaments(r.data))}/>}
-          {galleryMode==="swatch" && <SwatchView filaments={filaments} sort={galSort} selectMode={galSelectMode} onSelectModeChange={setGalSelectMode} onItemClick={f=>setGalSelected(f)}
+          {galleryMode==="swatch" && <SwatchView filaments={filaments} sort={galSort} selectMode={galSelectMode} onSelectModeChange={v => { setGalSelectMode(v); if (!v) setGalPreselect(null); }}
+            onItemClick={f=>setGalSelected(f)} preselect={galPreselect}
             onReload={() => client.get("/filaments/filaments").then(r => setAllFilaments(r.data || [])).catch(()=>{})}/>}
         </>
       )}

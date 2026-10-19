@@ -19,7 +19,7 @@ export default function GalleryCompare({
   onDeletePhoto, onSetPrimaryPhoto, onPhotosChanged,
   items, getId, getCoverImage, getPhotos, getTitle, getSubtitle, compareFields = [],
   maxCompare = 6, emptyLabel = "Aucun élément", pageSize = 30,
-  enableCompare = true, renderCover = null, swatchMode = false, swatchInfo = false, getTone = null,
+  enableCompare = true, renderCover = null, swatchMode = false, swatchInfo = false, getTone = null, preselect = null,
   selectMode: selectModeProp = false, onSelectModeChange = null,
   onItemClick = null,
 }) {
@@ -71,10 +71,23 @@ export default function GalleryCompare({
   // Long press → activer mode sélection (sans déclencher sur scroll ni menu contextuel)
   const pressTimer  = React.useRef(null);
   const pressOrigin = React.useRef(null);
+  const pressFired  = React.useRef(false);   // le clic qui suit l'appui long ne decoche pas
   const startPress  = (item, clientX, clientY) => {
     pressOrigin.current = { x: clientX, y: clientY };
-    pressTimer.current  = setTimeout(() => { changeSelectMode(true); toggle(item); }, 500);
+    pressFired.current  = false;
+    pressTimer.current  = setTimeout(() => {
+      pressFired.current = true;
+      if (navigator.vibrate) navigator.vibrate(15);
+      changeSelectMode(true);
+      if (!selected.has(getId(item))) toggle(item);
+    }, 500);
   };
+  // Venu d'ailleurs (appui long dans la vue Photos) : arrive deja coche.
+  React.useEffect(() => {
+    if (!preselect?.length) return;
+    setSelectMode(true);
+    setSelected(new Map(preselect.map(it => [getId(it), it])));
+  }, [preselect]);
   const cancelPress = () => { clearTimeout(pressTimer.current); pressOrigin.current = null; };
   const movePress   = (clientX, clientY) => {
     if (!pressOrigin.current) return;
@@ -112,7 +125,8 @@ export default function GalleryCompare({
           const light = swatchInfo && getTone ? getTone(item) === "light" : false;
           return (
             <div key={id}
-              onClick={() => { if (selectMode && enableCompare) toggle(item); else if (hasPhotos && !selectMode) openCarousel(item, 0); else if (onItemClick && !selectMode) onItemClick(item); }}
+              onClick={() => { if (pressFired.current) { pressFired.current = false; return; }
+                if (selectMode && enableCompare) toggle(item); else if (hasPhotos && !selectMode) openCarousel(item, 0); else if (onItemClick && !selectMode) onItemClick(item); }}
               onMouseDown={e => enableCompare && startPress(item, e.clientX, e.clientY)}
               onMouseMove={e => movePress(e.clientX, e.clientY)}
               onMouseUp={cancelPress} onMouseLeave={cancelPress}

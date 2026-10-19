@@ -21,12 +21,16 @@ const LONG_MS = 480;
 // Empeche la loupe / selection de texte d'iOS pendant l'appui long.
 export const NO_CALLOUT = { WebkitTouchCallout: "none", WebkitUserSelect: "none", userSelect: "none" };
 
-export function useLongPress(onLong, { disabled = false } = {}) {
+// onTouch : ce que fait l'appui long au doigt quand il differe du clic droit
+// (ex. l'historique : appui long = selection, clic droit = menu).
+export function useLongPress(onLong, { disabled = false, onTouch = null } = {}) {
   const t = useRef(null);
   const start = useRef(null);
   const fired = useRef(false);
   const cb = useRef(onLong);
   cb.current = onLong;
+  const touch = useRef(onTouch);
+  touch.current = onTouch;
   const clear = () => { if (t.current) clearTimeout(t.current); t.current = null; };
   useEffect(() => clear, []);
 
@@ -42,7 +46,7 @@ export function useLongPress(onLong, { disabled = false } = {}) {
       t.current = setTimeout(() => {
         fired.current = true;
         if (navigator.vibrate) navigator.vibrate(15);
-        cb.current?.(ev);
+        (touch.current || cb.current)?.(ev);
       }, LONG_MS);
     },
     onPointerMove: e => {

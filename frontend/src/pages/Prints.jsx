@@ -1856,7 +1856,7 @@ function GroupTile({ groupId, name, prints, latestDate, number_of_items, duratio
       isAdmin && "-",
       isAdmin && { icon: "⛓", label: "Dégrouper…", hint: "Les prints restent", onClick: ungroup },
     ],
-  }), { disabled: selectMode });
+  }), { disabled: selectMode, onTouch: onLongPress ? () => onLongPress(groupId) : null });
   const handleClick = guard(() => {
     if (selectMode && onToggleSelect) onToggleSelect(groupId); else setSheetOpen(true);
   });
@@ -2012,7 +2012,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
   const [mw, setMw] = useState(false);
   const loadFull = mode => client.get("/prints/" + p.id).then(r => setFull({ mode, p: r.data }))
     .catch(e => showAlert("Erreur: " + (e.response?.data?.detail || e.message)));
-  // Appui long / clic droit : menu du print (hors mode selection).
+  // Appui long au doigt : selection (grouper, supprimer...) ; clic droit : menu du print.
   const [press, guard] = useLongPress(e => openMenu(e, {
     title: p.file_name || "Sans nom", subtitle: fmtDate(p.print_date),
     items: [
@@ -2023,7 +2023,7 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
       isAdmin && { icon: "✏️", label: "Modifier", onClick: () => loadFull("edit") },
       isAdmin && { icon: "🗑", label: "Supprimer…", danger: true, onClick: () => loadFull("delete") },
     ],
-  }), { disabled: selectMode });
+  }), { disabled: selectMode, onTouch: onLongPress ? () => onLongPress(p.id) : null });
   const handleClick = guard(() => { if (selectMode) onToggleSelect(p.id); else onClick(); });
 
   return (<>
