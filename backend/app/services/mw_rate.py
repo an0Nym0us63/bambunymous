@@ -32,28 +32,66 @@ def _design_id(h) -> str:
     return None
 
 
-async def rated_designs(fresh: bool = False):
-    """Modeles que j'ai deja evalues ; None si la liste est illisible (pas de compte...)."""
+def _is_rated(h) -> bool:
+    """Une impression partagee cree chez MakerWorld une evaluation vide (score 0,
+    sans texte ni photo) : elle reste a remplir. Sans champ score, on la compte faite."""
+    if "score" not in h:
+        return True
+    return bool(h.get("score") or (h.get("content") or "").strip() or h.get("images"))
+
+
+def _pending_of(h) -> dict:
+    inst = h.get("instance") if isinstance(h.get("instance"), dict) else {}
+    des = h.get("design") if isinstance(h.get("design"), dict) else {}
+    return {"profile_id": inst.get("profileId"), "profile_title": inst.get("titleTranslated") or inst.get("title"),
+            "profile_cover": inst.get("cover"), "title": des.get("titleTranslated") or des.get("title"),
+            "cover_url": des.get("coverUrl"), "date": h.get("createTime"),
+            "success": h.get("successPrinted"), "creator_name": (inst.get("instUser") or {}).get("name")}
+
+
+async def my_ratings(fresh: bool = False):
+    """(modeles evalues, evaluations a remplir par modele) ; None si illisible."""
     from .makerworld import _get_json
     from .makerworld_account import token
-    hit = _CACHE.get("rated")
+    hit = _CACHE.get("ratings")
     if hit and not fresh and time.time() - hit[0] < 1800:
         return hit[1]
     tok = await token()
     if not tok:
         return None
-    out, off = set(), 0
-    for _ in range(20):
+    rated, pending, off = set(), {}, 0
+    for _ in range(40):
         code, d = await asyncio.to_thread(_get_json, RATED.format(offset=off), tok)
         if not isinstance(d, dict):
-            return None if off == 0 else out
-        hits = d.get("hits") if isinstance(d.get("hits"), list) else d.get("list") if isinstance(d.get("list"), list) else []
-        out |= {x for x in (_design_id(h) for h in hits) if x}
+            if off == 0:
+                return None
+            break
+        hits = next((d[k] for k in ("hits", "list", "profileRatings") if isinstance(d.get(k), list)), [])
+        for h in hits:
+            did = _design_id(h)
+            if not did:
+                continue
+            if _is_rated(h):
+                rated.add(did)
+            elif did not in pending and h.get("userCanRating", True):
+                pending[did] = _pending_of(h)
         if len(hits) < 50:
             break
         off += 50
-    _CACHE["rated"] = (time.time(), out)
+    out = (rated, pending)
+    _CACHE["ratings"] = (time.time(), out)
     return out
+
+
+async def rated_designs(fresh: bool = False):
+    """Modeles que j'ai deja evalues ; None si la liste est illisible (pas de compte...)."""
+    r = await my_ratings(fresh)
+    return None if r is None else r[0]
+
+
+async def pending_ratings(fresh: bool = False) -> dict:
+    r = await my_ratings(fresh)
+    return {} if r is None else r[1]
 
 
 async def own_designs():
@@ -81,6 +119,7 @@ async def to_rate(fresh: bool = False) -> dict:
     from ..api.v1.routes.filaments import gallery_items
     from .makerworld_account import DONE_STATUSES
     rated = await rated_designs(fresh)
+    pending = await pending_ratings()
     my_uid, mine = await own_designs()
     async with AsyncSessionLocal() as db:
         prints = (await db.execute(
@@ -88,17 +127,20 @@ async def to_rate(fresh: bool = False) -> dict:
             .where(Print.design_id.isnot(None), Print.status.in_(DONE_STATUSES))
             .order_by(Print.print_date.desc()))).scalars().all()
         prints = [p for p in prints if str(p.design_id or "").strip().isdigit()]
-        if rated:
-            prints = [p for p in prints if str(p.design_id) not in rated]
+        if rated:                                   # deja note, sauf si MakerWorld attend encore une note (autre profil)
+            prints = [p for p in prints if str(p.design_id) not in rated or str(p.design_id) in pending]
         prints = [p for p in prints if str(p.design_id) not in mine]
-        if my_uid and prints:                       # mes modeles absents de la liste publiee (createur connu)
-            own = {m.design_id for m in (await db.execute(select(MW).where(
-                MW.design_id.in_(list({str(p.design_id) for p in prints})), MW.creator_uid == my_uid))).scalars().all()}
-            prints = [p for p in prints if str(p.design_id) not in own]
-        if not prints:
+        own_mw = set()
+        cand = list({str(p.design_id) for p in prints} | set(pending))
+        if my_uid and cand:                         # mes modeles absents de la liste publiee (createur connu)
+            own_mw = {m.design_id for m in (await db.execute(select(MW).where(
+                MW.design_id.in_(cand), MW.creator_uid == my_uid))).scalars().all()}
+            prints = [p for p in prints if str(p.design_id) not in own_mw]
+        pending = {k: v for k, v in pending.items() if k not in mine and k not in own_mw}
+        if not prints and not pending:
             return {"items": [], "rated_known": rated is not None}
-        gal = await gallery_items(db, prints, {})
-        ids = list({str(p.design_id) for p in prints})
+        gal = await gallery_items(db, prints, {}) if prints else {"prints": []}
+        ids = list({str(p.design_id) for p in prints} | set(pending))
         mws = {m.design_id: m for m in (await db.execute(select(MW).where(MW.design_id.in_(ids)))).scalars().all()}
     by_print = {it["id"]: it for it in gal["prints"]}
     items = {}
@@ -120,6 +162,22 @@ async def to_rate(fresh: bool = False) -> dict:
         if not it["photos"] and g.get("photos"):
             it["photos"], it["photo_source"] = g["photos"][:8], g.get("photo_source")
             it["print_name"] = g.get("name")
+    # Ce que MakerWorld attend : lien direct vers le profil imprime, et les
+    # impressions partagees absentes de mon historique local.
+    for did, pd in pending.items():
+        it = items.get(did)
+        if it is None:
+            m = mws.get(did)
+            it = items[did] = {"design_id": did, "title": ((m.title_fr or m.title) if m else None) or pd["title"],
+                               "cover_url": (m.cover_url if m else None) or pd["cover_url"],
+                               "creator_name": (m.creator_name if m else None) or pd["creator_name"],
+                               "printed": 0, "last_date": pd["date"], "photos": [], "photo_source": None, "print_ids": []}
+        it["awaited"] = True
+        it["profile_title"] = pd["profile_title"]
+        if pd["profile_id"]:
+            it["url"] = f"https://makerworld.com/fr/models/{did}#profileId-{pd['profile_id']}"
+        else:
+            it.setdefault("url", f"https://makerworld.com/fr/models/{did}")
     out = sorted(items.values(), key=lambda x: x["last_date"] or "", reverse=True)
     out.sort(key=lambda x: not x["photos"])                 # avec photos d'abord, puis les plus recents
     return {"items": out, "rated_known": rated is not None}

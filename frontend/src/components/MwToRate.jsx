@@ -82,7 +82,9 @@ export function ToRateSheet({ data, onClose, onOpen }) {
                   <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {x.title || x.print_name || `Modèle ${x.design_id}`}</div>
                   <div style={{ fontSize: 11, color: "var(--muted)" }}>
-                    {[x.creator_name && `par ${x.creator_name}`, `imprimé ${x.printed}×`, x.last_date && `le ${day(x.last_date)}`].filter(Boolean).join(" · ")}</div>
+                    {[x.creator_name && `par ${x.creator_name}`, x.printed > 0 && `imprimé ${x.printed}×`, x.last_date && `le ${day(x.last_date)}`].filter(Boolean).join(" · ")}</div>
+                  {x.awaited && <div style={{ fontSize: 10.5, color: "#f59e0b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    ⏳ Attendu par MakerWorld{x.profile_title ? ` · profil « ${x.profile_title} »` : ""}</div>}
                 </div>
               </div>
               {x.photos?.length > 0 ? (
