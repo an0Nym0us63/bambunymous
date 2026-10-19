@@ -52,10 +52,9 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   // Profil a imprimer : celui qui est deplie, sinon celui retenu.
   const printProfile = () => (m?.profiles || []).find(p => p.instance_id === open)
     || (m?.profiles || []).find(p => p.main) || m?.profiles?.[0] || null;
-  const openStudio = async () => {
-    const p = printProfile();
+  const openStudio = async (p = printProfile()) => {
     if (!p) return showAlert("Aucun profil imprimable sur ce modèle.");
-    setStudioBusy(true);
+    setStudioBusy(p.instance_id);
     try {
       const { data } = await client.get(`/makerworld/model/${id}/studio/${p.instance_id}`,
         { params: p.dev_model ? { dev_model: p.dev_model } : {} });
@@ -214,19 +213,6 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
             <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
               <a href={m.url} target="_blank" rel="noopener noreferrer" style={linkBtn}>Ouvrir sur MakerWorld ↗</a>
-              {/* Imprimer : on passe la main a l'appli Bambu, sur le profil deplie (sinon le retenu).
-                  Telephone : la page « open-app » de MakerWorld (ouvre Handy, ou propose de
-                  l'installer) -- un lien https, sans risque pour la coquille Android.
-                  Ordinateur : Bambu Studio, avec le lien du 3MF comme le bouton du site. */}
-              {IS_MOBILE && (
-                <a href={handyUrl(id, printProfile())} target="_blank" rel="noopener noreferrer"
-                  title="Ouvrir ce modèle et ce profil dans l'appli Bambu Handy" style={linkBtn}>📱 Bambu Handy</a>
-              )}
-              {!IS_MOBILE && (
-                <AdminOnly home><button onClick={openStudio} disabled={studioBusy}
-                  title="Ouvrir ce profil dans Bambu Studio (compte MakerWorld requis ; compte comme un téléchargement)"
-                  style={{ ...linkBtn, cursor:"pointer" }}>{studioBusy ? "…" : "🖥️ Bambu Studio"}</button></AdminOnly>
-              )}
               {like && (
                 <AdminOnly home><button onClick={toggleLike} disabled={likeBusy}
                   style={{ ...linkBtn, cursor:"pointer", ...(like.liked ? { color:"#ef4444", background:"rgba(239,68,68,0.1)",
@@ -310,6 +296,21 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                           <div style={{ fontSize:11, color:"var(--text2)", marginTop:2 }}>{stockSummary(m.stock[p.instance_id])}</div>
                         )}
                       </button>
+                      {/* Imprimer CE profil : Handy (telephone, page open-app de MakerWorld)
+                          ou Bambu Studio (ordinateur, lien du 3MF de ce profil). */}
+                      {(!allProfiles || isOpen) && (
+                        <div style={{ display:"flex", gap:6, padding:"0 10px 8px", flexWrap:"wrap" }}>
+                          {IS_MOBILE ? (
+                            <a href={handyUrl(id, p)} target="_blank" rel="noopener noreferrer"
+                              style={{ ...linkBtn, padding:"5px 10px", fontSize:11.5 }}>📱 Ouvrir ce profil dans Bambu Handy</a>
+                          ) : (
+                            <AdminOnly home><button onClick={() => openStudio(p)} disabled={studioBusy === p.instance_id}
+                              title="Compte MakerWorld requis ; compte comme un téléchargement"
+                              style={{ ...linkBtn, padding:"5px 10px", fontSize:11.5, cursor:"pointer" }}>
+                              {studioBusy === p.instance_id ? "…" : "🖥️ Ouvrir ce profil dans Bambu Studio"}</button></AdminOnly>
+                          )}
+                        </div>
+                      )}
                       {(!allProfiles || isOpen) && m.stock?.[p.instance_id]?.length > 0
                         && !m.stock[p.instance_id].some(x => x.exact) && (
                         <AdminOnly>

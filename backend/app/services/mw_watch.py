@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 K_SNAP = "MW_COLL_SNAPSHOT"
 PERIOD = 600
 OWN_TTL = 7200
+MAX_IDS = 300            # modeles memorises par collection
 _OWN: list = []          # [(instant, type, collection, modele)]
 
 
@@ -87,8 +88,17 @@ async def check_collections() -> int:
         ids = prev["ids"] if prev else []
         if old is None or not prev or prev.get("count") != c["count"] or c["count"] is None:
             try:
-                page = await A.collection_designs(c["id"], 0, 30, fresh=True)
-                items = page.get("items") or []
+                # Toute la collection (jusqu'a MAX_IDS) : savoir ce qui en est
+                # SORTI permet de reconnaitre un deplacement (sorti ici, entre
+                # la-bas), qui n'est pas un ajout.
+                items, off = [], 0
+                while off < MAX_IDS:
+                    page = await A.collection_designs(c["id"], off, 60, fresh=True)
+                    got = page.get("items") or []
+                    items += got
+                    if not got or not page.get("has_more"):
+                        break
+                    off += 60
             except Exception as e:
                 logger.info(f"[MW] collection {c['id']} illisible : {e}")
                 items = None
@@ -102,6 +112,12 @@ async def check_collections() -> int:
         return 0
 
     sent = 0
+    # Modeles sortis d'une collection pendant ce passage : s'ils sont entres
+    # dans une autre, c'est un deplacement -- ni ajout, ni notification.
+    gone = set()
+    for cid, o in old.items():
+        if cid in snap and (snap[cid].get("ids") is not o.get("ids")):
+            gone |= set(o.get("ids") or []) - set(snap[cid].get("ids") or [])
     link = N.app_link(cfg, "/prints")
     acts_app = [("Ouvrir BambuNymous", link)] if link else []
     # Creees, renommees, supprimees
@@ -131,7 +147,19 @@ async def check_collections() -> int:
             if not items or o is None and not c.get("count"):
                 continue
             before = set((o or {}).get("ids") or [])
-            new = [x for x in items if x["design_id"] not in before
+            # Un ajout arrive EN TETE de la collection : seul ce qui precede le
+            # premier modele deja connu est nouveau. Plus loin, c'est un modele
+            # qui remonte dans la 1re page parce qu'un autre a ete retire (ou
+            # deplace ailleurs) -- pas un ajout.
+            head = []
+            for x in items:
+                if before and x["design_id"] in before:
+                    break
+                head.append(x)
+            # Et jamais plus d'ajouts que la hausse du nombre de modeles.
+            if o and isinstance(o.get("count"), int) and isinstance(c.get("count"), int):
+                head = head[:max(0, c["count"] - o["count"])]
+            new = [x for x in head if x["design_id"] not in before and x["design_id"] not in gone
                    and (with_app("mw_coll_added") or not _is_own("add", c["id"], x["design_id"]))]
             for x in new[:5]:
                 url = f"https://makerworld.com/fr/models/{x['design_id']}"
