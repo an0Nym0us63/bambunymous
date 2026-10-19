@@ -50,11 +50,10 @@ export function FriendPicker({ onDone }) {
           {/* Voyant : il imprime en ce moment */}
           {printing[f.id] != null && (
             <span title={`Imprime en ce moment · ${printing[f.id]} %`} style={{ display:"inline-flex", alignItems:"center", gap:4,
-              fontSize:10.5, color:"#22c55e", fontWeight:600 }}>
+              marginLeft:"auto", fontSize:10.5, color:"#22c55e", fontWeight:600 }}>
               <span style={{ width:7, height:7, borderRadius:"50%", background:"#22c55e", boxShadow:"0 0 0 3px rgba(34,197,94,0.18)",
                 animation:"livePulse 2s infinite" }}/>{printing[f.id]} %</span>
           )}
-          <span style={{ marginLeft:"auto", fontSize:10.5, color:"var(--muted)" }}>{ROLE_LABEL[f.role] || f.role}</span>
         </button>
       ))}
     </div>
