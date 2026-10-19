@@ -9,7 +9,7 @@ import client, { apiUrl } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
 import { moneyVal } from "../utils/money";
 import AdminOnly from "../components/AdminOnly";
-import { useMine, MineBadge } from "../components/Friends";
+import { useMine, MineBadge, FriendsPrints, useHasFriends } from "../components/Friends";
 import { useMwAssign } from "../store/mwAssign";
 import MwQueue from "../components/MwQueue";
 import { mwImg } from "../components/MwImg";
@@ -708,6 +708,8 @@ function MakerWorldCard({ designId, note, prints = [] }) {
   const [mw, setMw] = useState(undefined);       // undefined = en cours, null = rien
   const [pick, setPick] = useState(false);       // ranger dans mes collections
   const [sheet, setSheet] = useState(null);      // fiche du modele (ou d'un similaire)
+  const hasFriends = useHasFriends();
+  const [showFr, setShowFr] = useState(false);   // « Chez les copains » : meme modele chez eux
   useEffect(() => {
     let alive = true, timer = null;
     const load = (again) => client.get(`/prints/makerworld/${encodeURIComponent(designId)}`).then(({ data }) => {
@@ -780,6 +782,14 @@ function MakerWorldCard({ designId, note, prints = [] }) {
           cursor:"pointer" }}>☆ Ranger dans mes collections</button>
       </AdminOnly>
       {pick && <MakerWorldCollectionsPicker designId={designId} title={mw.title} onClose={() => setPick(false)}/>}
+      {hasFriends && (<>
+        <button onClick={() => setShowFr(v => !v)} style={{ display:"flex", width:"100%", padding:"7px 10px", border:"none",
+          borderTop:"1px solid var(--border)", background:"none", color:"#3b82f6", fontSize:11.5, fontWeight:600, cursor:"pointer" }}>
+          <span style={{ flex:1, textAlign:"left" }}>👀 Chez les copains</span><span>{showFr ? "▴" : "▾"}</span></button>
+        {showFr && <div style={{ padding:"4px 10px 10px" }}>
+          <FriendsPrints url={`/friends/shared/design/${encodeURIComponent(designId)}`}
+            empty="Aucun copain n'a encore imprimé ce modèle."/></div>}
+      </>)}
       <MakerWorldSimilar designId={designId} onOpen={setSheet}/>
       {sheet && <MakerWorldModelSheet designId={sheet} onClose={() => setSheet(null)}/>}
     </div>

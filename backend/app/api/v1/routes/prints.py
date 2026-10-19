@@ -1252,6 +1252,43 @@ async def design_makerworld(design_id: str, _: str = Depends(get_current_user)):
     return await _makerworld_for(design_id)
 
 
+@router.get("/design/{design_id}/gallery")
+async def design_gallery(design_id: str, _: str = Depends(get_current_user)):
+    """Mes impressions d'un modele MakerWorld, avec photos et filaments utilises
+    (lu aussi par le BambuNymous d'un copain : « Chez les copains »)."""
+    from .filaments import gallery_items
+    from ....models.filament import Filament, Spool
+    did = str(design_id or "").strip()
+    if not did.isdigit():
+        return {"prints": [], "groups": []}
+    async with AsyncSessionLocal() as db:
+        prints = (await db.execute(
+            select(Print).options(selectinload(Print.snapshots), selectinload(Print.group))
+            .where(Print.design_id == did).order_by(Print.print_date.desc())
+        )).scalars().all()
+        if not prints:
+            return {"prints": [], "groups": []}
+        ids = [p.id for p in prints]
+        rows = (await db.execute(
+            select(FilamentUsage.print_id, FilamentUsage.grams_used, Filament.name, Filament.translated_name,
+                   Filament.manufacturer, Filament.color, Filament.colors_array, Filament.multicolor_type,
+                   Filament.fila_type, Filament.material)
+            .join(Spool, Spool.id == FilamentUsage.spool_id).join(Filament, Filament.id == Spool.filament_id)
+            .where(FilamentUsage.print_id.in_(ids))
+        )).all()
+        grams, fils = {}, {}
+        for pid, g, name, tname, brand, color, carr, mct, ftype, mat in rows:
+            grams[pid] = grams.get(pid, 0.0) + float(g or 0)
+            lst = fils.setdefault(pid, [])
+            if not any(x["name"] == (tname or name) for x in lst):
+                lst.append({"name": tname or name, "brand": brand, "color": color, "colors_array": carr,
+                            "multicolor_type": mct, "material": ftype or mat})
+        out = await gallery_items(db, prints, grams)
+    for it in out["prints"]:
+        it["filaments"] = fils.get(it["id"], [])
+    return out
+
+
 @router.get("/{print_id}/makerworld")
 async def print_makerworld(print_id: int, _: str = Depends(get_current_user)):
     async with AsyncSessionLocal() as db:

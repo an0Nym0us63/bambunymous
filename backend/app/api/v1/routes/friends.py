@@ -49,6 +49,26 @@ async def _viewer(request: Request, db: AsyncSession = Depends(get_db)) -> str:
     return username
 
 
+@router.get("/shared/filament/{filament_id}")
+async def friends_shared_filament(filament_id: int, _: str = Depends(get_current_user)):
+    """Impressions de mes copains avec le meme filament (strictement)."""
+    from ....db.session import AsyncSessionLocal
+    from ....models.filament import Filament
+    from ....services import friends_shared as FS
+    async with AsyncSessionLocal() as db:
+        f = await db.get(Filament, filament_id)
+    if not f:
+        raise HTTPException(404, "Filament introuvable")
+    return await FS.for_filament(f)
+
+
+@router.get("/shared/design/{design_id}")
+async def friends_shared_design(design_id: str, _: str = Depends(get_current_user)):
+    """Impressions de mes copains du meme modele MakerWorld."""
+    from ....services import friends_shared as FS
+    return await FS.for_design(design_id)
+
+
 @router.get("/{fid}/p/{path:path}")
 async def friends_proxy(fid: str, path: str, request: Request, _: str = Depends(_viewer)):
     params = [(k, v) for k, v in request.query_params.multi_items() if k != "_t"]

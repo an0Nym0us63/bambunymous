@@ -3,6 +3,7 @@ import client from "../api/client";
 import { useFriend } from "../store/friend";
 import { useIsHomeAdmin, ROLE_LABEL } from "../store/auth";
 import { showAlert, showConfirm } from "../utils/dialog";
+import Lightbox from "./Lightbox";
 import { Pressable } from "./ContextMenu";
 
 // ── Pastille « chez un copain » : dans l'en-tete (mobile) ou le menu (PC) ──
@@ -186,5 +187,89 @@ export function MineBadge({ m }) {
         whiteSpace:"nowrap" }}>
       🏠 {has ? bits.join(" · ") : "pas chez moi"}
     </span>
+  );
+}
+
+
+// ── « Chez les copains » ─────────────────────────────────────────────────────
+// Mes copains (liste lue une fois par session), seulement chez moi : chez un
+// copain, « chez les copains » n'a pas de sens.
+let _friendsList = null;
+export function useHasFriends() {
+  const friend = useFriend((s) => s.friend);
+  const [n, setN] = useState(_friendsList ? _friendsList.length : null);
+  useEffect(() => {
+    if (friend || _friendsList) return;
+    client.get("/friends").then(({ data }) => { _friendsList = data.friends || []; setN(_friendsList.length); })
+      .catch(() => setN(0));
+  }, [friend]);
+  return !friend && (n || 0) > 0;
+}
+
+// Image relayee par mon serveur : une <img> n'envoie pas d'en-tete, le jeton part en _t.
+const relayed = (u) => {
+  if (!u || !u.startsWith("/api/v1/friends/")) return u;
+  const t = localStorage.getItem("token") || "";
+  return `${u}${u.includes("?") ? "&" : "?"}_t=${encodeURIComponent(t)}`;
+};
+const STATUS_TXT = { offline: "injoignable", outdated: "BambuNymous pas à jour", forbidden: "accès refusé" };
+
+// Impressions de mes copains (meme filament, ou meme modele), par copain ;
+// toucher une vignette ouvre ses photos en grand.
+export function FriendsPrints({ url, empty = "Rien chez eux pour l'instant." }) {
+  const [data, setData] = useState(null);
+  const [view, setView] = useState(null);       // { images, index }
+  useEffect(() => {
+    let alive = true;
+    setData(null);
+    client.get(url).then(({ data }) => alive && setData(data))
+      .catch(e => alive && setData({ error: e.response?.data?.detail || e.message }));
+    return () => { alive = false; };
+  }, [url]);
+  const muted = { color: "var(--muted)", fontSize: 12.5, textAlign: "center", padding: 18, margin: 0 };
+  if (!data) return <p style={muted}>Je demande à tes copains…</p>;
+  if (data.error) return <p style={{ ...muted, color: "#ef4444" }}>⚠ {data.error}</p>;
+  if (data.reason) return <p style={muted}>{data.reason}</p>;
+  const fmt = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "";
+  const any = (data.friends || []).some(f => f.prints?.length);
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {!any && <p style={muted}>{empty}</p>}
+      {(data.friends || []).map(f => (f.status !== "ok" || f.prints?.length) ? (
+        <div key={f.id}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)" }}>👀 {f.name}</span>
+            <span style={{ fontSize: 11, color: f.status === "ok" ? "var(--muted)" : "#f59e0b" }}>
+              {f.status === "ok" ? `${f.prints.length} impression${f.prints.length > 1 ? "s" : ""}` : STATUS_TXT[f.status] || f.status}</span>
+          </div>
+          {f.status === "ok" && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(110px,1fr))", gap: 8 }}>
+              {f.prints.map(p => {
+                const imgs = (p.photos?.length ? p.photos : [p.image]).map(relayed);
+                return (
+                  <button key={p.id} onClick={() => setView({ images: imgs, index: 0 })}
+                    style={{ padding: 0, border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden",
+                      background: "var(--surface2)", cursor: "pointer", textAlign: "left", color: "var(--text)" }}>
+                    <div style={{ position: "relative", paddingTop: "100%", background: "var(--surface)" }}>
+                      <img src={imgs[0]} alt="" loading="lazy" style={{ position: "absolute", inset: 0, width: "100%",
+                        height: "100%", objectFit: "cover" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+                      {imgs.length > 1 && <span style={{ position: "absolute", top: 5, right: 5, fontSize: 10, fontWeight: 800,
+                        color: "white", background: "rgba(0,0,0,0.55)", borderRadius: 10, padding: "1px 6px" }}>{imgs.length} 📷</span>}
+                    </div>
+                    <div style={{ padding: "5px 7px 6px" }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                      <div style={{ fontSize: 10, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {[fmt(p.print_date), p.grams ? `${p.grams} g` : null,
+                          p.filaments?.length ? p.filaments.map(x => x.name).join(", ") : null].filter(Boolean).join(" · ")}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      ) : null)}
+      {view && <Lightbox images={view.images} index={view.index} onClose={() => setView(null)}/>}
+    </div>
   );
 }

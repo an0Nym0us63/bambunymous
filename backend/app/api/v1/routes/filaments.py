@@ -674,6 +674,14 @@ async def filament_prints(
         .where(_P.id.in_(list(grams)))
         .order_by(_P.print_date.desc())
     )).scalars().all()
+    return await gallery_items(db, prints, grams)
+
+
+async def gallery_items(db, prints, grams: dict) -> dict:
+    """Impressions et leurs photos, au format de la galerie d'un filament :
+    photos prises du print, a defaut celles de son groupe, a defaut l'image du
+    plateau ; avec photo d'abord. Sert aussi aux impressions d'un modele."""
+    from ....models.print_history import Print as _P, PrintSnapshot as _PS
 
     def own_photos(p):
         names = [(s.file_path or "").split("/")[-1] for s in (p.snapshots or [])
