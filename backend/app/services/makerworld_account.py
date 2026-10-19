@@ -643,8 +643,30 @@ async def boost_state(design_id: str) -> dict:
     if not isinstance(d, dict):
         return {"known": False, "can": False, "error": f"État du boost illisible (HTTP {code})"}
     right = d.get("availableBoostingRight") if isinstance(d.get("availableBoostingRight"), dict) else None
-    return {"known": True, "can": bool(right and right.get("id")), "right_id": (right or {}).get("id"),
-            "reason": d.get("reason") or d.get("message") if not right else None}
+    n = lambda k: d.get(k) if isinstance(d.get(k), int) else None
+    avail, mine, mine_max = n("availableTotal"), n("designBoostedCnt"), n("oneDesignBoostLimit")
+    creator, creator_max = n("designUserBoostedCnt"), n("oneDesignUserBoostLimit")
+    # Meme regle que le site : plus de boost ; sinon canBoost ; sinon limite du
+    # modele (deja booste autant que permis) ; sinon limite par createur (seuil annuel).
+    if avail is not None and avail < 1:
+        state = "none_left"
+    elif d.get("canBoost") is True:
+        state = "can"
+    elif mine_max is not None and mine is not None and mine >= mine_max:
+        state = "model_limit"
+    elif creator_max is not None and creator is not None and creator >= creator_max:
+        state = "creator_limit"
+    else:
+        state = "can" if right else "unknown"
+    can = state == "can" and bool(right and right.get("id"))
+    reason = {"none_left": "Plus aucun boost disponible",
+              "model_limit": f"Déjà boosté ({mine}/{mine_max} pour ce modèle)",
+              "creator_limit": f"Limite par créateur atteinte ({creator}/{creator_max} cette année)",
+              }.get(state) if not can else None
+    return {"known": True, "can": can, "state": state if can or state != "can" else "unknown",
+            "right_id": (right or {}).get("id"), "available": avail,
+            "boosted": mine, "boosted_max": mine_max, "creator": creator, "creator_max": creator_max,
+            "reason": reason or (None if can else (d.get("reason") or d.get("message") or "Boost impossible pour ce modèle"))}
 
 
 async def boost(design_id: str) -> dict:

@@ -84,7 +84,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     let alive = true;
     setBoost(null);
     Promise.all([client.get(`/makerworld/model/${id}/boost`), client.get("/makerworld/boosts")])
-      .then(([a, b]) => alive && a.data.known && setBoost({ can: a.data.can, available: b.data.available }))
+      .then(([a, b]) => alive && a.data.known && setBoost({ ...a.data, available: a.data.available ?? b.data.available }))
       .catch(() => {});
     return () => { alive = false; };
   }, [id]);
@@ -272,10 +272,17 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
               )}
               {boost && (boost.can || boost.done) && (
                 <AdminOnly home><button onClick={doBoost} disabled={boostBusy || boost.done}
-                  title={boost.available != null ? `${boost.available} boost(s) disponible(s)` : undefined}
+                  title={[boost.available != null && `${boost.available} boost(s) disponible(s)`,
+                    boost.creator_max != null && `${boost.creator ?? 0}/${boost.creator_max} donnés à ce créateur cette année`]
+                    .filter(Boolean).join(" · ") || undefined}
                   style={{ ...linkBtn, cursor: boost.done ? "default" : "pointer", color:"#f59e0b", borderColor:"rgba(245,158,11,0.4)",
                     background:"rgba(245,158,11,0.08)" }}>
-                  {boost.done ? "⚡ Boosté" : `⚡ Booster${boost.available != null ? ` · ${boost.available} dispo` : ""}`}</button></AdminOnly>
+                  {boost.done ? "⚡ Boosté" : `⚡ ${boost.boosted ? "Booster encore" : "Booster"}${boost.available != null ? ` · ${boost.available} dispo` : ""}`}</button></AdminOnly>
+              )}
+              {/* Pas de boost possible : la raison, discrete (deja booste, limite par createur, plus de boost). */}
+              {boost && !boost.can && !boost.done && boost.reason && (
+                <AdminOnly home><span title="Règle de MakerWorld" style={{ ...linkBtn, color:"var(--muted)", cursor:"default",
+                  background:"none", borderStyle:"dashed" }}>⚡ {boost.reason}</span></AdminOnly>
               )}
               {!friend && (
                 <AdminOnly><button onClick={() => { startAssign(tile()); onClose(); }}
