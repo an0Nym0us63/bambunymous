@@ -2746,7 +2746,7 @@ export default function Prints() {
       )}
 
       {/* KPIs — données complètes depuis API (pas juste les éléments chargés) */}
-      {kpis && viewMode!=="makerworld" && viewMode!=="queue" && (
+      {kpis && viewMode==="list" && (
         <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
           {[
             [`${kpis.count}`, "prints", "#3b82f6"],
