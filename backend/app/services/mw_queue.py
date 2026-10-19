@@ -29,6 +29,64 @@ KEY = "MW_QUEUE"
 MAX_PER_COLLECTION = 300
 _CACHE = [0.0, None]
 TTL = 300
+# Dernier calcul garde sur disque : apres un redemarrage, la page s'affiche tout
+# de suite avec lui (« stale ») pendant que le calcul se refait en arriere-plan.
+_INVALID = [False]         # reglage change depuis le dernier calcul : on recalcule avant de repondre
+_TASK = [None]
+
+
+def _snap_path():
+    from pathlib import Path
+    from ..core.config import settings
+    return Path(settings.DATA_DIR) / "mw_queue.json"
+
+
+def _snap_get():
+    try:
+        return json.loads(_snap_path().read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def _snap_put(out):
+    try:
+        _snap_path().write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        logger.exception("[QUEUE] instantane non garde")
+
+
+async def _recompute():
+    out = await _compute()
+    _CACHE[:] = [time.time(), out]
+    _INVALID[0] = False
+    await asyncio.to_thread(_snap_put, out)
+    return out
+
+
+def _refresh_bg():
+    if _TASK[0] and not _TASK[0].done():
+        return
+    async def run():
+        try:
+            await _recompute()
+        except Exception:
+            logger.exception("[QUEUE] recalcul en arriere-plan")
+    _TASK[0] = asyncio.create_task(run())
+
+
+async def warm():
+    """Au demarrage : calcule la liste sans attendre qu'on ouvre la page."""
+    await asyncio.sleep(30)
+    try:
+        if (await _load())["collections"]:
+            snap = await asyncio.to_thread(_snap_get)
+            if snap and _CACHE[1] is None:
+                _CACHE[:] = [0.0, snap]
+                _INVALID[0] = False
+            if _CACHE[0] == 0.0:
+                await _recompute()
+    except Exception:
+        logger.exception("[QUEUE] calcul au demarrage")
 
 
 class QueueError(Exception):
@@ -57,6 +115,7 @@ async def _save(d: dict) -> None:
     async with AsyncSessionLocal() as db:
         await set_setting(db, KEY, json.dumps(d, ensure_ascii=False))
     _CACHE[:] = [0.0, None]
+    _INVALID[0] = True
 
 
 async def config() -> dict:
@@ -196,8 +255,20 @@ async def _prices(fids) -> dict:
 async def queue(fresh: bool = False, until: str | None = None) -> dict:
     """File complete ; avec `until`, les stats (totaux, filaments, manques) ne
     portent que sur les modeles jusqu'a celui-la inclus, dans l'ordre de priorite."""
+    stale = False
     if fresh or _CACHE[1] is None or time.time() - _CACHE[0] >= TTL:
-        _CACHE[:] = [time.time(), await _compute()]
+        if not fresh and _CACHE[1] is None and not _INVALID[0]:
+            snap = await asyncio.to_thread(_snap_get)
+            if snap:
+                _CACHE[:] = [0.0, snap]
+        if fresh or _INVALID[0] or _CACHE[1] is None:
+            if _TASK[0] and not _TASK[0].done() and not fresh:
+                await _TASK[0]                       # un calcul tourne deja : on l'attend
+            else:
+                await _recompute()
+        else:
+            _refresh_bg()                            # ancien resultat tout de suite, relu en fond
+            stale = True
     raw = _CACHE[1]
     # En cours d'impression (etat MQTT en direct, ou impression ouverte dans l'historique) : en tete.
     live = _live_print()
@@ -216,6 +287,8 @@ async def queue(fresh: bool = False, until: str | None = None) -> dict:
            **_aggregate(upto, raw["stock_of"])}
     if upto is not models:
         out["until"] = {"design_id": str(until), "count": len(upto)}
+    if stale:
+        out["stale"] = True
     return out
 
 

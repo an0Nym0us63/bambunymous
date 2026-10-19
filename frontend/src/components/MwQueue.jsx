@@ -49,6 +49,8 @@ export default function MwQueue() {
   const [cutting, setCutting] = useState(false);
   const isAdmin = useIsAdmin();
   const fresh = useRef(false);
+  const staleT = useRef(null);
+  useEffect(() => () => clearTimeout(staleT.current), []);
   const setUntil = v => {
     setUntilState(v);
     try { v ? localStorage.setItem("mwQueueUntil", v) : localStorage.removeItem("mwQueueUntil"); } catch { /* stockage indisponible */ }
@@ -66,6 +68,8 @@ export default function MwQueue() {
         if (!alive) return;
         setQ(data);
         if (until && !data.until) setUntil(null);    // modele sorti de la file : on revient au tout
+        // Ancien calcul (redemarrage) : affiche tout de suite, on redemande jusqu'au nouveau.
+        if (data.stale) staleT.current = setTimeout(() => setReload(n => n + 1), 3000);
       })
       .catch(e => alive && setErr(e.response?.data?.detail || e.message))
       .finally(() => alive && setBusy(false));
@@ -138,7 +142,7 @@ export default function MwQueue() {
         )) : <span style={{ fontSize:12, color:"#f59e0b" }}>aucune choisie</span>}
         <AdminOnly><button onClick={() => setPick(true)} style={btn}>⚙ Choisir</button></AdminOnly>
         <button onClick={refresh} disabled={busy} title="Relire maintenant" style={{ ...btn, marginLeft:"auto" }}>
-          {busy ? <span className="mw-spin" style={{ width:12, height:12 }}/> : "⟳"}</button>
+          {busy || q.stale ? <span className="mw-spin" style={{ width:12, height:12 }}/> : "⟳"}</button>
       </div>
 
       {q.collections.length === 0 ? (

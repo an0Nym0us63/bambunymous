@@ -121,6 +121,9 @@ async def lifespan(app: FastAPI):
     # Mon activite de createur (points, boosts, abonnes, paliers) : 30 min.
     from app.services.mw_creator import watch_loop as _mw_creator
     _mw_creator_task = _aio.create_task(_mw_creator())
+    # Liste « À faire » : calculee des le demarrage (et reprise de son dernier calcul).
+    from app.services.mw_queue import warm as _queue_warm
+    _queue_warm_task = _aio.create_task(_queue_warm())
     # Notifications de l'imprimante (pause, fin proche, HMS, sechage) : la
     # config est lue une fois pour l'ecouteur, qui ne touche pas a la base.
     from app.services import notify as _notify, notify_events as _nev
