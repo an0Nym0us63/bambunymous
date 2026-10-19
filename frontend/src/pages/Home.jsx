@@ -92,9 +92,9 @@ function BannerSwitch({ status }) {
     return () => { alive = false; clearInterval(t); };
   }, [sel?.id]);
   const pctOf = f => Math.round(f.progress ?? 0);
-  // Discret : une petite pastille grise, sans couleur forte.
-  const pill = { fontSize:10.5, fontWeight:600, padding:"2px 8px", borderRadius:20, cursor:"pointer",
-    border:"1px solid var(--border)", background:"transparent", color:"var(--muted)", whiteSpace:"nowrap" };
+  // Tres discret : un petit texte gris, sans cadre.
+  const pill = { fontSize:10, fontWeight:500, padding:0, cursor:"pointer", border:"none", background:"transparent",
+    color:"var(--muted)", opacity:0.8, whiteSpace:"nowrap" };
   const stop = e => e.stopPropagation();
   let switcher = null;
   if (sel) switcher = <button onClick={e => { stop(e); setSel(null); }} style={pill}>↩ Ma machine</button>;
@@ -102,7 +102,7 @@ function BannerSwitch({ status }) {
     style={pill}>👀 {friends[0].name} · {pctOf(friends[0])}%</button>;
   else if (friends.length > 1) switcher = (
     <select value="" onClick={stop} onChange={e => { const f = friends.find(x => x.id === e.target.value); if (f) setSel({ id: f.id, name: f.name }); }}
-      style={{ ...pill, padding:"2px 4px", maxWidth:150 }}>
+      style={{ ...pill, maxWidth:140 }}>
       <option value="">👀 {friends.length} copains</option>
       {friends.map(f => <option key={f.id} value={f.id}>{f.name} · {pctOf(f)}%</option>)}
     </select>
@@ -173,9 +173,11 @@ function StatusBanner({ status, friend = null, switcher = null }) {
     if (!status?.status) return;
     const live = ["RUNNING", "PAUSE", "PREPARE", "SLICING"].includes(status.status);
     client.get(via("/prints"), { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
-      .then(r => { const p = r.data?.prints?.[0]; setPrintInfo(p || null); })
+      .then(r => { const p = r.data?.prints?.[0]; if (p) setPrintInfo(p); })
       .catch(() => {});
   }, [status?.status, status?.job_id, friend?.id]);
+  // Changement de machine (moi / un copain) : la vignette de l'autre ne reste pas.
+  useEffect(() => { setPrintInfo(null); }, [friend?.id]);
 
   if (!status) return <div className="card" style={{ height:56, animation:"pulse 2s infinite" }} />;
   const cfg    = STATUS_CFG[status.status] ?? STATUS_CFG.IDLE;
