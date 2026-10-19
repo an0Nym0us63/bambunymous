@@ -3,7 +3,7 @@ import { usePrinter } from "../store/printer";
 import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
 import client, { apiUrl } from "../api/client";
 import AttentionSection from "../components/AttentionSection";
-import { useHasFriends, relayed } from "../components/Friends";
+import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel } from "../utils/ams";
 
@@ -54,64 +54,7 @@ const HMS_SEV = {
   info:    { label: "Info",    color: "#3b82f6" },
 };
 
-// ── Copains qui impriment ────────────────────────────────────────────────────
-// Lu toutes les 30 s (et au retour sur l'appli), seulement chez moi.
-function useFriendsPrinting() {
-  const has = useHasFriends();
-  const [list, setList] = useState([]);
-  useEffect(() => {
-    if (!has) { setList([]); return; }
-    let alive = true;
-    const load = () => { if (document.hidden) return;
-      client.get("/friends/shared/printing").then(({ data }) => alive && setList(data.printing || [])).catch(() => {}); };
-    load();
-    const t = setInterval(load, 30000);
-    const vis = () => { if (!document.hidden) load(); };
-    document.addEventListener("visibilitychange", vis);
-    return () => { alive = false; clearInterval(t); document.removeEventListener("visibilitychange", vis); };
-  }, [has]);
-  return list;
-}
-
-const FR_ACCENT = "#8b5cf6";      // violet : le bandeau d'un copain ne se confond pas avec le mien
-
-// Mon bandeau, ou celui d'un copain qui imprime (le VRAI bandeau : camera,
-// temperatures, alertes de chez lui). Le choix se fait dans le bandeau.
-function BannerSwitch({ status }) {
-  const friends = useFriendsPrinting();
-  const [sel, setSel] = useState(null);        // { id, name } : copain affiche
-  const [fst, setFst] = useState(null);
-  useEffect(() => {
-    setFst(null);
-    if (!sel) return;
-    let alive = true;
-    const load = () => { if (document.hidden) return;
-      client.get(`/friends/${sel.id}/p/printer/status`).then(({ data }) => alive && setFst(data)).catch(() => {}); };
-    load();
-    const t = setInterval(load, 3000);
-    return () => { alive = false; clearInterval(t); };
-  }, [sel?.id]);
-  const pctOf = f => Math.round(f.progress ?? 0);
-  // Tres discret : un petit texte gris, sans cadre.
-  const pill = { fontSize:10, fontWeight:500, padding:0, cursor:"pointer", border:"none", background:"transparent",
-    color:"var(--muted)", opacity:0.8, whiteSpace:"nowrap" };
-  const stop = e => e.stopPropagation();
-  let switcher = null;
-  if (sel) switcher = <button onClick={e => { stop(e); setSel(null); }} style={pill}>↩ Ma machine</button>;
-  else if (friends.length === 1) switcher = <button onClick={e => { stop(e); setSel({ id: friends[0].id, name: friends[0].name }); }}
-    style={pill}>👀 {friends[0].name} · {pctOf(friends[0])}%</button>;
-  else if (friends.length > 1) switcher = (
-    <select value="" onClick={stop} onChange={e => { const f = friends.find(x => x.id === e.target.value); if (f) setSel({ id: f.id, name: f.name }); }}
-      style={{ ...pill, maxWidth:140 }}>
-      <option value="">👀 {friends.length} copains</option>
-      {friends.map(f => <option key={f.id} value={f.id}>{f.name} · {pctOf(f)}%</option>)}
-    </select>
-  );
-  // Avant la 1re lecture complete, le resume de la liste suffit a afficher le bandeau.
-  const summary = sel ? friends.find(f => f.id === sel.id) : null;
-  const st = sel ? (fst || (summary && { ...summary, connected: true, nozzles: [] })) : status;
-  return <StatusBanner status={st} friend={sel} switcher={switcher}/>;
-}
+const FR_ACCENT = "#8b5cf6";      // violet : le bandeau d'une autre machine ne se confond pas avec le mien
 
 function StatusBanner({ status, friend = null, switcher = null }) {
   // Chez un copain : ses donnees (impression en cours, camera) passent par le relais.
@@ -834,7 +777,7 @@ export default function Home() {
 
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, maxWidth:640, margin:"0 auto" }}>
-      <BannerSwitch status={status} />
+      <StatusBanner status={status} />
       {(status?.status === "RUNNING" || status?.status === "PAUSED" || (status?.ams_list?.length > 0)) && <DeviceGrid key={visKey}
         amsList={status?.ams_list ?? []}
         activeAmsId={isRunning ? (status?.active_ams_id ?? -1) : -1}

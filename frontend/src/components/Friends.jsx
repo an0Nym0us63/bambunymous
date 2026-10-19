@@ -29,7 +29,13 @@ export function FriendPicker({ onDone }) {
   const friend = useFriend((s) => s.friend);
   const visit = useFriend((s) => s.visit);
   const [list, setList] = useState(null);
+  const [printing, setPrinting] = useState({});      // id -> avancement (%), pour le voyant
   useEffect(() => { client.get("/friends").then(({ data }) => setList(data.friends || [])).catch(() => setList([])); }, []);
+  useEffect(() => {
+    if (!list?.length) return;
+    client.get("/friends/shared/printing").then(({ data }) =>
+      setPrinting(Object.fromEntries((data.printing || []).map(f => [f.id, Math.round(f.progress ?? 0)])))).catch(() => {});
+  }, [list?.length]);
   if (!list || (!list.length && !friend)) return null;
   const row = (on) => ({ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background: on
     ? "rgba(59,130,246,0.1)" : "none", border:"none", cursor:"pointer", color:"var(--text)", fontSize:13, textAlign:"left" });
@@ -40,7 +46,15 @@ export function FriendPicker({ onDone }) {
       <button onClick={() => { onDone?.(); if (friend) visit(null); }} style={row(!friend)}>🏠 Chez moi</button>
       {list.map(f => (
         <button key={f.id} onClick={() => { onDone?.(); if (friend?.id !== f.id) visit(f); }} style={row(friend?.id === f.id)}>
-          👀 {f.name}<span style={{ marginLeft:"auto", fontSize:10.5, color:"var(--muted)" }}>{ROLE_LABEL[f.role] || f.role}</span>
+          👀 {f.name}
+          {/* Voyant : il imprime en ce moment */}
+          {printing[f.id] != null && (
+            <span title={`Imprime en ce moment · ${printing[f.id]} %`} style={{ display:"inline-flex", alignItems:"center", gap:4,
+              fontSize:10.5, color:"#22c55e", fontWeight:600 }}>
+              <span style={{ width:7, height:7, borderRadius:"50%", background:"#22c55e", boxShadow:"0 0 0 3px rgba(34,197,94,0.18)",
+                animation:"livePulse 2s infinite" }}/>{printing[f.id]} %</span>
+          )}
+          <span style={{ marginLeft:"auto", fontSize:10.5, color:"var(--muted)" }}>{ROLE_LABEL[f.role] || f.role}</span>
         </button>
       ))}
     </div>
