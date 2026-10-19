@@ -842,7 +842,30 @@ function MakerWorldPlates({ designId, profiles, prints: printsIn }) {
     if (pp) known[pp] = (known[pp] || 0) + 1;
   });
   const sure = avec.find(x => known[x.profile_id] && known[x.profile_id] === Math.max(...Object.values(known)));
-  const guess = sure || (avec.length === 1 ? avec[0] : avec.find(x => x.default) || avec[0]);
+  // Profil inconnu : on le deduit des indices de mes prints, du plus fort au plus
+  // faible -- profil reconnu a l'image de l'apercu, puis plateaux qui collent
+  // (le numero de plateau existe dans ce profil, poids voisin de celui du
+  // plateau). A egalite, l'ordre recu (deja classe pour mon imprimante).
+  const scoreOf = (x) => {
+    let sc = 0;
+    prints.forEach(pr => {
+      const g = imgGuess[pr.id];
+      if (g && String(g.profile) === String(x.profile_id)) sc += g.sure === false ? 6 : 10;
+      const i = parseInt(pr.plate_id, 10);
+      const pl = i ? x.plates.find(q => q.index === i) : null;
+      if (i && !pl) sc -= 4;                                   // ce profil n'a pas ce plateau
+      else if (pl?.weight_g && pr.total_weight_g > 0) {
+        const r = Math.min(pl.weight_g, pr.total_weight_g) / Math.max(pl.weight_g, pr.total_weight_g);
+        sc += 3 * r;                                            // 3 si meme poids, ~0 si tres different
+      }
+    });
+    return sc;
+  };
+  const deduced = !sure && avec.length > 1
+    ? avec.map((x, k) => ({ x, sc: scoreOf(x), k })).sort((a, b) => b.sc - a.sc || a.k - b.k)[0]
+    : null;
+  const guess = sure || (avec.length === 1 ? avec[0]
+    : deduced && deduced.sc > 0 ? deduced.x : avec.find(x => x.default) || avec[0]);
   const [pid, setPid] = useState(null);
   if (!avec.length || !prints.length) return null;
   const prof = avec.find(x => x.profile_id === pid) || guess;
