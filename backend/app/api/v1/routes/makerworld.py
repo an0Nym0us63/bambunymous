@@ -228,6 +228,14 @@ async def mw_to_rate(fresh: bool = False, _: str = Depends(get_current_user)):
     return await _call(mw_rate.to_rate(fresh))
 
 
+@router.post("/rate/{design_id}")
+async def mw_rate_submit(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
+    """Publie mon evaluation (note, texte, mes photos) sur MakerWorld."""
+    from ....services import mw_rate
+    return await _call(mw_rate.submit(design_id, body.get("rating_id"), body.get("score"),
+                                      body.get("content"), body.get("photos") or []))
+
+
 @router.get("/contests")
 async def mw_contests(offset: int = 0, fresh: bool = False, _: str = Depends(get_current_user)):
     """Concours MakerWorld (publics)."""

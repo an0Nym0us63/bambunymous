@@ -43,7 +43,7 @@ def _is_rated(h) -> bool:
 def _pending_of(h) -> dict:
     inst = h.get("instance") if isinstance(h.get("instance"), dict) else {}
     des = h.get("design") if isinstance(h.get("design"), dict) else {}
-    return {"profile_id": inst.get("profileId"), "profile_title": inst.get("titleTranslated") or inst.get("title"),
+    return {"rating_id": h.get("id"), "profile_id": inst.get("profileId"), "profile_title": inst.get("titleTranslated") or inst.get("title"),
             "profile_cover": inst.get("cover"), "title": des.get("titleTranslated") or des.get("title"),
             "cover_url": des.get("coverUrl"), "date": h.get("createTime"),
             "success": h.get("successPrinted"), "creator_name": (inst.get("instUser") or {}).get("name")}
@@ -173,6 +173,7 @@ async def to_rate(fresh: bool = False) -> dict:
                                "creator_name": (m.creator_name if m else None) or pd["creator_name"],
                                "printed": 0, "last_date": pd["date"], "photos": [], "photo_source": None, "print_ids": []}
         it["awaited"] = True
+        it["rating_id"] = str(pd["rating_id"]) if pd.get("rating_id") else None
         it["profile_title"] = pd["profile_title"]
         if pd["profile_id"]:
             it["url"] = f"https://makerworld.com/fr/models/{did}#profileId-{pd['profile_id']}"
@@ -181,3 +182,125 @@ async def to_rate(fresh: bool = False) -> dict:
     out = sorted(items.values(), key=lambda x: x["last_date"] or "", reverse=True)
     out.sort(key=lambda x: not x["photos"])                 # avec photos d'abord, puis les plus recents
     return {"items": out, "rated_known": rated is not None}
+
+
+# ── Publier une evaluation depuis l'appli (geste explicite de l'utilisateur) ──
+# Requetes relevees sur makerworld.com (19/10/2026) :
+#   POST /design-user-service/my/upload {useType: "makerworld/comment", fileNames}
+#        -> adresse d'envoi de chaque photo
+#   PUT  /comment-service/rating/{id} {score, content, images, ratingExtension}
+# On ne complete que l'evaluation vide que MakerWorld attend (son id est connu).
+UPLOAD = "/design-user-service/my/upload"
+MAX_PHOTOS = 8
+_MIME = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
+
+
+def _local_photo(url: str):
+    """/api/v1/prints/{id}/file/{nom} -> fichier sur disque (dans le dossier du print)."""
+    import os, re
+    from pathlib import Path
+    m = re.fullmatch(r"/api/v1/prints/(\d+)/file/([^/\\]+)", url or "")
+    if not m:
+        return None
+    base = (Path(os.getenv("DATA_DIR", "/data")) / "prints" / m.group(1)).resolve()
+    f = (base / m.group(2)).resolve()
+    if f.parent != base or not f.is_file() or f.suffix.lower() not in _MIME:
+        return None
+    return f
+
+
+def _urls(o, out):
+    if isinstance(o, str) and o.startswith("http"):
+        out.append(o)
+    elif isinstance(o, dict):
+        for v in o.values():
+            _urls(v, out)
+    elif isinstance(o, list):
+        for v in o:
+            _urls(v, out)
+    return out
+
+
+def _shape(o, depth=0):
+    """Forme d'une reponse sans ses valeurs (pour le journal, jamais d'adresse signee)."""
+    if depth > 3:
+        return "..."
+    if isinstance(o, dict):
+        return {k: _shape(v, depth + 1) for k, v in o.items()}
+    if isinstance(o, list):
+        return [_shape(o[0], depth + 1)] if o else []
+    return type(o).__name__
+
+
+def _upload_photo(f, tok: str) -> str:
+    """Envoie une photo chez MakerWorld ; rend son adresse publique, verifiee."""
+    from urllib.parse import urlsplit
+    from .makerworld import session
+    from .makerworld_account import _send, AccountError
+    mime = _MIME[f.suffix.lower()]
+    d = _send("POST", UPLOAD, {"useType": "makerworld/comment", "fileNames": [f.name]}, tok)
+    urls = _urls(d, [])
+    signed = [u for u in urls if "?" in u]
+    if not signed:
+        logger.warning(f"[MW] envoi de photo : reponse inattendue {_shape(d)}")
+        raise AccountError("MakerWorld n'a pas donné d'adresse d'envoi pour la photo")
+    put = signed[0]
+    try:
+        r = session().put(put, data=f.read_bytes(), headers={"Content-Type": mime}, timeout=60)
+    except Exception as e:
+        raise AccountError(f"Envoi de la photo impossible ({type(e).__name__})")
+    if r.status_code >= 300:
+        logger.warning(f"[MW] envoi de photo refuse HTTP {r.status_code} ; reponse {_shape(d)}")
+        raise AccountError(f"Envoi de la photo refusé (HTTP {r.status_code})")
+    # Adresse publique : celle donnee par la reponse, sinon l'adresse d'envoi sans
+    # sa signature, ou le meme chemin sur le CDN de MakerWorld. On garde la
+    # premiere qui repond vraiment une image.
+    path = urlsplit(put).path
+    cands = [u for u in urls if "?" not in u] + [put.split("?")[0]]
+    i = path.find("/makerworld/")
+    if i >= 0:
+        cands.append("https://makerworld.bblmw.com" + path[i:])
+    for u in dict.fromkeys(cands):
+        try:
+            g = session().get(u, timeout=20, stream=True)
+            ok = g.status_code == 200 and g.headers.get("content-type", "").startswith("image/")
+            g.close()
+        except Exception:
+            ok = False
+        if ok:
+            return u
+    logger.warning(f"[MW] photo envoyee mais introuvable ; reponse {_shape(d)}")
+    raise AccountError("Photo envoyée mais son adresse publique est introuvable : évaluation non publiée")
+
+
+async def submit(design_id: str, rating_id: str, score: int, content: str, photos: list) -> dict:
+    from .makerworld_account import _send, _tok, AccountError
+    did, rid = str(design_id or "").strip(), str(rating_id or "").strip()
+    pend = (await pending_ratings(True)).get(did)
+    if not pend or str(pend.get("rating_id")) != rid:
+        raise AccountError("Cette évaluation n'est plus attendue par MakerWorld (déjà faite ?)")
+    try:
+        score = int(score)
+    except (TypeError, ValueError):
+        score = 0
+    if not 1 <= score <= 5:
+        raise AccountError("Choisis une note de 1 à 5 étoiles")
+    content = (content or "").strip()
+    if score < 4 and len(content) < 10:
+        raise AccountError("Pour une note basse, explique le problème (10 caractères au moins)")
+    if len(content) > 2000:
+        raise AccountError("Texte trop long (2000 caractères au plus)")
+    files = []
+    for u in (photos or [])[:MAX_PHOTOS]:
+        f = _local_photo(u)
+        if not f:
+            raise AccountError("Photo introuvable")
+        files.append(f)
+    tok = await _tok()
+    images = [await asyncio.to_thread(_upload_photo, f, tok) for f in files]
+    await asyncio.to_thread(_send, "PUT", f"/comment-service/rating/{rid}",
+                            {"score": score, "content": content, "images": images,
+                             "ratingExtension": {"lowScoreDetails": []}}, tok)
+    logger.info(f"[MW] evaluation publiee : modele {did}, {score} etoiles, {len(images)} photo(s)")
+    _CACHE.pop("ratings", None)
+    return {"ok": True, "photos": len(images)}

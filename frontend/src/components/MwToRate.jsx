@@ -30,6 +30,7 @@ export function useToRateSet(enabled = true) {
   const d = useToRate(enabled);
   return new Set((d?.items || []).map(x => String(x.design_id)));
 }
+export function forgetToRate() { _p = null; _t = 0; }
 export const rateUrl = (did) => `https://makerworld.com/fr/models/${did}`;
 
 const day = d => d ? new Date(d).toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : "";
@@ -53,9 +54,68 @@ export function ToRateTile({ data, onClick, card }) {
   );
 }
 
+// Evaluer sans quitter l'appli : note, texte et mes photos, envoyes a MakerWorld.
+function RateForm({ x, onDone }) {
+  const [score, setScore] = useState(5);
+  const [text, setText] = useState("");
+  const [picked, setPicked] = useState(() => new Set((x.photos || []).slice(0, 8)));
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const low = score < 4;
+  const toggle = u => setPicked(s => {
+    const n = new Set(s);
+    n.has(u) ? n.delete(u) : n.size < 8 && n.add(u);
+    return n;
+  });
+  const send = async () => {
+    if (!window.confirm(`Publier sur MakerWorld : ${score} étoile${score > 1 ? "s" : ""}, ${picked.size} photo${picked.size > 1 ? "s" : ""} ?`)) return;
+    setBusy(true); setErr(null);
+    try {
+      await client.post(`/makerworld/rate/${x.design_id}`, { rating_id: x.rating_id, score, content: text, photos: [...picked] });
+      forgetToRate();
+      onDone();
+    } catch (e) {
+      setErr(e.response?.data?.detail || e.message);
+    }
+    setBusy(false);
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, borderRadius: 10, background: "var(--surface2)",
+      border: "1px solid var(--border)" }}>
+      <div style={{ display: "flex", gap: 2 }}>
+        {[1, 2, 3, 4, 5].map(n => (
+          <button key={n} onClick={() => setScore(n)} aria-label={`${n} étoiles`} style={{ background: "none", border: "none", padding: 2,
+            cursor: "pointer", fontSize: 26, lineHeight: 1, color: n <= score ? "#f59e0b" : "var(--border)" }}>★</button>
+        ))}
+      </div>
+      <textarea value={text} onChange={e => setText(e.target.value)} rows={3} maxLength={2000}
+        placeholder={low ? "Qu'est-ce qui n'a pas marché ? (obligatoire)" : "Ton avis (facultatif)"}
+        style={{ width: "100%", boxSizing: "border-box", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface)",
+          color: "var(--text)", padding: 8, fontSize: 13, resize: "vertical", fontFamily: "inherit" }}/>
+      {x.photos?.length > 0 && (
+        <div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginBottom: 4 }}>Photos jointes ({picked.size}) : touche pour retirer ou ajouter</div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {x.photos.map(u => (
+              <img key={u} src={u} alt="" onClick={() => toggle(u)} style={{ width: 58, height: 58, borderRadius: 8, objectFit: "cover",
+                cursor: "pointer", border: picked.has(u) ? "2px solid #f59e0b" : "2px solid transparent", opacity: picked.has(u) ? 1 : 0.4 }}/>
+            ))}
+          </div>
+        </div>
+      )}
+      {err && <div style={{ fontSize: 12, color: "#ef4444" }}>{err}</div>}
+      <button onClick={send} disabled={busy || (low && text.trim().length < 10)} style={{ alignSelf: "flex-start", padding: "7px 16px",
+        borderRadius: 10, fontSize: 12.5, fontWeight: 700, cursor: "pointer", background: "#f59e0b", color: "white", border: "none",
+        opacity: busy || (low && text.trim().length < 10) ? 0.5 : 1 }}>{busy ? "Publication…" : "Publier l'évaluation"}</button>
+    </div>
+  );
+}
+
 export function ToRateSheet({ data, onClose, onOpen }) {
   const [view, setView] = useState(null);
-  const items = data?.items || [];
+  const [open, setOpen] = useState(null);
+  const [done, setDone] = useState(() => new Set());
+  const items = (data?.items || []).filter(x => !done.has(x.design_id));
   return (
     <div data-no-pull="" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 4100, background: "rgba(0,0,0,0.6)",
       display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
@@ -98,11 +158,18 @@ export function ToRateSheet({ data, onClose, onOpen }) {
                 </div>
               ) : <div style={{ fontSize: 11, color: "var(--muted)" }}>Pas de photo de cette impression.</div>}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {x.rating_id ? (
+                  <button onClick={() => setOpen(o => o === x.design_id ? null : x.design_id)} style={{ padding: "6px 12px", borderRadius: 10,
+                    fontSize: 12, fontWeight: 700, cursor: "pointer", background: "#f59e0b", color: "white", border: "none" }}>
+                    {open === x.design_id ? "Fermer" : "⭐ Évaluer ici"}</button>
+                ) : null}
                 <a href={x.url} target="_blank" rel="noopener noreferrer" style={{ padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 700,
-                  background: "#f59e0b", color: "white", textDecoration: "none" }}>⭐ Évaluer sur MakerWorld ↗</a>
+                  textDecoration: "none", ...(x.rating_id ? { background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)" }
+                    : { background: "#f59e0b", color: "white" }) }}>{x.rating_id ? "MakerWorld ↗" : "⭐ Évaluer sur MakerWorld ↗"}</a>
                 <button onClick={() => onOpen?.(x)} style={{ padding: "6px 12px", borderRadius: 10, fontSize: 12, fontWeight: 600, cursor: "pointer",
                   background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)" }}>Fiche</button>
               </div>
+              {open === x.design_id && <RateForm x={x} onDone={() => { setDone(s => new Set(s).add(x.design_id)); setOpen(null); }}/>}
             </div>
           ))}
         </div>
