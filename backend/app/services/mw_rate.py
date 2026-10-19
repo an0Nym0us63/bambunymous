@@ -56,6 +56,23 @@ async def rated_designs(fresh: bool = False):
     return out
 
 
+async def own_designs():
+    """Mes propres modeles (on n'evalue pas ce qu'on a publie) : mon uid et la
+    liste de mes modeles publies. Vide si le compte n'est pas connecte."""
+    uid, ids = None, set()
+    try:
+        from .makerworld_account import _my_uid
+        uid = await _my_uid()
+    except Exception:
+        return None, ids
+    try:
+        from . import mw_creator
+        ids = {str(m["design_id"]) for m in await mw_creator.models()}
+    except Exception:
+        logger.exception("[MW] mes modeles (a evaluer)")
+    return uid, ids
+
+
 async def to_rate(fresh: bool = False) -> dict:
     from sqlalchemy import select
     from sqlalchemy.orm import selectinload
@@ -64,6 +81,7 @@ async def to_rate(fresh: bool = False) -> dict:
     from ..api.v1.routes.filaments import gallery_items
     from .makerworld_account import DONE_STATUSES
     rated = await rated_designs(fresh)
+    my_uid, mine = await own_designs()
     async with AsyncSessionLocal() as db:
         prints = (await db.execute(
             select(Print).options(selectinload(Print.snapshots), selectinload(Print.group))
@@ -72,6 +90,11 @@ async def to_rate(fresh: bool = False) -> dict:
         prints = [p for p in prints if str(p.design_id or "").strip().isdigit()]
         if rated:
             prints = [p for p in prints if str(p.design_id) not in rated]
+        prints = [p for p in prints if str(p.design_id) not in mine]
+        if my_uid and prints:                       # mes modeles absents de la liste publiee (createur connu)
+            own = {m.design_id for m in (await db.execute(select(MW).where(
+                MW.design_id.in_(list({str(p.design_id) for p in prints})), MW.creator_uid == my_uid))).scalars().all()}
+            prints = [p for p in prints if str(p.design_id) not in own]
         if not prints:
             return {"items": [], "rated_known": rated is not None}
         gal = await gallery_items(db, prints, {})
