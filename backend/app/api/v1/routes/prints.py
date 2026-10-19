@@ -821,6 +821,29 @@ async def prints_stats(
             .order_by(desc(Print.total_weight_g)).limit(10)
         )).all()
 
+        # ── Le plus de couleurs : teintes distinctes reellement utilisees (grammes > 0),
+        # alpha et « # » ignores (FFFFFFFF = #ffffff).
+        COL = func.lower(func.substr(func.replace(FilamentUsage.color_hex, "#", ""), 1, 6))
+        NCOL = func.count(func.distinct(COL))
+        _used = (FilamentUsage.grams_used > 0, func.coalesce(FilamentUsage.color_hex, "") != "")
+        top_colors = (await db.execute(
+            select(Print.id, Print.file_name, Print.original_name, Print.translated_name,
+                   DUR.label("dur_s"), Print.total_cost, Print.total_weight_g, Print.print_date,
+                   NCOL.label("n_colors"))
+            .join(FilamentUsage, FilamentUsage.print_id == Print.id)
+            .where(*W(ok), *_used)
+            .group_by(Print.id).having(NCOL > 1)
+            .order_by(desc(NCOL), desc(Print.total_weight_g)).limit(10)
+        )).all()
+        top_g_colors = [{"id": r.id, "name": html.unescape(r.name) if r.name else "Groupe", "nb": r.nb,
+                         "n_colors": int(r.n_colors or 0)} for r in (await db.execute(
+            select(Group.id, Group.name, func.count(func.distinct(Print.id)).label("nb"), NCOL.label("n_colors"))
+            .join(Print, Print.group_id == Group.id)
+            .join(FilamentUsage, FilamentUsage.print_id == Print.id)
+            .where(*W(ok), *_used)
+            .group_by(Group.id).having(NCOL > 1)
+            .order_by(desc(NCOL)).limit(10))).all()]
+
         # ── Tops groupes (agrégés) — absents de l'ancienne version
         async def _top_groups(order_col):
             rows = (await db.execute(
@@ -1020,6 +1043,8 @@ async def prints_stats(
             "top_duration":   [_p(r) for r in top_dur],
             "top_cost":       [_p(r) for r in top_cost],
             "top_weight":     [_p(r) for r in top_weight],
+            "top_colors":     [{**_p(r), "n_colors": int(r.n_colors or 0)} for r in top_colors],
+            "top_groups_colors":   top_g_colors,
             "top_groups_duration": top_g_dur,
             "top_groups_cost":     top_g_cost,
             "top_groups_weight":   top_g_weight,

@@ -1037,6 +1037,10 @@ export default function Stats() {
             prints={data.top_weight} groups={data.top_groups_weight}
             valueKey="weight_g" valueLabel={p => `${Math.round(p.weight_g)} g`}
             onItemClick={openDetail}/>
+          <TopList title="🎨 Le plus de couleurs" barColor="#ec4899"
+            prints={data.top_colors} groups={data.top_groups_colors}
+            valueKey="n_colors" valueLabel={p => `${p.n_colors} couleurs`}
+            onItemClick={openDetail}/>
         </div>
       </Section>
 
