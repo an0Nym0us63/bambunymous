@@ -65,6 +65,8 @@ export default function ShareProgress() {
   const dismiss = useShares(s => s.dismiss);
   const mobile = useMobile();
   const [slot, setSlot] = useState(null);
+  // Evaluations en file sur le serveur : leur etat se relit a l'ouverture.
+  useEffect(() => { useShares.getState().syncRates(); }, []);
   useEffect(() => { setSlot(document.getElementById(mobile ? "header-status" : "sidebar-status")); }, [mobile]);
   if (!jobs.length) return null;
 
@@ -81,7 +83,7 @@ export default function ShareProgress() {
           flexShrink:0, whiteSpace:"nowrap" }}>
         {Icon ? <Icon size={12}/> : <Spinner size={11}/>}
         <KindIcon j={j} size={11}/>
-        {t.short(j)}{n > 1 ? ` ×${n}` : j.status === "sending" && j.count > 1 ? ` → ${j.count}` : ""}
+        {t.short(j)}{n > 1 ? ` ×${n}` : j.status === "sending" && j.count > 1 ? (rt(j) ? ` ×${j.count}` : ` → ${j.count}`) : ""}
       </button>,
       slot
     );
@@ -103,7 +105,7 @@ export default function ShareProgress() {
             {Icon ? <Icon size={14} style={{ flexShrink:0 }}/> : <Spinner/>}
             <KindIcon j={j} size={12}/>
             <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", minWidth:0 }}>
-              {t.long(j)}{j.status === "sending" && j.count > 1 ? ` → ${j.count} destinations` : ""}
+              {t.long(j)}{j.status === "sending" && j.count > 1 && !rt(j) ? ` → ${j.count} destinations` : ""}
             </span>
             {j.status !== "sending" && (
               <button onClick={(e) => { e.stopPropagation(); dismiss(j.id); }} aria-label="Fermer"

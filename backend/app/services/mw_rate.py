@@ -425,3 +425,103 @@ async def set_templates(fams) -> list:
     async with AsyncSessionLocal() as db:
         await set_setting(db, K_TEMPLATES, json.dumps(clean, ensure_ascii=False))
     return clean
+
+
+# ── File d'attente des publications, cote serveur ────────────────────────────
+# Publier = deposer dans la file et rendre la main : le serveur publie ensuite
+# une evaluation a la fois (submit). La file est gardee sur disque : quitter la
+# page, recharger ou redemarrer ne perd rien, et l'appli relit son etat.
+_JOBS = []                     # {id, design_id, title, rating_id, score, content, photos, status, detail, ts}
+_WORKER = [None]
+_KEEP_S = 600                  # une publication terminee reste visible 10 min
+
+
+def _queue_file():
+    return _tmp_dir().parent / "mw_rate_queue.json"
+
+
+def _persist():
+    import json
+    try:
+        f = _queue_file()
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps([j for j in _JOBS if j["status"] in ("queued", "sending")], ensure_ascii=False), encoding="utf-8")
+    except OSError:
+        logger.exception("[MW] file des evaluations : ecriture impossible")
+
+
+def _public(j) -> dict:
+    return {k: j[k] for k in ("id", "design_id", "title", "status", "detail", "ts")}
+
+
+def queue_state() -> dict:
+    now = time.time()
+    _JOBS[:] = [j for j in _JOBS if j["status"] in ("queued", "sending") or now - j["ts"] < _KEEP_S]
+    return {"jobs": [_public(j) for j in _JOBS]}
+
+
+def enqueue(design_id, rating_id, score, content, photos, title=None) -> dict:
+    import uuid
+    from .makerworld_account import AccountError
+    try:
+        score = int(score)
+    except (TypeError, ValueError):
+        score = 0
+    if not 1 <= score <= 5:
+        raise AccountError("Choisis une note de 1 à 5 étoiles")
+    did, rid = str(design_id or "").strip(), str(rating_id or "").strip()
+    if not did.isdigit() or not rid.isdigit():
+        raise AccountError("Évaluation inconnue")
+    if any(j["rating_id"] == rid and j["status"] in ("queued", "sending") for j in _JOBS):
+        raise AccountError("Cette évaluation est déjà en file")
+    j = {"id": uuid.uuid4().hex[:12], "design_id": did, "title": (title or "")[:200] or f"Modèle {did}",
+         "rating_id": rid, "score": score, "content": content or "", "photos": list(photos or [])[:MAX_PHOTOS],
+         "status": "queued", "detail": "", "ts": time.time()}
+    _JOBS.append(j)
+    _persist()
+    _start_worker()
+    return _public(j)
+
+
+def dismiss(job_id: str):
+    _JOBS[:] = [j for j in _JOBS if not (j["id"] == job_id and j["status"] in ("done", "error"))]
+
+
+def _start_worker():
+    if _WORKER[0] is None or _WORKER[0].done():
+        _WORKER[0] = asyncio.get_event_loop().create_task(_work())
+
+
+async def _work():
+    from .makerworld_account import AccountError
+    while True:
+        j = next((x for x in _JOBS if x["status"] == "queued"), None)
+        if not j:
+            return
+        j["status"], j["ts"] = "sending", time.time()
+        try:
+            r = await submit(j["design_id"], j["rating_id"], j["score"], j["content"], j["photos"])
+            j["status"], j["detail"] = "done", f"{r.get('photos', 0)} photo(s)"
+        except AccountError as e:
+            j["status"], j["detail"] = "error", str(e)
+        except Exception as e:
+            logger.exception("[MW] publication d'une evaluation")
+            j["status"], j["detail"] = "error", f"Erreur inattendue ({type(e).__name__})"
+        j["ts"] = time.time()
+        _persist()
+
+
+async def resume_queue():
+    """Au demarrage : reprend les publications laissees en file."""
+    import json
+    try:
+        saved = json.loads(_queue_file().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    for j in saved if isinstance(saved, list) else []:
+        if isinstance(j, dict) and j.get("rating_id") and not any(x["id"] == j.get("id") for x in _JOBS):
+            j["status"], j["ts"] = "queued", time.time()
+            _JOBS.append(j)
+    if _JOBS:
+        logger.info(f"[MW] {len(_JOBS)} evaluation(s) reprise(s) en file")
+        _start_worker()

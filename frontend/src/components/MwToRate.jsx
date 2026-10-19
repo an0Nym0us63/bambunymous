@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { showConfirm } from "../utils/dialog";
 import client from "../api/client";
-import { useShares } from "../store/shares";
+import { useShares, setOnRateFailed } from "../store/shares";
 import MwImg from "./MwImg";
 import Lightbox from "./Lightbox";
 
@@ -57,6 +57,8 @@ function useTemplates() {
   }, []);
   return fams;
 }
+
+setOnRateFailed(() => { forgetToRate(); readToRate(); });
 
 export function forgetToRate() { _p = null; _t = 0; }  // relire au prochain affichage
 
@@ -227,14 +229,21 @@ function RateForm({ x, targets, onDone }) {
     const n = (targets || [x]).length;
     if (!(await showConfirm(`${score} étoile${score > 1 ? "s" : ""}, ${picked.size} photo${picked.size > 1 ? "s" : ""}`
       + (n > 1 ? `, pour ${n} modèles` : ""), { title: "Publier sur MakerWorld ?", confirmLabel: "Publier" }))) return;
-    // Un groupe : la meme note pour chacun de ses modeles attendus.
+    // Un groupe : la meme note pour chacun de ses modeles attendus. Chaque
+    // evaluation part dans la file du serveur, qui les publie l'une apres l'autre.
+    setBusy(true);
     for (const t of targets || [x]) {
       const body = { rating_id: t.rating_id, score, content: text, photos: [...picked] };
-      useShares.getState().rate(t.title || `Modèle ${t.design_id}`,
-        () => client.post(`/makerworld/rate/${t.design_id}`, body, { timeout: 5 * 60 * 1000 }))
-        .catch(() => { forgetToRate(); readToRate(); });
-      markRated(t.design_id);
+      try {
+        await useShares.getState().rate(body, t.design_id, t.title || `Modèle ${t.design_id}`);
+        markRated(t.design_id);
+      } catch (e) {
+        setErr(e.response?.data?.detail || e.message);
+        setBusy(false);
+        return;
+      }
     }
+    setBusy(false);
     onDone();
   };
   return (

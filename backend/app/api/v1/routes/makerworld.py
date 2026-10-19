@@ -259,10 +259,27 @@ async def mw_rate_photo(file: UploadFile = File(...), _: str = Depends(require_a
 
 @router.post("/rate/{design_id}")
 async def mw_rate_submit(design_id: str, body: dict = Body({}), _: str = Depends(require_admin)):
-    """Publie mon evaluation (note, texte, mes photos) sur MakerWorld."""
+    """Met mon evaluation (note, texte, mes photos) en file de publication ; rend la main tout de suite."""
     from ....services import mw_rate
-    return await _call(mw_rate.submit(design_id, body.get("rating_id"), body.get("score"),
-                                      body.get("content"), body.get("photos") or []))
+    try:
+        return mw_rate.enqueue(design_id, body.get("rating_id"), body.get("score"), body.get("content"),
+                               body.get("photos") or [], body.get("title"))
+    except acc.AccountError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.get("/rate-queue")
+async def mw_rate_queue(_: str = Depends(get_current_user)):
+    """Publications en file, en cours et recentes (pour la puce d'etat)."""
+    from ....services import mw_rate
+    return mw_rate.queue_state()
+
+
+@router.delete("/rate-queue/{job_id}")
+async def mw_rate_queue_dismiss(job_id: str, _: str = Depends(require_admin)):
+    from ....services import mw_rate
+    mw_rate.dismiss(job_id)
+    return {"ok": True}
 
 
 @router.get("/contests")

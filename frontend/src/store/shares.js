@@ -6,6 +6,9 @@ import client from "../api/client";
 // (telephone) ou de la barre laterale (ordinateur) les suit -- ShareProgress.
 // Un travail reussi disparait seul ; un echec reste jusqu'a ce qu'on le lise.
 let seq = 0;
+// Echec d'une publication : la liste « A evaluer » se relit (le modele y revient).
+let onRateFailed = null;
+export function setOnRateFailed(fn) { onRateFailed = fn; }
 
 export const useShares = create((set, get) => ({
   // { id, kind: "telegram" | "upload", title, count, status: "sending" | "done" | "partial" | "error", detail }
@@ -46,23 +49,49 @@ export const useShares = create((set, get) => ({
       });
   },
 
-  // Publication d'une evaluation MakerWorld (envoi des photos puis de la note).
-  // En file : chacune attend la fin de la precedente (le serveur les espace
-  // en plus de quelques secondes), jamais deux en meme temps.
-  _rateChain: Promise.resolve(),
-  rate: (title, run) => {
-    const jid = get()._add({ kind: "rate", title });
-    const ahead = get().jobs.filter(j => j.kind === "rate" && j.status === "sending" && j.id !== jid).length;
-    if (ahead) get()._update(jid, { detail: `en attente (${ahead} avant)` });
-    const p = get()._rateChain.then(() => { get()._update(jid, { detail: "" }); return run(); });
-    set({ _rateChain: p.catch(() => {}) });
-    return p
-      .then((r) => { get()._update(jid, { status: "done" }); setTimeout(() => get().dismiss(jid), 4000); return r; })
-      .catch((e) => {
-        get()._update(jid, { status: "error", detail: `Évaluation de « ${title} » non publiée : ${e.response?.data?.detail || e.message}` });
-        throw e;
-      });
+  // Evaluations MakerWorld : la file vit sur le SERVEUR (une a la fois,
+  // espacees) ; ici on n'en montre que l'etat, relu au demarrage puis toutes
+  // les 3 s tant qu'il en reste. Quitter la page ou recharger ne perd rien.
+  rate: async (body, designId, title) => {
+    await client.post(`/makerworld/rate/${designId}`, { ...body, title });
+    get().syncRates();
+  },
+  _ratePoll: null,
+  _rateSeen: {},                // job serveur -> statut deja vu (echecs signales une fois)
+  syncRates: async () => {
+    let jobs;
+    try { ({ data: { jobs } } = await client.get("/makerworld/rate-queue")); } catch { return; }
+    const others = get().jobs.filter(j => j.kind !== "rate");
+    const seen = { ...get()._rateSeen };
+    const shown = [];
+    const queued = jobs.filter(j => j.status === "queued").length;
+    for (const j of jobs) {
+      const prev = seen[j.id];
+      seen[j.id] = j.status;
+      if (j.status === "done") {
+        if (prev && prev !== "done") shown.push({ id: `r${j.id}`, kind: "rate", title: j.title, status: "done", detail: "", count: 1, sid: j.id });
+        continue;
+      }
+      if (j.status === "error") {
+        shown.push({ id: `r${j.id}`, kind: "rate", title: j.title, status: "error", count: 1, sid: j.id,
+          detail: `Évaluation de « ${j.title} » non publiée : ${j.detail}` });
+        if (prev && prev !== "error") onRateFailed?.();
+        continue;
+      }
+      // Une seule puce pour la file : celle en cours, avec le nombre restant.
+      if (j.status === "sending") shown.push({ id: `r${j.id}`, kind: "rate", title: j.title, status: "sending", count: queued + 1, sid: j.id,
+        detail: queued ? `${queued} en attente` : "" });
+    }
+    set({ jobs: [...others, ...shown], _rateSeen: seen });
+    shown.filter(j => j.status === "done").forEach(j => setTimeout(() => get().dismiss(j.id), 4000));
+    const active = jobs.some(j => j.status === "queued" || j.status === "sending");
+    if (active && !get()._ratePoll) set({ _ratePoll: setInterval(() => get().syncRates(), 3000) });
+    if (!active && get()._ratePoll) { clearInterval(get()._ratePoll); set({ _ratePoll: null }); }
   },
 
-  dismiss: (jobId) => set({ jobs: get().jobs.filter(j => j.id !== jobId) }),
+  dismiss: (jobId) => {
+    const j = get().jobs.find(x => x.id === jobId);
+    if (j?.sid && j.status === "error") client.delete(`/makerworld/rate-queue/${j.sid}`).catch(() => {});
+    set({ jobs: get().jobs.filter(x => x.id !== jobId) });
+  },
 }));
