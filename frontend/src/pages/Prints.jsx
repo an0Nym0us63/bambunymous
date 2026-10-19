@@ -826,10 +826,14 @@ function MakerWorldPlates({ profiles, prints }) {
   const prof = avec.find(x => x.profile_id === pid) || guess;
   const deduit = !sure;
   // un print compte pour ce profil s'il en vient, ou si son profil est inconnu
+  // ou sans plateaux connus (profil retouche, renvoye depuis Studio...) : on ne
+  // l'ecarte que s'il vient d'un AUTRE profil dont on connait les plateaux.
   // Termine (reussi / partiel) seulement ; un plateau en cours est signale a part.
+  const withPlates = new Set(avec.map(x => String(x.profile_id)));
   const done = {}, running = {};
   prints.forEach(pr => {
-    if (pr.mw_profile_id && pr.mw_profile_id !== prof.profile_id) return;
+    const pp = pr.mw_profile_id ? String(pr.mw_profile_id) : null;
+    if (pp && pp !== String(prof.profile_id) && withPlates.has(pp)) return;
     const i = parseInt(pr.plate_id, 10);
     if (!i) return;
     if (pr.status === "SUCCESS" || pr.status === "PARTIAL") done[i] = (done[i] || 0) + 1;
