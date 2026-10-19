@@ -322,6 +322,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                           <div style={{ fontSize:11, color:"var(--text2)", marginTop:2 }}>{stockSummary(m.stock[p.instance_id])}</div>
                         )}
                       </button>
+                      {isOpen && p.summary && <ProfileSummary p={p}/>}
                       {/* Imprimer CE profil : Handy (telephone, page open-app de MakerWorld)
                           ou Bambu Studio (ordinateur, lien du 3MF de ce profil). */}
                       {isOpen && (
@@ -521,6 +522,28 @@ function launch(href) {
   const a = document.createElement("a");
   a.href = href; a.style.display = "none";
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+// Descriptif du profil (traduit, original a la demande), replie s'il est long.
+function ProfileSummary({ p }) {
+  const [more, setMore] = useState(false);
+  const [orig, setOrig] = useState(false);
+  const txt = orig && p.summary_original ? p.summary_original : p.summary;
+  const long = txt.length > 220;
+  const b = { background:"none", border:"none", padding:0, cursor:"pointer", fontSize:11.5, fontWeight:700, color:"#3b82f6" };
+  return (
+    <div style={{ padding:"0 10px 8px" }}>
+      <div style={{ fontSize:12, color:"var(--text2)", lineHeight:1.5, whiteSpace:"pre-wrap",
+        ...(long && !more ? { maxHeight:72, overflow:"hidden", maskImage:"linear-gradient(#000 60%, transparent)" } : null) }}>{txt}</div>
+      {(long || p.summary_original) && (
+        <div style={{ display:"flex", gap:12, marginTop:3 }}>
+          {long && <button onClick={() => setMore(v => !v)} style={b}>{more ? "Réduire" : "Lire la suite"}</button>}
+          {p.summary_original && <button onClick={() => setOrig(v => !v)} style={{ ...b, color:"var(--muted)" }}>
+            {orig ? "Afficher la traduction" : "Afficher l'original"}</button>}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function Section({ title, children, open, onToggle }) {

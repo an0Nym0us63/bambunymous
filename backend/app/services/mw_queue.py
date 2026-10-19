@@ -199,7 +199,14 @@ async def queue(fresh: bool = False, until: str | None = None) -> dict:
     if fresh or _CACHE[1] is None or time.time() - _CACHE[0] >= TTL:
         _CACHE[:] = [time.time(), await _compute()]
     raw = _CACHE[1]
-    models = raw["models"]
+    # En cours d'impression (etat MQTT en direct, ou impression ouverte dans l'historique) : en tete.
+    live = _live_print()
+    models = []
+    for r in raw["models"]:
+        on = live if live and live["design_id"] == r["design_id"] else None
+        models.append({**r, "printing": bool(on or r.get("_inprog")),
+                       "progress": on["progress"] if on else None, "remaining_min": on["remaining_min"] if on else None})
+    models.sort(key=lambda r: not r["printing"])
     ids = [r["design_id"] for r in models]
     upto = models
     if until and str(until) in ids:
@@ -210,6 +217,18 @@ async def queue(fresh: bool = False, until: str | None = None) -> dict:
     if upto is not models:
         out["until"] = {"design_id": str(until), "count": len(upto)}
     return out
+
+
+def _live_print():
+    try:
+        from ..core.mqtt import get_state
+        st = get_state()
+        if st and st.design_id and str(st.status or "").upper() in ("RUNNING", "PAUSE", "PREPARE", "SLICING"):
+            return {"design_id": str(st.design_id), "progress": round(float(st.progress or 0)),
+                    "remaining_min": int(st.remaining_minutes or 0)}
+    except Exception:
+        pass
+    return None
 
 
 def _aggregate(models: list, stock_of: dict) -> dict:
@@ -281,7 +300,7 @@ async def _compute() -> dict:
         row = {"design_id": did, "title": base.get("title"), "title_fr": base.get("title_fr") or m.get("title_fr"),
                "cover_url": base.get("cover_url") or m.get("cover_url"), "collections": where.get(did, []),
                "printed": m.get("printed") or 0, "planned": chosen_plan, "qty": qty, "error": m.get("error"),
-               "plates_ready": [], "plates_count": 0, "_need": {}, "_miss": {},
+               "plates_ready": [], "plates_count": 0, "_need": {}, "_miss": {}, "_inprog": m.get("in_progress") or 0,
                "profile": None, "seconds": None, "weight_g": 0.0, "filaments": [], "status": "unknown"}
         if prof:
             sel = plan.get("plates") if plan and plan.get("instance_id") == prof.get("instance_id") else None

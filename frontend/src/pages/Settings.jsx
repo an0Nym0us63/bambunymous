@@ -1653,6 +1653,9 @@ export default function Settings() {
   const [serial,  setSerial]  = useState("");
   const [code,    setCode]    = useState("");
   const [pname,   setPname]   = useState("");
+  const [pmodel,  setPmodel]  = useState("");
+  const [pmodels, setPmodels] = useState([]);
+  const [pauto,   setPauto]   = useState("");
   const [user,    setUser]    = useState("admin");
   const [pass,    setPass]    = useState("");
   const [cost,    setCost]    = useState("0");
@@ -1670,6 +1673,9 @@ export default function Settings() {
       setIp(data.PRINTER_IP     ?? "");
       setSerial(data.PRINTER_ID ?? "");
       setPname(data.PRINTER_NAME ?? "");
+      setPmodel(data.PRINTER_MODEL ?? "");
+      setPmodels(data.PRINTER_MODELS ?? []);
+      setPauto(data.PRINTER_MODEL_AUTO ?? "");
       setUser(data.ADMIN_USERNAME ?? "admin");
       setCost(data.COST_BY_HOUR ?? "0");
       setLoading(false);
@@ -1684,6 +1690,7 @@ export default function Settings() {
     if (serial) payload.PRINTER_ID     = serial;
     if (code)   payload.PRINTER_ACCESS_CODE = code;
     if (pname)  payload.PRINTER_NAME   = pname;
+    payload.PRINTER_MODEL = pmodel;     // vide = automatique
     // Les identifiants ne sont plus geres ici : voir "Mon compte" et "Utilisateurs".
     if (cost)   payload.COST_BY_HOUR   = cost;
     try {
@@ -1839,7 +1846,16 @@ export default function Settings() {
               />
               {codeSet && !code && <p style={{ fontSize:10, color:"#22c55e", marginTop:4 }}>✓ Code configuré</p>}
             </div>
-            {F("Nom affiché", pname, setPname, { placeholder:"Mon H2C" })}
+            <div>
+              <label style={lbl}>Modèle</label>
+              <select value={pmodel} onChange={e => setPmodel(e.target.value)} style={inp}>
+                <option value="">Automatique{pauto ? ` (${pauto}, d'après le n° de série)` : ""}</option>
+                {pmodels.map(m => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <p style={{ fontSize:10, color:"var(--muted)", marginTop:4 }}>
+                Sert à MakerWorld : profil fait pour ton imprimante, compatibilité, fichier ouvert dans Studio.</p>
+            </div>
+            {F("Nom affiché", pname, setPname, { placeholder:"Mon imprimante" })}
           </div>
         </div>
 

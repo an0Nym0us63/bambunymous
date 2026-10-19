@@ -370,7 +370,9 @@ def _plate_detail(d) -> list:
         t_fr = i.get("titleTranslated") if isinstance(i.get("titleTranslated"), str) and i.get("titleTranslated") else ""
         out.append({"instance_id": str(i.get("id") or ""), "profile_id": str(i.get("profileId") or ""),
                     "title": t_fr or t_or, "title_original": t_or if t_fr and t_fr != t_or else None,
-                    "summary": _text(i.get("summaryTranslated") or i.get("summary"))[:500],
+                    "summary": _text(i.get("summaryTranslated") or i.get("summary"))[:4000],
+                    "summary_original": (_text(i.get("summary"))[:4000] if i.get("summaryTranslated")
+                                         and _text(i.get("summary")) != _text(i.get("summaryTranslated")) else None),
                     "default": i.get("id") == d.get("defaultInstanceId"),
                     "printer": comp.get("devProductName") if isinstance(comp.get("devProductName"), str) else None,
                     "dev_model": comp.get("devModelName") if isinstance(comp.get("devModelName"), str) else None,
@@ -392,19 +394,37 @@ def _pnorm(s) -> str:
     return "".join(ch for ch in str(s or "").upper() if ch.isalnum())
 
 
+# Modeles proposes dans les parametres (noms MakerWorld) et prefixes de numero de serie connus.
+PRINTER_MODELS = ["H2C", "H2D", "H2D Pro", "H2S", "X1 Carbon", "X1", "X1E", "P2S", "P1S", "P1P", "A1", "A1 mini"]
+SERIAL_MODELS = {"31B": "H2C", "094": "H2D", "00M": "X1 Carbon", "00W": "X1", "03W": "X1E",
+                 "01P": "P1S", "01S": "P1P", "039": "A1", "030": "A1 mini"}
+
+
+def printer_from_serial(serial) -> str:
+    return SERIAL_MODELS.get(str(serial or "").strip().upper()[:3], "")
+
+
 async def my_printer() -> str:
-    """Mon imprimante : la plus presente dans l'historique (H2C par defaut)."""
+    """Mon imprimante : celle choisie dans les parametres, sinon deduite du numero
+    de serie, sinon la plus presente dans l'historique ; vide si rien ne le dit."""
     from sqlalchemy import select, func
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
+    from .settings_service import get_setting
     try:
         async with AsyncSessionLocal() as db:
+            chosen = (await get_setting(db, "PRINTER_MODEL") or "").strip()
+            if chosen:
+                return chosen
+            auto = printer_from_serial(await get_setting(db, "PRINTER_ID"))
+            if auto:
+                return auto
             row = (await db.execute(select(Print.printer_model, func.count(Print.id))
                                     .where(Print.printer_model.isnot(None))
                                     .group_by(Print.printer_model).order_by(func.count(Print.id).desc()).limit(1))).first()
-        return row[0] if row and row[0] else "H2C"
+        return row[0] if row and row[0] else ""
     except Exception:
-        return "H2C"
+        return ""
 
 
 def rank_profiles(profiles: list, printer: str) -> list:

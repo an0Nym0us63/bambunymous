@@ -103,6 +103,9 @@ class SettingsOut(BaseModel):
     PRINTER_ID: str = ""
     PRINTER_ACCESS_CODE_SET: bool = False   # indique si un code est configuré, sans l'exposer
     PRINTER_NAME: str = ""
+    PRINTER_MODEL: str = ""          # vide = automatique
+    PRINTER_MODEL_AUTO: str = ""     # deduit du numero de serie
+    PRINTER_MODELS: list = []
     ADMIN_USERNAME: str = "admin"
     COST_BY_HOUR: str = "0"
 
@@ -112,6 +115,7 @@ class SettingsUpdate(BaseModel):
     PRINTER_ID: Optional[str] = None
     PRINTER_ACCESS_CODE: Optional[str] = None   # None = ne pas toucher
     PRINTER_NAME: Optional[str] = None
+    PRINTER_MODEL: Optional[str] = None
     ADMIN_USERNAME: Optional[str] = None
     ADMIN_PASSWORD: Optional[str] = None
     COST_BY_HOUR: Optional[str] = None
@@ -120,7 +124,11 @@ class SettingsUpdate(BaseModel):
 @router.get("", response_model=SettingsOut)
 async def get_settings(db: AsyncSession = Depends(get_db), _: str = Depends(get_current_user)):
     all_s = await get_all_settings(db)
+    from ....services.makerworld import printer_from_serial, PRINTER_MODELS
     return SettingsOut(
+        PRINTER_MODEL=all_s.get("PRINTER_MODEL", "") or "",
+        PRINTER_MODEL_AUTO=printer_from_serial(all_s.get("PRINTER_ID", "")),
+        PRINTER_MODELS=PRINTER_MODELS,
         PRINTER_IP=all_s.get("PRINTER_IP", ""),
         PRINTER_ID=all_s.get("PRINTER_ID", ""),
         PRINTER_ACCESS_CODE_SET=bool(all_s.get("PRINTER_ACCESS_CODE")),

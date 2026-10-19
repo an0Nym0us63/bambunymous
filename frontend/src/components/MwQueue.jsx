@@ -184,20 +184,19 @@ export default function MwQueue() {
                 onPointerDown={() => prefetchModel(r.design_id)}
                 style={{ display:"flex", alignItems:"center", gap:10, padding:8, borderRadius:12, cursor:"pointer", textAlign:"left",
                   background:"var(--surface2)", color:"var(--text)", opacity: out ? 0.45 : 1,
-                  border: cutting ? "1px dashed #3b82f6" : "1px solid var(--border)" }}>
+                  border: cutting ? "1px dashed #3b82f6" : r.printing ? "1.5px solid #3b82f6" : "1px solid var(--border)" }}>
                 {r.cover_url ? <MwImg src={r.cover_url} w={110} style={{ width:54, height:54, borderRadius:8, objectFit:"cover", flexShrink:0 }}/>
                   : <span style={{ width:54, height:54, borderRadius:8, background:"var(--surface)", flexShrink:0 }}/>}
                 <span style={{ flex:1, minWidth:0 }}>
                   <span style={{ display:"block", fontSize:12.5, fontWeight:700, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {r.title_fr || r.title || `Modèle ${r.design_id}`}</span>
                   <span style={{ display:"flex", gap:4, flexWrap:"wrap", margin:"2px 0 1px" }}>
+                    {r.printing && <span title="En cours d'impression" style={{ ...tag, color:"white", background:"#3b82f6" }}>
+                      🖨️ En cours{r.progress != null ? ` · ${r.progress} %` : ""}{r.remaining_min ? ` · ${fmtDur(r.remaining_min * 60)}` : ""}</span>}
                     {r.new && <span style={{ ...tag, color:"#3b82f6", background:"rgba(59,130,246,0.12)" }}>Nouveau</span>}
                     {r.planned
                       ? <span title="Profil, plateaux et filaments retenus depuis la fiche" style={{ ...tag, color:"#16a34a", background:"rgba(34,197,94,0.12)" }}>📌 Retenu</span>
                       : <span title="Profil retenu par l'appli, tous les plateaux, filament le plus proche du stock" style={{ ...tag, color:"var(--muted)", background:"var(--surface)", border:"1px dashed var(--border)" }}>Par défaut</span>}
-                    {r.status === "partial" && (r.stock_ok
-                      ? <span title="Le reste (autres plateaux ou exemplaires) est faisable avec le stock, à charger dans l'AMS" style={{ ...tag, color:"#f59e0b", background:"rgba(245,158,11,0.12)" }}>reste : stock OK</span>
-                      : <span title="Pour le reste, un filament manque en stock" style={{ ...tag, color:"#ef4444", background:"rgba(239,68,68,0.12)" }}>reste : manque</span>)}
                   </span>
                   <span style={{ display:"block", fontSize:10.5, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {r.profile ? `${r.profile.title || "Profil"}${r.profile.plates < r.profile.plates_total ? ` · ${r.profile.plates}/${r.profile.plates_total} plateaux` : ""}` : "profil inconnu"}
@@ -213,7 +212,13 @@ export default function MwQueue() {
                   </span>
                 </span>
                 <span style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:5, flexShrink:0 }}>
-                  <span title={help} style={{ fontSize:10.5, fontWeight:800, color, whiteSpace:"nowrap" }}>{statusText(r)}</span>
+                  {/* Tout ce qui dit « faisable ou non » se lit ici, a droite. */}
+                  <span style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:2 }}>
+                    <span title={help} style={{ fontSize:10.5, fontWeight:800, color, whiteSpace:"nowrap" }}>{statusText(r)}</span>
+                    {r.status === "partial" && (r.stock_ok
+                      ? <span title="Le reste (autres plateaux ou exemplaires) est faisable avec le stock, à charger dans l'AMS" style={{ ...tag, color:"#f59e0b", background:"rgba(245,158,11,0.12)", whiteSpace:"nowrap" }}>reste : stock OK</span>
+                      : <span title="Pour le reste, un filament manque en stock" style={{ ...tag, color:"#ef4444", background:"rgba(239,68,68,0.12)", whiteSpace:"nowrap" }}>reste : manque</span>)}
+                  </span>
                   {sorting ? (
                     <span onClick={e => e.stopPropagation()} style={{ display:"flex", gap:3 }}>
                       {[["top", "⤒", "En haut"], [-1, "↑", "Monter"], [1, "↓", "Descendre"], ["bottom", "⤓", "En bas"]].map(([to, ic, l]) => (
