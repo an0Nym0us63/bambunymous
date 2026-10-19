@@ -70,7 +70,7 @@ export default function ShareSheet({ kind, id, onClose }) {
         ) : dests.length === 0 ? (
           <p style={{ fontSize:12.5, color:"var(--muted)", lineHeight:1.5 }}>
             Aucune destination : relie ton compte et ajoute des discussions dans
-            Paramètres › Général › Partage Telegram.
+            Paramètres › Notifs › Partage Telegram.
           </p>
         ) : (<>
           <label style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>

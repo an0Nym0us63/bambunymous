@@ -446,7 +446,7 @@ export default function MakerWorldView({ onSearch }) {
         <div style={{ padding:"4px 0 16px" }}>
           {status === null ? <p style={msg}>…</p>
             : !PUBLIC_TABS.includes(tab) && !status.connected ? (
-              <p style={msg}>Connecte ton compte MakerWorld dans <b>Paramètres → Données → MakerWorld</b> pour voir
+              <p style={msg}>Connecte ton compte MakerWorld dans <b>Paramètres → Comptes → MakerWorld</b> pour voir
                 tes collections et tes j'aime ici.</p>
             ) : tab === "creator" ? (
               <MwCreator reload={reload} onOpen={setModel} onLoaded={() => setBusy(false)}/>

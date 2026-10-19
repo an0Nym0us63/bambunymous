@@ -1631,12 +1631,15 @@ function LabelsCard({ card, cardTitle }) {
 // Onglets de la page. `admin` marque ceux dont tout le contenu est reserve aux
 // administrateurs : les afficher a un compte en lecture seule reviendrait a lui
 // proposer des onglets vides.
+// Un onglet par sujet : l'imprimante, les filaments, l'affichage, les comptes
+// (et services connectes), les notifications, puis les outils de maintenance.
 const SET_TABS = [
-  { id:"general",  label:"Général",  admin:true  },
-  { id:"display",  label:"Affichage", admin:false },
-  { id:"accounts", label:"Comptes",  admin:false },
-  { id:"data",     label:"Données",  admin:true  },
-  { id:"notify",   label:"Notifs",   admin:true  },
+  { id:"printer",  label:"🖨️ Imprimante", admin:true  },
+  { id:"filament", label:"🧵 Filaments",  admin:true  },
+  { id:"display",  label:"🎨 Affichage",  admin:false },
+  { id:"accounts", label:"👤 Comptes",    admin:false },
+  { id:"notify",   label:"🔔 Notifs",     admin:true  },
+  { id:"tools",    label:"🛠️ Outils",     admin:true  },
 ];
 
 export default function Settings() {
@@ -1704,9 +1707,14 @@ export default function Settings() {
 
   const isAdmin = useIsAdmin();
   const tabs = SET_TABS.filter(t => isAdmin || !t.admin);
-  // L'onglet par defaut depend du role : "Général" n'existe pas pour un compte
-  // en lecture seule, il atterrit donc sur "Affichage".
-  const [tab, setTab] = React.useState(() => (isAdmin ? "general" : "display"));
+  // Dernier onglet ouvert (ce navigateur) ; sinon selon le role : « Imprimante »
+  // n'existe pas pour un compte en lecture seule, il atterrit sur « Affichage ».
+  const [tab, setTabState] = React.useState(() => {
+    let t = null;
+    try { t = localStorage.getItem("settingsTab"); } catch { /* indisponible */ }
+    return SET_TABS.some(x => x.id === t && (isAdmin || !x.admin)) ? t : (isAdmin ? "printer" : "display");
+  });
+  const setTab = t => { setTabState(t); try { localStorage.setItem("settingsTab", t); } catch { /* indisponible */ } };
   useTrackDetail(`Paramètres · ${tabs.find(t => t.id === tab)?.label || tab}`);
 
   // Tous les hooks sont declares AVANT ce retour anticipe. Les placer apres
@@ -1758,12 +1766,12 @@ export default function Settings() {
       </div>
 
       {/* Meme composant visuel que Filaments / Historique / Objets. */}
-      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12,
-        padding:4, border:"1px solid var(--border)" }}>
+      {/* Six onglets : une ligne sur ordinateur, deux lignes de trois sur telephone. */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(100px, 1fr))", gap:4,
+        background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
         {tabs.map(t => (
           <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            // padding horizontal reduit : 5 onglets tiennent sur un telephone
-            flex:"1 1 auto", minWidth:0, padding:"8px 4px", borderRadius:8, fontSize:12, fontWeight:600,
+            minWidth:0, padding:"8px 4px", borderRadius:8, fontSize:12, fontWeight:600,
             whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
             cursor:"pointer", border:"none", transition:"all 0.15s",
             background: tab===t.id ? "#3b82f6" : "transparent",
@@ -1788,16 +1796,22 @@ export default function Settings() {
         </div>
       </div>
       <AdminOnly>
-        <AMSOrderSection/>
         <AttentionCard card={card} cardTitle={cardTitle}/>
-        <LabelsCard card={card} cardTitle={cardTitle}/>
-        <DryRulesCard card={card} cardTitle={cardTitle}/>
-        <SpoolTaresCard card={card} cardTitle={cardTitle}/>
       </AdminOnly>
       </>)}
 
-      {/* ── Général ───────────────────────────────────────────────── */}
-      {tab === "general" && (
+      {/* ── Filaments ─────────────────────────────────────────────── */}
+      {tab === "filament" && (
+      <AdminOnly>
+        <DryRulesCard card={card} cardTitle={cardTitle}/>
+        <SpoolTaresCard card={card} cardTitle={cardTitle}/>
+        <LabelsCard card={card} cardTitle={cardTitle}/>
+        <PriceReviewSection/>
+      </AdminOnly>
+      )}
+
+      {/* ── Imprimante ────────────────────────────────────────────── */}
+      {tab === "printer" && (
       <AdminOnly>
       <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
@@ -1879,7 +1893,7 @@ export default function Settings() {
           {saved ? "Sauvegardé ✓" : "Sauvegarder"}
         </button>
       </form>
-      <div style={{ marginTop:16 }}><TelegramSettings card={card} cardTitle={cardTitle}/></div>
+      <div style={{ marginTop:16 }}><AMSOrderSection/></div>
       </AdminOnly>
       )}
 
@@ -1888,18 +1902,17 @@ export default function Settings() {
       <MyAccountSection/>
       <TwoFactorCard/>
       <UsersSection/>
+      <AdminOnly><MakerWorldSettings/></AdminOnly>
       <FriendsCard/>
       <ActivitySection/>
       </>)}
 
-      {/* ── Données ───────────────────────────────────────────────── */}
-      {tab === "data" && (
+      {/* ── Outils (maintenance) ──────────────────────────────────── */}
+      {tab === "tools" && (
       <AdminOnly>
         <EnrichFromCatalogSection/>
         <RecalculateSection/>
-        <PriceReviewSection/>
         <TranslateNamesSection/>
-        <MakerWorldSettings/>
         <SpoolnymousImport/>
         <RfidDebugSection/>
       </AdminOnly>
@@ -1909,6 +1922,7 @@ export default function Settings() {
       {tab === "notify" && (
       <AdminOnly>
         <NotificationsSettings/>
+        <div style={{ marginTop:16 }}><TelegramSettings card={card} cardTitle={cardTitle}/></div>
       </AdminOnly>
       )}
 
