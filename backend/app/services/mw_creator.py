@@ -143,7 +143,9 @@ async def models(fresh: bool = False) -> list:
             if not isinstance(h, dict) or not str(h.get("id") or "").isdigit():
                 continue
             out.append({"design_id": str(h["id"]), "title": h.get("title"),
-                        "title_fr": h.get("titleTranslated") or None, "cover_url": h.get("cover"),
+                        "title_fr": h.get("titleTranslated") or None,
+                        # cette liste donne « coverUrl » (pas « cover » comme la recherche)
+                        "cover_url": h.get("coverUrl") or h.get("cover") or h.get("coverPortrait") or None,
                         "downloads": _num(h.get("downloadCount")), "prints": _num(h.get("printCount")),
                         "boosts": _num(h.get("boostCnt")), "likes": _num(h.get("likeCount")),
                         "collections": _num(h.get("collectionCount")), "comments": _num(h.get("commentCount")),
