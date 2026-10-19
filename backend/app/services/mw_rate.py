@@ -160,8 +160,9 @@ async def to_rate(fresh: bool = False) -> dict:
         it["printed"] += 1
         it["print_ids"].append(p.id)
         # Photos : celles du print le plus recent qui en a ; sinon celles de son groupe.
-        if not it["photos"] and g.get("photos"):
-            it["photos"], it["photo_source"] = g["photos"][:8], g.get("photo_source")
+        imgs = [u for u in (g.get("photos") or []) if u.split("?")[0].lower().endswith(tuple(_MIME))]
+        if not it["photos"] and imgs:
+            it["photos"], it["photo_source"] = imgs[:8], g.get("photo_source")
             it["print_name"] = g.get("name")
     # Ce que MakerWorld attend : lien direct vers le profil imprime, et les
     # impressions partagees absentes de mon historique local.
@@ -233,10 +234,13 @@ def _local_photo(url: str):
     if t:
         f = _tmp_dir() / t.group(1)
         return f if f.is_file() else None
+    # Photo d'un print, ou photo ajoutee directement a son groupe.
     m = re.fullmatch(r"/api/v1/prints/(\d+)/file/([^/\\]+)", url or "")
-    if not m:
+    g = re.fullmatch(r"/api/v1/prints/groups/(\d+)/photo/([^/\\]+)", url or "")
+    if not (m or g):
         return None
-    base = (Path(os.getenv("DATA_DIR", "/data")) / "prints" / m.group(1)).resolve()
+    m = m or g
+    base = (Path(os.getenv("DATA_DIR", "/data")) / ("prints" if m is not g else "groups") / m.group(1)).resolve()
     f = (base / m.group(2)).resolve()
     if f.parent != base or not f.is_file() or f.suffix.lower() not in _MIME:
         return None
@@ -328,7 +332,7 @@ async def submit(design_id: str, rating_id: str, score: int, content: str, photo
     for u in (photos or [])[:MAX_PHOTOS]:
         f = _local_photo(u)
         if not f:
-            raise AccountError("Photo introuvable")
+            raise AccountError(f"Photo introuvable ou format non pris en charge : {(u or '').split('/')[-1]}")
         files.append(f)
     tok = await _tok()
     images = [await asyncio.to_thread(_upload_photo, f, tok) for f in files]
