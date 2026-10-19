@@ -227,6 +227,12 @@ async def mw_contests(offset: int = 0, fresh: bool = False, _: str = Depends(get
     return await _call(mw.contests(offset, 12, fresh))
 
 
+@router.get("/contests/{cid}/designs")
+async def mw_contest_designs(cid: str, offset: int = 0, order: str = "hot", _: str = Depends(get_current_user)):
+    """Tous les modeles d'un concours."""
+    return await _call(mw.contest_designs(cid, offset, order))
+
+
 @router.get("/boosts")
 async def mw_boosts(_: str = Depends(get_current_user)):
     """Mes boosts disponibles."""

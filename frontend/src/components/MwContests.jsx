@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import client from "../api/client";
 import MwImg from "./MwImg";
 
@@ -83,7 +83,17 @@ function Contest({ c, onOpen }) {
   const when = c.status === "open" ? `jusqu'au ${day(c.end)}${left(c.end) ? ` · ${left(c.end)}` : ""}`
     : c.status === "judging" ? `résultats le ${day(c.results)}`
     : c.status === "upcoming" ? `à partir du ${day(c.start)}` : `terminé le ${day(c.end)}`;
-  const designs = all ? c.designs : c.designs.slice(0, 6);
+  // Deux lignes de vignettes, quelle que soit la largeur ; le reste dans la liste complete.
+  const box = useRef(null);
+  const [cols, setCols] = useState(3);
+  useEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setCols(Math.max(1, Math.floor((el.clientWidth + 6) / 102))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const designs = c.designs.slice(0, cols * 2);
   return (
     <div className="card" style={{ padding: 0, overflow: "hidden" }}>
       {c.cover && <MwImg src={c.cover} w={720} style={{ width: "100%", aspectRatio: "16 / 6", objectFit: "cover", display: "block" }}/>}
@@ -121,7 +131,7 @@ function Contest({ c, onOpen }) {
           <div>
             <div style={{ fontSize: 11, fontWeight: 800, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
               {c.designs_kind === "awarded" ? "Primés" : "En vue"}</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(96px,1fr))", gap: 6 }}>
+            <div ref={box} style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 6 }}>
               {designs.map(x => (
                 <button key={x.design_id} onClick={() => onOpen(x)} title={x.title_fr || x.title}
                   style={{ padding: 0, border: "1px solid var(--border)", borderRadius: 10, overflow: "hidden", cursor: "pointer",
@@ -136,14 +146,92 @@ function Contest({ c, onOpen }) {
                 </button>
               ))}
             </div>
-            {c.designs.length > 6 && (
-              <button onClick={() => setAll(v => !v)} style={{ marginTop: 6, background: "none", border: "none", padding: 0, cursor: "pointer",
-                fontSize: 11.5, fontWeight: 700, color: "#3b82f6" }}>{all ? "Moins" : `Voir les ${c.designs.length}`}</button>
+            {(c.entries || 0) > 0 && (
+              <button onClick={() => setAll(true)} style={{ marginTop: 8, background: "none", border: "none", padding: 0, cursor: "pointer",
+                fontSize: 12, fontWeight: 700, color: "#3b82f6" }}>Voir les {c.entries} modèles du concours ›</button>
             )}
           </div>
         )}
         <a href={c.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
           Voir le concours sur MakerWorld ↗</a>
+      </div>
+      {all && <ContestEntries c={c} onOpen={onOpen} onClose={() => setAll(false)}/>}
+    </div>
+  );
+}
+
+// Tous les modeles d'un concours : populaires ou recents, 20 par page.
+function ContestEntries({ c, onOpen, onClose }) {
+  const [order, setOrder] = useState("hot");
+  const [data, setData] = useState(null);
+  const [more, setMore] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    setData(null);
+    client.get(`/makerworld/contests/${c.id}/designs`, { params: { order } })
+      .then(({ data }) => alive && setData(data))
+      .catch(e => alive && setData({ error: e.response?.data?.detail || e.message, items: [] }));
+    return () => { alive = false; };
+  }, [c.id, order]);
+  const loadMore = async () => {
+    setMore(true);
+    try {
+      const { data: d } = await client.get(`/makerworld/contests/${c.id}/designs`, { params: { order, offset: data.next_offset } });
+      setData(x => ({ ...x, items: [...x.items, ...(d.items || [])], next_offset: d.next_offset }));
+    } catch { /* on garde l'affiche */ }
+    setMore(false);
+  };
+  const pill = on => ({ padding: "4px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
+    background: on ? "rgba(59,130,246,0.15)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--text2)",
+    border: on ? "1px solid #3b82f6" : "1px solid var(--border)" });
+  return (
+    <div data-no-pull="" onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 4100, background: "rgba(0,0,0,0.6)",
+      display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} className="sheet-panel" style={{ width: "100%", maxWidth: 820, height: "92vh",
+        borderRadius: "18px 18px 0 0", border: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px 10px", borderBottom: "1px solid var(--border)" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14.5, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              🏆 {c.name}</div>
+            <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{data?.total ?? c.entries} modèles</div>
+          </div>
+          <button onClick={onClose} aria-label="Fermer" style={{ background: "none", border: "none", color: "var(--muted)", fontSize: 20,
+            cursor: "pointer", padding: 4 }}>✕</button>
+        </div>
+        <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+          <div style={{ display: "flex", gap: 6, marginBottom: 10 }}>
+            <button onClick={() => setOrder("hot")} style={pill(order === "hot")}>🔥 Populaires</button>
+            <button onClick={() => setOrder("new")} style={pill(order === "new")}>🆕 Récents</button>
+          </div>
+          {!data ? <p style={{ textAlign: "center", color: "var(--muted)", fontSize: 13, padding: 24 }}>Lecture des modèles…</p>
+            : data.error && !data.items.length ? <p style={{ textAlign: "center", color: "#f59e0b", fontSize: 13, padding: 24 }}>{data.error}</p> : (<>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 8 }}>
+              {data.items.map(x => (
+                <button key={x.design_id} onClick={() => onOpen(x)}
+                  style={{ padding: 0, border: x.printed > 0 ? "1.5px solid #22c55e" : "1px solid var(--border)", borderRadius: 10,
+                    overflow: "hidden", cursor: "pointer", background: "var(--surface2)", textAlign: "left", color: "var(--text)", position: "relative" }}>
+                  {x.cover_url ? <MwImg src={x.cover_url} w={260} style={{ width: "100%", aspectRatio: "1", objectFit: "cover", display: "block" }}/>
+                    : <div style={{ width: "100%", aspectRatio: "1" }}/>}
+                  {x.printed > 0 && <span style={{ position: "absolute", top: 5, right: 5, fontSize: 9.5, fontWeight: 800, color: "white",
+                    background: "#22c55e", borderRadius: 10, padding: "1px 6px" }}>✓ IMPRIMÉ</span>}
+                  <div style={{ padding: "5px 7px 6px" }}>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {x.title_fr || x.title}</div>
+                    {x.creator_name && <div style={{ fontSize: 10, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis",
+                      whiteSpace: "nowrap" }}>par {x.creator_name}</div>}
+                  </div>
+                </button>
+              ))}
+            </div>
+            {data.items.length < data.total && (
+              <div style={{ display: "flex", justifyContent: "center", padding: "14px 0" }}>
+                <button onClick={loadMore} disabled={more} style={{ padding: "8px 18px", borderRadius: 10, fontSize: 12, fontWeight: 700,
+                  cursor: "pointer", background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text)" }}>
+                  {more ? "…" : `Plus de modèles (${data.items.length} / ${data.total})`}</button>
+              </div>
+            )}
+          </>)}
+        </div>
       </div>
     </div>
   );

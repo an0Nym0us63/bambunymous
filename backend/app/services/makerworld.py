@@ -364,6 +364,32 @@ async def contests(offset: int = 0, limit: int = 12, fresh: bool = False) -> dic
     return res
 
 
+async def contest_designs(cid: str, offset: int = 0, order: str = "hot", fresh: bool = False) -> dict:
+    """Tous les modeles d'un concours (recherche publique, comme la page du
+    concours), 20 par page : populaires ou recents, avec « deja imprime »."""
+    import asyncio, time
+    from .makerworld_account import _enrich
+    cid = str(cid or "").strip()
+    if not cid.isdigit():
+        return {"items": [], "total": 0, "error": "Concours inconnu"}
+    offset = max(0, int(offset or 0))
+    ob = "newUploads" if order == "new" else "hotScore"
+    ck = ("contest", cid, offset, ob)
+    hit = None if fresh else _CONTESTS.get(ck)
+    if hit and time.time() - hit[0] < 900:
+        return hit[1]
+    code, d = await asyncio.to_thread(
+        _get_json, f"/search-service/select/design2?contestId={cid}&offset={offset}&limit=20&entrance=contest&slq=true&orderBy={ob}")
+    if not isinstance(d, dict):
+        return {"items": [], "total": 0, "error": f"MakerWorld ne répond pas (HTTP {code})"}
+    hits = [h for h in (d.get("hits") if isinstance(d.get("hits"), list) else []) if isinstance(h, dict)]
+    items = [x for x in (_hit(h) for h in hits) if x]
+    res = {"items": (await _enrich(items))["items"] if items else [],
+           "total": d.get("total") if isinstance(d.get("total"), int) else len(items), "next_offset": offset + 20}
+    _CONTESTS[ck] = (time.time(), res)
+    return res
+
+
 async def discover(key: str, offset: int = 0, fresh: bool = False, seed: int = 0) -> dict:
     """Un fil de la page d'accueil, 24 modeles par page, avec « deja imprime »."""
     import asyncio, re, time
