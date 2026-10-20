@@ -97,6 +97,12 @@ class BambuCatalogSync:
             if fname == FILAMENTS_FILE and not (isinstance(data, dict) and isinstance(data.get("data"), list)
                                                 and data["data"]):
                 raise ValueError("pas de liste « data »")
+            if fname == FILAMENTS_FILE:
+                # l'officiel ecrit parfois les couleurs en minuscules (#6e88bcFF) :
+                # en majuscules, comme la copie communautaire qu'on lisait avant
+                for e in data["data"]:
+                    if isinstance(e, dict) and isinstance(e.get("fila_color"), list):
+                        e["fila_color"] = [c.upper() if isinstance(c, str) else c for c in e["fila_color"]]
             pretty = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
         except Exception as e:
             log.warning(f"[CATALOG] JSON invalide pour {fname}: {e}")
