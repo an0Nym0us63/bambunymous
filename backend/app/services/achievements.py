@@ -491,7 +491,7 @@ async def _notify(new: list, ev: dict) -> None:
     title = (f"🏅 Succès débloqué : {a['name']} {t['emoji']}" if len(items) == 1
              else f"🏅 {len(items)} succès débloqués")
     await N.notify("achievement_unlocked", title, "\n".join(lines),
-                   click=N.app_link(cfg, f"/achievements?a={aid}"), priority=3)
+                   click=N.app_link(cfg, f"/stats?tab=achievements&a={aid}"), priority=3)
 
 
 # ── Vue pour la page ─────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import React from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./store/auth";
 import Layout from "./components/layout/Layout";
 import Login from "./pages/Login";
@@ -8,7 +8,6 @@ import Settings from "./pages/Settings";
 import Logs from "./pages/Logs";
 import Stats from "./pages/Stats";
 import Notifications from "./pages/Notifications";
-import Achievements from "./pages/Achievements";
 import Objects from "./pages/Objects";
 import Filaments from "./pages/Filaments";
 import Prints from "./pages/Prints";
@@ -46,7 +45,8 @@ export default function App() {
         <Route path="objects" element={<Objects />} />
         <Route path="stats" element={<Stats />} />
         <Route path="notifications" element={<Notifications />} />
-        <Route path="achievements" element={<Achievements />} />
+        {/* ancienne adresse des succes (liens deja envoyes) : onglet des statistiques */}
+        <Route path="achievements" element={<AchievementsRedirect />} />
       </Route>
     </Routes>
     <DialogHost />
@@ -58,3 +58,10 @@ export default function App() {
 
 // ── Swipe-to-close global pour tous les bottom sheets ──────────────────────
 
+
+function AchievementsRedirect() {
+  const { search } = useLocation();
+  const p = new URLSearchParams(search);
+  p.set("tab", "achievements");
+  return <Navigate to={`/stats?${p}`} replace />;
+}

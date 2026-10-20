@@ -18,7 +18,8 @@ const fmt = (n, unit) => {
 const dateFr = iso => iso ? new Date(iso + (iso.endsWith("Z") || iso.includes("+") ? "" : "Z"))
   .toLocaleDateString("fr-FR", { day:"numeric", month:"long", year:"numeric" }) : "";
 
-export default function Achievements() {
+// embedded : dans l'onglet Succes des statistiques (sans son propre titre).
+export default function Achievements({ embedded = false }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [sp, setSp] = useSearchParams();
@@ -44,8 +45,8 @@ export default function Achievements() {
   }
 
   return (
-    <div style={{ maxWidth:900, margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
-      <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Succès</h1>
+    <div style={{ maxWidth: embedded ? undefined : 900, width:"100%", margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
+      {!embedded && <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Succès</h1>}
 
       {/* Bilan : score et medailles */}
       <div className="card" style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:12,
@@ -81,7 +82,7 @@ export default function Achievements() {
               const it = byId[r.id]; if (!it) return null;
               const t = it.tiers[r.tier];
               return (
-                <button key={r.id + r.tier} onClick={() => { const n = new URLSearchParams(); n.set("a", r.id); setSp(n, { replace:true }); }}
+                <button key={r.id + r.tier} onClick={() => { const n = new URLSearchParams(sp); n.delete("cat"); n.set("a", r.id); setSp(n, { replace:true }); }}
                   className="card" style={{ flexShrink:0, display:"flex", alignItems:"center", gap:10, padding:"8px 12px 8px 8px",
                     cursor:"pointer", border:"1px solid var(--border)", textAlign:"left" }}>
                   <Medal tier={t} emoji={it.emoji} size={40}/>

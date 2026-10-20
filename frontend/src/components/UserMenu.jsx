@@ -107,7 +107,7 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
               <p style={{ margin:"2px 0 0", fontSize:11, color:"var(--muted)" }}>{roleLabel}</p>
             </div>
             <FriendPicker onDone={() => setRect(null)}/>
-            <button onClick={() => { setRect(null); navigate("/achievements"); }}
+            <button onClick={() => { setRect(null); navigate("/stats?tab=achievements"); }}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
                 padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
                 cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>

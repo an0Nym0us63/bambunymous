@@ -9,6 +9,7 @@ import { isMoneyHidden, MONEY_MASK } from "../utils/money";
 import { PrintDetail, GroupBottomSheet } from "./Prints";
 import { ObjectSheet, AccessorySheet } from "./Objects";
 import { FilamentSheetFromSpool } from "./Filaments";
+import Achievements from "./Achievements";
 
 const fmtH = s => {
   const t = Math.round(s || 0);
@@ -790,7 +791,7 @@ export default function Stats() {
   const [groupPrints, setGroupPrints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [tab, setTab] = useUrlTab("tab", "prints", ["prints", "filaments", "drying", "objects"]);
+  const [tab, setTab] = useUrlTab("tab", "prints", ["prints", "filaments", "drying", "objects", "achievements"]);
   useTrackDetail(`Stats · ${ {prints:"Prints", filaments:"Filaments",
     objects:"Objets"}[tab] || tab }`);
   const [objStats, setObjStats] = useState(null);
@@ -890,7 +891,7 @@ export default function Stats() {
     </div>
   );
 
-  const tabs = [["prints","Prints"],["filaments","Filaments"],["drying","Séchage"],["objects","Objets"]];
+  const tabs = [["prints","Prints"],["filaments","Filaments"],["drying","Séchage"],["objects","Objets"],["achievements","Succès"]];
 
   return (
     <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
@@ -1130,6 +1131,8 @@ export default function Stats() {
       </>)}
 
       {tab === "drying" && <DryingStats/>}
+
+      {tab === "achievements" && <Achievements embedded/>}
 
       {tab === "objects" && (
         <ObjectsStats stats={objStats} onOpen={openDetail} onOpenObject={openObject} onOpenAccessory={openAccessory}/>
