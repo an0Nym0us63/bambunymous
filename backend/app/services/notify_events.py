@@ -1090,6 +1090,12 @@ def _watch_more(st, cfg, status: str, prev: str, baseline: bool = False) -> None
             if was is None or baseline or was == empty:
                 continue
             k = f"tray:{a.id}:{t.id}"
+            if not empty:
+                # changement de filament (succes) : note en memoire, une fois stable
+                from . import ams_log
+                _settle(f"chg:{a.id}:{t.id}", STABLE_TRAY,
+                        lambda aid=a.id, sl=t.id: (lambda x: x is not None and not _tray_empty(x))(_tray_now(aid, sl)),
+                        ams_log.record)
             if not empty and on("spool_loaded"):
                 _settle(k, STABLE_TRAY, lambda aid=a.id, sl=t.id: (lambda x: x is not None and not _tray_empty(x))(_tray_now(aid, sl)),
                         lambda aid=a.id, sl=t.id: _spawn(spool_loaded, aid, sl))

@@ -38,7 +38,7 @@ TIERS = [
 ]
 # Version des seuils : quand elle change, le passage suivant recalcule les crans
 # sans rien notifier (un seuil abaisse ne doit pas declencher une rafale).
-CATALOG_VERSION = 5          # 3 : secrets loufoques ; 4 : jusqu'a 100 secrets ; 5 : photos, appli (20/10/2026)
+CATALOG_VERSION = 6          # 3 : secrets loufoques ; 4 : jusqu'a 100 secrets ; 5 : photos, appli ; 6 : durees, AMS (20/10/2026)
 UNIQUE = {"id": "unique", "label": "Unique", "emoji": "🏵️", "color": "#EC4899", "score": 3}
 
 CATEGORIES = [
@@ -162,6 +162,24 @@ CATALOG = [
     _a("print_days", "prints", "🗓️", "Jours d'impression", "{n} jours différents avec une impression", [1]),
     _a("tags", "prints", "🏷️", "Organisé", "{n} étiquettes différentes sur tes impressions", [1]),
     _a("print_groups", "prints", "🗂️", "Rangé", "{n} groupes d'impressions", [1]),
+    # Changements de filament (AMS)
+    _a("fil_changes", "filaments", "🔄", "Valse des bobines", "{n} bobines posées dans l'AMS", [1]),
+    _a("fil_changes_day", "filaments", "🤹", "Jongleur", "{n} bobines posées dans l'AMS le même jour", [1]),
+    _a("fil_changes_week", "filaments", "🌪️", "Semaine agitée", "{n} bobines posées dans l'AMS en 7 jours", [1]),
+    _a("open_spools", "filaments", "🍰", "Tout entamé", "{n} bobines entamées en même temps", [1]),
+    # Durees
+    _a("long_prints", "prints", "🐫", "Longue haleine", "{n} impressions de plus de 10 h", [1]),
+    _a("express", "prints", "🏎️", "Express", "{n} impressions réussies de moins de 30 minutes", [1]),
+    _a("night_hours", "prints", "🌃", "Veilleur de nuit", "{n} h imprimées entre minuit et 6 h", [1], unit="h"),
+    _a("nonstop", "prints", "🔋", "Sans relâche", "{n} h d'affilée sans que l'imprimante s'arrête", [1], unit="h"),
+    _a("lost_hours", "prints", "⌛", "Heures envolées", "{n} h d'impressions ratées", [1], unit="h"),
+    _a("day_hours", "prints", "☀️", "Journée pleine", "{n} h d'impressions lancées le même jour", [1], unit="h"),
+    _a("month_hours", "prints", "📈", "Mois de folie", "{n} h imprimées en un même mois", [1], unit="h"),
+    # Poids, plateaux, imprimantes
+    _a("feather", "prints", "🪶", "Poids plume", "{n} impressions réussies de moins de 5 g", [1]),
+    _a("sturdy", "prints", "🦍", "Costaud", "{n} impressions de plus de 500 g", [1]),
+    _a("multi_plate", "prints", "🍽️", "Multi-plateaux", "{n} impressions d'un plateau 2 ou plus", [1]),
+    _a("printers", "prints", "🖨️", "Parc machines", "{n} modèles d'imprimante différents", [1]),
     # Secrets : une medaille unique, cachee tant qu'elle n'est pas gagnee
     _a("halloween", "secret", "🎃", "Spooky", "Une impression lancée un 31 octobre", [1],
        lore="Tu as imprimé un soir d'Halloween. Citrouille, squelette ou chauve-souris : l'imprimante aussi s'est déguisée."),
@@ -286,6 +304,14 @@ CATALOG = [
        lore="Cinq objets vendus dans la journée : un vrai jour de marché."),
     _a("santa", "secret", "🎅", "Père Noël", "Un objet offert en décembre", [1],
        lore="Un objet offert en décembre. Le Père Noël a un atelier d'impression 3D."),
+    _a("pit_stop", "secret", "🏁", "Arrêt au stand", "4 bobines posées dans l'AMS en moins de 5 minutes", [1],
+       lore="Quatre bobines changées en moins de cinq minutes : un vrai arrêt au stand de Formule 1."),
+    _a("one_hour", "secret", "⏲️", "Une heure pile", "Une impression réussie d'une heure tout rond (à 30 s près)", [1],
+       lore="Soixante minutes, pas une seconde de plus (ou presque)."),
+    _a("cinderella", "secret", "👠", "Cendrillon", "Une impression terminée sur le coup de minuit", [1],
+       lore="Finie sur le coup de minuit : le carrosse n'a pas eu le temps de redevenir citrouille."),
+    _a("wake_up", "secret", "⏰", "Le réveil", "Une impression terminée à 7 h pile", [1],
+       lore="Finie à 7 h pile, juste à temps pour le café."),
     _a("paparazzi", "secret", "🤳", "Paparazzi", "Une photo ajoutée moins de 10 minutes après la fin de l'impression", [1],
        lore="La pièce était encore tiède que tu la prenais déjà en photo."),
     _a("souvenirs", "secret", "📷", "Souvenirs", "Une photo ajoutée plus d'un an après l'impression", [1],
@@ -381,7 +407,7 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "photos_manual", "photo_prints", "photos_camera", "photos_max", "covers", "visits", "visit_days", "details",
         "actions", "updates", "notifs", "dismissals", "tags", "print_groups", "paparazzi", "souvenirs",
         "grand_tour", "night_visit", "cutting_edge", "double_update", "shares", "mw_rates", "mw_boosts_given",
-        "mw_likes_given", "mw_collected"}
+        "mw_likes_given", "mw_collected", "open_spools"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
     # une medaille unique ne se devoile qu'une fois gagnee
@@ -459,6 +485,21 @@ TIER_TABLE = {
     "print_days": [30, 100, 250, 500, 1000, 1500],
     "tags": [5, 10, 25, 50, 100, 200],
     "print_groups": [5, 25, 50, 100, 250, 500],
+    "fil_changes": [10, 50, 100, 250, 500, 1000],
+    "fil_changes_day": [3, 5, 8, 12, 16, 24],
+    "fil_changes_week": [10, 20, 35, 50, 75, 100],
+    "open_spools": [5, 10, 20, 30, 40, 60],
+    "long_prints": [5, 10, 25, 50, 100, 250],
+    "express": [10, 50, 100, 250, 500, 1000],
+    "night_hours": [10, 50, 100, 250, 500, 1000],
+    "nonstop": [12, 24, 48, 72, 120, 168],
+    "lost_hours": [5, 25, 50, 100, 250, 500],
+    "day_hours": [10, 16, 20, 22, 23, 24],
+    "month_hours": [100, 200, 300, 400, 500, 650],
+    "feather": [10, 50, 100, 250, 500, 1000],
+    "sturdy": [5, 10, 25, 50, 100, 250],
+    "multi_plate": [5, 25, 50, 100, 250, 500],
+    "printers": [2, 3, 4, 5, 6, 8],
     "shares": [1, 10, 25, 50, 100, 250],
     "mw_rates": [1, 10, 25, 50, 100, 250],
     "mw_boosts_given": [1, 10, 25, 50, 100, 250],
@@ -506,7 +547,8 @@ async def _load_data() -> dict:
         prints = (await db.execute(select(Print.id, Print.print_date, Print.status, Print.duration_seconds,
                                           Print.total_weight_g, Print.design_id, Print.translated_name,
                                           Print.file_name, Print.estimated_seconds, Print.number_of_items,
-                                          Print.total_cost).order_by(Print.print_date, Print.id))).all()
+                                          Print.total_cost, Print.plate_id, Print.printer_model)
+                                   .order_by(Print.print_date, Print.id))).all()
         usage = (await db.execute(select(FilamentUsage.print_id, FilamentUsage.spool_id, FilamentUsage.filament_type,
                                          FilamentUsage.color_hex, FilamentUsage.grams_used))).all()
         spools = (await db.execute(select(Spool.id, Spool.filament_id, Spool.archived, Spool.updated_at,
@@ -557,6 +599,11 @@ async def _load_data() -> dict:
                                if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")]
     except Exception:
         pass
+    try:
+        from . import ams_log
+        changes = [datetime.fromisoformat(x) for x in await ams_log.drain()]
+    except Exception:
+        changes = []
     st = await _state_get() or {}
     versions = dict(st.get("versions") or {})
     sha = (os.getenv("COMMIT_SHA") or "")[:8]
@@ -565,7 +612,7 @@ async def _load_data() -> dict:
     return {"prints": prints, "usage": usage, "spools": spools, "fils": fils, "objs": objs, "links": links,
             "groups": groups, "snaps": snaps, "covers": covers, "pgroups": pgroups, "tags": tags,
             "act_days": act_days, "pages": pages, "late": late, "notif_days": notif_days, "dismiss": dismiss,
-            "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts}
+            "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "changes": changes}
 
 
 _MONDAY0 = datetime(1970, 1, 5).date()       # un lundi : numero de semaine = jours // 7
@@ -924,6 +971,7 @@ def compute_series(d: dict, now: datetime) -> dict:
     push("stock", now, len(live_spools))
     push("stock_kg", now, round(sum(max(0.0, s.remaining_weight_g or 0) for s in live_spools) / 1000, 2))
     push("rfid", now, sum(1 for s in live_spools if (s.tag_number or "").strip()))
+    push("open_spools", now, sum(1 for s in live_spools if _ts(s.first_used_at)))
     stocked = {s.filament_id for s in live_spools}
     tints = set()
     for f in d["fils"]:
@@ -991,6 +1039,7 @@ def compute_series(d: dict, now: datetime) -> dict:
         for i, dt in enumerate(sorted((_ts(o.updated_at) or now) for o in d["objs"] if o.status == st_), 1):
             push(key, dt, i)
     _more(push, d, now)
+    _durations(push, d)
     acc = 0
     for dt, q in sorted(((_ts(lk.created_at) or now), (lk.quantity or 0)) for lk in d["links"]):
         acc += q
@@ -1075,6 +1124,99 @@ def _more(push, d, now) -> None:
             push("cutting_edge", now, 1)
     except Exception:
         pass
+
+
+def _night_overlap(start: datetime, end: datetime) -> float:
+    """Heures d'une impression comprises entre minuit et 6 h (heure locale)."""
+    if end <= start:
+        return 0.0
+    tz = _tz()
+    a, b = start.replace(tzinfo=timezone.utc).astimezone(tz), end.replace(tzinfo=timezone.utc).astimezone(tz)
+    tot, day = 0.0, a.date()
+    while day <= b.date():
+        n0 = datetime(day.year, day.month, day.day, tzinfo=tz)
+        n1 = n0 + timedelta(hours=6)
+        lo, hi = max(a, n0), min(b, n1)
+        if hi > lo:
+            tot += (hi - lo).total_seconds() / 3600
+        day += timedelta(days=1)
+    return tot
+
+
+def _durations(push, d) -> None:
+    """Durees (longues, express, nuit, d'affilee, perdues, par jour et par
+    mois), poids, plateaux, imprimantes ; changements de filament."""
+    longs = express = feather = sturdy = multi = 0
+    night = lost = 0.0
+    per_day, per_month = defaultdict(float), defaultdict(float)
+    printers = set()
+    run_start = run_end = None
+    best_run = 0.0
+    for p in d["prints"]:
+        st = (p.status or "").upper()
+        if st == "IN_PROGRESS" or not p.print_date:
+            continue
+        start, dur = p.print_date, p.duration_seconds or 0
+        end = start + timedelta(seconds=dur)
+        ok, ko = st in OK, st in KO
+        w = p.total_weight_g or 0
+        loc, loc_end = _local(start), _local(end)
+        if dur >= 10 * 3600:
+            longs += 1
+            push("long_prints", end, longs)
+        if ok and 0 < dur < 1800:
+            express += 1
+            push("express", end, express)
+        if ok and 0 < w < 5:
+            feather += 1
+            push("feather", end, feather)
+        if w > 500:
+            sturdy += 1
+            push("sturdy", end, sturdy)
+        if str(getattr(p, "plate_id", "") or "1").strip() not in ("", "0", "1"):
+            multi += 1
+            push("multi_plate", end, multi)
+        if getattr(p, "printer_model", None):
+            printers.add(str(p.printer_model).strip().upper())
+            push("printers", start, len(printers))
+        night += _night_overlap(start, end)
+        push("night_hours", end, int(night))
+        if ko:
+            lost += dur / 3600
+            push("lost_hours", end, int(lost))
+        per_day[loc.date()] += dur / 3600
+        push("day_hours", start, int(per_day[loc.date()]))
+        per_month[(loc.year, loc.month)] += dur / 3600
+        push("month_hours", end, int(per_month[(loc.year, loc.month)]))
+        # machine occupee d'affilee : impressions qui s'enchainent a moins de 30 min
+        if run_end is not None and start <= run_end + timedelta(minutes=30):
+            run_end = max(run_end, end)
+        else:
+            run_start, run_end = start, end
+        best_run = max(best_run, (run_end - run_start).total_seconds() / 3600)
+        push("nonstop", run_end, int(best_run))
+        # secrets d'heure de fin et de duree
+        if ok and abs(dur - 3600) <= 30:
+            push("one_hour", end, 1)
+        if (loc_end.hour == 23 and loc_end.minute == 59) or (loc_end.hour == 0 and loc_end.minute == 0):
+            push("cinderella", end, 1)
+        if (loc_end.hour, loc_end.minute) == (7, 0):
+            push("wake_up", end, 1)
+    # changements de filament : total, record d'un jour, record sur 7 jours
+    ch = sorted(d.get("changes") or [])
+    per = defaultdict(int)
+    best7 = 0
+    j = 0
+    for i, t in enumerate(ch):
+        push("fil_changes", t, i + 1)
+        per[_local(t).date()] += 1
+        push("fil_changes_day", t, per[_local(t).date()])
+        while ch[j] < t - timedelta(days=7):
+            j += 1
+        best7 = max(best7, i - j + 1)
+        push("fil_changes_week", t, best7)
+        if i >= 3 and t - ch[i - 3] <= timedelta(minutes=5):
+            push("pit_stop", t, 1)
 
 
 def _fun(push, p, start, end, dur, loc, ok, ko, w, cols, us, key, st) -> None:
