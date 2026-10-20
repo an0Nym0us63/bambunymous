@@ -1,8 +1,12 @@
 """
 Synchronisation du catalogue filaments Bambu Lab.
-Source : repo public m0h31h31/3DPrint-Filament-RFID-Tool (assets APK).
-- filaments_color_codes.json  : fila_id + color_code → nom couleur, hex, type
-- filaments_type_mapping.json : type détaillé → famille (PLA/PETG/ABS...)
+- filaments_color_codes.json  : fila_id + color_code → nom couleur, hex, type.
+  Source officielle : le nuancier de Bambu Studio (depot bambulab/BambuStudio,
+  tenu par Bambu Lab). A defaut, la copie du depot communautaire
+  m0h31h31/3DPrint-Filament-RFID-Tool (meme format, en retard sur l'officiel).
+- filaments_type_mapping.json : type détaillé → famille (PLA/PETG/ABS...), du
+  depot communautaire. Bambu Studio n'en publie pas : la famille se DEDUIT du
+  type (« PLA Basic » → PLA) et ce fichier ne sert qu'en secours.
 Téléchargés au démarrage, re-vérifiés toutes les 24h via ETag.
 Stockés dans DATA_DIR/bambu_catalog/.
 """
@@ -15,7 +19,9 @@ import urllib.error
 log = logging.getLogger(__name__)
 
 BASE_RAW = "https://raw.githubusercontent.com/m0h31h31/3DPrint-Filament-RFID-Tool/master/app/src/main/assets"
-FILAMENTS_URL   = f"{BASE_RAW}/filaments_color_codes.json"
+OFFICIAL_RAW = "https://raw.githubusercontent.com/bambulab/BambuStudio/master/resources/profiles/BBL/filament"
+FILAMENTS_URL   = f"{OFFICIAL_RAW}/filaments_color_codes.json"
+FILAMENTS_FALLBACK_URL = f"{BASE_RAW}/filaments_color_codes.json"
 TYPE_MAP_URL    = f"{BASE_RAW}/filaments_type_mapping.json"
 FILAMENTS_FILE  = "filaments_color_codes.json"
 TYPE_MAP_FILE   = "filaments_type_mapping.json"
@@ -88,6 +94,9 @@ class BambuCatalogSync:
 
         try:
             data = json.loads(body)
+            if fname == FILAMENTS_FILE and not (isinstance(data, dict) and isinstance(data.get("data"), list)
+                                                and data["data"]):
+                raise ValueError("pas de liste « data »")
             pretty = json.dumps(data, indent=2, ensure_ascii=False).encode("utf-8")
         except Exception as e:
             log.warning(f"[CATALOG] JSON invalide pour {fname}: {e}")
@@ -106,6 +115,11 @@ class BambuCatalogSync:
     def sync_once(self) -> dict:
         t0 = time.time()
         w_fil, st_fil = self._fetch(FILAMENTS_URL, FILAMENTS_FILE)
+        if st_fil not in (200, 304) and not os.path.exists(os.path.join(self.catalog_dir, FILAMENTS_FILE)):
+            # source officielle injoignable ou deplacee, et rien en local : la
+            # copie communautaire (une copie officielle deja la est gardee)
+            log.warning(f"[CATALOG] source officielle en échec ({st_fil}), copie communautaire")
+            w_fil, st_fil = self._fetch(FILAMENTS_FALLBACK_URL, FILAMENTS_FILE)
         w_typ, st_typ = self._fetch(TYPE_MAP_URL,  TYPE_MAP_FILE)
         log.info(f"[CATALOG] Sync terminée en {time.time()-t0:.1f}s "
                  f"(filaments={'maj' if w_fil else 'ok'}, types={'maj' if w_typ else 'ok'})")
@@ -146,7 +160,7 @@ class BambuCatalogSync:
         if not os.path.exists(path):
             return None
         try:
-            data = json.loads(open(path).read())
+            data = json.loads(open(path, encoding="utf-8").read())
         except Exception:
             return None
 
@@ -190,15 +204,60 @@ class BambuCatalogSync:
             }
         return None
 
-    def type_mapping(self) -> dict:
-        """Retourne le mapping type_détaillé → famille (PLA, PETG…)."""
+    def _fallback_mapping(self) -> dict:
         path = os.path.join(self.catalog_dir, TYPE_MAP_FILE)
-        if not os.path.exists(path):
-            return {}
         try:
-            return json.loads(open(path).read())
+            d = json.loads(open(path, encoding="utf-8").read())
         except Exception:
             return {}
+        return d if isinstance(d, dict) else {}
+
+    def type_mapping(self) -> dict:
+        """Famille → types détaillés ({"PLA": ["PLA Basic", …]}), pour tous les
+        types du catalogue : famille deduite du nom du type, le fichier
+        communautaire en secours quand la deduction ne reconnait rien."""
+        path = os.path.join(self.catalog_dir, FILAMENTS_FILE)
+        try:
+            entries = json.loads(open(path, encoding="utf-8").read()).get("data", [])
+        except Exception:
+            entries = []
+        fallback = self._fallback_mapping()
+        known = {_norm_type(t): fam for fam, ts in fallback.items() if isinstance(ts, list) for t in ts}
+        out: dict = {}
+        for t in sorted({e.get("fila_type", "") for e in entries if isinstance(e, dict)} - {""}):
+            fam = family_of(t) or known.get(_norm_type(t)) or t.split()[0]
+            out.setdefault(fam, []).append(t)
+        if not out:                       # catalogue absent : le secours tel quel
+            return fallback
+        return out
+
+    def type_to_family(self) -> dict:
+        """type détaillé (minuscules) → famille."""
+        return {t.lower(): fam for fam, ts in self.type_mapping().items() for t in ts}
+
+
+# Familles reconnues dans le nom d'un type Bambu (« PETG HF » → PETG,
+# « PA6-CF » → PA, « Support for PLA/PETG » → Support).
+FAMILIES = ("PLA", "PETG", "PET", "ABS", "ASA", "PA", "PC", "PPA", "PPS", "PVA", "TPU", "HIPS", "PEEK", "PEI")
+_FAMILY_ALIASES = {"PA6": "PA", "PA12": "PA", "PAHT": "PA", "PA11": "PA"}
+
+
+def _norm_type(t: str) -> str:
+    import re
+    return re.sub(r"[\s\-_/]+", " ", (t or "").strip().lower())
+
+
+def family_of(fila_type: str) -> Optional[str]:
+    """Famille deduite du type détaillé, ou None si rien n'est reconnu."""
+    import re
+    t = (fila_type or "").strip()
+    if not t:
+        return None
+    if t.lower().startswith("support"):
+        return "Support"
+    head = re.split(r"[\s\-_/+]+", t)[0].upper()
+    head = _FAMILY_ALIASES.get(head, head)
+    return head if head in FAMILIES else None
 
 
 def _normalize_color_code(raw: str) -> str:

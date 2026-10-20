@@ -1466,7 +1466,6 @@ async def catalog_search(
     import os, json as _json, re as _re
     from ....core.config import settings
     path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_color_codes.json")
-    type_path = os.path.join(settings.DATA_DIR, "bambu_catalog", "filaments_type_mapping.json")
     if not os.path.exists(path):
         return {"entries": [], "available": False}
 
@@ -1475,16 +1474,8 @@ async def catalog_search(
     except Exception:
         return {"entries": [], "available": False}
 
-    # Charger le mapping famille→types pour filtrer par famille
-    type_to_family: dict = {}
-    if os.path.exists(type_path):
-        try:
-            mapping = _json.loads(open(type_path).read())
-            for fam, types in mapping.items():
-                for t in types:
-                    type_to_family[t.lower()] = fam
-        except Exception:
-            pass
+    # Famille de chaque type : deduite, le fichier communautaire en secours
+    type_to_family: dict = _get_catalog().type_to_family()
 
     COLOR_TYPE_FR = {
         "单色":  "monochrome",
