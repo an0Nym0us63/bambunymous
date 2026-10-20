@@ -29,6 +29,7 @@ K_ACC = "NOTIF_ACCESSORIES"         # {id accessoire: "low" | "out"} deja signal
 K_UNSOLD = "NOTIF_UNSOLD"           # objets en vente deja signales
 K_OVERDUE = "NOTIF_OVERDUE"         # id de la derniere impression signalee en retard
 K_MWAUTH = "NOTIF_MW_AUTH"          # "lost" : jeton refuse deja signale
+K_BOOSTS = "NOTIF_BOOST_TOKENS"     # {"ids": [jetons boost connus], "warned": [deja signales proches de l'expiration]}
 
 
 def _fr(x: float, d: int = 1) -> str:
@@ -500,6 +501,81 @@ async def mw_auth_tick(cfg) -> int:
     return 1
 
 
+# ── MakerWorld : jetons boost ────────────────────────────────────────────────
+BOOST_EVERY_S = 3 * 3600
+_BOOST = {"t": 0.0}
+BOOST_REASONS = {"plan": "avec ton abonnement"}
+
+
+def _fr_date(iso) -> str:
+    """« 16 nov. » en heure locale."""
+    try:
+        from .achievements import _local
+        d = _local(datetime.fromisoformat(str(iso).replace("Z", "+00:00")).replace(tzinfo=None))
+    except Exception:
+        return "?"
+    mois = "janv. févr. mars avr. mai juin juil. août sept. oct. nov. déc.".split()
+    return f"{d.day} {mois[d.month - 1]}"
+
+
+async def boost_tokens_tick(cfg) -> int:
+    """Toutes les 3 h : nouveaux jetons boost, et ceux qui expirent bientot (un
+    rappel par jeton). Le premier passage memorise sans rien envoyer."""
+    import time
+    from . import makerworld_account as A
+    if time.time() - _BOOST["t"] < BOOST_EVERY_S:
+        return 0
+    _BOOST["t"] = time.time()
+    if not await A.token():
+        return 0
+    rights = await A.boost_rights()
+    now = datetime.utcnow()
+    st = await _get(K_BOOSTS, None)
+    ids = [r["id"] for r in rights]
+    if not isinstance(st, dict):
+        await _put(K_BOOSTS, {"ids": ids, "warned": []})
+        return 0
+    known, warned = set(st.get("ids") or []), set(st.get("warned") or [])
+    sent = 0
+    n_av = len(rights)
+    link = N.app_link(cfg, "/prints?tab=makerworld")
+    new = [r for r in rights if r["id"] not in known]
+    if new and N.enabled_in(cfg, "mw_boost_token"):
+        why = {BOOST_REASONS.get(r["reason"], r["reason"]) for r in new} - {""}
+        first_exp = min((r["expire_at"] for r in new if r["expire_at"]), default=None)
+        lines = [(f"Obtenu{'s' if len(new) > 1 else ''} " + " et ".join(sorted(why)) if why else "Obtenu")
+                 + (f" · expire le {_fr_date(first_exp)}" if first_exp else ""),
+                 f"🚀 {n_av} jeton{'s' if n_av > 1 else ''} disponible{'s' if n_av > 1 else ''}"]
+        await N.notify("mw_boost_token", "🚀 Nouveau jeton boost" if len(new) == 1 else f"🚀 {len(new)} nouveaux jetons boost",
+                       "\n".join(lines), click=link, priority=2)
+        sent += 1
+    days = N.options_of(cfg, "mw_boost_expiring")["days"]
+    soon = []
+    for r in rights:
+        try:
+            exp = datetime.fromisoformat(str(r["expire_at"]).replace("Z", "+00:00")).replace(tzinfo=None)
+        except (TypeError, ValueError):
+            continue
+        if now < exp <= now + timedelta(days=days) and r["id"] not in warned:
+            soon.append((exp, r))
+    if soon and N.enabled_in(cfg, "mw_boost_expiring"):
+        soon.sort(key=lambda x: x[0])
+        lines = []
+        for exp, r in soon[:6]:
+            left = (exp - now).days
+            lines.append(f"Expire le {_fr_date(r['expire_at'])} ("
+                         + ("aujourd'hui" if left < 1 else "demain" if left < 2 else f"dans {left} jours") + ")")
+        lines.append(f"🚀 {n_av} jeton{'s' if n_av > 1 else ''} disponible{'s' if n_av > 1 else ''}")
+        n = len(soon)
+        await N.notify("mw_boost_expiring", f"⏳ {n} jeton{'s' if n > 1 else ''} boost expire{'nt' if n > 1 else ''} bientôt",
+                       "\n".join(lines), click=link, priority=3)
+        sent += 1
+    warned |= {r["id"] for _e, r in soon}
+    # on oublie les jetons depenses ou expires
+    await _put(K_BOOSTS, {"ids": ids, "warned": sorted(w for w in warned if w in set(ids))})
+    return sent
+
+
 # ── Boucle commune ───────────────────────────────────────────────────────────
 # (types qui la reclament, verification) ; None : toujours (les succes se
 # tiennent a jour meme quand leur notification est coupee).
@@ -507,7 +583,8 @@ _TICKS = [(("attention_new",), attention_tick), (("weekly_summary",), weekly_tic
           (None, achievements_tick), (("mw_queue_ready",), queue_ready_tick),
           (("dry_needed_loaded",), dry_needed_tick), (("dry_forgotten",), dry_forgotten_tick),
           (("accessory_low", "accessory_out"), accessories_tick), (("objects_unsold",), unsold_tick),
-          (("print_overdue",), overdue_tick), (("mw_auth_lost",), mw_auth_tick)]
+          (("print_overdue",), overdue_tick), (("mw_auth_lost",), mw_auth_tick),
+          (("mw_boost_token", "mw_boost_expiring"), boost_tokens_tick)]
 
 
 async def loop(period_s: int = 900, first_delay_s: int = 180):

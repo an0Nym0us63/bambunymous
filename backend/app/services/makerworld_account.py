@@ -637,6 +637,33 @@ async def boosts() -> dict:
     return {"available": n}
 
 
+async def boost_rights() -> list:
+    """Mes jetons boost disponibles, un par un : {id, reason, expire_at}
+    (meme lecture que le compteur, page par page)."""
+    import asyncio
+    from .makerworld import _get_json
+    tok = await _tok()
+    out, offset = [], 0
+    while offset < 500:
+        code, d = await asyncio.to_thread(
+            _get_json, f"/point-service/boost/boostingright?filter=available&offset={offset}&limit=50", tok)
+        if code == 401:
+            raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+        hits = (d or {}).get("hits") if isinstance(d, dict) else None
+        if not isinstance(hits, list):
+            if offset == 0:
+                raise AccountError(f"Jetons boost illisibles (HTTP {code})")
+            break
+        for h in hits:
+            if isinstance(h, dict) and h.get("id") is not None:
+                out.append({"id": str(h["id"]), "reason": h.get("earnReason") or "", "expire_at": h.get("expireAt")})
+        total = d.get("availableTotal") or d.get("total") or 0
+        offset += 50
+        if len(hits) < 50 or offset >= total:
+            break
+    return out
+
+
 async def boost_state(design_id: str) -> dict:
     """Etat de boost d'un modele : puis-je le booster (droit disponible) ?"""
     import asyncio

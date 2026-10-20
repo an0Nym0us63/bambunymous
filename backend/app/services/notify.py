@@ -358,6 +358,20 @@ EVENTS["printer_idle"] = {
     "sample": {"title": "💤 L'imprimante n'a pas servi depuis 7 jours", "priority": 2, "link": "/prints",
                "message": "Dernière impression : Toucan, le 13 oct.\n📋 4 modèles t'attendent dans « À faire »."},
 }
+EVENTS["mw_boost_token"] = {
+    "section": "mw", "label": "Jeton boost obtenu",
+    "description": "Un nouveau jeton pour booster des modèles sur MakerWorld (vérifié toutes les 3 h).",
+    "options": [],
+    "sample": {"title": "🚀 Nouveau jeton boost", "priority": 2, "link": "/prints?tab=makerworld",
+               "message": "Obtenu avec ton abonnement · expire le 16 nov.\n🚀 7 jetons disponibles"},
+}
+EVENTS["mw_boost_expiring"] = {
+    "section": "mw", "label": "Jeton boost bientôt expiré",
+    "description": "Un jeton boost arrive à expiration : utilise-le avant qu'il ne soit perdu (un rappel par jeton).",
+    "options": [{"key": "days", "type": "number", "label": "Moins de", "unit": "jours", "default": 5, "min": 1, "max": 30}],
+    "sample": {"title": "⏳ 1 jeton boost expire bientôt", "priority": 3, "link": "/prints?tab=makerworld",
+               "message": "Expire le 2 nov. (dans 4 jours)\n🚀 7 jetons disponibles"},
+}
 EVENTS["mw_comment"] = {
     "section": "mw", "label": "Nouveau commentaire sur un de mes modèles",
     "description": "Quelqu'un a commenté un de tes modèles MakerWorld (relevé toutes les 30 min).",
