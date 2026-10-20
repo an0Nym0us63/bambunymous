@@ -389,7 +389,7 @@ EVENTS["achievement_unlocked"] = {
 }
 EVENTS["keys_gained"] = {
     "section": "achievements", "label": "Clés gagnées",
-    "description": "Des clés pour révéler les secrets : 10 impressions réussies, paliers et secrets gagnés, début de mois (2), Noël (5).",
+    "description": "Chaque clé gagnée pour révéler les secrets : impressions réussies, paliers et secrets gagnés… et quelques surprises.",
     "options": [],
     "sample": {"title": "🎁 Bon début de mois : +2 clés !", "priority": 2, "link": "/stats?tab=achievements&cat=secret",
                "message": "🎁 +2 · Début du mois\nTu as maintenant 12 clés : de quoi révéler des secrets."},
