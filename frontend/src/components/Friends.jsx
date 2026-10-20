@@ -232,6 +232,25 @@ export function useHasFriends() {
   return !friend && (n || 0) > 0;
 }
 
+// Combien de copains impriment en ce moment (pastille du menu du compte) :
+// relu toutes les 2 min et au retour sur l'onglet, chez moi seulement.
+export function useFriendsPrinting() {
+  const has = useHasFriends();
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (!has) { setN(0); return; }
+    let alive = true;
+    const load = () => client.get("/friends/shared/printing")
+      .then(({ data }) => { if (alive) setN((data.printing || []).length); }).catch(() => {});
+    load();
+    const t = setInterval(load, 120_000);
+    const vis = () => { if (document.visibilityState === "visible") load(); };
+    document.addEventListener("visibilitychange", vis);
+    return () => { alive = false; clearInterval(t); document.removeEventListener("visibilitychange", vis); };
+  }, [has]);
+  return n;
+}
+
 // Image relayee par mon serveur : une <img> n'envoie pas d'en-tete, le jeton part en _t.
 export const relayed = (u) => {
   if (!u || !u.startsWith("/api/v1/friends/")) return u;

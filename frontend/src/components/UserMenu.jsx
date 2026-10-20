@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { LogOut } from "lucide-react";
 import { useAuth, ROLE_LABEL, ROLE_ADMIN } from "../store/auth";
-import { FriendPicker } from "./Friends";
+import { FriendPicker, useFriendsPrinting } from "./Friends";
 
 // Violet du scrim natif de la coquille Android : le meme, pour que la pastille
 // se lise comme une continuite de l'application et non comme un accent de plus.
@@ -63,16 +63,25 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
         : { top: rect.bottom + 8, right: window.innerWidth - rect.right })
     : null;
 
+  const busy = useFriendsPrinting();          // copains qui impriment en ce moment
   return (
     <>
       <button ref={btnRef} onClick={toggle} aria-label="Compte"
+        title={busy ? `${busy} copain${busy > 1 ? "s" : ""} en train d'imprimer` : undefined}
         style={{ display:"flex", alignItems:"center", gap:9, flexShrink:0,
           background:"none", border:"none", padding:0, cursor:"pointer" }}>
         <span style={{ width:size, height:size, borderRadius:"50%", flexShrink:0,
           background:AVATAR_BG, color:"white", fontWeight:700,
           fontSize:Math.round(size*0.45), lineHeight:1,
-          display:"flex", alignItems:"center", justifyContent:"center" }}>
+          display:"flex", alignItems:"center", justifyContent:"center", position:"relative" }}>
           {initial}
+          {/* Activite chez les copains : un point vert, le nombre s'ils sont plusieurs */}
+          {busy > 0 && (
+            <span style={{ animation:"friendPulse 2.4s ease-in-out infinite", position:"absolute", top:-3, right:-4, minWidth: busy > 1 ? 15 : 10,
+              height: busy > 1 ? 15 : 10, padding: busy > 1 ? "0 3px" : 0, borderRadius:8, background:"#22c55e",
+              color:"white", fontSize:9, fontWeight:800, lineHeight:"15px", textAlign:"center", boxSizing:"border-box",
+              boxShadow:"0 0 0 2px var(--surface)" }}>{busy > 1 ? busy : ""}</span>
+          )}
         </span>
         {showName && (
           <span style={{ fontSize:13, color:"var(--text2)", overflow:"hidden",
