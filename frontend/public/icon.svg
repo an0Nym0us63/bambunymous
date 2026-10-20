@@ -9,25 +9,12 @@
       <stop offset="100%" stop-color="rgba(255,255,255,0)"/>
     </linearGradient>
   </defs>
-
   <!-- Fond arrondi bleu/violet -->
   <rect width="512" height="512" rx="115" fill="url(#bg)"/>
-  <!-- Reflet subtil -->
   <rect width="512" height="256" rx="115" fill="url(#shine)"/>
-
-  <!-- Lettre B blanche, bold, centrée légèrement haute -->
-  <text x="220" y="330"
-        font-family="system-ui,-apple-system,BlinkMacSystemFont,sans-serif"
-        font-size="320" font-weight="900"
-        fill="white" text-anchor="middle"
-        letter-spacing="-10">B</text>
-
-  <!-- Nozzle sous le B — signature 3D printing -->
-  <rect x="196" y="370" width="48" height="52" rx="6" fill="rgba(255,255,255,0.9)"/>
-  <path d="M 196 422 L 220 474 L 244 422 Z" fill="rgba(255,255,255,0.9)"/>
-  <!-- Point fondu -->
-  <circle cx="220" cy="480" r="10" fill="rgba(255,255,255,0.7)"/>
-
-  <!-- Ligne d impression -->
-  <rect x="96" y="490" width="320" height="6" rx="3" fill="rgba(255,255,255,0.2)"/>
+  <!-- Le masque en forme de B : yeux, moustache et barbiche-buse sont des
+       ouvertures (evenodd), le fond les traverse. Dessine sur 100x100. -->
+  <g transform="translate(256 258) scale(4.2) translate(-53.5 -50)">
+    <path fill="#ffffff" fill-rule="evenodd" d="M22 9 H55 C72 9 80.5 18.5 80.5 30.5 C80.5 38.5 76.5 43.8 70.5 46.8 C79.8 49.8 85 57.2 85 67.5 C85 81.5 74.5 91 57 91 H22 Z M33 31 C37.5 25.5 44 25.5 48 31 C44 33.8 37.5 33.8 33 31 Z M55 31 C59 25.5 65.5 25.5 70 31 C65.5 33.8 59 33.8 55 31 Z M29 64 C38 55.5 46.5 57.5 52 62.5 C57.5 57.5 66 55.5 75 64 C67.5 61 59 66.5 52 69.5 C45 66.5 36.5 61 29 64 Z M48.2 73.5 H55.8 L52 87 Z"/>
+  </g>
 </svg>
