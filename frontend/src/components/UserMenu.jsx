@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { LogOut } from "lucide-react";
+import { LogOut, Trophy } from "lucide-react";
 import { useAuth, ROLE_LABEL, ROLE_ADMIN } from "../store/auth";
 import { FriendPicker, useFriendsPrinting } from "./Friends";
 
@@ -107,6 +107,12 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
               <p style={{ margin:"2px 0 0", fontSize:11, color:"var(--muted)" }}>{roleLabel}</p>
             </div>
             <FriendPicker onDone={() => setRect(null)}/>
+            <button onClick={() => { setRect(null); navigate("/achievements"); }}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
+                padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
+                cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>
+              <Trophy size={16} color="#F59E0B"/> Succès
+            </button>
             <button onClick={doLogout}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
                 padding:"12px 14px", background:"none", border:"none", cursor:"pointer",

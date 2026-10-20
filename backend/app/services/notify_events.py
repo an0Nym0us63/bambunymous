@@ -698,7 +698,7 @@ async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
     while True:
         try:
             cfg = await N._load()
-            if not (N.enabled_in(cfg, "friend_print_started") or N.enabled_in(cfg, "friend_print_done")):
+            if not any(N.enabled_in(cfg, e) for e in ("friend_print_started", "friend_print_done", "friend_prints_mine")):
                 last = None
             else:
                 from . import friends_shared as FS
@@ -724,6 +724,7 @@ async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
                                             design_id=pi.get("design_id"), rem=it.get("remaining_minutes") or 0)
                     if last is not None:
                         link = N.app_link(cfg, "/")
+                        mine = None                     # mes modeles publies (releve du createur), lus au besoin
                         for fid, c in cur.items():
                             p = last.get(fid)
                             if not p or c is p:
@@ -738,6 +739,14 @@ async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
                                 c["visual"] = vis              # garde pour la fin
                                 await N.notify("friend_print_started", f"👥 {who} imprime", "\n".join(lines),
                                                click=link, priority=2, **vis)
+                                if c.get("design_id") and N.enabled_in(cfg, "friend_prints_mine"):
+                                    if mine is None:
+                                        from .mw_creator import _snap_get
+                                        mine = set(((await _snap_get()) or {}).get("models") or {})
+                                    if str(c["design_id"]) in mine:
+                                        await N.notify("friend_prints_mine", f"🥰 {who} imprime ton modèle",
+                                                       f"📄 {c['print']}" if c["print"] else "",
+                                                       click=link, priority=3, **vis)
                             elif p["state"] == "printing" and c["state"] != "printing":
                                 vis = p.get("visual") or await _friend_visual(cfg, fid, p)
                                 await N.notify("friend_print_done", f"👥 {who} a fini d'imprimer",

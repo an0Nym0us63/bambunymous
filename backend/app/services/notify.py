@@ -31,13 +31,16 @@ SECTIONS = [
     ("spools", "🧵 Bobines et AMS"),
     ("mw", "🌐 MakerWorld"),
     ("friends", "👥 Copains"),
+    ("objects", "📦 Objets et accessoires"),
     ("attention", "⚠️ Points d'attention"),
+    ("achievements", "🏅 Succès"),
     ("system", "🖥️ BambuNymous"),
 ]
 # Teinte de chaque section dans l'appli Android (grande icone, categorie) :
 # envoyee avec chaque message, l'appli n'a rien en dur a republier.
 SECTION_COLORS = {"attention": "#EAB308", "prints": "#3B82F6", "printer": "#EF4444", "dry": "#06B6D4", "spools": "#F59E0B",
-                  "mw": "#22C55E", "friends": "#8B5CF6", "system": "#64748B"}
+                  "mw": "#22C55E", "friends": "#8B5CF6", "system": "#64748B",
+                  "objects": "#14B8A6", "achievements": "#F59E0B"}
 
 
 # Petite icone (barre d'etat) et teinte de la marque dans l'appli Android :
@@ -377,12 +380,68 @@ EVENTS["app_started"] = {
                "message": "Tout est reparti."},
 }
 
-EVENTS["print_milestone"] = {
-    "section": "prints", "label": "Jalons d'impression",
-    "description": "100ᵉ impression réussie, 10 kg de filament, 500 h d'impression, nouvelle impression la plus longue…",
+EVENTS["achievement_unlocked"] = {
+    "section": "achievements", "label": "Succès débloqué",
+    "description": "Une médaille gagnée : impressions, filaments, objets, MakerWorld, secrets… (vérifié toutes les 15 min).",
     "options": [],
-    "sample": {"title": "🎉 100ᵉ impression réussie !", "priority": 3, "link": "/stats",
-               "message": "Depuis le 12 mars 2025.\n🧵 11,8 kg de filament · ⏱ 612 h d'impression"},
+    "sample": {"title": "🏅 Succès débloqué : Imprimeur 🥇", "priority": 3, "link": "/achievements",
+               "message": "🥇 🖨️ Imprimeur · Or\n   1 000 impressions réussies — prochain cran : 2 500"},
+}
+EVENTS["accessory_low"] = {
+    "section": "objects", "label": "Accessoire bientôt épuisé",
+    "description": "Le stock d'un accessoire passe sous le seuil (une fois, jusqu'au réassort).",
+    "options": [{"key": "threshold", "type": "number", "label": "Sous", "unit": "pièces", "default": 3, "min": 1, "max": 100}],
+    "sample": {"title": "🔩 Plus que 2 : Aimants 6×2 mm", "priority": 2, "link": "/objects?tab=accessories",
+               "message": "Utilisé sur 14 objets.\n💶 0,08 € pièce"},
+}
+EVENTS["accessory_out"] = {
+    "section": "objects", "label": "Accessoire épuisé",
+    "description": "Plus aucun en stock alors qu'il sert sur des objets.",
+    "options": [],
+    "sample": {"title": "🚫 Rupture : Anneaux porte-clés", "priority": 3, "link": "/objects?tab=accessories",
+               "message": "Utilisé sur 31 objets : pense à en recommander."},
+}
+EVENTS["objects_unsold"] = {
+    "section": "objects", "label": "Objets à vendre depuis longtemps",
+    "description": "Des objets disponibles à la vente depuis plus de N jours (un rappel par objet).",
+    "options": [{"key": "days", "type": "number", "label": "Après", "unit": "jours", "default": 90, "min": 7, "max": 730}],
+    "sample": {"title": "🧸 3 objets en vente depuis plus de 90 jours", "priority": 1, "link": "/objects",
+               "message": "   • Dragon articulé (124 j)\n   • Vase spirale (98 j)\n   • Porte-clés Toucan (91 j)"},
+}
+EVENTS["print_overdue"] = {
+    "section": "prints", "label": "Impression en retard",
+    "description": "L'impression prendra nettement plus longtemps que prévu par le tranchage (pauses, sous-extrusion…).",
+    "options": [{"key": "pct", "type": "number", "label": "Au-delà de", "unit": "%", "default": 20, "min": 5, "max": 200}],
+    "sample": {"title": "⏳ Impression en retard : Toucan", "priority": 3, "link": "/prints",
+               "message": "Prévue : 3 h 10 · au rythme actuel : 4 h 05 (+29 %)\n⏱ encore 1 h 12"},
+}
+EVENTS["mw_auth_lost"] = {
+    "section": "mw", "label": "Connexion MakerWorld perdue",
+    "description": "Le jeton MakerWorld est refusé : points, collections et « À faire » ne se mettent plus à jour.",
+    "options": [],
+    "sample": {"title": "🔌 MakerWorld : reconnecte ton compte", "priority": 4, "link": "/settings?tab=links",
+               "message": "Le jeton est refusé ou expiré. Tant qu'il n'est pas remplacé, plus de points, de collections ni de file « À faire »."},
+}
+EVENTS["login_new"] = {
+    "section": "system", "label": "Connexion depuis un nouvel appareil",
+    "description": "Un compte se connecte depuis un appareil ou un navigateur jamais vu pour lui.",
+    "options": [],
+    "sample": {"title": "🔐 Nouvelle connexion : ludo", "priority": 3, "link": "/settings?tab=accounts",
+               "message": "📱 Android · Chrome\n🌍 adresse 81.250.12.34"},
+}
+EVENTS["login_failed"] = {
+    "section": "system", "label": "Échecs de connexion répétés",
+    "description": "Au moins 3 mots de passe ou codes faux en 15 minutes pour un même compte ou une même adresse.",
+    "options": [],
+    "sample": {"title": "🚨 4 échecs de connexion", "priority": 4, "link": "/settings?tab=accounts",
+               "message": "Compte « admin » · adresse 185.220.101.4\nDernier essai à 03:12"},
+}
+EVENTS["friend_prints_mine"] = {
+    "section": "friends", "label": "Un copain imprime un de mes modèles",
+    "description": "Il lance l'impression d'un modèle que tu as publié sur MakerWorld.",
+    "options": [],
+    "sample": {"title": "🥰 Léo imprime ton modèle", "priority": 3, "link": "/",
+               "message": "📄 Natrium — Casse-tête 6 pièces"},
 }
 EVENTS["mw_queue_ready"] = {
     "section": "mw", "label": "Modèle de « À faire » imprimable",
@@ -407,12 +466,12 @@ EVENTS["dry_forgotten"] = {
 }
 
 # Ordre d'affichage dans chaque section
-_ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_end", "print_done", "print_failed",
+_ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_end", "print_overdue", "print_done", "print_failed",
           "print_paused", "print_resumed", "print_speed",
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
           "dry_started", "dry_done", "dry_needed_loaded", "dry_forgotten",
           "spool_loaded", "spool_removed", "ams_humidity", "spool_low", "spool_short", "stock_low", "fil_to_order",
-          "printer_idle", "weekly_summary", "print_milestone", "mw_queue_ready", "app_update", "app_started"]
+          "printer_idle", "weekly_summary", "mw_queue_ready", "app_update", "app_started"]
 EVENTS = {**{k: EVENTS[k] for k in _ORDER if k in EVENTS}, **{k: v for k, v in EVENTS.items() if k not in _ORDER}}
 
 

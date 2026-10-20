@@ -8,6 +8,7 @@ import Settings from "./pages/Settings";
 import Logs from "./pages/Logs";
 import Stats from "./pages/Stats";
 import Notifications from "./pages/Notifications";
+import Achievements from "./pages/Achievements";
 import Objects from "./pages/Objects";
 import Filaments from "./pages/Filaments";
 import Prints from "./pages/Prints";
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="objects" element={<Objects />} />
         <Route path="stats" element={<Stats />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="achievements" element={<Achievements />} />
       </Route>
     </Routes>
     <DialogHost />

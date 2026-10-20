@@ -9,7 +9,8 @@ import { notifSeenEvent } from "../components/NotifBell";
 // impression). Ouvrir la page marque tout comme vu ; les nouvelles restent
 // signalees jusqu'au prochain passage. Onglets : une categorie (?cat=), puis
 // au besoin un type de cette categorie (?type=), gardes dans l'adresse.
-const SECTION_ICON = { prints: "🖨️", printer: "📡", dry: "💧", spools: "🧵", mw: "🌐", friends: "👥", system: "🖥️" };
+const SECTION_ICON = { prints: "🖨️", printer: "📡", dry: "💧", spools: "🧵", mw: "🌐", friends: "👥", system: "🖥️",
+  objects: "📦", attention: "⚠️", achievements: "🏅" };
 
 const dayLabel = d => {
   const t = new Date(); t.setHours(0, 0, 0, 0);

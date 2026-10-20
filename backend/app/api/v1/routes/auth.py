@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, Body, Depends, Form, HTTPException, status
+from fastapi import APIRouter, Body, Depends, Form, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -24,8 +24,23 @@ class Token(BaseModel):
 
 
 @router.post("/login", response_model=Token)
-async def login(form: OAuth2PasswordRequestForm = Depends(), otp: str | None = Form(None),
+async def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), otp: str | None = Form(None),
                 db: AsyncSession = Depends(get_db)):
+    """Connexion, surveillee : nouvel appareil, echecs repetes (services/login_watch)."""
+    from ....services import login_watch as W
+    ip = W.client_ip(request)
+    try:
+        out = await _login(form, otp, db)
+    except HTTPException as e:
+        # « 2FA_REQUIRED » n'est pas un echec : le mot de passe etait bon
+        if e.status_code == 401 and e.detail != "2FA_REQUIRED":
+            W.spawn(W.on_failure(form.username, ip))
+        raise
+    W.spawn(W.on_success(form.username, ip, request.headers.get("user-agent", "")))
+    return out
+
+
+async def _login(form, otp, db: AsyncSession):
     """
     Authentification sur la table users. Repli historique : si la table est vide
     (premiere version, ou migration pas encore passee), on accepte l'admin stocke

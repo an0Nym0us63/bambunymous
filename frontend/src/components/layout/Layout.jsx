@@ -30,6 +30,8 @@ const TITLES = {
   "/stats":     "Statistiques",
   "/settings":  "Paramètres",
   "/logs":      "Journal",
+  "/notifications": "Notifications",
+  "/achievements":  "Succès",
 };
 
 const S = {

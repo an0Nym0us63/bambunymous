@@ -4,7 +4,7 @@ Notifications calculees a intervalles (20/10/2026) :
   - resume de la semaine d'impression ;
   - imprimante au repos depuis N jours ;
   - mise a jour de BambuNymous disponible (services/version_check) ;
-  - jalons d'impression, modele de « A faire » devenu imprimable ;
+  - succes (services/achievements), modele de « A faire » devenu imprimable ;
   - bobine a secher chargee, bobine oubliee apres le sechage.
 Chaque boucle memorise ce qu'elle a deja signale dans un reglage (survit aux
 redemarrages) ; un premier passage memorise sans rien envoyer.
@@ -22,10 +22,17 @@ K_ATT = "NOTIF_ATTENTION_STATE"     # {"seen": [cles], "pending": {cle: ligne}, 
 K_WEEK = "NOTIF_WEEKLY_SENT"        # "AAAA-MM-JJ" du dernier resume
 K_IDLE = "NOTIF_IDLE_SENT"          # id du dernier print au moment du rappel
 K_UPD = "NOTIF_UPDATE_SENT"         # dernier commit annonce
-K_MILE = "NOTIF_MILESTONES"         # paliers atteints et record de duree
 K_QREADY = "NOTIF_QUEUE_READY"      # modeles de « A faire » deja imprimables
 K_DRYN = "NOTIF_DRY_NEEDED"         # bobines a secher deja signalees
 K_DRYF = "NOTIF_DRY_FORGOTTEN"      # par unite AMS : {"was", "idle", "sent"}
+K_ACC = "NOTIF_ACCESSORIES"         # {id accessoire: "low" | "out"} deja signales
+K_UNSOLD = "NOTIF_UNSOLD"           # objets en vente deja signales
+K_OVERDUE = "NOTIF_OVERDUE"         # id de la derniere impression signalee en retard
+K_MWAUTH = "NOTIF_MW_AUTH"          # "lost" : jeton refuse deja signale
+
+
+def _fr(x: float, d: int = 1) -> str:
+    return f"{x:.{d}f}".replace(".", ",")
 
 
 async def _get(key, default):
@@ -191,72 +198,6 @@ async def idle_tick(cfg) -> int:
     return 1
 
 
-# ── Jalons d'impression ──────────────────────────────────────────────────────
-# Paliers, puis tous les `every` au-dela du dernier.
-MILE_COUNT = ([10, 25, 50, 100, 200, 300, 400, 500, 750, 1000], 500)
-MILE_KG = ([1, 2, 5, 10, 20, 30, 40, 50, 75, 100], 50)
-MILE_HOURS = ([24, 100, 250, 500, 750, 1000, 1500, 2000], 1000)
-RECORD_MIN_S = 2 * 3600            # un record de duree ne compte qu'au-dela de 2 h
-
-
-def _mile(v: float, spec) -> int:
-    """Le palier le plus haut atteint par v (0 : aucun)."""
-    marks, every = spec
-    if v < marks[0]:
-        return 0
-    if v < marks[-1]:
-        return max(m for m in marks if m <= v)
-    return marks[-1] + int((v - marks[-1]) // every) * every
-
-
-def _fr(x: float, d: int = 1) -> str:
-    return f"{x:.{d}f}".replace(".", ",")
-
-
-async def milestone_tick(cfg) -> int:
-    from sqlalchemy import func, select
-    from ..db.session import AsyncSessionLocal
-    from ..models.print_history import Print
-    ok_status = ("SUCCESS", "PARTIAL")
-    async with AsyncSessionLocal() as db:
-        n_ok, first = (await db.execute(select(func.count(Print.id), func.min(Print.print_date))
-                                        .where(Print.status.in_(ok_status)))).one()
-        grams, secs = (await db.execute(select(func.coalesce(func.sum(Print.total_weight_g), 0),
-                                               func.coalesce(func.sum(Print.duration_seconds), 0))
-                                        .where(Print.status != "IN_PROGRESS"))).one()
-        longest = (await db.execute(select(Print).where(Print.status.in_(ok_status))
-                                    .order_by(Print.duration_seconds.desc()).limit(1))).scalar_one_or_none()
-    now = {"count": _mile(n_ok or 0, MILE_COUNT), "kg": _mile((grams or 0) / 1000, MILE_KG),
-           "hours": _mile((secs or 0) / 3600, MILE_HOURS),
-           "longest_id": longest.id if longest else None, "longest_s": int((longest.duration_seconds or 0) if longest else 0)}
-    st = await _get(K_MILE, None)
-    await _put(K_MILE, now)
-    if not isinstance(st, dict):                    # premier passage : on memorise
-        return 0
-    lines, titles, link = [], [], "/stats"
-    if now["count"] > (st.get("count") or 0):
-        titles.append(f"🎉 {now['count']}ᵉ impression réussie !")
-    if now["kg"] > (st.get("kg") or 0):
-        titles.append(f"🧵 {now['kg']} kg de filament imprimé !")
-    if now["hours"] > (st.get("hours") or 0):
-        h = now["hours"]
-        titles.append("⏱ 24 h d'impression cumulées !" if h == 24 else f"⏱ {h} h d'impression cumulées !")
-    if (longest and now["longest_id"] != st.get("longest_id") and now["longest_s"] >= RECORD_MIN_S
-            and now["longest_s"] > (st.get("longest_s") or 0) + 60 and st.get("longest_s")):
-        name = longest.translated_name or longest.file_name or "?"
-        titles.append("🏆 Nouveau record : ta plus longue impression")
-        lines.append(f"🏆 {name} : {_dur(now['longest_s'])} (avant : {_dur(st['longest_s'])})")
-        link = f"/prints?id={longest.id}"
-    if not titles:
-        return 0
-    if first:
-        lines.append(f"Depuis le {first.strftime('%d/%m/%Y')}.")
-    lines.append(f"🖨️ {n_ok} impressions réussies · 🧵 {_fr((grams or 0) / 1000, 2)} kg · ⏱ {int((secs or 0) // 3600)} h")
-    lines = [t for t in titles[1:]] + lines
-    await N.notify("print_milestone", titles[0], "\n".join(lines), click=N.app_link(cfg, link), priority=3)
-    return 1
-
-
 # ── « A faire » : modele devenu imprimable ──────────────────────────────────
 QUEUE_EVERY_S = 3600
 
@@ -399,10 +340,174 @@ async def dry_forgotten_tick(cfg) -> int:
     return sent
 
 
+# ── Succes ───────────────────────────────────────────────────────────────────
+async def achievements_tick(cfg) -> int:
+    """La notification ne part que si son type est active ; les medailles, elles,
+    se tiennent a jour dans tous les cas (voir loop)."""
+    from . import achievements
+    return len(await achievements.tick())
+
+
+# ── Accessoires et objets ────────────────────────────────────────────────────
+async def accessories_tick(cfg) -> int:
+    """Accessoire sous le seuil, ou epuise alors qu'il sert : une fois, jusqu'a
+    ce que le stock remonte au-dessus."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.object_history import Accessory, ObjectAccessory
+    async with AsyncSessionLocal() as db:
+        accs = (await db.execute(select(Accessory))).scalars().all()
+        links = (await db.execute(select(ObjectAccessory.accessory_id, ObjectAccessory.object_id))).all()
+    used = {}
+    for aid, oid in links:
+        used.setdefault(aid, set()).add(oid)
+    low_on, out_on = N.enabled_in(cfg, "accessory_low"), N.enabled_in(cfg, "accessory_out")
+    thr = N.options_of(cfg, "accessory_low")["threshold"]
+    st = await _get(K_ACC, None)
+    first = not isinstance(st, dict)
+    st = {} if first else st
+    out, sent = {}, 0
+    for a in accs:
+        q, n_obj = a.quantity or 0, len(used.get(a.id, ()))
+        state = "out" if q == 0 and n_obj else "low" if 0 < q < thr else ""
+        prev = st.get(str(a.id), "")
+        if state:
+            out[str(a.id)] = state
+        # deja signale (ou pire deja signale) : rien de neuf
+        if first or not state or state == prev or (prev == "out" and state == "low"):
+            continue
+        link = N.app_link(cfg, "/objects?tab=accessories")
+        plural = "s" if n_obj > 1 else ""
+        if state == "out" and out_on:
+            await N.notify("accessory_out", f"🚫 Rupture : {a.name}",
+                           f"Utilisé sur {n_obj} objet{plural} : pense à en recommander.", click=link, priority=3)
+            sent += 1
+        elif state == "low" and low_on:
+            lines = ([f"Utilisé sur {n_obj} objet{plural}."] if n_obj else []) + \
+                    ([f"💶 {_fr(a.unit_price, 2)} € pièce"] if a.unit_price else [])
+            await N.notify("accessory_low", f"🔩 Plus que {q} : {a.name}", "\n".join(lines), click=link, priority=2)
+            sent += 1
+    await _put(K_ACC, out)
+    return sent
+
+
+async def unsold_tick(cfg) -> int:
+    """Objets en vente depuis plus de N jours : un rappel par objet, groupes."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.object_history import Object
+    days = N.options_of(cfg, "objects_unsold")["days"]
+    limit = datetime.utcnow() - timedelta(days=days)
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Object).where(Object.status == "available", Object.created_at < limit)
+                                 .order_by(Object.created_at))).scalars().all()
+    ids = [o.id for o in rows]
+    st = await _get(K_UNSOLD, None)
+    if not isinstance(st, list):                    # premier passage : on memorise
+        await _put(K_UNSOLD, ids)
+        return 0
+    if _now().hour < 10:                            # pas au milieu de la nuit
+        return 0
+    known = set(st)
+    new = [o for o in rows if o.id not in known]
+    await _put(K_UNSOLD, [i for i in st if i in set(ids)] + [o.id for o in new])
+    if not new:
+        return 0
+    now = datetime.utcnow()
+    lines = [f"   • {o.translated_name or o.name} ({(now - o.created_at).days} j)" for o in new[:8]] + \
+            ([f"   • … et {len(new) - 8} autre(s)"] if len(new) > 8 else [])
+    n = len(new)
+    await N.notify("objects_unsold", f"🧸 {n} objet{'s' if n > 1 else ''} en vente depuis plus de {days} jours",
+                   "\n".join(lines), click=N.app_link(cfg, "/objects"), priority=1)
+    return 1
+
+
+# ── Impression en retard ─────────────────────────────────────────────────────
+def _printer_state():
+    try:
+        from ..core.mqtt import get_state
+        return get_state()
+    except Exception:
+        return None
+
+
+async def overdue_tick(cfg) -> int:
+    """Duree prevue par l'imprimante (ecoule + restant) nettement au-dela de
+    l'estimation du tranchage : une fois par impression."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    s = _printer_state()
+    if not s or str(s.status or "").upper() not in ("RUNNING", "PAUSE"):
+        return 0
+    async with AsyncSessionLocal() as db:
+        p = (await db.execute(select(Print).where(Print.status == "IN_PROGRESS")
+                              .order_by(Print.print_date.desc()).limit(1))).scalar_one_or_none()
+    if not p or not p.estimated_seconds or p.estimated_seconds < 600:
+        return 0
+    if await _get(K_OVERDUE, None) == p.id:
+        return 0
+    pct = N.options_of(cfg, "print_overdue")["pct"]
+    elapsed = (datetime.utcnow() - p.print_date).total_seconds()
+    rem = int(s.remaining_minutes or 0) * 60
+    total = elapsed + rem
+    if elapsed < 900 or total <= p.estimated_seconds * (1 + pct / 100):
+        return 0
+    await _put(K_OVERDUE, p.id)
+    over = round((total / p.estimated_seconds - 1) * 100)
+    lines = [f"Prévue : {_dur(p.estimated_seconds)} · au rythme actuel : {_dur(total)} (+{over} %)"]
+    if rem:
+        lines.append(f"⏱ encore {_dur(rem)}")
+    if str(s.status).upper() == "PAUSE":
+        lines.append("⏸ L'impression est en pause.")
+    await N.notify("print_overdue", f"⏳ Impression en retard : {p.translated_name or p.file_name or '?'}",
+                   "\n".join(lines), click=N.app_link(cfg, f"/prints?id={p.id}"), priority=3)
+    return 1
+
+
+# ── MakerWorld : jeton refuse ────────────────────────────────────────────────
+MW_AUTH_EVERY_S = 3600
+_MW_AUTH = {"t": 0.0}
+
+
+async def mw_auth_tick(cfg) -> int:
+    """Une fois par heure : le jeton est-il encore accepte ? Une seule
+    notification tant qu'il n'est pas remplace."""
+    import time
+    from . import makerworld_account as A
+    if time.time() - _MW_AUTH["t"] < MW_AUTH_EVERY_S:
+        return 0
+    _MW_AUTH["t"] = time.time()
+    tok = await A.token()
+    if not tok:
+        await _put(K_MWAUTH, "")
+        return 0
+    try:
+        await A._profile(tok)
+        await _put(K_MWAUTH, "")
+        return 0
+    except A.AccountError as e:
+        if "refus" not in str(e).lower():           # profil illisible : pas une deconnexion
+            return 0
+    except Exception:
+        return 0                                    # reseau : on reessaiera
+    if await _get(K_MWAUTH, "") == "lost":
+        return 0
+    await _put(K_MWAUTH, "lost")
+    await N.notify("mw_auth_lost", "🔌 MakerWorld : reconnecte ton compte",
+                   "Le jeton est refusé ou expiré. Tant qu'il n'est pas remplacé, plus de points, "
+                   "de collections ni de file « À faire ».", click=N.app_link(cfg, "/settings?tab=links"), priority=4)
+    return 1
+
+
 # ── Boucle commune ───────────────────────────────────────────────────────────
-_TICKS = [("attention_new", attention_tick), ("weekly_summary", weekly_tick), ("printer_idle", idle_tick),
-          ("print_milestone", milestone_tick), ("mw_queue_ready", queue_ready_tick),
-          ("dry_needed_loaded", dry_needed_tick), ("dry_forgotten", dry_forgotten_tick)]
+# (types qui la reclament, verification) ; None : toujours (les succes se
+# tiennent a jour meme quand leur notification est coupee).
+_TICKS = [(("attention_new",), attention_tick), (("weekly_summary",), weekly_tick), (("printer_idle",), idle_tick),
+          (None, achievements_tick), (("mw_queue_ready",), queue_ready_tick),
+          (("dry_needed_loaded",), dry_needed_tick), (("dry_forgotten",), dry_forgotten_tick),
+          (("accessory_low", "accessory_out"), accessories_tick), (("objects_unsold",), unsold_tick),
+          (("print_overdue",), overdue_tick), (("mw_auth_lost",), mw_auth_tick)]
 
 
 async def loop(period_s: int = 900, first_delay_s: int = 180):
@@ -415,12 +520,12 @@ async def loop(period_s: int = 900, first_delay_s: int = 180):
         except Exception as e:
             cfg = None
             logger.warning(f"[NOTIF] verifications periodiques : {e}")
-        for event, tick in _TICKS if cfg else []:
+        for events, tick in _TICKS if cfg else []:
             try:
-                if N.enabled_in(cfg, event):
+                if events is None or any(N.enabled_in(cfg, e) for e in events):
                     await tick(cfg)
             except Exception as e:
-                logger.warning(f"[NOTIF] {event} : {e}")
+                logger.warning(f"[NOTIF] {tick.__name__} : {e}")
         await asyncio.sleep(period_s)
 
 
