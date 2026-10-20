@@ -31,7 +31,9 @@ export default function NotifBell({ size = 20 }) {
     <button onClick={() => navigate("/notifications")} aria-label={n ? `${n} notification${n > 1 ? "s" : ""} non vue${n > 1 ? "s" : ""}` : "Notifications"}
       title="Notifications" style={{ position:"relative", flexShrink:0, width:size + 14, height:size + 14, borderRadius:"50%",
         border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-        background: active ? "rgba(59,130,246,0.15)" : "transparent", color: active ? "#3b82f6" : "var(--text2)" }}>
+        // pastille bleue douce tout le temps (la cloche noire faisait brut),
+        // un peu plus marquee sur la page Notifications
+        background: active ? "rgba(59,130,246,0.22)" : "rgba(59,130,246,0.12)", color:"#3b82f6" }}>
       <Bell size={size} strokeWidth={2.1}/>
       {n > 0 && (
         <span style={{ position:"absolute", top:1, right:0, minWidth:16, height:16, padding:"0 4px", borderRadius:8,
