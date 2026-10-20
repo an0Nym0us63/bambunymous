@@ -911,14 +911,14 @@ TIER_TABLE = {
     "rfid": [5, 10, 15, 25, 35, 45, 60, 80, 100],
     "labels": [5, 10, 20, 30, 45, 60, 80, 110, 150],
     "multicolor_fils": [1, 2, 3, 4, 5, 6, 7, 8, 10],
-    "objects": [25, 100, 250, 500, 1000, 2500],
-    "sold": [1, 10, 50, 100, 500, 1000],
-    "revenue": [50, 250, 1000, 5000, 10000, 25000],
-    "gifted": [1, 5, 20, 50, 100, 250],
-    "personal": [5, 25, 50, 100, 250, 500],
-    "accessories": [25, 100, 250, 500, 1000, 2500],
-    "groups": [1, 5, 10, 25, 50, 100],
-    "margin": [50, 250, 1000, 2500, 5000, 10000],
+    "objects": [10, 25, 50, 80, 110, 150, 190, 240, 300],
+    "sold": [1, 3, 6, 10, 15, 25, 35, 50, 75],
+    "revenue": [10, 25, 50, 80, 120, 175, 250, 350, 500],
+    "gifted": [1, 3, 6, 10, 15, 25, 35, 50, 75],
+    "personal": [5, 10, 25, 40, 60, 80, 110, 150, 200],
+    "accessories": [10, 50, 100, 175, 250, 350, 450, 600, 750],
+    "groups": [1, 2, 4, 6, 10, 15, 20, 30, 40],
+    "margin": [5, 10, 25, 40, 60, 85, 120, 175, 250],
     "mw_designs": [1, 5, 10, 25, 50, 100],
     "mw_downloads": [500, 2500, 10000, 25000, 50000, 100000],
     "mw_prints": [250, 1000, 5000, 10000, 25000, 50000],
@@ -987,11 +987,11 @@ TIER_TABLE = {
     "catalog": [5, 10, 20, 30, 45, 60, 80, 110, 150],
     "bambu_spools": [5, 10, 25, 40, 60, 80, 110, 150, 200],
     "other_spools": [2, 5, 8, 12, 16, 20, 25, 35, 50],
-    "assembled": [5, 25, 50, 100, 250, 500],
-    "accessory_refs": [5, 10, 25, 50, 100, 200],
-    "accessory_units": [50, 100, 250, 500, 1000, 2500],
-    "best_sale": [10, 25, 50, 100, 250, 500],
-    "showcase": [5, 10, 25, 50, 100, 200],
+    "assembled": [2, 5, 10, 20, 35, 50, 70, 100, 150],
+    "accessory_refs": [2, 5, 10, 15, 20, 30, 40, 55, 75],
+    "accessory_units": [25, 50, 100, 200, 300, 450, 650, 900, 1200],
+    "best_sale": [2, 5, 10, 15, 20, 30, 45, 70, 100],
+    "showcase": [2, 5, 8, 12, 18, 25, 35, 45, 60],
     "notes": [1, 5, 10, 20, 30, 40, 55, 75, 100],
     "household": [2, 3, 4, 5, 8, 10],
     "shares": [1, 10, 25, 50, 100, 250],
@@ -1144,7 +1144,7 @@ async def _load_data() -> dict:
                                         Filament.label_printed_at, Filament.multicolor_type,
                                         Filament.fila_type, Filament.name))).all()
         objs = (await db.execute(select(Object.id, Object.status, Object.sold_date, Object.sold_price,
-                                        Object.created_at, Object.updated_at, Object.margin))).all()
+                                        Object.created_at, Object.updated_at, Object.cost_total))).all()
         groups = (await db.execute(select(ObjectGroup.created_at))).all()
         from sqlalchemy import func
         from ..models.activity import ActivityLog
@@ -1644,7 +1644,9 @@ def compute_series(d: dict, now: datetime) -> dict:
     # objets
     for i, dt in enumerate(sorted((_ts(o.created_at) or now) for o in d["objs"]), 1):
         push("objects", dt, i)
-    sold = sorted(((_ts(o.sold_date) or _ts(o.updated_at) or now), o.sold_price or 0, o.margin or 0)
+    # marge : prix de vente - cout de revient (comme la page Objets)
+    sold = sorted(((_ts(o.sold_date) or _ts(o.updated_at) or now), o.sold_price or 0,
+                   (o.sold_price or 0) - (getattr(o, "cost_total", None) or 0))
                   for o in d["objs"] if o.status == "sold")
     tot = marg = 0.0
     for i, (dt, pr, mg) in enumerate(sold, 1):
