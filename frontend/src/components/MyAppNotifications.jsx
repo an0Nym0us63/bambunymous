@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import client from "../api/client";
-import { BookOpen, Minus, Smartphone } from "lucide-react";
+import { Smartphone } from "lucide-react";
 import { pushApi, readPushStatus, sendEndpoint } from "./PushBridge";
 
 // Mes notifications sur l'appli Android : chaque compte de la maison inscrit
@@ -58,16 +58,15 @@ export default function MyAppNotifications({ embedded = false }) {
   return (<>
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
-        {embedded ? "Mes notifications (appli et cloche)" : "Mes notifications"}</h3>
+        {embedded ? "Mon téléphone" : "Mes notifications"}</h3>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 10px", lineHeight:1.5 }}>
-        Deux canaux, à cocher pour chaque notification : <b><BookOpen size={12} style={{ verticalAlign:-1 }}/> le journal</b>
-        (la 🔔 cloche, 15 jours) et <b><Smartphone size={12} style={{ verticalAlign:-1 }}/> ton téléphone</b> (appli Android
-        BambuNymous, avec l'appli <b>ntfy</b>). Celles que tu reçois déjà sur
-        ntfy ou Telegram entrent dans le journal déjà lues. Les autres comptes ont leurs propres choix.
+        Coche ce que tu veux recevoir sur <b><Smartphone size={12} style={{ verticalAlign:-1 }}/> ton téléphone</b> (appli
+        Android BambuNymous, avec l'appli <b>ntfy</b>). Tu les retrouves aussi dans la 🔔 cloche, lues dès que tu les touches.
+        Les autres comptes ont leurs propres choix.
       </p>
       {!me.app_on && (
         <p style={{ fontSize:12, color:"#f59e0b", margin:"0 0 10px" }}>
-          L'administrateur n'a pas activé l'appli Android : pour l'instant, seulement dans la cloche.</p>
+          L'administrateur n'a pas activé l'appli Android : rien ne partira sur le téléphone pour l'instant.</p>
       )}
       {push ? (
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12, color:"var(--text2)", marginBottom:8 }}>
@@ -101,7 +100,7 @@ export default function MyAppNotifications({ embedded = false }) {
     {me.sections.map(sec => {
       const evs = me.events.filter(e => e.section === sec.id);
       if (!evs.length) return null;
-      const n = evs.filter(e => e.journal || e.app).length;
+      const n = evs.filter(e => e.app).length;
       // etat d'un canal sur la section : tout / rien / melange
       const all = c => evs.every(e => e[c]) ? true : evs.some(e => e[c]) ? null : false;
       const isOpen = !!open[sec.id];
@@ -116,7 +115,7 @@ export default function MyAppNotifications({ embedded = false }) {
               <span style={{ fontSize:11, fontWeight:700, padding:"3px 9px", borderRadius:20, marginLeft:"auto",
                 color: n ? "#22c55e" : "var(--muted)", background: n ? "rgba(34,197,94,0.12)" : "var(--surface2)" }}>{n}/{evs.length}</span>
             </button>
-            <Channels journal={all("journal")} app={all("app")} disabled={busy === "ev"}
+            <Channels app={all("app")} disabled={busy === "ev"}
               onChange={(c, v) => setEvents({ [`section:${sec.id}`]: { [c]: v } })}/>
           </div>
           {isOpen && (
@@ -127,7 +126,7 @@ export default function MyAppNotifications({ embedded = false }) {
                     <div style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{e.label}</div>
                     <div style={{ fontSize:11.5, color:"var(--muted)", marginTop:2 }}>{e.description}</div>
                   </div>
-                  <Channels journal={e.journal} app={e.app} disabled={busy === "ev"}
+                  <Channels app={e.app} disabled={busy === "ev"}
                     onChange={(c, v) => setEvents({ [e.id]: { [c]: v } })}/>
                 </div>
               ))}
@@ -141,9 +140,11 @@ export default function MyAppNotifications({ embedded = false }) {
 
 // Deux canaux independants par type : le journal (la cloche) et le telephone
 // (appli Android). Vrai : actif ; null (en tete de section) : melange.
-const CHANNELS = [["journal", "Journal", "la cloche", BookOpen], ["app", "Téléphone", "appli Android", Smartphone]];
-function Channels({ journal, app, onChange, disabled }) {
-  const val = { journal, app };
+// Mon telephone, type par type (le journal est un canal commun, regle par
+// l'administrateur)
+const CHANNELS = [["app", "Téléphone", "appli Android", Smartphone]];
+function Channels({ app, onChange, disabled }) {
+  const val = { app };
   return (
     <span style={{ display:"inline-flex", flexShrink:0, gap:5 }}>
       {CHANNELS.map(([k, label, hint, Icon]) => {

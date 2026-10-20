@@ -353,7 +353,8 @@ class NotifyError(Exception):
 # Canal des notifications : ntfy, un bot Telegram (pour qui n'a pas ntfy), ou les deux.
 # Canaux, chacun active ou non (20/10/2026) : ntfy, bot Telegram, appli Android.
 # Remplace l'ancien choix exclusif « channel » (ntfy | telegram | both | app).
-KINDS = ("ntfy", "telegram", "app")
+KINDS = ("ntfy", "telegram", "app", "journal")
+PUSH_KINDS = ("ntfy", "telegram", "app")          # ceux qui envoient vraiment quelque chose
 _OLD_CHANNEL = {"ntfy": ("ntfy",), "telegram": ("telegram",), "both": ("ntfy", "telegram"), "app": ("app",)}
 TG_API = "https://api.telegram.org"
 
@@ -381,6 +382,8 @@ async def _load() -> dict:
     if not isinstance(cfg.get("channels"), dict):
         old = _OLD_CHANNEL.get(cfg.get("channel") or "ntfy", ("ntfy",))
         cfg["channels"] = {k: k in old or (k == "app" and bool(cfg.get("app_push"))) for k in KINDS}
+    cfg["channels"].setdefault("journal", True)       # le journal existait avant d'etre un canal
+    cfg.setdefault("journal", {})
     cfg.pop("channel", None)
     cfg.pop("app_push", None)
     _normalize(cfg)
@@ -439,38 +442,39 @@ def global_on(cfg, event: str) -> bool:
     return bool(cfg and ((cfg.get("events") or {}).get(event) or {}).get("enabled"))
 
 
-def wants(cfg, user, event: str) -> dict:
-    """Choix d'un compte pour un type, deux canaux independants : {"journal":
-    son journal (la cloche), "app": son telephone}. Sans choix de sa part :
-    comme l'administrateur (les deux s'il l'a active)."""
+def app_wants(cfg, user, event: str) -> bool:
+    """Ce que le proprietaire d'un telephone veut y recevoir. Sans choix de sa
+    part : comme l'administrateur."""
     prefs = (cfg.get("app_prefs") or {}).get(user or "") if user else None
     v = prefs.get(event) if isinstance(prefs, dict) else None
     if isinstance(v, dict):
-        return {"journal": bool(v.get("journal")), "app": bool(v.get("app"))}
+        return bool(v.get("app"))
     if v is not None:                       # anciens choix : vrai / faux, "off" / "journal" / "app"
-        return {"journal": v in (True, "journal", "app"), "app": v in (True, "app")}
-    on = global_on(cfg, event)
-    return {"journal": on, "app": on}
+        return v in (True, "app")
+    return global_on(cfg, event)
 
 
-def app_wants(cfg, user, event: str) -> bool:
-    """Ce que le proprietaire d'un telephone veut recevoir sur l'appli."""
-    return wants(cfg, user, event)["app"]
+def journal_on(cfg, event: str) -> bool:
+    """Le type va-t-il au journal ? Canal commun regle par l'administrateur :
+    « tout », ou type par type (sans choix : comme ntfy / Telegram)."""
+    if not cfg or not (cfg.get("channels") or {}).get("journal"):
+        return False
+    j = cfg.get("journal") or {}
+    if j.get("all"):
+        return True
+    v = (j.get("events") or {}).get(event)
+    return global_on(cfg, event) if v is None else bool(v)
 
 
 def enabled_in(cfg, event: str) -> bool:
     """L'evenement merite-t-il d'etre calcule ? Oui si l'administrateur l'a
     active, ou si un compte l'a choisi (son historique, sa cloche, et ses
     telephones si l'appli est activee)."""
-    if global_on(cfg, event):
+    if global_on(cfg, event) or journal_on(cfg, event):
         return True
-    if not cfg:
+    if not cfg or not (cfg.get("channels") or {}).get("app"):
         return False
-    for p in (cfg.get("app_prefs") or {}).values():
-        v = p.get(event) if isinstance(p, dict) else None
-        if (isinstance(v, dict) and (v.get("journal") or v.get("app"))) or v in (True, "journal", "app"):
-            return True
-    return False
+    return any(app_wants(cfg, d.get("user"), event) for d in cfg.get("devices") or [])
 
 
 def _public(cfg: dict) -> dict:
@@ -479,6 +483,10 @@ def _public(cfg: dict) -> dict:
     b = cfg.get("tgbot") or {}
     return {
         "channels": {k: bool(cfg["channels"].get(k)) for k in KINDS},
+        # Journal : canal commun, visible des administrateurs (et de chacun pour
+        # ce qui arrive sur son telephone)
+        "journal": {"all": bool((cfg.get("journal") or {}).get("all")),
+                    "events": {k: journal_on({**cfg, "channels": {**cfg["channels"], "journal": True}}, k) for k in EVENTS}},
         # Appli Android (UnifiedPush) : les telephones inscrits, jamais leur adresse
         # d'envoi (elle suffit a leur ecrire).
         "devices": [{k: d.get(k) for k in ("id", "name", "user", "added", "last_ok", "last_err")} for d in cfg.get("devices") or []],
@@ -855,7 +863,7 @@ def me_view(cfg, user: str) -> dict:
         "app_on": bool((cfg.get("channels") or {}).get("app")),
         "sections": [{"id": k, "label": v} for k, v in SECTIONS],
         "events": [{"id": k, "section": v["section"], "label": v["label"], "description": v["description"],
-                    **wants(cfg, user, k), "mine": app_wants(cfg, user, k)} for k, v in EVENTS.items()],
+                    "app": app_wants(cfg, user, k), "mine": app_wants(cfg, user, k)} for k, v in EVENTS.items()],
         "devices": [{k: d.get(k) for k in ("id", "name", "added", "last_ok", "last_err")}
                     for d in cfg.get("devices") or [] if (d.get("user") or "") == user],
     }
@@ -866,20 +874,19 @@ async def me_config(user: str) -> dict:
 
 
 async def set_my_events(user: str, patch: dict) -> dict:
-    """{type: {"journal": bool, "app": bool}} (un seul des deux suffit) ; une
-    section entiere : {"section:prints": {...}}."""
+    """Mon telephone, type par type : {type: bool} ou {type: {"app": bool}} ;
+    une section entiere : {"section:prints": ...}."""
     cfg = await _load()
     prefs = cfg["app_prefs"].setdefault(user, {})
-    # premiere fois / anciens choix : on fige le point de depart sous la forme
-    # {"journal", "app"}
+    # premiere fois / anciens choix : on fige le point de depart
     for k in EVENTS:
-        prefs[k] = wants(cfg, user, k)
+        prefs[k] = {"app": app_wants(cfg, user, k)}
 
     def merge(e, v):
-        if isinstance(v, bool):             # ancien format : les deux d'un coup
-            prefs[e] = {"journal": v, "app": v}
-        elif isinstance(v, dict):
-            prefs[e].update({c: bool(v[c]) for c in ("journal", "app") if c in v})
+        if isinstance(v, dict):
+            v = v.get("app")
+        if isinstance(v, bool):
+            prefs[e] = {"app": v}
     for k, v in (patch or {}).items():
         if k.startswith("section:"):
             for e, ev in EVENTS.items():
@@ -962,6 +969,26 @@ def _post_devices(cfg, devices, title, message, click, priority, section, attach
     return errs
 
 
+async def set_journal(all_=None, events=None) -> dict:
+    """Ce qui va au journal : « tout » ({all}), ou type par type ({events:
+    {type: bool}}, une section par "section:prints")."""
+    cfg = await _load()
+    j = cfg.setdefault("journal", {})
+    if all_ is not None:
+        j["all"] = bool(all_)
+    if isinstance(events, dict):
+        ev = j.setdefault("events", {})
+        for k, v in events.items():
+            if k.startswith("section:"):
+                for e, d in EVENTS.items():
+                    if d["section"] == k[8:]:
+                        ev[e] = bool(v)
+            elif k in EVENTS:
+                ev[k] = bool(v)
+    await _save(cfg)
+    return _public(cfg)
+
+
 async def set_channels(patch: dict) -> dict:
     """Active ou coupe des canaux : {"ntfy": true, "app": false…}."""
     cfg = await _load()
@@ -976,7 +1003,7 @@ def _on(cfg) -> list:
     return [k for k in KINDS if (cfg.get("channels") or {}).get(k)]
 
 
-_KIND_FR = {"ntfy": "ntfy", "telegram": "Telegram", "app": "l'appli Android"}
+_KIND_FR = {"ntfy": "ntfy", "telegram": "Telegram", "app": "l'appli Android", "journal": "le journal"}
 
 
 async def send(title: str, message: str = "", click=None, attach=None, tags=None, priority=None,
@@ -1003,8 +1030,10 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
             log_id = await _log_sent(cfg, event, title, message, click, attach)
         except Exception as e:
             logger.warning(f"[NOTIF] historique : {e}")
-    kinds = _on(cfg)
+    kinds = [k for k in _on(cfg) if k in PUSH_KINDS]
     if not kinds:
+        if (cfg.get("channels") or {}).get("journal") and event in EVENTS:
+            return                          # le journal seul : c'est fait
         raise NotifyError("Aucun canal activé (ntfy, Telegram ou appli Android)")
     # ntfy et Telegram : seulement si l'administrateur a active ce type (un
     # envoi sans type, essai compris, part partout)
@@ -1053,10 +1082,10 @@ K_SEEN = "NOTIF_SEEN"          # {compte: id de la derniere notification vue}
 
 async def _recipients(cfg, event: str) -> list:
     """Les comptes qui voient ce type dans leur journal : (compte, deja_lue).
-    Ceux qui ont le journal pour ce type ; et l'administrateur qui l'a recue
-    sur ntfy / Telegram, toujours. Deja lue pour qui l'a eue sur ntfy /
-    Telegram sans la recevoir sur son telephone ; sinon non lue (son
-    telephone la marquera lue quand il la touchera)."""
+    Les administrateurs si le type va au journal ; chacun pour ce qui arrive
+    sur son telephone (sa lecture y remonte). Deja lue pour qui l'a eue sur
+    ntfy / Telegram sans son telephone ; sinon non lue : on la lit en ouvrant
+    le journal, ou en la touchant sur le telephone."""
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.user import User
@@ -1067,14 +1096,14 @@ async def _recipients(cfg, event: str) -> list:
     app_on = bool((cfg.get("channels") or {}).get("app"))
     pushed = bool(set(_on(cfg)) & {"ntfy", "telegram"}) and global_on(cfg, event)
     owners = {d.get("user") for d in cfg.get("devices") or []}
+    to_journal = journal_on(cfg, event)
     out = []
     for u, role in rows:
-        w = wants(cfg, u, event)
-        elsewhere = role == "admin" and pushed            # recue sur ntfy / Telegram
-        if not w["journal"] and not elsewhere:
+        on_phone = app_on and u in owners and app_wants(cfg, u, event)
+        admin = role == "admin"
+        if not ((admin and to_journal) or on_phone):
             continue
-        on_phone = w["app"] and app_on and u in owners
-        out.append((u, elsewhere and not on_phone))
+        out.append((u, admin and pushed and not on_phone))
     return out
 
 

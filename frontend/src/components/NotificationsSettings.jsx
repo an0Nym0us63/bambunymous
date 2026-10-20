@@ -92,6 +92,7 @@ export default function NotificationsSettings() {
     return "Choisis ntfy si Android le demande…";
   });
   const removeDevice = (id) => run("app", async () => { apply((await client.delete(`/notify/devices/${id}`)).data); });
+  const setJournal = (body, key = "journal") => run(key, async () => { apply((await client.put("/notify/journal", body)).data); });
   const setKind = (kind, on) => run(`ch_${kind}`, async () => { apply((await client.put("/notify/channels", { [kind]: on })).data); });
   const test = (event) => run(event || "ntfy", () => client.post("/notify/test", { event }), `Envoyé : regarde ${where()}.`);
   const testTo = (key, body, name) => run(key, () => client.post("/notify/test", body), `Envoyé sur « ${name} ».`);
@@ -152,7 +153,7 @@ export default function NotificationsSettings() {
   return (<>
     {/* ── Canaux : un onglet chacun, chacun active ou non ── */}
     <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
-      {[["app", "Appli Android"], ["ntfy", "ntfy"], ["telegram", "Telegram"]].map(([k, l]) => (
+      {[["app", "Appli Android"], ["ntfy", "ntfy"], ["telegram", "Telegram"], ["journal", "Journal"]].map(([k, l]) => (
         <button key={k} onClick={() => setChTab(k)} style={{ flex:1, padding:"8px 10px", borderRadius:8, fontSize:12.5,
           fontWeight:700, cursor:"pointer", border:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
           background: chTab === k ? "#3b82f6" : "transparent", color: chTab === k ? "white" : "var(--muted)" }}>
@@ -318,6 +319,47 @@ export default function NotificationsSettings() {
     {/* Mes propres choix sur l'appli (chaque compte a les siens) */}
     {chTab === "app" && on.app && <MyAppNotifications embedded/>}
 
+    {/* ── Journal : canal commun, visible des administrateurs ── */}
+    {chTab === "journal" && channelCard("journal", "Journal", <>
+        La 🔔 cloche et la page Notifications (15 jours), visibles des administrateurs. Ce qui t'arrive aussi sur
+        ntfy ou Telegram y entre déjà lu ; le reste est non lu jusqu'à ce que tu ouvres le journal, ou que tu touches
+        la notification sur ton téléphone. Chacun y voit aussi ce qu'il reçoit sur son téléphone.</>, <>
+      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+        <span style={{ flex:1, fontSize:13, fontWeight:700, color:"var(--text)" }}>Tout journaliser
+          <span style={{ display:"block", fontSize:11.5, fontWeight:400, color:"var(--muted)" }}>
+            Chaque notification, même celles coupées sur ntfy et Telegram.</span></span>
+        <Switch on={!!cfg.journal?.all} onChange={v => setJournal({ all: v })} disabled={busy === "journal"}/>
+      </div>
+      {!cfg.journal?.all && cfg.sections.map(sec => {
+        const evs = cfg.events.filter(ev => ev.section === sec.id);
+        if (!evs.length) return null;
+        const jn = evs.filter(ev => cfg.journal?.events?.[ev.id]).length;
+        return (
+          <div key={sec.id} style={{ padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <span style={{ flex:1, fontSize:13, fontWeight:700, color:"var(--text)" }}>{sec.label}</span>
+              <span style={{ fontSize:11, fontWeight:700, color: jn ? "#22c55e" : "var(--muted)" }}>{jn}/{evs.length}</span>
+              <Switch on={jn === evs.length} onChange={v => setJournal({ events: { [`section:${sec.id}`]: v } })}
+                disabled={busy === "journal"}/>
+            </div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginTop:7 }}>
+              {evs.map(ev => {
+                const onj = !!cfg.journal?.events?.[ev.id];
+                return (
+                  <button key={ev.id} onClick={() => setJournal({ events: { [ev.id]: !onj } })} disabled={busy === "journal"}
+                    title={ev.description} style={{ fontSize:11.5, fontWeight:600, padding:"4px 10px", borderRadius:20,
+                      cursor:"pointer", border: onj ? "1px solid rgba(99,102,241,0.45)" : "1px solid var(--border)",
+                      background: onj ? "rgba(99,102,241,0.16)" : "transparent", color: onj ? "#6366F1" : "var(--muted)" }}>
+                    {ev.label}</button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+      <Msg k="journal"/>
+    </>)}
+
     {/* ── Types de notification, par section repliable ── */}
     {cfg.sections.map(sec => {
       const evs = cfg.events.filter(ev => ev.section === sec.id);
@@ -327,7 +369,8 @@ export default function NotificationsSettings() {
       const tOf = savedTopics.find(t => t.topic === sec.route?.ntfy) || savedTopics[0];
       const cOf = savedChats.find(c => c.chat_id === sec.route?.telegram) || savedChats[0];
       const dests = [on.ntfy && tOf && `ntfy · ${topicName(tOf)}`, on.telegram && cOf && `Telegram · ${chatName(cOf)}`,
-                     on.app && devices.length && "Appli Android"].filter(Boolean);
+                     on.app && devices.length && "Appli Android",
+                     on.journal && (cfg.journal?.all || evs.some(ev => cfg.journal?.events?.[ev.id])) && "Journal"].filter(Boolean);
       const pickTopic = on.ntfy && savedTopics.length > 1;
       const pickChat = on.telegram && savedChats.length > 1;
       return (

@@ -45,6 +45,12 @@ async def notify_set_channel(body: dict = Body({}), _: str = Depends(require_adm
     return await _call(N.set_channels({k: k in old for k in N.KINDS}))
 
 
+@router.put("/journal")
+async def notify_set_journal(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Ce qui va au journal : {"all": bool} et/ou {"events": {type | "section:x": bool}}."""
+    return await _call(N.set_journal(body.get("all"), body.get("events")))
+
+
 @router.put("/channels")
 async def notify_set_channels(body: dict = Body({}), _: str = Depends(require_admin)):
     """Active ou coupe chaque canal : {"ntfy": true, "telegram": false, "app": true}."""
