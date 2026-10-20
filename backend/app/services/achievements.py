@@ -2770,6 +2770,39 @@ async def podium(me_name: str, fresh: bool = False) -> dict:
     return out
 
 
+# ── Export des paliers (revue des seuils) ────────────────────────────────────
+async def export_csv() -> str:
+    """Tous les succes a paliers : section, ce qui compte, ma valeur, le palier
+    atteint, le prochain seuil et les seuils de Bronze a Eternel. Separateur
+    « ; » et BOM UTF-8 : s'ouvre tel quel dans Excel ou LibreOffice."""
+    import csv
+    import io
+    v = await view(fresh=True)
+    cats = {c["id"]: c["name"] for c in v["categories"]}
+    labels = [t["label"] for t in TIERS]
+    buf = io.StringIO()
+    w = csv.writer(buf, delimiter=";", lineterminator="\n")
+    w.writerow(["Section", "Succès", "Ce qui compte", "Unité", "Ma valeur", "Palier atteint", "Prochain seuil"] + labels)
+
+    def num(x):
+        if x is None:
+            return ""
+        if isinstance(x, float) and not x.is_integer():
+            return f"{x:.2f}".rstrip("0").rstrip(".").replace(".", ",")
+        return str(int(x))
+    seen = {it["id"]: it for it in v["items"]}
+    for a in CATALOG:
+        if len(a["tiers"]) < 2:
+            continue
+        # meme une matiere jamais imprimee (masquee sur la page) : ses seuils comptent pour la revue
+        it = seen.get(a["id"]) or {"value": 0, "level": -1, "tiers": [], "next": a["tiers"][0]}
+        lvl = it["level"]
+        w.writerow([cats.get(a["cat"], a["cat"]), a["name"], a["desc"].replace("{n}", "N"), a.get("unit") or "",
+                    num(it["value"]), it["tiers"][lvl]["label"] if lvl >= 0 else "—", num(it.get("next"))]
+                   + [num(x) for x in a["tiers"]] + [""] * (len(labels) - len(a["tiers"])))
+    return "\ufeff" + buf.getvalue()
+
+
 # ── Secrets : ce qu'un autre compte en voit ──────────────────────────────────
 def mask_secrets(v: dict, keep=()) -> dict:
     """Medailles uniques gagnees : la medaille, le titre et la date restent ;

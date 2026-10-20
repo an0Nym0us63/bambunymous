@@ -985,6 +985,42 @@ function TranslateKeyRow({ label, on, hint, placeholder, onSave }) {
   );
 }
 
+// Succes : export des paliers et de ma progression, pour revoir les seuils.
+function AchievementsExportSection() {
+  const [busy, setBusy] = React.useState(false);
+  const [msg, setMsg] = React.useState(null);
+  const get = async () => (await client.get("/achievements/export", { responseType: "text" })).data;
+  const run = async fn => { setBusy(true); setMsg(null); try { await fn(); } catch (e) { setMsg({ ok:false, text: e.response?.data?.detail || e.message }); } setBusy(false); };
+  const download = () => run(async () => {
+    const blob = new Blob([await get()], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `succes-paliers-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.dispatchEvent(new MouseEvent("click"));
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    setMsg({ ok:true, text:"Fichier téléchargé." });
+  });
+  const copy = () => run(async () => {
+    await navigator.clipboard.writeText((await get()).replace(/^\ufeff/, ""));
+    setMsg({ ok:true, text:"Copié : colle-le dans la conversation." });
+  });
+  const btn = { padding:"8px 14px", borderRadius:10, fontSize:13, fontWeight:700, cursor: busy ? "default" : "pointer",
+    border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)" };
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>🏅 Succès : paliers et progression</h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 10px", lineHeight:1.5 }}>
+        Tous les succès à paliers : ce qui compte, ta valeur actuelle, le palier atteint, le prochain seuil, et les seuils de
+        Bronze à Éternel. Pour revoir les paliers.</p>
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+        <button onClick={download} disabled={busy} style={btn}>⬇️ Télécharger (CSV)</button>
+        <button onClick={copy} disabled={busy} style={btn}>📋 Copier</button>
+      </div>
+      {msg && <p style={{ fontSize:12, margin:"8px 0 0", color: msg.ok ? "#22c55e" : "#ef4444" }}>{msg.text}</p>}
+    </div>
+  );
+}
+
 function TranslateNamesSection() {
   const [running, setRunning] = React.useState(null);   // null = pas encore su
   const [err, setErr] = React.useState(null);
@@ -1916,6 +1952,7 @@ export default function Settings() {
         <TranslateNamesSection/>
         <SpoolnymousImport/>
         <RfidDebugSection/>
+        <AchievementsExportSection/>
       </AdminOnly>
       )}
 

@@ -35,6 +35,15 @@ async def achievements_spend_key(aid: str, _: str = Depends(require_admin)):
         raise HTTPException(400, str(e))
 
 
+@router.get("/export")
+async def achievements_export(_: str = Depends(require_admin)):
+    """Tableau CSV des paliers et de ma progression (revue des seuils)."""
+    from fastapi.responses import Response
+    from ....services import achievements as A
+    return Response(await A.export_csv(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="succes-paliers.csv"'})
+
+
 @router.get("/mine")
 async def achievements_mine(acc=Depends(require_own_account)):
     """Mes medailles uniques : lues chez moi quand je visite un copain, pour
