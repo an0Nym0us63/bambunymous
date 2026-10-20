@@ -901,8 +901,11 @@ export default function Stats() {
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12,
         padding:4, border:"1px solid var(--border)" }}>
         {tabs.map(([id,label]) => (
+          // largeur selon le texte, et texte qui retrecit avec l'ecran :
+          // les cinq onglets tiennent sur une ligne, meme sur un petit telephone
           <button key={id} onClick={()=>setTab(id)} style={{
-            flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
+            flex:"1 1 auto", minWidth:0, padding:"8px 3px", borderRadius:8, fontWeight:600, cursor:"pointer",
+            fontSize:"clamp(10px, 3.1vw, 12px)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
             background: tab===id ? "#3b82f6" : "transparent",
             color: tab===id ? "white" : "var(--muted)",
             border:"none", transition:"all 0.15s" }}>

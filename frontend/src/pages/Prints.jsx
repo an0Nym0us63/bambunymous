@@ -2899,8 +2899,10 @@ export default function Prints() {
       {/* Tabs Liste / Galerie / MakerWorld */}
       <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
         {[["list","Liste"],["gallery","Galerie"],["makerworld","MakerWorld"],["queue","À faire"]].map(([id,label])=>(
+          // comme les Stats : largeur selon le texte, qui retrecit avec l'ecran
           <button key={id} onClick={()=>setViewMode(id)} style={{
-            flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
+            flex:"1 1 auto", minWidth:0, padding:"8px 3px", borderRadius:8, fontWeight:600, cursor:"pointer",
+            fontSize:"clamp(10px, 3.1vw, 12px)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
             background: viewMode===id ? "#3b82f6" : "transparent",
             color: viewMode===id ? "white" : "var(--muted)",
             border:"none", transition:"all 0.15s",

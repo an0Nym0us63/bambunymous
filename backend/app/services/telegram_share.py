@@ -39,6 +39,8 @@ CAPTION_MAX = 1024      # limite Telegram d'une legende de media
 _lock = asyncio.Lock()
 _client = None          # client connecte et autorise, reutilise
 _pending: dict = {}     # connexion en cours : {client, phone, phone_code_hash}
+_ME: dict = {"me": None}  # dernier compte lu (nom, pseudo) : rendu pendant un partage en cours
+STATUS_TIMEOUT = 10
 
 
 class ShareError(Exception):
@@ -114,16 +116,31 @@ async def status() -> dict:
     out = {"app_configured": bool(api_id and await _get(K_API_HASH)), "api_id": api_id or "",
            "connected": False, "me": None, "pending": bool(_pending),
            "destinations": await destinations()}
-    if await _get(K_SESSION):
-        try:
+    out["linked"] = bool(await _get(K_SESSION))
+    if out["linked"]:
+        # Un partage en cours tient le verrou (envoi de videos : plusieurs
+        # minutes) : on rend le dernier compte connu plutot que d'attendre.
+        if _lock.locked() and _ME["me"]:
+            out.update(connected=True, me=_ME["me"], busy=True)
+            return out
+
+        async def ask():
             async with _lock:
                 c = await _connected_client()
-                me = await c.get_me()
-            out["connected"] = True
-            out["me"] = {"name": " ".join(filter(None, [me.first_name, me.last_name])),
+                return await c.get_me()
+        try:
+            # jamais plus de STATUS_TIMEOUT s : la page attend cette reponse
+            me = await asyncio.wait_for(ask(), STATUS_TIMEOUT)
+            _ME["me"] = {"name": " ".join(filter(None, [me.first_name, me.last_name])),
                          "username": me.username}
+            out.update(connected=True, me=_ME["me"])
         except ShareError as e:
             out["error"] = str(e)
+        except asyncio.TimeoutError:
+            if _ME["me"]:
+                out.update(connected=True, me=_ME["me"], busy=True)
+            else:
+                out["error"] = "Telegram ne répond pas pour le moment : réessaie dans un instant."
         except Exception as e:      # reseau : on le dit sans tout casser
             logger.warning(f"[TG] statut : {e}")
             out["error"] = f"Telegram injoignable : {e}"
@@ -203,6 +220,7 @@ async def logout() -> None:
     except Exception as e:
         logger.info(f"[TG] deconnexion : {e}")
     _client = None
+    _ME["me"] = None
     await _set(K_SESSION, "")
 
 

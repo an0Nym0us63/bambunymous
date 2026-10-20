@@ -360,8 +360,48 @@ export default function NotificationsSettings() {
       <Msg k="journal"/>
     </>)}
 
-    {/* ── Types de notification, par section repliable ── */}
-    {cfg.sections.map(sec => {
+    {/* ── Types envoyes sur ntfy et Telegram, par section repliable ──
+        Seulement sous ces deux onglets : le journal a ses puces, l'appli
+        Android les choix de chaque telephone (« Mon telephone »). */}
+    {/* Reglages des types (seuils, delais, createurs suivis) : communs a tous
+        les canaux, donc aussi sous Journal et Appli Android. */}
+    {(chTab === "journal" || chTab === "app") && (() => {
+      const evs = cfg.events.filter(ev => (ev.options || []).length || ev.id === "mw_new_model");
+      if (!evs.length) return null;
+      return (
+        <div className="card" style={{ padding:"14px 20px" }}>
+          <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 4px" }}>Réglages des notifications</h3>
+          <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 6px", lineHeight:1.5 }}>
+            Seuils, délais et créateurs suivis : valables pour tous les canaux.</p>
+          {evs.map(ev => (
+            <div key={ev.id} style={{ padding:"9px 0", borderTop:"1px solid var(--border)" }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{ev.label}</div>
+              {(ev.options || []).map(o => (
+                <OptionRow key={o.key} o={o} disabled={busy === ev.id} inp={inp}
+                  onChange={v => setEvent(ev.id, { options: { [o.key]: v } })}/>
+              ))}
+              {ev.id === "mw_new_model" && (
+                <button onClick={openPicker} disabled={busy === ev.id} style={{ ...btn, marginTop:6 }}>
+                  👤 {ev.creators.length ? `Créateurs suivis (${ev.creators.length})` : "Choisir les créateurs"}
+                </button>
+              )}
+              {ev.id === "mw_new_model" && picker && creators && (
+                <CreatorPicker creators={creators} picked={ev.creators}
+                  applyLabel={k => k ? `Me notifier pour ${k} créateur${k > 1 ? "s" : ""}` : "Aucun créateur"}
+                  onClose={() => setPicker(false)}
+                  onApply={ids => { setPicker(false); setEvent(ev.id, { creators: ids }); }}/>
+              )}
+              <Msg k={ev.id}/>
+            </div>
+          ))}
+        </div>
+      );
+    })()}
+    {(chTab === "ntfy" || chTab === "telegram") && (
+      <h3 style={{ fontSize:13, fontWeight:800, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em",
+        margin:"6px 4px 0" }}>Ce qui part sur ntfy et Telegram</h3>
+    )}
+    {(chTab === "ntfy" || chTab === "telegram") && cfg.sections.map(sec => {
       const evs = cfg.events.filter(ev => ev.section === sec.id);
       if (!evs.length) return null;
       const nOn = evs.filter(ev => ev.enabled).length;

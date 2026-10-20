@@ -21,9 +21,9 @@ export default function TelegramSettings({ card, cardTitle }) {
   const [chats, setChats] = useState(null);      // liste pour ajouter une destination
   const [pick, setPick] = useState({ chat:"", topic:"", label:"" });
 
-  const load = () => client.get("/share/telegram").then(r => {
+  const load = () => client.get("/share/telegram", { timeout: 20000 }).then(r => {
     setSt(r.data); setF(x => ({ ...x, api_id: x.api_id || r.data.api_id || "" }));
-  }).catch(e => setSt({ error: errMsg(e), destinations: [] }));
+  }).catch(e => setSt({ error: errMsg(e), destinations: [], failed: true }));
   useEffect(() => { load(); }, []);
 
   const run = async (fn) => { setBusy(true); try { await fn(); } catch (e) { showAlert(errMsg(e)); } setBusy(false); };
@@ -65,7 +65,17 @@ export default function TelegramSettings({ card, cardTitle }) {
     setChats(null);
   };
 
-  if (!st) return null;
+  // En attendant la reponse (Telegram peut mettre quelques secondes) : la
+  // carte, pas un onglet vide.
+  if (!st) return (
+    <div className="card" style={card}>
+      <div style={cardTitle}>Partage Telegram</div>
+      <p style={{ fontSize:12.5, color:"var(--muted)", margin:0 }}>Connexion à Telegram…</p>
+    </div>
+  );
+  // Compte relie mais Telegram muet (ou serveur injoignable) : on propose de
+  // reessayer, pas de tout reconnecter.
+  const unreachable = !st.connected && (st.failed || (st.linked && st.error && !/expir/i.test(st.error)));
   return (
     <div className="card" style={card}>
       <div style={cardTitle}>Partage Telegram</div>
@@ -74,11 +84,17 @@ export default function TelegramSettings({ card, cardTitle }) {
         discussions Telegram, <b>en ton nom</b>.
       </p>
 
-      {st.connected ? (
+      {unreachable && step === "idle" ? (
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, flexWrap:"wrap" }}>
+          <span style={{ fontSize:12.5, color:"#f59e0b", flex:1, minWidth:180 }}>{st.error}</span>
+          <button type="button" onClick={() => { setSt(null); load(); }} style={btn(true)}>Réessayer</button>
+        </div>
+      ) : st.connected ? (
         <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
           <span style={{ fontSize:13, color:"#22c55e", fontWeight:700 }}>● Connecté</span>
           <span style={{ fontSize:13, color:"var(--text)", flex:1, minWidth:0 }}>
             {st.me?.name}{st.me?.username ? ` (@${st.me.username})` : ""}
+            {st.busy && <span style={{ display:"block", fontSize:11, color:"var(--muted)" }}>Un partage est en cours d'envoi…</span>}
           </span>
           <button type="button" onClick={logout} disabled={busy} style={btn(false)}>Déconnecter</button>
         </div>
