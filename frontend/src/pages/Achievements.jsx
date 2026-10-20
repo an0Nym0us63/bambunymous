@@ -336,7 +336,7 @@ function Tile({ it, onOpen, others, shared, rivals }) {
       {it.tiers.length > 1 && it.next != null && (
         <span style={{ width:"70%", height:3, borderRadius:3, background:"var(--surface2)", overflow:"hidden" }}>
           <span style={{ display:"block", width:`${Math.round(p * 100)}%`, height:"100%",
-            background: it.tiers[it.level + 1]?.color || top.color }}/></span>
+            background: PROGRESS }}/></span>
       )}
     </button>
   );
@@ -483,7 +483,7 @@ function Bar({ value }) {
   return (
     <div style={{ height:8, borderRadius:8, background:"var(--surface2)", overflow:"hidden", width:"100%" }}>
       <div style={{ width:`${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`, height:"100%", borderRadius:8,
-        background:"linear-gradient(90deg, #CD7F32, #F5B700, #6EC6D9, #8B5CF6, #E11D48, #0D9488, #4338CA)" }}/>
+        background: PROGRESS }}/>
     </div>
   );
 }
@@ -510,6 +510,9 @@ function MedalCounts({ tiers, medals }) {
     </div>
   );
 }
+
+// Une seule couleur pour toutes les barres de progression : les medailles portent deja celle du palier
+const PROGRESS = "#F59E0B";
 
 const progress = it => {
   if (it.next == null || it.value == null) return it.level >= 0 ? 1 : 0;
@@ -584,7 +587,7 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
                 <div style={{ flex:1, height:6, borderRadius:6, background:"var(--surface2)", overflow:"hidden" }}>
                   <div style={{ width:`${Math.round(p * 100)}%`, height:"100%", borderRadius:6,
-                    background: it.tiers[it.level + 1]?.color || top.color }}/>
+                    background: PROGRESS }}/>
                 </div>
                 {!money && <span style={{ fontSize:11, fontWeight:700, color:"var(--text2)", whiteSpace:"nowrap",
                   fontVariantNumeric:"tabular-nums" }}>{fmt(it.value, it.unit)} / {fmt(it.next, it.unit)}</span>}
@@ -644,8 +647,9 @@ function Versus({ it, rivals }) {
                 {here.map(p => <Avatar key={p.name} name={p.name} me={p.me}/>)}
               </div>
               <Medal tier={t} emoji="" size={20} locked={!people.some(p => p.level >= i)}/>
-              <span style={{ width:"100%", height:3, borderRadius:2,
-                background: people.some(p => p.level >= i) ? t.color : "var(--border)" }}/>
+              {/* une seule couleur : jusqu'ou je suis alle, moi */}
+              <span style={{ width:"100%", height:4, borderRadius:2,
+                background: i <= it.level ? "#F59E0B" : "var(--border)" }}/>
             </div>
           );
         })}
