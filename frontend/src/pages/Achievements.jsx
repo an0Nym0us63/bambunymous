@@ -48,6 +48,9 @@ export default function Achievements({ embedded = false }) {
     else for (const p of pod?.people || []) if (!p.me && p.status === "ok") add(p.uniques, p.name);
     return out;
   }, [pod, mine, atFriend]);
+  // En visite : parmi ses medailles uniques, celles que j'ai aussi (ou pas)
+  const mineSet = useMemo(() => atFriend && mine ? new Set(mine.uniques || []) : null, [mine, atFriend]);
+  const shared = it => mineSet && it.tiers.length === 1 && it.level >= 0 ? mineSet.has(it.id) : undefined;
   const byId = useMemo(() => Object.fromEntries((data?.items || []).map(x => [x.id, x])), [data]);
   // lien d'une notification : deplier sa section et ouvrir son detail
   useEffect(() => {
@@ -137,6 +140,8 @@ export default function Achievements({ embedded = false }) {
         const myRank = ranked.findIndex(p => p.me) + 1;
         const open = openCats.has(c.id);
         const near = items.filter(x => x.level < 0 && ringBy[x.id]).length;
+        const common = items.filter(x => shared(x) === true).length;
+        const toFind = items.filter(x => shared(x) === false).length;
         return (
           <div key={c.id} className="card" style={{ padding:0, overflow:"hidden" }}>
             <button onClick={() => toggle(c.id)} aria-expanded={open}
@@ -148,7 +153,13 @@ export default function Achievements({ embedded = false }) {
                   <span style={{ display:"block", fontSize:15, fontWeight:800 }}>{c.name}</span>
                   <span style={{ display:"block", fontSize:11.5, color:"var(--muted)", marginTop:1 }}>
                     {got}/{items.length} succès · {sum.score} pts
-                    {near > 0 && <span style={{ color:"#F59E0B", fontWeight:700 }}> · 👀 {near} à portée</span>}</span>
+                    {near > 0 && <span style={{ color:"#F59E0B", fontWeight:700 }}> · 👀 {near} à portée</span>}
+                    {mineSet && (common + toFind) > 0 && (
+                      <span style={{ display:"block", marginTop:2 }}>
+                        <span style={{ color:"#22c55e", fontWeight:700 }}>✓ {common} en commun</span>
+                        <span style={{ color:"var(--muted)" }}> · </span>
+                        <span style={{ color:"#ef4444", fontWeight:700 }}>{toFind} à trouver</span></span>
+                    )}</span>
                 </span>
                 {myRank > 0 && (
                   <span title="Ta place entre copains" style={{ fontSize:11.5, fontWeight:800, padding:"3px 9px", borderRadius:20,
@@ -189,7 +200,7 @@ export default function Achievements({ embedded = false }) {
                       </div>
                     )}
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
-                      {sb.items.map(it => <Tile key={it.id} it={it} others={ringBy[it.id]} onOpen={() => setDetail(it.id)}/>)}
+                      {sb.items.map(it => <Tile key={it.id} it={it} others={ringBy[it.id]} shared={shared(it)} onOpen={() => setDetail(it.id)}/>)}
                     </div>
                   </div>
                 ))}
@@ -209,7 +220,7 @@ export default function Achievements({ embedded = false }) {
             position:"relative" }}>
             <button onClick={closeDetail} aria-label="Fermer" style={{ position:"absolute", top:8, right:10, zIndex:1,
               background:"none", border:"none", color:"var(--muted)", fontSize:20, cursor:"pointer" }}>✕</button>
-            <Card it={byId[detail]} sheet others={ringBy[detail]}/>
+            <Card it={byId[detail]} sheet others={ringBy[detail]} shared={shared(byId[detail])}/>
           </div>
         </div>, document.body
       )}
@@ -219,7 +230,7 @@ export default function Achievements({ embedded = false }) {
 
 // Une medaille de la grille d'une section : grisee tant qu'elle n'est pas
 // gagnee, avec un petit liseré de progression vers le palier suivant.
-function Tile({ it, onOpen, others }) {
+function Tile({ it, onOpen, others, shared }) {
   const got = it.level >= 0;
   const top = got ? it.tiers[it.level] : it.tiers[0];
   const p = progress(it);
@@ -233,6 +244,12 @@ function Tile({ it, onOpen, others }) {
       border:`1px ${near ? "dashed" : "solid"} ${got ? top.color + "55" : near ? "#F59E0B" : "var(--border)"}` }}>
       <span style={{ borderRadius:"50%", padding:2, boxShadow: near ? "0 0 0 2px #F59E0B, 0 0 12px rgba(245,158,11,0.55)" : "none" }}>
         <Medal tier={top} emoji={it.emoji} size={46} locked={!got}/></span>
+      {/* en visite : sa medaille, l'ai-je aussi ? */}
+      {shared !== undefined && (
+        <span style={{ position:"absolute", top:4, right:4, fontSize:9.5, fontWeight:800, padding:"2px 6px", borderRadius:20,
+          whiteSpace:"nowrap", color:"#fff", background: shared ? "#22c55e" : "#ef4444",
+          border:"1.5px solid var(--sheet-bg)" }}>{shared ? "✓ toi aussi" : "pas toi"}</span>
+      )}
       {near && (
         <span style={{ position:"absolute", top:4, right:4, display:"flex" }}>
           {others.slice(0, 2).map((n, i) => (
@@ -353,7 +370,7 @@ const progress = it => {
   return span > 0 ? Math.max(0, Math.min(1, (it.value - (it.prev || 0)) / span)) : 0;
 };
 
-function Card({ it, focus, sheet = false, others }) {
+function Card({ it, focus, sheet = false, others, shared }) {
   const ref = useRef(null);
   const [open, setOpen] = useState(sheet);
   useEffect(() => {
@@ -390,6 +407,10 @@ function Card({ it, focus, sheet = false, others }) {
           )}
         </div>
       </div>
+      {shared !== undefined && (
+        <p style={{ margin:0, fontSize:12.5, fontWeight:700, color: shared ? "#22c55e" : "#ef4444" }}>
+          {shared ? "✓ Toi aussi, tu l'as." : "Tu ne l'as pas encore : à toi de le trouver !"}</p>
+      )}
       {!got && others?.length > 0 && (
         <p style={{ margin:0, fontSize:12.5, fontWeight:700, color:"#F59E0B", lineHeight:1.45 }}>
           {others.length === 1 && others[0] === "Toi" ? "👀 Toi, tu l'as déjà !"
