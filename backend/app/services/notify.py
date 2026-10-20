@@ -26,9 +26,12 @@ KEY = "NOTIFY_CONFIG"
 
 SECTIONS = [
     ("prints", "🖨️ Impressions"),
+    ("printer", "📡 Imprimante"),
     ("dry", "💧 Séchage"),
-    ("spools", "🧵 Bobines"),
+    ("spools", "🧵 Bobines et AMS"),
     ("mw", "🌐 MakerWorld"),
+    ("friends", "👥 Copains"),
+    ("system", "🖥️ BambuNymous"),
 ]
 
 _MIN_MINUTES = {"key": "min_minutes", "type": "number", "label": "Seulement si l'impression dure plus de",
@@ -86,7 +89,7 @@ EVENTS = {
                    "message": "📄 Kit de semis auto-arrosant\n📶 52 % · couche 94/180\n⚠️ Raison : le filament de l'AMS-A slot 2 est épuisé."},
     },
     "printer_hms": {
-        "section": "prints", "label": "Alerte de l'imprimante (HMS)",
+        "section": "printer", "label": "Alerte de l'imprimante (HMS)",
         "description": "Libellé en français et lien vers le wiki Bambu.",
         "options": [{"key": "level", "type": "select", "label": "Alertes", "default": "serious",
                      "choices": [["serious", "Graves seulement"], ["common", "Graves et courantes"],
@@ -215,6 +218,112 @@ EVENTS["mw_milestone"] = {
     "sample": {"title": "🏁 500 téléchargements !", "priority": 3, "attach": _SAMPLE_COVER,
                "message": "📄 Irony — Casse-tête 6 pièces\n⬇️ 500 téléchargements · 🖨️ 312 impressions"},
 }
+
+
+# ── Ajouts du 20/10/2026 : tout ce que l'appli sait voir ──────────────────
+EVENTS["print_progress"] = {
+    "section": "prints", "label": "Avancement de l'impression",
+    "description": "Un message à chaque palier (25 %, 50 %, 75 %…).",
+    "options": [{"key": "step", "type": "select", "label": "Paliers", "default": "25",
+                 "choices": [["50", "à mi-parcours"], ["25", "tous les 25 %"], ["20", "tous les 20 %"],
+                             ["10", "tous les 10 %"]]}, _MIN_MINUTES],
+    "sample": {"title": "📶 50 % · Kit de semis auto-arrosant", "priority": 2, "link": "/",
+               "message": "🧱 couche 94/180\n⏳ encore 1 h 12"},
+}
+EVENTS["print_resumed"] = {
+    "section": "prints", "label": "Impression reprise",
+    "description": "Après une pause, avec la durée de la pause.",
+    "options": [],
+    "sample": {"title": "▶️ Impression reprise", "priority": 3, "link": "/",
+               "message": "📄 Kit de semis auto-arrosant\n⏸️ en pause pendant 6 min · 📶 52 %"},
+}
+EVENTS["print_speed"] = {
+    "section": "prints", "label": "Vitesse modifiée",
+    "description": "Silencieux, Standard, Sport ou Ludique, changé pendant une impression.",
+    "options": [],
+    "sample": {"title": "🏎️ Vitesse : Sport", "priority": 2, "link": "/",
+               "message": "📄 Kit de semis auto-arrosant\navant : Standard\n⏳ encore 58 min"},
+}
+EVENTS["printer_offline"] = {
+    "section": "printer", "label": "Imprimante injoignable",
+    "description": "Plus de nouvelles de l'imprimante pendant 3 minutes (éteinte, Wi-Fi…).",
+    "options": [{"key": "back", "type": "select", "label": "Au retour", "default": "yes",
+                 "choices": [["yes", "prévenir aussi"], ["no", "ne rien dire"]]}],
+    "sample": {"title": "📴 Imprimante injoignable", "priority": 4, "link": "/",
+               "message": "Plus de nouvelles depuis 3 min (éteinte, Wi-Fi coupé ?)."},
+}
+EVENTS["bed_cooled"] = {
+    "section": "printer", "label": "Plateau refroidi",
+    "description": "Après une impression, le plateau est assez froid pour décoller la pièce.",
+    "options": [{"key": "temp", "type": "number", "label": "Sous", "unit": "°C", "default": 35, "min": 20, "max": 70}],
+    "sample": {"title": "🧊 Plateau refroidi (34 °C)", "priority": 3, "link": "/",
+               "message": "📄 Kit de semis auto-arrosant\nTu peux retirer la pièce."},
+}
+EVENTS["printer_firmware"] = {
+    "section": "printer", "label": "Firmware mis à jour",
+    "description": "La version du firmware de l'imprimante a changé.",
+    "options": [],
+    "sample": {"title": "🆕 Firmware de l'imprimante mis à jour", "priority": 2, "link": "/",
+               "message": "01.02.00.00 → 01.03.00.00"},
+}
+EVENTS["ams_humidity"] = {
+    "section": "spools", "label": "AMS trop humide",
+    "description": "L'humidité d'une unité dépasse le seuil pendant 10 min.",
+    "options": [{"key": "pct", "type": "number", "label": "Au-dessus de", "unit": "%", "default": 40, "min": 10, "max": 90}],
+    "sample": {"title": "💦 AMS-B trop humide : 47 %", "priority": 3, "link": "/",
+               "message": "Seuil : 40 %\nPense au déshydratant, ou à un cycle de séchage."},
+}
+EVENTS["spool_loaded"] = {
+    "section": "spools", "label": "Bobine chargée",
+    "description": "Une bobine arrive dans un emplacement de l'AMS : laquelle, reconnue ou non.",
+    "options": [{"key": "which", "type": "select", "label": "Prévenir pour", "default": "all",
+                 "choices": [["all", "toutes les bobines"], ["unknown", "les bobines non reconnues"]]}],
+    "sample": {"title": "🧵 Bobine chargée · AMS-A slot 2", "priority": 2, "link": "/",
+               "message": "Prune — PLA Matte · Bambu Lab\n⚖️ reste environ 640 g"},
+}
+EVENTS["spool_removed"] = {
+    "section": "spools", "label": "Bobine retirée",
+    "description": "Un emplacement de l'AMS se vide.",
+    "options": [],
+    "sample": {"title": "📤 Bobine retirée · AMS-A slot 2", "priority": 2, "link": "/",
+               "message": "Prune — PLA Matte · Bambu Lab"},
+}
+EVENTS["mw_to_rate"] = {
+    "section": "mw", "label": "Impressions à évaluer",
+    "description": "De nouveaux modèles imprimés attendent ton avis sur MakerWorld (relevé toutes les 6 h).",
+    "options": [],
+    "sample": {"title": "⭐ 2 impressions à évaluer", "priority": 2, "link": "/prints",
+               "message": "   • Kit de semis auto-arrosant\n   • Toucan"},
+}
+EVENTS["friend_print_started"] = {
+    "section": "friends", "label": "Un copain lance une impression",
+    "description": "Relevé toutes les 5 min chez chaque copain.",
+    "options": [],
+    "sample": {"title": "👥 Léo imprime", "priority": 2, "link": "/",
+               "message": "📄 Dragon articulé\n⏳ encore 3 h 10"},
+}
+EVENTS["friend_print_done"] = {
+    "section": "friends", "label": "L'impression d'un copain se termine",
+    "description": "Son imprimante a fini (ou s'est arrêtée).",
+    "options": [],
+    "sample": {"title": "👥 Léo a fini d'imprimer", "priority": 2, "link": "/",
+               "message": "📄 Dragon articulé"},
+}
+EVENTS["app_started"] = {
+    "section": "system", "label": "BambuNymous redémarré",
+    "description": "L'appli vient de (re)démarrer : mise à jour, redémarrage du serveur…",
+    "options": [],
+    "sample": {"title": "🔄 BambuNymous a redémarré", "priority": 1, "link": "/",
+               "message": "Tout est reparti."},
+}
+
+# Ordre d'affichage dans chaque section
+_ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_end", "print_done", "print_failed",
+          "print_paused", "print_resumed", "print_speed",
+          "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
+          "dry_started", "dry_done",
+          "spool_loaded", "spool_removed", "ams_humidity", "spool_low", "spool_short", "stock_low", "fil_to_order"]
+EVENTS = {**{k: EVENTS[k] for k in _ORDER if k in EVENTS}, **{k: v for k, v in EVENTS.items() if k not in _ORDER}}
 
 
 class NotifyError(Exception):

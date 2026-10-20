@@ -136,6 +136,10 @@ async def lifespan(app: FastAPI):
     except Exception:
         pass
     _sub(_nev.watch)
+    # Copains (debut / fin d'impression), impressions a evaluer, redemarrage
+    _aio.create_task(_nev.friends_loop())
+    _aio.create_task(_nev.mw_rate_loop())
+    _aio.create_task(_nev.app_started())
     await mqtt_manager.start()
     # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.

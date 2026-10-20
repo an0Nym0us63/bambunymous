@@ -36,6 +36,10 @@ CANCELLED = 0x0300400C  # print_error : « tache annulee »
 STABLE_DRY = 20        # secondes : un changement de sechage doit tenir ce temps
 STABLE_PAUSE = 10
 STABLE_HMS = 10
+OFFLINE_S = 180         # imprimante muette ce temps avant de le dire
+STABLE_TRAY = 45        # bobine posee : laisse le temps a la reconnaissance (RFID, appariement)
+STABLE_EMPTY = 20
+HUMID_S = 600           # humidite au-dessus du seuil pendant ce temps
 
 
 def _spawn(fn, *args):
@@ -480,9 +484,240 @@ async def after_deduction(pid: int, changes: list):
                         link=f"/filaments?id={f.id}", priority=3)
 
 
+# ── Ajouts du 20/10/2026 ──────────────────────────────────────────────────
+_SPEED = {1: "Silencieux", 2: "Standard", 3: "Sport", 4: "Ludique"}
+
+
+async def _job_name(job_id: str):
+    pid = await _pid_of_job(job_id)
+    info = await _print_info(pid) if pid else {}
+    return pid, info
+
+
+async def print_progress(job_id: str, step: int, layer=0, total=0, rem=0):
+    cfg = await _cfg_for("print_progress")
+    if not cfg:
+        return
+    pid, info = await _job_name(job_id)
+    if info and not _long_enough(cfg, "print_progress", info.get("est")):
+        return
+    lines = ([f"🧱 couche {layer}/{total}"] if total else []) + ([f"⏳ encore {_fmt_dur(rem * 60)}"] if rem else [])
+    await _send(cfg, "print_progress", f"📶 {step} % · {info.get('name') or 'Impression'}", "\n".join(lines),
+                link=f"/prints?id={pid}" if pid else "/", priority=2)
+
+
+async def print_resumed(job_id: str, paused_s: float, pct: float):
+    cfg = await _cfg_for("print_resumed")
+    if not cfg:
+        return
+    pid, info = await _job_name(job_id)
+    lines = [f"📄 {info.get('name') or 'Impression'}",
+             f"⏸️ en pause pendant {_fmt_dur(paused_s)} · 📶 {int(pct or 0)} %"]
+    await _send(cfg, "print_resumed", "▶️ Impression reprise", "\n".join(lines),
+                link=f"/prints?id={pid}" if pid else "/", priority=3)
+
+
+async def print_speed(job_id: str, old: int, new: int, rem: int = 0):
+    cfg = await _cfg_for("print_speed")
+    if not cfg:
+        return
+    pid, info = await _job_name(job_id)
+    lines = [f"📄 {info.get('name') or 'Impression'}", f"avant : {_SPEED.get(old, old)}"] \
+        + ([f"⏳ encore {_fmt_dur(rem * 60)}"] if rem else [])
+    await _send(cfg, "print_speed", f"🏎️ Vitesse : {_SPEED.get(new, new)}", "\n".join(lines),
+                link=f"/prints?id={pid}" if pid else "/", priority=2)
+
+
+async def printer_offline(back: bool, down_s: float = 0):
+    cfg = await _cfg_for("printer_offline")
+    if not cfg:
+        return
+    if back:
+        await _send(cfg, "printer_offline", "📶 Imprimante de nouveau joignable",
+                    f"Injoignable pendant {_fmt_dur(down_s)}.", link="/", priority=2)
+    else:
+        await _send(cfg, "printer_offline", "📴 Imprimante injoignable",
+                    f"Plus de nouvelles depuis {OFFLINE_S // 60} min (éteinte, Wi-Fi coupé ?).", link="/", priority=4)
+
+
+async def bed_cooled(job_id: str, temp: float):
+    cfg = await _cfg_for("bed_cooled")
+    if not cfg:
+        return
+    pid, info = await _job_name(job_id)
+    lines = ([f"📄 {info['name']}"] if info.get("name") else []) + ["Tu peux retirer la pièce."]
+    await _send(cfg, "bed_cooled", f"🧊 Plateau refroidi ({int(temp)} °C)", "\n".join(lines),
+                link=f"/prints?id={pid}" if pid else "/", priority=3)
+
+
+async def printer_firmware(old: str, new: str):
+    cfg = await _cfg_for("printer_firmware")
+    if cfg:
+        await _send(cfg, "printer_firmware", "🆕 Firmware de l'imprimante mis à jour", f"{old} → {new}", link="/", priority=2)
+
+
+async def ams_humidity(label: str, hum: int, thr: int):
+    cfg = await _cfg_for("ams_humidity")
+    if cfg:
+        await _send(cfg, "ams_humidity", f"💦 {label} trop humide : {hum} %",
+                    f"Seuil : {thr} %\nPense au déshydratant, ou à un cycle de séchage.", link="/", priority=3)
+
+
+def _tray_empty(t) -> bool:
+    """Meme regle que l'interface (AMSSection) : drapeau, ou rien d'identifiable."""
+    if t.empty:
+        return True
+    return (t.uuid or "").replace("0", "") == "" and not (t.filament_type or "").strip() \
+        and not (t.tray_id_name or "").strip()
+
+
+def _tray_text(t) -> str:
+    bits = [x for x in ((t.tray_id_name or "").strip(), (t.filament_type or "").strip()) if x]
+    col = (t.raw_color or t.color or "").lstrip("#")[:6]
+    return " · ".join(bits or ["Filament"]) + (f" (#{col.upper()})" if col and col.strip("0") else "")
+
+
+def _tray_now(ams_id, slot):
+    a = _ams_of(_state(), ams_id)
+    return next((t for t in (a.trays if a else []) if t.id == slot), None)
+
+
+def _where(ams_id, slot) -> str:
+    try:
+        from ..core.mqtt import slot_location
+        return slot_location(ams_id, slot)
+    except Exception:
+        return f"AMS {ams_id} slot {int(slot) + 1}"
+
+
+async def spool_loaded(ams_id: int, slot: int):
+    cfg = await _cfg_for("spool_loaded")
+    t = _tray_now(ams_id, slot)
+    if not cfg or t is None or _tray_empty(t):
+        return
+    known = bool(t.spool_id) and t.match_mode not in ("notfound", "manual")
+    if N.options_of(cfg, "spool_loaded")["which"] == "unknown" and known:
+        return
+    lines = (await _spool_lines([t.spool_id]) if t.spool_id else []) or [_tray_text(t)]
+    lines = [x.replace("🧵 ", "") for x in lines]
+    if t.remain is not None and 0 <= t.remain <= 100 and t.remain:
+        lines.append(f"⚖️ reste environ {t.remain} %")
+    if not known:
+        lines.append("❓ Non reconnue dans ton stock : touche pour l'attribuer.")
+    await _send(cfg, "spool_loaded", f"{'🧵 Bobine chargée' if known else '❓ Bobine non reconnue'} · {_where(ams_id, slot)}",
+                "\n".join(lines), link="/", priority=2 if known else 3)
+
+
+async def spool_removed(ams_id: int, slot: int, before):
+    cfg = await _cfg_for("spool_removed")
+    if not cfg:
+        return
+    sid, text = before or (None, "")
+    lines = [x.replace("🧵 ", "") for x in (await _spool_lines([sid]) if sid else [])] or ([text] if text else [])
+    await _send(cfg, "spool_removed", f"📤 Bobine retirée · {_where(ams_id, slot)}", "\n".join(lines),
+                link="/", priority=2)
+
+
+async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
+    """Copains : leur imprimante commence ou finit d'imprimer. Le premier
+    passage memorise sans rien envoyer ; un copain injoignable garde son
+    dernier etat connu (pas de fausse fin)."""
+    await asyncio.sleep(first_delay_s)
+    last = None
+    while True:
+        try:
+            cfg = await N._load()
+            if not (N.enabled_in(cfg, "friend_print_started") or N.enabled_in(cfg, "friend_print_done")):
+                last = None
+            else:
+                from . import friends_shared as FS
+                friends = await FS._load()
+                if not friends:
+                    last = None
+                else:
+                    r = await FS.printing()
+                    names = {str(f["id"]): f.get("name") or f"Copain {f['id']}" for f in friends}
+                    cur = {}
+                    for fid, stt in (r.get("states") or {}).items():
+                        if stt.get("state") == "unreachable":
+                            if last and fid in last:
+                                cur[fid] = last[fid]
+                            continue
+                        cur[fid] = {"state": stt.get("state"), "print": None, "rem": 0}
+                    for it in r.get("printing") or []:
+                        fid = str(it.get("id"))
+                        if fid in cur:
+                            cur[fid].update(print=it.get("print_name") or (it.get("print") or {}).get("name"),
+                                            rem=it.get("remaining_minutes") or 0)
+                    if last is not None:
+                        link = N.app_link(cfg, "/")
+                        for fid, c in cur.items():
+                            p = last.get(fid)
+                            if not p or c is p:
+                                continue
+                            who = names.get(fid, f"Copain {fid}")
+                            if c["state"] == "printing" and p["state"] != "printing":
+                                lines = ([f"📄 {c['print']}"] if c["print"] else []) \
+                                    + ([f"⏳ encore {_fmt_dur(c['rem'] * 60)}"] if c["rem"] else [])
+                                await N.notify("friend_print_started", f"👥 {who} imprime", "\n".join(lines),
+                                               click=link, priority=2)
+                            elif p["state"] == "printing" and c["state"] != "printing":
+                                await N.notify("friend_print_done", f"👥 {who} a fini d'imprimer",
+                                               f"📄 {p['print']}" if p.get("print") else "", click=link, priority=2)
+                    last = cur
+        except Exception as e:
+            logger.warning(f"[NOTIF] copains : {e}")
+        await asyncio.sleep(period_s)
+
+
+async def mw_rate_loop(period_s: int = 6 * 3600, first_delay_s: int = 900):
+    """Impressions a evaluer sur MakerWorld : previent des nouvelles (le
+    premier passage memorise)."""
+    await asyncio.sleep(first_delay_s)
+    seen = None
+    while True:
+        try:
+            cfg = await N._load()
+            from .makerworld_account import token
+            if not N.enabled_in(cfg, "mw_to_rate") or not await token():
+                seen = None
+            else:
+                from . import mw_rate
+                items = (await mw_rate.to_rate(fresh=True)).get("items") or []
+                ids = {str(x.get("design_id")) for x in items}
+                if seen is not None:
+                    new = [x for x in items if str(x.get("design_id")) not in seen]
+                    if new:
+                        lines = [f"   • {x.get('title') or 'Modèle ' + str(x.get('design_id'))}" for x in new[:6]] \
+                            + ([f"   • … et {len(new) - 6} autre(s)"] if len(new) > 6 else [])
+                        link = N.app_link(cfg, "/prints?tab=makerworld")
+                        await N.notify("mw_to_rate", f"⭐ {len(new)} impression{'s' if len(new) > 1 else ''} à évaluer",
+                                       "\n".join(lines), click=link, priority=2,
+                                       actions=[("Ouvrir BambuNymous", link)] if link else None)
+                seen = ids
+        except Exception as e:
+            logger.warning(f"[NOTIF] a evaluer : {e}")
+        await asyncio.sleep(period_s)
+
+
+async def app_started(delay_s: int = 45):
+    """Une fois au demarrage, apres avoir laisse l'imprimante se connecter."""
+    await asyncio.sleep(delay_s)
+    cfg = await N._load()
+    if not N.enabled_in(cfg, "app_started"):
+        return
+    st = _state()
+    await N.notify("app_started", "🔄 BambuNymous a redémarré",
+                   "🖨️ Imprimante connectée." if st.connected else "📴 Imprimante pas encore joignable.",
+                   click=N.app_link(cfg, "/"), priority=1)
+
+
 # ── Ecouteur de l'etat MQTT ───────────────────────────────────────────────
 _W = {"init": False, "status": "", "hms": set(), "hms_sent": set(), "dry": {}, "dry_sent": {},
-      "dry_left": {}, "dry_cfg": {}, "near_sent": set(), "near_above": set()}
+      "dry_left": {}, "dry_cfg": {}, "near_sent": set(), "near_above": set(),
+      # ajouts du 20/10/2026
+      "conn": False, "down_at": 0.0, "off_sent": False, "pause_at": 0.0, "prog": {}, "speed": {},
+      "bed_armed": False, "bed_job": "", "fw": "", "humid": {}, "trays": {}, "tray_desc": {}}
 
 
 def _hms_key(e) -> str:
@@ -515,7 +750,9 @@ def _watch(st) -> None:
             _W["dry_left"][a.id] = a.dry_time
             _W["dry_cfg"][a.id] = (a.dry_temperature, a.dry_duration)
     if not _W["init"]:
-        _W.update(init=True, status=status, hms=codes, hms_sent=set(codes), dry=dict(dry), dry_sent=dict(dry))
+        _W.update(init=True, status=status, hms=codes, hms_sent=set(codes), dry=dict(dry), dry_sent=dict(dry),
+                  conn=bool(st.connected), fw=st.fw_version or "")
+        _watch_more(st, cfg, status, "", baseline=True)
         return
     prev = _W["status"]
     job = str(st.job_id or "")
@@ -598,6 +835,145 @@ def _watch(st) -> None:
             return cur is not None and ((cur.dry_time or 0) > 0) == now
         _settle(key, STABLE_DRY, _still, _fire_dry)
 
+    _watch_more(st, cfg, status, prev)
     _W["status"] = status
     _W["hms"] = codes
     _W["dry"].update(dry)
+
+
+def _watch_more(st, cfg, status: str, prev: str, baseline: bool = False) -> None:
+    """Ajouts du 20/10/2026 : connexion, reprise, avancement, vitesse, plateau,
+    firmware, humidite des AMS, bobines posees ou retirees."""
+    on = lambda e: N.enabled_in(cfg, e)
+    now_t = time.time()
+    job = str(st.job_id or "")
+    conn = bool(st.connected)
+
+    # Connexion : muette OFFLINE_S avant de le dire ; le retour, si on l'a dit
+    if not baseline and conn != _W["conn"]:
+        if not conn:
+            _W["down_at"] = now_t
+
+            def _fire_off():
+                _W["off_sent"] = True
+                _spawn(printer_offline, False, 0)
+            if on("printer_offline"):
+                _settle("offline", OFFLINE_S, lambda: not _state().connected, _fire_off)
+        else:
+            _cancel("offline")
+            if _W["off_sent"]:
+                _W["off_sent"] = False
+                if on("printer_offline") and N.options_of(cfg, "printer_offline")["back"] == "yes":
+                    _spawn(printer_offline, True, now_t - _W["down_at"])
+    _W["conn"] = conn
+    if not conn:
+        return                      # le reste de l'etat est fige : rien a en tirer
+
+    # Reprise apres une pause
+    if status == "PAUSE" and prev != "PAUSE":
+        _W["pause_at"] = now_t
+    elif status == "RUNNING" and prev == "PAUSE" and _W["pause_at"]:
+        dur = now_t - _W["pause_at"]
+        _W["pause_at"] = 0.0
+        if dur >= STABLE_PAUSE and on("print_resumed"):
+            _spawn(print_resumed, job, dur, st.progress)
+
+    # Avancement par paliers ; le premier regard sur un travail ne rattrape rien
+    if status == "RUNNING" and job:
+        step = int(N.options_of(cfg, "print_progress")["step"])
+        b = int((st.progress or 0) // step) * step
+        last = _W["prog"].get(job)
+        if last is None or baseline:
+            _W["prog"][job] = b
+        elif last < b < 100:
+            _W["prog"][job] = b
+            if on("print_progress"):
+                _spawn(print_progress, job, b, st.layer, st.total_layers, st.remaining_minutes)
+
+    # Vitesse : le nouveau reglage doit tenir 10 s ; compare au dernier dit
+    if status == "RUNNING" and job and st.speed_level:
+        sp = st.speed_level
+        told = _W["speed"].get(job)
+        if told is None or baseline:
+            _W["speed"][job] = sp
+        elif sp != told and on("print_speed"):
+            def _fire_speed(job=job, sp=sp):
+                old = _W["speed"].get(job)
+                if old is not None and old != sp:
+                    _W["speed"][job] = sp
+                    _spawn(print_speed, job, old, sp, _state().remaining_minutes)
+            _settle("speed", 10, lambda sp=sp: _state().speed_level == sp, _fire_speed)
+        elif sp != told:
+            _W["speed"][job] = sp
+
+    # Plateau refroidi apres une fin (reussie ou non)
+    if status in ("FINISH", "FAILED") and prev in ("RUNNING", "PAUSE"):
+        _W["bed_armed"], _W["bed_job"] = True, job
+    elif status in ("RUNNING", "PREPARE"):
+        _W["bed_armed"] = False
+    if _W["bed_armed"] and 0 < (st.bed_temp or 0):
+        thr = N.options_of(cfg, "bed_cooled")["temp"]
+        if st.bed_temp < thr:
+            _W["bed_armed"] = False
+            if on("bed_cooled"):
+                _spawn(bed_cooled, _W["bed_job"], st.bed_temp)
+
+    # Firmware
+    fw = st.fw_version or ""
+    if fw and _W["fw"] and fw != _W["fw"] and not baseline and on("printer_firmware"):
+        _spawn(printer_firmware, _W["fw"], fw)
+    if fw:
+        _W["fw"] = fw
+
+    # Humidite des AMS : au-dessus du seuil HUMID_S ; reamorcee 5 points sous le seuil
+    thr = N.options_of(cfg, "ams_humidity")["pct"]
+    for a in (st.ams_list or []):
+        hum = a.humidity or 0
+        if not hum:
+            continue
+        was = _W["humid"].get(a.id)
+        if was is None or baseline:
+            _W["humid"][a.id] = hum >= thr      # deja humide au demarrage : rien
+            continue
+        if hum >= thr and not was:
+            def _fire_humid(aid=a.id):
+                cur = _ams_of(_state(), aid)
+                if cur is None or (cur.humidity or 0) < thr or _W["humid"].get(aid):
+                    return
+                _W["humid"][aid] = True
+                try:
+                    from ..core.mqtt import ams_label
+                    label = ams_label(aid)
+                except Exception:
+                    label = f"AMS {aid}"
+                if label and not label.upper().startswith(("AMS", "HT")):
+                    label = f"AMS {label}"
+                _spawn(ams_humidity, label, cur.humidity, thr)
+            if on("ams_humidity"):
+                _settle(f"humid:{a.id}", HUMID_S, lambda aid=a.id: ((_ams_of(_state(), aid) or a).humidity or 0) >= thr,
+                        _fire_humid)
+        elif hum <= thr - 5 and was:
+            _W["humid"][a.id] = False
+            _cancel(f"humid:{a.id}")
+
+    # Bobines posees ou retirees, emplacement par emplacement
+    for a in (st.ams_list or []):
+        for t in a.trays:
+            key = (a.id, t.id)
+            empty = _tray_empty(t)
+            if not empty:
+                _W["tray_desc"][key] = (t.spool_id, _tray_text(t))
+            was = _W["trays"].get(key)
+            _W["trays"][key] = empty
+            if was is None or baseline or was == empty:
+                continue
+            k = f"tray:{a.id}:{t.id}"
+            if not empty and on("spool_loaded"):
+                _settle(k, STABLE_TRAY, lambda aid=a.id, sl=t.id: (lambda x: x is not None and not _tray_empty(x))(_tray_now(aid, sl)),
+                        lambda aid=a.id, sl=t.id: _spawn(spool_loaded, aid, sl))
+            elif empty and on("spool_removed"):
+                before = _W["tray_desc"].get(key)
+                _settle(k, STABLE_EMPTY, lambda aid=a.id, sl=t.id: (lambda x: x is None or _tray_empty(x))(_tray_now(aid, sl)),
+                        lambda aid=a.id, sl=t.id, before=before: _spawn(spool_removed, aid, sl, before))
+            else:
+                _cancel(k)
