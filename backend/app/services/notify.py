@@ -887,7 +887,7 @@ async def test_device(dev_id: str, user: str, admin: bool) -> dict:
 
 
 
-def _up_payload(title, message, click, priority, section, attach) -> bytes:
+def _up_payload(title, message, click, priority, section, attach, nid=None) -> bytes:
     """JSON compact : t titre, m texte, u lien, p priorite, s section, i image ;
     et l'habillage de la section (sl nom, e emoji, c teinte) pour que l'appli
     cree sa categorie et sa grande icone sans liste en dur."""
@@ -896,6 +896,8 @@ def _up_payload(title, message, click, priority, section, attach) -> bytes:
     if section:
         d.update(sl=name, e=emo, c=SECTION_COLORS.get(section, ""))
     d.update(si=SECTION_ICONS.get(section or "", NOTIF_ICON), ac=BRAND_COLOR)
+    if nid:
+        d["n"] = int(nid)        # touchee ou balayee sur le telephone : lue dans le journal
     if attach and str(attach).startswith("https://"):
         d["i"] = attach
     raw = json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
@@ -905,12 +907,12 @@ def _up_payload(title, message, click, priority, section, attach) -> bytes:
     return raw
 
 
-def _post_devices(cfg, devices, title, message, click, priority, section, attach) -> list:
+def _post_devices(cfg, devices, title, message, click, priority, section, attach, nid=None) -> list:
     """Envoie a chaque telephone ; rend les erreurs (une par telephone en echec)."""
     from urllib.parse import urlparse
     from .makerworld import session
     from datetime import datetime, timezone
-    body = _up_payload(title, message, click, priority, section, attach)
+    body = _up_payload(title, message, click, priority, section, attach, nid)
     n = cfg.get("ntfy") or {}
     ntfy_host = urlparse(n.get("url") or "https://ntfy.sh").netloc
     errs = []
@@ -974,9 +976,10 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
     # icone du sujet si elle est posee, sinon celle passee, sinon le logo
     t_icon = next((t.get("icon") for t in cfg["ntfy"].get("topics") or [] if t["topic"] == topic), "")
     icon = t_icon or icon or app_link(cfg, "/icon-192.png")
+    log_id = None
     if _log and event in EVENTS:
         try:
-            await _log_sent(cfg, event, title, message, click, attach)
+            log_id = await _log_sent(cfg, event, title, message, click, attach)
         except Exception as e:
             logger.warning(f"[NOTIF] historique : {e}")
     kinds = _on(cfg)
@@ -1009,7 +1012,7 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
         if not devs:
             errors.append("Appli Android : aucun téléphone inscrit")
         else:
-            errs = await asyncio.to_thread(_post_devices, cfg, devs, title, message, click, priority, sec, attach)
+            errs = await asyncio.to_thread(_post_devices, cfg, devs, title, message, click, priority, sec, attach, log_id)
             await _save(cfg)                    # derniers succes / echecs par telephone
             if len(errs) == len(devs):
                 errors.append("Appli Android : " + " · ".join(errs))
@@ -1041,25 +1044,28 @@ async def _recipients(cfg, event: str) -> list:
     return [u for u, role in rows if app_wants(cfg, u, event) or (role == "admin" and global_on(cfg, event))]
 
 
-async def _log_sent(cfg, event, title, message, click, attach) -> None:
+async def _log_sent(cfg, event, title, message, click, attach):
+    """Ecrit la notification dans le journal ; rend son id (ou None)."""
     from datetime import datetime, timedelta
     from sqlalchemy import delete
     from ..db.session import AsyncSessionLocal
     from ..models.notif_log import NotifLog
     users = await _recipients(cfg, event)
     if not users:
-        return
+        return None
     base = ((cfg.get("ntfy") or {}).get("app_url") or "").rstrip("/")
     link = click or ""
     if base and link.startswith(base):
         link = link[len(base):] or "/"
     async with AsyncSessionLocal() as db:
-        db.add(NotifLog(event=event, section=EVENTS[event]["section"], title=(title or "")[:250],
-                        message=message or "", link=link[:500] or None,
-                        image=attach if attach and str(attach).startswith("https://") else None,
-                        users="," + ",".join(users) + ","))
+        row = NotifLog(event=event, section=EVENTS[event]["section"], title=(title or "")[:250],
+                       message=message or "", link=link[:500] or None,
+                       image=attach if attach and str(attach).startswith("https://") else None,
+                       users="," + ",".join(users) + ",")
+        db.add(row)
         await db.execute(delete(NotifLog).where(NotifLog.created_at < datetime.utcnow() - timedelta(days=HISTORY_DAYS)))
         await db.commit()
+        return row.id
 
 
 def _mine(user: str):
@@ -1080,26 +1086,63 @@ async def _seen_get() -> dict:
     return d if isinstance(d, dict) else {}
 
 
+K_READ = "NOTIF_READ"          # {compte: [ids lues une par une, au-dela du « tout vu »]}
+
+
+async def _read_get() -> dict:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, K_READ, "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+async def _read_put(d: dict) -> None:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, K_READ, json.dumps(d, separators=(",", ":")))
+
+
+async def mark_read(user: str, ids) -> dict:
+    """Notifications lues sur le telephone (touchees ou balayees)."""
+    seen = int((await _seen_get()).get(user) or 0)
+    d = await _read_get()
+    mine = {int(x) for x in d.get(user) or [] if int(x) > seen}
+    mine |= {int(x) for x in ids or [] if str(x).isdigit() and int(x) > seen}
+    d[user] = sorted(mine)[-2000:]
+    await _read_put(d)
+    return {"unseen": await unseen_count(user)}
+
+
+async def _read_of(user: str) -> set:
+    return {int(x) for x in (await _read_get()).get(user) or []}
+
+
 async def history(user: str, before: int = 0, limit: int = 40) -> dict:
     from sqlalchemy import select, func
     from ..db.session import AsyncSessionLocal
     from ..models.notif_log import NotifLog
     labels = dict(SECTIONS)
     seen = int((await _seen_get()).get(user) or 0)
+    read = await _read_of(user)
     q = select(NotifLog).where(_mine(user))
     if before:
         q = q.where(NotifLog.id < int(before))
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(q.order_by(NotifLog.id.desc()).limit(max(1, min(int(limit), 100))))).scalars().all()
-        unseen = (await db.execute(select(func.count()).select_from(NotifLog)
-                                   .where(_mine(user), NotifLog.id > seen))).scalar_one()
+    unseen = await unseen_count(user)
     return {"items": [{"id": r.id, "time": r.created_at.isoformat() + "Z", "event": r.event, "section": r.section,
                        "section_label": labels.get(r.section, ""),
                        # meme habillage que la notification de l'appli Android
                        "section_emoji": _section_parts(r.section)[0], "section_name": _section_parts(r.section)[1],
                        "section_color": SECTION_COLORS.get(r.section or "", BRAND_COLOR),
                        "title": r.title, "message": r.message,
-                       "link": r.link, "image": r.image, "seen": r.id <= seen} for r in rows],
+                       "link": r.link, "image": r.image, "seen": r.id <= seen or r.id in read} for r in rows],
             "unseen": unseen, "more": len(rows) >= limit, "days": HISTORY_DAYS}
 
 
@@ -1108,9 +1151,12 @@ async def unseen_count(user: str) -> int:
     from ..db.session import AsyncSessionLocal
     from ..models.notif_log import NotifLog
     seen = int((await _seen_get()).get(user) or 0)
+    read = await _read_of(user)
+    q = select(func.count()).select_from(NotifLog).where(_mine(user), NotifLog.id > seen)
+    if read:
+        q = q.where(NotifLog.id.notin_(read))
     async with AsyncSessionLocal() as db:
-        return (await db.execute(select(func.count()).select_from(NotifLog)
-                                 .where(_mine(user), NotifLog.id > seen))).scalar_one()
+        return (await db.execute(q)).scalar_one()
 
 
 async def mark_seen(user: str) -> dict:

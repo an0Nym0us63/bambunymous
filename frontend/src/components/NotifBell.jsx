@@ -22,8 +22,9 @@ export default function NotifBell({ size = 20 }) {
     const seen = () => setN(0);
     document.addEventListener("visibilitychange", vis);
     window.addEventListener(notifSeenEvent, seen);
+    window.addEventListener("bambu-notif-reload", load);       // lues sur le telephone
     return () => { alive = false; clearInterval(t); document.removeEventListener("visibilitychange", vis);
-      window.removeEventListener(notifSeenEvent, seen); };
+      window.removeEventListener(notifSeenEvent, seen); window.removeEventListener("bambu-notif-reload", load); };
   }, [pathname]);
 
   const active = pathname === "/notifications";

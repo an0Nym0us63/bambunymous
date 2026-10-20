@@ -32,6 +32,17 @@ export async function sendEndpoint(endpoint, force = false) {
   window.dispatchEvent(new CustomEvent("bambu-push-synced"));
 }
 
+// Notifications lues sur le telephone (touchees ou balayees) : l'appli les
+// garde et nous les donne ; on les marque lues dans le journal.
+export const notifReloadEvent = "bambu-notif-reload";
+async function flushReads() {
+  let ids = [];
+  try { ids = JSON.parse(pushApi()?.pushTakeReads?.() || "[]"); } catch { /* ancien shell */ }
+  if (!Array.isArray(ids) || !ids.length) return;
+  await client.post("/notify/me/read", { ids });
+  window.dispatchEvent(new CustomEvent(notifReloadEvent));
+}
+
 export default function PushBridge() {
   // Tout compte de la maison inscrit SES telephones (Layout ne monte ce pont
   // que chez moi, jamais en visite chez un copain).
@@ -53,7 +64,16 @@ export default function PushBridge() {
         .catch(err => toast(`Inscription refusée : ${err.response?.data?.detail || err.message}`, "error", 4000));
     };
     window.addEventListener("bambu-push", on);
-    return () => window.removeEventListener("bambu-push", on);
+    flushReads().catch(() => {});
+    const reads = () => flushReads().catch(() => {});
+    const vis = () => { if (document.visibilityState === "visible") reads(); };
+    window.addEventListener("bambu-reads", reads);
+    document.addEventListener("visibilitychange", vis);
+    return () => {
+      window.removeEventListener("bambu-push", on);
+      window.removeEventListener("bambu-reads", reads);
+      document.removeEventListener("visibilitychange", vis);
+    };
   }, []);
   return null;
 }

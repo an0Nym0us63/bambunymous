@@ -130,6 +130,13 @@ async def notify_my_unseen(acc=Depends(require_own_account)):
     return {"unseen": await N.unseen_count(acc[0])}
 
 
+@router.post("/me/read")
+async def notify_my_read(body: dict = Body({}), acc=Depends(require_own_account)):
+    """Lues sur le telephone (touchees ou balayees) : {ids: [...]}."""
+    ids = body.get("ids") if isinstance(body.get("ids"), list) else []
+    return await N.mark_read(acc[0], ids[:500])
+
+
 @router.post("/me/seen")
 async def notify_my_seen(acc=Depends(require_own_account)):
     return await N.mark_seen(acc[0])
