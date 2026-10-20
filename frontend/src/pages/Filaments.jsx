@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
+import { useUrlTab, keepTabs } from "../utils/useUrlTab";
 import ScanSheet from "../components/ScanSheet";
 import RfidSheet from "../components/RfidSheet";
 import { useRfidScan } from "../store/rfidScan";
@@ -2766,7 +2767,7 @@ export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, 
 }
 
 export default function Filaments() {
-  const [tab, setTab] = useState("spools");
+  const [tab, setTab] = useUrlTab("tab", "spools", ["spools", "archived", "catalog", "gallery"]);
   const [searchParams, setSearchParams] = useSearchParams();
   useTrackDetail(`Filaments · ${ {spools:"Stock", archived:"Archivées",
     catalog:"Filaments", gallery:"Galerie"}[tab] || tab }`);
@@ -2844,7 +2845,7 @@ export default function Filaments() {
   const onRfidCreated = (res) => {
     // On enchaine sur la fiche du filament fraichement cree.
     setSearchParams(
-      { id: String(res.filament_id), ...(res.spool_id ? { spool: String(res.spool_id) } : {}) },
+      keepTabs(searchParams, { id: String(res.filament_id), ...(res.spool_id ? { spool: String(res.spool_id) } : {}) }),
       { replace: true },
     );
     // Rafraichir la galerie : la nouvelle reference doit y apparaitre sans recharger.
@@ -2863,7 +2864,7 @@ export default function Filaments() {
     // construction, le QR d'un echantillon. On ajoute swatch=1, ce qui fait
     // cocher la case avant l'ouverture de la fiche -- sans rien attendre de
     // l'app Android, l'information est deja connue ici.
-    setSearchParams({ id, swatch: "1" }, { replace: false });
+    setSearchParams(keepTabs(searchParams, { id, swatch: "1" }), { replace: false });
   };
 
   const FAMILIES_G = ["PLA","PETG","ABS","ASA","PA","PC","TPU","PVA","PLA-CF","PETG-CF","PA-CF","PPS"];

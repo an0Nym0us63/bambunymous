@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useUrlTab } from "../utils/useUrlTab";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import AdminOnly from "./AdminOnly";
@@ -41,7 +42,7 @@ const ago = iso => {
 const FILTERS = [["all", "Tous"], ["printed", "Déjà imprimés"], ["new", "Jamais imprimés"]];
 
 export default function MakerWorldView({ onSearch }) {
-  const [tab, setTab] = useState("favorites");
+  const [tab, setTab] = useUrlTab("mw", "favorites", TABS.map(([k]) => k));
   const [coll, setColl] = useState(null);          // collection ouverte { id, title }
   const [data, setData] = useState(null);          // { items } | { collections } | { error }
   const [pf, setPf] = useState("all");           // tous / deja imprimes / jamais imprimes

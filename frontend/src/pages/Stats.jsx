@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useUrlTab } from "../utils/useUrlTab";
 
 import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag, Filter, Droplets } from "lucide-react";
 import client from "../api/client";
@@ -789,7 +790,7 @@ export default function Stats() {
   const [groupPrints, setGroupPrints] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [tab, setTab] = useState("prints");     // prints | filaments | objects
+  const [tab, setTab] = useUrlTab("tab", "prints", ["prints", "filaments", "drying", "objects"]);
   useTrackDetail(`Stats · ${ {prints:"Prints", filaments:"Filaments",
     objects:"Objets"}[tab] || tab }`);
   const [objStats, setObjStats] = useState(null);

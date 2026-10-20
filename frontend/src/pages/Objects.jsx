@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { useUrlTab } from "../utils/useUrlTab";
 import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
 import client, { apiUrl } from "../api/client";
 import { showAlert, showConfirm } from "../utils/dialog";
@@ -1793,7 +1794,7 @@ function ObjectGroupTile({ group, objects, sectionStatus, totalCount, onChanged 
 
 // ── Main ──────────────────────────────────────────────────────────────────
 export default function Objects() {
-  const [tab, setTab] = useState("objects");
+  const [tab, setTab] = useUrlTab("tab", "objects", ["objects", "accessories"]);
   useTrackDetail(`Objets · ${tab === "accessories" ? "Accessoires" : "Objets"}`);
   const [q, setQ] = useState("");
   const [objects, setObjects] = useState([]);

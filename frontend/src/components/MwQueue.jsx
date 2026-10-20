@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useUrlTab } from "../utils/useUrlTab";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import MwImg from "./MwImg";
@@ -42,7 +43,7 @@ export default function MwQueue() {
   const [pick, setPick] = useState(false);
   const [filter, setFilter] = useState("all");
   const [model, setModel] = useState(null);
-  const [tab, setTab] = useState("models");        // models | filaments
+  const [tab, setTab] = useUrlTab("afaire", "models", ["models", "filaments"]);
   const [sorting, setSorting] = useState(false);   // mode « Réorganiser »
   // « Jusqu'ici » : les stats ne portent que sur le debut de la file (garde dans ce navigateur).
   const [until, setUntilState] = useState(() => { try { return localStorage.getItem("mwQueueUntil") || null; } catch { return null; } });

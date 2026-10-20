@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import Lightbox from "../components/Lightbox";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
+import { useUrlTab } from "../utils/useUrlTab";
 import MakerWorldView from "../components/MakerWorldView";
 import MakerWorldCollectionsPicker from "../components/MakerWorldCollectionsPicker";
 import MakerWorldModelSheet, { prefetchModel } from "../components/MakerWorldModelSheet";
@@ -2642,7 +2643,7 @@ export default function Prints() {
   const [allFilaTypes, setAllFilaTypes] = useState([]);
   const [filSearch, setFilSearch] = useState("");
   const [sortF, setSortF]     = useState("recent");
-  const [viewMode, setViewMode] = useState("list"); // "list" | "gallery" | "makerworld"
+  const [viewMode, setViewMode] = useUrlTab("tab", "list", ["list", "gallery", "makerworld", "queue"]);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   // Groupes selectionnes (appui long sur une tuile de groupe), dans l'ordre de

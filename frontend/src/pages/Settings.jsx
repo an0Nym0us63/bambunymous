@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useUrlTab } from "../utils/useUrlTab";
 import client from "../api/client";
 import { FriendsCard, FriendKeyButtons } from "../components/Friends";
 import { showAlert, showConfirm } from "../utils/dialog";
@@ -1721,12 +1722,15 @@ export default function Settings() {
   const tabs = SET_TABS.filter(t => isAdmin || !t.admin);
   // Dernier onglet ouvert (ce navigateur) ; sinon selon le role : « Imprimante »
   // n'existe pas pour un compte en lecture seule, il atterrit sur « Affichage ».
-  const [tab, setTabState] = React.useState(() => {
+  // L'adresse (?tab=…) d'abord : rafraichir ou changer de maison garde l'onglet.
+  // Sans elle, le dernier onglet ouvert sur ce navigateur.
+  const [defTab] = React.useState(() => {
     let t = null;
     try { t = localStorage.getItem("settingsTab"); } catch { /* indisponible */ }
     return SET_TABS.some(x => x.id === t && (isAdmin || !x.admin)) ? t : (isAdmin ? "printer" : "display");
   });
-  const setTab = t => { setTabState(t); try { localStorage.setItem("settingsTab", t); } catch { /* indisponible */ } };
+  const [tab, setUrlTab] = useUrlTab("tab", defTab, tabs.map(t => t.id));
+  const setTab = t => { setUrlTab(t); try { localStorage.setItem("settingsTab", t); } catch { /* indisponible */ } };
   useTrackDetail(`Paramètres · ${tabs.find(t => t.id === tab)?.label || tab}`);
 
   // Tous les hooks sont declares AVANT ce retour anticipe. Les placer apres
