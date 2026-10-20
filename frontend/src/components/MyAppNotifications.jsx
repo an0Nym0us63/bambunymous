@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import client from "../api/client";
-import { Smartphone } from "lucide-react";
 import { pushApi, readPushStatus, sendEndpoint } from "./PushBridge";
 
 // Mes notifications sur l'appli Android : chaque compte de la maison inscrit
@@ -60,8 +59,7 @@ export default function MyAppNotifications({ embedded = false }) {
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
         {embedded ? "Mon téléphone" : "Mes notifications"}</h3>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 10px", lineHeight:1.5 }}>
-        Coche ce que tu veux recevoir sur <b><Smartphone size={12} style={{ verticalAlign:-1 }}/> ton téléphone</b> (appli
-        Android BambuNymous, avec l'appli <b>ntfy</b>). Tu les retrouves aussi dans la 🔔 cloche, lues dès que tu les touches.
+        Active ce que tu veux recevoir sur ton téléphone (appli Android BambuNymous, avec l'appli <b>ntfy</b>). Tu les retrouves aussi dans la 🔔 cloche, lues dès que tu les touches.
         Les autres comptes ont leurs propres choix.
       </p>
       {!me.app_on && (
@@ -115,8 +113,8 @@ export default function MyAppNotifications({ embedded = false }) {
               <span style={{ fontSize:11, fontWeight:700, padding:"3px 9px", borderRadius:20, marginLeft:"auto",
                 color: n ? "#22c55e" : "var(--muted)", background: n ? "rgba(34,197,94,0.12)" : "var(--surface2)" }}>{n}/{evs.length}</span>
             </button>
-            <Channels app={all("app")} disabled={busy === "ev"}
-              onChange={(c, v) => setEvents({ [`section:${sec.id}`]: { [c]: v } })}/>
+            <Switch on={all("app") === true} partial={all("app") === null} disabled={busy === "ev"}
+              onChange={v => setEvents({ [`section:${sec.id}`]: { app: v } })}/>
           </div>
           {isOpen && (
             <div style={{ padding:"0 20px 10px" }}>
@@ -126,8 +124,7 @@ export default function MyAppNotifications({ embedded = false }) {
                     <div style={{ fontSize:13, fontWeight:700, color:"var(--text)" }}>{e.label}</div>
                     <div style={{ fontSize:11.5, color:"var(--muted)", marginTop:2 }}>{e.description}</div>
                   </div>
-                  <Channels app={e.app} disabled={busy === "ev"}
-                    onChange={(c, v) => setEvents({ [e.id]: { [c]: v } })}/>
+                  <Switch on={!!e.app} disabled={busy === "ev"} onChange={v => setEvents({ [e.id]: { app: v } })}/>
                 </div>
               ))}
             </div>
@@ -140,32 +137,6 @@ export default function MyAppNotifications({ embedded = false }) {
 
 // Deux canaux independants par type : le journal (la cloche) et le telephone
 // (appli Android). Vrai : actif ; null (en tete de section) : melange.
-// Mon telephone, type par type (le journal est un canal commun, regle par
-// l'administrateur)
-const CHANNELS = [["app", "Téléphone", "appli Android", Smartphone]];
-function Channels({ app, onChange, disabled }) {
-  const val = { app };
-  return (
-    <span style={{ display:"inline-flex", flexShrink:0, gap:5 }}>
-      {CHANNELS.map(([k, label, hint, Icon]) => {
-        const v = val[k];
-        const on = v === true, mixed = v === null;
-        return (
-          <button key={k} onClick={() => onChange(k, !on)} disabled={disabled} aria-pressed={on}
-            title={`${label} (${hint}) : ${on ? "activé" : mixed ? "en partie" : "désactivé"}`}
-            style={{ height:26, padding:"0 9px 0 7px", borderRadius:20, cursor:"pointer", display:"inline-flex",
-              alignItems:"center", gap:5, fontSize:11.5, fontWeight:600, transition:"all .15s",
-              border: on ? "1px solid rgba(99,102,241,0.45)" : mixed ? "1px dashed rgba(99,102,241,0.6)" : "1px solid var(--border)",
-              background: on ? "rgba(99,102,241,0.16)" : "transparent",
-              color: on || mixed ? "#6366F1" : "var(--muted)", opacity: on || mixed ? 1 : 0.85 }}>
-            <Icon size={13} strokeWidth={2.2}/>{label}
-          </button>
-        );
-      })}
-    </span>
-  );
-}
-
 function Switch({ on, partial, onChange, disabled }) {
   return (
     <button onClick={() => onChange(!on)} disabled={disabled} aria-pressed={on}
