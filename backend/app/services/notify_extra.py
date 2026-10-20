@@ -29,7 +29,7 @@ K_ACC = "NOTIF_ACCESSORIES"         # {id accessoire: "low" | "out"} deja signal
 K_UNSOLD = "NOTIF_UNSOLD"           # objets en vente deja signales
 K_OVERDUE = "NOTIF_OVERDUE"         # id de la derniere impression signalee en retard
 K_MWAUTH = "NOTIF_MW_AUTH"          # "lost" : jeton refuse deja signale
-K_BOOSTS = "NOTIF_BOOST_TOKENS"     # {"ids": [jetons boost connus], "warned": [deja signales proches de l'expiration]}
+K_BOOSTS = "NOTIF_BOOST_TOKENS"     # {"ids": [jetons boost connus], "reminded": "AAAA-MM-JJ" du dernier rappel}
 
 
 def _fr(x: float, d: int = 1) -> str:
@@ -519,8 +519,9 @@ def _fr_date(iso) -> str:
 
 
 async def boost_tokens_tick(cfg) -> int:
-    """Toutes les 3 h : nouveaux jetons boost, et ceux qui expirent bientot (un
-    rappel par jeton). Le premier passage memorise sans rien envoyer."""
+    """Toutes les 3 h : nouveaux jetons boost (notifies a leur arrivee), et
+    rappel chaque jour tant qu'un jeton expire sous N jours. Le premier passage
+    memorise les jetons deja la sans rien envoyer."""
     import time
     from . import makerworld_account as A
     if time.time() - _BOOST["t"] < BOOST_EVERY_S:
@@ -533,9 +534,9 @@ async def boost_tokens_tick(cfg) -> int:
     st = await _get(K_BOOSTS, None)
     ids = [r["id"] for r in rights]
     if not isinstance(st, dict):
-        await _put(K_BOOSTS, {"ids": ids, "warned": []})
+        await _put(K_BOOSTS, {"ids": ids, "reminded": ""})
         return 0
-    known, warned = set(st.get("ids") or []), set(st.get("warned") or [])
+    known = set(st.get("ids") or [])
     sent = 0
     n_av = len(rights)
     link = N.app_link(cfg, "/prints?tab=makerworld")
@@ -556,9 +557,17 @@ async def boost_tokens_tick(cfg) -> int:
             exp = datetime.fromisoformat(str(r["expire_at"]).replace("Z", "+00:00")).replace(tzinfo=None)
         except (TypeError, ValueError):
             continue
-        if now < exp <= now + timedelta(days=days) and r["id"] not in warned:
+        if now < exp <= now + timedelta(days=days):
             soon.append((exp, r))
-    if soon and N.enabled_in(cfg, "mw_boost_expiring"):
+    # rappel quotidien (a partir de 9 h, heure de Paris) tant qu'un jeton est sous le seuil
+    try:
+        from .achievements import _local
+        loc = _local(now)
+    except Exception:
+        loc = now
+    today = loc.strftime("%Y-%m-%d")
+    due = soon and loc.hour >= 9 and st.get("reminded") != today
+    if due and N.enabled_in(cfg, "mw_boost_expiring"):
         soon.sort(key=lambda x: x[0])
         lines = []
         for exp, r in soon[:6]:
@@ -570,9 +579,7 @@ async def boost_tokens_tick(cfg) -> int:
         await N.notify("mw_boost_expiring", f"⏳ {n} jeton{'s' if n > 1 else ''} boost expire{'nt' if n > 1 else ''} bientôt",
                        "\n".join(lines), click=link, priority=3)
         sent += 1
-    warned |= {r["id"] for _e, r in soon}
-    # on oublie les jetons depenses ou expires
-    await _put(K_BOOSTS, {"ids": ids, "warned": sorted(w for w in warned if w in set(ids))})
+    await _put(K_BOOSTS, {"ids": ids, "reminded": today if due else st.get("reminded", "")})
     return sent
 
 

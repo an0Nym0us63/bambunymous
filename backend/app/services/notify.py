@@ -367,7 +367,7 @@ EVENTS["mw_boost_token"] = {
 }
 EVENTS["mw_boost_expiring"] = {
     "section": "mw", "label": "Jeton boost bientôt expiré",
-    "description": "Un jeton boost arrive à expiration : utilise-le avant qu'il ne soit perdu (un rappel par jeton).",
+    "description": "Des jetons boost expirent bientôt : un rappel chaque jour (dès 9 h) tant qu'ils ne sont pas utilisés.",
     "options": [{"key": "days", "type": "number", "label": "Moins de", "unit": "jours", "default": 5, "min": 1, "max": 30}],
     "sample": {"title": "⏳ 1 jeton boost expire bientôt", "priority": 3, "link": "/prints?tab=makerworld",
                "message": "Expire le 2 nov. (dans 4 jours)\n🚀 7 jetons disponibles"},
