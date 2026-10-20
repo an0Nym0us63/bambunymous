@@ -409,6 +409,12 @@ async def enforce_readonly(request, call_next):
         if auth.lower().startswith("bearer ") and auth.split(" ", 1)[1].strip().startswith("fk_"):
             # Cle copain : lecture seule, toujours.
             return JSONResponse(status_code=403, content={"detail": "Accès copain : lecture seule"})
+        # Actions MakerWorld : chaque route d'ecriture porte son propre controle
+        # (droit « Actions MakerWorld » ou administrateur, verifie en base) ;
+        # le blocage par role les refusait a un compte en lecture seule qui a
+        # pourtant ce droit.
+        if path.startswith("/api/v1/makerworld/"):
+            return await call_next(request)
         if auth.lower().startswith("bearer "):
             payload = decode_token_payload(auth.split(" ", 1)[1].strip())
             # Test sur "different de admin" et non sur une liste de roles brides :

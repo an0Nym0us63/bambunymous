@@ -14,7 +14,7 @@ import { mwPatch, onMwChange } from "../utils/mwSync";
 import { useFriend } from "../store/friend";
 import { useMine, MineBadge } from "./Friends";
 import { Pressable } from "./ContextMenu";
-import { useIsAdmin, useIsHomeAdmin, useCanMw } from "../store/auth";
+import { useIsAdmin, useCanMw, useCanMwHome } from "../store/auth";
 import { useMwAssign } from "../store/mwAssign";
 
 // Cache de la vue (le temps de la session) : revenir sur un onglet ou une
@@ -266,7 +266,7 @@ export default function MakerWorldView({ onSearch }) {
   const friend = useFriend((s) => s.friend);
   const isAdmin = useIsAdmin();
   const canMw = useCanMw();
-  const isHomeAdmin = useIsHomeAdmin();
+  const isHomeAdmin = useCanMwHome();       // ranger dans MES collections : droit MakerWorld
   const startAssign = useMwAssign((s) => s.start);
   // Menus d'appui long / clic droit : collection, modele.
   const collMenu = c => ({
