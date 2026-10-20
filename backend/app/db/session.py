@@ -34,6 +34,7 @@ async def init_db():
     from ..models import rfid       # noqa - table des scans NFC
     from ..models import user       # noqa - comptes et roles
     from ..models import activity   # noqa - journal d'activite
+    from ..models import notif_log  # noqa - historique des notifications
     async with engine.begin() as conn:
         # WAL mode : permet lectures concurrentes, évite les database locked
         await conn.execute(__import__("sqlalchemy").text("PRAGMA journal_mode=WAL"))

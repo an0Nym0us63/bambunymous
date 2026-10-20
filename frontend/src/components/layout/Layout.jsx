@@ -4,6 +4,7 @@ import { useFriend } from "../../store/friend";
 import { Outlet, NavLink, useNavigate, useLocation } from "react-router-dom";
 import { Home, Settings, Package, History, ShoppingBag, BarChart2 } from "lucide-react";
 import UserMenu from "../UserMenu";
+import NotifBell from "../NotifBell";
 import ShareProgress from "../ShareProgress";
 import RfidScanBridge from "../RfidScanBridge";
 import PushBridge from "../PushBridge";
@@ -166,7 +167,10 @@ export default function Layout() {
         {/* Le compte remplace le bouton de deconnexion nu : meme place, en bas
             du menu, mais il indique aussi qui est connecte et sous quel role. */}
         <div style={{ margin:"0 8px", padding:"10px 12px", borderTop:"1px solid var(--border)" }}>
-          <UserMenu placement="top" showName size={28}/>
+          <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+            <div style={{ flex:1, minWidth:0 }}><UserMenu placement="top" showName size={28}/></div>
+            {!friend && <NotifBell size={18}/>}
+          </div>
         </div>
       </aside>
 
@@ -199,6 +203,7 @@ export default function Layout() {
           <div id="header-status" style={{ display:"flex", alignItems:"center", flexShrink:0 }}/>
           {/* Profil sur toutes les pages, toujours le plus a droite (apres le
               point d'injection des actions de la page). */}
+          {!friend && <NotifBell/>}
           <UserMenu placement="bottom"/>
         </header>
 

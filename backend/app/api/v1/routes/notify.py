@@ -118,6 +118,23 @@ async def notify_me_events(body: dict = Body({}), acc=Depends(require_own_accoun
     return await _call(N.set_my_events(acc[0], body))
 
 
+@router.get("/me/history")
+async def notify_my_history(before: int = 0, acc=Depends(require_own_account)):
+    """Mes notifications des 15 derniers jours, la plus recente d'abord."""
+    return await N.history(acc[0], before)
+
+
+@router.get("/me/unseen")
+async def notify_my_unseen(acc=Depends(require_own_account)):
+    """Pour la cloche : combien je n'en ai pas encore vu."""
+    return {"unseen": await N.unseen_count(acc[0])}
+
+
+@router.post("/me/seen")
+async def notify_my_seen(acc=Depends(require_own_account)):
+    return await N.mark_seen(acc[0])
+
+
 @router.post("/me/test")
 async def notify_me_test(body: dict = Body({}), acc=Depends(require_own_account)):
     return await _call(N.test_device(str(body.get("device") or ""), acc[0], _is_admin(acc)))

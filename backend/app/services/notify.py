@@ -431,12 +431,13 @@ def app_wants(cfg, user, event: str) -> bool:
 
 def enabled_in(cfg, event: str) -> bool:
     """L'evenement merite-t-il d'etre calcule ? Oui si l'administrateur l'a
-    active, ou si un telephone inscrit le veut (appli activee)."""
+    active, ou si un compte l'a choisi (son historique, sa cloche, et ses
+    telephones si l'appli est activee)."""
     if global_on(cfg, event):
         return True
-    if not cfg or not (cfg.get("channels") or {}).get("app"):
+    if not cfg:
         return False
-    return any(app_wants(cfg, d.get("user"), event) for d in cfg.get("devices") or [])
+    return any(isinstance(p, dict) and p.get(event) for p in (cfg.get("app_prefs") or {}).values())
 
 
 def _public(cfg: dict) -> dict:
@@ -930,7 +931,8 @@ _KIND_FR = {"ntfy": "ntfy", "telegram": "Telegram", "app": "l'appli Android"}
 
 
 async def send(title: str, message: str = "", click=None, attach=None, tags=None, priority=None,
-               actions=None, file=None, filename=None, icon=None, event=None, topic=None, chat=None) -> None:
+               actions=None, file=None, filename=None, icon=None, event=None, topic=None, chat=None,
+               _log: bool = True) -> None:
     """icon : petite image de la notification (Android ; iOS l'ignore). Par
     defaut le logo BambuNymous, servi par l'appli si son adresse est connue.
     Part sur chaque canal active (ntfy, bot Telegram, appli Android) ; un canal
@@ -946,6 +948,11 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
     # icone du sujet si elle est posee, sinon celle passee, sinon le logo
     t_icon = next((t.get("icon") for t in cfg["ntfy"].get("topics") or [] if t["topic"] == topic), "")
     icon = t_icon or icon or app_link(cfg, "/icon-192.png")
+    if _log and event in EVENTS:
+        try:
+            await _log_sent(cfg, event, title, message, click, attach)
+        except Exception as e:
+            logger.warning(f"[NOTIF] historique : {e}")
     kinds = _on(cfg)
     if not kinds:
         raise NotifyError("Aucun canal activé (ntfy, Telegram ou appli Android)")
@@ -989,6 +996,108 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
         logger.warning(f"[NOTIF] {e}")
 
 
+# ── Historique (15 jours), une liste par compte ───────────────────────────
+HISTORY_DAYS = 15
+K_SEEN = "NOTIF_SEEN"          # {compte: id de la derniere notification vue}
+
+
+async def _recipients(cfg, event: str) -> list:
+    """Les comptes qui voient ce type dans leur historique : ceux qui le
+    veulent sur l'appli (sans choix : comme l'administrateur), et les
+    administrateurs quand il part sur ntfy / Telegram."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.user import User
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(User.username, User.role).where(User.active.is_(True)))).all()
+    if not rows:
+        return ["*"]
+    return [u for u, role in rows if app_wants(cfg, u, event) or (role == "admin" and global_on(cfg, event))]
+
+
+async def _log_sent(cfg, event, title, message, click, attach) -> None:
+    from datetime import datetime, timedelta
+    from sqlalchemy import delete
+    from ..db.session import AsyncSessionLocal
+    from ..models.notif_log import NotifLog
+    users = await _recipients(cfg, event)
+    if not users:
+        return
+    base = ((cfg.get("ntfy") or {}).get("app_url") or "").rstrip("/")
+    link = click or ""
+    if base and link.startswith(base):
+        link = link[len(base):] or "/"
+    async with AsyncSessionLocal() as db:
+        db.add(NotifLog(event=event, section=EVENTS[event]["section"], title=(title or "")[:250],
+                        message=message or "", link=link[:500] or None,
+                        image=attach if attach and str(attach).startswith("https://") else None,
+                        users="," + ",".join(users) + ","))
+        await db.execute(delete(NotifLog).where(NotifLog.created_at < datetime.utcnow() - timedelta(days=HISTORY_DAYS)))
+        await db.commit()
+
+
+def _mine(user: str):
+    from sqlalchemy import or_
+    from ..models.notif_log import NotifLog
+    return or_(NotifLog.users.like(f"%,{user},%"), NotifLog.users == ",*,")
+
+
+async def _seen_get() -> dict:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, K_SEEN, "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+async def history(user: str, before: int = 0, limit: int = 40) -> dict:
+    from sqlalchemy import select, func
+    from ..db.session import AsyncSessionLocal
+    from ..models.notif_log import NotifLog
+    labels = dict(SECTIONS)
+    seen = int((await _seen_get()).get(user) or 0)
+    q = select(NotifLog).where(_mine(user))
+    if before:
+        q = q.where(NotifLog.id < int(before))
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(q.order_by(NotifLog.id.desc()).limit(max(1, min(int(limit), 100))))).scalars().all()
+        unseen = (await db.execute(select(func.count()).select_from(NotifLog)
+                                   .where(_mine(user), NotifLog.id > seen))).scalar_one()
+    return {"items": [{"id": r.id, "time": r.created_at.isoformat() + "Z", "event": r.event, "section": r.section,
+                       "section_label": labels.get(r.section, ""), "title": r.title, "message": r.message,
+                       "link": r.link, "image": r.image, "seen": r.id <= seen} for r in rows],
+            "unseen": unseen, "more": len(rows) >= limit, "days": HISTORY_DAYS}
+
+
+async def unseen_count(user: str) -> int:
+    from sqlalchemy import select, func
+    from ..db.session import AsyncSessionLocal
+    from ..models.notif_log import NotifLog
+    seen = int((await _seen_get()).get(user) or 0)
+    async with AsyncSessionLocal() as db:
+        return (await db.execute(select(func.count()).select_from(NotifLog)
+                                 .where(_mine(user), NotifLog.id > seen))).scalar_one()
+
+
+async def mark_seen(user: str) -> dict:
+    """Tout est vu jusqu'a la plus recente."""
+    from sqlalchemy import select, func
+    from ..db.session import AsyncSessionLocal
+    from ..models.notif_log import NotifLog
+    from .settings_service import set_setting
+    async with AsyncSessionLocal() as db:
+        top = (await db.execute(select(func.max(NotifLog.id)))).scalar_one() or 0
+    d = await _seen_get()
+    d[user] = int(top)
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, K_SEEN, json.dumps(d))
+    return {"unseen": 0}
+
+
 async def _send_only(cfg, message: str, topic: str, chat: str) -> None:
     """Essai d'UNE destination, quel que soit le canal choisi."""
     import asyncio
@@ -1027,7 +1136,7 @@ async def test(event: str = "", topic: str = "", chat: str = "", device: str = "
         if s.get("link") is not None and app_link(cfg, s["link"]):
             actions.insert(0, ("Ouvrir BambuNymous", app_link(cfg, s["link"])))
         await send("[Test] " + s["title"], s["message"], click=click, attach=s.get("attach"),
-                   priority=s.get("priority"), actions=actions, event=event)
+                   priority=s.get("priority"), actions=actions, event=event, _log=False)
     else:
         names = [_KIND_FR[k] for k in _on(cfg)]
         ch = (", ".join(names[:-1]) + " et " + names[-1]) if len(names) > 1 else (names[0] if names else "aucun canal")

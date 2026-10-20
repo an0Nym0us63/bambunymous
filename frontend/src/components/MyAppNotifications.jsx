@@ -57,14 +57,14 @@ export default function MyAppNotifications({ embedded = false }) {
   return (<>
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
-        {embedded ? "Mes notifications sur l'appli" : "Notifications sur mon téléphone"}</h3>
+        {embedded ? "Mes notifications (appli et cloche)" : "Mes notifications"}</h3>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 10px", lineHeight:1.5 }}>
-        L'appli Android BambuNymous les affiche elle-même (il faut aussi l'appli <b>ntfy</b> sur le téléphone).
-        Tu choisis ci-dessous ce que tu veux recevoir ; les autres comptes ont leurs propres choix.
+        Celles que tu choisis ci-dessous arrivent dans la 🔔 cloche (historique de 15 jours) et, si ton téléphone est
+        inscrit, dans l'appli Android BambuNymous (il faut aussi l'appli <b>ntfy</b>). Les autres comptes ont leurs propres choix.
       </p>
       {!me.app_on && (
         <p style={{ fontSize:12, color:"#f59e0b", margin:"0 0 10px" }}>
-          L'administrateur n'a pas activé les notifications de l'appli : rien ne partira pour l'instant.</p>
+          L'administrateur n'a pas activé l'appli Android : pour l'instant, seulement dans la cloche.</p>
       )}
       {push ? (
         <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12, color:"var(--text2)", marginBottom:8 }}>
