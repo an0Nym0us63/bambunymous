@@ -2377,6 +2377,10 @@ async def tick(notify: bool = True) -> list:
         new = [(aid, i) for aid, i in new if _recent(st["unlocked"].get(aid, {}).get(str(i)))]
     gains = _earn_keys(st, ev, new, await _ok_since((st.get("keys") or {}).get("since")))
     gains += _gift_keys(st)
+    # les cles de depart ont aussi leur notification (une fois)
+    if not st["keys"].get("start_notified", True):
+        st["keys"]["start_notified"] = True
+        gains.insert(0, (KEY_START, "Clés de départ"))
     st["sig"] = CATALOG_SIG
     sha = (os.getenv("COMMIT_SHA") or "")[:8]
     if sha and sha != "dev":
@@ -2386,7 +2390,7 @@ async def tick(notify: bool = True) -> list:
     await _state_put(st)
     _CACHE["v"] = None
     if new and notify:
-        await _notify(new, ev, sum(n for n, _w in gains if not _w.startswith(("Début", "Noël"))))
+        await _notify(new, ev, sum(n for n, _w in gains if not _w.startswith(("Début", "Noël", "Clés de départ"))))
     if gains and notify:
         await _notify_keys(gains, st["keys"]["balance"])
     return new
@@ -2435,7 +2439,7 @@ def _keys_init(st: dict) -> dict:
     k = st.get("keys")
     now = datetime.utcnow()
     if not isinstance(k, dict):
-        k = st["keys"] = {"balance": KEY_START, "spent": {}, "earned": KEY_START,
+        k = st["keys"] = {"balance": KEY_START, "spent": {}, "earned": KEY_START, "start_notified": False,
                           "log": [{"at": now.isoformat(), "n": KEY_START, "why": "Clés de départ"}]}
     if not k.get("since"):
         # mise en route (ou reprise d'un etat d'avant le comptage par date)
@@ -2475,13 +2479,15 @@ async def _notify_keys(gains: list, balance: int) -> None:
     cfg = await N._load()
     total = sum(n for n, _w in gains)
     whys = [w for _n, w in gains]
-    if "Noël" in whys:
+    if "Clés de départ" in whys and len(gains) == 1:
+        title = f"🗝️ Tes {total} premières clés pour révéler des secrets !"
+    elif "Noël" in whys:
         title = f"🎄 Joyeux Noël : +{total} clé{'s' if total > 1 else ''} !"
     elif "Début du mois" in whys:
         title = f"🎁 Bon début de mois : +{total} clé{'s' if total > 1 else ''} !"
     else:
         title = f"🔑 +{total} clé{'s' if total > 1 else ''}"
-    icon = {"Noël": "🎄", "Début du mois": "🎁"}
+    icon = {"Noël": "🎄", "Début du mois": "🎁", "Clés de départ": "🗝️"}
     lines = [f"{icon.get(w, '🔑')} +{n} · {w}" for n, w in gains[:8]] + \
             ([f"… et {len(gains) - 8} autre(s)"] if len(gains) > 8 else [])
     lines.append(f"Tu as maintenant {balance} clé{'s' if balance > 1 else ''} : de quoi révéler des secrets.")
@@ -2752,6 +2758,9 @@ async def view(fresh: bool = False) -> dict:
             if t["at"] and not (BY_ID[it["id"]].get("live") and t["at"][:10] <= first_day):
                 top[it["id"]] = (t["at"], it["id"], j)
     recent = sorted(top.values(), reverse=True)[:6]
+    if st.get("unlocked") is not None and st.get("sig") and not isinstance(st.get("keys"), dict):
+        _keys_init(st)                         # mise en route des cles sans attendre le prochain passage
+        await _state_put(st)
     k = st.get("keys") if isinstance(st.get("keys"), dict) else None
     ok_since = await _ok_since(k.get("since")) if k else 0
     keys = None if k is None else {

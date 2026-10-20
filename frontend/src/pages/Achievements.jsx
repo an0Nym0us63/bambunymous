@@ -162,7 +162,13 @@ export default function Achievements({ embedded = false }) {
               <div style={{ display:"flex", alignItems:"center", gap:10, width:"100%" }}>
                 <span style={{ fontSize:22 }}>{c.emoji}</span>
                 <span style={{ flex:1, minWidth:0 }}>
-                  <span style={{ display:"block", fontSize:15, fontWeight:800 }}>{c.name}</span>
+                  <span style={{ display:"flex", alignItems:"center", gap:8, fontSize:15, fontWeight:800 }}>{c.name}
+                    {/* mes cles, la ou on les depense */}
+                    {c.id === "secret" && data.keys && !atFriend && (
+                      <span title="Tes clés, pour révéler les secrets (touche un secret)" style={{ fontSize:12, fontWeight:900,
+                        padding:"2px 8px", borderRadius:20, background:"rgba(245,158,11,0.15)", color:"#F59E0B" }}>
+                        🔑 {data.keys.balance}</span>
+                    )}</span>
                   <span style={{ display:"block", fontSize:11.5, color:"var(--muted)", marginTop:1 }}>
                     {got}/{items.length} succès · {sum.score} pts
                     {near > 0 && <span style={{ color:"#F59E0B", fontWeight:700 }}> · 👀 {near} à portée</span>}
