@@ -186,6 +186,17 @@ export default function Achievements({ embedded = false }) {
                     <Compare people={people} cat={c.id}/>
                   </div>
                 )}
+                {/* Legende des reperes entre copains (ce qui s'applique ici seulement) */}
+                {c.id === "secret" && (near > 0 || common + toFind > 0) && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:4, padding:"8px 10px", borderRadius:10, fontSize:11.5,
+                    lineHeight:1.45, color:"var(--text2)", background:"rgba(245,158,11,0.08)", border:"1px dashed rgba(245,158,11,0.5)" }}>
+                    {near > 0 && !atFriend && <span><b style={{ color:"#F59E0B" }}>👀 À portée</b> : pas encore à toi, mais un copain l'a déjà
+                      débloqué (son initiale est sur la médaille). Rien n'est dévoilé : à toi de trouver comment.</span>}
+                    {near > 0 && atFriend && <span><b style={{ color:"#F59E0B" }}>« toi »</b> : tu l'as déjà, lui pas encore.</span>}
+                    {common + toFind > 0 && <span><b style={{ color:"#22c55e" }}>✓ toi aussi</b> / <b style={{ color:"#ef4444" }}>pas toi</b> :
+                      ses médailles comparées aux tiennes.</span>}
+                  </div>
+                )}
                 {/* Secrets : rangés en sous-sections (calendrier, heures, couleurs…) */}
                 {(c.id === "secret" && data.subs?.length
                   ? data.subs.map(sb => ({ ...sb, items: items.filter(x => x.sub === sb.id) })).filter(sb => sb.items.length)

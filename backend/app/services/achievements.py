@@ -341,6 +341,188 @@ CATALOG = [
        lore="Cinq objets vendus dans la journée : un vrai jour de marché."),
     _a("santa", "secret", "🎅", "Père Noël", "Un objet offert en décembre", [1],
        lore="Un objet offert en décembre. Le Père Noël a un atelier d'impression 3D."),
+    _a("new_years_day", "secret", "🥂", "Premier de l'an", "Une impression lancée un 1er janvier", [1],
+       lore="Première impression de l'année, le jour même. Bonne résolution tenue."),
+    _a("star_wars", "secret", "🌌", "Que la force soit avec toi", "Une impression lancée un 4 mai", [1],
+       lore="May the 4th be with you : ton imprimante a choisi le côté lumineux."),
+    _a("towel_day", "secret", "🧣", "Jour de la serviette", "Une impression lancée un 25 mai", [1],
+       lore="Le 25 mai, jour de la serviette. N'oublie jamais la tienne."),
+    _a("pi_approx", "secret", "🥧", "Pi approché", "Une impression lancée un 22 juillet", [1],
+       lore="22/7 : la fraction qui fait presque Pi. Presque."),
+    _a("cat_day", "secret", "🐈", "Journée du chat", "Une impression lancée un 8 août", [1],
+       lore="Journée mondiale du chat. Le tien a sûrement dormi sur l'imprimante."),
+    _a("mid_august", "secret", "🏖️", "Plein été", "Une impression lancée un 15 août", [1],
+       lore="Le 15 août, tout le monde est à la plage. Sauf ton imprimante."),
+    _a("back_to_school", "secret", "🎒", "Rentrée", "Une impression lancée un 1er septembre", [1],
+       lore="Jour de rentrée : un nouveau cartable, ou une nouvelle impression ?"),
+    _a("all_saints", "secret", "🕯️", "Toussaint", "Une impression lancée un 1er novembre", [1],
+       lore="Une impression le 1er novembre, en souvenir des plateaux disparus."),
+    _a("dia_muertos", "secret", "💀", "Jour des morts", "Une impression lancée un 2 novembre", [1],
+       lore="Día de los Muertos : une tête de mort colorée, peut-être ?"),
+    _a("st_nicholas", "secret", "🍬", "Saint-Nicolas", "Une impression lancée un 6 décembre", [1],
+       lore="Le 6 décembre, saint Nicolas passe : tu as imprimé les friandises ?"),
+    _a("st_john", "secret", "🔥", "Feux de la Saint-Jean", "Une impression lancée un 24 juin", [1],
+       lore="La nuit de la Saint-Jean, les feux s'allument, la buse aussi."),
+    _a("earth_day", "secret", "🌍", "Jour de la Terre", "Une impression lancée un 22 avril", [1],
+       lore="Jour de la Terre : un peu de PLA, ce bioplastique de maïs."),
+    _a("equinox", "secret", "⚖️", "Équinoxe", "Une impression lancée un jour d'équinoxe", [1],
+       lore="Autant de jour que de nuit : l'équilibre parfait."),
+    _a("dst_summer", "secret", "⏩", "Heure d'été", "Une impression en cours au passage à l'heure d'été", [1],
+       lore="L'impression a perdu une heure en route, et ne s'en est pas aperçue."),
+    _a("dst_winter", "secret", "⏪", "Heure d'hiver", "Une impression en cours au passage à l'heure d'hiver", [1],
+       lore="Une heure gagnée en pleine impression : 2 h 30 deux fois de suite."),
+    _a("programmers", "secret", "👨‍💻", "Jour du programmeur", "Une impression lancée le 256ᵉ jour de l'année", [1],
+       lore="Le 256ᵉ jour de l'année, la fête de ceux qui comptent en octets."),
+    _a("mothers_day", "secret", "💐", "Fête des mères", "Une impression lancée le jour de la fête des mères", [1],
+       lore="Une impression le jour de la fête des mères. Un vase, un cadre, un cœur ?"),
+    _a("ascension", "secret", "☁️", "Ascension", "Une impression lancée le jeudi de l'Ascension", [1],
+       lore="Un jeudi férié, et l'imprimante qui monte, couche après couche."),
+    _a("mardi_gras", "secret", "🎭", "Mardi gras", "Une impression lancée un mardi gras", [1],
+       lore="Mardi gras : masques, confettis… et filament."),
+    _a("black_friday", "secret", "🛍️", "Black Friday", "Une impression lancée le jour du Black Friday", [1],
+       lore="Pendant que d'autres achètent, toi tu fabriques."),
+    _a("double_day", "secret", "👯", "Jour double", "Une impression lancée un jour dont le jour et le mois sont égaux", [1],
+       lore="1/1, 2/2, 3/3… un jour en double, et une impression avec."),
+    _a("twelve", "secret", "🕛", "Douze douze", "Une impression lancée le 12 décembre à 12 h 12", [1],
+       lore="12/12 à 12 h 12 : une précision d'horloger."),
+    _a("palindrome_time", "secret", "🔄", "Heure palindrome", "Une impression lancée à une heure qui se lit dans les deux sens", [1],
+       lore="12 h 21, 13 h 31… une heure réversible."),
+    _a("after_midnight", "secret", "🌘", "Juste après minuit", "Une impression lancée à 0 h 01", [1],
+       lore="À peine minuit passé, déjà une impression : la journée commence bien."),
+    _a("snack_time", "secret", "🍪", "L'heure du goûter", "Une impression lancée à 16 h pile", [1],
+       lore="16 h pile : un goûter pour toi, une impression pour l'imprimante."),
+    _a("tea_time", "secret", "🫖", "Tea time", "Une impression lancée à 17 h pile", [1],
+       lore="17 h, l'heure du thé. Avec ou sans lait, mais avec filament."),
+    _a("aperitif", "secret", "🫒", "L'heure de l'apéro", "Une impression lancée à 18 h pile", [1],
+       lore="18 h pile : l'apéro est servi, l'imprimante aussi."),
+    _a("wolf_hour", "secret", "🐺", "L'heure du loup", "Une impression lancée entre 3 h et 4 h du matin", [1],
+       lore="L'heure du loup, quand tout le monde dort. Sauf toi."),
+    _a("end_noon", "secret", "🍽️", "Pile pour midi", "Une impression terminée à midi pile", [1],
+       lore="Finie à midi pile : juste à temps pour passer à table."),
+    _a("end_evening", "secret", "🔔", "Fin de journée", "Une impression terminée à 18 h pile", [1],
+       lore="Finie à 18 h pile, comme une journée de bureau."),
+    _a("triple3", "secret", "3️⃣", "Triple trois", "Une impression de 3 h 33 pile", [1],
+       lore="3 h 33 : trois fois trois, à la minute près."),
+    _a("suite123", "secret", "🔢", "Un, deux, trois", "Une impression de 1 h 23 pile", [1],
+       lore="1 h 23 : la suite parfaite, à la minute près."),
+    _a("min42", "secret", "🌌", "42 minutes", "Une impression réussie de 42 minutes pile", [1],
+       lore="42 minutes : encore la grande réponse, mais en durée."),
+    _a("gram1", "secret", "🪶", "Le gramme", "Une impression réussie d'un gramme pile", [1],
+       lore="Un seul gramme. On a dû la chercher sur le plateau."),
+    _a("g100", "secret", "💯", "Cent grammes", "Une impression réussie de 100 g pile", [1],
+       lore="100 g tout rond, comme une tablette de chocolat."),
+    _a("g500", "secret", "🧈", "Demi-kilo", "Une impression réussie de 500 g pile", [1],
+       lore="500 g pile : un demi-kilo, comme un paquet de beurre (en plus solide)."),
+    _a("g_palindrome", "secret", "🪞", "Poids miroir", "Une impression de plus d'un kilo dont le poids se lit dans les deux sens", [1],
+       lore="1 221 g, 1 331 g… un poids qui se lit à l'endroit comme à l'envers."),
+    _a("equal", "secret", "🟰", "Équilibre", "Une impression qui a duré autant de minutes qu'elle pèse de grammes", [1],
+       lore="Autant de minutes que de grammes : l'harmonie parfaite."),
+    _a("supersonic", "secret", "🚀", "Supersonique", "Une impression réussie en deux fois moins de temps que prévu", [1],
+       lore="Deux fois plus rapide que l'estimation : le mur du son est franchi."),
+    _a("wink", "secret", "😉", "Clin d'œil", "Une impression réussie en moins de 2 minutes", [1],
+       lore="Moins de deux minutes. Tu as cligné des yeux et c'était fini."),
+    _a("mammoth", "secret", "🦣", "Mammouth", "Une impression de plus de 3 kg", [1],
+       lore="Plus de 3 kg d'un coup : une pièce de mammouth."),
+    _a("rainbow6", "secret", "🌈", "Arc-en-ciel parfait", "Rouge, orange, jaune, vert, bleu et violet dans la même impression", [1],
+       lore="Les six couleurs de l'arc-en-ciel dans une seule pièce."),
+    _a("vader", "secret", "🖤", "Côté obscur", "Une impression réussie toute en noir, de plus de 100 g", [1],
+       lore="Plus de 100 g de noir, rien que du noir : je suis ton imprimante."),
+    _a("snow", "secret", "☃️", "Neige", "Une impression réussie toute en blanc, de plus de 100 g", [1],
+       lore="Plus de 100 g de blanc immaculé, comme une neige fraîche."),
+    _a("mouse", "secret", "🐭", "Gris souris", "Une impression réussie toute en gris", [1],
+       lore="Tout en gris, discrète comme une souris."),
+    _a("clockwork", "secret", "🍊", "Orange mécanique", "Une impression réussie toute en orange", [1],
+       lore="Tout en orange, sans rien d'autre."),
+    _a("prince", "secret", "💜", "Purple Rain", "Une impression réussie toute en violet", [1],
+       lore="Tout en violet, en hommage à Prince."),
+    _a("chick", "secret", "🐥", "Poussin", "Une impression réussie toute en jaune", [1],
+       lore="Tout en jaune, comme un poussin tout juste éclos."),
+    _a("belgium", "secret", "🇧🇪", "Une fois", "Une impression en noir, jaune et rouge", [1],
+       lore="Noir, jaune, rouge : une impression aux couleurs de la Belgique, une fois."),
+    _a("italy", "secret", "🇮🇹", "Tricolore italien", "Une impression en vert, blanc et rouge", [1],
+       lore="Vert, blanc, rouge : comme une pizza margherita."),
+    _a("reggae", "secret", "🎵", "Reggae", "Une impression en rouge, jaune et vert", [1],
+       lore="Rouge, jaune, vert : une impression qui swingue."),
+    _a("bee", "secret", "🐝", "Abeille", "Une impression en jaune et noir, rien d'autre", [1],
+       lore="Jaune et noir, une impression qui bourdonne."),
+    _a("ladybug", "secret", "🐞", "Coccinelle", "Une impression en rouge et noir, rien d'autre", [1],
+       lore="Rouge à points noirs : une coccinelle porte-bonheur."),
+    _a("sailor", "secret", "⚓", "Marinière", "Une impression en bleu et blanc, rien d'autre", [1],
+       lore="Bleu et blanc, comme une marinière bretonne."),
+    _a("rainbow_ultimate", "secret", "🎆", "Arc-en-ciel ultime", "Une impression de 16 couleurs ou plus", [1],
+       lore="Seize couleurs ou plus dans une même impression : tous tes AMS ont donné."),
+    _a("mix2", "secret", "🧬", "Mélange", "Une impression avec deux matières différentes", [1],
+       lore="Deux matières dans la même pièce : un mariage réussi."),
+    _a("lab3", "secret", "⚗️", "Laboratoire", "Une impression avec trois matières différentes", [1],
+       lore="Trois matières dans une seule impression : un vrai laboratoire."),
+    _a("abs_first", "secret", "👃", "Odeur d'ABS", "Ta première impression réussie en ABS", [1],
+       lore="Ton premier ABS réussi, sans warping. L'odeur, on n'en parle pas."),
+    _a("asa_first", "secret", "🌞", "Plein air", "Ta première impression réussie en ASA", [1],
+       lore="De l'ASA : une pièce faite pour affronter le soleil et la pluie."),
+    _a("pc_first", "secret", "🛡️", "Polycarbonate", "Ta première impression réussie en PC", [1],
+       lore="Du polycarbonate : solide comme un bouclier."),
+    _a("nylon_first", "secret", "🪢", "Nylon", "Ta première impression réussie en PA (nylon)", [1],
+       lore="Ton premier nylon réussi : résistant, et pas facile à dompter."),
+    _a("pi314", "secret", "🥧", "Pi fois cent", "Ta 314ᵉ impression réussie", [1],
+       lore="La 314ᵉ : Pi multiplié par cent."),
+    _a("err404", "secret", "🚫", "Erreur 404", "Ta 404ᵉ impression a raté", [1],
+       lore="La 404ᵉ impression a échoué : page introuvable, pièce aussi."),
+    _a("devil666", "secret", "😈", "Six cent soixante-six", "Ta 666ᵉ impression réussie", [1],
+       lore="La 666ᵉ : on ne dira rien, mais elle sentait le soufre."),
+    _a("almost1000", "secret", "😬", "Presque mille", "Ta 999ᵉ impression réussie", [1],
+       lore="999 : si près du millier…"),
+    _a("byte256", "secret", "💾", "Un octet", "Ta 256ᵉ impression réussie", [1],
+       lore="256 : un octet plein, de 0 à 255 et une de plus."),
+    _a("kilobyte", "secret", "💽", "Un kilo-octet", "Ta 1024ᵉ impression réussie", [1],
+       lore="1024 : un kilo-octet, un vrai."),
+    _a("ten_thousand", "secret", "🏛️", "Dix mille", "Ta 10 000ᵉ impression réussie", [1],
+       lore="Dix mille impressions réussies. Respect."),
+    _a("onetwothree", "secret", "🎲", "123", "Ta 123ᵉ impression réussie", [1],
+       lore="La 123ᵉ : comme on compte jusqu'à trois."),
+    _a("seventh", "secret", "☁️", "Septième ciel", "Ta 7ᵉ impression réussie", [1],
+       lore="La septième : te voilà au septième ciel."),
+    _a("lucky13", "secret", "🍀", "Treize porte-bonheur", "Ta 13ᵉ impression réussie", [1],
+       lore="La 13ᵉ, réussie : le 13 porte bonheur, finalement."),
+    _a("forager", "secret", "🦋", "Butineur", "10 modèles différents imprimés le même jour", [1],
+       lore="Dix modèles différents dans la journée : tu butines de modèle en modèle."),
+    _a("perfect_month", "secret", "📆", "Mois parfait", "Au moins une impression chaque jour d'un mois entier", [1],
+       lore="Pas un seul jour sans imprimer pendant un mois entier."),
+    _a("all_hours", "secret", "🕐", "Tour du cadran", "Des impressions lancées à chacune des 24 heures", [1],
+       lore="Tu as lancé une impression à chaque heure du jour et de la nuit."),
+    _a("plate7", "secret", "🍽️", "Septième plateau", "Une impression d'un plateau 7 ou plus", [1],
+       lore="Plateau 7 ou plus : un projet qui ne tient pas en un seul plateau."),
+    _a("unfaithful", "secret", "🔀", "Infidèle", "Deux impressions d'affilée sur deux imprimantes différentes", [1],
+       lore="Une imprimante, puis une autre : tu as plusieurs amours."),
+    _a("mega_group", "secret", "📦", "Méga-groupe", "Un groupe de 20 impressions ou plus", [1],
+       lore="Vingt impressions dans un même groupe : un sacré projet."),
+    _a("novelist", "secret", "✍️", "Romancier", "Une note de plus de 200 caractères sur une impression", [1],
+       lore="Une note de plus de 200 caractères : tu racontes tes impressions."),
+    _a("black_week", "secret", "🖤", "Semaine noire", "10 impressions ratées en 7 jours", [1],
+       lore="Dix échecs en une semaine. La suivante ne peut être que meilleure."),
+    _a("revenge", "secret", "🥊", "Revanche", "Un modèle enfin réussi après 5 échecs au total", [1],
+       lore="Cinq échecs sur le même modèle, puis la victoire. La revanche est un plat qui se sert chaud."),
+    _a("flawless_month", "secret", "✨", "Mois sans faute", "Au moins 20 impressions dans un mois, et aucun échec", [1],
+       lore="Vingt impressions ou plus dans le mois, et pas un seul échec."),
+    _a("psycho_price", "secret", "🏷️", "Prix psychologique", "Un objet vendu à un prix en ,99", [1],
+       lore="Vendu à quelque chose ,99 € : le marketing n'a plus de secret pour toi."),
+    _a("one_euro", "secret", "🪙", "Euro symbolique", "Un objet vendu 1 €", [1],
+       lore="Vendu pour un euro symbolique. Le geste compte."),
+    _a("big_spool", "secret", "🛢️", "Grosse bobine", "Une bobine de 3 kg ou plus", [1],
+       lore="Une bobine de 3 kg ou plus : de quoi voir venir."),
+    _a("gold_spool", "secret", "💎", "Bobine précieuse", "Une bobine de plus de 40 €", [1],
+       lore="Plus de 40 € la bobine : un filament de luxe."),
+    _a("bargain", "secret", "🤝", "Bonne affaire", "Une bobine à moins de 10 €", [1],
+       lore="Moins de 10 € la bobine : une affaire en or."),
+    _a("spring_clean", "secret", "🧹", "Grand ménage", "10 bobines terminées le même mois", [1],
+       lore="Dix bobines vidées dans le mois : l'étagère respire."),
+    _a("self_print", "secret", "🪞", "Autoportrait", "Une impression de l'un de tes propres modèles MakerWorld", [1],
+       lore="Tu as imprimé ton propre modèle : le créateur et l'imprimeur, c'est toi."),
+    _a("bestseller", "secret", "📚", "Best-seller", "Un modèle imprimé par plus de 100 000 personnes", [1],
+       lore="Un modèle imprimé plus de 100 000 fois sur MakerWorld : un classique."),
+    _a("pioneer", "secret", "🧭", "Pionnier", "Un modèle imprimé par moins de 5 personnes avant toi", [1],
+       lore="Un modèle que presque personne n'avait encore imprimé : tu ouvres la voie."),
+    _a("christmas_visit", "secret", "🎄", "Même à Noël", "L'appli ouverte un 25 décembre", [1],
+       lore="Le jour de Noël, tu as quand même jeté un œil à tes impressions."),
     _a("pit_stop", "secret", "🏁", "Arrêt au stand", "4 bobines posées dans l'AMS en moins de 5 minutes", [1],
        lore="Quatre bobines changées en moins de cinq minutes : un vrai arrêt au stand de Formule 1."),
     _a("one_hour", "secret", "⏲️", "Une heure pile", "Une impression réussie d'une heure tout rond (à 30 s près)", [1],
@@ -444,19 +626,20 @@ CATALOG = [
 SECRET_SUBS = [
     ("calendar", "📅", "Calendrier", "halloween christmas new_year friday13 pi_day leap_day valentine may_day bastille "
      "all_year april_fool music summer_solstice winter_solstice easter st_patrick fathers_day crepes epiphany "
-     "palindrome_date anniversary all_seasons santa"),
+     "palindrome_date anniversary all_seasons santa new_years_day star_wars towel_day pi_approx cat_day mid_august back_to_school all_saints dia_muertos st_nicholas st_john earth_day equinox dst_summer dst_winter programmers mothers_day ascension mardi_gras black_friday double_day twelve"),
     ("clock", "🕛", "Heures et lune", "midnight noon mirror sequence elite last_minute saturday_night monday_morning "
-     "sunday_morning full_moon new_moon all_nighter cinderella wake_up night_visit"),
+     "sunday_morning full_moon new_moon all_nighter cinderella wake_up night_visit palindrome_time after_midnight snack_time tea_time aperitif wolf_hour end_noon end_evening"),
     ("measures", "⚖️", "Poids et durées", "tiny flash titan answer42 beast kilo pi_grams palindrome full_day marathon42 "
-     "bullseye tortoise hare one_hour watchmaker hundred_pieces"),
+     "bullseye tortoise hare one_hour watchmaker hundred_pieces triple3 suite123 min42 gram1 g100 g500 g_palindrome equal supersonic wink mammoth"),
     ("colors", "🎨", "Couleurs et matières", "rainbow16 panda tricolore carbon rubber barbie smurf hulk fire pumpkin "
-     "xmas_tree silk galaxy glow marble wood translucent sparkle soluble"),
+     "xmas_tree silk galaxy glow marble wood translucent sparkle soluble rainbow6 vader snow mouse clockwork prince chick belgium italy reggae bee ladybug sailor rainbow_ultimate mix2 lab3 abs_first asa_first pc_first nylon_first"),
     ("counts", "🔢", "Compteurs et séries", "first_print n1001 hundred jackpot leet y2k dont_panic weekend10 on_fire "
-     "rainbow_day triplets broken_record"),
-    ("ups", "🎢", "Hauts et bas", "comeback phoenix bad_day insomniac comeback30 hibernation first_try so_close big_fall"),
+     "rainbow_day triplets broken_record pi314 err404 devil666 almost1000 byte256 kilobyte ten_thousand onetwothree seventh lucky13 forager perfect_month all_hours plate7 unfaithful mega_group novelist"),
+    ("ups", "🎢", "Hauts et bas", "comeback phoenix bad_day insomniac comeback30 hibernation first_try so_close big_fall black_week revenge flawless_month"),
     ("trade", "🛒", "Ventes et bobines", "penny luxury market_day museum sold_hot finally_sold eternal_spool "
-     "devoured_spool big_order pit_stop"),
-    ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel"),
+     "devoured_spool big_order pit_stop psycho_price one_euro big_spool gold_spool bargain spring_clean"),
+    ("mw", "🌐", "MakerWorld", "self_print bestseller pioneer"),
+    ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit"),
 ]
 SUB_OF = {aid: sid for sid, _e, _n, ids in SECRET_SUBS for aid in ids.split()}
 
@@ -686,7 +869,8 @@ async def _load_data() -> dict:
         prints = (await db.execute(select(Print.id, Print.print_date, Print.status, Print.duration_seconds,
                                           Print.total_weight_g, Print.design_id, Print.translated_name,
                                           Print.file_name, Print.estimated_seconds, Print.number_of_items,
-                                          Print.total_cost, Print.plate_id, Print.printer_model, Print.status_note)
+                                          Print.total_cost, Print.plate_id, Print.printer_model, Print.status_note,
+                                          Print.group_id)
                                    .order_by(Print.print_date, Print.id))).all()
         usage = (await db.execute(select(FilamentUsage.print_id, FilamentUsage.spool_id, FilamentUsage.filament_type,
                                          FilamentUsage.color_hex, FilamentUsage.grams_used))).all()
@@ -755,6 +939,11 @@ async def _load_data() -> dict:
         changes = [datetime.fromisoformat(x) for x in await ams_log.drain()]
     except Exception:
         changes = []
+    try:
+        from .mw_creator import _snap_get
+        my_designs = list(((await _snap_get()) or {}).get("models") or {})
+    except Exception:
+        my_designs = []
     st = await _state_get() or {}
     versions = dict(st.get("versions") or {})
     sha = (os.getenv("COMMIT_SHA") or "")[:8]
@@ -765,7 +954,7 @@ async def _load_data() -> dict:
             "act_days": act_days, "pages": pages, "late": late, "notif_days": notif_days, "dismiss": dismiss,
             "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "changes": changes,
             "mwd": mwd, "accs": accs, "acc_objs": acc_objs, "n_users": n_users, "spool_more": spool_more,
-            "queue": _queue_size()}
+            "queue": _queue_size(), "my_designs": my_designs}
 
 
 _MONDAY0 = datetime(1970, 1, 5).date()       # un lundi : numero de semaine = jours // 7
@@ -825,6 +1014,31 @@ def _hue(hx: str) -> str:
     if h < 300:
         return "violet"
     return "rose"
+
+
+def _last_sunday(y: int, month: int):
+    d = (datetime(y + (month == 12), month % 12 + 1, 1) - timedelta(days=1)).date()
+    return d - timedelta(days=(d.weekday() + 1) % 7)
+
+
+def _mothers_day(y: int):
+    """Fete des meres en France : dernier dimanche de mai, ou premier de juin
+    s'il tombe a la Pentecote."""
+    d = _last_sunday(y, 5)
+    if d == _easter(y) + timedelta(days=49):
+        d += timedelta(days=7)
+    return d
+
+
+def _black_friday(y: int):
+    d = datetime(y, 11, 1).date()
+    d += timedelta(days=(3 - d.weekday()) % 7)          # premier jeudi
+    return d + timedelta(days=22)                        # 4e jeudi (Thanksgiving) + 1
+
+
+def _dst_switches(y: int):
+    """Changements d'heure europeens : dernier dimanche de mars et d'octobre, 1 h UTC."""
+    return [datetime.combine(_last_sunday(y, m), datetime.min.time()) + timedelta(hours=1) for m in (3, 10)]
 
 
 def _fathers_day(y: int):
@@ -1194,6 +1408,7 @@ def compute_series(d: dict, now: datetime) -> dict:
     _more(push, d, now)
     _durations(push, d)
     _wide(push, d, now)
+    _fun200(push, d, now)
     acc = 0
     for dt, q in sorted(((_ts(lk.created_at) or now), (lk.quantity or 0)) for lk in d["links"]):
         acc += q
@@ -1298,6 +1513,222 @@ def _night_overlap(start: datetime, end: datetime) -> float:
 
 
 ENGINEERING = {"ABS", "ASA", "PA", "PC", "PPS", "PET"}
+
+
+def _fun200(push, d, now) -> None:
+    """Fournee de secrets pour passer les 200 : dates, heures, durees, poids,
+    couleurs, matieres, compteurs, series, ventes, bobines, MakerWorld."""
+    from collections import deque
+    by_print = defaultdict(list)
+    for u in d["usage"]:
+        by_print[u.print_id].append(u)
+    mwd = d.get("mwd") or {}
+    mine = set(d.get("my_designs") or [])
+    n_all = n_ok = 0
+    firsts = set()
+    month_days = defaultdict(set)
+    month_ok, month_ko, month_last = defaultdict(int), defaultdict(int), {}
+    hours = set()
+    models_day = defaultdict(set)
+    fails_model = defaultdict(int)
+    ko_times = deque()
+    groups = defaultdict(int)
+    prev_printer = None
+    for p in d["prints"]:
+        st = (p.status or "").upper()
+        if st == "IN_PROGRESS" or not p.print_date:
+            continue
+        start, dur = p.print_date, p.duration_seconds or 0
+        end = start + timedelta(seconds=dur)
+        ok, ko = st in OK, st in KO
+        loc, le = _local(start), _local(end)
+        us = by_print.get(p.id, [])
+        cols = {(u.color_hex or "").upper()[:6] for u in us if (u.grams_used or 0) > 0 and u.color_hex}
+        hues = {_hue(c) for c in cols}
+        fams = {_family(u.filament_type) for u in us if (u.grams_used or 0) > 0 and _family(u.filament_type)}
+        w = p.total_weight_g or sum(u.grams_used or 0 for u in us)
+        est = p.estimated_seconds or 0
+        key = _model_key(p)
+        md, day, hm = (loc.month, loc.day), loc.date(), (loc.hour, loc.minute)
+        n_all += 1
+        # dates
+        for when, aid in (((1, 1), "new_years_day"), ((5, 4), "star_wars"), ((5, 25), "towel_day"), ((7, 22), "pi_approx"),
+                          ((8, 8), "cat_day"), ((8, 15), "mid_august"), ((9, 1), "back_to_school"), ((11, 1), "all_saints"),
+                          ((11, 2), "dia_muertos"), ((12, 6), "st_nicholas"), ((6, 24), "st_john"), ((4, 22), "earth_day"),
+                          ((3, 20), "equinox"), ((9, 22), "equinox")):
+            if md == when:
+                push(aid, start, 1)
+        for sw, aid in zip(_dst_switches(loc.year), ("dst_summer", "dst_winter")):
+            if start < sw < end:
+                push(aid, end, 1)
+        if day == datetime(loc.year, 1, 1).date() + timedelta(days=255):
+            push("programmers", start, 1)
+        if day == _mothers_day(loc.year):
+            push("mothers_day", start, 1)
+        if day == _easter(loc.year) + timedelta(days=39):
+            push("ascension", start, 1)
+        if day == _easter(loc.year) - timedelta(days=47):
+            push("mardi_gras", start, 1)
+        if day == _black_friday(loc.year):
+            push("black_friday", start, 1)
+        if loc.day == loc.month:
+            push("double_day", start, 1)
+        if md == (12, 12) and hm == (12, 12):
+            push("twelve", start, 1)
+        # heures
+        hh = f"{loc.hour:02d}{loc.minute:02d}"
+        if hh == hh[::-1]:
+            push("palindrome_time", start, 1)
+        for when, aid in (((0, 1), "after_midnight"), ((16, 0), "snack_time"), ((17, 0), "tea_time"), ((18, 0), "aperitif")):
+            if hm == when:
+                push(aid, start, 1)
+        if loc.hour == 3:
+            push("wolf_hour", start, 1)
+        if (le.hour, le.minute) == (12, 0):
+            push("end_noon", end, 1)
+        if (le.hour, le.minute) == (18, 0):
+            push("end_evening", end, 1)
+        # durees et poids
+        for target, aid in ((3 * 3600 + 33 * 60, "triple3"), (83 * 60, "suite123")):
+            if abs(dur - target) <= 30:
+                push(aid, end, 1)
+        if ok and abs(dur - 42 * 60) <= 30:
+            push("min42", end, 1)
+        if ok and 0.95 <= w <= 1.05:
+            push("gram1", end, 1)
+        if ok and 99.5 <= w <= 100.5:
+            push("g100", end, 1)
+        if ok and 499.5 <= w <= 500.5:
+            push("g500", end, 1)
+        gi = int(round(w))
+        if gi >= 1001 and abs(w - gi) < 0.05 and str(gi) == str(gi)[::-1]:
+            push("g_palindrome", end, 1)
+        if w >= 10 and int(round(dur / 60)) == gi:
+            push("equal", end, 1)
+        if ok and est >= 3600 and 0 < dur <= est / 2:
+            push("supersonic", end, 1)
+        if ok and 0 < dur < 120:
+            push("wink", end, 1)
+        if w >= 3000:
+            push("mammoth", end, 1)
+        # couleurs
+        if {"rouge", "orange", "jaune", "vert", "bleu", "violet"} <= hues:
+            push("rainbow6", end, 1)
+        if ok and w >= 100 and hues == {"noir"}:
+            push("vader", end, 1)
+        if ok and w >= 100 and hues == {"blanc"}:
+            push("snow", end, 1)
+        for only, aid in (("gris", "mouse"), ("orange", "clockwork"), ("violet", "prince"), ("jaune", "chick")):
+            if ok and hues == {only}:
+                push(aid, end, 1)
+        for combo, aid in (({"noir", "jaune", "rouge"}, "belgium"), ({"vert", "blanc", "rouge"}, "italy"),
+                           ({"rouge", "jaune", "vert"}, "reggae"), ({"jaune", "noir"}, "bee"),
+                           ({"rouge", "noir"}, "ladybug"), ({"bleu", "blanc"}, "sailor")):
+            if hues == combo:
+                push(aid, end, 1)
+        if len(cols) >= 16:
+            push("rainbow_ultimate", end, 1)
+        if len(fams) >= 2:
+            push("mix2", end, 1)
+        if len(fams) >= 3:
+            push("lab3", end, 1)
+        if ok:
+            for fam, aid in (("ABS", "abs_first"), ("ASA", "asa_first"), ("PC", "pc_first"), ("PA", "nylon_first")):
+                if fam in fams and aid not in firsts:
+                    firsts.add(aid)
+                    push(aid, end, 1)
+        # compteurs
+        if ok:
+            n_ok += 1
+            for n_, aid in ((7, "seventh"), (13, "lucky13"), (123, "onetwothree"), (256, "byte256"), (314, "pi314"),
+                            (666, "devil666"), (999, "almost1000"), (1024, "kilobyte"), (10000, "ten_thousand")):
+                if n_ok == n_:
+                    push(aid, end, 1)
+        if n_all == 404 and ko:
+            push("err404", end, 1)
+        if key:
+            models_day[day].add(key)
+            if len(models_day[day]) >= 10:
+                push("forager", end, 1)
+        month_days[(loc.year, loc.month)].add(loc.day)
+        import calendar
+        if len(month_days[(loc.year, loc.month)]) == calendar.monthrange(loc.year, loc.month)[1]:
+            push("perfect_month", start, 1)
+        hours.add(loc.hour)
+        if len(hours) == 24:
+            push("all_hours", start, 1)
+        try:
+            if int(str(getattr(p, "plate_id", "") or "1").strip()) >= 7:
+                push("plate7", end, 1)
+        except ValueError:
+            pass
+        pm = (getattr(p, "printer_model", None) or "").strip().upper()
+        if prev_printer and pm and pm != prev_printer:
+            push("unfaithful", start, 1)
+        prev_printer = pm or prev_printer
+        gid = getattr(p, "group_id", None)
+        if gid:
+            groups[gid] += 1
+            if groups[gid] >= 20:
+                push("mega_group", end, 1)
+        if len((getattr(p, "status_note", None) or "").strip()) > 200:
+            push("novelist", end, 1)
+        # hauts et bas
+        mk = (loc.year, loc.month)
+        month_last[mk] = end
+        if ok:
+            month_ok[mk] += 1
+            if key and fails_model[key] >= 5:
+                push("revenge", end, 1)
+        elif ko:
+            month_ko[mk] += 1
+            if key:
+                fails_model[key] += 1
+            ko_times.append(end)
+            while ko_times and ko_times[0] < end - timedelta(days=7):
+                ko_times.popleft()
+            if len(ko_times) >= 10:
+                push("black_week", end, 1)
+        # MakerWorld
+        did = str(p.design_id or "").strip()
+        if ok and did and did not in ("0", "None"):
+            if did in mine:
+                push("self_print", end, 1)
+            m = mwd.get(did)
+            if m is not None and (m.print_count or 0) > 100000:
+                push("bestseller", end, 1)
+            if m is not None and 0 < (m.print_count or 0) < 5:
+                push("pioneer", end, 1)
+    for mk, n in month_ok.items():
+        if n >= 20 and not month_ko.get(mk):
+            push("flawless_month", month_last[mk], 1)
+    # ventes, bobines
+    for o in d["objs"]:
+        sd = _ts(o.sold_date)
+        if o.status == "sold" and sd and o.sold_price:
+            if round(o.sold_price * 100) % 100 == 99:
+                push("psycho_price", sd, 1)
+            if abs(o.sold_price - 1) < 0.005:
+                push("one_euro", sd, 1)
+    for r in d.get("spool_more") or []:
+        at = _ts(r.created_at) or now
+        price = r.price_override if r.price_override is not None else r.price
+        if (r.filament_weight_g or 0) >= 3000:
+            push("big_spool", at, 1)
+        if price and price > 40:
+            push("gold_spool", at, 1)
+        if price and 0 < price < 10:
+            push("bargain", at, 1)
+    per_month = defaultdict(int)
+    for sp in d["spools"]:
+        if sp.archived and _ts(sp.updated_at):
+            t = _ts(sp.updated_at)
+            per_month[(t.year, t.month)] += 1
+            if per_month[(t.year, t.month)] >= 10:
+                push("spring_clean", t, 1)
+    for _k, day_, _n in d.get("act_days") or []:
+        if day_ and str(day_)[5:] == "12-25":
+            push("christmas_visit", datetime.fromisoformat(str(day_)), 1)
 
 
 def _wide(push, d, now) -> None:
