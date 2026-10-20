@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import client, { apiUrl } from "../api/client";
 import { notifSeenEvent } from "../components/NotifBell";
@@ -25,23 +25,40 @@ const thumbOf = it => {
   return m ? apiUrl(`/prints/${m[1]}/image`) : null;
 };
 
+const HIDDEN_KEY = "notifHiddenSections";
+const ALL_SECTIONS = Object.keys(SECTION_ICON);
+
 export default function Notifications() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [more, setMore] = useState(false);
   const navigate = useNavigate();
+  // Categories masquees (ce navigateur)
+  const [hidden, setHiddenState] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]")); } catch { return new Set(); }
+  });
+  const setHidden = h => { setHiddenState(h); try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...h])); } catch { /* indisponible */ } };
+  const [picker, setPicker] = useState(false);
+  const firstLoad = useRef(true);
+  const params = hidden.size ? { sections: ALL_SECTIONS.filter(x => !hidden.has(x)).join(",") } : {};
 
   useEffect(() => {
-    client.get("/notify/me/history").then(({ data }) => {
+    let alive = true;
+    client.get("/notify/me/history", { params }).then(({ data }) => {
+      if (!alive) return;
       setData(data);
-      if (data.unseen) client.post("/notify/me/seen").then(() => window.dispatchEvent(new CustomEvent(notifSeenEvent))).catch(() => {});
+      // ouvrir le journal : tout est vu (une fois, au premier chargement)
+      if (firstLoad.current && data.unseen) client.post("/notify/me/seen")
+        .then(() => window.dispatchEvent(new CustomEvent(notifSeenEvent))).catch(() => {});
+      firstLoad.current = false;
     }).catch(e => setErr(e.response?.data?.detail || e.message));
-  }, []);
+    return () => { alive = false; };
+  }, [[...hidden].sort().join(",")]);
 
   const loadMore = () => {
     const last = data.items[data.items.length - 1];
     setMore(true);
-    client.get("/notify/me/history", { params: { before: last.id } })
+    client.get("/notify/me/history", { params: { ...params, before: last.id } })
       .then(({ data: d }) => setData(x => ({ ...x, items: [...x.items, ...d.items], more: d.more })))
       .catch(() => {}).finally(() => setMore(false));
   };
@@ -63,8 +80,9 @@ export default function Notifications() {
 
   return (
     <div style={{ maxWidth:720, margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
-      <div style={{ display:"flex", alignItems:"baseline", gap:10 }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10 }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>Notifications</h1>
+        <SectionFilter sections={data.sections || []} hidden={hidden} open={picker} setOpen={setPicker} onChange={setHidden}/>
         <button onClick={() => navigate("/settings?tab=notify")} style={{ background:"none", border:"none", cursor:"pointer",
           color:"#3b82f6", fontSize:12, fontWeight:700 }}>Choisir mes notifications</button>
       </div>
@@ -137,6 +155,49 @@ function BigIcon({ thumb, it }) {
     <span style={{ width:46, height:46, borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center",
       justifyContent:"center", fontSize:22, background:`${c}2e`, boxShadow:`inset 0 0 0 2px ${c}` }}>
       {it.section_emoji || SECTION_ICON[it.section] || "🔔"}</span>
+  );
+}
+
+// Filtre des categories : menu deroulant, Tous / Aucun, une case par section
+function SectionFilter({ sections, hidden, open, setOpen, onChange }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
+  const shown = sections.filter(s => !hidden.has(s.id)).length;
+  const toggle = id => { const h = new Set(hidden); h.has(id) ? h.delete(id) : h.add(id); onChange(h); };
+  const link = { background:"none", border:"none", padding:0, cursor:"pointer", color:"#6366F1", fontSize:12, fontWeight:700 };
+  return (
+    <div ref={ref} style={{ position:"relative" }}>
+      <button onClick={() => setOpen(!open)} aria-expanded={open}
+        style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 11px", borderRadius:20, fontSize:12, fontWeight:700,
+          cursor:"pointer", border: hidden.size ? "1px solid rgba(99,102,241,0.45)" : "1px solid var(--border)",
+          background: hidden.size ? "rgba(99,102,241,0.12)" : "var(--surface2)", color: hidden.size ? "#6366F1" : "var(--text2)" }}>
+        Catégories{sections.length ? ` ${shown}/${sections.length}` : ""} <span style={{ fontSize:9 }}>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="card" style={{ position:"absolute", right:0, top:"calc(100% + 6px)", zIndex:50, minWidth:220,
+          padding:"8px 6px", boxShadow:"0 10px 30px rgba(0,0,0,0.25)" }}>
+          <div style={{ display:"flex", gap:14, padding:"2px 10px 8px", borderBottom:"1px solid var(--border)", marginBottom:4 }}>
+            <button onClick={() => onChange(new Set())} style={link}>Tous</button>
+            <button onClick={() => onChange(new Set(sections.map(s => s.id)))} style={link}>Aucun</button>
+          </div>
+          {sections.map(s => (
+            <label key={s.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 10px", borderRadius:8,
+              cursor:"pointer", fontSize:13, color:"var(--text)" }}>
+              <input type="checkbox" checked={!hidden.has(s.id)} onChange={() => toggle(s.id)}
+                style={{ accentColor:"#6366F1", width:16, height:16 }}/>
+              <span style={{ width:24, height:24, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
+                fontSize:13, background:`${s.color}2e` }}>{s.emoji}</span>
+              {s.name}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

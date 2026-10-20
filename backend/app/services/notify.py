@@ -1206,7 +1206,8 @@ async def _read_of(user: str) -> set:
     return {int(x) for x in (await _read_get()).get(user) or []}
 
 
-async def history(user: str, before: int = 0, limit: int = 40) -> dict:
+async def history(user: str, before: int = 0, limit: int = 40, sections=None) -> dict:
+    """sections : ne garder que ces categories (None : toutes)."""
     from sqlalchemy import select, func
     from ..db.session import AsyncSessionLocal
     from ..models.notif_log import NotifLog
@@ -1214,6 +1215,8 @@ async def history(user: str, before: int = 0, limit: int = 40) -> dict:
     seen = int((await _seen_get()).get(user) or 0)
     read = await _read_of(user)
     q = select(NotifLog).where(_mine(user))
+    if sections is not None:
+        q = q.where(NotifLog.section.in_(list(sections) or [""]))
     if before:
         q = q.where(NotifLog.id < int(before))
     async with AsyncSessionLocal() as db:
@@ -1226,7 +1229,10 @@ async def history(user: str, before: int = 0, limit: int = 40) -> dict:
                        "section_color": SECTION_COLORS.get(r.section or "", BRAND_COLOR),
                        "title": r.title, "message": r.message,
                        "link": r.link, "image": r.image, "seen": r.id <= seen or r.id in read} for r in rows],
-            "unseen": unseen, "more": len(rows) >= limit, "days": HISTORY_DAYS}
+            "unseen": unseen, "more": len(rows) >= limit, "days": HISTORY_DAYS,
+            # les categories, pour le filtre du journal
+            "sections": [{"id": k, "emoji": _section_parts(k)[0], "name": _section_parts(k)[1],
+                          "color": SECTION_COLORS.get(k, BRAND_COLOR)} for k, _ in SECTIONS]}
 
 
 async def unseen_count(user: str) -> int:
