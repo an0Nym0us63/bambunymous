@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { currentFriend } from "../store/friend";
+import { useIsAdmin } from "../store/auth";
 import client from "../api/client";
 import { isMoneyHidden } from "../utils/money";
 
@@ -32,10 +33,20 @@ export default function Achievements({ embedded = false }) {
   const [openCats, setOpenCats] = useState(() => new Set([sp.get("cat")].filter(Boolean)));
   const [detail, setDetail] = useState(null);
   const atFriend = !!currentFriend();             // chez un copain : pas de podium (ce sont ses copains a lui)
+  const isAdmin = useIsAdmin();
+  const load = () => client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
+  // cles : reveler l'etape suivante d'un secret, puis relire la page
+  const [keyErr, setKeyErr] = useState(null);
+  const spend = async aid => {
+    setKeyErr(null);
+    try { await client.post(`/achievements/keys/${aid}`); await load(); }
+    catch (e) { setKeyErr(e.response?.data?.detail || e.message); }
+  };
+  const canSpend = isAdmin && !atFriend && !!data?.keys;
   const [mine, setMine] = useState(null);         // en visite : mes propres medailles uniques (lues chez moi)
 
   useEffect(() => {
-    client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
+    load();
     if (!atFriend) client.get("/achievements/podium").then(r => setPod(r.data)).catch(() => {});
     else client.get("/achievements/mine", { home: true }).then(r => setMine(r.data)).catch(() => {});
   }, []);
@@ -86,6 +97,7 @@ export default function Achievements({ embedded = false }) {
         </div>
         <Bar value={pct / 100}/>
         <MedalCounts tiers={data.tiers} medals={data.medals}/>
+        {data.keys && !atFriend && <KeysBox keys={data.keys}/>}
       </div>
 
       {/* Podium general entre copains */}
@@ -231,7 +243,8 @@ export default function Achievements({ embedded = false }) {
             position:"relative" }}>
             <button onClick={closeDetail} aria-label="Fermer" style={{ position:"absolute", top:8, right:10, zIndex:1,
               background:"none", border:"none", color:"var(--muted)", fontSize:20, cursor:"pointer" }}>✕</button>
-            <Card it={byId[detail]} sheet others={ringBy[detail]} shared={shared(byId[detail])}/>
+            <Card it={byId[detail]} sheet others={ringBy[detail]} shared={shared(byId[detail])}
+              keys={canSpend ? data.keys : null} onSpend={() => spend(detail)} keyErr={keyErr}/>
           </div>
         </div>, document.body
       )}
@@ -275,6 +288,12 @@ function Tile({ it, onOpen, others, shared }) {
       <span style={{ fontSize:11, fontWeight:700, color: got ? "var(--text)" : "var(--muted)", textAlign:"center",
         lineHeight:1.2, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden",
         width:"100%" }}>{it.name}</span>
+      {!got && it.reveal > 0 && (
+        <span title={`${it.reveal}/4 révélé par des clés`} style={{ display:"flex", gap:3 }}>
+          {[1, 2, 3, 4].map(i => <span key={i} style={{ width:5, height:5, borderRadius:"50%",
+            background: i <= it.reveal ? "#F59E0B" : "var(--border)" }}/>)}
+        </span>
+      )}
       {it.tiers.length > 1 && it.next != null && (
         <span style={{ width:"70%", height:3, borderRadius:3, background:"var(--surface2)", overflow:"hidden" }}>
           <span style={{ display:"block", width:`${Math.round(p * 100)}%`, height:"100%",
@@ -343,6 +362,81 @@ function Compare({ people, cat }) {
   );
 }
 
+// Mes cles : le compte, la prochaine, et (deplie) comment on en gagne et
+// les derniers mouvements.
+function KeysBox({ keys }) {
+  const [open, setOpen] = useState(false);
+  const r = keys.rules;
+  return (
+    <div style={{ borderRadius:12, padding:"8px 12px", background:"rgba(245,158,11,0.10)", border:"1px solid rgba(245,158,11,0.35)" }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width:"100%", display:"flex", alignItems:"center", gap:10, background:"none",
+        border:"none", padding:0, cursor:"pointer", color:"var(--text)", textAlign:"left" }}>
+        <span style={{ fontSize:22 }}>🔑</span>
+        <span style={{ flex:1, minWidth:0 }}>
+          <span style={{ display:"block", fontSize:15, fontWeight:900 }}>{keys.balance} clé{keys.balance > 1 ? "s" : ""}</span>
+          <span style={{ display:"block", fontSize:11.5, color:"var(--muted)" }}>
+            Prochaine dans {keys.to_next} impression{keys.to_next > 1 ? "s" : ""} réussie{keys.to_next > 1 ? "s" : ""}</span>
+        </span>
+        <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>
+      </button>
+      {open && (
+        <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:6, fontSize:12, color:"var(--text2)", lineHeight:1.45 }}>
+          <div>
+            <b>Gagner des clés</b> : {r.start} au départ · 1 toutes les {r.prints} impressions réussies · {r.tier} par palier franchi ·
+            {" "}{r.secret} par secret gagné. Ce qui est reconnu après coup (nouveau succès, seuils changés) ne compte pas.
+          </div>
+          <div>
+            <b>Les dépenser</b> sur un secret pas encore gagné, dans l'ordre :{" "}
+            {keys.steps.map((st, i) => <span key={st.id}>{i ? " → " : ""}{st.label} ({st.cost} 🔑)</span>)}.
+          </div>
+          {keys.log?.length > 0 && (
+            <div style={{ display:"flex", flexDirection:"column", gap:2, marginTop:2 }}>
+              {keys.log.slice(0, 8).map((l, i) => (
+                <div key={i} style={{ display:"flex", gap:8 }}>
+                  <span style={{ width:34, flexShrink:0, fontWeight:800, color: l.n > 0 ? "#22c55e" : "#ef4444" }}>
+                    {l.n > 0 ? `+${l.n}` : l.n}</span>
+                  <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.why}</span>
+                  <span style={{ color:"var(--muted)", fontSize:11 }}>{dateFr(l.at)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Reveler un secret pas a pas : vignette, titre, indice, descriptif.
+function Reveal({ it, keys, onSpend, err }) {
+  const lvl = it.reveal || 0;
+  const [busy, setBusy] = useState(false);
+  const go = async () => { setBusy(true); await onSpend(); setBusy(false); };
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:6, borderTop:"1px solid var(--border)", paddingTop:8 }}>
+      <div style={{ fontSize:12, fontWeight:800, color:"var(--text2)" }}>
+        🔑 Révéler ce secret · tu as {keys.balance} clé{keys.balance > 1 ? "s" : ""}</div>
+      {keys.steps.map((st, i) => {
+        const done = i < lvl, next = i === lvl, poor = keys.balance < st.cost;
+        return (
+          <div key={st.id} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5,
+            color: done ? "#22c55e" : next ? "var(--text)" : "var(--muted)" }}>
+            <span style={{ width:18 }}>{done ? "✓" : next ? "▸" : "🔒"}</span>
+            <span style={{ flex:1 }}>{st.label.charAt(0).toUpperCase() + st.label.slice(1)}</span>
+            {next ? (
+              <button onClick={go} disabled={busy || poor} style={{ padding:"5px 11px", borderRadius:20, fontSize:12,
+                fontWeight:800, cursor: poor ? "default" : "pointer", border:"none",
+                background: poor ? "var(--surface2)" : "#F59E0B", color: poor ? "var(--muted)" : "#fff" }}>
+                {busy ? "…" : `${st.cost} 🔑`}</button>
+            ) : <span style={{ fontSize:11.5 }}>{st.cost} 🔑</span>}
+          </div>
+        );
+      })}
+      {err && <p style={{ margin:0, fontSize:12, color:"#ef4444" }}>{err}</p>}
+    </div>
+  );
+}
+
 function Bar({ value }) {
   return (
     <div style={{ height:8, borderRadius:8, background:"var(--surface2)", overflow:"hidden", width:"100%" }}>
@@ -381,7 +475,7 @@ const progress = it => {
   return span > 0 ? Math.max(0, Math.min(1, (it.value - (it.prev || 0)) / span)) : 0;
 };
 
-function Card({ it, focus, sheet = false, others, shared }) {
+function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr }) {
   const ref = useRef(null);
   const [open, setOpen] = useState(sheet);
   useEffect(() => {
@@ -427,6 +521,11 @@ function Card({ it, focus, sheet = false, others, shared }) {
           {others.length === 1 && others[0] === "Toi" ? "👀 Toi, tu l'as déjà !"
             : `👀 ${others.join(", ")} ${others.length > 1 ? "l'ont" : "l'a"} déjà débloqué : à toi de le trouver !`}</p>
       )}
+      {/* secret pas encore gagne : ce que les cles ont revele, et la suite */}
+      {sheet && unique && !got && it.hint && (
+        <p style={{ margin:0, fontSize:12.5, color:"var(--text2)", fontStyle:"italic" }}>💡 Indice : {it.hint}</p>
+      )}
+      {sheet && unique && !got && keys && <Reveal it={it} keys={keys} onSpend={onSpend} err={keyErr}/>}
       {unique && got && it.lore && (
         <p style={{ margin:0, fontSize:12.5, color:"var(--text2)", lineHeight:1.5, fontStyle:"italic",
           padding:"8px 10px", borderRadius:10, background:`${top.color}14`, borderLeft:`3px solid ${top.color}` }}>

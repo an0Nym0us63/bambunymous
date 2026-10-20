@@ -5,7 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....db.session import get_db
 from ....models.user import ROLE_ADMIN, User
-from .auth import get_current_role, get_current_user, oauth2_scheme, require_own_account
+from fastapi import HTTPException
+
+from .auth import get_current_role, get_current_user, oauth2_scheme, require_admin, require_own_account
 
 router = APIRouter()
 
@@ -21,6 +23,16 @@ async def achievements_podium(fresh: bool = False, acc=Depends(require_own_accou
     Jamais par une cle de copain (on ne fait pas lire ses copains par un autre)."""
     from ....services import achievements as A
     return await A.podium(acc[0], fresh)
+
+
+@router.post("/keys/{aid}")
+async def achievements_spend_key(aid: str, _: str = Depends(require_admin)):
+    """Revele l'etape suivante d'un secret (vignette, titre, indice, descriptif)."""
+    from ....services import achievements as A
+    try:
+        return await A.spend_key(aid)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
 
 
 @router.get("/mine")
@@ -42,7 +54,7 @@ async def achievements_view(request: Request, fresh: bool = False, token: str = 
         return v
     u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
     if u is not None and u.secrets_visible:
-        return v
+        return v                                  # droit « voit mes succes secrets » : tout, revelations comprises
     # seul un acces par cle de copain (relaye par son serveur) dit ce qu'il a
     mine = set()
     if by_key:

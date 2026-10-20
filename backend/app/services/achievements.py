@@ -2146,6 +2146,7 @@ async def tick(notify: bool = True) -> list:
         new += [(aid, int(i)) for i in got if i not in old]
         st["unlocked"][aid] = got
     st["unlocked"] = {k: v for k, v in st["unlocked"].items() if v and k in BY_ID}
+    gained = _earn_keys(st, ev, [] if silent else new)
     st["sig"] = CATALOG_SIG
     sha = (os.getenv("COMMIT_SHA") or "")[:8]
     if sha and sha != "dev":
@@ -2155,8 +2156,103 @@ async def tick(notify: bool = True) -> list:
     await _state_put(st)
     _CACHE["v"] = None
     if new and notify and not silent:
-        await _notify(new, ev)
+        await _notify(new, ev, gained)
     return [] if silent else new
+
+
+# ── Cles (20/10/2026) ────────────────────────────────────────────────────────
+# Gagnees : 3 au depart, 1 toutes les 10 impressions reussies (depuis la mise
+# en route des cles), 1 par palier reellement franchi, 3 par secret gagne. Les
+# paliers et secrets reconnus apres coup (premier calcul, nouveau succes,
+# seuils changes : passages silencieux) ne rapportent rien.
+# Depensees sur un secret pas encore gagne, dans l'ordre : sa vignette (1),
+# son titre (2), un indice (3), son descriptif (5).
+KEY_START = 3
+KEYS_PER_PRINTS = 10
+KEYS_TIER, KEYS_SECRET = 1, 3
+REVEALS = [("vignette", "la vignette", 1), ("title", "le titre", 2), ("hint", "un indice", 3), ("desc", "le descriptif", 5)]
+KEY_LOG_MAX = 40
+
+
+def _earn_keys(st: dict, ev: dict, new: list) -> int:
+    """Ajoute les cles gagnees depuis le dernier passage ; rend leur nombre."""
+    now = datetime.utcnow().isoformat()
+    n_ok = int(ev.get("prints_ok", {}).get("value") or 0)
+    k = st.get("keys")
+    if not isinstance(k, dict):
+        k = st["keys"] = {"balance": KEY_START, "base_ok": n_ok, "from_prints": 0, "spent": {}, "earned": KEY_START,
+                          "log": [{"at": now, "n": KEY_START, "why": "Clés de départ"}]}
+    gained = 0
+
+    def add(n, why):
+        nonlocal gained
+        if n <= 0:
+            return
+        k["balance"] += n
+        k["earned"] = k.get("earned", 0) + n
+        gained += n
+        k["log"] = ([{"at": now, "n": n, "why": why}] + (k.get("log") or []))[:KEY_LOG_MAX]
+    total = max(0, n_ok - k.get("base_ok", n_ok)) // KEYS_PER_PRINTS
+    if total > k.get("from_prints", 0):
+        n = total - k.get("from_prints", 0)
+        k["from_prints"] = total
+        add(n, f"{n * KEYS_PER_PRINTS} impressions réussies")
+    tiers = [x for x in new if len(BY_ID[x[0]]["tiers"]) > 1]
+    secrets = [x for x in new if len(BY_ID[x[0]]["tiers"]) == 1]
+    if tiers:
+        add(KEYS_TIER * len(tiers), f"{len(tiers)} palier{'s' if len(tiers) > 1 else ''} franchi{'s' if len(tiers) > 1 else ''}")
+    for aid, _i in secrets:
+        add(KEYS_SECRET, f"Secret « {BY_ID[aid]['name']} »")
+    return gained
+
+
+async def spend_key(aid: str) -> dict:
+    """Revele l'etape suivante d'un secret pas encore gagne."""
+    a = BY_ID.get(aid)
+    if not a or len(a["tiers"]) != 1:
+        raise ValueError("Ce succès n'est pas un secret")
+    st = await _state_get() or {}
+    k = st.get("keys")
+    if not isinstance(k, dict):
+        raise ValueError("Les clés arrivent au prochain calcul des succès (dans 15 minutes au plus)")
+    if (st.get("unlocked") or {}).get(aid):
+        raise ValueError("Ce secret est déjà gagné : tout est dévoilé")
+    lvl = int((k.get("spent") or {}).get(aid, 0))
+    if lvl >= len(REVEALS):
+        raise ValueError("Tout est déjà révélé")
+    cost = REVEALS[lvl][2]
+    if k["balance"] < cost:
+        raise ValueError(f"Il faut {cost} clé{'s' if cost > 1 else ''} pour révéler {REVEALS[lvl][1]}")
+    k["balance"] -= cost
+    k.setdefault("spent", {})[aid] = lvl + 1
+    k["log"] = ([{"at": datetime.utcnow().isoformat(), "n": -cost,
+                  "why": f"{REVEALS[lvl][1].capitalize()} d'un secret"}] + (k.get("log") or []))[:KEY_LOG_MAX]
+    await _state_put(st)
+    _CACHE["v"] = None
+    return {"balance": k["balance"], "level": lvl + 1}
+
+
+_MONTHS = "janvier février mars avril mai juin juillet août septembre octobre novembre décembre".split()
+_DAYS = "lundi mardi mercredi jeudi vendredi samedi dimanche".split()
+_COLORS = "rouge orange jaune vert bleu violet rose noir blanc gris".split()
+_MATS = "pla petg tpu abs asa pc pa nylon pva".split()
+
+
+def hint_of(a: dict) -> str:
+    """Indice : la description, mots-cles caches (nombres, dates, couleurs,
+    matieres) ; a defaut, sa premiere moitie."""
+    import re as _re
+    if a.get("hint"):
+        return a["hint"]
+    words = set(_MONTHS + _DAYS + _COLORS + _MATS)
+    desc = a["desc"].replace("{n}", "…")
+    out = _re.sub(r"\d[\d\s,.]*(?:ᵉ|er|e)?(?:\s?(?:h|g|kg|min|minutes|heures?|jours?|%|€))?", "…", desc)
+    out = _re.sub(r"[\wÀ-ÿ']+", lambda m: "…" if m.group(0).lower().strip("'") in words else m.group(0), out)
+    out = _re.sub(r"…(\s*…)+", "…", out)
+    if out == desc:
+        parts = desc.split()
+        out = " ".join(parts[:max(3, len(parts) // 2)]) + " …"
+    return out
 
 
 def _fmt_n(n, a) -> str:
@@ -2171,7 +2267,7 @@ def describe(a: dict, n) -> str:
     return a["desc"].replace("{n}", _fmt_n(n, a))
 
 
-async def _notify(new: list, ev: dict) -> None:
+async def _notify(new: list, ev: dict, keys: int = 0) -> None:
     from . import notify as N
     cfg = await N._load()
     if not N.enabled_in(cfg, "achievement_unlocked"):
@@ -2191,6 +2287,8 @@ async def _notify(new: list, ev: dict) -> None:
                      + (f" — prochain palier : {_fmt_n(nxt, a)}" if nxt is not None and not a.get("money") else ""))
     if len(items) > 8:
         lines.append(f"… et {len(items) - 8} autre(s)")
+    if keys:
+        lines.append(f"🔑 +{keys} clé{'s' if keys > 1 else ''}")
     aid, i = items[0]
     a, t = BY_ID[aid], tiers_of(BY_ID[aid])[i]
     title = (f"🏅 Succès débloqué : {a['name']} {t['emoji']}" if len(items) == 1
@@ -2273,8 +2371,12 @@ def mask_secrets(v: dict, keep=()) -> dict:
     for it in v["items"]:
         if len(it["tiers"]) == 1 and it["level"] >= 0 and it["id"] not in keep:
             it = {**it, "desc": "Descriptif caché", "lore": None, "masked": True}
+        elif len(it["tiers"]) == 1 and it["level"] < 0 and it.get("reveal"):
+            # ce que mes cles ont revele reste chez moi
+            it = {**it, "emoji": "❔", "name": "Succès secret", "hint": None, "reveal": 0,
+                  "desc": "Continue d'imprimer : il se dévoilera tout seul."}
         items.append(it)
-    return {**v, "items": items}
+    return {**v, "items": items, "keys": None}
 
 
 async def my_uniques() -> list:
@@ -2312,10 +2414,13 @@ async def view(fresh: bool = False) -> dict:
         score_max += sum(t["score"] for t in tiers)
         nxt = lvl + 1 if lvl + 1 < len(a["tiers"]) else None
         secret = a.get("hidden") and lvl < 0
+        rv = int(((st.get("keys") or {}).get("spent") or {}).get(a["id"], 0)) if secret else 0
         items.append({
-            "id": a["id"], "cat": a["cat"], "emoji": "❔" if secret else a["emoji"],
-            "name": "Succès secret" if secret else a["name"],
-            "desc": "Continue d'imprimer : il se dévoilera tout seul." if secret else
+            "id": a["id"], "cat": a["cat"], "emoji": "❔" if secret and rv < 1 else a["emoji"],
+            "name": "Succès secret" if secret and rv < 2 else a["name"],
+            "hint": hint_of(a) if secret and rv >= 3 else None, "reveal": rv,
+            "desc": ("Continue d'imprimer : il se dévoilera tout seul." if rv < 1 else "Descriptif à révéler (🔑)")
+                    if secret and rv < 4 else
                     describe(a, a["tiers"][nxt if nxt is not None else lvl]),
             # medaille unique gagnee : ce qu'elle raconte, et ce qui l'a valu
             "lore": a.get("lore") if lvl >= 0 and len(a["tiers"]) == 1 else None,
@@ -2337,7 +2442,15 @@ async def view(fresh: bool = False) -> dict:
             if t["at"] and not (BY_ID[it["id"]].get("live") and t["at"][:10] <= first_day):
                 top[it["id"]] = (t["at"], it["id"], j)
     recent = sorted(top.values(), reverse=True)[:6]
-    out = {"items": items, "medals": medals, "score": score, "score_max": score_max,
+    k = st.get("keys") if isinstance(st.get("keys"), dict) else None
+    n_ok = int(ev.get("prints_ok", {}).get("value") or 0)
+    keys = None if k is None else {
+        "balance": k.get("balance", 0), "earned": k.get("earned", 0),
+        "to_next": KEYS_PER_PRINTS - (max(0, n_ok - k.get("base_ok", n_ok)) % KEYS_PER_PRINTS),
+        "steps": [{"id": i, "label": l, "cost": c} for i, l, c in REVEALS],
+        "rules": {"start": KEY_START, "prints": KEYS_PER_PRINTS, "tier": KEYS_TIER, "secret": KEYS_SECRET},
+        "log": (k.get("log") or [])[:12]}
+    out = {"items": items, "medals": medals, "score": score, "score_max": score_max, "keys": keys,
            "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES],
            "subs": [{"id": i, "emoji": e, "name": n} for i, e, n, _ids in SECRET_SUBS],
            "tiers": TIERS + [UNIQUE], "recent": [{"id": i, "tier": j, "at": at} for at, i, j in recent],
