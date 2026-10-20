@@ -161,9 +161,24 @@ export default function Achievements({ embedded = false }) {
                     <Compare people={people} cat={c.id}/>
                   </div>
                 )}
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
-                  {items.map(it => <Tile key={it.id} it={it} onOpen={() => setDetail(it.id)}/>)}
-                </div>
+                {/* Secrets : rangés en sous-sections (calendrier, heures, couleurs…) */}
+                {(c.id === "secret" && data.subs?.length
+                  ? data.subs.map(sb => ({ ...sb, items: items.filter(x => x.sub === sb.id) })).filter(sb => sb.items.length)
+                  : [{ id:"", items }]
+                ).map(sb => (
+                  <div key={sb.id} style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {sb.id && (
+                      <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, fontWeight:800, color:"var(--text2)" }}>
+                        <span>{sb.emoji}</span>{sb.name}
+                        <span style={{ marginLeft:"auto", fontSize:11, fontWeight:700, color:"var(--muted)" }}>
+                          {sb.items.filter(x => x.level >= 0).length}/{sb.items.length}</span>
+                      </div>
+                    )}
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
+                      {sb.items.map(it => <Tile key={it.id} it={it} onOpen={() => setDetail(it.id)}/>)}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

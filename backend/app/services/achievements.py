@@ -38,7 +38,7 @@ TIERS = [
 ]
 # Version des seuils : quand elle change, le passage suivant recalcule les crans
 # sans rien notifier (un seuil abaisse ne doit pas declencher une rafale).
-CATALOG_VERSION = 6          # 3 : secrets loufoques ; 4 : jusqu'a 100 secrets ; 5 : photos, appli ; 6 : durees, AMS (20/10/2026)
+CATALOG_VERSION = 7          # 3 : secrets loufoques ; 4 : jusqu'a 100 secrets ; 5 : photos, appli ; 6 : durees, AMS ; 7 : 36 a paliers (20/10/2026)
 UNIQUE = {"id": "unique", "label": "Unique", "emoji": "🏵️", "color": "#EC4899", "score": 3}
 
 CATEGORIES = [
@@ -167,6 +167,42 @@ CATALOG = [
     _a("fil_changes_day", "filaments", "🤹", "Jongleur", "{n} bobines posées dans l'AMS le même jour", [1]),
     _a("fil_changes_week", "filaments", "🌪️", "Semaine agitée", "{n} bobines posées dans l'AMS en 7 jours", [1]),
     _a("open_spools", "filaments", "🍰", "Tout entamé", "{n} bobines entamées en même temps", [1]),
+    _a("bicolor", "prints", "🎭", "Bicolore", "{n} impressions de 2 couleurs ou plus", [1]),
+    _a("reliable", "prints", "🎯", "Fiable", "{n} impressions finies à 5 % près de l'estimation", [1]),
+    _a("faster", "prints", "💨", "Plus vite que prévu", "{n} impressions réussies finies avant l'estimation", [1]),
+    _a("morning", "prints", "🌅", "Matinée productive", "{n} impressions lancées entre 7 h et midi", [1]),
+    _a("lunch", "prints", "🥪", "Pause déjeuner", "{n} impressions lancées entre midi et 14 h", [1]),
+    _a("evening", "prints", "🌆", "Soirée atelier", "{n} impressions lancées entre 18 h et 22 h", [1]),
+    _a("overnight", "prints", "🛌", "Nuit complète", "{n} impressions qui tournent de 23 h à 6 h", [1]),
+    _a("cancelled", "prints", "✋", "Changement d'avis", "{n} impressions annulées", [1]),
+    _a("records", "prints", "📏", "Recordman", "{n} fois que tu as battu ton record de durée", [1]),
+    _a("success_rate", "prints", "📊", "Fiabilité", "{n} % de réussite (sur au moins 100 impressions)", [1], unit='%'),
+    _a("months_active", "prints", "🗓️", "Assidu au mois", "{n} mois différents avec une impression", [1]),
+    _a("weekends_active", "prints", "🔧", "Bricoleur du dimanche", "{n} week-ends avec une impression", [1]),
+    _a("kg_month", "prints", "🍔", "Mois gourmand", "{n} kg imprimés en un même mois", [1], unit='kg'),
+    _a("kg_day", "prints", "🥩", "Journée gourmande", "{n} kg imprimés le même jour", [1], unit='kg'),
+    _a("engineering", "filaments", "🛠️", "Ingénieur", "{n} kg de matières techniques (ABS, ASA, PA, PC, chargées)", [1], unit='kg'),
+    _a("mw_designs_printed", "mw", "🧭", "Explorateur MakerWorld", "{n} modèles MakerWorld différents imprimés", [1]),
+    _a("creators", "mw", "🎨", "Fan de créateurs", "{n} créateurs différents imprimés", [1]),
+    _a("mw_categories", "mw", "🗃️", "Curieux de tout", "{n} catégories MakerWorld imprimées", [1]),
+    _a("trending", "mw", "🔥", "Dans la tendance", "{n} modèles imprimés par plus de 10 000 personnes", [1]),
+    _a("gems", "mw", "💎", "Dénicheur", "{n} modèles imprimés par moins de 50 personnes", [1]),
+    _a("mw_points_bal", "mw", "🪙", "Tirelire", "{n} points MakerWorld en caisse", [1]),
+    _a("profile_downloads", "mw", "📥", "Profils prisés", "{n} téléchargements de tes profils d'impression", [1]),
+    _a("queue_size", "mw", "📋", "Liste de souhaits", "{n} modèles dans « À faire »", [1]),
+    _a("spools_total", "filaments", "🧺", "Collection de bobines", "{n} bobines enregistrées en tout", [1]),
+    _a("spool_kg", "filaments", "🚚", "Gros acheteur", "{n} kg de filament achetés", [1], unit='kg'),
+    _a("spool_spent", "filaments", "💳", "Budget filament", "{n} € de bobines", [1], unit='€', money=True),
+    _a("catalog", "filaments", "📚", "Catalogue", "{n} références de filament", [1]),
+    _a("bambu_spools", "filaments", "🎋", "Fidèle à Bambu", "{n} bobines Bambu Lab", [1]),
+    _a("other_spools", "filaments", "🏴‍☠️", "Indépendant", "{n} bobines d'autres marques", [1]),
+    _a("assembled", "objects", "🧩", "Assembleur", "{n} objets avec des accessoires", [1]),
+    _a("accessory_refs", "objects", "🧰", "Quincaillerie", "{n} sortes d'accessoires", [1]),
+    _a("accessory_units", "objects", "🗄️", "Tiroirs pleins", "{n} accessoires en stock", [1]),
+    _a("best_sale", "objects", "🤑", "Belle vente", "Un objet vendu {n} €", [1], unit='€', money=True),
+    _a("showcase", "objects", "🪟", "Vitrine", "{n} objets à vendre en même temps", [1]),
+    _a("notes", "prints", "📝", "Annotateur", "{n} impressions annotées", [1]),
+    _a("household", "app", "🏠", "Maison pleine", "{n} comptes dans la maison", [1]),
     # Durees
     _a("long_prints", "prints", "🐫", "Longue haleine", "{n} impressions de plus de 10 h", [1]),
     _a("express", "prints", "🏎️", "Express", "{n} impressions réussies de moins de 30 minutes", [1]),
@@ -402,17 +438,35 @@ CATALOG = [
     _a("all_seasons", "secret", "🍂", "Quatre saisons", "Une impression réussie à chaque saison d'une même année", [1],
        lore="Printemps, été, automne, hiver : ton imprimante n'a pas de saison."),
 ]
+# Secrets (toutes les medailles uniques) : rangés en sous-sections dans la
+# categorie « Secrets ».
+SECRET_SUBS = [
+    ("calendar", "📅", "Calendrier", "halloween christmas new_year friday13 pi_day leap_day valentine may_day bastille "
+     "all_year april_fool music summer_solstice winter_solstice easter st_patrick fathers_day crepes epiphany "
+     "palindrome_date anniversary all_seasons santa"),
+    ("clock", "🕛", "Heures et lune", "midnight noon mirror sequence elite last_minute saturday_night monday_morning "
+     "sunday_morning full_moon new_moon all_nighter cinderella wake_up night_visit"),
+    ("measures", "⚖️", "Poids et durées", "tiny flash titan answer42 beast kilo pi_grams palindrome full_day marathon42 "
+     "bullseye tortoise hare one_hour watchmaker hundred_pieces"),
+    ("colors", "🎨", "Couleurs et matières", "rainbow16 panda tricolore carbon rubber barbie smurf hulk fire pumpkin "
+     "xmas_tree silk galaxy glow marble wood translucent sparkle soluble"),
+    ("counts", "🔢", "Compteurs et séries", "first_print n1001 hundred jackpot leet y2k dont_panic weekend10 on_fire "
+     "rainbow_day triplets broken_record"),
+    ("ups", "🎢", "Hauts et bas", "comeback phoenix bad_day insomniac comeback30 hibernation first_try so_close big_fall"),
+    ("trade", "🛒", "Ventes et bobines", "penny luxury market_day museum sold_hot finally_sold eternal_spool "
+     "devoured_spool big_order pit_stop"),
+    ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel"),
+]
+SUB_OF = {aid: sid for sid, _e, _n, ids in SECRET_SUBS for aid in ids.split()}
+
 LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_likes", "mw_level", "mw_collections",
         "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils",
         "photos_manual", "photo_prints", "photos_camera", "photos_max", "covers", "visits", "visit_days", "details",
         "actions", "updates", "notifs", "dismissals", "tags", "print_groups", "paparazzi", "souvenirs",
         "grand_tour", "night_visit", "cutting_edge", "double_update", "shares", "mw_rates", "mw_boosts_given",
-        "mw_likes_given", "mw_collected", "open_spools"}
+        "mw_likes_given", "mw_collected", "open_spools", "mw_points_bal", "profile_downloads", "queue_size", "accessory_units", "showcase", "household", "notes", "catalog", "assembled", "accessory_refs"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
-    # une medaille unique ne se devoile qu'une fois gagnee
-    if len(_x["tiers"]) == 1:
-        _x["hidden"] = True
 # Seuils (20/10/2026, v2) : six crans, jusqu'a la Legende, releves pour qu'un
 # parc bien rode (2 000 impressions, 4 000 h, 90 kg) ait encore de quoi viser.
 TIER_TABLE = {
@@ -500,6 +554,42 @@ TIER_TABLE = {
     "sturdy": [5, 10, 25, 50, 100, 250],
     "multi_plate": [5, 25, 50, 100, 250, 500],
     "printers": [2, 3, 4, 5, 6, 8],
+    "bicolor": [10, 50, 100, 250, 500, 1000],
+    "reliable": [5, 25, 50, 100, 250, 500],
+    "faster": [5, 25, 50, 100, 250, 500],
+    "morning": [25, 100, 300, 600, 1200, 2500],
+    "lunch": [5, 25, 100, 250, 500, 1000],
+    "evening": [25, 100, 300, 600, 1200, 2500],
+    "overnight": [5, 10, 25, 50, 100, 250],
+    "cancelled": [1, 10, 25, 50, 100, 250],
+    "records": [3, 5, 10, 15, 20, 30],
+    "success_rate": [80, 85, 90, 93, 96, 99],
+    "months_active": [3, 6, 12, 24, 36, 60],
+    "weekends_active": [5, 25, 52, 100, 150, 250],
+    "kg_month": [1, 2, 5, 10, 20, 30],
+    "kg_day": [0.5, 1, 2, 3, 5, 8],
+    "engineering": [0.5, 1, 2, 5, 10, 25],
+    "mw_designs_printed": [10, 50, 100, 250, 500, 1000],
+    "creators": [5, 25, 50, 100, 250, 500],
+    "mw_categories": [3, 5, 10, 15, 20, 30],
+    "trending": [5, 25, 50, 100, 250, 500],
+    "gems": [5, 25, 50, 100, 250, 500],
+    "mw_points_bal": [100, 500, 1000, 2500, 5000, 10000],
+    "profile_downloads": [100, 1000, 5000, 10000, 25000, 50000],
+    "queue_size": [5, 10, 25, 50, 100, 200],
+    "spools_total": [10, 50, 100, 250, 500, 1000],
+    "spool_kg": [5, 25, 50, 100, 250, 500],
+    "spool_spent": [100, 500, 1000, 2500, 5000, 10000],
+    "catalog": [10, 25, 50, 100, 200, 400],
+    "bambu_spools": [5, 25, 50, 100, 250, 500],
+    "other_spools": [5, 25, 50, 100, 250, 500],
+    "assembled": [5, 25, 50, 100, 250, 500],
+    "accessory_refs": [5, 10, 25, 50, 100, 200],
+    "accessory_units": [50, 100, 250, 500, 1000, 2500],
+    "best_sale": [10, 25, 50, 100, 250, 500],
+    "showcase": [5, 10, 25, 50, 100, 200],
+    "notes": [5, 25, 50, 100, 250, 500],
+    "household": [2, 3, 4, 5, 8, 10],
     "shares": [1, 10, 25, 50, 100, 250],
     "mw_rates": [1, 10, 25, 50, 100, 250],
     "mw_boosts_given": [1, 10, 25, 50, 100, 250],
@@ -511,6 +601,14 @@ for _x in CATALOG:
         _x["tiers"] = TIER_TABLE[_x["id"]]
     elif _x["id"].startswith("mat_"):
         _x["tiers"] = [1, 5, 10, 25, 50, 100]
+    # APRES les seuils (un succes a paliers est declare avec un seuil provisoire) :
+    # une medaille unique ne se devoile qu'une fois gagnee, et vit dans « Secrets »
+    if len(_x["tiers"]) == 1:
+        _x["hidden"] = True
+        _x["cat"] = "secret"
+        _x["sub"] = SUB_OF.get(_x["id"], "counts")
+    else:
+        _x.pop("hidden", None)
 BY_ID = {a["id"]: a for a in CATALOG}
 
 
@@ -547,7 +645,7 @@ async def _load_data() -> dict:
         prints = (await db.execute(select(Print.id, Print.print_date, Print.status, Print.duration_seconds,
                                           Print.total_weight_g, Print.design_id, Print.translated_name,
                                           Print.file_name, Print.estimated_seconds, Print.number_of_items,
-                                          Print.total_cost, Print.plate_id, Print.printer_model)
+                                          Print.total_cost, Print.plate_id, Print.printer_model, Print.status_note)
                                    .order_by(Print.print_date, Print.id))).all()
         usage = (await db.execute(select(FilamentUsage.print_id, FilamentUsage.spool_id, FilamentUsage.filament_type,
                                          FilamentUsage.color_hex, FilamentUsage.grams_used))).all()
@@ -581,6 +679,18 @@ async def _load_data() -> dict:
                                        .group_by(func.date(NotifLog.created_at)))).all()
         dismiss = (await db.execute(select(AttentionDismissal.created_at))).all()
         rfid = (await db.execute(select(RfidScan.created_at))).all()
+        from ..models.print_history import MakerWorldDesign
+        from ..models.object_history import Accessory
+        from ..models.user import User
+        mwd = {r.design_id: r for r in (await db.execute(select(
+            MakerWorldDesign.design_id, MakerWorldDesign.creator_uid, MakerWorldDesign.creator_name,
+            MakerWorldDesign.categories, MakerWorldDesign.print_count))).all()}
+        accs = (await db.execute(select(Accessory.quantity))).all()
+        acc_objs = (await db.execute(select(ObjectAccessory.object_id, ObjectAccessory.created_at))).all()
+        n_users = (await db.execute(select(func.count()).select_from(User).where(User.active.is_(True)))).scalar() or 0
+        spool_more = (await db.execute(select(Spool.id, Spool.created_at, Spool.price_override, Filament.price,
+                                              Filament.filament_weight_g, Filament.manufacturer)
+                                       .join(Filament, Filament.id == Spool.filament_id))).all()
         # actions reussies qui comptent : partages, gestes MakerWorld
         acts = (await db.execute(select(ActivityLog.method, ActivityLog.path, ActivityLog.created_at).where(
             ActivityLog.kind == "action",
@@ -612,7 +722,9 @@ async def _load_data() -> dict:
     return {"prints": prints, "usage": usage, "spools": spools, "fils": fils, "objs": objs, "links": links,
             "groups": groups, "snaps": snaps, "covers": covers, "pgroups": pgroups, "tags": tags,
             "act_days": act_days, "pages": pages, "late": late, "notif_days": notif_days, "dismiss": dismiss,
-            "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "changes": changes}
+            "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "changes": changes,
+            "mwd": mwd, "accs": accs, "acc_objs": acc_objs, "n_users": n_users, "spool_more": spool_more,
+            "queue": _queue_size()}
 
 
 _MONDAY0 = datetime(1970, 1, 5).date()       # un lundi : numero de semaine = jours // 7
@@ -1040,6 +1152,7 @@ def compute_series(d: dict, now: datetime) -> dict:
             push(key, dt, i)
     _more(push, d, now)
     _durations(push, d)
+    _wide(push, d, now)
     acc = 0
     for dt, q in sorted(((_ts(lk.created_at) or now), (lk.quantity or 0)) for lk in d["links"]):
         acc += q
@@ -1141,6 +1254,137 @@ def _night_overlap(start: datetime, end: datetime) -> float:
             tot += (hi - lo).total_seconds() / 3600
         day += timedelta(days=1)
     return tot
+
+
+ENGINEERING = {"ABS", "ASA", "PA", "PC", "PPS", "PET"}
+
+
+def _wide(push, d, now) -> None:
+    """Fournee de succes a paliers : couleurs, estimations, moments de la
+    journee, annulations, records, taux, mois et week-ends, kilos, matieres
+    techniques, MakerWorld (modeles, createurs, categories, popularite),
+    bobines, accessoires, objets, notes, comptes."""
+    by_print = defaultdict(list)
+    for u in d["usage"]:
+        by_print[u.print_id].append(u)
+    mwd = d.get("mwd") or {}
+    c = defaultdict(int)
+    months, weekends = set(), set()
+    kg_m, kg_d = defaultdict(float), defaultdict(float)
+    eng = 0.0
+    designs, creators, cats, seen_mw = set(), set(), set(), set()
+    record = 0.0
+    n_done = n_ok = 0
+    for p in d["prints"]:
+        st = (p.status or "").upper()
+        if st == "IN_PROGRESS" or not p.print_date:
+            continue
+        start, dur = p.print_date, p.duration_seconds or 0
+        end = start + timedelta(seconds=dur)
+        ok = st in OK
+        loc = _local(start)
+        us = by_print.get(p.id, [])
+        cols = {(u.color_hex or "").upper()[:6] for u in us if (u.grams_used or 0) > 0 and u.color_hex}
+        w = p.total_weight_g or sum(u.grams_used or 0 for u in us)
+        est = p.estimated_seconds or 0
+
+        def inc(key, at):
+            c[key] += 1
+            push(key, at, c[key])
+        if len(cols) >= 2:
+            inc("bicolor", end)
+        if est >= 600 and dur and abs(dur - est) <= 0.05 * est:
+            inc("reliable", end)
+        if ok and est >= 600 and 0 < dur < est:
+            inc("faster", end)
+        if 7 <= loc.hour < 12:
+            inc("morning", start)
+        elif 12 <= loc.hour < 14:
+            inc("lunch", start)
+        elif 18 <= loc.hour < 22:
+            inc("evening", start)
+        # nuit complete : deja lancee a 23 h, encore en cours a 6 h le lendemain
+        # (la nuit d'une impression lancee avant midi est celle de la veille)
+        night0 = loc.replace(hour=23, minute=0, second=0, microsecond=0)
+        if loc.hour < 12:
+            night0 -= timedelta(days=1)
+        if loc <= night0 and _local(end) >= night0 + timedelta(hours=7):
+            inc("overnight", end)
+        if st == "CANCELLED":
+            inc("cancelled", end)
+        if ok and dur > record:
+            if record:
+                inc("records", end)
+            record = dur
+        # taux de reussite, des 100 impressions terminees (meilleur atteint)
+        n_done += 1
+        n_ok += ok
+        if n_done >= 100:
+            push("success_rate", end, int(100 * n_ok / n_done))
+        months.add((loc.year, loc.month))
+        push("months_active", start, len(months))
+        if loc.weekday() >= 5:
+            weekends.add(loc.date() - timedelta(days=loc.weekday() - 5))
+            push("weekends_active", start, len(weekends))
+        kg_m[(loc.year, loc.month)] += w / 1000
+        push("kg_month", end, round(kg_m[(loc.year, loc.month)], 2))
+        kg_d[loc.date()] += w / 1000
+        push("kg_day", end, round(kg_d[loc.date()], 2))
+        for u in us:
+            fam = _family(u.filament_type)
+            t = (u.filament_type or "").upper()
+            if fam in ENGINEERING or "CF" in t or "GF" in t:
+                eng += (u.grams_used or 0) / 1000
+        push("engineering", end, round(eng, 2))
+        if (getattr(p, "status_note", None) or "").strip():
+            inc("notes", end)
+        did = str(p.design_id or "").strip()
+        if ok and did and did not in ("0", "None"):
+            designs.add(did)
+            push("mw_designs_printed", end, len(designs))
+            m = mwd.get(did)
+            if m is not None:
+                if m.creator_uid or m.creator_name:
+                    creators.add(m.creator_uid or m.creator_name)
+                    push("creators", end, len(creators))
+                cats.update(x.strip().lower() for x in (m.categories or "").split(",") if x.strip())
+                push("mw_categories", end, len(cats))
+                pc = m.print_count or 0
+                if did not in seen_mw:                  # un modele ne compte qu'une fois
+                    seen_mw.add(did)
+                    if pc > 10000:
+                        inc("trending", end)
+                    if 0 < pc < 50:
+                        inc("gems", end)
+    push("queue_size", now, d.get("queue") or 0)
+    push("household", now, d.get("n_users") or 0)
+    # bobines : toutes, kilos et euros achetes, marques
+    tot = kg = eur = 0.0
+    bambu = other = 0
+    for r in sorted(d.get("spool_more") or [], key=lambda x: _ts(x.created_at) or now):
+        at = _ts(r.created_at) or now
+        tot += 1
+        push("spools_total", at, int(tot))
+        kg += (r.filament_weight_g or 1000) / 1000
+        push("spool_kg", at, round(kg, 1))
+        eur += (r.price_override if r.price_override is not None else (r.price or 0)) or 0
+        push("spool_spent", at, round(eur, 2))
+        if "bambu" in (r.manufacturer or "").lower():
+            bambu += 1
+            push("bambu_spools", at, bambu)
+        elif (r.manufacturer or "").strip():
+            other += 1
+            push("other_spools", at, other)
+    push("catalog", now, len(d["fils"]))
+    # accessoires et objets
+    push("accessory_refs", now, len(d.get("accs") or []))
+    push("accessory_units", now, sum((r.quantity or 0) for r in d.get("accs") or []))
+    push("assembled", now, len({r.object_id for r in d.get("acc_objs") or []}))
+    push("showcase", now, sum(1 for o in d["objs"] if o.status == "available"))
+    best = 0.0
+    for o in sorted((o for o in d["objs"] if o.status == "sold"), key=lambda o: _ts(o.sold_date) or now):
+        best = max(best, o.sold_price or 0)
+        push("best_sale", _ts(o.sold_date) or now, round(best, 2))
 
 
 def _durations(push, d) -> None:
@@ -1337,7 +1581,9 @@ async def _live_values() -> dict:
                         "mw_prints": p.get("prints") or 0, "mw_boosts": p.get("boosts") or 0,
                         "mw_fans": p.get("fans") or 0, "mw_likes": p.get("likes") or 0,
                         "mw_level": p.get("level") or 0, "mw_collections": p.get("collections") or 0,
-                        "mw_follows": p.get("follows") or 0})
+                        "mw_follows": p.get("follows") or 0,
+                        "mw_points_bal": int((p.get("points") or {}).get("total") or 0),
+                        "profile_downloads": p.get("profile_downloads") or 0})
     except Exception as e:
         logger.info(f"[SUCCES] profil MakerWorld illisible : {e}")
     try:
@@ -1349,6 +1595,15 @@ async def _live_values() -> dict:
 
 
 # ── Etat ─────────────────────────────────────────────────────────────────────
+def _queue_size() -> int:
+    """Modeles de « A faire », d'apres le dernier calcul garde sur disque."""
+    try:
+        from .mw_queue import _snap_get
+        return len((_snap_get() or {}).get("models") or [])
+    except Exception:
+        return 0
+
+
 async def _state_get():
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting
@@ -1580,6 +1835,7 @@ async def view(fresh: bool = False) -> dict:
             # medaille unique gagnee : ce qu'elle raconte, et ce qui l'a valu
             "lore": a.get("lore") if lvl >= 0 and len(a["tiers"]) == 1 else None,
             "secret": bool(a.get("hidden")), "money": bool(a.get("money")), "unit": a.get("unit"),
+            "sub": a.get("sub"),
             "value": None if secret else r["value"], "level": lvl,
             "next": None if nxt is None or secret else a["tiers"][nxt],
             "prev": a["tiers"][lvl] if lvl >= 0 else 0,
@@ -1598,6 +1854,7 @@ async def view(fresh: bool = False) -> dict:
     recent = sorted(top.values(), reverse=True)[:6]
     out = {"items": items, "medals": medals, "score": score, "score_max": score_max,
            "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES],
+           "subs": [{"id": i, "emoji": e, "name": n} for i, e, n, _ids in SECRET_SUBS],
            "tiers": TIERS + [UNIQUE], "recent": [{"id": i, "tier": j, "at": at} for at, i, j in recent],
            "since": (st or {}).get("since")}
     _CACHE.update(t=time.time(), v=out)
