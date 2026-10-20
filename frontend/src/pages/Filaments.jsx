@@ -1205,6 +1205,14 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
               {rem != null ? `${Math.round(rem)} g` : "—"}
             </span>
             <span style={{ opacity:0.6 }}> / {total} g</span>
+            {/* Bobine vide ou presque : pastille a cote du poids (en haut a
+                droite, elle chevauchait le sous-type) */}
+            {rem != null && pct <= 15 && (
+              <span style={{ marginLeft:4, fontSize:8, fontWeight:800, padding:"1px 4px", borderRadius:20,
+                background:"#ef4444", color:"white", fontFamily:"inherit", verticalAlign:"1px" }}>
+                {pct}%
+              </span>
+            )}
           </p>
         </div>
 
@@ -1243,14 +1251,6 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         )}
       </div>
 
-      {/* Bobine vide ou presque : signal discret mais present, sinon il faut
-          lire chaque chiffre pour reperer celles a remplacer. */}
-      {rem != null && pct <= 15 && (
-        <span style={{ position:"absolute", top:12, right:6, fontSize:8, fontWeight:800,
-          padding:"1px 5px", borderRadius:20, background:"#ef4444", color:"white" }}>
-          {pct}%
-        </span>
-      )}
     </Pressable>
   );
 }
