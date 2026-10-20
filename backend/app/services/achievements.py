@@ -35,10 +35,11 @@ TIERS = [
     {"id": "platinum", "label": "Platine", "emoji": "💠", "color": "#6EC6D9", "score": 5},
     {"id": "diamond", "label": "Diamant", "emoji": "💎", "color": "#8B5CF6", "score": 8},
     {"id": "legend", "label": "Légende", "emoji": "👑", "color": "#E11D48", "score": 13},
+    {"id": "mythic", "label": "Mythique", "emoji": "🔱", "color": "#0D9488", "score": 21},
+    {"id": "cosmic", "label": "Cosmique", "emoji": "🌌", "color": "#4338CA", "score": 34},
+    {"id": "eternal", "label": "Éternel", "emoji": "✨", "color": "#111827", "score": 55},
 ]
-# Version des seuils : quand elle change, le passage suivant recalcule les crans
-# sans rien notifier (un seuil abaisse ne doit pas declencher une rafale).
-CATALOG_VERSION = 7          # 3 : secrets loufoques ; 4 : jusqu'a 100 secrets ; 5 : photos, appli ; 6 : durees, AMS ; 7 : 36 a paliers (20/10/2026)
+# (Version du catalogue : remplacee par son empreinte, CATALOG_SIG, plus bas.)
 UNIQUE = {"id": "unique", "label": "Unique", "emoji": "🏵️", "color": "#EC4899", "score": 3}
 
 CATEGORIES = [
@@ -467,8 +468,11 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "mw_likes_given", "mw_collected", "open_spools", "mw_points_bal", "profile_downloads", "queue_size", "accessory_units", "showcase", "household", "notes", "catalog", "assembled", "accessory_refs"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
-# Seuils (20/10/2026, v2) : six crans, jusqu'a la Legende, releves pour qu'un
-# parc bien rode (2 000 impressions, 4 000 h, 90 kg) ait encore de quoi viser.
+# Seuils : six paliers (bronze -> legende), etendus a neuf (mythique, cosmique,
+# eternel) par _extend, sauf liste de 9 donnee ici ou plafond naturel (BOUNDED).
+# Pour les retoucher, il suffit de changer cette table : l'empreinte du
+# catalogue change, et le passage suivant (15 min) realigne les paliers acquis
+# en silence -- retire ceux qui ne sont plus atteints, ajoute les nouveaux.
 TIER_TABLE = {
     "prints_ok": [50, 250, 1000, 2500, 5000, 10000],
     "print_hours": [250, 1000, 2500, 5000, 10000, 20000],
@@ -486,7 +490,7 @@ TIER_TABLE = {
     "multicolor": [5, 25, 100, 250, 500, 1000],
     "colors_max": [2, 4, 6, 8, 12, 16],
     "failures": [1, 10, 25, 50, 100, 250],
-    "veteran": [30, 180, 365, 730, 1095, 1825],
+    "veteran": [30, 180, 365, 730, 1095, 1825, 3650, 5479, 7305],    # jusqu'a 5, 10, 15, 20 ans
     "month_record": [20, 40, 60, 100, 150, 250],
     "weeks": [4, 8, 16, 26, 52, 104],
     "pieces": [250, 1000, 2500, 5000, 10000, 25000],
@@ -596,11 +600,36 @@ TIER_TABLE = {
     "mw_likes_given": [5, 25, 50, 100, 250, 500],
     "mw_collected": [5, 25, 50, 100, 250, 500],
 }
+# Au-dela de la Legende (Mythique, Cosmique, Eternel) : x2, x5, x10 du dernier
+# seuil, arrondis. Sauf la ou il y a un plafond naturel (pourcentage, 24 h par
+# jour, familles de teintes, matieres, imprimantes, niveau MakerWorld…).
+BOUNDED = {"success_rate", "day_hours", "colors_max", "stock_colors", "materials", "printers", "mw_level"}
+
+
+def _nice(x: float) -> float:
+    """Arrondi « rond » vers le haut : 1, 1,5, 2, 2,5, 3, 4, 5, 6, 7,5 x 10^k."""
+    import math
+    if x <= 0:
+        return x
+    k = 10 ** math.floor(math.log10(x))
+    for m in (1, 1.5, 2, 2.5, 3, 4, 5, 6, 7.5, 10):
+        if m * k >= x - 1e-9:
+            v = m * k
+            return int(v) if float(v).is_integer() else v
+    return x
+
+
+def _extend(t: list, aid: str) -> list:
+    if aid in BOUNDED or len(t) != 6:
+        return t
+    return t + [_nice(t[-1] * f) for f in (2, 5, 10)]
+
+
 for _x in CATALOG:
     if _x["id"] in TIER_TABLE:
-        _x["tiers"] = TIER_TABLE[_x["id"]]
+        _x["tiers"] = _extend(TIER_TABLE[_x["id"]], _x["id"])
     elif _x["id"].startswith("mat_"):
-        _x["tiers"] = [1, 5, 10, 25, 50, 100]
+        _x["tiers"] = _extend([1, 5, 10, 25, 50, 100], _x["id"])
     # APRES les seuils (un succes a paliers est declare avec un seuil provisoire) :
     # une medaille unique ne se devoile qu'une fois gagnee, et vit dans « Secrets »
     if len(_x["tiers"]) == 1:
@@ -610,6 +639,18 @@ for _x in CATALOG:
     else:
         _x.pop("hidden", None)
 BY_ID = {a["id"]: a for a in CATALOG}
+
+
+def _signature() -> str:
+    """Empreinte du catalogue (succes et seuils). Elle change des qu'on ajoute un
+    succes ou qu'on touche a un seuil : le passage suivant recalcule alors tout
+    en silence (pas de rafale de notifications), sans numero a tenir a jour."""
+    import hashlib
+    raw = json.dumps([(a["id"], a["tiers"]) for a in CATALOG], separators=(",", ":"))
+    return hashlib.md5(raw.encode()).hexdigest()[:12]
+
+
+CATALOG_SIG = _signature()
 
 
 def tiers_of(a: dict) -> list:
@@ -1656,23 +1697,25 @@ async def tick(notify: bool = True) -> list:
     first = st is None
     st = st or {"unlocked": {}, "best": {}}
     # seuils changes depuis le dernier passage : on recalcule en silence
-    silent = first or st.get("version") != CATALOG_VERSION
+    silent = first or st.get("sig") != CATALOG_SIG
     new = []
     for aid, r in ev.items():
         old = dict(st["unlocked"].get(aid) or {})
+        best = max(st["best"].get(aid, 0) or 0, r["value"] or 0)
+        st["best"][aid] = best
         if BY_ID[aid].get("live"):
-            got = {**old}
+            # lu au present : acquis meme si la valeur redescend, mais toujours
+            # selon les seuils du moment (meilleure valeur jamais vue)
+            got = {i: at for i, at in old.items() if _still(aid, i, best)}
             for i, at in r["reached"].items():
                 got.setdefault(i, at)
-            got = {i: at for i, at in got.items() if int(i) < len(BY_ID[aid]["tiers"])}
         else:
-            # date reelle tiree de l'historique ; un cran deja connu garde la sienne
+            # date reelle tiree de l'historique ; un palier deja connu garde la sienne
             got = {i: old.get(i, at) for i, at in r["reached"].items()}
         new += [(aid, int(i)) for i in got if i not in old]
         st["unlocked"][aid] = got
-        st["best"][aid] = max(st["best"].get(aid, 0) or 0, r["value"] or 0)
     st["unlocked"] = {k: v for k, v in st["unlocked"].items() if v and k in BY_ID}
-    st["version"] = CATALOG_VERSION
+    st["sig"] = CATALOG_SIG
     sha = (os.getenv("COMMIT_SHA") or "")[:8]
     if sha and sha != "dev":
         st.setdefault("versions", {}).setdefault(sha, datetime.utcnow().isoformat())
@@ -1726,6 +1769,13 @@ async def _notify(new: list, ev: dict) -> None:
 
 
 # ── Bilan par section (page, podium entre copains) ───────────────────────────
+def _still(aid: str, i, best) -> bool:
+    """Un palier deja acquis tient-il encore avec les seuils du moment ?"""
+    t = BY_ID[aid]["tiers"]
+    i = int(i)
+    return i < len(t) and (best or 0) >= t[i]
+
+
 def summary(v: dict) -> dict:
     """Score, medailles et nombre de succes gagnes, par section et en tout,
     a partir d'une vue (la mienne ou celle d'un copain, meme version ou non)."""
@@ -1817,7 +1867,8 @@ async def view(fresh: bool = False) -> dict:
         got = dict(r["reached"])
         stored = (st.get("unlocked") or {}).get(a["id"]) or {}
         if a.get("live"):                               # acquis, meme si la valeur a baisse
-            got.update({i: at for i, at in stored.items() if int(i) < len(a["tiers"])})
+            best = (st.get("best") or {}).get(a["id"], 0) or 0
+            got.update({i: at for i, at in stored.items() if _still(a["id"], i, best)})
         else:                                           # la date d'abord constatee
             got.update({i: at for i, at in stored.items() if i in got})
         tiers = tiers_of(a)

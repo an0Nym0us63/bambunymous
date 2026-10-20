@@ -6,8 +6,9 @@ import client from "../api/client";
 import { isMoneyHidden } from "../utils/money";
 
 // Succes : medailles gagnees sur l'historique (impressions, filaments, objets,
-// MakerWorld, copains, secrets). Chaque succes a six crans (bronze, argent,
-// or, platine, diamant, legende) ou une medaille unique.
+// MakerWorld, copains, secrets). Chaque succes a jusqu'a neuf paliers (bronze,
+// argent, or, platine, diamant, legende, mythique, cosmique, eternel) ou une
+// medaille unique.
 
 const fmt = (n, unit) => {
   if (n == null) return "";
@@ -318,25 +319,30 @@ function Bar({ value }) {
   return (
     <div style={{ height:8, borderRadius:8, background:"var(--surface2)", overflow:"hidden", width:"100%" }}>
       <div style={{ width:`${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`, height:"100%", borderRadius:8,
-        background:"linear-gradient(90deg, #CD7F32, #F5B700, #6EC6D9, #8B5CF6, #E11D48)" }}/>
+        background:"linear-gradient(90deg, #CD7F32, #F5B700, #6EC6D9, #8B5CF6, #E11D48, #0D9488, #4338CA)" }}/>
     </div>
   );
 }
 
+// Bilan des medailles : une case par type (medaille, nombre, nom), en grille
+// qui passe a la ligne plutot que de serrer les chiffres les uns sur les autres.
 function MedalCounts({ tiers, medals }) {
   return (
-    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(38px, 1fr))", rowGap:8, columnGap:2 }}>
-      {tiers.map(t => (
-        <div key={t.id} title={t.label} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2, minWidth:0 }}>
-          <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-            <Medal tier={t} emoji="" size={18} locked={!medals[t.id]}/>
-            <span style={{ fontSize:"clamp(12px, 3.6vw, 15px)", fontWeight:800, color:"var(--text)", fontVariantNumeric:"tabular-nums" }}>
-              {medals[t.id] || 0}</span>
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(52px, 1fr))", gap:6 }}>
+      {tiers.map(t => {
+        const n = medals[t.id] || 0;
+        return (
+          <div key={t.id} title={t.label} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:3,
+            padding:"7px 2px 6px", borderRadius:10, minWidth:0, background: n ? `${t.color}14` : "var(--surface2)",
+            border:`1px solid ${n ? t.color + "40" : "var(--border)"}` }}>
+            <Medal tier={t} emoji="" size={22} locked={!n}/>
+            <span style={{ fontSize:15, fontWeight:900, color: n ? "var(--text)" : "var(--muted)", lineHeight:1,
+              fontVariantNumeric:"tabular-nums" }}>{n}</span>
+            <span style={{ fontSize:10, color:"var(--muted)", whiteSpace:"nowrap", maxWidth:"100%", overflow:"hidden",
+              textOverflow:"ellipsis" }}>{t.label}</span>
           </div>
-          <span style={{ fontSize:"clamp(9px, 2.5vw, 10.5px)", color:"var(--muted)", whiteSpace:"nowrap",
-            maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis" }}>{t.label}</span>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
