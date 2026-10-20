@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
+import { currentFriend } from "../store/friend";
 import client from "../api/client";
 import { isMoneyHidden } from "../utils/money";
 
 // Succes : medailles gagnees sur l'historique (impressions, filaments, objets,
 // MakerWorld, copains, secrets). Chaque succes a six crans (bronze, argent,
-// or, platine, diamant, legende) ou une medaille unique. Onglet de categorie
-// garde dans l'adresse (?cat=) ; ?a= met un succes en avant (lien des
-// notifications).
+// or, platine, diamant, legende) ou une medaille unique.
 
 const fmt = (n, unit) => {
   if (n == null) return "";
@@ -19,30 +19,44 @@ const dateFr = iso => iso ? new Date(iso + (iso.endsWith("Z") || iso.includes("+
   .toLocaleDateString("fr-FR", { day:"numeric", month:"long", year:"numeric" }) : "";
 
 // embedded : dans l'onglet Succes des statistiques (sans son propre titre).
+// Une carte par section : ses chiffres, et depliee, son podium entre copains,
+// la comparaison avec chacun, puis toutes ses medailles (detail au toucher).
+// ?cat= deplie une section ; ?a= ouvre le detail d'un succes (notifications).
 export default function Achievements({ embedded = false }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
+  const [pod, setPod] = useState(null);           // podium : moi et mes copains
   const [sp, setSp] = useSearchParams();
-  const cat = sp.get("cat") || "", focus = sp.get("a") || "";
-  const pick = c => { const n = new URLSearchParams(sp); c ? n.set("cat", c) : n.delete("cat"); n.delete("a"); setSp(n, { replace:true }); };
+  const focus = sp.get("a") || "";
+  const [openCats, setOpenCats] = useState(() => new Set([sp.get("cat")].filter(Boolean)));
+  const [detail, setDetail] = useState(null);
+  const atFriend = !!currentFriend();             // chez un copain : pas de podium (ce sont ses copains a lui)
 
   useEffect(() => {
     client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
+    if (!atFriend) client.get("/achievements/podium").then(r => setPod(r.data)).catch(() => {});
   }, []);
-
   const byId = useMemo(() => Object.fromEntries((data?.items || []).map(x => [x.id, x])), [data]);
+  // lien d'une notification : deplier sa section et ouvrir son detail
+  useEffect(() => {
+    if (!focus || !byId[focus]) return;
+    setOpenCats(s => new Set([...s, byId[focus].cat]));
+    setDetail(focus);
+  }, [focus, byId]);
+
   if (err) return <p style={msg}>{err}</p>;
   if (!data) return <p style={msg}>…</p>;
 
-  const shown = data.items.filter(x => !cat || x.cat === cat)
-    // gagnes d'abord (du plus haut cran), puis les plus avances vers leur premier cran
-    .sort((a, b) => (b.level - a.level) || (progress(b) - progress(a)));
+  const toggle = c => setOpenCats(s => { const n = new Set(s); n.has(c) ? n.delete(c) : n.add(c); return n; });
+  const closeDetail = () => {
+    setDetail(null);
+    if (focus) { const n = new URLSearchParams(sp); n.delete("a"); setSp(n, { replace:true }); }
+  };
   const pct = data.score_max ? Math.round(100 * data.score / data.score_max) : 0;
-  const counts = {};
-  for (const x of data.items) {
-    const c = counts[x.cat] || (counts[x.cat] = { got:0, all:0 });
-    c.all++; if (x.level >= 0) c.got++;
-  }
+  const people = (pod?.people || []).filter(p => p.status === "ok");
+  const others = (pod?.people || []).filter(p => !p.me);
+  const withFriends = people.length > 1;
+  const tiersById = Object.fromEntries(data.tiers.map(t => [t.id, t]));
 
   return (
     <div style={{ maxWidth: embedded ? undefined : 900, width:"100%", margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
@@ -55,27 +69,24 @@ export default function Achievements({ embedded = false }) {
           <span style={{ fontSize:28, fontWeight:900, color:"var(--text)", fontVariantNumeric:"tabular-nums" }}>{data.score}</span>
           <span style={{ fontSize:13, color:"var(--muted)", fontWeight:600 }}>points sur {data.score_max} · {pct} %</span>
         </div>
-        <div style={{ height:8, borderRadius:8, background:"var(--surface2)", overflow:"hidden" }}>
-          <div style={{ width:`${pct}%`, height:"100%", borderRadius:8,
-            background:"linear-gradient(90deg, #CD7F32, #F5B700, #6EC6D9, #8B5CF6)" }}/>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(38px, 1fr))", rowGap:8, columnGap:2 }}>
-          {data.tiers.map(t => (
-            <div key={t.id} title={t.label} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2, minWidth:0 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                <Medal tier={t} emoji="" size={18} locked={!data.medals[t.id]}/>
-                <span style={{ fontSize:"clamp(12px, 3.6vw, 15px)", fontWeight:800, color:"var(--text)", fontVariantNumeric:"tabular-nums" }}>
-                  {data.medals[t.id] || 0}</span>
-              </div>
-              <span style={{ fontSize:"clamp(9px, 2.5vw, 10.5px)", color:"var(--muted)", whiteSpace:"nowrap",
-                maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis" }}>{t.label}</span>
-            </div>
-          ))}
-        </div>
+        <Bar value={pct / 100}/>
+        <MedalCounts tiers={data.tiers} medals={data.medals}/>
       </div>
 
+      {/* Podium general entre copains */}
+      {withFriends && (
+        <div className="card" style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:10 }}>
+          <div style={sectionTitle}>🏆 Podium entre copains</div>
+          <Podium people={people} score={p => p.score}/>
+          {others.filter(p => p.status !== "ok").map(p => (
+            <div key={p.id} style={{ fontSize:11.5, color:"var(--muted)" }}>
+              {p.name} : {p.status === "outdated" ? "son BambuNymous n'a pas encore les succès" : "injoignable pour le moment"}</div>
+          ))}
+        </div>
+      )}
+
       {/* Derniers succes */}
-      {data.recent.length > 0 && !cat && (
+      {data.recent.length > 0 && (
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           <div style={sectionTitle}>Derniers succès</div>
           <div className="no-scrollbar" style={{ display:"flex", gap:8, overflowX:"auto", padding:"2px 0" }}>
@@ -83,7 +94,7 @@ export default function Achievements({ embedded = false }) {
               const it = byId[r.id]; if (!it) return null;
               const t = it.tiers[r.tier];
               return (
-                <button key={r.id + r.tier} onClick={() => { const n = new URLSearchParams(sp); n.delete("cat"); n.set("a", r.id); setSp(n, { replace:true }); }}
+                <button key={r.id + r.tier} onClick={() => setDetail(r.id)}
                   className="card" style={{ flexShrink:0, display:"flex", alignItems:"center", gap:10, padding:"8px 12px 8px 8px",
                     cursor:"pointer", border:"1px solid var(--border)", textAlign:"left" }}>
                   <Medal tier={t} emoji={it.emoji} size={40}/>
@@ -98,24 +109,190 @@ export default function Achievements({ embedded = false }) {
         </div>
       )}
 
-      {/* Categories */}
-      <div className="no-scrollbar" style={{ display:"flex", gap:7, overflowX:"auto", padding:"2px 24px 2px 0",
-        WebkitMaskImage:"linear-gradient(90deg, #000 calc(100% - 28px), transparent)",
-        maskImage:"linear-gradient(90deg, #000 calc(100% - 28px), transparent)" }}>
-        <Chip on={!cat} onClick={() => pick("")}>Tout <small style={small}>{data.items.filter(x => x.level >= 0).length}/{data.items.length}</small></Chip>
-        {data.categories.filter(c => counts[c.id]).map(c => (
-          <Chip key={c.id} on={cat === c.id} onClick={() => pick(cat === c.id ? "" : c.id)}>
-            <span>{c.emoji}</span>{c.name} <small style={small}>{counts[c.id].got}/{counts[c.id].all}</small>
-          </Chip>
-        ))}
-      </div>
+      {/* Sections */}
+      {data.categories.map(c => {
+        const items = data.items.filter(x => x.cat === c.id)
+          .sort((a, b) => (b.level - a.level) || (progress(b) - progress(a)));
+        if (!items.length) return null;
+        const got = items.filter(x => x.level >= 0).length;
+        const sum = { score:0, max:0, medals:{} };
+        for (const it of items) for (const t of it.tiers) {
+          const sc = tiersById[t.id]?.score || 0;
+          sum.max += sc;
+          if (t.at) { sum.score += sc; sum.medals[t.id] = (sum.medals[t.id] || 0) + 1; }
+        }
+        const ranked = withFriends ? [...people].sort((a, b) => (b.cats?.[c.id]?.score || 0) - (a.cats?.[c.id]?.score || 0)) : [];
+        const myRank = ranked.findIndex(p => p.me) + 1;
+        const open = openCats.has(c.id);
+        return (
+          <div key={c.id} className="card" style={{ padding:0, overflow:"hidden" }}>
+            <button onClick={() => toggle(c.id)} aria-expanded={open}
+              style={{ width:"100%", display:"flex", flexDirection:"column", gap:8, padding:"14px 16px", background:"none",
+                border:"none", cursor:"pointer", textAlign:"left", color:"var(--text)" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:10, width:"100%" }}>
+                <span style={{ fontSize:22 }}>{c.emoji}</span>
+                <span style={{ flex:1, minWidth:0 }}>
+                  <span style={{ display:"block", fontSize:15, fontWeight:800 }}>{c.name}</span>
+                  <span style={{ display:"block", fontSize:11.5, color:"var(--muted)", marginTop:1 }}>
+                    {got}/{items.length} succès · {sum.score} pts</span>
+                </span>
+                {myRank > 0 && (
+                  <span title="Ta place entre copains" style={{ fontSize:11.5, fontWeight:800, padding:"3px 9px", borderRadius:20,
+                    whiteSpace:"nowrap", background:"var(--surface2)", color:"var(--text2)" }}>
+                    {["🥇", "🥈", "🥉"][myRank - 1] || "🏅"} {myRank}ᵉ/{ranked.length}</span>
+                )}
+                <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>
+              </div>
+              <Bar value={sum.max ? sum.score / sum.max : 0}/>
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
+                {data.tiers.filter(t => sum.medals[t.id]).map(t => (
+                  <span key={t.id} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:800 }}>
+                    <Medal tier={t} emoji="" size={16}/>{sum.medals[t.id]}</span>
+                ))}
+                {!Object.keys(sum.medals).length && <span style={{ fontSize:11.5, color:"var(--muted)" }}>Aucune médaille pour l'instant</span>}
+              </div>
+            </button>
+            {open && (
+              <div style={{ padding:"0 16px 16px", display:"flex", flexDirection:"column", gap:14 }}>
+                {withFriends && (
+                  <div style={{ display:"flex", flexDirection:"column", gap:10, padding:"12px", borderRadius:12,
+                    background:"var(--surface2)", border:"1px solid var(--border)" }}>
+                    <Podium people={people} score={p => p.cats?.[c.id]?.score || 0} small/>
+                    <Compare people={people} cat={c.id}/>
+                  </div>
+                )}
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
+                  {items.map(it => <Tile key={it.id} it={it} onOpen={() => setDetail(it.id)}/>)}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
 
-      {/* Succes */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(260px, 1fr))", gap:10 }}>
-        {shown.map(it => <Card key={it.id} it={it} focus={focus === it.id}/>)}
-      </div>
       {data.since && <p style={{ ...msg, padding:"4px", fontSize:11 }}>
         Les dates viennent de ton historique ; ce qui ne s'y lit pas (MakerWorld, stock, copains) est daté du jour où il a été constaté.</p>}
+
+      {detail && byId[detail] && createPortal(
+        <div data-no-pull="" onClick={closeDetail} style={{ position:"fixed", inset:0, zIndex:4300, background:"rgba(0,0,0,0.6)",
+          display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:420, maxHeight:"90vh", overflowY:"auto",
+            position:"relative" }}>
+            <button onClick={closeDetail} aria-label="Fermer" style={{ position:"absolute", top:8, right:10, zIndex:1,
+              background:"none", border:"none", color:"var(--muted)", fontSize:20, cursor:"pointer" }}>✕</button>
+            <Card it={byId[detail]} sheet/>
+          </div>
+        </div>, document.body
+      )}
+    </div>
+  );
+}
+
+// Une medaille de la grille d'une section : grisee tant qu'elle n'est pas
+// gagnee, avec un petit liseré de progression vers le palier suivant.
+function Tile({ it, onOpen }) {
+  const got = it.level >= 0;
+  const top = got ? it.tiers[it.level] : it.tiers[0];
+  const p = progress(it);
+  return (
+    <button onClick={onOpen} title={it.name} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:5,
+      padding:"10px 4px 8px", borderRadius:12, cursor:"pointer", minWidth:0,
+      background: got ? `${top.color}14` : "transparent", border:`1px solid ${got ? top.color + "55" : "var(--border)"}` }}>
+      <Medal tier={top} emoji={it.emoji} size={46} locked={!got}/>
+      <span style={{ fontSize:11, fontWeight:700, color: got ? "var(--text)" : "var(--muted)", textAlign:"center",
+        lineHeight:1.2, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden",
+        width:"100%" }}>{it.name}</span>
+      {it.tiers.length > 1 && it.next != null && (
+        <span style={{ width:"70%", height:3, borderRadius:3, background:"var(--surface2)", overflow:"hidden" }}>
+          <span style={{ display:"block", width:`${Math.round(p * 100)}%`, height:"100%",
+            background: it.tiers[it.level + 1]?.color || top.color }}/></span>
+      )}
+    </button>
+  );
+}
+
+// Podium : les trois premiers (2e, 1er, 3e), moi mis en avant.
+function Podium({ people, score, small = false }) {
+  const top = [...people].sort((a, b) => score(b) - score(a)).slice(0, 3);
+  const order = top.length === 3 ? [top[1], top[0], top[2]] : top.length === 2 ? [top[1], top[0]] : top;
+  const rank = p => top.indexOf(p);
+  const H = small ? [52, 38, 28] : [68, 50, 36];
+  return (
+    <div style={{ display:"flex", alignItems:"flex-end", justifyContent:"center", gap:8 }}>
+      {order.map(p => {
+        const r = rank(p);
+        return (
+          <div key={p.id} style={{ flex:"0 1 110px", minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+            <span style={{ fontSize: small ? 18 : 22 }}>{["🥇", "🥈", "🥉"][r]}</span>
+            <span style={{ fontSize:12, fontWeight:800, color: p.me ? "#F59E0B" : "var(--text)", maxWidth:"100%",
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.me ? "Toi" : p.name}</span>
+            <div style={{ width:"100%", height:H[r], borderRadius:"10px 10px 4px 4px", display:"flex", alignItems:"center",
+              justifyContent:"center", fontSize:13, fontWeight:900, color:"#fff",
+              background: ["#F5B700", "#B8C2CC", "#CD7F32"][r], boxShadow: p.me ? "0 0 0 2px #F59E0B" : "none" }}>
+              {score(p)}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Moi face a chacun de mes copains, sur une section : son score, l'ecart.
+function Compare({ people, cat }) {
+  const me = people.find(p => p.me);
+  const mine = me?.cats?.[cat]?.score || 0;
+  const max = Math.max(1, ...people.map(p => p.cats?.[cat]?.score || 0));
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+      {people.filter(p => !p.me).map(p => {
+        const his = p.cats?.[cat]?.score || 0;
+        const d = mine - his;
+        return (
+          <div key={p.id} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12 }}>
+            <span style={{ width:70, flexShrink:0, fontWeight:700, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis",
+              whiteSpace:"nowrap" }}>{p.name}</span>
+            <span style={{ flex:1, display:"flex", flexDirection:"column", gap:2 }}>
+              <span style={{ height:5, borderRadius:5, background:"var(--border)", overflow:"hidden" }}>
+                <span style={{ display:"block", width:`${100 * mine / max}%`, height:"100%", background:"#F59E0B" }}/></span>
+              <span style={{ height:5, borderRadius:5, background:"var(--border)", overflow:"hidden" }}>
+                <span style={{ display:"block", width:`${100 * his / max}%`, height:"100%", background:"#8B5CF6" }}/></span>
+            </span>
+            <span style={{ width:58, flexShrink:0, textAlign:"right", fontWeight:800,
+              color: d > 0 ? "#22c55e" : d < 0 ? "#ef4444" : "var(--muted)" }}>
+              {d > 0 ? `+${d}` : d < 0 ? `${d}` : "="} pts</span>
+          </div>
+        );
+      })}
+      <div style={{ display:"flex", gap:12, fontSize:10.5, color:"var(--muted)" }}>
+        <span><span style={{ color:"#F59E0B" }}>■</span> toi</span><span><span style={{ color:"#8B5CF6" }}>■</span> ton copain</span>
+      </div>
+    </div>
+  );
+}
+
+function Bar({ value }) {
+  return (
+    <div style={{ height:8, borderRadius:8, background:"var(--surface2)", overflow:"hidden", width:"100%" }}>
+      <div style={{ width:`${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`, height:"100%", borderRadius:8,
+        background:"linear-gradient(90deg, #CD7F32, #F5B700, #6EC6D9, #8B5CF6, #E11D48)" }}/>
+    </div>
+  );
+}
+
+function MedalCounts({ tiers, medals }) {
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(38px, 1fr))", rowGap:8, columnGap:2 }}>
+      {tiers.map(t => (
+        <div key={t.id} title={t.label} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2, minWidth:0 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+            <Medal tier={t} emoji="" size={18} locked={!medals[t.id]}/>
+            <span style={{ fontSize:"clamp(12px, 3.6vw, 15px)", fontWeight:800, color:"var(--text)", fontVariantNumeric:"tabular-nums" }}>
+              {medals[t.id] || 0}</span>
+          </div>
+          <span style={{ fontSize:"clamp(9px, 2.5vw, 10.5px)", color:"var(--muted)", whiteSpace:"nowrap",
+            maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis" }}>{t.label}</span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -126,9 +303,9 @@ const progress = it => {
   return span > 0 ? Math.max(0, Math.min(1, (it.value - (it.prev || 0)) / span)) : 0;
 };
 
-function Card({ it, focus }) {
+function Card({ it, focus, sheet = false }) {
   const ref = useRef(null);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(sheet);
   useEffect(() => {
     if (!focus) return;
     setOpen(true);
@@ -143,11 +320,14 @@ function Card({ it, focus }) {
   const done = got && it.next == null;
   const unique = it.tiers.length === 1;
   return (
-    <div ref={ref} className="card" onClick={() => setOpen(o => !o)}
+    <div ref={ref} className="card" onClick={() => !sheet && setOpen(o => !o)}
       style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:9, cursor:"pointer",
         border: focus ? `2px solid ${top.color}` : undefined,
         boxShadow: focus ? `0 0 0 4px ${top.color}33` : undefined,
-        background: done ? `linear-gradient(135deg, ${top.color}1f, transparent 70%), var(--surface)` : undefined }}>
+        // en feuille de detail : fond opaque des feuilles (la carte seule est translucide)
+        background: done ? `linear-gradient(135deg, ${top.color}1f, transparent 70%), ${sheet ? "var(--sheet-bg)" : "var(--surface)"}`
+          : sheet ? "var(--sheet-bg)" : undefined,
+        ...(sheet ? { backdropFilter:"none", boxShadow:"0 12px 40px rgba(0,0,0,0.45)", paddingRight:36 } : {}) }}>
       <div style={{ display:"flex", gap:12, alignItems:"center" }}>
         <Medal tier={top} emoji={it.emoji} size={52} locked={!got}/>
         <div style={{ flex:1, minWidth:0 }}>
@@ -232,15 +412,5 @@ export function Medal({ tier, emoji, size = 48, locked = false }) {
   );
 }
 
-function Chip({ on, onClick, children }) {
-  return (
-    <button onClick={onClick} aria-pressed={on} style={{ flexShrink:0, display:"flex", alignItems:"center", gap:5,
-      whiteSpace:"nowrap", cursor:"pointer", borderRadius:20, fontWeight:700, padding:"6px 12px", fontSize:12.5,
-      border: on ? "1px solid #F59E0B" : "1px solid var(--border)", background: on ? "#F59E0B" : "var(--surface2)",
-      color: on ? "#fff" : "var(--text2)" }}>{children}</button>
-  );
-}
-
-const small = { fontSize:11, fontWeight:700, opacity:0.7 };
 const sectionTitle = { fontSize:11, fontWeight:800, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", padding:"0 4px" };
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };

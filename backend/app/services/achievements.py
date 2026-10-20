@@ -1133,6 +1133,61 @@ async def _notify(new: list, ev: dict) -> None:
                    click=N.app_link(cfg, f"/stats?tab=achievements&a={aid}"), priority=3)
 
 
+# ── Bilan par section (page, podium entre copains) ───────────────────────────
+def summary(v: dict) -> dict:
+    """Score, medailles et nombre de succes gagnes, par section et en tout,
+    a partir d'une vue (la mienne ou celle d'un copain, meme version ou non)."""
+    tiers = {t["id"]: t for t in v.get("tiers") or []}
+    cats = {}
+    for it in v.get("items") or []:
+        c = cats.setdefault(it.get("cat") or "?", {"score": 0, "max": 0, "got": 0, "total": 0,
+                                                    "medals": {t: 0 for t in tiers}})
+        c["total"] += 1
+        got = [t for t in it.get("tiers") or [] if t.get("at")]
+        if got:
+            c["got"] += 1
+        for t in it.get("tiers") or []:
+            sc = (tiers.get(t.get("id")) or {}).get("score", 0)
+            c["max"] += sc
+            if t.get("at"):
+                c["score"] += sc
+                c["medals"][t["id"]] = c["medals"].get(t["id"], 0) + 1
+    return {"cats": cats, "score": sum(c["score"] for c in cats.values()),
+            "score_max": sum(c["max"] for c in cats.values()),
+            "got": sum(c["got"] for c in cats.values()), "total": sum(c["total"] for c in cats.values())}
+
+
+_PODIUM = {"t": 0.0, "v": None}
+
+
+async def podium(me_name: str, fresh: bool = False) -> dict:
+    """Moi et chacun de mes copains : score par section, lu chez eux par leur
+    cle (avec mes medailles uniques jointes, comme le relais de la page)."""
+    import asyncio
+    from . import friends as F
+    if not fresh and _PODIUM["v"] and time.time() - _PODIUM["t"] < 300:
+        return _PODIUM["v"]
+    people = [{"id": "me", "name": me_name, "me": True, "status": "ok", **summary(await view())}]
+    mine = ",".join(await my_uniques())
+
+    async def one(f):
+        head = {"id": f["id"], "name": f.get("name") or f"Copain {f['id']}", "me": False}
+        try:
+            r = await asyncio.to_thread(F._get, f["url"], f["key"], "achievements", None, 30,
+                                        {"X-BN-Achievements": mine})
+            if r.status_code == 404:
+                return {**head, "status": "outdated"}
+            if r.status_code >= 400:
+                return {**head, "status": "offline"}
+            return {**head, "status": "ok", **summary(r.json())}
+        except Exception:
+            return {**head, "status": "offline"}
+    people += list(await asyncio.gather(*(one(f) for f in await F._load())))
+    out = {"people": people, "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES]}
+    _PODIUM.update(t=time.time(), v=out)
+    return out
+
+
 # ── Secrets : ce qu'un autre compte en voit ──────────────────────────────────
 def mask_secrets(v: dict, keep=()) -> dict:
     """Medailles uniques gagnees : la medaille, le titre et la date restent ;

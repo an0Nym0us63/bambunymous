@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ....db.session import get_db
 from ....models.user import ROLE_ADMIN, User
-from .auth import get_current_role, get_current_user, oauth2_scheme
+from .auth import get_current_role, get_current_user, oauth2_scheme, require_own_account
 
 router = APIRouter()
 
@@ -13,6 +13,14 @@ router = APIRouter()
 # ses propres medailles uniques. Celles-la, il les a aussi : il peut en lire
 # le descriptif chez moi.
 MINE_HEADER = "x-bn-achievements"
+
+
+@router.get("/podium")
+async def achievements_podium(fresh: bool = False, acc=Depends(require_own_account)):
+    """Podium entre copains : mon score par section et celui de chacun d'eux.
+    Jamais par une cle de copain (on ne fait pas lire ses copains par un autre)."""
+    from ....services import achievements as A
+    return await A.podium(acc[0], fresh)
 
 
 @router.get("")
