@@ -141,21 +141,23 @@ export default function MyAppNotifications({ embedded = false }) {
 
 // Deux canaux independants par type : le journal (la cloche) et le telephone
 // (appli Android). Vrai : actif ; null (en tete de section) : melange.
-const CHANNELS = [["journal", "Journal (la cloche)", BookOpen], ["app", "Téléphone (appli Android)", Smartphone]];
+const CHANNELS = [["journal", "Journal", "la cloche", BookOpen], ["app", "Téléphone", "appli Android", Smartphone]];
 function Channels({ journal, app, onChange, disabled }) {
   const val = { journal, app };
   return (
-    <span style={{ display:"inline-flex", flexShrink:0, gap:4 }}>
-      {CHANNELS.map(([k, title, Icon]) => {
+    <span style={{ display:"inline-flex", flexShrink:0, gap:5 }}>
+      {CHANNELS.map(([k, label, hint, Icon]) => {
         const v = val[k];
+        const on = v === true, mixed = v === null;
         return (
-          <button key={k} onClick={() => onChange(k, v !== true)} disabled={disabled} aria-pressed={v === true}
-            title={`${title} : ${v === true ? "activé" : v === null ? "en partie" : "désactivé"}`}
-            style={{ width:34, height:28, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center",
-              justifyContent:"center", border: v === null ? "1px dashed #4F46E5" : "1px solid var(--border)",
-              background: v === true ? "#4F46E5" : v === null ? "rgba(79,70,229,0.15)" : "var(--surface2)",
-              color: v === true ? "white" : v === null ? "#4F46E5" : "var(--muted)" }}>
-            <Icon size={15} strokeWidth={2.3}/>
+          <button key={k} onClick={() => onChange(k, !on)} disabled={disabled} aria-pressed={on}
+            title={`${label} (${hint}) : ${on ? "activé" : mixed ? "en partie" : "désactivé"}`}
+            style={{ height:26, padding:"0 9px 0 7px", borderRadius:20, cursor:"pointer", display:"inline-flex",
+              alignItems:"center", gap:5, fontSize:11.5, fontWeight:600, transition:"all .15s",
+              border: on ? "1px solid rgba(99,102,241,0.45)" : mixed ? "1px dashed rgba(99,102,241,0.6)" : "1px solid var(--border)",
+              background: on ? "rgba(99,102,241,0.16)" : "transparent",
+              color: on || mixed ? "#6366F1" : "var(--muted)", opacity: on || mixed ? 1 : 0.85 }}>
+            <Icon size={13} strokeWidth={2.2}/>{label}
           </button>
         );
       })}
