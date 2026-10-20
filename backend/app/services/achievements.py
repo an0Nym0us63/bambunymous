@@ -38,7 +38,7 @@ TIERS = [
 ]
 # Version des seuils : quand elle change, le passage suivant recalcule les crans
 # sans rien notifier (un seuil abaisse ne doit pas declencher une rafale).
-CATALOG_VERSION = 4          # 3 : secrets loufoques ; 4 : jusqu'a 100 secrets (20/10/2026)
+CATALOG_VERSION = 5          # 3 : secrets loufoques ; 4 : jusqu'a 100 secrets ; 5 : photos, appli (20/10/2026)
 UNIQUE = {"id": "unique", "label": "Unique", "emoji": "🏵️", "color": "#EC4899", "score": 3}
 
 CATEGORIES = [
@@ -46,6 +46,8 @@ CATEGORIES = [
     ("filaments", "🧵", "Filaments"),
     ("objects", "🧸", "Objets et ventes"),
     ("mw", "🌐", "MakerWorld"),
+    ("photos", "📸", "Photos"),
+    ("app", "📱", "Dans l'appli"),
     ("social", "🤝", "Copains"),
     ("secret", "🔮", "Secrets"),
 ]
@@ -136,6 +138,30 @@ CATALOG = [
     _a("mw_follows", "mw", "👀", "Curieux", "Tu suis {n} créateurs", [5, 25, 50, 100, 250]),
     # Copains
     _a("friends", "social", "🤝", "Bande de copains", "{n} copains reliés", [1, 3, 5, 10, 20]),
+    # Photos
+    _a("photos_manual", "photos", "📸", "Photographe", "{n} photos ajoutées à tes impressions", [1]),
+    _a("photo_prints", "photos", "🖼️", "Album", "{n} impressions avec au moins une photo", [1]),
+    _a("photos_camera", "photos", "📹", "Œil de la caméra", "{n} photos prises par la caméra de l'imprimante", [1]),
+    _a("photos_max", "photos", "🎞️", "Séance photo", "{n} photos sur une même impression", [1]),
+    _a("covers", "photos", "🌟", "Galeriste", "{n} photos choisies comme vignette", [1]),
+    # Dans l'appli
+    _a("visits", "app", "🚪", "Habitué", "{n} visites de pages", [1]),
+    _a("visit_days", "app", "📅", "Fidèle au poste", "{n} jours où l'appli a été ouverte", [1]),
+    _a("details", "app", "🔎", "Fouineur", "{n} fiches et onglets consultés", [1]),
+    _a("actions", "app", "⚙️", "Hyperactif", "{n} actions dans l'appli (ajouts, modifications…)", [1]),
+    _a("updates", "app", "🆙", "Toujours à jour", "{n} mises à jour de BambuNymous installées", [1]),
+    _a("notifs", "app", "🔔", "Bien informé", "{n} notifications reçues", [1]),
+    _a("dismissals", "app", "🧘", "Zen", "{n} points d'attention mis en sourdine", [1]),
+    _a("shares", "social", "📣", "Partageur", "{n} partages sur Telegram", [1]),
+    _a("mw_rates", "mw", "✍️", "Critique", "{n} évaluations MakerWorld laissées depuis l'appli", [1]),
+    _a("mw_boosts_given", "mw", "🎁", "Généreux en boosts", "{n} boosts donnés depuis l'appli", [1]),
+    _a("mw_likes_given", "mw", "👍", "Cœur sur la main", "{n} « j'aime » donnés depuis l'appli", [1]),
+    _a("mw_collected", "mw", "📌", "Épingleur", "{n} modèles rangés dans tes collections depuis l'appli", [1]),
+    _a("rfid_scans", "filaments", "📲", "Scanner", "{n} scans de bobines RFID", [1]),
+    _a("colors_printed", "filaments", "🦎", "Caméléon", "{n} couleurs différentes imprimées", [1]),
+    _a("print_days", "prints", "🗓️", "Jours d'impression", "{n} jours différents avec une impression", [1]),
+    _a("tags", "prints", "🏷️", "Organisé", "{n} étiquettes différentes sur tes impressions", [1]),
+    _a("print_groups", "prints", "🗂️", "Rangé", "{n} groupes d'impressions", [1]),
     # Secrets : une medaille unique, cachee tant qu'elle n'est pas gagnee
     _a("halloween", "secret", "🎃", "Spooky", "Une impression lancée un 31 octobre", [1],
        lore="Tu as imprimé un soir d'Halloween. Citrouille, squelette ou chauve-souris : l'imprimante aussi s'est déguisée."),
@@ -260,6 +286,18 @@ CATALOG = [
        lore="Cinq objets vendus dans la journée : un vrai jour de marché."),
     _a("santa", "secret", "🎅", "Père Noël", "Un objet offert en décembre", [1],
        lore="Un objet offert en décembre. Le Père Noël a un atelier d'impression 3D."),
+    _a("paparazzi", "secret", "🤳", "Paparazzi", "Une photo ajoutée moins de 10 minutes après la fin de l'impression", [1],
+       lore="La pièce était encore tiède que tu la prenais déjà en photo."),
+    _a("souvenirs", "secret", "📷", "Souvenirs", "Une photo ajoutée plus d'un an après l'impression", [1],
+       lore="Une photo ajoutée plus d'un an après : certaines pièces méritent qu'on y revienne."),
+    _a("grand_tour", "secret", "🗺️", "Tour du propriétaire", "Toutes les pages de l'appli visitées", [1],
+       lore="Accueil, historique, filaments, objets, stats, paramètres, journal : tu as fait le tour du propriétaire."),
+    _a("night_visit", "secret", "🦇", "Visite nocturne", "L'appli ouverte entre 3 h et 4 h du matin", [1],
+       lore="L'appli ouverte entre 3 h et 4 h du matin. Tu vérifiais l'impression, avoue."),
+    _a("cutting_edge", "secret", "🚀", "À la pointe", "La toute dernière version de BambuNymous installée", [1],
+       lore="Tu tournes sur la toute dernière version publiée : rien de plus récent n'existe."),
+    _a("double_update", "secret", "⏩", "Mise à jour express", "Deux mises à jour installées le même jour", [1],
+       lore="Deux mises à jour dans la même journée : ça bouge vite, par ici."),
     # ── Fournee pour arriver a 100 (20/10/2026) ──
     _a("barbie", "secret", "🎀", "Barbie", "Une impression réussie toute en rose", [1],
        lore="Tout en rose, du premier au dernier millimètre. Come on Barbie, let's go print."),
@@ -339,7 +377,11 @@ CATALOG = [
        lore="Printemps, été, automne, hiver : ton imprimante n'a pas de saison."),
 ]
 LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_likes", "mw_level", "mw_collections",
-        "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils"}
+        "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils",
+        "photos_manual", "photo_prints", "photos_camera", "photos_max", "covers", "visits", "visit_days", "details",
+        "actions", "updates", "notifs", "dismissals", "tags", "print_groups", "paparazzi", "souvenirs",
+        "grand_tour", "night_visit", "cutting_edge", "double_update", "shares", "mw_rates", "mw_boosts_given",
+        "mw_likes_given", "mw_collected"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
     # une medaille unique ne se devoile qu'une fois gagnee
@@ -400,6 +442,28 @@ TIER_TABLE = {
     "mw_collections": [1, 5, 10, 25, 50, 100],
     "mw_follows": [5, 25, 50, 100, 250, 500],
     "friends": [1, 3, 5, 10, 20, 30],
+    "photos_manual": [10, 50, 100, 250, 500, 1000],
+    "photo_prints": [10, 25, 50, 100, 250, 500],
+    "photos_camera": [25, 100, 250, 500, 1000, 2500],
+    "photos_max": [3, 5, 8, 12, 16, 24],
+    "covers": [5, 25, 50, 100, 250, 500],
+    "visits": [100, 500, 1000, 2500, 5000, 10000],
+    "visit_days": [7, 30, 90, 180, 365, 730],
+    "details": [50, 250, 1000, 2500, 5000, 10000],
+    "actions": [50, 250, 1000, 2500, 5000, 10000],
+    "updates": [1, 5, 10, 25, 50, 100],
+    "notifs": [50, 250, 1000, 2500, 5000, 10000],
+    "dismissals": [5, 25, 50, 100, 250, 500],
+    "rfid_scans": [10, 50, 100, 250, 500, 1000],
+    "colors_printed": [10, 25, 50, 100, 200, 300],
+    "print_days": [30, 100, 250, 500, 1000, 1500],
+    "tags": [5, 10, 25, 50, 100, 200],
+    "print_groups": [5, 25, 50, 100, 250, 500],
+    "shares": [1, 10, 25, 50, 100, 250],
+    "mw_rates": [1, 10, 25, 50, 100, 250],
+    "mw_boosts_given": [1, 10, 25, 50, 100, 250],
+    "mw_likes_given": [5, 25, 50, 100, 250, 500],
+    "mw_collected": [5, 25, 50, 100, 250, 500],
 }
 for _x in CATALOG:
     if _x["id"] in TIER_TABLE:
@@ -455,9 +519,53 @@ async def _load_data() -> dict:
         objs = (await db.execute(select(Object.id, Object.status, Object.sold_date, Object.sold_price,
                                         Object.created_at, Object.updated_at, Object.margin))).all()
         groups = (await db.execute(select(ObjectGroup.created_at))).all()
+        from sqlalchemy import func
+        from ..models.activity import ActivityLog
+        from ..models.attention import AttentionDismissal
+        from ..models.notif_log import NotifLog
+        from ..models.print_history import Group, PrintSnapshot, PrintTag
+        from ..models.rfid import RfidScan
+        snaps = (await db.execute(select(PrintSnapshot.print_id, PrintSnapshot.trigger, PrintSnapshot.taken_at))).all()
+        covers = (await db.execute(select(Print.id).where(Print.cover_photo.isnot(None), Print.cover_photo != ""))).all()
+        pgroups = (await db.execute(select(Group.id, Group.created_at, Group.cover_photo))).all()
+        tags = (await db.execute(select(func.lower(PrintTag.tag)).distinct())).all()
+        # journal d'activite : par type et par jour (il peut etre long)
+        act_days = (await db.execute(select(ActivityLog.kind, func.date(ActivityLog.created_at), func.count())
+                                     .group_by(ActivityLog.kind, func.date(ActivityLog.created_at)))).all()
+        pages = (await db.execute(select(ActivityLog.path).where(ActivityLog.kind == "visite").distinct())).all()
+        late = (await db.execute(select(ActivityLog.created_at).where(
+            func.strftime("%H", ActivityLog.created_at).in_(["00", "01", "02", "03"])))).all()
+        notif_days = (await db.execute(select(func.date(NotifLog.created_at), func.count())
+                                       .group_by(func.date(NotifLog.created_at)))).all()
+        dismiss = (await db.execute(select(AttentionDismissal.created_at))).all()
+        rfid = (await db.execute(select(RfidScan.created_at))).all()
+        # actions reussies qui comptent : partages, gestes MakerWorld
+        acts = (await db.execute(select(ActivityLog.method, ActivityLog.path, ActivityLog.created_at).where(
+            ActivityLog.kind == "action",
+            (ActivityLog.path.like("/api/v1/share/%")) | (ActivityLog.path.like("/api/v1/makerworld/%"))))).all()
         links = (await db.execute(select(ObjectAccessory.quantity, ObjectAccessory.created_at))).all()
+    # photos deposees dans le dossier d'un groupe d'impressions
+    gfiles = []
+    try:
+        from ..core.config import settings
+        from pathlib import Path
+        root = Path(settings.DATA_DIR) / "groups"
+        if root.is_dir():
+            for d_ in root.iterdir():
+                if d_.is_dir():
+                    gfiles += [datetime.utcfromtimestamp(f.stat().st_mtime) for f in d_.iterdir()
+                               if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")]
+    except Exception:
+        pass
+    st = await _state_get() or {}
+    versions = dict(st.get("versions") or {})
+    sha = (os.getenv("COMMIT_SHA") or "")[:8]
+    if sha and sha != "dev":
+        versions.setdefault(sha, datetime.utcnow().isoformat())
     return {"prints": prints, "usage": usage, "spools": spools, "fils": fils, "objs": objs, "links": links,
-            "groups": groups}
+            "groups": groups, "snaps": snaps, "covers": covers, "pgroups": pgroups, "tags": tags,
+            "act_days": act_days, "pages": pages, "late": late, "notif_days": notif_days, "dismiss": dismiss,
+            "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts}
 
 
 _MONDAY0 = datetime(1970, 1, 5).date()       # un lundi : numero de semaine = jours // 7
@@ -579,6 +687,7 @@ def compute_series(d: dict, now: datetime) -> dict:
     nights = set()
     tpu_done = False
     ok_day = defaultdict(int)
+    all_colors = set()
     colors_day = defaultdict(set)
     seen_models = set()
     seasons = defaultdict(set)
@@ -686,6 +795,9 @@ def compute_series(d: dict, now: datetime) -> dict:
             if len(seasons[loc.year]) == 4:
                 push("all_seasons", end, 1)
         colors_day[day] |= cols
+        all_colors |= cols
+        push("colors_printed", end, len(all_colors))
+        push("print_days", start, len(days))
         if len(colors_day[day]) >= 10:
             push("rainbow_day", end, 1)
         if key:
@@ -878,11 +990,91 @@ def compute_series(d: dict, now: datetime) -> dict:
     for st_, key in (("gifted", "gifted"), ("personal", "personal")):
         for i, dt in enumerate(sorted((_ts(o.updated_at) or now) for o in d["objs"] if o.status == st_), 1):
             push(key, dt, i)
+    _more(push, d, now)
     acc = 0
     for dt, q in sorted(((_ts(lk.created_at) or now), (lk.quantity or 0)) for lk in d["links"]):
         acc += q
         push("accessories", dt, acc)
     return S
+
+
+# Actions du journal qui comptent pour un succes : (succes, methode, chemin)
+_ACT_PATTERNS = [
+    ("shares", "POST", r"^/api/v1/share/(?!telegram)[^/]+/[^/]+$"),
+    ("mw_rates", "POST", r"^/api/v1/makerworld/rate/\d+$"),
+    ("mw_boosts_given", "POST", r"^/api/v1/makerworld/model/\d+/boost$"),
+    ("mw_likes_given", "PUT", r"^/api/v1/makerworld/model/\d+/like$"),
+    ("mw_collected", "PUT", r"^/api/v1/makerworld/design/\d+/collections$"),
+]
+
+
+def _more(push, d, now) -> None:
+    """Photos, appli, mises a jour, et quelques compteurs de rangement."""
+    def cumul(key, dated):
+        for i, dt in enumerate(sorted(x for x in dated if x), 1):
+            push(key, dt, i)
+
+    def by_day(key, rows):
+        tot = 0
+        for day, n in sorted((r for r in rows if r[0]), key=lambda r: str(r[0])):
+            tot += n
+            push(key, datetime.fromisoformat(str(day)), tot)
+
+    ends = {p.id: p.print_date + timedelta(seconds=p.duration_seconds or 0) for p in d["prints"] if p.print_date}
+    manual = [s_ for s_ in d.get("snaps", []) if s_.trigger == "manual"]
+    cumul("photos_manual", [_ts(s_.taken_at) for s_ in manual] + list(d.get("gfiles", [])))
+    cumul("photos_camera", [_ts(s_.taken_at) for s_ in d.get("snaps", []) if s_.trigger != "manual"])
+    first_photo, per_print = {}, defaultdict(int)
+    for s_ in sorted(manual, key=lambda x: _ts(x.taken_at) or now):
+        t = _ts(s_.taken_at) or now
+        first_photo.setdefault(s_.print_id, t)
+        per_print[s_.print_id] += 1
+        push("photos_max", t, max(per_print.values()))
+        e = ends.get(s_.print_id)
+        if e and timedelta(0) <= t - e <= timedelta(minutes=10):
+            push("paparazzi", t, 1)
+        if e and t - e >= timedelta(days=365):
+            push("souvenirs", t, 1)
+    cumul("photo_prints", list(first_photo.values()))
+    covers = len(d.get("covers", [])) + sum(1 for g in d.get("pgroups", []) if (g.cover_photo or "").strip())
+    push("covers", now, covers)
+    cumul("print_groups", [_ts(g.created_at) or now for g in d.get("pgroups", [])])
+    push("tags", now, len(d.get("tags", [])))
+    # appli : visites, fiches, actions, jours d'ouverture
+    for kind, key in (("visite", "visits"), ("detail", "details"), ("action", "actions")):
+        by_day(key, [(day, n) for k, day, n in d.get("act_days", []) if k == kind])
+    days = sorted({str(day) for _k, day, _n in d.get("act_days", []) if day})
+    for i, day in enumerate(days, 1):
+        push("visit_days", datetime.fromisoformat(day), i)
+    if {"/", "/prints", "/filaments", "/objects", "/stats", "/settings", "/logs"} <= {r[0] for r in d.get("pages", [])}:
+        push("grand_tour", now, 1)
+    for (dt,) in d.get("late", []):
+        if dt and _local(dt).hour == 3:
+            push("night_visit", dt, 1)
+            break
+    by_day("notifs", d.get("notif_days", []))
+    kinds = defaultdict(list)
+    for method, path, dt in d.get("acts", []):
+        for key, m_, rx in _ACT_PATTERNS:
+            if method == m_ and re.match(rx, path or ""):
+                kinds[key].append(_ts(dt))
+    for key, _m, _rx in _ACT_PATTERNS:
+        cumul(key, kinds[key])
+    cumul("dismissals", [_ts(r[0]) for r in d.get("dismiss", [])])
+    cumul("rfid_scans", [_ts(r[0]) for r in d.get("rfid_scans", [])])
+    # mises a jour : chaque nouvelle version vue (la premiere n'en est pas une)
+    seen = sorted(datetime.fromisoformat(v) for v in (d.get("versions") or {}).values())
+    for i, dt in enumerate(seen[1:], 1):
+        push("updates", dt, i)
+    for a, b in zip(seen[1:], seen[2:]):
+        if _local(a).date() == _local(b).date():
+            push("double_update", b, 1)
+    try:
+        from .version_check import _CACHE as V
+        if (V.get("v") or {}).get("status") == "identical":
+            push("cutting_edge", now, 1)
+    except Exception:
+        pass
 
 
 def _fun(push, p, start, end, dur, loc, ok, ko, w, cols, us, key, st) -> None:
@@ -1084,6 +1276,9 @@ async def tick(notify: bool = True) -> list:
         st["best"][aid] = max(st["best"].get(aid, 0) or 0, r["value"] or 0)
     st["unlocked"] = {k: v for k, v in st["unlocked"].items() if v and k in BY_ID}
     st["version"] = CATALOG_VERSION
+    sha = (os.getenv("COMMIT_SHA") or "")[:8]
+    if sha and sha != "dev":
+        st.setdefault("versions", {}).setdefault(sha, datetime.utcnow().isoformat())
     if first:
         st["since"] = datetime.utcnow().isoformat()
     await _state_put(st)
