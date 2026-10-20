@@ -618,6 +618,50 @@ async def spool_removed(ams_id: int, slot: int, before):
                 link="/", priority=2)
 
 
+async def _friend_visual(cfg, fid: str, info: dict) -> dict:
+    """Visuel de l'impression d'un copain, pour la notification : la couverture
+    MakerWorld du modele (publique), sinon l'image du plateau lue chez lui.
+    Rend des arguments de N.notify : attach (adresse https) et/ou file."""
+    try:
+        if info.get("design_id"):
+            from .makerworld import fetch_design
+            d = await asyncio.to_thread(fetch_design, str(info["design_id"]))
+            cover = d.get("cover_url") or ""
+            if cover.startswith("https://"):
+                if "bblmw.com" in cover and "?" not in cover:
+                    cover += "?x-oss-process=image/resize,w_600/format,webp"
+                return {"attach": cover}
+        if info.get("pid"):
+            from .friends import _load, _get
+            f = next((x for x in await _load() if str(x["id"]) == str(fid)), None)
+            if f:
+                r = await asyncio.to_thread(_get, f["url"], f["key"], f"prints/{info['pid']}/image", None, 15)
+                if r.status_code == 200 and (r.headers.get("content-type") or "").startswith("image/") and r.content:
+                    return {"file": r.content, "filename": "plateau.png", "attach": _keep_image(cfg, r.content)}
+    except Exception as e:
+        logger.info(f"[NOTIF] visuel copain : {e}")
+    return {}
+
+
+def _keep_image(cfg, data: bytes):
+    """Copie publique (15 jours) d'une image sans adresse : l'appli Android et
+    le journal ne savent montrer qu'une adresse https."""
+    import hashlib
+    from ..core.config import settings
+    url = N.app_link(cfg, "/uploads/notif/")
+    if not url or not url.startswith("https://"):
+        return None
+    d = Path(settings.UPLOADS_DIR) / "notif"
+    d.mkdir(parents=True, exist_ok=True)
+    now = time.time()
+    for old in d.glob("*.png"):
+        if now - old.stat().st_mtime > 15 * 86400:
+            old.unlink(missing_ok=True)
+    name = hashlib.sha1(data).hexdigest()[:20] + ".png"
+    (d / name).write_bytes(data)
+    return url + name
+
+
 async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
     """Copains : leur imprimante commence ou finit d'imprimer. Le premier
     passage memorise sans rien envoyer ; un copain injoignable garde son
@@ -647,8 +691,10 @@ async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
                     for it in r.get("printing") or []:
                         fid = str(it.get("id"))
                         if fid in cur:
-                            cur[fid].update(print=it.get("print_name") or (it.get("print") or {}).get("name"),
-                                            rem=it.get("remaining_minutes") or 0)
+                            pi = it.get("print") or {}
+                            # le vrai nom (traduit) plutot que le nom du fichier
+                            cur[fid].update(print=pi.get("name") or it.get("print_name"), pid=pi.get("id"),
+                                            design_id=pi.get("design_id"), rem=it.get("remaining_minutes") or 0)
                     if last is not None:
                         link = N.app_link(cfg, "/")
                         for fid, c in cur.items():
@@ -659,11 +705,14 @@ async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
                             if c["state"] == "printing" and p["state"] != "printing":
                                 lines = ([f"📄 {c['print']}"] if c["print"] else []) \
                                     + ([f"⏳ encore {_fmt_dur(c['rem'] * 60)}"] if c["rem"] else [])
+                                vis = await _friend_visual(cfg, fid, c)
+                                c["visual"] = vis              # garde pour la fin
                                 await N.notify("friend_print_started", f"👥 {who} imprime", "\n".join(lines),
-                                               click=link, priority=2)
+                                               click=link, priority=2, **vis)
                             elif p["state"] == "printing" and c["state"] != "printing":
+                                vis = p.get("visual") or await _friend_visual(cfg, fid, p)
                                 await N.notify("friend_print_done", f"👥 {who} a fini d'imprimer",
-                                               f"📄 {p['print']}" if p.get("print") else "", click=link, priority=2)
+                                               f"📄 {p['print']}" if p.get("print") else "", click=link, priority=2, **vis)
                     last = cur
         except Exception as e:
             logger.warning(f"[NOTIF] copains : {e}")
