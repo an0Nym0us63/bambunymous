@@ -810,6 +810,14 @@ def _post_devices(cfg, devices, title, message, click, priority, section, attach
         try:
             r = session().post(d["endpoint"], data=body, headers={"Content-Type": "application/json",
                                                                  "TTL": "86400", "Urgency": "high", **auth}, timeout=15)
+            if r.status_code in (401, 403):
+                # ntfy protege : les sujets UnifiedPush (up*) doivent etre ouverts
+                # en ecriture, ou le jeton doit valoir pour ce serveur
+                same = urlparse(d["endpoint"]).netloc == ntfy_host
+                raise NotifyError(f"HTTP {r.status_code}, refusé par ntfy : " + (
+                    "ouvre les sujets up* en écriture (ntfy access everyone 'up*' write-only) ou donne ce droit au jeton"
+                    if same else f"le téléphone utilise {urlparse(d['endpoint']).netloc}, différent du serveur ntfy "
+                                 f"renseigné ({ntfy_host}) : le jeton n'y est pas envoyé"))
             if r.status_code >= 400:
                 raise NotifyError(f"HTTP {r.status_code}")
             d["last_ok"], d["last_err"] = now, None

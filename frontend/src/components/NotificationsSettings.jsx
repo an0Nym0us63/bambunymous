@@ -26,6 +26,11 @@ export default function NotificationsSettings() {
   const [open, setOpen] = useState(() => {
     try { return JSON.parse(localStorage.getItem(OPEN_KEY) || "{}") || {}; } catch { return {}; }
   });
+  // Onglet du canal affiche (ce navigateur)
+  const [chTab, setChTabState] = useState(() => {
+    try { return localStorage.getItem("notifChannelTab") || "ntfy"; } catch { return "ntfy"; }
+  });
+  const setChTab = t => { setChTabState(t); try { localStorage.setItem("notifChannelTab", t); } catch { /* indisponible */ } };
   const toggle = id => setOpen(o => {
     const n = { ...o, [id]: !o[id] };
     try { localStorage.setItem(OPEN_KEY, JSON.stringify(n)); } catch { /* indisponible */ }
@@ -144,7 +149,19 @@ export default function NotificationsSettings() {
     padding:"2px 7px", borderRadius:20, whiteSpace:"nowrap" }}>par défaut</span>;
 
   return (<>
-    {channelCard("ntfy", "ntfy", <>
+    {/* ── Canaux : un onglet chacun, chacun active ou non ── */}
+    <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
+      {[["ntfy", "ntfy"], ["telegram", "Telegram"], ["app", "Appli Android"]].map(([k, l]) => (
+        <button key={k} onClick={() => setChTab(k)} style={{ flex:1, padding:"8px 10px", borderRadius:8, fontSize:12.5,
+          fontWeight:700, cursor:"pointer", border:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
+          background: chTab === k ? "#3b82f6" : "transparent", color: chTab === k ? "white" : "var(--muted)" }}>
+          <span title={on[k] ? "activé" : "désactivé"} style={{ width:8, height:8, borderRadius:"50%", flexShrink:0,
+            background: on[k] ? "#22c55e" : chTab === k ? "rgba(255,255,255,0.45)" : "var(--border)" }}/>
+          {l}
+        </button>
+      ))}
+    </div>
+    {chTab === "ntfy" && channelCard("ntfy", "ntfy", <>
         Les notifications partent sur tes sujets ntfy (serveur public ntfy.sh ou le tien). Abonne-toi aux mêmes sujets
         dans l'appli ntfy du téléphone. Plusieurs sujets : chaque section choisit le sien plus bas. L'icône d'un sujet
         (adresse d'une image) accompagne chacune de ses notifications sur Android.</>, <>
@@ -208,7 +225,7 @@ export default function NotificationsSettings() {
       </div>
     </>)}
 
-    {channelCard("telegram", "Bot Telegram", <>
+    {chTab === "telegram" && channelCard("telegram", "Bot Telegram", <>
         Dans Telegram, écris à <b>@BotFather</b> « /newbot » : il donne un <b>jeton</b>. Colle-le ici. Écris ensuite
         « /start » à ton bot, ou ajoute-le à des <b>groupes</b> et écris-y un message, puis touche « Chercher les
         discussions ». Un groupe par sujet (Impressions, MakerWorld…) a son nom et sa photo, les mêmes sur tous tes appareils.</>, <>
@@ -264,7 +281,7 @@ export default function NotificationsSettings() {
     </>)}
 
     {/* ── Appli Android (UnifiedPush, ntfy en distributeur) ── */}
-    {channelCard("app", "Appli Android", <>
+    {chTab === "app" && channelCard("app", "Appli Android", <>
         Les notifications arrivent dans l'appli BambuNymous elle-même : son icône, son nom, une catégorie Android par
         section (son et vibration réglables dans Android), et la bonne page s'ouvre au toucher. Il faut l'appli
         <b> ntfy</b> sur le téléphone : elle les achemine (UnifiedPush).</>, <>
