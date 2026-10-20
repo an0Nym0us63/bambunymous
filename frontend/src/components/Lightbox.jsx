@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { mwImg } from "./MwImg";
+import { mwImg, isVideo } from "./MwImg";
 
 // Galerie plein ecran : on fait defiler les photos en grand (glisser sur
 // telephone, fleches ou clavier sur ordinateur). data-no-pull : le
@@ -48,9 +48,14 @@ export default function Lightbox({ images, index = 0, onClose }) {
           <div key={i} style={{ flex:"0 0 100%", height:"100%", scrollSnapAlign:"center", display:"flex",
             alignItems:"center", justifyContent:"center" }}>
             {Math.abs(i - cur) <= 2 && (
-              <img src={mwImg(u, w)} alt="" referrerPolicy="no-referrer" decoding="async"
+              isVideo(u) ? (
+                <video src={u} autoPlay muted loop playsInline controls
+                  style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}/>
+              ) : (
+              <img src={mwImg(u, w, true)} alt="" referrerPolicy="no-referrer" decoding="async"
                 onError={e => { if (e.currentTarget.src !== u) e.currentTarget.src = u; }}
                 style={{ maxWidth:"100%", maxHeight:"100%", objectFit:"contain" }}/>
+              )
             )}
           </div>
         ))}

@@ -41,6 +41,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [id, setId] = useState(designId);          // permet d'ouvrir un similaire sans empiler
   const [m, setM] = useState(null);
   const [more, setMore] = useState(false);         // descriptif deplie
+  const [descLong, setDescLong] = useState(false); // descriptif plus long que le repli
   const [allProfs, setAllProfs] = useState(false); // profils : les 4 premiers, puis « voir plus »
   const [orig, setOrig] = useState(false);         // descriptif : original au lieu du francais
   const [origC, setOrigC] = useState({});          // commentaires montres dans l'original
@@ -243,7 +244,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                 {m.pictures.map((u, i) => (
                   <a key={i} href={u} onClick={e => { e.preventDefault(); setZoom({ images: m.pictures, index: i }); }}
                     style={{ flexShrink:0, width:"78%", maxWidth:360, scrollSnapAlign:"center", cursor:"zoom-in" }}>
-                    <MwImg src={u} w={360} eager={i < 2}
+                    <MwImg src={u} w={360} eager={i < 2} animate
                       style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:12, display:"block",
                         background:"var(--surface2)" }}/>
                   </a>
@@ -340,12 +341,12 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             {/* Descriptif */}
             {m.description && (
               <Section title="Descriptif">
-                <div style={{ fontSize:13, color:"var(--text2)", lineHeight:1.55, whiteSpace:"pre-wrap",
-                  ...(more ? null : { maxHeight:150, overflow:"hidden", maskImage:"linear-gradient(#000 70%, transparent)" }) }}>
+                <Folded lines={7} open={more} onOverflow={setDescLong}
+                  style={{ fontSize:13, color:"var(--text2)", lineHeight:1.55, whiteSpace:"pre-wrap" }}>
                   {orig && m.description_original ? m.description_original : m.description}
-                </div>
+                </Folded>
                 <div style={{ display:"flex", gap:14 }}>
-                  {m.description.length > 300 && (
+                  {(descLong || more) && (
                     <button onClick={() => setMore(v => !v)} style={textBtn}>{more ? "Réduire" : "Lire la suite"}</button>
                   )}
                   {m.description_original && (
@@ -547,7 +548,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                       {c.images?.length > 0 && (
                         <div style={{ display:"flex", gap:4, marginTop:4, overflowX:"auto" }}>
                           {c.images.map((u, i) => <a key={i} href={u} onClick={e => { e.preventDefault(); setZoom({ images: c.images, index: i }); }}>
-                            <MwImg src={u} w={128}
+                            <MwImg src={u} w={128} animate
                               style={{ width:64, height:64, objectFit:"cover", borderRadius:6 }}/></a>)}
                         </div>
                       )}
@@ -621,17 +622,48 @@ function launch(href) {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 
+// Texte replie sur `lines` lignes entieres (jamais une demi-ligne). Le fondu
+// sur la derniere ligne et onOverflow(true) seulement si le texte depasse
+// vraiment : avant, le fondu s'appliquait meme a un texte court, et « Lire la
+// suite » dependait d'un nombre de caracteres.
+function Folded({ lines, open, onOverflow, style, children }) {
+  const ref = useRef(null);
+  const [over, setOver] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => {
+      const o = el.scrollHeight > el.clientHeight + 2;
+      if (!open) { setOver(o); onOverflow?.(o); }
+    };
+    check();
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(check) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [children, open, lines]);
+  const lh = `${style?.lineHeight || 1.5}em`;
+  return (
+    <div ref={ref} style={{ ...style, ...(open ? null : {
+      maxHeight:`calc(${lh} * ${lines})`, overflow:"hidden",
+      ...(over ? { maskImage:`linear-gradient(#000 calc(100% - ${lh}), transparent)`,
+                   WebkitMaskImage:`linear-gradient(#000 calc(100% - ${lh}), transparent)` } : null) }) }}>
+      {children}
+    </div>
+  );
+}
+
 // Descriptif du profil (traduit, original a la demande), replie s'il est long.
 function ProfileSummary({ p }) {
   const [more, setMore] = useState(false);
   const [orig, setOrig] = useState(false);
   const txt = orig && p.summary_original ? p.summary_original : p.summary;
-  const long = txt.length > 220;
+  const [overflow, setOverflow] = useState(false);
+  const long = overflow || more;
   const b = { background:"none", border:"none", padding:0, cursor:"pointer", fontSize:11.5, fontWeight:700, color:"#3b82f6" };
   return (
     <div style={{ padding:"0 10px 8px" }}>
-      <div style={{ fontSize:12, color:"var(--text2)", lineHeight:1.5, whiteSpace:"pre-wrap",
-        ...(long && !more ? { maxHeight:72, overflow:"hidden", maskImage:"linear-gradient(#000 60%, transparent)" } : null) }}>{txt}</div>
+      <Folded lines={4} open={more} onOverflow={setOverflow}
+        style={{ fontSize:12, color:"var(--text2)", lineHeight:1.5, whiteSpace:"pre-wrap" }}>{txt}</Folded>
       {(long || p.summary_original) && (
         <div style={{ display:"flex", gap:12, marginTop:3 }}>
           {long && <button onClick={() => setMore(v => !v)} style={b}>{more ? "Réduire" : "Lire la suite"}</button>}
