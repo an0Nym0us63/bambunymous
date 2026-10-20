@@ -31,6 +31,9 @@ export default function Achievements({ embedded = false }) {
   const [sp, setSp] = useSearchParams();
   const focus = sp.get("a") || "";
   const [openCats, setOpenCats] = useState(() => new Set([sp.get("cat")].filter(Boolean)));
+  // sous-sections des Secrets : repliees par defaut
+  const [openSubs, setOpenSubs] = useState(() => new Set());
+  const toggleSub = id => setOpenSubs(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [detail, setDetail] = useState(null);
   const atFriend = !!currentFriend();             // chez un copain : pas de podium (ce sont ses copains a lui)
   const isAdmin = useIsAdmin();
@@ -68,6 +71,7 @@ export default function Achievements({ embedded = false }) {
   useEffect(() => {
     if (!focus || !byId[focus]) return;
     setOpenCats(s => new Set([...s, byId[focus].cat]));
+    setOpenSubs(s => new Set([...s, byId[focus].sub || "unknown"]));
     setDetail(focus);
   }, [focus, byId]);
 
@@ -227,18 +231,25 @@ export default function Achievements({ embedded = false }) {
                 ).map(sb => (
                   <div key={sb.id} style={{ display:"flex", flexDirection:"column", gap:8 }}>
                     {sb.id && (
-                      <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, fontWeight:800, color:"var(--text2)" }}>
+                      <button onClick={() => toggleSub(sb.id)} aria-expanded={openSubs.has(sb.id)}
+                        style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, fontWeight:800, color:"var(--text2)",
+                          background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10, padding:"8px 10px",
+                          cursor:"pointer", textAlign:"left", width:"100%" }}>
+                        <span style={{ fontSize:10, color:"var(--muted)", transform: openSubs.has(sb.id) ? "rotate(90deg)" : "none",
+                          transition:"transform .15s" }}>▶</span>
                         <span>{sb.emoji}</span>{sb.name}
                         <span style={{ marginLeft:"auto", fontSize:11, fontWeight:700, color:"var(--muted)" }}>
                           {sb.id === "unknown" ? `${sb.items.length} à découvrir` : (() => {
                             const won = sb.items.filter(x => x.level >= 0).length, seen = sb.items.length - won;
                             return `${won} gagné${won > 1 ? "s" : ""}` + (seen ? ` · ${seen} en vue` : "");
                           })()}</span>
+                      </button>
+                    )}
+                    {(!sb.id || openSubs.has(sb.id)) && (
+                      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
+                        {sb.items.map(it => <Tile key={it.id} it={it} others={ringBy[it.id]} shared={shared(it)} onOpen={() => setDetail(it.id)}/>)}
                       </div>
                     )}
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
-                      {sb.items.map(it => <Tile key={it.id} it={it} others={ringBy[it.id]} shared={shared(it)} onOpen={() => setDetail(it.id)}/>)}
-                    </div>
                   </div>
                 ))}
               </div>
