@@ -591,8 +591,7 @@ async def check_creator() -> int:
         if on["mw_comment"] and "c" in o and m["comments"] > _num(o.get("c")):
             n = m["comments"] - _num(o.get("c"))
             await N.notify("mw_comment", f"💬 {'Nouveau commentaire' if n == 1 else f'{n} nouveaux commentaires'}",
-                           f"📄 {name}
-💬 {m['comments']} commentaires au total", click=url,
+                           f"📄 {name}\n💬 {m['comments']} commentaires au total", click=url,
                            attach=_cover(m.get("cover_url")), icon=_cover(m.get("cover_url")), priority=3,
                            actions=[("Voir le modèle", url)] + acts)
             sent += 1
