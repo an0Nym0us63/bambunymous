@@ -289,13 +289,15 @@ async def import_history(rows, until: str = None, from_start: bool = False, desi
     h["days"].update(new)
     if from_start and min(new) <= min(h["days"]):
         h["from_start"] = True
-    if isinstance(designs, dict) and designs:
+    parsed = {str(did): {d: v for d, v in parse_date_list(drows, until).items() if any(v)}
+              for did, drows in (designs if isinstance(designs, dict) else {}).items() if str(did).isdigit()}
+    # aucun jour pour aucun modele : la page d'un modele n'a pas ete lue (forme
+    # differente), surtout ne pas declarer l'historique des modeles complet
+    ignored = bool(parsed) and not any(parsed.values())
+    if parsed and not ignored:
         keep = h.get("designs") if isinstance(h.get("designs"), dict) else {}
-        for did, drows in designs.items():
-            if not str(did).isdigit():
-                continue
-            got = {d: v for d, v in parse_date_list(drows, until).items() if any(v)}
-            keep[str(did)] = {**(keep.get(str(did)) or {}), **got}
+        for did, got in parsed.items():
+            keep[did] = {**(keep.get(did) or {}), **got}
         h["designs"] = keep
         # meme plage que le compte : on en garde les bornes pour la couverture
         h["designs_to"] = max(new)
@@ -304,7 +306,7 @@ async def import_history(rows, until: str = None, from_start: bool = False, desi
     h["imported"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     async with AsyncSessionLocal() as db:
         await set_setting(db, K_HISTORY, json.dumps(h, separators=(",", ":")))
-    return history_summary(h) | {"added": len(new)}
+    return history_summary(h) | {"added": len(new), "designs_ignored": ignored}
 
 
 def history_summary(h: dict) -> dict:

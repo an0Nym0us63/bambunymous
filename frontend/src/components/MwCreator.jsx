@@ -84,7 +84,8 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
         rows: pick(list), designs, until: String(pp.maxDateStr || "").slice(0, 10) || null,
         from_start: !!(pp.startDateStr && pp.minDateStr && pp.startDateStr <= pp.minDateStr) });
       await showAlert(`Historique importé : ${h.days} jours, du ${dayFr(h.from)} au ${dayFr(h.to)}`
-        + (h.designs ? `, et ${h.designs} modèles un par un.` : ". Pour le classement par modèle, utilise le script de console."));
+        + (h.designs_ignored ? ". Les modèles de ce fichier sont vides : ils n'ont pas été pris (recopie le script, il a été corrigé)."
+          : h.designs ? `, et ${h.designs} modèles un par un.` : ". Pour le classement par modèle, utilise le script de console."));
       setImported(n => n + 1);
     } catch (e) {
       await showAlert("Import impossible : " + (e.response?.data?.detail || e.message));
@@ -275,10 +276,30 @@ export const CONSOLE_SCRIPT = `(async () => {
   const out = { pageProps: { minDateStr: all.minDateStr, maxDateStr: all.maxDateStr, startDateStr: all.startDateStr,
     statisticalData: { dateList: pick(all.statisticalData.dateList) } }, designs: {} };
   const list = all.statisticalList || [];
+  // la liste jour par jour d'un modele : cherchee partout (« dateList » d'abord)
+  const find = (o, depth) => {
+    if (!o || typeof o !== "object" || depth > 6) return null;
+    if (Array.isArray(o.dateList) && o.dateList.length && "intervalVal" in o.dateList[0]) return o.dateList;
+    for (const k of Object.keys(o)) {
+      if (k === "_nextI18Next" || k === "config" || k === "session") continue;
+      const r = find(o[k], depth + 1);
+      if (r) return r;
+    }
+    return null;
+  };
+  const shape = (o, depth) => !o || typeof o !== "object" ? typeof o : Array.isArray(o)
+    ? "[" + o.length + "] " + (o.length ? shape(o[0], depth + 1) : "")
+    : depth > 3 ? "{…}" : "{" + Object.keys(o).filter(k => k !== "_nextI18Next" && k !== "config")
+      .map(k => k + ": " + shape(o[k], depth + 1)).join(", ") + "}";
   for (const [i, d] of list.entries()) {
     const p = await get(base + "/" + d.designId + ".json?" + q + "&designId=" + d.designId);
-    out.designs[d.designId] = pick(p.statisticalData && p.statisticalData.dateList);
-    console.log((i + 1) + "/" + list.length, d.title);
+    const l = find(p, 0);
+    if (!l && !i) {
+      console.log("Forme de la réponse d'un modèle (à coller à Claude) :", shape(p, 0));
+      throw new Error("Pas de liste jour par jour dans la page d'un modèle : copie la ligne « Forme de la réponse » ci-dessus");
+    }
+    out.designs[d.designId] = pick(l);
+    console.log((i + 1) + "/" + list.length, d.title, (l || []).length + " jours");
     await new Promise(r => setTimeout(r, 400));
   }
   const a = document.createElement("a");
