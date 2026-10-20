@@ -2853,7 +2853,14 @@ def summary(v: dict) -> dict:
     # medailles uniques gagnees : pour cercler, chez moi, les secrets qu'un copain a deja
     uniques = sorted(it["id"] for it in v.get("items") or []
                      if len(it.get("tiers") or []) == 1 and (it["tiers"][0] or {}).get("at"))
-    return {"cats": cats, "uniques": uniques, "score": sum(c["score"] for c in cats.values()),
+    # palier atteint par succes, et sa date : [indice, date]
+    levels = {}
+    for it in v.get("items") or []:
+        got = [(i, t.get("at")) for i, t in enumerate(it.get("tiers") or []) if t.get("at")]
+        if got:
+            levels[it["id"]] = [got[-1][0], got[-1][1]]
+    return {"cats": cats, "uniques": uniques, "levels": levels, "sig": v.get("sig"),
+            "score": sum(c["score"] for c in cats.values()),
             "score_max": sum(c["max"] for c in cats.values()),
             "got": sum(c["got"] for c in cats.values()), "total": sum(c["total"] for c in cats.values())}
 
@@ -2902,6 +2909,72 @@ async def podium(me_name: str, fresh: bool = False) -> dict:
     out = {"people": people, "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES]}
     _PODIUM.update(t=time.time(), v=out)
     return out
+
+
+# ── Succes des copains : notification ────────────────────────────────────────
+async def friend_news(notify: bool = True) -> list:
+    """Ce que mes copains viennent de gagner. Premier passage chez un copain,
+    ou seuils changes chez lui (empreinte differente) : on retient sans rien
+    dire. Ensuite, seul un palier atteint il y a peu (48 h) est annonce --
+    pas un rattrapage. Un secret que je n'ai pas reste secret."""
+    pod = await podium("Toi", fresh=True)
+    st = await _state_get()
+    if st is None:
+        return []
+    seen = dict(st.get("friend_levels") or {})
+    sigs = dict(st.get("friend_sigs") or {})
+    mine = {it["id"]: it["level"] for it in (await view())["items"]}
+    news = []
+    ok_ids = set()
+    for p in pod["people"]:
+        if p.get("me") or p.get("status") != "ok" or "levels" not in p:
+            continue
+        fid = str(p["id"])
+        ok_ids.add(fid)
+        cur = {aid: lv[0] for aid, lv in p["levels"].items()}
+        quiet = fid not in seen or sigs.get(fid) != p.get("sig")
+        if not quiet:
+            for aid, (lv, at) in p["levels"].items():
+                if aid in BY_ID and lv > seen[fid].get(aid, -1) and _recent(at):
+                    news.append((p["name"], aid, lv))
+        seen[fid], sigs[fid] = cur, p.get("sig")
+    keep = ok_ids | {fid for fid in seen if fid in {str(p["id"]) for p in pod["people"] if not p.get("me")}}
+    st["friend_levels"] = {fid: v for fid, v in seen.items() if fid in keep}
+    st["friend_sigs"] = {fid: v for fid, v in sigs.items() if fid in keep}
+    await _state_put(st)
+    if notify and news:
+        await _notify_friends(news, mine)
+    return news
+
+
+async def _notify_friends(news: list, mine: dict) -> None:
+    from . import notify as N
+    cfg = await N._load()
+    if not N.enabled_in(cfg, "friend_achievement"):
+        return
+    by = defaultdict(list)
+    for name, aid, lv in news:
+        by[name].append((aid, lv))
+    for name, got in by.items():
+        got.sort(key=lambda x: -tiers_of(BY_ID[x[0]])[x[1]]["score"])
+        lines, first = [], None
+        for aid, lv in got[:8]:
+            a, t = BY_ID[aid], tiers_of(BY_ID[aid])[lv]
+            if len(a["tiers"]) == 1 and mine.get(aid, -1) < 0:
+                lines.append(f"{t['emoji']} 🤫 Un succès secret (tu ne l'as pas encore)")
+                continue
+            first = first or (aid, a, t)
+            me = mine.get(aid, -1)
+            vs = ("" if len(a["tiers"]) == 1 else
+                  " — toi : " + (tiers_of(a)[me]["label"] if me >= 0 else "pas encore")
+                  + (" (devant)" if me > lv else " (à égalité)" if me == lv else ""))
+            lines.append(f"{t['emoji']} {a['emoji']} {a['name']} · {t['label']}{vs}")
+        if len(got) > 8:
+            lines.append(f"… et {len(got) - 8} autre(s)")
+        title = (f"👥 {name} : {first[1]['name']} {first[2]['emoji']}" if len(got) == 1 and first
+                 else f"👥 {name} a débloqué {len(got)} succès" if len(got) > 1 else f"👥 {name} a débloqué un secret")
+        link = f"/stats?tab=achievements&a={first[0]}" if first else "/stats?tab=achievements&cat=secret"
+        await N.notify("friend_achievement", title, "\n".join(lines), click=N.app_link(cfg, link), priority=2)
 
 
 # ── Export des paliers (revue des seuils) ────────────────────────────────────
@@ -3034,6 +3107,6 @@ async def view(fresh: bool = False) -> dict:
            "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES],
            "subs": [{"id": i, "emoji": e, "name": n} for i, e, n, _ids in SECRET_SUBS],
            "tiers": TIERS + [UNIQUE], "recent": [{"id": i, "tier": j, "at": at} for at, i, j in recent],
-           "since": (st or {}).get("since")}
+           "since": (st or {}).get("since"), "sig": CATALOG_SIG}
     _CACHE.update(t=time.time(), v=out)
     return out

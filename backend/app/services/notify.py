@@ -333,6 +333,13 @@ EVENTS["friend_print_done"] = {
     "sample": {"title": "👥 Léo a fini d'imprimer", "priority": 2, "link": "/",
                "message": "📄 Dragon articulé"},
 }
+EVENTS["friend_achievement"] = {
+    "section": "friends", "label": "Un copain gagne un succès",
+    "description": "Un palier ou un secret gagné par un copain, avec où tu en es (vérifié toutes les 15 min). Ses secrets que tu n'as pas restent secrets.",
+    "options": [],
+    "sample": {"title": "👥 Léo : Imprimeur 💎", "priority": 2, "link": "/stats?tab=achievements",
+               "message": "💎 🖨️ Imprimeur · Diamant — toi : Platine"},
+}
 EVENTS["attention_new"] = {
     "section": "attention", "label": "Nouveaux points d'attention",
     "description": "Ce qui apparaît dans les points d'attention de l'accueil (bobine presque vide, impression sans 3MF…).",

@@ -88,6 +88,9 @@ export default function Achievements({ embedded = false }) {
   const others = (pod?.people || []).filter(p => !p.me);
   const withFriends = people.length > 1;
   const tiersById = Object.fromEntries(data.tiers.map(t => [t.id, t]));
+  // Chez moi : le palier de chacun de mes copains sur un succes (-1 : pas encore)
+  const pals = atFriend ? [] : (pod?.people || []).filter(p => !p.me && p.status === "ok" && p.levels);
+  const rivalsOf = it => pals.length ? pals.map(p => ({ name: p.name, level: p.levels[it.id]?.[0] ?? -1 })) : null;
 
   return (
     <div style={{ maxWidth: embedded ? undefined : 900, width:"100%", margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
@@ -247,7 +250,7 @@ export default function Achievements({ embedded = false }) {
                     )}
                     {(!sb.id || openSubs.has(sb.id)) && (
                       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
-                        {sb.items.map(it => <Tile key={it.id} it={it} others={ringBy[it.id]} shared={shared(it)} onOpen={() => setDetail(it.id)}/>)}
+                        {sb.items.map(it => <Tile key={it.id} it={it} others={ringBy[it.id]} shared={shared(it)} rivals={rivalsOf(it)} onOpen={() => setDetail(it.id)}/>)}
                       </div>
                     )}
                   </div>
@@ -268,7 +271,7 @@ export default function Achievements({ embedded = false }) {
             position:"relative" }}>
             <button onClick={closeDetail} aria-label="Fermer" style={{ position:"absolute", top:8, right:10, zIndex:1,
               background:"none", border:"none", color:"var(--muted)", fontSize:20, cursor:"pointer" }}>✕</button>
-            <Card it={byId[detail]} sheet others={ringBy[detail]} shared={shared(byId[detail])}
+            <Card it={byId[detail]} sheet others={ringBy[detail]} shared={shared(byId[detail])} rivals={rivalsOf(byId[detail])}
               keys={canSpend ? data.keys : null} onSpend={() => spend(detail)} keyErr={keyErr}/>
           </div>
         </div>, document.body
@@ -279,10 +282,12 @@ export default function Achievements({ embedded = false }) {
 
 // Une medaille de la grille d'une section : grisee tant qu'elle n'est pas
 // gagnee, avec un petit liseré de progression vers le palier suivant.
-function Tile({ it, onOpen, others, shared }) {
+function Tile({ it, onOpen, others, shared, rivals }) {
   const got = it.level >= 0;
   const top = got ? it.tiers[it.level] : it.tiers[0];
   const p = progress(it);
+  // succes a paliers : les copains qui sont devant moi
+  const ahead = it.tiers.length > 1 ? (rivals || []).filter(r => r.level > it.level) : [];
   // secret pas encore gagne ici, mais deja par quelqu'un de la bande : cercle
   const near = !got && others?.length;
   return (
@@ -298,6 +303,15 @@ function Tile({ it, onOpen, others, shared }) {
         <span style={{ position:"absolute", top:4, right:4, fontSize:9.5, fontWeight:800, padding:"2px 6px", borderRadius:20,
           whiteSpace:"nowrap", color:"#fff", background: shared ? "#22c55e" : "#ef4444",
           border:"1.5px solid var(--sheet-bg)" }}>{shared ? "✓ toi aussi" : "pas toi"}</span>
+      )}
+      {ahead.length > 0 && (
+        <span title={`${ahead.map(r => r.name).join(", ")} : devant toi`}
+          style={{ position:"absolute", top:4, left:4, display:"flex", alignItems:"center", gap:1, padding:"1px 4px 1px 2px",
+          borderRadius:20, background:"rgba(139,92,246,0.15)" }}>
+          <span style={{ fontSize:9, fontWeight:900, color:"#8B5CF6", lineHeight:1 }}>▲</span>
+          {ahead.slice(0, 2).map((r, i) => <Avatar key={r.name} name={r.name} size={15} style={{ marginLeft: i ? -5 : 0 }}/>)}
+          {ahead.length > 2 && <span style={{ fontSize:9, fontWeight:800, color:"#8B5CF6" }}>+{ahead.length - 2}</span>}
+        </span>
       )}
       {near && (
         <span style={{ position:"absolute", top:4, right:4, display:"flex" }}>
@@ -503,7 +517,7 @@ const progress = it => {
   return span > 0 ? Math.max(0, Math.min(1, (it.value - (it.prev || 0)) / span)) : 0;
 };
 
-function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr }) {
+function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr, rivals }) {
   const ref = useRef(null);
   const [open, setOpen] = useState(sheet);
   useEffect(() => {
@@ -582,6 +596,7 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr 
           </>
         )
       ) : null}
+      {rivals?.length > 0 && (got || !it.secret) && (unique ? got && <PalsUnique rivals={rivals}/> : <Versus it={it} rivals={rivals}/>)}
       {open && !unique && (got || !it.secret) && (
         <div style={{ display:"flex", flexDirection:"column", gap:4, borderTop:"1px solid var(--border)", paddingTop:8 }}>
           {it.tiers.map(t => (
@@ -595,6 +610,77 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr 
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Pastille d'une personne : « toi » en orange, un copain en violet (son initiale).
+function Avatar({ name, me = false, size = 18, style }) {
+  return (
+    <span title={me ? "Toi" : name} style={{ width:size, height:size, borderRadius:"50%", flexShrink:0, display:"inline-flex",
+      alignItems:"center", justifyContent:"center", fontSize: me ? size * 0.42 : size * 0.55, fontWeight:900, color:"#fff",
+      background: me ? "#F59E0B" : "#8B5CF6", border:"1.5px solid var(--sheet-bg)", lineHeight:1, ...style }}>
+      {me ? "toi" : (name || "?").slice(0, 1).toUpperCase()}</span>
+  );
+}
+
+// Moi et mes copains sur un succes a paliers : l'echelle des paliers avec
+// chacun au-dessus du sien, puis la liste du plus avance au moins avance.
+function Versus({ it, rivals }) {
+  const people = [{ name:"Toi", me:true, level: it.level }, ...rivals];
+  const stack = Math.max(1, ...it.tiers.map((_, i) => people.filter(p => p.level === i).length));
+  const ranked = [...people].sort((a, b) => b.level - a.level || (b.me ? 1 : 0) - (a.me ? 1 : 0));
+  return (
+    <div onClick={e => e.stopPropagation()} style={{ display:"flex", flexDirection:"column", gap:8,
+      borderTop:"1px solid var(--border)", paddingTop:8, cursor:"default" }}>
+      <div style={{ fontSize:12, fontWeight:800, color:"var(--text2)" }}>👥 Toi et tes copains</div>
+      <div style={{ display:"flex", gap:2, alignItems:"flex-end" }}>
+        {it.tiers.map((t, i) => {
+          const here = people.filter(p => p.level === i);
+          return (
+            <div key={t.id} style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+              <div style={{ display:"flex", flexDirection:"column-reverse", alignItems:"center", gap:2,
+                minHeight: stack * 20 - 2, justifyContent:"flex-start" }}>
+                {here.map(p => <Avatar key={p.name} name={p.name} me={p.me}/>)}
+              </div>
+              <Medal tier={t} emoji="" size={20} locked={!people.some(p => p.level >= i)}/>
+              <span style={{ width:"100%", height:3, borderRadius:2,
+                background: people.some(p => p.level >= i) ? t.color : "var(--border)" }}/>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:5 }}>
+        {ranked.map(p => {
+          const t = p.level >= 0 ? it.tiers[p.level] : null;
+          const d = p.level - it.level;
+          return (
+            <div key={p.name} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5 }}>
+              <Avatar name={p.name} me={p.me} size={20}/>
+              <span style={{ flex:1, minWidth:0, fontWeight: p.me ? 800 : 700, color: p.me ? "#F59E0B" : "var(--text)",
+                overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{p.me ? "Toi" : p.name}</span>
+              <span style={{ display:"flex", alignItems:"center", gap:5, color: t ? "var(--text)" : "var(--muted)", fontWeight:700 }}>
+                {t && <Medal tier={t} emoji="" size={16}/>}{t ? t.label : "pas encore"}</span>
+              <span style={{ width:74, flexShrink:0, textAlign:"right", fontSize:11, fontWeight:800,
+                color: p.me ? "transparent" : d > 0 ? "#8B5CF6" : d < 0 ? "#22c55e" : "var(--muted)" }}>
+                {p.me ? "" : d > 0 ? `▲ devant toi` : d < 0 ? "▼ derrière toi" : "= à égalité"}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Un secret gagne : qui l'a aussi parmi mes copains.
+function PalsUnique({ rivals }) {
+  const yes = rivals.filter(r => r.level >= 0), no = rivals.filter(r => r.level < 0);
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:4, fontSize:12.5, borderTop:"1px solid var(--border)", paddingTop:8 }}>
+      {yes.length > 0 && <span style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", color:"var(--text)", fontWeight:700 }}>
+        👥 L'ont aussi : {yes.map(r => <span key={r.name} style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
+          <Avatar name={r.name}/>{r.name}</span>)}</span>}
+      {no.length > 0 && <span style={{ color:"var(--muted)" }}>Pas encore : {no.map(r => r.name).join(", ")}</span>}
     </div>
   );
 }
