@@ -194,6 +194,18 @@ EVENTS["mw_fans"] = {
     "options": [],
     "sample": {"title": "👥 +3 abonnés sur MakerWorld", "priority": 2, "message": "Tu as maintenant 274 abonnés."},
 }
+EVENTS["mw_points_goal"] = {
+    "section": "mw", "label": "Palier de points : récompense à portée",
+    "description": "Ton solde atteint de quoi prendre une récompense MakerWorld : 500 pts = 40 € de réduction, "
+                   "524 pts = carte cadeau 40 €, et toutes leurs combinaisons (1 000, 1 024, 1 048…).",
+    "options": [{"key": "kind", "type": "select", "label": "Récompenses", "default": "both",
+                 "choices": [["both", "réductions et cartes cadeaux"], ["coupon", "réductions (500 pts)"],
+                             ["card", "cartes cadeaux (524 pts)"]]}],
+    "sample": {"title": "🎁 1 024 points : 80 € de récompenses", "priority": 3,
+               "message": "🪙 Solde : 1 031 points\n🎟️ 1 carte cadeau 40 € + 1 réduction de 40 €\n"
+                          "Avec ton solde : 2 × 40 € (2 réductions, ou 1 carte + 1 réduction)\n"
+                          "➡️ Prochain palier : 1 048 pts (2 cartes cadeaux 40 €)"},
+}
 EVENTS["mw_milestone"] = {
     "section": "mw", "label": "Palier franchi par un de mes modèles",
     "description": "50, 100, 250, 500, 1 000, 2 500… téléchargements ou impressions.",

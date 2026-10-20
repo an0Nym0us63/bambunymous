@@ -392,7 +392,60 @@ def _fmt(v):
     return (f"{v:.2f}".rstrip("0").rstrip(".")).replace(".", ",")
 
 
-EVENTS_HERE = ("mw_points", "mw_boost", "mw_fans", "mw_milestone")
+EVENTS_HERE = ("mw_points", "mw_boost", "mw_fans", "mw_milestone", "mw_points_goal")
+
+# Recompenses de la boutique de points (20/10/2026) : toutes valent 40 euros.
+CARD_PTS, COUPON_PTS, REWARD_EUR = 524, 500, 40
+
+
+def _plural(n, one, many):
+    return f"{n} {one if n == 1 else many}"
+
+
+def reward_text(cards: int, coupons: int) -> str:
+    parts = ([_plural(cards, "carte cadeau 40 €", "cartes cadeaux 40 €")] if cards else [])         + ([_plural(coupons, "réduction de 40 €", "réductions de 40 €")] if coupons else [])
+    return " + ".join(parts)
+
+
+def reward_goals(upto: float, kind: str = "both") -> list:
+    """Paliers <= upto : (points, cartes, reductions), tries ; chaque
+    combinaison de cartes (524) et de reductions (500)."""
+    out = set()
+    max_n = int(upto // COUPON_PTS)
+    for cards in range(0, max_n + 1):
+        for coupons in range(0, max_n + 1 - cards):
+            if not cards and not coupons:
+                continue
+            if (kind == "card" and coupons) or (kind == "coupon" and cards):
+                continue
+            pts = cards * CARD_PTS + coupons * COUPON_PTS
+            if pts <= upto:
+                out.add((pts, cards, coupons))
+    return sorted(out)
+
+
+def goal_message(old_bal: float, bal: float, kind: str = "both"):
+    """(titre, message) si le solde franchit un palier en montant, sinon None."""
+    crossed = [g for g in reward_goals(bal, kind) if g[0] > old_bal]
+    if not crossed:
+        return None
+    pts, cards, coupons = crossed[-1]
+    n = cards + coupons
+    title = f"🎁 {_fmt(pts)} points : " + (reward_text(cards, coupons) if n == 1 else f"{n * REWARD_EUR} € de récompenses")
+    # ce que permet le solde entier : n_max recompenses, dont jusqu'a `c_max` cartes
+    n_max = int(bal // COUPON_PTS) if kind != "card" else int(bal // CARD_PTS)
+    lines = [f"🪙 Solde : {_fmt(bal)} points", f"🎟️ {reward_text(cards, coupons)}"]
+    if kind == "both" and n_max:
+        c_max = min(n_max, int((bal - n_max * COUPON_PTS) // (CARD_PTS - COUPON_PTS)))
+        ways = [_plural(n_max, "réduction", "réductions")]
+        if c_max:
+            ways.append(reward_text(c_max, n_max - c_max).replace(" de 40 €", "").replace(" 40 €", ""))
+        lines.append(f"Avec ton solde : {n_max} × 40 € ({' ou '.join(ways)})")
+    nxt = reward_goals(bal + CARD_PTS + COUPON_PTS, kind)
+    nxt = [g for g in nxt if g[0] > bal]
+    if nxt:
+        lines.append(f"➡️ Prochain palier : {_fmt(nxt[0][0])} pts ({reward_text(nxt[0][1], nxt[0][2])})")
+    return title, "\n".join(lines)
 
 
 async def check_creator() -> int:
@@ -411,7 +464,7 @@ async def check_creator() -> int:
     first = await points(0, 50)
     old = await _snap_get()
     snap = {"last_time": max((x["time"] or "" for x in first["items"]), default=(old or {}).get("last_time") or ""),
-            "fans": prof["fans"],
+            "fans": prof["fans"], "points": prof["points"]["total"],
             "models": {m["design_id"]: {"d": m["downloads"], "p": m["prints"], "b": m["boosts"]} for m in ms}}
     if old is None:
         await _snap_put(snap)
@@ -437,6 +490,13 @@ async def check_creator() -> int:
             await N.notify("mw_points", f"💰 +{_fmt(tot)} points MakerWorld",
                            "\n".join([f"🪙 Solde : {_fmt(prof['points']['total'])} points"] + lines),
                            priority=2, click=profile_url, actions=acts)
+            sent += 1
+    # Paliers de points : une recompense de la boutique devient accessible
+    if on["mw_points_goal"] and old.get("points") is not None:
+        kind = N.options_of(cfg, "mw_points_goal").get("kind", "both")
+        g = goal_message(_num(old.get("points")), prof["points"]["total"], kind)
+        if g:
+            await N.notify("mw_points_goal", g[0], g[1], priority=3, click=profile_url, actions=acts)
             sent += 1
     # Abonnes
     if on["mw_fans"] and prof["fans"] > _num(old.get("fans")):
