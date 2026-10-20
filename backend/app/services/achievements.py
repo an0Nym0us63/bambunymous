@@ -38,7 +38,7 @@ TIERS = [
 ]
 # Version des seuils : quand elle change, le passage suivant recalcule les crans
 # sans rien notifier (un seuil abaisse ne doit pas declencher une rafale).
-CATALOG_VERSION = 2
+CATALOG_VERSION = 3          # 3 : fournee des secrets loufoques (20/10/2026)
 UNIQUE = {"id": "unique", "label": "Unique", "emoji": "🏵️", "color": "#EC4899", "score": 3}
 
 CATEGORIES = [
@@ -179,6 +179,87 @@ CATALOG = [
        lore="La 1001ᵉ impression réussie : de quoi en raconter une chaque nuit."),
     _a("titan", "secret", "🗿", "Titan", "Une impression de plus de 2 kg et de plus de 24 h", [1],
        lore="Plus de 2 kg et plus de 24 heures d'un coup : une pièce de titan."),
+    # ── Fournee du 20/10/2026 : les loufoques ──
+    _a("answer42", "secret", "🌌", "La grande réponse", "Une impression réussie de 42 g pile", [1],
+       lore="42 grammes tout rond : la réponse à la grande question sur la vie, l'univers et le reste."),
+    _a("beast", "secret", "😈", "Le nombre de la bête", "Une impression de 666 g pile", [1],
+       lore="666 grammes. On ne dira rien, mais l'imprimante sentait un peu le soufre."),
+    _a("kilo", "secret", "⚖️", "Le kilo pile", "Une impression réussie de 1 kg tout rond (à 2 g près)", [1],
+       lore="Un kilo, ni plus ni moins : une bobine entière dans une seule pièce."),
+    _a("pi_grams", "secret", "🥧", "Pi grammes", "Une impression réussie de 3,14 g", [1],
+       lore="3,14 grammes : une part de tarte… très fine."),
+    _a("palindrome", "secret", "🔁", "Palindrome", "Une impression dont la durée en minutes se lit dans les deux sens", [1],
+       lore="Une durée qui se lit pareil dans les deux sens, comme « kayak » ou « été »."),
+    _a("full_day", "secret", "🕐", "Tour d'horloge", "Une impression de 24 h pile (à la minute près)", [1],
+       lore="Vingt-quatre heures, pas une minute de plus : l'imprimante a fait le tour du cadran."),
+    _a("marathon42", "secret", "🏅", "Vrai marathon", "Une impression réussie de plus de 42,195 h", [1],
+       lore="42,195 heures : la distance d'un marathon, mais en heures. Et sans ampoules."),
+    _a("bullseye", "secret", "🎯", "Dans le mille", "Une impression de plus d'une heure finie à une minute près de l'estimation", [1],
+       lore="Le trancheur avait dit telle heure, ce fut telle heure. À la minute près."),
+    _a("tortoise", "secret", "🐢", "La tortue", "Une impression réussie qui a pris deux fois plus longtemps que prévu", [1],
+       lore="Deux fois le temps prévu, mais elle est arrivée au bout. Rien ne sert de courir."),
+    _a("hare", "secret", "🐇", "Le lièvre", "Une impression réussie finie 20 % plus tôt que prévu", [1],
+       lore="Finie bien avant l'heure : le trancheur était trop pessimiste."),
+    _a("hundred", "secret", "💯", "Centenaire", "Ta 100ᵉ impression réussie", [1],
+       lore="La centième ! On ne compte plus les plateaux nettoyés."),
+    _a("jackpot", "secret", "🎰", "Jackpot", "Ta 777ᵉ impression réussie", [1],
+       lore="777 : les trois cerises sont alignées."),
+    _a("leet", "secret", "💻", "1337", "Ta 1337ᵉ impression réussie", [1],
+       lore="Ta 1337ᵉ réussite : tu es officiellement « leet »."),
+    _a("hundred_pieces", "secret", "🧮", "Centaine", "100 pièces ou plus dans une seule impression", [1],
+       lore="Cent pièces d'un coup sur le plateau : la production en série, version artisanale."),
+    _a("panda", "secret", "🐼", "Panda", "Une impression en noir et blanc, rien d'autre", [1],
+       lore="Du noir, du blanc, et rien d'autre : élégant comme un panda."),
+    _a("tricolore", "secret", "🇫🇷", "Tricolore", "Une impression en bleu, blanc et rouge", [1],
+       lore="Bleu, blanc, rouge : une impression aux couleurs de la France."),
+    _a("carbon", "secret", "🖤", "Fibre de carbone", "Une impression réussie en filament chargé carbone", [1],
+       lore="Du filament chargé de fibre de carbone : solide, mat, et la buse s'en souviendra."),
+    _a("rubber", "secret", "🫧", "Caoutchouc", "Ta première impression réussie en TPU", [1],
+       lore="Ton premier TPU réussi : souple, rebondissant, et pas la plus facile des matières."),
+    _a("novel", "secret", "📖", "Roman-fleuve", "Une impression au nom de plus de 80 caractères", [1],
+       lore="Un nom de modèle si long qu'il aurait pu faire un chapitre."),
+    _a("noon", "secret", "☀️", "Midi pile", "Une impression lancée à midi pile", [1],
+       lore="Lancée à 12 h 00 pile : le soleil au zénith, la buse aussi."),
+    _a("mirror", "secret", "🪞", "Heure miroir", "Une impression lancée à une heure miroir (11 h 11, 22 h 22…)", [1],
+       lore="Lancée à une heure miroir. Fais un vœu."),
+    _a("sequence", "secret", "🔢", "1, 2, 3, 4", "Une impression lancée à 12 h 34", [1],
+       lore="12 h 34 : une, deux, trois, quatre… lancée !"),
+    _a("april_fool", "secret", "🐟", "Poisson d'avril", "Une impression ratée un 1er avril", [1],
+       lore="Une impression ratée un 1er avril. C'était une blague, évidemment."),
+    _a("music", "secret", "🎸", "Fête de la musique", "Une impression lancée un 21 juin", [1],
+       lore="Le 21 juin, ton imprimante a joué sa partition : bip, vrrr, bip."),
+    _a("summer_solstice", "secret", "🌞", "Solstice d'été", "Une impression de plus de 12 h un 21 juin", [1],
+       lore="Plus de 12 heures d'impression le jour le plus long de l'année."),
+    _a("winter_solstice", "secret", "🌑", "Nuit la plus longue", "Une impression de plus de 12 h un 21 décembre", [1],
+       lore="Plus de 12 heures d'impression pendant la nuit la plus longue de l'année."),
+    _a("easter", "secret", "🥚", "Chasse aux œufs", "Une impression lancée le dimanche de Pâques", [1],
+       lore="Une impression le dimanche de Pâques. Tu as caché des œufs en PLA ?"),
+    _a("full_moon", "secret", "🌕", "Pleine lune", "Une impression lancée de nuit, un soir de pleine lune", [1],
+       lore="Lancée une nuit de pleine lune. Les loups-garous impriment aussi."),
+    _a("sunday_morning", "secret", "🥐", "Dimanche matin", "Une impression lancée un dimanche entre 6 h et 8 h", [1],
+       lore="Un dimanche avant 8 h : pas de grasse matinée pour l'imprimante."),
+    _a("triplets", "secret", "👶", "Triplés", "Le même modèle réussi trois fois le même jour", [1],
+       lore="Trois fois le même modèle réussi dans la journée : des triplés !"),
+    _a("broken_record", "secret", "💿", "Disque rayé", "Le même modèle réussi trois fois de suite", [1],
+       lore="Trois fois de suite le même modèle : on dirait un disque rayé."),
+    _a("bad_day", "secret", "🌧️", "Jour sans", "5 impressions ratées le même jour", [1],
+       lore="Cinq échecs en une journée. Demain sera meilleur, promis."),
+    _a("insomniac", "secret", "🥱", "Insomniaque", "Des impressions lancées entre minuit et 5 h trois nuits d'affilée", [1],
+       lore="Trois nuits d'affilée à lancer des impressions entre minuit et 5 h. Tu dors, parfois ?"),
+    _a("comeback30", "secret", "🛰️", "Le retour", "Une impression après plus d'un mois sans imprimer", [1],
+       lore="Plus d'un mois sans imprimer, puis le grand retour. La buse avait des fourmis dans les jambes."),
+    _a("hibernation", "secret", "🐻", "Hibernation", "Une impression après plus de trois mois de pause", [1],
+       lore="Trois mois de sommeil, et l'imprimante se réveille comme un ours au printemps."),
+    _a("anniversary", "secret", "🎂", "Joyeux anniversaire", "Une impression le jour anniversaire de ta toute première", [1],
+       lore="Une impression le jour anniversaire de ta toute première. Souffle les bougies… en PLA."),
+    _a("penny", "secret", "🪙", "Petit budget", "Une impression réussie qui a coûté moins de 10 centimes", [1],
+       lore="Moins de 10 centimes de filament et d'électricité. La pièce la plus rentable de l'atelier."),
+    _a("luxury", "secret", "👑", "Grand luxe", "Une seule impression qui a coûté plus de 50 €", [1],
+       lore="Plus de 50 € pour une seule impression : une pièce de collection."),
+    _a("market_day", "secret", "🎪", "Jour de marché", "5 objets vendus le même jour", [1],
+       lore="Cinq objets vendus dans la journée : un vrai jour de marché."),
+    _a("santa", "secret", "🎅", "Père Noël", "Un objet offert en décembre", [1],
+       lore="Un objet offert en décembre. Le Père Noël a un atelier d'impression 3D."),
 ]
 LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_likes", "mw_level", "mw_collections",
         "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils"}
@@ -302,6 +383,51 @@ async def _load_data() -> dict:
 
 
 _MONDAY0 = datetime(1970, 1, 5).date()       # un lundi : numero de semaine = jours // 7
+_NEW_MOON = datetime(2000, 1, 6, 18, 14)       # nouvelle lune de reference (UTC)
+_SYNODIC = 29.530588853                        # jours d'une lunaison
+
+
+def _full_moon(dt: datetime) -> bool:
+    """Pleine lune (a un jour pres) : age de la lune vers la moitie de la lunaison."""
+    age = ((dt - _NEW_MOON).total_seconds() / 86400) % _SYNODIC
+    return 13.8 <= age <= 15.8
+
+
+def _easter(y: int):
+    """Dimanche de Paques (calendrier gregorien, algorithme dit anonyme)."""
+    a, b, c = y % 19, y // 100, y % 100
+    d, e = b // 4, b % 4
+    g = (8 * b + 13) // 25
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 19 * l) // 433
+    month = (h + l - 7 * m + 90) // 25
+    return datetime(y, month, (h + l - 7 * m + 33 * month + 19) % 32).date()
+
+
+def _rgb(hx: str):
+    try:
+        return tuple(int(hx[i:i + 2], 16) for i in (0, 2, 4))
+    except (ValueError, TypeError):
+        return None
+
+
+def _hue(hx: str) -> str:
+    """Famille grossiere d'une couleur : noir, blanc, rouge, bleu, ou autre."""
+    c = _rgb(hx)
+    if not c:
+        return "?"
+    r, g, b = c
+    if max(c) <= 60:
+        return "noir"
+    if min(c) >= 210:
+        return "blanc"
+    if r >= 150 and g <= 90 and b <= 90:
+        return "rouge"
+    if b >= 120 and r <= 90 and g <= 160:
+        return "bleu"
+    return "autre"
 
 
 def _ts(dt) -> datetime | None:
@@ -350,6 +476,12 @@ def compute_series(d: dict, now: datetime) -> dict:
     last_week = None
     ko_run = pieces = mw_made = 0
     spent = 0.0
+    last_start = first_day = prev_key = None
+    same_run = 0
+    fails_day = defaultdict(int)
+    model_day = defaultdict(int)
+    nights = set()
+    tpu_done = False
     for p in d["prints"]:
         st = (p.status or "").upper()
         if st == "IN_PROGRESS" or not p.print_date:
@@ -430,6 +562,41 @@ def compute_series(d: dict, now: datetime) -> dict:
             push("midnight", start, 1)
         spent += p.total_cost or 0
         push("spent", end, round(spent, 2))
+        key = _model_key(p)
+        _fun(push, p, start, end, dur, loc, ok, ko, w, cols, us, key, st)
+        # pauses, anniversaire, nuits d'affilee
+        if last_start is not None:
+            gap = (start - last_start).days
+            if gap >= 30:
+                push("comeback30", start, 1)
+            if gap >= 90:
+                push("hibernation", start, 1)
+        last_start = start
+        first_day = first_day or day
+        if day.year > first_day.year and (day.month, day.day) == (first_day.month, first_day.day):
+            push("anniversary", start, 1)
+        if loc.hour < 5:
+            nights.add(day)
+            if {day - timedelta(days=1), day - timedelta(days=2)} <= nights:
+                push("insomniac", start, 1)
+        if ko:
+            fails_day[day] += 1
+            if fails_day[day] >= 5:
+                push("bad_day", end, 1)
+        # le meme modele : trois fois de suite, trois fois dans la journee
+        if ok and key:
+            same_run = same_run + 1 if key == prev_key else 1
+            model_day[(day, key)] += 1
+            if same_run >= 3:
+                push("broken_record", end, 1)
+            if model_day[(day, key)] >= 3:
+                push("triplets", end, 1)
+        else:
+            same_run = 0
+        prev_key = key
+        if ok and not tpu_done and any(_family(u.filament_type) == "TPU" and (u.grams_used or 0) > 0 for u in us):
+            tpu_done = True
+            push("rubber", end, 1)
         loc_end = _local(end)
         if loc_end.year > loc.year:
             push("new_year", end, 1)
@@ -445,6 +612,9 @@ def compute_series(d: dict, now: datetime) -> dict:
             first_ok = first_ok or end
             if n_ok == 1001:
                 push("n1001", end, 1)
+            for n_, key_ in ((100, "hundred"), (777, "jackpot"), (1337, "leet")):
+                if n_ok == n_:
+                    push(key_, end, 1)
             if ko_run >= 5:
                 push("phoenix", end, 1)
             ko_run = 0
@@ -541,6 +711,15 @@ def compute_series(d: dict, now: datetime) -> dict:
         push("sold", dt, i)
         push("revenue", dt, round(tot, 2))
         push("margin", dt, round(marg, 2))
+    per_sale_day = defaultdict(int)
+    for dt, _pr, _mg in sold:
+        per_sale_day[_local(dt).date()] += 1
+        if per_sale_day[_local(dt).date()] >= 5:
+            push("market_day", dt, 1)
+    for o in d["objs"]:
+        dt = _ts(o.updated_at)
+        if o.status == "gifted" and dt and _local(dt).month == 12:
+            push("santa", dt, 1)
     for st_, key in (("gifted", "gifted"), ("personal", "personal")):
         for i, dt in enumerate(sorted((_ts(o.updated_at) or now) for o in d["objs"] if o.status == st_), 1):
             push(key, dt, i)
@@ -549,6 +728,78 @@ def compute_series(d: dict, now: datetime) -> dict:
         acc += q
         push("accessories", dt, acc)
     return S
+
+
+def _fun(push, p, start, end, dur, loc, ok, ko, w, cols, us, key, st) -> None:
+    """Les secrets loufoques d'une impression : poids, durees, heures, dates,
+    couleurs, matieres, nom, cout."""
+    est = p.estimated_seconds or 0
+    mins = int(round(dur / 60))
+    # poids
+    if ok and 41.5 <= w <= 42.5:
+        push("answer42", end, 1)
+    if 665.5 <= w <= 666.5:
+        push("beast", end, 1)
+    if ok and 998 <= w <= 1002:
+        push("kilo", end, 1)
+    if ok and 3.10 <= w <= 3.18:
+        push("pi_grams", end, 1)
+    # durees
+    if ok and mins >= 101 and str(mins) == str(mins)[::-1]:
+        push("palindrome", end, 1)
+    if abs(dur - 86400) <= 60:
+        push("full_day", end, 1)
+    if ok and dur >= 42.195 * 3600:
+        push("marathon42", end, 1)
+    if ok and est >= 3600 and dur and abs(dur - est) <= 60:
+        push("bullseye", end, 1)
+    if ok and est >= 1800 and dur >= 2 * est:
+        push("tortoise", end, 1)
+    if ok and est >= 3600 and 0 < dur <= 0.8 * est:
+        push("hare", end, 1)
+    if ok and (p.number_of_items or 0) >= 100:
+        push("hundred_pieces", end, 1)
+    # heures de lancement
+    hm = (loc.hour, loc.minute)
+    if hm == (12, 0):
+        push("noon", start, 1)
+    if hm == (12, 34):
+        push("sequence", start, 1)
+    if loc.hour == loc.minute and loc.hour > 0:
+        push("mirror", start, 1)
+    if loc.weekday() == 6 and 6 <= loc.hour < 8:
+        push("sunday_morning", start, 1)
+    if (loc.hour >= 20 or loc.hour < 5) and _full_moon(start):
+        push("full_moon", start, 1)
+    # dates
+    md = (loc.month, loc.day)
+    if md == (4, 1) and ko:
+        push("april_fool", end, 1)
+    if md == (6, 21):
+        push("music", start, 1)
+        if dur >= 12 * 3600:
+            push("summer_solstice", end, 1)
+    if md == (12, 21) and dur >= 12 * 3600:
+        push("winter_solstice", end, 1)
+    if loc.date() == _easter(loc.year):
+        push("easter", start, 1)
+    # couleurs
+    hues = {_hue(c) for c in cols}
+    if ok and hues == {"noir", "blanc"}:
+        push("panda", end, 1)
+    if ok and hues == {"bleu", "blanc", "rouge"}:
+        push("tricolore", end, 1)
+    # matieres, nom, cout
+    if ok and any("CF" in (u.filament_type or "").upper().replace("-", " ").split() or
+                  "-CF" in (u.filament_type or "").upper() for u in us if (u.grams_used or 0) > 0):
+        push("carbon", end, 1)
+    if len((p.translated_name or p.file_name or "").strip()) > 80:
+        push("novel", end, 1)
+    cost = p.total_cost or 0
+    if ok and 0 < cost < 0.10:
+        push("penny", end, 1)
+    if cost > 50:
+        push("luxury", end, 1)
 
 
 async def _live_values() -> dict:

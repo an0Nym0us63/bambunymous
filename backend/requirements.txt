@@ -19,6 +19,9 @@ qrcode==7.4.2
 pycurl==7.45.3
 # Partage Telegram en son nom (API utilisateur officielle, MTProto).
 telethon==1.36.0
+# Fuseaux horaires (zoneinfo) partout, meme sans paquet systeme : heures
+# locales des succes (minuit pile, pleine lune, 1er avril...).
+tzdata==2024.2
 
 aiohttp>=3.9.0
 aiofiles>=23.0.0
