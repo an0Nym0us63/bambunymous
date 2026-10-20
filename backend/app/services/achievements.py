@@ -137,7 +137,8 @@ CATALOG = [
     _a("mw_fans", "mw", "👥", "Influenceur", "{n} abonnés", [10, 100, 500, 1000, 5000]),
     _a("mw_likes", "mw", "❤️", "Apprécié", "{n} « j'aime » sur tes modèles", [100, 500, 2000, 5000, 10000]),
     _a("mw_level", "mw", "⭐", "Niveau", "Niveau {n} sur MakerWorld", [5, 10, 20, 30, 40]),
-    _a("mw_collections", "mw", "📚", "Curateur", "{n} collections MakerWorld", [1, 5, 10, 25, 50]),
+    _a("mw_collections", "mw", "📚", "Collectionné", "Tes modèles ajoutés {n} fois à des collections", [1, 5, 10, 25, 50]),
+    _a("mw_my_collections", "mw", "🗂️", "Curateur", "{n} collections MakerWorld à toi", [1]),
     _a("mw_follows", "mw", "👀", "Curieux", "Tu suis {n} créateurs", [5, 25, 50, 100, 250]),
     # Copains
     _a("friends", "social", "🤝", "Bande de copains", "{n} copains reliés", [1, 3, 5, 10, 20]),
@@ -860,6 +861,7 @@ HINTS = {
 
 
 LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_likes", "mw_level", "mw_collections",
+        "mw_my_collections",
         "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils",
         "photos_manual", "photo_prints", "photos_camera", "photos_max", "covers", "visits", "visit_days", "details",
         "actions", "updates", "notifs", "dismissals", "print_groups", "paparazzi", "souvenirs",
@@ -919,15 +921,15 @@ TIER_TABLE = {
     "accessories": [10, 50, 100, 175, 250, 350, 450, 600, 750],
     "groups": [1, 2, 4, 6, 10, 15, 20, 30, 40],
     "margin": [5, 10, 25, 40, 60, 85, 120, 175, 250],
-    "mw_designs": [1, 5, 10, 25, 50, 100],
-    "mw_downloads": [500, 2500, 10000, 25000, 50000, 100000],
-    "mw_prints": [250, 1000, 5000, 10000, 25000, 50000],
-    "mw_boosts": [25, 100, 250, 500, 1000, 2500],
-    "mw_fans": [25, 100, 500, 1000, 5000, 10000],
-    "mw_likes": [250, 1000, 2500, 5000, 10000, 25000],
-    "mw_level": [5, 10, 20, 30, 40, 50],
-    "mw_collections": [1, 5, 10, 25, 50, 100],
-    "mw_follows": [5, 25, 50, 100, 250, 500],
+    "mw_designs": [1, 3, 5, 8, 12, 18, 25, 35, 50],
+    "mw_downloads": [50, 200, 500, 1000, 1750, 2750, 4000, 5500, 7500],
+    "mw_prints": [25, 100, 250, 500, 1000, 1750, 2500, 3500, 5000],
+    "mw_boosts": [5, 15, 30, 60, 100, 150, 210, 300, 400],
+    "mw_fans": [5, 20, 40, 75, 120, 175, 250, 350, 500],
+    "mw_likes": [25, 100, 250, 500, 750, 1100, 1600, 2200, 3000],
+    "mw_level": [3, 6, 9, 12, 15, 18, 21, 25, 30],
+    "mw_collections": [50, 200, 500, 1000, 1750, 2750, 4000, 5500, 7500],
+    "mw_follows": [1, 3, 5, 8, 12, 18, 25, 35, 50],
     "friends": [1, 3, 5, 10, 20, 30],
     "photos_manual": [10, 50, 100, 250, 500, 1000],
     "photo_prints": [10, 25, 50, 100, 250, 500],
@@ -973,14 +975,14 @@ TIER_TABLE = {
     "kg_month": [0.5, 1, 2, 3, 4, 5, 6, 8, 10],
     "kg_day": [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.25, 1.5, 2],
     "engineering": [0.1, 0.25, 0.5, 1, 2, 3, 4.5, 7, 10],
-    "mw_designs_printed": [10, 50, 100, 250, 500, 1000],
-    "creators": [5, 25, 50, 100, 250, 500],
-    "mw_categories": [3, 5, 10, 15, 20, 30],
-    "trending": [5, 25, 50, 100, 250, 500],
-    "gems": [5, 25, 50, 100, 250, 500],
-    "mw_points_bal": [100, 500, 1000, 2500, 5000, 10000],
-    "profile_downloads": [100, 1000, 5000, 10000, 25000, 50000],
-    "queue_size": [5, 10, 25, 50, 100, 200],
+    "mw_designs_printed": [10, 40, 80, 130, 200, 280, 380, 480, 600],
+    "creators": [5, 20, 40, 70, 100, 140, 190, 260, 350],
+    "mw_categories": [2, 5, 10, 15, 20, 25, 32, 40, 50],
+    "trending": [1, 3, 6, 10, 15, 20, 30, 45, 60],
+    "gems": [1, 3, 5, 8, 12, 17, 23, 35, 50],
+    "mw_points_bal": [10, 25, 50, 100, 175, 275, 400, 600, 1000],
+    "profile_downloads": [50, 200, 500, 1000, 1750, 2750, 4000, 5500, 7500],
+    "queue_size": [2, 5, 10, 15, 20, 30, 40, 55, 75],
     "spools_total": [10, 25, 50, 80, 110, 150, 190, 240, 300],
     "spool_kg": [5, 15, 30, 50, 75, 100, 140, 190, 250],
     "spool_spent": [50, 150, 300, 500, 750, 1000, 1400, 1900, 2500],
@@ -995,18 +997,20 @@ TIER_TABLE = {
     "notes": [1, 5, 10, 20, 30, 40, 55, 75, 100],
     "household": [2, 3, 4, 5, 8, 10],
     "shares": [1, 10, 25, 50, 100, 250],
-    "mw_rates": [1, 10, 25, 50, 100, 250],
-    "mw_boosts_given": [1, 10, 25, 50, 100, 250],
-    "mw_likes_given": [5, 25, 50, 100, 250, 500],
-    "mw_collected": [5, 25, 50, 100, 250, 500],
+    "mw_rates": [1, 10, 25, 50, 75, 100, 150, 200, 300],
+    "mw_boosts_given": [1, 2, 4, 7, 10, 15, 20, 30, 50],
+    "mw_likes_given": [1, 5, 10, 20, 35, 50, 75, 100, 150],
+    "mw_collected": [1, 5, 10, 20, 35, 50, 75, 100, 150],
     # Filaments : revus le 21/10/2026
     "mat_pla": [1, 5, 10, 20, 30, 45, 65, 90, 120],
     "mat_petg": [0.5, 1, 2, 4, 6, 9, 13, 20, 30],
+    # MakerWorld : revus le 21/10/2026
+    "mw_my_collections": [1, 3, 5, 8, 12, 16, 20, 30, 40],
 }
 # Au-dela de la Legende (Mythique, Cosmique, Eternel) : x2, x5, x10 du dernier
 # seuil, arrondis. Sauf la ou il y a un plafond naturel (pourcentage, 24 h par
 # jour, familles de teintes, matieres, imprimantes, niveau MakerWorld…).
-BOUNDED = {"day_hours", "colors_max", "stock_colors", "materials", "ams_units", "mw_level"}
+BOUNDED = {"day_hours", "colors_max", "stock_colors", "materials", "ams_units", "mw_level"}   # mw_level : 30 au plus
 
 
 def _nice(x: float) -> float:
@@ -2402,6 +2406,12 @@ async def _live_values() -> dict:
                         "profile_downloads": p.get("profile_downloads") or 0})
     except Exception as e:
         logger.info(f"[SUCCES] profil MakerWorld illisible : {e}")
+    try:
+        from .makerworld_account import collections, token
+        if await token():
+            out["mw_my_collections"] = len((await collections())["collections"])
+    except Exception as e:      # MakerWorld injoignable : on garde ce qui est acquis
+        logger.info(f"[SUCCES] collections MakerWorld illisibles : {e}")
     try:
         from .friends import list_friends
         out["friends"] = len(await list_friends())
