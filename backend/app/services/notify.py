@@ -39,6 +39,15 @@ SECTION_COLORS = {"prints": "#3B82F6", "printer": "#EF4444", "dry": "#06B6D4", "
                   "mw": "#22C55E", "friends": "#8B5CF6", "system": "#64748B"}
 
 
+# Petite icone (barre d'etat) et teinte de la marque dans l'appli Android :
+# une silhouette blanche servie par BambuNymous (chemin relatif, l'appli le
+# complete avec sa propre adresse). Une section peut avoir la sienne ici
+# (fichier dans frontend/public), sans nouvel APK.
+NOTIF_ICON = "/notif-icon.png"
+SECTION_ICONS: dict = {}
+BRAND_COLOR = "#4F46E5"
+
+
 def _section_parts(section: str):
     """« 🖨️ Impressions » -> ("🖨️", "Impressions")."""
     label = dict(SECTIONS).get(section or "", "")
@@ -886,6 +895,7 @@ def _up_payload(title, message, click, priority, section, attach) -> bytes:
     d = {"t": (title or "")[:200], "m": message or "", "u": click or "", "p": int(priority or 3), "s": section or ""}
     if section:
         d.update(sl=name, e=emo, c=SECTION_COLORS.get(section, ""))
+    d.update(si=SECTION_ICONS.get(section or "", NOTIF_ICON), ac=BRAND_COLOR)
     if attach and str(attach).startswith("https://"):
         d["i"] = attach
     raw = json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
