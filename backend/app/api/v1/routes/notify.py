@@ -32,7 +32,8 @@ async def notify_set_ntfy(body: dict = Body({}), _: str = Depends(require_admin)
     # "token" absent = inchange ; "" = retire
     return await _call(N.set_ntfy(body.get("url", ""), body.get("topic", ""),
                                   body["token"] if "token" in body else None,
-                                  body["app_url"] if "app_url" in body else None))
+                                  body["app_url"] if "app_url" in body else None,
+                                  body.get("topics")))
 
 
 @router.put("/channel")
@@ -43,13 +44,19 @@ async def notify_set_channel(body: dict = Body({}), _: str = Depends(require_adm
 @router.put("/tgbot")
 async def notify_set_tgbot(body: dict = Body({}), _: str = Depends(require_admin)):
     # "token" absent = inchange ; "" = retire
-    return await _call(N.set_tgbot(body.get("token"), body.get("chat_id")))
+    return await _call(N.set_tgbot(body.get("token"), body.get("chat_id"), body.get("chats")))
 
 
 @router.post("/tgbot/detect")
 async def notify_detect_tgbot(_: str = Depends(require_admin)):
     """Discussion du bot : la derniere personne (ou groupe) qui lui a ecrit."""
     return await _call(N.detect_tgbot_chat())
+
+
+@router.put("/sections/{section}")
+async def notify_set_route(section: str, body: dict = Body({}), _: str = Depends(require_admin)):
+    """Sujet ntfy et discussion Telegram d'une section ("" = ceux par defaut)."""
+    return await _call(N.set_route(section, body.get("ntfy"), body.get("telegram")))
 
 
 @router.put("/events/{event}")
@@ -59,4 +66,4 @@ async def notify_set_event(event: str, body: dict = Body({}), _: str = Depends(r
 
 @router.post("/test")
 async def notify_test(body: dict = Body({}), _: str = Depends(require_admin)):
-    return await _call(N.test(str(body.get("event") or "")))
+    return await _call(N.test(str(body.get("event") or ""), str(body.get("topic") or ""), str(body.get("chat") or "")))

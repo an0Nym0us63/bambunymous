@@ -108,7 +108,7 @@ async def _send(cfg, event: str, title: str, message: str, link=None, priority=3
     acts = ([("Ouvrir BambuNymous", url)] if url else []) + list(actions or [])
     try:
         await N.send(title, message, click=click or url, priority=priority, file=file, filename=filename,
-                     attach=attach, actions=acts)
+                     attach=attach, actions=acts, event=event)
         logger.info(f"[NOTIF] {event} envoyee : {title}")
     except Exception as e:
         logger.warning(f"[NOTIF] {event} : {e}")

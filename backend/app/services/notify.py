@@ -243,10 +243,27 @@ async def _load() -> dict:
     cfg.setdefault("ntfy", {})
     cfg.setdefault("tgbot", {})
     cfg.setdefault("events", {})
+    cfg.setdefault("routes", {})
     if cfg.get("channel") not in CHANNELS:
         cfg["channel"] = "ntfy"
+    _normalize(cfg)
     _CACHE = cfg
     return cfg
+
+
+def _normalize(cfg: dict) -> None:
+    """Plusieurs sujets ntfy et plusieurs discussions Telegram (20/10/2026).
+    L'ancien sujet unique et l'ancienne discussion unique deviennent le premier
+    element de leur liste, celui par defaut ; « topic » et « chat_id » restent
+    tenus egaux a ce premier element."""
+    n, b = cfg["ntfy"], cfg["tgbot"]
+    if not isinstance(n.get("topics"), list):
+        n["topics"] = [{"topic": n["topic"], "label": "", "icon": ""}] if n.get("topic") else []
+    n["topic"] = n["topics"][0]["topic"] if n["topics"] else ""
+    if not isinstance(b.get("chats"), list):
+        b["chats"] = [{"chat_id": b["chat_id"], "label": b.get("chat_label") or ""}] if b.get("chat_id") else []
+    b["chat_id"] = b["chats"][0]["chat_id"] if b["chats"] else ""
+    b["chat_label"] = b["chats"][0]["label"] if b["chats"] else ""
 
 
 async def _save(cfg: dict) -> None:
@@ -291,11 +308,14 @@ def _public(cfg: dict) -> dict:
     return {
         "channel": cfg.get("channel") or "ntfy",
         "ntfy": {"url": n.get("url") or "https://ntfy.sh", "topic": n.get("topic") or "",
+                 "topics": n.get("topics") or [],
                  "app_url": n.get("app_url") or "", "has_token": bool(n.get("token"))},
         # Jamais le jeton du bot : seulement s'il est pose, et le nom du bot.
         "tgbot": {"has_token": bool(b.get("token")), "bot": b.get("bot") or "", "chat_id": b.get("chat_id") or "",
-                  "chat_label": b.get("chat_label") or ""},
-        "sections": [{"id": k, "label": v} for k, v in SECTIONS],
+                  "chat_label": b.get("chat_label") or "", "chats": b.get("chats") or []},
+        # Destination de chaque section ("" = celle par defaut)
+        "sections": [{"id": k, "label": v, "route": {"ntfy": _route(cfg, k, "ntfy"), "telegram": _route(cfg, k, "telegram")}}
+                     for k, v in SECTIONS],
         "events": [{"id": k, "section": v["section"], "label": v["label"], "description": v["description"],
                     "enabled": enabled_in(cfg, k),
                     "creators": ((cfg["events"].get(k) or {}).get("creators") or []),
@@ -315,15 +335,38 @@ def _clean_url(u: str, what: str) -> str:
     return u
 
 
-async def set_ntfy(url: str, topic: str, token=None, app_url=None) -> dict:
-    """token None = inchange ; "" = retire. app_url None = inchange."""
-    url = _clean_url(url, "Adresse du serveur ntfy") or "https://ntfy.sh"
+def _check_topic(topic: str) -> str:
     topic = (topic or "").strip()
     if topic and (len(topic) > 64 or not all(c.isalnum() or c in "-_" for c in topic)):
-        raise NotifyError("Sujet ntfy : lettres, chiffres, - et _ seulement (64 max)")
+        raise NotifyError(f"Sujet ntfy « {topic[:20]} » : lettres, chiffres, - et _ seulement (64 max)")
+    return topic
+
+
+async def set_ntfy(url: str, topic: str, token=None, app_url=None, topics=None) -> dict:
+    """token None = inchange ; "" = retire. app_url None = inchange. topics :
+    la liste complete [{topic, label, icon}] (le premier est celui par defaut) ;
+    sans elle, `topic` remplace seulement le sujet par defaut."""
+    url = _clean_url(url, "Adresse du serveur ntfy") or "https://ntfy.sh"
     cfg = await _load()
     n = cfg["ntfy"]
-    n.update({"url": url, "topic": topic})
+    if isinstance(topics, list):
+        seen, out = set(), []
+        for t in topics[:20]:
+            if not isinstance(t, dict):
+                continue
+            tp = _check_topic(t.get("topic"))
+            if not tp or tp in seen:
+                continue
+            seen.add(tp)
+            out.append({"topic": tp, "label": str(t.get("label") or "").strip()[:40],
+                        "icon": _clean_url(str(t.get("icon") or ""), "Icône du sujet")})
+        n["topics"] = out
+    else:
+        tp = _check_topic(topic)
+        rest = [t for t in n.get("topics") or [] if t["topic"] != tp][1:] if n.get("topics") else []
+        n["topics"] = ([{"topic": tp, "label": "", "icon": ""}] if tp else []) + rest
+    n["url"] = url
+    _normalize(cfg)
     if token is not None:
         n["token"] = str(token).strip()[:200]
     if app_url is not None:
@@ -478,8 +521,16 @@ def _post_tgbot(b: dict, title: str, message: str, click=None, attach=None, acti
     return _tg(b["token"], "sendMessage", {**base, "text": text[:4096], "disable_web_page_preview": "true"})
 
 
-async def set_tgbot(token=None, chat_id=None) -> dict:
-    """token None = inchange ; "" = retire (et oublie la discussion)."""
+def _check_chat(c) -> str:
+    c = str(c or "").strip()
+    if c and not (c.lstrip("-").isdigit() or (c.startswith("@") and len(c) < 40)):
+        raise NotifyError(f"Discussion « {c[:20]} » invalide (identifiant numérique ou @canal)")
+    return c
+
+
+async def set_tgbot(token=None, chat_id=None, chats=None) -> dict:
+    """token None = inchange ; "" = retire (et oublie les discussions).
+    chats : la liste complete [{chat_id, label}] (la premiere par defaut)."""
     import asyncio
     cfg = await _load()
     b = cfg["tgbot"]
@@ -493,34 +544,75 @@ async def set_tgbot(token=None, chat_id=None) -> dict:
             raise NotifyError("Jeton de bot invalide (forme 123456:ABC…, donné par @BotFather)")
         me = await asyncio.to_thread(_tg, token, "getMe")
         b.update({"token": token, "bot": me.get("username") or ""})
-    if chat_id is not None:
-        c = str(chat_id).strip()
-        if c and not (c.lstrip("-").isdigit() or (c.startswith("@") and len(c) < 40)):
-            raise NotifyError("Discussion invalide (identifiant numérique ou @canal)")
-        b["chat_id"], b["chat_label"] = c, ""
+    if isinstance(chats, list):
+        seen, out = set(), []
+        for c in chats[:20]:
+            if not isinstance(c, dict):
+                continue
+            cid = _check_chat(c.get("chat_id"))
+            if not cid or cid in seen:
+                continue
+            seen.add(cid)
+            out.append({"chat_id": cid, "label": str(c.get("label") or "").strip()[:60]})
+        b["chats"] = out
+    elif chat_id is not None:
+        cid = _check_chat(chat_id)
+        rest = [c for c in b.get("chats") or [] if c["chat_id"] != cid][1:] if b.get("chats") else []
+        b["chats"] = ([{"chat_id": cid, "label": ""}] if cid else []) + rest
+    _normalize(cfg)
     await _save(cfg)
     return _public(cfg)
 
 
 async def detect_tgbot_chat() -> dict:
-    """Trouve la discussion : la derniere qui a ecrit au bot (« /start »)."""
+    """Trouve les discussions qui ont ecrit au bot (« /start » en prive, un
+    message dans un groupe ou il a ete ajoute) et ajoute les nouvelles."""
     import asyncio
     cfg = await _load()
     b = cfg["tgbot"]
     if not b.get("token"):
         raise NotifyError("Pose d'abord le jeton du bot")
     ups = await asyncio.to_thread(_tg, b["token"], "getUpdates", {"limit": "50", "timeout": "0"})
-    chat = None
+    found = {}
     for u in reversed(ups or []):
         m = u.get("message") or u.get("channel_post") or u.get("my_chat_member") or {}
-        if (m.get("chat") or {}).get("id"):
-            chat = m["chat"]
-            break
-    if not chat:
-        raise NotifyError(f"Aucun message reçu : écris « /start » à @{b.get('bot') or 'ton bot'} dans Telegram, puis réessaie")
-    b["chat_id"] = str(chat["id"])
-    b["chat_label"] = chat.get("title") or " ".join(filter(None, [chat.get("first_name"), chat.get("last_name")])) \
-        or (f"@{chat['username']}" if chat.get("username") else "")
+        chat = m.get("chat") or {}
+        if chat.get("id") and str(chat["id"]) not in found:
+            found[str(chat["id"])] = chat.get("title") or " ".join(
+                filter(None, [chat.get("first_name"), chat.get("last_name")])) \
+                or (f"@{chat['username']}" if chat.get("username") else "")
+    if not found:
+        raise NotifyError(f"Aucun message reçu : écris « /start » à @{b.get('bot') or 'ton bot'} dans Telegram "
+                          "(ou un message dans le groupe où tu l'as ajouté), puis réessaie")
+    have = {c["chat_id"]: c for c in b.get("chats") or []}
+    for cid, label in found.items():
+        if cid in have:
+            have[cid]["label"] = have[cid]["label"] or label
+        else:
+            b.setdefault("chats", []).append({"chat_id": cid, "label": label})
+    _normalize(cfg)
+    await _save(cfg)
+    return _public(cfg) | {"found": len(found)}
+
+
+def _route(cfg: dict, section: str, kind: str) -> str:
+    """Sujet ntfy / discussion choisi pour une section ; "" = celui par defaut
+    (aussi quand le choix ne figure plus dans la liste)."""
+    v = ((cfg.get("routes") or {}).get(section) or {}).get(kind) or ""
+    if kind == "ntfy":
+        return v if any(t["topic"] == v for t in cfg["ntfy"].get("topics") or []) else ""
+    return v if any(c["chat_id"] == v for c in cfg["tgbot"].get("chats") or []) else ""
+
+
+async def set_route(section: str, ntfy=None, telegram=None) -> dict:
+    if section not in dict(SECTIONS):
+        raise NotifyError("Section inconnue")
+    cfg = await _load()
+    r = cfg["routes"].setdefault(section, {})
+    if ntfy is not None:
+        r["ntfy"] = str(ntfy)
+    if telegram is not None:
+        r["telegram"] = str(telegram)
     await _save(cfg)
     return _public(cfg)
 
@@ -535,25 +627,33 @@ async def set_channel(channel: str) -> dict:
 
 
 async def send(title: str, message: str = "", click=None, attach=None, tags=None, priority=None,
-               actions=None, file=None, filename=None, icon=None) -> None:
+               actions=None, file=None, filename=None, icon=None, event=None, topic=None, chat=None) -> None:
     """icon : petite image de la notification (Android ; iOS l'ignore). Par
     defaut le logo BambuNymous, servi par l'appli si son adresse est connue.
     Part sur le canal choisi (ntfy, bot Telegram ou les deux) ; avec les deux,
-    un canal en panne n'empeche pas l'autre."""
+    un canal en panne n'empeche pas l'autre. event : type d'ou vient l'envoi,
+    pour le sujet ntfy et la discussion de sa section ; topic / chat : une
+    destination imposee (essai d'un sujet ou d'une discussion)."""
     import asyncio
     cfg = await _load()
-    icon = icon or app_link(cfg, "/icon-192.png")
+    sec = EVENTS[event]["section"] if event in EVENTS else None
+    topic = topic or (_route(cfg, sec, "ntfy") if sec else "") or cfg["ntfy"].get("topic")
+    chat = chat or (_route(cfg, sec, "telegram") if sec else "") or cfg["tgbot"].get("chat_id")
+    # icone du sujet si elle est posee, sinon celle passee, sinon le logo
+    t_icon = next((t.get("icon") for t in cfg["ntfy"].get("topics") or [] if t["topic"] == topic), "")
+    icon = t_icon or icon or app_link(cfg, "/icon-192.png")
     ch = cfg.get("channel") or "ntfy"
     errors = []
     if ch in ("ntfy", "both"):
         try:
-            await asyncio.to_thread(_post_ntfy, cfg["ntfy"], title, message, click, attach, tags, priority,
-                                    actions, file, filename, icon)
+            await asyncio.to_thread(_post_ntfy, {**cfg["ntfy"], "topic": topic}, title, message, click, attach, tags,
+                                    priority, actions, file, filename, icon)
         except NotifyError as e:
             errors.append(f"ntfy : {e}" if ch == "both" else str(e))
     if ch in ("telegram", "both"):
         try:
-            await asyncio.to_thread(_post_tgbot, cfg["tgbot"], title, message, click, attach, actions, file, filename)
+            await asyncio.to_thread(_post_tgbot, {**cfg["tgbot"], "chat_id": chat}, title, message, click, attach,
+                                    actions, file, filename)
         except NotifyError as e:
             errors.append(str(e))
     if errors and (ch != "both" or len(errors) == 2):
@@ -562,21 +662,35 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
         logger.warning(f"[NOTIF] {e}")
 
 
+async def _send_only(cfg, message: str, topic: str, chat: str) -> None:
+    """Essai d'UNE destination, quel que soit le canal choisi."""
+    import asyncio
+    t_icon = next((t.get("icon") for t in cfg["ntfy"].get("topics") or [] if t["topic"] == topic), "")
+    if topic:
+        await asyncio.to_thread(_post_ntfy, {**cfg["ntfy"], "topic": topic}, "BambuNymous", message, app_link(cfg, "/"),
+                                None, ["white_check_mark"], None, None, None, None,
+                                t_icon or app_link(cfg, "/icon-192.png"))
+    else:
+        await asyncio.to_thread(_post_tgbot, {**cfg["tgbot"], "chat_id": chat}, "BambuNymous", message,
+                                app_link(cfg, "/"))
+
+
 async def notify(event: str, title: str, message: str = "", **kw) -> bool:
     """Envoie si ce type est active. Ne leve jamais (un echec se journalise)."""
     try:
         st = await event_settings(event)
         if not st.get("enabled"):
             return False
-        await send(title, message, **kw)
+        await send(title, message, event=event, **kw)
         return True
     except Exception as e:
         logger.warning(f"[NOTIF] {event} : {e}")
         return False
 
 
-async def test(event: str = "") -> dict:
-    """« Envoyer test » : du canal (sans event) ou d'un type, meme desactive."""
+async def test(event: str = "", topic: str = "", chat: str = "") -> dict:
+    """« Envoyer test » : du canal (sans event) ou d'un type, meme desactive ;
+    topic / chat : essai d'un sujet ntfy ou d'une discussion precis."""
     if event and event not in EVENTS:
         raise NotifyError("Type de notification inconnu")
     cfg = await _load()
@@ -587,9 +701,18 @@ async def test(event: str = "") -> dict:
         if s.get("link") is not None and app_link(cfg, s["link"]):
             actions.insert(0, ("Ouvrir BambuNymous", app_link(cfg, s["link"])))
         await send("[Test] " + s["title"], s["message"], click=click, attach=s.get("attach"),
-                   priority=s.get("priority"), actions=actions)
+                   priority=s.get("priority"), actions=actions, event=event)
     else:
         ch = {"ntfy": "ntfy", "telegram": "le bot Telegram", "both": "ntfy et le bot Telegram"}[cfg.get("channel") or "ntfy"]
+        if topic or chat:
+            cfg = {**cfg, "channel": "ntfy" if topic else "telegram"}
+            name = next((t.get("label") or t["topic"] for t in cfg["ntfy"].get("topics") or [] if t["topic"] == topic), "") \
+                if topic else next((c.get("label") or c["chat_id"] for c in cfg["tgbot"].get("chats") or []
+                                    if c["chat_id"] == chat), "")
+            if not name:
+                raise NotifyError("Sujet ou discussion inconnu : enregistre-le d'abord")
+            await _send_only(cfg, f"Test de notification : « {name} » fonctionne.", topic, chat)
+            return {"ok": True}
         await send("BambuNymous", f"Test de notification : {ch} fonctionne.", tags=["white_check_mark"],
                    click=app_link(cfg, "/"))
     return {"ok": True}
