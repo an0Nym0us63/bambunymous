@@ -137,6 +137,13 @@ async def proxy(fid: str, path: str, params: dict, headers=None):
     if ".." in p or p.startswith(("friends", "auth/login")) or (p.startswith("users") and p != "users/activity/ping"):
         raise FriendError("Chemin non relayé")
     extra = {k: v for k, v in (headers or {}).items() if k.lower() in TRACK_HEADERS}
+    if p == "achievements":
+        # mes medailles uniques : chez lui, je lirai le descriptif de celles-la
+        try:
+            from .achievements import my_uniques
+            extra["X-BN-Achievements"] = ",".join(await my_uniques())
+        except Exception:
+            pass
     r = await asyncio.to_thread(_get, f["url"], f["key"], p, params, 60, extra)
     if p == "auth/me" and r.status_code < 400:
         try:

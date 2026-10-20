@@ -23,6 +23,10 @@ class User(Base):
     # le compte MakerWorld de la maison, quel que soit le role. Toujours vrai
     # pour un administrateur ; jamais pour une invitation de copain.
     mw_write      = Column(Boolean, default=False, server_default=text("0"), nullable=False)
+    # Voit ce qui a valu mes medailles uniques (succes secrets) : sinon, la
+    # medaille, son titre et sa date seulement. Toujours vrai pour un
+    # administrateur.
+    secrets_visible = Column(Boolean, default=False, server_default=text("0"), nullable=False)
     last_seen     = Column(DateTime, nullable=True)   # derniere activite
     # Tout jeton emis AVANT cette date est refuse. Un JWT est sans etat : sans
     # ce garde-fou, changer un mot de passe ou retrograder un role n'a aucun

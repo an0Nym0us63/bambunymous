@@ -693,6 +693,26 @@ async def _notify(new: list, ev: dict) -> None:
                    click=N.app_link(cfg, f"/stats?tab=achievements&a={aid}"), priority=3)
 
 
+# ── Secrets : ce qu'un autre compte en voit ──────────────────────────────────
+def mask_secrets(v: dict, keep=()) -> dict:
+    """Medailles uniques gagnees : la medaille, le titre et la date restent ;
+    ce qui l'a valu et son histoire sont caches, sauf pour celles de `keep`
+    (que celui qui regarde a gagnees lui aussi)."""
+    items = []
+    for it in v["items"]:
+        if len(it["tiers"]) == 1 and it["level"] >= 0 and it["id"] not in keep:
+            it = {**it, "desc": "Descriptif caché", "lore": None, "masked": True}
+        items.append(it)
+    return {**v, "items": items}
+
+
+async def my_uniques() -> list:
+    """Mes medailles uniques gagnees (envoyees quand je regarde chez un copain)."""
+    st = await _state_get() or {}
+    return sorted(aid for aid, got in (st.get("unlocked") or {}).items()
+                  if got and aid in BY_ID and len(BY_ID[aid]["tiers"]) == 1)
+
+
 # ── Vue pour la page ─────────────────────────────────────────────────────────
 async def view(fresh: bool = False) -> dict:
     if not fresh and _CACHE["v"] and time.time() - _CACHE["t"] < 60:

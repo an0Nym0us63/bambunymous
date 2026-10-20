@@ -549,6 +549,16 @@ function UsersSection() {
                     Actions MakerWorld
                   </label>
                 )}
+                {/* Succes secrets (medailles uniques) : sans cette option, ce
+                    compte -- et la cle de copain qui en depend -- voit la
+                    medaille, son titre et sa date, pas ce qui l'a valu. */}
+                <label style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11.5, fontWeight:600,
+                  color:"var(--text)", cursor: busy ? "default" : "pointer" }}
+                  title="Ce qui a valu tes médailles uniques. Sans cette option : la médaille, son titre et sa date seulement (sauf celles qu'un copain a aussi gagnées).">
+                  <input type="checkbox" checked={!!u.secrets_visible} disabled={busy}
+                    onChange={e => act(() => client.patch(`/users/${u.id}`, { secrets_visible: e.target.checked }))}/>
+                  Voit mes succès secrets
+                </label>
                 {/* Telephone perdu sans code de secours : un admin retire la 2FA,
                     l'utilisateur la reactivera lui-meme. */}
                 {u.totp_enabled && (

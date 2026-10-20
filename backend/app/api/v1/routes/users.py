@@ -25,6 +25,7 @@ class UserOut(BaseModel):
     totp_enabled: bool = False   # double authentification active
     has_friend_key: bool = False  # invitation copain en cours
     mw_write: bool = False        # peut agir sur MakerWorld (j'aime, collections...)
+    secrets_visible: bool = False  # voit le descriptif de mes succes secrets
 
 
 class UserCreate(BaseModel):
@@ -38,6 +39,7 @@ class UserUpdate(BaseModel):
     active: Optional[bool] = None
     password: Optional[str] = None
     mw_write: Optional[bool] = None
+    secrets_visible: Optional[bool] = None
 
 
 def _out(u: User, protected: bool = False) -> UserOut:
@@ -45,6 +47,9 @@ def _out(u: User, protected: bool = False) -> UserOut:
                    protected=protected, totp_enabled=bool(getattr(u, "totp_enabled", False)),
                    has_friend_key=bool(getattr(u, "friend_key_hash", None)),
                    mw_write=bool(getattr(u, "mw_write", False)) or u.role == ROLE_ADMIN,
+                   # valeur reelle : un administrateur voit tout chez lui, mais
+                   # sa cle de copain suit l'option comme les autres
+                   secrets_visible=bool(getattr(u, "secrets_visible", False)),
                    last_seen=(str(u.last_seen) if getattr(u, "last_seen", None) else None))
 
 
@@ -247,6 +252,8 @@ async def update_user(
         u.active = body.active
     if body.mw_write is not None:
         u.mw_write = bool(body.mw_write)
+    if body.secrets_visible is not None:
+        u.secrets_visible = bool(body.secrets_visible)
     if body.password:
         if len(body.password) < 4:
             raise HTTPException(400, "Mot de passe trop court (4 caracteres minimum)")

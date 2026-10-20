@@ -152,8 +152,9 @@ function Card({ it, focus }) {
         <Medal tier={top} emoji={it.emoji} size={52} locked={!got}/>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:14, fontWeight:800, color: got ? "var(--text)" : "var(--text2)" }}>{it.name}</div>
-          <div style={{ fontSize:12, color:"var(--muted)", marginTop:2, lineHeight:1.35 }}>
-            {unique && got ? it.desc : done ? `✓ Tous les paliers atteints · ${it.desc}` : it.desc}</div>
+          <div style={{ fontSize:12, color:"var(--muted)", marginTop:2, lineHeight:1.35,
+            fontStyle: it.masked ? "italic" : "normal" }}>
+            {it.masked ? "🔒 Descriptif caché" : unique && got ? it.desc : done ? `✓ Tous les paliers atteints · ${it.desc}` : it.desc}</div>
           {unique && got && (
             <div style={{ fontSize:11, fontWeight:700, color:top.color, marginTop:3 }}>Gagné le {dateFr(top.at)}</div>
           )}
