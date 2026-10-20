@@ -2918,17 +2918,20 @@ export default function Prints() {
 
       {/* KPIs — données complètes depuis API (pas juste les éléments chargés) */}
       {kpis && viewMode==="list" && (
-        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+        // Une seule ligne : les pastilles se partagent la largeur, et les grands
+        // nombres s'arrondissent (3938 h plutot que 3938h 30min).
+        <div style={{ display:"flex", gap:6 }}>
           {[
             [`${kpis.count}`, "prints", "#3b82f6"],
-            kpis.duration > 0 ? [fmtDur(kpis.duration), null, "#8b5cf6"] : null,
-            kpis.weight_g > 0 ? [`${(kpis.weight_g/1000).toFixed(2)} kg`, null, "#f59e0b"] : null,
-            kpis.cost > 0 ? [`${moneyVal(kpis.cost, 2)} €`, null, "#22c55e"] : null,
+            kpis.duration > 0 ? [kpis.duration >= 100 * 3600 ? `${Math.round(kpis.duration / 3600)} h` : fmtDur(kpis.duration), null, "#8b5cf6"] : null,
+            kpis.weight_g > 0 ? [`${(kpis.weight_g/1000).toFixed(kpis.weight_g >= 10000 ? 1 : 2).replace(".", ",")} kg`, null, "#f59e0b"] : null,
+            kpis.cost > 0 ? [`${moneyVal(kpis.cost, kpis.cost >= 100 ? 0 : 2).replace(".", ",")} €`, null, "#22c55e"] : null,
           ].filter(Boolean).map(([val, label, color])=>(
-            <div key={val} style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 10px",
-              borderRadius:20, background:`${color}18`, border:`1px solid ${color}30` }}>
-              <span style={{ fontSize:12, fontWeight:700, color, fontFamily:"monospace" }}>{val}</span>
-              {label && <span style={{ fontSize:11, color:"var(--muted)" }}>{label}</span>}
+            <div key={val} style={{ flex:"1 1 auto", minWidth:0, display:"flex", alignItems:"center", justifyContent:"center",
+              gap:4, padding:"4px 8px", borderRadius:20, background:`${color}18`, border:`1px solid ${color}30`, whiteSpace:"nowrap" }}>
+              <span style={{ fontSize:"clamp(11px, 3.2vw, 12.5px)", fontWeight:700, color, fontVariantNumeric:"tabular-nums",
+                overflow:"hidden", textOverflow:"ellipsis" }}>{val}</span>
+              {label && <span style={{ fontSize:"clamp(10px, 2.9vw, 11px)", color:"var(--muted)" }}>{label}</span>}
             </div>
           ))}
         </div>
