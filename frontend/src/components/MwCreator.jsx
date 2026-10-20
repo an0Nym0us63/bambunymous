@@ -1,5 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import client from "../api/client";
+import { showAlert } from "../utils/dialog";
+import { useIsAdmin } from "../store/auth";
 import MwImg from "./MwImg";
 import { prefetchModel } from "./MakerWorldModelSheet";
 
@@ -21,6 +23,10 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   const [hist, setHist] = useState(null);        // { items, total }
   const [more, setMore] = useState(false);
   const [view, setView] = useState("models");    // models | points
+  const [imported, setImported] = useState(0);   // relit la page apres un import
+  const [importing, setImporting] = useState(false);
+  const fileRef = useRef(null);
+  const isAdmin = useIsAdmin();
 
   useEffect(() => {
     let alive = true;
@@ -30,7 +36,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
       .catch(e => { if (alive) setErr(e.response?.data?.detail || e.message); })
       .finally(() => onLoaded?.());
     return () => { alive = false; };
-  }, [reload, period]);
+  }, [reload, period, imported]);
   useEffect(() => {
     client.get("/makerworld/creator/points").then(({ data }) => setHist(data)).catch(() => {});
   }, [reload]);
@@ -47,6 +53,34 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
       .catch(() => {}).finally(() => setMore(false));
   };
 
+  // Import unique : la reponse de la page « Vue d'ensemble » du Centre des
+  // createurs (…/my/data-overview/model.json), enregistree par l'utilisateur.
+  // On n'en envoie que les compteurs jour par jour.
+  const importFile = async (file) => {
+    if (!file) return;
+    setImporting(true);
+    try {
+      const text = await file.text();
+      const a = text.indexOf("{"), b = text.lastIndexOf("}");
+      let j;
+      try { j = JSON.parse(text.slice(a, b + 1)); } catch { throw new Error("ce fichier n'est pas du JSON"); }
+      const pp = j.pageProps || j;
+      const list = (pp.statisticalData || j.statisticalData)?.dateList;
+      if (!Array.isArray(list)) throw new Error("pas de « dateList » : il faut la réponse de la page Vue d'ensemble");
+      const rows = list.map(r => ({ intervalVal: r.intervalVal, download: r.download, print: r.print, boost: r.boost, like: r.like }));
+      const { data: h } = await client.post("/makerworld/creator/history", {
+        rows, until: String(pp.maxDateStr || "").slice(0, 10) || null,
+        from_start: !!(pp.startDateStr && pp.minDateStr && pp.startDateStr <= pp.minDateStr) });
+      await showAlert(`Historique importé : ${h.days} jours, du ${dayFr(h.from)} au ${dayFr(h.to)}.`);
+      setImported(n => n + 1);
+    } catch (e) {
+      await showAlert("Import impossible : " + (e.response?.data?.detail || e.message));
+    } finally {
+      setImporting(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
   if (err) return <p style={msg}>MakerWorld ne répond pas comme prévu : {err}</p>;
   if (!data) return <p style={msg}>…</p>;
   const p = data.profile;
@@ -56,6 +90,18 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   // Compteurs (hors points) : releves journaliers pris par l'appli, depuis peu.
   const partial = type !== "points" && period !== "all" && data.counters_partial;
   const since = data.counters_since ? new Date(data.counters_since + "T12:00:00").toLocaleDateString("fr-FR", { day:"numeric", month:"short" }) : null;
+  const typeLabel = TYPES.find(t => t[0] === type)?.[1].toLowerCase();
+  const hist0 = data.history || {};
+  const importLink = isAdmin && (
+    <>
+      <input ref={fileRef} type="file" accept=".json,.txt,application/json,text/plain" style={{ display:"none" }}
+        onChange={e => importFile(e.target.files?.[0])}/>
+      {" "}<button onClick={() => fileRef.current?.click()} disabled={importing} title={IMPORT_HELP}
+        style={{ background:"none", border:"none", padding:0, cursor:"pointer", color:"#3b82f6", fontWeight:700,
+          fontSize:"inherit", textDecoration:"underline" }}>
+        {importing ? "Import…" : hist0.days ? "Réimporter l'historique" : "Importer l'historique (fichier)"}</button>
+    </>
+  );
 
   // historique groupe par jour de versement
   const days = [];
@@ -111,10 +157,23 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
         )}
 
       </div>
+      {view === "models" && type !== "points" && period !== "all" && data.account && (
+        <div style={{ fontSize:12, color:"var(--text2)", margin:"-4px 0 0", display:"flex", gap:10, flexWrap:"wrap" }}>
+          <span style={{ color:"var(--muted)" }}>Tout le compte, {PERIODS.find(x => x[0] === period)?.[1]} :</span>
+          {[["downloads", "⬇️"], ["prints", "🖨️"], ["boosts", "⚡"], ["likes", "❤"]].map(([k, ic]) => (
+            <span key={k} style={{ fontWeight: k === type ? 800 : 600, color: k === type ? "#22c55e" : "inherit" }}>
+              {ic} {data.account[k] > 0 ? "+" : ""}{fmt(data.account[k])}</span>
+          ))}
+        </div>
+      )}
       {view === "models" && partial && (
-        <p style={{ fontSize:11.5, color:"#f59e0b", margin:"-4px 0 0", lineHeight:1.45 }}>
-          L'appli note les compteurs de tes modèles chaque jour depuis le {since} : sur cette période, les
-          {" "}{TYPES.find(t => t[0] === type)?.[1].toLowerCase()} ne sont comptés que depuis cette date. Les points, eux, sont complets.
+        <p style={{ fontSize:11.5, color: data.account_complete ? "var(--muted)" : "#f59e0b", margin:"-4px 0 0", lineHeight:1.45 }}>
+          {data.account_complete
+            ? <>Totaux du compte complets grâce à l'historique importé ({dayFr(hist0.from)} → {dayFr(hist0.to)}).
+                Le classement par modèle, lui, ne compte les {typeLabel} que depuis le {since} : MakerWorld ne donne pas l'historique modèle par modèle.</>
+            : <>L'appli note les compteurs de tes modèles chaque jour depuis le {since} : sur cette période, les
+                {" "}{typeLabel} ne sont comptés que depuis cette date. Les points, eux, sont complets.</>}
+          {importLink}
         </p>
       )}
 
@@ -175,6 +234,9 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   );
 }
 
+const dayFr = d => d ? new Date(d + "T12:00:00").toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }) : "?";
+const IMPORT_HELP = "Sur makerworld.com, connecté : Centre des créateurs › Vue d'ensemble, plage depuis le début. "
+  + "Ouvre la requête « model.json?startDate=…&endDate=… » de cette page, enregistre la réponse, puis choisis le fichier ici.";
 const sel = { fontSize:12, padding:"4px 8px", borderRadius:8, background:"var(--surface2)",
   border:"1px solid var(--border)", color:"var(--text2)" };
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };

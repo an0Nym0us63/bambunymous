@@ -13,6 +13,7 @@ de recalculer des paliers dont la regle change.
 import asyncio
 import json
 import logging
+import re
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -210,6 +211,103 @@ def _baseline(daily: dict, days):
 PERIODS = {"7": 7, "30": 30, "90": 90, "365": 365, "all": None}
 
 
+# ── Historique importe (une fois) ─────────────────────────────────────────
+# La page « Centre des createurs › Vue d'ensemble » du site donne, pour tout le
+# compte, les compteurs JOUR PAR JOUR depuis l'ouverture (dateList), mais pas
+# modele par modele. L'adresse (_next/data/{build}/…) depend des cookies du
+# navigateur : l'utilisateur l'ouvre lui-meme, l'interface en extrait dateList
+# et nous l'envoie. On en tire les totaux du compte sur une periode, pour les
+# jours d'avant le premier releve quotidien de l'appli.
+K_HISTORY = "MW_CREATOR_HISTORY"
+HIST_KEYS = ("download", "print", "boost", "like")   # meme ordre que METRICS
+
+
+async def _history_get() -> dict:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, K_HISTORY, "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) and isinstance(d.get("days"), dict) else {"days": {}}
+
+
+def parse_date_list(rows, until: str = None) -> dict:
+    """dateList du site -> {AAAA-MM-JJ: [telechargements, impressions, boosts, j'aime]}.
+    `until` (AAAA-MM-JJ) : jour du releve, encore incomplet, ecarte avec la suite."""
+    out = {}
+    for r in rows if isinstance(rows, list) else []:
+        if not isinstance(r, dict):
+            continue
+        m = re.fullmatch(r"(\d{4})[/-](\d{2})[/-](\d{2})", str(r.get("intervalVal") or r.get("day") or ""))
+        if not m:
+            continue
+        day = "-".join(m.groups())
+        if until and day >= until:
+            continue
+        out[day] = [int(_num(r.get(k))) for k in HIST_KEYS]
+    return out
+
+
+async def import_history(rows, until: str = None, from_start: bool = False) -> dict:
+    """Ajoute les jours importes (un jour deja connu est remplace par le
+    nouvel import) ; rend le resume de ce qui est garde."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    if until and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(until)):
+        until = None
+    new = parse_date_list(rows, until)
+    if not new:
+        raise CreatorError("Aucun jour reconnu : il faut la réponse de la page « Vue d'ensemble » (statisticalData.dateList).")
+    h = await _history_get()
+    h["days"].update(new)
+    if from_start and min(new) <= min(h["days"]):
+        h["from_start"] = True
+    h["imported"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, K_HISTORY, json.dumps(h, separators=(",", ":")))
+    return history_summary(h) | {"added": len(new)}
+
+
+def history_summary(h: dict) -> dict:
+    days = sorted((h or {}).get("days") or {})
+    return {"from": days[0] if days else None, "to": days[-1] if days else None, "days": len(days),
+            "imported": (h or {}).get("imported")}
+
+
+def account_totals(hist: dict, daily: dict, ms: list, days) -> dict:
+    """Totaux du compte sur la periode : releves de l'appli depuis le premier
+    releve utile, et historique importe pour les jours d'avant.
+    Rend {"totals": {metrique: n}, "complete": bool}."""
+    if days is None:
+        return {"totals": {k: sum(m[k] for m in ms) for k in METRICS}, "complete": True}
+    now = datetime.now(timezone.utc)
+    target = (now - timedelta(days=days)).strftime("%Y-%m-%d")
+    since, base = _baseline(daily, days)
+    tot = {k: 0 for k in METRICS}
+    if base is not None:
+        for m in ms:
+            b = base.get(m["design_id"])
+            for i, k in enumerate(METRICS):
+                tot[k] += m[k] - b[i] if b else (m[k] if str(m.get("created") or "")[:10] >= since else 0)
+    if since is None or since <= target:
+        return {"totals": tot, "complete": since is not None}
+    # Trou entre le debut de la periode et le premier releve : le releve du jour
+    # `since` est pris en cours ou en fin de journee, il contient ce jour-la.
+    hd = (hist or {}).get("days") or {}
+    keys = sorted(hd)
+    for d in keys:
+        if target < d <= since:
+            for i, k in enumerate(METRICS):
+                tot[k] += hd[d][i]
+    first_needed = (now - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    # un historique pris depuis l'ouverture du compte couvre aussi ce qui le precede
+    covered = bool(keys) and keys[-1] >= since and (keys[0] <= first_needed or bool(hist.get("from_start")))
+    return {"totals": tot, "complete": covered}
+
+
 async def overview(fresh: bool = False, period: str = "30") -> dict:
     prof = await profile(fresh)
     ms = await models(fresh)
@@ -247,6 +345,8 @@ async def overview(fresh: bool = False, period: str = "30") -> dict:
         m["period"] = period_vals
         m["points30"] = round(per.get(m["design_id"], 0), 2) if days == 30 else m.get("points30")
     target = (now - timedelta(days=days)).strftime("%Y-%m-%d") if days else None
+    hist = await _history_get()
+    acc = account_totals(hist, daily, ms, days)
     try:
         tot = await points(0, 1)
     except Exception:
@@ -255,7 +355,10 @@ async def overview(fresh: bool = False, period: str = "30") -> dict:
             "earned_total": tot.get("income") or None, "spent_total": tot.get("expense") or None,
             "period": str(period), "counters_since": since,
             # periode plus longue que les releves pris : les compteurs ne couvrent qu'une partie
-            "counters_partial": bool(days and since and since > target)}
+            "counters_partial": bool(days and since and since > target),
+            # totaux du compte sur la periode (completes par l'historique importe)
+            "account": acc["totals"], "account_complete": acc["complete"],
+            "history": history_summary(hist)}
 
 
 # ── Notifications ──────────────────────────────────────────────────────────

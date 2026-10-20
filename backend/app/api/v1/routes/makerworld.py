@@ -135,6 +135,20 @@ async def mw_creator(fresh: bool = False, period: str = "30", _: str = Depends(g
         raise HTTPException(400, str(e))
 
 
+@router.post("/creator/history")
+async def mw_creator_history(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Import unique de l'historique jour par jour du compte (dateList de la
+    page « Vue d'ensemble » du Centre des createurs, extrait par l'interface)."""
+    from ....services import mw_creator as C
+    rows = body.get("rows")
+    if not isinstance(rows, list) or len(rows) > 20000:
+        raise HTTPException(400, "Liste de jours attendue")
+    try:
+        return await C.import_history(rows, body.get("until"), bool(body.get("from_start")))
+    except C.CreatorError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.get("/creator/points")
 async def mw_creator_points(offset: int = 0, _: str = Depends(get_current_user)):
     from ....services import mw_creator as C
