@@ -104,7 +104,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   const headSub = k => data.head && HEAD.map(([n, l]) => {
     const h = data.head[n];
     const v = h?.totals?.[k];
-    return [l, v == null ? "—" : `${h.complete ? "" : "≥ "}${v > 0 ? "+" : ""}${fmt(v)}`];
+    return [l, v ?? 0, v == null ? "—" : `${h.complete ? "" : "≥ "}${v > 0 ? "+" : ""}${fmt(v)}`];
   });
   const val = m => m.period?.[type] ?? 0;
   const models = [...data.models].sort((a, b) => val(b) - val(a) || (b[type] || 0) - (a[type] || 0));
@@ -141,9 +141,10 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
           {p.avatar && <MwImg src={p.avatar} w={96} eager style={{ width:46, height:46, borderRadius:"50%", flexShrink:0 }}/>}
           <div style={{ flex:1, minWidth:0 }}>
-            <div style={{ fontSize:15, fontWeight:800, color:"var(--text)" }}>{p.name}
-              {p.level ? <span style={{ fontSize:11, color:"var(--muted)", fontWeight:600 }}> · niveau {p.level}</span> : null}</div>
-            <div style={{ fontSize:11.5, color:"var(--muted)" }}>@{p.handle}</div>
+            <div style={{ fontSize:15, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis",
+              whiteSpace:"nowrap" }}>{p.name}</div>
+            <div style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.35 }}>
+              @{p.handle}{p.level ? <> · <b style={{ color:"var(--text2)", fontWeight:700 }}>niveau {p.level}</b></> : null}</div>
           </div>
           <div style={{ textAlign:"right" }}>
             <div style={{ fontSize:22, fontWeight:900, color:"#f59e0b", lineHeight:1 }}>🪙 {pts(p.points.total)}</div>
@@ -161,32 +162,33 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
             </span>
           ))}
         </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10, marginTop:12 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(135px,1fr))", gap:10, marginTop:12 }}>
           {[[Coins, "#f59e0b", data.earned_total != null ? pts(data.earned_total) : "—", "points gagnés",
               data.earned && HEAD.map(([n, l]) => [l, data.earned[n], "+" + pts(data.earned[n])])],
             [Download, "#3b82f6", fmt(p.downloads), "téléchargements", headSub("downloads")],
             [Printer, "#8b5cf6", fmt(p.prints), "impressions", headSub("prints")],
             [Zap, "#f97316", fmt(p.boosts), "boosts reçus", headSub("boosts")],
             [Heart, "#ec4899", fmt(p.likes), "j'aime", headSub("likes")]].map(([Icon, c, v, l, sub]) => (
-            <div key={l} style={{ padding:"11px 12px 10px", borderRadius:14, border:`1px solid ${c}2e`,
+            <div key={l} style={{ padding:"11px 12px 10px", borderRadius:14, border:`1px solid ${c}2e`, minWidth:0,
+              ...(l === "points gagnés" ? { gridColumn:"1 / -1" } : null),
               background:`linear-gradient(140deg, ${c}1c 0%, ${c}08 55%, transparent 100%), var(--surface2)` }}>
               <div style={{ display:"flex", alignItems:"center", gap:7 }}>
                 <span style={{ width:24, height:24, borderRadius:8, background:`${c}22`, display:"flex",
                   alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                   <Icon size={14} color={c} strokeWidth={2.4}/></span>
-                <span style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
-                  letterSpacing:"0.04em", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{l}</span>
+                <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
+                  letterSpacing:"0.03em", lineHeight:1.2, minWidth:0, overflowWrap:"anywhere" }}>{l}</span>
               </div>
               <div style={{ fontSize:22, fontWeight:900, color:"var(--text)", margin:"7px 0 8px",
                 letterSpacing:"-0.02em", lineHeight:1 }}>{v}</div>
               {sub && (
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:4 }}>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:3 }}>
                   {sub.map(([k, n, x]) => (
-                    <span key={k} style={{ padding:"4px 2px 3px", borderRadius:8, textAlign:"center",
+                    <span key={k} style={{ padding:"4px 1px 3px", borderRadius:8, textAlign:"center", minWidth:0,
                       background:"var(--surface)", border:"1px solid var(--border)" }}>
                       <span style={{ display:"block", fontSize:9, color:"var(--muted)", fontWeight:600 }}>{k}</span>
-                      <span style={{ display:"block", fontSize:11, fontWeight:800, whiteSpace:"nowrap",
-                        color: n > 0 ? c : "var(--muted)" }}>{x}</span>
+                      <span style={{ display:"block", fontSize:11, fontWeight:800, whiteSpace:"nowrap", letterSpacing:"-0.03em",
+                        overflow:"hidden", textOverflow:"ellipsis", color: n > 0 ? c : "var(--muted)" }}>{x}</span>
                     </span>
                   ))}
                 </div>
