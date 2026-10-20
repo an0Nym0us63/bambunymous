@@ -162,10 +162,16 @@ function ColorPill({ tray, spoolInfo, active }) {
           <Sun size={10} strokeWidth={2.8}/>
         </span>
       )}
-      {(sansEchantillon(tray, spoolInfo) || aSecher(tray, spoolInfo)) && (
-        <span style={{ position:"absolute", bottom:2, left:2, display:"flex", gap:2 }}>
-          {sansEchantillon(tray, spoolInfo) && <PillBadge color={SWATCH_COLOR} title={SWATCH_TITLE} Icon={Palette}/>}
-          {aSecher(tray, spoolInfo) && <PillBadge color={DRY_COLOR} title={DRY_TITLE} Icon={Droplets}/>}
+      {/* Deux alertes : une par coin du bas. Cote a cote dans une pastille
+          d'une trentaine de pixels, leurs anneaux blancs se touchaient. */}
+      {sansEchantillon(tray, spoolInfo) && (
+        <span style={{ position:"absolute", bottom:2, left:2 }}>
+          <PillBadge color={SWATCH_COLOR} title={SWATCH_TITLE} Icon={Palette}/>
+        </span>
+      )}
+      {aSecher(tray, spoolInfo) && (
+        <span style={{ position:"absolute", bottom:2, ...(sansEchantillon(tray, spoolInfo) ? { right:2 } : { left:2 }) }}>
+          <PillBadge color={DRY_COLOR} title={DRY_TITLE} Icon={Droplets}/>
         </span>
       )}
     </div>
