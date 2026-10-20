@@ -251,9 +251,11 @@ def parse_date_list(rows, until: str = None) -> dict:
     return out
 
 
-async def import_history(rows, until: str = None, from_start: bool = False) -> dict:
+async def import_history(rows, until: str = None, from_start: bool = False, designs: dict = None) -> dict:
     """Ajoute les jours importes (un jour deja connu est remplace par le
-    nouvel import) ; rend le resume de ce qui est garde."""
+    nouvel import) ; rend le resume de ce qui est garde. `designs` :
+    {id de modele: dateList de sa page}, pris sur la meme plage que `rows`
+    (seuls les jours non nuls y sont gardes)."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import set_setting
     if until and not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(until)):
@@ -265,6 +267,18 @@ async def import_history(rows, until: str = None, from_start: bool = False) -> d
     h["days"].update(new)
     if from_start and min(new) <= min(h["days"]):
         h["from_start"] = True
+    if isinstance(designs, dict) and designs:
+        keep = h.get("designs") if isinstance(h.get("designs"), dict) else {}
+        for did, drows in designs.items():
+            if not str(did).isdigit():
+                continue
+            got = {d: v for d, v in parse_date_list(drows, until).items() if any(v)}
+            keep[str(did)] = {**(keep.get(str(did)) or {}), **got}
+        h["designs"] = keep
+        # meme plage que le compte : on en garde les bornes pour la couverture
+        h["designs_to"] = max(new)
+        h["designs_from"] = min(new)
+        h["designs_from_start"] = bool(from_start)
     h["imported"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     async with AsyncSessionLocal() as db:
         await set_setting(db, K_HISTORY, json.dumps(h, separators=(",", ":")))
@@ -274,7 +288,21 @@ async def import_history(rows, until: str = None, from_start: bool = False) -> d
 def history_summary(h: dict) -> dict:
     days = sorted((h or {}).get("days") or {})
     return {"from": days[0] if days else None, "to": days[-1] if days else None, "days": len(days),
+            "designs": len((h or {}).get("designs") or {}),
             "imported": (h or {}).get("imported")}
+
+
+def _covers(first, last, from_start, since, days) -> bool:
+    """Un historique [first, last] comble-t-il le trou entre le debut de la
+    periode et le premier releve `since` ? L'import s'arrete a la veille de son
+    releve (jour incomplet ecarte) : fait le jour du premier releve, il manque
+    ce jour-la, on le tolere. Pris depuis l'ouverture du compte, il couvre
+    aussi ce qui le precede."""
+    if not first or not last or not since:
+        return False
+    first_needed = (datetime.now(timezone.utc) - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    day_before = (datetime.strptime(since, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+    return last >= day_before and (first <= first_needed or bool(from_start))
 
 
 def account_totals(hist: dict, daily: dict, ms: list, days) -> dict:
@@ -302,12 +330,7 @@ def account_totals(hist: dict, daily: dict, ms: list, days) -> dict:
         if target < d <= since:
             for i, k in enumerate(METRICS):
                 tot[k] += hd[d][i]
-    first_needed = (now - timedelta(days=days - 1)).strftime("%Y-%m-%d")
-    # un historique pris depuis l'ouverture du compte couvre aussi ce qui le precede
-    # l'import s'arrete a la veille de son releve (jour incomplet ecarte) : s'il
-    # a ete fait le jour du premier releve, il manque ce jour-la, on le tolere
-    day_before = (datetime.strptime(since, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
-    covered = bool(keys) and keys[-1] >= day_before and (keys[0] <= first_needed or bool(hist.get("from_start")))
+    covered = bool(keys) and _covers(keys[0], keys[-1], hist.get("from_start"), since, days)
     return {"totals": tot, "complete": covered}
 
 
@@ -335,20 +358,30 @@ async def overview(fresh: bool = False, period: str = "30") -> dict:
         if x.get("design_id") and (days is None or age <= timedelta(days=days)):
             per[x["design_id"]] = per.get(x["design_id"], 0) + x["points"]
     since, base = _baseline(daily, days)
+    target = (now - timedelta(days=days)).strftime("%Y-%m-%d") if days else None
+    hist = await _history_get()
+    gap = bool(days and since and since > target)
+    hdes = hist.get("designs") or {}
+    designs_ok = gap and bool(hdes) and _covers(hist.get("designs_from"), hist.get("designs_to"),
+                                                 hist.get("designs_from_start"), since, days)
     for m in ms:
         b = (base or {}).get(m["design_id"])
         period_vals = {"points": round(per.get(m["design_id"], 0), 2)}
+        # jours du trou, pris dans l'historique importe du modele
+        filled = [0] * len(METRICS)
+        if designs_ok:
+            for d, v in (hdes.get(m["design_id"]) or {}).items():
+                if target < d <= since:
+                    filled = [a + x for a, x in zip(filled, v)]
         for i, k in enumerate(METRICS):
             if days is None:
                 period_vals[k] = m[k]
             elif b is None:                         # modele absent du releve de depart
-                period_vals[k] = m[k] if since and str(m.get("created") or "")[:10] >= since else 0
+                period_vals[k] = (m[k] if since and str(m.get("created") or "")[:10] >= since else 0) + filled[i]
             else:
-                period_vals[k] = max(0, m[k] - b[i])
+                period_vals[k] = max(0, m[k] - b[i] + filled[i])
         m["period"] = period_vals
         m["points30"] = round(per.get(m["design_id"], 0), 2) if days == 30 else m.get("points30")
-    target = (now - timedelta(days=days)).strftime("%Y-%m-%d") if days else None
-    hist = await _history_get()
     acc = account_totals(hist, daily, ms, days)
     try:
         tot = await points(0, 1)
@@ -358,7 +391,7 @@ async def overview(fresh: bool = False, period: str = "30") -> dict:
             "earned_total": tot.get("income") or None, "spent_total": tot.get("expense") or None,
             "period": str(period), "counters_since": since,
             # periode plus longue que les releves pris : les compteurs ne couvrent qu'une partie
-            "counters_partial": bool(days and since and since > target),
+            "counters_partial": gap and not designs_ok,
             # totaux du compte sur la periode (completes par l'historique importe)
             "account": acc["totals"], "account_complete": acc["complete"],
             "history": history_summary(hist)}

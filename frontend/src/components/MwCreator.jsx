@@ -56,6 +56,14 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   // Import unique : la reponse de la page « Vue d'ensemble » du Centre des
   // createurs (…/my/data-overview/model.json), enregistree par l'utilisateur.
   // On n'en envoie que les compteurs jour par jour.
+  const copyScript = async () => {
+    try {
+      await navigator.clipboard.writeText(CONSOLE_SCRIPT);
+      await showAlert("Script copié. " + SCRIPT_HELP);
+    } catch {
+      await showAlert("Copie impossible ici. " + SCRIPT_HELP + "\n\n" + CONSOLE_SCRIPT);
+    }
+  };
   const importFile = async (file) => {
     if (!file) return;
     setImporting(true);
@@ -67,11 +75,16 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
       const pp = j.pageProps || j;
       const list = (pp.statisticalData || j.statisticalData)?.dateList;
       if (!Array.isArray(list)) throw new Error("pas de « dateList » : il faut la réponse de la page Vue d'ensemble");
-      const rows = list.map(r => ({ intervalVal: r.intervalVal, download: r.download, print: r.print, boost: r.boost, like: r.like }));
+      const pick = l => (l || []).map(r => ({ intervalVal: r.intervalVal, download: r.download, print: r.print, boost: r.boost, like: r.like }));
+      // fichier du script de console : en plus, la dateList de chaque modele
+      // (seuls ses jours non nuls partent)
+      const designs = j.designs && typeof j.designs === "object" ? Object.fromEntries(Object.entries(j.designs)
+        .map(([id, l]) => [id, pick(l).filter(r => r.download || r.print || r.boost || r.like)])) : undefined;
       const { data: h } = await client.post("/makerworld/creator/history", {
-        rows, until: String(pp.maxDateStr || "").slice(0, 10) || null,
+        rows: pick(list), designs, until: String(pp.maxDateStr || "").slice(0, 10) || null,
         from_start: !!(pp.startDateStr && pp.minDateStr && pp.startDateStr <= pp.minDateStr) });
-      await showAlert(`Historique importé : ${h.days} jours, du ${dayFr(h.from)} au ${dayFr(h.to)}.`);
+      await showAlert(`Historique importé : ${h.days} jours, du ${dayFr(h.from)} au ${dayFr(h.to)}`
+        + (h.designs ? `, et ${h.designs} modèles un par un.` : ". Pour le classement par modèle, utilise le script de console."));
       setImported(n => n + 1);
     } catch (e) {
       await showAlert("Import impossible : " + (e.response?.data?.detail || e.message));
@@ -100,6 +113,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
         style={{ background:"none", border:"none", padding:0, cursor:"pointer", color:"#3b82f6", fontWeight:700,
           fontSize:"inherit", textDecoration:"underline" }}>
         {importing ? "Import…" : hist0.days ? "Réimporter l'historique" : "Importer l'historique (fichier)"}</button>
+      {" · "}<button onClick={copyScript} title={SCRIPT_HELP} style={linkBtn}>Copier le script de console</button>
     </>
   );
 
@@ -237,7 +251,42 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
 
 const dayFr = d => d ? new Date(d + "T12:00:00").toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }) : "?";
 const IMPORT_HELP = "Sur makerworld.com, connecté : Centre des créateurs › Vue d'ensemble, plage depuis le début. "
-  + "Ouvre la requête « model.json?startDate=…&endDate=… » de cette page, enregistre la réponse, puis choisis le fichier ici.";
+  + "Ouvre la requête « model.json?startDate=…&endDate=… » de cette page, enregistre la réponse, puis choisis le fichier ici. "
+  + "Ou mieux : le fichier du script de console, qui contient aussi chaque modèle.";
+const SCRIPT_HELP = "À coller dans la console (F12) d'un onglet makerworld.com où tu es connecté : il lit la Vue d'ensemble "
+  + "du compte puis celle de chacun de tes modèles, depuis le début, et télécharge mw-historique.json à importer ici.";
+const linkBtn = { background:"none", border:"none", padding:0, cursor:"pointer", color:"#3b82f6", fontWeight:700,
+  fontSize:"inherit", textDecoration:"underline" };
+// Script lance par l'utilisateur dans SA console MakerWorld : lectures seules,
+// avec ses propres cookies, rien ne part ailleurs que dans le fichier telecharge.
+export const CONSOLE_SCRIPT = `(async () => {
+  const b = window.__NEXT_DATA__ && __NEXT_DATA__.buildId;
+  if (!b) throw new Error("Ouvre d'abord une page makerworld.com");
+  const get = async u => {
+    const r = await fetch(u, { headers: { "x-nextjs-data": "1" }, credentials: "include" });
+    if (!r.ok) throw new Error(r.status + " " + u);
+    return (await r.json()).pageProps;
+  };
+  const pick = l => (l || []).map(r => ({ intervalVal: r.intervalVal, download: r.download, print: r.print, boost: r.boost, like: r.like }));
+  const base = "/_next/data/" + b + "/fr/my/data-overview/model";
+  const first = await get(base + ".json");
+  const q = "startDate=" + first.minDateStr.slice(0, 10) + "&endDate=" + first.maxDateStr.slice(0, 10);
+  const all = await get(base + ".json?" + q);
+  const out = { pageProps: { minDateStr: all.minDateStr, maxDateStr: all.maxDateStr, startDateStr: all.startDateStr,
+    statisticalData: { dateList: pick(all.statisticalData.dateList) } }, designs: {} };
+  const list = all.statisticalList || [];
+  for (const [i, d] of list.entries()) {
+    const p = await get(base + "/" + d.designId + ".json?" + q + "&designId=" + d.designId);
+    out.designs[d.designId] = pick(p.statisticalData && p.statisticalData.dateList);
+    console.log((i + 1) + "/" + list.length, d.title);
+    await new Promise(r => setTimeout(r, 400));
+  }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(out)], { type: "application/json" }));
+  a.download = "mw-historique.json";
+  document.body.appendChild(a); a.click(); a.remove();
+  console.log("Fini : mw-historique.json est téléchargé, importe-le dans BambuNymous.");
+})();`;
 const sel = { fontSize:12, padding:"4px 8px", borderRadius:8, background:"var(--surface2)",
   border:"1px solid var(--border)", color:"var(--text2)" };
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };

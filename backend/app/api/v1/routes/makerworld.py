@@ -144,7 +144,10 @@ async def mw_creator_history(body: dict = Body({}), _: str = Depends(require_adm
     if not isinstance(rows, list) or len(rows) > 20000:
         raise HTTPException(400, "Liste de jours attendue")
     try:
-        return await C.import_history(rows, body.get("until"), bool(body.get("from_start")))
+        designs = body.get("designs") if isinstance(body.get("designs"), dict) else None
+        if designs and len(designs) > 1000:
+            raise HTTPException(400, "Trop de modèles")
+        return await C.import_history(rows, body.get("until"), bool(body.get("from_start")), designs)
     except C.CreatorError as e:
         raise HTTPException(400, str(e))
 
