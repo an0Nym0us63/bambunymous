@@ -3,6 +3,7 @@ import client from "../api/client";
 import { CreatorPicker } from "./MakerWorldView";
 import MwImg from "./MwImg";
 import { pushApi, readPushStatus, sendEndpoint } from "./PushBridge";
+import MyAppNotifications from "./MyAppNotifications";
 
 // Parametres > Notifications : le canal (ntfy, bot Telegram ou les deux), ses
 // sujets ntfy et ses discussions Telegram (le premier de chaque liste est celui
@@ -28,7 +29,7 @@ export default function NotificationsSettings() {
   });
   // Onglet du canal affiche (ce navigateur)
   const [chTab, setChTabState] = useState(() => {
-    try { return localStorage.getItem("notifChannelTab") || "ntfy"; } catch { return "ntfy"; }
+    try { return localStorage.getItem("notifChannelTab") || "app"; } catch { return "app"; }
   });
   const setChTab = t => { setChTabState(t); try { localStorage.setItem("notifChannelTab", t); } catch { /* indisponible */ } };
   const toggle = id => setOpen(o => {
@@ -151,7 +152,7 @@ export default function NotificationsSettings() {
   return (<>
     {/* ── Canaux : un onglet chacun, chacun active ou non ── */}
     <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
-      {[["ntfy", "ntfy"], ["telegram", "Telegram"], ["app", "Appli Android"]].map(([k, l]) => (
+      {[["app", "Appli Android"], ["ntfy", "ntfy"], ["telegram", "Telegram"]].map(([k, l]) => (
         <button key={k} onClick={() => setChTab(k)} style={{ flex:1, padding:"8px 10px", borderRadius:8, fontSize:12.5,
           fontWeight:700, cursor:"pointer", border:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
           background: chTab === k ? "#3b82f6" : "transparent", color: chTab === k ? "white" : "var(--muted)" }}>
@@ -303,6 +304,7 @@ export default function NotificationsSettings() {
         <div key={d.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderTop:"1px solid var(--border)", fontSize:12.5 }}>
           <span style={{ flex:1, minWidth:0 }}>
             <span style={{ fontWeight:700, color:"var(--text)" }}>📱 {d.name || "Téléphone"}</span>
+            <span style={{ fontSize:11, color:"var(--muted)", fontWeight:600 }}> · {d.user ? `👤 ${d.user}` : "propriétaire inconnu"}</span>
             <span style={{ display:"block", fontSize:11, color: d.last_err ? "#ef4444" : "var(--muted)" }}>
               {d.last_err ? `Échec ${d.last_err}` : d.last_ok ? `Dernier envoi : ${new Date(d.last_ok).toLocaleString("fr-FR")}`
                 : `Inscrit le ${new Date(d.added).toLocaleDateString("fr-FR")}`}</span>
@@ -313,6 +315,8 @@ export default function NotificationsSettings() {
       ))}
       <Msg k="app"/>
     </>)}
+    {/* Mes propres choix sur l'appli (chaque compte a les siens) */}
+    {chTab === "app" && on.app && <MyAppNotifications embedded/>}
 
     {/* ── Types de notification, par section repliable ── */}
     {cfg.sections.map(sec => {

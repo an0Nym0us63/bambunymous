@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import client from "../api/client";
-import { useIsAdmin } from "../store/auth";
 import { toast } from "../store/toast";
 
 // Appli Android (UnifiedPush) : monte une fois dans le Layout, chez moi
@@ -34,9 +33,10 @@ export async function sendEndpoint(endpoint, force = false) {
 }
 
 export default function PushBridge() {
-  const isAdmin = useIsAdmin();
+  // Tout compte de la maison inscrit SES telephones (Layout ne monte ce pont
+  // que chez moi, jamais en visite chez un copain).
   useEffect(() => {
-    if (!isAdmin || !pushApi()) return;
+    if (!pushApi()) return;
     const st = readPushStatus();
     if (st?.endpoint) sendEndpoint(st.endpoint).catch(() => {});
     // Adresse changee pendant que la page etait fermee : l'ancienne est oubliee
@@ -54,6 +54,6 @@ export default function PushBridge() {
     };
     window.addEventListener("bambu-push", on);
     return () => window.removeEventListener("bambu-push", on);
-  }, [isAdmin]);
+  }, []);
   return null;
 }

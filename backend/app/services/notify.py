@@ -357,6 +357,7 @@ async def _load() -> dict:
     cfg.setdefault("events", {})
     cfg.setdefault("routes", {})
     cfg.setdefault("devices", [])
+    cfg.setdefault("app_prefs", {})
     if not isinstance(cfg.get("channels"), dict):
         old = _OLD_CHANNEL.get(cfg.get("channel") or "ntfy", ("ntfy",))
         cfg["channels"] = {k: k in old or (k == "app" and bool(cfg.get("app_push"))) for k in KINDS}
@@ -413,8 +414,29 @@ def options_of(cfg: dict, event: str) -> dict:
     return {o["key"]: _opt_value(o, stored.get(o["key"], o["default"])) for o in EVENTS[event]["options"]}
 
 
-def enabled_in(cfg, event: str) -> bool:
+def global_on(cfg, event: str) -> bool:
+    """Active par l'administrateur : part sur ntfy et Telegram."""
     return bool(cfg and ((cfg.get("events") or {}).get(event) or {}).get("enabled"))
+
+
+def app_wants(cfg, user, event: str) -> bool:
+    """Ce que le proprietaire d'un telephone veut recevoir sur l'appli. Sans
+    choix de sa part (ou telephone sans proprietaire connu) : comme
+    l'administrateur."""
+    prefs = (cfg.get("app_prefs") or {}).get(user or "") if user else None
+    if isinstance(prefs, dict) and event in prefs:
+        return bool(prefs[event])
+    return global_on(cfg, event)
+
+
+def enabled_in(cfg, event: str) -> bool:
+    """L'evenement merite-t-il d'etre calcule ? Oui si l'administrateur l'a
+    active, ou si un telephone inscrit le veut (appli activee)."""
+    if global_on(cfg, event):
+        return True
+    if not cfg or not (cfg.get("channels") or {}).get("app"):
+        return False
+    return any(app_wants(cfg, d.get("user"), event) for d in cfg.get("devices") or [])
 
 
 def _public(cfg: dict) -> dict:
@@ -425,7 +447,7 @@ def _public(cfg: dict) -> dict:
         "channels": {k: bool(cfg["channels"].get(k)) for k in KINDS},
         # Appli Android (UnifiedPush) : les telephones inscrits, jamais leur adresse
         # d'envoi (elle suffit a leur ecrire).
-        "devices": [{k: d.get(k) for k in ("id", "name", "added", "last_ok", "last_err")} for d in cfg.get("devices") or []],
+        "devices": [{k: d.get(k) for k in ("id", "name", "user", "added", "last_ok", "last_err")} for d in cfg.get("devices") or []],
         "ntfy": {"url": n.get("url") or "https://ntfy.sh", "topic": n.get("topic") or "",
                  "topics": n.get("topics") or [],
                  "app_url": n.get("app_url") or "", "has_token": bool(n.get("token"))},
@@ -436,7 +458,7 @@ def _public(cfg: dict) -> dict:
         "sections": [{"id": k, "label": v, "route": {"ntfy": _route(cfg, k, "ntfy"), "telegram": _route(cfg, k, "telegram")}}
                      for k, v in SECTIONS],
         "events": [{"id": k, "section": v["section"], "label": v["label"], "description": v["description"],
-                    "enabled": enabled_in(cfg, k),
+                    "enabled": global_on(cfg, k),
                     "creators": ((cfg["events"].get(k) or {}).get("creators") or []),
                     "options": [{**o, "value": options_of(cfg, k)[o["key"]]} for o in v["options"]]}
                    for k, v in EVENTS.items()],
@@ -517,7 +539,7 @@ async def event_settings(event: str) -> dict:
     """Reglages d'un type (enabled, creators, options) pour le code qui le declenche."""
     cfg = await _load()
     return {"enabled": False, "creators": [], **(cfg["events"].get(event) or {}),
-            "options": options_of(cfg, event)}
+            "options": options_of(cfg, event)} | {"enabled": enabled_in(cfg, event)}
 
 
 def app_link(cfg, path: str):
@@ -752,8 +774,9 @@ def _endpoint_ok(u: str) -> str:
     return u
 
 
-async def add_device(endpoint: str, name: str = "") -> dict:
-    """Inscrit (ou met a jour) un telephone ; la meme adresse n'est gardee qu'une fois."""
+async def add_device(endpoint: str, name: str = "", user: str = "") -> dict:
+    """Inscrit (ou met a jour) un telephone de `user` ; la meme adresse n'est
+    gardee qu'une fois (reinscrite par un autre compte, elle change de main)."""
     import secrets
     from datetime import datetime, timezone
     endpoint = _endpoint_ok(endpoint)
@@ -768,15 +791,77 @@ async def add_device(endpoint: str, name: str = "") -> dict:
         devs.append(d)
     if name:
         d["name"] = str(name).strip()[:60]
+    if user:
+        d["user"] = user
     await _save(cfg)
     return _public(cfg)
 
 
-async def remove_device(dev_id: str = "", endpoint: str = "") -> dict:
+async def remove_device(dev_id: str = "", endpoint: str = "", user: str = "", admin: bool = True) -> dict:
+    """Retire un telephone (par son id ou son adresse) ; hors administrateur,
+    seulement les siens."""
     cfg = await _load()
-    cfg["devices"] = [d for d in cfg["devices"] if d.get("id") != dev_id and (not endpoint or d.get("endpoint") != endpoint)]
+
+    def hit(d):
+        if not ((dev_id and d.get("id") == dev_id) or (endpoint and d.get("endpoint") == endpoint)):
+            return False
+        return admin or (d.get("user") or "") == user
+    before = len(cfg["devices"])
+    cfg["devices"] = [d for d in cfg["devices"] if not hit(d)]
+    if dev_id and len(cfg["devices"]) == before:
+        raise NotifyError("Téléphone inconnu, ou pas le tien")
     await _save(cfg)
     return _public(cfg)
+
+
+# ── Mes notifications sur l'appli (chaque utilisateur) ───────────────────────
+def me_view(cfg, user: str) -> dict:
+    """Ce que voit un utilisateur : ses telephones et ses choix, type par type."""
+    return {
+        "app_on": bool((cfg.get("channels") or {}).get("app")),
+        "sections": [{"id": k, "label": v} for k, v in SECTIONS],
+        "events": [{"id": k, "section": v["section"], "label": v["label"], "description": v["description"],
+                    "mine": app_wants(cfg, user, k)} for k, v in EVENTS.items()],
+        "devices": [{k: d.get(k) for k in ("id", "name", "added", "last_ok", "last_err")}
+                    for d in cfg.get("devices") or [] if (d.get("user") or "") == user],
+    }
+
+
+async def me_config(user: str) -> dict:
+    return me_view(await _load(), user)
+
+
+async def set_my_events(user: str, patch: dict) -> dict:
+    """{evenement: bool} ; une section entiere : {"section:prints": bool}."""
+    cfg = await _load()
+    prefs = cfg["app_prefs"].setdefault(user, {})
+    # premiere fois : on fige le point de depart (ce que l'administrateur recoit)
+    for k in EVENTS:
+        prefs.setdefault(k, global_on(cfg, k))
+    for k, v in (patch or {}).items():
+        if k.startswith("section:"):
+            for e, ev in EVENTS.items():
+                if ev["section"] == k[8:]:
+                    prefs[e] = bool(v)
+        elif k in EVENTS:
+            prefs[k] = bool(v)
+    await _save(cfg)
+    return me_view(cfg, user)
+
+
+async def test_device(dev_id: str, user: str, admin: bool) -> dict:
+    import asyncio
+    cfg = await _load()
+    d = next((x for x in cfg["devices"] if x.get("id") == dev_id), None)
+    if not d or not (admin or (d.get("user") or "") == user):
+        raise NotifyError("Téléphone inconnu, ou pas le tien")
+    errs = await asyncio.to_thread(_post_devices, cfg, [d], "BambuNymous",
+                                   f"Test de notification : « {d.get('name') or 'ce téléphone'} » fonctionne.",
+                                   app_link(cfg, "/"), 3, "system", None)
+    await _save(cfg)
+    if errs:
+        raise NotifyError(errs[0])
+    return {"ok": True}
 
 
 
@@ -864,6 +949,16 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
     kinds = _on(cfg)
     if not kinds:
         raise NotifyError("Aucun canal activé (ntfy, Telegram ou appli Android)")
+    # ntfy et Telegram : seulement si l'administrateur a active ce type (un
+    # envoi sans type, essai compris, part partout)
+    if event in EVENTS and not global_on(cfg, event):
+        kinds = [k for k in kinds if k == "app"]
+    devs = [d for d in cfg.get("devices") or []
+            if event not in EVENTS or app_wants(cfg, d.get("user"), event)] if "app" in kinds else []
+    if event in EVENTS and not devs:
+        kinds = [k for k in kinds if k != "app"]
+    if not kinds:
+        return
     errors = []
     if "ntfy" in kinds:
         try:
@@ -878,7 +973,6 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
         except NotifyError as e:
             errors.append(str(e))
     if "app" in kinds:
-        devs = cfg.get("devices") or []
         if not devs:
             errors.append("Appli Android : aucun téléphone inscrit")
         else:
@@ -911,8 +1005,7 @@ async def _send_only(cfg, message: str, topic: str, chat: str) -> None:
 async def notify(event: str, title: str, message: str = "", **kw) -> bool:
     """Envoie si ce type est active. Ne leve jamais (un echec se journalise)."""
     try:
-        st = await event_settings(event)
-        if not st.get("enabled"):
+        if not enabled_in(await _load(), event):
             return False
         await send(title, message, event=event, **kw)
         return True
@@ -939,17 +1032,7 @@ async def test(event: str = "", topic: str = "", chat: str = "", device: str = "
         names = [_KIND_FR[k] for k in _on(cfg)]
         ch = (", ".join(names[:-1]) + " et " + names[-1]) if len(names) > 1 else (names[0] if names else "aucun canal")
         if device:
-            import asyncio
-            d = next((x for x in cfg["devices"] if x.get("id") == device), None)
-            if not d:
-                raise NotifyError("Téléphone inconnu")
-            errs = await asyncio.to_thread(_post_devices, cfg, [d], "BambuNymous",
-                                           f"Test de notification : « {d.get('name') or 'ce téléphone'} » fonctionne.",
-                                           app_link(cfg, "/"), 3, "system", None)
-            await _save(cfg)
-            if errs:
-                raise NotifyError(errs[0])
-            return {"ok": True}
+            return await test_device(device, "", True)
         if topic or chat:
             name = next((t.get("label") or t["topic"] for t in cfg["ntfy"].get("topics") or [] if t["topic"] == topic), "") \
                 if topic else next((c.get("label") or c["chat_id"] for c in cfg["tgbot"].get("chats") or []

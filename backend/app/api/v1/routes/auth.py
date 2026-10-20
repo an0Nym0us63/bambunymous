@@ -171,6 +171,17 @@ async def require_mw(
     raise HTTPException(status.HTTP_403_FORBIDDEN, "Action MakerWorld non autorisée pour ce compte")
 
 
+async def require_own_account(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> tuple:
+    """Un compte de la maison, quel que soit son role : (username, role).
+    Jamais une invitation de copain (cle fk_)."""
+    if (token or "").startswith("fk_"):
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Accès copain : non autorisé")
+    return await _resolve(token, db)
+
+
 async def require_admin(role: str = Depends(get_current_role)) -> str:
     """A poser sur toute route reservee aux administrateurs."""
     if role != ROLE_ADMIN:

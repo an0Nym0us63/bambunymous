@@ -19,6 +19,7 @@ import SpoolTaresCard from "../components/SpoolTaresCard";
 import MakerWorldSettings from "../components/MakerWorldSettings";
 import RateTemplatesSettings from "../components/RateTemplatesSettings";
 import NotificationsSettings from "../components/NotificationsSettings";
+import MyAppNotifications from "../components/MyAppNotifications";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
 import { amsName, slotCount, lireDisposition, dispositionParDefaut, MAX_LIGNES, MAX_COLONNES } from "../utils/ams";
@@ -1651,7 +1652,7 @@ const SET_TABS = [
   { id:"filament", label:"🧵 Filaments",  admin:true  },
   { id:"display",  label:"🎨 Affichage",  admin:false },
   { id:"accounts", label:"👤 Comptes",    admin:false },
-  { id:"notify",   label:"🔔 Notifs",     admin:true  },
+  { id:"notify",   label:"🔔 Notifs",     admin:false },
   { id:"tools",    label:"🛠️ Outils",     admin:true  },
 ];
 
@@ -1936,12 +1937,15 @@ export default function Settings() {
       )}
 
       {/* ── Notifications ─────────────────────────────────────────── */}
-      {tab === "notify" && (
-      <AdminOnly>
-        <NotificationsSettings/>
-        <div style={{ marginTop:16 }}><TelegramSettings card={card} cardTitle={cardTitle}/></div>
-      </AdminOnly>
-      )}
+      {tab === "notify" && (isAdmin ? (
+        <>
+          <NotificationsSettings/>
+          <div style={{ marginTop:16 }}><TelegramSettings card={card} cardTitle={cardTitle}/></div>
+        </>
+      ) : (
+        // Les autres comptes : leurs telephones et leurs choix (appli Android)
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}><MyAppNotifications/></div>
+      ))}
 
 
 

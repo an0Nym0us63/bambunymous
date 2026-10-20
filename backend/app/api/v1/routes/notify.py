@@ -3,7 +3,7 @@ import logging
 
 from fastapi import APIRouter, Body, Depends, HTTPException
 
-from .auth import require_admin
+from .auth import require_admin, require_own_account
 from ....services import notify as N
 
 router = APIRouter()
@@ -80,18 +80,44 @@ async def notify_test(body: dict = Body({}), _: str = Depends(require_admin)):
                               str(body.get("device") or "")))
 
 
+# ── Appli Android : chaque compte de la maison inscrit SES telephones et
+# choisit ce qu'il y recoit ; l'administrateur les voit tous. ──
+def _is_admin(acc) -> bool:
+    return acc[1] == "admin"
+
+
 @router.post("/devices")
-async def notify_add_device(body: dict = Body({}), _: str = Depends(require_admin)):
+async def notify_add_device(body: dict = Body({}), acc=Depends(require_own_account)):
     """Telephone (appli Android) : son adresse UnifiedPush, donnee par son distributeur."""
-    return await _call(N.add_device(str(body.get("endpoint") or ""), str(body.get("name") or "")))
+    await _call(N.add_device(str(body.get("endpoint") or ""), str(body.get("name") or ""), acc[0]))
+    return await N.me_config(acc[0])
 
 
 @router.delete("/devices/{dev_id}")
-async def notify_remove_device(dev_id: str, _: str = Depends(require_admin)):
-    return await _call(N.remove_device(dev_id))
+async def notify_remove_device(dev_id: str, acc=Depends(require_own_account)):
+    await _call(N.remove_device(dev_id, "", acc[0], _is_admin(acc)))
+    return await (N.get_config() if _is_admin(acc) else N.me_config(acc[0]))
 
 
 @router.post("/devices/forget")
-async def notify_forget_device(body: dict = Body({}), _: str = Depends(require_admin)):
+async def notify_forget_device(body: dict = Body({}), acc=Depends(require_own_account)):
     """L'appli s'est desinscrite (ou a change d'adresse) : on oublie l'ancienne."""
-    return await _call(N.remove_device("", str(body.get("endpoint") or "")))
+    await _call(N.remove_device("", str(body.get("endpoint") or ""), acc[0], False))
+    return {"ok": True}
+
+
+@router.get("/me")
+async def notify_me(acc=Depends(require_own_account)):
+    """Mes telephones et ce que je veux y recevoir."""
+    return await N.me_config(acc[0])
+
+
+@router.put("/me/events")
+async def notify_me_events(body: dict = Body({}), acc=Depends(require_own_account)):
+    """{type: bool}, ou {"section:prints": bool} pour toute une section."""
+    return await _call(N.set_my_events(acc[0], body))
+
+
+@router.post("/me/test")
+async def notify_me_test(body: dict = Body({}), acc=Depends(require_own_account)):
+    return await _call(N.test_device(str(body.get("device") or ""), acc[0], _is_admin(acc)))

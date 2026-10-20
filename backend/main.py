@@ -419,6 +419,10 @@ async def enforce_readonly(request, call_next):
         # pourtant ce droit.
         if path.startswith("/api/v1/makerworld/"):
             return await call_next(request)
+        # Notifications de l'appli : chaque compte gere SES telephones et ses
+        # choix (controle par route : son compte, jamais une cle copain).
+        if path.startswith(("/api/v1/notify/me", "/api/v1/notify/devices")):
+            return await call_next(request)
         if auth.lower().startswith("bearer "):
             payload = decode_token_payload(auth.split(" ", 1)[1].strip())
             # Test sur "different de admin" et non sur une liste de roles brides :
