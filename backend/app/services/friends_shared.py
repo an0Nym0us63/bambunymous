@@ -122,15 +122,38 @@ async def gallery() -> dict:
 LIVE = ("RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING")
 
 
+def printer_state(st: dict) -> str:
+    """Voyant d'une imprimante : printing (vert), standby (orange : allumee,
+    au repos), off (rouge : l'appli ne la joint plus, donc eteinte).
+    « unreachable » (gris) se pose quand c'est le BambuNymous qu'on ne joint pas."""
+    if not st.get("connected"):
+        return "off"
+    return "printing" if str(st.get("status") or "").upper() in LIVE else "standby"
+
+
+def my_state() -> dict:
+    from ..core.mqtt import get_state
+    s = get_state()
+    st = {"connected": bool(s.connected), "status": s.status}
+    return {"state": printer_state(st), "progress": s.progress}
+
+
 async def printing() -> dict:
     """Les copains dont l'imprimante tourne en ce moment : etat, avancement, et
-    l'impression en cours (nom, vignette par le relais). Les autres sont omis."""
+    l'impression en cours (nom, vignette par le relais). Les autres sont omis
+    de « printing » ; « states » donne le voyant de chacun, « me » le mien."""
     friends = await _load()
+    states = {}
 
     async def one(f):
         try:
             st = await _ask(f, "printer/status")
-            if str(st.get("status") or "").upper() not in LIVE:
+        except Exception:
+            states[f["id"]] = {"state": "unreachable"}
+            return None
+        states[f["id"]] = {"state": printer_state(st), "progress": st.get("progress")}
+        try:
+            if states[f["id"]]["state"] != "printing":
                 return None
             cur = None
             try:
@@ -148,7 +171,7 @@ async def printing() -> dict:
         except Exception:
             return None
     res = await asyncio.gather(*(one(f) for f in friends))
-    return {"printing": [r for r in res if r]}
+    return {"printing": [r for r in res if r], "states": {str(k): v for k, v in states.items()}, "me": my_state()}
 
 
 async def for_design(design_id: str) -> dict:

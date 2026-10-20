@@ -24,17 +24,36 @@ export function FriendChip({ block = false }) {
   );
 }
 
+// Voyant d'imprimante : vert imprime, orange au repos, rouge eteinte, gris injoignable.
+const LAMP = {
+  printing:    { c:"#22c55e", t:"Imprime en ce moment" },
+  standby:     { c:"#f59e0b", t:"Allumée, au repos" },
+  off:         { c:"#ef4444", t:"Imprimante éteinte (ou hors réseau)" },
+  unreachable: { c:"#9ca3af", t:"BambuNymous injoignable" },
+};
+function Lamp({ s }) {
+  if (!s) return null;
+  const l = LAMP[s.state] || LAMP.unreachable;
+  const live = s.state === "printing";
+  const pct = live && s.progress != null ? Math.round(s.progress) : null;
+  return (
+    <span title={l.t + (pct != null ? ` · ${pct} %` : "")} style={{ display:"inline-flex", alignItems:"center", gap:4,
+      marginLeft:"auto", fontSize:10.5, color:l.c, fontWeight:600, flexShrink:0 }}>
+      <span style={{ width:7, height:7, borderRadius:"50%", background:l.c, boxShadow:`0 0 0 3px ${l.c}2e`,
+        animation: live ? "livePulse 2s infinite" : "none" }}/>{pct != null && `${pct} %`}</span>
+  );
+}
+
 // ── Liste « Chez qui ? » (menu du compte) ───────────────────────────────────
 export function FriendPicker({ onDone }) {
   const friend = useFriend((s) => s.friend);
   const visit = useFriend((s) => s.visit);
   const [list, setList] = useState(null);
-  const [printing, setPrinting] = useState({});      // id -> avancement (%), pour le voyant
+  const [lamps, setLamps] = useState(null);         // { me, states: { id: {state, progress} } }
   useEffect(() => { client.get("/friends").then(({ data }) => setList(data.friends || [])).catch(() => setList([])); }, []);
   useEffect(() => {
     if (!list?.length) return;
-    client.get("/friends/shared/printing").then(({ data }) =>
-      setPrinting(Object.fromEntries((data.printing || []).map(f => [f.id, Math.round(f.progress ?? 0)])))).catch(() => {});
+    client.get("/friends/shared/printing").then(({ data }) => setLamps(data)).catch(() => {});
   }, [list?.length]);
   if (!list || (!list.length && !friend)) return null;
   const row = (on) => ({ width:"100%", display:"flex", alignItems:"center", gap:10, padding:"10px 14px", background: on
@@ -43,17 +62,11 @@ export function FriendPicker({ onDone }) {
     <div style={{ borderBottom:"1px solid var(--border)", padding:"4px 0" }}>
       <p style={{ margin:"6px 14px 2px", fontSize:10.5, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
         letterSpacing:0.4 }}>Chez qui ?</p>
-      <button onClick={() => { onDone?.(); if (friend) visit(null); }} style={row(!friend)}>🏠 Chez moi</button>
+      <button onClick={() => { onDone?.(); if (friend) visit(null); }} style={row(!friend)}>🏠 Chez moi<Lamp s={lamps?.me}/></button>
       {list.map(f => (
         <button key={f.id} onClick={() => { onDone?.(); if (friend?.id !== f.id) visit(f); }} style={row(friend?.id === f.id)}>
           👀 {f.name}
-          {/* Voyant : il imprime en ce moment */}
-          {printing[f.id] != null && (
-            <span title={`Imprime en ce moment · ${printing[f.id]} %`} style={{ display:"inline-flex", alignItems:"center", gap:4,
-              marginLeft:"auto", fontSize:10.5, color:"#22c55e", fontWeight:600 }}>
-              <span style={{ width:7, height:7, borderRadius:"50%", background:"#22c55e", boxShadow:"0 0 0 3px rgba(34,197,94,0.18)",
-                animation:"livePulse 2s infinite" }}/>{printing[f.id]} %</span>
-          )}
+          <Lamp s={lamps?.states?.[String(f.id)]}/>
         </button>
       ))}
     </div>

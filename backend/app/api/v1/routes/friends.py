@@ -64,7 +64,7 @@ async def friends_shared_filament(filament_id: int, _: str = Depends(get_current
 
 @router.get("/shared/printing")
 async def friends_shared_printing(_: str = Depends(get_current_user)):
-    """Les copains qui impriment en ce moment."""
+    """Les copains qui impriment en ce moment, et le voyant de chacun (et le mien)."""
     from ....services import friends_shared as FS
     return await FS.printing()
 
