@@ -1653,6 +1653,7 @@ const SET_TABS = [
   { id:"filament", label:"🧵 Filaments",  admin:true  },
   { id:"display",  label:"🎨 Affichage",  admin:false },
   { id:"accounts", label:"👤 Comptes",    admin:false },
+  { id:"links",    label:"🔗 Connexions", admin:false },
   { id:"notify",   label:"🔔 Notifs",     admin:false },
   { id:"share",    label:"📤 Partage",    admin:true  },
   { id:"android",  label:"📱 Appli Android", admin:false },
@@ -1882,15 +1883,19 @@ export default function Settings() {
       </AdminOnly>
       )}
 
-      {/* ── Comptes ───────────────────────────────────────────────── */}
+      {/* ── Comptes : moi, la securite, les utilisateurs, leur activite ── */}
       {tab === "accounts" && (<>
       <MyAccountSection/>
       <TwoFactorCard/>
       <UsersSection/>
+      <ActivitySection/>
+      </>)}
+
+      {/* ── Connexions : MakerWorld et les BambuNymous des copains ──────── */}
+      {tab === "links" && (<>
       <AdminOnly><MakerWorldSettings/></AdminOnly>
       <AdminOnly home mw><RateTemplatesSettings/></AdminOnly>
       <FriendsCard/>
-      <ActivitySection/>
       </>)}
 
       {/* ── Outils (maintenance) ──────────────────────────────────── */}
