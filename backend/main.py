@@ -551,6 +551,12 @@ if STATIC_DIR.exists():
             except ValueError:
                 candidate = None
             if candidate and candidate.is_file():
+                if candidate.suffix == ".apk":
+                    # l'appli Android : un fichier a enregistrer (et a installer),
+                    # jamais une page a afficher ; pas de cache (mise a jour)
+                    return FileResponse(str(candidate), filename=candidate.name,
+                                        media_type="application/vnd.android.package-archive",
+                                        headers={"Cache-Control": "no-cache"})
                 return FileResponse(str(candidate))
 
         index = STATIC_DIR / "index.html"
