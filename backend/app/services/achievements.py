@@ -84,7 +84,8 @@ CATALOG = [
     _a("print_hours", "prints", "⏱️", "Heures de vol", "{n} h d'impression", [100, 500, 1000, 2500, 5000], unit="h"),
     _a("print_kg", "prints", "🧵", "Dévoreur de filament", "{n} kg de filament imprimé", [1, 10, 50, 100, 250], unit="kg"),
     _a("longest", "prints", "🏃", "Marathonien", "Une impression réussie de {n} h", [6, 12, 24, 48, 72], unit="h"),
-    _a("heaviest", "prints", "🏋️", "Poids lourd", "Une impression de {n} g", [250, 500, 1000, 2000, 3000], unit="g"),
+    _a("heaviest", "prints", "🏋️", "Poids lourd", "Une impression réussie de {n} g", [250, 500, 1000, 2000, 3000], unit="g"),
+    _a("heavy_group", "prints", "🏗️", "Gros chantier", "Un groupe d'impressions réussies de {n} g", [1], unit="g"),
     _a("streak", "prints", "📅", "Assidu", "{n} jours d'affilée avec une impression", [3, 7, 14, 30, 60], unit="j"),
     _a("busy_day", "prints", "⚡", "Journée chargée", "{n} impressions lancées le même jour", [3, 5, 8, 12, 20]),
     _a("success_run", "prints", "✅", "Sans faute", "{n} impressions réussies d'affilée", [10, 25, 50, 100, 200]),
@@ -161,7 +162,6 @@ CATALOG = [
     _a("rfid_scans", "filaments", "📲", "Scanner", "{n} scans de bobines RFID", [1]),
     _a("colors_printed", "filaments", "🦎", "Caméléon", "{n} couleurs différentes imprimées", [1]),
     _a("print_days", "prints", "🗓️", "Jours d'impression", "{n} jours différents avec une impression", [1]),
-    _a("tags", "prints", "🏷️", "Organisé", "{n} étiquettes différentes sur tes impressions", [1]),
     _a("print_groups", "prints", "🗂️", "Rangé", "{n} groupes d'impressions", [1]),
     # Changements de filament (AMS)
     _a("fil_changes", "filaments", "🔄", "Valse des bobines", "{n} bobines posées dans l'AMS", [1]),
@@ -175,9 +175,9 @@ CATALOG = [
     _a("lunch", "prints", "🥪", "Pause déjeuner", "{n} impressions lancées entre midi et 14 h", [1]),
     _a("evening", "prints", "🌆", "Soirée atelier", "{n} impressions lancées entre 18 h et 22 h", [1]),
     _a("overnight", "prints", "🛌", "Nuit complète", "{n} impressions qui tournent de 23 h à 6 h", [1]),
-    _a("cancelled", "prints", "✋", "Changement d'avis", "{n} impressions annulées", [1]),
+    _a("cancelled", "prints", "✋", "Changement d'avis", "{n} impressions arrêtées dans les 15 minutes", [1]),
     _a("records", "prints", "📏", "Recordman", "{n} fois que tu as battu ton record de durée", [1]),
-    _a("success_rate", "prints", "📊", "Fiabilité", "{n} % de réussite (sur au moins 100 impressions)", [1], unit='%'),
+    _a("clean_weeks", "prints", "🛡️", "Semaines sans accroc", "{n} semaines d'impression sans aucun échec", [1], unit="sem."),
     _a("months_active", "prints", "🗓️", "Assidu au mois", "{n} mois différents avec une impression", [1]),
     _a("weekends_active", "prints", "🔧", "Bricoleur du dimanche", "{n} week-ends avec une impression", [1]),
     _a("kg_month", "prints", "🍔", "Mois gourmand", "{n} kg imprimés en un même mois", [1], unit='kg'),
@@ -210,13 +210,13 @@ CATALOG = [
     _a("night_hours", "prints", "🌃", "Veilleur de nuit", "{n} h imprimées entre minuit et 6 h", [1], unit="h"),
     _a("nonstop", "prints", "🔋", "Sans relâche", "{n} h d'affilée sans que l'imprimante s'arrête", [1], unit="h"),
     _a("lost_hours", "prints", "⌛", "Heures envolées", "{n} h d'impressions ratées", [1], unit="h"),
-    _a("day_hours", "prints", "☀️", "Journée pleine", "{n} h d'impressions lancées le même jour", [1], unit="h"),
+    _a("day_hours", "prints", "☀️", "Journée pleine", "{n} h imprimées dans une même journée", [1], unit="h"),
     _a("month_hours", "prints", "📈", "Mois de folie", "{n} h imprimées en un même mois", [1], unit="h"),
     # Poids, plateaux, imprimantes
     _a("feather", "prints", "🪶", "Poids plume", "{n} impressions réussies de moins de 5 g", [1]),
     _a("sturdy", "prints", "🦍", "Costaud", "{n} impressions de plus de 500 g", [1]),
     _a("multi_plate", "prints", "🍽️", "Multi-plateaux", "{n} impressions d'un plateau 2 ou plus", [1]),
-    _a("printers", "prints", "🖨️", "Parc machines", "{n} modèles d'imprimante différents", [1]),
+    _a("ams_units", "prints", "🗄️", "Parc d'AMS", "{n} AMS en service", [1]),
     # Secrets : une medaille unique, cachee tant qu'elle n'est pas gagnee
     _a("halloween", "secret", "🎃", "Spooky", "Une impression lancée un 31 octobre", [1],
        lore="Tu as imprimé un soir d'Halloween. Citrouille, squelette ou chauve-souris : l'imprimante aussi s'est déguisée."),
@@ -861,7 +861,7 @@ HINTS = {
 LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_likes", "mw_level", "mw_collections",
         "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils",
         "photos_manual", "photo_prints", "photos_camera", "photos_max", "covers", "visits", "visit_days", "details",
-        "actions", "updates", "notifs", "dismissals", "tags", "print_groups", "paparazzi", "souvenirs",
+        "actions", "updates", "notifs", "dismissals", "print_groups", "paparazzi", "souvenirs",
         "grand_tour", "night_visit", "cutting_edge", "double_update", "shares", "mw_rates", "mw_boosts_given",
         "mw_likes_given", "mw_collected", "open_spools", "mw_points_bal", "profile_downloads", "queue_size", "accessory_units", "showcase", "household", "notes", "catalog", "assembled", "accessory_refs"}
 for _x in CATALOG:
@@ -872,28 +872,32 @@ for _x in CATALOG:
 # catalogue change, et le passage suivant (15 min) realigne les paliers acquis
 # en silence -- retire ceux qui ne sont plus atteints, ajoute les nouveaux.
 TIER_TABLE = {
-    "prints_ok": [50, 250, 1000, 2500, 5000, 10000],
-    "print_hours": [250, 1000, 2500, 5000, 10000, 20000],
-    "print_kg": [5, 25, 50, 100, 250, 500],
-    "longest": [6, 12, 24, 48, 72, 96],
-    "heaviest": [250, 500, 1000, 2000, 3000, 5000],
-    "streak": [3, 7, 14, 30, 60, 100],
-    "busy_day": [3, 5, 8, 12, 20, 30],
-    "success_run": [10, 25, 50, 100, 250, 500],
-    "night": [10, 50, 150, 300, 600, 1000],
-    "early": [10, 50, 150, 300, 600, 1000],
-    "weekend": [25, 100, 300, 600, 1200, 2500],
-    "models": [25, 100, 250, 500, 1000, 2500],
-    "repeat": [5, 10, 25, 50, 100, 250],
-    "multicolor": [5, 25, 100, 250, 500, 1000],
-    "colors_max": [2, 4, 6, 8, 12, 16],
-    "failures": [1, 10, 25, 50, 100, 250],
-    "veteran": [30, 180, 365, 730, 1095, 1825, 3650, 5479, 7305],    # jusqu'a 5, 10, 15, 20 ans
-    "month_record": [20, 40, 60, 100, 150, 250],
-    "weeks": [4, 8, 16, 26, 52, 104],
-    "pieces": [250, 1000, 2500, 5000, 10000, 25000],
-    "mw_made": [25, 100, 250, 500, 1000, 2500],
-    "spent": [100, 500, 1000, 2500, 5000, 10000],
+    # Impressions : revus le 21/10/2026 (maximums donnes par l'utilisateur)
+    "heavy_group": [100, 250, 500, 1000, 1500, 2000, 3000, 4000, 5000],
+    "clean_weeks": [1, 4, 8, 13, 20, 30, 40, 60, 80],
+    "ams_units": [1, 2, 3, 4, 5],
+    "prints_ok": [10, 100, 250, 500, 800, 1200, 1700, 2300, 3000],
+    "print_hours": [25, 250, 700, 1250, 2000, 2800, 3800, 5000, 7000],
+    "print_kg": [1, 10, 25, 45, 70, 100, 140, 190, 250],
+    "longest": [2, 4, 8, 12, 20, 30, 40, 55, 72],
+    "heaviest": [50, 100, 200, 300, 400, 500, 650, 800, 1000],
+    "streak": [3, 7, 15, 25, 40, 60, 80, 110, 150],
+    "busy_day": [2, 3, 5, 7, 9, 11, 13, 16, 20],
+    "success_run": [5, 20, 50, 80, 120, 160, 210, 275, 350],
+    "night": [5, 20, 50, 80, 120, 160, 210, 275, 350],
+    "early": [1, 2, 3, 5, 7, 10, 13, 16, 20],
+    "weekend": [10, 50, 100, 200, 300, 400, 550, 750, 1000],
+    "models": [10, 50, 125, 200, 300, 450, 650, 900, 1200],
+    "repeat": [2, 5, 8, 12, 16, 20, 25, 35, 50],
+    "multicolor": [2, 10, 25, 45, 70, 100, 140, 190, 250],
+    "colors_max": [2, 3, 4, 5, 6, 8, 10, 12, 16],
+    "failures": [1, 5, 10, 20, 30, 40, 55, 75, 100],
+    "veteran": [7, 30, 91, 182, 365, 548, 730, 1095, 1826],
+    "month_record": [10, 25, 50, 75, 100, 130, 160, 200, 250],
+    "weeks": [2, 4, 6, 10, 15, 20, 26, 39, 52],
+    "pieces": [10, 100, 300, 600, 1000, 1500, 2000, 2700, 3500],
+    "mw_made": [10, 50, 150, 300, 500, 750, 1000, 1500, 2000],
+    "spent": [10, 50, 150, 300, 500, 750, 1000, 1500, 2000],
     "palette": [10, 25, 50, 100, 200, 300],
     "materials": [2, 3, 5, 7, 10, 12],
     "spools_done": [5, 25, 50, 100, 250, 500],
@@ -938,38 +942,35 @@ TIER_TABLE = {
     "dismissals": [5, 25, 50, 100, 250, 500],
     "rfid_scans": [10, 50, 100, 250, 500, 1000],
     "colors_printed": [10, 25, 50, 100, 200, 300],
-    "print_days": [30, 100, 250, 500, 1000, 1500],
-    "tags": [5, 10, 25, 50, 100, 200],
-    "print_groups": [5, 25, 50, 100, 250, 500],
+    "print_days": [7, 30, 60, 100, 150, 225, 300, 450, 600],
+    "print_groups": [5, 25, 50, 100, 150, 200, 275, 375, 500],
     "fil_changes": [10, 50, 100, 250, 500, 1000],
     "fil_changes_day": [3, 5, 8, 12, 16, 24],
     "fil_changes_week": [10, 20, 35, 50, 75, 100],
     "open_spools": [5, 10, 20, 30, 40, 60],
-    "long_prints": [5, 10, 25, 50, 100, 250],
-    "express": [10, 50, 100, 250, 500, 1000],
-    "night_hours": [10, 50, 100, 250, 500, 1000],
-    "nonstop": [12, 24, 48, 72, 120, 168],
-    "lost_hours": [5, 25, 50, 100, 250, 500],
-    "day_hours": [10, 16, 20, 22, 23, 24],
-    "month_hours": [100, 200, 300, 400, 500, 650],
-    "feather": [10, 50, 100, 250, 500, 1000],
-    "sturdy": [5, 10, 25, 50, 100, 250],
-    "multi_plate": [5, 25, 50, 100, 250, 500],
-    "printers": [2, 3, 4, 5, 6, 8],
-    "bicolor": [10, 50, 100, 250, 500, 1000],
-    "reliable": [5, 25, 50, 100, 250, 500],
-    "faster": [5, 25, 50, 100, 250, 500],
-    "morning": [25, 100, 300, 600, 1200, 2500],
-    "lunch": [5, 25, 100, 250, 500, 1000],
-    "evening": [25, 100, 300, 600, 1200, 2500],
-    "overnight": [5, 10, 25, 50, 100, 250],
-    "cancelled": [1, 10, 25, 50, 100, 250],
-    "records": [3, 5, 10, 15, 20, 30],
-    "success_rate": [80, 85, 90, 93, 96, 99],
-    "months_active": [3, 6, 12, 24, 36, 60],
-    "weekends_active": [5, 25, 52, 100, 150, 250],
-    "kg_month": [1, 2, 5, 10, 20, 30],
-    "kg_day": [0.5, 1, 2, 3, 5, 8],
+    "long_prints": [1, 3, 5, 10, 15, 25, 35, 50, 75],
+    "express": [5, 25, 50, 100, 175, 250, 350, 450, 600],
+    "night_hours": [10, 50, 150, 300, 450, 600, 800, 1100, 1500],
+    "nonstop": [2, 4, 8, 12, 20, 30, 40, 55, 72],
+    "lost_hours": [1, 5, 10, 20, 30, 40, 55, 75, 100],
+    "day_hours": [4, 8, 12, 16, 18, 20, 22, 23, 24],
+    "month_hours": [25, 50, 100, 150, 200, 250, 325, 400, 500],
+    "feather": [5, 20, 50, 80, 120, 160, 210, 275, 350],
+    "sturdy": [1, 2, 3, 4, 5, 7, 9, 12, 15],
+    "multi_plate": [5, 15, 30, 50, 75, 100, 150, 200, 300],
+    "bicolor": [10, 50, 100, 200, 300, 400, 550, 750, 1000],
+    "reliable": [5, 15, 30, 50, 75, 100, 140, 190, 250],
+    "faster": [2, 5, 10, 20, 35, 50, 70, 100, 150],
+    "morning": [5, 25, 50, 100, 150, 200, 275, 375, 500],
+    "lunch": [5, 25, 50, 100, 150, 200, 275, 375, 500],
+    "evening": [10, 50, 100, 175, 250, 350, 450, 600, 750],
+    "overnight": [1, 3, 5, 10, 15, 20, 25, 35, 50],
+    "cancelled": [1, 3, 5, 8, 10, 15, 20, 25, 30],
+    "records": [1, 2, 3, 4, 5, 6, 7, 8, 10],
+    "months_active": [1, 3, 6, 9, 12, 18, 24, 30, 36],
+    "weekends_active": [1, 5, 10, 20, 30, 40, 55, 75, 100],
+    "kg_month": [0.5, 1, 2, 3, 4, 5, 6, 8, 10],
+    "kg_day": [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.25, 1.5, 2],
     "engineering": [0.5, 1, 2, 5, 10, 25],
     "mw_designs_printed": [10, 50, 100, 250, 500, 1000],
     "creators": [5, 25, 50, 100, 250, 500],
@@ -990,7 +991,7 @@ TIER_TABLE = {
     "accessory_units": [50, 100, 250, 500, 1000, 2500],
     "best_sale": [10, 25, 50, 100, 250, 500],
     "showcase": [5, 10, 25, 50, 100, 200],
-    "notes": [5, 25, 50, 100, 250, 500],
+    "notes": [1, 5, 10, 20, 30, 40, 55, 75, 100],
     "household": [2, 3, 4, 5, 8, 10],
     "shares": [1, 10, 25, 50, 100, 250],
     "mw_rates": [1, 10, 25, 50, 100, 250],
@@ -1001,7 +1002,7 @@ TIER_TABLE = {
 # Au-dela de la Legende (Mythique, Cosmique, Eternel) : x2, x5, x10 du dernier
 # seuil, arrondis. Sauf la ou il y a un plafond naturel (pourcentage, 24 h par
 # jour, familles de teintes, matieres, imprimantes, niveau MakerWorld…).
-BOUNDED = {"success_rate", "day_hours", "colors_max", "stock_colors", "materials", "printers", "mw_level"}
+BOUNDED = {"day_hours", "colors_max", "stock_colors", "materials", "ams_units", "mw_level"}
 
 
 def _nice(x: float) -> float:
@@ -1018,9 +1019,14 @@ def _nice(x: float) -> float:
 
 
 def _extend(t: list, aid: str) -> list:
-    if aid in BOUNDED or len(t) != 6:
-        return t
-    return t + [_nice(t[-1] * f) for f in (2, 5, 10)]
+    """Neuf paliers. Un succes plafonne a moins de neuf seuils les place en
+    haut de l'echelle (le dernier est l'Eternel) : son premier seuil donne
+    d'un coup tous les paliers d'en dessous (et compte pour leurs collections)."""
+    if aid not in BOUNDED and len(t) == 6:
+        t = t + [_nice(t[-1] * f) for f in (2, 5, 10)]
+    if 1 < len(t) < len(TIERS):
+        t = [t[0]] * (len(TIERS) - len(t)) + t
+    return t
 
 
 for _x in CATALOG:
@@ -1123,7 +1129,8 @@ async def _load_data() -> dict:
                                           Print.group_id)
                                    .order_by(Print.print_date, Print.id))).all()
         usage = (await db.execute(select(FilamentUsage.print_id, FilamentUsage.spool_id, FilamentUsage.filament_type,
-                                         FilamentUsage.color_hex, FilamentUsage.grams_used))).all()
+                                         FilamentUsage.color_hex, FilamentUsage.grams_used,
+                                         FilamentUsage.ams_id))).all()
         spools = (await db.execute(select(Spool.id, Spool.filament_id, Spool.archived, Spool.updated_at,
                                           Spool.last_dried_at, Spool.created_at, Spool.remaining_weight_g,
                                           Spool.tag_number, Spool.first_used_at))).all()
@@ -1204,7 +1211,16 @@ async def _load_data() -> dict:
             "act_days": act_days, "pages": pages, "late": late, "notif_days": notif_days, "dismiss": dismiss,
             "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "changes": changes,
             "mwd": mwd, "accs": accs, "acc_objs": acc_objs, "n_users": n_users, "spool_more": spool_more,
-            "queue": _queue_size(), "my_designs": my_designs}
+            "queue": _queue_size(), "my_designs": my_designs, "ams_live": _ams_live()}
+
+
+def _ams_live() -> int:
+    """AMS branches sur l'imprimante en ce moment (0 si inconnu)."""
+    try:
+        from ..core.mqtt import get_state
+        return sum(1 for a in (get_state().ams_list or []) if 0 <= int(a.id) < 254)
+    except Exception:
+        return 0
 
 
 _MONDAY0 = datetime(1970, 1, 5).date()       # un lundi : numero de semaine = jours // 7
@@ -1562,8 +1578,9 @@ def compute_series(d: dict, now: datetime) -> dict:
             run = 0
             if key:
                 fails_in_row[key] += 1
-        heaviest = max(heaviest, w)
-        push("heaviest", end, round(heaviest))
+        if ok:
+            heaviest = max(heaviest, w)
+            push("heaviest", end, round(heaviest))
         if len(cols) >= 4:
             multicolor += 1
             push("multicolor", end, multicolor)
@@ -1577,6 +1594,7 @@ def compute_series(d: dict, now: datetime) -> dict:
             at = first_ok + timedelta(days=n)
             if at <= now:
                 push("veteran", at, n)
+        push("veteran", now, (now - first_ok).days)
     # bobines
     done = sorted((_ts(s.updated_at) or now) for s in d["spools"] if s.archived)
     for i, dt in enumerate(done, 1):
@@ -1656,7 +1674,7 @@ def compute_series(d: dict, now: datetime) -> dict:
         for i, dt in enumerate(sorted((_ts(o.updated_at) or now) for o in d["objs"] if o.status == st_), 1):
             push(key, dt, i)
     _more(push, d, now)
-    _durations(push, d)
+    _durations(push, d, now)
     _wide(push, d, now)
     _fun200(push, d, now)
     acc = 0
@@ -1707,7 +1725,6 @@ def _more(push, d, now) -> None:
     covers = len(d.get("covers", [])) + sum(1 for g in d.get("pgroups", []) if (g.cover_photo or "").strip())
     push("covers", now, covers)
     cumul("print_groups", [_ts(g.created_at) or now for g in d.get("pgroups", [])])
-    push("tags", now, len(d.get("tags", [])))
     # appli : visites, fiches, actions, jours d'ouverture
     for kind, key in (("visite", "visits"), ("detail", "details"), ("action", "actions")):
         by_day(key, [(day, n) for k, day, n in d.get("act_days", []) if k == kind])
@@ -1743,6 +1760,23 @@ def _more(push, d, now) -> None:
             push("cutting_edge", now, 1)
     except Exception:
         pass
+
+
+def _by_local_day(start: datetime, end: datetime) -> list:
+    """[(date locale, heures)] : une impression decoupee par journee (heure locale)."""
+    if end <= start:
+        return []
+    tz = _tz()
+    a, b = start.replace(tzinfo=timezone.utc).astimezone(tz), end.replace(tzinfo=timezone.utc).astimezone(tz)
+    out, day = [], a.date()
+    while day <= b.date():
+        d0 = datetime(day.year, day.month, day.day, tzinfo=tz)
+        d1 = datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=tz)
+        lo, hi = max(a, d0), min(b, d1)
+        if hi > lo:
+            out.append((day, (hi - lo).total_seconds() / 3600))
+        day += timedelta(days=1)
+    return out
 
 
 def _night_overlap(start: datetime, end: datetime) -> float:
@@ -1996,7 +2030,7 @@ def _wide(push, d, now) -> None:
     eng = 0.0
     designs, creators, cats, seen_mw = set(), set(), set(), set()
     record = 0.0
-    n_done = n_ok = 0
+    wk_bad = {}
     for p in d["prints"]:
         st = (p.status or "").upper()
         if st == "IN_PROGRESS" or not p.print_date:
@@ -2032,17 +2066,16 @@ def _wide(push, d, now) -> None:
             night0 -= timedelta(days=1)
         if loc <= night0 and _local(end) >= night0 + timedelta(hours=7):
             inc("overnight", end)
-        if st == "CANCELLED":
+        # changement d'avis : arretee (ratee ou annulee) dans les 15 minutes
+        if st in KO and p.duration_seconds is not None and dur < 15 * 60:
             inc("cancelled", end)
         if ok and dur > record:
             if record:
                 inc("records", end)
             record = dur
-        # taux de reussite, des 100 impressions terminees (meilleur atteint)
-        n_done += 1
-        n_ok += ok
-        if n_done >= 100:
-            push("success_rate", end, int(100 * n_ok / n_done))
+        # semaines (du lundi) : imprimee, et un echec la gache
+        wk = (loc.date() - _MONDAY0).days // 7
+        wk_bad[wk] = wk_bad.get(wk, False) or st in KO
         months.add((loc.year, loc.month))
         push("months_active", start, len(months))
         if loc.weekday() >= 5:
@@ -2078,6 +2111,15 @@ def _wide(push, d, now) -> None:
                         inc("trending", end)
                     if 0 < pc < 50:
                         inc("gems", end)
+    # semaines sans accroc : chacune compte une fois finie (le lundi suivant)
+    clean = 0
+    for wk in sorted(wk_bad):
+        at = datetime.combine(_MONDAY0 + timedelta(days=7 * (wk + 1)), datetime.min.time())
+        if at > now:
+            break
+        if not wk_bad[wk]:
+            clean += 1
+            push("clean_weeks", at, clean)
     push("queue_size", now, d.get("queue") or 0)
     push("household", now, d.get("n_users") or 0)
     # bobines : toutes, kilos et euros achetes, marques
@@ -2109,13 +2151,13 @@ def _wide(push, d, now) -> None:
         push("best_sale", _ts(o.sold_date) or now, round(best, 2))
 
 
-def _durations(push, d) -> None:
+def _durations(push, d, now) -> None:
     """Durees (longues, express, nuit, d'affilee, perdues, par jour et par
     mois), poids, plateaux, imprimantes ; changements de filament."""
     longs = express = feather = sturdy = multi = 0
     night = lost = 0.0
     per_day, per_month = defaultdict(float), defaultdict(float)
-    printers = set()
+    group_g = defaultdict(float)
     run_start = run_end = None
     best_run = 0.0
     for p in d["prints"]:
@@ -2142,18 +2184,21 @@ def _durations(push, d) -> None:
         if str(getattr(p, "plate_id", "") or "1").strip() not in ("", "0", "1"):
             multi += 1
             push("multi_plate", end, multi)
-        if getattr(p, "printer_model", None):
-            printers.add(str(p.printer_model).strip().upper())
-            push("printers", start, len(printers))
+        gid = getattr(p, "group_id", None)
+        if ok and gid:
+            group_g[gid] += w
+            push("heavy_group", end, round(max(group_g.values())))
         night += _night_overlap(start, end)
         push("night_hours", end, int(night))
         if ko:
             lost += dur / 3600
             push("lost_hours", end, int(lost))
-        per_day[loc.date()] += dur / 3600
-        push("day_hours", start, int(per_day[loc.date()]))
-        per_month[(loc.year, loc.month)] += dur / 3600
-        push("month_hours", end, int(per_month[(loc.year, loc.month)]))
+        # heures reellement imprimees dans chaque journee et chaque mois (heure locale)
+        for day, h in _by_local_day(start, end):
+            per_day[day] += h
+            per_month[(day.year, day.month)] += h
+            push("day_hours", end, min(24, int(per_day[day] + 1e-6)))
+            push("month_hours", end, int(per_month[(day.year, day.month)] + 1e-6))
         # machine occupee d'affilee : impressions qui s'enchainent a moins de 30 min
         if run_end is not None and start <= run_end + timedelta(minutes=30):
             run_end = max(run_end, end)
@@ -2168,6 +2213,16 @@ def _durations(push, d) -> None:
             push("cinderella", end, 1)
         if (loc_end.hour, loc_end.minute) == (7, 0):
             push("wake_up", end, 1)
+    # AMS : ceux qui ont servi (historique des filaments) et ceux branches (en direct) ;
+    # 254 et 255 sont les porte-bobines externes
+    when = {p.id: p.print_date for p in d["prints"] if p.print_date}
+    ams = set()
+    for u in sorted((u for u in d["usage"] if when.get(u.print_id)), key=lambda u: when[u.print_id]):
+        a = getattr(u, "ams_id", None)
+        if a is not None and 0 <= a < 254 and a not in ams:
+            ams.add(a)
+            push("ams_units", when[u.print_id], len(ams))
+    push("ams_units", now, max(len(ams), d.get("ams_live") or 0))
     # changements de filament : total, record d'un jour, record sur 7 jours
     ch = sorted(d.get("changes") or [])
     per = defaultdict(int)
