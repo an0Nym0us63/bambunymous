@@ -107,15 +107,7 @@ export default function Notifications() {
                         display:"-webkit-box", WebkitLineClamp:5, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{it.message}</div>
                     )}
                   </div>
-                  {thumb ? (
-                    <img src={thumb} alt="" loading="lazy" style={{ width:46, height:46, borderRadius:12, objectFit:"cover",
-                      flexShrink:0, background:"var(--surface2)" }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
-                  ) : (
-                    <span style={{ width:46, height:46, borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center",
-                      justifyContent:"center", fontSize:22,
-                      background:`${it.section_color || "#4F46E5"}2e`, boxShadow:`inset 0 0 0 2px ${it.section_color || "#4F46E5"}` }}>
-                      {it.section_emoji || SECTION_ICON[it.section] || "🔔"}</span>
-                  )}
+                  <BigIcon thumb={thumb} it={it}/>
                 </div>
               </div>
             );
@@ -129,6 +121,22 @@ export default function Notifications() {
       )}
       <p style={{ ...msg, padding:"4px", fontSize:11 }}>Gardées {data.days} jours.</p>
     </div>
+  );
+}
+
+// Grande icone : l'image si elle se charge, sinon l'emoji de la section sur
+// un disque de sa teinte (comme la notification de l'appli Android)
+function BigIcon({ thumb, it }) {
+  const [broken, setBroken] = useState(false);
+  if (thumb && !broken) return (
+    <img src={thumb} alt="" loading="lazy" onError={() => setBroken(true)} style={{ width:46, height:46, borderRadius:12,
+      objectFit:"cover", flexShrink:0, background:"var(--surface2)" }}/>
+  );
+  const c = it.section_color || "#4F46E5";
+  return (
+    <span style={{ width:46, height:46, borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center",
+      justifyContent:"center", fontSize:22, background:`${c}2e`, boxShadow:`inset 0 0 0 2px ${c}` }}>
+      {it.section_emoji || SECTION_ICON[it.section] || "🔔"}</span>
   );
 }
 
