@@ -1094,7 +1094,11 @@ async def history(user: str, before: int = 0, limit: int = 40) -> dict:
         unseen = (await db.execute(select(func.count()).select_from(NotifLog)
                                    .where(_mine(user), NotifLog.id > seen))).scalar_one()
     return {"items": [{"id": r.id, "time": r.created_at.isoformat() + "Z", "event": r.event, "section": r.section,
-                       "section_label": labels.get(r.section, ""), "title": r.title, "message": r.message,
+                       "section_label": labels.get(r.section, ""),
+                       # meme habillage que la notification de l'appli Android
+                       "section_emoji": _section_parts(r.section)[0], "section_name": _section_parts(r.section)[1],
+                       "section_color": SECTION_COLORS.get(r.section or "", BRAND_COLOR),
+                       "title": r.title, "message": r.message,
                        "link": r.link, "image": r.image, "seen": r.id <= seen} for r in rows],
             "unseen": unseen, "more": len(rows) >= limit, "days": HISTORY_DAYS}
 

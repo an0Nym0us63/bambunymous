@@ -79,29 +79,43 @@ export default function Notifications() {
           {g.items.map(it => {
             const thumb = thumbOf(it);
             return (
+              // Meme mise en page que la notification de l'appli Android :
+              // en-tete (masque violet · BambuNymous · section · heure), titre,
+              // texte, et a droite la grande icone (image, ou emoji de la
+              // section sur un disque de sa teinte).
               <div key={it.id} onClick={() => open(it)} className="card"
-                style={{ display:"flex", gap:12, padding:"11px 13px", cursor: it.link ? "pointer" : "default",
-                  borderLeft: it.seen ? "1px solid var(--border)" : "3px solid #3b82f6",
-                  background: it.seen ? undefined : "linear-gradient(90deg, rgba(59,130,246,0.07), transparent 60%), var(--surface)" }}>
-                {thumb ? (
-                  <img src={thumb} alt="" loading="lazy" style={{ width:52, height:52, borderRadius:10, objectFit:"cover", flexShrink:0,
-                    background:"var(--surface2)" }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
-                ) : (
-                  <span style={{ width:52, height:52, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center",
-                    justifyContent:"center", fontSize:24, background:"var(--surface2)" }}>{SECTION_ICON[it.section] || "🔔"}</span>
-                )}
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
-                    <span style={{ flex:1, fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden",
-                      textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{it.title}</span>
-                    <span style={{ fontSize:10.5, color:"var(--muted)", flexShrink:0 }}>
-                      {new Date(it.time).toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" })}</span>
+                style={{ padding:"11px 14px 12px", borderRadius:18, cursor: it.link ? "pointer" : "default",
+                  background: it.seen ? undefined : "linear-gradient(90deg, rgba(79,70,229,0.07), transparent 65%), var(--surface)",
+                  border: it.seen ? undefined : "1px solid rgba(79,70,229,0.35)" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:11.5, color:"var(--muted)", minWidth:0 }}>
+                  <span style={{ width:22, height:22, borderRadius:"50%", background:"#4F46E5", flexShrink:0, display:"flex",
+                    alignItems:"center", justifyContent:"center" }}>
+                    <img src="/notif-icon.png" alt="" style={{ width:13, height:13 }}/></span>
+                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+                    <span style={{ color:"var(--text2)", fontWeight:600 }}>BambuNymous</span>
+                    {it.section_name ? <> • {it.section_name}</> : null}
+                    {" • "}{new Date(it.time).toLocaleTimeString("fr-FR", { hour:"2-digit", minute:"2-digit" })}</span>
+                  {!it.seen && <span title="Nouvelle" style={{ width:7, height:7, borderRadius:"50%", background:"#4F46E5",
+                    marginLeft:"auto", flexShrink:0 }}/>}
+                </div>
+                <div style={{ display:"flex", gap:12, marginTop:7, paddingLeft:30 }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:"var(--text)", overflow:"hidden",
+                      textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{it.title}</div>
+                    {it.message && (
+                      <div style={{ fontSize:12.5, color:"var(--text2)", marginTop:3, whiteSpace:"pre-line", lineHeight:1.45,
+                        display:"-webkit-box", WebkitLineClamp:5, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{it.message}</div>
+                    )}
                   </div>
-                  {it.message && (
-                    <div style={{ fontSize:12, color:"var(--text2)", marginTop:3, whiteSpace:"pre-line", lineHeight:1.45,
-                      display:"-webkit-box", WebkitLineClamp:5, WebkitBoxOrient:"vertical", overflow:"hidden" }}>{it.message}</div>
+                  {thumb ? (
+                    <img src={thumb} alt="" loading="lazy" style={{ width:46, height:46, borderRadius:12, objectFit:"cover",
+                      flexShrink:0, background:"var(--surface2)" }} onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
+                  ) : (
+                    <span style={{ width:46, height:46, borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center",
+                      justifyContent:"center", fontSize:22,
+                      background:`${it.section_color || "#4F46E5"}2e`, boxShadow:`inset 0 0 0 2px ${it.section_color || "#4F46E5"}` }}>
+                      {it.section_emoji || SECTION_ICON[it.section] || "🔔"}</span>
                   )}
-                  <div style={{ fontSize:10.5, color:"var(--muted)", marginTop:4 }}>{it.section_label}</div>
                 </div>
               </div>
             );
