@@ -1183,6 +1183,26 @@ async def _load_data() -> dict:
             ActivityLog.kind == "action",
             (ActivityLog.path.like("/api/v1/share/%")) | (ActivityLog.path.like("/api/v1/makerworld/%"))))).all()
         links = (await db.execute(select(ObjectAccessory.quantity, ObjectAccessory.created_at))).all()
+    # les journaux (activite, notifications) se purgent : on en garde les comptes jour par jour
+    cur = defaultdict(dict)
+    for k, day, n in act_days:
+        if day:
+            cur[k][str(day)] = n
+    for day, n in notif_days:
+        if day:
+            cur["notif"][str(day)] = n
+    for method, path, dt in acts:
+        for key, m_, rx in _ACT_PATTERNS:
+            if dt and method == m_ and re.match(rx, path or ""):
+                day = str(_ts(dt).date())
+                cur[key][day] = cur[key].get(day, 0) + 1
+    late3 = next((_ts(dt).isoformat() for (dt,) in late if dt and _local(_ts(dt)).hour == 3), None)
+    mem = await _journal_memory(cur, [r[0] for r in pages if r[0]], late3)
+    act_days = [(k, day, n) for k in ("visite", "detail", "action") for day, n in (mem.get(k) or {}).items()]
+    notif_days = list((mem.get("notif") or {}).items())
+    pages = [(x,) for x in mem.get("pages") or []]
+    late = [(datetime.fromisoformat(mem["late"]),)] if mem.get("late") else []
+    act_kinds = {key: list((mem.get(key) or {}).items()) for key, _m, _rx in _ACT_PATTERNS}
     # photos deposees dans le dossier d'un groupe d'impressions
     gfiles = []
     try:
@@ -1214,7 +1234,7 @@ async def _load_data() -> dict:
     return {"prints": prints, "usage": usage, "spools": spools, "fils": fils, "objs": objs, "links": links,
             "groups": groups, "snaps": snaps, "covers": covers, "pgroups": pgroups, "tags": tags,
             "act_days": act_days, "pages": pages, "late": late, "notif_days": notif_days, "dismiss": dismiss,
-            "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "changes": changes,
+            "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "act_kinds": act_kinds, "changes": changes,
             "mwd": mwd, "accs": accs, "acc_objs": acc_objs, "n_users": n_users, "spool_more": spool_more,
             "queue": _queue_size(), "my_designs": my_designs, "ams_live": _ams_live()}
 
@@ -1753,13 +1773,17 @@ def _more(push, d, now) -> None:
             push("night_visit", dt, 1)
             break
     by_day("notifs", d.get("notif_days", []))
-    kinds = defaultdict(list)
-    for method, path, dt in d.get("acts", []):
-        for key, m_, rx in _ACT_PATTERNS:
-            if method == m_ and re.match(rx, path or ""):
-                kinds[key].append(_ts(dt))
-    for key, _m, _rx in _ACT_PATTERNS:
-        cumul(key, kinds[key])
+    if "act_kinds" in d:            # gardes jour par jour (le journal se purge)
+        for key, _m, _rx in _ACT_PATTERNS:
+            by_day(key, d["act_kinds"].get(key, []))
+    else:
+        kinds = defaultdict(list)
+        for method, path, dt in d.get("acts", []):
+            for key, m_, rx in _ACT_PATTERNS:
+                if method == m_ and re.match(rx, path or ""):
+                    kinds[key].append(_ts(dt))
+        for key, _m, _rx in _ACT_PATTERNS:
+            cumul(key, kinds[key])
     cumul("dismissals", [_ts(r[0]) for r in d.get("dismiss", [])])
     cumul("rfid_scans", [_ts(r[0]) for r in d.get("rfid_scans", [])])
     # mises a jour : chaque nouvelle version vue (la premiere n'en est pas une)
@@ -2394,6 +2418,36 @@ def _queue_size() -> int:
         return len((_snap_get() or {}).get("models") or [])
     except Exception:
         return 0
+
+
+async def _journal_memory(cur: dict, pages: list, late3: str | None) -> dict:
+    """Le journal d'activite et celui des notifications se purgent : ce qu'ils
+    comptent est garde ici, jour par jour (le plus grand nombre vu pour ce
+    jour). Reprendre le max rend l'operation sans effet si on la rejoue, et
+    un jour purge garde son compte : les succes ne reculent pas."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, KEY + "_JOURNAL", "")
+    try:
+        mem = json.loads(raw) if raw else {}
+    except ValueError:
+        mem = {}
+    if not isinstance(mem, dict):
+        mem = {}
+    before = json.dumps(mem, sort_keys=True)
+    for grp, days in cur.items():
+        m = mem.setdefault(grp, {})
+        for day, n in days.items():
+            if n > m.get(day, 0):
+                m[day] = n
+    mem["pages"] = sorted(set(mem.get("pages") or []) | set(pages))
+    if late3 and not mem.get("late"):
+        mem["late"] = late3
+    if json.dumps(mem, sort_keys=True) != before:
+        async with AsyncSessionLocal() as db:
+            await set_setting(db, KEY + "_JOURNAL", json.dumps(mem))
+    return mem
 
 
 async def _state_get():
