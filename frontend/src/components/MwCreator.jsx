@@ -106,7 +106,8 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   const since = data.counters_since ? new Date(data.counters_since + "T12:00:00").toLocaleDateString("fr-FR", { day:"numeric", month:"short" }) : null;
   const typeLabel = TYPES.find(t => t[0] === type)?.[1].toLowerCase();
   const hist0 = data.history || {};
-  const importLink = isAdmin && (
+  // import unique : masque une fois l'historique des modeles importe
+  const importLink = isAdmin && !hist0.designs && (
     <>
       <input ref={fileRef} type="file" accept=".json,.txt,application/json,text/plain" style={{ display:"none" }}
         onChange={e => importFile(e.target.files?.[0])}/>
