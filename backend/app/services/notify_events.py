@@ -106,13 +106,16 @@ async def _cfg_for(event: str):
 
 
 async def _send(cfg, event: str, title: str, message: str, link=None, priority=3, file=None,
-                filename=None, attach=None, actions=None, click=None):
-    """Envoi d'un type active : lien vers l'appli en clic et en premier bouton."""
+                filename=None, attach=None, actions=None, click=None, icon=None):
+    """Envoi d'un type active : lien vers l'appli en clic et en premier bouton.
+    file : image locale (piece jointe) ; attach : adresse https de la grande
+    image (sans file, ou copie publique de file pour l'appli et le journal) ;
+    icon : petite vignette (ntfy, appli Android)."""
     url = N.app_link(cfg, link) if link is not None else None
     acts = ([("Ouvrir BambuNymous", url)] if url else []) + list(actions or [])
     try:
         await N.send(title, message, click=click or url, priority=priority, file=file, filename=filename,
-                     attach=attach, actions=acts, event=event)
+                     attach=attach, actions=acts, event=event, icon=icon)
         logger.info(f"[NOTIF] {event} envoyee : {title}")
     except Exception as e:
         logger.warning(f"[NOTIF] {event} : {e}")
@@ -173,6 +176,28 @@ def _fils_lines(info) -> list:
     if len(f) == 1:
         return [f"🧵 {f[0]}"]
     return ["🧵 Filaments :"] + [f"   • {x}" for x in f]
+
+
+def _public(cfg, path):
+    """Adresse https d'une image locale (copie publique de 15 jours), ou None."""
+    try:
+        return _keep_image(cfg, Path(path).read_bytes()) if path else None
+    except OSError:
+        return None
+
+
+def _visuals(cfg, info, big_file=None):
+    """(file, attach, icon) d'une notification d'impression : la grande image
+    (photo de la camera si on en a une, sinon la couverture MakerWorld, sinon
+    le plateau) et une vignette (couverture, sinon plateau)."""
+    plate = _image(info, info.get("plate"))
+    cover = info.get("cover")
+    thumb = cover or _public(cfg, plate)
+    if big_file:
+        return big_file, _public(cfg, big_file), thumb
+    if cover:
+        return None, cover, _public(cfg, plate) or cover
+    return plate, _public(cfg, plate), None
 
 
 def _image(info, *names):
@@ -240,10 +265,9 @@ async def print_started(pid: int, wait: float = 120):
     if bits:
         lines.append(" · ".join(bits))
     lines += _fils_lines(info)
-    img = _image(info, info["plate"])
+    f, big, thumb = _visuals(cfg, info)
     await _send(cfg, "print_started", "▶️ Impression démarrée", "\n".join(lines), link=f"/prints?id={pid}",
-                priority=2, file=img, filename="plateau.png", attach=None if img else info["cover"],
-                actions=_mw_action(info))
+                priority=2, file=f, filename="plateau.png", attach=big, icon=thumb, actions=_mw_action(info))
 
 
 async def print_first_layer(pid: int):
@@ -262,8 +286,9 @@ async def print_first_layer(pid: int):
             lines.append(f"📶 couche {st.layer}/{st.total_layers} · reste {_fmt_dur((st.remaining_minutes or 0) * 60)}")
     except Exception:
         pass
+    f, big, thumb = _visuals(cfg, info, img)
     await _send(cfg, "print_first_layer", "🔍 1re couche terminée", "\n".join(lines),
-                link=f"/prints?id={pid}", priority=3, file=img, filename="couche1.jpg")
+                link=f"/prints?id={pid}", priority=3, file=f, filename="couche1.jpg", attach=big, icon=thumb)
 
 
 async def print_finished(pid: int, status: str, pct: int = 0, print_error: int = 0, wait: float = 40):
@@ -300,10 +325,10 @@ async def print_finished(pid: int, status: str, pct: int = 0, print_error: int =
         if bits:
             lines.append(" · ".join(bits))
         lines += _fils_lines(info)
-        img = snap or _image(info, info["plate"])
+        f, big, thumb = _visuals(cfg, info, snap)
         await _send(cfg, event, "✅ Impression terminée", "\n".join(lines),
-                    link=f"/prints?id={pid}", priority=3, file=img, filename="fin.jpg",
-                    attach=None if img else info["cover"], actions=_mw_action(info))
+                    link=f"/prints?id={pid}", priority=3, file=f, filename="fin.jpg",
+                    attach=big, icon=thumb, actions=_mw_action(info))
     else:
         cancelled = int(print_error or 0) == CANCELLED
         title = "🚫 Impression annulée" if cancelled else "❌ Impression en échec"
@@ -313,8 +338,10 @@ async def print_finished(pid: int, status: str, pct: int = 0, print_error: int =
         if rs:
             lines.append("⚠️ " + " ; ".join(rs[:3]))
         lines += _fils_lines(info)
+        f, big, thumb = _visuals(cfg, info, snap)
         await _send(cfg, event, title, "\n".join(lines),
-                    link=f"/prints?id={pid}", priority=3 if cancelled else 5, file=snap, filename="arret.jpg")
+                    link=f"/prints?id={pid}", priority=3 if cancelled else 5, file=f, filename="arret.jpg",
+                    attach=big, icon=thumb)
 
 
 async def print_paused(job_id: str, pct: float, hms: list, print_error: int, layer=0, total=0):
@@ -654,10 +681,10 @@ def _keep_image(cfg, data: bytes):
     d = Path(settings.UPLOADS_DIR) / "notif"
     d.mkdir(parents=True, exist_ok=True)
     now = time.time()
-    for old in d.glob("*.png"):
+    for old in d.glob("*.*"):
         if now - old.stat().st_mtime > 15 * 86400:
             old.unlink(missing_ok=True)
-    name = hashlib.sha1(data).hexdigest()[:20] + ".png"
+    name = hashlib.sha1(data).hexdigest()[:20] + (".jpg" if data[:3] == b"\xff\xd8\xff" else ".png")
     (d / name).write_bytes(data)
     return url + name
 
@@ -702,6 +729,8 @@ async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
                             if not p or c is p:
                                 continue
                             who = names.get(fid, f"Copain {fid}")
+                            # toucher la notification : BambuNymous chez ce copain
+                            link = N.app_link(cfg, f"/?friend={fid}")
                             if c["state"] == "printing" and p["state"] != "printing":
                                 lines = ([f"📄 {c['print']}"] if c["print"] else []) \
                                     + ([f"⏳ encore {_fmt_dur(c['rem'] * 60)}"] if c["rem"] else [])

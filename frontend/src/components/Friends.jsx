@@ -44,6 +44,24 @@ function Lamp({ s }) {
   );
 }
 
+// Lien « chez un copain » (notification de copain) : ?friend=<id> bascule
+// chez lui, ?friend=me revient chez moi. Monte une fois dans le Layout.
+export function FriendLinkBridge() {
+  const friend = useFriend((s) => s.friend);
+  const visit = useFriend((s) => s.visit);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("friend");
+    if (!id) return;
+    if (id === "me") { if (friend) visit(null); return; }
+    if (friend && String(friend.id) === id) return;
+    client.get("/friends").then(({ data }) => {
+      const f = (data.friends || []).find(x => String(x.id) === id);
+      if (f) visit(f);
+    }).catch(() => {});
+  }, []);
+  return null;
+}
+
 // ── Liste « Chez qui ? » (menu du compte) ───────────────────────────────────
 export function FriendPicker({ onDone }) {
   const friend = useFriend((s) => s.friend);

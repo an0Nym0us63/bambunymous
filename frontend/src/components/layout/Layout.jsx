@@ -8,6 +8,7 @@ import NotifBell from "../NotifBell";
 import ShareProgress from "../ShareProgress";
 import RfidScanBridge from "../RfidScanBridge";
 import PushBridge from "../PushBridge";
+import { FriendLinkBridge } from "../Friends";
 import Toast from "../Toast";
 import NoAutofill from "../NoAutofill";
 
@@ -211,6 +212,7 @@ export default function Layout() {
         <ShareProgress/>
         {!friend && <RfidScanBridge/>}
         {!friend && <PushBridge/>}
+        <FriendLinkBridge/>
         <Toast/>
         <NoAutofill/>
 

@@ -956,7 +956,7 @@ async def test_device(dev_id: str, user: str, admin: bool) -> dict:
 
 
 
-def _up_payload(title, message, click, priority, section, attach, nid=None) -> bytes:
+def _up_payload(title, message, click, priority, section, attach, nid=None, icon=None) -> bytes:
     """JSON compact : t titre, m texte, u lien, p priorite, s section, i image ;
     et l'habillage de la section (sl nom, e emoji, c teinte) pour que l'appli
     cree sa categorie et sa grande icone sans liste en dur."""
@@ -965,6 +965,8 @@ def _up_payload(title, message, click, priority, section, attach, nid=None) -> b
     if section:
         d.update(sl=name, e=emo, c=SECTION_COLORS.get(section, ""))
     d.update(si=SECTION_ICONS.get(section or "", NOTIF_ICON), ac=BRAND_COLOR)
+    if icon and str(icon).startswith("https://"):
+        d["li"] = icon           # vignette (grande icone a droite)
     if nid:
         d["n"] = int(nid)        # touchee ou balayee sur le telephone : lue dans le journal
     if attach and str(attach).startswith("https://"):
@@ -976,12 +978,12 @@ def _up_payload(title, message, click, priority, section, attach, nid=None) -> b
     return raw
 
 
-def _post_devices(cfg, devices, title, message, click, priority, section, attach, nid=None) -> list:
+def _post_devices(cfg, devices, title, message, click, priority, section, attach, nid=None, icon=None) -> list:
     """Envoie a chaque telephone ; rend les erreurs (une par telephone en echec)."""
     from urllib.parse import urlparse
     from .makerworld import session
     from datetime import datetime, timezone
-    body = _up_payload(title, message, click, priority, section, attach, nid)
+    body = _up_payload(title, message, click, priority, section, attach, nid, icon)
     n = cfg.get("ntfy") or {}
     ntfy_host = urlparse(n.get("url") or "https://ntfy.sh").netloc
     errs = []
@@ -1064,7 +1066,7 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
     chat = chat or (_route(cfg, sec, "telegram") if sec else "") or cfg["tgbot"].get("chat_id")
     # icone du sujet si elle est posee, sinon celle passee, sinon le logo
     t_icon = next((t.get("icon") for t in cfg["ntfy"].get("topics") or [] if t["topic"] == topic), "")
-    icon = t_icon or icon or app_link(cfg, "/icon-192.png")
+    icon = icon or t_icon or app_link(cfg, "/icon-192.png")
     log_id = None
     if _log and event in EVENTS:
         try:
@@ -1103,7 +1105,8 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
         if not devs:
             errors.append("Appli Android : aucun téléphone inscrit")
         else:
-            errs = await asyncio.to_thread(_post_devices, cfg, devs, title, message, click, priority, sec, attach, log_id)
+            errs = await asyncio.to_thread(_post_devices, cfg, devs, title, message, click, priority, sec, attach, log_id,
+                                           icon if icon != app_link(cfg, "/icon-192.png") else None)
             await _save(cfg)                    # derniers succes / echecs par telephone
             if len(errs) == len(devs):
                 errors.append("Appli Android : " + " · ".join(errs))
