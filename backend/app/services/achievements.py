@@ -71,7 +71,8 @@ def _a(id, cat, emoji, name, desc, tiers, **kw):
 
 CATALOG = [
     # Impressions
-    _a("first_print", "prints", "🐣", "Premier pas", "Ta première impression réussie", [1]),
+    _a("first_print", "prints", "🐣", "Premier pas", "Ta première impression réussie", [1],
+       lore="Tout a commencé là : une buse chaude, un plateau propre, et ta toute première impression réussie."),
     _a("prints_ok", "prints", "🖨️", "Imprimeur", "{n} impressions réussies", [10, 100, 500, 1000, 2500]),
     _a("print_hours", "prints", "⏱️", "Heures de vol", "{n} h d'impression", [100, 500, 1000, 2500, 5000], unit="h"),
     _a("print_kg", "prints", "🧵", "Dévoreur de filament", "{n} kg de filament imprimé", [1, 10, 50, 100, 250], unit="kg"),
@@ -89,6 +90,12 @@ CATALOG = [
     _a("colors_max", "prints", "🎨", "Peintre", "{n} couleurs dans une même impression", [2, 4, 8, 12, 16]),
     _a("failures", "prints", "💥", "Ça arrive aux meilleurs", "{n} impressions ratées ou annulées", [1, 10, 25, 50, 100]),
     _a("veteran", "prints", "🎖️", "Vétéran", "{n} jours depuis ta première impression", [30, 180, 365, 730, 1095], unit="j"),
+    _a("month_record", "prints", "🗓️", "Mois record", "{n} impressions en un même mois", [20, 40, 60, 100, 150]),
+    _a("weeks", "prints", "📆", "Régulier", "{n} semaines d'affilée avec une impression", [4, 8, 16, 26, 52], unit="sem."),
+    _a("pieces", "prints", "🧩", "Fournée", "{n} pièces imprimées", [100, 500, 1000, 5000, 10000]),
+    _a("mw_made", "prints", "🌐", "Fidèle à MakerWorld", "{n} impressions réussies de modèles MakerWorld", [10, 50, 200, 500, 1000]),
+    _a("spent", "prints", "💸", "Investisseur", "{n} € de filament et d'électricité imprimés", [50, 250, 1000, 2500, 5000],
+       unit="€", money=True),
     # Filaments
     _a("palette", "filaments", "🎨", "Palette", "{n} filaments différents utilisés", [10, 25, 50, 100, 200]),
     _a("materials", "filaments", "🧪", "Alchimiste", "{n} matières différentes imprimées", [2, 3, 5, 7, 10]),
@@ -99,6 +106,11 @@ CATALOG = [
     _a("dried", "filaments", "💧", "Au sec", "{n} bobines séchées", [1, 10, 25, 50, 100]),
     _a("swatches", "filaments", "🏷️", "Nuancier", "{n} échantillons de couleur", [5, 25, 50, 100, 200]),
     _a("brands", "filaments", "🏭", "Touche-à-tout", "{n} marques de filament", [2, 3, 5, 8, 12]),
+    _a("stock_kg", "filaments", "⚖️", "Grenier", "{n} kg de filament en stock", [5, 10, 25, 50, 100], unit="kg"),
+    _a("stock_colors", "filaments", "🌈", "Nuancier vivant", "{n} teintes différentes en stock", [5, 8, 10, 12, 15]),
+    _a("rfid", "filaments", "📡", "Pucé", "{n} bobines à puce RFID en stock", [5, 25, 50, 100, 200]),
+    _a("labels", "filaments", "🏷️", "Étiqueteur", "{n} étiquettes de filament imprimées", [5, 25, 50, 100, 200]),
+    _a("multicolor_fils", "filaments", "🎨", "Bigarré", "{n} filaments multicolores", [1, 3, 5, 10, 20]),
     # Objets et ventes
     _a("objects", "objects", "🧸", "Fabricant", "{n} objets créés", [10, 50, 200, 500, 1000]),
     _a("sold", "objects", "💶", "Commerçant", "{n} objets vendus", [1, 10, 50, 100, 500]),
@@ -106,6 +118,8 @@ CATALOG = [
     _a("gifted", "objects", "🎁", "Généreux", "{n} objets offerts", [1, 5, 20, 50, 100]),
     _a("personal", "objects", "🏠", "Fait maison", "{n} objets gardés pour toi", [5, 25, 50, 100, 250]),
     _a("accessories", "objects", "🔩", "Bricoleur", "{n} accessoires posés sur des objets", [10, 50, 200, 500, 1000]),
+    _a("groups", "objects", "🗃️", "Assortiments", "{n} lots d'objets", [1, 5, 10, 25, 50]),
+    _a("margin", "objects", "📈", "Bénéfices", "{n} € de marge sur les ventes", [10, 100, 500, 1000, 5000], unit="€", money=True),
     # MakerWorld (lu au present sur le profil)
     _a("mw_designs", "mw", "📐", "Créateur", "{n} modèles publiés sur MakerWorld", [1, 5, 10, 25, 50]),
     _a("mw_downloads", "mw", "⬇️", "Téléchargé", "{n} téléchargements de tes modèles", [100, 1000, 5000, 10000, 50000]),
@@ -114,23 +128,61 @@ CATALOG = [
     _a("mw_fans", "mw", "👥", "Influenceur", "{n} abonnés", [10, 100, 500, 1000, 5000]),
     _a("mw_likes", "mw", "❤️", "Apprécié", "{n} « j'aime » sur tes modèles", [100, 500, 2000, 5000, 10000]),
     _a("mw_level", "mw", "⭐", "Niveau", "Niveau {n} sur MakerWorld", [5, 10, 20, 30, 40]),
+    _a("mw_collections", "mw", "📚", "Curateur", "{n} collections MakerWorld", [1, 5, 10, 25, 50]),
+    _a("mw_follows", "mw", "👀", "Curieux", "Tu suis {n} créateurs", [5, 25, 50, 100, 250]),
     # Copains
     _a("friends", "social", "🤝", "Bande de copains", "{n} copains reliés", [1, 3, 5, 10, 20]),
     # Secrets : une medaille unique, cachee tant qu'elle n'est pas gagnee
-    _a("halloween", "secret", "🎃", "Spooky", "Une impression lancée un 31 octobre", [1], hidden=True),
-    _a("christmas", "secret", "🎄", "Joyeux Noël", "Une impression lancée un 24 ou 25 décembre", [1], hidden=True),
-    _a("new_year", "secret", "🎆", "Bonne année", "Une impression en cours au passage du Nouvel An", [1], hidden=True),
-    _a("friday13", "secret", "🐈‍⬛", "Vendredi 13", "Une impression lancée un vendredi 13", [1], hidden=True),
-    _a("pi_day", "secret", "🥧", "Jour de Pi", "Une impression lancée un 14 mars", [1], hidden=True),
-    _a("tiny", "secret", "🐜", "Miniature", "Une impression réussie de moins de 1 g", [1], hidden=True),
-    _a("flash", "secret", "⚡", "Éclair", "Une impression réussie en moins de 10 minutes", [1], hidden=True),
-    _a("all_nighter", "secret", "🌙", "Nuit blanche", "Une impression de plus de 8 h lancée après 22 h", [1], hidden=True),
-    _a("comeback", "secret", "💪", "Persévérant", "Un modèle enfin réussi après 3 échecs d'affilée", [1], hidden=True),
-    _a("rainbow16", "secret", "🦄", "Licorne", "Une impression de 8 couleurs ou plus", [1], hidden=True),
+    _a("halloween", "secret", "🎃", "Spooky", "Une impression lancée un 31 octobre", [1],
+       lore="Tu as imprimé un soir d'Halloween. Citrouille, squelette ou chauve-souris : l'imprimante aussi s'est déguisée."),
+    _a("christmas", "secret", "🎄", "Joyeux Noël", "Une impression lancée un 24 ou 25 décembre", [1],
+       lore="L'imprimante a travaillé à Noël. Les lutins du Père Noël, c'était donc toi."),
+    _a("new_year", "secret", "🎆", "Bonne année", "Une impression en cours au passage du Nouvel An", [1],
+       lore="Ton imprimante a changé d'année en pleine couche. Meilleurs vœux, buse comprise."),
+    _a("friday13", "secret", "🐈‍⬛", "Vendredi 13", "Une impression lancée un vendredi 13", [1],
+       lore="Tu as défié le sort en lançant une impression un vendredi 13. Courageux."),
+    _a("pi_day", "secret", "🥧", "Jour de Pi", "Une impression lancée un 14 mars", [1],
+       lore="Une impression le 14/3, jour de Pi : 3,14159… couches de bonheur."),
+    _a("tiny", "secret", "🐜", "Miniature", "Une impression réussie de moins de 1 g", [1],
+       lore="Moins d'un gramme de filament : une pièce qui tient sur un ongle."),
+    _a("flash", "secret", "⚡", "Éclair", "Une impression réussie en moins de 10 minutes", [1],
+       lore="Une impression bouclée en moins de 10 minutes. Le café n'a même pas eu le temps de refroidir."),
+    _a("all_nighter", "secret", "🌙", "Nuit blanche", "Une impression de plus de 8 h lancée après 22 h", [1],
+       lore="Plus de 8 heures lancées après 22 h : l'imprimante a veillé pendant que tu dormais."),
+    _a("comeback", "secret", "💪", "Persévérant", "Un modèle enfin réussi après 3 échecs d'affilée", [1],
+       lore="Trois échecs d'affilée sur le même modèle, et tu n'as rien lâché : la quatrième était la bonne."),
+    _a("rainbow16", "secret", "🦄", "Licorne", "Une impression de 8 couleurs ou plus", [1],
+       lore="Huit couleurs ou plus dans une seule impression : un vrai arc-en-ciel."),
+    _a("watchmaker", "secret", "⌚", "Horloger", "Une impression de plus d'une heure terminée à 1 % près de l'estimation", [1],
+       lore="Une impression de plus d'une heure finie à 1 % près de l'estimation du trancheur. Précision suisse."),
+    _a("leap_day", "secret", "🐸", "Saut de puce", "Une impression lancée un 29 février", [1],
+       lore="Une impression un 29 février : ça n'arrive qu'une fois tous les quatre ans."),
+    _a("valentine", "secret", "💘", "Saint-Valentin", "Une impression lancée un 14 février", [1],
+       lore="Une impression le jour de la Saint-Valentin. Un cœur en PLA, peut-être ?"),
+    _a("may_day", "secret", "🌷", "Fête du travail", "Une impression lancée un 1er mai", [1],
+       lore="Le 1er mai, tout le monde se repose… sauf ton imprimante."),
+    _a("bastille", "secret", "🎇", "14 juillet", "Une impression lancée un 14 juillet", [1],
+       lore="Une impression le jour de la fête nationale : feu d'artifice de filament."),
+    _a("midnight", "secret", "🕛", "Minuit pile", "Une impression lancée à minuit pile", [1],
+       lore="Une impression lancée à 00 h 00 pile. Les douze coups ont sonné."),
+    _a("all_year", "secret", "🗓️", "Toute l'année", "Au moins une impression chaque mois d'une même année", [1],
+       lore="Pas un seul mois sans imprimer, de janvier à décembre : une année complète."),
+    _a("weekend10", "secret", "🛠️", "Week-end de folie", "10 impressions lancées en un seul week-end", [1],
+       lore="Dix impressions en un week-end : ton atelier n'a pas chômé."),
+    _a("phoenix", "secret", "🔥", "Phénix", "Une impression réussie juste après 5 échecs d'affilée", [1],
+       lore="Cinq échecs d'affilée, puis une réussite : tu renais de tes cendres de filament."),
+    _a("n1001", "secret", "📜", "Mille et une", "Ta 1001ᵉ impression réussie", [1],
+       lore="La 1001ᵉ impression réussie : de quoi en raconter une chaque nuit."),
+    _a("titan", "secret", "🗿", "Titan", "Une impression de plus de 2 kg et de plus de 24 h", [1],
+       lore="Plus de 2 kg et plus de 24 heures d'un coup : une pièce de titan."),
 ]
-LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_likes", "mw_level", "friends", "stock"}
+LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_likes", "mw_level", "mw_collections",
+        "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
+    # une medaille unique ne se devoile qu'une fois gagnee
+    if len(_x["tiers"]) == 1:
+        _x["hidden"] = True
 BY_ID = {a["id"]: a for a in CATALOG}
 
 
@@ -161,22 +213,30 @@ async def _load_data() -> dict:
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.filament import Filament, Spool
-    from ..models.object_history import Object, ObjectAccessory
+    from ..models.object_history import Object, ObjectAccessory, ObjectGroup
     from ..models.print_history import FilamentUsage, Print
     async with AsyncSessionLocal() as db:
         prints = (await db.execute(select(Print.id, Print.print_date, Print.status, Print.duration_seconds,
                                           Print.total_weight_g, Print.design_id, Print.translated_name,
-                                          Print.file_name).order_by(Print.print_date, Print.id))).all()
+                                          Print.file_name, Print.estimated_seconds, Print.number_of_items,
+                                          Print.total_cost).order_by(Print.print_date, Print.id))).all()
         usage = (await db.execute(select(FilamentUsage.print_id, FilamentUsage.spool_id, FilamentUsage.filament_type,
                                          FilamentUsage.color_hex, FilamentUsage.grams_used))).all()
         spools = (await db.execute(select(Spool.id, Spool.filament_id, Spool.archived, Spool.updated_at,
-                                          Spool.last_dried_at, Spool.created_at))).all()
+                                          Spool.last_dried_at, Spool.created_at, Spool.remaining_weight_g,
+                                          Spool.tag_number))).all()
         fils = (await db.execute(select(Filament.id, Filament.manufacturer, Filament.swatch, Filament.updated_at,
-                                        Filament.created_at))).all()
+                                        Filament.created_at, Filament.color_bucket, Filament.label_printed,
+                                        Filament.label_printed_at, Filament.multicolor_type))).all()
         objs = (await db.execute(select(Object.id, Object.status, Object.sold_date, Object.sold_price,
-                                        Object.created_at, Object.updated_at))).all()
+                                        Object.created_at, Object.updated_at, Object.margin))).all()
+        groups = (await db.execute(select(ObjectGroup.created_at))).all()
         links = (await db.execute(select(ObjectAccessory.quantity, ObjectAccessory.created_at))).all()
-    return {"prints": prints, "usage": usage, "spools": spools, "fils": fils, "objs": objs, "links": links}
+    return {"prints": prints, "usage": usage, "spools": spools, "fils": fils, "objs": objs, "links": links,
+            "groups": groups}
+
+
+_MONDAY0 = datetime(1970, 1, 5).date()       # un lundi : numero de semaine = jours // 7
 
 
 def _ts(dt) -> datetime | None:
@@ -218,6 +278,13 @@ def compute_series(d: dict, now: datetime) -> dict:
     palette, mats = set(), set()
     mat_g = defaultdict(float)
     first_ok = None
+    per_month = defaultdict(int)
+    months_of_year = defaultdict(set)
+    per_weekend = defaultdict(int)
+    week_run = best_weeks = 0
+    last_week = None
+    ko_run = pieces = mw_made = 0
+    spent = 0.0
     for p in d["prints"]:
         st = (p.status or "").upper()
         if st == "IN_PROGRESS" or not p.print_date:
@@ -265,6 +332,22 @@ def compute_series(d: dict, now: datetime) -> dict:
         if loc.weekday() >= 5:
             weekend += 1
             push("weekend", start, weekend)
+            sat = day - timedelta(days=loc.weekday() - 5)
+            per_weekend[sat] += 1
+            if per_weekend[sat] >= 10:
+                push("weekend10", start, 1)
+        # mois, annee, semaines d'affilee
+        per_month[(loc.year, loc.month)] += 1
+        push("month_record", start, max(per_month.values()))
+        months_of_year[loc.year].add(loc.month)
+        if len(months_of_year[loc.year]) == 12:
+            push("all_year", start, 1)
+        week = (day - _MONDAY0).days // 7
+        if last_week != week:
+            week_run = week_run + 1 if last_week is not None and week - last_week == 1 else 1
+            last_week = week
+        best_weeks = max(best_weeks, week_run)
+        push("weeks", start, best_weeks)
         # dates particulieres
         if (loc.month, loc.day) == (10, 31):
             push("halloween", start, 1)
@@ -274,6 +357,14 @@ def compute_series(d: dict, now: datetime) -> dict:
             push("pi_day", start, 1)
         if loc.day == 13 and loc.weekday() == 4:
             push("friday13", start, 1)
+        md = (loc.month, loc.day)
+        for key, when in (("leap_day", (2, 29)), ("valentine", (2, 14)), ("may_day", (5, 1)), ("bastille", (7, 14))):
+            if md == when:
+                push(key, start, 1)
+        if loc.hour == 0 and loc.minute == 0:
+            push("midnight", start, 1)
+        spent += p.total_cost or 0
+        push("spent", end, round(spent, 2))
         loc_end = _local(end)
         if loc_end.year > loc.year:
             push("new_year", end, 1)
@@ -287,6 +378,21 @@ def compute_series(d: dict, now: datetime) -> dict:
         if ok:
             n_ok += 1
             first_ok = first_ok or end
+            if n_ok == 1001:
+                push("n1001", end, 1)
+            if ko_run >= 5:
+                push("phoenix", end, 1)
+            ko_run = 0
+            pieces += p.number_of_items or 1
+            push("pieces", end, pieces)
+            if p.design_id and str(p.design_id).strip() not in ("", "0", "None"):
+                mw_made += 1
+                push("mw_made", end, mw_made)
+            est = p.estimated_seconds or 0
+            if est >= 3600 and dur and abs(dur - est) <= est * 0.01:
+                push("watchmaker", end, 1)
+            if w >= 2000 and dur >= 24 * 3600:
+                push("titan", end, 1)
             push("first_print", end, 1)
             push("prints_ok", end, n_ok)
             run += 1
@@ -306,6 +412,7 @@ def compute_series(d: dict, now: datetime) -> dict:
                 push("flash", end, 1)
         elif ko:
             n_ko += 1
+            ko_run += 1
             push("failures", end, n_ko)
             run = 0
             if key:
@@ -332,7 +439,22 @@ def compute_series(d: dict, now: datetime) -> dict:
     dried = sorted(_ts(s.last_dried_at) for s in d["spools"] if _ts(s.last_dried_at))
     for i, dt in enumerate(dried, 1):
         push("dried", dt, i)
-    push("stock", now, sum(1 for s in d["spools"] if not s.archived))
+    live_spools = [s for s in d["spools"] if not s.archived]
+    push("stock", now, len(live_spools))
+    push("stock_kg", now, round(sum(max(0.0, s.remaining_weight_g or 0) for s in live_spools) / 1000, 2))
+    push("rfid", now, sum(1 for s in live_spools if (s.tag_number or "").strip()))
+    stocked = {s.filament_id for s in live_spools}
+    tints = set()
+    for f in d["fils"]:
+        if f.id in stocked:
+            tints |= {t.strip() for t in (f.color_bucket or "").split(",") if t.strip()}
+    push("stock_colors", now, len(tints))
+    push("multicolor_fils", now, sum(1 for f in d["fils"] if (f.multicolor_type or "monochrome") != "monochrome"))
+    lab = sorted((_ts(f.label_printed_at) or _ts(f.updated_at) or now) for f in d["fils"] if f.label_printed)
+    for i, dt in enumerate(lab, 1):
+        push("labels", dt, i)
+    for i, dt in enumerate(sorted((_ts(g.created_at) or now) for g in d["groups"]), 1):
+        push("groups", dt, i)
     sw = sorted((_ts(f.updated_at) or now) for f in d["fils"] if f.swatch)
     for i, dt in enumerate(sw, 1):
         push("swatches", dt, i)
@@ -345,12 +467,15 @@ def compute_series(d: dict, now: datetime) -> dict:
     # objets
     for i, dt in enumerate(sorted((_ts(o.created_at) or now) for o in d["objs"]), 1):
         push("objects", dt, i)
-    sold = sorted(((_ts(o.sold_date) or _ts(o.updated_at) or now), o.sold_price or 0) for o in d["objs"] if o.status == "sold")
-    tot = 0.0
-    for i, (dt, pr) in enumerate(sold, 1):
+    sold = sorted(((_ts(o.sold_date) or _ts(o.updated_at) or now), o.sold_price or 0, o.margin or 0)
+                  for o in d["objs"] if o.status == "sold")
+    tot = marg = 0.0
+    for i, (dt, pr, mg) in enumerate(sold, 1):
         tot += pr
+        marg += mg
         push("sold", dt, i)
         push("revenue", dt, round(tot, 2))
+        push("margin", dt, round(marg, 2))
     for st_, key in (("gifted", "gifted"), ("personal", "personal")):
         for i, dt in enumerate(sorted((_ts(o.updated_at) or now) for o in d["objs"] if o.status == st_), 1):
             push(key, dt, i)
@@ -372,7 +497,8 @@ async def _live_values() -> dict:
             out.update({"mw_designs": p.get("designs") or 0, "mw_downloads": p.get("downloads") or 0,
                         "mw_prints": p.get("prints") or 0, "mw_boosts": p.get("boosts") or 0,
                         "mw_fans": p.get("fans") or 0, "mw_likes": p.get("likes") or 0,
-                        "mw_level": p.get("level") or 0})
+                        "mw_level": p.get("level") or 0, "mw_collections": p.get("collections") or 0,
+                        "mw_follows": p.get("follows") or 0})
     except Exception as e:
         logger.info(f"[SUCCES] profil MakerWorld illisible : {e}")
     try:
@@ -522,6 +648,8 @@ async def view(fresh: bool = False) -> dict:
             "name": "Succès secret" if secret else a["name"],
             "desc": "Continue d'imprimer : il se dévoilera tout seul." if secret else
                     describe(a, a["tiers"][nxt if nxt is not None else lvl]),
+            # medaille unique gagnee : ce qu'elle raconte, et ce qui l'a valu
+            "lore": a.get("lore") if lvl >= 0 and len(a["tiers"]) == 1 else None,
             "secret": bool(a.get("hidden")), "money": bool(a.get("money")), "unit": a.get("unit"),
             "value": None if secret else r["value"], "level": lvl,
             "next": None if nxt is None or secret else a["tiers"][nxt],

@@ -140,6 +140,7 @@ function Card({ it, focus }) {
   const p = progress(it);
   const money = it.money && isMoneyHidden();
   const done = got && it.next == null;
+  const unique = it.tiers.length === 1;
   return (
     <div ref={ref} className="card" onClick={() => setOpen(o => !o)}
       style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:9, cursor:"pointer",
@@ -151,9 +152,17 @@ function Card({ it, focus }) {
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:14, fontWeight:800, color: got ? "var(--text)" : "var(--text2)" }}>{it.name}</div>
           <div style={{ fontSize:12, color:"var(--muted)", marginTop:2, lineHeight:1.35 }}>
-            {done ? "✓ Tous les crans gagnés" : it.desc}</div>
+            {unique && got ? it.desc : done ? `✓ Tous les crans gagnés · ${it.desc}` : it.desc}</div>
+          {unique && got && (
+            <div style={{ fontSize:11, fontWeight:700, color:top.color, marginTop:3 }}>Gagné le {dateFr(top.at)}</div>
+          )}
         </div>
       </div>
+      {unique && got && it.lore && (
+        <p style={{ margin:0, fontSize:12.5, color:"var(--text2)", lineHeight:1.5, fontStyle:"italic",
+          padding:"8px 10px", borderRadius:10, background:`${top.color}14`, borderLeft:`3px solid ${top.color}` }}>
+          {it.lore}</p>
+      )}
       {!it.secret || got ? (
         it.tiers.length > 1 && (
           <>
@@ -173,7 +182,7 @@ function Card({ it, focus }) {
           </>
         )
       ) : null}
-      {open && (got || !it.secret) && (
+      {open && !unique && (got || !it.secret) && (
         <div style={{ display:"flex", flexDirection:"column", gap:4, borderTop:"1px solid var(--border)", paddingTop:8 }}>
           {it.tiers.map(t => (
             <div key={t.id} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12,
