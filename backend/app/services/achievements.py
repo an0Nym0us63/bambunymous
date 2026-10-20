@@ -38,7 +38,7 @@ TIERS = [
 ]
 # Version des seuils : quand elle change, le passage suivant recalcule les crans
 # sans rien notifier (un seuil abaisse ne doit pas declencher une rafale).
-CATALOG_VERSION = 3          # 3 : fournee des secrets loufoques (20/10/2026)
+CATALOG_VERSION = 4          # 3 : secrets loufoques ; 4 : jusqu'a 100 secrets (20/10/2026)
 UNIQUE = {"id": "unique", "label": "Unique", "emoji": "🏵️", "color": "#EC4899", "score": 3}
 
 CATEGORIES = [
@@ -260,6 +260,83 @@ CATALOG = [
        lore="Cinq objets vendus dans la journée : un vrai jour de marché."),
     _a("santa", "secret", "🎅", "Père Noël", "Un objet offert en décembre", [1],
        lore="Un objet offert en décembre. Le Père Noël a un atelier d'impression 3D."),
+    # ── Fournee pour arriver a 100 (20/10/2026) ──
+    _a("barbie", "secret", "🎀", "Barbie", "Une impression réussie toute en rose", [1],
+       lore="Tout en rose, du premier au dernier millimètre. Come on Barbie, let's go print."),
+    _a("smurf", "secret", "💙", "Schtroumpf", "Une impression réussie toute en bleu, de plus de 100 g", [1],
+       lore="Plus de 100 g de bleu, rien que du bleu : un vrai Schtroumpf."),
+    _a("hulk", "secret", "💚", "Incroyable Hulk", "Une impression réussie toute en vert, de plus de 100 g", [1],
+       lore="Plus de 100 g de vert et rien d'autre. Ne mets pas l'imprimante en colère."),
+    _a("fire", "secret", "🔥", "Feu de camp", "Une impression en rouge, orange et jaune", [1],
+       lore="Rouge, orange et jaune dans la même impression : ça crépite."),
+    _a("pumpkin", "secret", "🎃", "Citrouille", "Une impression en orange et noir, rien d'autre", [1],
+       lore="Orange et noir, les couleurs d'Halloween, même si ce n'était pas le 31."),
+    _a("xmas_tree", "secret", "🎄", "Sapin", "Une impression en rouge et vert, rien d'autre", [1],
+       lore="Rouge et vert, les couleurs de Noël, quelle que soit la saison."),
+    _a("silk", "secret", "🪡", "Soie", "Une impression réussie en filament soie", [1],
+       lore="Du filament soie : ça brille, ça glisse sous les doigts, et ça fait toujours son effet."),
+    _a("galaxy", "secret", "🌠", "Galaxie", "Une impression réussie en filament galaxie", [1],
+       lore="Un filament galaxie : des paillettes d'étoiles dans chaque couche."),
+    _a("glow", "secret", "👻", "Phosphorescent", "Une impression réussie en filament phosphorescent", [1],
+       lore="Une pièce qui brille dans le noir. Éteins la lumière pour vérifier."),
+    _a("marble", "secret", "🏛️", "Marbre", "Une impression réussie en filament effet marbre", [1],
+       lore="Effet marbre : ta pièce a l'air taillée par un sculpteur antique."),
+    _a("wood", "secret", "🪵", "Menuisier", "Une impression réussie en filament bois", [1],
+       lore="Du filament bois : ça sent même un peu la scierie."),
+    _a("translucent", "secret", "🔍", "Transparence", "Une impression réussie en filament translucide", [1],
+       lore="Une pièce translucide : on voit à travers, mais elle est bien là."),
+    _a("sparkle", "secret", "✨", "Paillettes", "Une impression réussie en filament pailleté", [1],
+       lore="Des paillettes plein la pièce. Et un peu partout ailleurs, comme toujours."),
+    _a("soluble", "secret", "💧", "Soluble", "Une impression avec un support soluble (PVA)", [1],
+       lore="Des supports qui fondent dans l'eau : la magie du PVA."),
+    _a("elite", "secret", "💾", "13 h 37", "Une impression lancée à 13 h 37", [1],
+       lore="13 h 37 : l'heure des initiés."),
+    _a("last_minute", "secret", "🕚", "Juste avant minuit", "Une impression lancée à 23 h 59", [1],
+       lore="Lancée à 23 h 59 : une seconde de plus et c'était demain."),
+    _a("saturday_night", "secret", "🪩", "Samedi soir", "Une impression lancée un samedi après 22 h", [1],
+       lore="Samedi soir, 22 h passées : pendant que d'autres dansent, ton imprimante travaille."),
+    _a("monday_morning", "secret", "😩", "Lundi matin", "Une impression ratée un lundi avant 9 h", [1],
+       lore="Une impression ratée un lundi avant 9 h. Même l'imprimante n'aime pas les lundis."),
+    _a("st_patrick", "secret", "☘️", "Saint-Patrick", "Une impression avec du vert un 17 mars", [1],
+       lore="Du vert le 17 mars : la Saint-Patrick, version filament."),
+    _a("fathers_day", "secret", "👔", "Fête des pères", "Une impression lancée le jour de la fête des pères", [1],
+       lore="Une impression le jour de la fête des pères. Un cadeau de dernière minute ?"),
+    _a("crepes", "secret", "🥞", "Chandeleur", "Une impression lancée un 2 février", [1],
+       lore="Le 2 février, jour des crêpes. Tu en as fait sauter une entre deux couches ?"),
+    _a("epiphany", "secret", "👑", "Galette des rois", "Une impression lancée un 6 janvier", [1],
+       lore="Le 6 janvier, jour de la galette. Tu as imprimé la fève ?"),
+    _a("palindrome_date", "secret", "📅", "Date palindrome", "Une impression lancée un jour dont la date se lit dans les deux sens", [1],
+       lore="Une date qui se lit dans les deux sens (comme le 02/02/2020) : rarissime."),
+    _a("new_moon", "secret", "🌑", "Nuit noire", "Une impression lancée de nuit, un soir de nouvelle lune", [1],
+       lore="Lancée une nuit sans lune. Heureusement, l'imprimante a son éclairage."),
+    _a("y2k", "secret", "🎆", "An 2000", "Ta 2000ᵉ impression réussie", [1],
+       lore="La 2000ᵉ : pas de bug de l'an 2000, juste des plateaux à vider."),
+    _a("dont_panic", "secret", "🛸", "Pas de panique", "Ta 42ᵉ impression réussie", [1],
+       lore="La 42ᵉ réussite. Pas de panique, et n'oublie pas ta serviette."),
+    _a("on_fire", "secret", "🚒", "En feu", "7 impressions réussies le même jour", [1],
+       lore="Sept réussites dans la journée : l'imprimante est en feu (au sens figuré)."),
+    _a("rainbow_day", "secret", "🌈", "Journée arc-en-ciel", "10 couleurs différentes imprimées le même jour", [1],
+       lore="Dix couleurs différentes dans la même journée : ton AMS a fait de la gymnastique."),
+    _a("first_try", "secret", "🎳", "Du premier coup", "Un nouveau modèle de plus de 10 h réussi du premier coup", [1],
+       lore="Un modèle jamais imprimé, plus de 10 heures, et réussi du premier coup. Strike !"),
+    _a("so_close", "secret", "😱", "Si près du but", "Une impression annulée après plus de 90 % du temps prévu", [1],
+       lore="Annulée alors qu'elle était presque finie. Il y avait sûrement une bonne raison…"),
+    _a("big_fall", "secret", "🪂", "La chute", "Une impression ratée après plus de 10 h", [1],
+       lore="Plus de 10 heures, puis l'échec. Les plus grandes chutes font les plus belles remontées."),
+    _a("museum", "secret", "🖼️", "Pièce de musée", "Un objet vendu plus de 100 €", [1],
+       lore="Un objet vendu plus de 100 € : une vraie pièce de collection."),
+    _a("sold_hot", "secret", "🌶️", "Vendu tout chaud", "Un objet vendu le jour même de sa création", [1],
+       lore="Vendu le jour même : à peine refroidi, déjà parti."),
+    _a("finally_sold", "secret", "🕸️", "Enfin vendu", "Un objet vendu plus d'un an après sa création", [1],
+       lore="Plus d'un an à attendre son acheteur, et il a fini par trouver preneur."),
+    _a("eternal_spool", "secret", "🐌", "Bobine éternelle", "Une bobine terminée plus d'un an après sa première utilisation", [1],
+       lore="Plus d'un an pour finir une bobine : elle aura vu passer les saisons."),
+    _a("devoured_spool", "secret", "🍝", "Dévorée", "Une bobine terminée moins d'une semaine après sa première utilisation", [1],
+       lore="Une bobine entière avalée en moins d'une semaine. Gourmande, cette imprimante."),
+    _a("big_order", "secret", "📦", "Grosse commande", "10 bobines ajoutées au stock le même jour", [1],
+       lore="Dix bobines arrivées le même jour. Le livreur s'en souvient encore."),
+    _a("all_seasons", "secret", "🍂", "Quatre saisons", "Une impression réussie à chaque saison d'une même année", [1],
+       lore="Printemps, été, automne, hiver : ton imprimante n'a pas de saison."),
 ]
 LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_likes", "mw_level", "mw_collections",
         "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils"}
@@ -370,10 +447,11 @@ async def _load_data() -> dict:
                                          FilamentUsage.color_hex, FilamentUsage.grams_used))).all()
         spools = (await db.execute(select(Spool.id, Spool.filament_id, Spool.archived, Spool.updated_at,
                                           Spool.last_dried_at, Spool.created_at, Spool.remaining_weight_g,
-                                          Spool.tag_number))).all()
+                                          Spool.tag_number, Spool.first_used_at))).all()
         fils = (await db.execute(select(Filament.id, Filament.manufacturer, Filament.swatch, Filament.updated_at,
                                         Filament.created_at, Filament.color_bucket, Filament.label_printed,
-                                        Filament.label_printed_at, Filament.multicolor_type))).all()
+                                        Filament.label_printed_at, Filament.multicolor_type,
+                                        Filament.fila_type, Filament.name))).all()
         objs = (await db.execute(select(Object.id, Object.status, Object.sold_date, Object.sold_price,
                                         Object.created_at, Object.updated_at, Object.margin))).all()
         groups = (await db.execute(select(ObjectGroup.created_at))).all()
@@ -414,20 +492,38 @@ def _rgb(hx: str):
 
 
 def _hue(hx: str) -> str:
-    """Famille grossiere d'une couleur : noir, blanc, rouge, bleu, ou autre."""
+    """Famille d'une couleur : noir, blanc, gris, puis par teinte rouge,
+    orange, jaune, vert, bleu, violet, rose."""
+    import colorsys
     c = _rgb(hx)
     if not c:
         return "?"
-    r, g, b = c
-    if max(c) <= 60:
+    h, sat, v = colorsys.rgb_to_hsv(*(x / 255 for x in c))
+    h *= 360
+    if v <= 0.25:
         return "noir"
-    if min(c) >= 210:
-        return "blanc"
-    if r >= 150 and g <= 90 and b <= 90:
-        return "rouge"
-    if b >= 120 and r <= 90 and g <= 160:
+    if sat <= 0.15:
+        return "blanc" if v >= 0.82 else "gris"
+    if h < 15 or h >= 345:
+        return "rose" if sat < 0.45 and v > 0.8 else "rouge"
+    if h < 40:
+        return "orange"
+    if h < 70:
+        return "jaune"
+    if h < 170:
+        return "vert"
+    if h < 260:
         return "bleu"
-    return "autre"
+    if h < 300:
+        return "violet"
+    return "rose"
+
+
+def _fathers_day(y: int):
+    """Fete des peres en France : troisieme dimanche de juin."""
+    d = datetime(y, 6, 1).date()
+    d += timedelta(days=(6 - d.weekday()) % 7)
+    return d + timedelta(days=14)
 
 
 def _ts(dt) -> datetime | None:
@@ -482,6 +578,11 @@ def compute_series(d: dict, now: datetime) -> dict:
     model_day = defaultdict(int)
     nights = set()
     tpu_done = False
+    ok_day = defaultdict(int)
+    colors_day = defaultdict(set)
+    seen_models = set()
+    seasons = defaultdict(set)
+    fil_text = {f.id: f"{f.fila_type or ''} {f.name or ''}" for f in d["fils"]}
     for p in d["prints"]:
         st = (p.status or "").upper()
         if st == "IN_PROGRESS" or not p.print_date:
@@ -564,6 +665,39 @@ def compute_series(d: dict, now: datetime) -> dict:
         push("spent", end, round(spent, 2))
         key = _model_key(p)
         _fun(push, p, start, end, dur, loc, ok, ko, w, cols, us, key, st)
+        # matieres speciales : le type du releve, et le sous-type / nom du filament de la bobine
+        if ok:
+            words = " ".join(f"{u.filament_type or ''} {fil_text.get(fil_of_spool.get(u.spool_id), '')}"
+                             for u in us if (u.grams_used or 0) > 0).lower()
+            for kw, aid in ((("silk",), "silk"), (("galaxy",), "galaxy"), (("glow", "phospho"), "glow"),
+                            (("marble", "marbre"), "marble"), (("wood", "bois"), "wood"),
+                            (("translucent", "transparent", "clear"), "translucent"),
+                            (("sparkle", "glitter", "paillet"), "sparkle"), (("pva",), "soluble")):
+                if any(k in words for k in kw):
+                    push(aid, end, 1)
+        # journee : reussites, couleurs ; nouveau modele reussi du premier coup
+        if ok:
+            ok_day[day] += 1
+            if ok_day[day] >= 7:
+                push("on_fire", end, 1)
+            if key and key not in seen_models and dur >= 10 * 3600:
+                push("first_try", end, 1)
+            seasons[loc.year].add((loc.month % 12) // 3)
+            if len(seasons[loc.year]) == 4:
+                push("all_seasons", end, 1)
+        colors_day[day] |= cols
+        if len(colors_day[day]) >= 10:
+            push("rainbow_day", end, 1)
+        if key:
+            seen_models.add(key)
+        # echecs remarquables
+        est = p.estimated_seconds or 0
+        if st == "CANCELLED" and est >= 1800 and dur >= 0.9 * est:
+            push("so_close", end, 1)
+        if ko and dur >= 10 * 3600:
+            push("big_fall", end, 1)
+        if ko and loc.weekday() == 0 and loc.hour < 9:
+            push("monday_morning", end, 1)
         # pauses, anniversaire, nuits d'affilee
         if last_start is not None:
             gap = (start - last_start).days
@@ -612,7 +746,7 @@ def compute_series(d: dict, now: datetime) -> dict:
             first_ok = first_ok or end
             if n_ok == 1001:
                 push("n1001", end, 1)
-            for n_, key_ in ((100, "hundred"), (777, "jackpot"), (1337, "leet")):
+            for n_, key_ in ((42, "dont_panic"), (100, "hundred"), (777, "jackpot"), (1337, "leet"), (2000, "y2k")):
                 if n_ok == n_:
                     push(key_, end, 1)
             if ko_run >= 5:
@@ -720,6 +854,27 @@ def compute_series(d: dict, now: datetime) -> dict:
         dt = _ts(o.updated_at)
         if o.status == "gifted" and dt and _local(dt).month == 12:
             push("santa", dt, 1)
+        sd, cd = _ts(o.sold_date), _ts(o.created_at)
+        if o.status == "sold" and sd:
+            if (o.sold_price or 0) > 100:
+                push("museum", sd, 1)
+            if cd and _local(sd).date() == _local(cd).date():
+                push("sold_hot", sd, 1)
+            if cd and (sd - cd).days >= 365:
+                push("finally_sold", sd, 1)
+    added_day = defaultdict(int)
+    for sp in sorted(d["spools"], key=lambda x: _ts(x.created_at) or now):
+        c = _ts(sp.created_at)
+        if c:
+            added_day[_local(c).date()] += 1
+            if added_day[_local(c).date()] >= 10:
+                push("big_order", c, 1)
+        fu, done_at = _ts(sp.first_used_at), _ts(sp.updated_at)
+        if sp.archived and fu and done_at:
+            if (done_at - fu).days >= 365:
+                push("eternal_spool", done_at, 1)
+            if 0 <= (done_at - fu).days < 7:
+                push("devoured_spool", done_at, 1)
     for st_, key in (("gifted", "gifted"), ("personal", "personal")):
         for i, dt in enumerate(sorted((_ts(o.updated_at) or now) for o in d["objs"] if o.status == st_), 1):
             push(key, dt, i)
@@ -765,6 +920,16 @@ def _fun(push, p, start, end, dur, loc, ok, ko, w, cols, us, key, st) -> None:
         push("noon", start, 1)
     if hm == (12, 34):
         push("sequence", start, 1)
+    if hm == (13, 37):
+        push("elite", start, 1)
+    if hm == (23, 59):
+        push("last_minute", start, 1)
+    if loc.weekday() == 5 and loc.hour >= 22:
+        push("saturday_night", start, 1)
+    if loc.hour >= 20 or loc.hour < 5:
+        age = ((start - _NEW_MOON).total_seconds() / 86400) % _SYNODIC
+        if age <= 1.0 or age >= _SYNODIC - 1.0:
+            push("new_moon", start, 1)
     if loc.hour == loc.minute and loc.hour > 0:
         push("mirror", start, 1)
     if loc.weekday() == 6 and 6 <= loc.hour < 8:
@@ -783,12 +948,36 @@ def _fun(push, p, start, end, dur, loc, ok, ko, w, cols, us, key, st) -> None:
         push("winter_solstice", end, 1)
     if loc.date() == _easter(loc.year):
         push("easter", start, 1)
+    if loc.date() == _fathers_day(loc.year):
+        push("fathers_day", start, 1)
+    if md == (2, 2):
+        push("crepes", start, 1)
+    if md == (1, 6):
+        push("epiphany", start, 1)
+    ds = loc.strftime("%d%m%Y")
+    if ds == ds[::-1]:
+        push("palindrome_date", start, 1)
     # couleurs
+    md = (loc.month, loc.day)
     hues = {_hue(c) for c in cols}
     if ok and hues == {"noir", "blanc"}:
         push("panda", end, 1)
     if ok and hues == {"bleu", "blanc", "rouge"}:
         push("tricolore", end, 1)
+    if ok and hues == {"rose"}:
+        push("barbie", end, 1)
+    if ok and hues == {"bleu"} and w >= 100:
+        push("smurf", end, 1)
+    if ok and hues == {"vert"} and w >= 100:
+        push("hulk", end, 1)
+    if {"rouge", "orange", "jaune"} <= hues:
+        push("fire", end, 1)
+    if hues == {"orange", "noir"}:
+        push("pumpkin", end, 1)
+    if hues == {"rouge", "vert"}:
+        push("xmas_tree", end, 1)
+    if md == (3, 17) and "vert" in hues:
+        push("st_patrick", start, 1)
     # matieres, nom, cout
     if ok and any("CF" in (u.filament_type or "").upper().replace("-", " ").split() or
                   "-CF" in (u.filament_type or "").upper() for u in us if (u.grams_used or 0) > 0):
