@@ -8,7 +8,9 @@ import { currentFriend } from "../store/friend";
 // « deja chez moi ? », et toute ecriture -- chez lui je ne peux rien ecrire,
 // une ecriture est donc forcement une action sur MES collections MakerWorld.
 const HOME_PREFIXES = ["/auth", "/friends", "/users", "/settings", "/notify",
-  "/makerworld/mine", "/makerworld/model/", "/makerworld/similar/", "/makerworld/design/"];
+  "/makerworld/mine", "/makerworld/model/", "/makerworld/similar/", "/makerworld/design/",
+  // Mes evaluations (file de publication, messages tout faits) : toujours chez moi.
+  "/makerworld/rate-queue", "/makerworld/rate-templates"];
 // Le ping d'activite part chez le copain visite : son journal suit ma visite.
 const isHome = (url) => !url.startsWith("/users/activity/ping") && HOME_PREFIXES.some(p => url === p || url.startsWith(p.endsWith("/") ? p : p + "/") || url.startsWith(p + "?"));
 
