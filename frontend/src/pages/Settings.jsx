@@ -1653,6 +1653,7 @@ const SET_TABS = [
   { id:"display",  label:"🎨 Affichage",  admin:false },
   { id:"accounts", label:"👤 Comptes",    admin:false },
   { id:"notify",   label:"🔔 Notifs",     admin:false },
+  { id:"share",    label:"📤 Partage",    admin:true  },
   { id:"tools",    label:"🛠️ Outils",     admin:true  },
 ];
 
@@ -1936,11 +1937,17 @@ export default function Settings() {
       </AdminOnly>
       )}
 
+      {/* ── Partage (Telegram) ─────────────────────────────────────── */}
+      {tab === "share" && (
+      <AdminOnly>
+        <TelegramSettings card={card} cardTitle={cardTitle}/>
+      </AdminOnly>
+      )}
+
       {/* ── Notifications ─────────────────────────────────────────── */}
       {tab === "notify" && (isAdmin ? (
         <>
           <NotificationsSettings/>
-          <div style={{ marginTop:16 }}><TelegramSettings card={card} cardTitle={cardTitle}/></div>
         </>
       ) : (
         // Les autres comptes : leurs telephones et leurs choix (appli Android)
