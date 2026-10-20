@@ -34,7 +34,11 @@ TIERS = [
     {"id": "gold", "label": "Or", "emoji": "🥇", "color": "#F5B700", "score": 3},
     {"id": "platinum", "label": "Platine", "emoji": "💠", "color": "#6EC6D9", "score": 5},
     {"id": "diamond", "label": "Diamant", "emoji": "💎", "color": "#8B5CF6", "score": 8},
+    {"id": "legend", "label": "Légende", "emoji": "👑", "color": "#E11D48", "score": 13},
 ]
+# Version des seuils : quand elle change, le passage suivant recalcule les crans
+# sans rien notifier (un seuil abaisse ne doit pas declencher une rafale).
+CATALOG_VERSION = 2
 UNIQUE = {"id": "unique", "label": "Unique", "emoji": "🏵️", "color": "#EC4899", "score": 3}
 
 CATEGORIES = [
@@ -183,6 +187,67 @@ for _x in CATALOG:
     # une medaille unique ne se devoile qu'une fois gagnee
     if len(_x["tiers"]) == 1:
         _x["hidden"] = True
+# Seuils (20/10/2026, v2) : six crans, jusqu'a la Legende, releves pour qu'un
+# parc bien rode (2 000 impressions, 4 000 h, 90 kg) ait encore de quoi viser.
+TIER_TABLE = {
+    "prints_ok": [50, 250, 1000, 2500, 5000, 10000],
+    "print_hours": [250, 1000, 2500, 5000, 10000, 20000],
+    "print_kg": [5, 25, 50, 100, 250, 500],
+    "longest": [6, 12, 24, 48, 72, 96],
+    "heaviest": [250, 500, 1000, 2000, 3000, 5000],
+    "streak": [3, 7, 14, 30, 60, 100],
+    "busy_day": [3, 5, 8, 12, 20, 30],
+    "success_run": [10, 25, 50, 100, 250, 500],
+    "night": [10, 50, 150, 300, 600, 1000],
+    "early": [10, 50, 150, 300, 600, 1000],
+    "weekend": [25, 100, 300, 600, 1200, 2500],
+    "models": [25, 100, 250, 500, 1000, 2500],
+    "repeat": [5, 10, 25, 50, 100, 250],
+    "multicolor": [5, 25, 100, 250, 500, 1000],
+    "colors_max": [2, 4, 6, 8, 12, 16],
+    "failures": [1, 10, 25, 50, 100, 250],
+    "veteran": [30, 180, 365, 730, 1095, 1825],
+    "month_record": [20, 40, 60, 100, 150, 250],
+    "weeks": [4, 8, 16, 26, 52, 104],
+    "pieces": [250, 1000, 2500, 5000, 10000, 25000],
+    "mw_made": [25, 100, 250, 500, 1000, 2500],
+    "spent": [100, 500, 1000, 2500, 5000, 10000],
+    "palette": [10, 25, 50, 100, 200, 300],
+    "materials": [2, 3, 5, 7, 10, 12],
+    "spools_done": [5, 25, 50, 100, 250, 500],
+    "stock": [10, 25, 50, 100, 200, 300],
+    "dried": [5, 25, 50, 100, 250, 500],
+    "swatches": [10, 25, 50, 100, 200, 400],
+    "brands": [2, 3, 5, 8, 12, 20],
+    "stock_kg": [5, 10, 25, 50, 100, 200],
+    "stock_colors": [4, 6, 8, 10, 12, 14],
+    "rfid": [5, 25, 50, 100, 200, 400],
+    "labels": [10, 25, 50, 100, 200, 400],
+    "multicolor_fils": [1, 3, 5, 10, 20, 40],
+    "objects": [25, 100, 250, 500, 1000, 2500],
+    "sold": [1, 10, 50, 100, 500, 1000],
+    "revenue": [50, 250, 1000, 5000, 10000, 25000],
+    "gifted": [1, 5, 20, 50, 100, 250],
+    "personal": [5, 25, 50, 100, 250, 500],
+    "accessories": [25, 100, 250, 500, 1000, 2500],
+    "groups": [1, 5, 10, 25, 50, 100],
+    "margin": [50, 250, 1000, 2500, 5000, 10000],
+    "mw_designs": [1, 5, 10, 25, 50, 100],
+    "mw_downloads": [500, 2500, 10000, 25000, 50000, 100000],
+    "mw_prints": [250, 1000, 5000, 10000, 25000, 50000],
+    "mw_boosts": [25, 100, 250, 500, 1000, 2500],
+    "mw_fans": [25, 100, 500, 1000, 5000, 10000],
+    "mw_likes": [250, 1000, 2500, 5000, 10000, 25000],
+    "mw_level": [5, 10, 20, 30, 40, 50],
+    "mw_collections": [1, 5, 10, 25, 50, 100],
+    "mw_follows": [5, 25, 50, 100, 250, 500],
+    "friends": [1, 3, 5, 10, 20, 30],
+}
+for _x in CATALOG:
+    if _x["id"] in TIER_TABLE:
+        _x["tiers"] = TIER_TABLE[_x["id"]]
+    elif _x["id"].startswith("mat_"):
+        _x["tiers"] = [1, 5, 10, 25, 50, 100]
 BY_ID = {a["id"]: a for a in CATALOG}
 
 
@@ -561,23 +626,31 @@ async def tick(notify: bool = True) -> list:
     st = await _state_get()
     first = st is None
     st = st or {"unlocked": {}, "best": {}}
+    # seuils changes depuis le dernier passage : on recalcule en silence
+    silent = first or st.get("version") != CATALOG_VERSION
     new = []
     for aid, r in ev.items():
-        got = st["unlocked"].setdefault(aid, {})
-        for i, at in r["reached"].items():
-            if i not in got:
-                # date reelle si l'historique la donne, sinon maintenant
-                got[i] = at
-                new.append((aid, int(i)))
+        old = dict(st["unlocked"].get(aid) or {})
+        if BY_ID[aid].get("live"):
+            got = {**old}
+            for i, at in r["reached"].items():
+                got.setdefault(i, at)
+            got = {i: at for i, at in got.items() if int(i) < len(BY_ID[aid]["tiers"])}
+        else:
+            # date reelle tiree de l'historique ; un cran deja connu garde la sienne
+            got = {i: old.get(i, at) for i, at in r["reached"].items()}
+        new += [(aid, int(i)) for i in got if i not in old]
+        st["unlocked"][aid] = got
         st["best"][aid] = max(st["best"].get(aid, 0) or 0, r["value"] or 0)
-    st["unlocked"] = {k: v for k, v in st["unlocked"].items() if v}
+    st["unlocked"] = {k: v for k, v in st["unlocked"].items() if v and k in BY_ID}
+    st["version"] = CATALOG_VERSION
     if first:
         st["since"] = datetime.utcnow().isoformat()
     await _state_put(st)
     _CACHE["v"] = None
-    if new and notify and not first:
+    if new and notify and not silent:
         await _notify(new, ev)
-    return [] if first else new
+    return [] if silent else new
 
 
 def _fmt_n(n, a) -> str:
@@ -632,7 +705,11 @@ async def view(fresh: bool = False) -> dict:
     for a in CATALOG:
         r = ev[a["id"]]
         got = dict(r["reached"])
-        got.update((st.get("unlocked") or {}).get(a["id"]) or {})      # deja acquis (meme si la valeur a baisse)
+        stored = (st.get("unlocked") or {}).get(a["id"]) or {}
+        if a.get("live"):                               # acquis, meme si la valeur a baisse
+            got.update({i: at for i, at in stored.items() if int(i) < len(a["tiers"])})
+        else:                                           # la date d'abord constatee
+            got.update({i: at for i, at in stored.items() if i in got})
         tiers = tiers_of(a)
         lvl = max((int(i) for i in got), default=-1)
         if a.get("only_started") and lvl < 0 and not r["value"]:

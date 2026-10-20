@@ -4,8 +4,8 @@ import client from "../api/client";
 import { isMoneyHidden } from "../utils/money";
 
 // Succes : medailles gagnees sur l'historique (impressions, filaments, objets,
-// MakerWorld, copains, secrets). Chaque succes a jusqu'a cinq crans (bronze,
-// argent, or, platine, diamant) ou une medaille unique. Onglet de categorie
+// MakerWorld, copains, secrets). Chaque succes a six crans (bronze, argent,
+// or, platine, diamant, legende) ou une medaille unique. Onglet de categorie
 // garde dans l'adresse (?cat=) ; ?a= met un succes en avant (lien des
 // notifications).
 
@@ -59,15 +59,16 @@ export default function Achievements({ embedded = false }) {
           <div style={{ width:`${pct}%`, height:"100%", borderRadius:8,
             background:"linear-gradient(90deg, #CD7F32, #F5B700, #6EC6D9, #8B5CF6)" }}/>
         </div>
-        <div style={{ display:"grid", gridTemplateColumns:`repeat(${data.tiers.length}, 1fr)`, gap:4 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(38px, 1fr))", rowGap:8, columnGap:2 }}>
           {data.tiers.map(t => (
             <div key={t.id} title={t.label} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2, minWidth:0 }}>
               <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-                <Medal tier={t} emoji="" size={20} locked={!data.medals[t.id]}/>
-                <span style={{ fontSize:15, fontWeight:800, color:"var(--text)", fontVariantNumeric:"tabular-nums" }}>
+                <Medal tier={t} emoji="" size={18} locked={!data.medals[t.id]}/>
+                <span style={{ fontSize:"clamp(12px, 3.6vw, 15px)", fontWeight:800, color:"var(--text)", fontVariantNumeric:"tabular-nums" }}>
                   {data.medals[t.id] || 0}</span>
               </div>
-              <span style={{ fontSize:10.5, color:"var(--muted)", whiteSpace:"nowrap" }}>{t.label}</span>
+              <span style={{ fontSize:"clamp(9px, 2.5vw, 10.5px)", color:"var(--muted)", whiteSpace:"nowrap",
+                maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis" }}>{t.label}</span>
             </div>
           ))}
         </div>
