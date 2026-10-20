@@ -113,8 +113,10 @@ export default function GalleryCompare({
       <div style={{ display:"grid",
         gridTemplateColumns: swatchMode
           ? `repeat(auto-fill,minmax(${swatchInfo ? 108 : 72}px,1fr))`
-          : "repeat(auto-fill,minmax(110px,1fr))",
-        gap: swatchMode ? (swatchInfo ? 6 : 3) : 8,
+          // 110 px sur telephone (inchange), jusqu'a 180 px sur grand ecran :
+          // a 110 px partout, un ordinateur alignait 8 vignettes minuscules.
+          : "repeat(auto-fill,minmax(clamp(110px, 18vw, 180px),1fr))",
+        gap: swatchMode ? (swatchInfo ? 6 : 3) : 10,
         paddingBottom: (enableCompare && selectedList.length) ? 76 : 0 }}>
         {visibleItems.map(item => {
           const id = getId(item);
@@ -197,11 +199,11 @@ export default function GalleryCompare({
                   par-dessus, qui fausseraient la lecture de la teinte. */}
               {!swatchMode && (
                 <div style={{ position:"absolute", bottom:0, left:0, right:0,
-                  background:"linear-gradient(transparent,rgba(0,0,0,0.78))", padding:"18px 6px 4px" }}>
-                  <p style={{ fontSize:10, color:"white", fontWeight:700, margin:0,
+                  background:"linear-gradient(transparent,rgba(0,0,0,0.78))", padding:"22px 8px 6px" }}>
+                  <p style={{ fontSize:"clamp(10px, 1.1vw, 12.5px)", color:"white", fontWeight:700, margin:0,
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getTitle(item)}</p>
                   {getSubtitle && (
-                    <p style={{ fontSize:9, color:"rgba(255,255,255,0.7)", margin:0,
+                    <p style={{ fontSize:"clamp(9px, 0.95vw, 11px)", color:"rgba(255,255,255,0.75)", margin:"1px 0 0",
                       overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getSubtitle(item)}</p>
                   )}
                 </div>
