@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import AdminOnly from "./AdminOnly";
@@ -132,13 +132,20 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setExactBusy(null);
   };
+  const [planDone, setPlanDone] = useState(null);   // « Retenu » / « Mis à jour », un instant
+  const planDoneT = useRef(null);
   const pinPlan = async (p) => {
     setPlanBusy(true);
     try {
       const body = { instance_id: p.instance_id, plates: plateSel[p.instance_id] || null,
         picks: picksOf(`${id}|${p.instance_id}`, m.stock?.[p.instance_id]) };
       const { data } = await client.put(`/makerworld/queue/plan/${id}`, body);
+      // Retour visible : le bouton passe a « ✓ Enregistre » un instant
+      const updating = plan?.instance_id === p.instance_id;
       setPlan(data);
+      setPlanDone(updating ? "Mis à jour" : "Retenu");
+      clearTimeout(planDoneT.current);
+      planDoneT.current = setTimeout(() => setPlanDone(null), 1800);
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setPlanBusy(false);
   };
@@ -408,8 +415,14 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                               <button onClick={() => pinPlan(p)} disabled={planBusy}
                                 title="La file d'attente utilisera ce profil, ces plateaux et ces filaments"
                                 style={{ ...linkBtn, padding:"5px 10px", fontSize:11.5, cursor:"pointer",
-                                  ...(plan?.instance_id === p.instance_id ? { color:"#22c55e", borderColor:"rgba(34,197,94,0.4)" } : null) }}>
-                                {plan?.instance_id === p.instance_id ? "📌 Retenu pour « À faire » · mettre à jour" : "📌 Retenir pour « À faire »"}</button>
+                                  transition:"background .25s, color .25s, transform .15s",
+                                  ...(plan?.instance_id === p.instance_id ? { color:"#22c55e", borderColor:"rgba(34,197,94,0.4)" } : null),
+                                  ...(planDone && plan?.instance_id === p.instance_id
+                                    ? { background:"#22c55e", color:"white", borderColor:"#22c55e", transform:"scale(1.04)" } : null),
+                                  ...(planBusy ? { opacity:0.6 } : null) }}>
+                                {planBusy ? "📌 Enregistrement…"
+                                  : planDone && plan?.instance_id === p.instance_id ? `✓ ${planDone}`
+                                  : plan?.instance_id === p.instance_id ? "📌 Retenu pour « À faire » · mettre à jour" : "📌 Retenir pour « À faire »"}</button>
                               {plan?.instance_id === p.instance_id && (
                                 <button onClick={unpinPlan} disabled={planBusy} title="Oublier ce choix"
                                   style={{ ...linkBtn, padding:"5px 9px", fontSize:11.5, cursor:"pointer", color:"var(--muted)" }}>✕</button>

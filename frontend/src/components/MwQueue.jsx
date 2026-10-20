@@ -96,10 +96,14 @@ export default function MwQueue() {
     try { await client.put(`/makerworld/queue/qty/${did}`, { qty: n }); refresh(); } catch { refresh(); }
   };
   // Ordre de priorite : deplace, enregistre l'ordre complet (les nouveaux y entrent).
+  const [posFor, setPosFor] = useState(null);     // { id, title, at, n } : fenetre « position »
   const move = async (did, to) => {
     const ids = q.models.map(r => r.design_id);
     const i = ids.indexOf(did);
-    const j = to === "top" ? 0 : to === "bottom" ? ids.length - 1 : Math.max(0, Math.min(ids.length - 1, i + to));
+    // to : "top", "bottom", un pas (-1 / +1) ou {at: rang 1..n}
+    const j = to === "top" ? 0 : to === "bottom" ? ids.length - 1
+      : typeof to === "object" ? Math.max(0, Math.min(ids.length - 1, (to.at | 0) - 1))
+      : Math.max(0, Math.min(ids.length - 1, i + to));
     if (i < 0 || i === j) return;
     ids.splice(j, 0, ids.splice(i, 1)[0]);
     const byId = Object.fromEntries(q.models.map(r => [r.design_id, r]));
@@ -129,6 +133,8 @@ export default function MwQueue() {
         isAdmin && i > 0 && { icon: "↑", label: "Monter d'un cran", onClick: () => move(r.design_id, -1) },
         isAdmin && i < last && { icon: "↓", label: "Descendre d'un cran", onClick: () => move(r.design_id, 1) },
         isAdmin && i < last && { icon: "⤓", label: "Mettre en bas", onClick: () => move(r.design_id, "bottom") },
+        isAdmin && last > 0 && { icon: "#", label: "Mettre à la position…", hint: `Actuellement ${i + 1} sur ${last + 1}`,
+          onClick: () => setPosFor({ id: r.design_id, title: r.title_fr || r.title, at: String(i + 1), n: last + 1 }) },
         isAdmin && { icon: "↕", label: "Réorganiser toute la liste", onClick: () => { setCutting(false); setSorting(true); } },
         isAdmin && "-",
         isAdmin && { icon: "＋", label: `Un exemplaire de plus (×${(r.qty || 1) + 1})`, onClick: () => setQty(r.design_id, Math.min(99, (r.qty || 1) + 1)) },
@@ -147,8 +153,38 @@ export default function MwQueue() {
   const pos = Object.fromEntries(q.models.map((r, i) => [r.design_id, i]));
   const cutRow = cutAt >= 0 ? q.models[cutAt] : null;
 
+  const commitPos = () => {
+    const at = parseInt(posFor.at, 10);
+    if (at >= 1) move(posFor.id, { at });
+    setPosFor(null);
+  };
+
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12, paddingBottom: cutting || cutRow || choosing || picked ? 80 : 16 }}>
+      {/* « Mettre à la position… » : un numero, Entree pour valider */}
+      {posFor && createPortal(
+        <div onClick={() => setPosFor(null)} style={{ position:"fixed", inset:0, zIndex:3000, background:"rgba(0,0,0,0.45)",
+          display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+          <div onClick={e => e.stopPropagation()} className="card" style={{ width:"100%", maxWidth:320, padding:"16px 18px" }}>
+            <div style={{ fontSize:14, fontWeight:800, color:"var(--text)", marginBottom:4 }}>Mettre à la position</div>
+            <div style={{ fontSize:12, color:"var(--muted)", marginBottom:10, overflow:"hidden", textOverflow:"ellipsis",
+              whiteSpace:"nowrap" }}>{posFor.title}</div>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <input type="number" inputMode="numeric" min={1} max={posFor.n} value={posFor.at} autoFocus
+                onFocus={e => e.target.select()}
+                onChange={e => setPosFor(p => ({ ...p, at: e.target.value }))}
+                onKeyDown={e => { if (e.key === "Enter") commitPos(); if (e.key === "Escape") setPosFor(null); }}
+                style={{ width:80, padding:"8px 10px", borderRadius:8, fontSize:15, fontWeight:700, textAlign:"center",
+                  background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" }}/>
+              <span style={{ fontSize:12, color:"var(--muted)" }}>sur {posFor.n}</span>
+              <span style={{ flex:1 }}/>
+              <button onClick={() => setPosFor(null)} style={{ padding:"7px 12px", borderRadius:9, fontSize:12, fontWeight:600,
+                cursor:"pointer", background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text)" }}>Annuler</button>
+              <button onClick={commitPos} style={{ padding:"7px 14px", borderRadius:9, fontSize:12, fontWeight:700, cursor:"pointer",
+                background:"#3b82f6", border:"none", color:"white" }}>OK</button>
+            </div>
+          </div>
+        </div>, document.body)}
       <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
         <span style={{ fontSize:12, color:"var(--muted)" }}>Collections :</span>
         {q.collections.length ? q.collections.map(c => (
