@@ -195,7 +195,8 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
               <span style={{ textAlign:"right", flexShrink:0 }}>
                 <span style={{ display:"block", fontSize:13, fontWeight:800, color: val(m) ? "#22c55e" : "var(--muted)" }}>
                   {val(m) ? `${period === "all" ? "" : "+"}${type === "points" ? pts(val(m)) : fmt(val(m))}` : "0"}</span>
-                <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>{typeShort} {SHORT[period]}</span>
+                <span style={{ display:"block", fontSize:9.5, color: partial ? "#f59e0b" : "var(--muted)" }}>
+                  {typeShort} {partial && since ? `depuis le ${since}` : SHORT[period]}</span>
               </span>
             </button>
           ))}

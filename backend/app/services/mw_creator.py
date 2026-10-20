@@ -304,7 +304,10 @@ def account_totals(hist: dict, daily: dict, ms: list, days) -> dict:
                 tot[k] += hd[d][i]
     first_needed = (now - timedelta(days=days - 1)).strftime("%Y-%m-%d")
     # un historique pris depuis l'ouverture du compte couvre aussi ce qui le precede
-    covered = bool(keys) and keys[-1] >= since and (keys[0] <= first_needed or bool(hist.get("from_start")))
+    # l'import s'arrete a la veille de son releve (jour incomplet ecarte) : s'il
+    # a ete fait le jour du premier releve, il manque ce jour-la, on le tolere
+    day_before = (datetime.strptime(since, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+    covered = bool(keys) and keys[-1] >= day_before and (keys[0] <= first_needed or bool(hist.get("from_start")))
     return {"totals": tot, "complete": covered}
 
 
