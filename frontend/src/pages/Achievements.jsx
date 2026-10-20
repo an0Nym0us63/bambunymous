@@ -47,7 +47,8 @@ export default function Achievements({ embedded = false }) {
 
   useEffect(() => {
     load();
-    if (!atFriend) client.get("/achievements/podium").then(r => setPod(r.data)).catch(() => {});
+    // le podium tient a jour les secrets des copains (etapes offertes) : on relit ensuite
+    if (!atFriend) client.get("/achievements/podium").then(r => { setPod(r.data); load(); }).catch(() => {});
     else client.get("/achievements/mine", { home: true }).then(r => setMine(r.data)).catch(() => {});
   }, []);
   // Secrets « a portee » : pas encore gagnes ici, mais deja par quelqu'un de la
@@ -216,8 +217,12 @@ export default function Achievements({ embedded = false }) {
                   </div>
                 )}
                 {/* Secrets : rangés en sous-sections (calendrier, heures, couleurs…) */}
+                {/* Secrets : les gagnes (et ceux dont une cle a revele la categorie) dans
+                    leur sous-section ; les autres « a decouvrir ». Les en-tetes ne disent
+                    que ce qu'ils montrent : rien sur la taille cachee d'une categorie. */}
                 {(c.id === "secret" && data.subs?.length
-                  ? data.subs.map(sb => ({ ...sb, items: items.filter(x => x.sub === sb.id) })).filter(sb => sb.items.length)
+                  ? [...data.subs.map(sb => ({ ...sb, items: items.filter(x => x.sub === sb.id) })),
+                     { id:"unknown", emoji:"❓", name:"À découvrir", items: items.filter(x => !x.sub) }].filter(sb => sb.items.length)
                   : [{ id:"", items }]
                 ).map(sb => (
                   <div key={sb.id} style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -225,7 +230,10 @@ export default function Achievements({ embedded = false }) {
                       <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, fontWeight:800, color:"var(--text2)" }}>
                         <span>{sb.emoji}</span>{sb.name}
                         <span style={{ marginLeft:"auto", fontSize:11, fontWeight:700, color:"var(--muted)" }}>
-                          {sb.items.filter(x => x.level >= 0).length}/{sb.items.length}</span>
+                          {sb.id === "unknown" ? `${sb.items.length} à découvrir` : (() => {
+                            const won = sb.items.filter(x => x.level >= 0).length, seen = sb.items.length - won;
+                            return `${won} gagné${won > 1 ? "s" : ""}` + (seen ? ` · ${seen} en vue` : "");
+                          })()}</span>
                       </div>
                     )}
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
@@ -295,8 +303,8 @@ function Tile({ it, onOpen, others, shared }) {
         lineHeight:1.2, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden",
         width:"100%" }}>{it.name}</span>
       {!got && it.reveal > 0 && (
-        <span title={`${it.reveal}/4 révélé par des clés`} style={{ display:"flex", gap:3 }}>
-          {[1, 2, 3, 4].map(i => <span key={i} style={{ width:5, height:5, borderRadius:"50%",
+        <span title={`${it.reveal}/5 révélé par des clés`} style={{ display:"flex", gap:3 }}>
+          {[1, 2, 3, 4, 5].map(i => <span key={i} style={{ width:5, height:5, borderRadius:"50%",
             background: i <= it.reveal ? "#F59E0B" : "var(--border)" }}/>)}
         </span>
       )}
@@ -426,12 +434,13 @@ function Reveal({ it, keys, onSpend, err }) {
         🔑 Révéler ce secret · tu as {keys.balance} clé{keys.balance > 1 ? "s" : ""}</div>
       {keys.steps.map((st, i) => {
         const done = i < lvl, next = i === lvl, poor = keys.balance < st.cost;
+        const gift = done && i < 3 && it.gift_from?.length > 0;      // offert par un copain qui l'a
         return (
           <div key={st.id} style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5,
             color: done ? "#22c55e" : next ? "var(--text)" : "var(--muted)" }}>
             <span style={{ width:18 }}>{done ? "✓" : next ? "▸" : "🔒"}</span>
             <span style={{ flex:1 }}>{st.label.charAt(0).toUpperCase() + st.label.slice(1)}</span>
-            {next ? (
+            {gift ? <span style={{ fontSize:11, color:"#8B5CF6", fontWeight:700 }}>offert</span> : next ? (
               <button onClick={go} disabled={busy || poor} style={{ padding:"5px 11px", borderRadius:20, fontSize:12,
                 fontWeight:800, cursor: poor ? "default" : "pointer", border:"none",
                 background: poor ? "var(--surface2)" : "#F59E0B", color: poor ? "var(--muted)" : "#fff" }}>
@@ -532,6 +541,10 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr 
       {/* secret pas encore gagne : ce que les cles ont revele, et la suite */}
       {sheet && unique && !got && it.hint && (
         <p style={{ margin:0, fontSize:12.5, color:"var(--text2)", fontStyle:"italic" }}>💡 Indice : {it.hint}</p>
+      )}
+      {sheet && unique && !got && it.gift_from?.length > 0 && (
+        <p style={{ margin:0, fontSize:12.5, fontWeight:700, color:"#8B5CF6" }}>
+          🎁 Catégorie, vignette et titre offerts grâce à {it.gift_from.join(", ")}</p>
       )}
       {sheet && unique && !got && keys && <Reveal it={it} keys={keys} onSpend={onSpend} err={keyErr}/>}
       {unique && got && it.lore && (

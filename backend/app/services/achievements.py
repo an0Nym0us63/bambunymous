@@ -2407,7 +2407,10 @@ async def tick(notify: bool = True) -> list:
 KEY_START = 3
 KEYS_PER_PRINTS = 10
 KEYS_TIER, KEYS_SECRET = 1, 3
-REVEALS = [("vignette", "la vignette", 1), ("title", "le titre", 2), ("hint", "un indice", 3), ("desc", "le descriptif", 5)]
+REVEALS = [("category", "la catégorie", 1), ("vignette", "la vignette", 2), ("title", "le titre", 3),
+           ("hint", "un indice", 4), ("desc", "le descriptif", 5)]
+FREE_FROM_FRIENDS = 3   # un secret qu'un copain a gagne : categorie, vignette et titre offerts
+REVEAL_V = 2           # 2 : la categorie devient la 1re etape (avant : vignette, titre, indice, descriptif)
 KEY_LOG_MAX = 40
 
 
@@ -2439,7 +2442,7 @@ def _keys_init(st: dict) -> dict:
     k = st.get("keys")
     now = datetime.utcnow()
     if not isinstance(k, dict):
-        k = st["keys"] = {"balance": KEY_START, "spent": {}, "earned": KEY_START, "start_notified": False,
+        k = st["keys"] = {"balance": KEY_START, "spent": {}, "earned": KEY_START, "start_notified": False, "reveal_v": REVEAL_V,
                           "log": [{"at": now.isoformat(), "n": KEY_START, "why": "Clés de départ"}]}
     if not k.get("since"):
         # mise en route (ou reprise d'un etat d'avant le comptage par date)
@@ -2447,6 +2450,11 @@ def _keys_init(st: dict) -> dict:
         k["since"] = first or now.isoformat()
         k["from_prints"] = 0
         k.pop("base_ok", None)
+    if k.get("reveal_v") != REVEAL_V:
+        # la categorie est devenue la 1re etape : ce qui etait paye monte d'un cran (categorie offerte)
+        if k.get("spent"):
+            k["spent"] = {aid: min(len(REVEALS), int(l) + 1) for aid, l in k["spent"].items()}
+        k["reveal_v"] = REVEAL_V
     if "gifts" not in k:
         # rien de retroactif : le mois en cours (et Noel s'il est passe) comptent comme donnes
         loc = _local(now)
@@ -2522,6 +2530,22 @@ def _earn_keys(st: dict, ev: dict, new: list, ok_since: int = 0) -> list:
     return gains
 
 
+def _gift_from(st: dict, aid: str) -> list:
+    """Les copains qui ont deja gagne ce secret (ils m'en offrent les 3 premieres etapes)."""
+    names = st.get("friend_names") or {}
+    return [names.get(fid, "un copain") for fid, ids in (st.get("friend_uniques") or {}).items() if aid in ids]
+
+
+def _reveal_level(st: dict, aid: str) -> int:
+    """Etape atteinte sur un secret : ce que j'ai paye, ou les 3 premieres
+    offertes si un copain l'a deja gagne."""
+    paid = int(((st.get("keys") or {}).get("spent") or {}).get(aid, 0))
+    friends = st.get("friend_uniques") or {}
+    if any(aid in ids for ids in friends.values()):
+        return max(paid, FREE_FROM_FRIENDS)
+    return paid
+
+
 async def spend_key(aid: str) -> dict:
     """Revele l'etape suivante d'un secret pas encore gagne."""
     a = BY_ID.get(aid)
@@ -2531,9 +2555,10 @@ async def spend_key(aid: str) -> dict:
     k = st.get("keys")
     if not isinstance(k, dict):
         raise ValueError("Les clés arrivent au prochain calcul des succès (dans 15 minutes au plus)")
+    k = _keys_init(st)                         # reprise eventuelle des etapes deja payees
     if (st.get("unlocked") or {}).get(aid):
         raise ValueError("Ce secret est déjà gagné : tout est dévoilé")
-    lvl = int((k.get("spent") or {}).get(aid, 0))
+    lvl = _reveal_level(st, aid)
     if lvl >= len(REVEALS):
         raise ValueError("Tout est déjà révélé")
     cost = REVEALS[lvl][2]
@@ -2672,7 +2697,22 @@ async def podium(me_name: str, fresh: bool = False) -> dict:
             return {**head, "status": "ok", **summary(r.json())}
         except Exception:
             return {**head, "status": "offline"}
-    people += list(await asyncio.gather(*(one(f) for f in await F._load())))
+    friends_now = await F._load()
+    people += list(await asyncio.gather(*(one(f) for f in friends_now)))
+    st = await _state_get()
+    if st is not None:
+        known = dict(st.get("friend_uniques") or {})
+        names = dict(st.get("friend_names") or {})
+        for p in people:
+            if not p.get("me") and p.get("status") == "ok":
+                known[str(p["id"])] = p.get("uniques") or []
+        ids_now = {str(f["id"]) for f in friends_now}
+        known = {fid: ids for fid, ids in known.items() if fid in ids_now}
+        names = {str(f["id"]): f.get("name") or f"Copain {f['id']}" for f in friends_now}
+        if known != (st.get("friend_uniques") or {}) or names != (st.get("friend_names") or {}):
+            st["friend_uniques"], st["friend_names"] = known, names
+            await _state_put(st)
+            _CACHE["v"] = None
     out = {"people": people, "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES]}
     _PODIUM.update(t=time.time(), v=out)
     return out
@@ -2687,11 +2727,8 @@ def mask_secrets(v: dict, keep=()) -> dict:
     for it in v["items"]:
         if len(it["tiers"]) == 1 and it["level"] >= 0 and it["id"] not in keep:
             it = {**it, "desc": "Descriptif caché", "lore": None, "masked": True}
-        elif len(it["tiers"]) == 1 and it["level"] < 0 and it.get("reveal"):
-            # ce que mes cles ont revele reste chez moi
-            it = {**it, "emoji": "❔", "name": "Succès secret", "hint": None, "reveal": 0,
-                  "desc": "Continue d'imprimer : il se dévoilera tout seul."}
         items.append(it)
+    # ce que j'ai revele de mes secrets reste visible : les copains s'entraident
     return {**v, "items": items, "keys": None}
 
 
@@ -2708,6 +2745,10 @@ async def view(fresh: bool = False) -> dict:
         return _CACHE["v"]
     ev = await evaluate()
     st = await _state_get() or {"unlocked": {}}
+    if st.get("unlocked") is not None and st.get("sig") and (
+            not isinstance(st.get("keys"), dict) or st["keys"].get("reveal_v") != REVEAL_V):
+        _keys_init(st)                         # mise en route (ou reprise) des cles sans attendre le prochain passage
+        await _state_put(st)
     medals = {t["id"]: 0 for t in TIERS + [UNIQUE]}
     score = score_max = 0
     items = []
@@ -2730,18 +2771,21 @@ async def view(fresh: bool = False) -> dict:
         score_max += sum(t["score"] for t in tiers)
         nxt = lvl + 1 if lvl + 1 < len(a["tiers"]) else None
         secret = a.get("hidden") and lvl < 0
-        rv = int(((st.get("keys") or {}).get("spent") or {}).get(a["id"], 0)) if secret else 0
+        rv = _reveal_level(st, a["id"]) if secret else 0
         items.append({
-            "id": a["id"], "cat": a["cat"], "emoji": "❔" if secret and rv < 1 else a["emoji"],
-            "name": "Succès secret" if secret and rv < 2 else a["name"],
-            "hint": hint_of(a) if secret and rv >= 3 else None, "reveal": rv,
+            "id": a["id"], "cat": a["cat"], "emoji": "❔" if secret and rv < 2 else a["emoji"],
+            "name": "Succès secret" if secret and rv < 3 else a["name"],
+            "hint": hint_of(a) if secret and rv >= 4 else None, "reveal": rv,
+            # etapes offertes par des copains qui l'ont deja (grace a…)
+            "gift_from": _gift_from(st, a["id"]) if secret else [],
             "desc": ("Continue d'imprimer : il se dévoilera tout seul." if rv < 1 else "Descriptif à révéler (🔑)")
-                    if secret and rv < 4 else
+                    if secret and rv < 5 else
                     describe(a, a["tiers"][nxt if nxt is not None else lvl]),
             # medaille unique gagnee : ce qu'elle raconte, et ce qui l'a valu
             "lore": a.get("lore") if lvl >= 0 and len(a["tiers"]) == 1 else None,
             "secret": bool(a.get("hidden")), "money": bool(a.get("money")), "unit": a.get("unit"),
-            "sub": a.get("sub"),
+            # un secret pas encore gagne reste « a decouvrir » tant que sa categorie n'est pas revelee
+            "sub": None if secret and rv < 1 else a.get("sub"),
             "value": None if secret else r["value"], "level": lvl,
             "next": None if nxt is None or secret else a["tiers"][nxt],
             "prev": a["tiers"][lvl] if lvl >= 0 else 0,
@@ -2758,9 +2802,6 @@ async def view(fresh: bool = False) -> dict:
             if t["at"] and not (BY_ID[it["id"]].get("live") and t["at"][:10] <= first_day):
                 top[it["id"]] = (t["at"], it["id"], j)
     recent = sorted(top.values(), reverse=True)[:6]
-    if st.get("unlocked") is not None and st.get("sig") and not isinstance(st.get("keys"), dict):
-        _keys_init(st)                         # mise en route des cles sans attendre le prochain passage
-        await _state_put(st)
     k = st.get("keys") if isinstance(st.get("keys"), dict) else None
     ok_since = await _ok_since(k.get("since")) if k else 0
     keys = None if k is None else {
