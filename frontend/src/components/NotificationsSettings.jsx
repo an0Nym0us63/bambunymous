@@ -66,7 +66,11 @@ export default function NotificationsSettings() {
       ...(token !== undefined ? { token } : {}) });
     apply(data); setTokEdit(null);
   }, "Enregistré.");
-  const where = () => ({ ntfy: "ntfy", telegram: "Telegram", both: "ntfy et Telegram", app: "l'appli Android" }[cfg?.channel || "ntfy"]);
+  const KIND_FR = { ntfy: "ntfy", telegram: "Telegram", app: "l'appli Android" };
+  const where = () => {
+    const l = Object.keys(KIND_FR).filter(k => cfg?.channels?.[k]).map(k => KIND_FR[k]);
+    return l.length > 1 ? `${l.slice(0, -1).join(", ")} et ${l[l.length - 1]}` : l[0] || "aucun canal";
+  };
   // Appli Android : etat lu dans le shell natif (absent dans un navigateur)
   const [push, setPush] = useState(() => readPushStatus());
   useEffect(() => {
@@ -82,10 +86,9 @@ export default function NotificationsSettings() {
     return "Choisis ntfy si Android le demande…";
   });
   const removeDevice = (id) => run("app", async () => { apply((await client.delete(`/notify/devices/${id}`)).data); });
-  const setAppPush = (on) => run("app", async () => { apply((await client.put("/notify/app-push", { on })).data); });
+  const setKind = (kind, on) => run(`ch_${kind}`, async () => { apply((await client.put("/notify/channels", { [kind]: on })).data); });
   const test = (event) => run(event || "ntfy", () => client.post("/notify/test", { event }), `Envoyé : regarde ${where()}.`);
   const testTo = (key, body, name) => run(key, () => client.post("/notify/test", body), `Envoyé sur « ${name} ».`);
-  const setChannel = (channel) => run("channel", async () => { apply((await client.put("/notify/channel", { channel })).data); });
   const saveBot = (body, ok = "Enregistré.") => run("tgbot", async () => {
     apply((await client.put("/notify/tgbot", body)).data); setBotTok(null); setChatAdd(null);
   }, ok);
@@ -112,13 +115,27 @@ export default function NotificationsSettings() {
   const primary = { ...btn, background:"#3b82f6", border:"none", color:"white", fontWeight:700 };
   const Msg = ({ k }) => msg[k] ? <p style={{ fontSize:12, margin:"8px 0 0", color: msg[k].ok ? "#22c55e" : "#ef4444" }}>{msg[k].text}</p> : null;
   const noFill = { autoComplete: "off", "data-lpignore": "true", "data-1p-ignore": "true", "data-bwignore": "true" };
-  const ch = cfg.channel || "ntfy";
+  const on = cfg.channels || {};
   const savedTopics = cfg.ntfy.topics || [];
   const savedChats = cfg.tgbot.chats || [];
   const botReady = cfg.tgbot?.has_token && savedChats.length > 0;
   const devices = cfg.devices || [];
-  const canSend = ch === "app" ? devices.length > 0
-    : (ch !== "telegram" && savedTopics.length > 0) || (ch !== "ntfy" && botReady);
+  const canSend = (on.ntfy && savedTopics.length > 0) || (on.telegram && botReady) || (on.app && devices.length > 0);
+  // Carte d'un canal : interrupteur en tete ; reglages seulement s'il est active.
+  // (Fonction et non composant : un composant defini ici serait recree a chaque
+  // rendu et ferait perdre le focus des champs.)
+  const channelCard = (kind, title, intro, body) => (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px", display:"flex", alignItems:"center", gap:10 }}>
+        <span style={{ flex:1 }}>{title}</span>
+        <span style={{ fontSize:11, fontWeight:700, color: on[kind] ? "#22c55e" : "var(--muted)" }}>{on[kind] ? "activé" : "désactivé"}</span>
+        <Switch on={!!on[kind]} onChange={v => setKind(kind, v)} disabled={busy === `ch_${kind}`}/>
+      </h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin: on[kind] ? "0 0 12px" : 0, lineHeight:1.5 }}>{intro}</p>
+      {on[kind] && body}
+      <Msg k={`ch_${kind}`}/>
+    </div>
+  );
   const topicName = t => t.label || t.topic;
   const chatName = c => c.label || c.chat_id;
   const setTopic = (i, patch) => setForm(f => ({ ...f, topics: f.topics.map((t, j) => j === i ? { ...t, ...patch } : t) }));
@@ -127,127 +144,10 @@ export default function NotificationsSettings() {
     padding:"2px 7px", borderRadius:20, whiteSpace:"nowrap" }}>par défaut</span>;
 
   return (<>
-    {/* ── Choix du canal : ntfy, bot Telegram (pour qui n'a pas ntfy), ou les deux ── */}
-    <div className="card" style={{ padding:"16px 20px" }}>
-      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 8px" }}>Envoyer les notifications par</h3>
-      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-        {[["ntfy", "ntfy"], ["telegram", "Bot Telegram"], ["both", "Les deux"], ["app", "Appli Android seule"]].map(([id, label]) => (
-          <button key={id} onClick={() => setChannel(id)} disabled={busy === "channel"}
-            style={{ ...btn, ...(ch === id ? { background:"#3b82f6", border:"none", color:"white", fontWeight:700 } : {}) }}>{label}</button>
-        ))}
-      </div>
-      <Msg k="channel"/>
-    </div>
-
-    {/* ── Appli Android (UnifiedPush, ntfy en distributeur) ── */}
-    <div className="card" style={{ padding:"16px 20px" }}>
-      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px", display:"flex", alignItems:"center", gap:10 }}>
-        <span style={{ flex:1 }}>Appli Android</span>
-        {ch !== "app" && <Switch on={!!cfg.app_push} onChange={setAppPush} disabled={busy === "app"}/>}
-      </h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 10px", lineHeight:1.5 }}>
-        Les notifications arrivent dans l'appli BambuNymous elle-même : son icône, son nom, une catégorie Android par
-        section (son et vibration réglables dans Android), et la bonne page s'ouvre au toucher. Il faut l'appli
-        <b> ntfy</b> sur le téléphone : elle les achemine (UnifiedPush).
-        {ch !== "app" && <> Interrupteur : en plus de {where()}.</>}
-      </p>
-      {push ? (
-        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12, color:"var(--text2)", marginBottom:8 }}>
-          Ce téléphone : {push.endpoint ? <b style={{ color:"#22c55e" }}>inscrit</b>
-            : !(push.distributors || []).length ? <span style={{ color:"#f59e0b" }}>installe l'appli ntfy d'abord</span>
-            : <span style={{ color:"var(--muted)" }}>pas encore inscrit</span>}
-          {!push.endpoint && (push.distributors || []).length > 0 && (
-            <button onClick={pushRegister} disabled={busy === "app"} style={primary}>Activer sur ce téléphone</button>
-          )}
-          {push.endpoint && <button onClick={pushRegister} disabled={busy === "app"} style={small}>Réinscrire</button>}
-        </div>
-      ) : (
-        <p style={{ fontSize:11.5, color:"var(--muted)", margin:"0 0 8px" }}>
-          Pour inscrire un téléphone, ouvre cette page dans l'appli Android BambuNymous.</p>
-      )}
-      {devices.map(d => (
-        <div key={d.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderTop:"1px solid var(--border)", fontSize:12.5 }}>
-          <span style={{ flex:1, minWidth:0 }}>
-            <span style={{ fontWeight:700, color:"var(--text)" }}>📱 {d.name || "Téléphone"}</span>
-            <span style={{ display:"block", fontSize:11, color: d.last_err ? "#ef4444" : "var(--muted)" }}>
-              {d.last_err ? `Échec ${d.last_err}` : d.last_ok ? `Dernier envoi : ${new Date(d.last_ok).toLocaleString("fr-FR")}`
-                : `Inscrit le ${new Date(d.added).toLocaleDateString("fr-FR")}`}</span>
-          </span>
-          <button onClick={() => testTo("app", { device: d.id }, d.name || "ce téléphone")} disabled={busy === "app"} style={small}>Tester</button>
-          <button onClick={() => removeDevice(d.id)} disabled={busy === "app"} style={{ ...small, color:"var(--muted)" }} aria-label="Retirer">✕</button>
-        </div>
-      ))}
-      <Msg k="app"/>
-    </div>
-
-    {ch !== "ntfy" && ch !== "app" && (
-    <div className="card" style={{ padding:"16px 20px" }}>
-      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Canal : bot Telegram</h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
-        Dans Telegram, écris à <b>@BotFather</b> « /newbot » : il donne un <b>jeton</b>. Colle-le ici. Écris ensuite
-        « /start » à ton bot, ou ajoute-le à des <b>groupes</b> et écris-y un message, puis touche « Chercher les
-        discussions ». Un groupe par sujet (Impressions, MakerWorld…) a son nom et sa photo, les mêmes sur tous tes appareils.
-      </p>
-      <div style={{ display:"flex", flexDirection:"column", gap:8, fontSize:12, color:"var(--text2)" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
-          Bot {cfg.tgbot?.has_token ? <b style={{ color:"#22c55e" }}>{cfg.tgbot.bot ? `@${cfg.tgbot.bot}` : "posé"}</b>
-            : <span style={{ color:"var(--muted)" }}>— pas encore de jeton</span>}
-          {botTok === null ? (<>
-            <button onClick={() => setBotTok("")} style={small}>{cfg.tgbot?.has_token ? "Changer" : "Ajouter"}</button>
-            {cfg.tgbot?.has_token && <button onClick={() => saveBot({ token: "" })} style={{ ...small, color:"var(--muted)" }}>Retirer</button>}
-          </>) : (
-            <span style={{ display:"flex", gap:6, flex:"1 1 100%" }}>
-              <input value={botTok} onChange={e => setBotTok(e.target.value)} placeholder="123456789:AA…" autoFocus {...noFill}
-                style={{ ...inp, flex:1, fontFamily:"JetBrains Mono,monospace", fontSize:12 }}/>
-              <button onClick={() => setBotTok(null)} style={btn}>✕</button>
-              <button onClick={() => saveBot({ token: botTok.trim() })} disabled={!botTok.trim() || busy === "tgbot"} style={primary}>OK</button>
-            </span>
-          )}
-        </div>
-        {cfg.tgbot?.has_token && (<>
-          <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginTop:4 }}>
-            Discussions</div>
-          {!chats.length && <span style={{ color:"var(--muted)" }}>Aucune pour l'instant.</span>}
-          {chats.map((c, i) => (
-            <div key={c.chat_id} style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-              <input value={c.label} onChange={e => setChats(l => l.map((x, j) => j === i ? { ...x, label: e.target.value } : x))}
-                placeholder="Nom (ex. Impressions)" {...noFill} style={{ ...inp, flex:"1 1 140px", padding:"6px 9px", fontSize:12.5 }}/>
-              <span style={{ fontFamily:"JetBrains Mono,monospace", fontSize:11, color:"var(--muted)" }}>{c.chat_id}</span>
-              {i === 0 ? <Default/> : <button onClick={() => setChats(l => moveFirst(l, i))} style={small} title="En faire la discussion par défaut">★</button>}
-              <button onClick={() => testTo("tgbot", { chat: c.chat_id }, chatName(c))} style={small}
-                disabled={busy === "tgbot" || !savedChats.some(x => x.chat_id === c.chat_id)}
-                title="Enregistre d'abord une nouvelle discussion">Tester</button>
-              <button onClick={() => setChats(l => l.filter((_, j) => j !== i))} style={{ ...small, color:"var(--muted)" }} aria-label="Retirer">✕</button>
-            </div>
-          ))}
-          {chatAdd !== null && (
-            <span style={{ display:"flex", gap:6 }}>
-              <input value={chatAdd} onChange={e => setChatAdd(e.target.value)} placeholder="Identifiant ou @canal" autoFocus {...noFill}
-                style={{ ...inp, flex:1, fontSize:12 }}/>
-              <button onClick={() => setChatAdd(null)} style={btn}>✕</button>
-              <button onClick={() => { setChats(l => [...l, { chat_id: chatAdd.trim(), label: "" }]); setChatAdd(null); }}
-                disabled={!chatAdd.trim()} style={primary}>Ajouter</button>
-            </span>
-          )}
-          <div style={{ display:"flex", gap:8, marginTop:4, flexWrap:"wrap" }}>
-            <button onClick={() => saveChats(chats)} disabled={busy === "tgbot"} style={primary}>Enregistrer</button>
-            <button onClick={detectChat} disabled={busy === "tgbot"} style={btn}>Chercher les discussions</button>
-            {chatAdd === null && <button onClick={() => setChatAdd("")} style={{ ...btn, color:"var(--muted)" }}>Saisir à la main</button>}
-          </div>
-        </>)}
-        <Msg k="tgbot"/>
-      </div>
-    </div>
-    )}
-
-    {ch !== "telegram" && ch !== "app" && (
-    <div className="card" style={{ padding:"16px 20px" }}>
-      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Canal : ntfy</h3>
-      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
+    {channelCard("ntfy", "ntfy", <>
         Les notifications partent sur tes sujets ntfy (serveur public ntfy.sh ou le tien). Abonne-toi aux mêmes sujets
         dans l'appli ntfy du téléphone. Plusieurs sujets : chaque section choisit le sien plus bas. L'icône d'un sujet
-        (adresse d'une image) accompagne chacune de ses notifications sur Android.
-      </p>
+        (adresse d'une image) accompagne chacune de ses notifications sur Android.</>, <>
       <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
         <label style={{ fontSize:11, color:"var(--muted)" }}>Serveur
           <input value={form.url} onChange={e => setForm(f => ({ ...f, url: e.target.value }))} placeholder="https://ntfy.sh"
@@ -302,12 +202,100 @@ export default function NotificationsSettings() {
         <div style={{ display:"flex", gap:8, marginTop:4 }}>
           <button onClick={() => saveNtfy()} disabled={busy === "ntfy"} style={primary}>Enregistrer</button>
           <button onClick={() => test("")} disabled={busy === "ntfy" || !canSend} style={btn}
-            title={canSend ? "" : "Renseigne et enregistre d'abord un sujet"}>Envoyer un test</button>
+            title={canSend ? "" : "Renseigne et enregistre d'abord un sujet"}>Tester tous les canaux</button>
         </div>
         <Msg k="ntfy"/>
       </div>
-    </div>
-    )}
+    </>)}
+
+    {channelCard("telegram", "Bot Telegram", <>
+        Dans Telegram, écris à <b>@BotFather</b> « /newbot » : il donne un <b>jeton</b>. Colle-le ici. Écris ensuite
+        « /start » à ton bot, ou ajoute-le à des <b>groupes</b> et écris-y un message, puis touche « Chercher les
+        discussions ». Un groupe par sujet (Impressions, MakerWorld…) a son nom et sa photo, les mêmes sur tous tes appareils.</>, <>
+      <div style={{ display:"flex", flexDirection:"column", gap:8, fontSize:12, color:"var(--text2)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          Bot {cfg.tgbot?.has_token ? <b style={{ color:"#22c55e" }}>{cfg.tgbot.bot ? `@${cfg.tgbot.bot}` : "posé"}</b>
+            : <span style={{ color:"var(--muted)" }}>— pas encore de jeton</span>}
+          {botTok === null ? (<>
+            <button onClick={() => setBotTok("")} style={small}>{cfg.tgbot?.has_token ? "Changer" : "Ajouter"}</button>
+            {cfg.tgbot?.has_token && <button onClick={() => saveBot({ token: "" })} style={{ ...small, color:"var(--muted)" }}>Retirer</button>}
+          </>) : (
+            <span style={{ display:"flex", gap:6, flex:"1 1 100%" }}>
+              <input value={botTok} onChange={e => setBotTok(e.target.value)} placeholder="123456789:AA…" autoFocus {...noFill}
+                style={{ ...inp, flex:1, fontFamily:"JetBrains Mono,monospace", fontSize:12 }}/>
+              <button onClick={() => setBotTok(null)} style={btn}>✕</button>
+              <button onClick={() => saveBot({ token: botTok.trim() })} disabled={!botTok.trim() || busy === "tgbot"} style={primary}>OK</button>
+            </span>
+          )}
+        </div>
+        {cfg.tgbot?.has_token && (<>
+          <div style={{ fontSize:11, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em", marginTop:4 }}>
+            Discussions</div>
+          {!chats.length && <span style={{ color:"var(--muted)" }}>Aucune pour l'instant.</span>}
+          {chats.map((c, i) => (
+            <div key={c.chat_id} style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+              <input value={c.label} onChange={e => setChats(l => l.map((x, j) => j === i ? { ...x, label: e.target.value } : x))}
+                placeholder="Nom (ex. Impressions)" {...noFill} style={{ ...inp, flex:"1 1 140px", padding:"6px 9px", fontSize:12.5 }}/>
+              <span style={{ fontFamily:"JetBrains Mono,monospace", fontSize:11, color:"var(--muted)" }}>{c.chat_id}</span>
+              {i === 0 ? <Default/> : <button onClick={() => setChats(l => moveFirst(l, i))} style={small} title="En faire la discussion par défaut">★</button>}
+              <button onClick={() => testTo("tgbot", { chat: c.chat_id }, chatName(c))} style={small}
+                disabled={busy === "tgbot" || !savedChats.some(x => x.chat_id === c.chat_id)}
+                title="Enregistre d'abord une nouvelle discussion">Tester</button>
+              <button onClick={() => setChats(l => l.filter((_, j) => j !== i))} style={{ ...small, color:"var(--muted)" }} aria-label="Retirer">✕</button>
+            </div>
+          ))}
+          {chatAdd !== null && (
+            <span style={{ display:"flex", gap:6 }}>
+              <input value={chatAdd} onChange={e => setChatAdd(e.target.value)} placeholder="Identifiant ou @canal" autoFocus {...noFill}
+                style={{ ...inp, flex:1, fontSize:12 }}/>
+              <button onClick={() => setChatAdd(null)} style={btn}>✕</button>
+              <button onClick={() => { setChats(l => [...l, { chat_id: chatAdd.trim(), label: "" }]); setChatAdd(null); }}
+                disabled={!chatAdd.trim()} style={primary}>Ajouter</button>
+            </span>
+          )}
+          <div style={{ display:"flex", gap:8, marginTop:4, flexWrap:"wrap" }}>
+            <button onClick={() => saveChats(chats)} disabled={busy === "tgbot"} style={primary}>Enregistrer</button>
+            <button onClick={detectChat} disabled={busy === "tgbot"} style={btn}>Chercher les discussions</button>
+            {chatAdd === null && <button onClick={() => setChatAdd("")} style={{ ...btn, color:"var(--muted)" }}>Saisir à la main</button>}
+          </div>
+        </>)}
+        <Msg k="tgbot"/>
+      </div>
+    </>)}
+
+    {/* ── Appli Android (UnifiedPush, ntfy en distributeur) ── */}
+    {channelCard("app", "Appli Android", <>
+        Les notifications arrivent dans l'appli BambuNymous elle-même : son icône, son nom, une catégorie Android par
+        section (son et vibration réglables dans Android), et la bonne page s'ouvre au toucher. Il faut l'appli
+        <b> ntfy</b> sur le téléphone : elle les achemine (UnifiedPush).</>, <>
+      {push ? (
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12, color:"var(--text2)", marginBottom:8 }}>
+          Ce téléphone : {push.endpoint ? <b style={{ color:"#22c55e" }}>inscrit</b>
+            : !(push.distributors || []).length ? <span style={{ color:"#f59e0b" }}>installe l'appli ntfy d'abord</span>
+            : <span style={{ color:"var(--muted)" }}>pas encore inscrit</span>}
+          {!push.endpoint && (push.distributors || []).length > 0 && (
+            <button onClick={pushRegister} disabled={busy === "app"} style={primary}>Activer sur ce téléphone</button>
+          )}
+          {push.endpoint && <button onClick={pushRegister} disabled={busy === "app"} style={small}>Réinscrire</button>}
+        </div>
+      ) : (
+        <p style={{ fontSize:11.5, color:"var(--muted)", margin:"0 0 8px" }}>
+          Pour inscrire un téléphone, ouvre cette page dans l'appli Android BambuNymous.</p>
+      )}
+      {devices.map(d => (
+        <div key={d.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderTop:"1px solid var(--border)", fontSize:12.5 }}>
+          <span style={{ flex:1, minWidth:0 }}>
+            <span style={{ fontWeight:700, color:"var(--text)" }}>📱 {d.name || "Téléphone"}</span>
+            <span style={{ display:"block", fontSize:11, color: d.last_err ? "#ef4444" : "var(--muted)" }}>
+              {d.last_err ? `Échec ${d.last_err}` : d.last_ok ? `Dernier envoi : ${new Date(d.last_ok).toLocaleString("fr-FR")}`
+                : `Inscrit le ${new Date(d.added).toLocaleDateString("fr-FR")}`}</span>
+          </span>
+          <button onClick={() => testTo("app", { device: d.id }, d.name || "ce téléphone")} disabled={busy === "app"} style={small}>Tester</button>
+          <button onClick={() => removeDevice(d.id)} disabled={busy === "app"} style={{ ...small, color:"var(--muted)" }} aria-label="Retirer">✕</button>
+        </div>
+      ))}
+      <Msg k="app"/>
+    </>)}
 
     {/* ── Types de notification, par section repliable ── */}
     {cfg.sections.map(sec => {
@@ -317,11 +305,10 @@ export default function NotificationsSettings() {
       const isOpen = !!open[sec.id];
       const tOf = savedTopics.find(t => t.topic === sec.route?.ntfy) || savedTopics[0];
       const cOf = savedChats.find(c => c.chat_id === sec.route?.telegram) || savedChats[0];
-      const dests = ch === "app" ? ["Appli Android"]
-        : [ch !== "telegram" && tOf && `ntfy · ${topicName(tOf)}`, ch !== "ntfy" && cOf && `Telegram · ${chatName(cOf)}`,
-           cfg.app_push && devices.length && "Appli Android"].filter(Boolean);
-      const pickTopic = ch !== "telegram" && ch !== "app" && savedTopics.length > 1;
-      const pickChat = ch !== "ntfy" && ch !== "app" && savedChats.length > 1;
+      const dests = [on.ntfy && tOf && `ntfy · ${topicName(tOf)}`, on.telegram && cOf && `Telegram · ${chatName(cOf)}`,
+                     on.app && devices.length && "Appli Android"].filter(Boolean);
+      const pickTopic = on.ntfy && savedTopics.length > 1;
+      const pickChat = on.telegram && savedChats.length > 1;
       return (
         <div key={sec.id} className="card" style={{ padding:0, overflow:"hidden" }}>
           <button onClick={() => toggle(sec.id)} aria-expanded={isOpen}

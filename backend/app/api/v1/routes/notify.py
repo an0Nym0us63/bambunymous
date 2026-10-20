@@ -38,7 +38,17 @@ async def notify_set_ntfy(body: dict = Body({}), _: str = Depends(require_admin)
 
 @router.put("/channel")
 async def notify_set_channel(body: dict = Body({}), _: str = Depends(require_admin)):
-    return await _call(N.set_channel(str(body.get("channel") or "")))
+    # ancien appel (choix exclusif) : traduit en canaux actives
+    old = N._OLD_CHANNEL.get(str(body.get("channel") or ""))
+    if not old:
+        raise HTTPException(400, "Canal inconnu")
+    return await _call(N.set_channels({k: k in old for k in N.KINDS}))
+
+
+@router.put("/channels")
+async def notify_set_channels(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Active ou coupe chaque canal : {"ntfy": true, "telegram": false, "app": true}."""
+    return await _call(N.set_channels(body))
 
 
 @router.put("/tgbot")
@@ -85,9 +95,3 @@ async def notify_remove_device(dev_id: str, _: str = Depends(require_admin)):
 async def notify_forget_device(body: dict = Body({}), _: str = Depends(require_admin)):
     """L'appli s'est desinscrite (ou a change d'adresse) : on oublie l'ancienne."""
     return await _call(N.remove_device("", str(body.get("endpoint") or "")))
-
-
-@router.put("/app-push")
-async def notify_set_app_push(body: dict = Body({}), _: str = Depends(require_admin)):
-    """Envoyer aussi a l'appli Android, en plus du canal choisi."""
-    return await _call(N.set_app_push(bool(body.get("on"))))

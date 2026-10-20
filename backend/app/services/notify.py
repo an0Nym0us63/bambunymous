@@ -331,7 +331,10 @@ class NotifyError(Exception):
 
 
 # Canal des notifications : ntfy, un bot Telegram (pour qui n'a pas ntfy), ou les deux.
-CHANNELS = ("ntfy", "telegram", "both", "app")     # app : seulement l'appli Android (UnifiedPush)
+# Canaux, chacun active ou non (20/10/2026) : ntfy, bot Telegram, appli Android.
+# Remplace l'ancien choix exclusif « channel » (ntfy | telegram | both | app).
+KINDS = ("ntfy", "telegram", "app")
+_OLD_CHANNEL = {"ntfy": ("ntfy",), "telegram": ("telegram",), "both": ("ntfy", "telegram"), "app": ("app",)}
 TG_API = "https://api.telegram.org"
 
 
@@ -354,8 +357,11 @@ async def _load() -> dict:
     cfg.setdefault("events", {})
     cfg.setdefault("routes", {})
     cfg.setdefault("devices", [])
-    if cfg.get("channel") not in CHANNELS:
-        cfg["channel"] = "ntfy"
+    if not isinstance(cfg.get("channels"), dict):
+        old = _OLD_CHANNEL.get(cfg.get("channel") or "ntfy", ("ntfy",))
+        cfg["channels"] = {k: k in old or (k == "app" and bool(cfg.get("app_push"))) for k in KINDS}
+    cfg.pop("channel", None)
+    cfg.pop("app_push", None)
     _normalize(cfg)
     _CACHE = cfg
     return cfg
@@ -416,10 +422,9 @@ def _public(cfg: dict) -> dict:
     n = cfg.get("ntfy") or {}
     b = cfg.get("tgbot") or {}
     return {
-        "channel": cfg.get("channel") or "ntfy",
+        "channels": {k: bool(cfg["channels"].get(k)) for k in KINDS},
         # Appli Android (UnifiedPush) : les telephones inscrits, jamais leur adresse
         # d'envoi (elle suffit a leur ecrire).
-        "app_push": bool(cfg.get("app_push")),
         "devices": [{k: d.get(k) for k in ("id", "name", "added", "last_ok", "last_err")} for d in cfg.get("devices") or []],
         "ntfy": {"url": n.get("url") or "https://ntfy.sh", "topic": n.get("topic") or "",
                  "topics": n.get("topics") or [],
@@ -774,11 +779,6 @@ async def remove_device(dev_id: str = "", endpoint: str = "") -> dict:
     return _public(cfg)
 
 
-async def set_app_push(on: bool) -> dict:
-    cfg = await _load()
-    cfg["app_push"] = bool(on)
-    await _save(cfg)
-    return _public(cfg)
 
 
 def _up_payload(title, message, click, priority, section, attach) -> bytes:
@@ -819,21 +819,30 @@ def _post_devices(cfg, devices, title, message, click, priority, section, attach
     return errs
 
 
-async def set_channel(channel: str) -> dict:
-    if channel not in CHANNELS:
-        raise NotifyError("Canal inconnu")
+async def set_channels(patch: dict) -> dict:
+    """Active ou coupe des canaux : {"ntfy": true, "app": false…}."""
     cfg = await _load()
-    cfg["channel"] = channel
+    for k, v in (patch or {}).items():
+        if k in KINDS:
+            cfg["channels"][k] = bool(v)
     await _save(cfg)
     return _public(cfg)
+
+
+def _on(cfg) -> list:
+    return [k for k in KINDS if (cfg.get("channels") or {}).get(k)]
+
+
+_KIND_FR = {"ntfy": "ntfy", "telegram": "Telegram", "app": "l'appli Android"}
 
 
 async def send(title: str, message: str = "", click=None, attach=None, tags=None, priority=None,
                actions=None, file=None, filename=None, icon=None, event=None, topic=None, chat=None) -> None:
     """icon : petite image de la notification (Android ; iOS l'ignore). Par
     defaut le logo BambuNymous, servi par l'appli si son adresse est connue.
-    Part sur le canal choisi (ntfy, bot Telegram ou les deux) ; avec les deux,
-    un canal en panne n'empeche pas l'autre. event : type d'ou vient l'envoi,
+    Part sur chaque canal active (ntfy, bot Telegram, appli Android) ; un canal
+    en panne n'empeche pas les autres, l'erreur ne remonte que si tous
+    echouent. event : type d'ou vient l'envoi,
     pour le sujet ntfy et la discussion de sa section ; topic / chat : une
     destination imposee (essai d'un sujet ou d'une discussion)."""
     import asyncio
@@ -844,35 +853,35 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
     # icone du sujet si elle est posee, sinon celle passee, sinon le logo
     t_icon = next((t.get("icon") for t in cfg["ntfy"].get("topics") or [] if t["topic"] == topic), "")
     icon = t_icon or icon or app_link(cfg, "/icon-192.png")
-    ch = cfg.get("channel") or "ntfy"
+    kinds = _on(cfg)
+    if not kinds:
+        raise NotifyError("Aucun canal activé (ntfy, Telegram ou appli Android)")
     errors = []
-    # Appli Android : seule (canal « app ») ou en plus du canal choisi
-    if ch == "app" or cfg.get("app_push"):
-        devs = cfg.get("devices") or []
-        if not devs and ch == "app":
-            raise NotifyError("Aucun téléphone inscrit : ouvre BambuNymous dans l'appli Android et active les notifications")
-        if devs:
-            errs = await asyncio.to_thread(_post_devices, cfg, devs, title, message, click, priority, sec, attach)
-            await _save(cfg)                    # derniers succes / echecs par telephone
-            if errs and (ch == "app" and len(errs) == len(devs)):
-                raise NotifyError(" · ".join(errs))
-            for e in errs:
-                logger.warning(f"[NOTIF] appli : {e}")
-        if ch == "app":
-            return
-    if ch in ("ntfy", "both"):
+    if "ntfy" in kinds:
         try:
             await asyncio.to_thread(_post_ntfy, {**cfg["ntfy"], "topic": topic}, title, message, click, attach, tags,
                                     priority, actions, file, filename, icon)
         except NotifyError as e:
-            errors.append(f"ntfy : {e}" if ch == "both" else str(e))
-    if ch in ("telegram", "both"):
+            errors.append(f"ntfy : {e}")
+    if "telegram" in kinds:
         try:
             await asyncio.to_thread(_post_tgbot, {**cfg["tgbot"], "chat_id": chat}, title, message, click, attach,
                                     actions, file, filename)
         except NotifyError as e:
             errors.append(str(e))
-    if errors and (ch != "both" or len(errors) == 2):
+    if "app" in kinds:
+        devs = cfg.get("devices") or []
+        if not devs:
+            errors.append("Appli Android : aucun téléphone inscrit")
+        else:
+            errs = await asyncio.to_thread(_post_devices, cfg, devs, title, message, click, priority, sec, attach)
+            await _save(cfg)                    # derniers succes / echecs par telephone
+            if len(errs) == len(devs):
+                errors.append("Appli Android : " + " · ".join(errs))
+            else:
+                for e in errs:
+                    logger.warning(f"[NOTIF] appli : {e}")
+    if errors and len(errors) == len(kinds):
         raise NotifyError(" · ".join(errors))
     for e in errors:
         logger.warning(f"[NOTIF] {e}")
@@ -919,8 +928,8 @@ async def test(event: str = "", topic: str = "", chat: str = "", device: str = "
         await send("[Test] " + s["title"], s["message"], click=click, attach=s.get("attach"),
                    priority=s.get("priority"), actions=actions, event=event)
     else:
-        ch = {"ntfy": "ntfy", "telegram": "le bot Telegram", "both": "ntfy et le bot Telegram",
-              "app": "l'appli Android"}[cfg.get("channel") or "ntfy"]
+        names = [_KIND_FR[k] for k in _on(cfg)]
+        ch = (", ".join(names[:-1]) + " et " + names[-1]) if len(names) > 1 else (names[0] if names else "aucun canal")
         if device:
             import asyncio
             d = next((x for x in cfg["devices"] if x.get("id") == device), None)
@@ -934,7 +943,6 @@ async def test(event: str = "", topic: str = "", chat: str = "", device: str = "
                 raise NotifyError(errs[0])
             return {"ok": True}
         if topic or chat:
-            cfg = {**cfg, "channel": "ntfy" if topic else "telegram"}
             name = next((t.get("label") or t["topic"] for t in cfg["ntfy"].get("topics") or [] if t["topic"] == topic), "") \
                 if topic else next((c.get("label") or c["chat_id"] for c in cfg["tgbot"].get("chats") or []
                                     if c["chat_id"] == chat), "")
