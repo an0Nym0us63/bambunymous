@@ -23,6 +23,7 @@ FAIL_WINDOW_S = 15 * 60
 FAIL_MIN = 3
 _FAILS: dict = {}            # cle ("u:nom" / "ip:adresse") -> deque d'horodatages
 _ALERTED: dict = {}          # cle -> horodatage de la derniere alerte
+_TASKS: set = set()
 
 
 def client_ip(request) -> str:
@@ -111,6 +112,8 @@ def spawn(coro) -> None:
         except Exception as e:
             logger.warning(f"[LOGIN] surveillance : {e}")
     try:
-        asyncio.get_running_loop().create_task(run())
+        t = asyncio.get_running_loop().create_task(run())
+        _TASKS.add(t)                       # reference forte : sinon le ramasse-miettes peut l'emporter
+        t.add_done_callback(_TASKS.discard)
     except RuntimeError:
         pass

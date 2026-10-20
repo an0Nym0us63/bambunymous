@@ -689,12 +689,46 @@ def _keep_image(cfg, data: bytes):
     return url + name
 
 
+K_FRIENDS_LAST = "NOTIF_FRIENDS_LAST"
+
+
+async def _friends_last_get():
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    import json
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, K_FRIENDS_LAST, "")
+    try:
+        d = json.loads(raw) if raw else None
+    except ValueError:
+        d = None
+    return d if isinstance(d, dict) else None
+
+
+async def _friends_last_put(cur) -> None:
+    """Le dernier etat de chaque copain, en base : un redemarrage de l'appli
+    (mise a jour) ne fait plus perdre un debut ni une fin d'impression. Le
+    visuel garde pour la fin n'est garde que par son adresse (pas d'octets)."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    import json
+    keep = {fid: {**{k: v for k, v in c.items() if k != "visual"},
+                  "visual": {k: v for k, v in (c.get("visual") or {}).items() if k == "attach"}}
+            for fid, c in (cur or {}).items()}
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, K_FRIENDS_LAST, json.dumps(keep, ensure_ascii=False))
+
+
 async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
-    """Copains : leur imprimante commence ou finit d'imprimer. Le premier
-    passage memorise sans rien envoyer ; un copain injoignable garde son
-    dernier etat connu (pas de fausse fin)."""
+    """Copains : leur imprimante commence ou finit d'imprimer. Le tout premier
+    passage memorise sans rien envoyer ; ensuite l'etat de reference est relu
+    en base (un redemarrage ne fait rien perdre). Un copain injoignable garde
+    son dernier etat connu (pas de fausse fin)."""
     await asyncio.sleep(first_delay_s)
-    last = None
+    try:
+        last = await _friends_last_get()
+    except Exception:
+        last = None
     while True:
         try:
             cfg = await N._load()
@@ -752,6 +786,7 @@ async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
                                 await N.notify("friend_print_done", f"👥 {who} a fini d'imprimer",
                                                f"📄 {p['print']}" if p.get("print") else "", click=link, priority=2, **vis)
                     last = cur
+                    await _friends_last_put(cur)
         except Exception as e:
             logger.warning(f"[NOTIF] copains : {e}")
         await asyncio.sleep(period_s)

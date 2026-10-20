@@ -49,6 +49,10 @@ class _LogNoiseFilter(logging.Filter):
         return not any(x in msg for x in _NOISY_LOG_MSGS)
 
 
+# Taches de fond lancees au demarrage (voir _bg dans lifespan)
+_BG_TASKS: set = set()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Path(settings.DATA_DIR).mkdir(parents=True, exist_ok=True)
@@ -130,7 +134,16 @@ async def lifespan(app: FastAPI):
     _queue_warm_task = _aio.create_task(_queue_warm())
     # Evaluations MakerWorld laissees en file avant l'arret : on les reprend.
     from app.services.mw_rate import resume_queue as _rate_resume
-    _aio.create_task(_rate_resume())
+    # Taches de fond sans variable : gardees ici. asyncio ne retient qu'une
+    # reference FAIBLE d'une tache ; sans autre reference, le ramasse-miettes
+    # peut la supprimer pendant qu'elle dort, et sa boucle s'arrete sans bruit
+    # (notifications des copains disparues le 20/10/2026).
+    def _bg(coro):
+        t = _aio.create_task(coro)
+        _BG_TASKS.add(t)
+        t.add_done_callback(_BG_TASKS.discard)
+        return t
+    _bg(_rate_resume())
     # Notifications de l'imprimante (pause, fin proche, HMS, sechage) : la
     # config est lue une fois pour l'ecouteur, qui ne touche pas a la base.
     from app.services import notify as _notify, notify_events as _nev
@@ -141,13 +154,13 @@ async def lifespan(app: FastAPI):
         pass
     _sub(_nev.watch)
     # Copains (debut / fin d'impression), impressions a evaluer, redemarrage
-    _aio.create_task(_nev.friends_loop())
-    _aio.create_task(_nev.mw_rate_loop())
-    _aio.create_task(_nev.app_started())
+    _bg(_nev.friends_loop())
+    _bg(_nev.mw_rate_loop())
+    _bg(_nev.app_started())
     # Points d'attention, resume de la semaine, imprimante au repos ; version
     from app.services import notify_extra as _nx
-    _aio.create_task(_nx.loop())
-    _aio.create_task(_nx.update_loop())
+    _bg(_nx.loop())
+    _bg(_nx.update_loop())
     await mqtt_manager.start()
     # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.
