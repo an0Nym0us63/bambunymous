@@ -930,19 +930,19 @@ TIER_TABLE = {
     "mw_level": [3, 6, 9, 12, 15, 18, 21, 25, 30],
     "mw_collections": [50, 200, 500, 1000, 1750, 2750, 4000, 5500, 7500],
     "mw_follows": [1, 3, 5, 8, 12, 18, 25, 35, 50],
-    "friends": [1, 3, 5, 10, 20, 30],
-    "photos_manual": [10, 50, 100, 250, 500, 1000],
-    "photo_prints": [10, 25, 50, 100, 250, 500],
-    "photos_camera": [25, 100, 250, 500, 1000, 2500],
-    "photos_max": [3, 5, 8, 12, 16, 24],
-    "covers": [5, 25, 50, 100, 250, 500],
-    "visits": [100, 500, 1000, 2500, 5000, 10000],
-    "visit_days": [7, 30, 90, 180, 365, 730],
-    "details": [50, 250, 1000, 2500, 5000, 10000],
-    "actions": [50, 250, 1000, 2500, 5000, 10000],
-    "updates": [1, 5, 10, 25, 50, 100],
-    "notifs": [50, 250, 1000, 2500, 5000, 10000],
-    "dismissals": [5, 25, 50, 100, 250, 500],
+    "friends": [1, 2, 3, 4, 5],
+    "photos_manual": [10, 50, 100, 200, 350, 500, 700, 950, 1200],
+    "photo_prints": [5, 10, 25, 40, 60, 80, 110, 150, 200],
+    "photos_camera": [50, 250, 750, 1500, 2500, 3750, 5000, 7500, 10000],
+    "photos_max": [2, 3, 4, 5, 6, 8, 10, 12, 15],
+    "covers": [1, 2, 3, 4, 5, 6, 7, 8, 10],
+    "visits": [25, 100, 250, 500, 750, 1000, 1400, 1900, 2500],
+    "visit_days": [3, 7, 14, 30, 60, 100, 150, 250, 365],
+    "details": [25, 75, 150, 300, 450, 650, 850, 1100, 1500],
+    "actions": [10, 50, 100, 200, 300, 450, 600, 800, 1000],
+    "updates": [1, 3, 5, 10, 15, 25, 40, 60, 100],
+    "notifs": [50, 200, 500, 1000, 1500, 2200, 3000, 4000, 5000],
+    "dismissals": [2, 5, 10, 15, 25, 35, 50, 70, 100],
     "rfid_scans": [5, 15, 30, 50, 75, 100, 150, 200, 300],
     "colors_printed": [5, 10, 25, 40, 60, 80, 110, 150, 200],
     "print_days": [7, 30, 60, 100, 150, 225, 300, 450, 600],
@@ -995,8 +995,8 @@ TIER_TABLE = {
     "best_sale": [2, 5, 10, 15, 20, 30, 45, 70, 100],
     "showcase": [2, 5, 8, 12, 18, 25, 35, 45, 60],
     "notes": [1, 5, 10, 20, 30, 40, 55, 75, 100],
-    "household": [2, 3, 4, 5, 8, 10],
-    "shares": [1, 10, 25, 50, 100, 250],
+    "household": [2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "shares": [1, 3, 5, 8, 12, 18, 25, 35, 50],
     "mw_rates": [1, 10, 25, 50, 75, 100, 150, 200, 300],
     "mw_boosts_given": [1, 2, 4, 7, 10, 15, 20, 30, 50],
     "mw_likes_given": [1, 5, 10, 20, 35, 50, 75, 100, 150],
@@ -1010,7 +1010,7 @@ TIER_TABLE = {
 # Au-dela de la Legende (Mythique, Cosmique, Eternel) : x2, x5, x10 du dernier
 # seuil, arrondis. Sauf la ou il y a un plafond naturel (pourcentage, 24 h par
 # jour, familles de teintes, matieres, imprimantes, niveau MakerWorld…).
-BOUNDED = {"day_hours", "colors_max", "stock_colors", "materials", "ams_units", "mw_level"}   # mw_level : 30 au plus
+BOUNDED = {"day_hours", "colors_max", "stock_colors", "materials", "ams_units", "mw_level", "friends"}   # mw_level : 30 au plus
 
 
 def _nice(x: float) -> float:
