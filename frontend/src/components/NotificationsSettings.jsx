@@ -48,7 +48,14 @@ export default function NotificationsSettings() {
 
   const run = async (key, fn, okText) => {
     setBusy(key); setMsg(m => ({ ...m, [key]: null }));
-    try { const t = await fn(); if (okText || t) setMsg(m => ({ ...m, [key]: { ok: true, text: t || okText } })); }
+    // fn peut rendre un texte a afficher (sinon okText) ; tout autre retour
+    // (reponse axios des essais…) est ignore : un objet rendu tel quel fait
+    // planter React (erreur 31).
+    try {
+      const t = await fn();
+      const text = typeof t === "string" ? t : okText;
+      if (text) setMsg(m => ({ ...m, [key]: { ok: true, text } }));
+    }
     catch (e) { setMsg(m => ({ ...m, [key]: { ok: false, text: e.response?.data?.detail || e.message } })); }
     setBusy("");
   };
