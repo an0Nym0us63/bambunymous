@@ -33,6 +33,17 @@ SECTIONS = [
     ("friends", "👥 Copains"),
     ("system", "🖥️ BambuNymous"),
 ]
+# Teinte de chaque section dans l'appli Android (grande icone, categorie) :
+# envoyee avec chaque message, l'appli n'a rien en dur a republier.
+SECTION_COLORS = {"prints": "#3B82F6", "printer": "#EF4444", "dry": "#06B6D4", "spools": "#F59E0B",
+                  "mw": "#22C55E", "friends": "#8B5CF6", "system": "#64748B"}
+
+
+def _section_parts(section: str):
+    """« 🖨️ Impressions » -> ("🖨️", "Impressions")."""
+    label = dict(SECTIONS).get(section or "", "")
+    emo, _, name = label.partition(" ")
+    return (emo, name) if name else ("", label)
 
 _MIN_MINUTES = {"key": "min_minutes", "type": "number", "label": "Seulement si l'impression dure plus de",
                 "unit": "min", "default": 0, "min": 0, "max": 1440}
@@ -868,8 +879,13 @@ async def test_device(dev_id: str, user: str, admin: bool) -> dict:
 
 
 def _up_payload(title, message, click, priority, section, attach) -> bytes:
-    """JSON compact : t titre, m texte, u lien, p priorite, s section, i image."""
+    """JSON compact : t titre, m texte, u lien, p priorite, s section, i image ;
+    et l'habillage de la section (sl nom, e emoji, c teinte) pour que l'appli
+    cree sa categorie et sa grande icone sans liste en dur."""
+    emo, name = _section_parts(section)
     d = {"t": (title or "")[:200], "m": message or "", "u": click or "", "p": int(priority or 3), "s": section or ""}
+    if section:
+        d.update(sl=name, e=emo, c=SECTION_COLORS.get(section, ""))
     if attach and str(attach).startswith("https://"):
         d["i"] = attach
     raw = json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
