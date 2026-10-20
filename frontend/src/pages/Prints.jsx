@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
+import Lightbox from "../components/Lightbox";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import MakerWorldView from "../components/MakerWorldView";
@@ -1498,6 +1500,7 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
   const [unmappingG, setUnmappingG] = useState(null);
   const [editGroup, setEditGroup] = useState(false);
   const [groupPhotos, setGroupPhotos] = useState([]);
+  const [groupLb, setGroupLb] = useState(-1);          // photo du groupe en grand (visionneuse par-dessus)
   const [groupCover, setGroupCover] = useState(null);
 
   const loadGroupPhotos = () => client.get(`/prints/groups/${groupId}/photos`).then(r=>{ setGroupPhotos(r.data?.files||[]); setGroupCover(r.data?.cover_photo||null); }).catch(()=>{});
@@ -1666,6 +1669,8 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
           )}
 
           {/* Photos du groupe */}
+          {groupLb >= 0 && <Lightbox images={groupPhotos.filter(x => !isVideoUrl(x.url)).map(x => x.url)} index={groupLb}
+            onClose={() => setGroupLb(-1)}/>}
           {(groupPhotos.length > 0 || true) && (
             <div style={{ marginBottom:14 }}>
               <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
@@ -1688,8 +1693,8 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
                         <video src={ph.url} muted loop autoPlay playsInline preload="metadata"
                           style={{ height:80, width:80, objectFit:"cover", display:"block", borderRadius:6 }}/>
                       ) : (
-                        <img src={ph.url} alt="" style={{ height:80, width:80, objectFit:"cover",
-                          display:"block", borderRadius:6 }}/>
+                        <img src={ph.url} alt="" onClick={() => setGroupLb(groupPhotos.filter(x => !isVideoUrl(x.url)).findIndex(x => x.url === ph.url))}
+                          style={{ height:80, width:80, objectFit:"cover", display:"block", borderRadius:6, cursor:"zoom-in" }}/>
                       )}
                       <AdminOnly>
                         {/* Etoile a gauche, doree sur la vignette actuelle et
@@ -2361,9 +2366,11 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
       <Row title="Photos" items={photoItems} startIdx={0} canCover
         onAdd={async(f)=>{ await onUpload?.(f); reloadDiskFiles(); }} onDeleteItem={onDeleteUpload}/>
       <Row title="Milestones" items={milestoneItems} startIdx={photoItems.length}/>
-      {lightbox && (
-        <div onClick={() => setLightbox(null)}
-          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:2000,
+      {/* Hors de la fiche (portail) : dans le panneau qui defile, la visionneuse
+          restait coincee a l'interieur au lieu de couvrir l'ecran. */}
+      {lightbox && createPortal(
+        <div data-no-pull="" onClick={() => setLightbox(null)}
+          style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.92)", zIndex:6000,
             display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
           {/* Titre */}
           <p style={{ color:"rgba(255,255,255,0.7)", fontSize:12, margin:"0 0 10px",
@@ -2401,7 +2408,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
               {lbIdx + 1} / {flatItems.length}
             </p>
           )}
-        </div>
+        </div>, document.body
       )}
     {photoToDelete && <PhotoDeleteConfirm
       label={photoToDelete.label||photoToDelete.name}

@@ -157,6 +157,14 @@ async def update_settings(
                 await set_setting(db, field, value)
                 printer_changed = True
         else:
+            if field == "COST_BY_HOUR":
+                # « 0,20 » comme « 0.20 » : la virgule francaise faisait echouer
+                # le calcul du cout electrique (float("0,20")).
+                v = str(value or "").strip().replace(",", ".").replace(" ", "").replace("€", "")
+                try:
+                    value = str(float(v or 0))
+                except ValueError:
+                    raise HTTPException(400, "Tarif électrique invalide (ex. 0,20)")
             await set_setting(db, field, value)
             if field in ("PRINTER_IP", "PRINTER_ID"):
                 printer_changed = True

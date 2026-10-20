@@ -758,7 +758,10 @@ async def _costs(db, p: Print):
             total_c  += cost_ov
             total_cn += cost_no
 
-        rate  = float(await get_setting(db, "COST_BY_HOUR") or 0)
+        try:   # tolere un ancien reglage saisi avec une virgule (« 0,20 »)
+            rate = float(str(await get_setting(db, "COST_BY_HOUR") or 0).replace(",", ".").strip() or 0)
+        except ValueError:
+            rate = 0.0
         dur_h = (p.duration_seconds or p.estimated_seconds or 0) / 3600
         elec  = round(dur_h * rate, 4)
 
