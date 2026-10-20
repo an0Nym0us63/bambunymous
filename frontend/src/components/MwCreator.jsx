@@ -179,6 +179,8 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
             <span key={k} style={{ fontWeight: k === type ? 800 : 600, color: k === type ? "#22c55e" : "inherit" }}>
               {ic} {data.account[k] > 0 ? "+" : ""}{fmt(data.account[k])}</span>
           ))}
+          {/* sans note « partiel », l'import reste accessible ici */}
+          {!partial && importLink && <span style={{ fontSize:11, marginLeft:"auto" }}>{importLink}</span>}
         </div>
       )}
       {view === "models" && partial && (

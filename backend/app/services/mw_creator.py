@@ -386,7 +386,9 @@ async def overview(fresh: bool = False, period: str = "30") -> dict:
     hist = await _history_get()
     gap = bool(days and since and since > target)
     hdes = hist.get("designs") or {}
-    designs_ok = gap and bool(hdes) and _covers(hist.get("designs_from"), hist.get("designs_to"),
+    # au moins un modele avec des jours : un import aux modeles vides (forme de
+    # page non lue, avant le 20/10/2026) ne vaut pas historique complet
+    designs_ok = gap and any(hdes.values()) and _covers(hist.get("designs_from"), hist.get("designs_to"),
                                                  hist.get("designs_from_start"), since, days)
     for m in ms:
         b = (base or {}).get(m["design_id"])
