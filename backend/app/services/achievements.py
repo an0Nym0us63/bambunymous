@@ -1032,11 +1032,39 @@ for _x in CATALOG:
     # une medaille unique ne se devoile qu'une fois gagnee, et vit dans « Secrets »
     if len(_x["tiers"]) == 1:
         _x["hidden"] = True
-        _x["hint"] = HINTS.get(_x["id"])
+        _x["hint"] = HINTS.get(_x["id"]) or _x.get("hint")
         _x["cat"] = "secret"
         _x["sub"] = SUB_OF.get(_x["id"], "counts")
     else:
         _x.pop("hidden", None)
+# Collections de medailles (secrets) : toute une section au moins a un palier.
+# Seuls comptent les succes qui ont ce palier (un succes plafonne a 6 paliers
+# ne bloque pas Mythique et au-dela) ; une matiere jamais imprimee non plus.
+SET_CATS = [c for c in CATEGORIES if c[0] != "secret"]
+
+
+def _set_id(cat: str, tier: str) -> str:
+    return f"set_{cat}_{tier}"
+
+
+def _members(cat: str, i: int) -> list:
+    return [a for a in CATALOG if a["cat"] == cat and len(a["tiers"]) > max(i, 1) and not a["id"].startswith("set_")]
+
+
+for _cid, _cemo, _cname in SET_CATS:
+    for _i, _t in enumerate(TIERS):
+        if not _members(_cid, _i):
+            continue
+        CATALOG.append({
+            "id": _set_id(_cid, _t["id"]), "cat": "secret", "sub": "sets", "hidden": True, "live": False,
+            "emoji": _t["emoji"], "name": f"Collection {_t['label']} · {_cname}",
+            "desc": f"Tous les succès de la section {_cname} au moins au palier {_t['label']}", "tiers": [1],
+            "hint": f"Regarde la section {_cname} : il faudrait que toutes ses médailles se ressemblent.",
+            "lore": f"Toute la section {_cname} au palier {_t['label']} : une vitrine parfaitement assortie.",
+            "set": (_cid, _i)})
+SECRET_SUBS.append(("sets", "🏆", "Collections de médailles",
+                    " ".join(a["id"] for a in CATALOG if a.get("set"))))
+SUB_OF.update({a["id"]: "sets" for a in CATALOG if a.get("set")})
 BY_ID = {a["id"]: a for a in CATALOG}
 
 
@@ -2339,7 +2367,31 @@ async def evaluate(now: datetime | None = None) -> dict:
             if at is not None:
                 reached[str(i)] = at.isoformat()
         out[a["id"]] = {"value": val, "reached": reached}
+    _sets(out, await _state_get() or {})
     return out
+
+
+def _sets(out: dict, st: dict) -> None:
+    """Collections de medailles : date = le jour ou le dernier succes de la
+    section a atteint le palier. Un succes « au present » garde ce qu'il a
+    deja acquis (meme si sa valeur a baisse)."""
+    stored = st.get("unlocked") or {}
+    best = st.get("best") or {}
+
+    def at(a, i):
+        r = (out.get(a["id"]) or {}).get("reached", {}).get(str(i))
+        if r is None and a.get("live") and _still(a["id"], i, best.get(a["id"], 0)):
+            r = (stored.get(a["id"]) or {}).get(str(i))
+        return r
+    for a in CATALOG:
+        if not a.get("set"):
+            continue
+        cat, i = a["set"]
+        mem = [m for m in _members(cat, i)
+               if not (m.get("only_started") and not (out.get(m["id"]) or {}).get("value") and not stored.get(m["id"]))]
+        dates = [at(m, i) for m in mem]
+        ok = bool(mem) and all(dates)
+        out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {}}
 
 
 async def tick(notify: bool = True) -> list:
