@@ -125,11 +125,12 @@ async def notify_me_events(body: dict = Body({}), acc=Depends(require_own_accoun
 
 
 @router.get("/me/history")
-async def notify_my_history(before: int = 0, sections: str = None, acc=Depends(require_own_account)):
+async def notify_my_history(before: int = 0, sections: str = None, events: str = None,
+                            acc=Depends(require_own_account)):
     """Mes notifications des 15 derniers jours, la plus recente d'abord ;
-    sections : liste separee par des virgules (absente : toutes)."""
-    secs = None if sections is None else [x for x in sections.split(",") if x]
-    return await N.history(acc[0], before, sections=secs)
+    sections, events : listes separees par des virgules (absentes : toutes)."""
+    split = lambda v: None if v is None else [x for x in v.split(",") if x]
+    return await N.history(acc[0], before, sections=split(sections), events=split(events))
 
 
 @router.get("/me/unseen")

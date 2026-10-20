@@ -1,12 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { SlidersHorizontal } from "lucide-react";
 import client, { apiUrl } from "../api/client";
 import { notifSeenEvent } from "../components/NotifBell";
 
 // Historique de MES notifications (15 jours) : celles que j'ai choisies, avec
 // leur image quand il y en a une (couverture MakerWorld, plateau d'une
 // impression). Ouvrir la page marque tout comme vu ; les nouvelles restent
-// signalees jusqu'au prochain passage.
+// signalees jusqu'au prochain passage. Onglets : une categorie (?cat=), puis
+// au besoin un type de cette categorie (?type=), gardes dans l'adresse.
 const SECTION_ICON = { prints: "🖨️", printer: "📡", dry: "💧", spools: "🧵", mw: "🌐", friends: "👥", system: "🖥️" };
 
 const dayLabel = d => {
@@ -25,35 +27,36 @@ const thumbOf = it => {
   return m ? apiUrl(`/prints/${m[1]}/image`) : null;
 };
 
-const HIDDEN_KEY = "notifHiddenSections";
-const ALL_SECTIONS = Object.keys(SECTION_ICON);
-
 export default function Notifications() {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [more, setMore] = useState(false);
+  const [counts, setCounts] = useState(null);     // par categorie, tels qu'a l'ouverture (points des nouvelles)
   const navigate = useNavigate();
-  // Categories masquees (ce navigateur)
-  const [hidden, setHiddenState] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem(HIDDEN_KEY) || "[]")); } catch { return new Set(); }
-  });
-  const setHidden = h => { setHiddenState(h); try { localStorage.setItem(HIDDEN_KEY, JSON.stringify([...h])); } catch { /* indisponible */ } };
-  const [picker, setPicker] = useState(false);
+  const [sp, setSp] = useSearchParams();
+  const cat = sp.get("cat") || "", type = sp.get("type") || "";
+  const pick = (c, t = "") => {
+    const n = new URLSearchParams(sp);
+    c ? n.set("cat", c) : n.delete("cat");
+    t ? n.set("type", t) : n.delete("type");
+    setSp(n, { replace: true });
+  };
   const firstLoad = useRef(true);
-  const params = hidden.size ? { sections: ALL_SECTIONS.filter(x => !hidden.has(x)).join(",") } : {};
+  const params = { ...(cat ? { sections: cat } : {}), ...(type ? { events: type } : {}) };
 
   useEffect(() => {
     let alive = true;
     client.get("/notify/me/history", { params }).then(({ data }) => {
       if (!alive) return;
       setData(data);
+      if (firstLoad.current) setCounts(data.counts || {});
       // ouvrir le journal : tout est vu (une fois, au premier chargement)
       if (firstLoad.current && data.unseen) client.post("/notify/me/seen")
         .then(() => window.dispatchEvent(new CustomEvent(notifSeenEvent))).catch(() => {});
       firstLoad.current = false;
     }).catch(e => setErr(e.response?.data?.detail || e.message));
     return () => { alive = false; };
-  }, [[...hidden].sort().join(",")]);
+  }, [cat, type]);
 
   const loadMore = () => {
     const last = data.items[data.items.length - 1];
@@ -82,13 +85,16 @@ export default function Notifications() {
     <div style={{ maxWidth:720, margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>Notifications</h1>
-        <SectionFilter sections={data.sections || []} hidden={hidden} open={picker} setOpen={setPicker} onChange={setHidden}/>
-        <button onClick={() => navigate("/settings?tab=notify")} style={{ background:"none", border:"none", cursor:"pointer",
-          color:"#3b82f6", fontSize:12, fontWeight:700 }}>Choisir mes notifications</button>
+        <button onClick={() => navigate("/settings?tab=notify")} title="Choisir mes notifications"
+          aria-label="Choisir mes notifications" style={{ display:"flex", alignItems:"center", gap:6, background:"none",
+            border:"none", cursor:"pointer", color:"var(--muted)", fontSize:12, fontWeight:700, padding:4, marginLeft:"auto" }}>
+          <SlidersHorizontal size={16}/>Choisir</button>
       </div>
+      <Tabs sections={data.sections || []} counts={counts || {}} cat={cat} type={type} pick={pick}/>
       {!data.items.length && (
-        <p style={msg}>Aucune notification ces {data.days} derniers jours. Choisis celles que tu veux recevoir dans
-          Paramètres › Notifs : elles s'afficheront ici.</p>
+        <p style={msg}>{cat ? "Rien dans cette catégorie ces " + data.days + " derniers jours."
+          : <>Aucune notification ces {data.days} derniers jours. Choisis celles que tu veux recevoir dans
+            Paramètres › Notifs : elles s'afficheront ici.</>}</p>
       )}
       {groups.map(g => (
         <div key={g.k} style={{ display:"flex", flexDirection:"column", gap:8 }}>
@@ -158,46 +164,63 @@ function BigIcon({ thumb, it }) {
   );
 }
 
-// Filtre des categories : menu deroulant, Tous / Aucun, une case par section
-function SectionFilter({ sections, hidden, open, setOpen, onChange }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const close = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("pointerdown", close);
-    return () => document.removeEventListener("pointerdown", close);
-  }, [open]);
-  const shown = sections.filter(s => !hidden.has(s.id)).length;
-  const toggle = id => { const h = new Set(hidden); h.has(id) ? h.delete(id) : h.add(id); onChange(h); };
-  const link = { background:"none", border:"none", padding:0, cursor:"pointer", color:"#6366F1", fontSize:12, fontWeight:700 };
+// Onglets : « Tout » puis les categories qui ont des notifications (nombre,
+// point violet s'il y en avait de nouvelles a l'ouverture) ; sous une
+// categorie qui en compte plusieurs, ses types. Une ligne qui defile au doigt.
+function Tabs({ sections, counts, cat, type, pick }) {
+  const total = Object.values(counts).reduce((n, c) => n + c.total, 0);
+  const fresh = Object.values(counts).some(c => c.unseen);
+  const shown = sections.filter(s => counts[s.id]?.total || s.id === cat);
+  const evs = Object.entries(counts[cat]?.events || {}).sort((a, b) => b[1].total - a[1].total);
+  if (!shown.length) return null;
   return (
-    <div ref={ref} style={{ position:"relative" }}>
-      <button onClick={() => setOpen(!open)} aria-expanded={open}
-        style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 11px", borderRadius:20, fontSize:12, fontWeight:700,
-          cursor:"pointer", border: hidden.size ? "1px solid rgba(99,102,241,0.45)" : "1px solid var(--border)",
-          background: hidden.size ? "rgba(99,102,241,0.12)" : "var(--surface2)", color: hidden.size ? "#6366F1" : "var(--text2)" }}>
-        Catégories{sections.length ? ` ${shown}/${sections.length}` : ""} <span style={{ fontSize:9 }}>{open ? "▲" : "▼"}</span>
-      </button>
-      {open && (
-        <div className="card" style={{ position:"absolute", right:0, top:"calc(100% + 6px)", zIndex:50, minWidth:220,
-          padding:"8px 6px", boxShadow:"0 10px 30px rgba(0,0,0,0.25)" }}>
-          <div style={{ display:"flex", gap:14, padding:"2px 10px 8px", borderBottom:"1px solid var(--border)", marginBottom:4 }}>
-            <button onClick={() => onChange(new Set())} style={link}>Tous</button>
-            <button onClick={() => onChange(new Set(sections.map(s => s.id)))} style={link}>Aucun</button>
-          </div>
-          {sections.map(s => (
-            <label key={s.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"7px 10px", borderRadius:8,
-              cursor:"pointer", fontSize:13, color:"var(--text)" }}>
-              <input type="checkbox" checked={!hidden.has(s.id)} onChange={() => toggle(s.id)}
-                style={{ accentColor:"#6366F1", width:16, height:16 }}/>
-              <span style={{ width:24, height:24, borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center",
-                fontSize:13, background:`${s.color}2e` }}>{s.emoji}</span>
-              {s.name}
-            </label>
+    <div style={{ display:"flex", flexDirection:"column", gap:8, marginTop:-4 }}>
+      <Row>
+        <Chip on={!cat} onClick={() => pick("")} label="Tout" n={total} dot={fresh && !!cat}/>
+        {shown.map(s => (
+          <Chip key={s.id} on={cat === s.id} onClick={() => pick(cat === s.id ? "" : s.id)} color={s.color}
+            label={<><span>{s.emoji}</span>{s.name}</>} n={counts[s.id]?.total || 0}
+            dot={!!counts[s.id]?.unseen && cat !== s.id}/>
+        ))}
+      </Row>
+      {cat && evs.length > 1 && (
+        <Row small>
+          <Chip small on={!type} onClick={() => pick(cat)} label="Tous"/>
+          {evs.map(([e, c]) => (
+            <Chip small key={e} on={type === e} onClick={() => pick(cat, type === e ? "" : e)} label={c.label} n={c.total}
+              dot={!!c.unseen && type !== e}/>
           ))}
-        </div>
+        </Row>
       )}
     </div>
+  );
+}
+
+// Ligne qui defile, sans barre, fondue sur le bord droit
+function Row({ children, small }) {
+  return (
+    <div className="no-scrollbar" style={{ display:"flex", gap: small ? 6 : 7, overflowX:"auto", padding:"2px 0",
+      scrollbarWidth:"none", WebkitMaskImage:"linear-gradient(90deg, #000 calc(100% - 28px), transparent)",
+      maskImage:"linear-gradient(90deg, #000 calc(100% - 28px), transparent)", paddingRight:24 }}>{children}</div>
+  );
+}
+
+function Chip({ on, onClick, label, n, dot, small, color = "#4F46E5" }) {
+  const ref = useRef(null);
+  // l'onglet choisi reste visible (lien direct vers une categorie du bout de la ligne)
+  useEffect(() => { if (on) ref.current?.scrollIntoView({ block:"nearest", inline:"center" }); }, [on]);
+  return (
+    <button ref={ref} onClick={onClick} aria-pressed={on} style={{ position:"relative", flexShrink:0, display:"flex", alignItems:"center",
+      gap:5, whiteSpace:"nowrap", cursor:"pointer", borderRadius:20, fontWeight:700,
+      padding: small ? "4px 10px" : "6px 12px", fontSize: small ? 11.5 : 12.5,
+      border: on ? `1px solid ${color}` : "1px solid var(--border)",
+      background: on ? (small ? `${color}22` : color) : small ? "transparent" : "var(--surface2)",
+      color: on ? (small ? "var(--text)" : "#fff") : "var(--text2)" }}>
+      {label}
+      {n != null && <span style={{ fontSize: small ? 10.5 : 11, fontWeight:700, opacity: on ? 0.85 : 0.6 }}>{n}</span>}
+      {dot && <span title="Nouvelles" style={{ position:"absolute", top:1, right:1, width:8, height:8, borderRadius:"50%",
+        background:"#4F46E5", boxShadow:"0 0 0 2px var(--bg, #fff)" }}/>}
+    </button>
   );
 }
 

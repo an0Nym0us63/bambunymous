@@ -1250,8 +1250,10 @@ async def _read_of(user: str) -> set:
     return {int(x) for x in (await _read_get()).get(user) or []}
 
 
-async def history(user: str, before: int = 0, limit: int = 40, sections=None) -> dict:
-    """sections : ne garder que ces categories (None : toutes)."""
+async def history(user: str, before: int = 0, limit: int = 40, sections=None, events=None) -> dict:
+    """sections / events : ne garder que ces categories / ces types (None :
+    tous). Rend aussi, pour les onglets du journal, le nombre de notifications
+    (et de non lues) par categorie et par type."""
     from sqlalchemy import select, func
     from ..db.session import AsyncSessionLocal
     from ..models.notif_log import NotifLog
@@ -1261,11 +1263,28 @@ async def history(user: str, before: int = 0, limit: int = 40, sections=None) ->
     q = select(NotifLog).where(_mine(user))
     if sections is not None:
         q = q.where(NotifLog.section.in_(list(sections) or [""]))
+    if events is not None:
+        q = q.where(NotifLog.event.in_(list(events) or [""]))
     if before:
         q = q.where(NotifLog.id < int(before))
+    unseen_q = NotifLog.id > seen
+    if read:
+        unseen_q = unseen_q & NotifLog.id.notin_(read)
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(q.order_by(NotifLog.id.desc()).limit(max(1, min(int(limit), 100))))).scalars().all()
+        tot = (await db.execute(select(NotifLog.section, NotifLog.event, func.count())
+                                .where(_mine(user)).group_by(NotifLog.section, NotifLog.event))).all()
+        new = (await db.execute(select(NotifLog.section, NotifLog.event, func.count())
+                                .where(_mine(user), unseen_q).group_by(NotifLog.section, NotifLog.event))).all()
     unseen = await unseen_count(user)
+    nnew = {(s_, e): n for s_, e, n in new}
+    counts = {}
+    for s_, e, n in tot:
+        c = counts.setdefault(s_ or "", {"total": 0, "unseen": 0, "events": {}})
+        c["total"] += n
+        c["unseen"] += nnew.get((s_, e), 0)
+        c["events"][e] = {"total": n, "unseen": nnew.get((s_, e), 0),
+                          "label": (EVENTS.get(e) or {}).get("label", e)}
     return {"items": [{"id": r.id, "time": r.created_at.isoformat() + "Z", "event": r.event, "section": r.section,
                        "section_label": labels.get(r.section, ""),
                        # meme habillage que la notification de l'appli Android
@@ -1273,7 +1292,7 @@ async def history(user: str, before: int = 0, limit: int = 40, sections=None) ->
                        "section_color": SECTION_COLORS.get(r.section or "", BRAND_COLOR),
                        "title": r.title, "message": r.message,
                        "link": r.link, "image": r.image, "seen": r.id <= seen or r.id in read} for r in rows],
-            "unseen": unseen, "more": len(rows) >= limit, "days": HISTORY_DAYS,
+            "unseen": unseen, "more": len(rows) >= limit, "days": HISTORY_DAYS, "counts": counts,
             # les categories, pour le filtre du journal
             "sections": [{"id": k, "emoji": _section_parts(k)[0], "name": _section_parts(k)[1],
                           "color": SECTION_COLORS.get(k, BRAND_COLOR)} for k, _ in SECTIONS]}
