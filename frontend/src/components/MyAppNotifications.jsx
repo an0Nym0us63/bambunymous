@@ -148,6 +148,10 @@ function DownloadApp() {
   }, []);
   if (!v) return null;
   const inApp = !!pushApi();
+  // version installee (l'appli la donne depuis le 20/10/2026 ; avant : ancienne)
+  let mine = null;
+  try { mine = JSON.parse(window.BambuScan?.getConfig?.() || "{}").versionCode ?? null; } catch { /* navigateur */ }
+  const upToDate = inApp && mine != null && v.code != null && Number(mine) >= Number(v.code);
   const mo = (v.size / 1048576).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
   const date = v.date ? new Date(v.date).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }) : "";
   return (
@@ -157,12 +161,18 @@ function DownloadApp() {
         <div style={{ fontSize:14, fontWeight:700, color:"var(--text)" }}>Appli Android BambuNymous</div>
         <div style={{ fontSize:11.5, color:"var(--muted)", marginTop:2 }}>
           Version {v.version}{date ? ` · ${date}` : ""} · {mo} Mo
-          {inApp ? " · tu l'utilises déjà : télécharge-la pour la mettre à jour" : " · notifications, scan RFID, appareil photo"}</div>
+          {!inApp ? " · notifications, scan RFID, appareil photo" : null}</div>
+        {inApp && (
+          <div style={{ fontSize:11.5, fontWeight:700, marginTop:3, color: upToDate ? "#22c55e" : "#f59e0b" }}>
+            {upToDate ? "✓ Ton appli est à jour" : "Une mise à jour est disponible"}</div>
+        )}
       </div>
       <a href="/android/BambuNymous.apk" download="BambuNymous.apk"
         style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"8px 14px", borderRadius:10, fontSize:12.5,
-          fontWeight:700, textDecoration:"none", background:"#4F46E5", color:"white", flexShrink:0 }}>
-        <Download size={15} strokeWidth={2.4}/> {inApp ? "Mettre à jour" : "Télécharger"}</a>
+          fontWeight:700, textDecoration:"none", flexShrink:0,
+          ...(upToDate ? { background:"var(--surface2)", color:"var(--text2)", border:"1px solid var(--border)" }
+            : { background:"#4F46E5", color:"white" }) }}>
+        <Download size={15} strokeWidth={2.4}/> {!inApp ? "Télécharger" : upToDate ? "Réinstaller" : "Mettre à jour"}</a>
     </div>
   );
 }
