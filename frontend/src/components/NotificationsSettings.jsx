@@ -10,6 +10,8 @@ export default function NotificationsSettings() {
   const [cfg, setCfg] = useState(null);
   const [form, setForm] = useState({ url: "", topic: "", app_url: "" });
   const [tokEdit, setTokEdit] = useState(null);       // null = ferme, sinon saisie
+  const [botTok, setBotTok] = useState(null);         // jeton du bot Telegram en saisie (jamais reaffiche)
+  const [chatEdit, setChatEdit] = useState(null);     // discussion saisie a la main
   const [msg, setMsg] = useState({});                 // { [cle]: { ok, text } }
   const [busy, setBusy] = useState("");
   const [creators, setCreators] = useState(null);     // createurs suivis (MakerWorld)
@@ -35,7 +37,14 @@ export default function NotificationsSettings() {
     const { data } = await client.put("/notify/ntfy", { ...form, ...(token !== undefined ? { token } : {}) });
     apply(data); setTokEdit(null);
   }, "Enregistré.");
-  const test = (event) => run(event || "ntfy", () => client.post("/notify/test", { event }), "Envoyé : regarde ntfy.");
+  const where = () => ({ ntfy: "ntfy", telegram: "Telegram", both: "ntfy et Telegram" }[cfg?.channel || "ntfy"]);
+  const test = (event) => run(event || "ntfy", () => client.post("/notify/test", { event }), `Envoyé : regarde ${where()}.`);
+  const setChannel = (channel) => run("channel", async () => { apply((await client.put("/notify/channel", { channel })).data); });
+  const saveBot = (body) => run("tgbot", async () => {
+    apply((await client.put("/notify/tgbot", body)).data); setBotTok(null); setChatEdit(null);
+  }, "Enregistré.");
+  const detectChat = () => run("tgbot", async () => { apply((await client.post("/notify/tgbot/detect")).data); }, "Discussion trouvée.");
+  const testBot = () => run("tgbot", () => client.post("/notify/test", { event: "" }), `Envoyé : regarde ${where()}.`);
   const setEvent = (id, patch) => run(id, async () => {
     const { data } = await client.put(`/notify/events/${id}`, patch); setCfg(data);
   });
@@ -52,10 +61,74 @@ export default function NotificationsSettings() {
   const primary = { ...btn, background:"#3b82f6", border:"none", color:"white", fontWeight:700 };
   const Msg = ({ k }) => msg[k] ? <p style={{ fontSize:12, margin:"8px 0 0", color: msg[k].ok ? "#22c55e" : "#ef4444" }}>{msg[k].text}</p> : null;
   const noFill = { autoComplete: "off", "data-lpignore": "true", "data-1p-ignore": "true", "data-bwignore": "true" };
-  const canSend = !!cfg.ntfy.topic;
+  const ch = cfg.channel || "ntfy";
+  const botReady = cfg.tgbot?.has_token && !!cfg.tgbot?.chat_id;
+  const canSend = (ch !== "telegram" && !!cfg.ntfy.topic) || (ch !== "ntfy" && botReady);
 
   return (<>
-    {/* ── Canal ── */}
+    {/* ── Choix du canal : ntfy, bot Telegram (pour qui n'a pas ntfy), ou les deux ── */}
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 8px" }}>Envoyer les notifications par</h3>
+      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+        {[["ntfy", "ntfy"], ["telegram", "Bot Telegram"], ["both", "Les deux"]].map(([id, label]) => (
+          <button key={id} onClick={() => setChannel(id)} disabled={busy === "channel"}
+            style={{ ...btn, ...(ch === id ? { background:"#3b82f6", border:"none", color:"white", fontWeight:700 } : {}) }}>{label}</button>
+        ))}
+      </div>
+      <Msg k="channel"/>
+    </div>
+
+    {ch !== "ntfy" && (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Canal : bot Telegram</h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
+        Pour qui n'a pas ntfy. Dans Telegram, écris à <b>@BotFather</b> « /newbot » : il donne un <b>jeton</b>.
+        Colle-le ici, puis écris « /start » à ton bot et touche « Trouver la discussion ».
+      </p>
+      <div style={{ display:"flex", flexDirection:"column", gap:8, fontSize:12, color:"var(--text2)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+          Bot {cfg.tgbot?.has_token ? <b style={{ color:"#22c55e" }}>{cfg.tgbot.bot ? `@${cfg.tgbot.bot}` : "posé"}</b>
+            : <span style={{ color:"var(--muted)" }}>— pas encore de jeton</span>}
+          {botTok === null ? (<>
+            <button onClick={() => setBotTok("")} style={{ ...btn, padding:"4px 10px" }}>{cfg.tgbot?.has_token ? "Changer" : "Ajouter"}</button>
+            {cfg.tgbot?.has_token && <button onClick={() => saveBot({ token: "" })} style={{ ...btn, padding:"4px 10px", color:"var(--muted)" }}>Retirer</button>}
+          </>) : (
+            <span style={{ display:"flex", gap:6, flex:"1 1 100%" }}>
+              <input value={botTok} onChange={e => setBotTok(e.target.value)} placeholder="123456789:AA…" autoFocus {...noFill}
+                style={{ ...inp, flex:1, fontFamily:"JetBrains Mono,monospace", fontSize:12 }}/>
+              <button onClick={() => setBotTok(null)} style={btn}>✕</button>
+              <button onClick={() => saveBot({ token: botTok.trim() })} disabled={!botTok.trim() || busy === "tgbot"} style={primary}>OK</button>
+            </span>
+          )}
+        </div>
+        {cfg.tgbot?.has_token && (
+          <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+            Discussion {cfg.tgbot.chat_id
+              ? <b style={{ color:"#22c55e" }}>{cfg.tgbot.chat_label || cfg.tgbot.chat_id}</b>
+              : <span style={{ color:"var(--muted)" }}>— pas encore trouvée</span>}
+            {chatEdit === null ? (<>
+              <button onClick={detectChat} disabled={busy === "tgbot"} style={{ ...btn, padding:"4px 10px" }}>Trouver la discussion</button>
+              <button onClick={() => setChatEdit(cfg.tgbot.chat_id || "")} style={{ ...btn, padding:"4px 10px", color:"var(--muted)" }}>Saisir</button>
+            </>) : (
+              <span style={{ display:"flex", gap:6, flex:"1 1 100%" }}>
+                <input value={chatEdit} onChange={e => setChatEdit(e.target.value)} placeholder="Identifiant ou @canal" autoFocus {...noFill}
+                  style={{ ...inp, flex:1, fontSize:12 }}/>
+                <button onClick={() => setChatEdit(null)} style={btn}>✕</button>
+                <button onClick={() => saveBot({ chat_id: chatEdit.trim() })} disabled={busy === "tgbot"} style={primary}>OK</button>
+              </span>
+            )}
+          </div>
+        )}
+        <div style={{ display:"flex", gap:8, marginTop:4 }}>
+          <button onClick={testBot} disabled={busy === "tgbot" || !botReady} style={btn}
+            title={botReady ? "" : "Pose le jeton et trouve la discussion d'abord"}>Envoyer un test</button>
+        </div>
+        <Msg k="tgbot"/>
+      </div>
+    </div>
+    )}
+
+    {ch !== "telegram" && (
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Canal : ntfy</h3>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
@@ -97,6 +170,7 @@ export default function NotificationsSettings() {
         <Msg k="ntfy"/>
       </div>
     </div>
+    )}
 
     {/* ── Types de notification, par section ── */}
     {cfg.sections.map(sec => {

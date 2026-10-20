@@ -35,6 +35,23 @@ async def notify_set_ntfy(body: dict = Body({}), _: str = Depends(require_admin)
                                   body["app_url"] if "app_url" in body else None))
 
 
+@router.put("/channel")
+async def notify_set_channel(body: dict = Body({}), _: str = Depends(require_admin)):
+    return await _call(N.set_channel(str(body.get("channel") or "")))
+
+
+@router.put("/tgbot")
+async def notify_set_tgbot(body: dict = Body({}), _: str = Depends(require_admin)):
+    # "token" absent = inchange ; "" = retire
+    return await _call(N.set_tgbot(body.get("token"), body.get("chat_id")))
+
+
+@router.post("/tgbot/detect")
+async def notify_detect_tgbot(_: str = Depends(require_admin)):
+    """Discussion du bot : la derniere personne (ou groupe) qui lui a ecrit."""
+    return await _call(N.detect_tgbot_chat())
+
+
 @router.put("/events/{event}")
 async def notify_set_event(event: str, body: dict = Body({}), _: str = Depends(require_admin)):
     return await _call(N.set_event(event, body.get("enabled"), body.get("creators"), body.get("options")))

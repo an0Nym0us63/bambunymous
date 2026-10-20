@@ -209,6 +209,11 @@ class NotifyError(Exception):
     pass
 
 
+# Canal des notifications : ntfy, un bot Telegram (pour qui n'a pas ntfy), ou les deux.
+CHANNELS = ("ntfy", "telegram", "both")
+TG_API = "https://api.telegram.org"
+
+
 _CACHE = None     # derniere config lue : pour l'ecouteur MQTT, qui ne lit pas la base
 
 
@@ -224,7 +229,10 @@ async def _load() -> dict:
         cfg = {}
     cfg = cfg if isinstance(cfg, dict) else {}
     cfg.setdefault("ntfy", {})
+    cfg.setdefault("tgbot", {})
     cfg.setdefault("events", {})
+    if cfg.get("channel") not in CHANNELS:
+        cfg["channel"] = "ntfy"
     _CACHE = cfg
     return cfg
 
@@ -267,9 +275,14 @@ def enabled_in(cfg, event: str) -> bool:
 def _public(cfg: dict) -> dict:
     """Ce que voit le navigateur : jamais le jeton."""
     n = cfg.get("ntfy") or {}
+    b = cfg.get("tgbot") or {}
     return {
+        "channel": cfg.get("channel") or "ntfy",
         "ntfy": {"url": n.get("url") or "https://ntfy.sh", "topic": n.get("topic") or "",
                  "app_url": n.get("app_url") or "", "has_token": bool(n.get("token"))},
+        # Jamais le jeton du bot : seulement s'il est pose, et le nom du bot.
+        "tgbot": {"has_token": bool(b.get("token")), "bot": b.get("bot") or "", "chat_id": b.get("chat_id") or "",
+                  "chat_label": b.get("chat_label") or ""},
         "sections": [{"id": k, "label": v} for k, v in SECTIONS],
         "events": [{"id": k, "section": v["section"], "label": v["label"], "description": v["description"],
                     "enabled": enabled_in(cfg, k),
@@ -396,15 +409,145 @@ def _post_ntfy(n: dict, title: str, message: str, click=None, attach=None, tags=
         raise NotifyError(_error_of(r))
 
 
+# ── Bot Telegram ─────────────────────────────────────────────────────────────
+def _tg(token: str, method: str, data=None, files=None, timeout=20):
+    from .makerworld import session
+    try:
+        r = session().post(f"{TG_API}/bot{token}/{method}", data=data, files=files, timeout=timeout)
+    except Exception as e:
+        raise NotifyError(f"Telegram injoignable ({type(e).__name__})")
+    try:
+        j = r.json()
+    except ValueError:
+        j = {}
+    if not j.get("ok"):
+        desc = j.get("description") or f"HTTP {r.status_code}"
+        if r.status_code == 401:
+            desc = "Jeton du bot refusé (vérifie-le auprès de @BotFather)"
+        raise NotifyError(f"Telegram : {desc}")
+    return j.get("result")
+
+
+def _post_tgbot(b: dict, title: str, message: str, click=None, attach=None, actions=None, file=None, filename=None):
+    """Envoie au chat du bot : image (piece jointe, sinon adresse) avec legende,
+    sinon texte ; liens en boutons sous le message."""
+    import html as _h
+    if not b.get("token") or not b.get("chat_id"):
+        raise NotifyError("Bot Telegram non configuré (jeton et discussion)")
+    text = f"<b>{_h.escape(title)}</b>" + (f"\n{_h.escape(message)}" if message else "")
+    # Boutons : seulement des liens https (Telegram refuse le reste, localhost compris).
+    btns = [(lbl, u) for lbl, u in ([("Ouvrir", click)] if click else []) + list(actions or [])
+            if u and str(u).startswith("https://")]
+    seen, rows = set(), []
+    for lbl, u in btns:
+        if u not in seen:
+            seen.add(u)
+            rows.append([{"text": str(lbl)[:40], "url": u}])
+    base = {"chat_id": b["chat_id"], "parse_mode": "HTML"}
+    if rows:
+        base["reply_markup"] = json.dumps({"inline_keyboard": rows[:4]})
+    data = None
+    if file is not None:
+        try:
+            data = file if isinstance(file, (bytes, bytearray)) else Path(file).read_bytes()
+        except OSError:
+            data = None
+    cap = text[:1024]
+    try:
+        if data:
+            return _tg(b["token"], "sendPhoto", {**base, "caption": cap},
+                       files={"photo": (filename or "image.jpg", bytes(data))}, timeout=40)
+        if attach and str(attach).startswith("http"):
+            return _tg(b["token"], "sendPhoto", {**base, "caption": cap, "photo": attach})
+    except NotifyError as e:
+        if "Jeton" in str(e):
+            raise
+        logger.info(f"[NOTIF] image refusee par Telegram ({e}) : envoi en texte")
+    return _tg(b["token"], "sendMessage", {**base, "text": text[:4096], "disable_web_page_preview": "true"})
+
+
+async def set_tgbot(token=None, chat_id=None) -> dict:
+    """token None = inchange ; "" = retire (et oublie la discussion)."""
+    import asyncio
+    cfg = await _load()
+    b = cfg["tgbot"]
+    if token is not None:
+        token = token.strip()
+        if not token:
+            cfg["tgbot"] = {}
+            await _save(cfg)
+            return _public(cfg)
+        if ":" not in token or len(token) > 100 or " " in token:
+            raise NotifyError("Jeton de bot invalide (forme 123456:ABC…, donné par @BotFather)")
+        me = await asyncio.to_thread(_tg, token, "getMe")
+        b.update({"token": token, "bot": me.get("username") or ""})
+    if chat_id is not None:
+        c = str(chat_id).strip()
+        if c and not (c.lstrip("-").isdigit() or (c.startswith("@") and len(c) < 40)):
+            raise NotifyError("Discussion invalide (identifiant numérique ou @canal)")
+        b["chat_id"], b["chat_label"] = c, ""
+    await _save(cfg)
+    return _public(cfg)
+
+
+async def detect_tgbot_chat() -> dict:
+    """Trouve la discussion : la derniere qui a ecrit au bot (« /start »)."""
+    import asyncio
+    cfg = await _load()
+    b = cfg["tgbot"]
+    if not b.get("token"):
+        raise NotifyError("Pose d'abord le jeton du bot")
+    ups = await asyncio.to_thread(_tg, b["token"], "getUpdates", {"limit": "50", "timeout": "0"})
+    chat = None
+    for u in reversed(ups or []):
+        m = u.get("message") or u.get("channel_post") or u.get("my_chat_member") or {}
+        if (m.get("chat") or {}).get("id"):
+            chat = m["chat"]
+            break
+    if not chat:
+        raise NotifyError(f"Aucun message reçu : écris « /start » à @{b.get('bot') or 'ton bot'} dans Telegram, puis réessaie")
+    b["chat_id"] = str(chat["id"])
+    b["chat_label"] = chat.get("title") or " ".join(filter(None, [chat.get("first_name"), chat.get("last_name")])) \
+        or (f"@{chat['username']}" if chat.get("username") else "")
+    await _save(cfg)
+    return _public(cfg)
+
+
+async def set_channel(channel: str) -> dict:
+    if channel not in CHANNELS:
+        raise NotifyError("Canal inconnu")
+    cfg = await _load()
+    cfg["channel"] = channel
+    await _save(cfg)
+    return _public(cfg)
+
+
 async def send(title: str, message: str = "", click=None, attach=None, tags=None, priority=None,
                actions=None, file=None, filename=None, icon=None) -> None:
     """icon : petite image de la notification (Android ; iOS l'ignore). Par
-    defaut le logo BambuNymous, servi par l'appli si son adresse est connue."""
+    defaut le logo BambuNymous, servi par l'appli si son adresse est connue.
+    Part sur le canal choisi (ntfy, bot Telegram ou les deux) ; avec les deux,
+    un canal en panne n'empeche pas l'autre."""
     import asyncio
     cfg = await _load()
     icon = icon or app_link(cfg, "/icon-192.png")
-    await asyncio.to_thread(_post_ntfy, cfg["ntfy"], title, message, click, attach, tags, priority,
-                            actions, file, filename, icon)
+    ch = cfg.get("channel") or "ntfy"
+    errors = []
+    if ch in ("ntfy", "both"):
+        try:
+            await asyncio.to_thread(_post_ntfy, cfg["ntfy"], title, message, click, attach, tags, priority,
+                                    actions, file, filename, icon)
+        except NotifyError as e:
+            errors.append(f"ntfy : {e}" if ch == "both" else str(e))
+    if ch in ("telegram", "both"):
+        try:
+            await asyncio.to_thread(_post_tgbot, cfg["tgbot"], title, message, click, attach, actions, file, filename)
+        except NotifyError as e:
+            errors.append(str(e))
+    if errors and (ch != "both" or len(errors) == 2):
+        raise NotifyError(" · ".join(errors))
+    for e in errors:
+        logger.warning(f"[NOTIF] {e}")
 
 
 async def notify(event: str, title: str, message: str = "", **kw) -> bool:
@@ -434,6 +577,7 @@ async def test(event: str = "") -> dict:
         await send("[Test] " + s["title"], s["message"], click=click, attach=s.get("attach"),
                    priority=s.get("priority"), actions=actions)
     else:
-        await send("BambuNymous", "Test de notification : le canal ntfy fonctionne.", tags=["white_check_mark"],
+        ch = {"ntfy": "ntfy", "telegram": "le bot Telegram", "both": "ntfy et le bot Telegram"}[cfg.get("channel") or "ntfy"]
+        await send("BambuNymous", f"Test de notification : {ch} fonctionne.", tags=["white_check_mark"],
                    click=app_link(cfg, "/"))
     return {"ok": True}
