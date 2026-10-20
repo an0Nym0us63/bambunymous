@@ -20,6 +20,7 @@ import json
 import logging
 import os
 import re
+from types import SimpleNamespace
 import time
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
@@ -898,18 +899,18 @@ TIER_TABLE = {
     "pieces": [10, 100, 300, 600, 1000, 1500, 2000, 2700, 3500],
     "mw_made": [10, 50, 150, 300, 500, 750, 1000, 1500, 2000],
     "spent": [10, 50, 150, 300, 500, 750, 1000, 1500, 2000],
-    "palette": [10, 25, 50, 100, 200, 300],
-    "materials": [2, 3, 5, 7, 10, 12],
-    "spools_done": [5, 25, 50, 100, 250, 500],
-    "stock": [10, 25, 50, 100, 200, 300],
-    "dried": [5, 25, 50, 100, 250, 500],
-    "swatches": [10, 25, 50, 100, 200, 400],
-    "brands": [2, 3, 5, 8, 12, 20],
-    "stock_kg": [5, 10, 25, 50, 100, 200],
-    "stock_colors": [4, 6, 8, 10, 12, 14],
-    "rfid": [5, 25, 50, 100, 200, 400],
-    "labels": [10, 25, 50, 100, 200, 400],
-    "multicolor_fils": [1, 3, 5, 10, 20, 40],
+    "palette": [5, 10, 25, 40, 60, 80, 110, 150, 200],
+    "materials": [2, 3, 4, 5, 6],
+    "spools_done": [2, 5, 10, 20, 30, 45, 65, 90, 120],
+    "stock": [5, 10, 15, 25, 35, 45, 60, 80, 100],
+    "dried": [5, 10, 20, 35, 50, 75, 100, 150, 200],
+    "swatches": [5, 10, 20, 30, 45, 60, 80, 110, 150],
+    "brands": [2, 3, 4, 5, 6, 7, 8, 9, 10],
+    "stock_kg": [5, 10, 15, 25, 35, 45, 60, 80, 100],
+    "stock_colors": [6, 7, 8, 9, 10, 11, 12, 13, 14],
+    "rfid": [5, 10, 15, 25, 35, 45, 60, 80, 100],
+    "labels": [5, 10, 20, 30, 45, 60, 80, 110, 150],
+    "multicolor_fils": [1, 2, 3, 4, 5, 6, 7, 8, 10],
     "objects": [25, 100, 250, 500, 1000, 2500],
     "sold": [1, 10, 50, 100, 500, 1000],
     "revenue": [50, 250, 1000, 5000, 10000, 25000],
@@ -940,14 +941,14 @@ TIER_TABLE = {
     "updates": [1, 5, 10, 25, 50, 100],
     "notifs": [50, 250, 1000, 2500, 5000, 10000],
     "dismissals": [5, 25, 50, 100, 250, 500],
-    "rfid_scans": [10, 50, 100, 250, 500, 1000],
-    "colors_printed": [10, 25, 50, 100, 200, 300],
+    "rfid_scans": [5, 15, 30, 50, 75, 100, 150, 200, 300],
+    "colors_printed": [5, 10, 25, 40, 60, 80, 110, 150, 200],
     "print_days": [7, 30, 60, 100, 150, 225, 300, 450, 600],
     "print_groups": [5, 25, 50, 100, 150, 200, 275, 375, 500],
-    "fil_changes": [10, 50, 100, 250, 500, 1000],
-    "fil_changes_day": [3, 5, 8, 12, 16, 24],
-    "fil_changes_week": [10, 20, 35, 50, 75, 100],
-    "open_spools": [5, 10, 20, 30, 40, 60],
+    "fil_changes": [5, 25, 50, 100, 150, 200, 275, 375, 500],
+    "fil_changes_day": [2, 3, 4, 6, 8, 10, 13, 18, 25],
+    "fil_changes_week": [5, 8, 12, 16, 20, 25, 32, 45, 60],
+    "open_spools": [5, 10, 15, 25, 35, 45, 60, 80, 100],
     "long_prints": [1, 3, 5, 10, 15, 25, 35, 50, 75],
     "express": [5, 25, 50, 100, 175, 250, 350, 450, 600],
     "night_hours": [10, 50, 150, 300, 450, 600, 800, 1100, 1500],
@@ -971,7 +972,7 @@ TIER_TABLE = {
     "weekends_active": [1, 5, 10, 20, 30, 40, 55, 75, 100],
     "kg_month": [0.5, 1, 2, 3, 4, 5, 6, 8, 10],
     "kg_day": [0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.25, 1.5, 2],
-    "engineering": [0.5, 1, 2, 5, 10, 25],
+    "engineering": [0.1, 0.25, 0.5, 1, 2, 3, 4.5, 7, 10],
     "mw_designs_printed": [10, 50, 100, 250, 500, 1000],
     "creators": [5, 25, 50, 100, 250, 500],
     "mw_categories": [3, 5, 10, 15, 20, 30],
@@ -980,12 +981,12 @@ TIER_TABLE = {
     "mw_points_bal": [100, 500, 1000, 2500, 5000, 10000],
     "profile_downloads": [100, 1000, 5000, 10000, 25000, 50000],
     "queue_size": [5, 10, 25, 50, 100, 200],
-    "spools_total": [10, 50, 100, 250, 500, 1000],
-    "spool_kg": [5, 25, 50, 100, 250, 500],
-    "spool_spent": [100, 500, 1000, 2500, 5000, 10000],
-    "catalog": [10, 25, 50, 100, 200, 400],
-    "bambu_spools": [5, 25, 50, 100, 250, 500],
-    "other_spools": [5, 25, 50, 100, 250, 500],
+    "spools_total": [10, 25, 50, 80, 110, 150, 190, 240, 300],
+    "spool_kg": [5, 15, 30, 50, 75, 100, 140, 190, 250],
+    "spool_spent": [50, 150, 300, 500, 750, 1000, 1400, 1900, 2500],
+    "catalog": [5, 10, 20, 30, 45, 60, 80, 110, 150],
+    "bambu_spools": [5, 10, 25, 40, 60, 80, 110, 150, 200],
+    "other_spools": [2, 5, 8, 12, 16, 20, 25, 35, 50],
     "assembled": [5, 25, 50, 100, 250, 500],
     "accessory_refs": [5, 10, 25, 50, 100, 200],
     "accessory_units": [50, 100, 250, 500, 1000, 2500],
@@ -998,6 +999,9 @@ TIER_TABLE = {
     "mw_boosts_given": [1, 10, 25, 50, 100, 250],
     "mw_likes_given": [5, 25, 50, 100, 250, 500],
     "mw_collected": [5, 25, 50, 100, 250, 500],
+    # Filaments : revus le 21/10/2026
+    "mat_pla": [1, 5, 10, 20, 30, 45, 65, 90, 120],
+    "mat_petg": [0.5, 1, 2, 4, 6, 9, 13, 20, 30],
 }
 # Au-dela de la Legende (Mythique, Cosmique, Eternel) : x2, x5, x10 du dernier
 # seuil, arrondis. Sauf la ou il y a un plafond naturel (pourcentage, 24 h par
@@ -1033,7 +1037,7 @@ for _x in CATALOG:
     if _x["id"] in TIER_TABLE:
         _x["tiers"] = _extend(TIER_TABLE[_x["id"]], _x["id"])
     elif _x["id"].startswith("mat_"):
-        _x["tiers"] = _extend([1, 5, 10, 25, 50, 100], _x["id"])
+        _x["tiers"] = list([0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5])
     # APRES les seuils (un succes a paliers est declare avec un seuil provisoire) :
     # une medaille unique ne se devoile qu'une fois gagnee, et vit dans « Secrets »
     if len(_x["tiers"]) == 1:
@@ -1135,6 +1139,7 @@ async def _load_data() -> dict:
                                           Spool.last_dried_at, Spool.created_at, Spool.remaining_weight_g,
                                           Spool.tag_number, Spool.first_used_at))).all()
         fils = (await db.execute(select(Filament.id, Filament.manufacturer, Filament.swatch, Filament.updated_at,
+                                        Filament.material,
                                         Filament.created_at, Filament.color_bucket, Filament.label_printed,
                                         Filament.label_printed_at, Filament.multicolor_type,
                                         Filament.fila_type, Filament.name))).all()
@@ -1337,10 +1342,18 @@ def compute_series(d: dict, now: datetime) -> dict:
         if not s or v > s[-1][1]:
             s.append((dt, v))
 
+    fil_of_spool = {s.id: s.filament_id for s in d["spools"]}
+    # type absent d'une ligne de consommation : celui de la bobine liee (comme l'Historique)
+    mat_of_fil = {f.id: getattr(f, "material", None) for f in d["fils"]}
+    d["usage"] = [u if u.filament_type or not u.spool_id
+                  or not mat_of_fil.get(fil_of_spool.get(u.spool_id)) else
+                  SimpleNamespace(**{**u._asdict(), "filament_type": mat_of_fil[fil_of_spool[u.spool_id]]})
+                  if hasattr(u, "_asdict") else
+                  SimpleNamespace(**{**vars(u), "filament_type": mat_of_fil[fil_of_spool[u.spool_id]]})
+                  for u in d["usage"]]
     by_print = defaultdict(list)
     for u in d["usage"]:
         by_print[u.print_id].append(u)
-    fil_of_spool = {s.id: s.filament_id for s in d["spools"]}
 
     n_ok = n_ko = night = early = weekend = multicolor = 0
     secs = grams = 0.0
