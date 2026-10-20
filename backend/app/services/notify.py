@@ -1191,6 +1191,17 @@ async def mark_read(user: str, ids) -> dict:
     return {"unseen": await unseen_count(user)}
 
 
+async def device_read(endpoint: str, ids) -> dict:
+    """Lues sur un telephone (balayees, touchees), annoncees par l'appli elle-
+    meme sans passer par la page : elle se designe par son adresse d'envoi
+    UnifiedPush, un secret partage par le telephone et ce serveur seuls."""
+    cfg = await _load()
+    d = next((x for x in cfg.get("devices") or [] if endpoint and x.get("endpoint") == endpoint), None)
+    if not d or not d.get("user"):
+        raise NotifyError("Téléphone inconnu")
+    return await mark_read(d["user"], [i for i in (ids or [])][:200])
+
+
 async def _read_of(user: str) -> set:
     return {int(x) for x in (await _read_get()).get(user) or []}
 

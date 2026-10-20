@@ -143,6 +143,19 @@ async def notify_my_read(body: dict = Body({}), acc=Depends(require_own_account)
     return await N.mark_read(acc[0], ids[:500])
 
 
+@router.post("/device-read")
+async def notify_device_read(body: dict = Body({})):
+    """L'appli Android annonce les notifications lues (balayees ou touchees),
+    meme fermee. Sans compte : elle se designe par son adresse d'envoi
+    UnifiedPush (secrete), et seulement pour les notifications de son
+    proprietaire."""
+    ids = body.get("ids") if isinstance(body.get("ids"), list) else []
+    try:
+        return await N.device_read(str(body.get("endpoint") or ""), ids)
+    except N.NotifyError as e:
+        raise HTTPException(404, str(e))
+
+
 @router.post("/me/seen")
 async def notify_my_seen(acc=Depends(require_own_account)):
     return await N.mark_seen(acc[0])
