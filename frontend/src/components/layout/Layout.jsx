@@ -6,6 +6,7 @@ import { Home, Settings, Package, History, ShoppingBag, BarChart2 } from "lucide
 import UserMenu from "../UserMenu";
 import ShareProgress from "../ShareProgress";
 import RfidScanBridge from "../RfidScanBridge";
+import PushBridge from "../PushBridge";
 import Toast from "../Toast";
 import NoAutofill from "../NoAutofill";
 
@@ -204,6 +205,7 @@ export default function Layout() {
         <main className="page-content" style={S.page}><Outlet /></main>
         <ShareProgress/>
         {!friend && <RfidScanBridge/>}
+        {!friend && <PushBridge/>}
         <Toast/>
         <NoAutofill/>
 

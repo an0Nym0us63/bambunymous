@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import client from "../api/client";
 import { CreatorPicker } from "./MakerWorldView";
 import MwImg from "./MwImg";
+import { pushApi, readPushStatus, sendEndpoint } from "./PushBridge";
 
 // Parametres > Notifications : le canal (ntfy, bot Telegram ou les deux), ses
 // sujets ntfy et ses discussions Telegram (le premier de chaque liste est celui
@@ -65,7 +66,23 @@ export default function NotificationsSettings() {
       ...(token !== undefined ? { token } : {}) });
     apply(data); setTokEdit(null);
   }, "Enregistré.");
-  const where = () => ({ ntfy: "ntfy", telegram: "Telegram", both: "ntfy et Telegram" }[cfg?.channel || "ntfy"]);
+  const where = () => ({ ntfy: "ntfy", telegram: "Telegram", both: "ntfy et Telegram", app: "l'appli Android" }[cfg?.channel || "ntfy"]);
+  // Appli Android : etat lu dans le shell natif (absent dans un navigateur)
+  const [push, setPush] = useState(() => readPushStatus());
+  useEffect(() => {
+    const re = () => { setPush(readPushStatus()); client.get("/notify").then(({ data }) => setCfg(data)).catch(() => {}); };
+    window.addEventListener("bambu-push", re);
+    window.addEventListener("bambu-push-synced", re);
+    return () => { window.removeEventListener("bambu-push", re); window.removeEventListener("bambu-push-synced", re); };
+  }, []);
+  const pushRegister = () => run("app", async () => {
+    const st = readPushStatus();
+    if (st?.endpoint) { await sendEndpoint(st.endpoint, true); return "Ce téléphone est inscrit."; }
+    pushApi().pushRegister();
+    return "Choisis ntfy si Android le demande…";
+  });
+  const removeDevice = (id) => run("app", async () => { apply((await client.delete(`/notify/devices/${id}`)).data); });
+  const setAppPush = (on) => run("app", async () => { apply((await client.put("/notify/app-push", { on })).data); });
   const test = (event) => run(event || "ntfy", () => client.post("/notify/test", { event }), `Envoyé : regarde ${where()}.`);
   const testTo = (key, body, name) => run(key, () => client.post("/notify/test", body), `Envoyé sur « ${name} ».`);
   const setChannel = (channel) => run("channel", async () => { apply((await client.put("/notify/channel", { channel })).data); });
@@ -99,7 +116,9 @@ export default function NotificationsSettings() {
   const savedTopics = cfg.ntfy.topics || [];
   const savedChats = cfg.tgbot.chats || [];
   const botReady = cfg.tgbot?.has_token && savedChats.length > 0;
-  const canSend = (ch !== "telegram" && savedTopics.length > 0) || (ch !== "ntfy" && botReady);
+  const devices = cfg.devices || [];
+  const canSend = ch === "app" ? devices.length > 0
+    : (ch !== "telegram" && savedTopics.length > 0) || (ch !== "ntfy" && botReady);
   const topicName = t => t.label || t.topic;
   const chatName = c => c.label || c.chat_id;
   const setTopic = (i, patch) => setForm(f => ({ ...f, topics: f.topics.map((t, j) => j === i ? { ...t, ...patch } : t) }));
@@ -112,7 +131,7 @@ export default function NotificationsSettings() {
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 8px" }}>Envoyer les notifications par</h3>
       <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-        {[["ntfy", "ntfy"], ["telegram", "Bot Telegram"], ["both", "Les deux"]].map(([id, label]) => (
+        {[["ntfy", "ntfy"], ["telegram", "Bot Telegram"], ["both", "Les deux"], ["app", "Appli Android seule"]].map(([id, label]) => (
           <button key={id} onClick={() => setChannel(id)} disabled={busy === "channel"}
             style={{ ...btn, ...(ch === id ? { background:"#3b82f6", border:"none", color:"white", fontWeight:700 } : {}) }}>{label}</button>
         ))}
@@ -120,7 +139,48 @@ export default function NotificationsSettings() {
       <Msg k="channel"/>
     </div>
 
-    {ch !== "ntfy" && (
+    {/* ── Appli Android (UnifiedPush, ntfy en distributeur) ── */}
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px", display:"flex", alignItems:"center", gap:10 }}>
+        <span style={{ flex:1 }}>Appli Android</span>
+        {ch !== "app" && <Switch on={!!cfg.app_push} onChange={setAppPush} disabled={busy === "app"}/>}
+      </h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 10px", lineHeight:1.5 }}>
+        Les notifications arrivent dans l'appli BambuNymous elle-même : son icône, son nom, une catégorie Android par
+        section (son et vibration réglables dans Android), et la bonne page s'ouvre au toucher. Il faut l'appli
+        <b> ntfy</b> sur le téléphone : elle les achemine (UnifiedPush).
+        {ch !== "app" && <> Interrupteur : en plus de {where()}.</>}
+      </p>
+      {push ? (
+        <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12, color:"var(--text2)", marginBottom:8 }}>
+          Ce téléphone : {push.endpoint ? <b style={{ color:"#22c55e" }}>inscrit</b>
+            : !(push.distributors || []).length ? <span style={{ color:"#f59e0b" }}>installe l'appli ntfy d'abord</span>
+            : <span style={{ color:"var(--muted)" }}>pas encore inscrit</span>}
+          {!push.endpoint && (push.distributors || []).length > 0 && (
+            <button onClick={pushRegister} disabled={busy === "app"} style={primary}>Activer sur ce téléphone</button>
+          )}
+          {push.endpoint && <button onClick={pushRegister} disabled={busy === "app"} style={small}>Réinscrire</button>}
+        </div>
+      ) : (
+        <p style={{ fontSize:11.5, color:"var(--muted)", margin:"0 0 8px" }}>
+          Pour inscrire un téléphone, ouvre cette page dans l'appli Android BambuNymous.</p>
+      )}
+      {devices.map(d => (
+        <div key={d.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0", borderTop:"1px solid var(--border)", fontSize:12.5 }}>
+          <span style={{ flex:1, minWidth:0 }}>
+            <span style={{ fontWeight:700, color:"var(--text)" }}>📱 {d.name || "Téléphone"}</span>
+            <span style={{ display:"block", fontSize:11, color: d.last_err ? "#ef4444" : "var(--muted)" }}>
+              {d.last_err ? `Échec ${d.last_err}` : d.last_ok ? `Dernier envoi : ${new Date(d.last_ok).toLocaleString("fr-FR")}`
+                : `Inscrit le ${new Date(d.added).toLocaleDateString("fr-FR")}`}</span>
+          </span>
+          <button onClick={() => testTo("app", { device: d.id }, d.name || "ce téléphone")} disabled={busy === "app"} style={small}>Tester</button>
+          <button onClick={() => removeDevice(d.id)} disabled={busy === "app"} style={{ ...small, color:"var(--muted)" }} aria-label="Retirer">✕</button>
+        </div>
+      ))}
+      <Msg k="app"/>
+    </div>
+
+    {ch !== "ntfy" && ch !== "app" && (
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Canal : bot Telegram</h3>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
@@ -180,7 +240,7 @@ export default function NotificationsSettings() {
     </div>
     )}
 
-    {ch !== "telegram" && (
+    {ch !== "telegram" && ch !== "app" && (
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Canal : ntfy</h3>
       <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
@@ -257,9 +317,11 @@ export default function NotificationsSettings() {
       const isOpen = !!open[sec.id];
       const tOf = savedTopics.find(t => t.topic === sec.route?.ntfy) || savedTopics[0];
       const cOf = savedChats.find(c => c.chat_id === sec.route?.telegram) || savedChats[0];
-      const dests = [ch !== "telegram" && tOf && `ntfy · ${topicName(tOf)}`, ch !== "ntfy" && cOf && `Telegram · ${chatName(cOf)}`].filter(Boolean);
-      const pickTopic = ch !== "telegram" && savedTopics.length > 1;
-      const pickChat = ch !== "ntfy" && savedChats.length > 1;
+      const dests = ch === "app" ? ["Appli Android"]
+        : [ch !== "telegram" && tOf && `ntfy · ${topicName(tOf)}`, ch !== "ntfy" && cOf && `Telegram · ${chatName(cOf)}`,
+           cfg.app_push && devices.length && "Appli Android"].filter(Boolean);
+      const pickTopic = ch !== "telegram" && ch !== "app" && savedTopics.length > 1;
+      const pickChat = ch !== "ntfy" && ch !== "app" && savedChats.length > 1;
       return (
         <div key={sec.id} className="card" style={{ padding:0, overflow:"hidden" }}>
           <button onClick={() => toggle(sec.id)} aria-expanded={isOpen}

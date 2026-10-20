@@ -66,4 +66,28 @@ async def notify_set_event(event: str, body: dict = Body({}), _: str = Depends(r
 
 @router.post("/test")
 async def notify_test(body: dict = Body({}), _: str = Depends(require_admin)):
-    return await _call(N.test(str(body.get("event") or ""), str(body.get("topic") or ""), str(body.get("chat") or "")))
+    return await _call(N.test(str(body.get("event") or ""), str(body.get("topic") or ""), str(body.get("chat") or ""),
+                              str(body.get("device") or "")))
+
+
+@router.post("/devices")
+async def notify_add_device(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Telephone (appli Android) : son adresse UnifiedPush, donnee par son distributeur."""
+    return await _call(N.add_device(str(body.get("endpoint") or ""), str(body.get("name") or "")))
+
+
+@router.delete("/devices/{dev_id}")
+async def notify_remove_device(dev_id: str, _: str = Depends(require_admin)):
+    return await _call(N.remove_device(dev_id))
+
+
+@router.post("/devices/forget")
+async def notify_forget_device(body: dict = Body({}), _: str = Depends(require_admin)):
+    """L'appli s'est desinscrite (ou a change d'adresse) : on oublie l'ancienne."""
+    return await _call(N.remove_device("", str(body.get("endpoint") or "")))
+
+
+@router.put("/app-push")
+async def notify_set_app_push(body: dict = Body({}), _: str = Depends(require_admin)):
+    """Envoyer aussi a l'appli Android, en plus du canal choisi."""
+    return await _call(N.set_app_push(bool(body.get("on"))))

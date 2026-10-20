@@ -1,0 +1,59 @@
+import { useEffect } from "react";
+import client from "../api/client";
+import { useIsAdmin } from "../store/auth";
+import { toast } from "../store/toast";
+
+// Appli Android (UnifiedPush) : monte une fois dans le Layout, chez moi
+// seulement. Le shell natif expose window.BambuScan.pushStatus() et previent la
+// page par l'evenement « bambu-push » ({endpoint}, {removed}, {error}). Ici, on
+// transmet son adresse d'envoi au serveur (inscription idempotente), une fois
+// par adresse et par session ; une adresse retiree est oubliee.
+export const pushApi = () => {
+  const b = window.BambuScan;
+  return b && typeof b.pushStatus === "function" ? b : null;
+};
+
+export function readPushStatus() {
+  const b = pushApi();
+  if (!b) return null;
+  try { return JSON.parse(b.pushStatus() || "{}"); } catch { return null; }
+}
+
+const SENT = "pushEndpointSent";
+
+export async function sendEndpoint(endpoint, force = false) {
+  if (!endpoint) return;
+  let done = null;
+  try { done = sessionStorage.getItem(SENT); } catch { /* indisponible */ }
+  if (done === endpoint && !force) return;
+  let name = "";
+  try { name = pushApi()?.deviceName?.() || ""; } catch { /* ancien shell */ }
+  await client.post("/notify/devices", { endpoint, name });
+  try { sessionStorage.setItem(SENT, endpoint); } catch { /* indisponible */ }
+  window.dispatchEvent(new CustomEvent("bambu-push-synced"));
+}
+
+export default function PushBridge() {
+  const isAdmin = useIsAdmin();
+  useEffect(() => {
+    if (!isAdmin || !pushApi()) return;
+    const st = readPushStatus();
+    if (st?.endpoint) sendEndpoint(st.endpoint).catch(() => {});
+    // Adresse changee pendant que la page etait fermee : l'ancienne est oubliee
+    if (st?.previous && st.previous !== st.endpoint) {
+      client.post("/notify/devices/forget", { endpoint: st.previous })
+        .then(() => { try { pushApi().pushClearPrevious?.(); } catch { /* ancien shell */ } }).catch(() => {});
+    }
+    const on = (e) => {
+      const d = e.detail || {};
+      if (d.error) { toast(`Notifications de l'appli : ${d.error}`, "error", 4000); return; }
+      if (d.removed) client.post("/notify/devices/forget", { endpoint: d.removed }).catch(() => {});
+      if (d.endpoint) sendEndpoint(d.endpoint, true)
+        .then(() => toast("Notifications activées sur ce téléphone", "success", 2500))
+        .catch(err => toast(`Inscription refusée : ${err.response?.data?.detail || err.message}`, "error", 4000));
+    };
+    window.addEventListener("bambu-push", on);
+    return () => window.removeEventListener("bambu-push", on);
+  }, [isAdmin]);
+  return null;
+}

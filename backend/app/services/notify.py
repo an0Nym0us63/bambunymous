@@ -331,7 +331,7 @@ class NotifyError(Exception):
 
 
 # Canal des notifications : ntfy, un bot Telegram (pour qui n'a pas ntfy), ou les deux.
-CHANNELS = ("ntfy", "telegram", "both")
+CHANNELS = ("ntfy", "telegram", "both", "app")     # app : seulement l'appli Android (UnifiedPush)
 TG_API = "https://api.telegram.org"
 
 
@@ -353,6 +353,7 @@ async def _load() -> dict:
     cfg.setdefault("tgbot", {})
     cfg.setdefault("events", {})
     cfg.setdefault("routes", {})
+    cfg.setdefault("devices", [])
     if cfg.get("channel") not in CHANNELS:
         cfg["channel"] = "ntfy"
     _normalize(cfg)
@@ -416,6 +417,10 @@ def _public(cfg: dict) -> dict:
     b = cfg.get("tgbot") or {}
     return {
         "channel": cfg.get("channel") or "ntfy",
+        # Appli Android (UnifiedPush) : les telephones inscrits, jamais leur adresse
+        # d'envoi (elle suffit a leur ecrire).
+        "app_push": bool(cfg.get("app_push")),
+        "devices": [{k: d.get(k) for k in ("id", "name", "added", "last_ok", "last_err")} for d in cfg.get("devices") or []],
         "ntfy": {"url": n.get("url") or "https://ntfy.sh", "topic": n.get("topic") or "",
                  "topics": n.get("topics") or [],
                  "app_url": n.get("app_url") or "", "has_token": bool(n.get("token"))},
@@ -726,6 +731,94 @@ async def set_route(section: str, ntfy=None, telegram=None) -> dict:
     return _public(cfg)
 
 
+# ── Appli Android (UnifiedPush, ntfy en distributeur) ───────────────────────
+# L'appli s'inscrit aupres de son distributeur (l'appli ntfy), qui lui donne une
+# adresse sur le serveur ntfy ; la page la transmet ici. Envoyer = POST d'un
+# JSON compact sur cette adresse : l'appli l'affiche elle-meme (son icone, son
+# nom, une categorie Android par section, la page a ouvrir). Message en clair :
+# le connecteur le livre tel quel (il ne dechiffre que s'il le peut).
+UP_MAX = 3800            # octets : les distributeurs garantissent 4096
+
+
+def _endpoint_ok(u: str) -> str:
+    u = (u or "").strip()
+    if not u.startswith("https://") or len(u) > 500 or " " in u:
+        raise NotifyError("Adresse UnifiedPush invalide (https://…)")
+    return u
+
+
+async def add_device(endpoint: str, name: str = "") -> dict:
+    """Inscrit (ou met a jour) un telephone ; la meme adresse n'est gardee qu'une fois."""
+    import secrets
+    from datetime import datetime, timezone
+    endpoint = _endpoint_ok(endpoint)
+    cfg = await _load()
+    devs = cfg["devices"]
+    d = next((x for x in devs if x.get("endpoint") == endpoint), None)
+    if d is None:
+        if len(devs) >= 20:
+            raise NotifyError("20 téléphones au plus")
+        d = {"id": secrets.token_hex(6), "endpoint": endpoint,
+             "added": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        devs.append(d)
+    if name:
+        d["name"] = str(name).strip()[:60]
+    await _save(cfg)
+    return _public(cfg)
+
+
+async def remove_device(dev_id: str = "", endpoint: str = "") -> dict:
+    cfg = await _load()
+    cfg["devices"] = [d for d in cfg["devices"] if d.get("id") != dev_id and (not endpoint or d.get("endpoint") != endpoint)]
+    await _save(cfg)
+    return _public(cfg)
+
+
+async def set_app_push(on: bool) -> dict:
+    cfg = await _load()
+    cfg["app_push"] = bool(on)
+    await _save(cfg)
+    return _public(cfg)
+
+
+def _up_payload(title, message, click, priority, section, attach) -> bytes:
+    """JSON compact : t titre, m texte, u lien, p priorite, s section, i image."""
+    d = {"t": (title or "")[:200], "m": message or "", "u": click or "", "p": int(priority or 3), "s": section or ""}
+    if attach and str(attach).startswith("https://"):
+        d["i"] = attach
+    raw = json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    while len(raw) > UP_MAX and d["m"]:
+        d["m"] = d["m"][: max(0, len(d["m"]) - (len(raw) - UP_MAX) - 4)] + "…"
+        raw = json.dumps(d, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return raw
+
+
+def _post_devices(cfg, devices, title, message, click, priority, section, attach) -> list:
+    """Envoie a chaque telephone ; rend les erreurs (une par telephone en echec)."""
+    from urllib.parse import urlparse
+    from .makerworld import session
+    from datetime import datetime, timezone
+    body = _up_payload(title, message, click, priority, section, attach)
+    n = cfg.get("ntfy") or {}
+    ntfy_host = urlparse(n.get("url") or "https://ntfy.sh").netloc
+    errs = []
+    for d in devices:
+        # sur NOTRE serveur ntfy protege, le jeton d'acces (les sujets up* sont
+        # souvent ouverts en ecriture, mais pas toujours)
+        auth = {"Authorization": f"Bearer {n['token']}"} if n.get("token") and urlparse(d["endpoint"]).netloc == ntfy_host else {}
+        now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        try:
+            r = session().post(d["endpoint"], data=body, headers={"Content-Type": "application/json",
+                                                                 "TTL": "86400", "Urgency": "high", **auth}, timeout=15)
+            if r.status_code >= 400:
+                raise NotifyError(f"HTTP {r.status_code}")
+            d["last_ok"], d["last_err"] = now, None
+        except Exception as e:
+            d["last_err"] = f"{now[:16]} : {e if isinstance(e, NotifyError) else type(e).__name__}"
+            errs.append(f"{d.get('name') or 'téléphone'} : {d['last_err'].split(' : ', 1)[1]}")
+    return errs
+
+
 async def set_channel(channel: str) -> dict:
     if channel not in CHANNELS:
         raise NotifyError("Canal inconnu")
@@ -753,6 +846,20 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
     icon = t_icon or icon or app_link(cfg, "/icon-192.png")
     ch = cfg.get("channel") or "ntfy"
     errors = []
+    # Appli Android : seule (canal « app ») ou en plus du canal choisi
+    if ch == "app" or cfg.get("app_push"):
+        devs = cfg.get("devices") or []
+        if not devs and ch == "app":
+            raise NotifyError("Aucun téléphone inscrit : ouvre BambuNymous dans l'appli Android et active les notifications")
+        if devs:
+            errs = await asyncio.to_thread(_post_devices, cfg, devs, title, message, click, priority, sec, attach)
+            await _save(cfg)                    # derniers succes / echecs par telephone
+            if errs and (ch == "app" and len(errs) == len(devs)):
+                raise NotifyError(" · ".join(errs))
+            for e in errs:
+                logger.warning(f"[NOTIF] appli : {e}")
+        if ch == "app":
+            return
     if ch in ("ntfy", "both"):
         try:
             await asyncio.to_thread(_post_ntfy, {**cfg["ntfy"], "topic": topic}, title, message, click, attach, tags,
@@ -797,7 +904,7 @@ async def notify(event: str, title: str, message: str = "", **kw) -> bool:
         return False
 
 
-async def test(event: str = "", topic: str = "", chat: str = "") -> dict:
+async def test(event: str = "", topic: str = "", chat: str = "", device: str = "") -> dict:
     """« Envoyer test » : du canal (sans event) ou d'un type, meme desactive ;
     topic / chat : essai d'un sujet ntfy ou d'une discussion precis."""
     if event and event not in EVENTS:
@@ -812,7 +919,20 @@ async def test(event: str = "", topic: str = "", chat: str = "") -> dict:
         await send("[Test] " + s["title"], s["message"], click=click, attach=s.get("attach"),
                    priority=s.get("priority"), actions=actions, event=event)
     else:
-        ch = {"ntfy": "ntfy", "telegram": "le bot Telegram", "both": "ntfy et le bot Telegram"}[cfg.get("channel") or "ntfy"]
+        ch = {"ntfy": "ntfy", "telegram": "le bot Telegram", "both": "ntfy et le bot Telegram",
+              "app": "l'appli Android"}[cfg.get("channel") or "ntfy"]
+        if device:
+            import asyncio
+            d = next((x for x in cfg["devices"] if x.get("id") == device), None)
+            if not d:
+                raise NotifyError("Téléphone inconnu")
+            errs = await asyncio.to_thread(_post_devices, cfg, [d], "BambuNymous",
+                                           f"Test de notification : « {d.get('name') or 'ce téléphone'} » fonctionne.",
+                                           app_link(cfg, "/"), 3, "system", None)
+            await _save(cfg)
+            if errs:
+                raise NotifyError(errs[0])
+            return {"ok": True}
         if topic or chat:
             cfg = {**cfg, "channel": "ntfy" if topic else "telegram"}
             name = next((t.get("label") or t["topic"] for t in cfg["ntfy"].get("topics") or [] if t["topic"] == topic), "") \
