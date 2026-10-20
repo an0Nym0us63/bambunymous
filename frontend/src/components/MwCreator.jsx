@@ -4,6 +4,7 @@ import { showAlert } from "../utils/dialog";
 import { useIsAdmin } from "../store/auth";
 import MwImg from "./MwImg";
 import { prefetchModel } from "./MakerWorldModelSheet";
+import { Boxes, Coins, Download, Heart, Printer, Users, Zap } from "lucide-react";
 
 // Onglet « Créateur » : mes points MakerWorld (solde, gains 7 / 30 jours,
 // historique jour par jour) et mes modeles avec leurs compteurs. Les points
@@ -150,26 +151,43 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
               {pts(p.points.regular)} normaux · {pts(p.points.exclusive)} exclusifs</div>
           </div>
         </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(118px,1fr))", gap:8, marginTop:12 }}>
-          {[[data.earned_total != null ? pts(data.earned_total) : "—", "points gagnés au total", "#f59e0b",
-              data.earned && HEAD.map(([n, l]) => [l, "+" + pts(data.earned[n])])],
-            [fmt(p.downloads), "téléchargements", null, headSub("downloads")],
-            [fmt(p.prints), "impressions", null, headSub("prints")],
-            [fmt(p.boosts), "boosts reçus", null, headSub("boosts")],
-            [fmt(p.likes), "j'aime", null, headSub("likes")],
-            [fmt(p.fans), "abonnés"], [fmt(p.designs), "modèles"],
-            ...(myBoosts != null ? [[`⚡ ${myBoosts}`, "boosts à donner", "#f59e0b"]] : [])].map(([v, l, c, sub]) => (
-            <div key={l} style={{ padding:"8px 10px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)" }}>
-              <div style={{ fontSize:15, fontWeight:800, color: c || "var(--text)" }}>{v}</div>
-              <div style={{ fontSize:10.5, color:"var(--muted)" }}>{l}</div>
+        {/* Le reste du compte en pastilles, les vignettes gardent ce qui bouge */}
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:10 }}>
+          {[[Users, fmt(p.fans), "abonnés", "#3b82f6"], [Boxes, fmt(p.designs), "modèles", "#64748b"],
+            ...(myBoosts != null ? [[Zap, myBoosts, "boosts à donner", "#f59e0b"]] : [])].map(([Icon, v, l, c]) => (
+            <span key={l} style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"3px 10px 3px 7px",
+              borderRadius:20, fontSize:11.5, color:"var(--text2)", background:`${c}14`, border:`1px solid ${c}33` }}>
+              <Icon size={13} color={c} strokeWidth={2.4}/><b style={{ color:"var(--text)" }}>{v}</b> {l}
+            </span>
+          ))}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10, marginTop:12 }}>
+          {[[Coins, "#f59e0b", data.earned_total != null ? pts(data.earned_total) : "—", "points gagnés",
+              data.earned && HEAD.map(([n, l]) => [l, data.earned[n], "+" + pts(data.earned[n])])],
+            [Download, "#3b82f6", fmt(p.downloads), "téléchargements", headSub("downloads")],
+            [Printer, "#8b5cf6", fmt(p.prints), "impressions", headSub("prints")],
+            [Zap, "#f97316", fmt(p.boosts), "boosts reçus", headSub("boosts")],
+            [Heart, "#ec4899", fmt(p.likes), "j'aime", headSub("likes")]].map(([Icon, c, v, l, sub]) => (
+            <div key={l} style={{ padding:"11px 12px 10px", borderRadius:14, border:`1px solid ${c}2e`,
+              background:`linear-gradient(140deg, ${c}1c 0%, ${c}08 55%, transparent 100%), var(--surface2)` }}>
+              <div style={{ display:"flex", alignItems:"center", gap:7 }}>
+                <span style={{ width:24, height:24, borderRadius:8, background:`${c}22`, display:"flex",
+                  alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                  <Icon size={14} color={c} strokeWidth={2.4}/></span>
+                <span style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", textTransform:"uppercase",
+                  letterSpacing:"0.04em", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{l}</span>
+              </div>
+              <div style={{ fontSize:22, fontWeight:900, color:"var(--text)", margin:"7px 0 8px",
+                letterSpacing:"-0.02em", lineHeight:1 }}>{v}</div>
               {sub && (
-                <div style={{ marginTop:5, paddingTop:5, borderTop:"1px solid var(--border)", display:"grid",
-                  gridTemplateColumns:"auto 1fr", columnGap:6, fontSize:10.5, lineHeight:1.45 }}>
-                  {sub.map(([k, x]) => (
-                    <React.Fragment key={k}>
-                      <span style={{ color:"var(--muted)" }}>{k}</span>
-                      <span style={{ textAlign:"right", fontWeight:700, color:"#22c55e", whiteSpace:"nowrap" }}>{x}</span>
-                    </React.Fragment>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(3,1fr)", gap:4 }}>
+                  {sub.map(([k, n, x]) => (
+                    <span key={k} style={{ padding:"4px 2px 3px", borderRadius:8, textAlign:"center",
+                      background:"var(--surface)", border:"1px solid var(--border)" }}>
+                      <span style={{ display:"block", fontSize:9, color:"var(--muted)", fontWeight:600 }}>{k}</span>
+                      <span style={{ display:"block", fontSize:11, fontWeight:800, whiteSpace:"nowrap",
+                        color: n > 0 ? c : "var(--muted)" }}>{x}</span>
+                    </span>
                   ))}
                 </div>
               )}

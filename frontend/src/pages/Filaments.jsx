@@ -1194,25 +1194,28 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         {/* Jauge + poids chiffre : la barre pour l'oeil, le detail pour la
             decision d'impression. */}
         <div>
-          <div style={{ height:5, borderRadius:3, background:"var(--surface2)",
-            overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)" }}>
-            <div style={{ width:`${pct}%`, height:"100%", background:barColor,
-              borderRadius:3, transition:"width 0.5s" }}/>
+          {/* Bobine vide ou presque : pastille au bout de la jauge (en haut a
+              droite elle chevauchait le sous-type, a cote du poids elle faisait
+              passer le « g » a la ligne) */}
+          <div style={{ display:"flex", alignItems:"center", gap:4 }}>
+            <div style={{ flex:1, height:5, borderRadius:3, background:"var(--surface2)",
+              overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)" }}>
+              <div style={{ width:`${pct}%`, height:"100%", background:barColor,
+                borderRadius:3, transition:"width 0.5s" }}/>
+            </div>
+            {rem != null && pct <= 15 && (
+              <span style={{ fontSize:8, fontWeight:800, padding:"1px 4px", borderRadius:20, lineHeight:1.3,
+                background:"#ef4444", color:"white", flexShrink:0 }}>
+                {pct}%
+              </span>
+            )}
           </div>
           <p style={{ fontSize:9.5, color:"var(--muted)", margin:"4px 0 0", textAlign:"center",
-            fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>
+            whiteSpace:"nowrap", fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>
             <span style={{ color:"var(--text)", fontWeight:700 }}>
               {rem != null ? `${Math.round(rem)} g` : "—"}
             </span>
             <span style={{ opacity:0.6 }}> / {total} g</span>
-            {/* Bobine vide ou presque : pastille a cote du poids (en haut a
-                droite, elle chevauchait le sous-type) */}
-            {rem != null && pct <= 15 && (
-              <span style={{ marginLeft:4, fontSize:8, fontWeight:800, padding:"1px 4px", borderRadius:20,
-                background:"#ef4444", color:"white", fontFamily:"inherit", verticalAlign:"1px" }}>
-                {pct}%
-              </span>
-            )}
           </p>
         </div>
 
