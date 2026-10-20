@@ -79,6 +79,25 @@ async def profile(fresh: bool = False) -> dict:
     return out
 
 
+def _find_design(h: dict, depth: int = 0):
+    """(id, titre) du modele cite par une ligne de points d'un autre genre
+    (boost recu…) : forme non relevee, on cherche un identifiant de modele en
+    surface puis dans les objets imbriques."""
+    if not isinstance(h, dict) or depth > 2:
+        return None
+    did = h.get("designId") or h.get("design_id")
+    if str(did or "").isdigit():
+        return str(did), h.get("designTitle") or h.get("title")
+    for k, v in h.items():
+        if isinstance(v, dict):
+            if "design" in k.lower() and str(v.get("id") or "").isdigit():
+                return str(v["id"]), v.get("title") or v.get("designTitle")
+            got = _find_design(v, depth + 1)
+            if got:
+                return got
+    return None
+
+
 def _bill_item(h: dict) -> dict:
     dr = h.get("designRewardV2") if isinstance(h.get("designRewardV2"), dict) else None
     ir = h.get("instanceRewardV2") if isinstance(h.get("instanceRewardV2"), dict) else None
@@ -95,6 +114,9 @@ def _bill_item(h: dict) -> dict:
                    instance_title=ir.get("instanceTitle"), label="Profil")
     else:
         out.update(label={"boost": "Boost"}.get(kind.split("_")[0], kind.replace("_", " ") or "Autre"))
+        got = _find_design(h)
+        if got:
+            out.update(design_id=got[0], title=got[1] or out.get("title"))
     return out
 
 

@@ -952,6 +952,29 @@ async def _most_printed_design() -> str:
     return str(row[0]) if row else ""
 
 
+async def _debug_other_points() -> dict:
+    """Lignes de points qui ne sont ni un versement par modele ni par profil
+    (boosts recus…), brutes : pour savoir a quel modele les rattacher."""
+    import asyncio
+    from .makerworld import _get_json
+    tok = await token() or None
+    seen, kinds = [], {}
+    for off in range(0, 2000, 50):
+        code, d = await asyncio.to_thread(_get_json, f"/point-service/point-bill/my?offset={off}&limit=50", tok)
+        hits = d.get("hits") if isinstance(d, dict) and isinstance(d.get("hits"), list) else []
+        for h in hits:
+            if not isinstance(h, dict) or h.get("designRewardV2") or h.get("instanceRewardV2"):
+                continue
+            k = str(h.get("type") or "")
+            kinds[k] = kinds.get(k, 0) + 1
+            if kinds[k] <= 2:
+                seen.append(h)
+        if len(hits) < 50:
+            break
+    return {"path": "/point-service/point-bill/my (lignes hors modele/profil)", "http": code,
+            "body": json.dumps({"types": kinds, "exemples": seen}, ensure_ascii=False)[:8000]}
+
+
 async def _debug_plates() -> dict:
     """Plateaux d'un modele (le plus imprime) et ce que l'API dit d'imprime."""
     import asyncio
@@ -1107,6 +1130,8 @@ async def debug(name: str) -> dict:
         return await _debug_collections()
     if name == "essais_plateaux":
         return await _debug_plates()
+    if name == "points_autres":
+        return await _debug_other_points()
     if name in DEBUG_TRIES:
         title, paths = DEBUG_TRIES[name](await _most_printed_design() or "1400373")
         return await _try(title, paths)
