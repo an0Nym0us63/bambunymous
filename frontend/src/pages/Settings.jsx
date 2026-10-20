@@ -20,6 +20,7 @@ import MakerWorldSettings from "../components/MakerWorldSettings";
 import RateTemplatesSettings from "../components/RateTemplatesSettings";
 import NotificationsSettings from "../components/NotificationsSettings";
 import MyAppNotifications from "../components/MyAppNotifications";
+import AndroidApp from "../components/AndroidApp";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
 import { amsName, slotCount, lireDisposition, dispositionParDefaut, MAX_LIGNES, MAX_COLONNES } from "../utils/ams";
@@ -1654,17 +1655,11 @@ const SET_TABS = [
   { id:"accounts", label:"👤 Comptes",    admin:false },
   { id:"notify",   label:"🔔 Notifs",     admin:false },
   { id:"share",    label:"📤 Partage",    admin:true  },
+  { id:"android",  label:"📱 Appli Android", admin:false },
   { id:"tools",    label:"🛠️ Outils",     admin:true  },
 ];
 
 export default function Settings() {
-  // Config de la coquille native (URL + presence du jeton), pour affichage.
-  const [nativeCfg, setNativeCfg] = React.useState(null);
-  React.useEffect(() => {
-    try {
-      if (window.BambuScan?.getConfig) setNativeCfg(JSON.parse(window.BambuScan.getConfig()));
-    } catch { /* pas en webview */ }
-  }, []);
   const navigate = useNavigate();
   const { theme, toggle } = useTheme();
   const [ip,      setIp]      = useState("");
@@ -1833,34 +1828,6 @@ export default function Settings() {
       <AdminOnly>
       <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
-        {/* Application native (WebView) : rouvrir les reglages URL + jeton RFID.
-            Visible uniquement dans la coquille Android (window.BambuScan). */}
-        {typeof window !== "undefined" && window.BambuScan && (
-          <div className="card" style={card}>
-            <div style={cardTitle}>Application native</div>
-            <p style={{ fontSize:12.5, color:"var(--muted)", margin:"0 0 12px", lineHeight:1.5 }}>
-              L'adresse de BambuNymous et le jeton RFID sont gérés par l'application
-              Android. Tu peux les modifier ici.
-            </p>
-            {nativeCfg?.url && (
-              <p style={{ fontSize:12, color:"var(--text2)", margin:"0 0 12px",
-                fontFamily:"JetBrains Mono, monospace", wordBreak:"break-all" }}>
-                {nativeCfg.url}
-                <br/>
-                Jeton RFID : {nativeCfg.hasToken ? "défini ✓" : "non défini"}
-              </p>
-            )}
-            <button type="button"
-              onClick={() => { try { window.BambuScan.openSettings(); } catch {} }}
-              style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 16px",
-                borderRadius:12, border:"none", cursor:"pointer",
-                background:"linear-gradient(135deg,#4f46e5,#6366f1)", color:"#fff",
-                fontSize:13, fontWeight:700 }}>
-              ⚙️ Ouvrir les réglages de l'application
-            </button>
-          </div>
-        )}
-
         {/* Imprimante */}
         <div className="card" style={card}>
           <div style={cardTitle}><Wifi size={13}/> Imprimante</div>
@@ -1936,6 +1903,9 @@ export default function Settings() {
         <RfidDebugSection/>
       </AdminOnly>
       )}
+
+      {/* ── Appli Android (telechargement, reglages de l'appli) ──────── */}
+      {tab === "android" && <AndroidApp card={card} cardTitle={cardTitle}/>}
 
       {/* ── Partage (Telegram) ─────────────────────────────────────── */}
       {tab === "share" && (
