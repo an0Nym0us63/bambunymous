@@ -8,6 +8,10 @@ from datetime import datetime
 from pathlib import Path
 import logging
 import logging.handlers
+import mimetypes
+# L'appli Android servie par le site (frontend/public/android) : sans ce type,
+# certains navigateurs la prennent pour un fichier quelconque.
+mimetypes.add_type("application/vnd.android.package-archive", ".apk")
 import time
 import os
 

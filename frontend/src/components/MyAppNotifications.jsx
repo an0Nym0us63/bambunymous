@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import client from "../api/client";
+import { Download } from "lucide-react";
 import { pushApi, readPushStatus, sendEndpoint } from "./PushBridge";
 
 // Mes notifications sur l'appli Android : chaque compte de la maison inscrit
@@ -55,6 +56,7 @@ export default function MyAppNotifications({ embedded = false }) {
   const primary = { ...btn, background:"#3b82f6", border:"none", color:"white", fontWeight:700 };
 
   return (<>
+    <DownloadApp/>
     <div className="card" style={{ padding:"16px 20px" }}>
       <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>
         {embedded ? "Mon téléphone" : "Mes notifications"}</h3>
@@ -137,6 +139,34 @@ export default function MyAppNotifications({ embedded = false }) {
 
 // Deux canaux independants par type : le journal (la cloche) et le telephone
 // (appli Android). Vrai : actif ; null (en tete de section) : melange.
+// L'appli Android, servie par BambuNymous lui-meme (frontend/public/android) :
+// version, date et taille lues dans version.json, publie avec l'APK.
+function DownloadApp() {
+  const [v, setV] = useState(null);
+  useEffect(() => {
+    fetch("/android/version.json", { cache: "no-cache" }).then(r => r.ok ? r.json() : null).then(setV).catch(() => {});
+  }, []);
+  if (!v) return null;
+  const inApp = !!pushApi();
+  const mo = (v.size / 1048576).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+  const date = v.date ? new Date(v.date).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" }) : "";
+  return (
+    <div className="card" style={{ padding:"14px 18px", display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
+      <img src="/icon-192.png" alt="" style={{ width:44, height:44, borderRadius:11, flexShrink:0 }}/>
+      <div style={{ flex:1, minWidth:160 }}>
+        <div style={{ fontSize:14, fontWeight:700, color:"var(--text)" }}>Appli Android BambuNymous</div>
+        <div style={{ fontSize:11.5, color:"var(--muted)", marginTop:2 }}>
+          Version {v.version}{date ? ` · ${date}` : ""} · {mo} Mo
+          {inApp ? " · tu l'utilises déjà : télécharge-la pour la mettre à jour" : " · notifications, scan RFID, appareil photo"}</div>
+      </div>
+      <a href="/android/BambuNymous.apk" download="BambuNymous.apk"
+        style={{ display:"inline-flex", alignItems:"center", gap:7, padding:"8px 14px", borderRadius:10, fontSize:12.5,
+          fontWeight:700, textDecoration:"none", background:"#4F46E5", color:"white", flexShrink:0 }}>
+        <Download size={15} strokeWidth={2.4}/> {inApp ? "Mettre à jour" : "Télécharger"}</a>
+    </div>
+  );
+}
+
 function Switch({ on, partial, onChange, disabled }) {
   return (
     <button onClick={() => onChange(!on)} disabled={disabled} aria-pressed={on}
