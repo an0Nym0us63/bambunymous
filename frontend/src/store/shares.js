@@ -17,9 +17,9 @@ export const useShares = create((set, get) => ({
   _add: (job) => { const j = { id: ++seq, status: "sending", detail: "", count: 1, ...job }; set({ jobs: [...get().jobs, j] }); return j.id; },
   _update: (id, patch) => set({ jobs: get().jobs.map(j => j.id === id ? { ...j, ...patch } : j) }),
 
-  start: ({ kind, id, title, destinationIds, message, tz }) => {
+  start: ({ kind, id, title, destinationIds, message, tz, media }) => {
     const jid = get()._add({ kind: "telegram", title, count: destinationIds.length });
-    client.post(`/share/${kind}/${id}`, { destination_ids: destinationIds, message, tz },
+    client.post(`/share/${kind}/${id}`, { destination_ids: destinationIds, message, tz, ...(media ? { media } : {}) },
       { timeout: 15 * 60 * 1000 })
       .then(({ data }) => {
         const ko = (data.results || []).filter(r => !r.ok);

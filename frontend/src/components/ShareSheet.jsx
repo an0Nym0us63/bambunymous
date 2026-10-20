@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Send } from "lucide-react";
-import client from "../api/client";
+import client, { apiUrl } from "../api/client";
 import { useShares } from "../store/shares";
 
 // Partage Telegram d'une impression ou d'un groupe : choix de la destination,
@@ -19,11 +19,13 @@ export default function ShareSheet({ kind, id, onClose }) {
   const [sel, setSel] = useState(null);         // ids coches (null tant que non initialise)
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
+  const [pick, setPick] = useState(null);       // medias joints (ids), comme pour les evaluations
   const timer = useRef(null);
 
   const load = (msg) => client.get(`/share/${kind}/${id}/preview`, { params: { message: msg, tz: TZ } })
     .then(r => {
       setPreview(r.data);
+      setPick(cur => cur || r.data.default_ids || []);
       setSel(cur => {
         if (cur) return cur;
         let last = []; try { last = JSON.parse(localStorage.getItem(LAST_DEST) || "[]"); } catch { /* stockage indisponible */ }
@@ -45,13 +47,16 @@ export default function ShareSheet({ kind, id, onClose }) {
   // suite, la pastille en haut de l'ecran suit l'envoi sur toutes les pages.
   const send = () => {
     useShares.getState().start({ kind, id, title: preview?.title || "Partage",
-      destinationIds: sel, message, tz: TZ });
+      destinationIds: sel, message, tz: TZ, media: pick || undefined });
     try { localStorage.setItem(LAST_DEST, JSON.stringify(sel)); } catch { /* stockage indisponible */ }
     onClose();
   };
 
   const dests = preview?.destinations || [];
-  const nMedia = preview?.media?.length || 0;
+  const max = preview?.album_max || 10;
+  const nMedia = pick ? pick.length : preview?.media?.length || 0;
+  const toggle = (mid) => setPick(p => p.includes(mid) ? p.filter(x => x !== mid) : p.length < max ? [...p, mid] : p);
+  const thumb = { width: 58, height: 58, borderRadius: 8, objectFit: "cover", cursor: "pointer", display: "block" };
   return createPortal(
     <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:1500, background:"rgba(0,0,0,0.6)",
       display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
@@ -103,8 +108,26 @@ export default function ShareSheet({ kind, id, onClose }) {
 
           <div style={{ fontSize:11, fontWeight:600, color:"var(--muted)", marginBottom:4 }}>
             Ce qui partira · {nMedia ? `${nMedia} photo${nMedia > 1 ? "s" : ""} ou vidéo${nMedia > 1 ? "s" : ""}` : "texte seul"}
-            {preview.live && " · dont la caméra en direct"}
+            {pick?.includes("camera") && " · dont la caméra en direct"}
           </div>
+          {/* Medias joints : touche pour retirer ou ajouter, 10 au plus (limite Telegram). */}
+          {(preview.pool?.length > 0 || preview.live) && (
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:10 }}>
+              {preview.live && (
+                <div onClick={() => toggle("camera")} title="Caméra en direct, capturée à l'envoi"
+                  style={{ ...thumb, display:"flex", alignItems:"center", justifyContent:"center", fontSize:22,
+                    background:"var(--surface2)", border: pick?.includes("camera") ? "2px solid #229ED9" : "2px solid transparent",
+                    opacity: pick?.includes("camera") ? 1 : 0.4 }}>📷</div>
+              )}
+              {(preview.pool || []).map(m => {
+                const on = pick?.includes(m.id);
+                const st = { ...thumb, border: on ? "2px solid #229ED9" : "2px solid transparent", opacity: on ? 1 : 0.4 };
+                return m.video
+                  ? <video key={m.id} src={apiUrl(m.url.slice(7))} muted playsInline preload="metadata" onClick={() => toggle(m.id)} style={st}/>
+                  : <img key={m.id} src={apiUrl(m.url.slice(7))} alt="" onClick={() => toggle(m.id)} style={st}/>;
+              })}
+            </div>
+          )}
           {/* Legende construite par le serveur, contenu deja echappe : seules
               ses balises <b> et <a> sont interpretees. */}
           <style>{`.bn-cap blockquote{margin:0;padding:6px 10px;border-left:3px solid #229ED9;

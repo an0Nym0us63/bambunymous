@@ -444,7 +444,25 @@ def _makerworld(design_id) -> Optional[str]:
     return f"https://makerworld.com/models/{d}" if d and d != "0" else None
 
 
-async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = None) -> dict:
+def _media_id(f: Path) -> str:
+    """Identifiant d'un media : son chemin sous DATA_DIR (prints/12/Photo-1.jpg)."""
+    try:
+        return f.relative_to(DATA_DIR).as_posix()
+    except ValueError:
+        return f.name
+
+
+def _media_url(mid: str) -> str:
+    """Adresse de l'API qui sert ce media (pour l'apercu dans l'appli)."""
+    parts = mid.split("/")
+    if len(parts) == 3 and parts[0] == "prints":
+        return f"/api/v1/prints/{parts[1]}/file/{parts[2]}"
+    if len(parts) == 3 and parts[0] == "groups":
+        return f"/api/v1/prints/groups/{parts[1]}/photo/{parts[2]}"
+    return ""
+
+
+async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = None, chosen=None) -> dict:
     """
     Ce qui partira : titre, statistiques, lien MakerWorld, medias. Sert a
     l'apercu de la fenetre ET a l'envoi : on montre exactement ce qui part.
@@ -465,6 +483,8 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
             # a defaut encore, l'image du plateau.
             media = (_photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo)
                      or _snapshots(p) or _plate(p.id))
+            # Tout ce qu'on peut joindre (choix a la main dans l'appli).
+            pool = _photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo) + _snapshots(p) + _plate(p.id)
             items = p.number_of_items or 1
         elif kind == "group":
             g = await db.get(Group, obj_id)
@@ -485,6 +505,13 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
             if not media:
                 for p in ordered:
                     media += _plate(p.id)
+            pool = _photos_of_dir(DATA_DIR / "groups" / str(g.id), g.cover_photo)
+            for p in ordered:
+                pool += _photos_of_dir(DATA_DIR / "prints" / str(p.id), p.cover_photo)
+            for p in ordered:
+                pool += _snapshots(p)
+            for p in ordered:
+                pool += _plate(p.id)
             items = g.number_of_items or 1
         else:
             raise ShareError("Type inconnu")
@@ -549,8 +576,21 @@ async def build_share(kind: str, obj_id: int, tz_offset_min: Optional[int] = Non
             media[-1] = plate[0]
     else:
         media = media[:ALBUM_MAX]
+    pool = list(dict.fromkeys(pool))
+    by_id = {_media_id(f): f for f in pool}
+    default_ids = (["camera"] if live else []) + [_media_id(f) for f in media]
+    camera = bool(live)
+    if chosen is not None:
+        # Choix fait dans l'appli : dans son ordre, seulement des medias connus
+        # de ce print / groupe, 10 au plus (camera comprise).
+        ids = [i for i in dict.fromkeys(chosen) if i == "camera" or i in by_id]
+        camera = bool(live) and "camera" in ids
+        media = [by_id[i] for i in ids if i != "camera"][:ALBUM_MAX - (1 if camera else 0)]
     return {"title": title, "stats": stats, "filaments": fil_lines, "links": links,
-            "media": media, "live": live}
+            "media": media, "live": live, "camera": camera,
+            "pool": [{"id": i, "url": _media_url(i), "video": f.suffix.lower() in (".mp4", ".mov", ".webm", ".m4v")}
+                     for i, f in by_id.items()],
+            "default_ids": default_ids}
 
 
 def render_caption(share: dict, message: str = "") -> str:
@@ -645,7 +685,7 @@ async def _send_one(c, dest: dict, files: list, caption: str) -> None:
 
 
 async def send(kind: str, obj_id: int, destination_ids, message: str = "",
-               tz_offset_min: Optional[int] = None) -> dict:
+               tz_offset_min: Optional[int] = None, chosen=None) -> dict:
     """
     Envoie a une ou plusieurs destinations. Medias et capture camera sont
     prepares UNE fois (meme image pour tous). Un refus n'arrete pas les
@@ -657,12 +697,12 @@ async def send(kind: str, obj_id: int, destination_ids, message: str = "",
     dests = [known[i] for i in dict.fromkeys(destination_ids or []) if i in known]
     if not dests:
         raise ShareError("Destination inconnue")
-    share = await build_share(kind, obj_id, tz_offset_min)
+    share = await build_share(kind, obj_id, tz_offset_min, chosen)
     caption = render_caption(share, message)
     results = []
     with tempfile.TemporaryDirectory() as tmp:
         files = await asyncio.to_thread(prepare_media, share["media"], Path(tmp))
-        if share["live"]:
+        if share["live"] and share.get("camera", True):
             jpg = await _camera_jpeg()
             if jpg:
                 cam = Path(tmp) / "camera.jpg"

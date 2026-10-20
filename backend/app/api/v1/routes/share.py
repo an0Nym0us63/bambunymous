@@ -73,10 +73,13 @@ async def share_preview(kind: str, obj_id: int, message: str = "", tz: int | Non
     return {"title": share["title"], "caption_html": tg.render_caption(share, message),
             "media": (["camera"] if share["live"] else []) + [p.name for p in share["media"]],
             "live": bool(share["live"]),
+            # Medias qu'on peut joindre, et ceux choisis d'office (a cocher dans l'appli).
+            "pool": share["pool"], "default_ids": share["default_ids"], "album_max": tg.ALBUM_MAX,
             "destinations": [{"id": d["id"], "label": d["label"]} for d in await tg.destinations()]}
 
 
 @router.post("/{kind}/{obj_id}")
 async def share_send(kind: str, obj_id: int, body: dict = Body({}), _: str = Depends(require_admin)):
     ids = body.get("destination_ids") or ([body["destination_id"]] if body.get("destination_id") else [])
-    return await _call(tg.send(_kind(kind), obj_id, ids, body.get("message", ""), body.get("tz")))
+    chosen = body.get("media") if isinstance(body.get("media"), list) else None
+    return await _call(tg.send(_kind(kind), obj_id, ids, body.get("message", ""), body.get("tz"), chosen))
