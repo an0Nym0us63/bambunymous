@@ -31,11 +31,22 @@ export default function Achievements({ embedded = false }) {
   const [openCats, setOpenCats] = useState(() => new Set([sp.get("cat")].filter(Boolean)));
   const [detail, setDetail] = useState(null);
   const atFriend = !!currentFriend();             // chez un copain : pas de podium (ce sont ses copains a lui)
+  const [mine, setMine] = useState(null);         // en visite : mes propres medailles uniques (lues chez moi)
 
   useEffect(() => {
     client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
     if (!atFriend) client.get("/achievements/podium").then(r => setPod(r.data)).catch(() => {});
+    else client.get("/achievements/mine", { home: true }).then(r => setMine(r.data)).catch(() => {});
   }, []);
+  // Secrets « a portee » : pas encore gagnes ici, mais deja par quelqu'un de la
+  // bande. Chez moi : mes copains ; chez un copain : moi.
+  const ringBy = useMemo(() => {
+    const out = {};
+    const add = (ids, name) => (ids || []).forEach(id => { (out[id] = out[id] || []).push(name); });
+    if (atFriend) add(mine?.uniques, "Toi");
+    else for (const p of pod?.people || []) if (!p.me && p.status === "ok") add(p.uniques, p.name);
+    return out;
+  }, [pod, mine, atFriend]);
   const byId = useMemo(() => Object.fromEntries((data?.items || []).map(x => [x.id, x])), [data]);
   // lien d'une notification : deplier sa section et ouvrir son detail
   useEffect(() => {
@@ -124,6 +135,7 @@ export default function Achievements({ embedded = false }) {
         const ranked = withFriends ? [...people].sort((a, b) => (b.cats?.[c.id]?.score || 0) - (a.cats?.[c.id]?.score || 0)) : [];
         const myRank = ranked.findIndex(p => p.me) + 1;
         const open = openCats.has(c.id);
+        const near = items.filter(x => x.level < 0 && ringBy[x.id]).length;
         return (
           <div key={c.id} className="card" style={{ padding:0, overflow:"hidden" }}>
             <button onClick={() => toggle(c.id)} aria-expanded={open}
@@ -134,7 +146,8 @@ export default function Achievements({ embedded = false }) {
                 <span style={{ flex:1, minWidth:0 }}>
                   <span style={{ display:"block", fontSize:15, fontWeight:800 }}>{c.name}</span>
                   <span style={{ display:"block", fontSize:11.5, color:"var(--muted)", marginTop:1 }}>
-                    {got}/{items.length} succès · {sum.score} pts</span>
+                    {got}/{items.length} succès · {sum.score} pts
+                    {near > 0 && <span style={{ color:"#F59E0B", fontWeight:700 }}> · 👀 {near} à portée</span>}</span>
                 </span>
                 {myRank > 0 && (
                   <span title="Ta place entre copains" style={{ fontSize:11.5, fontWeight:800, padding:"3px 9px", borderRadius:20,
@@ -175,7 +188,7 @@ export default function Achievements({ embedded = false }) {
                       </div>
                     )}
                     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
-                      {sb.items.map(it => <Tile key={it.id} it={it} onOpen={() => setDetail(it.id)}/>)}
+                      {sb.items.map(it => <Tile key={it.id} it={it} others={ringBy[it.id]} onOpen={() => setDetail(it.id)}/>)}
                     </div>
                   </div>
                 ))}
@@ -195,7 +208,7 @@ export default function Achievements({ embedded = false }) {
             position:"relative" }}>
             <button onClick={closeDetail} aria-label="Fermer" style={{ position:"absolute", top:8, right:10, zIndex:1,
               background:"none", border:"none", color:"var(--muted)", fontSize:20, cursor:"pointer" }}>✕</button>
-            <Card it={byId[detail]} sheet/>
+            <Card it={byId[detail]} sheet others={ringBy[detail]}/>
           </div>
         </div>, document.body
       )}
@@ -205,15 +218,31 @@ export default function Achievements({ embedded = false }) {
 
 // Une medaille de la grille d'une section : grisee tant qu'elle n'est pas
 // gagnee, avec un petit liseré de progression vers le palier suivant.
-function Tile({ it, onOpen }) {
+function Tile({ it, onOpen, others }) {
   const got = it.level >= 0;
   const top = got ? it.tiers[it.level] : it.tiers[0];
   const p = progress(it);
+  // secret pas encore gagne ici, mais deja par quelqu'un de la bande : cercle
+  const near = !got && others?.length;
   return (
-    <button onClick={onOpen} title={it.name} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:5,
-      padding:"10px 4px 8px", borderRadius:12, cursor:"pointer", minWidth:0,
-      background: got ? `${top.color}14` : "transparent", border:`1px solid ${got ? top.color + "55" : "var(--border)"}` }}>
-      <Medal tier={top} emoji={it.emoji} size={46} locked={!got}/>
+    <button onClick={onOpen} title={near ? `${it.name} · ${others.join(", ")} l'${others.length > 1 ? "ont" : "a"}` : it.name}
+      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:5,
+      padding:"10px 4px 8px", borderRadius:12, cursor:"pointer", minWidth:0, position:"relative",
+      background: got ? `${top.color}14` : near ? "rgba(245,158,11,0.08)" : "transparent",
+      border:`1px ${near ? "dashed" : "solid"} ${got ? top.color + "55" : near ? "#F59E0B" : "var(--border)"}` }}>
+      <span style={{ borderRadius:"50%", padding:2, boxShadow: near ? "0 0 0 2px #F59E0B, 0 0 12px rgba(245,158,11,0.55)" : "none" }}>
+        <Medal tier={top} emoji={it.emoji} size={46} locked={!got}/></span>
+      {near && (
+        <span style={{ position:"absolute", top:4, right:4, display:"flex" }}>
+          {others.slice(0, 2).map((n, i) => (
+            <span key={n} style={{ width:18, height:18, borderRadius:"50%", marginLeft: i ? -6 : 0, display:"flex",
+              alignItems:"center", justifyContent:"center", fontSize:9.5, fontWeight:800, color:"#fff",
+              background: n === "Toi" ? "#F59E0B" : "#8B5CF6", border:"1.5px solid var(--sheet-bg)" }}>
+              {n === "Toi" ? "toi" : n.slice(0, 1).toUpperCase()}</span>
+          ))}
+          {others.length > 2 && <span style={{ fontSize:9.5, fontWeight:800, color:"#F59E0B", marginLeft:2 }}>+{others.length - 2}</span>}
+        </span>
+      )}
       <span style={{ fontSize:11, fontWeight:700, color: got ? "var(--text)" : "var(--muted)", textAlign:"center",
         lineHeight:1.2, display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical", overflow:"hidden",
         width:"100%" }}>{it.name}</span>
@@ -318,7 +347,7 @@ const progress = it => {
   return span > 0 ? Math.max(0, Math.min(1, (it.value - (it.prev || 0)) / span)) : 0;
 };
 
-function Card({ it, focus, sheet = false }) {
+function Card({ it, focus, sheet = false, others }) {
   const ref = useRef(null);
   const [open, setOpen] = useState(sheet);
   useEffect(() => {
@@ -355,6 +384,11 @@ function Card({ it, focus, sheet = false }) {
           )}
         </div>
       </div>
+      {!got && others?.length > 0 && (
+        <p style={{ margin:0, fontSize:12.5, fontWeight:700, color:"#F59E0B", lineHeight:1.45 }}>
+          {others.length === 1 && others[0] === "Toi" ? "👀 Toi, tu l'as déjà !"
+            : `👀 ${others.join(", ")} ${others.length > 1 ? "l'ont" : "l'a"} déjà débloqué : à toi de le trouver !`}</p>
+      )}
       {unique && got && it.lore && (
         <p style={{ margin:0, fontSize:12.5, color:"var(--text2)", lineHeight:1.5, fontStyle:"italic",
           padding:"8px 10px", borderRadius:10, background:`${top.color}14`, borderLeft:`3px solid ${top.color}` }}>

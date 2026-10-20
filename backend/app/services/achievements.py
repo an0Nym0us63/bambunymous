@@ -1744,7 +1744,10 @@ def summary(v: dict) -> dict:
             if t.get("at"):
                 c["score"] += sc
                 c["medals"][t["id"]] = c["medals"].get(t["id"], 0) + 1
-    return {"cats": cats, "score": sum(c["score"] for c in cats.values()),
+    # medailles uniques gagnees : pour cercler, chez moi, les secrets qu'un copain a deja
+    uniques = sorted(it["id"] for it in v.get("items") or []
+                     if len(it.get("tiers") or []) == 1 and (it["tiers"][0] or {}).get("at"))
+    return {"cats": cats, "uniques": uniques, "score": sum(c["score"] for c in cats.values()),
             "score_max": sum(c["max"] for c in cats.values()),
             "got": sum(c["got"] for c in cats.values()), "total": sum(c["total"] for c in cats.values())}
 

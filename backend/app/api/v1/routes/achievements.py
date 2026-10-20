@@ -23,6 +23,14 @@ async def achievements_podium(fresh: bool = False, acc=Depends(require_own_accou
     return await A.podium(acc[0], fresh)
 
 
+@router.get("/mine")
+async def achievements_mine(acc=Depends(require_own_account)):
+    """Mes medailles uniques : lues chez moi quand je visite un copain, pour
+    cercler sur sa page les secrets que j'ai et qu'il n'a pas."""
+    from ....services import achievements as A
+    return {"name": acc[0], "uniques": await A.my_uniques()}
+
+
 @router.get("")
 async def achievements_view(request: Request, fresh: bool = False, token: str = Depends(oauth2_scheme),
                             username: str = Depends(get_current_user), role: str = Depends(get_current_role),
