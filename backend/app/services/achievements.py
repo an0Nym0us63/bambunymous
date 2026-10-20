@@ -1041,11 +1041,17 @@ BY_ID = {a["id"]: a for a in CATALOG}
 
 
 def _signature() -> str:
-    """Empreinte du catalogue (succes et seuils). Elle change des qu'on ajoute un
-    succes ou qu'on touche a un seuil : le passage suivant recalcule alors tout
-    en silence (pas de rafale de notifications), sans numero a tenir a jour."""
+    """Empreinte du catalogue (succes, seuils) ET du code de ce module. Elle
+    change des qu'on ajoute un succes ou une categorie, qu'on touche a un seuil
+    ou a une regle de calcul : le passage suivant recalcule alors tout en
+    silence (ni notification ni cle), sans numero a tenir a jour."""
     import hashlib
     raw = json.dumps([(a["id"], a["tiers"]) for a in CATALOG], separators=(",", ":"))
+    try:
+        with open(__file__, "rb") as f:
+            raw += hashlib.md5(f.read()).hexdigest()
+    except OSError:
+        pass
     return hashlib.md5(raw.encode()).hexdigest()[:12]
 
 
@@ -2362,7 +2368,15 @@ async def tick(notify: bool = True) -> list:
         new += [(aid, int(i)) for i in got if i not in old]
         st["unlocked"][aid] = got
     st["unlocked"] = {k: v for k, v in st["unlocked"].items() if v and k in BY_ID}
-    gained = _earn_keys(st, ev, [] if silent else new)
+    # Seul ce qui vient d'arriver compte (notification, cles) : un palier ou un
+    # secret date de l'historique (import d'anciennes impressions, calcul
+    # reconstitue) n'est pas une nouveaute, meme hors passage silencieux.
+    if silent:
+        new = []
+    else:
+        new = [(aid, i) for aid, i in new if _recent(st["unlocked"].get(aid, {}).get(str(i)))]
+    gains = _earn_keys(st, ev, new, await _ok_since((st.get("keys") or {}).get("since")))
+    gains += _gift_keys(st)
     st["sig"] = CATALOG_SIG
     sha = (os.getenv("COMMIT_SHA") or "")[:8]
     if sha and sha != "dev":
@@ -2371,16 +2385,19 @@ async def tick(notify: bool = True) -> list:
         st["since"] = datetime.utcnow().isoformat()
     await _state_put(st)
     _CACHE["v"] = None
-    if new and notify and not silent:
-        await _notify(new, ev, gained)
-    return [] if silent else new
+    if new and notify:
+        await _notify(new, ev, sum(n for n, _w in gains if not _w.startswith(("Début", "Noël"))))
+    if gains and notify:
+        await _notify_keys(gains, st["keys"]["balance"])
+    return new
 
 
 # ── Cles (20/10/2026) ────────────────────────────────────────────────────────
-# Gagnees : 3 au depart, 1 toutes les 10 impressions reussies (depuis la mise
-# en route des cles), 1 par palier reellement franchi, 3 par secret gagne. Les
-# paliers et secrets reconnus apres coup (premier calcul, nouveau succes,
-# seuils changes : passages silencieux) ne rapportent rien.
+# Gagnees : 3 au depart, 1 toutes les 10 impressions reussies lancees depuis
+# la mise en route des cles, 1 par palier reellement franchi, 3 par secret
+# gagne, 2 au debut de chaque mois, 5 a Noel. Rien de retroactif : un
+# passage silencieux (premier calcul, code ou seuils changes) ne rapporte
+# rien, et seul ce qui a ete atteint dans les dernieres 48 h compte.
 # Depensees sur un secret pas encore gagne, dans l'ordre : sa vignette (1),
 # son titre (2), un indice (3), son descriptif (5).
 KEY_START = 3
@@ -2390,25 +2407,102 @@ REVEALS = [("vignette", "la vignette", 1), ("title", "le titre", 2), ("hint", "u
 KEY_LOG_MAX = 40
 
 
-def _earn_keys(st: dict, ev: dict, new: list) -> int:
-    """Ajoute les cles gagnees depuis le dernier passage ; rend leur nombre."""
-    now = datetime.utcnow().isoformat()
-    n_ok = int(ev.get("prints_ok", {}).get("value") or 0)
+RECENT = timedelta(hours=48)
+KEYS_MONTH, KEYS_XMAS = 2, 5
+
+
+def _recent(at) -> bool:
+    """Atteint il y a peu (48 h) : une vraie nouveaute, pas un rattrapage."""
+    t = _ts(at)
+    return bool(t) and t >= datetime.utcnow() - RECENT
+
+
+async def _ok_since(since) -> int:
+    """Impressions reussies lancees depuis la mise en route des cles (par date :
+    un import d'anciennes impressions ne rapporte rien)."""
+    from sqlalchemy import func, select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    t = _ts(since) if since else None
+    if not t:
+        return 0
+    async with AsyncSessionLocal() as db:
+        return (await db.execute(select(func.count(Print.id)).where(
+            Print.status.in_(OK), Print.print_date >= t))).scalar() or 0
+
+
+def _keys_init(st: dict) -> dict:
     k = st.get("keys")
+    now = datetime.utcnow()
     if not isinstance(k, dict):
-        k = st["keys"] = {"balance": KEY_START, "base_ok": n_ok, "from_prints": 0, "spent": {}, "earned": KEY_START,
-                          "log": [{"at": now, "n": KEY_START, "why": "Clés de départ"}]}
-    gained = 0
+        k = st["keys"] = {"balance": KEY_START, "spent": {}, "earned": KEY_START,
+                          "log": [{"at": now.isoformat(), "n": KEY_START, "why": "Clés de départ"}]}
+    if not k.get("since"):
+        # mise en route (ou reprise d'un etat d'avant le comptage par date)
+        first = next((l["at"] for l in reversed(k.get("log") or []) if l.get("why") == "Clés de départ"), None)
+        k["since"] = first or now.isoformat()
+        k["from_prints"] = 0
+        k.pop("base_ok", None)
+    if "gifts" not in k:
+        # rien de retroactif : le mois en cours (et Noel s'il est passe) comptent comme donnes
+        loc = _local(now)
+        k["gifts"] = [f"month:{loc:%Y-%m}"] + ([f"xmas:{loc.year}"] if (loc.month, loc.day) >= (12, 25) else [])
+    return k
+
+
+def _gift_keys(st: dict) -> list:
+    """Cadeaux du calendrier : 2 cles au debut de chaque mois, 5 a Noel (le 25
+    decembre, ou des que possible jusqu'au 31). Une fois chacun."""
+    k = _keys_init(st)
+    loc = _local(datetime.utcnow())
+    out = []
+    for tag, n, why in ((f"month:{loc:%Y-%m}", KEYS_MONTH, "Début du mois"),
+                        (f"xmas:{loc.year}", KEYS_XMAS, "Noël")):
+        if tag in k["gifts"] or (tag.startswith("xmas") and (loc.month, loc.day) < (12, 25)):
+            continue
+        k["gifts"].append(tag)
+        k["gifts"] = k["gifts"][-60:]
+        k["balance"] += n
+        k["earned"] = k.get("earned", 0) + n
+        k["log"] = ([{"at": datetime.utcnow().isoformat(), "n": n, "why": why}] + (k.get("log") or []))[:KEY_LOG_MAX]
+        out.append((n, why))
+    return out
+
+
+async def _notify_keys(gains: list, balance: int) -> None:
+    """Notification « cles gagnees » : une par passage, avec le detail."""
+    from . import notify as N
+    cfg = await N._load()
+    total = sum(n for n, _w in gains)
+    whys = [w for _n, w in gains]
+    if "Noël" in whys:
+        title = f"🎄 Joyeux Noël : +{total} clé{'s' if total > 1 else ''} !"
+    elif "Début du mois" in whys:
+        title = f"🎁 Bon début de mois : +{total} clé{'s' if total > 1 else ''} !"
+    else:
+        title = f"🔑 +{total} clé{'s' if total > 1 else ''}"
+    icon = {"Noël": "🎄", "Début du mois": "🎁"}
+    lines = [f"{icon.get(w, '🔑')} +{n} · {w}" for n, w in gains[:8]] + \
+            ([f"… et {len(gains) - 8} autre(s)"] if len(gains) > 8 else [])
+    lines.append(f"Tu as maintenant {balance} clé{'s' if balance > 1 else ''} : de quoi révéler des secrets.")
+    await N.notify("keys_gained", title, "\n".join(lines),
+                   click=N.app_link(cfg, "/stats?tab=achievements&cat=secret"), priority=2)
+
+
+def _earn_keys(st: dict, ev: dict, new: list, ok_since: int = 0) -> list:
+    """Ajoute les cles gagnees depuis le dernier passage ; rend [(nombre, raison)]."""
+    now = datetime.utcnow().isoformat()
+    k = _keys_init(st)
+    gains = []
 
     def add(n, why):
-        nonlocal gained
         if n <= 0:
             return
         k["balance"] += n
         k["earned"] = k.get("earned", 0) + n
-        gained += n
+        gains.append((n, why))
         k["log"] = ([{"at": now, "n": n, "why": why}] + (k.get("log") or []))[:KEY_LOG_MAX]
-    total = max(0, n_ok - k.get("base_ok", n_ok)) // KEYS_PER_PRINTS
+    total = ok_since // KEYS_PER_PRINTS
     if total > k.get("from_prints", 0):
         n = total - k.get("from_prints", 0)
         k["from_prints"] = total
@@ -2419,7 +2513,7 @@ def _earn_keys(st: dict, ev: dict, new: list) -> int:
         add(KEYS_TIER * len(tiers), f"{len(tiers)} palier{'s' if len(tiers) > 1 else ''} franchi{'s' if len(tiers) > 1 else ''}")
     for aid, _i in secrets:
         add(KEYS_SECRET, f"Secret « {BY_ID[aid]['name']} »")
-    return gained
+    return gains
 
 
 async def spend_key(aid: str) -> dict:
@@ -2659,10 +2753,11 @@ async def view(fresh: bool = False) -> dict:
                 top[it["id"]] = (t["at"], it["id"], j)
     recent = sorted(top.values(), reverse=True)[:6]
     k = st.get("keys") if isinstance(st.get("keys"), dict) else None
-    n_ok = int(ev.get("prints_ok", {}).get("value") or 0)
+    ok_since = await _ok_since(k.get("since")) if k else 0
     keys = None if k is None else {
         "balance": k.get("balance", 0), "earned": k.get("earned", 0),
-        "to_next": KEYS_PER_PRINTS - (max(0, n_ok - k.get("base_ok", n_ok)) % KEYS_PER_PRINTS),
+        "to_next": KEYS_PER_PRINTS - (ok_since % KEYS_PER_PRINTS),
+        "gifts": {"month": KEYS_MONTH, "xmas": KEYS_XMAS},
         "steps": [{"id": i, "label": l, "cost": c} for i, l, c in REVEALS],
         "rules": {"start": KEY_START, "prints": KEYS_PER_PRINTS, "tier": KEYS_TIER, "secret": KEYS_SECRET},
         "log": (k.get("log") or [])[:12]}

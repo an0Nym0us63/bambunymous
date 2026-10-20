@@ -387,6 +387,13 @@ EVENTS["achievement_unlocked"] = {
     "sample": {"title": "🏅 Succès débloqué : Imprimeur 🥇", "priority": 3, "link": "/stats?tab=achievements",
                "message": "🥇 🖨️ Imprimeur · Or\n   1 000 impressions réussies — prochain palier : 2 500"},
 }
+EVENTS["keys_gained"] = {
+    "section": "achievements", "label": "Clés gagnées",
+    "description": "Des clés pour révéler les secrets : 10 impressions réussies, paliers et secrets gagnés, début de mois (2), Noël (5).",
+    "options": [],
+    "sample": {"title": "🎁 Bon début de mois : +2 clés !", "priority": 2, "link": "/stats?tab=achievements&cat=secret",
+               "message": "🎁 +2 · Début du mois\nTu as maintenant 12 clés : de quoi révéler des secrets."},
+}
 EVENTS["accessory_low"] = {
     "section": "objects", "label": "Accessoire bientôt épuisé",
     "description": "Le stock d'un accessoire passe sous le seuil (une fois, jusqu'au réassort).",

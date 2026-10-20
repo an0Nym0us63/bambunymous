@@ -383,7 +383,9 @@ function KeysBox({ keys }) {
         <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:6, fontSize:12, color:"var(--text2)", lineHeight:1.45 }}>
           <div>
             <b>Gagner des clés</b> : {r.start} au départ · 1 toutes les {r.prints} impressions réussies · {r.tier} par palier franchi ·
-            {" "}{r.secret} par secret gagné. Ce qui est reconnu après coup (nouveau succès, seuils changés) ne compte pas.
+            {" "}{r.secret} par secret gagné{keys.gifts ? <> · 🎁 {keys.gifts.month} au début de chaque mois · 🎄 {keys.gifts.xmas} à Noël</> : null}.
+            {" "}Rien de rétroactif : ce qui est reconnu après coup (anciennes impressions importées, nouveau succès, seuils
+            changés) ne rapporte rien.
           </div>
           <div>
             <b>Les dépenser</b> sur un secret pas encore gagné, dans l'ordre :{" "}
