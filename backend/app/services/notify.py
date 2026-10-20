@@ -31,11 +31,12 @@ SECTIONS = [
     ("spools", "🧵 Bobines et AMS"),
     ("mw", "🌐 MakerWorld"),
     ("friends", "👥 Copains"),
+    ("attention", "⚠️ Points d'attention"),
     ("system", "🖥️ BambuNymous"),
 ]
 # Teinte de chaque section dans l'appli Android (grande icone, categorie) :
 # envoyee avec chaque message, l'appli n'a rien en dur a republier.
-SECTION_COLORS = {"prints": "#3B82F6", "printer": "#EF4444", "dry": "#06B6D4", "spools": "#F59E0B",
+SECTION_COLORS = {"attention": "#EAB308", "prints": "#3B82F6", "printer": "#EF4444", "dry": "#06B6D4", "spools": "#F59E0B",
                   "mw": "#22C55E", "friends": "#8B5CF6", "system": "#64748B"}
 
 
@@ -329,6 +330,45 @@ EVENTS["friend_print_done"] = {
     "sample": {"title": "👥 Léo a fini d'imprimer", "priority": 2, "link": "/",
                "message": "📄 Dragon articulé"},
 }
+EVENTS["attention_new"] = {
+    "section": "attention", "label": "Nouveaux points d'attention",
+    "description": "Ce qui apparaît dans les points d'attention de l'accueil (bobine presque vide, impression sans 3MF…).",
+    "options": [{"key": "when", "type": "select", "label": "Quand", "default": "daily",
+                 "choices": [["daily", "un résumé par jour"], ["now", "dès qu'il y en a"]]},
+                {"key": "hour", "type": "number", "label": "Résumé à", "unit": "h", "default": 9, "min": 0, "max": 23}],
+    "sample": {"title": "⚠️ 3 nouveaux points d'attention", "priority": 2, "link": "/",
+               "message": "📦 Filaments sans bobine\n   • Prune — PLA Matte\n🪫 Bobines presque vides\n   • Noir — PLA Basic (42 g)\n   • Blanc — PETG HF (18 g)"},
+}
+EVENTS["weekly_summary"] = {
+    "section": "prints", "label": "Résumé de la semaine",
+    "description": "Impressions réussies et ratées, heures, grammes, coût, points MakerWorld de la semaine.",
+    "options": [{"key": "day", "type": "select", "label": "Le", "default": "6",
+                 "choices": [["0", "lundi"], ["4", "vendredi"], ["5", "samedi"], ["6", "dimanche"]]},
+                {"key": "hour", "type": "number", "label": "à", "unit": "h", "default": 19, "min": 0, "max": 23}],
+    "sample": {"title": "📊 Ta semaine d'impression", "priority": 2, "link": "/stats",
+               "message": "🖨️ 14 impressions (12 réussies, 2 ratées)\n⏱ 38 h · 🧵 1,24 kg · 💶 21,60 €\n🪙 +62,4 points MakerWorld\n🏆 La plus longue : Dragon articulé (9 h 12)"},
+}
+EVENTS["printer_idle"] = {
+    "section": "printer", "label": "Imprimante au repos",
+    "description": "Aucune impression depuis un moment (un rappel par période de repos).",
+    "options": [{"key": "days", "type": "number", "label": "Après", "unit": "jours", "default": 7, "min": 1, "max": 60}],
+    "sample": {"title": "💤 L'imprimante n'a pas servi depuis 7 jours", "priority": 2, "link": "/prints",
+               "message": "Dernière impression : Toucan, le 13 oct.\n📋 4 modèles t'attendent dans « À faire »."},
+}
+EVENTS["mw_comment"] = {
+    "section": "mw", "label": "Nouveau commentaire sur un de mes modèles",
+    "description": "Quelqu'un a commenté un de tes modèles MakerWorld (relevé toutes les 30 min).",
+    "options": [],
+    "sample": {"title": "💬 Nouveau commentaire", "priority": 3, "attach": _SAMPLE_COVER,
+               "message": "📄 Natrium — Casse-tête 6 pièces\n💬 61 commentaires au total"},
+}
+EVENTS["app_update"] = {
+    "section": "system", "label": "Mise à jour de BambuNymous disponible",
+    "description": "Une nouvelle version est publiée (vérifiée toutes les 6 h) : ce qui change.",
+    "options": [],
+    "sample": {"title": "🆕 BambuNymous : 3 nouveautés", "priority": 2, "link": "/settings",
+               "message": "   • Journal des notifications : filtre des catégories\n   • Appli Android : installation directe\n   • Créateur : vignettes corrigées"},
+}
 EVENTS["app_started"] = {
     "section": "system", "label": "BambuNymous redémarré",
     "description": "L'appli vient de (re)démarrer : mise à jour, redémarrage du serveur…",
@@ -342,7 +382,8 @@ _ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_en
           "print_paused", "print_resumed", "print_speed",
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
           "dry_started", "dry_done",
-          "spool_loaded", "spool_removed", "ams_humidity", "spool_low", "spool_short", "stock_low", "fil_to_order"]
+          "spool_loaded", "spool_removed", "ams_humidity", "spool_low", "spool_short", "stock_low", "fil_to_order",
+          "printer_idle", "weekly_summary", "app_update", "app_started"]
 EVENTS = {**{k: EVENTS[k] for k in _ORDER if k in EVENTS}, **{k: v for k, v in EVENTS.items() if k not in _ORDER}}
 
 

@@ -1927,11 +1927,40 @@ export default function Settings() {
 
 
 
-      {version && (
-        <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace",
-          textAlign:"center", marginTop:8 }}>
-          v{version.commit?.slice(0,8) || "dev"} · {version.build_date?.slice(0,10) || "?"}
-        </p>
+      {version && <VersionLine version={version}/>}
+    </div>
+  );
+}
+
+// Version en service, comparee a master sur GitHub : « a jour », ou les
+// nouveautes en attente (depliables).
+function VersionLine({ version }) {
+  const [chk, setChk] = React.useState(null);
+  const [open, setOpen] = React.useState(false);
+  React.useEffect(() => { client.get("/version/check").then(({ data }) => setChk(data)).catch(() => {}); }, []);
+  const n = chk?.behind || 0;
+  return (
+    <div style={{ textAlign:"center", marginTop:8 }}>
+      <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace", margin:0 }}>
+        v{version.commit?.slice(0,8) || "dev"} · {version.build_date?.slice(0,10) || "?"}
+        {chk && !chk.dev && !chk.error && (n
+          ? <> · <button onClick={() => setOpen(o => !o)} style={{ background:"none", border:"none", padding:0, cursor:"pointer",
+              fontFamily:"inherit", fontSize:11, fontWeight:700, color:"#f59e0b" }}>
+              ⬆ {n} nouveauté{n > 1 ? "s" : ""} disponible{n > 1 ? "s" : ""} {open ? "▴" : "▾"}</button></>
+          : <span style={{ color:"#22c55e", fontWeight:700 }}> · ✓ à jour</span>)}
+      </p>
+      {open && n > 0 && (
+        <div className="card" style={{ maxWidth:520, margin:"8px auto 0", padding:"10px 14px", textAlign:"left" }}>
+          <div style={{ fontSize:12, color:"var(--muted)", marginBottom:6 }}>
+            Mets à jour l'image Docker (Portainer, docker compose pull) pour en profiter.</div>
+          {(chk.commits || []).map((c, i) => (
+            <div key={i} style={{ fontSize:12, color:"var(--text2)", padding:"3px 0", borderTop: i ? "1px solid var(--border)" : "none" }}>
+              • {c}</div>
+          ))}
+          {n > (chk.commits || []).length && (
+            <div style={{ fontSize:11.5, color:"var(--muted)", marginTop:4 }}>… et {n - chk.commits.length} autre(s)</div>
+          )}
+        </div>
       )}
     </div>
   );

@@ -144,6 +144,10 @@ async def lifespan(app: FastAPI):
     _aio.create_task(_nev.friends_loop())
     _aio.create_task(_nev.mw_rate_loop())
     _aio.create_task(_nev.app_started())
+    # Points d'attention, resume de la semaine, imprimante au repos ; version
+    from app.services import notify_extra as _nx
+    _aio.create_task(_nx.loop())
+    _aio.create_task(_nx.update_loop())
     await mqtt_manager.start()
     # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.
@@ -511,6 +515,13 @@ async def db_debug():
 @app.get("/healthz", include_in_schema=False)
 async def healthz():
     return JSONResponse({"status": "ok", "version": VERSION})
+
+
+@app.get("/api/v1/version/check", include_in_schema=False)
+async def version_check(fresh: bool = False):
+    """Version en service comparee a master sur GitHub : nouveautes en attente."""
+    from app.services import version_check as _vc
+    return await _vc.check(fresh)
 
 
 @app.get("/api/v1/version", include_in_schema=False)

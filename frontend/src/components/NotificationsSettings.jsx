@@ -29,7 +29,7 @@ export default function NotificationsSettings() {
   });
   // Onglet du canal affiche (ce navigateur)
   const [chTab, setChTabState] = useState(() => {
-    try { return localStorage.getItem("notifChannelTab") || "app"; } catch { return "app"; }
+    try { return localStorage.getItem("notifChannelTab") || "journal"; } catch { return "journal"; }
   });
   const setChTab = t => { setChTabState(t); try { localStorage.setItem("notifChannelTab", t); } catch { /* indisponible */ } };
   const toggle = id => setOpen(o => {
@@ -153,7 +153,7 @@ export default function NotificationsSettings() {
   return (<>
     {/* ── Canaux : un onglet chacun, chacun active ou non ── */}
     <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
-      {[["app", "Appli Android"], ["ntfy", "ntfy"], ["telegram", "Telegram"], ["journal", "Journal"]].map(([k, l]) => (
+      {[["journal", "Journal"], ["app", "Appli Android"], ["ntfy", "ntfy"], ["telegram", "Telegram"]].map(([k, l]) => (
         <button key={k} onClick={() => setChTab(k)} style={{ flex:1, padding:"8px 10px", borderRadius:8, fontSize:12.5,
           fontWeight:700, cursor:"pointer", border:"none", display:"flex", alignItems:"center", justifyContent:"center", gap:6,
           background: chTab === k ? "#3b82f6" : "transparent", color: chTab === k ? "white" : "var(--muted)" }}>

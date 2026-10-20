@@ -466,7 +466,7 @@ def _fmt(v):
     return (f"{v:.2f}".rstrip("0").rstrip(".")).replace(".", ",")
 
 
-EVENTS_HERE = ("mw_points", "mw_boost", "mw_fans", "mw_milestone", "mw_points_goal")
+EVENTS_HERE = ("mw_points", "mw_boost", "mw_fans", "mw_milestone", "mw_points_goal", "mw_comment")
 
 # Recompenses de la boutique de points (20/10/2026) : toutes valent 40 euros.
 CARD_PTS, COUPON_PTS, REWARD_EUR = 524, 500, 40
@@ -539,7 +539,8 @@ async def check_creator() -> int:
     old = await _snap_get()
     snap = {"last_time": max((x["time"] or "" for x in first["items"]), default=(old or {}).get("last_time") or ""),
             "fans": prof["fans"], "points": prof["points"]["total"],
-            "models": {m["design_id"]: {"d": m["downloads"], "p": m["prints"], "b": m["boosts"]} for m in ms}}
+            "models": {m["design_id"]: {"d": m["downloads"], "p": m["prints"], "b": m["boosts"], "c": m["comments"]}
+                       for m in ms}}
     if old is None:
         await _snap_put(snap)
         logger.info("[MW] createur memorise : rien n'est notifie au premier passage")
@@ -586,6 +587,15 @@ async def check_creator() -> int:
             continue
         url = f"https://makerworld.com/fr/models/{did}"
         name = m.get("title_fr") or m.get("title") or f"Modèle {did}"
+        # commentaires : seulement si le compte etait deja memorise (ancien releve sans « c »)
+        if on["mw_comment"] and "c" in o and m["comments"] > _num(o.get("c")):
+            n = m["comments"] - _num(o.get("c"))
+            await N.notify("mw_comment", f"💬 {'Nouveau commentaire' if n == 1 else f'{n} nouveaux commentaires'}",
+                           f"📄 {name}
+💬 {m['comments']} commentaires au total", click=url,
+                           attach=_cover(m.get("cover_url")), icon=_cover(m.get("cover_url")), priority=3,
+                           actions=[("Voir le modèle", url)] + acts)
+            sent += 1
         if on["mw_boost"] and m["boosts"] > _num(o.get("b")):
             n = m["boosts"] - _num(o.get("b"))
             await N.notify("mw_boost", f"⚡ {'Boost reçu' if n == 1 else f'{n} boosts reçus'}",
