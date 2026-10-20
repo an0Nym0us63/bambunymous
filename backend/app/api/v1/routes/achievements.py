@@ -1,4 +1,4 @@
-"""Succes : medailles gagnees, progression vers le cran suivant (services/achievements)."""
+"""Succes : medailles gagnees, progression vers le palier suivant (services/achievements)."""
 from fastapi import APIRouter, Depends
 
 from .auth import get_current_user

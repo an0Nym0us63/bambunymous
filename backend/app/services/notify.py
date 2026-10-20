@@ -385,7 +385,7 @@ EVENTS["achievement_unlocked"] = {
     "description": "Une médaille gagnée : impressions, filaments, objets, MakerWorld, secrets… (vérifié toutes les 15 min).",
     "options": [],
     "sample": {"title": "🏅 Succès débloqué : Imprimeur 🥇", "priority": 3, "link": "/stats?tab=achievements",
-               "message": "🥇 🖨️ Imprimeur · Or\n   1 000 impressions réussies — prochain cran : 2 500"},
+               "message": "🥇 🖨️ Imprimeur · Or\n   1 000 impressions réussies — prochain palier : 2 500"},
 }
 EVENTS["accessory_low"] = {
     "section": "objects", "label": "Accessoire bientôt épuisé",

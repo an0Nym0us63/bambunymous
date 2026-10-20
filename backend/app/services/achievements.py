@@ -1,7 +1,7 @@
 """
 Succes (20/10/2026) : des paliers atteints sur l'historique, chacun avec sa
 medaille (bronze, argent, or, platine, diamant), ou une medaille unique pour
-les succes d'un seul cran (souvent secrets).
+les succes d'un seul palier (souvent secrets).
 
 Chaque succes calcule une serie de (date, valeur) qui ne fait que monter
 (cumul ou meilleur score) : un palier est atteint a la premiere date ou la
@@ -10,7 +10,7 @@ objets) ont donc leur VRAIE date, meme au premier calcul. Ceux qui ne se
 lisent qu'au present (MakerWorld, stock, copains) prennent la date du jour ou
 on les constate.
 
-Reglage ACHIEVEMENTS : {"unlocked": {id: {cran: iso}}, "best": {id: valeur}}.
+Reglage ACHIEVEMENTS : {"unlocked": {id: {palier: iso}}, "best": {id: valeur}}.
 Le premier calcul enregistre tout sans rien notifier ; ensuite, chaque cran
 nouveau part en notification (achievement_unlocked).
 """
@@ -598,7 +598,7 @@ _CACHE = {"t": 0.0, "v": None}
 
 
 async def evaluate(now: datetime | None = None) -> dict:
-    """Valeurs actuelles et crans atteints (avec leur date), sans rien ecrire."""
+    """Valeurs actuelles et paliers atteints (avec leur date), sans rien ecrire."""
     now = now or datetime.utcnow()
     series = compute_series(await _load_data(), now)
     live = await _live_values()
@@ -620,7 +620,7 @@ async def evaluate(now: datetime | None = None) -> dict:
 
 
 async def tick(notify: bool = True) -> list:
-    """Enregistre les crans nouvellement atteints ; notifie apres le premier
+    """Enregistre les paliers nouvellement atteints ; notifie apres le premier
     passage. Rend la liste des (id, cran) nouveaux."""
     ev = await evaluate()
     st = await _state_get()
@@ -682,7 +682,7 @@ async def _notify(new: list, ev: dict) -> None:
         nxt = a["tiers"][i + 1] if i + 1 < len(a["tiers"]) else None
         lines.append(f"{t['emoji']} {a['emoji']} {a['name']} · {t['label']}")
         lines.append(f"   {describe(a, a['tiers'][i])}"
-                     + (f" — prochain cran : {_fmt_n(nxt, a)}" if nxt is not None and not a.get("money") else ""))
+                     + (f" — prochain palier : {_fmt_n(nxt, a)}" if nxt is not None and not a.get("money") else ""))
     if len(items) > 8:
         lines.append(f"… et {len(items) - 8} autre(s)")
     aid, i = items[0]
