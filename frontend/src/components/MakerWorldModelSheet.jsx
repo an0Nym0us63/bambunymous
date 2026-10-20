@@ -57,6 +57,10 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   // Profil a imprimer : celui qui est deplie, sinon celui retenu.
   const printProfile = () => (m?.profiles || []).find(p => p.instance_id === open)
     || (m?.profiles || []).find(p => p.main) || m?.profiles?.[0] || null;
+  // Profil « retenu » pour le bouton du haut : celui choisi pour « A faire »,
+  // sinon le choix automatique (profils deja classes pour mon imprimante).
+  const keptProfile = () => (m?.profiles || []).find(p => p.instance_id === plan?.instance_id)
+    || m?.profiles?.[0] || null;            // le serveur les range deja pour mon imprimante
   const openStudio = async (p = printProfile()) => {
     if (!p) return showAlert("Aucun profil imprimable sur ce modèle.");
     setStudioBusy(p.instance_id);
@@ -272,6 +276,20 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
             <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
               <a href={m.url} target="_blank" rel="noopener noreferrer" style={linkBtn}>Ouvrir sur MakerWorld ↗</a>
+              {/* Ouvrir le profil retenu (pour « A faire », sinon automatique) sans le chercher dans la liste. */}
+              {(() => {
+                const kp = keptProfile();
+                if (!kp) return null;
+                const tip = `Profil ${plan?.instance_id === kp.instance_id ? "retenu" : "choisi automatiquement"} : ${kp.title || kp.instance_id}`;
+                return IS_MOBILE ? (
+                  <a href={handyUrl(id, kp)} target="_blank" rel="noopener noreferrer" title={tip}
+                    style={{ ...linkBtn, color:"white", background:"#22c55e", borderColor:"#22c55e" }}>📱 Ouvrir dans Handy</a>
+                ) : (
+                  <AdminOnly home mw><button onClick={() => openStudio(kp)} disabled={studioBusy === kp.instance_id} title={tip}
+                    style={{ ...linkBtn, cursor:"pointer", color:"white", background:"#22c55e", borderColor:"#22c55e" }}>
+                    {studioBusy === kp.instance_id ? "…" : "🖥️ Ouvrir dans Studio"}</button></AdminOnly>
+                );
+              })()}
               {like && (
                 <AdminOnly home mw><button onClick={toggleLike} disabled={likeBusy}
                   style={{ ...linkBtn, cursor:"pointer", ...(like.liked ? { color:"#ef4444", background:"rgba(239,68,68,0.1)",
