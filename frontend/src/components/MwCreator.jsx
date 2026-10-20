@@ -14,6 +14,7 @@ const PERIODS = [["7", "7 jours"], ["30", "30 jours"], ["90", "90 jours"], ["365
 const TYPES = [["points", "Points", "pts"], ["downloads", "Téléchargements", "téléch."], ["prints", "Impressions", "impr."],
   ["boosts", "Boosts", "boosts"], ["likes", "J'aime", "j'aime"]];
 const SHORT = { "7": "7 j", "30": "30 j", "90": "90 j", "365": "1 an", "all": "total" };
+const HEAD = [["7", "7 j"], ["30", "30 j"], ["365", "1 an"]];   // lignes des vignettes d'en-tete
 
 export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   const [data, setData] = useState(null);
@@ -98,6 +99,12 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   if (err) return <p style={msg}>MakerWorld ne répond pas comme prévu : {err}</p>;
   if (!data) return <p style={msg}>…</p>;
   const p = data.profile;
+  // compteurs du compte sur 7 j / 30 j / 1 an (« ≥ » : releves incomplets sur la periode)
+  const headSub = k => data.head && HEAD.map(([n, l]) => {
+    const h = data.head[n];
+    const v = h?.totals?.[k];
+    return [l, v == null ? "—" : `${h.complete ? "" : "≥ "}${v > 0 ? "+" : ""}${fmt(v)}`];
+  });
   const val = m => m.period?.[type] ?? 0;
   const models = [...data.models].sort((a, b) => val(b) - val(a) || (b[type] || 0) - (a[type] || 0));
   const typeShort = TYPES.find(t => t[0] === type)?.[2];
@@ -143,15 +150,29 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
               {pts(p.points.regular)} normaux · {pts(p.points.exclusive)} exclusifs</div>
           </div>
         </div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(96px,1fr))", gap:8, marginTop:12 }}>
-          {[...(data.earned_total != null ? [[pts(data.earned_total), "points gagnés au total", "#f59e0b"]] : []),
-            ["+" + pts(data.earned7), "points 7 j", "#22c55e"], ["+" + pts(data.earned30), "points 30 j", "#22c55e"],
-            [fmt(p.fans), "abonnés"], [fmt(p.designs), "modèles"], [fmt(p.downloads), "téléchargements"],
-            [fmt(p.prints), "impressions"], [fmt(p.boosts), "boosts reçus"], [fmt(p.likes), "j'aime"],
-            ...(myBoosts != null ? [[`⚡ ${myBoosts}`, "boosts à donner", "#f59e0b"]] : [])].map(([v, l, c]) => (
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(118px,1fr))", gap:8, marginTop:12 }}>
+          {[[data.earned_total != null ? pts(data.earned_total) : "—", "points gagnés au total", "#f59e0b",
+              data.earned && HEAD.map(([n, l]) => [l, "+" + pts(data.earned[n])])],
+            [fmt(p.downloads), "téléchargements", null, headSub("downloads")],
+            [fmt(p.prints), "impressions", null, headSub("prints")],
+            [fmt(p.boosts), "boosts reçus", null, headSub("boosts")],
+            [fmt(p.likes), "j'aime", null, headSub("likes")],
+            [fmt(p.fans), "abonnés"], [fmt(p.designs), "modèles"],
+            ...(myBoosts != null ? [[`⚡ ${myBoosts}`, "boosts à donner", "#f59e0b"]] : [])].map(([v, l, c, sub]) => (
             <div key={l} style={{ padding:"8px 10px", borderRadius:10, background:"var(--surface2)", border:"1px solid var(--border)" }}>
               <div style={{ fontSize:15, fontWeight:800, color: c || "var(--text)" }}>{v}</div>
               <div style={{ fontSize:10.5, color:"var(--muted)" }}>{l}</div>
+              {sub && (
+                <div style={{ marginTop:5, paddingTop:5, borderTop:"1px solid var(--border)", display:"grid",
+                  gridTemplateColumns:"auto 1fr", columnGap:6, fontSize:10.5, lineHeight:1.45 }}>
+                  {sub.map(([k, x]) => (
+                    <React.Fragment key={k}>
+                      <span style={{ color:"var(--muted)" }}>{k}</span>
+                      <span style={{ textAlign:"right", fontWeight:700, color:"#22c55e", whiteSpace:"nowrap" }}>{x}</span>
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -215,6 +236,13 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
                   {val(m) ? `${period === "all" ? "" : "+"}${type === "points" ? pts(val(m)) : fmt(val(m))}` : "0"}</span>
                 <span style={{ display:"block", fontSize:9.5, color: partial ? "#f59e0b" : "var(--muted)" }}>
                   {typeShort} {partial && since ? `depuis le ${since}` : SHORT[period]}</span>
+                {/* d'ou viennent les points : versements du modele, du profil, boosts recus */}
+                {type === "points" && val(m) > 0 && m.period?.points_split && (
+                  <span style={{ display:"block", fontSize:9.5, color:"var(--muted)", marginTop:2, whiteSpace:"nowrap" }}>
+                    {[["model", "modèle"], ["profile", "profil"], ["boost", "⚡ boosts"]]
+                      .filter(([k]) => m.period.points_split[k] > 0)
+                      .map(([k, l]) => `${l} ${pts(m.period.points_split[k])}`).join(" · ")}</span>
+                )}
               </span>
             </button>
           ))}

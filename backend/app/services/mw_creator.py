@@ -231,6 +231,7 @@ def _baseline(daily: dict, days):
 
 
 PERIODS = {"7": 7, "30": 30, "90": 90, "365": 365, "all": None}
+HEAD_DAYS = (7, 30, 365)
 
 
 # ── Historique importe (une fois) ─────────────────────────────────────────
@@ -363,10 +364,12 @@ async def overview(fresh: bool = False, period: str = "30") -> dict:
     ms = await models(fresh)
     days = PERIODS.get(str(period), 30)
     daily = await record_daily(ms)
-    # points : 7 et 30 jours pour l'en-tete, et la periode choisie par modele
-    recent = await recent_points(max(30, days or 3650), max_pages=40, fresh=fresh)
+    # points : 7 j, 30 j et 1 an pour l'en-tete, et la periode choisie par
+    # modele, ventilee entre versements du modele, du profil et boosts recus
+    recent = await recent_points(max(365, days or 3650), max_pages=200, fresh=fresh)
     now = datetime.now(timezone.utc)
-    per, e7, e30 = {}, 0.0, 0.0
+    per, split = {}, {}
+    earned = {n: 0.0 for n in HEAD_DAYS}
     for x in recent:
         try:
             t = datetime.fromisoformat(str(x["time"]).replace("Z", "+00:00"))
@@ -375,12 +378,16 @@ async def overview(fresh: bool = False, period: str = "30") -> dict:
         if x["points"] <= 0:
             continue
         age = now - t
-        if age <= timedelta(days=30):
-            e30 += x["points"]
-        if age <= timedelta(days=7):
-            e7 += x["points"]
+        for n in HEAD_DAYS:
+            if age <= timedelta(days=n):
+                earned[n] += x["points"]
         if x.get("design_id") and (days is None or age <= timedelta(days=days)):
-            per[x["design_id"]] = per.get(x["design_id"], 0) + x["points"]
+            did = x["design_id"]
+            per[did] = per.get(did, 0) + x["points"]
+            src = "boost" if str(x.get("type") or "").startswith("boost") else \
+                "profile" if x.get("label") == "Profil" else "model"
+            sp = split.setdefault(did, {"model": 0.0, "profile": 0.0, "boost": 0.0})
+            sp[src] += x["points"]
     since, base = _baseline(daily, days)
     target = (now - timedelta(days=days)).strftime("%Y-%m-%d") if days else None
     hist = await _history_get()
@@ -392,7 +399,8 @@ async def overview(fresh: bool = False, period: str = "30") -> dict:
                                                  hist.get("designs_from_start"), since, days)
     for m in ms:
         b = (base or {}).get(m["design_id"])
-        period_vals = {"points": round(per.get(m["design_id"], 0), 2)}
+        period_vals = {"points": round(per.get(m["design_id"], 0), 2),
+                       "points_split": {k: round(v, 2) for k, v in (split.get(m["design_id"]) or {}).items()}}
         # jours du trou, pris dans l'historique importe du modele
         filled = [0] * len(METRICS)
         if designs_ok:
@@ -409,11 +417,15 @@ async def overview(fresh: bool = False, period: str = "30") -> dict:
         m["period"] = period_vals
         m["points30"] = round(per.get(m["design_id"], 0), 2) if days == 30 else m.get("points30")
     acc = account_totals(hist, daily, ms, days)
+    # en-tete : compteurs du compte sur 7 j, 30 j et 1 an, quelle que soit la periode
+    head = {str(n): account_totals(hist, daily, ms, n) for n in HEAD_DAYS}
     try:
         tot = await points(0, 1)
     except Exception:
         tot = {}
-    return {"profile": prof, "models": ms, "earned7": round(e7, 2), "earned30": round(e30, 2),
+    return {"profile": prof, "models": ms, "earned7": round(earned[7], 2), "earned30": round(earned[30], 2),
+            "earned": {str(n): round(v, 2) for n, v in earned.items()},
+            "head": {n: {"totals": a["totals"], "complete": a["complete"]} for n, a in head.items()},
             "earned_total": tot.get("income") or None, "spent_total": tot.get("expense") or None,
             "period": str(period), "counters_since": since,
             # periode plus longue que les releves pris : les compteurs ne couvrent qu'une partie
