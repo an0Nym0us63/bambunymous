@@ -377,13 +377,42 @@ EVENTS["app_started"] = {
                "message": "Tout est reparti."},
 }
 
+EVENTS["print_milestone"] = {
+    "section": "prints", "label": "Jalons d'impression",
+    "description": "100ᵉ impression réussie, 10 kg de filament, 500 h d'impression, nouvelle impression la plus longue…",
+    "options": [],
+    "sample": {"title": "🎉 100ᵉ impression réussie !", "priority": 3, "link": "/stats",
+               "message": "Depuis le 12 mars 2025.\n🧵 11,8 kg de filament · ⏱ 612 h d'impression"},
+}
+EVENTS["mw_queue_ready"] = {
+    "section": "mw", "label": "Modèle de « À faire » imprimable",
+    "description": "Un modèle de ta file « À faire » a désormais tout son filament en stock (relevé toutes les heures).",
+    "options": [],
+    "sample": {"title": "✅ Prêt à imprimer : Lampe lune", "priority": 2, "attach": _SAMPLE_COVER, "link": "/prints?tab=queue",
+               "message": "🧵 Tout le filament est en stock (2 couleurs, 184 g).\n✨ Déjà dans l'AMS."},
+}
+EVENTS["dry_needed_loaded"] = {
+    "section": "dry", "label": "Bobine à sécher dans l'AMS",
+    "description": "Une bobine chargée dans l'AMS n'a jamais été séchée, ou plus depuis son délai (une fois par bobine, jusqu'à son séchage).",
+    "options": [],
+    "sample": {"title": "💧 À sécher avant d'imprimer · AMS-A", "priority": 2, "link": "/",
+               "message": "🧵 Blanc — PETG HF · Bambu Lab\n   séchée il y a 7 mois (délai : 2 mois)"},
+}
+EVENTS["dry_forgotten"] = {
+    "section": "dry", "label": "Bobine oubliée après le séchage",
+    "description": "Le séchage est fini mais une bobine posée pour sécher est toujours dans l'AMS.",
+    "options": [{"key": "hours", "type": "number", "label": "Après", "unit": "h", "default": 6, "min": 1, "max": 48}],
+    "sample": {"title": "🧺 Bobine toujours dans l'AMS-A", "priority": 2, "link": "/",
+               "message": "Séchage fini depuis 6 h : range-la au sec (sac étanche, boîte) pour garder le bénéfice du séchage.\n🧵 Prune — PLA Matte · Bambu Lab"},
+}
+
 # Ordre d'affichage dans chaque section
 _ORDER = ["print_started", "print_first_layer", "print_progress", "print_near_end", "print_done", "print_failed",
           "print_paused", "print_resumed", "print_speed",
           "printer_hms", "printer_offline", "bed_cooled", "printer_firmware",
-          "dry_started", "dry_done",
+          "dry_started", "dry_done", "dry_needed_loaded", "dry_forgotten",
           "spool_loaded", "spool_removed", "ams_humidity", "spool_low", "spool_short", "stock_low", "fil_to_order",
-          "printer_idle", "weekly_summary", "app_update", "app_started"]
+          "printer_idle", "weekly_summary", "print_milestone", "mw_queue_ready", "app_update", "app_started"]
 EVENTS = {**{k: EVENTS[k] for k in _ORDER if k in EVENTS}, **{k: v for k, v in EVENTS.items() if k not in _ORDER}}
 
 
