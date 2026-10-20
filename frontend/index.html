@@ -3,6 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <script>
+    // iOS : Safari zoome sur un champ de saisie de moins de 16 px a l'ouverture du
+    // clavier. maximum-scale=1 l'en empeche ; le pincement reste permis sur iOS
+    // (Safari ignore cette limite pour le geste), pas sur Android : iOS seulement.
+    if (/iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1))
+      document.querySelector('meta[name=viewport]').setAttribute("content",
+        "width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover");
+  </script>
   <title>BambuNymous</title>
 
   <!-- PWA -->
