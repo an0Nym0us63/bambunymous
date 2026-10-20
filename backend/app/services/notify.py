@@ -439,14 +439,23 @@ def global_on(cfg, event: str) -> bool:
     return bool(cfg and ((cfg.get("events") or {}).get(event) or {}).get("enabled"))
 
 
-def app_wants(cfg, user, event: str) -> bool:
-    """Ce que le proprietaire d'un telephone veut recevoir sur l'appli. Sans
-    choix de sa part (ou telephone sans proprietaire connu) : comme
-    l'administrateur."""
+def wants(cfg, user, event: str) -> dict:
+    """Choix d'un compte pour un type, deux canaux independants : {"journal":
+    son journal (la cloche), "app": son telephone}. Sans choix de sa part :
+    comme l'administrateur (les deux s'il l'a active)."""
     prefs = (cfg.get("app_prefs") or {}).get(user or "") if user else None
-    if isinstance(prefs, dict) and event in prefs:
-        return bool(prefs[event])
-    return global_on(cfg, event)
+    v = prefs.get(event) if isinstance(prefs, dict) else None
+    if isinstance(v, dict):
+        return {"journal": bool(v.get("journal")), "app": bool(v.get("app"))}
+    if v is not None:                       # anciens choix : vrai / faux, "off" / "journal" / "app"
+        return {"journal": v in (True, "journal", "app"), "app": v in (True, "app")}
+    on = global_on(cfg, event)
+    return {"journal": on, "app": on}
+
+
+def app_wants(cfg, user, event: str) -> bool:
+    """Ce que le proprietaire d'un telephone veut recevoir sur l'appli."""
+    return wants(cfg, user, event)["app"]
 
 
 def enabled_in(cfg, event: str) -> bool:
@@ -457,7 +466,11 @@ def enabled_in(cfg, event: str) -> bool:
         return True
     if not cfg:
         return False
-    return any(isinstance(p, dict) and p.get(event) for p in (cfg.get("app_prefs") or {}).values())
+    for p in (cfg.get("app_prefs") or {}).values():
+        v = p.get(event) if isinstance(p, dict) else None
+        if (isinstance(v, dict) and (v.get("journal") or v.get("app"))) or v in (True, "journal", "app"):
+            return True
+    return False
 
 
 def _public(cfg: dict) -> dict:
@@ -842,7 +855,7 @@ def me_view(cfg, user: str) -> dict:
         "app_on": bool((cfg.get("channels") or {}).get("app")),
         "sections": [{"id": k, "label": v} for k, v in SECTIONS],
         "events": [{"id": k, "section": v["section"], "label": v["label"], "description": v["description"],
-                    "mine": app_wants(cfg, user, k)} for k, v in EVENTS.items()],
+                    **wants(cfg, user, k), "mine": app_wants(cfg, user, k)} for k, v in EVENTS.items()],
         "devices": [{k: d.get(k) for k in ("id", "name", "added", "last_ok", "last_err")}
                     for d in cfg.get("devices") or [] if (d.get("user") or "") == user],
     }
@@ -853,19 +866,27 @@ async def me_config(user: str) -> dict:
 
 
 async def set_my_events(user: str, patch: dict) -> dict:
-    """{evenement: bool} ; une section entiere : {"section:prints": bool}."""
+    """{type: {"journal": bool, "app": bool}} (un seul des deux suffit) ; une
+    section entiere : {"section:prints": {...}}."""
     cfg = await _load()
     prefs = cfg["app_prefs"].setdefault(user, {})
-    # premiere fois : on fige le point de depart (ce que l'administrateur recoit)
+    # premiere fois / anciens choix : on fige le point de depart sous la forme
+    # {"journal", "app"}
     for k in EVENTS:
-        prefs.setdefault(k, global_on(cfg, k))
+        prefs[k] = wants(cfg, user, k)
+
+    def merge(e, v):
+        if isinstance(v, bool):             # ancien format : les deux d'un coup
+            prefs[e] = {"journal": v, "app": v}
+        elif isinstance(v, dict):
+            prefs[e].update({c: bool(v[c]) for c in ("journal", "app") if c in v})
     for k, v in (patch or {}).items():
         if k.startswith("section:"):
             for e, ev in EVENTS.items():
                 if ev["section"] == k[8:]:
-                    prefs[e] = bool(v)
+                    merge(e, v)
         elif k in EVENTS:
-            prefs[k] = bool(v)
+            merge(k, v)
     await _save(cfg)
     return me_view(cfg, user)
 
@@ -1031,17 +1052,30 @@ K_SEEN = "NOTIF_SEEN"          # {compte: id de la derniere notification vue}
 
 
 async def _recipients(cfg, event: str) -> list:
-    """Les comptes qui voient ce type dans leur historique : ceux qui le
-    veulent sur l'appli (sans choix : comme l'administrateur), et les
-    administrateurs quand il part sur ntfy / Telegram."""
+    """Les comptes qui voient ce type dans leur journal : (compte, deja_lue).
+    Ceux qui ont le journal pour ce type ; et l'administrateur qui l'a recue
+    sur ntfy / Telegram, toujours. Deja lue pour qui l'a eue sur ntfy /
+    Telegram sans la recevoir sur son telephone ; sinon non lue (son
+    telephone la marquera lue quand il la touchera)."""
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.user import User
     async with AsyncSessionLocal() as db:
         rows = (await db.execute(select(User.username, User.role).where(User.active.is_(True)))).all()
     if not rows:
-        return ["*"]
-    return [u for u, role in rows if app_wants(cfg, u, event) or (role == "admin" and global_on(cfg, event))]
+        return [("*", False)]
+    app_on = bool((cfg.get("channels") or {}).get("app"))
+    pushed = bool(set(_on(cfg)) & {"ntfy", "telegram"}) and global_on(cfg, event)
+    owners = {d.get("user") for d in cfg.get("devices") or []}
+    out = []
+    for u, role in rows:
+        w = wants(cfg, u, event)
+        elsewhere = role == "admin" and pushed            # recue sur ntfy / Telegram
+        if not w["journal"] and not elsewhere:
+            continue
+        on_phone = w["app"] and app_on and u in owners
+        out.append((u, elsewhere and not on_phone))
+    return out
 
 
 async def _log_sent(cfg, event, title, message, click, attach):
@@ -1050,9 +1084,10 @@ async def _log_sent(cfg, event, title, message, click, attach):
     from sqlalchemy import delete
     from ..db.session import AsyncSessionLocal
     from ..models.notif_log import NotifLog
-    users = await _recipients(cfg, event)
-    if not users:
+    rec = await _recipients(cfg, event)
+    if not rec:
         return None
+    users = [u for u, _ in rec]
     base = ((cfg.get("ntfy") or {}).get("app_url") or "").rstrip("/")
     link = click or ""
     if base and link.startswith(base):
@@ -1065,7 +1100,15 @@ async def _log_sent(cfg, event, title, message, click, attach):
         db.add(row)
         await db.execute(delete(NotifLog).where(NotifLog.created_at < datetime.utcnow() - timedelta(days=HISTORY_DAYS)))
         await db.commit()
-        return row.id
+        rid = row.id
+    # deja lue pour qui l'a recue ailleurs (ntfy / Telegram)
+    done = [u for u, read in rec if read]
+    if done:
+        d = await _read_get()
+        for u in done:
+            d[u] = (list(d.get(u) or []) + [rid])[-2000:]
+        await _read_put(d)
+    return rid
 
 
 def _mine(user: str):
