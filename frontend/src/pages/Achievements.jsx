@@ -103,7 +103,7 @@ export default function Achievements({ embedded = false }) {
           <span style={{ fontSize:28, fontWeight:900, color:"var(--text)", fontVariantNumeric:"tabular-nums" }}>{data.score}</span>
           <span style={{ fontSize:13, color:"var(--muted)", fontWeight:600 }}>points sur {data.score_max} · {pct} %</span>
         </div>
-        <Bar value={pct / 100}/>
+        <Bar value={pct / 100} tiers={data.tiers}/>
         <MedalCounts tiers={data.tiers} medals={data.medals}/>
         {data.keys && !atFriend && <KeysBox keys={data.keys}/>}
       </div>
@@ -194,7 +194,7 @@ export default function Achievements({ embedded = false }) {
                 )}
                 <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>
               </div>
-              <Bar value={sum.max ? sum.score / sum.max : 0}/>
+              <Bar value={sum.max ? sum.score / sum.max : 0} tiers={data.tiers}/>
               <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
                 {data.tiers.filter(t => sum.medals[t.id]).map(t => (
                   <span key={t.id} style={{ display:"inline-flex", alignItems:"center", gap:4, fontSize:12, fontWeight:800 }}>
@@ -479,11 +479,16 @@ function Reveal({ it, keys, onSpend, err }) {
   );
 }
 
-function Bar({ value }) {
+// Barre du score : sa couleur suit l'avancement, palier par palier (un neuvieme
+// du chemin par palier : Bronze au debut, Eternel tout au bout).
+function Bar({ value, tiers }) {
+  const ladder = (tiers || []).filter(t => t.id !== "unique");
+  const v = Math.max(0, Math.min(1, value));
+  const color = ladder.length ? ladder[Math.min(ladder.length - 1, Math.floor(v * ladder.length))].color : "#F59E0B";
   return (
     <div style={{ height:8, borderRadius:8, background:"var(--surface2)", overflow:"hidden", width:"100%" }}>
       <div style={{ width:`${Math.round(Math.max(0, Math.min(1, value)) * 100)}%`, height:"100%", borderRadius:8,
-        background:"#F59E0B" }}/>
+        background: color, transition:"background .3s" }}/>
     </div>
   );
 }
