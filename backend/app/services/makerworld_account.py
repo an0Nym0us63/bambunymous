@@ -185,6 +185,15 @@ def _design_of(it) -> dict:
             "creator_uid": str(cr.get("uid")) if str(cr.get("uid") or "").isdigit() else None}
 
 
+def _must(code, d, what: str = "MakerWorld") -> None:
+    """Reponse illisible ou absente (reseau, routage, panne) : erreur, jamais
+    une liste vide -- sinon tout ce qu'on compare semblerait avoir disparu."""
+    if code == 401:
+        raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+    if code != 200 or d is None:
+        raise AccountError(f"{what} injoignable pour le moment (HTTP {code or 'aucune réponse'})")
+
+
 async def _list(path_fmt: str, max_items: int = 300) -> list:
     """Parcourt une liste paginee (offset/limit) de modeles."""
     import asyncio
@@ -195,8 +204,7 @@ async def _list(path_fmt: str, max_items: int = 300) -> list:
     out, seen, offset = [], set(), 0
     while len(out) < max_items:
         code, d = await asyncio.to_thread(_get_json, path_fmt.format(offset=offset, limit=50), tok)
-        if code == 401:
-            raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+        _must(code, d)
         page = [x for x in (_design_of(i) for i in _items(d)) if x and x["design_id"] not in seen]
         if not page:
             break
@@ -355,8 +363,7 @@ async def _page(path_fmt: str, offset: int, limit: int, fresh: bool = False) -> 
     if hit is not None:
         return hit
     code, d = await asyncio.to_thread(_get_json, path_fmt.format(offset=offset, limit=limit), tok)
-    if code == 401:
-        raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+    _must(code, d)
     items = [x for x in (_design_of(i) for i in _items(d)) if x]
     total = d.get("total") if isinstance(d, dict) and isinstance(d.get("total"), int) else None
     return _cache_put(key, {"items": items, "total": total})
@@ -390,8 +397,7 @@ async def collections(fresh: bool = False) -> dict:
     if hit is not None:
         return hit
     code, d = await asyncio.to_thread(_get_json, COLLECTIONS, tok)
-    if code == 401:
-        raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
+    _must(code, d, "La liste des collections")
     out = []
     for it in _items(d):
         if not isinstance(it, dict) or not str(it.get("id") or "").isdigit():
@@ -647,13 +653,10 @@ async def boost_rights() -> list:
     while offset < 500:
         code, d = await asyncio.to_thread(
             _get_json, f"/point-service/boost/boostingright?filter=available&offset={offset}&limit=50", tok)
-        if code == 401:
-            raise AccountError("Jeton refusé ou expiré : reconnecte le compte")
-        hits = (d or {}).get("hits") if isinstance(d, dict) else None
+        _must(code, d, "La liste des jetons boost")
+        hits = d.get("hits") if isinstance(d, dict) else None
         if not isinstance(hits, list):
-            if offset == 0:
-                raise AccountError(f"Jetons boost illisibles (HTTP {code})")
-            break
+            raise AccountError(f"Jetons boost illisibles (HTTP {code})")
         for h in hits:
             if isinstance(h, dict) and h.get("id") is not None:
                 out.append({"id": str(h["id"]), "reason": h.get("earnReason") or "", "expire_at": h.get("expireAt")})

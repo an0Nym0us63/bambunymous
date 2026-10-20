@@ -164,7 +164,9 @@ async def models(fresh: bool = False) -> list:
     out, off = [], 0
     while off < 500:
         code, d = await asyncio.to_thread(_get_json, MODELS.format(uid=uid, offset=off))
-        hits = d.get("hits") if isinstance(d, dict) and isinstance(d.get("hits"), list) else []
+        if code != 200 or not isinstance(d, dict) or not isinstance(d.get("hits"), list):
+            raise CreatorError(f"Liste de mes modèles illisible (HTTP {code or 'aucune réponse'})")
+        hits = d["hits"]
         for h in hits:
             if not isinstance(h, dict) or not str(h.get("id") or "").isdigit():
                 continue

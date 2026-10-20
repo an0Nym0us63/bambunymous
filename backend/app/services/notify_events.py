@@ -748,6 +748,12 @@ async def friends_loop(period_s: int = 300, first_delay_s: int = 120):
                             if last and fid in last:
                                 cur[fid] = last[fid]
                             continue
+                        prev = (last or {}).get(fid)
+                        if stt.get("state") == "off" and prev and prev.get("state") == "printing" and not prev.get("off_seen"):
+                            # imprimante du copain injoignable en pleine impression (Wi-Fi, coupure) :
+                            # on attend un 2e passage avant de conclure qu'elle a fini
+                            cur[fid] = {**prev, "off_seen": True}
+                            continue
                         cur[fid] = {"state": stt.get("state"), "print": None, "rem": 0}
                     for it in r.get("printing") or []:
                         fid = str(it.get("id"))
@@ -805,7 +811,13 @@ async def mw_rate_loop(period_s: int = 6 * 3600, first_delay_s: int = 900):
                 seen = None
             else:
                 from . import mw_rate
-                items = (await mw_rate.to_rate(fresh=True)).get("items") or []
+                res = await mw_rate.to_rate(fresh=True)
+                if not res.get("rated_known"):
+                    # liste de mes evaluations illisible : tout semblerait « a evaluer »
+                    logger.info("[NOTIF] a evaluer : evaluations MakerWorld illisibles, passage ignore")
+                    await asyncio.sleep(period_s)
+                    continue
+                items = res.get("items") or []
                 ids = {str(x.get("design_id")) for x in items}
                 if seen is not None:
                     new = [x for x in items if str(x.get("design_id")) not in seen]

@@ -82,10 +82,17 @@ async def check_collections() -> int:
     with_app = lambda e: N.options_of(cfg, e).get("source") == "all"
     colls = (await A.collections(fresh=True))["collections"]
     old = await _snap_get()
+    # Toutes les collections disparues d'un coup : reponse douteuse (MakerWorld
+    # a moitie joignable), on ne tire aucune conclusion de ce passage.
+    if old and not colls:
+        logger.info("[MW] aucune collection lue alors qu'il y en avait : passage ignore")
+        return 0
     snap = {}
     for c in colls:
         prev = (old or {}).get(c["id"])
         ids = prev["ids"] if prev else []
+        if prev and prev.get("missing"):
+            prev = {k: v for k, v in prev.items() if k != "missing"}
         if old is None or not prev or prev.get("count") != c["count"] or c["count"] is None:
             try:
                 # Toute la collection (jusqu'a MAX_IDS) : savoir ce qui en est
@@ -106,9 +113,21 @@ async def check_collections() -> int:
                 c["_items"] = items
                 ids = [x["design_id"] for x in items]
         snap[c["id"]] = {"title": c["title"], "count": c["count"], "ids": ids}
+    # Une collection absente n'est supprimee qu'apres deux passages d'affilee
+    # (20 min) : un trou de reseau ne la fait pas disparaitre.
+    gone_now = {}
+    for cid, o in (old or {}).items():
+        if cid not in snap:
+            miss = int(o.get("missing") or 0) + 1
+            if miss < 2:
+                snap[cid] = {**o, "missing": miss}
+            else:
+                gone_now[cid] = o
     await _snap_put(snap)
-    if old is None:
-        logger.info(f"[MW] collections memorisees ({len(snap)}) : rien n'est notifie au premier passage")
+    if not old:
+        # premier passage, ou instantane vide (laisse par une panne d'avant ce
+        # correctif) : on memorise sans rien annoncer
+        logger.info(f"[MW] collections memorisees ({len(snap)}) : rien n'est notifie")
         return 0
 
     sent = 0
@@ -133,8 +152,8 @@ async def check_collections() -> int:
                 await N.notify("mw_coll_changed", "✏️ Collection renommée", f"« {o.get('title')} » → « {s['title']} »",
                                priority=2, actions=acts_app)
                 sent += 1
-        for cid, o in old.items():
-            if cid not in snap and (with_app("mw_coll_changed") or not _is_own("delete", cid)):
+        for cid, o in gone_now.items():
+            if with_app("mw_coll_changed") or not _is_own("delete", cid):
                 await N.notify("mw_coll_changed", "🗑️ Collection supprimée",
                                f"« {o.get('title')} »" + (f"\n📦 elle contenait {o['count']} modèle{'s' if o['count'] > 1 else ''}"
                                                           if o.get("count") else ""), priority=2, actions=acts_app)

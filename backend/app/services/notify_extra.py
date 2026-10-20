@@ -211,8 +211,11 @@ async def queue_ready_tick(cfg) -> int:
         return 0
     if Q._CACHE[1] is None or time.time() - Q._CACHE[0] >= QUEUE_EVERY_S:
         await Q._recompute()
-    ready = {r["design_id"]: r for r in Q._CACHE[1]["models"] if r.get("stock_ok")}
+    models = Q._CACHE[1].get("models") or []
     prev = await _get(K_QREADY, None)
+    if not models and prev:
+        return 0                               # file vide d'un coup : reponse douteuse, rien a conclure
+    ready = {r["design_id"]: r for r in models if r.get("stock_ok")}
     await _put(K_QREADY, list(ready))
     if not isinstance(prev, list):                  # premier passage : on memorise
         return 0
