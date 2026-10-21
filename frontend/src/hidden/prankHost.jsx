@@ -40,11 +40,12 @@ function effectOf(slug) {
 
 // Surprise a l'ouverture : a la premiere arrivee sur l'accueil d'un lancement de
 // l'appli, une farce (ou une page cachee) au hasard avec la probabilite p(n) = min(7 %, 0,5 % x n), n =
-// lancements depuis la derniere surprise (une toutes les ~20 ouvertures en moyenne).
+// lancements depuis la derniere surprise (remis a 0 quand elle tombe), et 50 % au-dela de 30 lancements
+// sans rien : la malchance ne dure pas.
 // Puis 70 % une farce / 30 % une page cachee, et dans le lot choisi 70 % une
 // pas encore trouvee / 30 % une deja trouvee (s'il y en a). Jamais chez un copain. Le secret suit la
 // regle des comptes (enregistre, ou « non comptabilise »).
-export const SURPRISE = { step: 0.005, cap: 0.07 };
+export const SURPRISE = { step: 0.005, cap: 0.07, after: 30, late: 0.5 };
 const SURPRISE_KEY = "bn-surprise";            // { n } : lancements depuis la derniere surprise
 let rolled = false;                             // une fois par lancement (module recharge = nouveau lancement)
 
@@ -75,7 +76,7 @@ function rollSurprise() {
   rolled = true;
   let n = 0;
   try { n = (JSON.parse(localStorage.getItem(SURPRISE_KEY) || "{}").n || 0) + 1; } catch { /* stockage indisponible */ }
-  const p = Math.min(SURPRISE.cap, SURPRISE.step * n);
+  const p = n > SURPRISE.after ? SURPRISE.late : Math.min(SURPRISE.cap, SURPRISE.step * n);
   const hit = Math.random() < p;
   try { localStorage.setItem(SURPRISE_KEY, JSON.stringify({ n: hit ? 0 : n })); } catch { /* stockage indisponible */ }
   return hit;
