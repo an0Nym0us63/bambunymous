@@ -805,7 +805,7 @@ EGGS = {
                  "L'appli parle français, mais ton navigateur, lui ?",
                  "Hello, hola, hallo : l'appli te répond quand même en français."),
     "anonymous": ("🎭", "Anonyme", "Ouvrir la page /anonymous",
-                  "Le nom de l'appli cache un mot bien connu : essaie-le comme adresse, après le nom du site.",
+                  "Le nom de l'appli cache un mot bien connu.",
                   "Nous sommes BambuNymous. Nous n'oublions pas la première couche."),
     "lockpick": ("🗝️", "Crocheteur", "Toucher 10 fois la médaille d'un secret pas encore gagné",
                  "Un cadenas, ça se force… à force d'insister.",
