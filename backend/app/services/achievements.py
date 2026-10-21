@@ -543,6 +543,70 @@ CATALOG = [
        lore="Un modèle imprimé plus de 100 000 fois sur MakerWorld : un classique."),
     _a("pioneer", "secret", "🧭", "Pionnier", "Un modèle imprimé par moins de 5 personnes avant toi", [1],
        lore="Un modèle que presque personne n'avait encore imprimé : tu ouvres la voie."),
+    _a('fv_anniversaire', "secret", '🎂', 'Bougie soufflée', "L'appli ouverte le jour anniversaire de ta première impression", [1],
+       lore="Tu es passé le jour anniversaire de tes débuts : l'imprimante a pris un an de plus, toi aussi."),
+    _a('fv_nouvel_an', "secret", '🎆', 'Réveillon connecté', "L'appli ouverte un 31 décembre ou un 1er janvier", [1],
+       lore="Entre deux coupes, un coup d'œil aux impressions : les bonnes résolutions commencent tôt."),
+    _a('fv_galette', "secret", '👑', 'Tirer les rois', "L'appli ouverte un 6 janvier", [1],
+       lore='Tu es venu le jour de la galette : pas sûr que la fève soit en PLA.'),
+    _a('fv_chandeleur', "secret", '🫓', 'Crêpe party', "L'appli ouverte un 2 février", [1],
+       lore="Une crêpe dans une main, le téléphone dans l'autre : c'est la Chandeleur."),
+    _a('fv_saint_valentin', "secret", '💌', 'Rendez-vous galant', "L'appli ouverte un 14 février", [1],
+       lore="Le jour des amoureux, tu as pensé à ton imprimante. Elle t'aime aussi."),
+    _a('fv_mardi_gras', "secret", '🤡', 'Sous le masque', "L'appli ouverte un mardi gras", [1],
+       lore='Déguisé ou pas, tu es passé le jour du carnaval.'),
+    _a('fv_poisson_avril', "secret", '🐠', "Pas né d'hier", "L'appli ouverte un 1er avril", [1],
+       lore='Tu es passé le 1er avril sans te faire avoir… ou presque.'),
+    _a('fv_paques', "secret", '🔔', 'Retour des cloches', "L'appli ouverte le dimanche ou le lundi de Pâques", [1],
+       lore='Les cloches sont revenues de Rome, et toi tu es passé voir tes impressions.'),
+    _a('fv_muguet', "secret", '🌿', 'Brin de muguet', "L'appli ouverte un 1er mai", [1],
+       lore="Un brin de muguet et un coup d'œil à l'imprimante : ça porte bonheur."),
+    _a('fv_fete_meres', "secret", '🌸', 'Pour maman', "L'appli ouverte le jour de la fête des mères", [1],
+       lore='Le jour des mamans, tu es passé : tu lui imprimes quelque chose ?'),
+    _a('fv_fete_peres', "secret", '🧰', 'Pour papa', "L'appli ouverte le jour de la fête des pères", [1],
+       lore='Le jour des papas, tu es passé : une cravate en TPU, peut-être ?'),
+    _a('fv_fete_musique', "secret", '🎶', 'En rythme', "L'appli ouverte un 21 juin", [1],
+       lore='Le jour de la musique, tu es passé écouter chanter les moteurs pas à pas.'),
+    _a('fv_quatorze_juillet', "secret", '🇫🇷', 'Jour de défilé', "L'appli ouverte un 14 juillet", [1],
+       lore="Entre le défilé et le feu d'artifice, une visite à l'atelier."),
+    _a('fv_halloween', "secret", '🦇', 'Visite nocturne', "L'appli ouverte un 31 octobre", [1],
+       lore='Tu es passé le soir des citrouilles. Rien ne bougeait… presque rien.'),
+    _a('fv_beaujolais', "secret", '🍇', 'Il est arrivé !', "L'appli ouverte le jour du Beaujolais nouveau", [1],
+       lore='Le Beaujolais nouveau est arrivé, et toi aussi.'),
+    _a('fv_gta_vi', "secret", '🌴', 'Jour de sortie', "L'appli ouverte le jour de sortie de GTA VI", [1],
+       lore='Le jour où tout le monde jouait, tu es quand même passé voir tes impressions.'),
+    _a('fv_vendredi_13', "secret", '🪜', 'Même pas peur', "L'appli ouverte un vendredi 13", [1],
+       lore='Un vendredi 13 et tu es passé quand même : la chance sourit aux imprimeurs.'),
+    _a('fv_changement_heure', "secret", '🕰️', 'Une heure de plus', "L'appli ouverte le jour d'un changement d'heure", [1],
+       lore="Le jour où les horloges se trompent, tu es passé remettre les pendules à l'heure."),
+    _a('fv_nouvel_an_chinois', "secret", '🐉', 'Danse du dragon', "L'appli ouverte le jour du Nouvel an chinois", [1],
+       lore='Le dragon a dansé devant tes impressions : bonne année lunaire !'),
+    _a('fv_saint_patrick', "secret", '🍀', 'Trèfle à quatre feuilles', "L'appli ouverte un 17 mars", [1],
+       lore='Tout était vert ce jour-là, même tes bobines.'),
+    _a('fv_holi', "secret", '🌈', 'Pluie de couleurs', "L'appli ouverte le jour de Holi", [1],
+       lore='Le jour des couleurs, tu es passé : ton AMS était jaloux.'),
+    _a('fv_star_wars', "secret", '🌌', 'Que la force…', "L'appli ouverte un 4 mai", [1],
+       lore="Un 4 mai dans l'appli : la force est avec ton plateau."),
+    _a('fv_dia_de_muertos', "secret", '💀', 'Fête des souvenirs', "L'appli ouverte un 2 novembre", [1],
+       lore="Fleurs orange et bougies : tu es passé le jour où l'on fête les souvenirs au Mexique."),
+    _a('fv_diwali', "secret", '🪔', 'Fête des lumières', "L'appli ouverte le jour de Diwali", [1],
+       lore='Le jour des lumières, ta buse brillait aussi.'),
+    _a('fv_thanksgiving', "secret", '🦃', "Merci l'imprimante", "L'appli ouverte le jour de Thanksgiving", [1],
+       lore="Le jour où l'on dit merci : merci à ton imprimante d'être là."),
+    _a('fv_pi', "secret", '🥧', '3,14', "L'appli ouverte un 14 mars", [1],
+       lore='Une visite le jour de π : tes impressions sont parfaitement rondes.'),
+    _a('lunar_print', "secret", '🏮', 'Impression lunaire', 'Une impression lancée le jour du Nouvel an chinois', [1],
+       lore='Une pièce pour accueillir la nouvelle année lunaire : elle portera chance.'),
+    _a('holi_print', "secret", '🎨', 'Couleurs vives', 'Une impression lancée le jour de Holi', [1],
+       lore="Le jour des couleurs, ta pièce n'a pas eu peur de la poudre."),
+    _a('diwali_print', "secret", '✨', 'Petite lumière', 'Une impression lancée le jour de Diwali', [1],
+       lore='Ta buse a brillé avec les lampes de Diwali.'),
+    _a('thanksgiving_print', "secret", '🍂', 'Gratitude', 'Une impression lancée le jour de Thanksgiving', [1],
+       lore='Une pièce le jour de la gratitude : ton imprimante te dit merci.'),
+    _a("beaujolais_print", "secret", "🍷", "Cuvée nouvelle", "Une impression lancée le jour du Beaujolais nouveau", [1],
+       lore="Le Beaujolais nouveau est arrivé, et ta pièce aussi : millésime de l'année."),
+    _a("gta_print", "secret", "🚓", "Pendant ce temps…", "Une impression lancée le 19 novembre 2026", [1],
+       lore="Le jour où le monde entier jouait, ton imprimante, elle, travaillait."),
     _a("christmas_visit", "secret", "🎄", "Même à Noël", "L'appli ouverte un 25 décembre", [1],
        lore="Le jour de Noël, tu as quand même jeté un œil à tes impressions."),
     _a("pit_stop", "secret", "🏁", "Arrêt au stand", "4 bobines posées dans l'AMS en moins de 5 minutes", [1],
@@ -1204,6 +1268,87 @@ EGGS = {
     "p_pluie_de_code": ('💻', 'Réveille-toi, maker', 'Ouvrir /pluie-de-code et attendre la fin de la recompilation.',
         "Des caractères verts dégoulinent du haut de l'écran : suis le lapin blanc.",
         'Ton accueil a été réécrit en code puis recompilé. Zéro erreur, zéro spaghetti.'),
+    "p_nouvel_an": ('🎆', 'Trois, deux, un… bonne année !', "Ouvrir /nouvel-an et profiter du spectacle : compte à rebours, bouchon qui saute et feu d'artifice.",
+        "La nuit où l'on s'embrasse sous le gui pendant que la dernière seconde de l'année file.",
+        'Tu as fêté la nouvelle année avec ton imprimante. Bonne résolution : nettoyer le plateau avant chaque impression (on en reparle en février).'),
+    "p_galette": ('👑', "Roi de l'atelier", "Ouvrir /galette et toucher les parts de la galette jusqu'à trouver la fève (sinon elle finit par se montrer), puis admirer la couronne.",
+        'Début janvier, le plus jeune se cache sous la table pour dire à qui va chaque part.',
+        'Tu as eu la fève ! Ta couronne en papier ira très bien avec ta casquette de maker.'),
+    "p_chandeleur": ('🥞', 'Sauteur de crêpes', 'Ouvrir /chandeleur et profiter du spectacle : les crêpes sautent, la page aussi.',
+        "Quarante jours après Noël, on tient une pièce dans une main et la poêle dans l'autre.",
+        'Toutes tes crêpes sont retombées dans la poêle. Une seule est restée au plafond, comme ta première impression sans brim.'),
+    "p_saint_valentin": ('💘', 'Coup de foudre', 'Ouvrir /saint-valentin et profiter du spectacle : cœurs, page qui bat et flèche de Cupidon.',
+        'Mi-février, un petit archer ailé vise les cœurs (et parfois les bobines).',
+        "Cupidon a visé ton atelier. Ton imprimante et toi, c'est pour la vie (enfin, jusqu'à la prochaine buse bouchée)."),
+    "p_mardi_gras": ('🎭', 'Roi du carnaval', 'Ouvrir /mardi-gras et profiter du spectacle : masques, confettis et serpentins, la page danse.',
+        'La veille du Carême, on se déguise, on lance des confettis et on mange des beignets.',
+        "Tu as fait le carnaval avec tes cartes. Il reste des confettis jusque dans l'extrudeur, ça te fera un PLA pailleté."),
+    "p_poisson_avril": ('🐟', 'Pas dupe', "Ouvrir /poisson-avril, repérer le poisson en papier collé dans le dos d'une carte et le toucher pour le décoller (sinon il finit par s'envoler seul).",
+        'Au premier jour du printemps des farceurs, regarde bien dans le dos des cartes.',
+        "Tu as décollé le poisson avant que tout l'atelier ne rigole. Il était en papier, pas en PETG : personne n'a été blessé."),
+    "p_paques": ('🥚', 'Chasseur de chocolat', 'Ouvrir /paques, regarder passer les cloches puis toucher les œufs qui dépassent de derrière les éléments de la page (sinon ils finissent par sortir seuls).',
+        "Les cloches ont fait l'aller-retour à Rome et elles ont les poches pleines de chocolat.",
+        'Tous les œufs sont trouvés. Petit rappel : le chocolat fond bien avant le PLA, ne le laisse pas sur le plateau chauffant.'),
+    "p_muguet": ('🌿', 'Porte-bonheur', 'Ouvrir /muguet et profiter du spectacle : des brins poussent au pied des tuiles et leurs clochettes tintent.',
+        "Le jour où l'on ne travaille pas, on offre de petites clochettes blanches qui sentent bon.",
+        "Un brin de muguet pour chaque tuile : ton atelier a du bonheur en stock pour toute l'année."),
+    "p_fete_meres": ('💐', 'Pour la plus belle', 'Ouvrir /fete-meres et profiter du spectacle : pétales, bouquet, et toute la page qui dessine un cœur.',
+        "Un dimanche de fin mai, on offre un collier de nouilles à celle qui t'a appris à ranger ta chambre.",
+        "Ton atelier a dessiné un cœur pour maman. Un cœur imprimé en 3D, c'est bien aussi (et ça ne fane pas)."),
+    "p_fete_peres": ('👔', "Moustache d'honneur", 'Ouvrir /fete-peres et profiter du spectacle : cravates, moustaches, caisse à outils et barbecue.',
+        'Un dimanche de juin, on offre une cravate à celui qui sait où sont rangées les clés de 10.',
+        'Cravate, moustache, saucisses : panoplie complète. Ton imprimante a même imprimé une décapsuleuse en douce.'),
+    "p_fete_musique": ('🎶', 'Moteurs pas à pas en concert', 'Ouvrir /fete-musique et profiter du spectacle : notes, égaliseur, et la page qui rebondit en rythme.',
+        "La nuit la plus courte de l'année, tout le monde sort jouer dans la rue, même les moteurs pas à pas.",
+        'Ton atelier a joué en rythme. Prochaine étape : la Marseillaise au G-code M300.'),
+    "p_quatorze_juillet": ('🎆', 'Défilé au pas', "Ouvrir /quatorze-juillet et profiter du spectacle : patrouille tricolore, défilé de la page et feu d'artifice.",
+        'En plein été, des avions dessinent un drapeau dans le ciel avant le bal des pompiers.',
+        "La Patrouille de France a survolé ton atelier. Même ta tour de purge s'est mise au garde-à-vous."),
+    "p_halloween": ('🎃', 'Même pas peur', 'Ouvrir /halloween et profiter du spectacle : la nuit tombe, chauves-souris, citrouilles et fantômes.',
+        'Fin octobre, les citrouilles sourient de toutes leurs dents et les enfants réclament des bonbons.',
+        "Tu as survécu à la nuit des fantômes. Le seul monstre de l'atelier reste le spaghetti de filament."),
+    "p_beaujolais": ('🍇', 'Nouvelle cuvée', 'Ouvrir /beaujolais et profiter du spectacle : bandeau, grappes qui tombent et page qui tangue doucement.',
+        'Un jeudi de novembre, une affiche fleurit dans tous les bistrots pour annoncer une arrivée très attendue.',
+        'La nouvelle cuvée est arrivée et ton atelier a un peu tangué. Ici on trinque au jus de raisin, et au PLA violet.'),
+    "p_gta_vi": ('🌴', 'Mission réussie', 'Ouvrir /gta-vi et profiter du spectacle : coucher de soleil, étoiles de recherche et course-poursuite de la page.',
+        'Un jeu attendu pendant plus de dix ans sort enfin : soleil couchant, palmiers et étoiles de recherche.',
+        "Tu as semé la police avec cinq étoiles au compteur. Respect : ton imprimante n'a grillé aucun feu, juste quelques couches."),
+    "p_noel": ('🎄', 'Livraison du traîneau', 'Ouvrir /noel et profiter du spectacle : neige, traîneau, guirlandes, et la page emballée en cadeaux.',
+        "Le soir où l'on dépose ses chaussons au pied du sapin en espérant une nouvelle imprimante.",
+        'Le Père Noël est passé et tout était imprimé en 3D. Les lutins ont gardé les chutes pour la tour de purge.'),
+    "p_vendredi_13": ('🐈', 'Touche du bois', 'Ouvrir /vendredi-13 et profiter du spectacle : chat noir, échelle, miroir qui se fend et page qui tremble.',
+        'Un jour de semaine bien précis, on évite de passer sous les échelles et de croiser un chat noir.',
+        "Chat noir, échelle, miroir cassé : tu as tout eu et pourtant ta buse n'est pas bouchée. La chance du débutant."),
+    "p_changement_heure": ('⏰', 'Maître du temps', "Ouvrir /changement-heure et profiter du spectacle : les horloges s'affolent et la page avance (ou recule) d'une heure.",
+        "Deux dimanches par an, à l'aube, le four affiche une heure et le téléphone une autre.",
+        "Une heure de gagnée ou de perdue, ton impression de 26 heures, elle, n'a rien remarqué."),
+    "p_anniversaire": ('🎂', 'Bougies soufflées', "Ouvrir /anniversaire, toucher les bougies du gâteau pour les souffler (sinon elles s'éteignent seules) et profiter de la fête.",
+        "Une date qui te rappelle tes débuts avec l'imprimante : la toute première couche, ça se fête.",
+        "Encore une année de couches bien posées. Ta toute première impression ? On n'en parle pas, elle était en spaghetti."),
+    "p_nouvel_an_chinois": ('🐉', 'La danse du dragon', "Ouvrir /nouvel-an-chinois et profiter du spectacle : le dragon traverse l'accueil deux fois.",
+        'Lanternes rouges, enveloppes porte-bonheur et pétards : une nouvelle année commence, mais pas le 1er janvier.',
+        "Un dragon de quinze mètres a dansé dans ton atelier. Il cherchait une bobine assez longue pour s'imprimer une queue."),
+    "p_saint_patrick": ('☘️', 'Tout en vert', "Ouvrir /saint-patrick et profiter du spectacle jusqu'au retour des couleurs.",
+        "Mi-mars, tout vire au vert et un petit bonhomme cache son or au pied de l'arc-en-ciel.",
+        "Ton PLA blanc est devenu vert pomme. Le trèfle à quatre feuilles, lui, a mal supporté le support d'impression."),
+    "p_holi": ('🎨', 'Pluie de poudre', 'Ouvrir /holi et profiter du spectacle, rinçage compris.',
+        'Au printemps, quelque part en Inde, on se lance des nuages de couleurs à la figure.',
+        "Tu as reçu toutes les couleurs de l'AMS en pleine poire. Le changement de filament n'a jamais été aussi rapide."),
+    "p_star_wars": ('✨', 'Dans un atelier lointain', "Ouvrir /star-wars et profiter du spectacle, du saut en vitesse lumière jusqu'au retour.",
+        'Un jeu de mots anglais transforme une date de printemps en vœu galactique : que la force du quatrième jour soit avec toi.',
+        'Ton accueil est passé en vitesse lumière et en est revenu entier. La buse, elle, réclame un sabre en PETG.'),
+    "p_dia_de_muertos": ('🌼', 'Fleurs et calaveras', "Ouvrir /dia-de-muertos et profiter du spectacle jusqu'à la dernière bougie.",
+        'Début novembre, au Mexique, des fleurs orange et des crânes en sucre qui sourient.',
+        'Des crânes en sucre ont dansé sur ton plateau. Pas de panique : ils sont en sucre, pas en résine.'),
+    "p_diwali": ('🪔', 'La fête des lumières', 'Ouvrir /diwali et profiter du spectacle, lampe après lampe.',
+        "À l'automne, des petites lampes à huile s'allument une à une pour que la lumière gagne sur la nuit.",
+        'Neuf lampes à huile se sont allumées dans ton atelier. Le capteur de température de la chambre en parle encore.'),
+    "p_thanksgiving": ('🦃', 'Tout le monde à table', "Ouvrir /thanksgiving et profiter du spectacle jusqu'au dessert.",
+        "Fin novembre, de l'autre côté de l'Atlantique, une volaille n'a vraiment aucune envie de passer à table.",
+        'Une dinde a traversé ton atelier en courant. Elle avait vu la taille du four à plateau chauffant.'),
+    "p_pi": ('🥧', 'Trois virgule quatorze', "Ouvrir /pi et profiter du spectacle, de la ronde jusqu'à la tarte.",
+        "Mi-mars, une date qui s'écrit 3/14 chez les Américains fait tourner les têtes en rond.",
+        "Tes cartes ont tourné en cercle parfait. La première couche, elle, n'a toujours pas réussi le sien."),
     "p_puzzle": ('🧩', 'Accueil en kit', "Ouvrir /puzzle et remettre dans l'ordre les 9 morceaux de l'accueil (les glisser, ou toucher deux pièces pour les échanger).",
         'Neuf morceaux, une seule image : le slicer a tranché un peu trop large.',
         "Recollé sans une goutte de colle : même le slicer n'y voit que du feu."),
@@ -1353,13 +1498,19 @@ CATALOG += [
 ]
 CATALOG += [_a(f"egg_{k}", "secret", e, t, d, [1], lore=l) for k, (e, t, d, _h, l) in EGGS.items()]
 HIDDEN_EGGS = {"anonymous", "teapot"} | {k for k in EGGS if k.startswith("h_")}
-PRANK_EGGS = {k for k in EGGS if k.startswith("p_")}
+# les fetes (farces du jour J et visites ce jour-la) ont leur propre rayon
+FETE_EGGS = {"p_" + s.replace("-", "_") for s in ["anniversaire", "nouvel-an", "galette", "chandeleur", "saint-valentin",
+             "mardi-gras", "poisson-avril", "paques", "muguet", "fete-meres", "fete-peres", "fete-musique", "quatorze-juillet",
+             "halloween", "beaujolais", "gta-vi", "noel", "vendredi-13", "changement-heure",
+             "nouvel-an-chinois", "saint-patrick", "holi", "star-wars", "dia-de-muertos", "diwali", "thanksgiving", "pi"]}
+FETE_VISITS = [a["id"] for a in CATALOG if a["id"].startswith("fv_")]
+PRANK_EGGS = {k for k in EGGS if k.startswith("p_")} - FETE_EGGS
 # Secrets (toutes les medailles uniques) : rangés en sous-sections dans la
 # categorie « Secrets ».
 SECRET_SUBS = [
     ("calendar", "📅", "Calendrier", "halloween christmas new_year friday13 pi_day leap_day valentine may_day bastille "
      "all_year april_fool music summer_solstice winter_solstice easter st_patrick fathers_day crepes epiphany "
-     "palindrome_date anniversary all_seasons santa new_years_day star_wars towel_day pi_approx cat_day mid_august back_to_school all_saints dia_muertos st_nicholas st_john earth_day equinox dst_summer dst_winter programmers mothers_day ascension mardi_gras black_friday double_day twelve"),
+     "palindrome_date anniversary all_seasons santa new_years_day star_wars towel_day pi_approx cat_day mid_august back_to_school beaujolais_print gta_print lunar_print holi_print diwali_print thanksgiving_print all_saints dia_muertos st_nicholas st_john earth_day equinox dst_summer dst_winter programmers mothers_day ascension mardi_gras black_friday double_day twelve"),
     ("clock", "🕛", "Heures et lune", "midnight noon mirror sequence elite last_minute saturday_night monday_morning "
      "sunday_morning full_moon new_moon all_nighter cinderella wake_up night_visit palindrome_time after_midnight snack_time tea_time aperitif wolf_hour end_noon end_evening"),
     ("measures", "⚖️", "Poids et durées", "tiny flash titan answer42 beast kilo pi_grams palindrome full_day marathon42 "
@@ -1377,8 +1528,9 @@ SECRET_SUBS = [
     ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
      "action_cam making_of festival retro_video family_film flash_video bunker pwd_changes black_photo white_photo "
      "panorama hires_photo photo_burst purge_day tinkerer"),
-    ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS if k not in HIDDEN_EGGS | PRANK_EGGS)),
+    ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS if k not in HIDDEN_EGGS | PRANK_EGGS | FETE_EGGS)),
     ("pranks", "🌀", "Farces", " ".join(f"egg_{k}" for k in EGGS if k in PRANK_EGGS)),
+    ("fetes", "🎉", "Fêtes", " ".join([f"egg_{k}" for k in EGGS if k in FETE_EGGS] + FETE_VISITS)),
     ("hidden", "🗺️", "Pages cachées", " ".join(f"egg_{k}" for k in EGGS if k in HIDDEN_EGGS)),
     ("game", "🎰", "Clés et roue", "jackpot lucky5 bad_luck win_streak last_key full_reveal"),
 ]
@@ -1595,6 +1747,38 @@ HINTS = {
     "cutting_edge": "Garde BambuNymous parfaitement à jour.",
     "double_update": "Une journée où BambuNymous change plusieurs fois.",
     "novel": "Un modèle qui a besoin de toute une phrase pour se présenter.",
+    'fv_anniversaire': 'Une date qui revient chaque année depuis ta toute première pièce : passe ce jour-là.',
+    'fv_nouvel_an': 'Passe quand le calendrier change de chiffre, juste avant ou juste après.',
+    'fv_galette': "Passe le jour où l'on cherche une fève dans la frangipane.",
+    'fv_chandeleur': "Passe le jour où l'on fait sauter les crêpes, une pièce dans la main.",
+    'fv_saint_valentin': 'Passe le jour des amoureux voir ta compagne la plus fidèle.',
+    'fv_mardi_gras': "Passe le jour où l'on se déguise avant le carême.",
+    'fv_poisson_avril': "Passe le jour où l'on colle des poissons dans le dos.",
+    'fv_paques': 'Passe quand les cloches reviennent de leur voyage.',
+    'fv_muguet': "Passe le jour où l'on offre des clochettes blanches.",
+    'fv_fete_meres': 'Passe le dimanche des mamans.',
+    'fv_fete_peres': 'Passe le dimanche des papas.',
+    'fv_fete_musique': "Passe le jour où l'on joue dans la rue.",
+    'fv_quatorze_juillet': "Passe le jour du défilé et des feux d'artifice.",
+    'fv_halloween': "Passe le soir où les citrouilles s'allument.",
+    'fv_beaujolais': 'Passe un jeudi de novembre où un vin nouveau arrive.',
+    'fv_gta_vi': "Passe le jour d'une sortie de jeu très, très attendue, à l'automne 2026.",
+    'fv_vendredi_13': 'Passe le jour le plus superstitieux, en fin de semaine.',
+    'fv_changement_heure': "Passe le dimanche où l'on avance ou recule les horloges.",
+    'fv_nouvel_an_chinois': 'Passe le jour où une nouvelle année commence avec la lune, en plein hiver.',
+    'fv_saint_patrick': "Passe le jour où l'Irlande voit tout en vert.",
+    'fv_holi': "Passe le jour où l'on se lance des poudres de toutes les couleurs, au printemps.",
+    'fv_star_wars': "Passe le jour où l'on souhaite que la force soit avec toi, au printemps.",
+    'fv_dia_de_muertos': "Passe le jour où le Mexique fleurit d'orange en souvenir des siens.",
+    'fv_diwali': "Passe le jour où des milliers de petites lampes s'allument, à l'automne.",
+    'fv_thanksgiving': "Passe le jeudi de fin novembre où l'Amérique dit merci autour d'une dinde.",
+    'fv_pi': 'Passe le jour qui ressemble à un nombre qui ne finit jamais.',
+    'lunar_print': 'Le jour où le dragon danse dans la rue, en hiver, fais chauffer la buse.',
+    'holi_print': 'Le jour des poudres de couleurs, lance une pièce.',
+    'diwali_print': 'Le jour des mille petites lampes, lance une pièce.',
+    'thanksgiving_print': 'Le jeudi de la dinde, fin novembre, lance une pièce.',
+    "beaujolais_print": "Un jeudi de novembre, un vin nouveau arrive : fais chauffer la buse ce jour-là.",
+    "gta_print": "Le jour d'une sortie de jeu très attendue de l'automne 2026, laisse la manette et lance une pièce.",
     "christmas_visit": "Ouvre l'appli le jour où le Père Noël est passé.",
     "action_cam": "Moteur, ça tourne ! La pièce est encore tiède.",
     "jackpot": "La roue cache un lot très, très rare. Tourne, encore et encore.",
@@ -2455,6 +2639,15 @@ def compute_series(d: dict, now: datetime) -> dict:
         # dates particulieres
         if (loc.month, loc.day) == (10, 31):
             push("halloween", start, 1)
+        fd = fetes_of(day)
+        if "beaujolais" in fd:
+            push("beaujolais_print", start, 1)
+        for sl, aid in (("nouvel-an-chinois", "lunar_print"), ("holi", "holi_print"), ("diwali", "diwali_print"),
+                        ("thanksgiving", "thanksgiving_print")):
+            if sl in fd:
+                push(aid, start, 1)
+        if day.isoformat() == "2026-11-19":
+            push("gta_print", start, 1)
         if (loc.month, loc.day) in ((12, 24), (12, 25)):
             push("christmas", start, 1)
         if loc.month == 3 and loc.day == 14:
@@ -3253,9 +3446,16 @@ def _fun200(push, d, now) -> None:
             per_month[(t.year, t.month)] += 1
             if per_month[(t.year, t.month)] >= 10:
                 push("spring_clean", t, 1)
+    starts = [p.print_date for p in d["prints"] if p.print_date and (p.status or "").upper() != "IN_PROGRESS"]
+    first = _local(min(starts)).date() if starts else None
     for _k, day_, _n in d.get("act_days") or []:
         if day_ and str(day_)[5:] == "12-25":
             push("christmas_visit", datetime.fromisoformat(str(day_)), 1)
+        if day_:
+            at = datetime.fromisoformat(str(day_)[:10])
+            for sl in fetes_of(at.date(), first):
+                if sl != "noel":
+                    push("fv_" + sl.replace("-", "_"), at, 1)
     for k, at in (d.get("eggs") or {}).items():
         if k in EGGS:
             push(f"egg_{k}", datetime.fromisoformat(at), 1)
@@ -3698,6 +3898,175 @@ async def open_passage(username: str) -> bool:
 # Crescendo : 0,5 % x n jusqu'a 10 % (n = 20), puis +1 % a chaque ouverture.
 def surprise_p(n: int) -> float:
     return 0.005 * n if n <= 20 else min(1.0, 0.10 + 0.01 * (n - 20))
+
+
+# Fetes : le jour J, la farce de la fete sort A COUP SUR a la premiere ouverture
+# de l'appli (une fois par compte et par fete), sans toucher au compteur ci-dessus.
+FETE_SLUGS = ["anniversaire", "nouvel-an", "galette", "chandeleur", "saint-valentin", "mardi-gras", "poisson-avril", "paques", "muguet",
+              "fete-meres", "fete-peres", "fete-musique", "quatorze-juillet", "halloween", "beaujolais", "gta-vi", "noel",
+              "vendredi-13", "changement-heure",
+              # fetes du monde
+              "nouvel-an-chinois", "saint-patrick", "holi", "star-wars", "dia-de-muertos", "diwali", "thanksgiving", "pi"]
+assert FETE_EGGS == {"p_" + s.replace("-", "_") for s in FETE_SLUGS}
+_FETES_FIXES = {(12, 31): "nouvel-an", (1, 1): "nouvel-an", (1, 6): "galette", (2, 2): "chandeleur",
+                (2, 14): "saint-valentin", (4, 1): "poisson-avril", (5, 1): "muguet", (6, 21): "fete-musique",
+                (7, 14): "quatorze-juillet", (10, 31): "halloween", (12, 24): "noel", (12, 25): "noel"}
+_FETES_UNIQUES = {"2026-11-19": "gta-vi"}   # sortie de GTA VI
+_FETES_FIXES.update({(3, 17): "saint-patrick", (5, 4): "star-wars", (11, 2): "dia-de-muertos", (3, 14): "pi"})
+# Fetes lunaires : dates publiees, a prolonger au-dela de 2032.
+_NOUVEL_AN_CHINOIS = {"2024-02-10": "Dragon", "2025-01-29": "Serpent", "2026-02-17": "Cheval", "2027-02-06": "Chèvre",
+                      "2028-01-26": "Singe", "2029-02-13": "Coq", "2030-02-03": "Chien", "2031-01-23": "Cochon",
+                      "2032-02-11": "Rat"}
+_HOLI = {"2024-03-25", "2025-03-14", "2026-03-04", "2027-03-22", "2028-03-11", "2029-03-01", "2030-03-20",
+         "2031-03-09", "2032-03-27"}
+_DIWALI = {"2024-11-01", "2025-10-20", "2026-11-08", "2027-10-29", "2028-10-17", "2029-11-05", "2030-10-26",
+           "2031-11-14", "2032-11-02"}
+
+
+def _paques(y: int):
+    """Dimanche de Paques (calendrier gregorien, algorithme de Meeus)."""
+    from datetime import date
+    a, b, c = y % 19, y // 100, y % 100
+    d, e = b // 4, b % 4
+    g = (8 * b + 13) // 25
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 19 * l) // 433
+    n = (h + l - 7 * m + 90) // 25
+    return date(y, n, (h + l - 7 * m + 33 * n + 19) % 32)
+
+
+def _nieme(y: int, mois: int, jour_sem: int, rang: int):
+    """Le rang-ieme jour_sem (0 = lundi) du mois ; rang -1 = le dernier."""
+    from datetime import date, timedelta
+    if rang > 0:
+        d = date(y, mois, 1)
+        d += timedelta(days=(jour_sem - d.weekday()) % 7)
+        return d + timedelta(weeks=rang - 1)
+    d = (date(y + (mois == 12), mois % 12 + 1, 1) - timedelta(days=1))
+    return d - timedelta(days=(d.weekday() - jour_sem) % 7)
+
+
+def fetes_of(d, first=None) -> list:
+    """Les fetes de ce jour (en France), la plus rare d'abord. `first` : le jour
+    de la toute premiere impression (pour son anniversaire)."""
+    from datetime import timedelta
+    out = []
+    if first and d.year > first.year and (d.month, d.day) == (first.month, first.day):
+        out.append("anniversaire")
+    if d.isoformat() in _FETES_UNIQUES:
+        out.append(_FETES_UNIQUES[d.isoformat()])
+    if (d.month, d.day) in _FETES_FIXES:
+        out.append(_FETES_FIXES[(d.month, d.day)])
+    iso = d.isoformat()
+    if iso in _NOUVEL_AN_CHINOIS:
+        out.append("nouvel-an-chinois")
+    if iso in _HOLI:
+        out.append("holi")
+    if iso in _DIWALI:
+        out.append("diwali")
+    if d == _nieme(d.year, 11, 3, 4):
+        out.append("thanksgiving")
+    p = _paques(d.year)
+    if d in (p, p + timedelta(days=1)):
+        out.append("paques")
+    if d == p - timedelta(days=47):
+        out.append("mardi-gras")
+    meres = _nieme(d.year, 5, 6, -1)
+    if meres == p + timedelta(days=49):          # Pentecote : la fete des meres passe en juin
+        meres = _nieme(d.year, 6, 6, 1)
+    if d == meres:
+        out.append("fete-meres")
+    if d == _nieme(d.year, 6, 6, 3):
+        out.append("fete-peres")
+    if d == _nieme(d.year, 11, 3, 3):
+        out.append("beaujolais")
+    if d.day == 13 and d.weekday() == 4:
+        out.append("vendredi-13")
+    if d in (_nieme(d.year, 3, 6, -1), _nieme(d.year, 10, 6, -1)):
+        out.append("changement-heure")
+    return out
+
+
+def _today_paris():
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("Europe/Paris")).date()
+
+
+async def _fetes_seen(db) -> dict:
+    from .settings_service import get_setting
+    raw = await get_setting(db, KEY + "_FETES", "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+async def first_print_day():
+    """Jour (heure de Paris) de la toute premiere impression, ou None. Retenu une
+    fois pour toutes ({id, jour}) ; si cette impression est supprimee, on reprend
+    la nouvelle premiere de l'historique."""
+    from datetime import date
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    from .settings_service import get_setting, set_setting
+    async with AsyncSessionLocal() as db:
+        try:
+            memo = json.loads(await get_setting(db, KEY + "_FIRST", "") or "{}")
+        except ValueError:
+            memo = {}
+        if memo.get("id") and (await db.execute(select(Print.id).where(Print.id == memo["id"]))).scalar() is not None:
+            return date.fromisoformat(memo["day"])
+        row = (await db.execute(select(Print.id, Print.print_date).where(Print.status != "IN_PROGRESS")
+                                .order_by(Print.print_date).limit(1))).first()
+        if not row:
+            return None
+        t = datetime.fromisoformat(row[1]) if isinstance(row[1], str) else row[1]
+        day = _local(t).date()
+        await set_setting(db, KEY + "_FIRST", json.dumps({"id": row[0], "day": day.isoformat()}))
+    return day
+
+
+async def fete_pending(username: str, today=None) -> str | None:
+    """La fete du jour pas encore montree a ce compte aujourd'hui (ou None)."""
+    from ..db.session import AsyncSessionLocal
+    today = today or _today_paris()
+    todo = fetes_of(today, await first_print_day())
+    if not todo:
+        return None
+    async with AsyncSessionLocal() as db:
+        seen = (await _fetes_seen(db)).get(username) or {}
+    done = (seen.get("shown") or []) if seen.get("date") == today.isoformat() else []
+    return next((s for s in todo if s not in done), None)
+
+
+async def fete_extra(slug: str, today=None) -> dict:
+    """Ce que la farce du jour peut afficher : le signe de l'annee lunaire, le
+    nombre d'annees depuis la premiere impression."""
+    today = today or _today_paris()
+    if slug == "nouvel-an-chinois":
+        return {"zodiac": _NOUVEL_AN_CHINOIS.get(today.isoformat())}
+    if slug == "anniversaire":
+        first = await first_print_day()
+        return {"years": today.year - first.year} if first else {}
+    return {}
+
+
+async def fete_shown(username: str, slug: str, today=None) -> None:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    today = (today or _today_paris()).isoformat()
+    async with AsyncSessionLocal() as db:
+        d = await _fetes_seen(db)
+        cur = d.get(username) or {}
+        shown = list(cur.get("shown") or []) if cur.get("date") == today else []
+        if slug not in shown:
+            shown.append(slug)
+        d[username] = {"date": today, "shown": shown}
+        await set_setting(db, KEY + "_FETES", json.dumps(d))
 
 
 async def _surprise_counts(db) -> dict:

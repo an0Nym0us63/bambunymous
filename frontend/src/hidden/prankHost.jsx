@@ -19,7 +19,17 @@ PRANK_SLUGS.push(...PRANK_SLUGS_2);
 const PRANK_SLUGS_3 = ["puzzle", "rideau", "cadenas", "ballons", "cache-cache", "gomme", "serrure", "carte-a-gratter", "radar", "ascenseur", "aimant-inverse", "sablier", "peche", "digicode", "souris", "interrupteurs", "boussole", "cles", "bombe", "demineur", "jardin", "cible", "bouchon"];
 PRANK_SLUGS.push(...PRANK_SLUGS_3);
 
-export const isPrank = slug => PRANK_SLUGS.includes(slug);
+// les fetes : a coup sur le jour J (le serveur tient le calendrier), jamais au hasard
+// les autres jours ; leur adresse marche toute l'annee
+export const FETE_SLUGS = ["anniversaire", "nouvel-an", "galette", "chandeleur", "saint-valentin", "mardi-gras", "poisson-avril", "paques",
+  "muguet", "fete-meres", "fete-peres", "fete-musique", "quatorze-juillet", "halloween", "beaujolais", "gta-vi", "noel",
+  "vendredi-13", "changement-heure"];
+// les fetes du monde (meme regle), dans leur propre lot
+export const FETE_SLUGS_MONDE = ["nouvel-an-chinois", "saint-patrick", "holi", "star-wars", "dia-de-muertos", "diwali",
+  "thanksgiving", "pi"];
+FETE_SLUGS.push(...FETE_SLUGS_MONDE);
+
+export const isPrank = slug => PRANK_SLUGS.includes(slug) || FETE_SLUGS.includes(slug);
 
 export const usePrank = create(set => ({
   slug: null,
@@ -35,7 +45,7 @@ export function PrankRedirect({ slug }) {
 }
 
 const Pranks = {};
-const load = slug => (PRANK_SLUGS_3.includes(slug) ? import("./pranks3")
+const load = slug => (FETE_SLUGS_MONDE.includes(slug) ? import("./pranks6") : FETE_SLUGS.includes(slug) ? import("./pranks4") : PRANK_SLUGS_3.includes(slug) ? import("./pranks3")
   : PRANK_SLUGS_2.includes(slug) ? import("./pranks2") : import("./pranks"));
 function effectOf(slug) {
   if (!Pranks[slug]) Pranks[slug] = lazy(() => load(slug).then(m => ({ default: m.PRANKS[slug]?.Effect || (() => null) })));
@@ -44,7 +54,8 @@ function effectOf(slug) {
 
 // Surprise a l'ouverture : a la premiere arrivee sur l'accueil d'un lancement de
 // l'appli (pas a chaque retour sur l'accueil), le serveur tire au sort avec un compteur
-// PAR COMPTE (navigateur, PWA et appli Android confondus) : p(n) = 0,5 % x n jusqu'a
+// PAR COMPTE (navigateur, PWA et appli Android confondus). Le jour d'une fete, c'est
+// elle, a coup sur, une fois par compte (sans toucher au compteur). : p(n) = 0,5 % x n jusqu'a
 // 10 % a n = 20, puis +1 % par ouverture ; n repart a 0 quand la surprise s'affiche.
 // Puis 70 % une farce / 30 % une page cachee, et dans le lot choisi 70 % une
 // pas encore trouvee / 30 % une deja trouvee (s'il y en a). Jamais chez un copain. Le secret suit la
@@ -113,16 +124,24 @@ export function PrankHost() {
     // l'accueil a le temps de s'afficher ; si on l'a deja quitte, pas de surprise ailleurs
     // ni sous l'ecran de demarrage (logo) : on attend qu'il soit parti
     let tries = 0;
-    const fire = found => {
-      if (document.getElementById("splash") && tries++ < 20) { setTimeout(() => fire(found), 300); return; }
+    const fire = data => {
+      if (document.getElementById("splash") && tries++ < 20) { setTimeout(() => fire(data), 300); return; }
       if (window.location.pathname !== "/" || usePrank.getState().slug) return;
-      const [kind, slug] = pickSurprise(found);
-      if (kind === "farce") start(slug); else nav("/" + slug);
-      client.post("/achievements/surprise/shown").catch(() => {});
+      if (data.fete && FETE_SLUGS.includes(data.fete)) {
+        // ce que la farce peut afficher : signe de l'annee lunaire, annees depuis la premiere impression
+        window.__bnZodiac = data.zodiac || undefined;
+        window.__bnAnniv = data.years || undefined;
+        start(data.fete);
+        client.post("/achievements/surprise/shown", { fete: data.fete }).catch(() => {});
+      } else {
+        const [kind, slug] = pickSurprise(data.found || []);
+        if (kind === "farce") start(slug); else nav("/" + slug);
+        client.post("/achievements/surprise/shown").catch(() => {});
+      }
       openPassage();
     };
     client.post("/achievements/surprise")
-      .then(({ data }) => { if (data?.hit) setTimeout(() => fire(data.found || []), 1200); })
+      .then(({ data }) => { if (data?.hit) setTimeout(() => fire(data), 1200); })
       .catch(() => {});
   }, [pathname, visiting, start, nav]);
   const doneRef = useRef(false);

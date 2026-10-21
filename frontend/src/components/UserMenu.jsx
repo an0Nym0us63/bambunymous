@@ -67,6 +67,14 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
   // il n'apparait qu'une fois ouvert par une premiere surprise, pour ce compte (sur
   // tous ses appareils) : le serveur le dit, ce navigateur s'en souvient en attendant
   const [opened, setOpened] = React.useState(() => { try { return !!localStorage.getItem("bn-passage"); } catch { return false; } });
+  // ouvert seulement dans ce navigateur (avant que le serveur le retienne) : on le
+  // signale au serveur, pour qu'il suive le compte sur ses autres appareils
+  React.useEffect(() => {
+    let sent = false;
+    try { sent = !!localStorage.getItem("bn-passage-srv"); } catch { /* rien */ }
+    if (opened && !sent) client.post("/achievements/passage")
+      .then(() => { try { localStorage.setItem("bn-passage-srv", "1"); } catch { /* rien */ } }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     if (!rect || opened) return;
     client.get("/achievements/passage", { home: true }).then(({ data }) => {

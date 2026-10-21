@@ -62,6 +62,9 @@ async def achievements_surprise(acc=Depends(require_own_account)):
     """Une ouverture de l'appli sur l'accueil : surprise ou pas (compteur par compte).
     En cas de surprise, la liste des pages et farces deja trouvees, pour preferer la nouveaute."""
     from ....services import achievements as A
+    fete = await A.fete_pending(acc[0])
+    if fete:   # le jour d'une fete, elle sort a coup sur (le compteur ne bouge pas)
+        return {"hit": True, "fete": fete, **await A.fete_extra(fete)}
     r = await A.roll_surprise(acc[0])
     if r["hit"]:
         r["found"] = sorted(k for k in await A.eggs_found() if k in A.HIDDEN_EGGS | A.PRANK_EGGS)
@@ -69,9 +72,13 @@ async def achievements_surprise(acc=Depends(require_own_account)):
 
 
 @router.post("/surprise/shown")
-async def achievements_surprise_shown(acc=Depends(require_own_account)):
+async def achievements_surprise_shown(body: dict | None = Body(None), acc=Depends(require_own_account)):
     from ....services import achievements as A
-    await A.surprise_shown(acc[0])
+    fete = (body or {}).get("fete")
+    if fete in A.FETE_SLUGS:
+        await A.fete_shown(acc[0], fete)
+    else:
+        await A.surprise_shown(acc[0])
     return {"ok": True}
 
 
