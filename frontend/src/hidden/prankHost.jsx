@@ -15,6 +15,10 @@ export const PRANK_SLUGS = ["tsunami", "seisme", "tete-en-bas", "panne", "melang
 // le grand spectacle (rien a faire, on regarde), dans leur propre lot
 const PRANK_SLUGS_2 = ["eclipse", "arc-en-ciel", "marees", "meteores", "hypnose", "telex", "aurore", "chantier", "pellicule", "eboulement", "bulldozer", "ressort", "neon", "origami", "zoom-avant", "cubisme", "briques", "pluie-filament", "kaleidoscope", "vagues-texte", "projecteur", "bande-dessinee", "pluie-de-code"];
 PRANK_SLUGS.push(...PRANK_SLUGS_2);
+// les catastrophes (meteorite, dragon, incendie…), dans leur propre lot
+const PRANK_SLUGS_5 = ["meteorite", "dragon-feu", "incendie", "eruption", "orage", "trou-noir", "enlevement", "kaiju",
+  "kraken", "sables-mouvants", "ere-glaciaire", "acide"];
+PRANK_SLUGS.push(...PRANK_SLUGS_5);
 // celles qui demandent un geste (trouver, tirer, deverrouiller…), dans leur propre lot
 const PRANK_SLUGS_3 = ["puzzle", "rideau", "cadenas", "ballons", "cache-cache", "gomme", "serrure", "carte-a-gratter", "radar", "ascenseur", "aimant-inverse", "sablier", "peche", "digicode", "souris", "interrupteurs", "boussole", "cles", "bombe", "demineur", "jardin", "cible", "bouchon"];
 PRANK_SLUGS.push(...PRANK_SLUGS_3);
@@ -45,7 +49,8 @@ export function PrankRedirect({ slug }) {
 }
 
 const Pranks = {};
-const load = slug => (FETE_SLUGS_MONDE.includes(slug) ? import("./pranks6") : FETE_SLUGS.includes(slug) ? import("./pranks4") : PRANK_SLUGS_3.includes(slug) ? import("./pranks3")
+const load = slug => (FETE_SLUGS_MONDE.includes(slug) ? import("./pranks6") : FETE_SLUGS.includes(slug) ? import("./pranks4")
+  : PRANK_SLUGS_5.includes(slug) ? import("./pranks5") : PRANK_SLUGS_3.includes(slug) ? import("./pranks3")
   : PRANK_SLUGS_2.includes(slug) ? import("./pranks2") : import("./pranks"));
 function effectOf(slug) {
   if (!Pranks[slug]) Pranks[slug] = lazy(() => load(slug).then(m => ({ default: m.PRANKS[slug]?.Effect || (() => null) })));
