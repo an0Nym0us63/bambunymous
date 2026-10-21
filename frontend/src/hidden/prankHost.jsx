@@ -12,6 +12,9 @@ import { HIDDEN_SLUGS } from "./index";
 export const PRANK_SLUGS = ["tsunami", "seisme", "tete-en-bas", "panne", "melange", "gravite", "miroir", "blizzard",
   "brouillard", "fete", "tornade", "aimant", "fantome", "pixel", "vieux-film", "glitch", "toile", "apesanteur", "vent",
   "ecran-bleu", "fourmis", "canicule", "papier", "loupe", "escargot", "aspirateur", "bulle", "taches", "domino", "ombre"];
+// celles qui demandent un geste (trouver, tirer, deverrouiller…), dans leur propre lot
+const PRANK_SLUGS_3 = ["puzzle", "rideau", "cadenas", "ballons", "cache-cache", "gomme", "serrure", "carte-a-gratter", "radar", "ascenseur", "aimant-inverse", "sablier", "peche", "digicode", "souris", "interrupteurs", "boussole", "cles", "bombe", "demineur", "jardin", "cible", "bouchon"];
+PRANK_SLUGS.push(...PRANK_SLUGS_3);
 
 export const isPrank = slug => PRANK_SLUGS.includes(slug);
 
@@ -29,9 +32,9 @@ export function PrankRedirect({ slug }) {
 }
 
 const Pranks = {};
-const load = () => import("./pranks");
+const load = slug => (PRANK_SLUGS_3.includes(slug) ? import("./pranks3") : import("./pranks"));
 function effectOf(slug) {
-  if (!Pranks[slug]) Pranks[slug] = lazy(() => load().then(m => ({ default: m.PRANKS[slug]?.Effect || (() => null) })));
+  if (!Pranks[slug]) Pranks[slug] = lazy(() => load(slug).then(m => ({ default: m.PRANKS[slug]?.Effect || (() => null) })));
   return Pranks[slug];
 }
 
