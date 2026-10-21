@@ -3,7 +3,7 @@ favoris) et diagnostic. Lecture seule cote MakerWorld."""
 import asyncio
 import logging
 
-from fastapi import APIRouter, Body, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Request, UploadFile
 
 from .auth import get_current_user, require_admin, require_mw
 from ....services import makerworld as mw
@@ -33,8 +33,21 @@ async def _call(coro):
 _IMG_MAX = 4 * 1024 * 1024
 
 
+async def _img_user(request: Request):
+    """Jeton de l'en-tete, ou `_t` dans l'adresse : la page charge la vignette par
+    une simple balise image (l'appli Android abime les reponses binaires lues autrement)."""
+    from ....db.session import AsyncSessionLocal
+    from .auth import _resolve
+    h = request.headers.get("authorization", "")
+    tok = h.split(" ", 1)[1].strip() if h.lower().startswith("bearer ") else request.query_params.get("_t", "")
+    if not tok:
+        raise HTTPException(401, "Non authentifié")
+    async with AsyncSessionLocal() as db:
+        return (await _resolve(tok, db))[0]
+
+
 @router.get("/img")
-async def mw_img(u: str, _=Depends(get_current_user)):
+async def mw_img(u: str, _=Depends(_img_user)):
     import hashlib
     from pathlib import Path
     from urllib.parse import urlparse

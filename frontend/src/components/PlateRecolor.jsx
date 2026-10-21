@@ -1,5 +1,4 @@
 import React, { useEffect, useId, useState } from "react";
-import client from "../api/client";
 import MwImg, { mwImg } from "./MwImg";
 
 // Vignette de plateau repeinte aux couleurs des filaments choisis (aperçu).
@@ -39,8 +38,12 @@ const CACHE = new Map();   // cle -> { url, absent } (plusieurs couleurs)
 async function paint(src, pairs) {
   const key = src + "|" + pairs.map(p => p.from + ">" + p.to).join(",");
   if (CACHE.has(key)) return CACHE.get(key);
-  const { data } = await client.get("/makerworld/img", { params: { u: src }, responseType: "blob" });
-  const bmp = await createImageBitmap(data);
+  // Une simple image de la meme adresse (lisible pixel par pixel) : l'appli Android
+  // abime les reponses binaires lues par requete.
+  const tok = (() => { try { return localStorage.getItem("token") || ""; } catch { return ""; } })();
+  const bmp = new Image();
+  bmp.src = `/api/v1/makerworld/img?u=${encodeURIComponent(src)}&_t=${encodeURIComponent(tok)}`;
+  await bmp.decode();
   const k = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
   const W = Math.max(1, Math.round(bmp.width * k)), H = Math.max(1, Math.round(bmp.height * k));
   const cv = document.createElement("canvas");
