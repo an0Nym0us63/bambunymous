@@ -297,7 +297,7 @@ CATALOG = [
        lore="Finie bien avant l'heure : le trancheur était trop pessimiste."),
     _a("hundred", "secret", "💯", "Centenaire", "Ta 100ᵉ impression réussie", [1],
        lore="La centième ! On ne compte plus les plateaux nettoyés."),
-    _a("jackpot", "secret", "🎰", "Jackpot", "Ta 777ᵉ impression réussie", [1],
+    _a("lucky777", "secret", "🎰", "Triple sept", "Ta 777ᵉ impression réussie", [1],
        lore="777 : les trois cerises sont alignées."),
     _a("leet", "secret", "💻", "1337", "Ta 1337ᵉ impression réussie", [1],
        lore="Ta 1337ᵉ réussite : tu es officiellement « leet »."),
@@ -980,7 +980,7 @@ SECRET_SUBS = [
      "bullseye tortoise hare one_hour watchmaker hundred_pieces triple3 suite123 min42 gram1 g100 g500 g_palindrome equal supersonic wink mammoth"),
     ("colors", "🎨", "Couleurs et matières", "rainbow16 panda tricolore carbon rubber barbie smurf hulk fire pumpkin "
      "xmas_tree silk galaxy glow marble wood translucent sparkle soluble rainbow6 vader snow mouse clockwork prince chick belgium italy reggae bee ladybug sailor rainbow_ultimate mix2 lab3 abs_first asa_first pc_first nylon_first"),
-    ("counts", "🔢", "Compteurs et séries", "first_print n1001 hundred jackpot leet y2k dont_panic weekend10 on_fire "
+    ("counts", "🔢", "Compteurs et séries", "first_print n1001 hundred lucky777 leet y2k dont_panic weekend10 on_fire "
      "rainbow_day triplets broken_record pi314 err404 devil666 almost1000 byte256 kilobyte ten_thousand onetwothree seventh lucky13 forager perfect_month all_hours plate7 unfaithful mega_group novelist"),
     ("ups", "🎢", "Hauts et bas", "comeback phoenix bad_day insomniac comeback30 hibernation first_try so_close big_fall black_week revenge flawless_month"),
     ("trade", "🛒", "Ventes et bobines", "penny luxury market_day museum sold_hot finally_sold eternal_spool "
@@ -1140,7 +1140,7 @@ HINTS = {
     "first_print": "Tout commence par une première réussite.",
     "n1001": "Autant d'impressions qu'il y a de nuits dans un célèbre recueil de contes.",
     "hundred": "Un nombre rond, à trois chiffres.",
-    "jackpot": "Le nombre gagnant des machines à sous.",
+    "lucky777": "Le nombre gagnant des machines à sous.",
     "leet": "Un nombre que les hackers écrivent à la place d'un mot.",
     "y2k": "Le nombre du bug qui faisait peur aux ordinateurs.",
     "dont_panic": "La grande réponse, en nombre d'impressions réussies.",
@@ -2135,7 +2135,7 @@ def compute_series(d: dict, now: datetime) -> dict:
             first_ok = first_ok or end
             if n_ok == 1001:
                 push("n1001", end, 1)
-            for n_, key_ in ((42, "dont_panic"), (100, "hundred"), (777, "jackpot"), (1337, "leet"), (2000, "y2k")):
+            for n_, key_ in ((42, "dont_panic"), (100, "hundred"), (777, "lucky777"), (1337, "leet"), (2000, "y2k")):
                 if n_ok == n_:
                     push(key_, end, 1)
             if ko_run >= 5:
