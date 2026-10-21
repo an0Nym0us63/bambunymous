@@ -3072,8 +3072,8 @@ async def _tick(notify: bool = True) -> list:
 KEY_START = 3
 KEYS_PER_PRINTS = 10
 KEYS_TIER, KEYS_SECRET = 1, 3
-REVEALS = [("category", "la catégorie", 1), ("vignette", "la vignette", 2), ("title", "le titre", 3),
-           ("hint", "un indice", 4), ("desc", "le descriptif", 5)]
+REVEALS = [("category", "la catégorie", 1), ("vignette", "la vignette", 3), ("title", "le titre", 6),
+           ("hint", "un indice", 10), ("desc", "le descriptif", 15)]      # 35 clés pour tout devoiler (21/10/2026)
 FREE_FROM_FRIENDS = 3   # un secret qu'un copain a gagne : categorie, vignette et titre offerts
 REVEAL_V = 2           # 2 : la categorie devient la 1re etape (avant : vignette, titre, indice, descriptif)
 KEY_LOG_MAX = 40
@@ -3268,7 +3268,7 @@ PRIZE_HELP = {
     "none": "Rien cette fois : retente ta chance.",
     "key1": "Une clé, tout de suite.",
     "replay": "Le tour t'est rendu : tu rejoues.",
-    "hint": "L'étape suivante d'un secret pris au hasard, offerte (elle vaut de 1 à 5 clés). "
+    "hint": "L'étape suivante d'un secret pris au hasard, offerte (elle vaut de 1 à 15 clés). "
             "S'il n'y a plus rien à révéler : 1 clé.",
     "key3": "Trois clés d'un coup.",
     "ticket": "Un ticket de plus. Sur un succès à paliers, il en faut de 1 à 6 selon le palier visé pour le passer.",
