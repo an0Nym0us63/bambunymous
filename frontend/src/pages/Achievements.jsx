@@ -695,9 +695,6 @@ function UsageSheet({ data, kind, onKind, onOpen, onClose }) {
               <span style={{ fontSize:13, fontWeight:900, color:"#D97706", whiteSpace:"nowrap" }}>{k.keys ? `🔑 ${k.keys}` : "🔑"}</span>
             </button>
           )) : <p style={msg}>Aucune clé dépensée pour l'instant.</p>)}
-          {kind === "keys" && keys.some(k => k.partial) && (
-            <p style={{ ...msg, padding:"6px 4px", fontSize:11 }}>Les clés sont comptées secret par secret depuis le 22 octobre 2026 ;
-              avant, seules les étapes révélées sont connues.</p>)}
         </div>
       </div>
     </div>
