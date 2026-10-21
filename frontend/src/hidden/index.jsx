@@ -19,6 +19,8 @@ const GROUP_OF = Object.fromEntries(Object.entries(GROUPS).flatMap(([g, slugs]) 
 const CACHE = {};
 
 export const isHidden = slug => !!GROUP_OF[slug];
+// toutes les pages cachees (pour la surprise a l'ouverture), /anonymous et /teapot compris
+export const HIDDEN_SLUGS = [...Object.keys(GROUP_OF), "anonymous", "teapot"];
 
 function pageFor(slug) {
   if (!CACHE[slug]) {

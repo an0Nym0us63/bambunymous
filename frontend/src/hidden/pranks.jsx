@@ -267,6 +267,8 @@ function useStage(done) {
 }
 
 const KIT_CSS = `
+.pk-caption { bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+@media (min-width: 768px) { .pk-caption { bottom: calc(22px + env(safe-area-inset-bottom, 0px)); } }
 @keyframes pk-kit-pill { from { opacity: 0; transform: translate(-50%, 14px) scale(.95) } to { opacity: 1; transform: translate(-50%, 0) scale(1) } }
 @keyframes pk-kit-fadeout { 0%, 70% { opacity: 1 } 100% { opacity: 0 } }
 @keyframes pk-kit-fadein { from { opacity: 0 } to { opacity: 1 } }
@@ -287,17 +289,23 @@ function Layer({ s, css, children, style }) {
   );
 }
 
-// Bulle de message (bas d'ecran par defaut, au-dessus de la barre mobile).
-function Pill({ children, top, fade, style }) {
+// Legende d'une farce : petite carte discrete en bas d'ecran, dans le style des
+// notifications de l'appli (fond du theme, liseré violet), au-dessus de la barre
+// mobile. Elle accompagne ce qui se passe sans jamais le masquer.
+function Pill({ children, fade, style }) {
   const anim = "pk-kit-pill .45s cubic-bezier(.2,1.3,.4,1) both" + (fade ? ", pk-kit-fadeout 3.4s ease .2s both" : "");
   return (
-    <div role="status" style={{ position: "absolute", left: "50%",
-      ...(top ? { top: "calc(68px + env(safe-area-inset-top, 0px))" } : { bottom: "calc(96px + env(safe-area-inset-bottom, 0px))" }),
-      transform: "translateX(-50%)", width: "max-content", maxWidth: "calc(100vw - 32px)", padding: "10px 16px",
-      borderRadius: 14, background: "rgba(10,10,20,0.84)", color: "#fff", fontWeight: 800, fontSize: 14.5,
-      lineHeight: 1.35, textAlign: "center", fontFamily: FONT, border: "1px solid rgba(255,255,255,0.18)",
-      boxShadow: "0 10px 30px rgba(0,0,0,.45)", animation: anim, pointerEvents: "none", zIndex: 40, ...style }}>
-      {children}
+    <div role="status" className="pk-caption" style={{ position: "absolute", left: "50%",
+      transform: "translateX(-50%)", width: "max-content", maxWidth: "min(380px, calc(100vw - 32px))",
+      display: "flex", alignItems: "center", gap: 8, padding: "7px 12px 7px 9px", borderRadius: 12,
+      background: "color-mix(in srgb, var(--sheet-bg, #1e293b) 86%, transparent)",
+      backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)",
+      color: "var(--text, #f1f5f9)", fontWeight: 600, fontSize: 12.5, lineHeight: 1.35, textAlign: "left",
+      fontFamily: FONT, border: "1px solid rgba(139,92,246,0.45)",
+      boxShadow: "0 6px 18px rgba(0,0,0,.22), 0 0 0 3px rgba(139,92,246,.10)",
+      animation: anim, pointerEvents: "none", zIndex: 40, ...style }}>
+      <span aria-hidden="true" style={{ fontSize: 13, flexShrink: 0 }}>🌀</span>
+      <span style={{ minWidth: 0 }}>{children}</span>
     </div>
   );
 }
@@ -2762,3 +2770,7 @@ export const PRANKS = {
   "domino": { label: "Domino", Effect: softly(Domino, { emoji: "🁢", text: "Effet domino évité de justesse.", tint: tint("rgba(234,179,8,.2)") }) },
   "ombre": { label: "Ombres", Effect: Ombre },
 };
+
+// Boite a outils partagee avec les autres lots de farces (pranks2, pranks3) :
+// calque, legende, remise en etat garantie au demontage, version douce.
+export { useStage, Layer, Pill, GiveUp, softly, Soft, prefersReduced, rand, pick, tint, FONT, FILAMENTS };
