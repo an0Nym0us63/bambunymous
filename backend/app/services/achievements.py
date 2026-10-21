@@ -675,7 +675,7 @@ EGGS = {
                   "Le logo n'est pas qu'une image : il a le tournis facile.",
                   "Sept clics sur le logo : il en a encore la tête qui tourne."),
     "disco": ("🪩", "Disco", "Basculer 10 fois entre thème clair et sombre en une minute",
-              "Jour, nuit, jour, nuit… vite, très vite.",
+              "Fais vibrer l'ambiance comme sur une piste des années 70, sans jamais t'arrêter.",
               "Clair, sombre, clair, sombre : la boule à facettes est de sortie."),
     "answer": ("🧮", "La grande question", "Chercher « 42 » dans une recherche",
                "Une recherche, un nombre, et la réponse à la grande question sur la vie, l'univers et le reste.",
