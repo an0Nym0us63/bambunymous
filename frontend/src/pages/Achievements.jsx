@@ -985,18 +985,27 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
       ) : null}
       {sheet && !unique && it.next != null && tickets > 0 && onTicket && (() => {
         const cost = it.ticket_cost || 1, enough = tickets >= cost;
+        const nt = it.tiers[it.level + 1];
+        const gain = fmt(it.next - (it.value || 0), it.unit);
         return (
-          <button onClick={e => { e.stopPropagation(); if (!enough) return; if (sure) { setSure(false); onTicket(); } else setSure(true); }}
-            disabled={!enough}
-            style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:8, padding:"7px 12px", borderRadius:20,
-              fontSize:12.5, fontWeight:800, cursor: enough ? "pointer" : "default", border:"1px solid #F59E0B",
-              background: sure ? "#F59E0B" : "rgba(245,158,11,0.12)", color: sure ? "#fff" : "#b45309", opacity: enough ? 1 : .6 }}>
-            <span>{sure ? `Confirmer : utiliser ${cost} ticket${cost > 1 ? "s" : ""} pour passer ${it.tiers[it.level + 1]?.label} (+${fmt(it.next - (it.value || 0), it.unit)})`
-              : `Passer ${it.tiers[it.level + 1]?.label} · ${cost} ticket${cost > 1 ? "s" : ""}`}</span>
-            <span style={{ display:"inline-flex", gap:2 }}>{Array.from({ length: cost }).map((_, i) =>
-              <TicketStub key={i} size={0.75} dim={i >= tickets}/>)}</span>
-            {!enough && <span style={{ fontWeight:600 }}>(tu en as {tickets})</span>}
-          </button>
+          <div style={{ display:"flex", flexDirection:"column", gap:6, alignItems:"flex-start" }}>
+            <button onClick={e => { e.stopPropagation(); if (!enough) return; if (sure) { setSure(false); onTicket(); } else setSure(true); }}
+              disabled={!enough}
+              style={{ display:"inline-flex", alignItems:"center", gap:10, padding:"7px 14px 7px 8px", borderRadius:20, textAlign:"left",
+                fontSize:12.5, fontWeight:800, cursor: enough ? "pointer" : "default", border:"1px solid #F59E0B",
+                background: sure ? "#F59E0B" : "rgba(245,158,11,0.12)", color: sure ? "#fff" : "#b45309", opacity: enough ? 1 : .6 }}>
+              {/* ce qu'on depense : un ticket dessine, et combien */}
+              <span style={{ display:"inline-flex", padding:"3px 4px", borderRadius:7, background: sure ? "rgba(124,45,18,.45)" : "transparent" }}>
+                <TicketStub n={cost} size={1} dim={!enough}/></span>
+              <span style={{ display:"flex", flexDirection:"column", lineHeight:1.3 }}>
+                <span>{sure ? "Confirmer" : "Utiliser"} {cost} ticket{cost > 1 ? "s" : ""}</span>
+                <span style={{ fontSize:11, fontWeight:700, opacity:.9 }}>
+                  → passer <span style={{ color: sure ? "#fff" : nt?.color }}>{nt?.label}</span> · compteur +{gain}</span>
+              </span>
+            </button>
+            {!enough && <span style={{ fontSize:11.5, color:"var(--muted)" }}>
+              Il en faut {cost}, tu en as {tickets}.</span>}
+          </div>
         );
       })()}
       {sheet && keyErr && !unique && <p style={{ margin:0, fontSize:12, color:"#ef4444" }}>{keyErr}</p>}
