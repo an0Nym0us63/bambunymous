@@ -119,8 +119,8 @@ export default function Achievements({ embedded = false }) {
       <div className="card" style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:16,
         background:"linear-gradient(135deg, rgba(245,183,0,0.10), rgba(139,92,246,0.10)), var(--surface)" }}>
         <div style={{ display:"flex", gap:18, alignItems:"center", flexWrap:"wrap" }}>
-          <ScoreRing score={data.score} max={data.score_max} tiers={data.tiers}/>
-          <div style={{ flex:1, minWidth:240, display:"flex", flexDirection:"column", gap:8 }}>
+          <ScoreHero data={data}/>
+          <div style={{ flex:"2 1 300px", minWidth:0, display:"flex", flexDirection:"column", gap:8 }}>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
               <span style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:"var(--muted)" }}>
                 Ta vitrine</span>
@@ -439,7 +439,7 @@ function Compare({ people, cat }) {
 // les derniers mouvements.
 // Le score dans une jauge : l'anneau prend la couleur du palier atteint (un
 // neuvieme du chemin par palier), le nombre monte au chargement.
-function ScoreRing({ score, max, tiers }) {
+function ScoreRing({ score, max, tiers, size = 138 }) {
   const ladder = tiers.filter(t => t.id !== "unique");
   const v = max ? Math.max(0, Math.min(1, score / max)) : 0;
   const t = ladder[Math.min(ladder.length - 1, Math.floor(v * ladder.length))] || ladder[0];
@@ -458,22 +458,60 @@ function ScoreRing({ score, max, tiers }) {
     return () => { cancelAnimationFrame(raf); clearTimeout(g); };
   }, [score]);
   const R = 56, C = 2 * Math.PI * R;
+  const k = size / 138;
   return (
-    <div style={{ position:"relative", width:138, height:138, flexShrink:0, margin:"0 auto" }}>
+    <div style={{ position:"relative", width:size, height:size, flexShrink:0 }}>
       <div aria-hidden="true" style={{ position:"absolute", inset:8, borderRadius:"50%",
         background:`radial-gradient(circle, ${t.color}33, transparent 70%)`, animation:"bn-ring-glow 3s ease-in-out infinite" }}/>
-      <svg width="138" height="138" viewBox="0 0 138 138" style={{ position:"absolute", inset:0, transform:"rotate(-90deg)" }}>
+      <svg width={size} height={size} viewBox="0 0 138 138" style={{ position:"absolute", inset:0, transform:"rotate(-90deg)" }}>
         <circle cx="69" cy="69" r={R} fill="none" stroke="var(--surface2)" strokeWidth="10"/>
         <circle cx="69" cy="69" r={R} fill="none" stroke={t.color} strokeWidth="10" strokeLinecap="round"
           strokeDasharray={C} strokeDashoffset={go ? C * (1 - v) : C}
           style={{ transition:"stroke-dashoffset 1.2s cubic-bezier(.2,.8,.2,1)", filter:`drop-shadow(0 0 4px ${t.color})` }}/>
       </svg>
       <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-        <span style={{ fontSize:27, fontWeight:900, color:"var(--text)", fontVariantNumeric:"tabular-nums", lineHeight:1 }}>
+        <span style={{ fontSize:27 * k, fontWeight:900, color:"var(--text)", fontVariantNumeric:"tabular-nums", lineHeight:1 }}>
           {shown.toLocaleString("fr-FR")}</span>
-        <span style={{ fontSize:11, color:"var(--muted)", marginTop:2 }}>points sur {max.toLocaleString("fr-FR")}</span>
-        <span style={{ marginTop:5, fontSize:11, fontWeight:900, padding:"2px 8px", borderRadius:20, color:"#fff",
+        <span style={{ fontSize:Math.max(10, 11 * k), color:"var(--muted)", marginTop:2 }}>points</span>
+        <span style={{ marginTop:4, fontSize:Math.max(10, 11 * k), fontWeight:900, padding:"1px 8px", borderRadius:20, color:"#fff",
           background:t.color }}>{Math.round(v * 100)} %</span>
+      </div>
+    </div>
+  );
+}
+
+// Le bandeau du score : la jauge, et a cote ton rang general, ce qu'il manque
+// pour le suivant, tes succes et tes secrets.
+function ScoreHero({ data }) {
+  const ladder = data.tiers.filter(t => t.id !== "unique");
+  const max = data.score_max || 1;
+  const i = Math.min(ladder.length - 1, Math.floor(Math.min(1, data.score / max) * ladder.length));
+  const t = ladder[i], nx = ladder[i + 1];
+  const need = nx ? Math.max(0, Math.ceil(((i + 1) / ladder.length) * max) - data.score) : 0;
+  const items = data.items || [];
+  const tiered = items.filter(x => x.tiers.length > 1);
+  const got = tiered.filter(x => x.level >= 0).length;
+  const done = tiered.filter(x => x.next == null && x.level >= 0).length;
+  const chip = (bg, c) => ({ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 9px", borderRadius:20,
+    fontSize:11.5, fontWeight:700, background:bg, color:c, whiteSpace:"nowrap" });
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:14, flex:"1 1 300px", maxWidth:420, minWidth:0 }}>
+      <ScoreRing score={data.score} max={data.score_max} tiers={data.tiers} size={112}/>
+      <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <Medal tier={t} emoji="" size={34}/>
+          <div style={{ minWidth:0 }}>
+            <div style={{ fontSize:11, color:"var(--muted)", fontWeight:700, letterSpacing:".06em", textTransform:"uppercase" }}>Rang</div>
+            <div style={{ fontSize:19, fontWeight:900, color:t.color, lineHeight:1.1 }}>{t.label}</div>
+          </div>
+        </div>
+        {nx && <div style={{ fontSize:12, color:"var(--text2)" }}>
+          encore <b>{need.toLocaleString("fr-FR")} pts</b> pour <span style={{ color:nx.color, fontWeight:800 }}>{nx.label}</span></div>}
+        <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+          <span style={chip("rgba(59,130,246,0.12)", "#3b82f6")}>🏅 {got}/{tiered.length} succès</span>
+          {done > 0 && <span style={chip("rgba(34,197,94,0.12)", "#16a34a")}>✓ {done} au max</span>}
+          <span style={chip("rgba(236,72,153,0.12)", "#db2777")}>🔮 {data.medals?.unique || 0} secrets</span>
+        </div>
       </div>
     </div>
   );
@@ -482,7 +520,7 @@ function ScoreRing({ score, max, tiers }) {
 // La vitrine : chaque palier, sa medaille (animee aux hauts rangs) et combien tu en as.
 function MedalShelf({ tiers, medals }) {
   return (
-    <div style={{ position:"relative", display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(54px, 1fr))", gap:"10px 6px",
+    <div style={{ position:"relative", display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(48px, 1fr))", gap:"10px 4px",
       padding:"10px 6px 14px", borderRadius:14, background:"linear-gradient(180deg, transparent 55%, rgba(0,0,0,0.06))" }}>
       {tiers.map(t => {
         const n = medals[t.id] || 0;
@@ -504,7 +542,112 @@ function MedalShelf({ tiers, medals }) {
 
 // Ce que tu as (cles, tickets) a gauche, la machine a sous a droite : la
 // toucher ouvre la roue.
-function Treasure({ keys, onRules, onWheel }) {
+function useNarrow(px = 640) {
+  const q = `(max-width: ${px}px)`;
+  const [n, setN] = useState(() => typeof window !== "undefined" && window.matchMedia?.(q).matches);
+  useEffect(() => {
+    const m = window.matchMedia?.(q);
+    if (!m) return;
+    const on = () => setN(m.matches);
+    m.addEventListener?.("change", on);
+    return () => m.removeEventListener?.("change", on);
+  }, [q]);
+  return n;
+}
+
+function Treasure(props) {
+  return useNarrow() ? <TreasureRow {...props}/> : <TreasureWide {...props}/>;
+}
+
+// Sur telephone : cles, tickets et roue cote a cote, trois cases.
+function TreasureRow({ keys, onRules, onWheel }) {
+  const [open, setOpen] = useState(false);
+  const log = keys.log || [];
+  const w = keys.wheel;
+  const per = w?.secrets_per_ticket || 10;
+  const toT = w?.to_ticket || per;
+  const prints = keys.rules?.prints || 10;
+  const has = (w?.spins || 0) > 0;
+  const box = (glow, edge) => ({ position:"relative", overflow:"hidden", borderRadius:14, padding:"10px 6px 8px", minWidth:0,
+    display:"flex", flexDirection:"column", alignItems:"center", gap:3, textAlign:"center",
+    background:`radial-gradient(circle at 50% 0%, ${glow}, transparent 70%), var(--surface2)`, border:`1px solid ${edge}` });
+  const mini = (pct, c) => <div style={{ width:"80%", height:4, borderRadius:4, background:"var(--surface)", overflow:"hidden", marginTop:2 }}>
+    <div style={{ width:`${pct}%`, height:"100%", background:c }}/></div>;
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:8 }}>
+        <button onClick={() => log.length && setOpen(o => !o)} style={{ ...box("rgba(250,204,21,.35)", "rgba(250,204,21,.45)"), cursor:"pointer",
+          font:"inherit", color:"inherit" }}>
+          <span style={{ fontSize:24, animation:"bn-float 3.5s ease-in-out infinite" }}>🔑</span>
+          <span style={{ fontSize:24, fontWeight:900, lineHeight:1, background:"linear-gradient(180deg,#fde047,#f59e0b)",
+            WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{keys.balance}</span>
+          <span style={{ fontSize:10.5, color:"var(--muted)", fontWeight:700 }}>clés</span>
+          {mini(Math.round(100 * (1 - (keys.to_next || prints) / prints)), "linear-gradient(90deg,#fde047,#f59e0b)")}
+          <span style={{ fontSize:9.5, color:"var(--muted)" }}>dans {keys.to_next} impr.</span>
+        </button>
+        {w && (
+          <div style={box("rgba(249,115,22,.32)", "rgba(249,115,22,.45)")}>
+            <span style={{ marginTop:4, marginBottom:3, animation:"bn-float 4s ease-in-out infinite" }}>
+              <TicketStub size={1} dim={!w.tickets}/></span>
+            <span style={{ fontSize:24, fontWeight:900, lineHeight:1, color:"#f97316" }}>{w.tickets || 0}</span>
+            <span style={{ fontSize:10.5, color:"var(--muted)", fontWeight:700 }}>tickets</span>
+            {mini(Math.round(100 * (1 - toT / per)), "linear-gradient(90deg,#fb923c,#f97316)")}
+            <span style={{ fontSize:9.5, color:"var(--muted)" }}>dans {toT} secret{toT > 1 ? "s" : ""}</span>
+          </div>
+        )}
+        {w && (
+          <div role={onWheel ? "button" : undefined} onClick={onWheel || undefined} style={{ position:"relative", borderRadius:14,
+            padding:"8px 6px", minWidth:0, display:"flex", flexDirection:"column", alignItems:"center", gap:4,
+            cursor: onWheel ? "pointer" : "default", background:"linear-gradient(180deg,#c81e1e,#7f1d1d)", border:"2px solid #f59e0b",
+            boxShadow:"0 6px 16px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.25)" }}>
+            <div aria-hidden="true" style={{ position:"absolute", inset:3, pointerEvents:"none" }}>
+              {[[10, 0], [50, 0], [90, 0], [10, 100], [50, 100], [90, 100]].map(([x, y], i) => <span key={i} style={{ position:"absolute",
+                width:5, height:5, borderRadius:"50%", background:"#fde047", left:`calc(${x}% - 2.5px)`, top:`calc(${y}% - 2.5px)`,
+                animation:`bn-lamp ${has ? 0.9 : 1.6}s ${i * 0.12}s infinite` }}/>)}
+            </div>
+            <span style={{ fontSize:10, fontWeight:900, color:"#fde047", letterSpacing:".08em", marginTop:2,
+              textShadow:"0 1px 0 #7c2d12" }}>🎰 ROUE</span>
+            <div style={{ display:"flex", gap:2, padding:2, borderRadius:6, background:"#1c1917", width:"92%" }}>
+              {[8, 6, 10].map((d, i) => {
+                const seq = [...IDLE.slice(i * 3), ...IDLE.slice(0, i * 3)];
+                return (
+                  <div key={i} style={{ flex:1, height:24, overflow:"hidden", borderRadius:4, background:"#fff" }}>
+                    <div style={{ animation:`bn-reel-idle ${d}s linear infinite` }}>
+                      {[...seq, ...seq].map((x, j) => <div key={j} style={{ height:24, display:"flex", alignItems:"center",
+                        justifyContent:"center", fontSize:14 }}>{x}</div>)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <span style={{ fontFamily:"'Courier New', monospace", fontWeight:900, color:"#fb923c", background:"#0c0a09",
+              borderRadius:5, padding:"0 6px", fontSize:14, textShadow:"0 0 6px #f97316" }}>{String(w.spins || 0).padStart(2, "0")}</span>
+            <span style={{ fontSize:9.5, fontWeight:900, color:"#7c2d12", borderRadius:8, padding:"3px 0", width:"92%", textAlign:"center",
+              background: has ? "linear-gradient(180deg,#fde047,#f59e0b)" : "#d6c79f",
+              animation: has && onWheel ? "bn-press 2s ease-in-out infinite" : "none" }}>{has ? "TOURNER" : "LUNDI"}</span>
+          </div>
+        )}
+      </div>
+      {open && (
+        <div style={{ borderRadius:12, padding:"8px 10px", background:"var(--surface2)", border:"1px solid var(--border)",
+          display:"flex", flexDirection:"column", gap:3, fontSize:12, color:"var(--text2)" }}>
+          {log.slice(0, 12).map((l, i) => (
+            <div key={i} style={{ display:"flex", gap:8 }}>
+              <span style={{ width:30, flexShrink:0, fontWeight:800, color: l.n > 0 ? "#22c55e" : l.n < 0 ? "#ef4444" : "var(--muted)" }}>
+                {l.n > 0 ? `+${l.n}` : l.n || "·"}</span>
+              <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.why}</span>
+              <span style={{ color:"var(--muted)", fontSize:11 }}>{dateFr(l.at)}</span>
+            </div>
+          ))}
+          <button onClick={onRules} style={{ alignSelf:"flex-start", marginTop:4, background:"none", border:"none", padding:0,
+            fontSize:11.5, fontWeight:700, color:"#F59E0B", cursor:"pointer" }}>Comment gagner et dépenser des clés ?</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TreasureWide({ keys, onRules, onWheel }) {
   const [open, setOpen] = useState(false);
   const log = keys.log || [];
   const w = keys.wheel;
