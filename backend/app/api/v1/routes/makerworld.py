@@ -26,6 +26,53 @@ async def _call(coro):
         raise HTTPException(502, f"MakerWorld : réponse inattendue ({type(e).__name__})")
 
 
+# Vignettes de plateau relayees par le serveur : le serveur d'images de MakerWorld
+# n'autorise pas la page a lire leurs pixels, ce qu'il faut pour les repeindre aux
+# couleurs choisies. Uniquement des images PNG/JPG/WEBP de *.bblmw.com en https,
+# sans redirection ; gardees sur disque (elles ne changent pas).
+_IMG_MAX = 4 * 1024 * 1024
+
+
+@router.get("/img")
+async def mw_img(u: str, _=Depends(get_current_user)):
+    import hashlib
+    from pathlib import Path
+    from urllib.parse import urlparse
+    import aiohttp
+    from fastapi import Response
+    from ....core.config import settings
+    p = urlparse(u)
+    host = (p.hostname or "").lower()
+    if p.scheme != "https" or not (host == "bblmw.com" or host.endswith(".bblmw.com")) or p.username or p.port \
+            or not p.path.lower().endswith((".png", ".jpg", ".jpeg", ".webp")):
+        raise HTTPException(400, "Image refusée")
+    ext = p.path.lower().rsplit(".", 1)[1]
+    ctype = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}[ext]
+    folder = Path(settings.DATA_DIR) / "mw_img"
+    path = folder / (hashlib.sha256(u.encode()).hexdigest()[:40] + "." + ext)
+    head = {"Cache-Control": "private, max-age=2592000"}
+    if path.exists():
+        return Response(path.read_bytes(), media_type=ctype, headers=head)
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as http:
+            async with http.get(u, allow_redirects=False) as r:
+                if r.status != 200:
+                    raise HTTPException(502, "Image introuvable")
+                data = await r.content.read(_IMG_MAX + 1)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(502, "Image indisponible")
+    if len(data) > _IMG_MAX:
+        raise HTTPException(502, "Image trop lourde")
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
+    except OSError:
+        pass
+    return Response(data, media_type=ctype, headers=head)
+
+
 @router.get("/status")
 async def mw_status(_: str = Depends(get_current_user)):
     out = {"cache": await mw.stats()}

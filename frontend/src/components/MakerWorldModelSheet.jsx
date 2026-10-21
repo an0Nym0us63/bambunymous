@@ -9,7 +9,8 @@ import { mwLiked } from "../utils/mwSync";
 import { useMwAssign } from "../store/mwAssign";
 import { useFriend } from "../store/friend";
 import MwImg from "./MwImg";
-import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, plateInAms, clearPicks } from "./MwStockMatch";
+import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, plateInAms, clearPicks, plateColorMap, usePicksVersion } from "./MwStockMatch";
+import PlateRecolor from "./PlateRecolor";
 import Lightbox from "./Lightbox";
 import { openCreator } from "./MwCreatorPage";
 import { useToRateSet, RateButton } from "./MwToRate";
@@ -84,6 +85,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const friend = useFriend((s) => s.friend); // profil dont le 3MF est en lecture
   const canPlan = useCanMw();                  // plan « A faire » : droit MakerWorld, jamais chez un copain
   const [plateSel, setPlateSel] = useState({});    // instance_id -> plateaux choisis (absent = tous)
+  usePicksVersion();                                 // un filament change : les vignettes se repeignent
   const [showCom, setShowCom] = useState(false);   // commentaires replies (charges a l'ouverture)
   const [like, setLike] = useState(null);          // { liked } avec mon compte ; null = inconnu / pas connecte
   const [likeBusy, setLikeBusy] = useState(false);
@@ -524,7 +526,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                       ombre suit la silhouette (la transparence la dessine) et la detache de
                                       n'importe quel fond. Image entiere, jamais recadree. */}
                                   <div style={{ background:"var(--surface2)" }}>
-                                    {pl.thumb ? <MwImg src={pl.thumb} w={200}
+                                    {pl.thumb ? <PlateRecolor src={pl.thumb} w={200}
+                                      map={plateColorMap(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`)}
                                       style={{ width:"100%", aspectRatio:"1", objectFit:"contain", display:"block", padding:6,
                                         boxSizing:"border-box",
                                         filter:"drop-shadow(0 0 0.6px rgba(0,0,0,.75)) drop-shadow(0 0 0.6px rgba(255,255,255,.7)) drop-shadow(0 3px 5px rgba(0,0,0,.28))" }}/>

@@ -31,6 +31,14 @@ const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const PICKS = new Map();      // `${scope}|${i}` -> filament_id
 // Filament trouve par la recherche dans tout le stock (hors propositions) : `${scope}|${i}` -> proposition.
 const EXTRA = new Map();
+// Qui veut savoir quand un choix change (les vignettes repeintes de la fiche).
+const WATCH = new Set();
+const changed = () => WATCH.forEach(f => { try { f(); } catch { /* rien */ } });
+export function usePicksVersion() {
+  const [v, setV] = useState(0);
+  useEffect(() => { const f = () => setV(n => n + 1); WATCH.add(f); return () => { WATCH.delete(f); }; }, []);
+  return v;
+}
 const inLists = (x, id) => x.matches.some(m => m.filament_id === id) || (x.others || []).some(m => m.filament_id === id);
 // Plan retenu pour « À faire » : cle « TYPE|#COULEUR » -> filament choisi a la main.
 // Un choix fait par recherche est relu dans le stock (promesse resolue une fois tout pret).
@@ -43,11 +51,28 @@ export function setPicksFromPlan(scope, items, picks) {
     if (!inLists(x, id)) asks.push(client.get("/makerworld/stock/search", { params: { type: x.type, color: x.color, ids: String(id) } })
       .then(({ data }) => { if (data.items?.[0]) EXTRA.set(`${scope}|${i}`, data.items[0]); }).catch(() => {}));
   });
-  return Promise.all(asks);
+  changed();
+  return Promise.all(asks).then(r => { changed(); return r; });
 }
 // Oublier les choix faits a la main pour un profil (plan retenu annule) : retour aux propositions.
 export function clearPicks(scope) {
   for (const m of [PICKS, EXTRA]) for (const k of [...m.keys()]) if (k.startsWith(`${scope}|`)) m.delete(k);
+  changed();
+}
+
+// Couleurs d'un plateau : pour chacun de ses filaments, couleur d'origine (3MF) ->
+// couleur du filament retenu dans le stock. [{ from, to }], une ligne par couleur d'origine.
+export function plateColorMap(items, plate, scope = "") {
+  const out = [], seen = new Set();
+  for (const f of (plate?.filaments || []).filter(x => num(x.g) > 0)) {
+    const i = (items || []).findIndex(x => fkey(x.type, x.color) === fkey(f.type, f.color));
+    const c = i >= 0 ? chosenOf(items[i], scope, i) : null;
+    const from = String(f.color || "").toUpperCase();
+    if (!c?.color || !from || seen.has(from)) continue;
+    seen.add(from);
+    out.push({ from, to: String(c.color) });
+  }
+  return out;
 }
 export function picksOf(scope, items) {
   const out = {};
@@ -145,7 +170,7 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
   if (!items?.length) return null;
   const go = id => { onNavigate?.(); nav(`/filaments?id=${id}`); };
   const choose = (x, i) => chosenOf(x, scope, i);
-  const pick = (i, id) => { PICKS.set(`${scope}|${i}`, id); setOpen(null); bump(n => n + 1); };
+  const pick = (i, id) => { PICKS.set(`${scope}|${i}`, id); setOpen(null); bump(n => n + 1); changed(); };
   const pickFound = (i, mt) => { EXTRA.set(`${scope}|${i}`, mt); pick(i, mt.filament_id); };
   const { need, total } = stockNeeds(items, plates, selected, choose);
   return (
