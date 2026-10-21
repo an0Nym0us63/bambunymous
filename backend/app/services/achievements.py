@@ -4343,6 +4343,86 @@ async def _spend_key(aid: str) -> dict:
     return {"balance": k["balance"], "level": lvl + 1}
 
 
+# Depense automatique (22/10/2026) : « depense X cles » et le serveur choisit.
+# But : le plus d'indices possible (l'etape qui permet vraiment de chercher).
+# 1) les secrets les moins chers a mener jusqu'a l'indice d'abord (ceux qu'un
+#    copain a gagnes, ceux deja entames) ; 2) avec le reste, on avance les
+#    suivants une etape apres l'autre ; 3) les descriptifs seulement quand tous
+#    les indices sont pris. Ordre stable : l'apercu et la depense sont identiques.
+def _auto_plan(st: dict, budget: int) -> list:
+    import zlib
+    hint_lvl = next(i for i, r in enumerate(REVEALS) if r[0] == "hint") + 1
+    todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and not a.get("set")
+            and not (st.get("unlocked") or {}).get(a["id"])]
+    lvl = {aid: _reveal_level(st, aid) for aid in todo}
+    to_hint = lambda aid: sum(REVEALS[i][2] for i in range(lvl[aid], hint_lvl))
+    order = sorted((aid for aid in todo if lvl[aid] < hint_lvl), key=lambda aid: (to_hint(aid), -lvl[aid], zlib.crc32(aid.encode())))
+    plan, left = [], budget
+
+    def take(aid, upto):
+        nonlocal left
+        while lvl[aid] < upto and REVEALS[lvl[aid]][2] <= left:
+            left -= REVEALS[lvl[aid]][2]
+            plan.append((aid, lvl[aid]))
+            lvl[aid] += 1
+
+    for aid in order:                      # 1) jusqu'a l'indice, en entier
+        if to_hint(aid) <= left:
+            take(aid, hint_lvl)
+    for aid in order:                      # 2) le reste, etape par etape
+        take(aid, hint_lvl)
+    if all(lvl[aid] >= hint_lvl for aid in todo):
+        for aid in sorted(todo, key=lambda a: zlib.crc32(a.encode())):   # 3) les descriptifs
+            take(aid, len(REVEALS))
+    return plan
+
+
+def _plan_summary(plan: list, budget: int) -> dict:
+    steps = {}
+    for _aid, i in plan:
+        steps[REVEALS[i][0]] = steps.get(REVEALS[i][0], 0) + 1
+    cost = sum(REVEALS[i][2] for _a, i in plan)
+    return {"cost": cost, "left": budget - cost, "secrets": len({a for a, _i in plan}),
+            "steps": [{"id": r[0], "label": r[1], "n": steps[r[0]]} for r in REVEALS if steps.get(r[0])]}
+
+
+async def spend_keys_auto(n: int, dry: bool = False) -> dict:
+    """Depense jusqu'a n cles d'un coup, au mieux (voir _auto_plan). dry : l'apercu seul."""
+    async with _lock():
+        st = await _state_get() or {}
+        k = st.get("keys")
+        if not isinstance(k, dict):
+            raise ValueError("Les clés arrivent au prochain calcul des succès (dans 15 minutes au plus)")
+        k = _keys_init(st)
+        n = max(0, min(int(n or 0), k["balance"]))
+        plan = _auto_plan(st, n)
+        out = _plan_summary(plan, n)
+        out["balance"] = k["balance"]
+        if dry or not plan:
+            return out
+        now = datetime.utcnow().isoformat()
+        for aid, i in plan:
+            cost = REVEALS[i][2]
+            k["balance"] -= cost
+            k.setdefault("spent", {})[aid] = i + 1
+            k["spent_total"] = k.get("spent_total", 0) + cost
+            k["reveal_steps"] = k.get("reveal_steps", 0) + 1
+            use = k.setdefault("uses", {}).setdefault(aid, {"keys": 0, "steps": []})
+            use["keys"] += cost
+            use["steps"].append({"step": REVEALS[i][1], "keys": cost, "at": now})
+            if i + 1 == len(REVEALS):
+                k.setdefault("flags", {}).setdefault("full_reveal", now)
+        if k["balance"] == 0:
+            k.setdefault("flags", {}).setdefault("last_key", now)
+        what = ", ".join(f"{s['n']} {s['label'].split(' ', 1)[1]}{'s' if s['n'] > 1 else ''}" for s in out["steps"])
+        k["log"] = ([{"at": now, "n": -out["cost"], "why": f"Dépense automatique : {what}"}] + (k.get("log") or []))[:KEY_LOG_MAX]
+        await _state_put(st)
+        _CACHE["v"] = None
+        _bg_tick()
+        out["balance"] = k["balance"]
+        return out
+
+
 # ── Roue (21/10/2026) ────────────────────────────────────────────────────────
 # 3 tours offerts au depart, puis 3 chaque lundi (rien de rattrape). Le tirage
 # se fait ici, jamais dans la page. Lots : (id, libelle, cles, chance en %).

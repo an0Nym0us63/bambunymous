@@ -140,6 +140,16 @@ async def achievements_ticket(aid: str, _: str = Depends(require_admin)):
         raise HTTPException(400, str(e))
 
 
+@router.post("/keys-auto")
+async def achievements_keys_auto(body: dict = Body(...), _: str = Depends(require_admin)):
+    """Depenser n cles d'un coup, au mieux (le plus d'indices possible). dry : l'apercu seul."""
+    from ....services import achievements as A
+    try:
+        return await A.spend_keys_auto(int(body.get("n") or 0), bool(body.get("dry")))
+    except (ValueError, TypeError) as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/keys/{aid}")
 async def achievements_spend_key(aid: str, _: str = Depends(require_admin)):
     """Revele l'etape suivante d'un secret (vignette, titre, indice, descriptif)."""

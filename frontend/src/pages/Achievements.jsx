@@ -148,7 +148,7 @@ export default function Achievements({ embedded = false }) {
             <MedalShelf tiers={data.tiers} medals={data.medals} onOpen={t => setVitrine(t)}/>
           </div>
         </div>
-        {data.keys && !atFriend && <Treasure keys={data.keys} onRules={() => setRules(true)}
+        {data.keys && !atFriend && <Treasure keys={data.keys} onRules={() => setRules(true)} onSpent={canSpend ? load : null}
           onWheel={canSpend && data.keys.wheel ? () => setSlot(true) : null}/>}
       </div>
 
@@ -846,12 +846,75 @@ function useNarrow(px = 640) {
   return n;
 }
 
+// Depenser plusieurs cles d'un coup : on choisit combien, le serveur choisit ou
+// (le plus d'indices possible) ; on voit l'apercu avant de valider.
+function AutoSpend({ keys, onSpent }) {
+  const [open, setOpen] = useState(false);
+  const [n, setN] = useState(keys.balance);
+  const [plan, setPlan] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const [done, setDone] = useState(null);
+  useEffect(() => { if (!open) { setPlan(null); setErr(null); setN(keys.balance); } }, [open, keys.balance]);
+  useEffect(() => {
+    if (!open || n < 1) { setPlan(null); return undefined; }
+    const t = setTimeout(() => client.post("/achievements/keys-auto", { n, dry: true })
+      .then(r => setPlan(r.data)).catch(e => setErr(e.response?.data?.detail || e.message)), 250);
+    return () => clearTimeout(t);
+  }, [open, n]);
+  if (!onSpent || keys.balance < 1) return null;
+  const go = async () => {
+    setBusy(true); setErr(null);
+    try { const r = await client.post("/achievements/keys-auto", { n }); setDone(r.data); setOpen(false); await onSpent(); }
+    catch (e) { setErr(e.response?.data?.detail || e.message); }
+    setBusy(false);
+  };
+  const line = p => p.steps.map(x => `${x.n} ${x.label.split(" ").slice(1).join(" ")}${x.n > 1 ? "s" : ""}`).join(" · ");
+  return (
+    <div onClick={e => e.stopPropagation()} style={{ position:"relative", marginTop:8 }}>
+      {!open ? (
+        <button onClick={() => { setDone(null); setOpen(true); }} style={{ width:"100%", padding:"7px 10px", borderRadius:10, cursor:"pointer",
+          border:"1px solid rgba(250,204,21,.5)", background:"rgba(250,204,21,.12)", color:"#d97706", fontWeight:800, fontSize:12.5 }}>
+          ⚡ Dépenser des clés automatiquement</button>
+      ) : (
+        <div style={{ borderRadius:12, padding:"10px 12px", background:"var(--surface2)", border:"1px solid rgba(250,204,21,.45)",
+          display:"flex", flexDirection:"column", gap:8, fontSize:12.5, color:"var(--text2)", textAlign:"left" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontWeight:800, color:"var(--text)" }}>Dépenser</span>
+            <input type="range" min={1} max={keys.balance} value={Math.min(n, keys.balance)}
+              onChange={e => setN(+e.target.value)} style={{ flex:1, minWidth:0, accentColor:"#f59e0b" }}/>
+            <span style={{ fontWeight:900, color:"#d97706", minWidth:44, textAlign:"right" }}>{n} 🔑</span>
+          </div>
+          <div style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.45 }}>
+            Le plus d'indices possible : d'abord les secrets les moins chers à mener jusqu'à leur indice (ceux qu'un copain a
+            gagnés, ceux déjà entamés), puis le reste étape par étape.</div>
+          {plan && (plan.steps.length
+            ? <div style={{ fontWeight:700, color:"var(--text)" }}>{line(plan)}
+                <span style={{ fontWeight:500, color:"var(--muted)" }}> · {plan.secrets} secret{plan.secrets > 1 ? "s" : ""} · {plan.cost} 🔑
+                  {plan.left > 0 ? ` (${plan.left} gardée${plan.left > 1 ? "s" : ""} : pas assez pour l'étape suivante)` : ""}</span></div>
+            : <div style={{ color:"var(--muted)" }}>Rien à révéler avec {n} clé{n > 1 ? "s" : ""}.</div>)}
+          {err && <div style={{ color:"#ef4444", fontSize:12 }}>{err}</div>}
+          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+            <button onClick={() => setOpen(false)} style={{ padding:"6px 12px", borderRadius:9, border:"1px solid var(--border)",
+              background:"var(--surface)", color:"var(--text2)", cursor:"pointer", fontWeight:700 }}>Annuler</button>
+            <button disabled={busy || !plan?.cost} onClick={go} style={{ padding:"6px 14px", borderRadius:9, border:"none",
+              cursor: busy || !plan?.cost ? "default" : "pointer", opacity: busy || !plan?.cost ? .6 : 1, fontWeight:800, color:"#7c2d12",
+              background:"linear-gradient(180deg,#fde047,#f59e0b)" }}>Valider{plan?.cost ? ` (${plan.cost} 🔑)` : ""}</button>
+          </div>
+        </div>
+      )}
+      {done && !open && <div style={{ marginTop:6, fontSize:12, color:"#16a34a", fontWeight:700 }}>
+        ✓ Révélé : {line(done)}. Va voir tes secrets !</div>}
+    </div>
+  );
+}
+
 function Treasure(props) {
   return useNarrow() ? <TreasureRow {...props}/> : <TreasureWide {...props}/>;
 }
 
 // Sur telephone : cles, tickets et roue cote a cote, trois cases.
-function TreasureRow({ keys, onRules, onWheel }) {
+function TreasureRow({ keys, onRules, onWheel, onSpent }) {
   const [open, setOpen] = useState(false);
   const log = keys.log || [];
   const w = keys.wheel;
@@ -870,7 +933,7 @@ function TreasureRow({ keys, onRules, onWheel }) {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:8 }}>
-        <button onClick={() => log.length && setOpen(o => !o)} style={{ ...box("rgba(250,204,21,.35)", "rgba(250,204,21,.45)"), cursor:"pointer",
+        <button onClick={() => (log.length || onSpent) && setOpen(o => !o)} style={{ ...box("rgba(250,204,21,.35)", "rgba(250,204,21,.45)"), cursor:"pointer",
           font:"inherit", color:"inherit", margin:0, justifyContent:"flex-start" }}>
           <span style={iconSlot}><span style={{ fontSize:24, lineHeight:1, animation:"bn-float 3.5s ease-in-out infinite" }}>🔑</span></span>
           <span style={{ fontSize:24, fontWeight:900, lineHeight:1, background:"linear-gradient(180deg,#fde047,#f59e0b)",
@@ -925,6 +988,7 @@ function TreasureRow({ keys, onRules, onWheel }) {
       {open && (
         <div style={{ borderRadius:12, padding:"8px 10px", background:"var(--surface2)", border:"1px solid var(--border)",
           display:"flex", flexDirection:"column", gap:3, fontSize:12, color:"var(--text2)" }}>
+          <AutoSpend keys={keys} onSpent={onSpent}/>
           {log.slice(0, 12).map((l, i) => (
             <div key={i} style={{ display:"flex", gap:8 }}>
               <span style={{ width:30, flexShrink:0, fontWeight:800, color: l.n > 0 ? "#22c55e" : l.n < 0 ? "#ef4444" : "var(--muted)" }}>
@@ -941,7 +1005,7 @@ function TreasureRow({ keys, onRules, onWheel }) {
   );
 }
 
-function TreasureWide({ keys, onRules, onWheel }) {
+function TreasureWide({ keys, onRules, onWheel, onSpent }) {
   const [open, setOpen] = useState(false);
   const log = keys.log || [];
   const w = keys.wheel;
@@ -980,6 +1044,7 @@ function TreasureWide({ keys, onRules, onWheel }) {
               border:"1px solid var(--border)", borderRadius:20, padding:"3px 9px", fontSize:11, color:"var(--muted)", cursor:"pointer",
               position:"relative" }}>Historique {open ? "▾" : "▸"}</button>}
           </div>
+          <AutoSpend keys={keys} onSpent={onSpent}/>
           {open && (
             <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:3, fontSize:12, color:"var(--text2)", position:"relative" }}>
               {log.slice(0, 12).map((l, i) => (
@@ -1402,6 +1467,10 @@ function Rules({ data, onClose }) {
           <div style={{ display:"flex", flexDirection:"column", gap:3, margin:"0 0 6px 4px", fontSize:12.5, color:"var(--text2)" }}>
             {k.steps.map((st, i) => <span key={st.id}>{i + 1}. {st.label.charAt(0).toUpperCase() + st.label.slice(1)} — {st.cost} 🔑</span>)}
           </div>
+          <P><b>Dépense automatique</b> (⚡ sous tes clés) : tu choisis combien en dépenser, l'appli choisit où. Elle vise le plus
+            d'indices possible : d'abord les secrets les moins chers à mener jusqu'à leur indice (ceux qu'un copain a gagnés, ceux
+            déjà entamés), puis elle avance les suivants étape par étape ; les descriptifs ne passent qu'une fois tous les indices
+            pris. Tu vois ce qui sera révélé avant de valider.</P>
         </>}
 
         {k?.wheel && <>
