@@ -111,7 +111,7 @@ export default function Achievements({ embedded = false }) {
         </div>
         <Bar value={pct / 100} tiers={data.tiers}/>
         <MedalCounts tiers={data.tiers} medals={data.medals}/>
-        {data.keys && !atFriend && <KeysBox keys={data.keys}/>}
+        {data.keys && !atFriend && <KeysBox keys={data.keys} onRules={() => setRules(true)}/>}
       </div>
 
       {/* Podium general entre copains */}
@@ -410,45 +410,35 @@ function Compare({ people, cat }) {
 
 // Mes cles : le compte, la prochaine, et (deplie) comment on en gagne et
 // les derniers mouvements.
-function KeysBox({ keys }) {
+function KeysBox({ keys, onRules }) {
   const [open, setOpen] = useState(false);
-  const r = keys.rules;
+  const log = keys.log || [];
   return (
     <div style={{ borderRadius:12, padding:"8px 12px", background:"rgba(245,158,11,0.10)", border:"1px solid rgba(245,158,11,0.35)" }}>
-      <button onClick={() => setOpen(o => !o)} style={{ width:"100%", display:"flex", alignItems:"center", gap:10, background:"none",
-        border:"none", padding:0, cursor:"pointer", color:"var(--text)", textAlign:"left" }}>
+      <button onClick={() => log.length && setOpen(o => !o)} style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
+        background:"none", border:"none", padding:0, cursor: log.length ? "pointer" : "default", color:"var(--text)", textAlign:"left" }}>
         <span style={{ fontSize:22 }}>🔑</span>
         <span style={{ flex:1, minWidth:0 }}>
           <span style={{ display:"block", fontSize:15, fontWeight:900 }}>{keys.balance} clé{keys.balance > 1 ? "s" : ""}</span>
           <span style={{ display:"block", fontSize:11.5, color:"var(--muted)" }}>
-            Prochaine dans {keys.to_next} impression{keys.to_next > 1 ? "s" : ""} réussie{keys.to_next > 1 ? "s" : ""}</span>
+            Prochaine dans {keys.to_next} impression{keys.to_next > 1 ? "s" : ""} réussie{keys.to_next > 1 ? "s" : ""}
+            {" · "}à dépenser sur les secrets</span>
         </span>
-        <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>
+        {log.length > 0 && <span style={{ fontSize:11, color:"var(--muted)", whiteSpace:"nowrap" }}>
+          Historique <span style={{ display:"inline-block", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span></span>}
       </button>
       {open && (
-        <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:6, fontSize:12, color:"var(--text2)", lineHeight:1.45 }}>
-          <div>
-            <b>Gagner des clés</b> : {r.start} au départ · 1 toutes les {r.prints} impressions réussies · {r.tier} par palier franchi ·
-            {" "}{r.secret} par secret gagné. Et parfois, une surprise.
-            {" "}Rien de rétroactif : ce qui est reconnu après coup (anciennes impressions importées, nouveau succès, seuils
-            changés) ne rapporte rien.
-          </div>
-          <div>
-            <b>Les dépenser</b> sur un secret pas encore gagné, dans l'ordre :{" "}
-            {keys.steps.map((st, i) => <span key={st.id}>{i ? " → " : ""}{st.label} ({st.cost} 🔑)</span>)}.
-          </div>
-          {keys.log?.length > 0 && (
-            <div style={{ display:"flex", flexDirection:"column", gap:2, marginTop:2 }}>
-              {keys.log.slice(0, 8).map((l, i) => (
-                <div key={i} style={{ display:"flex", gap:8 }}>
-                  <span style={{ width:34, flexShrink:0, fontWeight:800, color: l.n > 0 ? "#22c55e" : "#ef4444" }}>
-                    {l.n > 0 ? `+${l.n}` : l.n}</span>
-                  <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.why}</span>
-                  <span style={{ color:"var(--muted)", fontSize:11 }}>{dateFr(l.at)}</span>
-                </div>
-              ))}
+        <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:3, fontSize:12, color:"var(--text2)" }}>
+          {log.slice(0, 12).map((l, i) => (
+            <div key={i} style={{ display:"flex", gap:8 }}>
+              <span style={{ width:34, flexShrink:0, fontWeight:800, color: l.n > 0 ? "#22c55e" : "#ef4444" }}>
+                {l.n > 0 ? `+${l.n}` : l.n}</span>
+              <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.why}</span>
+              <span style={{ color:"var(--muted)", fontSize:11 }}>{dateFr(l.at)}</span>
             </div>
-          )}
+          ))}
+          <button onClick={onRules} style={{ alignSelf:"flex-start", marginTop:4, background:"none", border:"none", padding:0,
+            fontSize:11.5, fontWeight:700, color:"#F59E0B", cursor:"pointer" }}>Comment gagner et dépenser des clés ?</button>
         </div>
       )}
     </div>
