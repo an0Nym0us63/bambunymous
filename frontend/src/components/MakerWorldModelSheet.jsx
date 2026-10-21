@@ -7,7 +7,7 @@ import { mwLiked } from "../utils/mwSync";
 import { useMwAssign } from "../store/mwAssign";
 import { useFriend } from "../store/friend";
 import MwImg from "./MwImg";
-import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, plateInAms } from "./MwStockMatch";
+import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, plateInAms, clearPicks } from "./MwStockMatch";
 import Lightbox from "./Lightbox";
 import { openCreator } from "./MwCreatorPage";
 import { useToRateSet, RateButton } from "./MwToRate";
@@ -152,7 +152,16 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   };
   const unpinPlan = async () => {
     setPlanBusy(true);
-    try { await client.delete(`/makerworld/queue/plan/${id}`); setPlan(null); }
+    try {
+      await client.delete(`/makerworld/queue/plan/${id}`);
+      // le plan oublie : filaments et plateaux reviennent aux choix par defaut, sans recharger
+      if (plan?.instance_id) {
+        clearPicks(`${id}|${plan.instance_id}`);
+        setPlateSel(s => { const n = { ...s }; delete n[plan.instance_id]; return n; });
+      }
+      setPlan(null);
+      setM(x => x && { ...x });
+    }
     catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setPlanBusy(false);
   };

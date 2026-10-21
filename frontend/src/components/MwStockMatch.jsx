@@ -44,6 +44,10 @@ export function setPicksFromPlan(scope, items, picks) {
   });
   return Promise.all(asks);
 }
+// Oublier les choix faits a la main pour un profil (plan retenu annule) : retour aux propositions.
+export function clearPicks(scope) {
+  for (const m of [PICKS, EXTRA]) for (const k of [...m.keys()]) if (k.startsWith(`${scope}|`)) m.delete(k);
+}
 export function picksOf(scope, items) {
   const out = {};
   (items || []).forEach((x, i) => {
