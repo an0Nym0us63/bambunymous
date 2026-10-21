@@ -723,7 +723,8 @@ async def model_detail(design_id: str, stale_ok: bool = False) -> dict:
     printer = await my_printer()
     return {**base, "stock": stock, "printer": printer, "profiles": rank_profiles(base.get("profiles") or [], printer), "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
             "printed": len(done), "in_progress": sum(1 for r in rows if r[1] == "IN_PROGRESS"),
-            "printed_plates": sorted({k for r in done for k in plate_keys(r[2], r[3], r[4])})}
+            "printed_plates": sorted({k for r in done for k in plate_keys(r[2], r[3], r[4])}),
+            "printing_plates": sorted({k for r in rows if r[1] == "IN_PROGRESS" for k in plate_keys(r[2], r[3], r[4])})}
 
 
 def plate_keys(plate_id, profile_id, manual) -> list:

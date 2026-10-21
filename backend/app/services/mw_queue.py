@@ -262,6 +262,27 @@ async def _printed_plates(dids) -> dict:
     return out
 
 
+async def _printing_plates() -> dict:
+    """Plateaux en cours d'impression (impression ouverte dans l'historique) :
+    {design_id: {numeros de plateau}}. Lu a chaque appel : ca bouge vite."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    try:
+        async with AsyncSessionLocal() as db:
+            rows = (await db.execute(select(Print.design_id, Print.plate_id).where(
+                Print.status == "IN_PROGRESS", Print.design_id.isnot(None)))).all()
+    except Exception:
+        return {}
+    out = {}
+    for did, plate in rows:
+        try:
+            out.setdefault(str(did), set()).add(int(str(plate or "1").strip() or 1))
+        except ValueError:
+            continue
+    return out
+
+
 async def _prices(fids) -> dict:
     """Prix au gramme des filaments (prix de la bobine / poids nominal)."""
     from sqlalchemy import select
@@ -295,10 +316,15 @@ async def queue(fresh: bool = False, until: str | None = None, pick: list | None
     raw = _CACHE[1]
     # En cours d'impression (etat MQTT en direct, ou impression ouverte dans l'historique) : en tete.
     live = _live_print()
+    on_plates = await _printing_plates()
     models = []
     for r in raw["models"]:
         on = live if live and live["design_id"] == r["design_id"] else None
-        models.append({**r, "printing": bool(on or r.get("_inprog")),
+        printing = bool(on or r.get("_inprog"))
+        pp = on_plates.get(str(r["design_id"])) if printing else None
+        if pp and r.get("plates"):
+            r = {**r, "plates": [{**p, "printing": p.get("index") in pp} for p in r["plates"]]}
+        models.append({**r, "printing": printing,
                        "progress": on["progress"] if on else None, "remaining_min": on["remaining_min"] if on else None})
     models.sort(key=lambda r: not r["printing"])
     ids = [r["design_id"] for r in models]

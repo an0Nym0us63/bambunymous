@@ -37,25 +37,32 @@ function statusText(r) {
 }
 
 // Les plateaux d'un modele, un par pastille : vert = faisable tout de suite avec
-// l'AMS ; coche = deja imprime par moi ; gris = il manque un filament dans l'AMS.
+// l'AMS ; coche = deja imprime par moi ; gris = il manque un filament dans l'AMS ;
+// orange avec sablier = en cours d'impression.
 function PlateChips({ plates }) {
-  const todo = plates.filter(p => p.ready && !p.printed);       // faisables et pas encore faits
+  const todo = plates.filter(p => p.ready && !p.printed && !p.printing);   // faisables, ni faits ni en cours
   return (
-    <span style={{ display:"flex", gap:3, marginTop:4, flexWrap:"wrap", alignItems:"center" }}>
+    <span style={{ display:"flex", gap:5, marginTop:5, flexWrap:"wrap", alignItems:"center" }}>
       <span style={{ fontSize:10, color:"var(--muted)", marginRight:1 }}>Plateaux</span>
       {plates.map(p => {
         const done = p.printed > 0;
         const tip = `Plateau ${p.index}${p.name ? ` · ${p.name}` : ""} : `
           + (p.ready ? "faisable maintenant avec l'AMS" : "un filament manque dans l'AMS")
-          + (done ? ` · déjà imprimé${p.printed > 1 ? ` ${p.printed}×` : ""}` : " · pas encore imprimé");
+          + (done ? ` · déjà imprimé${p.printed > 1 ? ` ${p.printed}×` : ""}` : " · pas encore imprimé")
+          + (p.printing ? " · en cours d'impression" : "");
         return (
-          <span key={p.index} title={tip} style={{ minWidth:18, height:18, padding:"0 4px", borderRadius:6, fontSize:10,
-            fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", gap:1,
-            color: p.ready ? "#fff" : "var(--muted)",
-            background: p.ready ? (done ? "rgba(34,197,94,0.55)" : "#22c55e") : "var(--surface)",
-            border: p.ready ? "1px solid #22c55e" : "1px solid var(--border)",
+          <span key={p.index} title={tip} style={{ position:"relative", minWidth:18, height:18, padding:"0 4px", borderRadius:6,
+            fontSize:10, fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", gap:1,
+            color: p.printing || p.ready ? "#fff" : "var(--muted)",
+            background: p.printing ? "#f59e0b" : p.ready ? (done ? "rgba(34,197,94,0.55)" : "#22c55e") : "var(--surface)",
+            border: p.printing ? "1px solid #f59e0b" : p.ready ? "1px solid #22c55e" : done ? "1px solid #22c55e" : "1px solid var(--border)",
             textDecoration: "none" }}>
-            {p.index}{done && <span style={{ fontSize:9 }}>✓</span>}
+            {p.printing && <span style={{ fontSize:9 }}>⏳</span>}
+            {p.index}
+            {/* deja imprime : une coche verte dans le coin, quelle que soit la couleur du carre */}
+            {done && <span style={{ position:"absolute", top:-5, right:-5, width:11, height:11, borderRadius:"50%",
+              background:"#22c55e", color:"#fff", fontSize:7.5, lineHeight:"11px", textAlign:"center",
+              boxShadow:"0 0 0 1.5px var(--surface)" }}>✓</span>}
           </span>
         );
       })}

@@ -220,6 +220,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
   const done = new Set(m?.printed_plates || []);
   const plateDone = (prof, idx) => done.has(`${prof.profile_id}:${idx}`) || done.has(`:${idx}`);
+  const onNow = new Set(m?.printing_plates || []);
+  const platePrinting = (prof, idx) => onNow.has(`${prof.profile_id}:${idx}`) || onNow.has(`:${idx}`);
 
   return createPortal(
     <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4200, background:"rgba(0,0,0,0.6)",
@@ -496,6 +498,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:8, padding:"0 10px 10px" }}>
                           {p.plates.map(pl => {
                             const ok = plateDone(p, pl.index);
+                            const live = platePrinting(p, pl.index);
                             const sel0 = plateSel[p.instance_id];
                             // un plateau ecarte ne dit pas s'il est pret : il ne sera pas lance
                             const ready = !sel0 || sel0.includes(pl.index) ? plateInAms(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`) : null;
@@ -531,6 +534,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                   {/* deja imprime ET pret : les deux, on peut vouloir le refaire */}
                                   <div style={{ position:"absolute", top:4, left:4, display:"flex", flexDirection:"column",
                                     alignItems:"flex-start", gap:3 }}>
+                                    {live && <span title="Ce plateau est en cours d'impression" style={{ fontSize:9.5, fontWeight:800,
+                                      color:"white", background:"#f59e0b", padding:"1px 6px", borderRadius:20 }}>⏳ EN COURS</span>}
                                     {ok && <span style={{ fontSize:9.5, fontWeight:800, color:"white",
                                       background:"#22c55e", padding:"1px 6px", borderRadius:20 }}>✓ IMPRIMÉ</span>}
                                     {ready ? <span title={ok ? "Déjà imprimé, et tous ses filaments sont dans l'AMS : tu peux le relancer"
