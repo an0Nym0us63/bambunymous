@@ -46,10 +46,23 @@ async def achievements_spin(_: str = Depends(require_admin)):
 
 
 @router.post("/wheel/extra")
-async def achievements_wheel_extra(n: int = 5, _: str = Depends(require_admin)):
+async def achievements_wheel_extra(body: dict, username: str = Depends(get_current_user), _: str = Depends(require_admin),
+                                   db: AsyncSession = Depends(get_db)):
+    # administrateur, ET un secret : le token RFID suivi du mot de passe du compte
+    import asyncio
+    import hmac
+    from ....core.security import verify_password
+    from ....services.settings_service import get_setting
+    secret = str((body or {}).get("secret") or "")
+    token = (await get_setting(db, "RFID_TOKEN", "") or "").strip()
+    user = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+    ok = bool(token) and len(secret) > len(token) and hmac.compare_digest(secret[:len(token)], token)         and user is not None and verify_password(secret[len(token):], user.password_hash)
+    if not ok:
+        await asyncio.sleep(1.5)
+        raise HTTPException(403, "Refusé")
     from ....services import achievements as A
     try:
-        return await A.add_spins(n)
+        return await A.add_spins((body or {}).get("n") or 5)
     except ValueError as e:
         raise HTTPException(400, str(e))
 

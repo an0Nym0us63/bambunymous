@@ -18,15 +18,31 @@ import { egg } from "./eggs";
 import Anonymous from "./pages/Anonymous";
 
 function Rewind() {
-  const [msg, setMsg] = React.useState("…");
-  React.useEffect(() => {
-    const n = new URLSearchParams(window.location.search).get("n") || 5;
-    import("./api/client").then(({ default: client }) =>
-      client.post("/achievements/wheel/extra", null, { params: { n } })
-        .then(({ data }) => setMsg(`+${data.added} · ${data.spins}`))
-        .catch(e => setMsg(e.response?.status === 403 ? "Réservé à l'administrateur" : (e.response?.data?.detail || e.message))));
-  }, []);
-  return <p style={{ padding:"40px 16px", textAlign:"center", color:"var(--muted)", fontFamily:"monospace" }}>{msg}</p>;
+  const [pw, setPw] = React.useState("");
+  const [msg, setMsg] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const n = new URLSearchParams(window.location.search).get("n") || 5;
+  const go = async e => {
+    e.preventDefault();
+    if (!pw) { setMsg("Mot de passe requis"); return; }
+    setBusy(true); setMsg("");
+    try {
+      const { default: client } = await import("./api/client");
+      const { data } = await client.post("/achievements/wheel/extra", { n: Number(n), secret: pw });
+      setMsg(`+${data.added} · ${data.spins}`); setPw("");
+    } catch (err) { setMsg(err.response?.data?.detail || err.message); }
+    setBusy(false);
+  };
+  return (
+    <form onSubmit={go} style={{ maxWidth:320, margin:"60px auto", padding:"0 16px", display:"flex", flexDirection:"column", gap:10 }}>
+      <input type="password" value={pw} onChange={e => { setPw(e.target.value); setMsg(""); }} placeholder="Mot de passe"
+        autoComplete="off" style={{ padding:"10px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
+          color:"var(--text)", fontSize:14 }}/>
+      <button type="submit" disabled={busy} style={{ padding:"10px 0", borderRadius:10, border:"none", background:"#3b82f6",
+        color:"#fff", fontWeight:700, cursor:"pointer" }}>{busy ? "…" : "Valider"}</button>
+      {msg && <p style={{ margin:0, textAlign:"center", color:"var(--muted)", fontFamily:"monospace", fontSize:13 }}>{msg}</p>}
+    </form>
+  );
 }
 
 // Adresse inconnue : une page qui le dit (et un petit secret pour qui s'y perd)
