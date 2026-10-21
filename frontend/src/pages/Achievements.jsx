@@ -36,6 +36,7 @@ export default function Achievements({ embedded = false }) {
   const [openSubs, setOpenSubs] = useState(() => new Set());
   const toggleSub = id => setOpenSubs(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [detail, setDetail] = useState(null);
+  const [rules, setRules] = useState(false);
   const atFriend = !!currentFriend();             // chez un copain : pas de podium (ce sont ses copains a lui)
   const isAdmin = useIsAdmin();
   const load = () => client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
@@ -103,6 +104,10 @@ export default function Achievements({ embedded = false }) {
         <div style={{ display:"flex", alignItems:"baseline", gap:10, flexWrap:"wrap" }}>
           <span style={{ fontSize:28, fontWeight:900, color:"var(--text)", fontVariantNumeric:"tabular-nums" }}>{data.score}</span>
           <span style={{ fontSize:13, color:"var(--muted)", fontWeight:600 }}>points sur {data.score_max} · {pct} %</span>
+          <span style={{ flex:1 }}/>
+          <button onClick={() => setRules(true)} aria-label="Règles des succès" title="Règles : paliers, points, clés, secrets"
+            style={{ width:26, height:26, borderRadius:"50%", border:"1px solid var(--border)", background:"var(--surface2)",
+              color:"var(--text2)", fontSize:13, fontWeight:900, cursor:"pointer", alignSelf:"center", flexShrink:0 }}>?</button>
         </div>
         <Bar value={pct / 100} tiers={data.tiers}/>
         <MedalCounts tiers={data.tiers} medals={data.medals}/>
@@ -265,6 +270,7 @@ export default function Achievements({ embedded = false }) {
       {data.since && <p style={{ ...msg, padding:"4px", fontSize:11 }}>
         Les dates viennent de ton historique ; ce qui ne s'y lit pas (MakerWorld, stock, copains) est daté du jour où il a été constaté.</p>}
 
+      {rules && createPortal(<Rules data={data} onClose={() => setRules(false)}/>, document.body)}
       {detail && byId[detail] && createPortal(
         <div data-no-pull="" onClick={closeDetail} style={{ position:"fixed", inset:0, zIndex:4300, background:"rgba(0,0,0,0.6)",
           display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
@@ -626,6 +632,78 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// Les regles, en une feuille : paliers et points, secrets, cles, copains.
+function Rules({ data, onClose }) {
+  const ladder = data.tiers.filter(t => t.id !== "unique");
+  const uniq = data.tiers.find(t => t.id === "unique");
+  const k = data.keys;
+  const cum = ladder.map((t, i) => ladder.slice(0, i + 1).reduce((a, x) => a + x.score, 0));
+  const H = ({ children }) => <div style={{ fontSize:13, fontWeight:900, color:"var(--text)", margin:"14px 0 6px" }}>{children}</div>;
+  const P = ({ children }) => <p style={{ margin:"0 0 6px", fontSize:12.5, color:"var(--text2)", lineHeight:1.55 }}>{children}</p>;
+  return (
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4300, background:"rgba(0,0,0,0.6)",
+      display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width:"100%", maxWidth:460, maxHeight:"88vh", overflowY:"auto",
+        padding:"16px 18px", background:"var(--sheet-bg)", backdropFilter:"none", position:"relative" }}>
+        <button onClick={onClose} aria-label="Fermer" style={{ position:"absolute", top:8, right:10, background:"none", border:"none",
+          color:"var(--muted)", fontSize:20, cursor:"pointer" }}>✕</button>
+        <div style={{ fontSize:16, fontWeight:900, color:"var(--text)" }}>📖 Règles des succès</div>
+
+        <H>🏅 Paliers et points</H>
+        <P>Chaque succès a jusqu'à neuf paliers. Chaque palier gagné rapporte ses points, <b>et ceux d'en dessous restent
+          acquis</b> : un succès en {ladder[2]?.label} vaut {cum[2]} points ({ladder.slice(0, 3).map(t => t.score).join(" + ")}).</P>
+        <div style={{ display:"grid", gridTemplateColumns:"auto 1fr auto auto", gap:"4px 10px", alignItems:"center",
+          fontSize:12, margin:"4px 0 8px" }}>
+          <span/><span style={{ color:"var(--muted)" }}>Palier</span><span style={{ color:"var(--muted)", textAlign:"right" }}>pts</span>
+          <span style={{ color:"var(--muted)", textAlign:"right" }}>cumul</span>
+          {ladder.map((t, i) => (
+            <React.Fragment key={t.id}>
+              <Medal tier={t} emoji="" size={16}/>
+              <span style={{ fontWeight:700, color:"var(--text)" }}>{t.label}</span>
+              <span style={{ textAlign:"right", fontWeight:800, color:"var(--text)" }}>{t.score}</span>
+              <span style={{ textAlign:"right", color:"var(--muted)" }}>{cum[i]}</span>
+            </React.Fragment>
+          ))}
+          {uniq && <>
+            <Medal tier={uniq} emoji="" size={16}/>
+            <span style={{ fontWeight:700, color:"var(--text)" }}>{uniq.label} (secret)</span>
+            <span style={{ textAlign:"right", fontWeight:800, color:"var(--text)" }}>{uniq.score}</span><span/>
+          </>}
+        </div>
+        <P>Ton <b>score</b> est la somme de tous les points gagnés ; le total possible additionne tous les paliers de tous les
+          succès. Les seuils des paliers se voient dans le détail de chaque succès.</P>
+        <P>Un succès qui a <b>moins de neuf seuils</b> (un plafond naturel : 5 AMS, le niveau MakerWorld…) les place en haut de
+          l'échelle : son premier seuil donne d'un coup tous les paliers d'en dessous.</P>
+        <P>Ce qui se lit <b>au présent</b> (stock, MakerWorld, copains…) garde ce qui a été gagné, même si la valeur redescend.</P>
+        <P>Quand des seuils changent ou qu'un succès apparaît, tout se recalcule en silence : ce que ton historique méritait
+          déjà t'est donné, sans notification ni clé.</P>
+
+        <H>🤫 Secrets</H>
+        <P>Une médaille unique, cachée tant qu'elle n'est pas gagnée. Les secrets inconnus attendent dans « À découvrir » ;
+          une fois gagnés, ils rejoignent leur sous-section. Les <b>collections</b> récompensent une section entière à un même
+          palier.</P>
+
+        {k && <>
+          <H>🔑 Clés</H>
+          <P><b>Gagner des clés</b> : {k.rules.start} au départ · 1 toutes les {k.rules.prints} impressions réussies ·
+            {" "}{k.rules.tier} par palier franchi · {k.rules.secret} par secret gagné. Et parfois, une surprise.
+            Rien de rétroactif : ce qui est reconnu après coup ne rapporte rien.</P>
+          <P><b>Les dépenser</b> pour révéler un secret pas encore gagné, une étape après l'autre :</P>
+          <div style={{ display:"flex", flexDirection:"column", gap:3, margin:"0 0 6px 4px", fontSize:12.5, color:"var(--text2)" }}>
+            {k.steps.map((st, i) => <span key={st.id}>{i + 1}. {st.label.charAt(0).toUpperCase() + st.label.slice(1)} — {st.cost} 🔑</span>)}
+          </div>
+        </>}
+
+        <H>👥 Copains</H>
+        <P>Le <b>podium</b> compare les scores, en tout et par section. Dans le détail d'un succès, l'échelle « Toi et tes copains »
+          montre le palier de chacun ; dans la grille, ▲ signale un copain devant toi.</P>
+        <P>Un secret qu'un copain a déjà est <b>cerclé</b> chez toi, et ses trois premières étapes te sont offertes
+          (« grâce à … »). Ses descriptifs restent cachés, sauf si tu as le droit de voir ses secrets.</P>
+      </div>
     </div>
   );
 }
