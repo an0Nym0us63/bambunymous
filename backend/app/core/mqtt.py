@@ -297,7 +297,17 @@ class MQTTManager:
             state.total_layers = int(p["total_layer_num"]); changed = True
 
         if "subtask_name" in p: state.print_name = p["subtask_name"]; changed = True
-        if "job_id" in p: state.job_id = str(p["job_id"]); changed = True
+        if "job_id" in p:
+            # Nouveau job : la progression et la couche fusionnees sont celles de
+            # l'impression precedente (100 %, derniere couche) tant que l'imprimante
+            # ne les a pas republiees. Les garder declenchait d'un coup tous les
+            # cliches de jalons (50 %, 100 %, 1re couche) au lancement.
+            if str(p["job_id"]) != (state.job_id or ""):
+                if "mc_percent" not in p:
+                    state.progress = 0.0
+                if "layer_num" not in p and "layer_num" not in block_3d:
+                    state.layer = 0
+            state.job_id = str(p["job_id"]); changed = True
         if "design_id" in p: state.design_id = str(p["design_id"]); changed = True
         if "model_id" in p: state.model_id = str(p["model_id"]); changed = True
         if "profile_id" in p: state.profile_id = str(p["profile_id"]); changed = True

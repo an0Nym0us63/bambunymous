@@ -131,7 +131,9 @@ async def restore_in_progress():
                 snaps_r = await db.execute(
                     select(PrintSnapshot).where(PrintSnapshot.print_id == p.id)
                 )
-                existing_triggers = {s.trigger for s in snaps_r.scalars().all()}
+                snaps = snaps_r.scalars().all()
+                bad = await _bogus_milestones(db, p, snaps)
+                existing_triggers = {s.trigger for s in snaps if s not in bad}
                 with _LOCK:
                     if "pct50"  in existing_triggers: st["m50"]  = True
                     if "pct99"  in existing_triggers: st["m99"]  = True
@@ -151,6 +153,32 @@ async def restore_in_progress():
                 )
     except Exception as e:
         logger.error(f"[RESTORE] Erreur restore_in_progress: {e}")
+
+
+async def _bogus_milestones(db, p, snaps) -> list:
+    """Cliches de jalons pris a tort au lancement (progression restee de
+    l'impression precedente) : un 50 % / 99 % / 100 % moins de 5 min apres le
+    debut, et les cliches de couche pris dans la meme minute. Supprimes (ligne et
+    fichier) pour que les vrais jalons soient pris le moment venu."""
+    t0 = p.created_at or p.print_date
+    if not t0:
+        return []
+    early = [s for s in snaps if s.trigger in ("pct50", "pct99", "pct100") and s.taken_at
+             and (s.taken_at - t0).total_seconds() < 300]
+    if not early:
+        return []
+    bad = list(early) + [s for s in snaps if s.trigger in ("layer1", "layer2") and s.taken_at
+                         and any(abs((s.taken_at - e.taken_at).total_seconds()) < 60 for e in early)]
+    for s in bad:
+        try:
+            if s.file_path:
+                (DATA_DIR / s.file_path).unlink(missing_ok=True)
+        except OSError:
+            pass
+        await db.delete(s)
+    await db.commit()
+    logger.info(f"[RESTORE] print_id={p.id} : {len(bad)} cliché(s) de jalon pris à tort au lancement retiré(s)")
+    return bad
 
 
 def _bg(coro):
@@ -467,6 +495,11 @@ def on_progress(job_id: str, pct: float, layer: int):
             return
 
     prev = st["last_pct"]
+    # Premiere progression d'un job tout juste lance, deja avancee : c'est celle
+    # de l'impression precedente, encore dans l'etat. On attend la vraie.
+    if prev < 0 and (pct > 5.0 or layer >= 2) and time.time() - st.get("start_time", 0) < 300:
+        logger.info(f"[MILESTONE] progression ignoree au lancement ({pct:.0f} %, couche {layer}) print_id={pid}")
+        return
     # Régression forte = nouveau print
     if prev >= 5.0 and pct <= 1.0:
         with _LOCK:
