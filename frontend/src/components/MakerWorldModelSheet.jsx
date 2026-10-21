@@ -7,7 +7,7 @@ import { mwLiked } from "../utils/mwSync";
 import { useMwAssign } from "../store/mwAssign";
 import { useFriend } from "../store/friend";
 import MwImg from "./MwImg";
-import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf } from "./MwStockMatch";
+import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, plateInAms } from "./MwStockMatch";
 import Lightbox from "./Lightbox";
 import { openCreator } from "./MwCreatorPage";
 import { useToRateSet, RateButton } from "./MwToRate";
@@ -463,10 +463,23 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                           </div>
                         );
                       })()}
+                      {isOpen && p.plates.length > 1 && (() => {
+                        // retenus, faisables tout de suite avec l'AMS, et pas encore imprimes
+                        const sel = plateSel[p.instance_id];
+                        const todo = p.plates.filter(pl => (!sel || sel.includes(pl.index)) && !plateDone(p, pl.index)
+                          && plateInAms(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`)).map(pl => pl.index);
+                        return todo.length > 0 && (
+                          <div style={{ padding:"0 10px 8px", fontSize:12, fontWeight:700, color:"#16a34a" }}>
+                            ▶ À lancer maintenant avec l'AMS : plateau{todo.length > 1 ? "x" : ""} {todo.join(", ")}</div>
+                        );
+                      })()}
                       {isOpen && (
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:8, padding:"0 10px 10px" }}>
                           {p.plates.map(pl => {
                             const ok = plateDone(p, pl.index);
+                            const sel0 = plateSel[p.instance_id];
+                            // un plateau ecarte ne dit pas s'il est pret : il ne sera pas lance
+                            const ready = !sel0 || sel0.includes(pl.index) ? plateInAms(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`) : null;
                             const sel = plateSel[p.instance_id];
                             const on = !sel || sel.includes(pl.index);
                             const toggle = () => setPlateSel(s => {
@@ -478,7 +491,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                               <div key={pl.index} onClick={p.plates.length > 1 ? toggle : undefined} role={p.plates.length > 1 ? "button" : undefined}
                                 aria-pressed={on} style={{ borderRadius:8, overflow:"hidden", background:"var(--surface)",
                                 cursor: p.plates.length > 1 ? "pointer" : "default", opacity: on ? 1 : 0.4, transition:"opacity .15s",
-                                position:"relative", border: ok ? "2px solid #22c55e" : "1px solid var(--border)" }}>
+                                position:"relative", border: ok ? "2px solid #22c55e" : ready ? "2px solid #3b82f6" : "1px solid var(--border)" }}>
                                 {p.plates.length > 1 && <span style={{ position:"absolute", top:4, right:4, zIndex:1, width:18, height:18,
                                   borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900,
                                   color:"white", background: on ? "#3b82f6" : "rgba(0,0,0,0.45)", border:"1.5px solid white" }}>{on ? "✓" : ""}</span>}
@@ -486,8 +499,15 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                   {pl.thumb ? <MwImg src={pl.thumb} w={200}
                                     style={{ width:"100%", aspectRatio:"1", objectFit:"cover", display:"block" }}/>
                                     : <div style={{ width:"100%", aspectRatio:"1" }}/>}
-                                  {ok && <span style={{ position:"absolute", top:4, left:4, fontSize:9.5, fontWeight:800, color:"white",
-                                    background:"#22c55e", padding:"1px 6px", borderRadius:20 }}>✓ IMPRIMÉ</span>}
+                                  {ok ? <span style={{ position:"absolute", top:4, left:4, fontSize:9.5, fontWeight:800, color:"white",
+                                    background:"#22c55e", padding:"1px 6px", borderRadius:20 }}>✓ IMPRIMÉ</span>
+                                    : ready ? <span title="Tous ses filaments sont dans l'AMS, en quantité suffisante"
+                                      style={{ position:"absolute", top:4, left:4, fontSize:9.5, fontWeight:800, color:"white",
+                                      background:"#3b82f6", padding:"1px 6px", borderRadius:20 }}>▶ PRÊT (AMS)</span>
+                                    : ready === false ? <span title="Un de ses filaments n'est pas dans l'AMS, ou pas assez"
+                                      style={{ position:"absolute", top:4, left:4, fontSize:9.5, fontWeight:800, color:"var(--text2)",
+                                      background:"var(--surface2)", border:"1px solid var(--border)", padding:"1px 6px", borderRadius:20 }}>à charger</span>
+                                    : null}
                                 </div>
                                 <div style={{ padding:"5px 6px 6px" }}>
                                   <div style={{ fontSize:11.5, fontWeight:700, color:"var(--text)", overflow:"hidden",

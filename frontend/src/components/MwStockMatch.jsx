@@ -60,6 +60,25 @@ export const chosenOf = (x, scope, i) => {
     || (ex && ex.filament_id === id ? ex : null) || x.matches[0];
 };
 
+// Un plateau est-il faisable tout de suite avec ce qui est dans l'AMS ? Pour
+// chacun de ses filaments, le filament retenu (choix a la main ou meilleur)
+// doit avoir assez de grammes sur ses bobines chargees (AMS ou support
+// externe). null : on ne sait pas (pas de filaments lus).
+const IN_AMS = /^(AMS|Externe)/i;
+export function plateInAms(items, plate, scope = "") {
+  const fl = (plate?.filaments || []).filter(f => num(f.g) > 0);
+  if (!items?.length || !fl.length) return null;
+  const want = {}, have = {};
+  for (const f of fl) {
+    const i = items.findIndex(x => fkey(x.type, x.color) === fkey(f.type, f.color));
+    const c = i >= 0 ? chosenOf(items[i], scope, i) : null;
+    if (!c) return false;
+    want[c.filament_id] = (want[c.filament_id] || 0) + num(f.g);
+    have[c.filament_id] = (c.spool_g || []).reduce((s, w, j) => s + (IN_AMS.test(c.spool_where?.[j] || "") ? num(w) : 0), 0);
+  }
+  return Object.keys(want).every(id => have[id] >= want[id]);
+}
+
 // Besoins par filament du profil : tout le profil (selected absent) ou la
 // somme des plateaux choisis. Puis le total par filament retenu : deux
 // couleurs qui tombent sur le meme filament du stock s'additionnent.
