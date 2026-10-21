@@ -3176,6 +3176,7 @@ async def use_ticket(aid: str) -> dict:
         # le palier est date tout de suite : le passage ne le prendra pas pour une nouveaute (ni cle ni annonce)
         st.setdefault("unlocked", {}).setdefault(aid, {})[str(lvl + 1)] = now
         st.setdefault("ticket_tiers", {}).setdefault(aid, []).append(lvl + 1)
+        st.setdefault("ticket_paid", {}).setdefault(aid, []).append(cost)
         w["tickets"] -= cost
         w["tickets_used"] = w.get("tickets_used", 0) + cost
         label = tiers_of(a)[lvl + 1]["label"]
@@ -3187,9 +3188,19 @@ async def use_ticket(aid: str) -> dict:
     return {"id": aid, "tier": label, "level": lvl + 1, "cost": cost, "added": _addn(0, add), "tickets": w["tickets"]}
 
 
-# Prix d'un palier en tickets, selon le palier vise (a peu pres ses points) :
-# Bronze, Argent, Or 1 · Platine, Diamant 2 · Legende 3 · Mythique 4 · Cosmique 5 · Eternel 6.
-TICKET_COST = [1, 1, 1, 2, 2, 3, 4, 5, 6]
+# Prix d'un palier en tickets, selon le palier vise (rehausse le 21/10/2026) :
+# Bronze 1 · Argent 2 · Or 3 · Platine 4 · Diamant 5 · Legende 6 · Mythique 7 · Cosmique 8 · Eternel 10.
+TICKET_COST = [1, 2, 3, 4, 5, 6, 7, 8, 10]
+# Avant cette date : ce qui a ete paye alors reste compte a ce prix-la.
+OLD_TICKET_COST = [1, 1, 1, 2, 2, 3, 4, 5, 6]
+
+
+def tickets_paid(st: dict | None, aid: str) -> int:
+    """Tickets reellement depenses sur un succes (au prix du jour de l'achat)."""
+    tiers = ((st or {}).get("ticket_tiers") or {}).get(aid) or []
+    paid = ((st or {}).get("ticket_paid") or {}).get(aid) or []
+    old = tiers[:len(tiers) - len(paid)] if len(paid) < len(tiers) else []
+    return sum(OLD_TICKET_COST[min(max(i, 0), 8)] for i in old) + sum(int(x) for x in paid)
 
 
 def ticket_cost(i: int) -> int:
@@ -3517,7 +3528,7 @@ PRIZE_HELP = {
     "hint": "L'étape suivante d'un secret pris au hasard, offerte (elle vaut de 1 à 15 clés). "
             "S'il n'y a plus rien à révéler : 1 clé.",
     "key3": "Trois clés d'un coup.",
-    "ticket": "Un ticket de plus. Sur un succès à paliers, il en faut de 1 à 6 selon le palier visé pour le passer.",
+    "ticket": "Un ticket de plus. Sur un succès à paliers, il en faut de 1 à 10 selon le palier visé pour le passer.",
     "key5": "Cinq clés d'un coup.",
     "jackpot": "Le gros lot : dix clés.",
 }
@@ -4087,7 +4098,7 @@ async def view(fresh: bool = False) -> dict:
             "tiers": [{**{k: t[k] for k in ("id", "label", "emoji", "color")}, "n": a["tiers"][i],
                        "at": got.get(str(i)),
                        "ticket": i in ((st.get("ticket_tiers") or {}).get(a["id"]) or [])} for i, t in enumerate(tiers)],
-            "tickets": sum(ticket_cost(i) for i in ((st.get("ticket_tiers") or {}).get(a["id"]) or [])),
+            "tickets": tickets_paid(st, a["id"]),
             "ticket_cost": ticket_cost(nxt) if nxt is not None and len(a["tiers"]) > 1 else None,
         })
     # derniers succes : le plus haut cran de chacun ; pas ceux du releve au
@@ -4114,6 +4125,6 @@ async def view(fresh: bool = False) -> dict:
            "subs": [{"id": i, "emoji": e, "name": n} for i, e, n, _ids in SECRET_SUBS],
            "tiers": TIERS + [UNIQUE], "recent": [{"id": i, "tier": j, "at": at} for at, i, j in recent],
            "since": (st or {}).get("since"), "sig": CATALOG_SIG,
-           "tickets_used": sum(ticket_cost(i) for v in ((st or {}).get("ticket_tiers") or {}).values() for i in v)}
+           "tickets_used": sum(tickets_paid(st, k) for k in ((st or {}).get("ticket_tiers") or {}))}
     _CACHE.update(t=time.time(), v=out)
     return out
