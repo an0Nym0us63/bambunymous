@@ -41,6 +41,20 @@ async def achievements_users_set(body: dict = Body(...), _: str = Depends(requir
     return {"counted": await A.set_counted_users(body.get("counted") or [])}
 
 
+@router.get("/passage")
+async def achievements_passage(acc=Depends(require_own_account)):
+    """Le passage secret du menu est-il ouvert pour ce compte ? (par compte, sur
+    tous ses appareils : la premiere surprise l'ouvre, ou qu'elle tombe)."""
+    from ....services import achievements as A
+    return {"open": acc[0] in await A.passages()}
+
+
+@router.post("/passage")
+async def achievements_passage_open(acc=Depends(require_own_account)):
+    from ....services import achievements as A
+    return {"open": True, "new": await A.open_passage(acc[0])}
+
+
 @router.post("/egg/{name}")
 async def achievements_egg(name: str, acc=Depends(require_own_account)):
     """Un easter egg trouve dans l'appli (jamais par une cle de copain)."""

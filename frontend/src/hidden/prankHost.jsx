@@ -1,7 +1,8 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { create } from "zustand";
-import { egg } from "../eggs";
+import { egg, whisper } from "../eggs";
+import client from "../api/client";
 import { useFriend } from "../store/friend";
 import { HIDDEN_SLUGS } from "./index";
 
@@ -43,6 +44,17 @@ export const SURPRISE = { step: 0.005, cap: 0.07 };
 const SURPRISE_KEY = "bn-surprise";            // { n } : lancements depuis la derniere surprise
 let rolled = false;                             // une fois par lancement (module recharge = nouveau lancement)
 
+// Le passage secret du menu de profil reste cache jusqu'a la premiere surprise.
+// Ouvert par compte (cote serveur) : il apparait sur tous ses appareils.
+export const PASSAGE_KEY = "bn-passage";
+function openPassage() {
+  try { localStorage.setItem(PASSAGE_KEY, "1"); } catch { /* rien */ }
+  client.post("/achievements/passage").then(({ data }) => {
+    if (data?.new) setTimeout(() => whisper("🔮", "Un passage s'est ouvert",
+      "Tu sais maintenant que l'appli a des recoins… Ton menu de profil en garde un de plus."), 11000);
+  }).catch(() => {});
+}
+
 function rollSurprise() {
   if (rolled) return null;
   rolled = true;
@@ -76,6 +88,7 @@ export function PrankHost() {
       if (document.getElementById("splash") && tries++ < 20) { setTimeout(fire, 300); return; }
       if (window.location.pathname !== "/" || usePrank.getState().slug) return;
       if (hit[0] === "farce") start(hit[1]); else nav("/" + hit[1]);
+      openPassage();
     };
     if (hit) setTimeout(fire, 1200);
   }, [pathname, visiting, start, nav]);

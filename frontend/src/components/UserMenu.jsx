@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { LogOut, Trophy } from "lucide-react";
 import { useAuth, ROLE_LABEL, ROLE_ADMIN } from "../store/auth";
+import client from "../api/client";
 import { FriendPicker, useFriendsPrinting } from "./Friends";
 
 // Violet du scrim natif de la coquille Android : le meme, pour que la pastille
@@ -60,17 +61,18 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
 
   const doLogout = () => { setRect(null); logout(); navigate("/login"); };
 
-  // Passage secret : sans barre d'adresse (appli installee, telephone), le seul
-  // moyen d'aller a une adresse tapee a la main. Une adresse inconnue mene a
-  // « page introuvable », comme dans le navigateur : rien n'est devoile.
-  // seulement la ou il n'y a pas de barre d'adresse : appli installee (PWA) ou appli Android
-  const noAddressBar = React.useMemo(() => {
-    try {
-      const ua = navigator.userAgent || "";
-      return window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true
-        || ua.includes("BambuNymous") || (ua.includes("Android") && ua.includes("; wv)"));
-    } catch { return false; }
-  }, []);
+  // Passage secret : aller a une adresse tapee a la main (indispensable sans barre
+  // d'adresse : appli installee, telephone). Une adresse inconnue mene a « page
+  // introuvable », comme dans le navigateur : rien n'est devoile.
+  // il n'apparait qu'une fois ouvert par une premiere surprise, pour ce compte (sur
+  // tous ses appareils) : le serveur le dit, ce navigateur s'en souvient en attendant
+  const [opened, setOpened] = React.useState(() => { try { return !!localStorage.getItem("bn-passage"); } catch { return false; } });
+  React.useEffect(() => {
+    if (!rect || opened) return;
+    client.get("/achievements/passage", { home: true }).then(({ data }) => {
+      if (data?.open) { setOpened(true); try { localStorage.setItem("bn-passage", "1"); } catch { /* rien */ } }
+    }).catch(() => {});
+  }, [rect, opened]);
   const [door, setDoor] = React.useState(false);
   typingRef.current = door;
   const [path, setPath] = React.useState("");
@@ -143,7 +145,7 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
                 cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>
               <Trophy size={16} color="#F59E0B"/> Succès
             </button>
-            {!noAddressBar ? null : door ? (
+            {!opened ? null : door ? (
               <form onSubmit={go} style={{ display:"flex", alignItems:"center", gap:6, padding:"9px 10px 9px 14px",
                 borderBottom:"1px solid var(--border)" }}>
                 <span style={{ fontSize:13, color:"var(--muted)", fontWeight:700 }}>/</span>

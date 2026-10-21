@@ -3530,6 +3530,32 @@ async def set_counted_users(names: list) -> list:
     return names
 
 
+async def passages() -> dict:
+    """Comptes dont le passage secret est ouvert : {compte: date}."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, KEY + "_PASSAGE", "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+async def open_passage(username: str) -> bool:
+    """Ouvre le passage pour ce compte ; rend True la premiere fois."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    d = await passages()
+    if username in d:
+        return False
+    d[username] = datetime.utcnow().isoformat()
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, KEY + "_PASSAGE", json.dumps(d))
+    return True
+
+
 async def eggs_found() -> dict:
     """Les easter eggs trouves : {nom: date}."""
     from ..db.session import AsyncSessionLocal

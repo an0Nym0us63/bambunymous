@@ -47,8 +47,13 @@ export function tapper(n, ms, fn) {
 }
 
 // Bravo : une carte qui monte en bas de l'ecran, se ferme au toucher ou seule.
+// Un murmure : la meme petite carte que les succes, pour une simple annonce
+export function whisper(emoji, title, text) {
+  celebrate({ emoji, name: title, lore: text }, "w_", false);
+}
+
 // Le bandeau dit ce qu'on vient de trouver : page cachee, farce, ou easter egg
-const KIND = n => n.startsWith("h_") ? ["🗺️ Page cachée réussie !", "#22C55E"]
+const KIND = n => n === "w_" ? ["🔮 Psst…", "#7C3AED"] : n.startsWith("h_") ? ["🗺️ Page cachée réussie !", "#22C55E"]
   : n.startsWith("p_") ? ["🌀 Farce découverte !", "#8B5CF6"] : ["🥚 Easter egg trouvé !", "#EC4899"];
 
 function celebrate(e, name = "", uncounted = false) {
