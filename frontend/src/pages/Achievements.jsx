@@ -467,7 +467,9 @@ function KeysBox({ keys, onRules, onWheel }) {
           <span style={{ display:"block", fontSize:15, fontWeight:900, color:"var(--text)" }}>
             {w.spins} tour{w.spins > 1 ? "s" : ""} de roue</span>
           <span style={{ display:"block", fontSize:11.5, color:"var(--muted)" }}>
-            +{w.weekly} chaque lundi{w.tickets > 0 ? ` · 🎟️ ${w.tickets} ticket${w.tickets > 1 ? "s" : ""} de palier` : " · des clés à gagner"}</span>
+            +{w.weekly} chaque lundi · +{w.per_secret || 1} par secret gagné
+            {w.tickets > 0 ? ` · 🎟️ ${w.tickets} ticket${w.tickets > 1 ? "s" : ""}` : ""}
+            {w.to_ticket ? ` · prochain ticket dans ${w.to_ticket} secret${w.to_ticket > 1 ? "s" : ""}` : ""}</span>
         </span>
         {onWheel && (
           <button onClick={onWheel} style={{ padding:"8px 14px", borderRadius:20, border:"none", fontSize:13, fontWeight:900,
@@ -765,6 +767,8 @@ function Rules({ data, onClose }) {
         {k?.wheel && <>
           <H>🎰 Roue de la fortune</H>
           <P>{k.wheel.start} tours offerts au départ, puis {k.wheel.weekly} chaque lundi (une semaine manquée ne se rattrape pas).
+            Chaque secret gagné offre aussi {k.wheel.per_secret || 1} tour, et tous les {k.wheel.secrets_per_ticket || 10} secrets,
+            un ticket de palier{k.wheel.to_ticket ? ` (le prochain dans ${k.wheel.to_ticket} secret${k.wheel.to_ticket > 1 ? "s" : ""})` : ""}.
             Chaque tour tire un lot ; plus un lot vaut, plus il est rare :</P>
           <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:"3px 12px", fontSize:12.5, color:"var(--text2)",
             margin:"0 0 8px 4px" }}>
