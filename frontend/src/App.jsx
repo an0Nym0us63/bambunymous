@@ -15,6 +15,7 @@ import DialogHost from "./components/DialogHost";
 import { ContextMenuHost } from "./components/ContextMenu";
 import { CreatorPageHost } from "./components/MwCreatorPage";
 import { egg } from "./eggs";
+import Anonymous from "./pages/Anonymous";
 
 // Adresse inconnue : une page qui le dit (et un petit secret pour qui s'y perd)
 function NotFound() {
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="notifications" element={<Notifications />} />
         {/* ancienne adresse des succes (liens deja envoyes) : onglet des statistiques */}
         <Route path="achievements" element={<AchievementsRedirect />} />
+        <Route path="anonymous" element={<Anonymous />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>
