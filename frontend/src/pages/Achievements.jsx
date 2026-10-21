@@ -1090,17 +1090,21 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
               : unique ? it.desc : (
                 // a paliers : ou j'en suis, et ce que demande le suivant
                 <span style={{ display:"flex", flexDirection:"column", gap:3, marginTop:2 }}>
-                  <span style={{ display:"flex", alignItems:"center", gap:5 }}>
-                    <span style={{ minWidth:58, fontSize:11, fontWeight:700 }}>Actuel</span>
-                    {got ? <><Medal tier={top} emoji="" size={14}/><b style={{ color:"var(--text)" }}>{top.label}</b></>
+                  {/* chacun avec ce qu'il demande, en gras : on ne confond plus l'acquis et le suivant */}
+                  <span style={{ display:"flex", alignItems:"flex-start", gap:5 }}>
+                    <span style={{ minWidth:58, fontSize:11, fontWeight:700, paddingTop:1 }}>Actuel</span>
+                    {got ? <span style={{ display:"inline-flex", flexWrap:"wrap", alignItems:"center", gap:"0 5px" }}>
+                        <Medal tier={top} emoji="" size={14}/><span style={{ color:"var(--text)" }}>{top.label}</span>
+                        {top.desc && <b style={{ color:"var(--text)" }}>· {top.desc}</b>}</span>
                       : <span>pas encore de palier</span>}
                   </span>
-                  <span style={{ display:"flex", alignItems:"center", gap:5 }}>
-                    <span style={{ minWidth:58, fontSize:11, fontWeight:700 }}>Prochain</span>
-                    <Medal tier={it.tiers[it.level + 1]} emoji="" size={14} locked/>
-                    <b style={{ color:"var(--text2)" }}>{it.tiers[it.level + 1]?.label}</b>
+                  <span style={{ display:"flex", alignItems:"flex-start", gap:5 }}>
+                    <span style={{ minWidth:58, fontSize:11, fontWeight:700, paddingTop:1 }}>Prochain</span>
+                    <span style={{ display:"inline-flex", flexWrap:"wrap", alignItems:"center", gap:"0 5px" }}>
+                      <Medal tier={it.tiers[it.level + 1]} emoji="" size={14} locked/>
+                      <span style={{ color:"var(--text2)" }}>{it.tiers[it.level + 1]?.label}</span>
+                      <b style={{ color:"var(--text)" }}>· {it.tiers[it.level + 1]?.desc || it.desc}</b></span>
                   </span>
-                  <span style={{ paddingLeft:63 }}>{it.desc}</span>
                 </span>
               )}</div>
           {unique && got && (
@@ -1260,6 +1264,9 @@ function Rules({ data, onClose }) {
         <P>Une médaille unique, cachée tant qu'elle n'est pas gagnée. Les secrets inconnus attendent dans « À découvrir » ;
           une fois gagnés, ils rejoignent leur sous-section. Les <b>collections</b> récompensent une section entière à un même
           palier.</P>
+        <P><b>Complétude</b> : un tiroir de secrets entièrement trouvé, une section entièrement à son dernier palier, et tout à
+          100 %. Ces médailles-là, comme les collections, <b>se perdent</b> si un nouveau secret ou un nouveau palier arrive avec
+          une mise à jour : il suffit de le décrocher pour les retrouver.</P>
 
         {k && <>
           <H>🔑 Clés</H>

@@ -1517,6 +1517,36 @@ for _cid, _cemo, _cname in SET_CATS:
 SECRET_SUBS.append(("sets", "🏆", "Collections de médailles",
                     " ".join(a["id"] for a in CATALOG if a.get("set"))))
 SUB_OF.update({a["id"]: "sets" for a in CATALOG if a.get("set")})
+
+# Completude (22/10/2026) : un tiroir de secrets entierement trouve, une section
+# entierement au dernier palier, et tout a 100 %. Recalcules a chaque passage
+# comme les collections : un secret ou un palier ajoute plus tard les fait
+# perdre jusqu'a ce qu'on le rattrape.
+_SUBS_NOW = list(SECRET_SUBS)
+for _sid, _semo, _sname, _ids in _SUBS_NOW:
+    CATALOG.append({
+        "id": f"sub_{_sid}", "cat": "secret", "sub": "complete", "hidden": True, "live": False, "emoji": _semo,
+        "name": f"Tiroir complet · {_sname}", "desc": f"Tous les secrets du tiroir « {_sname} »", "tiers": [1],
+        "hint": f"Le tiroir « {_sname} » a encore des recoins. Vide-le entièrement.",
+        "lore": f"Plus un seul secret de « {_sname} » ne t'échappe. Jusqu'au prochain…",
+        "complete": ("sub", _sid)})
+for _cid, _cemo, _cname in CATEGORIES:
+    CATALOG.append({
+        "id": f"full_{_cid}", "cat": "secret", "sub": "complete", "hidden": True, "live": False, "emoji": _cemo,
+        "name": f"Complétude · {_cname}",
+        "desc": ("Tous les secrets trouvés" if _cid == "secret" else
+                 f"Tous les succès de la section {_cname} à leur dernier palier"), "tiers": [1],
+        "hint": f"La section {_cname}, sans exception, tout en haut.",
+        "lore": f"La section {_cname} est complète : pas une médaille ne manque, pas un palier n'est à prendre.",
+        "complete": ("cat", _cid)})
+CATALOG.append({
+    "id": "everything", "cat": "secret", "sub": "complete", "hidden": True, "live": False, "emoji": "👑",
+    "name": "100 %", "desc": "Absolument tout : chaque succès à son dernier palier, chaque secret trouvé", "tiers": [1],
+    "hint": "Il n'en reste qu'un, et c'est tous les autres à la fois.",
+    "lore": "Tout. Absolument tout. L'appli n'a plus rien à t'apprendre… jusqu'à la prochaine mise à jour.",
+    "complete": ("all", None)})
+SECRET_SUBS.append(("complete", "💯", "Complétude", " ".join(a["id"] for a in CATALOG if a.get("complete"))))
+SUB_OF.update({a["id"]: "complete" for a in CATALOG if a.get("complete")})
 BY_ID = {a["id"]: a for a in CATALOG}
 
 
@@ -3390,6 +3420,7 @@ async def evaluate(now: datetime | None = None, cached: bool = False) -> dict:
                 reached[str(i)] = at.isoformat()
         out[a["id"]] = {"value": val, "reached": reached}
     _sets(out, st)
+    _completes(out, st)
     return out
 
 
@@ -3485,6 +3516,31 @@ def _sets(out: dict, st: dict) -> None:
         mem = [m for m in _members(cat, i)
                if not (m.get("only_started") and not (out.get(m["id"]) or {}).get("value") and not stored.get(m["id"]))]
         dates = [at(m, i) for m in mem]
+        ok = bool(mem) and all(dates)
+        out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {}}
+
+
+def _completes(out: dict, st: dict) -> None:
+    """Completude : chaque membre a son dernier palier ; date = le dernier
+    atteint. Jamais acquise pour de bon : recalculee a chaque passage."""
+    stored = st.get("unlocked") or {}
+    best = st.get("best") or {}
+
+    def at(a, i):
+        r = (out.get(a["id"]) or {}).get("reached", {}).get(str(i))
+        if r is None and a.get("live") and _still(a["id"], i, best.get(a["id"], 0)):
+            r = (stored.get(a["id"]) or {}).get(str(i))
+        return r
+    for a in CATALOG:
+        c = a.get("complete")
+        if not c:
+            continue
+        kind, key = c
+        mem = [m for m in CATALOG if not m.get("complete") and (
+            kind == "all" or (kind == "cat" and m["cat"] == key) or (kind == "sub" and SUB_OF.get(m["id"]) == key))]
+        mem = [m for m in mem
+               if not (m.get("only_started") and not (out.get(m["id"]) or {}).get("value") and not stored.get(m["id"]))]
+        dates = [at(m, len(m["tiers"]) - 1) for m in mem]
         ok = bool(mem) and all(dates)
         out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {}}
 
@@ -4403,6 +4459,8 @@ async def view(fresh: bool = False) -> dict:
             "next": None if nxt is None or secret else a["tiers"][nxt],
             "prev": a["tiers"][lvl] if lvl >= 0 else 0,
             "tiers": [{**{k: t[k] for k in ("id", "label", "emoji", "color")}, "n": a["tiers"][i],
+                       # ce que demande ce palier (fiche : actuel et prochain, chacun le sien)
+                       **({"desc": describe(a, a["tiers"][i])} if len(a["tiers"]) > 1 else {}),
                        "at": got.get(str(i)),
                        "ticket": i in ((st.get("ticket_tiers") or {}).get(a["id"]) or [])} for i, t in enumerate(tiers)],
             "tickets": tickets_paid(st, a["id"]),
