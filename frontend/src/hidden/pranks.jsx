@@ -100,7 +100,8 @@ function makeCtl(layerRef) {
           if (SKIP.test(c.tagName) || c === layer || (layer && c.contains(layer))) continue;
           if (c.hasAttribute("data-prank-layer")) continue;
           const r = c.getBoundingClientRect();
-          if (r.width < 6 || r.height < 6 || r.bottom < -40 || r.top > H + 40) {
+          // les elements fins comptent aussi (barre de restant, trait, soulignement) : 2 px suffisent
+          if (r.width < 2 || r.height < 2 || (r.width < 6 && r.height < 6) || r.bottom < -40 || r.top > H + 40) {
             // conteneur sans boite propre (display: contents) : on regarde dedans
             if (r.width === 0 && r.height === 0 && c.children.length && depth < 14) visit(c, depth + 1);
             continue;
