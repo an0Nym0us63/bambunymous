@@ -46,6 +46,7 @@ export default function Achievements({ embedded = false }) {
   const [rules, setRules] = useState(false);
   useEffect(() => { if (rules) rulesOpened(); }, [rules]);
   const [slot, setSlot] = useState(false);
+  const [vitrine, setVitrine] = useState(undefined);   // undefined : fermee ; null : tout ; id : un type de medaille
   const atFriend = !!currentFriend();             // chez un copain : pas de podium (ce sont ses copains a lui)
   const isAdmin = useIsAdmin();
   const load = () => client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
@@ -128,8 +129,10 @@ export default function Achievements({ embedded = false }) {
           <ScoreHero data={data}/>
           <div style={{ flex:"2 1 300px", minWidth:0, display:"flex", flexDirection:"column", gap:8 }}>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <span style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:"var(--muted)" }}>
-                Ta vitrine</span>
+              <button onClick={() => setVitrine(null)} title="Ouvrir ta vitrine : toutes tes médailles"
+                style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:"var(--muted)",
+                  background:"none", border:"none", padding:0, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:4 }}>
+                🏛️ Ta vitrine <span style={{ fontSize:9 }}>▸</span></button>
               {data.tickets_used > 0 && <span title="Paliers passés avec des tickets" style={{ display:"inline-flex", alignItems:"center",
                 gap:4, fontSize:11, color:"var(--muted)" }}><TicketStub size={0.7}/> {data.tickets_used} utilisé{data.tickets_used > 1 ? "s" : ""}</span>}
               <span style={{ flex:1 }}/>
@@ -137,7 +140,7 @@ export default function Achievements({ embedded = false }) {
                 style={{ width:26, height:26, borderRadius:"50%", border:"1px solid var(--border)", background:"var(--surface2)",
                   color:"var(--text2)", fontSize:13, fontWeight:900, cursor:"pointer", flexShrink:0 }}>?</button>
             </div>
-            <MedalShelf tiers={data.tiers} medals={data.medals}/>
+            <MedalShelf tiers={data.tiers} medals={data.medals} onOpen={t => setVitrine(t)}/>
           </div>
         </div>
         {data.keys && !atFriend && <Treasure keys={data.keys} onRules={() => setRules(true)}
@@ -330,6 +333,8 @@ export default function Achievements({ embedded = false }) {
       {rules && createPortal(<Rules data={data} onClose={() => setRules(false)}/>, document.body)}
       {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
       {ceremony && <TicketCeremony {...ceremony} onClose={() => setCeremony(null)}/>}
+      {vitrine !== undefined && createPortal(<Showcase data={data} tier={vitrine} onTier={setVitrine}
+        onOpen={id => setDetail(id)} onClose={() => setVitrine(undefined)}/>, document.body)}
       {detail && byId[detail] && createPortal(
         <div data-no-pull="" className="ach-room" onClick={closeDetail} style={{ position:"fixed", inset:0, zIndex:4300, background:"rgba(0,0,0,0.6)",
           display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
@@ -551,24 +556,117 @@ function ScoreHero({ data }) {
 }
 
 // La vitrine : chaque palier, sa medaille (animee aux hauts rangs) et combien tu en as.
-function MedalShelf({ tiers, medals }) {
+function MedalShelf({ tiers, medals, onOpen }) {
   return (
     <div style={{ position:"relative", display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(48px, 1fr))", gap:"10px 4px",
       padding:"10px 6px 14px", borderRadius:14, background:"linear-gradient(180deg, transparent 55%, rgba(0,0,0,0.06))" }}>
       {tiers.map(t => {
         const n = medals[t.id] || 0;
         return (
-          <div key={t.id} title={`${t.label} : ${n}`} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2, minWidth:0 }}>
+          <button key={t.id} title={`${t.label} : ${n} — voir ces médailles`} onClick={() => onOpen?.(t.id)}
+            style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2, minWidth:0, background:"none",
+              border:"none", padding:0, cursor:"pointer", font:"inherit" }}>
             <Medal tier={t} emoji="" size={36} locked={!n}/>
             <span style={{ fontSize:16, fontWeight:900, lineHeight:1.1, fontVariantNumeric:"tabular-nums",
               color: n ? "var(--text)" : "var(--muted)" }}>{n}</span>
             <span style={{ fontSize:9.5, color:"var(--muted)", whiteSpace:"nowrap", maxWidth:"100%", overflow:"hidden",
               textOverflow:"ellipsis" }}>{t.label}</span>
-          </div>
+          </button>
         );
       })}
       <span aria-hidden="true" style={{ position:"absolute", left:10, right:10, bottom:6, height:3, borderRadius:3,
         background:"linear-gradient(90deg, transparent, var(--border), transparent)" }}/>
+    </div>
+  );
+}
+
+// La vitrine : toutes mes medailles gagnees, rangees sur des etageres de verre,
+// une par type (Bronze… Eternel, Unique). Ouverte sur un type, elle ne montre
+// que lui. Toucher une medaille ouvre sa fiche.
+function Showcase({ data, tier, onTier, onOpen, onClose }) {
+  useEffect(() => { egg("showcase"); }, []);
+  useEffect(() => {
+    const k = e => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onClose]);
+  const shelves = data.tiers.map(t => ({
+    t,
+    items: data.items.flatMap(it => it.tiers.filter(x => x.id === t.id && x.at).map(x => ({ it, at: x.at })))
+      .sort((a, b) => String(b.at).localeCompare(String(a.at))),
+  }));
+  const shown = shelves.filter(s => (tier == null || s.t.id === tier) && s.items.length);
+  const total = shelves.reduce((n, s) => n + s.items.length, 0);
+  const chip = (on, c) => ({ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 10px 4px 5px", borderRadius:20,
+    fontSize:11.5, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0,
+    border:`1px solid ${on ? c : "var(--border)"}`, color: on ? "var(--text)" : "var(--text2)",
+    background: on ? rgba(c, 0.18) : "var(--surface2)" });
+  return (
+    <div data-no-pull="" className="ach-room" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4300,
+      background:"rgba(8,4,20,0.72)", display:"flex", alignItems:"center", justifyContent:"center", padding:12 }}>
+      <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:760, maxHeight:"92vh", display:"flex",
+        flexDirection:"column", borderRadius:22, overflow:"hidden", position:"relative",
+        // le meuble : cadre dore, fond de velours
+        border:"3px solid #C9A227", boxShadow:"0 24px 70px rgba(0,0,0,0.6), inset 0 0 0 2px rgba(255,236,170,0.35)",
+        background:"radial-gradient(120% 60% at 50% 0%, rgba(255,215,0,0.16), transparent 60%), " +
+          "radial-gradient(90% 70% at 50% 110%, rgba(139,92,246,0.20), transparent 60%), var(--sheet-bg)" }}>
+        <div style={{ padding:"14px 16px 10px", display:"flex", flexDirection:"column", gap:10,
+          borderBottom:"1px solid rgba(201,162,39,0.35)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <span style={{ fontSize:24 }}>🏛️</span>
+            <span style={{ flex:1, minWidth:0 }}>
+              <span style={{ display:"block", fontSize:17, fontWeight:900, color:"var(--text)" }}>Ta vitrine</span>
+              <span style={{ fontSize:11.5, color:"var(--muted)" }}>{total} médaille{total > 1 ? "s" : ""} gagnée{total > 1 ? "s" : ""}
+                {tier != null && ` · ${shown[0]?.items.length || 0} en ${data.tiers.find(t => t.id === tier)?.label}`}</span>
+            </span>
+            <button onClick={onClose} aria-label="Fermer" style={{ background:"none", border:"none", color:"var(--muted)",
+              fontSize:22, cursor:"pointer" }}>✕</button>
+          </div>
+          <div className="no-scrollbar" style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:2 }}>
+            <button onClick={() => onTier(null)} style={chip(tier == null, "#C9A227")}>
+              <span style={{ width:18, textAlign:"center" }}>✨</span>Tout</button>
+            {shelves.map(({ t, items }) => (
+              <button key={t.id} onClick={() => onTier(t.id)} disabled={!items.length}
+                style={{ ...chip(tier === t.id, t.color), opacity: items.length ? 1 : 0.45, cursor: items.length ? "pointer" : "default" }}>
+                <Medal tier={t} emoji="" size={18} locked={!items.length}/>{t.label}
+                <span style={{ color:"var(--muted)", fontWeight:700 }}>{items.length}</span></button>
+            ))}
+          </div>
+        </div>
+        <div style={{ overflowY:"auto", padding:"6px 14px 18px", display:"flex", flexDirection:"column", gap:18 }}>
+          {!shown.length && <p style={{ ...msg, textAlign:"center" }}>Aucune médaille de ce type pour l'instant.</p>}
+          {shown.map(({ t, items }) => (
+            <div key={t.id} style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 2px 0" }}>
+                <Medal tier={t} emoji="" size={22}/>
+                <span style={{ fontSize:13, fontWeight:900, color:t.color }}>{t.label}</span>
+                <span style={{ fontSize:11.5, color:"var(--muted)", fontWeight:700 }}>{items.length}</span>
+                <span style={{ flex:1, height:1, background:`linear-gradient(90deg, ${rgba(t.color, 0.5)}, transparent)` }}/>
+              </div>
+              {/* l'etagere : un fond de verre teinte, et une tablette eclairee dessous */}
+              <div style={{ position:"relative", borderRadius:14, padding:"12px 8px 16px",
+                background:`linear-gradient(180deg, ${rgba(t.color, 0.10)}, ${rgba(t.color, 0.03)} 70%, ${rgba(t.color, 0.16)})`,
+                border:`1px solid ${rgba(t.color, 0.28)}`, boxShadow:"inset 0 1px 0 rgba(255,255,255,0.25)" }}>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(78px, 1fr))", gap:"12px 6px" }}>
+                  {items.map(({ it, at }) => (
+                    <button key={it.id} onClick={() => onOpen(it.id)} title={`${it.name} · ${dateFr(at)}`}
+                      style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, minWidth:0, background:"none",
+                        border:"none", padding:"2px 0", cursor:"pointer", font:"inherit" }}>
+                      <Medal tier={t} emoji={it.emoji} size={46}/>
+                      <span style={{ fontSize:10.5, fontWeight:700, color:"var(--text)", textAlign:"center", lineHeight:1.2,
+                        maxWidth:"100%", overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2,
+                        WebkitBoxOrient:"vertical" }}>{it.name}</span>
+                    </button>
+                  ))}
+                </div>
+                <span aria-hidden="true" style={{ position:"absolute", left:8, right:8, bottom:5, height:4, borderRadius:4,
+                  background:`linear-gradient(90deg, transparent, ${rgba(t.color, 0.55)}, transparent)`,
+                  boxShadow:`0 2px 10px ${rgba(t.color, 0.45)}` }}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
