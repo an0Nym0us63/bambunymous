@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useTrackDetail } from "../utils/track";
 import client from "../api/client";
 import { useKeyboardInset } from "../utils/keyboard";
 
@@ -16,6 +17,7 @@ import { useKeyboardInset } from "../utils/keyboard";
  */
 export default function ObjectCreateSheet({ parentType, parentId, defaultName,
                                             costFabrication = 0, onDone, onClose }) {
+  useTrackDetail("Objets · Nouvel objet");
   const [quota, setQuota] = useState(null);
   const [qty, setQty] = useState(1);
   const [mode, setMode] = useState("single");   // single | grouped

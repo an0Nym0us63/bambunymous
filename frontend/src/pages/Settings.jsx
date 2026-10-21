@@ -1225,6 +1225,7 @@ function AttentionCard({ card, cardTitle }) {
  * inutilisable sur mobile, là où l'appli sert le plus.
  */
 function CategoriesModal({ onClose }) {
+  useTrackDetail("Objets · Catégories");
   const [rows, setRows]   = React.useState(null);
   const [dirty, setDirty] = React.useState(false);
   const [busy, setBusy]   = React.useState(false);

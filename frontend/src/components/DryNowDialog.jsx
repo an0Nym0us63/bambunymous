@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import { Sun } from "lucide-react";
 import client from "../api/client";
@@ -12,6 +13,7 @@ import { showAlert } from "../utils/dialog";
 // est simplement posee : l'AMS la fait tourner sans la voir, l'appli retient
 // l'emplacement tant qu'il reste vide pour montrer ce qui seche.
 export default function DryNowDialog({ spoolId, spoolName, onClose, onDone }) {
+  useTrackDetail("Séchage · Lancer un séchage");
   const status = usePrinter(s => s.status);
   const [where, setWhere] = useState("");          // "" = ailleurs, sinon "ams:tray"
   const [busy, setBusy] = useState(false);

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTrackDetail } from "../utils/track";
 import { create } from "zustand";
 import client from "../api/client";
 import MwImg from "./MwImg";
@@ -39,6 +40,7 @@ export function CreatorPageHost() {
     return () => window.removeEventListener("keydown", k);
   }, [creator, model]);
 
+  useTrackDetail(creator ? `Créateur MakerWorld · ${data?.creator?.name || creator.name || creator.uid}` : null);
   if (!creator) return null;
   const c = data?.creator;
   const loadMore = async () => {

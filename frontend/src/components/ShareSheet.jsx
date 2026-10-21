@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import { Send } from "lucide-react";
 import client, { apiUrl } from "../api/client";
@@ -20,6 +21,7 @@ export default function ShareSheet({ kind, id, onClose }) {
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(null);
   const [pick, setPick] = useState(null);       // medias joints (ids), comme pour les evaluations
+  useTrackDetail(`Partage Telegram · ${kind === "group" ? "groupe" : "impression"} #${id}`);
   const timer = useRef(null);
 
   const load = (msg) => client.get(`/share/${kind}/${id}/preview`, { params: { message: msg, tz: TZ } })

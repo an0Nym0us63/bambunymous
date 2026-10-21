@@ -91,6 +91,7 @@ function RemainBar({ remaining, total=1000 }) {
 
 // ── Modal ajout bobine ─────────────────────────────────────────────────────
 function AddSpoolModal({ filaments: filamentsProp, onSave, onClose, preselect }) {
+  useTrackDetail("Filaments · Ajouter une bobine");
   const [form, setForm] = useState({ filament_id: preselect ? String(preselect) : "",
     remaining_weight_g:"", price_override:"", tag_number:"", comment:"" });
   const [saving, setSaving] = useState(false);
@@ -1333,6 +1334,7 @@ function ChipGroup({ label, options, selected, onToggle }) {
 }
 
 function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose }) {
+  useTrackDetail("Filtres et tri");
   // Tableaux et non chaînes : le multi-choix est tout l'objet de ce composant.
   const [fb, setFb] = useState(filters.brand || []);
   const [fm, setFm] = useState(filters.mat   || []);
@@ -1994,6 +1996,7 @@ function FilamentCard({ f, onClick, extra = null, menu, onLong }) {
 // plateau. Un clic ouvre la fiche du print PAR-DESSUS, sans quitter la page :
 // la meme fiche que l'historique (photos comprises).
 function FilamentPrintsSheet({ f, onClose }) {
+  useTrackDetail("Filaments · Impressions d'un filament");
   const hasFriends = useHasFriends();
   const shared = useShared(`/friends/shared/filament/${f.id}`, hasFriends);
   const nShared = sharedCount(shared);                 // onglet seulement s'il y a quelque chose chez eux
@@ -2296,6 +2299,7 @@ function FilamentsView() {
 
 // ── Création filament (saisie libre ou import catalogue Bambu) ─────────────
 function FilamentCreateSheet({ onClose, onCreated, prefill = null }) {
+  useTrackDetail("Filaments · Nouveau filament");
   // prefill: objet pré-rempli depuis le catalogue ou un tray MQTT
   const [mode, setMode] = useState(prefill ? "free" : "choose"); // "choose"|"catalog"|"free"
   const [saving, setSaving] = useState(false);

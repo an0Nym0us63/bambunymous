@@ -6,6 +6,7 @@ import { useIsAdmin } from "../store/auth";
 import client from "../api/client";
 import { isMoneyHidden } from "../utils/money";
 import { egg, tapper, rulesOpened } from "../eggs";
+import { useTrackDetail } from "../utils/track";
 import SlotMachine from "../components/SlotMachine";
 import TicketCeremony from "../components/TicketCeremony";
 
@@ -344,6 +345,7 @@ export default function Achievements({ embedded = false }) {
             position:"relative" }}>
             <button onClick={closeDetail} aria-label="Fermer" style={{ position:"absolute", top:8, right:10, zIndex:1,
               background:"none", border:"none", color:"var(--muted)", fontSize:20, cursor:"pointer" }}>✕</button>
+            <Track label={`Succès · ${byId[detail].name}`}/>
             <Card it={byId[detail]} sheet others={ringBy[detail]} shared={shared(byId[detail])} rivals={rivalsOf(byId[detail])}
               tickets={canSpend ? data.keys?.wheel?.tickets || 0 : 0} onTicket={() => useTicket(detail)}
               keys={canSpend ? data.keys : null} onSpend={() => spend(detail)} keyErr={keyErr}/>
@@ -585,8 +587,12 @@ function MedalShelf({ tiers, medals, onOpen }) {
 // La vitrine : toutes mes medailles gagnees, rangees sur des etageres de verre,
 // une par type (Bronze… Eternel, Unique). Ouverte sur un type, elle ne montre
 // que lui. Toucher une medaille ouvre sa fiche.
+// Une vue pour le journal d'activite, le temps qu'elle est affichee
+function Track({ label }) { useTrackDetail(label); return null; }
+
 function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
   useEffect(() => { egg("showcase"); }, []);
+  useTrackDetail(owner ? `Succès · Vitrine de ${owner}` : "Succès · Vitrine");
   // Chez un copain : ses medailles, et discretement celles que j'ai aussi
   const [own, setOwn] = useState("all");          // all | yes | no
   const myLvl = mine?.levels || null;
@@ -1202,6 +1208,7 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
 
 // Les regles, en une feuille : paliers et points, secrets, cles, copains.
 function Rules({ data, onClose }) {
+  useTrackDetail("Succès · Règles");
   const ladder = data.tiers.filter(t => t.id !== "unique");
   const uniq = data.tiers.find(t => t.id === "unique");
   const k = data.keys;

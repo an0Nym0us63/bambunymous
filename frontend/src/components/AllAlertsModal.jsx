@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import Select from "./Select";
@@ -40,6 +41,7 @@ function Dot({ a, size = 22 }) {
 }
 
 export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" }) {
+  useTrackDetail("Accueil · Points d'attention");
   const [tab, setTab]   = useState(initialTab);   // "all" | "dismissed"
   const [data, setData] = useState(null);
   const [dis, setDis]   = useState(null);         // sourdines, avec leur duree

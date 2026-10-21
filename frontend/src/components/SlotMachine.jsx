@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import { TicketStub } from "../pages/Achievements";
@@ -43,6 +44,7 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
   const [res, setRes] = useState(null);
   const [bonus, setBonus] = useState(null);           // cles rapportees en plus par les succes debloques
   const [err, setErr] = useState(null);
+  useTrackDetail("Succès · Roue de la fortune");
   const [help, setHelp] = useState(false);            // l'aide : les lots, ce qu'ils valent, leurs chances
   const timers = useRef([]);
   const finish = useRef(null);

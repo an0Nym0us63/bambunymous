@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import jsQR from "jsqr";
 
@@ -24,6 +25,7 @@ function parseId(text) {
 }
 
 export default function ScanSheet({ onDetect, onClose }) {
+  useTrackDetail("Filaments · Scan");
   const videoRef  = useRef(null);
   const canvasRef = useRef(null);
   const aliveRef  = useRef(true);

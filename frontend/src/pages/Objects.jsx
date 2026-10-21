@@ -382,6 +382,7 @@ export function AccessorySheet({ accId, onClose, onChanged }) {
 
 // ── Creation d'un accessoire ──────────────────────────────────────────────
 function AccessoryCreateSheet({ onClose, onCreated }) {
+  useTrackDetail("Objets · Nouvel accessoire");
   const [form, setForm] = React.useState({ name:"", quantity:"0", unit_price:"0", total_price:"" });
   const [priceMode, setPriceMode] = React.useState("unit");  // unit | total
   const [busy, setBusy] = React.useState(false);
@@ -480,6 +481,7 @@ function AccessoryCreateSheet({ onClose, onCreated }) {
  * chemins -- et l'anti-doublon vaut ici aussi.
  */
 function BulkCategorySheet({ ids, onClose, onDone }) {
+  useTrackDetail("Objets · Catégorie en lot");
   const [cat, setCat] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -608,6 +610,7 @@ function AccessoryCard({ acc, onClick, onLongPress, selectMode, selected }) {
 // Formulaire complet : nom FR, commentaire, perso, disponibilité, prix desire,
 // vente (prix + date) et annulation de vente.
 function ObjectEditSheet({ obj, onClose, onSaved }) {
+  useTrackDetail("Objets · Modifier un objet");
   const kb = useKeyboardInset();
   const [form, setForm] = React.useState({
     translated_name: obj.translated_name || obj.name || "",
@@ -1433,6 +1436,7 @@ function AccessorySection({ sec, open, onToggle, children }) {
 // existants et propose de creer celui qu'on tape. onPick recoit {group_id} ou
 // {group_name} (nouveau). Le parent gere l'action (rattachement, etc.).
 function ObjectGroupPickerSheet({ title, onClose, onPick }) {
+  useTrackDetail("Objets · Choisir un groupe");
   const kb = useKeyboardInset();
   const [q, setQ] = React.useState("");
   const [groups, setGroups] = React.useState([]);
@@ -1691,6 +1695,7 @@ function GroupBulkPanel({ group, memberCount, onChanged }) {
 }
 
 function ObjectGroupSheet({ group, objects, allObjects, sectionStatus, onClose, onSelectObj, onChanged }) {
+  useTrackDetail("Objets · Fiche groupe d'objets");
   // Ouverte depuis une section, la feuille montre d'abord les objets de CETTE
   // section -- c'est ce qu'on venait consulter. Mais on veut souvent verifier
   // le lot entier dans la foulee, d'ou la bascule plutot qu'une fermeture et

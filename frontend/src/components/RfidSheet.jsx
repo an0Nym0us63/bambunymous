@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import { colorBg, parseColorsList } from "../utils/colors";
@@ -14,6 +15,7 @@ import { colorBg, parseColorsList } from "../utils/colors";
  * - prix du filament : uniquement si le filament doit être créé.
  */
 export default function RfidSheet({ scanId, onClose, onCreated }) {
+  useTrackDetail("Filaments · Étiquette RFID");
   const [data, setData]   = useState(null);
   const [err, setErr]     = useState(null);
   const [busy, setBusy]   = useState(false);

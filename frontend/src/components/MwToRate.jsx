@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import { showConfirm, showAlert } from "../utils/dialog";
 import { useCanMwHome } from "../store/auth";
@@ -334,6 +335,7 @@ function RateForm({ x, targets, onDone }) {
 }
 
 export function ToRateSheet({ data, onClose, onOpen }) {
+  useTrackDetail("MakerWorld · À évaluer");
   const [view, setView] = useState(null);
   const [open, setOpen] = useState(null);
   const [done, setDone] = useState(() => new Set());

@@ -376,6 +376,7 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
 }
 
 function DissociateDialog({ usage, printId, onClose, onDone }) {
+  useTrackDetail("Dissocier");
   const [restore, setRestore] = useState(true);
   const [loading, setLoading] = useState(false);
 
@@ -584,6 +585,7 @@ function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRe
 }
 
 function PrintEditSheet({ p, onClose, onSaved }) {
+  useTrackDetail("Historique · Modifier une impression");
   const kb = useKeyboardInset();
   const [form, setForm] = useState({
     file_name:     p.file_name || "",
@@ -1426,6 +1428,7 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
 
 
 function GroupEditSheet({ groupId, name, onClose, onSaved }) {
+  useTrackDetail("Historique · Modifier un groupe");
   const [form, setForm] = useState({ name: name || "" });
   const [saving, setSaving] = useState(false);
   const inp = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
@@ -2644,6 +2647,7 @@ export default function Prints() {
   const [filSearch, setFilSearch] = useState("");
   const [sortF, setSortF]     = useState("recent");
   const [viewMode, setViewMode] = useUrlTab("tab", "list", ["list", "gallery", "makerworld", "queue"]);
+  useTrackDetail(`Historique · ${ {list:"Liste", gallery:"Galerie", makerworld:"MakerWorld", queue:"À faire"}[viewMode] || viewMode }`);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
   // Groupes selectionnes (appui long sur une tuile de groupe), dans l'ordre de
@@ -3429,6 +3433,7 @@ export default function Prints() {
 // ses vignettes) ; le nombre d'elements propose est la somme de ceux de chaque
 // groupe (1 par defaut), a valider ou corriger avant d'envoyer.
 function GroupMergeSheet({ groups, onClose, onDone }) {
+  useTrackDetail("Historique · Fusionner des groupes");
   const [keepId, setKeepId] = useState(groups[0]?.groupId);
   const sum = groups.reduce((t, g) => t + Math.max(1, g.number_of_items || 1), 0);
   const [nb, setNb] = useState(String(sum));
@@ -3527,6 +3532,7 @@ function fmtGroupDate(d) {
 
 // ── Sélecteur de groupe — recherche substring + création ───────────────────
 function GroupPickerSheet({ groups, onClose, onPick }) {
+  useTrackDetail("Historique · Choisir un groupe");
   const [q, setQ] = useState("");
   const [vh, setVh] = useState(typeof window !== "undefined" ? window.innerHeight : 800);
 

@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import client from "../api/client";
 import AdminOnly from "./AdminOnly";
@@ -55,6 +56,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const [plan, setPlan] = useState(null);            // plan retenu pour la file (profil, plateaux, filaments)
   const [planBusy, setPlanBusy] = useState(false);
   const [studioBusy, setStudioBusy] = useState(false);
+  useTrackDetail(`Fiche MakerWorld · ${m?.title || "#" + id}`);
   // Profil a imprimer : celui qui est deplie, sinon celui retenu.
   const printProfile = () => (m?.profiles || []).find(p => p.instance_id === open)
     || (m?.profiles || []).find(p => p.main) || m?.profiles?.[0] || null;

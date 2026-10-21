@@ -263,6 +263,9 @@ _PAGE_LABELS = {
     "/stats":     "Statistiques",
     "/settings":  "Parametres",
     "/logs":      "Journal",
+    "/notifications": "Notifications",
+    "/anonymous": "Anonymous",
+    "/teapot":    "Theiere",
 }
 
 # Dernieres vues journalisees par compte, gardees en memoire. Indispensable :

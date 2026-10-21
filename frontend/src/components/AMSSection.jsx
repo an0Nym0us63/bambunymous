@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTrackDetail } from "../utils/track";
 import { Droplets, Sun, Thermometer, Timer, Clock, Package, Palette } from "lucide-react";
 import client from "../api/client";
 import { colorBg, opaqueColors } from "../utils/colors";
@@ -497,6 +498,7 @@ const MATCH_LABEL = {
 };
 
 function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
+  useTrackDetail("Accueil · Emplacement AMS");
   const [spoolSheet, setSpoolSheet] = React.useState(null);
   if (!tray) return null;
   const color  = hexDisplay(tray.color);
@@ -740,6 +742,7 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
 
 // ── Mapper / Créer une bobine pour un tray non reconnu ────────────────────
 function MapTraySheet({ tray, amsId, onClose, onMapped }) {
+  useTrackDetail("Filaments · Corriger un emplacement AMS");
   const isBambu = Boolean(tray.tray_info_idx);
   // On ouvre toujours sur les bobines existantes : une bobine tierce sans profil
   // (emplacement « non identifie ») doit pouvoir etre associee, pas seulement creee.

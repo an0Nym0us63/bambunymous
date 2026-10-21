@@ -732,6 +732,7 @@ const PRESETS = [
 ];
 
 function PeriodFilterSheet({ value, onApply, onClose }) {
+  useTrackDetail("Filtre de période");
   const [from, setFrom] = React.useState(value.from || "");
   const [to, setTo] = React.useState(value.to || "");
   const applyCustom = () => {

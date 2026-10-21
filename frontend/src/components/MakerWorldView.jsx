@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { useTrackDetail } from "../utils/track";
 import { useUrlTab } from "../utils/useUrlTab";
 import { createPortal } from "react-dom";
 import client from "../api/client";
@@ -43,6 +44,7 @@ const FILTERS = [["all", "Tous"], ["printed", "Déjà imprimés"], ["new", "Jama
 
 export default function MakerWorldView({ onSearch }) {
   const [tab, setTab] = useUrlTab("mw", "favorites", TABS.map(([k]) => k));
+  useTrackDetail(`MakerWorld · ${(TABS.find(([k]) => k === tab) || [tab, tab])[1]}`);
   const [coll, setColl] = useState(null);          // collection ouverte { id, title }
   const [data, setData] = useState(null);          // { items } | { collections } | { error }
   const [pf, setPf] = useState("all");           // tous / deja imprimes / jamais imprimes
