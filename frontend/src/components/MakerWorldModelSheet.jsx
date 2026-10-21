@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import client from "../api/client";
+import { useCanMw } from "../store/auth";
 import AdminOnly from "./AdminOnly";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
 import { mwLiked } from "../utils/mwSync";
@@ -81,6 +82,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   };
   const startAssign = useMwAssign((s) => s.start);
   const friend = useFriend((s) => s.friend); // profil dont le 3MF est en lecture
+  const canPlan = useCanMw();                  // plan « A faire » : droit MakerWorld, jamais chez un copain
   const [plateSel, setPlateSel] = useState({});    // instance_id -> plateaux choisis (absent = tous)
   const [showCom, setShowCom] = useState(false);   // commentaires replies (charges a l'ouverture)
   const [like, setLike] = useState(null);          // { liked } avec mon compte ; null = inconnu / pas connecte
@@ -469,8 +471,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                         return (
                           <div style={{ display:"flex", alignItems:"center", gap:8, padding:"0 10px 8px", fontSize:11.5, color:"var(--text2)" }}>
                             <span style={{ flex:1 }}>{sel ? `Stock calculé pour ${sel.length} plateau${sel.length > 1 ? "x" : ""} sur ${p.plates.length}`
-                              : "Stock calculé pour tous les plateaux"} · touche un plateau pour l'enlever</span>
-                            {sel && <button onClick={() => setSel(undefined)} style={{ ...textBtn, marginTop:0 }}>Tous</button>}
+                              : "Stock calculé pour tous les plateaux"} {canPlan ? "· touche un plateau pour l'enlever" : ""}</span>
+                            {sel && canPlan && <button onClick={() => setSel(undefined)} style={{ ...textBtn, marginTop:0 }}>Tous</button>}
                           </div>
                         );
                       })()}
@@ -499,17 +501,18 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                             const ready = !sel0 || sel0.includes(pl.index) ? plateInAms(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`) : null;
                             const sel = plateSel[p.instance_id];
                             const on = !sel || sel.includes(pl.index);
-                            const toggle = () => setPlateSel(s => {
+                            const toggle = () => canPlan && setPlateSel(s => {
                               const cur = s[p.instance_id] || p.plates.map(x => x.index);
                               const next = on ? cur.filter(i => i !== pl.index) : [...cur, pl.index];
                               return { ...s, [p.instance_id]: next.length === p.plates.length ? undefined : next };
                             });
                             return (
-                              <div key={pl.index} onClick={p.plates.length > 1 ? toggle : undefined} role={p.plates.length > 1 ? "button" : undefined}
+                              <div key={pl.index} onClick={p.plates.length > 1 && canPlan ? toggle : undefined}
+                                role={p.plates.length > 1 && canPlan ? "button" : undefined}
                                 aria-pressed={on} style={{ borderRadius:8, overflow:"hidden", background:"var(--surface)",
-                                cursor: p.plates.length > 1 ? "pointer" : "default", opacity: on ? 1 : 0.4, transition:"opacity .15s",
+                                cursor: p.plates.length > 1 && canPlan ? "pointer" : "default", opacity: on ? 1 : 0.4, transition:"opacity .15s",
                                 position:"relative", border: ok ? "2px solid #22c55e" : ready ? "2px solid #3b82f6" : "1px solid var(--border)" }}>
-                                {p.plates.length > 1 && <span style={{ position:"absolute", top:4, right:4, zIndex:1, width:18, height:18,
+                                {p.plates.length > 1 && canPlan && <span style={{ position:"absolute", top:4, right:4, zIndex:1, width:18, height:18,
                                   borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900,
                                   color:"white", background: on ? "#3b82f6" : "rgba(0,0,0,0.45)", border:"1.5px solid white" }}>{on ? "✓" : ""}</span>}
                                 <div style={{ position:"relative" }}>

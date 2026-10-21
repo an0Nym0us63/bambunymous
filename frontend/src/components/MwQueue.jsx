@@ -355,7 +355,8 @@ export default function MwQueue() {
                         <button key={l} onClick={() => move(r.design_id, to)} aria-label={l} title={l} style={mv}>{ic}</button>
                       ))}
                     </span>
-                  ) : <Qty value={r.qty || 1} onChange={n => setQty(r.design_id, n)}/>}
+                  ) : isAdmin ? <Qty value={r.qty || 1} onChange={n => setQty(r.design_id, n)}/>
+                    : (r.qty || 1) > 1 && <span style={{ fontSize:12, fontWeight:800, color:"var(--text2)" }}>×{r.qty}</span>}
                 </span>
               </Pressable>
               {!cutting && !marks && pos[r.design_id] === cutAt && cutAt < q.models.length - 1 && (

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import client from "../api/client";
+import { useCanMw } from "../store/auth";
 import { useNavigate } from "react-router-dom";
 import { colorBg, parseColorsList } from "../utils/colors";
 
@@ -138,6 +139,9 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
   const [open, setOpen] = useState(null);
   const [, bump] = useState(0);
   const nav = useNavigate();
+  // Changer le filament retenu est une ecriture (il part dans le plan « A faire ») :
+  // reserve au droit MakerWorld, et jamais chez un copain. Les autres voient le choix.
+  const canEdit = useCanMw();
   if (!items?.length) return null;
   const go = id => { onNavigate?.(); nav(`/filaments?id=${id}`); };
   const choose = (x, i) => chosenOf(x, scope, i);
@@ -161,9 +165,9 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
         return (
           <div key={i} style={{ borderRadius:8, background:"var(--surface)", border:"1px solid var(--border)",
             opacity: unused ? 0.45 : 1, transition:"opacity .15s" }}>
-            <button onClick={() => setOpen(isOpen ? null : i)}
+            <button onClick={canEdit ? () => setOpen(isOpen ? null : i) : undefined} disabled={!canEdit}
               style={{ width:"100%", display:"flex", alignItems:"flex-start", gap:8, padding:"6px 8px", background:"none",
-                border:"none", cursor:"pointer", color:"var(--text)", textAlign:"left" }}>
+                border:"none", cursor: canEdit ? "pointer" : "default", color:"var(--text)", textAlign:"left" }}>
               <Swatch color={x.color} title={x.color}/>
               <span title={x.exact?.setting || undefined}
                 style={{ fontSize:11.5, fontWeight:700, flexShrink:0, lineHeight:"16px", maxWidth:"34%" }}>
@@ -198,13 +202,13 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
                   <span style={{ display:"block", fontSize:10, fontWeight:800, color: levelColor(best), whiteSpace:"nowrap",
                     lineHeight:"16px" }}>{levelText(best)}</span>
                   {manual ? <span style={{ display:"block", fontSize:9.5, color:"#3b82f6", fontWeight:700 }}>choisi</span>
-                    : <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>
+                    : canEdit && <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>
                       {isOpen ? "masquer ▴" : nAlt > 0 ? `${nAlt} autre${nAlt > 1 ? "s" : ""} ▾` : "changer ▾"}</span>}
                 </span>
               </>) : (
                 <span style={{ flex:1, fontSize:11.5, color:"#ef4444", lineHeight:"16px" }}>Aucun {x.type || "filament"} en stock
-                  <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
-                    {isOpen ? "masquer ▴" : others.length ? "choisir une autre matière ▾" : "chercher dans mon stock ▾"}</span></span>
+                  {canEdit && <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
+                    {isOpen ? "masquer ▴" : others.length ? "choisir une autre matière ▾" : "chercher dans mon stock ▾"}</span>}</span>
               )}
             </button>
             {!unused && shared ? (
