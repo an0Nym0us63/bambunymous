@@ -131,9 +131,9 @@ export default function Achievements({ embedded = false }) {
         <div style={{ display:"flex", gap:18, alignItems:"center", flexWrap:"wrap" }}>
           <ScoreHero data={data}/>
           <div style={{ flex:"2 1 300px", minWidth:0, display:"flex", flexDirection:"column", gap:8 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:"4px 10px", flexWrap:"wrap" }}>
               <button onClick={() => setVitrine(null)} title={atFriend ? "Ouvrir sa vitrine : toutes ses médailles" : "Ouvrir ta vitrine : toutes tes médailles"}
-                style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:"var(--muted)",
+                style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:"var(--muted)", whiteSpace:"nowrap",
                   background:"none", border:"none", padding:0, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:4 }}>
                 🏛️ {atFriend ? "Sa vitrine" : "Ta vitrine"} <span style={{ fontSize:9 }}>▸</span></button>
               {data.tickets_used > 0 && <button onClick={() => setUsage("tickets")} title="Où sont passés tes tickets"
@@ -423,7 +423,7 @@ function Tile({ it, onOpen, others, shared, rivals }) {
       {(it.tickets > 0 || it.key_use) && (
         <span title={it.tickets > 0 ? `${it.tickets} ticket${it.tickets > 1 ? "s" : ""} utilisé${it.tickets > 1 ? "s" : ""} ici`
           : `Révélé avec des clés${it.key_use.keys ? ` (${it.key_use.keys})` : ""}`}
-          style={{ position:"absolute", bottom:4, left:4, fontSize:9.5, fontWeight:800, padding:"1px 5px", borderRadius:20,
+          style={{ fontSize:9.5, fontWeight:800, padding:"1px 6px", borderRadius:20, marginTop:-2,
             background:"rgba(245,158,11,0.16)", color:"#D97706", lineHeight:1.3 }}>
           {it.tickets > 0 ? `🎟️${it.tickets}` : `🔑${it.key_use.keys || ""}`}</span>
       )}
@@ -607,7 +607,7 @@ function MedalShelf({ tiers, medals, onOpen }) {
 // que lui. Toucher une medaille ouvre sa fiche.
 // Ce qu'ont coute les paliers et les revelations : par section, dans la fiche, et le releve complet
 const usageBtn = { display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:700, color:"var(--muted)",
-  background:"none", border:"none", padding:0, cursor:"pointer" };
+  background:"none", border:"none", padding:0, cursor:"pointer", whiteSpace:"nowrap" };
 
 function spentIn(items) {
   let tickets = 0, keys = 0;
