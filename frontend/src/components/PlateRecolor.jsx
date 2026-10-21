@@ -89,13 +89,15 @@ export default function PlateRecolor({ src, map, w = 200, style }) {
   const [orig, setOrig] = useState(false);
   const [url, setUrl] = useState(null);
   const [absent, setAbsent] = useState([]);
+  const [fail, setFail] = useState(null);
   const multi = active && pairs.length > 1;
   const sig = pairs.map(p => p.from + ">" + p.to).join(",");
   useEffect(() => {
-    setUrl(null); setAbsent([]);
+    setUrl(null); setAbsent([]); setFail(null);
     if (!multi) return undefined;
     let live = true;
-    paint(src, pairs).then(res => { if (live) { setUrl(res.url); setAbsent(res.absent); } }).catch(() => {});
+    paint(src, pairs).then(res => { if (live) { setUrl(res.url); setAbsent(res.absent); } })
+      .catch(e => { if (live) setFail(e?.response?.status ? `${e.response.status}` : (e?.message || "erreur")); });
     return () => { live = false; };
   }, [src, sig, multi]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!active) return <MwImg src={src} w={w} style={style}/>;
@@ -133,6 +135,11 @@ export default function PlateRecolor({ src, map, w = 200, style }) {
   }
   return (
     <div style={{ position:"relative" }}>{body}{toggle}
+      {!orig && fail && (
+        <span title={`L'image n'a pas pu être lue pour être repeinte (${fail})`}
+          style={{ position:"absolute", left:4, bottom:4, zIndex:1, padding:"1px 6px", borderRadius:10,
+            background:"rgba(0,0,0,0.6)", color:"#fca5a5", fontSize:9, fontWeight:800 }}>aperçu impossible · {fail}</span>
+      )}
       {!orig && lost.length > 0 && (
         <span title="MakerWorld n'a pas rendu cette couleur sur la vignette : elle ne peut pas y changer"
           style={{ position:"absolute", left:4, bottom:4, zIndex:1, display:"flex", alignItems:"center", gap:3, padding:"1px 6px 1px 3px",

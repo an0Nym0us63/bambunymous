@@ -38,7 +38,6 @@ async def mw_img(u: str, _=Depends(get_current_user)):
     import hashlib
     from pathlib import Path
     from urllib.parse import urlparse
-    import aiohttp
     from fastapi import Response
     from ....core.config import settings
     p = urlparse(u)
@@ -53,16 +52,21 @@ async def mw_img(u: str, _=Depends(get_current_user)):
     head = {"Cache-Control": "private, max-age=2592000"}
     if path.exists():
         return Response(path.read_bytes(), media_type=ctype, headers=head)
+    # meme client que le reste de MakerWorld (requests, en-tete de navigateur) : il passe
+    def get():
+        with mw.session().get(u, headers={"User-Agent": "Mozilla/5.0 (BambuNymous)", "Accept": "image/*"},
+                              timeout=15, allow_redirects=False, stream=True) as r:
+            if r.status_code != 200:
+                return r.status_code, None
+            return 200, r.raw.read(_IMG_MAX + 1, decode_content=True)
     try:
-        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as http:
-            async with http.get(u, allow_redirects=False) as r:
-                if r.status != 200:
-                    raise HTTPException(502, "Image introuvable")
-                data = await r.content.read(_IMG_MAX + 1)
-    except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(502, "Image indisponible")
+        code, data = await asyncio.to_thread(get)
+    except Exception as e:
+        logger.warning("[MW] vignette %s : %s", u, e)
+        raise HTTPException(502, f"Image indisponible ({type(e).__name__})")
+    if code != 200 or not data:
+        logger.warning("[MW] vignette %s : HTTP %s", u, code)
+        raise HTTPException(502, f"Image introuvable (HTTP {code})")
     if len(data) > _IMG_MAX:
         raise HTTPException(502, "Image trop lourde")
     try:
