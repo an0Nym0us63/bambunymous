@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { currentFriend } from "../store/friend";
 import { useIsAdmin } from "../store/auth";
 import client from "../api/client";
@@ -615,6 +615,25 @@ function spentIn(items) {
   return { tickets, keys };
 }
 
+// Pages cachees et farces deja gagnees : un bouton pour y retourner
+const PLACE_OF = id => id === "egg_anonymous" ? ["/anonymous", "page"] : id === "egg_teapot" ? ["/teapot", "page"]
+  : id.startsWith("egg_h_") ? ["/" + id.slice(6).replace(/_/g, "-"), "page"]
+  : id.startsWith("egg_p_") ? ["/" + id.slice(6).replace(/_/g, "-"), "farce"] : null;
+
+function SecretPlace({ it }) {
+  const nav = useNavigate();
+  const place = PLACE_OF(it.id);
+  if (!place) return null;
+  const [path, kind] = place;
+  return (
+    <button onClick={e => { e.stopPropagation(); nav(path); }}
+      style={{ marginTop:8, display:"inline-flex", alignItems:"center", gap:6, padding:"7px 14px", borderRadius:20,
+        border:"none", cursor:"pointer", fontWeight:800, fontSize:12.5, color:"#fff",
+        background: kind === "farce" ? "linear-gradient(135deg,#8B5CF6,#6366F1)" : "linear-gradient(135deg,#22C55E,#0EA5E9)" }}>
+      {kind === "farce" ? "🌀 Rejouer la farce" : "🗺️ Y retourner"}</button>
+  );
+}
+
 function Spent({ it }) {
   const uses = it.ticket_uses || [], k = it.key_use;
   if (!uses.length && !k) return null;
@@ -1217,6 +1236,7 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
             <div style={{ fontSize:11, fontWeight:700, color:top.color, marginTop:3 }}>Gagné le {dateFr(top.at)}</div>
           )}
           {sheet && <Spent it={it}/>}
+          {sheet && got && <SecretPlace it={it}/>}
         </div>
       </div>
       {shared !== undefined && (

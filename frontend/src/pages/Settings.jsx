@@ -419,6 +419,44 @@ function MyAccountSection() {
 }
 
 // ── Utilisateurs (administrateurs seulement) ──────────────────────────────
+// Comptes dont l'activite fait avancer les succes (journal, easter eggs). Les
+// autres jouent quand meme : ils voient le bandeau, marque « non comptabilise ».
+function AchievementUsersSection() {
+  const [list, setList] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const load = () => client.get("/achievements/users").then(r => setList(Array.isArray(r.data) ? r.data : [])).catch(() => setList([]));
+  React.useEffect(() => { load(); }, []);
+  const toggle = async u => {
+    const next = list.map(x => x.username === u ? { ...x, counted: !x.counted } : x);
+    setList(next); setBusy(true);
+    try { await client.put("/achievements/users", { counted: next.filter(x => x.counted).map(x => x.username) }); }
+    catch { load(); }
+    setBusy(false);
+  };
+  return (
+    <div className="card" style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:10 }}>
+      <div style={{ fontSize:14, fontWeight:800, color:"var(--text)" }}>🏆 Comptes qui font avancer les succès</div>
+      <p style={{ margin:0, fontSize:12.5, color:"var(--muted)", lineHeight:1.5 }}>
+        Visites, fiches consultées, actions et easter eggs ne comptent que pour les comptes cochés. Les autres peuvent
+        jouer et trouver les secrets : ils voient le succès, marqué « non comptabilisé ».</p>
+      {!list ? <span style={{ fontSize:12.5, color:"var(--muted)" }}>Chargement…</span>
+        : list.map(u => (
+          <label key={u.username} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 2px", cursor:"pointer",
+            opacity: u.active ? 1 : 0.55 }}>
+            <input type="checkbox" checked={u.counted} disabled={busy} onChange={() => toggle(u.username)}
+              style={{ width:18, height:18, accentColor:"#F59E0B" }}/>
+            <span style={{ flex:1, minWidth:0, fontSize:13.5, fontWeight:700, color:"var(--text)" }}>{u.username}
+              <span style={{ fontWeight:500, fontSize:11.5, color:"var(--muted)" }}>
+                {" "}· {u.role === "admin" ? "administrateur" : "lecture seule"}{u.friend ? " · invitation copain" : ""}
+                {!u.active ? " · désactivé" : ""}</span></span>
+            <span style={{ fontSize:11.5, fontWeight:800, color: u.counted ? "#22c55e" : "var(--muted)" }}>
+              {u.counted ? "compte" : "ne compte pas"}</span>
+          </label>
+        ))}
+    </div>
+  );
+}
+
 function UsersSection() {
   const isAdmin = useIsAdmin();
   const meName  = useAuth((s) => s.username);
@@ -1936,6 +1974,7 @@ export default function Settings() {
       <MyAccountSection/>
       <TwoFactorCard/>
       <UsersSection/>
+      <AdminOnly><AchievementUsersSection/></AdminOnly>
       <ActivitySection/>
       </>)}
 

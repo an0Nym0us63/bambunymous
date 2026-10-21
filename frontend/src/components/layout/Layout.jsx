@@ -12,6 +12,7 @@ import { FriendLinkBridge } from "../Friends";
 import Toast from "../Toast";
 import { egg, installEggs, pageChanged, tapper } from "../../eggs";
 import NoAutofill from "../NoAutofill";
+import { PrankHost } from "../../hidden/prankHost";
 
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil"    },
@@ -226,6 +227,7 @@ export default function Layout() {
         </header>
 
         <main className="page-content" style={S.page}><Outlet /></main>
+        <PrankHost/>
         <ShareProgress/>
         {!friend && <RfidScanBridge/>}
         {!friend && <PushBridge/>}

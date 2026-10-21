@@ -17,6 +17,7 @@ import { CreatorPageHost } from "./components/MwCreatorPage";
 import { egg } from "./eggs";
 import Anonymous from "./pages/Anonymous";
 import HiddenPage, { isHidden } from "./hidden";
+import { PrankRedirect, isPrank } from "./hidden/prankHost";
 
 function Rewind() {
   const [pw, setPw] = React.useState("");
@@ -49,6 +50,7 @@ function Rewind() {
 // Adresse inconnue : une page cachee si elle existe (chargee a la demande), sinon « introuvable »
 function LostOrHidden() {
   const slug = (useLocation().pathname || "/").replace(/^\/+|\/+$/g, "").toLowerCase();
+  if (isPrank(slug)) return <PrankRedirect slug={slug}/>;
   return isHidden(slug) ? <HiddenPage key={slug} slug={slug}/> : <NotFound/>;
 }
 

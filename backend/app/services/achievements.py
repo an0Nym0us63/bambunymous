@@ -1044,6 +1044,97 @@ EGGS = {
     "h_pluie": ('☂️', 'Au sec', "Sur la page /pluie, rester à l'abri de la pluie 15 secondes",
         "Il pleut des cordes. Un parapluie, et beaucoup d'agilité.",
         "Quinze secondes au sec sous l'averse. Le filament, lui, déteste l'humidité."),
+    # Farces (22/10/2026) : l'accueil a une adresse secrete ou il lui arrive quelque chose
+    "p_tsunami": ('🌊', 'Raz-de-marée', 'Ouvrir /tsunami et survivre à la vague',
+        "Une vague géante venue du Japon porte un nom bien connu. Ton accueil aimerait la voir passer.",
+        "La vague est passée, l'accueil est trempé mais debout. Heureusement, le PLA ne craint pas l'eau."),
+    "p_seisme": ('\U0001fae8', 'Secousse', 'Ouvrir /seisme et attendre que la terre se calme',
+        'Quand la terre tremble, les spécialistes ont un mot pour ça. Ton accueil aussi.',
+        "Magnitude 9 sur l'échelle de Richter. Le plateau n'a pas bougé, lui."),
+    "p_tete_en_bas": ('🙃', 'Cul par-dessus tête', "Ouvrir /tete-en-bas et remettre la page à l'endroit",
+        "L'accueil, mais vu par une chauve-souris.",
+        "Remis à l'endroit ! Le sang redescend doucement de ta tête."),
+    "p_panne": ('💡', 'Électricien', "Ouvrir /panne et trouver l'interrupteur dans le noir",
+        "Coupure de courant à l'atelier : il faut trouver de quoi rallumer.",
+        "Lumière ! L'interrupteur était bien caché, mais pas pour toi."),
+    "p_melange": ('🔀', 'Anagramme', 'Ouvrir /melange et attendre que les lettres retrouvent leur place',
+        "Quand les lettres d'un mot changent de place, tout se brouille… le temps qu'elles reviennent.",
+        'Les lettres ont retrouvé leur place. Plus personne ne lit « Bmabu Nmyuos ».'),
+    "p_gravite": ('🍎', 'Newton', 'Ouvrir /gravite et voir les cartes tomber puis remonter',
+        "Une pomme est tombée sur la tête d'un savant. Sur ton accueil, ce sont les cartes.",
+        'Tout est tombé, tout est remonté. Isaac Newton prend des notes.'),
+    "p_miroir": ('🪞', "De l'autre côté", 'Ouvrir /miroir et traverser le reflet',
+        "Alice est passée de l'autre côté de quelque chose. Ton accueil aussi peut le faire.",
+        "La page s'est regardée dans la glace. Elle s'est trouvée plutôt jolie."),
+    "p_blizzard": ('🌨️', 'Chasse-neige', 'Ouvrir /blizzard et déneiger la page',
+        "Une tempête de neige s'abat sur l'accueil. Prends ta pelle… ou ton doigt.",
+        "Page déneigée ! Le PLA, lui, n'aime pas trop le froid."),
+    "p_brouillard": ('🌫️', 'Dans la purée de pois', 'Ouvrir /brouillard et dissiper la brume',
+        "On n'y voit rien, comme un matin de novembre. Chasse-le.",
+        "Le brouillard s'est levé. On revoit les bobines."),
+    "p_fete": ('🎉', 'Fêtard', "Ouvrir /fete et danser avec l'accueil",
+        "L'accueil a envie de faire la fête. Sors les cotillons.",
+        'Les cotillons sont rangés, la piste est vide. Quelle soirée !'),
+    "p_tornade": ('🌪️', 'Chasseur de tempête', "Ouvrir /tornade et voir l'accueil s'envoler",
+        'Un tourbillon de vent qui emporte tout sur son passage, Dorothée en sait quelque chose.',
+        "Tout s'est envolé et tout est retombé à sa place. Le Kansas peut dormir tranquille."),
+    "p_aimant": ('🧲', 'Magnétique', 'Ouvrir /aimant et attirer les cartes',
+        "Tu as un pouvoir d'attraction. Les cartes de ton accueil ne demandent qu'à te suivre.",
+        'Les cartes te suivaient comme de la limaille. Tu es irrésistible.'),
+    "p_fantome": ('👻', 'Chasseur de fantômes', 'Ouvrir /fantome et chasser les fantômes',
+        "Bouh ! Des draps blancs flottent sur l'accueil. Chasse-les.",
+        'Les fantômes ont fui. Qui tu vas appeler ? Personne, tu as tout fait seul.'),
+    "p_pixel": ('👾', 'Connexion 56k', 'Ouvrir /pixel et attendre que la page se charge',
+        'Ton accueil, mais en très gros carreaux, comme au temps des vieux modems.',
+        'Image enfin nette. On entend presque le bruit du modem.'),
+    "p_vieux_film": ('🎞️', 'Cinéma muet', "Ouvrir /vieux-film et regarder le film d'époque",
+        "L'accueil en noir et blanc, comme au temps de Charlot, avec du grain et des rayures.",
+        "Fin du film muet. Les couleurs sont revenues, et le son… ne l'a jamais quitté."),
+    "p_glitch": ('📺', 'Bug', 'Ouvrir /glitch et attendre la réparation',
+        "Un bug spectaculaire, des couleurs qui se décalent… puis tout se répare.",
+        "Couche retrouvée, bug réparé. Ce n'était qu'une fausse alerte."),
+    "p_toile": ('🕷️', 'Arachnophobe', "Ouvrir /toile et chasser l'araignée",
+        "Les coins de l'accueil se couvrent de soie. Il y a quelqu'un au bout du fil.",
+        "L'araignée est remontée dans son coin. Elle t'en veut un peu."),
+    "p_apesanteur": ('🧑\u200d🚀', 'Astronaute', 'Ouvrir /apesanteur et flotter avec les cartes',
+        "Là-haut, plus rien ne pèse. L'accueil aimerait essayer.",
+        'Retour sur Terre en douceur. Les cartes ont adoré flotter.'),
+    "p_vent": ('🍃', 'Coup de vent', 'Ouvrir /vent et tenir bon',
+        "Ça souffle fort aujourd'hui. Les feuilles et les cartes ne tiennent plus en place.",
+        'Le vent est tombé. Ramasse les feuilles, les cartes sont rentrées seules.'),
+    "p_ecran_bleu": ('🟦', 'Redémarrage', 'Ouvrir /ecran-bleu et redémarrer',
+        "Une couleur d'écran que tous les utilisateurs de Windows redoutent.",
+        "Redémarrage réussi. Ce n'était qu'un spaghetti, rien de grave."),
+    "p_fourmis": ('🐜', 'Fourmilière', 'Ouvrir /fourmis et voir les lettres partir et revenir',
+        'Une colonne de petites travailleuses a repéré les lettres de ton accueil.',
+        'Les fourmis ont tout rapporté. Pas une lettre ne manque.'),
+    "p_canicule": ('🥵', 'Coup de chaud', "Ouvrir /canicule et laisser l'accueil fondre",
+        "Quand le thermomètre s'affole en été, l'accueil fond comme un PLA à 200 °C.",
+        "Le ventilateur a tout refroidi. L'accueil a retrouvé sa forme."),
+    "p_papier": ('📃', 'Boule de papier', 'Ouvrir /papier et voir la page se froisser',
+        "L'accueil n'est qu'une feuille, après tout. Une feuille, ça se froisse.",
+        'Dépliée et lissée. Pas une pliure ne se voit.'),
+    "p_loupe": ('🔍', 'Myope', 'Ouvrir /loupe et trouver le mot écrit en tout petit',
+        "Sherlock Holmes ne sortait jamais sans elle. Un mot minuscule t'attend.",
+        'Trouvé ! « coucou », écrit en caractères de fourmi.'),
+    "p_escargot": ('🐌', 'Ralenti', "Ouvrir /escargot et patienter jusqu'au bout",
+        'Un animal célèbre pour sa lenteur ralentit tout sur son passage.',
+        "L'escargot est passé. Il a mis le temps, mais il est arrivé."),
+    "p_aspirateur": ('🌀', 'Ménage', 'Ouvrir /aspirateur et voir les cartes aspirées',
+        "Un appareil ménager affamé avale tout ce qui traîne sur l'accueil.",
+        'Burp ! Tout a été recraché à sa place. Merci pour le ménage.'),
+    "p_bulle": ('🫧', 'Dans sa bulle', 'Ouvrir /bulle et faire éclater la bulle',
+        "Être dans sa bulle, c'est agréable. Mais il faut bien en sortir un jour.",
+        "Pop ! La bulle a éclaté, l'accueil est revenu sur terre."),
+    "p_taches": ('🎨', 'Grand nettoyage', 'Ouvrir /taches et essuyer toutes les taches',
+        "Quelqu'un a renversé de la peinture sur l'écran. Un coup de chiffon s'impose.",
+        'Écran impeccable ! Plus une tache, plus une trace de doigt.'),
+    "p_domino": ('🁢', 'Effet domino', 'Ouvrir /domino et voir les cartes tomber à la chaîne',
+        'Une chute en entraîne une autre, puis une autre…',
+        'Toutes tombées, toutes relevées. Un record du monde en puissance.'),
+    "p_ombre": ('🌗', 'Cadran solaire', 'Ouvrir /ombre et voir une journée passer',
+        'Le soleil tourne autour de ton accueil, et chaque carte projette son ombre.',
+        'Du matin au soir, puis la nuit, puis le jour revient. Une journée en neuf secondes.'),
     "showcase": ("🏛️", "Conservateur", "Ouvrir sa vitrine de médailles",
                  "Un musée n'a de sens que si l'on pousse sa porte. Le tien a des étagères de verre.",
                  "Bienvenue au musée : chaque médaille y a sa place, sous le verre et la lumière."),
@@ -1125,6 +1216,7 @@ CATALOG += [
 ]
 CATALOG += [_a(f"egg_{k}", "secret", e, t, d, [1], lore=l) for k, (e, t, d, _h, l) in EGGS.items()]
 HIDDEN_EGGS = {"anonymous", "teapot"} | {k for k in EGGS if k.startswith("h_")}
+PRANK_EGGS = {k for k in EGGS if k.startswith("p_")}
 # Secrets (toutes les medailles uniques) : rangés en sous-sections dans la
 # categorie « Secrets ».
 SECRET_SUBS = [
@@ -1148,7 +1240,8 @@ SECRET_SUBS = [
     ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
      "action_cam making_of festival retro_video family_film flash_video bunker pwd_changes black_photo white_photo "
      "panorama hires_photo photo_burst purge_day tinkerer"),
-    ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS if k not in HIDDEN_EGGS)),
+    ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS if k not in HIDDEN_EGGS | PRANK_EGGS)),
+    ("pranks", "🌀", "Farces", " ".join(f"egg_{k}" for k in EGGS if k in PRANK_EGGS)),
     ("hidden", "🗺️", "Pages cachées", " ".join(f"egg_{k}" for k in EGGS if k in HIDDEN_EGGS)),
     ("game", "🎰", "Clés et roue", "jackpot lucky5 bad_luck win_streak last_key full_reveal"),
 ]
@@ -1740,6 +1833,7 @@ def _family(t: str) -> str:
 
 async def _load_data() -> dict:
     from sqlalchemy import select
+    counted = await counted_users()
     from ..db.session import AsyncSessionLocal
     from ..models.filament import Filament, Spool
     from ..models.object_history import Object, ObjectAccessory, ObjectGroup
@@ -1777,11 +1871,13 @@ async def _load_data() -> dict:
         pgroups = (await db.execute(select(Group.id, Group.created_at, Group.cover_photo))).all()
         tags = (await db.execute(select(func.lower(PrintTag.tag)).distinct())).all()
         # journal d'activite : par type et par jour (il peut etre long)
+        who = ActivityLog.username.in_(counted)          # comptes retenus pour les succes
         act_days = (await db.execute(select(ActivityLog.kind, func.date(ActivityLog.created_at), func.count())
+                                     .where(who)
                                      .group_by(ActivityLog.kind, func.date(ActivityLog.created_at)))).all()
-        pages = (await db.execute(select(ActivityLog.path).where(ActivityLog.kind == "visite").distinct())).all()
+        pages = (await db.execute(select(ActivityLog.path).where(ActivityLog.kind == "visite", who).distinct())).all()
         late = (await db.execute(select(ActivityLog.created_at).where(
-            func.strftime("%H", ActivityLog.created_at).in_(["00", "01", "02", "03"])))).all()
+            who, func.strftime("%H", ActivityLog.created_at).in_(["00", "01", "02", "03"])))).all()
         notif_days = (await db.execute(select(func.date(NotifLog.created_at), func.count())
                                        .group_by(func.date(NotifLog.created_at)))).all()
         dismiss = (await db.execute(select(AttentionDismissal.created_at))).all()
@@ -1801,7 +1897,7 @@ async def _load_data() -> dict:
         # actions reussies qui comptent : partages, gestes MakerWorld, pesees, corrections…
         from sqlalchemy import or_
         acts = (await db.execute(select(ActivityLog.method, ActivityLog.path, ActivityLog.created_at).where(
-            ActivityLog.kind == "action", or_(ActivityLog.method == "DELETE",
+            ActivityLog.kind == "action", who, or_(ActivityLog.method == "DELETE",
                                               *[ActivityLog.path.like(p) for p in _ACT_PREFIXES])))).all()
         links = (await db.execute(select(ObjectAccessory.quantity, ObjectAccessory.created_at))).all()
         # lot du 21/10/2026 : catalogue, bobines reconnues, ventes, couts, comptes
@@ -3400,6 +3496,38 @@ def _queue_size() -> int:
         return len((_snap_get() or {}).get("models") or [])
     except Exception:
         return 0
+
+
+async def counted_users() -> list:
+    """Les comptes dont l'activite fait avancer les succes (journal : visites,
+    fiches, actions ; easter eggs). Reglage ACHIEVEMENTS_USERS ; par defaut, les
+    administrateurs : un copain qui visite ou un compte en lecture seule ne
+    gonfle pas mes compteurs."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.user import User
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, KEY + "_USERS", "")
+        try:
+            chosen = json.loads(raw) if raw else None
+        except ValueError:
+            chosen = None
+        if isinstance(chosen, list):
+            return [str(x) for x in chosen]
+        rows = (await db.execute(select(User.username, User.role).where(User.active.is_(True)))).all()
+    return [u for u, r in rows if (r or "admin") == "admin"] or ["admin"]
+
+
+async def set_counted_users(names: list) -> list:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    names = sorted({str(x).strip() for x in names or [] if str(x).strip()})
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, KEY + "_USERS", json.dumps(names))
+    _BASE.update(t=0.0, v=None)
+    _CACHE["v"] = None
+    return names
 
 
 async def eggs_found() -> dict:

@@ -6,9 +6,11 @@ import { currentFriend } from "./store/friend";
 // copain, et un geste deja signale ne l'est plus.
 const KEY = "bn-eggs";
 
-function done() {
-  try { return new Set(JSON.parse(localStorage.getItem(KEY) || "[]")); } catch { return new Set(); }
+const NC_KEY = "bn-eggs-nc";       // trouves par un compte qui ne compte pas : bandeau deja montre
+function seen(key) {
+  try { return new Set(JSON.parse(localStorage.getItem(key) || "[]")); } catch { return new Set(); }
 }
+function done() { return seen(KEY); }
 
 export async function egg(name) {
   try { if (currentFriend()) return; } catch { /* pas de copain */ }
@@ -16,9 +18,20 @@ export async function egg(name) {
   if (d.has(name)) return;
   try {
     const { data } = await client.post(`/achievements/egg/${name}`);
+    if (data?.uncounted) {
+      // compte qui ne fait pas avancer les succes : on le felicite (une fois), sans rien enregistrer ;
+      // s'il est coche plus tard, le prochain passage comptera pour de bon
+      const nc = seen(NC_KEY);
+      if (!nc.has(name)) {
+        nc.add(name);
+        try { localStorage.setItem(NC_KEY, JSON.stringify([...nc])); } catch { /* stockage indisponible */ }
+        celebrate(data, name, true);
+      }
+      return;
+    }
     d.add(name);
     try { localStorage.setItem(KEY, JSON.stringify([...d])); } catch { /* stockage indisponible */ }
-    if (data?.new) celebrate(data);
+    if (data?.new) celebrate(data, name);
   } catch { /* hors connexion, ou pas connecte : on retentera */ }
 }
 
@@ -34,13 +47,18 @@ export function tapper(n, ms, fn) {
 }
 
 // Bravo : une carte qui monte en bas de l'ecran, se ferme au toucher ou seule.
-function celebrate(e) {
+// Le bandeau dit ce qu'on vient de trouver : page cachee, farce, ou easter egg
+const KIND = n => n.startsWith("h_") ? ["🗺️ Page cachée réussie !", "#22C55E"]
+  : n.startsWith("p_") ? ["🌀 Farce découverte !", "#8B5CF6"] : ["🥚 Easter egg trouvé !", "#EC4899"];
+
+function celebrate(e, name = "", uncounted = false) {
+  const [head, col] = KIND(name);
   const box = document.createElement("div");
   box.setAttribute("role", "status");
   box.style.cssText = "position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:9600;" +
     "transform:translate(-50%,20px);opacity:0;transition:all .35s cubic-bezier(.2,1.4,.4,1);max-width:calc(100vw - 32px);" +
     "width:340px;padding:14px 16px;border-radius:16px;background:var(--sheet-bg,#1e293b);color:var(--text,#fff);" +
-    "border:1px solid #EC4899;box-shadow:0 12px 40px rgba(0,0,0,.45),0 0 0 4px rgba(236,72,153,.18);" +
+    `border:1px solid ${col};box-shadow:0 12px 40px rgba(0,0,0,.45),0 0 0 4px ${col}2e;` +
     "display:flex;gap:12px;align-items:center;cursor:pointer;font-family:inherit";
   const big = document.createElement("span");
   big.textContent = e.emoji || "🥚";
@@ -48,8 +66,8 @@ function celebrate(e) {
   const txt = document.createElement("span");
   txt.style.cssText = "display:flex;flex-direction:column;gap:2px;min-width:0";
   const a = document.createElement("b");
-  a.textContent = "🥚 Easter egg trouvé !";
-  a.style.cssText = "font-size:12px;color:#EC4899;text-transform:uppercase;letter-spacing:.05em";
+  a.textContent = head;
+  a.style.cssText = `font-size:12px;color:${col};text-transform:uppercase;letter-spacing:.05em`;
   const b = document.createElement("span");
   b.textContent = e.name || "";
   b.style.cssText = "font-size:15px;font-weight:800";
@@ -57,6 +75,12 @@ function celebrate(e) {
   c.textContent = e.lore || "";
   c.style.cssText = "font-size:12.5px;opacity:.75;line-height:1.35";
   txt.append(a, b, c);
+  if (uncounted) {
+    const nc = document.createElement("span");
+    nc.textContent = "Non comptabilisé : ce compte ne fait pas avancer les succès";
+    nc.style.cssText = "font-size:11px;font-weight:700;color:#F59E0B;margin-top:2px";
+    txt.append(nc);
+  }
   box.append(big, txt);
   ensureStyle();
   document.body.appendChild(box);

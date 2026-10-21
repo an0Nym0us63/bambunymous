@@ -1,5 +1,5 @@
 """Succes : medailles gagnees, progression vers le palier suivant (services/achievements)."""
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Body, Depends, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,10 +25,32 @@ async def achievements_podium(fresh: bool = False, acc=Depends(require_own_accou
     return await A.podium(acc[0], fresh)
 
 
+@router.get("/users")
+async def achievements_users(db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    """Comptes de la maison, et ceux dont l'activite fait avancer les succes."""
+    from ....services import achievements as A
+    counted = set(await A.counted_users())
+    rows = (await db.execute(select(User.username, User.role, User.active, User.friend_key_hash))).all()
+    return [{"username": u, "role": r, "active": bool(a), "friend": bool(fk), "counted": u in counted}
+            for u, r, a, fk in rows]
+
+
+@router.put("/users")
+async def achievements_users_set(body: dict = Body(...), _: str = Depends(require_admin)):
+    from ....services import achievements as A
+    return {"counted": await A.set_counted_users(body.get("counted") or [])}
+
+
 @router.post("/egg/{name}")
 async def achievements_egg(name: str, acc=Depends(require_own_account)):
     """Un easter egg trouve dans l'appli (jamais par une cle de copain)."""
     from ....services import achievements as A
+    if acc[0] not in await A.counted_users():      # compte qui ne fait pas avancer les succes
+        # il a trouve, on le lui dit, mais rien n'est enregistre
+        e = A.EGGS.get(name)
+        if not e:
+            raise HTTPException(404, "Œuf inconnu")
+        return {"new": False, "uncounted": True, "id": f"egg_{name}", "emoji": e[0], "name": e[1], "lore": e[4]}
     try:
         return await A.find_egg(name)
     except ValueError as e:
