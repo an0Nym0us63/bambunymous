@@ -45,6 +45,13 @@ async def achievements_spin(_: str = Depends(require_admin)):
         raise HTTPException(400, str(e))
 
 
+@router.post("/wheel/settle")
+async def achievements_settle(since: str, _: str = Depends(require_admin)):
+    """Apres un tour : les cles rapportees en plus par les succes qu'il a debloques."""
+    from ....services import achievements as A
+    return {"bonus": await A.settle(since)}
+
+
 @router.post("/keys/{aid}")
 async def achievements_spend_key(aid: str, _: str = Depends(require_admin)):
     """Revele l'etape suivante d'un secret (vignette, titre, indice, descriptif)."""

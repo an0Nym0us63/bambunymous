@@ -417,9 +417,9 @@ EVENTS["keys_gained"] = {
 }
 EVENTS["wheel_spin"] = {
     "section": "achievements", "label": "Tour de roue gagné",
-    "description": "Un tour de roue offert chaque lundi (et les 3 du départ), à jouer sur la page Succès.",
+    "description": "Trois tours de roue offerts chaque lundi (et trois au départ), à jouer sur la page Succès.",
     "options": [],
-    "sample": {"title": "🎰 Nouveau tour de roue !", "priority": 2, "link": "/stats?tab=achievements",
+    "sample": {"title": "🎰 3 tours de roue offerts !", "priority": 2, "link": "/stats?tab=achievements",
                "message": "Tu as 2 tours de roue : de quoi gagner des clés."},
 }
 EVENTS["accessory_low"] = {

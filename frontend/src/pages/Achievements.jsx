@@ -456,7 +456,7 @@ function KeysBox({ keys, onRules, onWheel }) {
           <span style={{ display:"block", fontSize:15, fontWeight:900, color:"var(--text)" }}>
             {w.spins} tour{w.spins > 1 ? "s" : ""} de roue</span>
           <span style={{ display:"block", fontSize:11.5, color:"var(--muted)" }}>
-            +1 chaque lundi · des clés à gagner</span>
+            +{w.weekly} chaque lundi · des clés à gagner</span>
         </span>
         {onWheel && (
           <button onClick={onWheel} style={{ padding:"8px 14px", borderRadius:20, border:"none", fontSize:13, fontWeight:900,
@@ -714,7 +714,7 @@ function Rules({ data, onClose }) {
 
         {k?.wheel && <>
           <H>🎰 Roue de la fortune</H>
-          <P>{k.wheel.start} tours offerts au départ, puis 1 chaque lundi (une semaine manquée ne se rattrape pas).
+          <P>{k.wheel.start} tours offerts au départ, puis {k.wheel.weekly} chaque lundi (une semaine manquée ne se rattrape pas).
             Chaque tour tire un lot :</P>
           <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:"3px 12px", fontSize:12.5, color:"var(--text2)",
             margin:"0 0 8px 4px" }}>
@@ -726,8 +726,9 @@ function Rules({ data, onClose }) {
               </React.Fragment>
             ))}
           </div>
-          <P>Les paliers de la section « Clés et roue » ne rapportent pas de clé (sinon, des clés en appelleraient
-            d'autres sans fin) ; ses secrets, si.</P>
+          <P>Un tour peut aussi faire franchir des paliers ou débloquer un secret : leurs clés s'ajoutent au lot, et la
+            machine les affiche en bonus. Les paliers de la section « Clés et roue » ne rapportent pas de clé (sinon, des
+            clés en appelleraient d'autres sans fin) ; ses secrets, si.</P>
         </>}
 
         <H>👥 Copains</H>

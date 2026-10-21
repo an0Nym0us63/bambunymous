@@ -3169,9 +3169,10 @@ async def _spend_key(aid: str) -> dict:
 
 
 # ── Roue (21/10/2026) ────────────────────────────────────────────────────────
-# 3 tours offerts au depart, puis 1 chaque lundi (rien de rattrape). Le tirage
+# 3 tours offerts au depart, puis 3 chaque lundi (rien de rattrape). Le tirage
 # se fait ici, jamais dans la page. Lots : (id, libelle, cles, chance en %).
 WHEEL_START = 3
+WHEEL_WEEKLY = 3
 PRIZES = [("none", "Pas cette fois", 0, 52.0), ("key1", "1 clé", 1, 30.0), ("replay", "Tour rejoué", 0, 6.0),
           ("key3", "3 clés", 3, 7.0), ("hint", "Coup de pouce", 0, 3.0), ("key5", "5 clés", 5, 1.8),
           ("jackpot", "Jackpot : 10 clés", 10, 0.2)]
@@ -3196,7 +3197,7 @@ def _keys_peak(k: dict) -> None:
 
 
 def _wheel_weekly(st: dict) -> int:
-    """Un tour de plus chaque nouvelle semaine (lundi) ; les tours de depart,
+    """Des tours de plus chaque nouvelle semaine (lundi) ; les tours de depart,
     annonces une fois. Rend le nombre de tours a annoncer."""
     w = _wheel_init(st)
     n = 0
@@ -3206,8 +3207,8 @@ def _wheel_weekly(st: dict) -> int:
     tag = _week_tag()
     if w.get("week") != tag:
         w["week"] = tag
-        w["spins"] += 1
-        n += 1
+        w["spins"] += WHEEL_WEEKLY
+        n += WHEEL_WEEKLY
     return n
 
 
@@ -3216,7 +3217,7 @@ async def _notify_spins(n: int, total: int) -> None:
     cfg = await N._load()
     if not N.enabled_in(cfg, "wheel_spin"):
         return
-    title = f"🎰 {n} tours de roue offerts !" if n > 1 else "🎰 Nouveau tour de roue !"
+    title = f"🎰 {n} tours de roue offerts !" if n > 1 else "🎰 Un tour de roue offert !"
     await N.notify("wheel_spin", title,
                    f"Tu as {total} tour{'s' if total > 1 else ''} de roue : de quoi gagner des clés.",
                    click=N.app_link(cfg, "/stats?tab=achievements"), priority=2)
@@ -3289,7 +3290,16 @@ async def spin(rng=None) -> dict:
         await _state_put(st)
         _CACHE["v"] = None
     _bg_tick()
-    return {**out, "spins": w["spins"], "balance": k["balance"]}
+    return {**out, "spins": w["spins"], "balance": k["balance"], "at": now}
+
+
+async def settle(since: str) -> list:
+    """Apres un tour : le passage des succes qu'il a provoque (paliers, secrets),
+    et les cles qu'il a rapportees en plus du lot, depuis `since`."""
+    await tick()
+    k = (await _state_get() or {}).get("keys") or {}
+    return [l for l in (k.get("log") or []) if l.get("at", "") >= since and l.get("n", 0) > 0
+            and not str(l.get("why", "")).startswith("Roue")]
 
 
 def wheel_view(st: dict) -> dict | None:
@@ -3299,7 +3309,7 @@ def wheel_view(st: dict) -> dict | None:
     loc = _local(datetime.utcnow())
     nxt = (loc + timedelta(days=7 - loc.weekday())).date()
     return {"spins": w.get("spins", 0), "played": w.get("played", 0), "next": nxt.isoformat(),
-            "weekly": 1, "start": WHEEL_START,
+            "weekly": WHEEL_WEEKLY, "start": WHEEL_START,
             "prizes": [{"id": i, "label": l, "keys": n, "pct": p} for i, l, n, p in PRIZES]}
 
 

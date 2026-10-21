@@ -37,16 +37,20 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
   const [reels, setReels] = useState(() => [0, 1, 2].map(() => strip(pick(FILLER))));
   const [go, setGo] = useState(false);                 // declenche la translation
   const [res, setRes] = useState(null);
+  const [bonus, setBonus] = useState(null);           // cles rapportees en plus par les succes debloques
   const [err, setErr] = useState(null);
   const timers = useRef([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const spin = async () => {
     if (phase === "spinning" || spins <= 0) return;
-    setErr(null); setRes(null);
+    setErr(null); setRes(null); setBonus(null);
     let r;
     try { r = (await client.post("/achievements/wheel/spin")).data; }
     catch (e) { setErr(e.response?.data?.detail || e.message); return; }
+    // le tour fait avancer des succes (paliers, secrets) : ce qu'ils rapportent en plus, a part
+    const bonusP = client.post("/achievements/wheel/settle", null, { params: { since: r.at } })
+      .then(x => x.data.bonus || []).catch(() => []);
     const t = targets(r.prize);
     setGo(false);
     setReels(rs => t.map((x, i) => strip(x, rs[i][rs[i].length - 1])));
@@ -54,7 +58,8 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
     // une image plus tard : la translation part de zero vers la derniere case
     requestAnimationFrame(() => requestAnimationFrame(() => setGo(true)));
     timers.current.push(setTimeout(() => {
-      setRes(r); setSpins(r.spins); setPhase("done"); onDone?.();
+      setRes(r); setSpins(r.spins); setPhase("done");
+      bonusP.then(b => { setBonus(b); onDone?.(); });
     }, 3300));
   };
 
@@ -119,9 +124,15 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
                     : res.prize === "hint" ? "🔍 Coup de pouce !" : `🎉 ${res.label} !`}</div>
                 <div style={{ fontSize:12, color:"rgba(255,255,255,.75)", marginTop:2 }}>
                   {res.prize === "hint" && res.secret ? `${res.secret.step.charAt(0).toUpperCase() + res.secret.step.slice(1)} d'un secret, offert`
-                    : res.keys ? `Tu as maintenant ${res.balance} clé${res.balance > 1 ? "s" : ""}`
+                    : res.keys ? `Tu as maintenant ${res.balance + (bonus || []).reduce((a, b) => a + b.n, 0)} clé${res.balance > 1 ? "s" : ""}`
                     : res.prize === "replay" ? "Le tour t'est rendu" : "Retente ta chance"}</div>
               </div>
+            )}
+            {phase === "done" && bonus?.length > 0 && (
+              <div style={{ marginTop:6, padding:"6px 8px", borderRadius:10, background:"rgba(0,0,0,.25)", fontSize:11.5,
+                color:"#fde68a", lineHeight:1.4 }}>
+                🎁 Et +{bonus.reduce((a, b) => a + b.n, 0)} clé{bonus.reduce((a, b) => a + b.n, 0) > 1 ? "s" : ""} en bonus :
+                {" "}{bonus.map(b => `${b.why} (+${b.n})`).join(", ")}</div>
             )}
             {phase === "spinning" && <div style={{ fontSize:14, fontWeight:800, color:"rgba(255,255,255,.85)" }}>Ça tourne…</div>}
             {err && <div style={{ fontSize:12.5, color:"#fecaca", fontWeight:700 }}>{err}</div>}
