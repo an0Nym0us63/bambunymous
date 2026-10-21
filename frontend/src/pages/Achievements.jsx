@@ -684,14 +684,21 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
                       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, minWidth:0, background:"none",
                         border:"none", padding:"2px 0", cursor:"pointer", font:"inherit" }}>
                       <span style={{ position:"relative", display:"inline-flex" }}>
+                        {/* il me manque : un anneau ambre en pointilles autour (la medaille reste la sienne) */}
+                        {have === false && <span aria-hidden="true" style={{ position:"absolute", inset:-4, borderRadius:"50%",
+                          border:"2px dashed rgba(245,158,11,0.85)", boxShadow:"0 0 12px rgba(245,158,11,0.35)" }}/>}
                         <Medal tier={t} emoji={it.emoji} size={46}/>
                         {/* je l'ai aussi : une petite coche, la medaille reste la sienne */}
                         {have === true && <span aria-label="Tu l'as aussi" style={{ position:"absolute", right:-2, bottom:2,
                           width:16, height:16, borderRadius:"50%", background:"#22c55e", color:"#fff", fontSize:10,
                           fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1,
                           border:"2px solid var(--sheet-bg)", boxShadow:"0 1px 3px rgba(0,0,0,0.25)" }}>✓</span>}
+                        {have === false && <span aria-label="Tu ne l'as pas encore" style={{ position:"absolute", right:-4, bottom:0,
+                          width:17, height:17, borderRadius:"50%", background:"#F59E0B", color:"#fff", fontSize:13,
+                          fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1,
+                          border:"2px solid var(--sheet-bg)", boxShadow:"0 1px 3px rgba(0,0,0,0.25)" }}>+</span>}
                       </span>
-                      <span style={{ fontSize:10.5, fontWeight:700, color: have === false ? "var(--text2)" : "var(--text)",
+                      <span style={{ fontSize:10.5, fontWeight:700, color: have === false ? "#D97706" : "var(--text)",
                         textAlign:"center", lineHeight:1.2,
                         maxWidth:"100%", overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2,
                         WebkitBoxOrient:"vertical" }}>{it.name}</span>
