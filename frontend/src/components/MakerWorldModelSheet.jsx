@@ -560,7 +560,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                     {[pl.weight_g ? `${Math.round(pl.weight_g)} g` : null, fmtDur(pl.seconds)].filter(Boolean).join(" · ")}
                                   </div>
                                   <PlateColors items={m.stock?.[p.instance_id]} plate={pl} scope={`${id}|${p.instance_id}`}
-                                    canEdit={canPlan && on}/>
+                                    canEdit={canPlan && on} onNavigate={onClose}/>
                                 </div>
                               </div>
                             );

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import client from "../api/client";
 import { useCanMw } from "../store/auth";
 import { useNavigate } from "react-router-dom";
@@ -271,12 +272,12 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
                     lineHeight:"16px" }}>{levelText(best)}</span>
                   {manual ? <span style={{ display:"block", fontSize:9.5, color:"#3b82f6", fontWeight:700 }}>choisi</span>
                     : canEdit && <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}>
-                      {isOpen ? "masquer ▴" : nAlt > 0 ? `${nAlt} autre${nAlt > 1 ? "s" : ""} ▾` : "changer ▾"}</span>}
+                      {nAlt > 0 ? `${nAlt} autre${nAlt > 1 ? "s" : ""} ▸` : "changer ▸"}</span>}
                 </span>
               </>) : (
                 <span style={{ flex:1, fontSize:11.5, color:"#ef4444", lineHeight:"16px" }}>Aucun {x.type || "filament"} en stock
                   {canEdit && <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
-                    {isOpen ? "masquer ▴" : others.length ? "choisir une autre matière ▾" : "chercher dans mon stock ▾"}</span>}</span>
+                    {others.length ? "choisir une autre matière ▸" : "chercher dans mon stock ▸"}</span>}</span>
               )}
             </button>
             {alt[i].map(a => {
@@ -296,20 +297,9 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
               <div style={{ fontSize:10.5, color: short ? "#f59e0b" : "var(--muted)", padding:"0 8px 6px 30px" }}>
                 {short ? "⚠ " : ""}Partagé avec une autre couleur : {Math.round(sum)} g au total sur ce filament</div>
             ) : null}
-            {isOpen && x.matches.map(mt => (
-              <MatchRow key={mt.filament_id} mt={mt} g={g} on={mt.filament_id === best?.filament_id}
-                onPick={() => pick(i, mt.filament_id)} onGo={go}/>
-            ))}
-            {/* Autre matiere : pour simuler (un PLA Silk a la place d'un ABS…) ; plus proches en couleur. */}
-            {isOpen && others.length > 0 && (<>
-              <div style={{ fontSize:10, fontWeight:800, color:"#f59e0b", textTransform:"uppercase", letterSpacing:0.4,
-                padding:"7px 12px 3px", borderTop:"1px solid var(--border)" }}>Autre matière</div>
-              {others.map(mt => (
-                <MatchRow key={"o" + mt.filament_id} mt={mt} g={g} on={mt.filament_id === best?.filament_id}
-                  onPick={() => pick(i, mt.filament_id)} onGo={go}/>
-              ))}
-            </>)}
-            {isOpen && <StockSearch x={x} g={g} chosen={best} onPick={mt => pickFound(i, mt)} onGo={go}/>}
+            {isOpen && <FilamentPicker x={x} g={g} chosen={best} title="Filament pour cette couleur (tout le profil)"
+              onPick={mt => (inLists(x, mt.filament_id) ? pick(i, mt.filament_id) : pickFound(i, mt))}
+              onGo={go} onClose={() => setOpen(null)}/>}
           </div>
         );
       })}
@@ -320,8 +310,10 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
 // Couleurs d'un plateau : pastilles du filament qui sera vraiment utilise (cerclees
 // de bleu quand ce plateau a son propre choix) ; les toucher ouvre le choix pour CE
 // plateau, le reste du profil ne bouge pas.
-export function PlateColors({ items, plate, scope, canEdit }) {
+export function PlateColors({ items, plate, scope, canEdit, onNavigate }) {
   const [open, setOpen] = useState(false);
+  const [pickRow, setPickRow] = useState(null);
+  const nav = useNavigate();
   const fl = (plate?.filaments || []).filter(f => num(f.g) > 0);
   if (!fl.length) return null;
   const rows = fl.map(f => {
@@ -339,45 +331,114 @@ export function PlateColors({ items, plate, scope, canEdit }) {
     </span>
   );
   if (!canEdit || !items?.length) return <div style={{ marginTop:3 }}>{dots}</div>;
+  const go = id => { setOpen(false); setPickRow(null); onNavigate?.(); nav(`/filaments?id=${id}`); };
+  // une seule couleur : directement la fenetre de choix ; sinon la liste, puis la fenetre
+  const cur = rows.length === 1 ? (rows[0].x ? rows[0] : null) : pickRow != null ? rows[pickRow] : null;
   return (
     <div onClick={e => e.stopPropagation()} style={{ marginTop:3 }}>
-      <button type="button" onClick={() => setOpen(o => !o)} title="Couleurs de ce plateau"
+      <button type="button" onClick={() => setOpen(true)} title="Couleurs de ce plateau"
         style={{ background:"none", border:"none", padding:0, cursor:"pointer" }}>{dots}</button>
-      {open && (
-        <div style={{ marginTop:5, display:"flex", flexDirection:"column", gap:6 }}>
-          {rows.map((r, k) => r.x && (
-            <div key={k} style={{ display:"flex", flexDirection:"column", gap:3 }}>
-              <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:"var(--muted)", fontWeight:700 }}>
-                <Swatch color={r.f.color} size={10}/> {r.f.type} · {Math.round(num(r.f.g))} g</span>
-              <span style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
-                {[null, ...r.x.matches, ...(r.x.others || [])]
-                  .filter((mt, j, all) => !mt || all.findIndex(o => o && o.filament_id === mt.filament_id) === j).slice(0, 9).map(mt => {
-                  const on = mt ? r.own?.filament_id === mt.filament_id : !r.own;
-                  const base = chosenOf(r.x, scope, r.i);
-                  return (
-                    <button key={mt ? mt.filament_id : "p"} type="button" onClick={() => setPlatePick(scope, plate.index, r.i, mt)}
-                      title={mt ? `${mt.name} · ${mt.remaining_g} g` : `Comme le profil : ${base?.name || "?"}`}
-                      style={{ width:22, height:22, borderRadius:"50%", padding:0, cursor:"pointer", position:"relative",
-                        ...(mt ? colorBg(parseColorsList(mt.color, mt.colors_array), mt.multicolor_type)
-                          : { background:"var(--surface2)" }),
-                        border: on ? "2.5px solid #3b82f6" : "1px solid rgba(128,128,128,0.5)", fontSize:9, fontWeight:900,
-                        color:"var(--muted)" }}>{mt ? "" : "="}</button>
-                  );
-                })}
-              </span>
+      {open && rows.length > 1 && pickRow == null && createPortal(
+        <div onClick={e => { e.stopPropagation(); setOpen(false); }} style={{ position:"fixed", inset:0, zIndex:4300,
+          background:"rgba(0,0,0,0.55)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+          <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:520, maxHeight:"85dvh", overflowY:"auto",
+            background:"var(--sheet-bg, var(--surface))", borderRadius:"16px 16px 0 0", padding:"14px 14px calc(14px + env(safe-area-inset-bottom,0px))",
+            boxShadow:"0 -8px 30px rgba(0,0,0,.35)", display:"flex", flexDirection:"column", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ flex:1, fontSize:14, fontWeight:800, color:"var(--text)" }}>
+                🎨 Couleurs du plateau {plate.index}{plate.name ? ` · ${plate.name}` : ""}</span>
+              <button type="button" onClick={() => setOpen(false)} aria-label="Fermer" style={{ background:"none", border:"none",
+                fontSize:20, color:"var(--muted)", cursor:"pointer", lineHeight:1 }}>✕</button>
             </div>
-          ))}
-          <span style={{ fontSize:9.5, color:"var(--muted)", lineHeight:1.3 }}>« = » : comme le reste du profil</span>
-        </div>
-      )}
+            <div style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>Ce choix ne vaut que pour ce plateau.</div>
+            {rows.map((r, k) => r.x && (
+              <button key={k} type="button" onClick={() => setPickRow(k)} style={{ display:"flex", alignItems:"center", gap:8,
+                padding:"10px 12px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)", cursor:"pointer",
+                textAlign:"left", color:"var(--text)" }}>
+                <Swatch color={r.f.color} size={16}/>
+                <span style={{ fontSize:12, fontWeight:700 }}>{r.f.type} · {Math.round(num(r.f.g))} g</span>
+                <span style={{ color:"var(--muted)", fontSize:11 }}>→</span>
+                {r.c && <Swatch f={r.c} size={16}/>}
+                <span style={{ flex:1, minWidth:0, fontSize:12, fontWeight:600, color: r.own ? "#3b82f6" : "var(--text2)",
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{r.c?.name || "—"}{r.own ? "" : " (profil)"}</span>
+                <span style={{ fontSize:11, color:"#3b82f6", fontWeight:700 }}>changer ▸</span>
+              </button>
+            ))}
+          </div>
+        </div>, document.body)}
+      {open && cur && <FilamentPicker x={cur.x} g={num(cur.f.g)} chosen={cur.c}
+        title={`Plateau ${plate.index}${plate.name ? ` · ${plate.name}` : ""} : filament pour cette couleur`}
+        onPick={mt => { setPlatePick(scope, plate.index, cur.i, mt); setPickRow(null); if (rows.length <= 1) setOpen(false); }}
+        onReset={cur.own ? () => setPlatePick(scope, plate.index, cur.i, null) : null} resetLabel="= comme le profil"
+        onGo={go} onClose={() => { setPickRow(null); if (rows.length <= 1) setOpen(false); }}/>}
     </div>
   );
 }
 
+// Fenetre de choix d'un filament, en onglets : proches en couleur, deja charges
+// (AMS ou support externe), autre matiere, recherche dans tout le stock. Chaque
+// ligne dit l'ecart de couleur (ΔE), le niveau, la matiere, ce qui restera et ou.
+export function FilamentPicker({ x, g, chosen, title, onPick, onReset, resetLabel, onGo, onClose }) {
+  const others = x.others || [];
+  const [tab, setTab] = useState("near");
+  const [ams, setAms] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    client.get("/makerworld/stock/search", { params: { type: x.type, color: x.color, g: g || undefined, ams: true } })
+      .then(({ data }) => alive && setAms(data.items || [])).catch(() => alive && setAms([]));
+    return () => { alive = false; };
+  }, [x.type, x.color, g]);
+  const tabs = [["near", "Proches", x.matches.length], ["ams", "Dans l'AMS", ams ? ams.length : "…"],
+    ["other", "Autre matière", others.length], ["search", "Recherche", null]];
+  const list = tab === "near" ? x.matches : tab === "ams" ? ams : tab === "other" ? others : null;
+  const empty = { near: "Aucun filament proche en stock.", ams: "Rien de chargé dans l'AMS pour cette matière.",
+    other: "Aucune autre matière proche." }[tab];
+  return createPortal(
+    <div onClick={e => { e.stopPropagation(); onClose(); }} style={{ position:"fixed", inset:0, zIndex:4400,
+      background:"rgba(0,0,0,0.55)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:540, height:"min(640px, 88dvh)", display:"flex",
+        flexDirection:"column", background:"var(--sheet-bg, var(--surface))", borderRadius:"16px 16px 0 0",
+        boxShadow:"0 -8px 30px rgba(0,0,0,.35)", overflow:"hidden" }}>
+        <div style={{ padding:"14px 14px 8px", display:"flex", flexDirection:"column", gap:8, borderBottom:"1px solid var(--border)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <span style={{ flex:1, fontSize:14, fontWeight:800, color:"var(--text)" }}>{title || "Choisir un filament"}</span>
+            <button type="button" onClick={onClose} aria-label="Fermer" style={{ background:"none", border:"none", fontSize:20,
+              color:"var(--muted)", cursor:"pointer", lineHeight:1 }}>✕</button>
+          </div>
+          <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:12, color:"var(--text2)", flexWrap:"wrap" }}>
+            <Swatch color={x.color} size={16} title={x.color}/>
+            <b>{x.exact?.subtype || x.type || "?"}</b>{g ? <span style={{ color:"var(--muted)" }}>· {Math.round(g)} g</span> : null}
+            <span style={{ color:"var(--muted)" }}>→</span>
+            {chosen ? <><Swatch f={chosen} size={16}/><span style={{ fontWeight:700 }}>{chosen.name}</span></>
+              : <span style={{ color:"#ef4444" }}>aucun</span>}
+            {onReset && <button type="button" onClick={onReset} style={{ marginLeft:"auto", fontSize:11, fontWeight:800, color:"#3b82f6",
+              background:"none", border:"1px solid #3b82f6", borderRadius:12, padding:"2px 9px", cursor:"pointer" }}>{resetLabel || "Annuler ce choix"}</button>}
+          </div>
+          <div role="tablist" style={{ display:"flex", gap:4, overflowX:"auto" }}>
+            {tabs.map(([id, label, n]) => (
+              <button key={id} type="button" role="tab" aria-selected={tab === id} onClick={() => setTab(id)}
+                style={{ flexShrink:0, padding:"6px 11px", borderRadius:20, cursor:"pointer", fontSize:12, fontWeight:800,
+                  border: tab === id ? "1px solid #3b82f6" : "1px solid var(--border)",
+                  background: tab === id ? "#3b82f6" : "var(--surface2)", color: tab === id ? "#fff" : "var(--text2)" }}>
+                {label}{n != null ? <span style={{ opacity:.75, fontWeight:700 }}> {n}</span> : null}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{ flex:1, minHeight:0, overflowY:"auto" }}>
+          {tab === "search" ? <StockSearch x={x} g={g} chosen={chosen} onPick={onPick} onGo={onGo} open/>
+            : list === null ? <div style={{ padding:16, fontSize:12, color:"var(--muted)" }}>…</div>
+            : !list.length ? <div style={{ padding:16, fontSize:12, color:"var(--muted)" }}>{empty}</div>
+            : list.map(mt => <MatchRow key={tab + mt.filament_id} mt={mt} g={g} on={mt.filament_id === chosen?.filament_id}
+                onPick={() => onPick(mt)} onGo={onGo}/>)}
+        </div>
+      </div>
+    </div>, document.body);
+}
+
 // Chercher dans tout le stock (toutes matieres, nom, marque, couleur, #id),
 // du plus proche en couleur au plus eloigne.
-function StockSearch({ x, g, chosen, onPick, onGo }) {
-  const [on, setOn] = useState(false);
+function StockSearch({ x, g, chosen, onPick, onGo, open }) {
+  const [on, setOn] = useState(!!open);
   const [q, setQ] = useState("");
   const [res, setRes] = useState(null);
   useEffect(() => {
@@ -430,16 +491,19 @@ function MatchRow({ mt, g, on, onPick, onGo }) {
           <span style={{ display:"block", fontSize:11.5, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
             {mt.name}</span>
           {mt.same_finish != null && <RefBadge mt={mt}/>}
+          {mt.other_material && <span style={{ display:"block", fontSize:9.5, fontWeight:800, color:"#f59e0b", lineHeight:1.3 }}>
+            ⚠ autre matière : {mt.material}</span>}
           <span style={{ display:"block", fontSize:10.5, color:"var(--muted)" }}>
             {[detailOf(mt), `${mt.remaining_g} g (${mt.spools} bobine${mt.spools > 1 ? "s" : ""})`].filter(Boolean).join(" · ")}
             {g > 0 ? <b style={{ color: after < 0 ? "#f59e0b" : "var(--text2)" }}> · {after < 0 ? `manque ${-after} g` : `reste ${after} g`}</b> : null}
             {spoolsNeeded(mt, g) > 1 ? <span style={{ color:"#3b82f6" }}> · {spoolsNeeded(mt, g)} bobines à entamer</span> : null}
+            {mt.where?.[0] ? <span style={{ color: /^(AMS|Externe)/i.test(mt.where[0]) ? "#16a34a" : "var(--muted)" }}> · {mt.where[0]}</span> : null}
           </span>
         </span>
         <span style={{ textAlign:"right", flexShrink:0 }}>
           <span style={{ display:"block", fontSize:10, fontWeight:800, color: levelColor(mt) }}>{levelText(mt)}</span>
-          <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}
-            title="Écart de couleur perçu (ΔE 2000) : sous 2,5 l'œil ne voit pas la différence">ΔE {String(mt.delta_e).replace(".", ",")}</span>
+          {mt.delta_e != null && <span style={{ display:"block", fontSize:9.5, color:"var(--muted)" }}
+            title="Écart de couleur perçu (ΔE 2000) : sous 2,5 l'œil ne voit pas la différence">ΔE {String(mt.delta_e).replace(".", ",")}</span>}
         </span>
       </button>
       <button onClick={() => onGo(mt.filament_id)} title="Ouvrir ce filament" aria-label={`Ouvrir ${mt.name}`}

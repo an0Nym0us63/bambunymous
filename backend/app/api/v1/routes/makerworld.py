@@ -210,10 +210,16 @@ async def mw_creator_points(offset: int = 0, _: str = Depends(get_current_user))
 
 @router.get("/stock/search")
 async def mw_stock_search(type: str = "", color: str = "", g: float | None = None, q: str = "", ids: str = "",
-                          _: str = Depends(get_current_user)):
-    """Chercher dans tout le stock pour remplacer un filament de profil."""
+                          ams: bool = False, _: str = Depends(get_current_user)):
+    """Chercher dans tout le stock pour remplacer un filament de profil. ams : seulement
+    les filaments dont une bobine est chargee (AMS ou support externe)."""
+    import re
     from ....services.mw_stock import stock_rows, search
-    return {"items": search(await stock_rows(), type, color, g, q[:80], [i for i in ids.split(",") if i][:20])}
+    items = search(await stock_rows(), type, color, g, q[:80], [i for i in ids.split(",") if i][:20], n=400 if ams else 40)
+    if ams:
+        loaded = re.compile(r"^(AMS|Externe)", re.I)
+        items = [c for c in items if any(loaded.match(w or "") for w in c.get("spool_where") or c.get("where") or [])][:40]
+    return {"items": items}
 
 
 @router.get("/queue")
