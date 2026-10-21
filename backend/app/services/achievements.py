@@ -3485,6 +3485,39 @@ TICKET_COST = [1, 2, 3, 4, 5, 6, 7, 8, 10]
 OLD_TICKET_COST = [1, 1, 1, 2, 2, 3, 4, 5, 6]
 
 
+def key_use(st: dict | None, aid: str) -> dict | None:
+    """Ce que les cles ont revele d'un secret : {keys, steps, at}. Les cles ne
+    sont comptees que depuis le 22/10/2026 ; avant, seules les etapes sont
+    connues (keys : None, pas d'estimation)."""
+    k = (st or {}).get("keys") or {}
+    use = (k.get("uses") or {}).get(aid) or {"keys": 0, "steps": []}
+    paid = int((k.get("spent") or {}).get(aid, 0) or 0)
+    if not paid and not use["steps"]:
+        return None
+    noted = [x["step"] for x in use["steps"]]
+    before = [l for _i, l, _c in REVEALS[:max(0, paid - len(noted))]]
+    return {"keys": use["keys"] if not before else (use["keys"] or None), "steps": before + noted,
+            "at": use["steps"][-1]["at"] if use["steps"] else None, "partial": bool(before)}
+
+
+def ticket_uses(st: dict | None, aid: str) -> list:
+    """Paliers passes avec des tickets : [{tier, tickets, at}] (date et prix de l'achat)."""
+    tiers = ((st or {}).get("ticket_tiers") or {}).get(aid) or []
+    if not tiers:
+        return []
+    paid = ((st or {}).get("ticket_paid") or {}).get(aid) or []
+    bonus = ((st or {}).get("bonus") or {}).get(aid) or []
+    old = len(tiers) - len(paid)
+    a = BY_ID.get(aid)
+    labels = [t["label"] for t in tiers_of(a)] if a else []
+    out = []
+    for j, i in enumerate(tiers):
+        cost = int(paid[j - old]) if j >= old else OLD_TICKET_COST[min(max(i, 0), 8)]
+        at = bonus[j][0] if j < len(bonus) and bonus[j] else None
+        out.append({"tier": labels[i] if i < len(labels) else str(i), "tickets": cost, "at": at})
+    return out
+
+
 def tickets_paid(st: dict | None, aid: str) -> int:
     """Tickets reellement depenses sur un succes (au prix du jour de l'achat)."""
     tiers = ((st or {}).get("ticket_tiers") or {}).get(aid) or []
@@ -3818,6 +3851,9 @@ async def _spend_key(aid: str) -> dict:
                   "why": f"{REVEALS[lvl][1].capitalize()} d'un secret"}] + (k.get("log") or []))[:KEY_LOG_MAX]
     k["spent_total"] = k.get("spent_total", 0) + cost
     k["reveal_steps"] = k.get("reveal_steps", 0) + 1
+    use = k.setdefault("uses", {}).setdefault(aid, {"keys": 0, "steps": []})
+    use["keys"] += cost
+    use["steps"].append({"step": REVEALS[lvl][1], "keys": cost, "at": now})
     flags = k.setdefault("flags", {})
     if k["balance"] == 0:
         flags.setdefault("last_key", now)
@@ -4464,6 +4500,8 @@ async def view(fresh: bool = False) -> dict:
                        "at": got.get(str(i)),
                        "ticket": i in ((st.get("ticket_tiers") or {}).get(a["id"]) or [])} for i, t in enumerate(tiers)],
             "tickets": tickets_paid(st, a["id"]),
+            "ticket_uses": ticket_uses(st, a["id"]),
+            "key_use": key_use(st, a["id"]) if len(a["tiers"]) == 1 else None,
             "ticket_cost": ticket_cost(nxt) if nxt is not None and len(a["tiers"]) > 1 else None,
         })
     # derniers succes : le plus haut cran de chacun ; pas ceux du releve au
@@ -4490,6 +4528,7 @@ async def view(fresh: bool = False) -> dict:
            "subs": [{"id": i, "emoji": e, "name": n} for i, e, n, _ids in SECRET_SUBS],
            "tiers": TIERS + [UNIQUE], "recent": [{"id": i, "tier": j, "at": at} for at, i, j in recent],
            "since": (st or {}).get("since"), "sig": CATALOG_SIG,
-           "tickets_used": sum(tickets_paid(st, k) for k in ((st or {}).get("ticket_tiers") or {}))}
+           "tickets_used": sum(tickets_paid(st, k) for k in ((st or {}).get("ticket_tiers") or {})),
+           "keys_spent": int((((st or {}).get("keys") or {}).get("spent_total")) or 0)}
     _CACHE.update(t=time.time(), v=out)
     return out

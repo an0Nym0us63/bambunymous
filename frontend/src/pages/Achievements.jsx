@@ -48,6 +48,7 @@ export default function Achievements({ embedded = false }) {
   useEffect(() => { if (rules) rulesOpened(); }, [rules]);
   const [slot, setSlot] = useState(false);
   const [vitrine, setVitrine] = useState(undefined);   // undefined : fermee ; null : tout ; id : un type de medaille
+  const [usage, setUsage] = useState(null);             // releve des depenses : "tickets" | "keys"
   const atFriend = !!currentFriend();             // chez un copain : pas de podium (ce sont ses copains a lui)
   const isAdmin = useIsAdmin();
   const load = () => client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
@@ -135,8 +136,10 @@ export default function Achievements({ embedded = false }) {
                 style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:"var(--muted)",
                   background:"none", border:"none", padding:0, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:4 }}>
                 🏛️ {atFriend ? "Sa vitrine" : "Ta vitrine"} <span style={{ fontSize:9 }}>▸</span></button>
-              {data.tickets_used > 0 && <span title="Paliers passés avec des tickets" style={{ display:"inline-flex", alignItems:"center",
-                gap:4, fontSize:11, color:"var(--muted)" }}><TicketStub size={0.7}/> {data.tickets_used} utilisé{data.tickets_used > 1 ? "s" : ""}</span>}
+              {data.tickets_used > 0 && <button onClick={() => setUsage("tickets")} title="Où sont passés tes tickets"
+                style={usageBtn}><TicketStub size={0.7}/> {data.tickets_used} utilisé{data.tickets_used > 1 ? "s" : ""} ▸</button>}
+              {data.keys_spent > 0 && <button onClick={() => setUsage("keys")} title="Ce que tes clés ont révélé"
+                style={usageBtn}>🔑 {data.keys_spent} dépensée{data.keys_spent > 1 ? "s" : ""} ▸</button>}
               <span style={{ flex:1 }}/>
               <button onClick={() => setRules(true)} aria-label="Règles des succès" title="Règles : paliers, points, clés, secrets"
                 style={{ width:26, height:26, borderRadius:"50%", border:"1px solid var(--border)", background:"var(--surface2)",
@@ -223,6 +226,10 @@ export default function Achievements({ embedded = false }) {
                     )}</span>
                   <span style={{ display:"block", fontSize:11.5, color:"var(--muted)", marginTop:1 }}>
                     {got}/{items.length} succès · {sum.score} pts
+                    {spentIn(items).tickets > 0 && <span title="Tickets utilisés dans cette section" style={{ color:"#F59E0B", fontWeight:700 }}>
+                      {" "}· 🎟️ {spentIn(items).tickets}</span>}
+                    {spentIn(items).keys > 0 && <span title="Clés dépensées dans cette section" style={{ color:"#F59E0B", fontWeight:700 }}>
+                      {" "}· 🔑 {spentIn(items).keys}</span>}
                     {near > 0 && <span style={{ color:"#F59E0B", fontWeight:700 }}> · 👀 {near} à portée</span>}
                     {mineSet && (common + toFind) > 0 && (
                       <span style={{ display:"block", marginTop:2 }}>
@@ -303,7 +310,9 @@ export default function Achievements({ embedded = false }) {
                             <span style={{ position:"absolute", inset:6, borderRadius:"50%", background:"rgba(255,255,255,0.92)" }}/>
                             <span style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, fontSize:14 }}>{sb.emoji}</span>
                           </span>
-                          <span style={{ flex:1, minWidth:0 }}>{sb.name}</span>
+                          <span style={{ flex:1, minWidth:0 }}>{sb.name}
+                            {spentIn(sb.items).keys > 0 && <span title="Clés dépensées dans ce tiroir"
+                              style={{ marginLeft:6, fontSize:11, fontWeight:800, color:"#F59E0B" }}>🔑 {spentIn(sb.items).keys}</span>}</span>
                           {/* que ce qu'on voit : rien sur la taille cachee d'une categorie */}
                           {mystery
                             ? <span style={pill("#F5B700", true)}>🔒 {sb.items.length} à découvrir</span>
@@ -335,6 +344,8 @@ export default function Achievements({ embedded = false }) {
       {rules && createPortal(<Rules data={data} onClose={() => setRules(false)}/>, document.body)}
       {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
       {ceremony && <TicketCeremony {...ceremony} onClose={() => setCeremony(null)}/>}
+      {usage && createPortal(<UsageSheet data={data} kind={usage} onKind={setUsage} onOpen={id => setDetail(id)}
+        onClose={() => setUsage(null)}/>, document.body)}
       {vitrine !== undefined && createPortal(<Showcase data={data} tier={vitrine} onTier={setVitrine}
         mine={atFriend ? mine : null} owner={atFriend ? currentFriend()?.name : null}
         onOpen={id => setDetail(id)} onClose={() => setVitrine(undefined)}/>, document.body)}
@@ -408,6 +419,13 @@ function Tile({ it, onOpen, others, shared, rivals }) {
           {[1, 2, 3, 4, 5].map(i => <span key={i} style={{ width:5, height:5, borderRadius:"50%",
             background: i <= it.reveal ? "#F59E0B" : "var(--border)" }}/>)}
         </span>
+      )}
+      {(it.tickets > 0 || it.key_use) && (
+        <span title={it.tickets > 0 ? `${it.tickets} ticket${it.tickets > 1 ? "s" : ""} utilisé${it.tickets > 1 ? "s" : ""} ici`
+          : `Révélé avec des clés${it.key_use.keys ? ` (${it.key_use.keys})` : ""}`}
+          style={{ position:"absolute", bottom:4, left:4, fontSize:9.5, fontWeight:800, padding:"1px 5px", borderRadius:20,
+            background:"rgba(245,158,11,0.16)", color:"#D97706", lineHeight:1.3 }}>
+          {it.tickets > 0 ? `🎟️${it.tickets}` : `🔑${it.key_use.keys || ""}`}</span>
       )}
       {it.tiers.length > 1 && it.next != null && (
         <span style={{ width:"70%", height:3, borderRadius:3, background:"var(--surface2)", overflow:"hidden" }}>
@@ -587,6 +605,87 @@ function MedalShelf({ tiers, medals, onOpen }) {
 // La vitrine : toutes mes medailles gagnees, rangees sur des etageres de verre,
 // une par type (Bronze… Eternel, Unique). Ouverte sur un type, elle ne montre
 // que lui. Toucher une medaille ouvre sa fiche.
+// Ce qu'ont coute les paliers et les revelations : par section, dans la fiche, et le releve complet
+const usageBtn = { display:"inline-flex", alignItems:"center", gap:4, fontSize:11, fontWeight:700, color:"var(--muted)",
+  background:"none", border:"none", padding:0, cursor:"pointer" };
+
+function spentIn(items) {
+  let tickets = 0, keys = 0;
+  for (const it of items || []) { tickets += it.tickets || 0; keys += it.key_use?.keys || 0; }
+  return { tickets, keys };
+}
+
+function Spent({ it }) {
+  const uses = it.ticket_uses || [], k = it.key_use;
+  if (!uses.length && !k) return null;
+  return (
+    <div style={{ marginTop:6, padding:"6px 8px", borderRadius:9, fontSize:11.5, lineHeight:1.45,
+      background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", color:"var(--text2)" }}>
+      {uses.length > 0 && <div>🎟️ <b>{uses.reduce((n, u) => n + u.tickets, 0)} ticket{uses.reduce((n, u) => n + u.tickets, 0) > 1 ? "s" : ""}</b> :{" "}
+        {uses.map((u, i) => <span key={i}>{i ? ", " : ""}{u.tier} ({u.tickets}{u.at ? ` · ${dateFr(u.at)}` : ""})</span>)}</div>}
+      {k && <div>🔑 {k.keys ? <b>{k.keys} clé{k.keys > 1 ? "s" : ""}</b> : <b>Clés</b>} : {k.steps.join(", ")}
+        {k.partial && <span style={{ color:"var(--muted)" }}> (le compte des clés commence au 22 octobre 2026)</span>}</div>}
+    </div>
+  );
+}
+
+function UsageSheet({ data, kind, onKind, onOpen, onClose }) {
+  useTrackDetail(kind === "keys" ? "Succès · Clés dépensées" : "Succès · Tickets utilisés");
+  const tickets = data.items.flatMap(it => (it.ticket_uses || []).map(u => ({ it, ...u })))
+    .sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+  const keys = data.items.filter(it => it.key_use).map(it => ({ it, ...it.key_use }))
+    .sort((a, b) => (b.keys || 0) - (a.keys || 0) || String(b.at || "").localeCompare(String(a.at || "")));
+  const row = { display:"flex", alignItems:"center", gap:10, padding:"8px 6px", borderRadius:10, cursor:"pointer",
+    background:"none", border:"none", width:"100%", textAlign:"left", font:"inherit", color:"var(--text)" };
+  const tab = on => ({ flex:1, padding:"7px 0", borderRadius:9, fontSize:12.5, fontWeight:800, cursor:"pointer",
+    border:`1px solid ${on ? "#F59E0B" : "var(--border)"}`, background: on ? "rgba(245,158,11,0.15)" : "transparent",
+    color: on ? "var(--text)" : "var(--text2)" });
+  return (
+    <div data-no-pull="" className="ach-room" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4300,
+      background:"rgba(0,0,0,0.6)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width:"100%", maxWidth:460, maxHeight:"85vh",
+        display:"flex", flexDirection:"column", padding:"14px 16px", background:"var(--sheet-bg)", backdropFilter:"none", gap:10 }}>
+        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+          <span style={{ fontSize:16, fontWeight:900, color:"var(--text)", flex:1 }}>
+            {kind === "keys" ? "🔑 Où sont passées tes clés" : "🎟️ Où sont passés tes tickets"}</span>
+          <button onClick={onClose} aria-label="Fermer" style={{ background:"none", border:"none", color:"var(--muted)",
+            fontSize:20, cursor:"pointer" }}>✕</button>
+        </div>
+        <div style={{ display:"flex", gap:6 }}>
+          <button onClick={() => onKind("tickets")} style={tab(kind !== "keys")}>🎟️ Tickets · {data.tickets_used || 0}</button>
+          <button onClick={() => onKind("keys")} style={tab(kind === "keys")}>🔑 Clés · {data.keys_spent || 0}</button>
+        </div>
+        <div style={{ overflowY:"auto", display:"flex", flexDirection:"column", gap:2 }}>
+          {kind !== "keys" ? (tickets.length ? tickets.map((u, i) => (
+            <button key={i} onClick={() => onOpen(u.it.id)} style={row}>
+              <Medal tier={u.it.tiers.find(t => t.label === u.tier) || u.it.tiers[0]} emoji={u.it.emoji} size={34}/>
+              <span style={{ flex:1, minWidth:0 }}>
+                <span style={{ display:"block", fontSize:13, fontWeight:800 }}>{u.it.name}</span>
+                <span style={{ fontSize:11.5, color:"var(--muted)" }}>passé {u.tier}{u.at ? ` · ${dateFr(u.at)}` : ""}</span>
+              </span>
+              <TicketStub n={u.tickets} size={0.9}/>
+            </button>
+          )) : <p style={msg}>Aucun ticket utilisé pour l'instant.</p>)
+          : (keys.length ? keys.map((k, i) => (
+            <button key={i} onClick={() => onOpen(k.it.id)} style={row}>
+              <Medal tier={k.it.tiers[0]} emoji={k.it.emoji} size={34} locked={k.it.level < 0}/>
+              <span style={{ flex:1, minWidth:0 }}>
+                <span style={{ display:"block", fontSize:13, fontWeight:800 }}>{k.it.name}
+                  {k.it.level >= 0 && <span style={{ fontSize:11, color:"#22c55e", fontWeight:700 }}> · gagné</span>}</span>
+                <span style={{ fontSize:11.5, color:"var(--muted)" }}>{k.steps.join(", ")}{k.at ? ` · ${dateFr(k.at)}` : ""}</span>
+              </span>
+              <span style={{ fontSize:13, fontWeight:900, color:"#D97706", whiteSpace:"nowrap" }}>{k.keys ? `🔑 ${k.keys}` : "🔑"}</span>
+            </button>
+          )) : <p style={msg}>Aucune clé dépensée pour l'instant.</p>)}
+          {kind === "keys" && keys.some(k => k.partial) && (
+            <p style={{ ...msg, padding:"6px 4px", fontSize:11 }}>Les clés sont comptées secret par secret depuis le 22 octobre 2026 ;
+              avant, seules les étapes révélées sont connues.</p>)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Une vue pour le journal d'activite, le temps qu'elle est affichee
 function Track({ label }) { useTrackDetail(label); return null; }
 
@@ -1117,6 +1216,7 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
           {unique && got && (
             <div style={{ fontSize:11, fontWeight:700, color:top.color, marginTop:3 }}>Gagné le {dateFr(top.at)}</div>
           )}
+          {sheet && <Spent it={it}/>}
         </div>
       </div>
       {shared !== undefined && (
