@@ -84,8 +84,45 @@ function makeCtl(layerRef) {
       return out;
     },
 
-    // Cartes de premier niveau visibles a l'ecran (repli : blocs de la page).
-    cards(max = 30) {
+    // Les morceaux de la page qui bougent chacun de leur cote : dans chaque
+    // tuile, on descend jusqu'aux elements « atomes » (case d'AMS, bobine,
+    // vignette, ligne ou mot de texte, puce, barre…). Repli : les tuiles.
+    cards(max = 60) {
+      const tiles = ctl.tiles(30);
+      const layer = layerRef.current;
+      const H = vh();
+      const out = [];
+      const SKIP = /^(STYLE|SCRIPT|TEMPLATE|BR|NOSCRIPT)$/;
+      const ATOM = /^(svg|IMG|CANVAS|VIDEO|BUTTON|INPUT|SELECT|TEXTAREA|PROGRESS)$/;
+      const visit = (el, depth) => {
+        for (const c of Array.from(el.children)) {
+          if (out.length >= max * 3) return;
+          if (SKIP.test(c.tagName) || c === layer || (layer && c.contains(layer))) continue;
+          if (c.hasAttribute("data-prank-layer")) continue;
+          const r = c.getBoundingClientRect();
+          if (r.width < 6 || r.height < 6 || r.bottom < -40 || r.top > H + 40) {
+            // conteneur sans boite propre (display: contents) : on regarde dedans
+            if (r.width === 0 && r.height === 0 && c.children.length && depth < 14) visit(c, depth + 1);
+            continue;
+          }
+          const area = r.width * r.height;
+          const kids = Array.from(c.children).filter(k => !SKIP.test(k.tagName)).length;
+          if (c.hasAttribute("data-pk") || ATOM.test(c.tagName) || !kids || depth >= 14 || (area <= 9000 && kids < 4)) out.push(c);
+          else visit(c, depth + 1);
+        }
+      };
+      tiles.forEach(t => visit(t, 0));
+      if (!out.length) return tiles.slice(0, max);
+      // trop de morceaux : on en garde un sur k, repartis sur toute la page
+      const k = Math.max(1, Math.ceil(out.length / max));
+      const pick = out.filter((_, i) => i % k === 0).slice(0, max);
+      // un element en ligne ne se transforme pas : on le passe en bloc en ligne
+      pick.forEach(el => { if (getComputedStyle(el).display === "inline") ctl.set(el, { display: "inline-block" }); });
+      return pick;
+    },
+
+    // Tuiles de premier niveau visibles a l'ecran (repli : blocs de la page).
+    tiles(max = 30) {
       const main = ctl.main();
       if (!main) return [];
       const layer = layerRef.current;
@@ -464,7 +501,7 @@ function Seisme({ done }) {
   useEffect(() => {
     const { ctl } = s;
     const parts = ctl.parts();
-    const cards = ctl.cards(30);
+    const cards = ctl.cards(60);
     const N = 80, kf = [];
     for (let i = 0; i <= N; i++) {
       const t = i / N;
@@ -727,7 +764,7 @@ function Gravite({ done }) {
   const [msg, setMsg] = useState(1);
   useEffect(() => {
     const { ctl } = s;
-    const cards = ctl.cards(30);
+    const cards = ctl.cards(60);
     const floor = floorY();
     const fallIn = "cubic-bezier(.55,0,1,.45)", upOut = "cubic-bezier(0,.55,.45,1)";
     cards.forEach((c, i) => {
@@ -744,7 +781,7 @@ function Gravite({ done }) {
         { transform: at(d, rot), offset: .82, easing: upOut },
         { transform: at(d - b2, rot * .8), offset: .91, easing: fallIn },
         { transform: at(d, rot) },
-      ], { duration: dur, delay: i * 70 + rand(0, 140), fill: "forwards" });
+      ], { duration: dur, delay: i * Math.min(70, 1800 / cards.length) + rand(0, 140), fill: "forwards" });
       ctl.after(5000 + (cards.length - i) * 45, () => {
         ctl.anim(c, [{ transform: at(d, rot) }, { transform: at(-16, -rot * .3), offset: .78 }, { transform: at(0, 0) }],
           { duration: 1300, easing: "cubic-bezier(.45,0,.3,1)", fill: "forwards" });
@@ -974,7 +1011,7 @@ function Fete({ done }) {
       { filter: "hue-rotate(0deg) saturate(1)" }, { filter: "hue-rotate(60deg) saturate(1.6)", offset: .08 },
       { filter: "hue-rotate(1020deg) saturate(1.6)", offset: .92 }, { filter: "hue-rotate(1080deg) saturate(1)" },
     ], { duration: 7400, easing: "linear" }));
-    ctl.cards(30).forEach((c, i) => ctl.anim(c, [
+    ctl.cards(60).forEach((c, i) => ctl.anim(c, [
       { transform: "translateY(0) rotate(0deg) scale(1)" },
       { transform: `translateY(-12px) rotate(${i % 2 ? 3 : -3}deg) scale(1.03)`, offset: .25 },
       { transform: "translateY(0) rotate(0deg) scale(1)", offset: .5 },
@@ -1040,7 +1077,7 @@ function Tornade({ done }) {
     const { ctl } = s;
     const W = vw(), H = vh(), cy = H * .45;
     const main = ctl.main(), sc0 = main ? main.scrollTop : 0;
-    const st = ctl.cards(24).map(c => {
+    const st = ctl.cards(48).map(c => {
       const r = c.getBoundingClientRect();
       const hx = r.left + r.width / 2, hy = r.top + r.height / 2;
       return { c, hx, hy, a: Math.atan2(hy - cy, hx - W / 2), rad: rand(.16, .38) * Math.min(W, H * 1.2), sp: rand(2.2, 3.6),
@@ -1110,7 +1147,7 @@ function Aimant({ done }) {
   useEffect(() => {
     const { ctl } = s;
     const main = ctl.main(), sc0 = main ? main.scrollTop : 0;
-    const st = ctl.cards(24).map(c => {
+    const st = ctl.cards(48).map(c => {
       const r = c.getBoundingClientRect();
       return { c, hx: r.left + r.width / 2, hy: r.top + r.height / 2, x: 0, y: 0, r: 0, vx: 0, vy: 0, vr: 0 };
     });
@@ -1450,7 +1487,7 @@ function Glitch({ done }) {
   useEffect(() => {
     const { ctl } = s;
     const parts = ctl.parts();
-    const cards = ctl.cards(20);
+    const cards = ctl.cards(40);
     const jerk = (amp, n) => Array.from({ length: n }, (_, i) => ({ transform: i === 0 || i === n - 1 ? "translate(0px,0) skewX(0deg)"
       : `translate(${rand(-amp, amp).toFixed(1)}px,0) skewX(${rand(-amp / 3, amp / 3).toFixed(1)}deg)`, easing: "steps(1,end)" }));
     const loops = [];
@@ -1656,7 +1693,7 @@ function Apesanteur({ done }) {
   useEffect(() => {
     const { ctl } = s;
     const e = "cubic-bezier(.45,0,.55,1)";
-    ctl.cards(30).forEach((c, i) => {
+    ctl.cards(60).forEach((c, i) => {
       const lift = rand(40, 160), dx = rand(-40, 40), r = rand(-12, 12);
       const at = (x, y, rr) => `translate(${x.toFixed(1)}px,${y.toFixed(1)}px) rotate(${rr.toFixed(1)}deg)`;
       ctl.anim(c, [
@@ -1710,7 +1747,7 @@ function Vent({ done }) {
     const { ctl } = s;
     const H = vh();
     const e = "ease-in-out";
-    ctl.cards(30).forEach(c => {
+    ctl.cards(60).forEach(c => {
       const r = c.getBoundingClientRect();
       const k = rand(.6, 1.05);
       const at = (x, rot, sk) => `translateX(${(x * k).toFixed(1)}px) rotate(${(rot * k).toFixed(2)}deg) skewX(${(sk * k).toFixed(2)}deg)`;
@@ -1968,7 +2005,7 @@ function Canicule({ done }) {
   useEffect(() => {
     const { ctl } = s;
     const parts = ctl.parts();
-    const cards = ctl.cards(14);
+    const cards = ctl.tiles(14);
     ctl.after(400, () => parts.forEach(p => ctl.set(p, { filter: "url(#pk-canicule-f)" })));
     ctl.after(2400, () => {
       setPhase("fond");
@@ -2355,7 +2392,7 @@ function Aspirateur({ done }) {
   const V = useMemo(() => ({ x: vw() / 2, y: vh() * .45 }), []);
   useEffect(() => {
     const { ctl } = s;
-    const cards = ctl.cards(18).map(c => {
+    const cards = ctl.cards(40).map(c => {
       const r = c.getBoundingClientRect();
       const cx = r.left + r.width / 2, cy = r.top + r.height / 2;
       const d = Math.hypot(cx - V.x, cy - V.y), a0 = Math.atan2(cy - V.y, cx - V.x);
@@ -2596,9 +2633,10 @@ function Domino({ done }) {
   const [tacs, setTacs] = useState([]);
   useEffect(() => {
     const { ctl } = s;
-    const cards = ctl.cards(14).map(c => ({ c, r: c.getBoundingClientRect() }))
+    const cards = ctl.cards(36).map(c => ({ c, r: c.getBoundingClientRect() }))
       .sort((a, b) => (Math.abs(a.r.top - b.r.top) > 12 ? a.r.top - b.r.top : a.r.left - b.r.left));
-    const n = cards.length, step = 200, dur = 600;
+    const n0 = cards.length;
+    const n = cards.length, step = Math.min(200, 3000 / Math.max(n0, 1)), dur = 600;
     const P = "perspective(900px) ";
     const tl = [];
     cards.forEach(({ c, r }, i) => {
@@ -2615,10 +2653,10 @@ function Domino({ done }) {
     const rise = 200 + n * step + dur + 1900;
     cards.forEach(({ c }, i) => {
       ctl.anim(c, [{ transform: P + "rotateX(-80deg)" }, { transform: P + "rotateX(8deg)", offset: .75 }, { transform: P + "rotateX(0deg)" }],
-        { duration: 650, delay: rise + (n - 1 - i) * 130, easing: "cubic-bezier(.3,0,.4,1)", fill: "forwards" });
+        { duration: 650, delay: rise + (n - 1 - i) * Math.min(130, 1600 / Math.max(n, 1)), easing: "cubic-bezier(.3,0,.4,1)", fill: "forwards" });
     });
     ctl.after(rise - 600, () => setMsg(2));
-    ctl.after(rise + (Math.max(n, 1) - 1) * 130 + 800, () => { setMsg(3); s.finish(); });
+    ctl.after(rise + (Math.max(n, 1) - 1) * Math.min(130, 1600 / Math.max(n, 1)) + 800, () => { setMsg(3); s.finish(); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return (
     <Layer s={s} css={DOMINO_CSS}>
@@ -2684,7 +2722,7 @@ function Ombre({ done }) {
       const a = .5 * Math.min(1, p * 6, (1 - p) * 6);
       return `${dx.toFixed(1)}px ${dy.toFixed(1)}px ${(12 + L * .25).toFixed(1)}px rgba(0,0,0,${a.toFixed(2)})`;
     };
-    ctl.cards(30).forEach(c => {
+    ctl.tiles(30).forEach(c => {
       const orig = getComputedStyle(c).boxShadow;
       const kf = [];
       for (let i = 0; i <= 30; i++) { const u = i / 30; kf.push({ boxShadow: i === 0 || i === 30 ? orig : shadowAt(u) }); }

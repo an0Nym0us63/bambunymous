@@ -46,7 +46,9 @@ async def achievements_passage(acc=Depends(require_own_account)):
     """Le passage secret du menu est-il ouvert pour ce compte ? (par compte, sur
     tous ses appareils : la premiere surprise l'ouvre, ou qu'elle tombe)."""
     from ....services import achievements as A
-    return {"open": acc[0] in await A.passages()}
+    # pages cachees et farces deja trouvees : la surprise prefere la nouveaute (70/30)
+    found = sorted(k for k in await A.eggs_found() if k in A.HIDDEN_EGGS | A.PRANK_EGGS)
+    return {"open": acc[0] in await A.passages(), "found": found}
 
 
 @router.post("/passage")

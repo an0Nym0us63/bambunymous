@@ -38,7 +38,8 @@ function effectOf(slug) {
 // Surprise a l'ouverture : a la premiere arrivee sur l'accueil d'un lancement de
 // l'appli, une farce (ou une page cachee) au hasard avec la probabilite p(n) = min(7 %, 0,5 % x n), n =
 // lancements depuis la derniere surprise (une toutes les ~20 ouvertures en moyenne).
-// N'importe laquelle, meme deja trouvee. Jamais chez un copain. Le secret suit la
+// Puis 70 % une farce / 30 % une page cachee, et dans le lot choisi 70 % une
+// pas encore trouvee / 30 % une deja trouvee (s'il y en a). Jamais chez un copain. Le secret suit la
 // regle des comptes (enregistre, ou « non comptabilise »).
 export const SURPRISE = { step: 0.005, cap: 0.07 };
 const SURPRISE_KEY = "bn-surprise";            // { n } : lancements depuis la derniere surprise
@@ -55,6 +56,17 @@ function openPassage() {
   }).catch(() => {});
 }
 
+export const SURPRISE_MIX = { farce: 0.7, fresh: 0.7 };
+const eggOf = (kind, slug) => (kind === "farce" ? "p_" : slug === "anonymous" || slug === "teapot" ? "" : "h_") + slug.replace(/-/g, "_");
+function pickSurprise(found) {
+  const kind = Math.random() < SURPRISE_MIX.farce ? "farce" : "page";
+  const all = kind === "farce" ? PRANK_SLUGS : HIDDEN_SLUGS;
+  const got = new Set(found || []);
+  const fresh = all.filter(s => !got.has(eggOf(kind, s))), old = all.filter(s => got.has(eggOf(kind, s)));
+  const lot = !old.length ? fresh : !fresh.length ? old : Math.random() < SURPRISE_MIX.fresh ? fresh : old;
+  return [kind, lot[Math.floor(Math.random() * lot.length)]];
+}
+
 function rollSurprise() {
   if (rolled) return null;
   rolled = true;
@@ -63,10 +75,31 @@ function rollSurprise() {
   const p = Math.min(SURPRISE.cap, SURPRISE.step * n);
   const hit = Math.random() < p;
   try { localStorage.setItem(SURPRISE_KEY, JSON.stringify({ n: hit ? 0 : n })); } catch { /* stockage indisponible */ }
-  if (!hit) return null;
-  // toutes, meme deja trouvees : une farce sur l'accueil, ou un detour par une page cachee
-  const pool = [...PRANK_SLUGS.map(s => ["farce", s]), ...HIDDEN_SLUGS.map(s => ["page", s])];
-  return pool[Math.floor(Math.random() * pool.length)];
+  return hit;
+}
+
+// L'accueil charge en plusieurs temps (imprimante, AMS, points d'attention) :
+// la farce attend qu'il soit complet, sinon elle ne voit que la tuile d'attente.
+// Pret = plus d'ecran de demarrage ni de tuile qui « pulse », et une page qui ne
+// bouge plus d'un releve a l'autre. Au pire, on y va au bout de 6 s.
+function useHomeReady(slug, onHome) {
+  const [ready, setReady] = useState(null);
+  useEffect(() => {
+    if (!slug || !onHome) { setReady(null); return undefined; }
+    let n = 0, last = "", same = 0;
+    const id = setInterval(() => {
+      n++;
+      const main = document.querySelector("main.page-content");
+      const busy = !main || document.getElementById("splash")
+        || Array.from(main.querySelectorAll("[style*='pulse']")).some(el => el.getBoundingClientRect().height > 0);
+      const sig = main ? main.getElementsByTagName("*").length + ":" + main.textContent.length : "";
+      same = !busy && sig === last ? same + 1 : 0;
+      last = sig;
+      if ((n >= 3 && same >= 2) || n >= 24) { clearInterval(id); setReady(slug); }
+    }, 250);
+    return () => clearInterval(id);
+  }, [slug, onHome]);
+  return ready === slug;
 }
 
 /** Monte la farce en cours par-dessus l'accueil (dans la mise en page). */
@@ -84,13 +117,18 @@ export function PrankHost() {
     // l'accueil a le temps de s'afficher ; si on l'a deja quitte, pas de surprise ailleurs
     // ni sous l'ecran de demarrage (logo) : on attend qu'il soit parti
     let tries = 0;
+    let found = null;
     const fire = () => {
       if (document.getElementById("splash") && tries++ < 20) { setTimeout(fire, 300); return; }
       if (window.location.pathname !== "/" || usePrank.getState().slug) return;
-      if (hit[0] === "farce") start(hit[1]); else nav("/" + hit[1]);
+      const [kind, slug] = pickSurprise(found);
+      if (kind === "farce") start(slug); else nav("/" + slug);
       openPassage();
     };
-    if (hit) setTimeout(fire, 1200);
+    if (hit) {
+      client.get("/achievements/passage").then(({ data }) => { found = data?.found || []; }).catch(() => {});
+      setTimeout(fire, 1200);
+    }
   }, [pathname, visiting, start, nav]);
   const doneRef = useRef(false);
   // on QUITTE l'accueil : la farce s'arrete (et l'effet remet tout en place). Pas
@@ -101,7 +139,8 @@ export function PrankHost() {
     prev.current = pathname;
   }, [pathname, slug, stop]);
   useEffect(() => { doneRef.current = false; }, [slug]);
-  if (!slug || pathname !== "/") return null;
+  const ready = useHomeReady(slug, pathname === "/");
+  if (!slug || pathname !== "/" || !ready) return null;
   const Effect = effectOf(slug);
   const done = () => {
     if (doneRef.current) return;
