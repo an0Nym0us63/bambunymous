@@ -23,6 +23,7 @@ import MyAppNotifications from "../components/MyAppNotifications";
 import AndroidApp from "../components/AndroidApp";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
+import { egg, tapper } from "../eggs";
 import { amsName, slotCount, lireDisposition, dispositionParDefaut, MAX_LIGNES, MAX_COLONNES } from "../utils/ams";
 
 const inp = {
@@ -1988,13 +1989,14 @@ export default function Settings() {
 // nouveautes en attente (depliables).
 function VersionLine({ version }) {
   const [chk, setChk] = React.useState(null);
+  const devTap = React.useMemo(() => tapper(5, 3000, () => egg("developer")), []);
   const [open, setOpen] = React.useState(false);
   React.useEffect(() => { client.get("/version/check").then(({ data }) => setChk(data)).catch(() => {}); }, []);
   const n = chk?.behind || 0;
   return (
     <div style={{ textAlign:"center", marginTop:8 }}>
       <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace", margin:0 }}>
-        v{version.commit?.slice(0,8) || "dev"} · {version.build_date?.slice(0,10) || "?"}
+        <span onClick={devTap} style={{ cursor:"default", userSelect:"none" }}>v{version.commit?.slice(0,8) || "dev"}</span> · {version.build_date?.slice(0,10) || "?"}
         {chk && !chk.dev && !chk.error && (n
           ? <> · <button onClick={() => setOpen(o => !o)} style={{ background:"none", border:"none", padding:0, cursor:"pointer",
               fontFamily:"inherit", fontSize:11, fontWeight:700, color:"#f59e0b" }}>

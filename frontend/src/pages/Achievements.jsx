@@ -5,6 +5,7 @@ import { currentFriend } from "../store/friend";
 import { useIsAdmin } from "../store/auth";
 import client from "../api/client";
 import { isMoneyHidden } from "../utils/money";
+import { egg, tapper } from "../eggs";
 
 // Succes : medailles gagnees sur l'historique (impressions, filaments, objets,
 // MakerWorld, copains, secrets). Chaque succes a jusqu'a neuf paliers (bronze,
@@ -538,6 +539,9 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
   const money = it.money && isMoneyHidden();
   const done = got && it.next == null;
   const unique = it.tiers.length === 1;
+  // une medaille gagnee, ca s'astique
+  const [shine, setShine] = useState(0);
+  const polish = useMemo(() => tapper(10, 5000, () => egg("polish")), []);
   return (
     <div ref={ref} className="card" onClick={() => !sheet && setOpen(o => !o)}
       style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:9, cursor:"pointer",
@@ -548,7 +552,9 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
           : sheet ? "var(--sheet-bg)" : undefined,
         ...(sheet ? { backdropFilter:"none", boxShadow:"0 12px 40px rgba(0,0,0,0.45)", paddingRight:36 } : {}) }}>
       <div style={{ display:"flex", gap:12, alignItems:"center" }}>
-        <Medal tier={top} emoji={it.emoji} size={52} locked={!got}/>
+        <span key={shine} onClick={e => { if (!sheet || !got) return; e.stopPropagation(); setShine(n => n + 1); polish(); }}
+          style={{ display:"inline-flex", animation: shine ? "bn-shine .35s ease-out" : "none" }}>
+          <Medal tier={top} emoji={it.emoji} size={52} locked={!got}/></span>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:14, fontWeight:800, color: got ? "var(--text)" : "var(--text2)" }}>{it.name}</div>
           <div style={{ fontSize:12, color:"var(--muted)", marginTop:2, lineHeight:1.35,

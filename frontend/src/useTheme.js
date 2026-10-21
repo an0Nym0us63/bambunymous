@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { themeToggled } from "./eggs";
 
 // Couleur de la barre de statut (Android) = la theme-color de la PWA. On garde le
 // violet de la marque dans les deux themes, comme en PWA installee. Si un jour tu
@@ -25,7 +26,7 @@ export function useTheme() {
     } catch { /* pont indisponible : rien a faire */ }
   }, [theme]);
 
-  const toggle = () => setTheme(t => t === "dark" ? "light" : "dark");
+  const toggle = () => { themeToggled(); setTheme(t => t === "dark" ? "light" : "dark"); };
 
   return { theme, toggle };
 }

@@ -623,6 +623,41 @@ CATALOG = [
     _a("all_seasons", "secret", "🍂", "Quatre saisons", "Une impression réussie à chaque saison d'une même année", [1],
        lore="Printemps, été, automne, hiver : ton imprimante n'a pas de saison."),
 ]
+# Easter eggs : des gestes caches dans l'appli, signales par la page elle-meme
+# (POST /achievements/egg/{nom}). nom : (emoji, titre, ce qu'il faut faire, indice, histoire)
+EGGS = {
+    "developer": ("🤓", "Développeur", "Tapoter 5 fois de suite sur le numéro de version",
+                  "Comme sur un téléphone Android : insiste sur un petit numéro qui ne paie pas de mine.",
+                  "Tu es maintenant développeur. Aucun pouvoir en plus, mais quelle classe."),
+    "konami": ("🎮", "Code Konami", "Saisir le code Konami (↑ ↑ ↓ ↓ ← → ← → B A) dans l'appli",
+               "Haut, haut, bas, bas… les vieux joueurs connaissent la suite. Au doigt, ça se glisse aussi.",
+               "+30 vies. Ici, ça ne sert à rien, mais le geste compte."),
+    "magic_word": ("🪄", "Mot magique", "Taper « bambu » au clavier, sans être dans un champ",
+                   "Dis le nom de la maison… au clavier, sans viser de case.",
+                   "Tu as prononcé le mot magique : l'appli t'a reconnu."),
+    "logo_spin": ("🌀", "Toupie", "Cliquer 7 fois sur le logo",
+                  "Le logo n'est pas qu'une image : il a le tournis facile.",
+                  "Sept clics sur le logo : il en a encore la tête qui tourne."),
+    "disco": ("🪩", "Disco", "Basculer 10 fois entre thème clair et sombre en une minute",
+              "Jour, nuit, jour, nuit… vite, très vite.",
+              "Clair, sombre, clair, sombre : la boule à facettes est de sortie."),
+    "answer": ("🧮", "La grande question", "Chercher « 42 » dans une recherche",
+               "Une recherche, un nombre, et la réponse à la grande question sur la vie, l'univers et le reste.",
+               "42. Reste à trouver la question."),
+    "seeker": ("🔍", "Chasseur d'œufs", "Chercher « easter egg » dans une recherche",
+               "Si tu cherches des œufs, demande-le tout simplement… dans une recherche.",
+               "Tu cherchais un easter egg ? En voilà un."),
+    "lost": ("🧭", "Perdu", "Atterrir sur une page qui n'existe pas",
+             "Tape une adresse au hasard dans l'appli : il y a quelqu'un au bout du chemin.",
+             "Page introuvable, mais médaille trouvée."),
+    "polish": ("✨", "Polisseur", "Toucher 10 fois une médaille gagnée, dans son détail",
+               "Une médaille, ça s'astique. Ouvre-en une et frotte bien.",
+               "Elle brille comme jamais : on s'y voit presque."),
+    "impatient": ("⏳", "Impatient", "Recharger l'appli 5 fois en moins de 30 secondes",
+                  "Rafraîchir, rafraîchir, rafraîchir… ça n'ira pas plus vite.",
+                  "Cinq rechargements en trente secondes. Respire, tout est à jour."),
+}
+CATALOG += [_a(f"egg_{k}", "secret", e, t, d, [1], lore=l) for k, (e, t, d, _h, l) in EGGS.items()]
 # Secrets (toutes les medailles uniques) : rangés en sous-sections dans la
 # categorie « Secrets ».
 SECRET_SUBS = [
@@ -642,6 +677,7 @@ SECRET_SUBS = [
      "devoured_spool big_order pit_stop psycho_price one_euro big_spool gold_spool bargain spring_clean"),
     ("mw", "🌐", "MakerWorld", "self_print bestseller pioneer"),
     ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit"),
+    ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS)),
 ]
 SUB_OF = {aid: sid for sid, _e, _n, ids in SECRET_SUBS for aid in ids.split()}
 
@@ -857,6 +893,7 @@ HINTS = {
     "double_update": "Une journée où BambuNymous change plusieurs fois.",
     "novel": "Imprime un modèle au nom interminable.",
     "christmas_visit": "Ouvre l'appli le jour où le Père Noël est passé.",
+    **{f"egg_{k}": v[3] for k, v in EGGS.items()},
 }
 
 
@@ -1240,7 +1277,7 @@ async def _load_data() -> dict:
             "act_days": act_days, "pages": pages, "late": late, "notif_days": notif_days, "dismiss": dismiss,
             "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "act_kinds": act_kinds, "changes": changes,
             "mwd": mwd, "accs": accs, "acc_objs": acc_objs, "n_users": n_users, "spool_more": spool_more,
-            "queue": _queue_size(), "my_designs": my_designs, "ams_live": _ams_live()}
+            "queue": _queue_size(), "my_designs": my_designs, "eggs": await eggs_found(), "ams_live": _ams_live()}
 
 
 def _ams_live() -> int:
@@ -2056,6 +2093,9 @@ def _fun200(push, d, now) -> None:
     for _k, day_, _n in d.get("act_days") or []:
         if day_ and str(day_)[5:] == "12-25":
             push("christmas_visit", datetime.fromisoformat(str(day_)), 1)
+    for k, at in (d.get("eggs") or {}).items():
+        if k in EGGS:
+            push(f"egg_{k}", datetime.fromisoformat(at), 1)
 
 
 def _wide(push, d, now) -> None:
@@ -2430,6 +2470,45 @@ def _queue_size() -> int:
         return 0
 
 
+async def eggs_found() -> dict:
+    """Les easter eggs trouves : {nom: date}."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        raw = await get_setting(db, KEY + "_EGGS", "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+async def find_egg(name: str) -> dict:
+    """Un geste cache vient d'etre fait. La premiere fois : on le date, et le
+    passage suivant (lance tout de suite) donne la medaille, ses cles et sa
+    notification. Rend de quoi feliciter sur la page."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    if name not in EGGS:
+        raise ValueError("Œuf inconnu")
+    found = await eggs_found()
+    new = name not in found
+    if new:
+        found[name] = datetime.utcnow().isoformat()
+        async with AsyncSessionLocal() as db:
+            await set_setting(db, KEY + "_EGGS", json.dumps(found))
+        _CACHE["v"] = None
+        import asyncio
+        t = asyncio.create_task(tick())
+        _BG.add(t)
+        t.add_done_callback(_BG.discard)
+    e, title, _d, _h, lore = EGGS[name]
+    return {"new": new, "id": f"egg_{name}", "emoji": e, "name": title, "lore": lore}
+
+
+_BG: set = set()
+
+
 async def _journal_memory(cur: dict, pages: list, late3: str | None) -> dict:
     """Le journal d'activite et celui des notifications se purgent : ce qu'ils
     comptent est garde ici, jour par jour (le plus grand nombre vu pour ce
@@ -2528,9 +2607,22 @@ def _sets(out: dict, st: dict) -> None:
         out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {}}
 
 
+_TICK_LOCK = None
+
+
 async def tick(notify: bool = True) -> list:
     """Enregistre les paliers nouvellement atteints ; notifie apres le premier
-    passage. Rend la liste des (id, cran) nouveaux."""
+    passage. Rend la liste des (id, cran) nouveaux. Un passage a la fois (la
+    boucle et un easter egg peuvent tomber ensemble : jamais deux annonces)."""
+    import asyncio
+    global _TICK_LOCK
+    if _TICK_LOCK is None:
+        _TICK_LOCK = asyncio.Lock()
+    async with _TICK_LOCK:
+        return await _tick(notify)
+
+
+async def _tick(notify: bool = True) -> list:
     ev = await evaluate()
     st = await _state_get()
     first = st is None

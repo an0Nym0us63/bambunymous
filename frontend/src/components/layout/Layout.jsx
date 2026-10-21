@@ -10,6 +10,7 @@ import RfidScanBridge from "../RfidScanBridge";
 import PushBridge from "../PushBridge";
 import { FriendLinkBridge } from "../Friends";
 import Toast from "../Toast";
+import { egg, installEggs, tapper } from "../../eggs";
 import NoAutofill from "../NoAutofill";
 
 const nav = [
@@ -92,6 +93,13 @@ export default function Layout() {
   const title = TITLES[pathname] ?? null;
   const friend = useFriend((st) => st.friend);   // chez un copain
   const headerRef = React.useRef(null);
+  // gestes caches (voir eggs.js) ; le logo, lui, a le tournis facile
+  React.useEffect(() => { installEggs(); }, []);
+  const [spin, setSpin] = React.useState(false);
+  const logoTap = React.useMemo(() => tapper(7, 3000, () => {
+    setSpin(true); setTimeout(() => setSpin(false), 1100); egg("logo_spin");
+  }), []);
+  const logoAnim = spin ? "bn-spin 1s ease-in-out" : "none";
 
   // Le header mobile est fixed et sa hauteur VARIE selon la page (bouton scan sur
   // Filaments, avatar sur Accueil, rien ailleurs) + la safe-area du haut. Un
@@ -153,8 +161,8 @@ export default function Layout() {
     <div style={S.app}>
       {/* Sidebar desktop */}
       <aside className="hidden-mobile" style={S.aside}>
-        <div style={{...S.logo, cursor:"pointer"}} onClick={() => navigate("/")}>
-          <img src="/icon-192.png" style={{ width:28, height:28, borderRadius:7, flexShrink:0 }} alt=""/>
+        <div style={{...S.logo, cursor:"pointer"}} onClick={() => { logoTap(); navigate("/"); }}>
+          <img src="/icon-192.png" style={{ width:28, height:28, borderRadius:7, flexShrink:0, animation:logoAnim }} alt=""/>
           <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
             BambuNymous
           </span>
@@ -180,8 +188,8 @@ export default function Layout() {
         {/* Header mobile */}
         <header ref={headerRef} className="show-mobile app-header" style={S.header}>
           <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0, cursor:"pointer" }}
-            onClick={() => navigate("/")}>
-            <img src="/icon-192.png" style={{ width:24, height:24, borderRadius:6, flexShrink:0 }} alt=""/>
+            onClick={() => { logoTap(); navigate("/"); }}>
+            <img src="/icon-192.png" style={{ width:24, height:24, borderRadius:6, flexShrink:0, animation:logoAnim }} alt=""/>
             {!title && (
               <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
                 BambuNymous

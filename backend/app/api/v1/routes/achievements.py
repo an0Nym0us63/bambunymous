@@ -25,6 +25,16 @@ async def achievements_podium(fresh: bool = False, acc=Depends(require_own_accou
     return await A.podium(acc[0], fresh)
 
 
+@router.post("/egg/{name}")
+async def achievements_egg(name: str, acc=Depends(require_own_account)):
+    """Un easter egg trouve dans l'appli (jamais par une cle de copain)."""
+    from ....services import achievements as A
+    try:
+        return await A.find_egg(name)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
 @router.post("/keys/{aid}")
 async def achievements_spend_key(aid: str, _: str = Depends(require_admin)):
     """Revele l'etape suivante d'un secret (vignette, titre, indice, descriptif)."""
