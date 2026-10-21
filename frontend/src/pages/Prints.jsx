@@ -2702,7 +2702,9 @@ export default function Prints() {
     } finally { setDeleting(false); }
   };
 
-  const LIMIT = 40;
+  // Le serveur pagine par CARTES (un print seul ou un groupe entier) depuis le
+  // 22/10/2026 : une page = LIMIT cartes, et il dit ou reprendre (next_offset).
+  const LIMIT = 24;
   const CARDS_PER_LOAD = 20;   // cartes AFFICHEES visees par chargement (solos + groupes)
 
   const loadKpis = useCallback(async () => {
@@ -2764,6 +2766,7 @@ export default function Prints() {
       setPrints(data.prints ?? []);
       setTotal(data.total ?? 0);
       setHasMore(data.has_more ?? false);
+      setOffset(data.next_offset ?? LIMIT);
     } catch(e) {
       if (gen !== loadGen.current) return;
       setError(e.response?.data?.detail || e.message || "Erreur");
@@ -2790,7 +2793,7 @@ export default function Prints() {
       const gen = loadGen.current;
       while (more && guard < 12 && (countDisplayItems(acc) - startCount) < CARDS_PER_LOAD) {
         guard++;
-        const next = curOffset + LIMIT;
+        const next = curOffset;
         const params = new URLSearchParams({ limit: LIMIT, offset: next });
         if (searchQ)     params.set("search", searchQ);
         if (statusF)     params.set("status", statusF);
@@ -2807,7 +2810,8 @@ export default function Prints() {
         const existingIds = new Set(acc.map(p => p.id));
         const fresh = (data.prints || []).filter(p => !existingIds.has(p.id));
         acc = [...acc, ...fresh];
-        curOffset = next;
+        // reprise donnee par le serveur ; un ancien serveur (copain pas a jour) : offset + limit
+        curOffset = data.next_offset ?? next + LIMIT;
         more = data.has_more ?? false;
       }
       if (acc) {

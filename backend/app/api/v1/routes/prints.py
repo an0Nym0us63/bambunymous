@@ -290,19 +290,19 @@ def _order_clauses(sort: str, g):
     clé et restent contigus malgré la pagination.
     """
     if sort == "oldest":
-        return [func.coalesce(g.c.g_min_date, Print.print_date).asc(),
-                Print.print_date.asc()]
+        return [func.coalesce(g.c.g_min_date, Print.print_date).asc(), Print.group_id,
+                Print.print_date.asc(), Print.id]
     if sort == "cost":
-        return [desc(func.coalesce(g.c.g_cost, Print.total_cost, 0)),
-                desc(Print.print_date)]
+        return [desc(func.coalesce(g.c.g_cost, Print.total_cost, 0)), Print.group_id,
+                desc(Print.print_date), Print.id]
     if sort == "weight":
-        return [desc(func.coalesce(g.c.g_weight, Print.total_weight_g, 0)),
-                desc(Print.print_date)]
+        return [desc(func.coalesce(g.c.g_weight, Print.total_weight_g, 0)), Print.group_id,
+                desc(Print.print_date), Print.id]
     if sort == "duration":
-        return [desc(func.coalesce(g.c.g_duration, _PRINT_DURATION, 0)),
-                desc(Print.print_date)]
-    return [desc(func.coalesce(g.c.g_max_date, Print.print_date)),
-            desc(Print.print_date)]
+        return [desc(func.coalesce(g.c.g_duration, _PRINT_DURATION, 0)), Print.group_id,
+                desc(Print.print_date), Print.id]
+    return [desc(func.coalesce(g.c.g_max_date, Print.print_date)), Print.group_id,
+            desc(Print.print_date), Print.id]
 
 
 def _period_clauses(date_from: Optional[str], date_to: Optional[str]):
@@ -349,9 +349,14 @@ async def list_prints(
     _: str = Depends(get_current_user),
 ):
     """
-    Retourne les prints paginés.
-    Si un print appartient à un groupe, TOUS les prints de ce groupe sont inclus
-    dans la réponse (pour éviter un groupe coupé entre deux pages).
+    Retourne les prints pagines PAR CARTES : `limit` cartes affichees (un print
+    seul ou un groupe entier). Un groupe arrive en une fois, avec tous ses
+    prints, et une seule fois : ses membres se suivent dans le tri, la page
+    suivante repart apres eux (`next_offset`, en prints du tri).
+
+    Avant (22/10/2026) : `limit` prints. Un groupe de 70 prints remplissait une
+    page entiere pour une seule carte -- l'appli enchainait les requetes pour
+    remplir l'ecran -- et revenait en entier dans chaque page qui le touchait.
     """
     from sqlalchemy import exists
     from ....models.print_history import PrintTag as _PT
@@ -362,10 +367,6 @@ async def list_prints(
         g = _group_aggregates()
         q = (select(Print)
              .outerjoin(g, Print.group_id == g.c.gid)
-             .options(selectinload(Print.filament_usage),
-                      selectinload(Print.snapshots),
-                      selectinload(Print.tags),
-                      selectinload(Print.group))
              .order_by(*_order_clauses(sort, g)))
         if status:
             q = q.where(Print.status == status)
@@ -387,32 +388,47 @@ async def list_prints(
             select(func.count()).select_from(q.subquery())
         )).scalar()
 
-        # Page courante
-        rows = (await db.execute(q.offset(offset).limit(limit))).scalars().all()
+        # 1. Parcours leger (identifiants seuls) jusqu'a `limit` cartes
+        idq = q.with_only_columns(Print.id, Print.group_id, maintain_column_froms=True)
+        order, groups, cards, pos = [], [], 0, offset
+        chunk = max(200, limit * 10)
+        done = False
+        while not done:
+            part = (await db.execute(idq.offset(pos).limit(chunk))).all()
+            if not part:
+                break
+            for pid, gid in part:
+                new_card = gid is None or gid not in groups
+                if new_card and cards >= limit:
+                    done = True
+                    break
+                pos += 1
+                order.append(pid)
+                if new_card:
+                    cards += 1
+                    if gid is not None:
+                        groups.append(gid)
+            if len(part) < chunk:
+                break
 
-        # Compléter les groupes :
-        # 1. Si un print de la page appartient à un groupe → ramener tous les prints du groupe
-        page_ids = {p.id for p in rows}
-        page_group_ids = {p.group_id for p in rows if p.group_id}
-
-        if page_group_ids:
-            extra_q = (select(Print)
-                .options(selectinload(Print.filament_usage),
-                         selectinload(Print.snapshots),
-                         selectinload(Print.tags),
-                         selectinload(Print.group))
-                .where(Print.group_id.in_(list(page_group_ids)))
-                .where(Print.id.notin_(list(page_ids)))
-                .order_by(desc(Print.print_date)))
-            extra = (await db.execute(extra_q)).scalars().all()
-            if extra:
-                rows = list(rows) + extra
+        # 2. Les prints de la page, en entier ; chaque groupe complet (meme ses
+        #    membres que les filtres ecartent), apres ceux qu'a donnes le tri
+        full = select(Print).options(selectinload(Print.filament_usage), selectinload(Print.snapshots),
+                                     selectinload(Print.tags), selectinload(Print.group))
+        cond = Print.id.in_(order) if order else None
+        if groups:
+            cond = Print.group_id.in_(groups) if cond is None else (cond | Print.group_id.in_(groups))
+        rows = []
+        if cond is not None:
+            got = {p.id: p for p in (await db.execute(full.where(cond))).scalars().all()}
+            rank = {pid: i for i, pid in enumerate(order)}
+            rows = sorted(got.values(), key=lambda p: (rank.get(p.id, len(order)),
+                                                       -(p.print_date.timestamp() if p.print_date else 0)))
 
         await _enrich_filament_usage(db, rows)
 
     from ....core.fastjson import json_response
-    return json_response({"total": total, "has_more": (offset + limit) < total,
-                          "next_offset": offset + limit,
+    return json_response({"total": total, "has_more": pos < total, "next_offset": pos,
                           "prints": [_print_to_out(p) for p in rows]})
 
 
