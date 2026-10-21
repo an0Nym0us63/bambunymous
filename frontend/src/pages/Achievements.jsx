@@ -300,7 +300,7 @@ export default function Achievements({ embedded = false }) {
                             boxShadow:`0 2px 6px ${rgba(col, 0.45)}, inset 0 -2px 0 rgba(0,0,0,0.18)` }}>
                             <span style={{ position:"absolute", inset:2, borderRadius:"50%", border:"1.5px dashed rgba(255,255,255,0.75)" }}/>
                             <span style={{ position:"absolute", inset:6, borderRadius:"50%", background:"rgba(255,255,255,0.92)" }}/>
-                            <span style={{ position:"relative" }}>{sb.emoji}</span>
+                            <span style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, fontSize:14 }}>{sb.emoji}</span>
                           </span>
                           <span style={{ flex:1, minWidth:0 }}>{sb.name}</span>
                           {/* que ce qu'on voit : rien sur la taille cachee d'une categorie */}
@@ -1457,7 +1457,7 @@ function Chip({ emoji, color }) {
       boxShadow:`0 3px 8px ${rgba(color, 0.45)}, inset 0 -3px 0 rgba(0,0,0,0.18)` }}>
       <span style={{ position:"absolute", inset:3, borderRadius:"50%", border:"2px dashed rgba(255,255,255,0.75)" }}/>
       <span style={{ position:"absolute", inset:8, borderRadius:"50%", background:"rgba(255,255,255,0.92)" }}/>
-      <span style={{ position:"relative" }}>{emoji}</span>
+      <span style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, fontSize:19 }}>{emoji}</span>
     </span>
   );
 }
