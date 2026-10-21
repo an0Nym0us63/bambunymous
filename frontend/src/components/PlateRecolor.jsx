@@ -1,12 +1,11 @@
-import React, { useEffect, useId, useRef, useState } from "react";
-import MwImg, { mwImg } from "./MwImg";
+import React, { useEffect, useRef, useState } from "react";
+import MwImg from "./MwImg";
 
-// Vignette de plateau repeinte aux couleurs des filaments choisis (aperçu).
-// Une seule couleur d'origine : un filtre SVG (niveaux de gris puis teinte), sans
-// serveur. Plusieurs : on lit les pixels (image relayee par notre serveur, MakerWorld
-// n'autorise pas la lecture directe), chaque pixel va a la couleur d'origine la plus
-// proche, et prend la couleur choisie en gardant son ombrage. Un toucher sur 🎨
-// montre l'original.
+// Vignette de plateau repeinte aux couleurs des filaments choisis (aperçu). On lit
+// les pixels (image relayee par notre serveur, MakerWorld n'autorise pas la lecture
+// directe) ; chaque pixel va a la couleur d'origine la plus proche et prend la couleur
+// choisie en gardant son ombrage, la reference etant la clarte de l'objet sur le rendu
+// (MakerWorld rend parfois un objet gris en blanc). Un toucher sur 🎨 montre l'original.
 
 const rgbOf = h => {
   const s = String(h || "").replace("#", "");
@@ -74,35 +73,56 @@ async function paint(src, pairs) {
   }
   const img = cx.getImageData(0, 0, W, H), px = img.data;
   const src3 = pairs.map(p => { const c = rgbOf(p.from); return { c, L: lumOf(c), lab: lab(c), to: rgbOf(p.to) }; });
+  // 1) chaque pixel va a la couleur d'origine la plus proche (la clarte comptant peu :
+  //    l'ombrage la fait varier) ; on note la clarte de chaque groupe
+  const cls = new Int8Array(px.length / 4).fill(-1);
+  const hist = src3.map(() => new Uint32Array(256));
   const memo = new Map();
-  const count = new Map(src3.map(s => [s, 0]));
-  let total = 0;
-  for (let i = 0; i < px.length; i += 4) {
+  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
     if (i && i % 160000 === 0) await breath();     // par tranches : l'interface reste fluide
     if (px[i + 3] < 8) continue;
     const r = px[i], g = px[i + 1], b = px[i + 2];
     const q = (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3);
-    let out = memo.get(q);
-    if (!out) {
-      // la couleur d'origine la plus proche, la clarte comptant peu (l'ombrage la fait varier)
-      const P = lab([r, g, b]);
-      let best = src3[0], bd = Infinity;
-      for (const s of src3) {
-        const d = 0.25 * (P[0] - s.lab[0]) ** 2 + (P[1] - s.lab[1]) ** 2 + (P[2] - s.lab[2]) ** 2;
-        if (d < bd) { bd = d; best = s; }
+    let c = memo.get(q);
+    if (c === undefined) {
+      c = 0;
+      if (src3.length > 1) {
+        const P = lab([r, g, b]);
+        let bd = Infinity;
+        src3.forEach((s, k) => {
+          const d = 0.25 * (P[0] - s.lab[0]) ** 2 + (P[1] - s.lab[1]) ** 2 + (P[2] - s.lab[2]) ** 2;
+          if (d < bd) { bd = d; c = k; }
+        });
       }
-      out = tone(lumOf([r, g, b]), best.L, best.to);
-      out.src = best;
-      memo.set(q, out);
+      memo.set(q, c);
     }
-    count.set(out.src, count.get(out.src) + 1);
-    total++;
+    cls[j] = c;
+    hist[c][Math.round(lumOf([r, g, b]) * 255)]++;
+  }
+  // 2) la clarte de reference d'un groupe est celle de l'objet SUR LE RENDU (sa mediane),
+  //    pas celle du filament : MakerWorld rend parfois en blanc un objet gris (coques)
+  const count = hist.map(h => h.reduce((a, b) => a + b, 0));
+  const total = count.reduce((a, b) => a + b, 0);
+  const med = hist.map((h, k) => {
+    let acc = 0;
+    for (let v = 0; v < 256; v++) { acc += h[v]; if (acc * 2 >= count[k]) return Math.max(0.03, v / 255); }   // un rendu tout blanc : 1, le blanc devient la couleur
+    return src3[k].L;
+  });
+  const memo2 = new Map();
+  for (let i = 0, j = 0; i < px.length; i += 4, j++) {
+    if (i && i % 160000 === 0) await breath();
+    const c = cls[j];
+    if (c < 0) continue;
+    const r = px[i], g = px[i + 1], b = px[i + 2];
+    const q = ((r >> 2) << 12 | (g >> 2) << 6 | (b >> 2)) * 16 + c;
+    let out = memo2.get(q);
+    if (!out) { out = tone(lumOf([r, g, b]), med[c], src3[c].to); memo2.set(q, out); }
     px[i] = out[0]; px[i + 1] = out[1]; px[i + 2] = out[2];
   }
   cx.putImageData(img, 0, 0);
   // MakerWorld ne rend pas toujours toutes les couleurs d'un plateau (un rendu tout
   // noir pour un plateau noir et rose) : ce qui n'apparait pas ne peut pas changer.
-  const absent = pairs.filter((p, j) => count.get(src3[j]) < Math.max(30, total * 0.004)).map(p => p.from);
+  const absent = src3.length > 1 ? pairs.filter((p, j) => count[j] < Math.max(30, total * 0.004)).map(p => p.from) : [];
   const blob = await new Promise(res => cv.toBlob(res, "image/png"));
   const res = { url: blob ? URL.createObjectURL(blob) : cv.toDataURL("image/png"), absent };
   CACHE.set(key, res);
@@ -110,14 +130,13 @@ async function paint(src, pairs) {
 }
 
 export default function PlateRecolor({ src, map, w = 200, style }) {
-  const fid = "pk-tint-" + useId().replace(/[^a-z0-9]/gi, "");
   const pairs = (map || []).filter(p => rgbOf(p.from) && rgbOf(p.to));
   const active = pairs.some(p => !near(rgbOf(p.from), rgbOf(p.to)));
   const [orig, setOrig] = useState(false);
   const [url, setUrl] = useState(null);
   const [absent, setAbsent] = useState([]);
   const [fail, setFail] = useState(null);
-  const multi = active && pairs.length > 1;
+  const multi = active;            // une ou plusieurs couleurs : repeinte d'apres les pixels du rendu
   const sig = pairs.map(p => p.from + ">" + p.to).join(",");
   // repeinte seulement une fois la vignette a l'ecran, quand le navigateur souffle
   const box = useRef(null);
@@ -151,30 +170,8 @@ export default function PlateRecolor({ src, map, w = 200, style }) {
         border:"1.5px solid white", background: orig ? "rgba(0,0,0,0.45)" : "linear-gradient(135deg,#f472b6,#60a5fa,#34d399)",
         fontSize:12, lineHeight:"20px", boxShadow:"0 1px 4px rgba(0,0,0,.3)" }}>{orig ? "↺" : "🎨"}</button>
   );
-  let body;
-  if (orig || (multi && !url)) body = <MwImg src={src} w={w} style={style}/>;
-  else if (multi) body = <img src={url} alt="" style={style}/>;
-  else {
-    // une couleur : filtre SVG (luminance -> degrade noir / couleur choisie / blanc)
-    const from = rgbOf(pairs[0].from), to = rgbOf(pairs[0].to), Ls = lumOf(from);
-    const N = 24, ch = j => Array.from({ length: N + 1 }, (_, i) => (tone(i / N, Ls, to)[j] / 255).toFixed(3)).join(" ");
-    body = (
-      <>
-        <svg width="0" height="0" style={{ position:"absolute" }} aria-hidden="true">
-          <filter id={fid} colorInterpolationFilters="sRGB">
-            <feColorMatrix type="matrix" values="0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0.2126 0.7152 0.0722 0 0  0 0 0 1 0"/>
-            <feComponentTransfer>
-              <feFuncR type="table" tableValues={ch(0)}/>
-              <feFuncG type="table" tableValues={ch(1)}/>
-              <feFuncB type="table" tableValues={ch(2)}/>
-            </feComponentTransfer>
-          </filter>
-        </svg>
-        <img src={mwImg(src, w)} alt="" loading="lazy" decoding="async" referrerPolicy="no-referrer"
-          style={{ ...style, filter: `url(#${fid})${style?.filter ? " " + style.filter : ""}` }}/>
-      </>
-    );
-  }
+  // en attendant la version repeinte (ou pour voir l'original) : la vignette telle quelle
+  const body = orig || !url ? <MwImg src={src} w={w} style={style}/> : <img src={url} alt="" style={style}/>;
   return (
     <div ref={box} style={{ position:"relative" }}>{body}{toggle}
       {!orig && fail && (
