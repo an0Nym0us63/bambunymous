@@ -31,6 +31,8 @@ const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const PICKS = new Map();      // `${scope}|${i}` -> filament_id
 // Filament trouve par la recherche dans tout le stock (hors propositions) : `${scope}|${i}` -> proposition.
 const EXTRA = new Map();
+// Exceptions par plateau : `${scope}|${plateau}|${i}` -> proposition (ce plateau dans une autre couleur).
+const PLATE = new Map();
 // Qui veut savoir quand un choix change (les vignettes repeintes de la fiche).
 const WATCH = new Set();
 const changed = () => WATCH.forEach(f => { try { f(); } catch { /* rien */ } });
@@ -42,8 +44,17 @@ export function usePicksVersion() {
 const inLists = (x, id) => x.matches.some(m => m.filament_id === id) || (x.others || []).some(m => m.filament_id === id);
 // Plan retenu pour « À faire » : cle « TYPE|#COULEUR » -> filament choisi a la main.
 // Un choix fait par recherche est relu dans le stock (promesse resolue une fois tout pret).
-export function setPicksFromPlan(scope, items, picks) {
+export function setPicksFromPlan(scope, items, picks, platePicks) {
   const asks = [];
+  // exceptions par plateau : relues dans les propositions, sinon dans tout le stock
+  Object.entries(platePicks || {}).forEach(([pn, pk]) => (items || []).forEach((x, i) => {
+    const id = pk?.[fkey(x.type, x.color)];
+    if (!id) return;
+    const mt = x.matches.find(m => m.filament_id === id) || (x.others || []).find(m => m.filament_id === id);
+    if (mt) { PLATE.set(`${scope}|${pn}|${i}`, mt); return; }
+    asks.push(client.get("/makerworld/stock/search", { params: { type: x.type, color: x.color, ids: String(id) } })
+      .then(({ data }) => { if (data.items?.[0]) PLATE.set(`${scope}|${pn}|${i}`, data.items[0]); }).catch(() => {}));
+  }));
   (items || []).forEach((x, i) => {
     const id = picks?.[fkey(x.type, x.color)];
     if (!id) return;
@@ -56,7 +67,7 @@ export function setPicksFromPlan(scope, items, picks) {
 }
 // Oublier les choix faits a la main pour un profil (plan retenu annule) : retour aux propositions.
 export function clearPicks(scope) {
-  for (const m of [PICKS, EXTRA]) for (const k of [...m.keys()]) if (k.startsWith(`${scope}|`)) m.delete(k);
+  for (const m of [PICKS, EXTRA, PLATE]) for (const k of [...m.keys()]) if (k.startsWith(`${scope}|`)) m.delete(k);
   changed();
 }
 
@@ -66,7 +77,7 @@ export function plateColorMap(items, plate, scope = "") {
   const out = [], seen = new Set();
   for (const f of (plate?.filaments || []).filter(x => num(x.g) > 0)) {
     const i = (items || []).findIndex(x => fkey(x.type, x.color) === fkey(f.type, f.color));
-    const c = i >= 0 ? chosenOf(items[i], scope, i) : null;
+    const c = i >= 0 ? chosenOf(items[i], scope, i, plate.index) : null;
     const from = String(f.color || "").toUpperCase();
     if (!c?.color || !from || seen.has(from)) continue;
     seen.add(from);
@@ -82,7 +93,25 @@ export function picksOf(scope, items) {
   });
   return out;
 }
-export const chosenOf = (x, scope, i) => {
+// Exceptions d'un profil, pour le plan : { plateau: { "TYPE|#COULEUR": filament } }.
+export function platePicksOf(scope, items) {
+  const out = {};
+  for (const [k, mt] of PLATE) {
+    if (!k.startsWith(`${scope}|`)) continue;
+    const [pn, i] = k.slice(scope.length + 1).split("|");
+    const x = (items || [])[+i];
+    if (x && mt) (out[pn] = out[pn] || {})[fkey(x.type, x.color)] = mt.filament_id;
+  }
+  return out;
+}
+// Choisir (ou rendre au profil, mt null) la couleur d'un plateau.
+export function setPlatePick(scope, plate, i, mt) {
+  if (mt) PLATE.set(`${scope}|${plate}|${i}`, mt); else PLATE.delete(`${scope}|${plate}|${i}`);
+  changed();
+}
+export const platePickOf = (scope, plate, i) => PLATE.get(`${scope}|${plate}|${i}`) || null;
+export const chosenOf = (x, scope, i, plate) => {
+  if (plate != null && PLATE.has(`${scope}|${plate}|${i}`)) return PLATE.get(`${scope}|${plate}|${i}`);
   const id = PICKS.get(`${scope}|${i}`);
   const ex = EXTRA.get(`${scope}|${i}`);
   // Choix possible aussi parmi les « autre matiere », ou trouve par recherche dans tout le stock.
@@ -101,7 +130,7 @@ export function plateInAms(items, plate, scope = "") {
   const want = {}, have = {};
   for (const f of fl) {
     const i = items.findIndex(x => fkey(x.type, x.color) === fkey(f.type, f.color));
-    const c = i >= 0 ? chosenOf(items[i], scope, i) : null;
+    const c = i >= 0 ? chosenOf(items[i], scope, i, plate.index) : null;
     if (!c) return false;
     want[c.filament_id] = (want[c.filament_id] || 0) + num(f.g);
     have[c.filament_id] = (c.spool_g || []).reduce((s, w, j) => s + (IN_AMS.test(c.spool_where?.[j] || "") ? num(w) : 0), 0);
@@ -112,16 +141,29 @@ export function plateInAms(items, plate, scope = "") {
 // Besoins par filament du profil : tout le profil (selected absent) ou la
 // somme des plateaux choisis. Puis le total par filament retenu : deux
 // couleurs qui tombent sur le meme filament du stock s'additionnent.
-export function stockNeeds(items, plates, selected, choose = x => x.matches[0]) {
-  const need = items.map(x => {
-    if (!selected || !plates?.length) return num(x.g);
+export function stockNeeds(items, plates, selected, choose = x => x.matches[0], scope = null) {
+  // exceptions par plateau (plan) : ces grammes-la partent sur le filament du plateau
+  const alt = items.map(() => []);
+  const perPlate = scope != null && plates?.length && plates.every(pl => pl.filaments?.length);
+  const need = items.map((x, i) => {
     const k = fkey(x.type, x.color);
-    return plates.filter(pl => selected.includes(pl.index))
-      .reduce((s, pl) => s + (pl.filaments || []).filter(f => fkey(f.type, f.color) === k).reduce((a, f) => a + num(f.g), 0), 0);
+    if (!perPlate && (!selected || !plates?.length)) return num(x.g);
+    let g = 0;
+    for (const pl of plates.filter(p => !selected || selected.includes(p.index))) {
+      const gg = (pl.filaments || []).filter(f => fkey(f.type, f.color) === k).reduce((a, f) => a + num(f.g), 0);
+      if (!gg) continue;
+      const own = perPlate ? platePickOf(scope, pl.index, i) : null;
+      if (own) alt[i].push({ plate: pl.index, mt: own, g: gg }); else g += gg;
+    }
+    return g;
   });
   const total = {};
-  items.forEach((x, i) => { const b = choose(x, i); if (b && need[i] > 0) total[b.filament_id] = (total[b.filament_id] || 0) + need[i]; });
-  return { need, total };
+  items.forEach((x, i) => {
+    const b = choose(x, i);
+    if (b && need[i] > 0) total[b.filament_id] = (total[b.filament_id] || 0) + need[i];
+    for (const a of alt[i]) total[a.mt.filament_id] = (total[a.mt.filament_id] || 0) + a.g;
+  });
+  return { need, total, alt };
 }
 
 const detailOf = mt => [mt.brand, mt.material !== mt.name ? mt.material : null, mt.multicolor ? "multicolore" : null]
@@ -163,6 +205,7 @@ const levelColor = mt => (LEVEL[mt.level] || LEVEL["différent"]).c;
 export default function MwStockMatch({ items, plates, selected, scope = "", onNavigate }) {
   const [open, setOpen] = useState(null);
   const [, bump] = useState(0);
+  usePicksVersion();                       // un plateau change de couleur : les besoins se recalculent
   const nav = useNavigate();
   // Changer le filament retenu est une ecriture (il part dans le plan « A faire ») :
   // reserve au droit MakerWorld, et jamais chez un copain. Les autres voient le choix.
@@ -172,7 +215,7 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
   const choose = (x, i) => chosenOf(x, scope, i);
   const pick = (i, id) => { PICKS.set(`${scope}|${i}`, id); setOpen(null); bump(n => n + 1); changed(); };
   const pickFound = (i, mt) => { EXTRA.set(`${scope}|${i}`, mt); pick(i, mt.filament_id); };
-  const { need, total } = stockNeeds(items, plates, selected, choose);
+  const { need, total, alt } = stockNeeds(items, plates, selected, choose, scope);
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"0 10px 10px" }}>
       {items.map((x, i) => {
@@ -182,7 +225,7 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
         const nAlt = Math.max(0, x.matches.length - 1) + others.length;
         const isOpen = open === i;
         const g = need[i];
-        const unused = selected && g <= 0;
+        const unused = selected && g <= 0 && !alt[i].length;
         const sum = best ? total[best.filament_id] || 0 : 0;
         const shared = best && sum > g + 0.5;
         const after = best ? Math.round(best.remaining_g - sum) : 0;
@@ -236,6 +279,19 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
                     {isOpen ? "masquer ▴" : others.length ? "choisir une autre matière ▾" : "chercher dans mon stock ▾"}</span>}</span>
               )}
             </button>
+            {alt[i].map(a => {
+              const left = Math.round(a.mt.remaining_g - (total[a.mt.filament_id] || 0));
+              return (
+                <div key={a.plate} style={{ display:"flex", alignItems:"center", gap:6, fontSize:10.5, color:"var(--text2)",
+                  padding:"0 8px 6px 30px" }}>
+                  <span style={{ fontWeight:800, color:"#3b82f6" }}>Plateau {a.plate}</span> →
+                  <Swatch f={a.mt} size={12}/>
+                  <span style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{a.mt.name}
+                    <span style={{ color:"var(--muted)" }}> · {Math.round(a.g)} g · </span>
+                    <b style={{ color: left < 0 ? "#f59e0b" : "var(--text2)" }}>{left < 0 ? `manque ${-left} g` : `reste ${left} g`}</b></span>
+                </div>
+              );
+            })}
             {!unused && shared ? (
               <div style={{ fontSize:10.5, color: short ? "#f59e0b" : "var(--muted)", padding:"0 8px 6px 30px" }}>
                 {short ? "⚠ " : ""}Partagé avec une autre couleur : {Math.round(sum)} g au total sur ce filament</div>
@@ -257,6 +313,63 @@ export default function MwStockMatch({ items, plates, selected, scope = "", onNa
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// Couleurs d'un plateau : pastilles du filament qui sera vraiment utilise (cerclees
+// de bleu quand ce plateau a son propre choix) ; les toucher ouvre le choix pour CE
+// plateau, le reste du profil ne bouge pas.
+export function PlateColors({ items, plate, scope, canEdit }) {
+  const [open, setOpen] = useState(false);
+  const fl = (plate?.filaments || []).filter(f => num(f.g) > 0);
+  if (!fl.length) return null;
+  const rows = fl.map(f => {
+    const i = (items || []).findIndex(x => fkey(x.type, x.color) === fkey(f.type, f.color));
+    const x = i >= 0 ? items[i] : null;
+    const own = x ? platePickOf(scope, plate.index, i) : null;
+    return { f, i, x, own, c: x ? chosenOf(x, scope, i, plate.index) : null };
+  });
+  const dots = (
+    <span style={{ display:"flex", gap:3, flexWrap:"wrap", alignItems:"center" }}>
+      {rows.map((r, k) => <span key={k} title={`${r.f.type || ""} ${r.f.g ? `${r.f.g} g` : ""}${r.c ? ` → ${r.c.name}` : ""}`}
+        style={{ width:12, height:12, borderRadius:"50%", boxSizing:"border-box", ...(r.c ? colorBg(parseColorsList(r.c.color, r.c.colors_array), r.c.multicolor_type) : { background: r.f.color || "#888" }),
+          border: r.own ? "2px solid #3b82f6" : "1px solid rgba(255,255,255,0.3)" }}/>)}
+      {canEdit && items?.length > 0 && <span style={{ fontSize:9.5, color:"#3b82f6", fontWeight:700, marginLeft:2 }}>🎨</span>}
+    </span>
+  );
+  if (!canEdit || !items?.length) return <div style={{ marginTop:3 }}>{dots}</div>;
+  return (
+    <div onClick={e => e.stopPropagation()} style={{ marginTop:3 }}>
+      <button type="button" onClick={() => setOpen(o => !o)} title="Couleurs de ce plateau"
+        style={{ background:"none", border:"none", padding:0, cursor:"pointer" }}>{dots}</button>
+      {open && (
+        <div style={{ marginTop:5, display:"flex", flexDirection:"column", gap:6 }}>
+          {rows.map((r, k) => r.x && (
+            <div key={k} style={{ display:"flex", flexDirection:"column", gap:3 }}>
+              <span style={{ display:"flex", alignItems:"center", gap:4, fontSize:10, color:"var(--muted)", fontWeight:700 }}>
+                <Swatch color={r.f.color} size={10}/> {r.f.type} · {Math.round(num(r.f.g))} g</span>
+              <span style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                {[null, ...r.x.matches, ...(r.x.others || [])]
+                  .filter((mt, j, all) => !mt || all.findIndex(o => o && o.filament_id === mt.filament_id) === j).slice(0, 9).map(mt => {
+                  const on = mt ? r.own?.filament_id === mt.filament_id : !r.own;
+                  const base = chosenOf(r.x, scope, r.i);
+                  return (
+                    <button key={mt ? mt.filament_id : "p"} type="button" onClick={() => setPlatePick(scope, plate.index, r.i, mt)}
+                      title={mt ? `${mt.name} · ${mt.remaining_g} g` : `Comme le profil : ${base?.name || "?"}`}
+                      style={{ width:22, height:22, borderRadius:"50%", padding:0, cursor:"pointer", position:"relative",
+                        ...(mt ? colorBg(parseColorsList(mt.color, mt.colors_array), mt.multicolor_type)
+                          : { background:"var(--surface2)" }),
+                        border: on ? "2.5px solid #3b82f6" : "1px solid rgba(128,128,128,0.5)", fontSize:9, fontWeight:900,
+                        color:"var(--muted)" }}>{mt ? "" : "="}</button>
+                  );
+                })}
+              </span>
+            </div>
+          ))}
+          <span style={{ fontSize:9.5, color:"var(--muted)", lineHeight:1.3 }}>« = » : comme le reste du profil</span>
+        </div>
+      )}
     </div>
   );
 }

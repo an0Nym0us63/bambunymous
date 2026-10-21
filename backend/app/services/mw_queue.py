@@ -139,7 +139,7 @@ async def set_plan(design_id: str, plan) -> dict:
         # oublier le plan, mais garder la quantite si elle a ete reglee
         q = _qty((d["plans"].get(did) or {}).get("qty", 1))
         if q > 1:
-            d["plans"][did] = {"instance_id": None, "plates": None, "picks": {}, "qty": q}
+            d["plans"][did] = {"instance_id": None, "plates": None, "picks": {}, "plate_picks": {}, "qty": q}
         else:
             d["plans"].pop(did, None)
     else:
@@ -149,8 +149,15 @@ async def set_plan(design_id: str, plan) -> dict:
         plates = plan.get("plates")
         plates = [int(p) for p in plates if str(p).isdigit()] if isinstance(plates, list) else None
         picks = {str(k)[:40]: int(v) for k, v in (plan.get("picks") or {}).items() if str(v).isdigit()}
+        # exceptions par plateau : {"2": {"PLA|#40B0B0": 12}} (ce plateau-la dans une autre couleur)
+        plate_picks = {}
+        for pn, pk in (plan.get("plate_picks") or {}).items():
+            if str(pn).isdigit() and isinstance(pk, dict):
+                one = {str(k)[:40]: int(v) for k, v in pk.items() if str(v).isdigit()}
+                if one:
+                    plate_picks[str(int(pn))] = one
         qty = _qty(plan.get("qty", (d["plans"].get(did) or {}).get("qty", 1)))
-        d["plans"][did] = {"instance_id": iid, "plates": plates, "picks": picks, "qty": qty}
+        d["plans"][did] = {"instance_id": iid, "plates": plates, "picks": picks, "plate_picks": plate_picks, "qty": qty}
     await _save(d)
     return d["plans"].get(did) or {}
 
@@ -440,60 +447,94 @@ async def _compute() -> dict:
                               "printer": prof.get("printer"), "plates": len(plates), "plates_total": len(prof.get("plates") or [])}
             one = sum(_num(pl.get("seconds")) for pl in plates) if sel is not None else _num(prof.get("seconds"))
             row["seconds"] = one * qty if one else None
+            plate_picks = (plan or {}).get("plate_picks") or {}
             ok_stock = ok_ams = True
-            fid_of = {}                                   # cle TYPE|COULEUR -> filament retenu
             one_of = {}                                   # filament retenu -> grammes pour UN exemplaire
             missing = False                               # une couleur sans filament en stock
-            for it in items:
-                k = fkey(it.get("type"), it.get("color"))
-                if sel is None:
-                    g = _num(it.get("g"))
-                else:
-                    g = sum(_num(f.get("g")) for pl in plates for f in pl.get("filaments") or [] if fkey(f.get("type"), f.get("color")) == k)
-                if g <= 0:
-                    continue
-                g *= qty
+            by_key = {fkey(it.get("type"), it.get("color")): it for it in items}
+            # Ce qu'il faut imprimer : plateau par plateau quand les plateaux disent leurs
+            # filaments (chacun peut avoir son propre choix), sinon le total du profil.
+            per_plate = bool(plates) and all(pl.get("filaments") for pl in plates)
+            units = ([(pl.get("index"), fkey(f.get("type"), f.get("color")), _num(f.get("g")))
+                      for pl in plates for f in pl.get("filaments") or [] if _num(f.get("g")) > 0]
+                     if per_plate else
+                     [(None, fkey(it.get("type"), it.get("color")), _num(it.get("g"))) for it in items])
+            resolved = {}
+
+            async def resolve(k, want):
+                nonlocal stock_all
+                if (k, want) in resolved:
+                    return resolved[(k, want)]
+                it = by_key.get(k) or {}
                 cands = (it.get("matches") or []) + (it.get("others") or [])
-                pick = next((c for c in cands if c["filament_id"] == picks.get(k)), None)
-                if not pick and picks.get(k):
+                pick = next((c for c in cands if c["filament_id"] == want), None) if want else None
+                if not pick and want:
                     if stock_all is None:
                         from .mw_stock import stock_rows
                         stock_all = await stock_rows()
                     from .mw_stock import search as stock_search
-                    pick = (stock_search(stock_all, it.get("type"), it.get("color"), ids=[picks[k]]) or [None])[0]
+                    pick = (stock_search(stock_all, it.get("type"), it.get("color"), ids=[want]) or [None])[0]
                 pick = pick or (it.get("matches") or [None])[0]
+                resolved[(k, want)] = pick
+                return pick
+
+            groups = {}                                   # (cle, filament) -> grammes (tous exemplaires)
+            fid_at = {}                                   # (plateau, cle) -> filament retenu
+            for pn, k, g in units:
+                if k not in by_key:
+                    continue
+                want = (plate_picks.get(str(pn)) or {}).get(k) if pn is not None else None
+                pick = await resolve(k, want or picks.get(k))
+                fid = pick["filament_id"] if pick else None
+                fid_at[(pn, k)] = fid
+                groups[(k, fid)] = groups.get((k, fid), 0.0) + g * qty
+            for (k, fid), g in groups.items():
+                it = by_key[k]
+                pick = next((p for p in resolved.values() if p and p["filament_id"] == fid), None) if fid else None
                 row["weight_g"] += g
                 fil = None
                 if pick:
-                    fid = pick["filament_id"]
-                    fid_of[k] = fid
                     one_of[fid] = one_of.get(fid, 0) + g / qty
                     stock_of[fid] = {"filament_id": fid, "name": pick["name"], "brand": pick.get("brand"),
                                      "material": pick.get("material"), "color": pick.get("color"),
                                      "colors_array": pick.get("colors_array"), "multicolor_type": pick.get("multicolor_type"),
                                      "stock_g": pick.get("remaining_g") or 0, "ams_g": round(ams.get(fid, {}).get("g", 0))}
                     row["_need"][fid] = row["_need"].get(fid, 0.0) + g
-                    enough_stock = (pick.get("remaining_g") or 0) >= g
-                    enough_ams = ams.get(fid, {}).get("g", 0) >= g
-                    ok_stock &= enough_stock
-                    ok_ams &= enough_ams
                     fil = {"filament_id": fid, "name": pick["name"], "color": pick.get("color"),
                            "colors_array": pick.get("colors_array"), "multicolor_type": pick.get("multicolor_type"),
                            "level": pick.get("level"), "other_material": pick.get("other_material"),
-                           "in_ams": fid in ams, "enough_stock": enough_stock, "enough_ams": enough_ams}
+                           "in_ams": fid in ams}
                 else:
-                    ok_stock = ok_ams = False
                     missing = True
                     x = row["_miss"].setdefault(k, {"type": it.get("type"), "color": it.get("color"), "g": 0.0})
                     x["g"] += g
                 row["filaments"].append({"type": it.get("type"), "color": it.get("color"), "g": round(g, 1), "chosen": fil})
+            # assez de stock / d'AMS : par filament retenu, toutes couleurs confondues
+            for fid, n in row["_need"].items():
+                pick = stock_of[fid]
+                ok_stock &= (pick["stock_g"] or 0) >= n
+                ok_ams &= ams.get(fid, {}).get("g", 0) >= n
+            for x in row["filaments"]:
+                c = x["chosen"]
+                if c:
+                    c["enough_stock"] = (stock_of[c["filament_id"]]["stock_g"] or 0) >= row["_need"][c["filament_id"]]
+                    c["enough_ams"] = ams.get(c["filament_id"], {}).get("g", 0) >= row["_need"][c["filament_id"]]
+            if missing:
+                ok_stock = ok_ams = False
             # Plateau par plateau : un exemplaire du plateau est-il faisable avec l'AMS ?
             ready = []
             for pl in plates:
                 fl = [f for f in pl.get("filaments") or [] if _num(f.get("g")) > 0]
-                if fl and all(fkey(f.get("type"), f.get("color")) in fid_of
-                              and ams.get(fid_of[fkey(f.get("type"), f.get("color"))], {}).get("g", 0) >= _num(f.get("g"))
-                              for f in fl):
+                need1 = {}
+                ok = bool(fl)
+                for f in fl:
+                    k = fkey(f.get("type"), f.get("color"))
+                    fid = fid_at.get((pl.get("index") if per_plate else None, k))
+                    if fid is None:
+                        ok = False
+                        break
+                    need1[fid] = need1.get(fid, 0) + _num(f.get("g"))
+                if ok and all(ams.get(fid, {}).get("g", 0) >= g for fid, g in need1.items()):
                     ready.append(pl.get("index"))
             row["plates_ready"] = ready
             row["plates_count"] = len(plates)

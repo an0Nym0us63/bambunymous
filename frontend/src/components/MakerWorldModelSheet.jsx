@@ -9,7 +9,8 @@ import { mwLiked } from "../utils/mwSync";
 import { useMwAssign } from "../store/mwAssign";
 import { useFriend } from "../store/friend";
 import MwImg from "./MwImg";
-import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, plateInAms, clearPicks, plateColorMap, usePicksVersion } from "./MwStockMatch";
+import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, platePicksOf, plateInAms, clearPicks, plateColorMap, usePicksVersion,
+  PlateColors } from "./MwStockMatch";
 import PlateRecolor from "./PlateRecolor";
 import Lightbox from "./Lightbox";
 import { openCreator } from "./MwCreatorPage";
@@ -145,7 +146,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
     setPlanBusy(true);
     try {
       const body = { instance_id: p.instance_id, plates: plateSel[p.instance_id] || null,
-        picks: picksOf(`${id}|${p.instance_id}`, m.stock?.[p.instance_id]) };
+        picks: picksOf(`${id}|${p.instance_id}`, m.stock?.[p.instance_id]),
+        plate_picks: platePicksOf(`${id}|${p.instance_id}`, m.stock?.[p.instance_id]) };
       const { data } = await client.put(`/makerworld/queue/plan/${id}`, body);
       // Retour visible : le bouton passe a « ✓ Enregistre » un instant
       const updating = plan?.instance_id === p.instance_id;
@@ -194,7 +196,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
         const pl = c.plans?.[String(id)];
         if (!alive || !pl) { if (alive) setPlan(null); return; }
         setPlan(pl);
-        setPicksFromPlan(`${id}|${pl.instance_id}`, data.stock?.[pl.instance_id], pl.picks)
+        setPicksFromPlan(`${id}|${pl.instance_id}`, data.stock?.[pl.instance_id], pl.picks, pl.plate_picks)
           .then(() => alive && setM(x => x && { ...x }));     // choix trouves par recherche : relus, on redessine
         if (pl.plates) setPlateSel(s => ({ ...s, [pl.instance_id]: pl.plates }));
         setOpen(pl.instance_id);
@@ -557,15 +559,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                   <div style={{ fontSize:10.5, color:"var(--muted)" }}>
                                     {[pl.weight_g ? `${Math.round(pl.weight_g)} g` : null, fmtDur(pl.seconds)].filter(Boolean).join(" · ")}
                                   </div>
-                                  {pl.filaments?.length > 0 && (
-                                    <div style={{ display:"flex", gap:3, marginTop:3, flexWrap:"wrap" }}>
-                                      {pl.filaments.map((f, i) => (
-                                        <span key={i} title={`${f.type || ""} ${f.g ? `${f.g} g` : ""}`}
-                                          style={{ width:12, height:12, borderRadius:"50%", background: f.color || "#888",
-                                            border:"1px solid rgba(255,255,255,0.3)" }}/>
-                                      ))}
-                                    </div>
-                                  )}
+                                  <PlateColors items={m.stock?.[p.instance_id]} plate={pl} scope={`${id}|${p.instance_id}`}
+                                    canEdit={canPlan && on}/>
                                 </div>
                               </div>
                             );
