@@ -569,16 +569,17 @@ function TreasureRow({ keys, onRules, onWheel }) {
   const prints = keys.rules?.prints || 10;
   const has = (w?.spins || 0) > 0;
   const box = (glow, edge) => ({ position:"relative", overflow:"hidden", borderRadius:14, padding:"10px 6px 8px", minWidth:0,
-    display:"flex", flexDirection:"column", alignItems:"center", gap:3, textAlign:"center",
+    display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"flex-start", gap:3, textAlign:"center",
     background:`radial-gradient(circle at 50% 0%, ${glow}, transparent 70%), var(--surface2)`, border:`1px solid ${edge}` });
+  const iconSlot = { height:30, display:"flex", alignItems:"center", justifyContent:"center" };
   const mini = (pct, c) => <div style={{ width:"80%", height:4, borderRadius:4, background:"var(--surface)", overflow:"hidden", marginTop:2 }}>
     <div style={{ width:`${pct}%`, height:"100%", background:c }}/></div>;
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:8 }}>
         <button onClick={() => log.length && setOpen(o => !o)} style={{ ...box("rgba(250,204,21,.35)", "rgba(250,204,21,.45)"), cursor:"pointer",
-          font:"inherit", color:"inherit" }}>
-          <span style={{ fontSize:24, animation:"bn-float 3.5s ease-in-out infinite" }}>🔑</span>
+          font:"inherit", color:"inherit", margin:0, justifyContent:"flex-start" }}>
+          <span style={iconSlot}><span style={{ fontSize:24, lineHeight:1, animation:"bn-float 3.5s ease-in-out infinite" }}>🔑</span></span>
           <span style={{ fontSize:24, fontWeight:900, lineHeight:1, background:"linear-gradient(180deg,#fde047,#f59e0b)",
             WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{keys.balance}</span>
           <span style={{ fontSize:10.5, color:"var(--muted)", fontWeight:700 }}>clés</span>
@@ -587,8 +588,8 @@ function TreasureRow({ keys, onRules, onWheel }) {
         </button>
         {w && (
           <div style={box("rgba(249,115,22,.32)", "rgba(249,115,22,.45)")}>
-            <span style={{ marginTop:4, marginBottom:3, animation:"bn-float 4s ease-in-out infinite" }}>
-              <TicketStub size={1} dim={!w.tickets}/></span>
+            <span style={iconSlot}><span style={{ display:"inline-flex", animation:"bn-float 4s ease-in-out infinite" }}>
+              <TicketStub size={1.15} dim={!w.tickets}/></span></span>
             <span style={{ fontSize:24, fontWeight:900, lineHeight:1, color:"#f97316" }}>{w.tickets || 0}</span>
             <span style={{ fontSize:10.5, color:"var(--muted)", fontWeight:700 }}>tickets</span>
             {mini(Math.round(100 * (1 - toT / per)), "linear-gradient(90deg,#fb923c,#f97316)")}
