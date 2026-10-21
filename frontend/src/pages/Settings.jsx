@@ -1701,7 +1701,7 @@ const SET_TABS = [
   { id:"filament", label:"🧵 Filaments",  admin:true  },
   { id:"display",  label:"🎨 Affichage",  admin:false },
   { id:"accounts", label:"👤 Comptes",    admin:false },
-  { id:"links",    label:"🔗 Connexions", admin:false },
+  { id:"links",    label:"🔗 Connexions", admin:true  },   // MakerWorld, Telegram, messages types : administrateur
   { id:"notify",   label:"🔔 Notifs",     admin:false },
   { id:"share",    label:"📤 Partage",    admin:true  },
   { id:"android",  label:"📱 Appli Android", admin:false },
