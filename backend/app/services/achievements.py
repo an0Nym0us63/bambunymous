@@ -148,6 +148,8 @@ CATALOG = [
     _a("photos_camera", "photos", "📹", "Œil de la caméra", "{n} photos prises par la caméra de l'imprimante", [1]),
     _a("photos_max", "photos", "🎞️", "Séance photo", "{n} photos sur une même impression", [1]),
     _a("covers", "photos", "🌟", "Galeriste", "{n} photos choisies comme vignette", [1]),
+    _a("videos", "photos", "🎬", "Vidéaste", "{n} vidéos ajoutées", [1]),
+    _a("video_prints", "photos", "🎞️", "Court-métrage", "{n} impressions avec au moins une vidéo", [1]),
     # Dans l'appli
     _a("visits", "app", "🚪", "Habitué", "{n} visites de pages", [1]),
     _a("visit_days", "app", "📅", "Fidèle au poste", "{n} jours où l'appli a été ouverte", [1]),
@@ -622,6 +624,18 @@ CATALOG = [
        lore="Dix bobines arrivées le même jour. Le livreur s'en souvient encore."),
     _a("all_seasons", "secret", "🍂", "Quatre saisons", "Une impression réussie à chaque saison d'une même année", [1],
        lore="Printemps, été, automne, hiver : ton imprimante n'a pas de saison."),
+    _a("action_cam", "secret", "🎬", "Action !", "Une vidéo ajoutée moins de 10 minutes après la fin de l'impression", [1],
+       lore="À peine sortie du plateau, déjà filmée : moteur… action !"),
+    _a("making_of", "secret", "🎥", "Making-of", "Une photo et une vidéo sur la même impression", [1],
+       lore="La photo pour l'affiche, la vidéo pour les coulisses : un vrai making-of."),
+    _a("festival", "secret", "🎪", "Festival", "5 vidéos ajoutées le même jour", [1],
+       lore="Cinq vidéos dans la journée : la sélection officielle est bouclée."),
+    _a("retro_video", "secret", "📼", "Rétrospective", "Une vidéo ajoutée plus d'un an après l'impression", [1],
+       lore="Plus d'un an après, elle a enfin droit à son film. Mieux vaut tard que jamais."),
+    _a("family_film", "secret", "👨‍👩‍👧", "Film de famille", "Une vidéo dans le dossier d'un groupe d'impressions", [1],
+       lore="Toute la famille d'impressions réunie à l'écran."),
+    _a("flash_video", "secret", "⚡", "Flash", "Une vidéo de moins de 3 secondes", [1],
+       lore="Moins de trois secondes : le plus court des courts-métrages."),
 ]
 # Easter eggs : des gestes caches dans l'appli, signales par la page elle-meme
 # (POST /achievements/egg/{nom}). nom : (emoji, titre, ce qu'il faut faire, indice, histoire)
@@ -793,7 +807,8 @@ SECRET_SUBS = [
     ("trade", "🛒", "Ventes et bobines", "penny luxury market_day museum sold_hot finally_sold eternal_spool "
      "devoured_spool big_order pit_stop psycho_price one_euro big_spool gold_spool bargain spring_clean"),
     ("mw", "🌐", "MakerWorld", "self_print bestseller pioneer"),
-    ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit"),
+    ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
+     "action_cam making_of festival retro_video family_film flash_video"),
     ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS)),
 ]
 SUB_OF = {aid: sid for sid, _e, _n, ids in SECRET_SUBS for aid in ids.split()}
@@ -1010,6 +1025,12 @@ HINTS = {
     "double_update": "Une journée où BambuNymous change plusieurs fois.",
     "novel": "Imprime un modèle au nom interminable.",
     "christmas_visit": "Ouvre l'appli le jour où le Père Noël est passé.",
+    "action_cam": "Filme ton impression tout juste sortie, sans attendre qu'elle refroidisse.",
+    "making_of": "Une seule impression, deux façons de la montrer : l'une bouge, l'autre pas.",
+    "festival": "Un jour de tournage intensif : cinq films dans la même journée.",
+    "retro_video": "Ressors une vieille impression, très vieille, et fais-lui enfin son film.",
+    "family_film": "Les groupes d'impressions aiment aussi qu'on les filme.",
+    "flash_video": "Le plus court des films : moins de temps qu'un clin d'œil… ou presque.",
     **{f"egg_{k}": v[3] for k, v in EGGS.items()},
 }
 
@@ -1018,7 +1039,7 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "mw_my_collections",
         "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils",
         "photos_manual", "photo_prints", "photos_camera", "photos_max", "covers", "visits", "visit_days", "details",
-        "actions", "updates", "notifs", "dismissals", "print_groups", "paparazzi", "souvenirs",
+        "actions", "updates", "notifs", "dismissals", "print_groups", "paparazzi", "souvenirs", "videos", "video_prints",
         "grand_tour", "night_visit", "cutting_edge", "double_update", "shares", "mw_rates", "mw_boosts_given",
         "mw_likes_given", "mw_collected", "open_spools", "mw_points_bal", "profile_downloads", "queue_size", "accessory_units", "showcase", "household", "notes", "catalog", "assembled", "accessory_refs"}
 for _x in CATALOG:
@@ -1160,6 +1181,9 @@ TIER_TABLE = {
     "mat_petg": [0.5, 1, 2, 4, 6, 9, 13, 20, 30],
     # MakerWorld : revus le 21/10/2026
     "mw_my_collections": [1, 3, 5, 8, 12, 16, 20, 30, 40],
+    # Photos : videos (21/10/2026)
+    "videos": [1, 3, 5, 10, 20, 35, 50, 75, 100],
+    "video_prints": [1, 2, 4, 8, 15, 25, 40, 60, 80],
 }
 # Au-dela de la Legende (Mythique, Cosmique, Eternel) : x2, x5, x10 du dernier
 # seuil, arrondis. Sauf la ou il y a un plafond naturel (pourcentage, 24 h par
@@ -1310,7 +1334,8 @@ async def _load_data() -> dict:
         from ..models.notif_log import NotifLog
         from ..models.print_history import Group, PrintSnapshot, PrintTag
         from ..models.rfid import RfidScan
-        snaps = (await db.execute(select(PrintSnapshot.print_id, PrintSnapshot.trigger, PrintSnapshot.taken_at))).all()
+        snaps = (await db.execute(select(PrintSnapshot.print_id, PrintSnapshot.trigger, PrintSnapshot.taken_at,
+                                         PrintSnapshot.file_path))).all()
         covers = (await db.execute(select(Print.id).where(Print.cover_photo.isnot(None), Print.cover_photo != ""))).all()
         pgroups = (await db.execute(select(Group.id, Group.created_at, Group.cover_photo))).all()
         tags = (await db.execute(select(func.lower(PrintTag.tag)).distinct())).all()
@@ -1363,17 +1388,30 @@ async def _load_data() -> dict:
     act_kinds = {key: list((mem.get(key) or {}).items()) for key, _m, _rx in _ACT_PATTERNS}
     # photos deposees dans le dossier d'un groupe d'impressions
     gfiles = []
+    videos = []
     try:
         from ..core.config import settings
         from pathlib import Path
-        root = Path(settings.DATA_DIR) / "groups"
+        data = Path(settings.DATA_DIR)
+        root = data / "groups"
         if root.is_dir():
             for d_ in root.iterdir():
                 if d_.is_dir():
-                    gfiles += [datetime.utcfromtimestamp(f.stat().st_mtime) for f in d_.iterdir()
-                               if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp")]
+                    for f in d_.iterdir():
+                        if f.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp"):
+                            gfiles.append(datetime.utcfromtimestamp(f.stat().st_mtime))
+                        v = _video_info(f)
+                        if v:
+                            videos.append({"print_id": None, "group": True, **v})
+        # videos des impressions : ajoutees a la main (une video devient un WebP anime)
+        for s_ in snaps:
+            fp = getattr(s_, "file_path", None)
+            if s_.trigger == "manual" and fp:
+                v = _video_info(data / fp)
+                if v:
+                    videos.append({"print_id": s_.print_id, "group": False, **v, "at": _ts(s_.taken_at) or v["at"]})
     except Exception:
-        pass
+        logger.exception("[SUCCES] videos")
     try:
         from . import ams_log
         changes = [datetime.fromisoformat(x) for x in await ams_log.drain()]
@@ -1394,7 +1432,7 @@ async def _load_data() -> dict:
             "act_days": act_days, "pages": pages, "late": late, "notif_days": notif_days, "dismiss": dismiss,
             "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "act_kinds": act_kinds, "changes": changes,
             "mwd": mwd, "accs": accs, "acc_objs": acc_objs, "n_users": n_users, "spool_more": spool_more,
-            "queue": _queue_size(), "my_designs": my_designs, "eggs": await eggs_found(), "ams_live": _ams_live()}
+            "queue": _queue_size(), "my_designs": my_designs, "videos": videos, "eggs": await eggs_found(), "ams_live": _ams_live()}
 
 
 def _ams_live() -> int:
@@ -1404,6 +1442,59 @@ def _ams_live() -> int:
         return sum(1 for a in (get_state().ams_list or []) if 0 <= int(a.id) < 254)
     except Exception:
         return 0
+
+
+_VIDEO_CACHE: dict = {}
+VIDEO_EXT = (".mp4", ".mov", ".m4v", ".webm")
+
+
+def _video_info(path) -> dict | None:
+    """Une video ? {at: date du fichier, ms: duree ou None}. Une video ajoutee
+    devient un WebP anime (voir prints.py) : on le reconnait a son drapeau
+    d'animation, et sa duree est la somme de celles de ses images. Une video
+    brute (repli quand l'encodage echoue) compte, sans duree connue."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    key = (str(path), st.st_mtime, st.st_size)
+    if key in _VIDEO_CACHE:
+        return _VIDEO_CACHE[key]
+    at = datetime.utcfromtimestamp(st.st_mtime)
+    out = None
+    suf = path.suffix.lower()
+    if suf in VIDEO_EXT:
+        out = {"at": at, "ms": None}
+    elif suf == ".webp":
+        try:
+            with open(path, "rb") as f:
+                head = f.read(12)
+                if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+                    anim, ms = False, 0
+                    while True:
+                        ch = f.read(8)
+                        if len(ch) < 8:
+                            break
+                        tag, size = ch[:4], int.from_bytes(ch[4:8], "little")
+                        if tag == b"VP8X":
+                            body = f.read(size + (size & 1))
+                            anim = bool(body[:1] and body[0] & 0x02)
+                            if not anim:
+                                break
+                        elif tag == b"ANMF":
+                            body = f.read(16)
+                            ms += int.from_bytes(body[12:15], "little")
+                            f.seek(size + (size & 1) - 16, 1)
+                        else:
+                            f.seek(size + (size & 1), 1)
+                    if anim:
+                        out = {"at": at, "ms": ms}
+        except OSError:
+            out = None
+    if len(_VIDEO_CACHE) > 5000:
+        _VIDEO_CACHE.clear()
+    _VIDEO_CACHE[key] = out
+    return out
 
 
 _MONDAY0 = datetime(1970, 1, 5).date()       # un lundi : numero de semaine = jours // 7
@@ -1915,6 +2006,32 @@ def _more(push, d, now) -> None:
         if e and t - e >= timedelta(days=365):
             push("souvenirs", t, 1)
     cumul("photo_prints", list(first_photo.values()))
+    # videos
+    vids = sorted(d.get("videos") or [], key=lambda v: v["at"])
+    cumul("videos", [v["at"] for v in vids])
+    firsts = {}
+    for v in vids:
+        if v["print_id"] is not None:
+            firsts.setdefault(v["print_id"], v["at"])
+    cumul("video_prints", sorted(firsts.values()))
+    stills = {s_.print_id for s_ in manual if not any(
+        v["print_id"] == s_.print_id and v["at"] == (_ts(s_.taken_at) or now) for v in vids)}
+    per_day = defaultdict(int)
+    for v in vids:
+        t, e = v["at"], ends.get(v["print_id"])
+        if e and timedelta(0) <= t - e <= timedelta(minutes=10):
+            push("action_cam", t, 1)
+        if e and t - e >= timedelta(days=365):
+            push("retro_video", t, 1)
+        if v["print_id"] in stills:
+            push("making_of", t, 1)
+        if v["group"]:
+            push("family_film", t, 1)
+        if v["ms"] is not None and 0 < v["ms"] < 3000:
+            push("flash_video", t, 1)
+        per_day[_local(t).date()] += 1
+        if per_day[_local(t).date()] >= 5:
+            push("festival", t, 1)
     covers = len(d.get("covers", [])) + sum(1 for g in d.get("pgroups", []) if (g.cover_photo or "").strip())
     push("covers", now, covers)
     cumul("print_groups", [_ts(g.created_at) or now for g in d.get("pgroups", [])])
