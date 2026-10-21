@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useState } from "react";
+import React, { useEffect, useId, useRef, useState } from "react";
 import MwImg, { mwImg } from "./MwImg";
 
 // Vignette de plateau repeinte aux couleurs des filaments choisis (aperçu).
@@ -34,6 +34,12 @@ const tone = (L, Ls, to) => {
 };
 
 const CACHE = new Map();   // cle -> { url, absent } (plusieurs couleurs)
+// Une vignette a la fois, en arriere-plan : la fiche s'ouvre d'abord.
+let QUEUE = Promise.resolve();
+const queued = fn => { const p = QUEUE.then(fn, fn); QUEUE = p.catch(() => {}); return p; };
+const breath = () => new Promise(res => setTimeout(res, 0));
+const idle = () => new Promise(res => (window.requestIdleCallback ? window.requestIdleCallback(() => res(), { timeout: 600 })
+  : setTimeout(res, 250)));
 
 async function paint(src, pairs) {
   const key = src + "|" + pairs.map(p => p.from + ">" + p.to).join(",");
@@ -72,6 +78,7 @@ async function paint(src, pairs) {
   const count = new Map(src3.map(s => [s, 0]));
   let total = 0;
   for (let i = 0; i < px.length; i += 4) {
+    if (i && i % 160000 === 0) await breath();     // par tranches : l'interface reste fluide
     if (px[i + 3] < 8) continue;
     const r = px[i], g = px[i + 1], b = px[i + 2];
     const q = (r >> 3) << 10 | (g >> 3) << 5 | (b >> 3);
@@ -96,7 +103,8 @@ async function paint(src, pairs) {
   // MakerWorld ne rend pas toujours toutes les couleurs d'un plateau (un rendu tout
   // noir pour un plateau noir et rose) : ce qui n'apparait pas ne peut pas changer.
   const absent = pairs.filter((p, j) => count.get(src3[j]) < Math.max(30, total * 0.004)).map(p => p.from);
-  const res = { url: cv.toDataURL("image/png"), absent };
+  const blob = await new Promise(res => cv.toBlob(res, "image/png"));
+  const res = { url: blob ? URL.createObjectURL(blob) : cv.toDataURL("image/png"), absent };
   CACHE.set(key, res);
   return res;
 }
@@ -111,14 +119,29 @@ export default function PlateRecolor({ src, map, w = 200, style }) {
   const [fail, setFail] = useState(null);
   const multi = active && pairs.length > 1;
   const sig = pairs.map(p => p.from + ">" + p.to).join(",");
+  // repeinte seulement une fois la vignette a l'ecran, quand le navigateur souffle
+  const box = useRef(null);
+  const [seen, setSeen] = useState(false);
+  useEffect(() => {
+    if (seen || !multi || !box.current) return undefined;
+    if (!window.IntersectionObserver) { setSeen(true); return undefined; }
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) { setSeen(true); io.disconnect(); } },
+      { rootMargin: "200px" });
+    io.observe(box.current);
+    return () => io.disconnect();
+  }, [multi, seen]);
   useEffect(() => {
     setUrl(null); setAbsent([]); setFail(null);
-    if (!multi) return undefined;
+    if (!multi || !seen) return undefined;
     let live = true;
-    paint(src, pairs).then(res => { if (live) { setUrl(res.url); setAbsent(res.absent); } })
+    const key = src + "|" + sig;
+    const hit = CACHE.get(key);
+    if (hit) { setUrl(hit.url); setAbsent(hit.absent); return undefined; }
+    queued(async () => { if (!live) return null; await idle(); return live ? paint(src, pairs) : null; })
+      .then(res => { if (live && res) { setUrl(res.url); setAbsent(res.absent); } })
       .catch(e => { if (live) setFail(e?.response?.status ? `${e.response.status}` : (e?.message || "erreur")); });
     return () => { live = false; };
-  }, [src, sig, multi]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [src, sig, multi, seen]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!active) return <MwImg src={src} w={w} style={style}/>;
   const lost = pairs.filter(p => absent.includes(p.from) && !near(rgbOf(p.from), rgbOf(p.to)));
   const toggle = (
@@ -153,7 +176,7 @@ export default function PlateRecolor({ src, map, w = 200, style }) {
     );
   }
   return (
-    <div style={{ position:"relative" }}>{body}{toggle}
+    <div ref={box} style={{ position:"relative" }}>{body}{toggle}
       {!orig && fail && (
         <span title={`L'image n'a pas pu être lue pour être repeinte (${fail})`}
           style={{ position:"absolute", left:4, bottom:4, zIndex:1, padding:"1px 6px", borderRadius:10,
