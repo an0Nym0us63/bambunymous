@@ -35,9 +35,12 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
 
   // Repositionner sur scroll/resize serait du luxe : on ferme, c'est plus
   // previsible qu'un menu qui derive a cote de son ancre.
+  // Sauf pendant la saisie du passage secret : le clavier du telephone
+  // redimensionne et fait defiler l'ecran, le menu se serait referme aussitot.
+  const typingRef = React.useRef(false);
   React.useEffect(() => {
     if (!rect) return;
-    const close = () => setRect(null);
+    const close = () => { if (!typingRef.current) setRect(null); };
     window.addEventListener("resize", close);
     window.addEventListener("scroll", close, true);
     return () => {
@@ -56,6 +59,33 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
   };
 
   const doLogout = () => { setRect(null); logout(); navigate("/login"); };
+
+  // Passage secret : sans barre d'adresse (appli installee, telephone), le seul
+  // moyen d'aller a une adresse tapee a la main. Une adresse inconnue mene a
+  // « page introuvable », comme dans le navigateur : rien n'est devoile.
+  // seulement la ou il n'y a pas de barre d'adresse : appli installee (PWA) ou appli Android
+  const noAddressBar = React.useMemo(() => {
+    try {
+      const ua = navigator.userAgent || "";
+      return window.matchMedia?.("(display-mode: standalone)").matches || navigator.standalone === true
+        || ua.includes("BambuNymous") || (ua.includes("Android") && ua.includes("; wv)"));
+    } catch { return false; }
+  }, []);
+  const [door, setDoor] = React.useState(false);
+  typingRef.current = door;
+  const [path, setPath] = React.useState("");
+  React.useEffect(() => { if (!rect) { setDoor(false); setPath(""); } }, [rect]);
+  const go = e => {
+    e.preventDefault();
+    // seulement la fin de l'adresse : une adresse complete collee est ramenee a son chemin
+    let raw = path.trim();
+    if (/^https?:\/\//i.test(raw)) { try { raw = new URL(raw).pathname; } catch { /* garde tel quel */ } }
+    const slug = raw.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/^\/+|\/+$/g, "").replace(/\s+/g, "-").replace(/[^a-z0-9/-]/g, "");
+    if (!slug) return;
+    setRect(null);
+    navigate("/" + slug);
+  };
 
   const menuPos = rect
     ? (placement === "top"
@@ -113,6 +143,25 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
                 cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>
               <Trophy size={16} color="#F59E0B"/> Succès
             </button>
+            {!noAddressBar ? null : door ? (
+              <form onSubmit={go} style={{ display:"flex", alignItems:"center", gap:6, padding:"9px 10px 9px 14px",
+                borderBottom:"1px solid var(--border)" }}>
+                <span style={{ fontSize:13, color:"var(--muted)", fontWeight:700 }}>/</span>
+                <input autoFocus value={path} onChange={e => setPath(e.target.value)} placeholder="une adresse…"
+                  autoCapitalize="none" autoCorrect="off" spellCheck={false} enterKeyHint="go"
+                  style={{ flex:1, minWidth:0, padding:"7px 9px", borderRadius:8, border:"1px solid var(--border)",
+                    background:"var(--surface2)", color:"var(--text)", fontSize:14 }}/>
+                <button type="submit" aria-label="Y aller" style={{ width:34, height:34, borderRadius:8, border:"none",
+                  background:"#7c3aed", color:"#fff", fontWeight:900, cursor:"pointer", flexShrink:0 }}>➜</button>
+              </form>
+            ) : (
+              <button onClick={() => setDoor(true)}
+                style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
+                  padding:"12px 14px", background:"none", border:"none", borderBottom:"1px solid var(--border)",
+                  cursor:"pointer", color:"var(--text2)", fontSize:13, fontWeight:600, textAlign:"left" }}>
+                <span style={{ width:16, textAlign:"center" }}>🔮</span> Passage secret…
+              </button>
+            )}
             <button onClick={doLogout}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
                 padding:"12px 14px", background:"none", border:"none", cursor:"pointer",
