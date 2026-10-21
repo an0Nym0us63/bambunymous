@@ -16,6 +16,7 @@ nouveau part en notification (achievement_unlocked).
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -4116,44 +4117,66 @@ async def _surprise_counts(db) -> dict:
 
 
 SURPRISE_GAP = timedelta(minutes=5)   # deux ouvertures plus proches : la seconde ne compte pas
+_SURPRISE_LOCK = asyncio.Lock()       # deux ouvertures au meme instant : l'une apres l'autre
+
+
+async def _surprise_state(db) -> tuple:
+    from .settings_service import get_setting
+    out = []
+    for k in ("_SURPRISE_AT", "_SURPRISE_PENDING"):
+        try:
+            v = json.loads(await get_setting(db, KEY + k, "") or "{}")
+        except ValueError:
+            v = {}
+        out.append(v if isinstance(v, dict) else {})
+    return tuple(out)
 
 
 async def roll_surprise(username: str, rnd=None, now=None) -> dict:
     """Une ouverture de l'appli. Elle ne compte (compteur + tirage) que si la
     derniere ouverture comptee de ce compte date d'au moins 5 minutes : des F5 en
-    rafale ne font pas monter les chances."""
+    rafale ne font pas monter les chances. Un tirage gagnant reste en attente tant
+    que la surprise ne s'est pas affichee : elle revient a l'ouverture comptee
+    suivante, sans faire monter le compteur (l'esquiver ne rapporte rien)."""
     import random
     from ..db.session import AsyncSessionLocal
-    from .settings_service import get_setting, set_setting
+    from .settings_service import set_setting
     now = now or datetime.utcnow()
-    async with AsyncSessionLocal() as db:
-        d = await _surprise_counts(db)
-        try:
-            at = json.loads(await get_setting(db, KEY + "_SURPRISE_AT", "") or "{}")
-        except ValueError:
-            at = {}
-        at = at if isinstance(at, dict) else {}
-        last = _ts(at.get(username))
-        n = int(d.get(username) or 0)
-        if last and now - last < SURPRISE_GAP:
-            return {"hit": False, "n": n, "p": 0.0, "skipped": True}
-        n += 1
-        p = surprise_p(n)
-        d[username] = n
-        at[username] = now.isoformat()
-        await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
-        await set_setting(db, KEY + "_SURPRISE_AT", json.dumps(at))
-    return {"hit": (rnd or random.random)() < p, "n": n, "p": round(p, 4)}
+    async with _SURPRISE_LOCK:
+        async with AsyncSessionLocal() as db:
+            d = await _surprise_counts(db)
+            at, pending = await _surprise_state(db)
+            last = _ts(at.get(username))
+            n = int(d.get(username) or 0)
+            if last and now - last < SURPRISE_GAP:
+                return {"hit": False, "n": n, "p": 0.0, "skipped": True}
+            at[username] = now.isoformat()
+            await set_setting(db, KEY + "_SURPRISE_AT", json.dumps(at))
+            if pending.get(username):
+                return {"hit": True, "n": n, "p": 1.0, "again": True}
+            n += 1
+            p = surprise_p(n)
+            hit = (rnd or random.random)() < p
+            d[username] = n
+            await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
+            if hit:
+                pending[username] = now.isoformat()
+                await set_setting(db, KEY + "_SURPRISE_PENDING", json.dumps(pending))
+    return {"hit": hit, "n": n, "p": round(p, 4)}
 
 
 async def surprise_shown(username: str) -> None:
     """La surprise s'est affichee : le compteur de ce compte repart a 0."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import set_setting
-    async with AsyncSessionLocal() as db:
-        d = await _surprise_counts(db)
-        d[username] = 0
-        await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
+    async with _SURPRISE_LOCK:
+        async with AsyncSessionLocal() as db:
+            d = await _surprise_counts(db)
+            _at, pending = await _surprise_state(db)
+            d[username] = 0
+            pending.pop(username, None)
+            await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
+            await set_setting(db, KEY + "_SURPRISE_PENDING", json.dumps(pending))
 
 
 async def eggs_found() -> dict:
