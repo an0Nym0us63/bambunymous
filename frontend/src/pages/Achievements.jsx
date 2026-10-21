@@ -991,8 +991,8 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
             style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:8, padding:"7px 12px", borderRadius:20,
               fontSize:12.5, fontWeight:800, cursor: enough ? "pointer" : "default", border:"1px solid #F59E0B",
               background: sure ? "#F59E0B" : "rgba(245,158,11,0.12)", color: sure ? "#fff" : "#b45309", opacity: enough ? 1 : .6 }}>
-            <span>{sure ? `Confirmer : passer ${it.tiers[it.level + 1]?.label} (+${fmt(it.next - (it.value || 0), it.unit)})`
-              : `Passer ${it.tiers[it.level + 1]?.label}`}</span>
+            <span>{sure ? `Confirmer : utiliser ${cost} ticket${cost > 1 ? "s" : ""} pour passer ${it.tiers[it.level + 1]?.label} (+${fmt(it.next - (it.value || 0), it.unit)})`
+              : `Passer ${it.tiers[it.level + 1]?.label} · ${cost} ticket${cost > 1 ? "s" : ""}`}</span>
             <span style={{ display:"inline-flex", gap:2 }}>{Array.from({ length: cost }).map((_, i) =>
               <TicketStub key={i} size={0.75} dim={i >= tickets}/>)}</span>
             {!enough && <span style={{ fontWeight:600 }}>(tu en as {tickets})</span>}
