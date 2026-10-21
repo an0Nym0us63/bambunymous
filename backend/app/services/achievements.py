@@ -3299,7 +3299,7 @@ def _wheel_weekly(st: dict) -> int:
 
 SPINS_PER_SECRET = 1          # un secret gagne : un tour de roue
 SECRETS_PER_TICKET = 10       # tous les 10 secrets gagnes : un ticket de palier
-SECRET_REWARDS_V = 1           # rattrapage (une fois) des secrets gagnes avant cette regle
+SECRET_REWARDS_V = 1           # rattrapage (une fois) des secrets gagnes avant cette regle : les tickets seulement
 
 
 def _secret_rewards(st: dict, new: list) -> tuple:
@@ -3320,9 +3320,9 @@ def _secret_rewards(st: dict, new: list) -> tuple:
 
 
 def _secret_rewards_retro(st: dict, new: list) -> tuple | None:
-    """Une fois, a l'arrivee de la regle : les secrets deja gagnes rapportent
-    leurs tours et leurs tickets (ceux de ce passage suivent la regle normale).
-    Rend (secrets, tours, tickets) ou None."""
+    """Une fois, a l'arrivee de la regle : les secrets deja gagnes comptent pour
+    les tickets (un tous les 10), pas pour les tours de roue. Ceux de ce passage
+    suivent la regle normale. Rend (secrets, tours, tickets) ou None."""
     w = _wheel_init(st)
     if w.get("secret_rewards_v") == SECRET_REWARDS_V:
         return None
@@ -3336,11 +3336,10 @@ def _secret_rewards_retro(st: dict, new: list) -> tuple | None:
     n = len(had)
     tickets = n // SECRETS_PER_TICKET
     w["secrets"] = w.get("secrets", 0) + n
-    w["spins"] += SPINS_PER_SECRET * n
     if tickets:
         w["tickets"] = w.get("tickets", 0) + tickets
         w["tickets_won"] = w.get("tickets_won", 0) + tickets
-    return n, SPINS_PER_SECRET * n, tickets
+    return n, 0, tickets
 
 
 async def _notify_retro(n: int, spins: int, tickets: int, spins_total: int, tickets_total: int) -> None:
@@ -3350,14 +3349,17 @@ async def _notify_retro(n: int, spins: int, tickets: int, spins_total: int, tick
     left = SECRETS_PER_TICKET - n % SECRETS_PER_TICKET
     lines = [f"Nouvelle règle : chaque secret gagné offre {SPINS_PER_SECRET} tour de roue, et tous les "
              f"{SECRETS_PER_TICKET} secrets, un ticket de palier.",
-             f"Tu avais déjà gagné {n} secret{'s' if n > 1 else ''} : ils comptent aussi.",
-             f"🎰 +{spins} tour{'s' if spins > 1 else ''} de roue"]
+             f"Tu avais déjà gagné {n} secret{'s' if n > 1 else ''} : ils comptent pour les tickets "
+             f"(les tours de roue, eux, ne valent que pour les prochains secrets)."]
+    if spins:
+        lines.append(f"🎰 +{spins} tour{'s' if spins > 1 else ''} de roue")
     if tickets:
         lines.append(f"🎟️ +{tickets} ticket{'s' if tickets > 1 else ''} de palier")
     lines.append(f"Prochain ticket dans {left} secret{'s' if left > 1 else ''}. Tu as maintenant {spins_total} tours"
                  + (f" et {tickets_total} ticket{'s' if tickets_total > 1 else ''} de palier." if tickets_total else "."))
-    await N.notify("wheel_spin", f"🎁 Tes {n} secrets rapportent : +{spins} tours"
-                   + (f", +{tickets} ticket{'s' if tickets > 1 else ''}" if tickets else ""),
+    if not tickets:
+        return
+    await N.notify("wheel_spin", f"🎁 Tes {n} secrets rapportent {tickets} ticket{'s' if tickets > 1 else ''} de palier",
                    "\n".join(lines), click=N.app_link(cfg, "/stats?tab=achievements"), priority=3)
 
 
