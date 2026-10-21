@@ -1456,7 +1456,8 @@ function Rules({ data, onClose }) {
           100 %. Ces médailles-là, comme les collections, <b>se perdent</b> si un nouveau secret ou un nouveau palier arrive avec
           une mise à jour : il suffit de le décrocher pour les retrouver.</P>
         <P>Certains secrets se cachent derrière une adresse, d'autres derrière un geste. Et de temps en temps, en ouvrant
-          l'appli, l'accueil te joue un tour : plus il se fait attendre, plus il devient probable.</P>
+          l'appli, l'accueil te joue un tour : plus il se fait attendre, plus il devient probable. Ces tours-là ne se gagnent
+          que s'ils te tombent dessus par surprise, et ceux des jours de fête, seulement le jour même.</P>
 
         {k && <>
           <H>🔑 Clés</H>

@@ -4165,18 +4165,62 @@ async def roll_surprise(username: str, rnd=None, now=None) -> dict:
     return {"hit": hit, "n": n, "p": round(p, 4)}
 
 
-async def surprise_shown(username: str) -> None:
-    """La surprise s'est affichee : le compteur de ce compte repart a 0."""
+PRANK_GRANT_TTL = timedelta(minutes=30)
+
+
+async def surprise_shown(username: str, farce: str | None = None, now=None) -> None:
+    """La surprise s'est affichee : le compteur de ce compte repart a 0. Si c'est
+    une farce et qu'un tirage gagnant l'attendait bien, son secret devient gagnable
+    (une fois, pendant 30 minutes) : une farce ne se gagne que tombee par surprise."""
     from ..db.session import AsyncSessionLocal
-    from .settings_service import set_setting
+    from .settings_service import get_setting, set_setting
+    now = now or datetime.utcnow()
     async with _SURPRISE_LOCK:
         async with AsyncSessionLocal() as db:
             d = await _surprise_counts(db)
             _at, pending = await _surprise_state(db)
+            had = bool(pending.pop(username, None))
             d[username] = 0
-            pending.pop(username, None)
             await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
             await set_setting(db, KEY + "_SURPRISE_PENDING", json.dumps(pending))
+            egg = "p_" + str(farce or "").replace("-", "_")
+            if had and egg in PRANK_EGGS:
+                try:
+                    g = json.loads(await get_setting(db, KEY + "_PRANK_GRANT", "") or "{}")
+                except ValueError:
+                    g = {}
+                g = g if isinstance(g, dict) else {}
+                g[username] = {"egg": egg, "at": now.isoformat()}
+                await set_setting(db, KEY + "_PRANK_GRANT", json.dumps(g))
+
+
+async def egg_lock(username: str, name: str, consume: bool = False, now=None) -> str | None:
+    """Pourquoi ce secret ne peut pas etre gagne maintenant (None : il peut).
+    « fete » : une fete hors de son jour ; « surprise » : une farce qui n'est pas
+    tombee par surprise. Les pages cachees et le reste : toujours gagnables."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    if name in FETE_EGGS:
+        slug = name[2:].replace("_", "-")
+        return None if slug in fetes_of(_today_paris(), await first_print_day()) else "fete"
+    if name not in PRANK_EGGS:
+        return None
+    now = now or datetime.utcnow()
+    async with _SURPRISE_LOCK:
+        async with AsyncSessionLocal() as db:
+            try:
+                g = json.loads(await get_setting(db, KEY + "_PRANK_GRANT", "") or "{}")
+            except ValueError:
+                g = {}
+            g = g if isinstance(g, dict) else {}
+            mine = g.get(username) or {}
+            at = _ts(mine.get("at"))
+            if mine.get("egg") != name or not at or now - at > PRANK_GRANT_TTL:
+                return "surprise"
+            if consume:
+                g.pop(username, None)
+                await set_setting(db, KEY + "_PRANK_GRANT", json.dumps(g))
+    return None
 
 
 async def eggs_found() -> dict:

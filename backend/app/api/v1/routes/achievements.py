@@ -78,7 +78,7 @@ async def achievements_surprise_shown(body: dict | None = Body(None), acc=Depend
     if fete in A.FETE_SLUGS:
         await A.fete_shown(acc[0], fete)
     else:
-        await A.surprise_shown(acc[0])
+        await A.surprise_shown(acc[0], (body or {}).get("farce"))
     return {"ok": True}
 
 
@@ -86,6 +86,12 @@ async def achievements_surprise_shown(body: dict | None = Body(None), acc=Depend
 async def achievements_egg(name: str, acc=Depends(require_own_account)):
     """Un easter egg trouve dans l'appli (jamais par une cle de copain)."""
     from ....services import achievements as A
+    if name in A.EGGS and name not in await A.eggs_found():
+        why = await A.egg_lock(acc[0], name)
+        if why:
+            # fete hors de son jour, farce venue par son adresse : jouee, pas gagnee
+            e = A.EGGS[name]
+            return {"new": False, "locked": why, "id": f"egg_{name}", "emoji": e[0], "name": e[1]}
     if acc[0] not in await A.counted_users():      # compte qui ne fait pas avancer les succes
         # il a trouve, on le lui dit, mais rien n'est enregistre
         e = A.EGGS.get(name)
@@ -93,9 +99,11 @@ async def achievements_egg(name: str, acc=Depends(require_own_account)):
             raise HTTPException(404, "Œuf inconnu")
         return {"new": False, "uncounted": True, "id": f"egg_{name}", "emoji": e[0], "name": e[1], "lore": e[4]}
     try:
-        return await A.find_egg(name)
+        r = await A.find_egg(name)
     except ValueError as e:
         raise HTTPException(404, str(e))
+    await A.egg_lock(acc[0], name, consume=True)      # l'autorisation de la surprise est utilisee
+    return r
 
 
 @router.post("/wheel/spin")

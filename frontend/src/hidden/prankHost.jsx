@@ -140,8 +140,9 @@ export function PrankHost() {
         client.post("/achievements/surprise/shown", { fete: data.fete }).catch(() => {});
       } else {
         const [kind, slug] = pickSurprise(data.found || []);
+        // le serveur retient la farce tombee : c'est la seule facon d'en gagner le secret
+        client.post("/achievements/surprise/shown", kind === "farce" ? { farce: slug } : {}).catch(() => {});
         if (kind === "farce") start(slug); else nav("/" + slug);
-        client.post("/achievements/surprise/shown").catch(() => {});
       }
       openPassage();
     };

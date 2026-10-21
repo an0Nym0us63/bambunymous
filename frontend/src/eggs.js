@@ -18,6 +18,16 @@ export async function egg(name) {
   if (d.has(name)) return;
   try {
     const { data } = await client.post(`/achievements/egg/${name}`);
+    if (data?.locked) {
+      // jouee mais pas gagnee : une fete hors de son jour, une farce venue par son adresse
+      const k = "bn-locked-" + name;
+      let told = false;
+      try { told = !!sessionStorage.getItem(k); sessionStorage.setItem(k, "1"); } catch { /* rien */ }
+      if (!told) whisper(data.emoji || "🔒", data.locked === "fete" ? "Pas aujourd'hui…" : "Joli, mais…",
+        data.locked === "fete" ? "Ce secret-là ne se gagne que le jour de sa fête. Reviens à la bonne date !"
+          : "Cette farce ne se gagne que si elle te tombe dessus par surprise, à l'ouverture de l'appli.");
+      return;
+    }
     if (data?.uncounted) {
       // compte qui ne fait pas avancer les succes : on le felicite (une fois), sans rien enregistrer ;
       // s'il est coche plus tard, le prochain passage comptera pour de bon
