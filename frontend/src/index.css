@@ -148,6 +148,13 @@ body {
 @keyframes bn-medal-pulse { 0%, 100% { box-shadow: 0 0 4px 1px var(--glow) } 50% { box-shadow: 0 0 14px 5px var(--glow) } }
 @keyframes bn-medal-twinkle { 0%, 100% { opacity: 0; transform: scale(.4) } 50% { opacity: 1; transform: scale(1) } }
 @keyframes bn-medal-turn { to { transform: rotate(360deg) } }
+/* chaque palier a son effet (22/10/2026) : transparence et position seulement, pour rester fluide */
+@keyframes bn-medal-breath { 0%, 100% { opacity: .15 } 50% { opacity: .6 } }
+@keyframes bn-medal-glint { 0%, 70%, 100% { opacity: 0; transform: scale(.2) rotate(0) } 80% { opacity: 1; transform: scale(1) rotate(45deg) } 90% { opacity: 0; transform: scale(.4) rotate(90deg) } }
+@keyframes bn-medal-fizz { 0%, 100% { opacity: 0; transform: translateY(2px) scale(.3) } 40% { opacity: 1; transform: translateY(-2px) scale(1) } 70% { opacity: 0; transform: translateY(-5px) scale(.5) } }
+@keyframes bn-medal-frost { to { transform: rotate(360deg) } }
+@keyframes bn-medal-prism { 0%, 100% { opacity: 0 } 50% { opacity: .55 } }
+@keyframes bn-medal-rise { 0% { opacity: 0; transform: translateY(0) scale(.5) } 25% { opacity: 1 } 100% { opacity: 0; transform: translateY(-14px) scale(1) } }
 
 /* Tresor de la page Succes (cles, tickets, machine) */
 @keyframes bn-reel-idle { from { transform: translateY(0) } to { transform: translateY(-50%) } }

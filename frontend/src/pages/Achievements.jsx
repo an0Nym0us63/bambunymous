@@ -1408,7 +1408,9 @@ function PalsUnique({ rivals }) {
 export function Medal({ tier, emoji, size = 48, locked = false }) {
   const c = locked ? "#8a8f98" : tier.color;
   const id = `m${tier.id}${locked ? "l" : ""}`;
-  // les hauts rangs vivent : reflet (Legende), halo (Mythique), etoiles (Cosmique), liseré arc-en-ciel (Eternel)
+  // chaque palier vit a sa facon, de plus en plus fort : lueur (Bronze), eclat (Argent), paillettes (Or),
+  // givre (Platine), prisme (Diamant), reflet (Legende), halo (Mythique), etoiles (Cosmique),
+  // liseré arc-en-ciel (Eternel), coeurs (Unique)
   const fx = !locked && size >= 30 ? tier.id : null;
   const big = size >= 30;
   const cy = size * (big ? 28 : 24) / 48, r = size * (big ? 18 : 21) / 48;
@@ -1420,6 +1422,10 @@ export function Medal({ tier, emoji, size = 48, locked = false }) {
         <span aria-hidden="true" style={{ ...disc, left: disc.left - 3, top: disc.top - 3, width: r * 2 + 6, height: r * 2 + 6,
           background:"conic-gradient(#ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #6366f1, #d946ef, #ef4444)",
           animation:"bn-medal-turn 4s linear infinite" }}/>
+      )}
+      {fx === "bronze" && (
+        <span aria-hidden="true" style={{ ...disc, boxShadow:`0 0 10px 3px ${tier.color}`,
+          animation:"bn-medal-breath 4s ease-in-out infinite" }}/>
       )}
       {fx === "mythic" && (
         <span aria-hidden="true" style={{ ...disc, "--glow": `${tier.color}cc`, animation:"bn-medal-pulse 2.2s ease-in-out infinite" }}/>
@@ -1441,6 +1447,38 @@ export function Medal({ tier, emoji, size = 48, locked = false }) {
         <circle cx="24" cy={size >= 30 ? 28 : 24} r={size >= 30 ? 13.5 : 15.5} fill="none"
           stroke="#fff" strokeOpacity="0.45" strokeWidth="1.2"/>
       </svg>
+      {fx === "silver" && (
+        <span aria-hidden="true" style={{ position:"absolute", left: disc.left + r * 0.15, top: disc.top - r * 0.05,
+          fontSize: Math.max(9, size * 0.28), color:"#fff", textShadow:"0 0 6px #fff, 0 0 10px #cbd5e1", lineHeight:1,
+          pointerEvents:"none", animation:"bn-medal-glint 3.6s ease-in-out infinite" }}>✦</span>
+      )}
+      {fx === "gold" && [[0.08, 0.38, 0], [0.86, 0.42, 0.6], [0.5, 0.98, 1.2], [0.92, 0.88, 1.8], [0.06, 0.9, 2.4]].map(([x, y, d], i) => (
+        <span key={i} aria-hidden="true" style={{ position:"absolute", left: size * x - 2, top: size * y - 2, width:4, height:4,
+          borderRadius:"50%", background:"#fde68a", boxShadow:"0 0 6px 1px #fbbf24", pointerEvents:"none",
+          animation:`bn-medal-fizz 3s ${d}s ease-in-out infinite` }}/>
+      ))}
+      {fx === "platinum" && (
+        <span aria-hidden="true" style={{ ...disc, overflow:"hidden" }}>
+          <span style={{ position:"absolute", inset:"-25%", borderRadius:"50%",
+            background:"conic-gradient(from 0deg, transparent 0 60%, rgba(255,255,255,.55) 70%, transparent 80% 100%)",
+            animation:"bn-medal-frost 5s linear infinite" }}/>
+        </span>
+      )}
+      {fx === "diamond" && (
+        <span aria-hidden="true" style={{ ...disc, overflow:"hidden" }}>
+          <span style={{ position:"absolute", inset:0,
+            background:"linear-gradient(120deg, transparent 20%, rgba(244,114,182,.7) 35%, rgba(96,165,250,.7) 50%, rgba(52,211,153,.7) 65%, transparent 80%)",
+            animation:"bn-medal-prism 2.6s ease-in-out infinite" }}/>
+          <span style={{ position:"absolute", inset:0,
+            background:"linear-gradient(60deg, transparent 25%, rgba(253,224,71,.65) 45%, rgba(167,139,250,.7) 60%, transparent 78%)",
+            animation:"bn-medal-prism 2.6s 1.3s ease-in-out infinite" }}/>
+        </span>
+      )}
+      {fx === "unique" && [[0.12, 0], [0.78, 1.1], [0.45, 2.2]].map(([x, d], i) => (
+        <span key={i} aria-hidden="true" style={{ position:"absolute", left: size * x, top: disc.top - 2, lineHeight:1,
+          fontSize: Math.max(7, size * 0.18), color:"#f9a8d4", textShadow:"0 0 5px #ec4899", pointerEvents:"none",
+          animation:`bn-medal-rise 3.3s ${d}s ease-out infinite` }}>♥</span>
+      ))}
       {fx === "legend" && (
         <span aria-hidden="true" style={{ ...disc, overflow:"hidden" }}>
           <span style={{ position:"absolute", top:"-20%", bottom:"-20%", width:"35%",
