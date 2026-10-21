@@ -688,6 +688,12 @@ class MQTTManager:
                 _was_drying = ams.id in _DRYING_AMS
                 if _is_drying and not _was_drying:
                     _DRYING_AMS.add(ams.id)
+                    try:        # journal des succes : un cycle, sa duree reglee (h) ou restante (min)
+                        from ..services import ach_log as _alog
+                        _alog.dry(ams.id, (getattr(ams, "dry_duration", 0) or 0)
+                                  or (getattr(ams, "dry_time", 0) or 0) / 60)
+                    except Exception:
+                        pass
                     _sids = [t.spool_id for t in ams.trays if getattr(t, "spool_id", None)]
                     # ... et celles simplement POSEES dans cet AMS (emplacement vide).
                     try:

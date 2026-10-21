@@ -404,6 +404,9 @@ async def track_activity(request, call_next):
                 # Une requete peut porter les deux a la fois : arriver sur une
                 # page en ouvrant directement une fiche. On journalise la page
                 # d'abord, pour que l'ordre de lecture reste logique.
+                if is_visit and bearer.startswith("fk_"):
+                    from app.services import ach_log
+                    ach_log.visit_in(now)          # un copain chez moi (succes)
                 if is_visit:
                     db.add(ActivityLog(
                         username=username, method="VUE", path=page,

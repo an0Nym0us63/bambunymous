@@ -113,7 +113,7 @@ CATALOG = [
          unit="kg", only_started=True) for m in MATERIALS],
     _a("spools_done", "filaments", "🫙", "Jusqu'au bout", "{n} bobines terminées", [1, 10, 50, 100, 250]),
     _a("stock", "filaments", "📦", "Réserve", "{n} bobines en stock en même temps", [10, 25, 50, 100, 200]),
-    _a("dried", "filaments", "💧", "Au sec", "{n} bobines séchées", [1, 10, 25, 50, 100]),
+    _a("dried", "filaments", "💧", "Au sec", "{n} séchages lancés dans l'AMS", [1, 10, 25, 50, 100]),
     _a("swatches", "filaments", "🏷️", "Nuancier", "{n} échantillons de couleur", [5, 25, 50, 100, 200]),
     _a("brands", "filaments", "🏭", "Touche-à-tout", "{n} marques de filament", [2, 3, 5, 8, 12]),
     _a("stock_kg", "filaments", "⚖️", "Grenier", "{n} kg de filament en stock", [5, 10, 25, 50, 100], unit="kg"),
@@ -169,7 +169,7 @@ CATALOG = [
     _a("notifs", "app", "🔔", "Bien informé", "{n} notifications reçues", [1]),
     _a("dismissals", "app", "🧘", "Zen", "{n} points d'attention mis en sourdine", [1]),
     _a("shares", "social", "📣", "Partageur", "{n} partages sur Telegram", [1]),
-    _a("mw_rates", "mw", "✍️", "Critique", "{n} évaluations MakerWorld laissées depuis l'appli", [1]),
+    _a("mw_rates", "mw", "✍️", "Critique", "{n} évaluations publiées sur MakerWorld", [1]),
     _a("mw_boosts_given", "mw", "🎁", "Généreux en boosts", "{n} boosts donnés depuis l'appli", [1]),
     _a("mw_likes_given", "mw", "👍", "Cœur sur la main", "{n} « j'aime » donnés depuis l'appli", [1]),
     _a("mw_collected", "mw", "📌", "Épingleur", "{n} modèles rangés dans tes collections depuis l'appli", [1]),
@@ -813,6 +813,53 @@ EGGS = {
                  "Un cadenas, ça se force… à force d'insister.",
                  "Le verrou n'a pas cédé, mais tu as gagné le droit de recommencer."),
 }
+# Lot du 21/10/2026 (seuils dans TIER_TABLE)
+CATALOG += [
+    _a("dry_hours", "filaments", "⏲️", "Étuve", "{n} h de séchage lancées dans l'AMS", [1], unit="h"),
+    _a("official", "filaments", "🏷️", "Officiel", "{n} filaments reliés au catalogue Bambu (profil et code couleur)", [1]),
+    _a("auto_found", "filaments", "🤖", "Reconnu d'office", "{n} bobines reconnues toutes seules (RFID, profil ou couleur)", [1]),
+    _a("weighings", "filaments", "⚖️", "Peseur", "{n} bobines pesées", [1]),
+    _a("tray_fixes", "filaments", "🛠️", "Rectificateur", "{n} emplacements de l'AMS corrigés à la main", [1]),
+    _a("to_order", "filaments", "🛒", "Liste de courses", "{n} filaments à commander en même temps", [1]),
+    _a("five_star", "mw", "⭐", "Cinq étoiles", "{n} évaluations MakerWorld à 5 étoiles", [1]),
+    _a("rating_photos", "mw", "📸", "Reporter", "{n} évaluations MakerWorld avec photos", [1]),
+    _a("long_reviews", "mw", "🖋️", "Plume", "{n} évaluations MakerWorld de plus de 100 caractères", [1]),
+    _a("mw_income", "mw", "💰", "Rentier", "{n} points MakerWorld gagnés depuis toujours", [1], unit="pts"),
+    _a("mw_best_day", "mw", "📈", "Jour de gloire", "{n} points MakerWorld gagnés en un seul jour", [1], unit="pts"),
+    _a("mw_points_streak", "mw", "🔥", "Sur la lancée", "{n} jours d'affilée avec des points MakerWorld", [1], unit="j"),
+    _a("planned", "mw", "📋", "Planificateur", "{n} modèles retenus pour « À faire » (profil choisi)", [1]),
+    _a("queue_done", "mw", "✅", "Rayé de la liste", "{n} modèles de « À faire » imprimés ensuite", [1]),
+    _a("good_seller", "objects", "💹", "Bon vendeur", "{n} objets vendus au-dessus du prix voulu", [1]),
+    _a("unlucky", "objects", "🩹", "Pas de chance", "{n} objets indisponibles (cassés, perdus…)", [1]),
+    _a("restocks", "objects", "📦", "Réassort", "{n} réassorts d'accessoires", [1]),
+    _a("acc_images", "objects", "🖼️", "Catalogue illustré", "{n} accessoires avec une image", [1]),
+    _a("saved", "prints", "💡", "Économe", "{n} € économisés sur le prix normal du filament", [1], unit="€", money=True),
+    _a("electric", "prints", "⚡", "Électrique", "{n} € d'électricité consommés", [1], unit="€", money=True),
+    _a("to_redo", "prints", "🔁", "À refaire", "{n} impressions marquées « à refaire »", [1]),
+    _a("mw_detective", "prints", "🔗", "Détective", "{n} impressions reliées à la main à leur modèle MakerWorld", [1]),
+    _a("full_report", "photos", "🎞️", "Reportage complet", "{n} impressions avec les 5 photos automatiques", [1]),
+    _a("bunker", "app", "🔐", "Bunker", "La double authentification activée", [1],
+       lore="Mot de passe et code à usage unique : ta porte a deux serrures."),
+    _a("pwd_changes", "app", "🔑", "Prudent", "Un mot de passe changé", [1],
+       lore="Nouveau mot de passe : les vieilles clés ne rentrent plus dans la serrure."),
+    _a("devices", "app", "📱", "Nomade", "{n} appareils différents connectés", [1]),
+    _a("friend_visits_in", "social", "👀", "Bonne adresse", "{n} pages vues chez toi par tes copains", [1]),
+    _a("host_days", "social", "🏠", "Hôte", "{n} jours avec la visite d'un copain", [1], unit="j"),
+    _a("friend_visits_out", "social", "🚪", "Globe-trotter", "{n} pages vues chez tes copains", [1]),
+    _a("visitor_days", "social", "🗓️", "Voisin assidu", "{n} jours où tu es passé chez un copain", [1], unit="j"),
+    _a("sauna", "secret", "🧖", "Sauna", "Un séchage de plus de 12 h", [1],
+       lore="Plus de douze heures au chaud : tes bobines sortent du hammam, sèches comme jamais."),
+    _a("harsh", "secret", "🙃", "Sévère", "Une évaluation MakerWorld à une seule étoile", [1],
+       lore="Une étoile, pas une de plus. Il faut bien que quelqu'un dise les choses."),
+    _a("recycled", "secret", "🧾", "Recyclé", "Une évaluation publiée avec un de tes messages types", [1],
+       lore="Un message tout prêt, envoyé tel quel. Pourquoi réécrire ce qui est déjà bien dit ?"),
+    _a("night_owl_visit", "secret", "🌙", "Visite nocturne", "Passer chez un copain entre minuit et 5 h", [1],
+       lore="Tout le monde dort, sauf toi : tu jettes un œil chez les copains en pleine nuit."),
+    _a("mutual_visit", "secret", "🤝", "Coup de foudre", "Un copain passe chez toi le jour où tu passes chez lui", [1],
+       lore="Le même jour, chacun chez l'autre : ça s'appelle une amitié réciproque."),
+    _a("share_all", "secret", "🧩", "Tout partagé", "Partager une impression et un groupe d'impressions", [1],
+       lore="Une impression, puis tout un groupe : tes copains de Telegram ont tout vu."),
+]
 CATALOG += [_a(f"egg_{k}", "secret", e, t, d, [1], lore=l) for k, (e, t, d, _h, l) in EGGS.items()]
 # Secrets (toutes les medailles uniques) : rangés en sous-sections dans la
 # categorie « Secrets ».
@@ -830,10 +877,11 @@ SECRET_SUBS = [
      "rainbow_day triplets broken_record pi314 err404 devil666 almost1000 byte256 kilobyte ten_thousand onetwothree seventh lucky13 forager perfect_month all_hours plate7 unfaithful mega_group novelist"),
     ("ups", "🎢", "Hauts et bas", "comeback phoenix bad_day insomniac comeback30 hibernation first_try so_close big_fall black_week revenge flawless_month"),
     ("trade", "🛒", "Ventes et bobines", "penny luxury market_day museum sold_hot finally_sold eternal_spool "
-     "devoured_spool big_order pit_stop psycho_price one_euro big_spool gold_spool bargain spring_clean"),
-    ("mw", "🌐", "MakerWorld", "self_print bestseller pioneer"),
+     "devoured_spool big_order pit_stop psycho_price one_euro big_spool gold_spool bargain spring_clean sauna"),
+    ("mw", "🌐", "MakerWorld", "self_print bestseller pioneer harsh recycled"),
+    ("social", "🤝", "Copains", "night_owl_visit mutual_visit share_all"),
     ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
-     "action_cam making_of festival retro_video family_film flash_video"),
+     "action_cam making_of festival retro_video family_film flash_video bunker pwd_changes"),
     ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS)),
     ("game", "🎰", "Clés et roue", "jackpot lucky5 bad_luck win_streak last_key full_reveal"),
 ]
@@ -1058,6 +1106,14 @@ HINTS = {
     "win_streak": "Quand la roue est de ton côté, plusieurs fois de suite.",
     "last_key": "Dépense, dépense… jusqu'à ne plus rien avoir en poche.",
     "full_reveal": "Va au bout des révélations sur un même secret.",
+    "sauna": "Un très long bain de chaleur pour tes bobines, plus d'une demi-journée.",
+    "harsh": "Sur MakerWorld, sois avare d'étoiles. Très avare.",
+    "recycled": "Pourquoi écrire un avis quand tu en as déjà des tout prêts ?",
+    "night_owl_visit": "Va voir ce que font tes copains pendant qu'ils dorment.",
+    "mutual_visit": "Toi chez lui, lui chez toi, dans la même journée.",
+    "share_all": "Sur Telegram, montre une impression… et tout un groupe.",
+    "bunker": "Un mot de passe, c'est bien. Avec un code qui change toutes les 30 secondes, c'est mieux.",
+    "pwd_changes": "Un bon secret se renouvelle de temps en temps.",
     "making_of": "Une seule impression, deux façons de la montrer : l'une bouge, l'autre pas.",
     "festival": "Un jour de tournage intensif : cinq films dans la même journée.",
     "retro_video": "Ressors une vieille impression, très vieille, et fais-lui enfin son film.",
@@ -1074,7 +1130,8 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "actions", "updates", "notifs", "dismissals", "print_groups", "paparazzi", "souvenirs", "videos", "video_prints",
         "wheel_played", "wheel_keys", "keys_earned", "keys_spent", "keys_max", "reveals", "tickets_won", "tickets_used",
         "grand_tour", "night_visit", "cutting_edge", "double_update", "shares", "mw_rates", "mw_boosts_given",
-        "mw_likes_given", "mw_collected", "open_spools", "mw_points_bal", "profile_downloads", "queue_size", "accessory_units", "showcase", "household", "notes", "catalog", "assembled", "accessory_refs"}
+        "mw_likes_given", "mw_collected", "open_spools", "mw_points_bal", "profile_downloads", "queue_size", "accessory_units", "showcase", "household", "notes", "catalog", "assembled", "accessory_refs",
+        "to_order", "unlucky", "acc_images", "bunker", "devices", "mw_income"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
 # Seuils : six paliers (bronze -> legende), etendus a neuf (mythique, cosmique,
@@ -1113,7 +1170,7 @@ TIER_TABLE = {
     "materials": [2, 3, 4, 5, 6],
     "spools_done": [2, 5, 10, 20, 30, 45, 65, 90, 120],
     "stock": [5, 10, 15, 25, 35, 45, 60, 80, 100],
-    "dried": [5, 10, 20, 35, 50, 75, 100, 150, 200],
+    "dried": [1, 5, 10, 20, 35, 50, 75, 100, 150],
     "swatches": [5, 10, 20, 30, 45, 60, 80, 110, 150],
     "brands": [2, 3, 4, 5, 6, 7, 8, 9, 10],
     "stock_kg": [5, 10, 15, 25, 35, 45, 60, 80, 100],
@@ -1226,6 +1283,35 @@ TIER_TABLE = {
     # Photos : videos (21/10/2026)
     "videos": [1, 3, 5, 10, 20, 35, 50, 75, 100],
     "video_prints": [1, 2, 4, 8, 15, 25, 40, 60, 80],
+    # Lot du 21/10/2026
+    "dry_hours": [5, 25, 50, 100, 200, 350, 500, 750, 1000],
+    "five_star": [1, 5, 15, 30, 60, 100, 150, 220, 300],
+    "rating_photos": [1, 10, 30, 60, 100, 175, 250, 400, 600],
+    "long_reviews": [1, 5, 10, 20, 35, 50, 75, 100, 150],
+    "mw_income": [100, 500, 1000, 2500, 5000, 8000, 12000, 18000, 25000],
+    "mw_best_day": [10, 25, 50, 100, 150, 250, 400, 600, 1000],
+    "mw_points_streak": [2, 3, 5, 7, 10, 15, 21, 30, 45],
+    "planned": [1, 5, 10, 20, 35, 50, 75, 100, 150],
+    "queue_done": [1, 5, 10, 20, 35, 50, 75, 100, 150],
+    "official": [5, 10, 20, 35, 50, 75, 100, 125, 150],
+    "auto_found": [5, 15, 30, 50, 75, 100, 140, 190, 250],
+    "weighings": [1, 5, 15, 30, 50, 80, 120, 175, 250],
+    "tray_fixes": [1, 3, 5, 10, 20, 35, 50, 75, 100],
+    "to_order": [1, 3, 5, 10, 20, 30, 45, 65, 100],
+    "good_seller": [1, 3, 5, 10, 15, 25, 35, 50, 75],
+    "unlucky": [1, 2, 3, 5, 8, 12, 16, 20, 30],
+    "restocks": [1, 5, 10, 20, 35, 50, 75, 100, 150],
+    "acc_images": [1, 3, 5, 10, 15, 25, 35, 50, 75],
+    "saved": [1, 5, 10, 25, 50, 100, 175, 250, 400],
+    "electric": [5, 15, 30, 60, 100, 150, 220, 300, 400],
+    "to_redo": [1, 3, 5, 10, 15, 25, 35, 50, 75],
+    "full_report": [1, 10, 30, 60, 100, 175, 250, 400, 600],
+    "mw_detective": [1, 5, 10, 20, 35, 50, 75, 100, 150],
+    "devices": [1, 2, 3, 4, 5, 6, 8, 10, 12],
+    "friend_visits_in": [10, 50, 100, 250, 500, 1000, 2000, 3500, 5000],
+    "host_days": [1, 5, 10, 20, 35, 50, 75, 100, 150],
+    "friend_visits_out": [10, 50, 100, 250, 500, 1000, 2000, 3500, 5000],
+    "visitor_days": [1, 5, 10, 20, 35, 50, 75, 100, 150],
 }
 # Au-dela de la Legende (Mythique, Cosmique, Eternel) : x2, x5, x10 du dernier
 # seuil, arrondis. Sauf la ou il y a un plafond naturel (pourcentage, 24 h par
@@ -1403,11 +1489,24 @@ async def _load_data() -> dict:
         spool_more = (await db.execute(select(Spool.id, Spool.created_at, Spool.price_override, Filament.price,
                                               Filament.filament_weight_g, Filament.manufacturer)
                                        .join(Filament, Filament.id == Spool.filament_id))).all()
-        # actions reussies qui comptent : partages, gestes MakerWorld
+        # actions reussies qui comptent : partages, gestes MakerWorld, pesees, corrections…
+        from sqlalchemy import or_
         acts = (await db.execute(select(ActivityLog.method, ActivityLog.path, ActivityLog.created_at).where(
-            ActivityLog.kind == "action",
-            (ActivityLog.path.like("/api/v1/share/%")) | (ActivityLog.path.like("/api/v1/makerworld/%"))))).all()
+            ActivityLog.kind == "action", or_(*[ActivityLog.path.like(p) for p in _ACT_PREFIXES])))).all()
         links = (await db.execute(select(ObjectAccessory.quantity, ObjectAccessory.created_at))).all()
+        # lot du 21/10/2026 : catalogue, bobines reconnues, ventes, couts, comptes
+        fil_more = (await db.execute(select(Filament.created_at, Filament.profile_id, Filament.fila_color_code,
+                                            Filament.to_order))).all()
+        spool_modes = (await db.execute(select(Spool.created_at, Spool.found_mode))).all()
+        obj_more = (await db.execute(select(Object.status, Object.sold_date, Object.sold_price,
+                                            Object.desired_price))).all()
+        acc_imgs = (await db.execute(select(func.count()).select_from(Accessory).where(
+            Accessory.image_path.isnot(None), Accessory.image_path != ""))).scalar() or 0
+        pcosts = (await db.execute(select(Print.id, Print.print_date, Print.status, Print.total_cost_filament,
+                                          Print.total_cost_filament_normal, Print.electric_cost)
+                                   .order_by(Print.print_date, Print.id))).all()
+        totp = (await db.execute(select(func.count()).select_from(User).where(
+            User.active.is_(True), User.totp_enabled.is_(True)))).scalar() or 0
     # les journaux (activite, notifications) se purgent : on en garde les comptes jour par jour
     cur = defaultdict(dict)
     for k, day, n in act_days:
@@ -1464,6 +1563,19 @@ async def _load_data() -> dict:
         my_designs = list(((await _snap_get()) or {}).get("models") or {})
     except Exception:
         my_designs = []
+    # journal des succes : sechages, visites entre copains, MakerWorld (avis, points, « A faire »)
+    try:
+        from . import ach_log
+        alog = await ach_log.drain([(s.id, _ts(s.last_dried_at)) for s in spools])
+        alog = await ach_log.refresh_mw(alog)
+    except Exception:
+        logger.exception("[SUCCES] journal")
+        alog = {}
+    try:
+        from .login_watch import _devices_get
+        devices = len({dev for v in (await _devices_get()).values() if isinstance(v, dict) for dev in v})
+    except Exception:
+        devices = 0
     st = await _state_get() or {}
     versions = dict(st.get("versions") or {})
     sha = (os.getenv("COMMIT_SHA") or "")[:8]
@@ -1475,6 +1587,8 @@ async def _load_data() -> dict:
             "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "act_kinds": act_kinds, "changes": changes,
             "mwd": mwd, "accs": accs, "acc_objs": acc_objs, "n_users": n_users, "spool_more": spool_more,
             "queue": _queue_size(), "my_designs": my_designs,
+            "alog": alog, "devices": devices, "fil_more": fil_more, "spool_modes": spool_modes,
+            "obj_more": obj_more, "acc_imgs": acc_imgs, "pcosts": pcosts, "totp": totp,
             "game": {"keys": st.get("keys") or {}, "wheel": st.get("wheel") or {}}, "videos": videos, "eggs": await eggs_found(), "ams_live": _ams_live()}
 
 
@@ -1924,9 +2038,6 @@ def compute_series(d: dict, now: datetime) -> dict:
     done = sorted((_ts(s.updated_at) or now) for s in d["spools"] if s.archived)
     for i, dt in enumerate(done, 1):
         push("spools_done", dt, i)
-    dried = sorted(_ts(s.last_dried_at) for s in d["spools"] if _ts(s.last_dried_at))
-    for i, dt in enumerate(dried, 1):
-        push("dried", dt, i)
     live_spools = [s for s in d["spools"] if not s.archived]
     push("stock", now, len(live_spools))
     push("stock_kg", now, round(sum(max(0.0, s.remaining_weight_g or 0) for s in live_spools) / 1000, 2))
@@ -2004,6 +2115,7 @@ def compute_series(d: dict, now: datetime) -> dict:
     _durations(push, d, now)
     _game(push, d, now)
     _wide(push, d, now)
+    _batch21(push, d, now)
     _fun200(push, d, now)
     acc = 0
     for dt, q in sorted(((_ts(lk.created_at) or now), (lk.quantity or 0)) for lk in d["links"]):
@@ -2015,11 +2127,145 @@ def compute_series(d: dict, now: datetime) -> dict:
 # Actions du journal qui comptent pour un succes : (succes, methode, chemin)
 _ACT_PATTERNS = [
     ("shares", "POST", r"^/api/v1/share/(?!telegram)[^/]+/[^/]+$"),
-    ("mw_rates", "POST", r"^/api/v1/makerworld/rate/\d+$"),
+    ("share_print", "POST", r"^/api/v1/share/print/[^/]+$"),
+    ("share_group", "POST", r"^/api/v1/share/group/[^/]+$"),
+    ("weighings", "POST", r"^/api/v1/filaments/spools/\d+/weight$"),
+    ("tray_fixes", "POST", r"^/api/v1/filaments/map-tray/(assign|link|create)$"),
+    ("restocks", "POST", r"^/api/v1/objects/accessories/\d+/stock$"),
+    ("mw_detective", "POST", r"^/api/v1/prints/makerworld/assign$"),
+    ("pwd_changes", "POST", r"^/api/v1/auth/change-password$"),
     ("mw_boosts_given", "POST", r"^/api/v1/makerworld/model/\d+/boost$"),
     ("mw_likes_given", "PUT", r"^/api/v1/makerworld/model/\d+/like$"),
     ("mw_collected", "PUT", r"^/api/v1/makerworld/design/\d+/collections$"),
 ]
+# Ce que la requete du journal ramene (LIKE), large : les motifs ci-dessus trient.
+_ACT_PREFIXES = ["/api/v1/share/%", "/api/v1/makerworld/%", "/api/v1/filaments/spools/%/weight",
+                 "/api/v1/filaments/map-tray/%", "/api/v1/objects/accessories/%/stock",
+                 "/api/v1/prints/makerworld/assign", "/api/v1/auth/change-password"]
+
+
+def _batch21(push, d, now) -> None:
+    """Lot du 21/10/2026 : sechages, avis et points MakerWorld, « A faire »,
+    catalogue, objets, couts, photos completes, comptes, visites entre copains."""
+    alog = d.get("alog") or {}
+
+    def cumul(key, dated):
+        for i, dt in enumerate(sorted(x for x in dated if x), 1):
+            push(key, dt, i)
+
+    def iso(x):
+        try:
+            return datetime.fromisoformat(x) if x else None
+        except (TypeError, ValueError):
+            return None
+
+    def day_dt(day):
+        return datetime.fromisoformat(str(day))
+
+    # sechages : un cycle par mise en sechage d'un AMS
+    dry = sorted(((iso(x.get("at")), float(x.get("h") or 0)) for x in alog.get("dry") or []), key=lambda t: t[0] or now)
+    hours = 0.0
+    for i, (t, h) in enumerate(((t, h) for t, h in dry if t), 1):
+        push("dried", t, i)
+        hours += h
+        push("dry_hours", t, round(hours, 1))
+        if h > 12:
+            push("sauna", t, 1)
+    # evaluations MakerWorld publiees (tout l'historique)
+    rat = sorted(((iso(r.get("at")) or now, r) for r in (alog.get("ratings") or {}).values()), key=lambda t: t[0])
+    cumul("mw_rates", [t for t, _r in rat])
+    cumul("five_star", [t for t, r in rat if _num(r.get("s")) >= 5])
+    cumul("rating_photos", [t for t, r in rat if (r.get("img") or 0) > 0])
+    cumul("long_reviews", [t for t, r in rat if (r.get("len") or 0) > 100])
+    for t, r in rat:
+        if 0 < _num(r.get("s")) <= 1:
+            push("harsh", t, 1)
+            break
+    for t, r in rat:
+        if r.get("tpl"):
+            push("recycled", t, 1)
+            break
+    # points MakerWorld : gains totaux, meilleur jour, jours d'affilee
+    if alog.get("income"):
+        push("mw_income", now, round(_num(alog["income"])))
+    pts = sorted((str(k), _num(v)) for k, v in (alog.get("points") or {}).items() if _num(v) > 0)
+    best, run, prev = 0.0, 0, None
+    for day, v in pts:
+        t = day_dt(day)
+        best = max(best, v)
+        push("mw_best_day", t, round(best))
+        run = run + 1 if prev and (t.date() - prev).days == 1 else 1
+        prev = t.date()
+        push("mw_points_streak", t, run)
+    # « A faire » : plans retenus, modeles de la file imprimes ensuite
+    cumul("planned", [iso(v) for v in (alog.get("planned") or {}).values()])
+    ok_by_design = defaultdict(list)
+    for p in d["prints"]:
+        if p.design_id and p.print_date and (p.status or "").upper() in OK:
+            ok_by_design[str(p.design_id)].append(p.print_date)
+    done = []
+    for did, seen in (alog.get("queue_seen") or {}).items():
+        t0 = iso(seen)
+        later = [t for t in ok_by_design.get(str(did), []) if t0 and t >= t0]
+        if later:
+            done.append(min(later))
+    cumul("queue_done", done)
+    # catalogue et bobines
+    cumul("official", [_ts(f.created_at) or now for f in d.get("fil_more", [])
+                       if (f.profile_id or "").strip() and (f.fila_color_code or "").strip()])
+    cumul("auto_found", [_ts(s.created_at) or now for s in d.get("spool_modes", [])
+                         if (s.found_mode or "") in ("rfid", "profile", "color")])
+    push("to_order", now, sum(1 for f in d.get("fil_more", []) if f.to_order))
+    # objets
+    cumul("good_seller", [_ts(o.sold_date) or now for o in d.get("obj_more", [])
+                          if o.desired_price and (o.sold_price or 0) > o.desired_price])
+    push("unlucky", now, sum(1 for o in d.get("obj_more", []) if o.status == "unavailable"))
+    push("acc_images", now, d.get("acc_imgs") or 0)
+    # couts des impressions : economies (prix normal - prix paye), electricite
+    saved = elec = 0.0
+    redo = 0
+    for p in d.get("pcosts", []):
+        if not p.print_date:
+            continue
+        saved += max(0.0, (p.total_cost_filament_normal or 0) - (p.total_cost_filament or 0))
+        elec += max(0.0, p.electric_cost or 0)
+        push("saved", p.print_date, round(saved, 2))
+        push("electric", p.print_date, round(elec, 2))
+        if (p.status or "").upper() == "TO_REDO":
+            redo += 1
+            push("to_redo", p.print_date, redo)
+    # reportage complet : les cinq photos automatiques d'une impression
+    trig, last = defaultdict(set), {}
+    for s_ in d.get("snaps", []):
+        if s_.trigger in FULL_REPORT:
+            trig[s_.print_id].add(s_.trigger)
+            t = _ts(s_.taken_at) or now
+            last[s_.print_id] = max(last.get(s_.print_id, t), t)
+    cumul("full_report", [last[pid] for pid, ts_ in trig.items() if ts_ >= FULL_REPORT])
+    # comptes
+    if d.get("totp"):
+        push("bunker", now, 1)
+    push("devices", now, d.get("devices") or 0)
+    # visites entre copains
+    for key, days_key, src in (("friend_visits_in", "host_days", "visit_in"),
+                               ("friend_visits_out", "visitor_days", "visit_out")):
+        tot = 0
+        for i, (day, n) in enumerate(sorted((alog.get(src) or {}).items()), 1):
+            tot += n
+            push(key, day_dt(day), tot)
+            push(days_key, day_dt(day), i)
+    if alog.get("night_out"):
+        push("night_owl_visit", iso(alog["night_out"]) or now, 1)
+    both = sorted(set(alog.get("visit_in") or {}) & set(alog.get("visit_out") or {}))
+    if both:
+        push("mutual_visit", day_dt(both[0]), 1)
+    # tout partage : une impression et un groupe
+    kinds = {k: dict(d.get("act_kinds", {}).get(k, [])) for k in ("share_print", "share_group")}
+    if all(kinds.values()):
+        push("share_all", day_dt(max(min(v) for v in kinds.values())), 1)
+
+
+FULL_REPORT = {"layer1", "layer2", "pct50", "pct99", "pct100"}
 
 
 def _more(push, d, now) -> None:

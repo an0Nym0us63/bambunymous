@@ -1070,6 +1070,9 @@ function Rules({ data, onClose }) {
         <P>Un succès qui a <b>moins de neuf seuils</b> (un plafond naturel : 5 AMS, le niveau MakerWorld…) les place en haut de
           l'échelle : son premier seuil donne d'un coup tous les paliers d'en dessous.</P>
         <P>Ce qui se lit <b>au présent</b> (stock, MakerWorld, copains…) garde ce qui a été gagné, même si la valeur redescend.</P>
+        <P>Certains gestes ne laissent de trace nulle part ailleurs : l'appli les note elle-même <b>à partir du moment où elle
+          les voit</b> (séchages dans l'AMS, pesées, réassorts, visites chez tes copains et des copains chez toi). Tes
+          évaluations et tes points MakerWorld, eux, sont relus sur <b>tout ton historique</b>.</P>
         <P>Quand des seuils changent ou qu'un succès apparaît, tout se recalcule en silence : ce que ton historique méritait
           déjà t'est donné, sans notification ni clé.</P>
 

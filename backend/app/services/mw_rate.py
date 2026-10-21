@@ -60,6 +60,7 @@ async def my_ratings(fresh: bool = False):
     if not tok:
         return None
     rated, pending, off = set(), {}, 0
+    details = []
     for _ in range(40):
         code, d = await asyncio.to_thread(_get_json, RATED.format(offset=off), tok)
         if not isinstance(d, dict):
@@ -73,6 +74,10 @@ async def my_ratings(fresh: bool = False):
                 continue
             if _is_rated(h):
                 rated.add(did)
+                imgs = h.get("images")
+                details.append({"id": h.get("id"), "design_id": did, "score": h.get("score") or 0,
+                                "content": h.get("content") or "", "at": h.get("createTime"),
+                                "images": len(imgs) if isinstance(imgs, list) else 0})
             elif h.get("userCanRating", True):
                 pd = _pending_of(h)
                 lst = pending.setdefault(did, [])
@@ -83,7 +88,15 @@ async def my_ratings(fresh: bool = False):
         off += 50
     out = (rated, pending)
     _CACHE["ratings"] = (time.time(), out)
+    _CACHE["details"] = details
     return out
+
+
+async def rating_details() -> list:
+    """Mes evaluations publiees (pour les succes) : id, note, texte, photos, date."""
+    if await my_ratings() is None:
+        return []
+    return list(_CACHE.get("details") or [])
 
 
 def _forget_pending(did: str, rid: str):

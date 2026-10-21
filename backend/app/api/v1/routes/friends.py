@@ -90,6 +90,9 @@ async def friends_proxy(fid: str, path: str, request: Request, _: str = Depends(
         code, ctype, content = await F.proxy(fid, path, params, dict(request.headers))
     except F.FriendError as e:
         raise HTTPException(502 if "injoignable" in str(e) else 400, str(e))
+    if code < 400:
+        from ....services import ach_log
+        ach_log.visit_out(fid, request.headers.get("x-app-page"))   # ma visite chez lui (succes)
     if code == 401:
         # Pas de deconnexion chez moi : c'est l'acces au copain qui est refuse.
         raise HTTPException(403, "Accès refusé par le BambuNymous du copain (invitation révoquée ?)")
