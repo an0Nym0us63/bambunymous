@@ -34,7 +34,7 @@ const tone = (L, Ls, to) => {
   return to.map(c => c + (255 - c) * t);
 };
 
-const CACHE = new Map();   // cle -> dataURL (plusieurs couleurs)
+const CACHE = new Map();   // cle -> { url, absent } (plusieurs couleurs)
 
 async function paint(src, pairs) {
   const key = src + "|" + pairs.map(p => p.from + ">" + p.to).join(",");
@@ -50,6 +50,8 @@ async function paint(src, pairs) {
   const img = cx.getImageData(0, 0, W, H), px = img.data;
   const src3 = pairs.map(p => { const c = rgbOf(p.from); return { c, L: lumOf(c), lab: lab(c), to: rgbOf(p.to) }; });
   const memo = new Map();
+  const count = new Map(src3.map(s => [s, 0]));
+  let total = 0;
   for (let i = 0; i < px.length; i += 4) {
     if (px[i + 3] < 8) continue;
     const r = px[i], g = px[i + 1], b = px[i + 2];
@@ -64,14 +66,20 @@ async function paint(src, pairs) {
         if (d < bd) { bd = d; best = s; }
       }
       out = tone(lumOf([r, g, b]), best.L, best.to);
+      out.src = best;
       memo.set(q, out);
     }
+    count.set(out.src, count.get(out.src) + 1);
+    total++;
     px[i] = out[0]; px[i + 1] = out[1]; px[i + 2] = out[2];
   }
   cx.putImageData(img, 0, 0);
-  const url = cv.toDataURL("image/png");
-  CACHE.set(key, url);
-  return url;
+  // MakerWorld ne rend pas toujours toutes les couleurs d'un plateau (un rendu tout
+  // noir pour un plateau noir et rose) : ce qui n'apparait pas ne peut pas changer.
+  const absent = pairs.filter((p, j) => count.get(src3[j]) < Math.max(30, total * 0.004)).map(p => p.from);
+  const res = { url: cv.toDataURL("image/png"), absent };
+  CACHE.set(key, res);
+  return res;
 }
 
 export default function PlateRecolor({ src, map, w = 200, style }) {
@@ -80,16 +88,18 @@ export default function PlateRecolor({ src, map, w = 200, style }) {
   const active = pairs.some(p => !near(rgbOf(p.from), rgbOf(p.to)));
   const [orig, setOrig] = useState(false);
   const [url, setUrl] = useState(null);
+  const [absent, setAbsent] = useState([]);
   const multi = active && pairs.length > 1;
   const sig = pairs.map(p => p.from + ">" + p.to).join(",");
   useEffect(() => {
-    setUrl(null);
+    setUrl(null); setAbsent([]);
     if (!multi) return undefined;
     let live = true;
-    paint(src, pairs).then(u => { if (live) setUrl(u); }).catch(() => {});
+    paint(src, pairs).then(res => { if (live) { setUrl(res.url); setAbsent(res.absent); } }).catch(() => {});
     return () => { live = false; };
   }, [src, sig, multi]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!active) return <MwImg src={src} w={w} style={style}/>;
+  const lost = pairs.filter(p => absent.includes(p.from) && !near(rgbOf(p.from), rgbOf(p.to)));
   const toggle = (
     <button type="button" onClick={e => { e.stopPropagation(); setOrig(o => !o); }}
       title={orig ? "Voir aux couleurs choisies" : "Voir l'original"} aria-label={orig ? "Voir aux couleurs choisies" : "Voir l'original"}
@@ -121,5 +131,16 @@ export default function PlateRecolor({ src, map, w = 200, style }) {
       </>
     );
   }
-  return <div style={{ position:"relative" }}>{body}{toggle}</div>;
+  return (
+    <div style={{ position:"relative" }}>{body}{toggle}
+      {!orig && lost.length > 0 && (
+        <span title="MakerWorld n'a pas rendu cette couleur sur la vignette : elle ne peut pas y changer"
+          style={{ position:"absolute", left:4, bottom:4, zIndex:1, display:"flex", alignItems:"center", gap:3, padding:"1px 6px 1px 3px",
+            borderRadius:10, background:"rgba(0,0,0,0.6)", color:"#fde68a", fontSize:9, fontWeight:800 }}>
+          {lost.map(p => <span key={p.from} style={{ width:9, height:9, borderRadius:"50%", background:p.from,
+            border:"1px solid rgba(255,255,255,.6)" }}/>)}
+          absent de l'image</span>
+      )}
+    </div>
+  );
 }
