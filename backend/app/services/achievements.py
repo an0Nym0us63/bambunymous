@@ -2912,12 +2912,16 @@ async def use_ticket(aid: str) -> dict:
         st = await _state_get()
         w = _wheel_init(st) if st else {}
         if not st or w.get("tickets", 0) <= 0:
-            raise ValueError("Pas de ticket de palier : la roue en donne parfois")
+            raise ValueError("Pas de ticket de palier : un chaque lundi, et la roue en donne parfois")
         r = (await evaluate())[aid]
         got = set(r["reached"]) | set((st.get("unlocked") or {}).get(aid) or {})
         lvl = max((int(i) for i in got), default=-1)
         if lvl + 1 >= len(a["tiers"]):
             raise ValueError("Tous les paliers sont déjà atteints")
+        cost = ticket_cost(lvl + 1)
+        if w.get("tickets", 0) < cost:
+            raise ValueError(f"Il faut {cost} tickets pour passer {tiers_of(a)[lvl + 1]['label']} "
+                             f"(tu en as {w.get('tickets', 0)})")
         add = round(a["tiers"][lvl + 1] - _num(r["value"]), 3)
         if add <= 0:
             add = 0
@@ -2926,15 +2930,24 @@ async def use_ticket(aid: str) -> dict:
         # le palier est date tout de suite : le passage ne le prendra pas pour une nouveaute (ni cle ni annonce)
         st.setdefault("unlocked", {}).setdefault(aid, {})[str(lvl + 1)] = now
         st.setdefault("ticket_tiers", {}).setdefault(aid, []).append(lvl + 1)
-        w["tickets"] -= 1
-        w["tickets_used"] = w.get("tickets_used", 0) + 1
+        w["tickets"] -= cost
+        w["tickets_used"] = w.get("tickets_used", 0) + cost
         label = tiers_of(a)[lvl + 1]["label"]
         k = _keys_init(st)
         k["log"] = ([{"at": now, "n": 0, "why": f"Ticket : {a['name']} passe {label}"}] + (k.get("log") or []))[:KEY_LOG_MAX]
         await _state_put(st)
         _CACHE["v"] = None
     _bg_tick()
-    return {"id": aid, "tier": label, "added": _addn(0, add), "tickets": w["tickets"]}
+    return {"id": aid, "tier": label, "level": lvl + 1, "cost": cost, "added": _addn(0, add), "tickets": w["tickets"]}
+
+
+# Prix d'un palier en tickets, selon le palier vise (a peu pres ses points) :
+# Bronze, Argent, Or 1 · Platine, Diamant 2 · Legende 3 · Mythique 4 · Cosmique 5 · Eternel 6.
+TICKET_COST = [1, 1, 1, 2, 2, 3, 4, 5, 6]
+
+
+def ticket_cost(i: int) -> int:
+    return TICKET_COST[min(max(i, 0), len(TICKET_COST) - 1)]
 
 
 def _sets(out: dict, st: dict) -> None:
@@ -3022,7 +3035,7 @@ async def _tick(notify: bool = True) -> list:
     gains = _earn_keys(st, ev, new, await _ok_since((st.get("keys") or {}).get("since")))
     gains += _gift_keys(st)
     _keys_peak(st["keys"])
-    spins = _wheel_weekly(st)
+    spins, w_tickets = _wheel_weekly(st)
     retro = _secret_rewards_retro(st, new)
     s_spins, s_tickets = _secret_rewards(st, new)
     # les cles de depart ont aussi leur notification (une fois)
@@ -3043,8 +3056,8 @@ async def _tick(notify: bool = True) -> list:
         await _notify_keys(gains, st["keys"]["balance"])
     if retro and notify:
         await _notify_retro(*retro, st["wheel"]["spins"], st["wheel"].get("tickets", 0))
-    if (spins or s_spins or s_tickets) and notify:
-        await _notify_spins(spins, st["wheel"]["spins"], s_spins, s_tickets, st["wheel"].get("tickets", 0))
+    if (spins or s_spins or s_tickets or w_tickets) and notify:
+        await _notify_spins(spins, st["wheel"]["spins"], s_spins, s_tickets, st["wheel"].get("tickets", 0), w_tickets)
     return new
 
 
@@ -3246,9 +3259,10 @@ async def _spend_key(aid: str) -> dict:
 # se fait ici, jamais dans la page. Lots : (id, libelle, cles, chance en %).
 WHEEL_START = 3
 WHEEL_WEEKLY = 3
+TICKETS_WEEKLY = 1
 # Ranges par valeur : plus un lot vaut, plus il est rare.
-PRIZES = [("none", "Pas cette fois", 0, 47.0), ("key1", "1 clé", 1, 28.0), ("replay", "Tour rejoué", 0, 7.0),
-          ("hint", "Coup de pouce", 0, 7.0), ("key3", "3 clés", 3, 5.0), ("ticket", "Ticket de palier", 0, 4.0),
+PRIZES = [("none", "Pas cette fois", 0, 45.0), ("key1", "1 clé", 1, 26.0), ("ticket", "Ticket de palier", 0, 10.0),
+          ("replay", "Tour rejoué", 0, 7.0), ("hint", "Coup de pouce", 0, 6.0), ("key3", "3 clés", 3, 4.0),
           ("key5", "5 clés", 5, 1.8), ("jackpot", "Jackpot : 10 clés", 10, 0.2)]
 PRIZE_HELP = {
     "none": "Rien cette fois : retente ta chance.",
@@ -3257,7 +3271,7 @@ PRIZE_HELP = {
     "hint": "L'étape suivante d'un secret pris au hasard, offerte (elle vaut de 1 à 5 clés). "
             "S'il n'y a plus rien à révéler : 1 clé.",
     "key3": "Trois clés d'un coup.",
-    "ticket": "À utiliser sur un succès à paliers : il ajoute au compteur ce qui manque pour le palier suivant.",
+    "ticket": "Un ticket de plus. Sur un succès à paliers, il en faut de 1 à 6 selon le palier visé pour le passer.",
     "key5": "Cinq clés d'un coup.",
     "jackpot": "Le gros lot : dix clés.",
 }
@@ -3281,11 +3295,11 @@ def _keys_peak(k: dict) -> None:
     k["max_balance"] = max(k.get("max_balance", 0), k.get("balance", 0))
 
 
-def _wheel_weekly(st: dict) -> int:
-    """Des tours de plus chaque nouvelle semaine (lundi) ; les tours de depart,
-    annonces une fois. Rend le nombre de tours a annoncer."""
+def _wheel_weekly(st: dict) -> tuple:
+    """Chaque nouvelle semaine (lundi) : des tours de roue et un ticket de
+    palier ; les tours de depart, annonces une fois. Rend (tours, tickets)."""
     w = _wheel_init(st)
-    n = 0
+    n = t = 0
     if not w.get("start_notified"):
         w["start_notified"] = True
         n += w["spins"]
@@ -3294,7 +3308,10 @@ def _wheel_weekly(st: dict) -> int:
         w["week"] = tag
         w["spins"] += WHEEL_WEEKLY
         n += WHEEL_WEEKLY
-    return n
+        w["tickets"] = w.get("tickets", 0) + TICKETS_WEEKLY
+        w["tickets_won"] = w.get("tickets_won", 0) + TICKETS_WEEKLY
+        t += TICKETS_WEEKLY
+    return n, t
 
 
 SPINS_PER_SECRET = 1          # un secret gagne : un tour de roue
@@ -3363,7 +3380,8 @@ async def _notify_retro(n: int, spins: int, tickets: int, spins_total: int, tick
                    "\n".join(lines), click=N.app_link(cfg, "/stats?tab=achievements"), priority=3)
 
 
-async def _notify_spins(n: int, total: int, from_secrets: int = 0, tickets: int = 0, tickets_total: int = 0) -> None:
+async def _notify_spins(n: int, total: int, from_secrets: int = 0, tickets: int = 0, tickets_total: int = 0,
+                        weekly_tickets: int = 0) -> None:
     from . import notify as N
     cfg = await N._load()
     if not N.enabled_in(cfg, "wheel_spin"):
@@ -3376,6 +3394,8 @@ async def _notify_spins(n: int, total: int, from_secrets: int = 0, tickets: int 
     lines = []
     if n:
         lines.append(f"🗓️ +{n} · nouvelle semaine" if n == WHEEL_WEEKLY else f"🎁 +{n} · tours de départ")
+    if weekly_tickets:
+        lines.append(f"🎟️ +{weekly_tickets} ticket{'s' if weekly_tickets > 1 else ''} de palier · nouvelle semaine")
     if from_secrets:
         lines.append(f"🔮 +{from_secrets} · secret{'s' if from_secrets > 1 else ''} gagné{'s' if from_secrets > 1 else ''}")
     if tickets:
@@ -3476,6 +3496,7 @@ def wheel_view(st: dict) -> dict | None:
     nxt = (loc + timedelta(days=7 - loc.weekday())).date()
     return {"spins": w.get("spins", 0), "played": w.get("played", 0), "next": nxt.isoformat(), "tickets": w.get("tickets", 0),
             "weekly": WHEEL_WEEKLY, "start": WHEEL_START, "per_secret": SPINS_PER_SECRET,
+            "weekly_tickets": TICKETS_WEEKLY, "ticket_costs": TICKET_COST,
             "secrets_per_ticket": SECRETS_PER_TICKET,
             "to_ticket": SECRETS_PER_TICKET - (w.get("secrets", 0) % SECRETS_PER_TICKET),
             "prizes": [{"id": i, "label": l, "keys": n, "pct": p, "help": PRIZE_HELP.get(i, "")} for i, l, n, p in PRIZES]}
@@ -3806,7 +3827,8 @@ async def view(fresh: bool = False) -> dict:
             "tiers": [{**{k: t[k] for k in ("id", "label", "emoji", "color")}, "n": a["tiers"][i],
                        "at": got.get(str(i)),
                        "ticket": i in ((st.get("ticket_tiers") or {}).get(a["id"]) or [])} for i, t in enumerate(tiers)],
-            "tickets": len((st.get("ticket_tiers") or {}).get(a["id"]) or []),
+            "tickets": sum(ticket_cost(i) for i in ((st.get("ticket_tiers") or {}).get(a["id"]) or [])),
+            "ticket_cost": ticket_cost(nxt) if nxt is not None and len(a["tiers"]) > 1 else None,
         })
     # derniers succes : le plus haut cran de chacun ; pas ceux du releve au
     # present constates au premier calcul (ils n'ont pas de vraie date)
@@ -3832,6 +3854,6 @@ async def view(fresh: bool = False) -> dict:
            "subs": [{"id": i, "emoji": e, "name": n} for i, e, n, _ids in SECRET_SUBS],
            "tiers": TIERS + [UNIQUE], "recent": [{"id": i, "tier": j, "at": at} for at, i, j in recent],
            "since": (st or {}).get("since"), "sig": CATALOG_SIG,
-           "tickets_used": sum(len(v) for v in ((st or {}).get("ticket_tiers") or {}).values())}
+           "tickets_used": sum(ticket_cost(i) for v in ((st or {}).get("ticket_tiers") or {}).values() for i in v)}
     _CACHE.update(t=time.time(), v=out)
     return out

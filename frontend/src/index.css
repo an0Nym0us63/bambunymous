@@ -142,3 +142,9 @@ body {
 
 /* Defilement horizontal sans barre (bandeaux de l'accueil). */
 .no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* Medailles de haut rang (page Succes) : elles vivent selon leur palier. */
+@keyframes bn-medal-sweep { 0% { transform: translateX(-120%) rotate(25deg) } 55%, 100% { transform: translateX(160%) rotate(25deg) } }
+@keyframes bn-medal-pulse { 0%, 100% { box-shadow: 0 0 4px 1px var(--glow) } 50% { box-shadow: 0 0 14px 5px var(--glow) } }
+@keyframes bn-medal-twinkle { 0%, 100% { opacity: 0; transform: scale(.4) } 50% { opacity: 1; transform: scale(1) } }
+@keyframes bn-medal-turn { to { transform: rotate(360deg) } }

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import client from "../api/client";
+import { TicketStub } from "../pages/Achievements";
 
 // Roue de la fortune, facon machine a sous : le lot est tire par le serveur,
 // la page ne fait que jouer l'animation jusqu'a lui. Trois rouleaux qui
@@ -44,6 +45,7 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
   const [err, setErr] = useState(null);
   const [help, setHelp] = useState(false);            // l'aide : les lots, ce qu'ils valent, leurs chances
   const timers = useRef([]);
+  const finish = useRef(null);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
   const spin = async () => {
@@ -61,10 +63,15 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
     setPhase("spinning");
     // une image plus tard : la translation part de zero vers la derniere case
     requestAnimationFrame(() => requestAnimationFrame(() => setGo(true)));
-    timers.current.push(setTimeout(() => {
+    // le resultat s'affiche quand le dernier rouleau s'arrete (filet : 6 s)
+    let shown = false;
+    finish.current = () => {
+      if (shown) return;
+      shown = true;
       setRes(r); setSpins(r.spins); setPhase("done");
       bonusP.then(b => { setBonus(b); onDone?.(); });
-    }, 3300));
+    };
+    timers.current.push(setTimeout(() => finish.current?.(), 6000));
   };
 
   const win = res && res.prize !== "none";
@@ -78,6 +85,9 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
         @keyframes bn-win { 0%,100% { transform:scale(1) } 50% { transform:scale(1.08) } }
         @keyframes bn-fall { to { transform:translateY(110vh) rotate(720deg); opacity:.2 } }
         @keyframes bn-lever { 0% { transform:rotate(0) } 40% { transform:rotate(38deg) } 100% { transform:rotate(0) } }
+        @keyframes bn-flash { 0%,100% { opacity:0 } 15% { opacity:.85 } 45% { opacity:0 } 60% { opacity:.6 } }
+        @keyframes bn-ticket-out { from { transform:translateY(-100%) } to { transform:translateY(0) } }
+        @keyframes bn-ticket-wiggle { 0%,100% { transform:rotate(0) } 50% { transform:rotate(-4deg) } }
       `}</style>
       {win && Array.from({ length: big ? 70 : 28 }).map((_, i) => (
         <span key={`${res.prize}${i}`} style={{ position:"fixed", top:-20, left:`${Math.random() * 100}%`, fontSize: 14 + Math.random() * 14,
@@ -94,7 +104,7 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
             {BULBS.map(([x, y], i) => (
               <span key={i} style={{ position:"absolute", width:7, height:7, borderRadius:"50%", background:"#fde047",
                 left:`calc(${x}% - 3.5px)`, top:`calc(${y}% - 3.5px)`,
-                animation:`bn-bulb ${phase === "spinning" ? 0.35 : 1.2}s ${i * 0.07}s infinite` }}/>
+                animation:`bn-bulb ${phase === "spinning" ? 0.35 : big && phase === "done" ? 0.22 : 1.2}s ${i * (big && phase === "done" ? 0.03 : 0.07)}s infinite` }}/>
             ))}
           </div>
           <button onClick={() => setHelp(h => !h)} aria-label="Les lots de la roue" title="Les lots et leurs chances"
@@ -133,7 +143,8 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
             {reels.map((s, i) => (
               <div key={i} style={{ flex:1, height:H, overflow:"hidden", borderRadius:10, position:"relative",
                 background:"linear-gradient(180deg, #e7e5e4, #fff 40%, #fff 60%, #d6d3d1)" }}>
-                <div style={{ transform:`translateY(${go ? -(LEN - 1) * H : 0}px)`,
+                <div onTransitionEnd={i === 2 ? () => finish.current?.() : undefined}
+                  style={{ transform:`translateY(${go ? -(LEN - 1) * H : 0}px)`,
                   transition: go ? `transform ${1.6 + i * 0.6}s cubic-bezier(.12,.75,.22,1.03)` : "none" }}>
                   {s.map((x, j) => <div key={j} style={{ height:H, display:"flex", alignItems:"center", justifyContent:"center",
                     fontSize:40, filter: go && phase === "spinning" ? "blur(.6px)" : "none" }}>{x}</div>)}
@@ -145,6 +156,9 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
               </div>
             ))}
           </div>
+          {phase === "done" && big && <div aria-hidden="true" style={{ position:"absolute", inset:0, borderRadius:22,
+            background:"radial-gradient(circle, #fff, #fde047 60%, transparent)", pointerEvents:"none", zIndex:1,
+            animation:"bn-flash 1.4s ease-out 2" }}/>}
           {/* le resultat */}
           <div style={{ minHeight:46, textAlign:"center", display:"flex", flexDirection:"column", justifyContent:"center" }}>
             {phase === "done" && res && (
@@ -182,6 +196,20 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
               background: spins > 0 && phase !== "spinning" ? "linear-gradient(180deg, #fde047, #f59e0b)" : "#a8a29e",
               boxShadow: spins > 0 ? "0 4px 0 #b45309" : "none" }}>
             {phase === "spinning" ? "…" : spins > 0 ? "TOURNER" : "Plus de tour : rendez-vous lundi"}</button>
+          {/* la fente a ticket : il en sort un quand on en gagne */}
+          <div style={{ margin:"12px auto 0", width:150, position:"relative" }}>
+            <div style={{ height:8, borderRadius:4, background:"#1c1917", boxShadow:"inset 0 2px 4px rgba(0,0,0,.9)",
+              position:"relative", zIndex:2 }}/>
+            <div style={{ textAlign:"center", fontSize:9, fontWeight:900, letterSpacing:".25em", color:"rgba(253,224,71,.7)",
+              marginTop:2 }}>TICKET</div>
+            {phase === "done" && res?.prize === "ticket" && (
+              <div style={{ position:"absolute", top:4, left:0, right:0, display:"flex", justifyContent:"center", overflow:"hidden",
+                height:52, zIndex:1 }}>
+                <span style={{ animation:"bn-ticket-out .9s cubic-bezier(.2,.8,.3,1.1) forwards, bn-ticket-wiggle .6s .9s ease-in-out 2",
+                  display:"inline-flex", marginTop:4 }}><TicketStub size={2}/></span>
+              </div>
+            )}
+          </div>
           {/* le levier */}
           <div style={{ position:"absolute", right:-22, top:70, width:14, height:90, transformOrigin:"50% 100%",
             animation: phase === "spinning" ? "bn-lever .6s ease-out" : "none" }}>

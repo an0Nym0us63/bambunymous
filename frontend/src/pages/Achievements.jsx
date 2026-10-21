@@ -7,6 +7,7 @@ import client from "../api/client";
 import { isMoneyHidden } from "../utils/money";
 import { egg, tapper } from "../eggs";
 import SlotMachine from "../components/SlotMachine";
+import TicketCeremony from "../components/TicketCeremony";
 
 // Succes : medailles gagnees sur l'historique (impressions, filaments, objets,
 // MakerWorld, copains, secrets). Chaque succes a jusqu'a neuf paliers (bronze,
@@ -51,9 +52,17 @@ export default function Achievements({ embedded = false }) {
   };
   const canSpend = isAdmin && !atFriend && !!data?.keys;
   // ticket de palier : passer un succes a son palier suivant
+  const [ceremony, setCeremony] = useState(null);
   const useTicket = async aid => {
     setKeyErr(null);
-    try { await client.post(`/achievements/ticket/${aid}`); await load(); }
+    const it = byId[aid];
+    try {
+      const { data: r } = await client.post(`/achievements/ticket/${aid}`);
+      closeDetail();
+      setCeremony({ tier: it.tiers[r.level] || it.tiers[it.level + 1], emoji: it.emoji, name: it.name, cost: r.cost || 1,
+                    added: r.added, unit: it.unit });
+      await load();
+    }
     catch (e) { setKeyErr(e.response?.data?.detail || e.message); }
   };
   const [mine, setMine] = useState(null);         // en visite : mes propres medailles uniques (lues chez moi)
@@ -285,6 +294,7 @@ export default function Achievements({ embedded = false }) {
 
       {rules && createPortal(<Rules data={data} onClose={() => setRules(false)}/>, document.body)}
       {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
+      {ceremony && <TicketCeremony {...ceremony} onClose={() => setCeremony(null)}/>}
       {detail && byId[detail] && createPortal(
         <div data-no-pull="" onClick={closeDetail} style={{ position:"fixed", inset:0, zIndex:4300, background:"rgba(0,0,0,0.6)",
           display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
@@ -468,9 +478,11 @@ function KeysBox({ keys, onRules, onWheel }) {
             {w.spins} tour{w.spins > 1 ? "s" : ""} de roue</span>
           <span style={{ display:"block", fontSize:11.5, color:"var(--muted)" }}>
             +{w.weekly} chaque lundi · +{w.per_secret || 1} par secret gagné
-            {w.tickets > 0 ? ` · 🎟️ ${w.tickets} ticket${w.tickets > 1 ? "s" : ""}` : ""}
+
             {w.to_ticket ? ` · prochain ticket dans ${w.to_ticket} secret${w.to_ticket > 1 ? "s" : ""}` : ""}</span>
         </span>
+        {w.tickets > 0 && <span title="Tickets de palier : à utiliser dans le détail d'un succès à paliers">
+          <TicketStub n={w.tickets} size={1.1}/></span>}
         {onWheel && (
           <button onClick={onWheel} style={{ padding:"8px 14px", borderRadius:20, border:"none", fontSize:13, fontWeight:900,
             cursor:"pointer", color:"#7c2d12", background: w.spins > 0 ? "linear-gradient(180deg, #fde047, #f59e0b)" : "var(--surface2)",
@@ -676,13 +688,22 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
           </>
         )
       ) : null}
-      {sheet && !unique && it.next != null && tickets > 0 && onTicket && (
-        <button onClick={e => { e.stopPropagation(); if (sure) { setSure(false); onTicket(); } else setSure(true); }}
-          style={{ alignSelf:"flex-start", padding:"7px 12px", borderRadius:20, fontSize:12.5, fontWeight:800, cursor:"pointer",
-            border:"1px solid #F59E0B", background: sure ? "#F59E0B" : "rgba(245,158,11,0.12)", color: sure ? "#fff" : "#b45309" }}>
-          {sure ? `Confirmer : passer ${it.tiers[it.level + 1]?.label} (+${fmt(it.next - (it.value || 0), it.unit)})`
-            : `🎟️ Utiliser un ticket (${tickets}) : passer ${it.tiers[it.level + 1]?.label}`}</button>
-      )}
+      {sheet && !unique && it.next != null && tickets > 0 && onTicket && (() => {
+        const cost = it.ticket_cost || 1, enough = tickets >= cost;
+        return (
+          <button onClick={e => { e.stopPropagation(); if (!enough) return; if (sure) { setSure(false); onTicket(); } else setSure(true); }}
+            disabled={!enough}
+            style={{ alignSelf:"flex-start", display:"inline-flex", alignItems:"center", gap:8, padding:"7px 12px", borderRadius:20,
+              fontSize:12.5, fontWeight:800, cursor: enough ? "pointer" : "default", border:"1px solid #F59E0B",
+              background: sure ? "#F59E0B" : "rgba(245,158,11,0.12)", color: sure ? "#fff" : "#b45309", opacity: enough ? 1 : .6 }}>
+            <span>{sure ? `Confirmer : passer ${it.tiers[it.level + 1]?.label} (+${fmt(it.next - (it.value || 0), it.unit)})`
+              : `Passer ${it.tiers[it.level + 1]?.label}`}</span>
+            <span style={{ display:"inline-flex", gap:2 }}>{Array.from({ length: cost }).map((_, i) =>
+              <TicketStub key={i} size={0.75} dim={i >= tickets}/>)}</span>
+            {!enough && <span style={{ fontWeight:600 }}>(tu en as {tickets})</span>}
+          </button>
+        );
+      })()}
       {sheet && keyErr && !unique && <p style={{ margin:0, fontSize:12, color:"#ef4444" }}>{keyErr}</p>}
       {rivals?.length > 0 && (got || !it.secret) && (unique ? got && <PalsUnique rivals={rivals}/> : <Versus it={it} rivals={rivals}/>)}
       {open && !unique && (got || !it.secret) && (
@@ -780,9 +801,17 @@ function Rules({ data, onClose }) {
               </React.Fragment>
             ))}
           </div>
-          <P><b>Ticket de palier</b> 🎟️ : sur un succès à paliers (jamais un secret), il ajoute au compteur ce qui manquait
-            pour le palier suivant. Le compte avance pour de bon : la suite se compte à partir de là. Le palier ainsi passé
-            ne rapporte pas de clé, et il est marqué 🎟️, chez toi comme chez tes copains.</P>
+          <P><b>Tickets de palier</b> <TicketStub size={0.8}/> : {k.wheel.weekly_tickets || 1} offert chaque lundi, un tous les
+            {" "}{k.wheel.secrets_per_ticket || 10} secrets, et la roue en donne. Sur un succès à paliers (jamais un secret), ils
+            ajoutent au compteur ce qui manquait pour le palier suivant : le compte avance pour de bon, la suite se compte à
+            partir de là. Le prix dépend du palier visé :</P>
+          <div style={{ display:"flex", flexWrap:"wrap", gap:"4px 12px", margin:"0 0 8px 4px", fontSize:12, color:"var(--text2)" }}>
+            {(k.wheel.ticket_costs || []).map((c, i) => data.tiers[i] && (
+              <span key={i} style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
+                <Medal tier={data.tiers[i]} emoji="" size={14}/>{data.tiers[i].label} <b>{c}</b></span>
+            ))}
+          </div>
+          <P>Un palier passé avec des tickets ne rapporte pas de clé, et il est marqué 🎟️, chez toi comme chez tes copains.</P>
           <P>Un tour peut aussi faire franchir des paliers ou débloquer un secret : leurs clés s'ajoutent au lot, et la
             machine les affiche en bonus. Les paliers de la section « Clés et roue » ne rapportent pas de clé (sinon, des
             clés en appelleraient d'autres sans fin) ; ses secrets, si.</P>
@@ -874,9 +903,22 @@ function PalsUnique({ rivals }) {
 export function Medal({ tier, emoji, size = 48, locked = false }) {
   const c = locked ? "#8a8f98" : tier.color;
   const id = `m${tier.id}${locked ? "l" : ""}`;
+  // les hauts rangs vivent : reflet (Legende), halo (Mythique), etoiles (Cosmique), liseré arc-en-ciel (Eternel)
+  const fx = !locked && size >= 30 ? tier.id : null;
+  const big = size >= 30;
+  const cy = size * (big ? 28 : 24) / 48, r = size * (big ? 18 : 21) / 48;
+  const disc = { position:"absolute", left: size / 2 - r, top: cy - r, width: r * 2, height: r * 2, borderRadius:"50%" };
   return (
     <span style={{ position:"relative", width:size, height:size, flexShrink:0, display:"inline-flex",
       alignItems:"center", justifyContent:"center", opacity: locked ? 0.45 : 1 }}>
+      {fx === "eternal" && (
+        <span aria-hidden="true" style={{ ...disc, left: disc.left - 3, top: disc.top - 3, width: r * 2 + 6, height: r * 2 + 6,
+          background:"conic-gradient(#ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #6366f1, #d946ef, #ef4444)",
+          animation:"bn-medal-turn 4s linear infinite" }}/>
+      )}
+      {fx === "mythic" && (
+        <span aria-hidden="true" style={{ ...disc, "--glow": `${tier.color}cc`, animation:"bn-medal-pulse 2.2s ease-in-out infinite" }}/>
+      )}
       <svg width={size} height={size} viewBox="0 0 48 48" style={{ position:"absolute", inset:0 }} aria-hidden="true">
         <defs>
           <radialGradient id={id} cx="35%" cy="30%" r="75%">
@@ -894,8 +936,38 @@ export function Medal({ tier, emoji, size = 48, locked = false }) {
         <circle cx="24" cy={size >= 30 ? 28 : 24} r={size >= 30 ? 13.5 : 15.5} fill="none"
           stroke="#fff" strokeOpacity="0.45" strokeWidth="1.2"/>
       </svg>
+      {fx === "legend" && (
+        <span aria-hidden="true" style={{ ...disc, overflow:"hidden" }}>
+          <span style={{ position:"absolute", top:"-20%", bottom:"-20%", width:"35%",
+            background:"linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent)",
+            animation:"bn-medal-sweep 3s ease-in-out infinite" }}/>
+        </span>
+      )}
+      {fx === "cosmic" && [[-0.05, 0.25, 0], [0.92, 0.18, 0.7], [0.85, 0.92, 1.3], [0.02, 0.85, 1.9]].map(([x, y, d], i) => (
+        <span key={i} aria-hidden="true" style={{ position:"absolute", left: size * x, top: size * y, fontSize: Math.max(8, size * 0.2),
+          color:"#c7d2fe", textShadow:"0 0 6px #818cf8", animation:`bn-medal-twinkle 2.4s ${d}s ease-in-out infinite`,
+          pointerEvents:"none", lineHeight:1 }}>✦</span>
+      ))}
       {emoji && <span style={{ position:"relative", top: size >= 30 ? size * 0.08 : 0, fontSize:size * 0.36,
         filter: locked ? "grayscale(1)" : "none", lineHeight:1 }}>{emoji}</span>}
+    </span>
+  );
+}
+
+// Un ticket de palier dessine : bords echancres, talon perfore, et le nombre.
+export function TicketStub({ n, size = 1, dim = false }) {
+  const h = 18 * size, w = (n != null ? 40 : 26) * size;
+  const notch = `radial-gradient(circle at 0 50%, transparent ${3 * size}px, #000 ${3 * size + 0.5}px) left / 51% 100% no-repeat,
+    radial-gradient(circle at 100% 50%, transparent ${3 * size}px, #000 ${3 * size + 0.5}px) right / 51% 100% no-repeat`;
+  return (
+    <span aria-label={n != null ? `${n} ticket${n > 1 ? "s" : ""}` : "ticket"} style={{ display:"inline-flex", alignItems:"center",
+      height:h, width:w, flexShrink:0, position:"relative", verticalAlign:"middle",
+      background: dim ? "linear-gradient(135deg, #a8a29e, #78716c)" : "linear-gradient(135deg, #fbbf24, #f97316)",
+      WebkitMask: notch, mask: notch, borderRadius: 2 * size, boxShadow:"inset 0 0 0 1px rgba(255,255,255,.35)" }}>
+      <span style={{ width: 9 * size, height:"100%", borderRight:`${size}px dashed rgba(255,255,255,.75)`,
+        display:"flex", alignItems:"center", justifyContent:"center", fontSize: 8 * size, color:"#fff" }}>★</span>
+      {n != null && <span style={{ flex:1, textAlign:"center", fontSize: 10.5 * size, fontWeight:900, color:"#fff",
+        textShadow:"0 1px 0 rgba(0,0,0,.25)" }}>×{n}</span>}
     </span>
   );
 }
