@@ -516,9 +516,18 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                   borderRadius:"50%", display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:900,
                                   color:"white", background: on ? "#3b82f6" : "rgba(0,0,0,0.45)", border:"1.5px solid white" }}>{on ? "✓" : ""}</span>}
                                 <div style={{ position:"relative" }}>
-                                  {pl.thumb ? <MwImg src={pl.thumb} w={200}
-                                    style={{ width:"100%", aspectRatio:"1", objectFit:"cover", display:"block" }}/>
-                                    : <div style={{ width:"100%", aspectRatio:"1" }}/>}
+                                  {/* Certains rendus MakerWorld sont blancs (ou gris, ou noirs) sur fond
+                                      transparent : aucun fond ne convient a toutes les couleurs. Un fin contour
+                                      ombre suit la silhouette (la transparence la dessine) et la detache de
+                                      n'importe quel fond. Image entiere, jamais recadree. */}
+                                  <div style={{ background:"var(--surface2)" }}>
+                                    {pl.thumb ? <MwImg src={pl.thumb} w={200}
+                                      style={{ width:"100%", aspectRatio:"1", objectFit:"contain", display:"block", padding:6,
+                                        boxSizing:"border-box",
+                                        filter:"drop-shadow(0 0 0.6px rgba(0,0,0,.75)) drop-shadow(0 0 0.6px rgba(255,255,255,.7)) drop-shadow(0 3px 5px rgba(0,0,0,.28))" }}/>
+                                      : <div style={{ width:"100%", aspectRatio:"1", display:"flex", alignItems:"center",
+                                          justifyContent:"center", fontSize:28, fontWeight:900, color:"var(--muted)" }}>{pl.index}</div>}
+                                  </div>
                                   {/* deja imprime ET pret : les deux, on peut vouloir le refaire */}
                                   <div style={{ position:"absolute", top:4, left:4, display:"flex", flexDirection:"column",
                                     alignItems:"flex-start", gap:3 }}>

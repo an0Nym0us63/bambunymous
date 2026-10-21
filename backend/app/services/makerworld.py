@@ -123,6 +123,21 @@ def _parse_design(code, d) -> dict:
     }
 
 
+def _plate_thumb(p: dict):
+    """Vignette d'un plateau, quelle que soit la forme que MakerWorld lui donne :
+    {url}, une adresse directe, ou un autre nom de champ. None s'il n'y en a pas."""
+    th = p.get("thumbnail")
+    if isinstance(th, dict) and isinstance(th.get("url"), str) and th["url"]:
+        return th["url"]                             # la forme habituelle, telle quelle
+    for k in ("thumbnail", "thumbnailUrl", "thumbnailURL", "pic", "picture", "image", "cover"):
+        v = p.get(k)
+        if isinstance(v, dict):
+            v = v.get("url") or v.get("originalUrl") or v.get("thumbnailUrl")
+        if isinstance(v, str) and v.startswith(("http://", "https://", "//")):
+            return "https:" + v if v.startswith("//") else v
+    return None
+
+
 def _profiles(d) -> str:
     """Profils (instances) et leurs plateaux, en JSON compact. Rien d'exige :
     une forme inattendue donne simplement une liste plus courte."""
@@ -137,9 +152,8 @@ def _profiles(d) -> str:
         for p in (mi.get("plates") if isinstance(mi.get("plates"), list) else []):
             if not isinstance(p, dict) or not isinstance(p.get("index"), int):
                 continue
-            th = p.get("thumbnail") if isinstance(p.get("thumbnail"), dict) else {}
             plates.append({"index": p["index"], "name": p.get("name") if isinstance(p.get("name"), str) else "",
-                           "thumb": th.get("url") if isinstance(th.get("url"), str) else None,
+                           "thumb": _plate_thumb(p),
                            "weight_g": p.get("weight") if isinstance(p.get("weight"), (int, float)) else None,
                            "seconds": p.get("prediction") if isinstance(p.get("prediction"), (int, float)) else None})
         out.append({"profile_id": str(i.get("profileId") or ""), "instance_id": str(i.get("id") or ""), "title": i.get("title") if isinstance(i.get("title"), str) else "",
@@ -459,11 +473,10 @@ def _plate_detail(d) -> list:
         for pl in (mi.get("plates") if isinstance(mi.get("plates"), list) else []):
             if not isinstance(pl, dict) or not isinstance(pl.get("index"), int):
                 continue
-            th = pl.get("thumbnail") if isinstance(pl.get("thumbnail"), dict) else {}
             fils = [{"type": f.get("type"), "color": f.get("color"), "g": f.get("usedG")}
                     for f in (pl.get("filaments") or []) if isinstance(f, dict)]
             plates.append({"index": pl["index"], "name": pl.get("name") if isinstance(pl.get("name"), str) else "",
-                           "thumb": th.get("url") if isinstance(th.get("url"), str) else None,
+                           "thumb": _plate_thumb(pl),
                            "weight_g": pl.get("weight") if isinstance(pl.get("weight"), (int, float)) else None,
                            "seconds": pl.get("prediction") if isinstance(pl.get("prediction"), (int, float)) else None,
                            "filaments": fils})
