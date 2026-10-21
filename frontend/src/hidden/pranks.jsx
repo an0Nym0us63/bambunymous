@@ -259,7 +259,9 @@ function makeCtl(layerRef) {
               if (v) el.style.setProperty(k, v, p); else el.style.removeProperty(k);
             }
           }
-          if (!rec.had && !el.style.cssText) el.removeAttribute("style");
+          // Chrome synchronise l'attribut en differe : on le relit d'abord, sinon un
+          // style="" vide peut revenir apres le retrait
+          if (!rec.had && !el.style.cssText) { el.getAttribute("style"); el.removeAttribute("style"); }
         } catch (e) { /* rien */ }
       });
       styles.clear();
