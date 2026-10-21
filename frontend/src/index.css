@@ -156,3 +156,42 @@ body {
 @keyframes bn-lamp { 0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px #fde047 } 50% { opacity: .3; box-shadow: none } }
 @keyframes bn-press { 0%, 100% { transform: scale(1) } 50% { transform: scale(1.035) } }
 @keyframes bn-ring-glow { 0%, 100% { opacity: .55 } 50% { opacity: 1 } }
+
+/* ── Succes : la page a son propre decor (salon de jeu) ─────────────────────
+   Pose par la page (classe sur body) : le fond de toute la zone de contenu,
+   et des couleurs propres aux cartes et aux feuilles de la page (.ach-room). */
+body.ach-room-on main.page-content {
+  background:
+    radial-gradient(900px 520px at 8% -8%, rgba(245,183,0,0.22), transparent 62%),
+    radial-gradient(800px 560px at 108% 12%, rgba(139,92,246,0.24), transparent 62%),
+    radial-gradient(900px 640px at 40% 112%, rgba(236,72,153,0.16), transparent 62%),
+    radial-gradient(rgba(245,183,0,0.22) 1px, transparent 1.6px) 0 0 / 26px 26px,
+    linear-gradient(180deg, #160d2e 0%, #0d0a1f 100%) !important;
+  background-attachment: fixed !important;
+}
+[data-theme="light"] body.ach-room-on main.page-content,
+[data-theme="light"].ach-room-on main.page-content {
+  background:
+    radial-gradient(900px 520px at 8% -8%, rgba(245,183,0,0.26), transparent 62%),
+    radial-gradient(800px 560px at 108% 12%, rgba(139,92,246,0.20), transparent 62%),
+    radial-gradient(900px 640px at 40% 112%, rgba(236,72,153,0.14), transparent 62%),
+    radial-gradient(rgba(139,92,246,0.13) 1px, transparent 1.6px) 0 0 / 26px 26px,
+    linear-gradient(180deg, #fbf6ff 0%, #f3ecfb 100%) !important;
+  background-attachment: fixed !important;
+}
+.ach-room {
+  --surface:  rgba(36, 24, 66, 0.62);
+  --surface2: rgba(255, 255, 255, 0.07);
+  --border:   rgba(196, 167, 255, 0.18);
+  --sheet-bg: #1c1434;
+  --text2:    #b9b0d6;
+  --muted:    #968cb8;
+}
+[data-theme="light"] .ach-room {
+  --surface:  rgba(255, 255, 255, 0.78);
+  --surface2: rgba(250, 246, 255, 0.85);
+  --border:   rgba(124, 58, 237, 0.16);
+  --sheet-bg: #fffbf3;
+  --text2:    #3f3560;
+  --muted:    #6f6890;
+}

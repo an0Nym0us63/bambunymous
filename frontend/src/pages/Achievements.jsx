@@ -28,6 +28,11 @@ const dateFr = iso => iso ? new Date(iso + (iso.endsWith("Z") || iso.includes("+
 // la comparaison avec chacun, puis toutes ses medailles (detail au toucher).
 // ?cat= deplie une section ; ?a= ouvre le detail d'un succes (notifications).
 export default function Achievements({ embedded = false }) {
+  // la page a son decor : tout le fond de la zone de contenu (voir index.css)
+  useEffect(() => {
+    document.body.classList.add("ach-room-on");
+    return () => document.body.classList.remove("ach-room-on");
+  }, []);
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [pod, setPod] = useState(null);           // podium : moi et mes copains
@@ -112,7 +117,7 @@ export default function Achievements({ embedded = false }) {
   const rivalsOf = it => pals.length ? pals.map(p => ({ name: p.name, level: p.levels[it.id]?.[0] ?? -1 })) : null;
 
   return (
-    <div style={{ maxWidth: embedded ? undefined : 900, width:"100%", margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
+    <div className="ach-room" style={{ maxWidth: embedded ? undefined : 900, width:"100%", margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
       {!embedded && <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Succès</h1>}
 
       {/* Bilan : score (jauge), vitrine des medailles, puis le tresor (cles, tickets, machine) */}
@@ -240,7 +245,8 @@ export default function Achievements({ embedded = false }) {
               <div style={{ padding:"0 16px 16px", display:"flex", flexDirection:"column", gap:14 }}>
                 {withFriends && (
                   <div style={{ display:"flex", flexDirection:"column", gap:10, padding:"12px", borderRadius:12,
-                    background:"var(--surface2)", border:"1px solid var(--border)" }}>
+                    ...feltCard(CAT_COLOR[c.id] || "#8B5CF6", "#F5B700"),
+                    background:`radial-gradient(45% 80% at 50% 0%, rgba(255,215,0,0.18), transparent 70%), ${feltBg(CAT_COLOR[c.id] || "#8B5CF6", "#F5B700")}` }}>
                     <Podium people={people} score={p => p.cats?.[c.id]?.score || 0} small/>
                     <Compare people={people} cat={c.id}/>
                   </div>
@@ -301,7 +307,7 @@ export default function Achievements({ embedded = false }) {
       {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
       {ceremony && <TicketCeremony {...ceremony} onClose={() => setCeremony(null)}/>}
       {detail && byId[detail] && createPortal(
-        <div data-no-pull="" onClick={closeDetail} style={{ position:"fixed", inset:0, zIndex:4300, background:"rgba(0,0,0,0.6)",
+        <div data-no-pull="" className="ach-room" onClick={closeDetail} style={{ position:"fixed", inset:0, zIndex:4300, background:"rgba(0,0,0,0.6)",
           display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
           <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:420, maxHeight:"90vh", overflowY:"auto",
             position:"relative" }}>
@@ -893,9 +899,13 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
         border: focus ? `2px solid ${top.color}` : undefined,
         boxShadow: focus ? `0 0 0 4px ${top.color}33` : undefined,
         // en feuille de detail : fond opaque des feuilles (la carte seule est translucide)
-        background: done ? `linear-gradient(135deg, ${top.color}1f, transparent 70%), ${sheet ? "var(--sheet-bg)" : "var(--surface)"}`
-          : sheet ? "var(--sheet-bg)" : undefined,
-        ...(sheet ? { backdropFilter:"none", boxShadow:"0 12px 40px rgba(0,0,0,0.45)", paddingRight:36 } : {}) }}>
+        background: sheet
+          // feuille de detail : le decor de la page, eclaire par la couleur de la medaille
+          ? `radial-gradient(90% 55% at 15% 0%, ${top.color}${done ? "33" : "1a"}, transparent 70%), ` +
+            `radial-gradient(70% 50% at 100% 100%, rgba(139,92,246,0.14), transparent 70%), var(--sheet-bg)`
+          : done ? `linear-gradient(135deg, ${top.color}1f, transparent 70%), var(--surface)` : undefined,
+        ...(sheet ? { backdropFilter:"none", paddingRight:36, border:`1px solid ${top.color}66`,
+          boxShadow:`0 12px 40px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.06) inset, 0 0 30px ${top.color}33` } : {}) }}>
       <div style={{ display:"flex", gap:12, alignItems:"center" }}>
         <span key={shine} onClick={e => {
             if (!sheet) return;
@@ -1039,7 +1049,7 @@ function Rules({ data, onClose }) {
   const H = ({ children }) => <div style={{ fontSize:13, fontWeight:900, color:"var(--text)", margin:"14px 0 6px" }}>{children}</div>;
   const P = ({ children }) => <p style={{ margin:"0 0 6px", fontSize:12.5, color:"var(--text2)", lineHeight:1.55 }}>{children}</p>;
   return (
-    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4300, background:"rgba(0,0,0,0.6)",
+    <div data-no-pull="" className="ach-room" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4300, background:"rgba(0,0,0,0.6)",
       display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
       <div onClick={e => e.stopPropagation()} className="card" style={{ width:"100%", maxWidth:460, maxHeight:"88vh", overflowY:"auto",
         padding:"16px 18px", background:"var(--sheet-bg)", backdropFilter:"none", position:"relative" }}>
@@ -1295,7 +1305,7 @@ const rgba = (hex, a) => {
 const feltBg = (c, c2 = c) => [
   `radial-gradient(120% 90% at 0% 0%, ${rgba(c, 0.20)}, transparent 55%)`,
   `radial-gradient(90% 80% at 100% 100%, ${rgba(c2, 0.12)}, transparent 60%)`,
-  `repeating-linear-gradient(135deg, ${rgba(c, 0.04)} 0 9px, transparent 9px 18px)`,
+  "linear-gradient(180deg, rgba(255,255,255,0.07), transparent 45%)",
   "var(--surface)",
 ].join(", ");
 const feltCard = (c, c2) => ({ background: feltBg(c, c2), border:`1px solid ${rgba(c, 0.35)}`,
