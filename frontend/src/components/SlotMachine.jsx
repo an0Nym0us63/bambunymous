@@ -42,6 +42,7 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
   const [res, setRes] = useState(null);
   const [bonus, setBonus] = useState(null);           // cles rapportees en plus par les succes debloques
   const [err, setErr] = useState(null);
+  const [help, setHelp] = useState(false);            // l'aide : les lots, ce qu'ils valent, leurs chances
   const timers = useRef([]);
   useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
@@ -96,6 +97,31 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
                 animation:`bn-bulb ${phase === "spinning" ? 0.35 : 1.2}s ${i * 0.07}s infinite` }}/>
             ))}
           </div>
+          <button onClick={() => setHelp(h => !h)} aria-label="Les lots de la roue" title="Les lots et leurs chances"
+            style={{ position:"absolute", top:12, right:14, width:24, height:24, borderRadius:"50%", zIndex:2,
+              border:"1.5px solid #fde047", background:"rgba(0,0,0,.25)", color:"#fde047", fontWeight:900, fontSize:13,
+              cursor:"pointer" }}>{help ? "✕" : "?"}</button>
+          {help && (
+            <div style={{ position:"absolute", inset:"44px 12px 12px", zIndex:3, borderRadius:14, overflowY:"auto",
+              background:"rgba(28,25,23,.97)", border:"1px solid rgba(253,224,71,.5)", padding:"10px 12px",
+              color:"rgba(255,255,255,.9)", fontSize:12, lineHeight:1.45 }}>
+              <div style={{ fontWeight:900, color:"#fde047", marginBottom:6 }}>Les lots, du plus courant au plus rare</div>
+              {(wheel?.prizes || []).map(p => (
+                <div key={p.id} style={{ display:"flex", gap:8, padding:"4px 0", borderTop:"1px solid rgba(255,255,255,.08)" }}>
+                  <span style={{ width:22, textAlign:"center", fontSize:16 }}>{SYM[p.id] || "✖️"}</span>
+                  <span style={{ flex:1, minWidth:0 }}>
+                    <b>{p.label}</b>
+                    <span style={{ display:"block", fontSize:11, color:"rgba(255,255,255,.65)" }}>{p.help}</span>
+                  </span>
+                  <span style={{ fontWeight:800, color:"#fde047", fontVariantNumeric:"tabular-nums", whiteSpace:"nowrap" }}>
+                    {String(p.pct).replace(".", ",")} %</span>
+                </div>
+              ))}
+              <div style={{ marginTop:6, fontSize:11, color:"rgba(255,255,255,.65)" }}>
+                {wheel?.weekly || 3} tours offerts chaque lundi. Gagner des paliers ou un secret pendant un tour rapporte aussi
+                ses clés, affichées en bonus.</div>
+            </div>
+          )}
           <div style={{ textAlign:"center", fontWeight:900, fontSize:20, color:"#fde047", letterSpacing:".04em",
             textShadow:"0 2px 0 #7c2d12, 0 0 12px rgba(253,224,71,.6)" }}>🎰 ROUE DE LA FORTUNE</div>
           <div style={{ textAlign:"center", fontSize:11.5, color:"rgba(255,255,255,.8)", marginTop:2 }}>

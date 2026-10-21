@@ -3242,10 +3242,21 @@ async def _spend_key(aid: str) -> dict:
 # se fait ici, jamais dans la page. Lots : (id, libelle, cles, chance en %).
 WHEEL_START = 3
 WHEEL_WEEKLY = 3
-PRIZES = [("none", "Pas cette fois", 0, 47.0), ("key1", "1 clé", 1, 30.0), ("replay", "Tour rejoué", 0, 6.0),
-          ("ticket", "Ticket de palier", 0, 5.0),
-          ("key3", "3 clés", 3, 7.0), ("hint", "Coup de pouce", 0, 3.0), ("key5", "5 clés", 5, 1.8),
-          ("jackpot", "Jackpot : 10 clés", 10, 0.2)]
+# Ranges par valeur : plus un lot vaut, plus il est rare.
+PRIZES = [("none", "Pas cette fois", 0, 47.0), ("key1", "1 clé", 1, 28.0), ("replay", "Tour rejoué", 0, 7.0),
+          ("hint", "Coup de pouce", 0, 7.0), ("key3", "3 clés", 3, 5.0), ("ticket", "Ticket de palier", 0, 4.0),
+          ("key5", "5 clés", 5, 1.8), ("jackpot", "Jackpot : 10 clés", 10, 0.2)]
+PRIZE_HELP = {
+    "none": "Rien cette fois : retente ta chance.",
+    "key1": "Une clé, tout de suite.",
+    "replay": "Le tour t'est rendu : tu rejoues.",
+    "hint": "L'étape suivante d'un secret pris au hasard, offerte (elle vaut de 1 à 5 clés). "
+            "S'il n'y a plus rien à révéler : 1 clé.",
+    "key3": "Trois clés d'un coup.",
+    "ticket": "À utiliser sur un succès à paliers : il ajoute au compteur ce qui manque pour le palier suivant.",
+    "key5": "Cinq clés d'un coup.",
+    "jackpot": "Le gros lot : dix clés.",
+}
 
 
 def _week_tag(t: datetime | None = None) -> str:
@@ -3383,7 +3394,7 @@ def wheel_view(st: dict) -> dict | None:
     nxt = (loc + timedelta(days=7 - loc.weekday())).date()
     return {"spins": w.get("spins", 0), "played": w.get("played", 0), "next": nxt.isoformat(), "tickets": w.get("tickets", 0),
             "weekly": WHEEL_WEEKLY, "start": WHEEL_START,
-            "prizes": [{"id": i, "label": l, "keys": n, "pct": p} for i, l, n, p in PRIZES]}
+            "prizes": [{"id": i, "label": l, "keys": n, "pct": p, "help": PRIZE_HELP.get(i, "")} for i, l, n, p in PRIZES]}
 
 
 _MONTHS = "janvier février mars avril mai juin juillet août septembre octobre novembre décembre".split()

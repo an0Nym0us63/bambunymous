@@ -765,12 +765,12 @@ function Rules({ data, onClose }) {
         {k?.wheel && <>
           <H>🎰 Roue de la fortune</H>
           <P>{k.wheel.start} tours offerts au départ, puis {k.wheel.weekly} chaque lundi (une semaine manquée ne se rattrape pas).
-            Chaque tour tire un lot :</P>
+            Chaque tour tire un lot ; plus un lot vaut, plus il est rare :</P>
           <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:"3px 12px", fontSize:12.5, color:"var(--text2)",
             margin:"0 0 8px 4px" }}>
             {k.wheel.prizes.map(p => (
               <React.Fragment key={p.id}>
-                <span>{p.label}{p.id === "hint" ? " (une étape d'un secret au hasard, offerte)" : p.id === "replay" ? " (le tour t'est rendu)" : ""}</span>
+                <span>{p.label}{p.help && <span style={{ display:"block", fontSize:11, color:"var(--muted)" }}>{p.help}</span>}</span>
                 <span style={{ textAlign:"right", fontWeight:700, fontVariantNumeric:"tabular-nums" }}>
                   {String(p.pct).replace(".", ",")} %</span>
               </React.Fragment>
