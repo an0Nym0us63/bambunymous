@@ -5,8 +5,10 @@ import client from "../api/client";
 // Roue de la fortune, facon machine a sous : le lot est tire par le serveur,
 // la page ne fait que jouer l'animation jusqu'a lui. Trois rouleaux qui
 // defilent et s'arretent l'un apres l'autre ; trois symboles pareils = gagne.
-const SYM = { key1: "🔑", key3: "🗝️", key5: "💎", jackpot: "💰", replay: "🔁", hint: "🔍" };
-const FILLER = ["🔑", "🗝️", "💎", "💰", "🔁", "🔍", "🍒", "⭐", "🍋", "🔔"];
+// un symbole bien distinct par lot (🗝️ se confondait avec 🔑 sur certains ecrans)
+const SYM = { key1: "🔑", key3: "🍀", key5: "💎", jackpot: "💰", replay: "🔁", hint: "🔍" };
+const FILLER = ["🔑", "🍀", "💎", "💰", "🔁", "🔍", "🍒", "⭐", "🍋", "🔔"];
+const LEGEND = [["🔑", "1 clé"], ["🍀", "3 clés"], ["💎", "5 clés"], ["💰", "10 clés"], ["🔁", "rejoue"], ["🔍", "coup de pouce"]];
 const H = 76;                      // hauteur d'une case
 const LEN = 28;                    // cases par rouleau avant l'arret
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -136,6 +138,12 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
             )}
             {phase === "spinning" && <div style={{ fontSize:14, fontWeight:800, color:"rgba(255,255,255,.85)" }}>Ça tourne…</div>}
             {err && <div style={{ fontSize:12.5, color:"#fecaca", fontWeight:700 }}>{err}</div>}
+          </div>
+          {/* la legende : trois pareils = */}
+          <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", gap:"2px 10px", marginTop:6,
+            fontSize:10.5, color:"rgba(255,255,255,.75)" }}>
+            <span style={{ fontWeight:700 }}>3 pareils :</span>
+            {LEGEND.map(([e, l]) => <span key={e}>{e} {l}</span>)}
           </div>
           {/* le bouton */}
           <button onClick={spin} disabled={phase === "spinning" || spins <= 0}
