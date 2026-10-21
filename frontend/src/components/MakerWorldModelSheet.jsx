@@ -475,11 +475,17 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                       {isOpen && p.plates.length > 1 && (() => {
                         // retenus, faisables tout de suite avec l'AMS, et pas encore imprimes
                         const sel = plateSel[p.instance_id];
-                        const todo = p.plates.filter(pl => (!sel || sel.includes(pl.index)) && !plateDone(p, pl.index)
-                          && plateInAms(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`)).map(pl => pl.index);
-                        return todo.length > 0 && (
-                          <div style={{ padding:"0 10px 8px", fontSize:12, fontWeight:700, color:"#16a34a" }}>
-                            ▶ À lancer maintenant avec l'AMS : plateau{todo.length > 1 ? "x" : ""} {todo.join(", ")}</div>
+                        const can = p.plates.filter(pl => (!sel || sel.includes(pl.index))
+                          && plateInAms(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`));
+                        const todo = can.filter(pl => !plateDone(p, pl.index)).map(pl => pl.index);
+                        const again = can.filter(pl => plateDone(p, pl.index)).map(pl => pl.index);
+                        return (todo.length > 0 || again.length > 0) && (
+                          <div style={{ padding:"0 10px 8px", fontSize:12, fontWeight:700, display:"flex", flexDirection:"column", gap:2 }}>
+                            {todo.length > 0 && <span style={{ color:"#16a34a" }}>
+                              ▶ À lancer maintenant avec l'AMS : plateau{todo.length > 1 ? "x" : ""} {todo.join(", ")}</span>}
+                            {again.length > 0 && <span style={{ color:"var(--text2)", fontWeight:600 }}>
+                              ↻ Déjà imprimé{again.length > 1 ? "s" : ""}, relançable{again.length > 1 ? "s" : ""} avec l'AMS : plateau{again.length > 1 ? "x" : ""} {again.join(", ")}</span>}
+                          </div>
                         );
                       })()}
                       {isOpen && (
@@ -508,15 +514,20 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                   {pl.thumb ? <MwImg src={pl.thumb} w={200}
                                     style={{ width:"100%", aspectRatio:"1", objectFit:"cover", display:"block" }}/>
                                     : <div style={{ width:"100%", aspectRatio:"1" }}/>}
-                                  {ok ? <span style={{ position:"absolute", top:4, left:4, fontSize:9.5, fontWeight:800, color:"white",
-                                    background:"#22c55e", padding:"1px 6px", borderRadius:20 }}>✓ IMPRIMÉ</span>
-                                    : ready ? <span title="Tous ses filaments sont dans l'AMS, en quantité suffisante"
-                                      style={{ position:"absolute", top:4, left:4, fontSize:9.5, fontWeight:800, color:"white",
-                                      background:"#3b82f6", padding:"1px 6px", borderRadius:20 }}>▶ PRÊT (AMS)</span>
-                                    : ready === false ? <span title="Un de ses filaments n'est pas dans l'AMS, ou pas assez"
-                                      style={{ position:"absolute", top:4, left:4, fontSize:9.5, fontWeight:800, color:"var(--text2)",
-                                      background:"var(--surface2)", border:"1px solid var(--border)", padding:"1px 6px", borderRadius:20 }}>à charger</span>
-                                    : null}
+                                  {/* deja imprime ET pret : les deux, on peut vouloir le refaire */}
+                                  <div style={{ position:"absolute", top:4, left:4, display:"flex", flexDirection:"column",
+                                    alignItems:"flex-start", gap:3 }}>
+                                    {ok && <span style={{ fontSize:9.5, fontWeight:800, color:"white",
+                                      background:"#22c55e", padding:"1px 6px", borderRadius:20 }}>✓ IMPRIMÉ</span>}
+                                    {ready ? <span title={ok ? "Déjà imprimé, et tous ses filaments sont dans l'AMS : tu peux le relancer"
+                                        : "Tous ses filaments sont dans l'AMS, en quantité suffisante"}
+                                        style={{ fontSize:9.5, fontWeight:800, color:"white",
+                                        background:"#3b82f6", padding:"1px 6px", borderRadius:20 }}>▶ PRÊT (AMS)</span>
+                                      : ready === false ? <span title="Un de ses filaments n'est pas dans l'AMS, ou pas assez"
+                                        style={{ fontSize:9.5, fontWeight:800, color:"var(--text2)",
+                                        background:"var(--surface2)", border:"1px solid var(--border)", padding:"1px 6px", borderRadius:20 }}>à charger</span>
+                                      : null}
+                                  </div>
                                 </div>
                                 <div style={{ padding:"5px 6px 6px" }}>
                                   <div style={{ fontSize:11.5, fontWeight:700, color:"var(--text)", overflow:"hidden",
