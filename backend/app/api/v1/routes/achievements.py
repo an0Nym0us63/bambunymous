@@ -35,6 +35,16 @@ async def achievements_egg(name: str, acc=Depends(require_own_account)):
         raise HTTPException(404, str(e))
 
 
+@router.post("/wheel/spin")
+async def achievements_spin(_: str = Depends(require_admin)):
+    """Un tour de roue : tire le lot cote serveur et l'applique."""
+    from ....services import achievements as A
+    try:
+        return await A.spin()
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/keys/{aid}")
 async def achievements_spend_key(aid: str, _: str = Depends(require_admin)):
     """Revele l'etape suivante d'un secret (vignette, titre, indice, descriptif)."""

@@ -51,6 +51,7 @@ CATEGORIES = [
     ("photos", "📸", "Photos"),
     ("app", "📱", "Dans l'appli"),
     ("social", "🤝", "Copains"),
+    ("game", "🎲", "Clés et roue"),
     ("secret", "🔮", "Secrets"),
 ]
 
@@ -149,6 +150,13 @@ CATALOG = [
     _a("photos_max", "photos", "🎞️", "Séance photo", "{n} photos sur une même impression", [1]),
     _a("covers", "photos", "🌟", "Galeriste", "{n} photos choisies comme vignette", [1]),
     _a("videos", "photos", "🎬", "Vidéaste", "{n} vidéos ajoutées", [1]),
+    # Cles et roue (21/10/2026)
+    _a("wheel_played", "game", "🎰", "Joueur", "{n} tours de roue joués", [1]),
+    _a("wheel_keys", "game", "🍀", "Veinard", "{n} clés gagnées à la roue", [1]),
+    _a("keys_earned", "game", "🔑", "Trousseau", "{n} clés gagnées en tout", [1]),
+    _a("keys_spent", "game", "🗝️", "Serrurier", "{n} clés dépensées", [1]),
+    _a("keys_max", "game", "💼", "Coffre-fort", "{n} clés détenues en même temps", [1]),
+    _a("reveals", "game", "🔓", "Révélateur", "{n} étapes de secret révélées", [1]),
     _a("video_prints", "photos", "🎞️", "Court-métrage", "{n} impressions avec au moins une vidéo", [1]),
     # Dans l'appli
     _a("visits", "app", "🚪", "Habitué", "{n} visites de pages", [1]),
@@ -624,6 +632,18 @@ CATALOG = [
        lore="Dix bobines arrivées le même jour. Le livreur s'en souvient encore."),
     _a("all_seasons", "secret", "🍂", "Quatre saisons", "Une impression réussie à chaque saison d'une même année", [1],
        lore="Printemps, été, automne, hiver : ton imprimante n'a pas de saison."),
+    _a("jackpot", "secret", "💰", "Jackpot", "Décrocher le jackpot de la roue", [1],
+       lore="Le jackpot ! La machine à sous en tremble encore."),
+    _a("lucky5", "secret", "🍒", "Coup de chance", "Gagner 5 clés en un tour de roue", [1],
+       lore="Cinq clés d'un coup : la chance te sourit."),
+    _a("bad_luck", "secret", "🌧️", "Pas de bol", "Perdre 5 tours de roue d'affilée", [1],
+       lore="Cinq tours, cinq fois rien. Mais toi, tu gagnes une médaille."),
+    _a("win_streak", "secret", "🎯", "Série gagnante", "Gagner 3 tours de roue d'affilée", [1],
+       lore="Trois tours gagnants de suite : le casino va finir par t'interdire."),
+    _a("last_key", "secret", "🫙", "Fonds de tiroir", "Dépenser sa dernière clé", [1],
+       lore="Plus une seule clé en poche : tout est parti en secrets."),
+    _a("full_reveal", "secret", "📜", "Tout dévoilé", "Révéler un secret jusqu'à son descriptif", [1],
+       lore="Plus rien de caché : il ne reste qu'à le gagner."),
     _a("action_cam", "secret", "🎬", "Action !", "Une vidéo ajoutée moins de 10 minutes après la fin de l'impression", [1],
        lore="À peine sortie du plateau, déjà filmée : moteur… action !"),
     _a("making_of", "secret", "🎥", "Making-of", "Une photo et une vidéo sur la même impression", [1],
@@ -810,6 +830,7 @@ SECRET_SUBS = [
     ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
      "action_cam making_of festival retro_video family_film flash_video"),
     ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS)),
+    ("game", "🎰", "Clés et roue", "jackpot lucky5 bad_luck win_streak last_key full_reveal"),
 ]
 SUB_OF = {aid: sid for sid, _e, _n, ids in SECRET_SUBS for aid in ids.split()}
 
@@ -1026,6 +1047,12 @@ HINTS = {
     "novel": "Imprime un modèle au nom interminable.",
     "christmas_visit": "Ouvre l'appli le jour où le Père Noël est passé.",
     "action_cam": "Filme ton impression tout juste sortie, sans attendre qu'elle refroidisse.",
+    "jackpot": "La roue cache un lot très, très rare. Tourne, encore et encore.",
+    "lucky5": "Un beau lot de clés d'un seul coup de roue.",
+    "bad_luck": "Perdre, perdre encore… la malchance aussi se récompense.",
+    "win_streak": "Quand la roue est de ton côté, plusieurs fois de suite.",
+    "last_key": "Dépense, dépense… jusqu'à ne plus rien avoir en poche.",
+    "full_reveal": "Va au bout des révélations sur un même secret.",
     "making_of": "Une seule impression, deux façons de la montrer : l'une bouge, l'autre pas.",
     "festival": "Un jour de tournage intensif : cinq films dans la même journée.",
     "retro_video": "Ressors une vieille impression, très vieille, et fais-lui enfin son film.",
@@ -1040,6 +1067,7 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils",
         "photos_manual", "photo_prints", "photos_camera", "photos_max", "covers", "visits", "visit_days", "details",
         "actions", "updates", "notifs", "dismissals", "print_groups", "paparazzi", "souvenirs", "videos", "video_prints",
+        "wheel_played", "wheel_keys", "keys_earned", "keys_spent", "keys_max", "reveals",
         "grand_tour", "night_visit", "cutting_edge", "double_update", "shares", "mw_rates", "mw_boosts_given",
         "mw_likes_given", "mw_collected", "open_spools", "mw_points_bal", "profile_downloads", "queue_size", "accessory_units", "showcase", "household", "notes", "catalog", "assembled", "accessory_refs"}
 for _x in CATALOG:
@@ -1181,6 +1209,13 @@ TIER_TABLE = {
     "mat_petg": [0.5, 1, 2, 4, 6, 9, 13, 20, 30],
     # MakerWorld : revus le 21/10/2026
     "mw_my_collections": [1, 3, 5, 8, 12, 16, 20, 30, 40],
+    # Cles et roue (21/10/2026)
+    "wheel_played": [1, 5, 10, 20, 35, 50, 75, 100, 150],
+    "wheel_keys": [1, 5, 10, 20, 35, 50, 75, 100, 150],
+    "keys_earned": [5, 15, 30, 50, 80, 120, 175, 250, 350],
+    "keys_spent": [1, 5, 15, 30, 50, 80, 120, 175, 250],
+    "keys_max": [5, 10, 15, 20, 30, 40, 50, 75, 100],
+    "reveals": [1, 5, 10, 20, 35, 50, 75, 100, 150],
     # Photos : videos (21/10/2026)
     "videos": [1, 3, 5, 10, 20, 35, 50, 75, 100],
     "video_prints": [1, 2, 4, 8, 15, 25, 40, 60, 80],
@@ -1432,7 +1467,8 @@ async def _load_data() -> dict:
             "act_days": act_days, "pages": pages, "late": late, "notif_days": notif_days, "dismiss": dismiss,
             "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "act_kinds": act_kinds, "changes": changes,
             "mwd": mwd, "accs": accs, "acc_objs": acc_objs, "n_users": n_users, "spool_more": spool_more,
-            "queue": _queue_size(), "my_designs": my_designs, "videos": videos, "eggs": await eggs_found(), "ams_live": _ams_live()}
+            "queue": _queue_size(), "my_designs": my_designs,
+            "game": {"keys": st.get("keys") or {}, "wheel": st.get("wheel") or {}}, "videos": videos, "eggs": await eggs_found(), "ams_live": _ams_live()}
 
 
 def _ams_live() -> int:
@@ -1959,6 +1995,7 @@ def compute_series(d: dict, now: datetime) -> dict:
             push(key, dt, i)
     _more(push, d, now)
     _durations(push, d, now)
+    _game(push, d, now)
     _wide(push, d, now)
     _fun200(push, d, now)
     acc = 0
@@ -2074,6 +2111,22 @@ def _more(push, d, now) -> None:
             push("cutting_edge", now, 1)
     except Exception:
         pass
+
+
+def _game(push, d, now) -> None:
+    """Cles et roue : des compteurs tenus a jour au fil du jeu (rien a relire
+    dans l'historique), et les exploits dates au moment ou ils arrivent."""
+    g = d.get("game") or {}
+    k, w = g.get("keys") or {}, g.get("wheel") or {}
+    for key, v in (("wheel_played", w.get("played")), ("wheel_keys", w.get("keys")),
+                   ("keys_earned", k.get("earned")), ("keys_spent", k.get("spent_total")),
+                   ("keys_max", k.get("max_balance")), ("reveals", k.get("reveal_steps"))):
+        if v:
+            push(key, now, int(v))
+    for aid, at in {**(w.get("flags") or {}), **(k.get("flags") or {})}.items():
+        t = _ts(at)
+        if t:
+            push(aid, t, 1)
 
 
 def _by_local_day(start: datetime, end: datetime) -> list:
@@ -2732,10 +2785,7 @@ async def find_egg(name: str) -> dict:
         async with AsyncSessionLocal() as db:
             await set_setting(db, KEY + "_EGGS", json.dumps(found))
         _CACHE["v"] = None
-        import asyncio
-        t = asyncio.create_task(tick())
-        _BG.add(t)
-        t.add_done_callback(_BG.discard)
+        _bg_tick()
     e, title, _d, _h, lore = EGGS[name]
     return {"new": new, "id": f"egg_{name}", "emoji": e, "name": title, "lore": lore}
 
@@ -2844,15 +2894,28 @@ def _sets(out: dict, st: dict) -> None:
 _TICK_LOCK = None
 
 
-async def tick(notify: bool = True) -> list:
-    """Enregistre les paliers nouvellement atteints ; notifie apres le premier
-    passage. Rend la liste des (id, cran) nouveaux. Un passage a la fois (la
-    boucle et un easter egg peuvent tomber ensemble : jamais deux annonces)."""
+def _lock():
+    """Un seul ecrivain de l'etat a la fois : passage, cles depensees, roue."""
     import asyncio
     global _TICK_LOCK
     if _TICK_LOCK is None:
         _TICK_LOCK = asyncio.Lock()
-    async with _TICK_LOCK:
+    return _TICK_LOCK
+
+
+def _bg_tick() -> None:
+    """Un passage tout de suite, en fond (medailles, cles et notifications)."""
+    import asyncio
+    t = asyncio.create_task(tick())
+    _BG.add(t)
+    t.add_done_callback(_BG.discard)
+
+
+async def tick(notify: bool = True) -> list:
+    """Enregistre les paliers nouvellement atteints ; notifie apres le premier
+    passage. Rend la liste des (id, cran) nouveaux. Un passage a la fois (la
+    boucle et un easter egg peuvent tomber ensemble : jamais deux annonces)."""
+    async with _lock():
         return await _tick(notify)
 
 
@@ -2889,6 +2952,8 @@ async def _tick(notify: bool = True) -> list:
         new = [(aid, i) for aid, i in new if _recent(st["unlocked"].get(aid, {}).get(str(i)))]
     gains = _earn_keys(st, ev, new, await _ok_since((st.get("keys") or {}).get("since")))
     gains += _gift_keys(st)
+    _keys_peak(st["keys"])
+    spins = _wheel_weekly(st)
     # les cles de depart ont aussi leur notification (une fois)
     if not st["keys"].get("start_notified", True):
         st["keys"]["start_notified"] = True
@@ -2905,6 +2970,8 @@ async def _tick(notify: bool = True) -> list:
         await _notify(new, ev, sum(n for n, _w in gains if not _w.startswith(("Début", "Noël", "Clés de départ"))))
     if gains and notify:
         await _notify_keys(gains, st["keys"]["balance"])
+    if spins and notify:
+        await _notify_spins(spins, st["wheel"]["spins"])
     return new
 
 
@@ -3033,7 +3100,9 @@ def _earn_keys(st: dict, ev: dict, new: list, ok_since: int = 0) -> list:
         n = total - k.get("from_prints", 0)
         k["from_prints"] = total
         add(n, f"{n * KEYS_PER_PRINTS} impressions réussies")
-    tiers = [x for x in new if len(BY_ID[x[0]]["tiers"]) > 1]
+    # les paliers de la section « Cles et roue » ne rapportent pas de cle : gagner
+    # des cles ferait franchir un palier qui rapporterait des cles… sans fin
+    tiers = [x for x in new if len(BY_ID[x[0]]["tiers"]) > 1 and BY_ID[x[0]]["cat"] != "game"]
     secrets = [x for x in new if len(BY_ID[x[0]]["tiers"]) == 1]
     if tiers:
         add(KEYS_TIER * len(tiers), f"{len(tiers)} palier{'s' if len(tiers) > 1 else ''} franchi{'s' if len(tiers) > 1 else ''}")
@@ -3060,6 +3129,11 @@ def _reveal_level(st: dict, aid: str) -> int:
 
 async def spend_key(aid: str) -> dict:
     """Revele l'etape suivante d'un secret pas encore gagne."""
+    async with _lock():
+        return await _spend_key(aid)
+
+
+async def _spend_key(aid: str) -> dict:
     a = BY_ID.get(aid)
     if not a or len(a["tiers"]) != 1:
         raise ValueError("Ce succès n'est pas un secret")
@@ -3078,11 +3152,155 @@ async def spend_key(aid: str) -> dict:
         raise ValueError(f"Il faut {cost} clé{'s' if cost > 1 else ''} pour révéler {REVEALS[lvl][1]}")
     k["balance"] -= cost
     k.setdefault("spent", {})[aid] = lvl + 1
-    k["log"] = ([{"at": datetime.utcnow().isoformat(), "n": -cost,
+    now = datetime.utcnow().isoformat()
+    k["log"] = ([{"at": now, "n": -cost,
                   "why": f"{REVEALS[lvl][1].capitalize()} d'un secret"}] + (k.get("log") or []))[:KEY_LOG_MAX]
+    k["spent_total"] = k.get("spent_total", 0) + cost
+    k["reveal_steps"] = k.get("reveal_steps", 0) + 1
+    flags = k.setdefault("flags", {})
+    if k["balance"] == 0:
+        flags.setdefault("last_key", now)
+    if lvl + 1 == len(REVEALS):
+        flags.setdefault("full_reveal", now)
     await _state_put(st)
     _CACHE["v"] = None
+    _bg_tick()
     return {"balance": k["balance"], "level": lvl + 1}
+
+
+# ── Roue (21/10/2026) ────────────────────────────────────────────────────────
+# 3 tours offerts au depart, puis 1 chaque lundi (rien de rattrape). Le tirage
+# se fait ici, jamais dans la page. Lots : (id, libelle, cles, chance en %).
+WHEEL_START = 3
+PRIZES = [("none", "Pas cette fois", 0, 52.0), ("key1", "1 clé", 1, 30.0), ("replay", "Tour rejoué", 0, 6.0),
+          ("key3", "3 clés", 3, 7.0), ("hint", "Coup de pouce", 0, 3.0), ("key5", "5 clés", 5, 1.8),
+          ("jackpot", "Jackpot : 10 clés", 10, 0.2)]
+
+
+def _week_tag(t: datetime | None = None) -> str:
+    loc = _local(t or datetime.utcnow())
+    y, wk, _ = loc.isocalendar()
+    return f"{y}-W{wk:02d}"
+
+
+def _wheel_init(st: dict) -> dict:
+    w = st.get("wheel")
+    if not isinstance(w, dict):
+        w = st["wheel"] = {"spins": WHEEL_START, "week": _week_tag(), "played": 0, "keys": 0, "lose": 0, "win": 0,
+                           "flags": {}, "start_notified": False}
+    return w
+
+
+def _keys_peak(k: dict) -> None:
+    k["max_balance"] = max(k.get("max_balance", 0), k.get("balance", 0))
+
+
+def _wheel_weekly(st: dict) -> int:
+    """Un tour de plus chaque nouvelle semaine (lundi) ; les tours de depart,
+    annonces une fois. Rend le nombre de tours a annoncer."""
+    w = _wheel_init(st)
+    n = 0
+    if not w.get("start_notified"):
+        w["start_notified"] = True
+        n += w["spins"]
+    tag = _week_tag()
+    if w.get("week") != tag:
+        w["week"] = tag
+        w["spins"] += 1
+        n += 1
+    return n
+
+
+async def _notify_spins(n: int, total: int) -> None:
+    from . import notify as N
+    cfg = await N._load()
+    if not N.enabled_in(cfg, "wheel_spin"):
+        return
+    title = f"🎰 {n} tours de roue offerts !" if n > 1 else "🎰 Nouveau tour de roue !"
+    await N.notify("wheel_spin", title,
+                   f"Tu as {total} tour{'s' if total > 1 else ''} de roue : de quoi gagner des clés.",
+                   click=N.app_link(cfg, "/stats?tab=achievements"), priority=2)
+
+
+def _draw(rng=None) -> tuple:
+    import random
+    r = (rng or random.SystemRandom()).uniform(0, 100)
+    acc = 0.0
+    for p in PRIZES:
+        acc += p[3]
+        if r < acc:
+            return p
+    return PRIZES[0]
+
+
+async def spin(rng=None) -> dict:
+    """Un tour de roue : le lot, applique tout de suite."""
+    async with _lock():
+        st = await _state_get()
+        if st is None or not isinstance(st.get("keys"), dict):
+            raise ValueError("La roue arrive au prochain calcul des succès (dans 15 minutes au plus)")
+        k, w = _keys_init(st), _wheel_init(st)
+        if w["spins"] <= 0:
+            raise ValueError("Plus de tour de roue : le prochain arrive lundi")
+        pid, label, n, _pct = _draw(rng)
+        now = datetime.utcnow().isoformat()
+        w["spins"] -= 1
+        w["played"] = w.get("played", 0) + 1
+        flags = w.setdefault("flags", {})
+        out = {"prize": pid, "label": label, "keys": n}
+        if n:
+            k["balance"] += n
+            k["earned"] = k.get("earned", 0) + n
+            w["keys"] = w.get("keys", 0) + n
+            k["log"] = ([{"at": now, "n": n, "why": f"Roue : {label}"}] + (k.get("log") or []))[:KEY_LOG_MAX]
+            _keys_peak(k)
+        if pid == "replay":
+            w["spins"] += 1
+        if pid == "hint":
+            # la prochaine etape d'un secret pris au hasard, offerte
+            import random
+            todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and not a.get("set")
+                    and not (st.get("unlocked") or {}).get(a["id"]) and _reveal_level(st, a["id"]) < len(REVEALS)]
+            if todo:
+                aid = (rng or random.SystemRandom()).choice(todo)
+                lvl = _reveal_level(st, aid)
+                k.setdefault("spent", {})[aid] = lvl + 1
+                k["log"] = ([{"at": now, "n": 0, "why": f"Roue : {REVEALS[lvl][1]} d'un secret offert"}]
+                            + (k.get("log") or []))[:KEY_LOG_MAX]
+                out["secret"] = {"id": aid, "step": REVEALS[lvl][1]}
+            else:
+                # plus rien a reveler : une cle a la place
+                k["balance"] += 1
+                k["earned"] = k.get("earned", 0) + 1
+                w["keys"] = w.get("keys", 0) + 1
+                out["keys"] = 1
+                out["label"] = "1 clé (plus rien à révéler)"
+        won = pid not in ("none", "replay")
+        w["lose"] = 0 if won else w.get("lose", 0) + (pid == "none")
+        w["win"] = w.get("win", 0) + 1 if won else (w.get("win", 0) if pid == "replay" else 0)
+        if pid == "jackpot":
+            flags.setdefault("jackpot", now)
+        if pid == "key5":
+            flags.setdefault("lucky5", now)
+        if w["lose"] >= 5:
+            flags.setdefault("bad_luck", now)
+        if w["win"] >= 3:
+            flags.setdefault("win_streak", now)
+        await _state_put(st)
+        _CACHE["v"] = None
+    _bg_tick()
+    return {**out, "spins": w["spins"], "balance": k["balance"]}
+
+
+def wheel_view(st: dict) -> dict | None:
+    w = st.get("wheel")
+    if not isinstance(w, dict):
+        return None
+    loc = _local(datetime.utcnow())
+    nxt = (loc + timedelta(days=7 - loc.weekday())).date()
+    return {"spins": w.get("spins", 0), "played": w.get("played", 0), "next": nxt.isoformat(),
+            "weekly": 1, "start": WHEEL_START,
+            "prizes": [{"id": i, "label": l, "keys": n, "pct": p} for i, l, n, p in PRIZES]}
 
 
 _MONTHS = "janvier février mars avril mai juin juillet août septembre octobre novembre décembre".split()
@@ -3428,7 +3646,7 @@ async def view(fresh: bool = False) -> dict:
         "gifts": {"month": KEYS_MONTH, "xmas": KEYS_XMAS},
         "steps": [{"id": i, "label": l, "cost": c} for i, l, c in REVEALS],
         "rules": {"start": KEY_START, "prints": KEYS_PER_PRINTS, "tier": KEYS_TIER, "secret": KEYS_SECRET},
-        "log": (k.get("log") or [])[:12]}
+        "log": (k.get("log") or [])[:12], "wheel": wheel_view(st)}
     out = {"items": items, "medals": medals, "score": score, "score_max": score_max, "keys": keys,
            "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES],
            "subs": [{"id": i, "emoji": e, "name": n} for i, e, n, _ids in SECRET_SUBS],

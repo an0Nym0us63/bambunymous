@@ -6,6 +6,7 @@ import { useIsAdmin } from "../store/auth";
 import client from "../api/client";
 import { isMoneyHidden } from "../utils/money";
 import { egg, tapper } from "../eggs";
+import SlotMachine from "../components/SlotMachine";
 
 // Succes : medailles gagnees sur l'historique (impressions, filaments, objets,
 // MakerWorld, copains, secrets). Chaque succes a jusqu'a neuf paliers (bronze,
@@ -37,6 +38,7 @@ export default function Achievements({ embedded = false }) {
   const toggleSub = id => setOpenSubs(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [detail, setDetail] = useState(null);
   const [rules, setRules] = useState(false);
+  const [slot, setSlot] = useState(false);
   const atFriend = !!currentFriend();             // chez un copain : pas de podium (ce sont ses copains a lui)
   const isAdmin = useIsAdmin();
   const load = () => client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
@@ -111,7 +113,8 @@ export default function Achievements({ embedded = false }) {
         </div>
         <Bar value={pct / 100} tiers={data.tiers}/>
         <MedalCounts tiers={data.tiers} medals={data.medals}/>
-        {data.keys && !atFriend && <KeysBox keys={data.keys} onRules={() => setRules(true)}/>}
+        {data.keys && !atFriend && <KeysBox keys={data.keys} onRules={() => setRules(true)}
+          onWheel={canSpend && data.keys.wheel ? () => setSlot(true) : null}/>}
       </div>
 
       {/* Podium general entre copains */}
@@ -271,6 +274,7 @@ export default function Achievements({ embedded = false }) {
         Les dates viennent de ton historique ; ce qui ne s'y lit pas (MakerWorld, stock, copains) est daté du jour où il a été constaté.</p>}
 
       {rules && createPortal(<Rules data={data} onClose={() => setRules(false)}/>, document.body)}
+      {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
       {detail && byId[detail] && createPortal(
         <div data-no-pull="" onClick={closeDetail} style={{ position:"fixed", inset:0, zIndex:4300, background:"rgba(0,0,0,0.6)",
           display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}>
@@ -410,10 +414,12 @@ function Compare({ people, cat }) {
 
 // Mes cles : le compte, la prochaine, et (deplie) comment on en gagne et
 // les derniers mouvements.
-function KeysBox({ keys, onRules }) {
+function KeysBox({ keys, onRules, onWheel }) {
   const [open, setOpen] = useState(false);
   const log = keys.log || [];
+  const w = keys.wheel;
   return (
+    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
     <div style={{ borderRadius:12, padding:"8px 12px", background:"rgba(245,158,11,0.10)", border:"1px solid rgba(245,158,11,0.35)" }}>
       <button onClick={() => log.length && setOpen(o => !o)} style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
         background:"none", border:"none", padding:0, cursor: log.length ? "pointer" : "default", color:"var(--text)", textAlign:"left" }}>
@@ -441,6 +447,24 @@ function KeysBox({ keys, onRules }) {
             fontSize:11.5, fontWeight:700, color:"#F59E0B", cursor:"pointer" }}>Comment gagner et dépenser des clés ?</button>
         </div>
       )}
+    </div>
+    {w && (
+      <div style={{ borderRadius:12, padding:"8px 12px", display:"flex", alignItems:"center", gap:10,
+        background:"linear-gradient(90deg, rgba(220,38,38,0.12), rgba(245,158,11,0.12))", border:"1px solid rgba(220,38,38,0.35)" }}>
+        <span style={{ fontSize:22 }}>🎰</span>
+        <span style={{ flex:1, minWidth:0 }}>
+          <span style={{ display:"block", fontSize:15, fontWeight:900, color:"var(--text)" }}>
+            {w.spins} tour{w.spins > 1 ? "s" : ""} de roue</span>
+          <span style={{ display:"block", fontSize:11.5, color:"var(--muted)" }}>
+            +1 chaque lundi · des clés à gagner</span>
+        </span>
+        {onWheel && (
+          <button onClick={onWheel} style={{ padding:"8px 14px", borderRadius:20, border:"none", fontSize:13, fontWeight:900,
+            cursor:"pointer", color:"#7c2d12", background: w.spins > 0 ? "linear-gradient(180deg, #fde047, #f59e0b)" : "var(--surface2)",
+            boxShadow: w.spins > 0 ? "0 3px 0 #b45309" : "none" }}>{w.spins > 0 ? "Tourner" : "Voir"}</button>
+        )}
+      </div>
+    )}
     </div>
   );
 }
@@ -686,6 +710,24 @@ function Rules({ data, onClose }) {
           <div style={{ display:"flex", flexDirection:"column", gap:3, margin:"0 0 6px 4px", fontSize:12.5, color:"var(--text2)" }}>
             {k.steps.map((st, i) => <span key={st.id}>{i + 1}. {st.label.charAt(0).toUpperCase() + st.label.slice(1)} — {st.cost} 🔑</span>)}
           </div>
+        </>}
+
+        {k?.wheel && <>
+          <H>🎰 Roue de la fortune</H>
+          <P>{k.wheel.start} tours offerts au départ, puis 1 chaque lundi (une semaine manquée ne se rattrape pas).
+            Chaque tour tire un lot :</P>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:"3px 12px", fontSize:12.5, color:"var(--text2)",
+            margin:"0 0 8px 4px" }}>
+            {k.wheel.prizes.map(p => (
+              <React.Fragment key={p.id}>
+                <span>{p.label}{p.id === "hint" ? " (une étape d'un secret au hasard, offerte)" : p.id === "replay" ? " (le tour t'est rendu)" : ""}</span>
+                <span style={{ textAlign:"right", fontWeight:700, fontVariantNumeric:"tabular-nums" }}>
+                  {String(p.pct).replace(".", ",")} %</span>
+              </React.Fragment>
+            ))}
+          </div>
+          <P>Les paliers de la section « Clés et roue » ne rapportent pas de clé (sinon, des clés en appelleraient
+            d'autres sans fin) ; ses secrets, si.</P>
         </>}
 
         <H>👥 Copains</H>

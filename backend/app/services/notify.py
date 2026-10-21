@@ -415,6 +415,13 @@ EVENTS["keys_gained"] = {
     "sample": {"title": "🎁 Bon début de mois : +2 clés !", "priority": 2, "link": "/stats?tab=achievements&cat=secret",
                "message": "🎁 +2 · Début du mois\nTu as maintenant 12 clés : de quoi révéler des secrets."},
 }
+EVENTS["wheel_spin"] = {
+    "section": "achievements", "label": "Tour de roue gagné",
+    "description": "Un tour de roue offert chaque lundi (et les 3 du départ), à jouer sur la page Succès.",
+    "options": [],
+    "sample": {"title": "🎰 Nouveau tour de roue !", "priority": 2, "link": "/stats?tab=achievements",
+               "message": "Tu as 2 tours de roue : de quoi gagner des clés."},
+}
 EVENTS["accessory_low"] = {
     "section": "objects", "label": "Accessoire bientôt épuisé",
     "description": "Le stock d'un accessoire passe sous le seuil (une fois, jusqu'au réassort).",

@@ -1,0 +1,149 @@
+import React, { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import client from "../api/client";
+
+// Roue de la fortune, facon machine a sous : le lot est tire par le serveur,
+// la page ne fait que jouer l'animation jusqu'a lui. Trois rouleaux qui
+// defilent et s'arretent l'un apres l'autre ; trois symboles pareils = gagne.
+const SYM = { key1: "🔑", key3: "🗝️", key5: "💎", jackpot: "💰", replay: "🔁", hint: "🔍" };
+const FILLER = ["🔑", "🗝️", "💎", "💰", "🔁", "🔍", "🍒", "⭐", "🍋", "🔔"];
+const H = 76;                      // hauteur d'une case
+const LEN = 28;                    // cases par rouleau avant l'arret
+const pick = a => a[Math.floor(Math.random() * a.length)];
+// ampoules tout autour du cadre (en % de la machine)
+const BULBS = [
+  ...[8, 22, 36, 50, 64, 78, 92].map(x => [x, 0]), ...[25, 50, 75].map(y => [100, y]),
+  ...[92, 78, 64, 50, 36, 22, 8].map(x => [x, 100]), ...[75, 50, 25].map(y => [0, y]),
+];
+
+function targets(prize) {
+  if (SYM[prize]) return [SYM[prize], SYM[prize], SYM[prize]];
+  // perdu : trois symboles qui ne s'alignent pas
+  const a = pick(FILLER);
+  let b = pick(FILLER), c = pick(FILLER);
+  while (b === a) b = pick(FILLER);
+  while (c === a && c === b) c = pick(FILLER);
+  return [a, b, c];
+}
+
+// un rouleau : il repart du symbole ou il s'etait arrete, et finit sur le lot
+function strip(last, first) {
+  return [first || pick(FILLER), ...Array.from({ length: LEN - 2 }, () => pick(FILLER)), last];
+}
+
+export default function SlotMachine({ wheel, onClose, onDone }) {
+  const [spins, setSpins] = useState(wheel?.spins || 0);
+  const [phase, setPhase] = useState("idle");          // idle | spinning | done
+  const [reels, setReels] = useState(() => [0, 1, 2].map(() => strip(pick(FILLER))));
+  const [go, setGo] = useState(false);                 // declenche la translation
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState(null);
+  const timers = useRef([]);
+  useEffect(() => () => timers.current.forEach(clearTimeout), []);
+
+  const spin = async () => {
+    if (phase === "spinning" || spins <= 0) return;
+    setErr(null); setRes(null);
+    let r;
+    try { r = (await client.post("/achievements/wheel/spin")).data; }
+    catch (e) { setErr(e.response?.data?.detail || e.message); return; }
+    const t = targets(r.prize);
+    setGo(false);
+    setReels(rs => t.map((x, i) => strip(x, rs[i][rs[i].length - 1])));
+    setPhase("spinning");
+    // une image plus tard : la translation part de zero vers la derniere case
+    requestAnimationFrame(() => requestAnimationFrame(() => setGo(true)));
+    timers.current.push(setTimeout(() => {
+      setRes(r); setSpins(r.spins); setPhase("done"); onDone?.();
+    }, 3300));
+  };
+
+  const win = res && res.prize !== "none";
+  const big = res && (res.prize === "jackpot" || res.prize === "key5");
+  return createPortal(
+    <div data-no-pull="" onClick={phase === "spinning" ? undefined : onClose}
+      style={{ position:"fixed", inset:0, zIndex:4400, background:"rgba(0,0,0,0.7)", display:"flex",
+        alignItems:"center", justifyContent:"center", padding:16 }}>
+      <style>{`
+        @keyframes bn-bulb { 0%,100% { opacity:1; box-shadow:0 0 8px 2px #fde047 } 50% { opacity:.35; box-shadow:none } }
+        @keyframes bn-win { 0%,100% { transform:scale(1) } 50% { transform:scale(1.08) } }
+        @keyframes bn-fall { to { transform:translateY(110vh) rotate(720deg); opacity:.2 } }
+        @keyframes bn-lever { 0% { transform:rotate(0) } 40% { transform:rotate(38deg) } 100% { transform:rotate(0) } }
+      `}</style>
+      {win && Array.from({ length: big ? 70 : 28 }).map((_, i) => (
+        <span key={`${res.prize}${i}`} style={{ position:"fixed", top:-20, left:`${Math.random() * 100}%`, fontSize: 14 + Math.random() * 14,
+          animation:`bn-fall ${1.6 + Math.random() * 1.8}s ${Math.random() * 0.6}s ease-in forwards`, pointerEvents:"none", zIndex:4401 }}>
+          {pick(big ? ["💰", "🔑", "✨", "💎", "🎉"] : ["🔑", "✨", "🎉"])}</span>
+      ))}
+      <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:360, position:"relative" }}>
+        {/* la machine */}
+        <div style={{ borderRadius:26, padding:"18px 18px 20px", position:"relative",
+          background:"linear-gradient(180deg, #b91c1c, #7f1d1d)", border:"4px solid #f59e0b",
+          boxShadow:"0 20px 60px rgba(0,0,0,.6), inset 0 2px 0 rgba(255,255,255,.25)" }}>
+          {/* ampoules */}
+          <div style={{ position:"absolute", inset:5, pointerEvents:"none" }}>
+            {BULBS.map(([x, y], i) => (
+              <span key={i} style={{ position:"absolute", width:7, height:7, borderRadius:"50%", background:"#fde047",
+                left:`calc(${x}% - 3.5px)`, top:`calc(${y}% - 3.5px)`,
+                animation:`bn-bulb ${phase === "spinning" ? 0.35 : 1.2}s ${i * 0.07}s infinite` }}/>
+            ))}
+          </div>
+          <div style={{ textAlign:"center", fontWeight:900, fontSize:20, color:"#fde047", letterSpacing:".04em",
+            textShadow:"0 2px 0 #7c2d12, 0 0 12px rgba(253,224,71,.6)" }}>🎰 ROUE DE LA FORTUNE</div>
+          <div style={{ textAlign:"center", fontSize:11.5, color:"rgba(255,255,255,.8)", marginTop:2 }}>
+            {spins} tour{spins > 1 ? "s" : ""} · prochain lundi</div>
+          {/* les rouleaux */}
+          <div style={{ display:"flex", gap:8, margin:"14px 0 12px", padding:8, borderRadius:14,
+            background:"#1c1917", boxShadow:"inset 0 4px 12px rgba(0,0,0,.8)" }}>
+            {reels.map((s, i) => (
+              <div key={i} style={{ flex:1, height:H, overflow:"hidden", borderRadius:10, position:"relative",
+                background:"linear-gradient(180deg, #e7e5e4, #fff 40%, #fff 60%, #d6d3d1)" }}>
+                <div style={{ transform:`translateY(${go ? -(LEN - 1) * H : 0}px)`,
+                  transition: go ? `transform ${1.6 + i * 0.6}s cubic-bezier(.12,.75,.22,1.03)` : "none" }}>
+                  {s.map((x, j) => <div key={j} style={{ height:H, display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:40, filter: go && phase === "spinning" ? "blur(.6px)" : "none" }}>{x}</div>)}
+                </div>
+                {/* reflet */}
+                <div style={{ position:"absolute", inset:0, pointerEvents:"none",
+                  background:"linear-gradient(180deg, rgba(0,0,0,.25), transparent 30%, transparent 70%, rgba(0,0,0,.25))" }}/>
+                {phase === "done" && win && <div style={{ position:"absolute", inset:0, borderRadius:10, boxShadow:"inset 0 0 0 3px #22c55e" }}/>}
+              </div>
+            ))}
+          </div>
+          {/* le resultat */}
+          <div style={{ minHeight:46, textAlign:"center", display:"flex", flexDirection:"column", justifyContent:"center" }}>
+            {phase === "done" && res && (
+              <div style={{ animation: win ? "bn-win .6s ease-in-out 3" : "none" }}>
+                <div style={{ fontSize: big ? 22 : 18, fontWeight:900, color: win ? "#fde047" : "rgba(255,255,255,.85)" }}>
+                  {res.prize === "none" ? "Pas cette fois…" : res.prize === "replay" ? "🔁 Tour rejoué !"
+                    : res.prize === "hint" ? "🔍 Coup de pouce !" : `🎉 ${res.label} !`}</div>
+                <div style={{ fontSize:12, color:"rgba(255,255,255,.75)", marginTop:2 }}>
+                  {res.prize === "hint" && res.secret ? `${res.secret.step.charAt(0).toUpperCase() + res.secret.step.slice(1)} d'un secret, offert`
+                    : res.keys ? `Tu as maintenant ${res.balance} clé${res.balance > 1 ? "s" : ""}`
+                    : res.prize === "replay" ? "Le tour t'est rendu" : "Retente ta chance"}</div>
+              </div>
+            )}
+            {phase === "spinning" && <div style={{ fontSize:14, fontWeight:800, color:"rgba(255,255,255,.85)" }}>Ça tourne…</div>}
+            {err && <div style={{ fontSize:12.5, color:"#fecaca", fontWeight:700 }}>{err}</div>}
+          </div>
+          {/* le bouton */}
+          <button onClick={spin} disabled={phase === "spinning" || spins <= 0}
+            style={{ width:"100%", marginTop:8, padding:"12px 0", borderRadius:14, border:"none", cursor: spins > 0 && phase !== "spinning" ? "pointer" : "default",
+              fontSize:16, fontWeight:900, letterSpacing:".05em", color:"#7c2d12",
+              background: spins > 0 && phase !== "spinning" ? "linear-gradient(180deg, #fde047, #f59e0b)" : "#a8a29e",
+              boxShadow: spins > 0 ? "0 4px 0 #b45309" : "none" }}>
+            {phase === "spinning" ? "…" : spins > 0 ? "TOURNER" : "Plus de tour : rendez-vous lundi"}</button>
+          {/* le levier */}
+          <div style={{ position:"absolute", right:-22, top:70, width:14, height:90, transformOrigin:"50% 100%",
+            animation: phase === "spinning" ? "bn-lever .6s ease-out" : "none" }}>
+            <div style={{ width:6, height:80, margin:"0 auto", borderRadius:3, background:"linear-gradient(90deg, #9ca3af, #e5e7eb, #9ca3af)" }}/>
+            <div style={{ width:22, height:22, borderRadius:"50%", marginLeft:-4, marginTop:-96,
+              background:"radial-gradient(circle at 35% 35%, #fca5a5, #dc2626)" }}/>
+          </div>
+        </div>
+        <button onClick={onClose} disabled={phase === "spinning"} style={{ display:"block", margin:"12px auto 0", background:"none",
+          border:"none", color:"rgba(255,255,255,.8)", fontSize:13, cursor:"pointer" }}>Fermer</button>
+      </div>
+    </div>, document.body
+  );
+}
