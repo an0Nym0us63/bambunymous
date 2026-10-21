@@ -4115,16 +4115,34 @@ async def _surprise_counts(db) -> dict:
     return d if isinstance(d, dict) else {}
 
 
-async def roll_surprise(username: str, rnd=None) -> dict:
+SURPRISE_GAP = timedelta(minutes=5)   # deux ouvertures plus proches : la seconde ne compte pas
+
+
+async def roll_surprise(username: str, rnd=None, now=None) -> dict:
+    """Une ouverture de l'appli. Elle ne compte (compteur + tirage) que si la
+    derniere ouverture comptee de ce compte date d'au moins 5 minutes : des F5 en
+    rafale ne font pas monter les chances."""
     import random
     from ..db.session import AsyncSessionLocal
-    from .settings_service import set_setting
+    from .settings_service import get_setting, set_setting
+    now = now or datetime.utcnow()
     async with AsyncSessionLocal() as db:
         d = await _surprise_counts(db)
-        n = int(d.get(username) or 0) + 1
+        try:
+            at = json.loads(await get_setting(db, KEY + "_SURPRISE_AT", "") or "{}")
+        except ValueError:
+            at = {}
+        at = at if isinstance(at, dict) else {}
+        last = _ts(at.get(username))
+        n = int(d.get(username) or 0)
+        if last and now - last < SURPRISE_GAP:
+            return {"hit": False, "n": n, "p": 0.0, "skipped": True}
+        n += 1
         p = surprise_p(n)
         d[username] = n
+        at[username] = now.isoformat()
         await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
+        await set_setting(db, KEY + "_SURPRISE_AT", json.dumps(at))
     return {"hit": (rnd or random.random)() < p, "n": n, "p": round(p, 4)}
 
 
