@@ -101,6 +101,13 @@ export default function Layout() {
     setSpin(true); setTimeout(() => setSpin(false), 1100); egg("logo_spin");
   }), []);
   const logoAnim = spin ? "bn-spin 1s ease-in-out" : "none";
+  const holdRef = React.useRef(null);
+  const logoHold = {
+    onPointerDown: () => { clearTimeout(holdRef.current); holdRef.current = setTimeout(() => egg("hold_logo"), 3000); },
+    onPointerUp: () => clearTimeout(holdRef.current),
+    onPointerLeave: () => clearTimeout(holdRef.current),
+    onContextMenu: e => e.preventDefault(),
+  };
 
   // Le header mobile est fixed et sa hauteur VARIE selon la page (bouton scan sur
   // Filaments, avatar sur Accueil, rien ailleurs) + la safe-area du haut. Un
@@ -163,7 +170,7 @@ export default function Layout() {
       {/* Sidebar desktop */}
       <aside className="hidden-mobile" style={S.aside}>
         <div style={{...S.logo, cursor:"pointer"}} onClick={() => { logoTap(); navigate("/"); }}>
-          <img src="/icon-192.png" style={{ width:28, height:28, borderRadius:7, flexShrink:0, animation:logoAnim }} alt=""/>
+          <img src="/icon-192.png" {...logoHold} draggable={false} style={{ width:28, height:28, borderRadius:7, flexShrink:0, animation:logoAnim }} alt=""/>
           <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
             BambuNymous
           </span>
@@ -190,7 +197,7 @@ export default function Layout() {
         <header ref={headerRef} className="show-mobile app-header" style={S.header}>
           <div style={{ display:"flex", alignItems:"center", gap:8, flexShrink:0, cursor:"pointer" }}
             onClick={() => { logoTap(); navigate("/"); }}>
-            <img src="/icon-192.png" style={{ width:24, height:24, borderRadius:6, flexShrink:0, animation:logoAnim }} alt=""/>
+            <img src="/icon-192.png" {...logoHold} draggable={false} style={{ width:24, height:24, borderRadius:6, flexShrink:0, animation:logoAnim }} alt=""/>
             {!title && (
               <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
                 BambuNymous

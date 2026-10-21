@@ -542,6 +542,7 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
   // une medaille gagnee, ca s'astique
   const [shine, setShine] = useState(0);
   const polish = useMemo(() => tapper(10, 5000, () => egg("polish")), []);
+  const pick = useMemo(() => tapper(10, 5000, () => egg("lockpick")), []);
   return (
     <div ref={ref} className="card" onClick={() => !sheet && setOpen(o => !o)}
       style={{ padding:"12px 14px", display:"flex", flexDirection:"column", gap:9, cursor:"pointer",
@@ -552,8 +553,12 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
           : sheet ? "var(--sheet-bg)" : undefined,
         ...(sheet ? { backdropFilter:"none", boxShadow:"0 12px 40px rgba(0,0,0,0.45)", paddingRight:36 } : {}) }}>
       <div style={{ display:"flex", gap:12, alignItems:"center" }}>
-        <span key={shine} onClick={e => { if (!sheet || !got) return; e.stopPropagation(); setShine(n => n + 1); polish(); }}
-          style={{ display:"inline-flex", animation: shine ? "bn-shine .35s ease-out" : "none" }}>
+        <span key={shine} onClick={e => {
+            if (!sheet) return;
+            e.stopPropagation(); setShine(n => n + 1);
+            if (got) polish(); else if (unique) pick();
+          }}
+          style={{ display:"inline-flex", animation: !shine ? "none" : got ? "bn-shine .35s ease-out" : "bn-jiggle .3s ease-in-out" }}>
           <Medal tier={top} emoji={it.emoji} size={52} locked={!got}/></span>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:14, fontWeight:800, color: got ? "var(--text)" : "var(--text2)" }}>{it.name}</div>

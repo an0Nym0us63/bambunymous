@@ -72,9 +72,14 @@ function ensureStyle() {
   st.id = "bn-egg-style";
   st.textContent = "@keyframes bn-egg-pop{0%{transform:scale(.2) rotate(-30deg)}60%{transform:scale(1.3) rotate(10deg)}100%{transform:none}}" +
     "@keyframes bn-spin{to{transform:rotate(720deg)}}" +
-    "@keyframes bn-shine{0%{filter:brightness(1)}50%{filter:brightness(1.8) drop-shadow(0 0 10px #fff)}100%{filter:brightness(1)}}";
+    "@keyframes bn-shine{0%{filter:brightness(1)}50%{filter:brightness(1.8) drop-shadow(0 0 10px #fff)}100%{filter:brightness(1)}}" +
+    "@keyframes bn-jiggle{0%,100%{transform:none}25%{transform:rotate(-12deg)}75%{transform:rotate(12deg)}}";
   document.head.appendChild(st);
 }
+
+const WORDS = [["bambu", "magic_word"], ["sudo", "sudo"], ["bonjour", "hello"], ["ping", "ping"],
+  ["merci", "thanks"], ["xyzzy", "xyzzy"], ["aide", "help"], ["matrix", "matrix"], ["lumos", "lumos"]];
+const escTap = tapper(10, 5000, () => egg("escape"));
 
 // Les guetteurs globaux : clavier, doigt, recherches, rechargements.
 export function installEggs() {
@@ -91,10 +96,12 @@ export function installEggs() {
     const typing = tag === "input" || tag === "textarea" || tag === "select" || e.target?.isContentEditable;
     if (!typing && k.length === 1) {
       word = (word + k).slice(-8);
-      if (word.endsWith("bambu")) egg("magic_word");
-      if (word.endsWith("sudo")) egg("sudo");
-      if (word.endsWith("bonjour")) egg("hello");
+      for (const [w, name] of WORDS) if (word.endsWith(w)) egg(name);
     }
+    // raccourcis : tout selectionner (hors champ), chercher dans la page, s'evader
+    if ((e.ctrlKey || e.metaKey) && k === "a" && !typing) egg("select_all");
+    if ((e.ctrlKey || e.metaKey) && k === "f") egg("find");
+    if (k === "escape") escTap();
   });
   // au doigt : glisser haut, haut, bas, bas, gauche, droite, gauche, droite, puis toucher deux fois
   const S = ["U", "U", "D", "D", "L", "R", "L", "R", "T", "T"];
@@ -158,10 +165,65 @@ export function installEggs() {
     clicks.push(now);
     if (clicks.length >= 15) { clicks = []; egg("rage"); }
   }, true);
-  // batterie presque vide
+  // clics droits
+  const rightTap = tapper(5, 3000, () => egg("right_click"));
+  window.addEventListener("contextmenu", () => rightTap());
+  // yo-yo : tout en bas puis tout en haut, 3 fois en 20 secondes
+  let edge = null;
+  const yoyo = tapper(6, 20000, () => egg("yoyo"));
+  // (la page defile dans la fenetre sur telephone, dans son conteneur sur ordinateur)
+  window.addEventListener("scroll", e => {
+    const el = e.target === document ? document.documentElement : e.target;
+    if (!el || el.scrollHeight == null) return;
+    const max = el.scrollHeight - el.clientHeight, y = el === document.documentElement ? window.scrollY : el.scrollTop;
+    if (max < 400) return;
+    const at = y <= 2 ? "top" : y >= max - 2 ? "bottom" : null;
+    if (at && at !== edge) { edge = at; yoyo(); }
+  }, { passive: true, capture: true });
+  // loupe : zoom au doigt
+  window.visualViewport?.addEventListener("resize", () => { if (window.visualViewport.scale > 2) egg("zoom"); });
+  // paysage, sur un telephone
+  const land = () => { if (window.matchMedia("(pointer: coarse)").matches && window.innerWidth > window.innerHeight
+    && window.innerHeight < 600) egg("landscape"); };
+  window.addEventListener("orientationchange", () => setTimeout(land, 500));
+  // marche arriere : 5 retours en 10 secondes
+  const back = tapper(5, 10000, () => egg("moonwalk"));
+  window.addEventListener("popstate", () => back());
+  // cache-cache : 10 allers-retours en 30 secondes
+  const hide = tapper(10, 30000, () => egg("hide_seek"));
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") hide(); });
+  // fichier lache hors d'une zone de depot ; texte colle dans un champ
+  // (hors zone, le navigateur ouvrirait le fichier a la place de l'appli : on l'en empeche)
+  const files = e => [...(e.dataTransfer?.types || [])].includes("Files");
+  window.addEventListener("dragover", e => { if (files(e) && !e.defaultPrevented) e.preventDefault(); });
+  window.addEventListener("drop", e => { if (files(e) && !e.defaultPrevented) { e.preventDefault(); egg("drop"); } });
+  window.addEventListener("paste", e => {
+    const tag = (e.target?.tagName || "").toLowerCase();
+    if ((tag === "input" || tag === "textarea") && (e.clipboardData?.getData("text") || "").trim()) egg("paste");
+  });
+  // sieste : 30 minutes visible sans un geste
+  let idle = null;
+  const wake = () => { clearTimeout(idle); idle = setTimeout(() => { if (document.visibilityState === "visible") egg("nap"); }, 30 * 60000); };
+  ["pointerdown", "keydown", "scroll", "touchstart"].forEach(t => window.addEventListener(t, wake, { passive: true }));
+  wake();
+  // heures remarquables, a l'ouverture ou au retour sur l'appli
+  const clock = () => {
+    const d = new Date(), hm = `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
+    if (hm === "13:37") egg("leet_time");
+    if (hm === "11:11") egg("wish");
+    if (hm === "0:00") egg("midnight_open");
+  };
+  clock();
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") clock(); });
+  // navigateur dans une autre langue
+  if (navigator.language && !navigator.language.toLowerCase().startsWith("fr")) egg("polyglot");
+  // batterie presque vide, ou pleine et branchee
   try {
     navigator.getBattery?.().then(b => {
-      const chk = () => { if (b.level < 0.05 && !b.charging) egg("battery"); };
+      const chk = () => {
+        if (b.level < 0.05 && !b.charging) egg("battery");
+        if (b.level >= 1 && b.charging) egg("full_battery");
+      };
       chk();
       b.addEventListener("levelchange", chk);
     }).catch(() => {});
