@@ -10,7 +10,7 @@ import RfidScanBridge from "../RfidScanBridge";
 import PushBridge from "../PushBridge";
 import { FriendLinkBridge } from "../Friends";
 import Toast from "../Toast";
-import { egg, installEggs, tapper } from "../../eggs";
+import { egg, installEggs, pageChanged, tapper } from "../../eggs";
 import NoAutofill from "../NoAutofill";
 
 const nav = [
@@ -95,6 +95,7 @@ export default function Layout() {
   const headerRef = React.useRef(null);
   // gestes caches (voir eggs.js) ; le logo, lui, a le tournis facile
   React.useEffect(() => { installEggs(); }, []);
+  React.useEffect(() => { pageChanged(); }, [pathname]);
   const [spin, setSpin] = React.useState(false);
   const logoTap = React.useMemo(() => tapper(7, 3000, () => {
     setSpin(true); setTimeout(() => setSpin(false), 1100); egg("logo_spin");

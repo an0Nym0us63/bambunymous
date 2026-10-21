@@ -90,8 +90,10 @@ export function installEggs() {
     const tag = (e.target?.tagName || "").toLowerCase();
     const typing = tag === "input" || tag === "textarea" || tag === "select" || e.target?.isContentEditable;
     if (!typing && k.length === 1) {
-      word = (word + k).slice(-5);
-      if (word === "bambu") egg("magic_word");
+      word = (word + k).slice(-8);
+      if (word.endsWith("bambu")) egg("magic_word");
+      if (word.endsWith("sudo")) egg("sudo");
+      if (word.endsWith("bonjour")) egg("hello");
     }
   });
   // au doigt : glisser haut, haut, bas, bas, gauche, droite, gauche, droite, puis toucher deux fois
@@ -110,6 +112,60 @@ export function installEggs() {
     if (v === "42") egg("answer");
     if (v === "easter egg" || v === "easteregg") egg("seeker");
   });
+  // secouer : trois a-coups violents en une seconde et demie
+  const shake = tapper(3, 1500, () => egg("shake"));
+  let lastJolt = 0;
+  window.addEventListener("devicemotion", e => {
+    const a = e.accelerationIncludingGravity || e.acceleration;
+    if (!a) return;
+    const g = Math.sqrt((a.x || 0) ** 2 + (a.y || 0) ** 2 + (a.z || 0) ** 2);
+    const now = Date.now();
+    if (g > 25 && now - lastJolt > 150) { lastJolt = now; shake(); }
+  });
+  // retourner : ecran vers le bas, ou tete en bas, une seconde
+  let flipT = null;
+  const flipped = (beta, gamma) => Math.abs(beta) > 150 || (beta < -60 && Math.abs(gamma) < 30);
+  window.addEventListener("deviceorientation", e => {
+    if (e.beta == null) return;
+    if (flipped(e.beta, e.gamma || 0)) { if (!flipT) flipT = setTimeout(() => egg("flip"), 1000); }
+    else if (flipT) { clearTimeout(flipT); flipT = null; }
+  });
+  try {
+    screen.orientation?.addEventListener?.("change", () => {
+      if ((screen.orientation.type || "").includes("secondary") && screen.orientation.type.startsWith("portrait")) egg("flip");
+    });
+  } catch { /* pas d'orientation */ }
+  // imprimer la page, plein ecran, copier, tunnel
+  window.addEventListener("beforeprint", () => egg("print_page"));
+  document.addEventListener("fullscreenchange", () => { if (document.fullscreenElement) egg("fullscreen"); });
+  document.addEventListener("copy", () => { if (String(window.getSelection?.() || "").trim()) egg("copycat"); });
+  let wentOff = false;
+  window.addEventListener("offline", () => { wentOff = true; });
+  window.addEventListener("online", () => { if (wentOff) setTimeout(() => egg("offline"), 2000); });
+  // taille de fenetre : timbre-poste ou cinema
+  const size = () => {
+    if (window.innerWidth < 300) egg("tiny");
+    if (window.innerWidth > 2500) egg("giant");
+  };
+  window.addEventListener("resize", size);
+  size();
+  // furax : 15 clics au meme endroit en 3 secondes
+  let spot = null, clicks = [];
+  window.addEventListener("click", e => {
+    const now = Date.now(), here = `${Math.round(e.clientX / 20)}:${Math.round(e.clientY / 20)}`;
+    if (here !== spot) { spot = here; clicks = []; }
+    clicks = clicks.filter(x => now - x < 3000);
+    clicks.push(now);
+    if (clicks.length >= 15) { clicks = []; egg("rage"); }
+  }, true);
+  // batterie presque vide
+  try {
+    navigator.getBattery?.().then(b => {
+      const chk = () => { if (b.level < 0.05 && !b.charging) egg("battery"); };
+      chk();
+      b.addEventListener("levelchange", chk);
+    }).catch(() => {});
+  } catch { /* pas d'API batterie */ }
   try {
     const now = Date.now();
     const r = JSON.parse(sessionStorage.getItem("bn-reloads") || "[]").filter(x => now - x < 30000);
@@ -118,6 +174,12 @@ export function installEggs() {
     if (r.length >= 5) setTimeout(() => egg("impatient"), 1500);
   } catch { /* stockage indisponible */ }
 }
+
+// Changements de page : 15 en 30 secondes ; cloche : 10 en 5 secondes
+const pageTaps = tapper(15, 30000, () => egg("zapper"));
+export const pageChanged = () => pageTaps();
+const bellTaps = tapper(10, 5000, () => egg("bell"));
+export const bellRung = () => bellTaps();
 
 // Bascules de theme : 10 en une minute
 const themeTaps = tapper(10, 60000, () => egg("disco"));

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Bell } from "lucide-react";
 import client from "../api/client";
+import { bellRung } from "../eggs";
 
 // Cloche de l'en-tete : nombre de notifications pas encore vues (historique
 // de 15 jours, propre a chaque compte). Relue chaque minute, au retour sur
@@ -29,7 +30,7 @@ export default function NotifBell({ size = 20 }) {
 
   const active = pathname === "/notifications";
   return (
-    <button onClick={() => navigate("/notifications")} aria-label={n ? `${n} notification${n > 1 ? "s" : ""} non vue${n > 1 ? "s" : ""}` : "Notifications"}
+    <button onClick={() => { bellRung(); navigate("/notifications"); }} aria-label={n ? `${n} notification${n > 1 ? "s" : ""} non vue${n > 1 ? "s" : ""}` : "Notifications"}
       title="Notifications" style={{ position:"relative", flexShrink:0, width:size + 14, height:size + 14, borderRadius:"50%",
         border:"none", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
         // pastille bleue douce tout le temps (la cloche noire faisait brut),
