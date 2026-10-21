@@ -128,8 +128,9 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
                 </div>
               ))}
               <div style={{ marginTop:6, fontSize:11, color:"rgba(255,255,255,.65)" }}>
-                {wheel?.weekly || 3} tours offerts chaque lundi, et 1 par secret gagné ; un ticket de palier tous les
-                {" "}{wheel?.secrets_per_ticket || 10} secrets. Gagner des paliers ou un secret pendant un tour rapporte aussi
+                {wheel?.weekly || 3} tours offerts chaque lundi, 1 toutes les {wheel?.prints_per_spin || 8} impressions
+                réussies et 1 par secret gagné ; un ticket de palier toutes les {wheel?.prints_per_ticket || 5} impressions
+                réussies et tous les {wheel?.secrets_per_ticket || 5} secrets. Gagner des paliers ou un secret pendant un tour rapporte aussi
                 ses clés, affichées en bonus.</div>
             </div>
           )}

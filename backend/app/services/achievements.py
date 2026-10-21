@@ -3495,12 +3495,14 @@ async def _tick(notify: bool = True) -> list:
         new = []
     else:
         new = [(aid, i) for aid, i in new if _recent(st["unlocked"].get(aid, {}).get(str(i)))]
-    gains = _earn_keys(st, ev, new, await _ok_since((st.get("keys") or {}).get("since")))
+    ok_n = await _ok_since((st.get("keys") or {}).get("since"))
+    gains = _earn_keys(st, ev, new, ok_n)
     gains += _gift_keys(st)
     _keys_peak(st["keys"])
     spins, w_tickets = _wheel_weekly(st)
     retro = _secret_rewards_retro(st, new)
     s_spins, s_tickets = _secret_rewards(st, new)
+    p_spins, p_tickets = _print_rewards(st, ok_n)
     # les cles de depart ont aussi leur notification (une fois)
     if not st["keys"].get("start_notified", True):
         st["keys"]["start_notified"] = True
@@ -3519,8 +3521,9 @@ async def _tick(notify: bool = True) -> list:
         await _notify_keys(gains, st["keys"]["balance"])
     if retro and notify:
         await _notify_retro(*retro, st["wheel"]["spins"], st["wheel"].get("tickets", 0))
-    if (spins or s_spins or s_tickets or w_tickets) and notify:
-        await _notify_spins(spins, st["wheel"]["spins"], s_spins, s_tickets, st["wheel"].get("tickets", 0), w_tickets)
+    if (spins or s_spins or s_tickets or w_tickets or p_spins or p_tickets) and notify:
+        await _notify_spins(spins, st["wheel"]["spins"], s_spins, s_tickets, st["wheel"].get("tickets", 0), w_tickets,
+                            p_spins, p_tickets)
     return new
 
 
@@ -3778,7 +3781,31 @@ def _wheel_weekly(st: dict) -> tuple:
 
 
 SPINS_PER_SECRET = 1          # un secret gagne : un tour de roue
-SECRETS_PER_TICKET = 10       # tous les 10 secrets gagnes : un ticket de palier
+SECRETS_PER_TICKET = 5        # tous les 5 secrets gagnes : un ticket de palier (10 avant le 22/10/2026)
+PRINTS_PER_SPIN = 8           # toutes les 8 impressions reussies : un tour de roue
+PRINTS_PER_TICKET = 5         # toutes les 5 impressions reussies : un ticket de palier
+
+
+def _print_rewards(st: dict, ok: int) -> tuple:
+    """Tours et tickets gagnes par les impressions reussies (comptees comme pour
+    les cles). Pas de rattrapage : la premiere fois, on part du compte du jour.
+    Rend (tours, tickets) donnes."""
+    w = _wheel_init(st)
+    if "prints_base" not in w:
+        w.update(prints_base=ok, prints_spins=0, prints_tickets=0)
+    w["prints_seen"] = ok
+    d = max(0, ok - w["prints_base"])
+    spins = d // PRINTS_PER_SPIN - w.get("prints_spins", 0)
+    tickets = d // PRINTS_PER_TICKET - w.get("prints_tickets", 0)
+    spins, tickets = max(0, spins), max(0, tickets)
+    if spins:
+        w["prints_spins"] = w.get("prints_spins", 0) + spins
+        w["spins"] += spins
+    if tickets:
+        w["prints_tickets"] = w.get("prints_tickets", 0) + tickets
+        w["tickets"] = w.get("tickets", 0) + tickets
+        w["tickets_won"] = w.get("tickets_won", 0) + tickets
+    return spins, tickets
 SECRET_REWARDS_V = 1           # rattrapage (une fois) des secrets gagnes avant cette regle : les tickets seulement
 
 
@@ -3844,14 +3871,15 @@ async def _notify_retro(n: int, spins: int, tickets: int, spins_total: int, tick
 
 
 async def _notify_spins(n: int, total: int, from_secrets: int = 0, tickets: int = 0, tickets_total: int = 0,
-                        weekly_tickets: int = 0) -> None:
+                        weekly_tickets: int = 0, print_spins: int = 0, print_tickets: int = 0) -> None:
     from . import notify as N
     cfg = await N._load()
     if not N.enabled_in(cfg, "wheel_spin"):
         return
-    got = n + from_secrets
-    if tickets and not got:
-        title = f"🎟️ Ticket de palier gagné !" if tickets == 1 else f"🎟️ {tickets} tickets de palier gagnés !"
+    got = n + from_secrets + print_spins
+    all_t = tickets + weekly_tickets + print_tickets
+    if all_t and not got:
+        title = f"🎟️ Ticket de palier gagné !" if all_t == 1 else f"🎟️ {all_t} tickets de palier gagnés !"
     else:
         title = f"🎰 {got} tours de roue offerts !" if got > 1 else "🎰 Un tour de roue offert !"
     lines = []
@@ -3863,6 +3891,11 @@ async def _notify_spins(n: int, total: int, from_secrets: int = 0, tickets: int 
         lines.append(f"🔮 +{from_secrets} · secret{'s' if from_secrets > 1 else ''} gagné{'s' if from_secrets > 1 else ''}")
     if tickets:
         lines.append(f"🎟️ +{tickets} ticket{'s' if tickets > 1 else ''} de palier · {SECRETS_PER_TICKET} secrets gagnés")
+    if print_spins:
+        lines.append(f"🖨️ +{print_spins} tour{'s' if print_spins > 1 else ''} · {print_spins * PRINTS_PER_SPIN} impressions réussies")
+    if print_tickets:
+        lines.append(f"🎟️ +{print_tickets} ticket{'s' if print_tickets > 1 else ''} de palier · "
+                     f"{print_tickets * PRINTS_PER_TICKET} impressions réussies")
     lines.append(f"Tu as {total} tour{'s' if total > 1 else ''} de roue"
                  + (f" et {tickets_total} ticket{'s' if tickets_total > 1 else ''} de palier." if tickets_total else "."))
     await N.notify("wheel_spin", title, "\n".join(lines),
@@ -3976,6 +4009,9 @@ def wheel_view(st: dict) -> dict | None:
             "weekly_tickets": TICKETS_WEEKLY, "ticket_costs": TICKET_COST,
             "secrets_per_ticket": SECRETS_PER_TICKET,
             "to_ticket": SECRETS_PER_TICKET - (w.get("secrets", 0) % SECRETS_PER_TICKET),
+            "prints_per_spin": PRINTS_PER_SPIN, "prints_per_ticket": PRINTS_PER_TICKET,
+            "to_spin_prints": PRINTS_PER_SPIN - (max(0, w.get("prints_seen", 0) - w.get("prints_base", 0)) % PRINTS_PER_SPIN),
+            "to_ticket_prints": PRINTS_PER_TICKET - (max(0, w.get("prints_seen", 0) - w.get("prints_base", 0)) % PRINTS_PER_TICKET),
             "prizes": [{"id": i, "label": l, "keys": n, "pct": p, "help": PRIZE_HELP.get(i, "")} for i, l, n, p in PRIZES]}
 
 

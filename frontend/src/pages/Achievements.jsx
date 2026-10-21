@@ -695,8 +695,10 @@ function TreasureRow({ keys, onRules, onWheel }) {
   const [open, setOpen] = useState(false);
   const log = keys.log || [];
   const w = keys.wheel;
-  const per = w?.secrets_per_ticket || 10;
+  const per = w?.secrets_per_ticket || 5;
   const toT = w?.to_ticket || per;
+  const perP = w?.prints_per_ticket || 5, toTP = w?.to_ticket_prints || perP;
+  const perS = w?.prints_per_spin || 8, toSP = w?.to_spin_prints || perS;
   const prints = keys.rules?.prints || 10;
   const has = (w?.spins || 0) > 0;
   const box = (glow, edge) => ({ position:"relative", overflow:"hidden", borderRadius:14, padding:"10px 6px 8px", minWidth:0,
@@ -723,8 +725,8 @@ function TreasureRow({ keys, onRules, onWheel }) {
               <TicketStub size={1.15} dim={!w.tickets}/></span></span>
             <span style={{ fontSize:24, fontWeight:900, lineHeight:1, color:"#f97316" }}>{w.tickets || 0}</span>
             <span style={{ fontSize:10.5, color:"var(--muted)", fontWeight:700 }}>tickets</span>
-            {mini(Math.round(100 * (1 - toT / per)), "linear-gradient(90deg,#fb923c,#f97316)")}
-            <span style={{ fontSize:9.5, color:"var(--muted)" }}>dans {toT} secret{toT > 1 ? "s" : ""}</span>
+            {mini(Math.round(100 * (1 - toTP / perP)), "linear-gradient(90deg,#fb923c,#f97316)")}
+            <span style={{ fontSize:9.5, color:"var(--muted)" }}>dans {toTP} impr.</span>
           </div>
         )}
         {w && (
@@ -787,8 +789,10 @@ function TreasureWide({ keys, onRules, onWheel }) {
     background:`radial-gradient(circle at 12% 50%, ${glow}, transparent 60%), var(--surface2)`, border:`1px solid ${edge}` });
   const glint = <span aria-hidden="true" style={{ position:"absolute", top:"-40%", bottom:"-40%", width:"28%", pointerEvents:"none",
     background:"linear-gradient(90deg, transparent, rgba(255,255,255,.18), transparent)", animation:"bn-glint 4.5s ease-in-out infinite" }}/>;
-  const per = w?.secrets_per_ticket || 10;
+  const per = w?.secrets_per_ticket || 5;
   const toT = w?.to_ticket || per;
+  const perP = w?.prints_per_ticket || 5, toTP = w?.to_ticket_prints || perP;
+  const perS = w?.prints_per_spin || 8, toSP = w?.to_spin_prints || perS;
   const prints = keys.rules?.prints || 10;
   return (
     <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))", gap:12 }}>
@@ -845,12 +849,12 @@ function TreasureWide({ keys, onRules, onWheel }) {
               <div style={{ flex:1, minWidth:0 }}>
                 <div style={{ fontWeight:900, fontSize:14, color:"var(--text)" }}>Tickets de palier</div>
                 <div style={{ fontSize:11.5, color:"var(--muted)" }}>
-                  +{w.weekly_tickets || 1} chaque lundi · 1 tous les {per} secrets</div>
+                  +{w.weekly_tickets || 1} chaque lundi · 1 toutes les {perP} impressions · 1 tous les {per} secrets</div>
                 <div style={{ height:6, borderRadius:6, background:"var(--surface)", overflow:"hidden", marginTop:6 }}>
-                  <div style={{ width:`${Math.round(100 * (1 - toT / per))}%`, height:"100%",
+                  <div style={{ width:`${Math.round(100 * (1 - toTP / perP))}%`, height:"100%",
                     background:"linear-gradient(90deg,#fb923c,#f97316)" }}/></div>
                 <div style={{ fontSize:11, color:"var(--muted)", marginTop:3 }}>
-                  prochain dans {toT} secret{toT > 1 ? "s" : ""} · à utiliser dans un succès</div>
+                  prochain dans {toTP} impression{toTP > 1 ? "s" : ""} réussie{toTP > 1 ? "s" : ""} (ou {toT} secret{toT > 1 ? "s" : ""}) · à utiliser dans un succès</div>
               </div>
             </div>
           </div>
@@ -866,6 +870,7 @@ const IDLE = ["🔑", "🍀", "💎", "🎟️", "💰", "🔁", "🍒", "🔍"]
 const LAMPS = [...[6, 20, 34, 48, 62, 76, 90].map(x => [x, 0]), ...[30, 60].map(y => [100, y]),
   ...[90, 76, 62, 48, 34, 20, 6].map(x => [x, 100]), ...[60, 30].map(y => [0, y])];
 function MiniMachine({ w, onOpen }) {
+  const perS = w?.prints_per_spin || 8, toSP = w?.to_spin_prints || perS;
   const can = !!onOpen;
   const has = (w.spins || 0) > 0;
   return (
@@ -906,7 +911,7 @@ function MiniMachine({ w, onOpen }) {
         })}
       </div>
       <div style={{ textAlign:"center", color:"rgba(255,255,255,.85)", fontSize:11.5 }}>
-        +{w.weekly || 3} chaque lundi · +{w.per_secret || 1} par secret gagné</div>
+        +{w.weekly || 3} chaque lundi · +1 toutes les {perS} impressions · +{w.per_secret || 1} par secret · prochain dans {toSP} impr.</div>
       <div style={{ marginTop:9, padding:"10px 0", borderRadius:12, textAlign:"center", fontWeight:900, letterSpacing:".08em",
         fontSize:13.5, color:"#7c2d12", boxShadow: has ? "0 4px 0 #b45309" : "none",
         background: has ? "linear-gradient(180deg,#fde047,#f59e0b)" : "linear-gradient(180deg,#e7d9b4,#bfae86)",
@@ -1230,8 +1235,9 @@ function Rules({ data, onClose }) {
         {k?.wheel && <>
           <H>🎰 Roue de la fortune</H>
           <P>{k.wheel.start} tours offerts au départ, puis {k.wheel.weekly} chaque lundi (une semaine manquée ne se rattrape pas).
-            Chaque secret gagné offre aussi {k.wheel.per_secret || 1} tour, et tous les {k.wheel.secrets_per_ticket || 10} secrets,
-            un ticket de palier{k.wheel.to_ticket ? ` (le prochain dans ${k.wheel.to_ticket} secret${k.wheel.to_ticket > 1 ? "s" : ""})` : ""}.
+            Toutes les {k.wheel.prints_per_spin || 8} impressions réussies, un tour de plus
+            {k.wheel.to_spin_prints ? ` (le prochain dans ${k.wheel.to_spin_prints} impression${k.wheel.to_spin_prints > 1 ? "s" : ""})` : ""},
+            et chaque secret gagné en offre {k.wheel.per_secret || 1}.
             Chaque tour tire un lot ; plus un lot vaut, plus il est rare :</P>
           <div style={{ display:"grid", gridTemplateColumns:"1fr auto", gap:"3px 12px", fontSize:12.5, color:"var(--text2)",
             margin:"0 0 8px 4px" }}>
@@ -1243,8 +1249,11 @@ function Rules({ data, onClose }) {
               </React.Fragment>
             ))}
           </div>
-          <P><b>Tickets de palier</b> <TicketStub size={0.8}/> : {k.wheel.weekly_tickets || 1} offert chaque lundi, un tous les
-            {" "}{k.wheel.secrets_per_ticket || 10} secrets, et la roue en donne. Sur un succès à paliers (jamais un secret), ils
+          <P><b>Tickets de palier</b> <TicketStub size={0.8}/> : {k.wheel.weekly_tickets || 1} offert chaque lundi, un toutes
+            les {k.wheel.prints_per_ticket || 5} impressions réussies, un tous les {k.wheel.secrets_per_ticket || 5} secrets, et la
+            roue en donne{k.wheel.to_ticket_prints ? ` (le prochain dans ${k.wheel.to_ticket_prints} impression${k.wheel.to_ticket_prints > 1 ? "s" : ""}
+            ou ${k.wheel.to_ticket} secret${k.wheel.to_ticket > 1 ? "s" : ""})` : ""}. Les impressions comptent à partir du
+            22 octobre 2026 : celles d'avant ne rapportent ni tour ni ticket. Sur un succès à paliers (jamais un secret), ils
             ajoutent au compteur ce qui manquait pour le palier suivant : le compte avance pour de bon, la suite se compte à
             partir de là. Le prix dépend du palier visé :</P>
           <div style={{ display:"flex", flexWrap:"wrap", gap:"4px 12px", margin:"0 0 8px 4px", fontSize:12, color:"var(--text2)" }}>
