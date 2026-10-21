@@ -140,7 +140,10 @@ export default function Achievements({ embedded = false }) {
 
       {/* Podium general entre copains */}
       {withFriends && (
-        <div className="card" style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:10 }}>
+        <div className="card" style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:10,
+          ...feltCard("#F5B700", "#8B5CF6"),
+          // projecteur sur la scene, en plus du tapis
+          background:`radial-gradient(45% 70% at 50% 0%, rgba(255,215,0,0.22), transparent 70%), ${feltBg("#F5B700", "#8B5CF6")}` }}>
           <div style={sectionTitle}>🏆 Podium entre copains</div>
           <Podium people={people} score={p => p.score}/>
           {others.filter(p => p.status !== "ok").map(p => (
@@ -161,7 +164,7 @@ export default function Achievements({ embedded = false }) {
               return (
                 <button key={r.id + r.tier} onClick={() => setDetail(r.id)}
                   className="card" style={{ flexShrink:0, display:"flex", alignItems:"center", gap:10, padding:"8px 12px 8px 8px",
-                    cursor:"pointer", border:"1px solid var(--border)", textAlign:"left" }}>
+                    cursor:"pointer", textAlign:"left", ...feltCard(t.color || "#8B5CF6") }}>
                   <Medal tier={t} emoji={it.emoji} size={40}/>
                   <span style={{ display:"flex", flexDirection:"column", minWidth:0 }}>
                     <span style={{ fontSize:13, fontWeight:700, color:"var(--text)", whiteSpace:"nowrap" }}>{it.name}</span>
@@ -193,12 +196,12 @@ export default function Achievements({ embedded = false }) {
         const common = items.filter(x => shared(x) === true).length;
         const toFind = items.filter(x => shared(x) === false).length;
         return (
-          <div key={c.id} className="card" style={{ padding:0, overflow:"hidden" }}>
+          <div key={c.id} className="card" style={{ padding:0, overflow:"hidden", ...feltCard(CAT_COLOR[c.id] || "#8B5CF6") }}>
             <button onClick={() => toggle(c.id)} aria-expanded={open}
               style={{ width:"100%", display:"flex", flexDirection:"column", gap:8, padding:"14px 16px", background:"none",
                 border:"none", cursor:"pointer", textAlign:"left", color:"var(--text)" }}>
-              <div style={{ display:"flex", alignItems:"center", gap:10, width:"100%" }}>
-                <span style={{ fontSize:22 }}>{c.emoji}</span>
+              <div style={{ display:"flex", alignItems:"center", gap:12, width:"100%" }}>
+                <Chip emoji={c.emoji} color={CAT_COLOR[c.id] || "#8B5CF6"}/>
                 <span style={{ flex:1, minWidth:0 }}>
                   <span style={{ display:"flex", alignItems:"center", gap:8, fontSize:15, fontWeight:800 }}>{c.name}
                     {/* mes cles, la ou on les depense */}
@@ -1280,4 +1283,34 @@ export function TicketStub({ n, size = 1, dim = false }) {
 }
 
 const sectionTitle = { fontSize:11, fontWeight:800, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", padding:"0 4px" };
+
+// Ambiance « salle de jeu » : chaque section a sa couleur (tapis, reflets, jeton)
+const CAT_COLOR = { prints:"#0EA5E9", filaments:"#F97316", objects:"#EC4899", mw:"#22C55E", photos:"#8B5CF6",
+  app:"#6366F1", social:"#14B8A6", game:"#EF4444", secret:"#A855F7" };
+const rgba = (hex, a) => {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+};
+// Fond d'une carte : deux halos de sa couleur, un motif en biais tres discret, sur la surface du theme
+const feltBg = (c, c2 = c) => [
+  `radial-gradient(120% 90% at 0% 0%, ${rgba(c, 0.20)}, transparent 55%)`,
+  `radial-gradient(90% 80% at 100% 100%, ${rgba(c2, 0.12)}, transparent 60%)`,
+  `repeating-linear-gradient(135deg, ${rgba(c, 0.04)} 0 9px, transparent 9px 18px)`,
+  "var(--surface)",
+].join(", ");
+const feltCard = (c, c2) => ({ background: feltBg(c, c2), border:`1px solid ${rgba(c, 0.35)}`,
+  boxShadow:`0 6px 18px -10px ${rgba(c, 0.55)}, inset 0 1px 0 rgba(255,255,255,0.10)` });
+// L'emoji d'une section, pose sur un jeton de casino
+function Chip({ emoji, color }) {
+  return (
+    <span aria-hidden style={{ width:42, height:42, flexShrink:0, borderRadius:"50%", display:"flex", alignItems:"center",
+      justifyContent:"center", fontSize:21, position:"relative",
+      background:`radial-gradient(circle at 35% 30%, ${rgba(color, 0.55)}, ${color} 70%)`,
+      boxShadow:`0 3px 8px ${rgba(color, 0.45)}, inset 0 -3px 0 rgba(0,0,0,0.18)` }}>
+      <span style={{ position:"absolute", inset:3, borderRadius:"50%", border:"2px dashed rgba(255,255,255,0.75)" }}/>
+      <span style={{ position:"absolute", inset:8, borderRadius:"50%", background:"rgba(255,255,255,0.92)" }}/>
+      <span style={{ position:"relative" }}>{emoji}</span>
+    </span>
+  );
+}
 const msg = { fontSize:13, color:"var(--muted)", padding:"20px 4px", margin:0, lineHeight:1.5 };
