@@ -41,15 +41,31 @@ async function paint(src, pairs) {
   // Une simple image de la meme adresse (lisible pixel par pixel) : l'appli Android
   // abime les reponses binaires lues par requete.
   const tok = (() => { try { return localStorage.getItem("token") || ""; } catch { return ""; } })();
-  const bmp = new Image();
-  bmp.src = `/api/v1/makerworld/img?u=${encodeURIComponent(src)}&_t=${encodeURIComponent(tok)}`;
-  await bmp.decode();
-  const k = Math.min(1, 480 / Math.max(bmp.width, bmp.height));
-  const W = Math.max(1, Math.round(bmp.width * k)), H = Math.max(1, Math.round(bmp.height * k));
-  const cv = document.createElement("canvas");
-  cv.width = W; cv.height = H;
-  const cx = cv.getContext("2d", { willReadFrequently: true });
-  cx.drawImage(bmp, 0, 0, W, H);
+  // Chargement COMPLET avant de lire les pixels : sur l'appli Android, decode() rend
+  // parfois la main sur une image encore partielle (seul le haut etait repeint).
+  const load = () => new Promise((ok, ko) => {
+    const im = new Image();
+    im.onload = () => (im.decode ? im.decode().catch(() => {}) : Promise.resolve()).then(() => ok(im));
+    im.onerror = () => ko(new Error("image illisible"));
+    im.src = `/api/v1/makerworld/img?u=${encodeURIComponent(src)}&_t=${encodeURIComponent(tok)}`;
+  });
+  let bmp, cv, cx, W, H;
+  for (let tries = 0; tries < 3; tries++) {
+    bmp = await load();
+    const w0 = bmp.naturalWidth || bmp.width, h0 = bmp.naturalHeight || bmp.height;
+    const k = Math.min(1, 480 / Math.max(w0, h0));
+    W = Math.max(1, Math.round(w0 * k)); H = Math.max(1, Math.round(h0 * k));
+    cv = document.createElement("canvas");
+    cv.width = W; cv.height = H;
+    cx = cv.getContext("2d", { willReadFrequently: true });
+    cx.drawImage(bmp, 0, 0, W, H);
+    // l'image est-elle vraiment la ? (des pixels opaques en bas aussi, pas seulement en haut)
+    const low = cx.getImageData(0, Math.floor(H / 2), W, H - Math.floor(H / 2)).data;
+    let seen = 0;
+    for (let i = 3; i < low.length; i += 16) if (low[i] > 8) { seen++; if (seen > 20) break; }
+    if (seen > 20) break;
+    await new Promise(r => setTimeout(r, 400));
+  }
   const img = cx.getImageData(0, 0, W, H), px = img.data;
   const src3 = pairs.map(p => { const c = rgbOf(p.from); return { c, L: lumOf(c), lab: lab(c), to: rgbOf(p.to) }; });
   const memo = new Map();

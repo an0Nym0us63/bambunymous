@@ -61,7 +61,8 @@ async def mw_img(u: str, _=Depends(_img_user)):
     ext = p.path.lower().rsplit(".", 1)[1]
     ctype = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}[ext]
     folder = Path(settings.DATA_DIR) / "mw_img"
-    path = folder / (hashlib.sha256(u.encode()).hexdigest()[:40] + "." + ext)
+    # « v2 » : les fichiers d'avant pouvaient etre tronques, on ne les relit pas
+    path = folder / ("v2-" + hashlib.sha256(u.encode()).hexdigest()[:40] + "." + ext)
     head = {"Cache-Control": "private, max-age=2592000"}
     if path.exists():
         return Response(path.read_bytes(), media_type=ctype, headers=head)
@@ -71,7 +72,13 @@ async def mw_img(u: str, _=Depends(_img_user)):
                               timeout=15, allow_redirects=False, stream=True) as r:
             if r.status_code != 200:
                 return r.status_code, None
-            return 200, r.raw.read(_IMG_MAX + 1, decode_content=True)
+            # tout lire, morceau par morceau (un seul read() pouvait s'arreter au premier morceau)
+            buf = bytearray()
+            for chunk in r.iter_content(65536):
+                buf += chunk
+                if len(buf) > _IMG_MAX:
+                    break
+            return 200, bytes(buf)
     try:
         code, data = await asyncio.to_thread(get)
     except Exception as e:
@@ -82,6 +89,12 @@ async def mw_img(u: str, _=Depends(_img_user)):
         raise HTTPException(502, f"Image introuvable (HTTP {code})")
     if len(data) > _IMG_MAX:
         raise HTTPException(502, "Image trop lourde")
+    # image complete ? (fin de PNG / de JPEG) : sinon rien n'est garde
+    tail = data.rstrip(b"\x00")
+    whole = (b"IEND" in tail[-12:]) if ext == "png" else tail.endswith(b"\xff\xd9") if ext in ("jpg", "jpeg") else True
+    if not whole:
+        logger.warning("[MW] vignette %s : image incomplete (%s octets)", u, len(data))
+        raise HTTPException(502, "Image incomplète")
     try:
         folder.mkdir(parents=True, exist_ok=True)
         path.write_bytes(data)
