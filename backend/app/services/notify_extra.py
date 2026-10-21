@@ -61,7 +61,8 @@ def _now():
 
 # ── Points d'attention ──────────────────────────────────────────────────────
 def _att_line(a: dict) -> str:
-    return f"   • {a.get('title') or ''}" + (f" ({a['metric']})" if a.get("metric") else "")
+    m = a.get("metric") or a.get("value")         # la metrique d'une alerte s'appelle « value »
+    return f"   • {a.get('title') or ''}" + (f" ({m})" if m else "")
 
 
 def _att_message(items: list) -> str:
@@ -91,7 +92,7 @@ async def attention_tick(cfg) -> int:
     pending = {k: v for k, v in (st.get("pending") or {}).items() if k in live}   # resolues entre-temps : oubliees
     for k in live:
         if k not in seen:
-            pending[k] = {x: live[k].get(x) for x in ("title", "metric", "cat_icon", "cat_label", "category")}
+            pending[k] = {x: live[k].get(x) for x in ("title", "value", "cat_icon", "cat_label", "category")}
     opts = N.options_of(cfg, "attention_new")
     sent = 0
     now = _now()

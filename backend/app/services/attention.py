@@ -276,19 +276,26 @@ async def _prints_without_mapping(db) -> list[Alert]:
     ]
 
 
+NO_3MF_GRACE_MIN = 30
+
+
 @check("no_3mf", "Impressions sans métadonnées", "🧩")
 async def _prints_without_3mf(db) -> list[Alert]:
     """
     3MF jamais recupere : ni filament, ni cout, ni duree estimee. Souvent un
     redemarrage tombe pendant la fenetre de retry — /reenrich peut rattraper.
+    Pas avant 30 min apres le lancement : le 3MF arrive quelques minutes apres
+    le debut, une impression qui demarre n'est pas « sans metadonnees ».
     """
     cutoff = datetime.utcnow() - timedelta(days=30)
+    grace = datetime.utcnow() - timedelta(minutes=NO_3MF_GRACE_MIN)
     rows = (await db.execute(
         select(Print)
         .where(
             Print.model_3mf.is_(None),
             Print.task_name.isnot(None),
             Print.print_date >= cutoff,
+            Print.print_date <= grace,
         )
         .order_by(Print.print_date.desc())
         .limit(30)
@@ -297,7 +304,9 @@ async def _prints_without_3mf(db) -> list[Alert]:
         Alert(
             key=f"no_3mf:print:{p.id}",
             category="no_3mf",
-            title=p.file_name or f"Impression #{p.id}",
+            # le nom de fichier vaut parfois « 0 » tant que le 3MF n'est pas lu
+            title=next((n for n in (p.translated_name, p.task_name, p.file_name)
+                        if n and str(n).strip() not in ("", "0")), f"Impression #{p.id}"),
             detail="Relance possible depuis la fiche",
             value=p.print_date.strftime("%d/%m") if p.print_date else None,
             severity="warn",
