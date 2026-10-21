@@ -45,6 +45,19 @@ function Rewind() {
   );
 }
 
+// 418 : la blague des serveurs, et un petit secret pour qui la connait
+function Teapot() {
+  React.useEffect(() => { egg("teapot"); }, []);
+  return (
+    <div style={{ padding:"60px 16px", textAlign:"center", display:"flex", flexDirection:"column", alignItems:"center", gap:10 }}>
+      <div style={{ fontSize:64, animation:"bn-jiggle 1.2s ease-in-out infinite" }}>🫖</div>
+      <h2 style={{ margin:0, color:"var(--text)" }}>418 · Je suis une théière</h2>
+      <p style={{ margin:0, color:"var(--muted)", fontSize:14 }}>On ne fait pas de café ici. Du PLA, à la rigueur.</p>
+      <a href="/" style={{ marginTop:8, color:"#3b82f6", fontWeight:700, fontSize:14 }}>Retour à l'accueil</a>
+    </div>
+  );
+}
+
 // Adresse inconnue : une page qui le dit (et un petit secret pour qui s'y perd)
 function NotFound() {
   React.useEffect(() => { egg("lost"); }, []);
@@ -92,6 +105,7 @@ export default function App() {
         <Route path="achievements" element={<AchievementsRedirect />} />
         <Route path="anonymous" element={<Anonymous />} />
         <Route path="rembobiner" element={<Rewind />} />
+        <Route path="teapot" element={<Teapot />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

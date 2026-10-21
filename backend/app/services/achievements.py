@@ -812,6 +812,88 @@ EGGS = {
     "lockpick": ("🗝️", "Crocheteur", "Toucher 10 fois la médaille d'un secret pas encore gagné",
                  "Un cadenas, ça se force… à force d'insister.",
                  "Le verrou n'a pas cédé, mais tu as gagné le droit de recommencer."),
+    # Fournee du 21/10/2026
+    "benchy": ("🚤", "Moussaillon", "Taper « benchy » au clavier, sans être dans un champ",
+               "Le petit bateau que toutes les imprimantes connaissent. Écris son nom, n'importe où.",
+               "Le Benchy a pris la mer : le test de calibration le plus célèbre du monde te salue."),
+    "spaghetti": ("🍝", "Al dente", "Taper « spaghetti » au clavier, sans être dans un champ",
+                  "La pire chose qui puisse sortir d'une buse… et aussi un plat italien.",
+                  "Un plat de spaghettis, mais sans le plateau à nettoyer."),
+    "iddqd": ("🛡️", "Mode dieu", "Taper « iddqd » au clavier, sans être dans un champ",
+              "Un vieux code de jeu vidéo, celui qui rendait invincible dans les couloirs martiens.",
+              "Invincible ! Même les bouchons de buse ne peuvent plus rien contre toi."),
+    "coucou": ("🐦", "Coucou", "Taper « coucou » au clavier, sans être dans un champ",
+               "Une horloge suisse l'appelle toutes les heures. Salue-la au clavier.",
+               "Coucou ! L'appli te répond… à sa manière."),
+    "buse": ("🦅", "Bec chaud", "Taper « buse » au clavier, sans être dans un champ",
+             "C'est un rapace, et c'est aussi la pièce la plus chaude de ton imprimante.",
+             "La buse, à 220 °C : ne touche pas, même pour voir."),
+    "devtools": ("👨‍💻", "Sous le capot", "Appuyer sur F12",
+                 "Une touche tout en haut à droite du clavier ouvre les entrailles du navigateur.",
+                 "Tu as soulevé le capot. Attention, ça chauffe là-dedans."),
+    "save": ("💾", "Réflexe", "Faire Ctrl+S dans l'appli",
+             "Un vieux réflexe de bureau, celui qui protège ton travail. Ici, tout s'enregistre déjà.",
+             "Enregistré ! Enfin… ça l'était déjà, mais le geste compte."),
+    "undo": ("⏪", "Retour vers le passé", "Faire Ctrl+Z 10 fois en 5 secondes, hors d'un champ",
+             "Le raccourci qui annule. Insiste, comme si tu voulais remonter le temps.",
+             "Dix retours en arrière : la DeLorean n'a pas fait mieux."),
+    "sticky": ("🧷", "Touches rémanentes", "Appuyer 5 fois sur Maj en 2 secondes",
+               "Une touche, cinq fois de suite, et un vieux système s'inquiète pour toi.",
+               "Cinq fois Maj : Windows t'aurait proposé ses touches rémanentes."),
+    "tabber": ("⌨️", "Sans souris", "Appuyer 20 fois sur Tab en 10 secondes",
+               "Qui a besoin d'une souris ? Saute d'un bouton à l'autre, vite.",
+               "Vingt tabulations : tu navigues comme un pro du clavier."),
+    "alt_f4": ("🚪", "Tentative d'évasion", "Faire Alt+F4 dans l'appli",
+               "La combinaison qui ferme tout, celle qu'on fait faire aux naïfs.",
+               "Bien essayé ! Tu es toujours là."),
+    "time_1234": ("🔢", "Suite logique", "Ouvrir l'appli à 12 h 34",
+                  "Une heure qui se compte sur les doigts : un, deux, trois, quatre.",
+                  "12:34 : l'heure la plus ordonnée de la journée."),
+    "time_2222": ("🦢", "Les cygnes", "Ouvrir l'appli à 22 h 22",
+                  "Quatre fois le même chiffre, tard le soir.",
+                  "22:22, quatre petits cygnes en rang sur l'horloge."),
+    "time_314": ("🥧", "Heure de Pi", "Ouvrir l'appli à 3 h 14",
+                 "Une heure qui ressemble à un nombre célèbre, en pleine nuit.",
+                 "3:14 : l'heure de Pi. Tu es soit matheux, soit insomniaque."),
+    "time_404": ("🫥", "Heure introuvable", "Ouvrir l'appli à 4 h 04",
+                 "Une heure qui ressemble à une page qui n'existe pas.",
+                 "4:04 : heure introuvable. Et pourtant, tu l'as trouvée."),
+    "time_2359": ("⌛", "Juste à temps", "Ouvrir l'appli à 23 h 59",
+                  "La dernière minute de la journée. Pas une de plus.",
+                  "23:59 : tu as eu ta journée d'appli, de justesse."),
+    "dawn": ("🌄", "Aube", "Ouvrir l'appli entre 5 h et 6 h du matin",
+             "Avant même le premier café, quand le ciel rosit à peine.",
+             "Debout avant le soleil : l'imprimante, elle, ne dort jamais."),
+    "april_fool": ("🐟", "Poisson d'avril", "Ouvrir l'appli un 1er avril",
+                   "Un jour où l'on colle des choses dans le dos des gens.",
+                   "Ce succès n'est pas une blague. Enfin, presque."),
+    "leap_open": ("🐸", "Jour bonus", "Ouvrir l'appli un 29 février",
+                  "Un jour qui n'existe qu'une année sur quatre.",
+                  "Un jour en plus dans l'année, et tu l'as passé avec nous."),
+    "teapot": ("🫖", "Théière", "Ouvrir la page /teapot",
+               "Une erreur de serveur en forme de blague : 418. Va voir l'adresse qui va avec.",
+               "« Je suis une théière » : la plus célèbre des erreurs pour rire. Thé ou café ?"),
+    "rtfm": ("📖", "Lecteur assidu", "Ouvrir 5 fois les règles des succès en une minute",
+             "Les règles, ça se lit. Et ça se relit. Et ça se relit encore…",
+             "Cinq lectures des règles : tu es désormais le meilleur avocat des succès."),
+    "console": ("🖥️", "Hacker", "Lancer bambunymous() dans la console du navigateur",
+                "Ouvre les entrailles du navigateur : quelqu'un t'y a laissé un mot.",
+                "Accès accordé. Bienvenue dans la salle des machines."),
+    "marathon_session": ("🏃", "Veilleur", "Garder l'appli ouverte 3 heures d'affilée",
+                         "Ouvre l'appli et… ne la ferme pas. Vraiment pas. Pendant longtemps.",
+                         "Trois heures ouverte : l'appli a regardé toute une impression avec toi."),
+    "sunglasses": ("😎", "Lunettes de soleil", "Utiliser le thème clair entre minuit et 5 h",
+                   "En pleine nuit, choisis la lumière la plus éblouissante.",
+                   "Thème clair à cette heure-ci ? Tu as mis tes lunettes de soleil, on espère."),
+    "gamepad": ("🕹️", "Joueur", "Brancher une manette de jeu, appli ouverte",
+                "L'appli a des allures de jeu. Elle reconnaît même une certaine manière de jouer.",
+                "Une manette ? L'appli n'a pas de mode deux joueurs… pas encore."),
+    "mouse_shake": ("🐭", "Souris agitée", "Agiter la souris de gauche à droite très vite",
+                    "Quand on perd son curseur, on fait quoi ? On le secoue.",
+                    "Le curseur a eu le tournis. Toi aussi, peut-être."),
+    "leet_input": ("🕶️", "1337", "Taper « 1337 » dans un champ de l'appli",
+                   "Le nombre que les hackers lisent comme un mot.",
+                   "1337 : tu parles couramment le langage des hackers."),
 }
 # Lot du 21/10/2026 (seuils dans TIER_TABLE)
 CATALOG += [
@@ -859,6 +941,31 @@ CATALOG += [
        lore="Le même jour, chacun chez l'autre : ça s'appelle une amitié réciproque."),
     _a("share_all", "secret", "🧩", "Tout partagé", "Partager une impression et un groupe d'impressions", [1],
        lore="Une impression, puis tout un groupe : tes copains de Telegram ont tout vu."),
+    # Fournee du 21/10/2026 (bis) : photos, modeles celebres, gestes dans l'appli
+    _a("black_photo", "secret", "🌑", "Black-out", "Ajouter une photo presque entièrement noire", [1],
+       lore="Une photo toute noire : objectif bouché, lumière éteinte, ou pièce imprimée en noir dans le noir ?"),
+    _a("white_photo", "secret", "⬜", "Surexposé", "Ajouter une photo presque entièrement blanche", [1],
+       lore="Tout est blanc : le flash a gagné, la pièce a disparu dans la lumière."),
+    _a("panorama", "secret", "🏞️", "Panorama", "Ajouter une photo au moins 2,5 fois plus large que haute", [1],
+       lore="Un panorama de ton atelier : l'imprimante, les bobines, et tout ce qui traîne autour."),
+    _a("hires_photo", "secret", "🔭", "Haute définition", "Ajouter une photo de 12 mégapixels ou plus", [1],
+       lore="Douze millions de pixels : on peut compter les couches une par une."),
+    _a("photo_burst", "secret", "📸", "Rafale", "Ajouter 10 photos à une même impression en une minute", [1],
+       lore="Clic-clic-clic : une vraie séance photo, digne d'un défilé."),
+    _a("benchy_print", "secret", "🚤", "Le Benchy", "Imprimer un Benchy", [1],
+       lore="Le petit bateau qui teste toutes les imprimantes du monde. Le tien flotte-t-il ?"),
+    _a("calib_print", "secret", "📐", "Calibreur", "Imprimer une pièce de calibration (cube, test…)", [1],
+       lore="Un cube de calibration : quand on veut que tout tombe juste, on commence par là."),
+    _a("dragon_print", "secret", "🐉", "Dompteur de dragons", "Imprimer un dragon", [1],
+       lore="Un dragon sorti du plateau : articulé ou pas, il a fière allure."),
+    _a("skull_print", "secret", "💀", "Vanité", "Imprimer un crâne", [1],
+       lore="Un crâne, comme dans les vieux tableaux : souviens-toi que les bobines aussi ont une fin."),
+    _a("purge_day", "secret", "🗑️", "Coup de balai", "Supprimer 20 choses dans l'appli le même jour", [1],
+       lore="Vingt suppressions dans la journée : l'appli respire, et toi aussi."),
+    _a("tinkerer", "secret", "🎛️", "Bidouilleur", "Changer 10 fois les réglages le même jour", [1],
+       lore="Dix réglages changés dans la journée : tu cherches LA bonne configuration."),
+    _a("duo_dry", "secret", "🧖", "Spa en duo", "Faire sécher deux AMS en même temps", [1],
+       lore="Deux AMS au chaud en même temps : séance de spa pour toutes les bobines."),
 ]
 CATALOG += [_a(f"egg_{k}", "secret", e, t, d, [1], lore=l) for k, (e, t, d, _h, l) in EGGS.items()]
 # Secrets (toutes les medailles uniques) : rangés en sous-sections dans la
@@ -877,11 +984,13 @@ SECRET_SUBS = [
      "rainbow_day triplets broken_record pi314 err404 devil666 almost1000 byte256 kilobyte ten_thousand onetwothree seventh lucky13 forager perfect_month all_hours plate7 unfaithful mega_group novelist"),
     ("ups", "🎢", "Hauts et bas", "comeback phoenix bad_day insomniac comeback30 hibernation first_try so_close big_fall black_week revenge flawless_month"),
     ("trade", "🛒", "Ventes et bobines", "penny luxury market_day museum sold_hot finally_sold eternal_spool "
-     "devoured_spool big_order pit_stop psycho_price one_euro big_spool gold_spool bargain spring_clean sauna"),
+     "devoured_spool big_order pit_stop psycho_price one_euro big_spool gold_spool bargain spring_clean sauna duo_dry"),
     ("mw", "🌐", "MakerWorld", "self_print bestseller pioneer harsh recycled"),
     ("social", "🤝", "Copains", "night_owl_visit mutual_visit share_all"),
+    ("famous", "🗿", "Modèles célèbres", "benchy_print calib_print dragon_print skull_print"),
     ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
-     "action_cam making_of festival retro_video family_film flash_video bunker pwd_changes"),
+     "action_cam making_of festival retro_video family_film flash_video bunker pwd_changes black_photo white_photo "
+     "panorama hires_photo photo_burst purge_day tinkerer"),
     ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS)),
     ("game", "🎰", "Clés et roue", "jackpot lucky5 bad_luck win_streak last_key full_reveal"),
 ]
@@ -1112,6 +1221,18 @@ HINTS = {
     "night_owl_visit": "Va voir ce que font tes copains pendant qu'ils dorment.",
     "mutual_visit": "Toi chez lui, lui chez toi, dans la même journée.",
     "share_all": "Sur Telegram, montre une impression… et tout un groupe.",
+    "black_photo": "Une photo prise… sans lumière, ou presque.",
+    "white_photo": "Trop de lumière tue la photo. Essaie quand même.",
+    "panorama": "Une photo très, très large. Fais tourner le téléphone.",
+    "hires_photo": "Une photo avec beaucoup, beaucoup de pixels.",
+    "photo_burst": "Une séance photo express sur une seule impression.",
+    "benchy_print": "Un petit bateau de légende, l'épreuve de toutes les imprimantes.",
+    "calib_print": "Avant de tout imprimer, on vérifie que tout tombe juste.",
+    "dragon_print": "Une créature qui crache du feu… en plastique.",
+    "skull_print": "Ce qu'il reste de nous, en version imprimée.",
+    "purge_day": "Un grand ménage dans l'appli, en une seule journée.",
+    "tinkerer": "Une journée à tourner les boutons des réglages, encore et encore.",
+    "duo_dry": "Plusieurs AMS, une même envie de chaleur, au même moment.",
     "bunker": "Un mot de passe, c'est bien. Avec un code qui change toutes les 30 secondes, c'est mieux.",
     "pwd_changes": "Un bon secret se renouvelle de temps en temps.",
     "making_of": "Une seule impression, deux façons de la montrer : l'une bouge, l'autre pas.",
@@ -1492,7 +1613,8 @@ async def _load_data() -> dict:
         # actions reussies qui comptent : partages, gestes MakerWorld, pesees, corrections…
         from sqlalchemy import or_
         acts = (await db.execute(select(ActivityLog.method, ActivityLog.path, ActivityLog.created_at).where(
-            ActivityLog.kind == "action", or_(*[ActivityLog.path.like(p) for p in _ACT_PREFIXES])))).all()
+            ActivityLog.kind == "action", or_(ActivityLog.method == "DELETE",
+                                              *[ActivityLog.path.like(p) for p in _ACT_PREFIXES])))).all()
         links = (await db.execute(select(ObjectAccessory.quantity, ObjectAccessory.created_at))).all()
         # lot du 21/10/2026 : catalogue, bobines reconnues, ventes, couts, comptes
         fil_more = (await db.execute(select(Filament.created_at, Filament.profile_id, Filament.fila_color_code,
@@ -1530,6 +1652,7 @@ async def _load_data() -> dict:
     # photos deposees dans le dossier d'un groupe d'impressions
     gfiles = []
     videos = []
+    photo_stats = []
     try:
         from ..core.config import settings
         from pathlib import Path
@@ -1551,6 +1674,13 @@ async def _load_data() -> dict:
                 v = _video_info(data / fp)
                 if v:
                     videos.append({"print_id": s_.print_id, "group": False, **v, "at": _ts(s_.taken_at) or v["at"]})
+        # photos ajoutees : taille et luminosite (photo noire, blanche, panorama…)
+        for s_ in snaps:
+            fp = getattr(s_, "file_path", None)
+            if s_.trigger == "manual" and fp:
+                p_ = _photo_info(data / fp)
+                if p_:
+                    photo_stats.append({**p_, "print_id": s_.print_id, "at": _ts(s_.taken_at) or p_["at"]})
     except Exception:
         logger.exception("[SUCCES] videos")
     try:
@@ -1587,7 +1717,7 @@ async def _load_data() -> dict:
             "rfid_scans": rfid, "gfiles": gfiles, "versions": versions, "acts": acts, "act_kinds": act_kinds, "changes": changes,
             "mwd": mwd, "accs": accs, "acc_objs": acc_objs, "n_users": n_users, "spool_more": spool_more,
             "queue": _queue_size(), "my_designs": my_designs,
-            "alog": alog, "devices": devices, "fil_more": fil_more, "spool_modes": spool_modes,
+            "alog": alog, "devices": devices, "photo_stats": photo_stats, "fil_more": fil_more, "spool_modes": spool_modes,
             "obj_more": obj_more, "acc_imgs": acc_imgs, "pcosts": pcosts, "totp": totp,
             "game": {"keys": st.get("keys") or {}, "wheel": st.get("wheel") or {}}, "videos": videos, "eggs": await eggs_found(), "ams_live": _ams_live()}
 
@@ -1602,6 +1732,34 @@ def _ams_live() -> int:
 
 
 _VIDEO_CACHE: dict = {}
+_PHOTO_CACHE: dict = {}
+
+
+def _photo_info(path) -> dict | None:
+    """Une photo : {at, w, h, lum (0-255)}, None pour une video ou un fichier
+    illisible. Gardee en memoire par (chemin, date de modification)."""
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    key = (str(path), st.st_mtime)
+    if key in _PHOTO_CACHE:
+        return _PHOTO_CACHE[key]
+    out = None
+    if path.suffix.lower() in (".jpg", ".jpeg", ".png", ".webp") and not _video_info(path):
+        try:
+            from PIL import Image, ImageStat
+            with Image.open(path) as im:
+                w, h = im.size
+                im.draft("L", (64, 64))
+                g = im.convert("L")
+                g.thumbnail((64, 64))
+                out = {"at": datetime.utcfromtimestamp(st.st_mtime), "w": w, "h": h,
+                       "lum": round(ImageStat.Stat(g).mean[0], 1)}
+        except Exception:
+            out = None
+    _PHOTO_CACHE[key] = out
+    return out
 VIDEO_EXT = (".mp4", ".mov", ".m4v", ".webm")
 
 
@@ -2116,6 +2274,7 @@ def compute_series(d: dict, now: datetime) -> dict:
     _game(push, d, now)
     _wide(push, d, now)
     _batch21(push, d, now)
+    _batch21b(push, d, now)
     _fun200(push, d, now)
     acc = 0
     for dt, q in sorted(((_ts(lk.created_at) or now), (lk.quantity or 0)) for lk in d["links"]):
@@ -2134,6 +2293,8 @@ _ACT_PATTERNS = [
     ("restocks", "POST", r"^/api/v1/objects/accessories/\d+/stock$"),
     ("mw_detective", "POST", r"^/api/v1/prints/makerworld/assign$"),
     ("pwd_changes", "POST", r"^/api/v1/auth/change-password$"),
+    ("deletes", "DELETE", r"^/api/v1/.+"),
+    ("settings_changes", "PATCH", r"^/api/v1/settings$"),
     ("mw_boosts_given", "POST", r"^/api/v1/makerworld/model/\d+/boost$"),
     ("mw_likes_given", "PUT", r"^/api/v1/makerworld/model/\d+/like$"),
     ("mw_collected", "PUT", r"^/api/v1/makerworld/design/\d+/collections$"),
@@ -2141,7 +2302,7 @@ _ACT_PATTERNS = [
 # Ce que la requete du journal ramene (LIKE), large : les motifs ci-dessus trient.
 _ACT_PREFIXES = ["/api/v1/share/%", "/api/v1/makerworld/%", "/api/v1/filaments/spools/%/weight",
                  "/api/v1/filaments/map-tray/%", "/api/v1/objects/accessories/%/stock",
-                 "/api/v1/prints/makerworld/assign", "/api/v1/auth/change-password"]
+                 "/api/v1/prints/makerworld/assign", "/api/v1/auth/change-password", "/api/v1/settings"]
 
 
 def _batch21(push, d, now) -> None:
@@ -2266,6 +2427,48 @@ def _batch21(push, d, now) -> None:
 
 
 FULL_REPORT = {"layer1", "layer2", "pct50", "pct99", "pct100"}
+FAMOUS = [("benchy_print", r"benchy"), ("calib_print", r"calib|xyz[ _-]?cube|cube de test|test cube"),
+          ("dragon_print", r"dragon"), ("skull_print", r"skull|cr[aâ]ne")]
+
+
+def _batch21b(push, d, now) -> None:
+    """Photos (noire, blanche, panorama, haute definition, rafale), modeles
+    celebres, coup de balai, reglages, double sechage."""
+    photos = sorted(d.get("photo_stats") or [], key=lambda p: p["at"])
+    per_min = defaultdict(int)
+    for p in photos:
+        t = p["at"]
+        if p["lum"] < 12:
+            push("black_photo", t, 1)
+        if p["lum"] > 243:
+            push("white_photo", t, 1)
+        if p["h"] and p["w"] / p["h"] >= 2.5:
+            push("panorama", t, 1)
+        if p["w"] * p["h"] >= 12_000_000:
+            push("hires_photo", t, 1)
+        k = (p.get("print_id"), t.replace(second=0, microsecond=0))
+        per_min[k] += 1
+        if p.get("print_id") is not None and per_min[k] >= 10:
+            push("photo_burst", t, 1)
+    for p in d["prints"]:
+        if (p.status or "").upper() not in OK or not p.print_date:
+            continue
+        name = f"{p.translated_name or ''} {p.file_name or ''}".lower()
+        end = p.print_date + timedelta(seconds=p.duration_seconds or 0)
+        for key, rx in FAMOUS:
+            if re.search(rx, name):
+                push(key, end, 1)
+    for key, sec, n in (("deletes", "purge_day", 20), ("settings_changes", "tinkerer", 10)):
+        for day, c in sorted(d.get("act_kinds", {}).get(key, []), key=lambda r: str(r[0])):
+            if c >= n:
+                push(sec, datetime.fromisoformat(str(day)), 1)
+                break
+    dry = [(datetime.fromisoformat(x["at"]), float(x.get("h") or 0), x.get("ams"))
+           for x in (d.get("alog") or {}).get("dry") or [] if (x.get("ams") if x.get("ams") is not None else -1) >= 0]
+    for i, (t, h, a) in enumerate(dry):
+        if any(b != a and t0 <= t <= t0 + timedelta(hours=max(h0, 0.5)) for t0, h0, b in dry[:i]):
+            push("duo_dry", t, 1)
+            break
 
 
 def _more(push, d, now) -> None:

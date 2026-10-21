@@ -5,7 +5,7 @@ import { currentFriend } from "../store/friend";
 import { useIsAdmin } from "../store/auth";
 import client from "../api/client";
 import { isMoneyHidden } from "../utils/money";
-import { egg, tapper } from "../eggs";
+import { egg, tapper, rulesOpened } from "../eggs";
 import SlotMachine from "../components/SlotMachine";
 import TicketCeremony from "../components/TicketCeremony";
 
@@ -44,6 +44,7 @@ export default function Achievements({ embedded = false }) {
   const toggleSub = id => setOpenSubs(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [detail, setDetail] = useState(null);
   const [rules, setRules] = useState(false);
+  useEffect(() => { if (rules) rulesOpened(); }, [rules]);
   const [slot, setSlot] = useState(false);
   const atFriend = !!currentFriend();             // chez un copain : pas de podium (ce sont ses copains a lui)
   const isAdmin = useIsAdmin();

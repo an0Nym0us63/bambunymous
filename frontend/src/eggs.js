@@ -78,8 +78,12 @@ function ensureStyle() {
 }
 
 const WORDS = [["bambu", "magic_word"], ["sudo", "sudo"], ["bonjour", "hello"], ["ping", "ping"],
-  ["merci", "thanks"], ["xyzzy", "xyzzy"], ["aide", "help"], ["matrix", "matrix"], ["lumos", "lumos"]];
+  ["merci", "thanks"], ["xyzzy", "xyzzy"], ["aide", "help"], ["matrix", "matrix"], ["lumos", "lumos"],
+  ["benchy", "benchy"], ["spaghetti", "spaghetti"], ["iddqd", "iddqd"], ["coucou", "coucou"], ["buse", "buse"]];
 const escTap = tapper(10, 5000, () => egg("escape"));
+const undoTap = tapper(10, 5000, () => egg("undo"));
+const shiftTap = tapper(5, 2000, () => egg("sticky"));
+const tabTap = tapper(20, 10000, () => egg("tabber"));
 
 // Les guetteurs globaux : clavier, doigt, recherches, rechargements.
 export function installEggs() {
@@ -95,13 +99,20 @@ export function installEggs() {
     const tag = (e.target?.tagName || "").toLowerCase();
     const typing = tag === "input" || tag === "textarea" || tag === "select" || e.target?.isContentEditable;
     if (!typing && k.length === 1) {
-      word = (word + k).slice(-8);
+      word = (word + k).slice(-12);
       for (const [w, name] of WORDS) if (word.endsWith(w)) egg(name);
     }
     // raccourcis : tout selectionner (hors champ), chercher dans la page, s'evader
     if ((e.ctrlKey || e.metaKey) && k === "a" && !typing) egg("select_all");
     if ((e.ctrlKey || e.metaKey) && k === "f") egg("find");
     if (k === "escape") escTap();
+    // sous le capot, enregistrer, annuler, Maj a repetition, tabulations, evasion
+    if (k === "f12") egg("devtools");
+    if ((e.ctrlKey || e.metaKey) && k === "s") { e.preventDefault(); egg("save"); }
+    if ((e.ctrlKey || e.metaKey) && k === "z" && !typing) undoTap();
+    if (k === "shift" && !e.repeat) shiftTap();
+    if (k === "tab") tabTap();
+    if (e.altKey && k === "f4") egg("alt_f4");
   });
   // au doigt : glisser haut, haut, bas, bas, gauche, droite, gauche, droite, puis toucher deux fois
   const S = ["U", "U", "D", "D", "L", "R", "L", "R", "T", "T"];
@@ -118,6 +129,7 @@ export function installEggs() {
     const v = (e.target.value || "").trim().toLowerCase();
     if (v === "42") egg("answer");
     if (v === "easter egg" || v === "easteregg") egg("seeker");
+    if (v === "1337") egg("leet_input");
   });
   // secouer : trois a-coups violents en une seconde et demie
   const shake = tapper(3, 1500, () => egg("shake"));
@@ -212,9 +224,39 @@ export function installEggs() {
     if (hm === "13:37") egg("leet_time");
     if (hm === "11:11") egg("wish");
     if (hm === "0:00") egg("midnight_open");
+    if (hm === "12:34") egg("time_1234");
+    if (hm === "22:22") egg("time_2222");
+    if (hm === "3:14") egg("time_314");
+    if (hm === "4:04") egg("time_404");
+    if (hm === "23:59") egg("time_2359");
+    if (d.getHours() === 5) egg("dawn");
+    if (d.getMonth() === 3 && d.getDate() === 1) egg("april_fool");
+    if (d.getMonth() === 1 && d.getDate() === 29) egg("leap_open");
+    // theme clair en pleine nuit
+    if (d.getHours() < 5 && document.documentElement.getAttribute("data-theme") === "light") egg("sunglasses");
   };
   clock();
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") clock(); });
+  // une manette branchee
+  window.addEventListener("gamepadconnected", () => egg("gamepad"));
+  // souris agitee : 12 changements de sens en une seconde et demie
+  let lastX = null, dir = 0;
+  const wiggle = tapper(12, 1500, () => egg("mouse_shake"));
+  window.addEventListener("mousemove", e => {
+    if (lastX != null && Math.abs(e.clientX - lastX) > 8) {
+      const d = e.clientX > lastX ? 1 : -1;
+      if (d !== dir) { dir = d; wiggle(); }
+    }
+    lastX = e.clientX;
+  }, { passive: true });
+  // trois heures d'affilee
+  setTimeout(() => egg("marathon_session"), 3 * 3600000);
+  // un mot laisse dans la console, et la commande qui va avec
+  try {
+    window.bambunymous = () => { egg("console"); return "🖨️ Accès accordé."; };
+    console.log("%c🖨️ BambuNymous", "font-size:16px;font-weight:900;color:#8B5CF6",
+      "\nPsst… tu as trouvé la salle des machines. Tape bambunymous() pour entrer.");
+  } catch { /* pas de console */ }
   // navigateur dans une autre langue
   if (navigator.language && !navigator.language.toLowerCase().startsWith("fr")) egg("polyglot");
   // batterie presque vide, ou pleine et branchee
@@ -242,6 +284,10 @@ const pageTaps = tapper(15, 30000, () => egg("zapper"));
 export const pageChanged = () => pageTaps();
 const bellTaps = tapper(10, 5000, () => egg("bell"));
 export const bellRung = () => bellTaps();
+
+// Regles des succes : 5 ouvertures en une minute
+const rulesTaps = tapper(5, 60000, () => egg("rtfm"));
+export const rulesOpened = () => rulesTaps();
 
 // Bascules de theme : 10 en une minute
 const themeTaps = tapper(10, 60000, () => egg("disco"));
