@@ -3488,6 +3488,20 @@ async def settle(since: str) -> list:
             and not str(l.get("why", "")).startswith("Roue")]
 
 
+async def add_spins(n: int) -> dict:
+    """Ajoute des tours de roue (essais de l'administrateur)."""
+    n = max(1, min(int(n or 1), 100))
+    async with _lock():
+        st = await _state_get()
+        if st is None:
+            raise ValueError("Pas encore d'état des succès : attends le premier passage")
+        w = _wheel_init(st)
+        w["spins"] += n
+        await _state_put(st)
+        _CACHE["v"] = None
+    return {"added": n, "spins": w["spins"]}
+
+
 def wheel_view(st: dict) -> dict | None:
     w = st.get("wheel")
     if not isinstance(w, dict):

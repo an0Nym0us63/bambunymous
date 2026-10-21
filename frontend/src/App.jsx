@@ -17,6 +17,18 @@ import { CreatorPageHost } from "./components/MwCreatorPage";
 import { egg } from "./eggs";
 import Anonymous from "./pages/Anonymous";
 
+function Rewind() {
+  const [msg, setMsg] = React.useState("…");
+  React.useEffect(() => {
+    const n = new URLSearchParams(window.location.search).get("n") || 5;
+    import("./api/client").then(({ default: client }) =>
+      client.post("/achievements/wheel/extra", null, { params: { n } })
+        .then(({ data }) => setMsg(`+${data.added} · ${data.spins}`))
+        .catch(e => setMsg(e.response?.status === 403 ? "Réservé à l'administrateur" : (e.response?.data?.detail || e.message))));
+  }, []);
+  return <p style={{ padding:"40px 16px", textAlign:"center", color:"var(--muted)", fontFamily:"monospace" }}>{msg}</p>;
+}
+
 // Adresse inconnue : une page qui le dit (et un petit secret pour qui s'y perd)
 function NotFound() {
   React.useEffect(() => { egg("lost"); }, []);
@@ -63,6 +75,7 @@ export default function App() {
         {/* ancienne adresse des succes (liens deja envoyes) : onglet des statistiques */}
         <Route path="achievements" element={<AchievementsRedirect />} />
         <Route path="anonymous" element={<Anonymous />} />
+        <Route path="rembobiner" element={<Rewind />} />
         <Route path="*" element={<NotFound />} />
       </Route>
     </Routes>

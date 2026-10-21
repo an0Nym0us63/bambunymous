@@ -148,3 +148,11 @@ body {
 @keyframes bn-medal-pulse { 0%, 100% { box-shadow: 0 0 4px 1px var(--glow) } 50% { box-shadow: 0 0 14px 5px var(--glow) } }
 @keyframes bn-medal-twinkle { 0%, 100% { opacity: 0; transform: scale(.4) } 50% { opacity: 1; transform: scale(1) } }
 @keyframes bn-medal-turn { to { transform: rotate(360deg) } }
+
+/* Tresor de la page Succes (cles, tickets, machine) */
+@keyframes bn-reel-idle { from { transform: translateY(0) } to { transform: translateY(-50%) } }
+@keyframes bn-glint { 0% { transform: translateX(-150%) rotate(20deg) } 60%, 100% { transform: translateX(260%) rotate(20deg) } }
+@keyframes bn-float { 0%, 100% { transform: translateY(0) rotate(-6deg) } 50% { transform: translateY(-5px) rotate(-2deg) } }
+@keyframes bn-lamp { 0%, 100% { opacity: 1; box-shadow: 0 0 8px 2px #fde047 } 50% { opacity: .3; box-shadow: none } }
+@keyframes bn-press { 0%, 100% { transform: scale(1) } 50% { transform: scale(1.035) } }
+@keyframes bn-ring-glow { 0%, 100% { opacity: .55 } 50% { opacity: 1 } }

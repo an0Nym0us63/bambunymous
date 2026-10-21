@@ -45,6 +45,15 @@ async def achievements_spin(_: str = Depends(require_admin)):
         raise HTTPException(400, str(e))
 
 
+@router.post("/wheel/extra")
+async def achievements_wheel_extra(n: int = 5, _: str = Depends(require_admin)):
+    from ....services import achievements as A
+    try:
+        return await A.add_spins(n)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/wheel/settle")
 async def achievements_settle(since: str, _: str = Depends(require_admin)):
     """Apres un tour : les cles rapportees en plus par les succes qu'il a debloques."""

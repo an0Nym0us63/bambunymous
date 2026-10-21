@@ -115,24 +115,26 @@ export default function Achievements({ embedded = false }) {
     <div style={{ maxWidth: embedded ? undefined : 900, width:"100%", margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
       {!embedded && <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Succès</h1>}
 
-      {/* Bilan : score et medailles */}
-      <div className="card" style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:12,
-        background:"linear-gradient(135deg, rgba(245,183,0,0.12), rgba(139,92,246,0.10)), var(--surface)" }}>
-        <div style={{ display:"flex", alignItems:"baseline", gap:10, flexWrap:"wrap" }}>
-          <span style={{ fontSize:28, fontWeight:900, color:"var(--text)", fontVariantNumeric:"tabular-nums" }}>{data.score}</span>
-          <span style={{ fontSize:13, color:"var(--muted)", fontWeight:600 }}>points sur {data.score_max} · {pct} %</span>
-          <span style={{ flex:1 }}/>
-          <button onClick={() => setRules(true)} aria-label="Règles des succès" title="Règles : paliers, points, clés, secrets"
-            style={{ width:26, height:26, borderRadius:"50%", border:"1px solid var(--border)", background:"var(--surface2)",
-              color:"var(--text2)", fontSize:13, fontWeight:900, cursor:"pointer", alignSelf:"center", flexShrink:0 }}>?</button>
+      {/* Bilan : score (jauge), vitrine des medailles, puis le tresor (cles, tickets, machine) */}
+      <div className="card" style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:16,
+        background:"linear-gradient(135deg, rgba(245,183,0,0.10), rgba(139,92,246,0.10)), var(--surface)" }}>
+        <div style={{ display:"flex", gap:18, alignItems:"center", flexWrap:"wrap" }}>
+          <ScoreRing score={data.score} max={data.score_max} tiers={data.tiers}/>
+          <div style={{ flex:1, minWidth:240, display:"flex", flexDirection:"column", gap:8 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:"var(--muted)" }}>
+                Ta vitrine</span>
+              {data.tickets_used > 0 && <span title="Paliers passés avec des tickets" style={{ display:"inline-flex", alignItems:"center",
+                gap:4, fontSize:11, color:"var(--muted)" }}><TicketStub size={0.7}/> {data.tickets_used} utilisé{data.tickets_used > 1 ? "s" : ""}</span>}
+              <span style={{ flex:1 }}/>
+              <button onClick={() => setRules(true)} aria-label="Règles des succès" title="Règles : paliers, points, clés, secrets"
+                style={{ width:26, height:26, borderRadius:"50%", border:"1px solid var(--border)", background:"var(--surface2)",
+                  color:"var(--text2)", fontSize:13, fontWeight:900, cursor:"pointer", flexShrink:0 }}>?</button>
+            </div>
+            <MedalShelf tiers={data.tiers} medals={data.medals}/>
+          </div>
         </div>
-        <Bar value={pct / 100} tiers={data.tiers}/>
-        {data.tickets_used > 0 && (
-          <div style={{ fontSize:11.5, color:"var(--muted)", marginTop:-4 }}>
-            🎟️ {data.tickets_used} ticket{data.tickets_used > 1 ? "s" : ""} de palier utilisé{data.tickets_used > 1 ? "s" : ""}</div>
-        )}
-        <MedalCounts tiers={data.tiers} medals={data.medals}/>
-        {data.keys && !atFriend && <KeysBox keys={data.keys} onRules={() => setRules(true)}
+        {data.keys && !atFriend && <Treasure keys={data.keys} onRules={() => setRules(true)}
           onWheel={canSpend && data.keys.wheel ? () => setSlot(true) : null}/>}
       </div>
 
@@ -435,61 +437,210 @@ function Compare({ people, cat }) {
 
 // Mes cles : le compte, la prochaine, et (deplie) comment on en gagne et
 // les derniers mouvements.
-function KeysBox({ keys, onRules, onWheel }) {
+// Le score dans une jauge : l'anneau prend la couleur du palier atteint (un
+// neuvieme du chemin par palier), le nombre monte au chargement.
+function ScoreRing({ score, max, tiers }) {
+  const ladder = tiers.filter(t => t.id !== "unique");
+  const v = max ? Math.max(0, Math.min(1, score / max)) : 0;
+  const t = ladder[Math.min(ladder.length - 1, Math.floor(v * ladder.length))] || ladder[0];
+  const [shown, setShown] = useState(0);
+  const [go, setGo] = useState(false);
+  useEffect(() => {
+    let raf, t0;
+    const step = ts => {
+      t0 = t0 || ts;
+      const k = Math.min(1, (ts - t0) / 1100);
+      setShown(Math.round(score * (1 - Math.pow(1 - k, 3))));
+      if (k < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    const g = setTimeout(() => setGo(true), 50);
+    return () => { cancelAnimationFrame(raf); clearTimeout(g); };
+  }, [score]);
+  const R = 56, C = 2 * Math.PI * R;
+  return (
+    <div style={{ position:"relative", width:138, height:138, flexShrink:0, margin:"0 auto" }}>
+      <div aria-hidden="true" style={{ position:"absolute", inset:8, borderRadius:"50%",
+        background:`radial-gradient(circle, ${t.color}33, transparent 70%)`, animation:"bn-ring-glow 3s ease-in-out infinite" }}/>
+      <svg width="138" height="138" viewBox="0 0 138 138" style={{ position:"absolute", inset:0, transform:"rotate(-90deg)" }}>
+        <circle cx="69" cy="69" r={R} fill="none" stroke="var(--surface2)" strokeWidth="10"/>
+        <circle cx="69" cy="69" r={R} fill="none" stroke={t.color} strokeWidth="10" strokeLinecap="round"
+          strokeDasharray={C} strokeDashoffset={go ? C * (1 - v) : C}
+          style={{ transition:"stroke-dashoffset 1.2s cubic-bezier(.2,.8,.2,1)", filter:`drop-shadow(0 0 4px ${t.color})` }}/>
+      </svg>
+      <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+        <span style={{ fontSize:27, fontWeight:900, color:"var(--text)", fontVariantNumeric:"tabular-nums", lineHeight:1 }}>
+          {shown.toLocaleString("fr-FR")}</span>
+        <span style={{ fontSize:11, color:"var(--muted)", marginTop:2 }}>points sur {max.toLocaleString("fr-FR")}</span>
+        <span style={{ marginTop:5, fontSize:11, fontWeight:900, padding:"2px 8px", borderRadius:20, color:"#fff",
+          background:t.color }}>{Math.round(v * 100)} %</span>
+      </div>
+    </div>
+  );
+}
+
+// La vitrine : chaque palier, sa medaille (animee aux hauts rangs) et combien tu en as.
+function MedalShelf({ tiers, medals }) {
+  return (
+    <div style={{ position:"relative", display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(54px, 1fr))", gap:"10px 6px",
+      padding:"10px 6px 14px", borderRadius:14, background:"linear-gradient(180deg, transparent 55%, rgba(0,0,0,0.06))" }}>
+      {tiers.map(t => {
+        const n = medals[t.id] || 0;
+        return (
+          <div key={t.id} title={`${t.label} : ${n}`} style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2, minWidth:0 }}>
+            <Medal tier={t} emoji="" size={36} locked={!n}/>
+            <span style={{ fontSize:16, fontWeight:900, lineHeight:1.1, fontVariantNumeric:"tabular-nums",
+              color: n ? "var(--text)" : "var(--muted)" }}>{n}</span>
+            <span style={{ fontSize:9.5, color:"var(--muted)", whiteSpace:"nowrap", maxWidth:"100%", overflow:"hidden",
+              textOverflow:"ellipsis" }}>{t.label}</span>
+          </div>
+        );
+      })}
+      <span aria-hidden="true" style={{ position:"absolute", left:10, right:10, bottom:6, height:3, borderRadius:3,
+        background:"linear-gradient(90deg, transparent, var(--border), transparent)" }}/>
+    </div>
+  );
+}
+
+// Ce que tu as (cles, tickets) a gauche, la machine a sous a droite : la
+// toucher ouvre la roue.
+function Treasure({ keys, onRules, onWheel }) {
   const [open, setOpen] = useState(false);
   const log = keys.log || [];
   const w = keys.wheel;
+  const hero = (glow, edge) => ({ position:"relative", overflow:"hidden", borderRadius:16, padding:"12px 14px",
+    background:`radial-gradient(circle at 12% 50%, ${glow}, transparent 60%), var(--surface2)`, border:`1px solid ${edge}` });
+  const glint = <span aria-hidden="true" style={{ position:"absolute", top:"-40%", bottom:"-40%", width:"28%", pointerEvents:"none",
+    background:"linear-gradient(90deg, transparent, rgba(255,255,255,.18), transparent)", animation:"bn-glint 4.5s ease-in-out infinite" }}/>;
+  const per = w?.secrets_per_ticket || 10;
+  const toT = w?.to_ticket || per;
+  const prints = keys.rules?.prints || 10;
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-    <div style={{ borderRadius:12, padding:"8px 12px", background:"rgba(245,158,11,0.10)", border:"1px solid rgba(245,158,11,0.35)" }}>
-      <button onClick={() => log.length && setOpen(o => !o)} style={{ width:"100%", display:"flex", alignItems:"center", gap:10,
-        background:"none", border:"none", padding:0, cursor: log.length ? "pointer" : "default", color:"var(--text)", textAlign:"left" }}>
-        <span style={{ fontSize:22 }}>🔑</span>
-        <span style={{ flex:1, minWidth:0 }}>
-          <span style={{ display:"block", fontSize:15, fontWeight:900 }}>{keys.balance} clé{keys.balance > 1 ? "s" : ""}</span>
-          <span style={{ display:"block", fontSize:11.5, color:"var(--muted)" }}>
-            Prochaine dans {keys.to_next} impression{keys.to_next > 1 ? "s" : ""} réussie{keys.to_next > 1 ? "s" : ""}
-            {" · "}à dépenser sur les secrets</span>
-        </span>
-        {log.length > 0 && <span style={{ fontSize:11, color:"var(--muted)", whiteSpace:"nowrap" }}>
-          Historique <span style={{ display:"inline-block", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span></span>}
-      </button>
-      {open && (
-        <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:3, fontSize:12, color:"var(--text2)" }}>
-          {log.slice(0, 12).map((l, i) => (
-            <div key={i} style={{ display:"flex", gap:8 }}>
-              <span style={{ width:34, flexShrink:0, fontWeight:800, color: l.n > 0 ? "#22c55e" : "#ef4444" }}>
-                {l.n > 0 ? `+${l.n}` : l.n}</span>
-              <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.why}</span>
-              <span style={{ color:"var(--muted)", fontSize:11 }}>{dateFr(l.at)}</span>
+    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(260px, 1fr))", gap:12 }}>
+      <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+        {/* cles */}
+        <div style={hero("rgba(250,204,21,.30)", "rgba(250,204,21,.4)")}>
+          {glint}
+          <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+            <span style={{ fontSize:38, animation:"bn-float 3.5s ease-in-out infinite",
+              filter:"drop-shadow(0 4px 10px rgba(250,204,21,.5))" }}>🔑</span>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:"flex", alignItems:"baseline", gap:8 }}>
+                <span style={{ fontSize:34, fontWeight:900, lineHeight:1, background:"linear-gradient(180deg,#fde047,#f59e0b)",
+                  WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{keys.balance}</span>
+                <span style={{ fontSize:12.5, fontWeight:700, color:"var(--text2)" }}>clé{keys.balance > 1 ? "s" : ""}</span>
+              </div>
+              <div style={{ fontSize:11.5, color:"var(--muted)" }}>pour révéler les secrets</div>
+              <div style={{ height:6, borderRadius:6, background:"var(--surface)", overflow:"hidden", marginTop:6 }}>
+                <div style={{ width:`${Math.round(100 * (1 - (keys.to_next || prints) / prints))}%`, height:"100%",
+                  background:"linear-gradient(90deg,#fde047,#f59e0b)" }}/></div>
+              <div style={{ fontSize:11, color:"var(--muted)", marginTop:3 }}>
+                prochaine dans {keys.to_next} impression{keys.to_next > 1 ? "s" : ""} réussie{keys.to_next > 1 ? "s" : ""}</div>
             </div>
-          ))}
-          <button onClick={onRules} style={{ alignSelf:"flex-start", marginTop:4, background:"none", border:"none", padding:0,
-            fontSize:11.5, fontWeight:700, color:"#F59E0B", cursor:"pointer" }}>Comment gagner et dépenser des clés ?</button>
+            {log.length > 0 && <button onClick={() => setOpen(o => !o)} style={{ alignSelf:"flex-start", background:"var(--surface)",
+              border:"1px solid var(--border)", borderRadius:20, padding:"3px 9px", fontSize:11, color:"var(--muted)", cursor:"pointer",
+              position:"relative" }}>Historique {open ? "▾" : "▸"}</button>}
+          </div>
+          {open && (
+            <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:3, fontSize:12, color:"var(--text2)", position:"relative" }}>
+              {log.slice(0, 12).map((l, i) => (
+                <div key={i} style={{ display:"flex", gap:8 }}>
+                  <span style={{ width:34, flexShrink:0, fontWeight:800, color: l.n > 0 ? "#22c55e" : l.n < 0 ? "#ef4444" : "var(--muted)" }}>
+                    {l.n > 0 ? `+${l.n}` : l.n || "·"}</span>
+                  <span style={{ flex:1, minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{l.why}</span>
+                  <span style={{ color:"var(--muted)", fontSize:11 }}>{dateFr(l.at)}</span>
+                </div>
+              ))}
+              <button onClick={onRules} style={{ alignSelf:"flex-start", marginTop:4, background:"none", border:"none", padding:0,
+                fontSize:11.5, fontWeight:700, color:"#F59E0B", cursor:"pointer" }}>Comment gagner et dépenser des clés ?</button>
+            </div>
+          )}
         </div>
-      )}
-    </div>
-    {w && (
-      <div style={{ borderRadius:12, padding:"8px 12px", display:"flex", alignItems:"center", gap:10,
-        background:"linear-gradient(90deg, rgba(220,38,38,0.12), rgba(245,158,11,0.12))", border:"1px solid rgba(220,38,38,0.35)" }}>
-        <span style={{ fontSize:22 }}>🎰</span>
-        <span style={{ flex:1, minWidth:0 }}>
-          <span style={{ display:"block", fontSize:15, fontWeight:900, color:"var(--text)" }}>
-            {w.spins} tour{w.spins > 1 ? "s" : ""} de roue</span>
-          <span style={{ display:"block", fontSize:11.5, color:"var(--muted)" }}>
-            +{w.weekly} chaque lundi · +{w.per_secret || 1} par secret gagné
-
-            {w.to_ticket ? ` · prochain ticket dans ${w.to_ticket} secret${w.to_ticket > 1 ? "s" : ""}` : ""}</span>
-        </span>
-        {w.tickets > 0 && <span title="Tickets de palier : à utiliser dans le détail d'un succès à paliers">
-          <TicketStub n={w.tickets} size={1.1}/></span>}
-        {onWheel && (
-          <button onClick={onWheel} style={{ padding:"8px 14px", borderRadius:20, border:"none", fontSize:13, fontWeight:900,
-            cursor:"pointer", color:"#7c2d12", background: w.spins > 0 ? "linear-gradient(180deg, #fde047, #f59e0b)" : "var(--surface2)",
-            boxShadow: w.spins > 0 ? "0 3px 0 #b45309" : "none" }}>{w.spins > 0 ? "Tourner" : "Voir"}</button>
+        {/* tickets, a part */}
+        {w && (
+          <div style={hero("rgba(249,115,22,.28)", "rgba(249,115,22,.4)")}>
+            {glint}
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <div style={{ position:"relative", width:96, height:52, flexShrink:0 }}>
+                {[[-16, .55, 0], [-7, .8, 9], [3, 1, 18]].map(([r, o, x], i) => (
+                  <span key={i} style={{ position:"absolute", left:x, top:10, transform:`rotate(${r}deg)`, opacity:o }}>
+                    <TicketStub n={i === 2 ? w.tickets || 0 : null} size={1.5} dim={!w.tickets}/></span>
+                ))}
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontWeight:900, fontSize:14, color:"var(--text)" }}>Tickets de palier</div>
+                <div style={{ fontSize:11.5, color:"var(--muted)" }}>
+                  +{w.weekly_tickets || 1} chaque lundi · 1 tous les {per} secrets</div>
+                <div style={{ height:6, borderRadius:6, background:"var(--surface)", overflow:"hidden", marginTop:6 }}>
+                  <div style={{ width:`${Math.round(100 * (1 - toT / per))}%`, height:"100%",
+                    background:"linear-gradient(90deg,#fb923c,#f97316)" }}/></div>
+                <div style={{ fontSize:11, color:"var(--muted)", marginTop:3 }}>
+                  prochain dans {toT} secret{toT > 1 ? "s" : ""} · à utiliser dans un succès</div>
+              </div>
+            </div>
+          </div>
         )}
       </div>
-    )}
+      {w && <MiniMachine w={w} onOpen={onWheel}/>}
+    </div>
+  );
+}
+
+// La machine a sous en vitrine : rouleaux au ralenti, ampoules, compteur des tours.
+const IDLE = ["🔑", "🍀", "💎", "🎟️", "💰", "🔁", "🍒", "🔍"];
+const LAMPS = [...[6, 20, 34, 48, 62, 76, 90].map(x => [x, 0]), ...[30, 60].map(y => [100, y]),
+  ...[90, 76, 62, 48, 34, 20, 6].map(x => [x, 100]), ...[60, 30].map(y => [0, y])];
+function MiniMachine({ w, onOpen }) {
+  const can = !!onOpen;
+  const has = (w.spins || 0) > 0;
+  return (
+    <div role={can ? "button" : undefined} tabIndex={can ? 0 : undefined} onClick={can ? onOpen : undefined}
+      onKeyDown={e => { if (can && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onOpen(); } }}
+      title={can ? "Ouvrir la machine à sous" : undefined}
+      style={{ position:"relative", borderRadius:20, padding:"14px 16px 16px", cursor: can ? "pointer" : "default",
+        background:"linear-gradient(180deg,#c81e1e,#7f1d1d)", border:"3px solid #f59e0b", marginRight:12,
+        boxShadow:"0 10px 30px rgba(0,0,0,.35), inset 0 2px 0 rgba(255,255,255,.25)", transition:"transform .15s" }}
+      onMouseEnter={e => { if (can) e.currentTarget.style.transform = "translateY(-2px) scale(1.01)"; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = ""; }}>
+      <div aria-hidden="true" style={{ position:"absolute", inset:5, pointerEvents:"none" }}>
+        {LAMPS.map(([x, y], i) => <span key={i} style={{ position:"absolute", width:7, height:7, borderRadius:"50%", background:"#fde047",
+          left:`calc(${x}% - 3.5px)`, top:`calc(${y}% - 3.5px)`, animation:`bn-lamp ${has ? 0.9 : 1.6}s ${i * 0.08}s infinite` }}/>)}
+      </div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+        <span style={{ fontWeight:900, color:"#fde047", letterSpacing:".05em", fontSize:14.5,
+          textShadow:"0 2px 0 #7c2d12, 0 0 10px rgba(253,224,71,.6)" }}>🎰 ROUE DE LA FORTUNE</span>
+        <span style={{ fontFamily:"'Courier New', monospace", fontWeight:900, color:"#fb923c", background:"#0c0a09",
+          border:"2px solid #44403c", borderRadius:8, padding:"2px 8px", letterSpacing:".1em", textShadow:"0 0 8px #f97316",
+          fontSize:18 }}>{String(w.spins || 0).padStart(2, "0")}</span>
+      </div>
+      <div style={{ display:"flex", gap:6, padding:6, borderRadius:12, background:"#1c1917", boxShadow:"inset 0 4px 10px rgba(0,0,0,.8)",
+        margin:"10px 0" }}>
+        {[9, 7, 11].map((d, i) => {
+          const seq = [...IDLE.slice(i * 3), ...IDLE.slice(0, i * 3)];
+          return (
+            <div key={i} style={{ flex:1, height:62, overflow:"hidden", borderRadius:8, position:"relative",
+              background:"linear-gradient(180deg,#e7e5e4,#fff 40%,#fff 60%,#d6d3d1)" }}>
+              <div style={{ animation:`bn-reel-idle ${d}s linear infinite` }}>
+                {[...seq, ...seq].map((x, j) => <div key={j} style={{ height:62, display:"flex", alignItems:"center",
+                  justifyContent:"center", fontSize:32 }}>{x}</div>)}
+              </div>
+              <div aria-hidden="true" style={{ position:"absolute", inset:0,
+                background:"linear-gradient(180deg,rgba(0,0,0,.28),transparent 30%,transparent 70%,rgba(0,0,0,.28))" }}/>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ textAlign:"center", color:"rgba(255,255,255,.85)", fontSize:11.5 }}>
+        +{w.weekly || 3} chaque lundi · +{w.per_secret || 1} par secret gagné</div>
+      <div style={{ marginTop:9, padding:"10px 0", borderRadius:12, textAlign:"center", fontWeight:900, letterSpacing:".08em",
+        fontSize:13.5, color:"#7c2d12", boxShadow: has ? "0 4px 0 #b45309" : "none",
+        background: has ? "linear-gradient(180deg,#fde047,#f59e0b)" : "linear-gradient(180deg,#e7d9b4,#bfae86)",
+        animation: has && can ? "bn-press 2s ease-in-out infinite" : "none" }}>
+        {has ? (can ? "TOURNER" : `${w.spins} TOUR${w.spins > 1 ? "S" : ""}`) : "PROCHAINS TOURS LUNDI"}</div>
+      <span aria-hidden="true" style={{ position:"absolute", right:-15, top:46, width:8, height:70, borderRadius:4,
+        background:"linear-gradient(90deg,#9ca3af,#e5e7eb,#9ca3af)" }}>
+        <span style={{ position:"absolute", top:-14, left:-7, width:22, height:22, borderRadius:"50%",
+          background:"radial-gradient(circle at 35% 35%,#fca5a5,#dc2626)" }}/></span>
     </div>
   );
 }
