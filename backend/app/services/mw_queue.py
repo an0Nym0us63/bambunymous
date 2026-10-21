@@ -239,6 +239,29 @@ async def _ams_stock() -> dict:
     return out
 
 
+async def _printed_plates(dids) -> dict:
+    """Mes impressions reussies de ces modeles, plateau par plateau :
+    {design_id: {numero de plateau: nombre}}."""
+    from sqlalchemy import select
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    dids = [str(d) for d in dids if d]
+    if not dids:
+        return {}
+    async with AsyncSessionLocal() as db:
+        rows = (await db.execute(select(Print.design_id, Print.plate_id).where(
+            Print.design_id.in_(dids), Print.status.in_(("SUCCESS", "PARTIAL"))))).all()
+    out = {}
+    for did, plate in rows:
+        try:
+            n = int(str(plate or "1").strip() or 1)
+        except ValueError:
+            continue
+        per = out.setdefault(str(did), {})
+        per[n] = per.get(n, 0) + 1
+    return out
+
+
 async def _prices(fids) -> dict:
     """Prix au gramme des filaments (prix de la bobine / poids nominal)."""
     from sqlalchemy import select
@@ -364,6 +387,7 @@ async def _compute() -> dict:
                 return did, {"error": f"{type(e).__name__}"}
     details = dict(await asyncio.gather(*(detail(d) for d in designs)))
     ams = await _ams_stock()
+    done_plates = await _printed_plates(list(designs))
 
     models, stock_of = [], {}
     stock_all = None                                  # tout le stock, lu seulement si un choix sort des propositions
@@ -447,6 +471,11 @@ async def _compute() -> dict:
                     ready.append(pl.get("index"))
             row["plates_ready"] = ready
             row["plates_count"] = len(plates)
+            # chaque plateau : faisable tout de suite avec l'AMS ? deja imprime (par moi) ?
+            mine = done_plates.get(str(did), {})
+            row["plates"] = [{"index": pl.get("index"), "name": pl.get("name") or "",
+                              "ready": pl.get("index") in ready, "printed": mine.get(pl.get("index"), 0)}
+                             for pl in plates]
             row["stock_ok"] = bool(ok_stock and items)    # tout le modele faisable avec le stock
             # Exemplaires complets faisables tout de suite avec l'AMS (sur la quantite voulue).
             row["copies_ready"] = (min(qty, min(int(ams.get(f, {}).get("g", 0) // n) for f, n in one_of.items() if n > 0))

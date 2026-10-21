@@ -35,6 +35,37 @@ function statusText(r) {
   return `🟩 ${bits.join(" · ") || "en partie"} prêt${bits.length ? "s" : ""}`;
 }
 
+// Les plateaux d'un modele, un par pastille : vert = faisable tout de suite avec
+// l'AMS ; coche = deja imprime par moi ; gris = il manque un filament dans l'AMS.
+function PlateChips({ plates }) {
+  const todo = plates.filter(p => p.ready && !p.printed);       // faisables et pas encore faits
+  return (
+    <span style={{ display:"flex", gap:3, marginTop:4, flexWrap:"wrap", alignItems:"center" }}>
+      <span style={{ fontSize:10, color:"var(--muted)", marginRight:1 }}>Plateaux</span>
+      {plates.map(p => {
+        const done = p.printed > 0;
+        const tip = `Plateau ${p.index}${p.name ? ` · ${p.name}` : ""} : `
+          + (p.ready ? "faisable maintenant avec l'AMS" : "un filament manque dans l'AMS")
+          + (done ? ` · déjà imprimé${p.printed > 1 ? ` ${p.printed}×` : ""}` : " · pas encore imprimé");
+        return (
+          <span key={p.index} title={tip} style={{ minWidth:18, height:18, padding:"0 4px", borderRadius:6, fontSize:10,
+            fontWeight:800, display:"inline-flex", alignItems:"center", justifyContent:"center", gap:1,
+            color: p.ready ? "#fff" : "var(--muted)",
+            background: p.ready ? (done ? "rgba(34,197,94,0.55)" : "#22c55e") : "var(--surface)",
+            border: p.ready ? "1px solid #22c55e" : "1px solid var(--border)",
+            textDecoration: "none" }}>
+            {p.index}{done && <span style={{ fontSize:9 }}>✓</span>}
+          </span>
+        );
+      })}
+      {todo.length > 0 && (
+        <span style={{ fontSize:10, fontWeight:700, color:"#16a34a", marginLeft:2 }}>
+          à lancer : {todo.map(p => p.index).join(", ")}</span>
+      )}
+    </span>
+  );
+}
+
 export default function MwQueue() {
   const [q, setQ] = useState(null);
   const [err, setErr] = useState(null);
@@ -297,6 +328,7 @@ export default function MwQueue() {
                   <span style={{ display:"block", fontSize:10.5, color:"var(--muted)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
                     {r.profile ? `${r.profile.title || "Profil"}${r.profile.plates < r.profile.plates_total ? ` · ${r.profile.plates}/${r.profile.plates_total} plateaux` : ""}` : "profil inconnu"}
                     {" · "}{fmtDur(r.seconds)} · {g(r.weight_g)}{r.cost != null ? ` · ${moneyVal(r.cost, 2)} €` : ""}{r.printed ? ` · imprimé ${r.printed}×` : ""}</span>
+                  {r.plates?.length > 1 && <PlateChips plates={r.plates}/>}
                   <span style={{ display:"flex", gap:3, marginTop:4, flexWrap:"wrap" }}>
                     {r.filaments.map((f, i) => (
                       <span key={i} title={`${f.type} ${Math.round(f.g)} g → ${f.chosen ? f.chosen.name + (f.chosen.in_ams ? " (AMS)" : "") : "rien en stock"}`}
