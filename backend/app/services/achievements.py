@@ -1135,6 +1135,75 @@ EGGS = {
     "p_ombre": ('🌗', 'Cadran solaire', 'Ouvrir /ombre et voir une journée passer',
         'Le soleil tourne autour de ton accueil, et chaque carte projette son ombre.',
         'Du matin au soir, puis la nuit, puis le jour revient. Une journée en neuf secondes.'),
+    "p_eclipse": ('🌒', 'Nuit en plein jour', "Ouvrir /eclipse et regarder la lune passer devant le soleil jusqu'au retour du jour.",
+        "La lune joue à cache-cache avec le soleil, et ton accueil se retrouve dans l'ombre.",
+        "Tu as vu une éclipse totale sans lunettes spéciales. Ton ophtalmo n'en saura rien."),
+    "p_arc_en_ciel": ('🌈', 'Licorne en vadrouille', "Ouvrir /arc-en-ciel et laisser la licorne traverser l'accueil.",
+        "Sept couleurs, une corne, et l'AMS qui ne sait plus où donner de la bobine.",
+        'Une licorne a traversé ton accueil. Elle a laissé des couleurs, pas de crottin. Ouf.'),
+    "p_marees": ('🌊', 'Coefficient 118', 'Ouvrir /marees et attendre que la mer se retire.',
+        'La lune tire sur tes cartes deux fois par jour : elles montent, elles descendent.',
+        'Ton accueil a pris le large et il est revenu à quai. Même le crabe était content.'),
+    "p_meteores": ('☄️', "Pluie d'étoiles", "Ouvrir /meteores et attendre la fin de l'averse céleste.",
+        "Des cailloux venus de l'espace visent ton plateau. Fais un vœu à chaque impact.",
+        "Tu as survécu à une pluie de météores. Ton assureur n'y croit toujours pas."),
+    "p_hypnose": ('🌀', 'Tu as sommeil…', "Ouvrir /hypnose et fixer la spirale jusqu'au claquement de doigts.",
+        "Une spirale qui tourne, une montre qui balance, et une envie irrésistible d'imprimer.",
+        "Tu as été hypnotisé et tu as imprimé trois Benchy. Tu ne t'en souviens pas, c'est normal."),
+    "p_telex": ('📠', 'Tac-tac-ding', 'Ouvrir /telex et regarder la page se retaper toute seule.',
+        'Avant les courriels, il y avait une machine qui tapait toute seule et disait STOP.',
+        'Ton accueil a été retapé lettre par lettre. STOP. Bravo. STOP.'),
+    "p_aurore": ('🌌', 'Laponie à domicile', "Ouvrir /aurore et admirer le ciel jusqu'à ce qu'il s'éteigne.",
+        'Des rideaux verts et violets dansent au-dessus du cercle polaire… et de ton atelier.',
+        'Tu as vu une aurore boréale sans quitter ton fauteuil. Le Père Noël est jaloux.'),
+    "p_chantier": ('🚧', 'Révision des 500 heures', 'Ouvrir /chantier et laisser la grue remettre tout en place.',
+        'Casques jaunes, rubalise et une grue : ton accueil est en travaux, mais rassure-toi, dans les délais.',
+        "Un chantier terminé à l'heure. Tu viens d'assister à un miracle du BTP."),
+    "p_pellicule": ('📸', 'Chambre noire', 'Ouvrir /pellicule et attendre que le tirage sorte du révélateur.',
+        "Avant le numérique, les photos naissaient à l'envers, puis dans un bain sous une lampe rouge.",
+        "Ton accueil a été développé à l'ancienne. Format 10 × 15, sans retouche."),
+    "p_eboulement": ('🧱', 'Murs porteurs', 'Ouvrir /eboulement et regarder les cartes se reconstruire brique par brique.',
+        "Pas assez de parois dans le slicer, et tout s'écroule… avant de se rebâtir.",
+        'Tes cartes se sont effondrées puis reconstruites. Remplissage 15 %, solide quand même.'),
+    "p_bulldozer": ('🚜', 'Place nette', 'Ouvrir /bulldozer et attendre sa marche arrière.',
+        "Un engin jaune fait le ménage d'un grand coup de lame, puis recule en faisant bip bip.",
+        "Un bulldozer a déblayé ton accueil puis l'a remis en place. Service après-vente impeccable."),
+    "p_ressort": ('🪀', 'Boing boing', "Ouvrir /ressort et laisser les cartes rebondir jusqu'à s'arrêter.",
+        'Squash and stretch : tes cartes ont des ressorts sous les pieds.',
+        "Tes cartes ont rebondi jusqu'à épuisement. L'input shaping n'a rien pu faire."),
+    "p_neon": ('🌃', 'Las Vegas Atelier', 'Ouvrir /neon et attendre que le plafonnier se rallume.',
+        'La nuit, ton accueil devient une enseigne qui grésille, et une lettre fatigue toujours.',
+        'Ton accueil a brillé comme un casino. Le tube défectueux est noté pour la maintenance.'),
+    "p_origami": ('✈️', 'Escadrille de papier', "Ouvrir /origami et suivre les avions en papier jusqu'à leur atterrissage.",
+        'Plie, plie encore, lance… et chaque carte fait un looping.',
+        'Toutes tes cartes ont décollé et atterri sans un pli de travers. Pilote de ligne, toi.'),
+    "p_zoom_avant": ('🔍', 'Mise en abyme', "Ouvrir /zoom-avant et plonger jusqu'au retour à l'échelle normale.",
+        "Une carte contient l'accueil, qui contient une carte, qui contient l'accueil, qui contient…",
+        "Tu as plongé dans l'infini et tu en es ressorti. La buse, elle, est toujours introuvable."),
+    "p_cubisme": ('🎨', 'Période cubiste', 'Ouvrir /cubisme et regarder les cartes tourner sur leurs faces.',
+        "Un peintre espagnol aurait vu tes cartes avec six faces au lieu d'une.",
+        'Picasso a exposé ton accueil. Prix de vente estimé : une bobine de PLA.'),
+    "p_briques": ('🧱', 'Clic, clic, clic', 'Ouvrir /briques et attendre que tout soit emboîté puis démoulé.',
+        'Des picots sur le dessus, des couleurs vives, et la douleur bien connue du pied nu.',
+        "Tes cartes se sont emboîtées au dixième de millimètre. Personne n'a marché dessus."),
+    "p_pluie_filament": ('🌧️', 'Averse multicolore', "Ouvrir /pluie-filament et attendre que la flaque s'évapore.",
+        'Il pleut des brins de toutes les couleurs, et en bas, ça fait une drôle de flaque.',
+        "Il a plu du filament. Tu n'as rien ramassé, mais l'intention y était."),
+    "p_kaleidoscope": ('🔮', "Six fois l'atelier", "Ouvrir /kaleidoscope et regarder dans le tube jusqu'au retour à la normale.",
+        'Un tube, trois miroirs, et ton accueil se multiplie en rosace.',
+        "Tu as vu six ateliers d'un coup. Un seul suffit largement à ranger."),
+    "p_vagues_texte": ('🏄', 'La ola des lettres', 'Ouvrir /vagues-texte et laisser la houle passer sur les textes.',
+        'Les lettres se lèvent les unes après les autres, comme un stade un soir de match.',
+        'Tes lettres ont fait la ola sans perdre un accent. Quel public !'),
+    "p_projecteur": ('🎭', 'Rideau !', "Ouvrir /projecteur et applaudir jusqu'à ce que le rideau s'ouvre.",
+        "Noir dans la salle, un faisceau cherche les vedettes, et le velours rouge s'invite.",
+        'Tes cartes ont salué sous les applaudissements. Prochaine tournée : Bambu Lab Arena.'),
+    "p_bande_dessinee": ('💥', 'POW ! ZBAM !', "Ouvrir /bande-dessinee et attendre la fin de l'épisode.",
+        'Traits noirs épais, petits points et onomatopées qui éclatent : ton accueil est en cases.',
+        'Ton accueil a vécu un épisode en bande dessinée. Suite au prochain numéro.'),
+    "p_pluie_de_code": ('💻', 'Réveille-toi, maker', 'Ouvrir /pluie-de-code et attendre la fin de la recompilation.',
+        "Des caractères verts dégoulinent du haut de l'écran : suis le lapin blanc.",
+        'Ton accueil a été réécrit en code puis recompilé. Zéro erreur, zéro spaghetti.'),
     "p_puzzle": ('🧩', 'Accueil en kit', "Ouvrir /puzzle et remettre dans l'ordre les 9 morceaux de l'accueil (les glisser, ou toucher deux pièces pour les échanger).",
         'Neuf morceaux, une seule image : le slicer a tranché un peu trop large.',
         "Recollé sans une goutte de colle : même le slicer n'y voit que du feu."),
@@ -3623,6 +3692,48 @@ async def open_passage(username: str) -> bool:
     async with AsyncSessionLocal() as db:
         await set_setting(db, KEY + "_PASSAGE", json.dumps(d))
     return True
+
+
+# Surprise a l'ouverture de l'appli (farce ou page cachee) : un compteur PAR COMPTE,
+# cote serveur (le meme sur le navigateur, la PWA et l'appli Android). n = ouvertures
+# depuis la derniere surprise de ce compte ; il repart a 0 quand elle s'affiche vraiment
+# (un tirage gagnant mais l'accueil deja quitte ne compte pas).
+# Crescendo : 0,5 % x n jusqu'a 10 % (n = 20), puis +1 % a chaque ouverture.
+def surprise_p(n: int) -> float:
+    return 0.005 * n if n <= 20 else min(1.0, 0.10 + 0.01 * (n - 20))
+
+
+async def _surprise_counts(db) -> dict:
+    from .settings_service import get_setting
+    raw = await get_setting(db, KEY + "_SURPRISE", "")
+    try:
+        d = json.loads(raw) if raw else {}
+    except ValueError:
+        d = {}
+    return d if isinstance(d, dict) else {}
+
+
+async def roll_surprise(username: str, rnd=None) -> dict:
+    import random
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    async with AsyncSessionLocal() as db:
+        d = await _surprise_counts(db)
+        n = int(d.get(username) or 0) + 1
+        p = surprise_p(n)
+        d[username] = n
+        await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
+    return {"hit": (rnd or random.random)() < p, "n": n, "p": round(p, 4)}
+
+
+async def surprise_shown(username: str) -> None:
+    """La surprise s'est affichee : le compteur de ce compte repart a 0."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    async with AsyncSessionLocal() as db:
+        d = await _surprise_counts(db)
+        d[username] = 0
+        await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
 
 
 async def eggs_found() -> dict:

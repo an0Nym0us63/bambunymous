@@ -12,6 +12,9 @@ import { HIDDEN_SLUGS } from "./index";
 export const PRANK_SLUGS = ["tsunami", "seisme", "tete-en-bas", "panne", "melange", "gravite", "miroir", "blizzard",
   "brouillard", "fete", "tornade", "aimant", "fantome", "pixel", "vieux-film", "glitch", "toile", "apesanteur", "vent",
   "ecran-bleu", "fourmis", "canicule", "papier", "loupe", "escargot", "aspirateur", "bulle", "taches", "domino", "ombre"];
+// le grand spectacle (rien a faire, on regarde), dans leur propre lot
+const PRANK_SLUGS_2 = ["eclipse", "arc-en-ciel", "marees", "meteores", "hypnose", "telex", "aurore", "chantier", "pellicule", "eboulement", "bulldozer", "ressort", "neon", "origami", "zoom-avant", "cubisme", "briques", "pluie-filament", "kaleidoscope", "vagues-texte", "projecteur", "bande-dessinee", "pluie-de-code"];
+PRANK_SLUGS.push(...PRANK_SLUGS_2);
 // celles qui demandent un geste (trouver, tirer, deverrouiller…), dans leur propre lot
 const PRANK_SLUGS_3 = ["puzzle", "rideau", "cadenas", "ballons", "cache-cache", "gomme", "serrure", "carte-a-gratter", "radar", "ascenseur", "aimant-inverse", "sablier", "peche", "digicode", "souris", "interrupteurs", "boussole", "cles", "bombe", "demineur", "jardin", "cible", "bouchon"];
 PRANK_SLUGS.push(...PRANK_SLUGS_3);
@@ -32,21 +35,20 @@ export function PrankRedirect({ slug }) {
 }
 
 const Pranks = {};
-const load = slug => (PRANK_SLUGS_3.includes(slug) ? import("./pranks3") : import("./pranks"));
+const load = slug => (PRANK_SLUGS_3.includes(slug) ? import("./pranks3")
+  : PRANK_SLUGS_2.includes(slug) ? import("./pranks2") : import("./pranks"));
 function effectOf(slug) {
   if (!Pranks[slug]) Pranks[slug] = lazy(() => load(slug).then(m => ({ default: m.PRANKS[slug]?.Effect || (() => null) })));
   return Pranks[slug];
 }
 
 // Surprise a l'ouverture : a la premiere arrivee sur l'accueil d'un lancement de
-// l'appli, une farce (ou une page cachee) au hasard avec la probabilite p(n) = min(7 %, 0,5 % x n), n =
-// lancements depuis la derniere surprise (remis a 0 quand elle tombe), et 50 % au-dela de 30 lancements
-// sans rien : la malchance ne dure pas.
+// l'appli (pas a chaque retour sur l'accueil), le serveur tire au sort avec un compteur
+// PAR COMPTE (navigateur, PWA et appli Android confondus) : p(n) = 0,5 % x n jusqu'a
+// 10 % a n = 20, puis +1 % par ouverture ; n repart a 0 quand la surprise s'affiche.
 // Puis 70 % une farce / 30 % une page cachee, et dans le lot choisi 70 % une
 // pas encore trouvee / 30 % une deja trouvee (s'il y en a). Jamais chez un copain. Le secret suit la
 // regle des comptes (enregistre, ou « non comptabilise »).
-export const SURPRISE = { step: 0.005, cap: 0.07, after: 30, late: 0.5 };
-const SURPRISE_KEY = "bn-surprise";            // { n } : lancements depuis la derniere surprise
 let rolled = false;                             // une fois par lancement (module recharge = nouveau lancement)
 
 // Le passage secret du menu de profil reste cache jusqu'a la premiere surprise.
@@ -71,16 +73,6 @@ function pickSurprise(found) {
   return [kind, lot[Math.floor(Math.random() * lot.length)]];
 }
 
-function rollSurprise() {
-  if (rolled) return null;
-  rolled = true;
-  let n = 0;
-  try { n = (JSON.parse(localStorage.getItem(SURPRISE_KEY) || "{}").n || 0) + 1; } catch { /* stockage indisponible */ }
-  const p = n > SURPRISE.after ? SURPRISE.late : Math.min(SURPRISE.cap, SURPRISE.step * n);
-  const hit = Math.random() < p;
-  try { localStorage.setItem(SURPRISE_KEY, JSON.stringify({ n: hit ? 0 : n })); } catch { /* stockage indisponible */ }
-  return hit;
-}
 
 // L'accueil charge en plusieurs temps (imprimante, AMS, points d'attention) :
 // la farce attend qu'il soit complet, sinon elle ne voit que la tuile d'attente.
@@ -117,22 +109,21 @@ export function PrankHost() {
   // premiere arrivee sur l'accueil de ce lancement : la surprise, peut-etre
   useEffect(() => {
     if (pathname !== "/" || rolled || visiting || usePrank.getState().slug) return;
-    const hit = rollSurprise();
+    rolled = true;
     // l'accueil a le temps de s'afficher ; si on l'a deja quitte, pas de surprise ailleurs
     // ni sous l'ecran de demarrage (logo) : on attend qu'il soit parti
     let tries = 0;
-    let found = null;
-    const fire = () => {
-      if (document.getElementById("splash") && tries++ < 20) { setTimeout(fire, 300); return; }
+    const fire = found => {
+      if (document.getElementById("splash") && tries++ < 20) { setTimeout(() => fire(found), 300); return; }
       if (window.location.pathname !== "/" || usePrank.getState().slug) return;
       const [kind, slug] = pickSurprise(found);
       if (kind === "farce") start(slug); else nav("/" + slug);
+      client.post("/achievements/surprise/shown").catch(() => {});
       openPassage();
     };
-    if (hit) {
-      client.get("/achievements/passage").then(({ data }) => { found = data?.found || []; }).catch(() => {});
-      setTimeout(fire, 1200);
-    }
+    client.post("/achievements/surprise")
+      .then(({ data }) => { if (data?.hit) setTimeout(() => fire(data.found || []), 1200); })
+      .catch(() => {});
   }, [pathname, visiting, start, nav]);
   const doneRef = useRef(false);
   // on QUITTE l'accueil : la farce s'arrete (et l'effet remet tout en place). Pas

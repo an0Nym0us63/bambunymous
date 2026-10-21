@@ -450,7 +450,8 @@ async def enforce_readonly(request, call_next):
             return await call_next(request)
         # Easter eggs : tout compte de la maison peut en trouver (la route dit
         # s'il compte pour les succes ou non), jamais une cle copain (ci-dessus).
-        if path.startswith("/api/v1/achievements/egg/") or path == "/api/v1/achievements/passage":
+        if path.startswith("/api/v1/achievements/egg/") or path in ("/api/v1/achievements/passage", "/api/v1/achievements/surprise",
+                                                                         "/api/v1/achievements/surprise/shown"):
             return await call_next(request)
         # Notifications de l'appli : chaque compte gere SES telephones et ses
         # choix (controle par route : son compte, jamais une cle copain).
