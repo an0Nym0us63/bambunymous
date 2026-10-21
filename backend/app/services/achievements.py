@@ -58,12 +58,20 @@ CATEGORIES = [
 MATERIALS = ["PLA", "PETG", "TPU", "ABS", "ASA", "PA", "PC"]
 
 
+_TZ: dict = {}
+
+
 def _tz():
-    try:
-        from zoneinfo import ZoneInfo
-        return ZoneInfo(os.getenv("TZ") or "Europe/Paris")
-    except Exception:
-        return timezone.utc
+    name = os.getenv("TZ") or "Europe/Paris"
+    z = _TZ.get(name)
+    if z is None:
+        try:
+            from zoneinfo import ZoneInfo
+            z = ZoneInfo(name)
+        except Exception:
+            z = timezone.utc
+        _TZ[name] = z
+    return z
 
 
 def _local(dt: datetime) -> datetime:
@@ -3305,11 +3313,56 @@ async def _state_put(d: dict) -> None:
 _CACHE = {"t": 0.0, "v": None}
 
 
-async def evaluate(now: datetime | None = None) -> dict:
-    """Valeurs actuelles et paliers atteints (avec leur date), sans rien ecrire."""
-    now = now or datetime.utcnow()
+# Le gros du calcul (lecture de la base, series, valeurs en direct) : plusieurs
+# secondes sur un gros historique. La page le reprend tel quel s'il a moins de
+# BASE_TTL, sinon elle sert le dernier et le refait en fond (le suivant sera
+# frais). Le passage des 15 minutes, les tickets et les epreuves recalculent
+# toujours (cached=False).
+BASE_TTL = 120
+_BASE: dict = {"t": 0.0, "v": None, "task": None}
+
+
+async def _compute_base(now: datetime) -> tuple:
     series = compute_series(await _load_data(), now)
     live = await _live_values()
+    _BASE.update(t=time.time(), v=(series, live))
+    return series, live
+
+
+async def warm(delay_s: int = 15) -> None:
+    """Au demarrage : prepare le gros calcul pour que la premiere page ouverte
+    n'ait pas a l'attendre (la boucle des 15 min ne passe qu'apres 3 min)."""
+    import asyncio
+    await asyncio.sleep(delay_s)
+    try:
+        if _BASE["v"] is None:
+            await _compute_base(datetime.utcnow())
+    except Exception:
+        logger.exception("[SUCCES] prechauffage")
+
+
+async def _base(cached: bool, now: datetime) -> tuple:
+    if not cached or _BASE["v"] is None:
+        return await _compute_base(now)
+    if time.time() - _BASE["t"] > BASE_TTL and not _BASE["task"]:
+        import asyncio
+
+        async def refresh():
+            try:
+                await _compute_base(datetime.utcnow())
+                _CACHE["v"] = None
+            except Exception:
+                logger.exception("[SUCCES] rafraichissement")
+            finally:
+                _BASE["task"] = None
+        _BASE["task"] = asyncio.create_task(refresh())
+    return _BASE["v"]
+
+
+async def evaluate(now: datetime | None = None, cached: bool = False) -> dict:
+    """Valeurs actuelles et paliers atteints (avec leur date), sans rien ecrire."""
+    series, live = await _base(cached and now is None, now or datetime.utcnow())
+    now = now or datetime.utcnow()
     st = await _state_get() or {}
     bonus = st.get("bonus") or {}
     out = {}
@@ -4163,8 +4216,8 @@ async def podium(me_name: str, fresh: bool = False) -> dict:
             await _state_put(st)
             _CACHE["v"] = None
     out = {"people": people, "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES]}
-    _PODIUM.update(t=time.time(), v=out)
-    return out
+    _PODIUM.update(t=time.time(), v={**out, "refresh": False})
+    return {**out, "refresh": _CACHE["v"] is None}
 
 
 # ── Succes des copains : notification ────────────────────────────────────────
@@ -4291,7 +4344,7 @@ async def my_uniques() -> list:
 async def view(fresh: bool = False) -> dict:
     if not fresh and _CACHE["v"] and time.time() - _CACHE["t"] < 60:
         return _CACHE["v"]
-    ev = await evaluate()
+    ev = await evaluate(cached=not fresh)
     st = await _state_get() or {"unlocked": {}}
     if st.get("unlocked") is not None and st.get("sig") and (
             not isinstance(st.get("keys"), dict) or st["keys"].get("reveal_v") != REVEAL_V):

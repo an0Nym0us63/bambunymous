@@ -77,7 +77,8 @@ export default function Achievements({ embedded = false }) {
   useEffect(() => {
     load();
     // le podium tient a jour les secrets des copains (etapes offertes) : on relit ensuite
-    if (!atFriend) client.get("/achievements/podium").then(r => { setPod(r.data); load(); }).catch(() => {});
+    // le podium ne fait recharger la page que s'il a appris quelque chose (secrets des copains)
+    if (!atFriend) client.get("/achievements/podium").then(r => { setPod(r.data); if (r.data?.refresh) load(); }).catch(() => {});
     else client.get("/achievements/mine", { home: true }).then(r => setMine(r.data)).catch(() => {});
   }, []);
   // Secrets « a portee » : pas encore gagnes ici, mais deja par quelqu'un de la

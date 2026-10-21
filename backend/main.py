@@ -161,6 +161,8 @@ async def lifespan(app: FastAPI):
     from app.services import notify_extra as _nx
     _bg(_nx.loop())
     _bg(_nx.update_loop())
+    from app.services import achievements as _ach
+    _bg(_ach.warm())                 # succes : gros calcul prepare d'avance
     await mqtt_manager.start()
     # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.
@@ -470,6 +472,38 @@ async def no_cache_api(request, call_next):
         response.headers["Pragma"] = "no-cache"
     return response
 
+
+# Compression des reponses texte (JSON de l'API, pages, scripts) : la page des
+# succes pese ~370 Ko de JSON, ~40 Ko compresse. Jamais les images, videos ou
+# archives (deja compressees : ce serait du calcul pour rien).
+from starlette.middleware.gzip import GZipMiddleware as _GZ, GZipResponder as _GZR
+from starlette.datastructures import Headers as _H
+
+_GZ_TYPES = ("application/json", "text/", "application/javascript", "image/svg+xml", "application/xml",
+             "application/manifest+json")
+
+
+class _TextGZipResponder(_GZR):
+    async def send_with_gzip(self, message):
+        if message["type"] == "http.response.start":
+            ctype = _H(raw=message["headers"]).get("content-type", "")
+            if not ctype.startswith(_GZ_TYPES):
+                # comme une reponse deja encodee : passe telle quelle
+                self.initial_message = message
+                self.content_encoding_set = True
+                return
+        await super().send_with_gzip(message)
+
+
+class TextGZip(_GZ):
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http" and "gzip" in _H(scope=scope).get("Accept-Encoding", ""):
+            await _TextGZipResponder(self.app, self.minimum_size, compresslevel=self.compresslevel)(scope, receive, send)
+            return
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(TextGZip, minimum_size=1024, compresslevel=5)
 
 app.add_middleware(
     CORSMiddleware,

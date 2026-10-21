@@ -106,7 +106,7 @@ def _print_to_out(p: Print) -> dict:
 async def _enrich_filament_usage(db, prints):
     """Enrichit color_hex/filament_type/filament_name depuis les bobines liées."""
     spool_ids = {u.spool_id for p in prints for u in (p.filament_usage or []) if u.spool_id}
-    if not spool_ids:
+    if not any(p.filament_usage for p in prints):
         return
     from sqlalchemy.orm import selectinload as _sil
     spools_r = await db.execute(
@@ -118,15 +118,16 @@ async def _enrich_filament_usage(db, prints):
     fils_r = await db.execute(select(Filament).where(Filament.id.in_(fil_ids)))
     fils = {f.id: f for f in fils_r.scalars().all()}
 
-    # Charger aussi les filaments par couleur+type pour les usages sans spool_id
-    all_fils_r = await db.execute(select(Filament))
-    all_fils = all_fils_r.scalars().all()
-    # Index par couleur hex (sans #, lowercase)
+    # Filaments par couleur, pour les usages sans bobine (ou a bobine disparue) :
+    # tout le catalogue n'est lu que s'il y en a un sur la page.
     fil_by_color = {}
-    for f in all_fils:
-        if f.color:
-            key = str(f.color).lstrip("#").lower()
-            fil_by_color[key] = f
+    if any(u.color_hex and not (u.spool_id and spools.get(u.spool_id))
+           for p in prints for u in (p.filament_usage or [])):
+        all_fils = (await db.execute(select(Filament))).scalars().all()
+        for f in all_fils:
+            if f.color:
+                key = str(f.color).lstrip("#").lower()
+                fil_by_color[key] = f
 
     for p in prints:
         for u in (p.filament_usage or []):
@@ -409,9 +410,10 @@ async def list_prints(
 
         await _enrich_filament_usage(db, rows)
 
-    return {"total": total, "has_more": (offset + limit) < total,
-            "next_offset": offset + limit,
-            "prints": [_print_to_out(p) for p in rows]}
+    from ....core.fastjson import json_response
+    return json_response({"total": total, "has_more": (offset + limit) < total,
+                          "next_offset": offset + limit,
+                          "prints": [_print_to_out(p) for p in rows]})
 
 
 @router.get("/gallery")

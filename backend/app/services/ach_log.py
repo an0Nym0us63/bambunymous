@@ -32,12 +32,8 @@ _MW_AT = [0.0]
 
 
 def _tz():
-    try:
-        import os
-        from zoneinfo import ZoneInfo
-        return ZoneInfo(os.getenv("TZ") or "Europe/Paris")
-    except Exception:
-        return timezone.utc
+    from .achievements import _tz as tz
+    return tz()
 
 
 def _day(dt: datetime) -> str:

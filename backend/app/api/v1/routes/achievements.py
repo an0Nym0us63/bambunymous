@@ -119,12 +119,19 @@ async def achievements_view(request: Request, fresh: bool = False, token: str = 
     v = await A.view(fresh)
     by_key = bool(token and token.startswith("fk_"))
     if role == ROLE_ADMIN and not by_key:
-        return v
+        return _json(v)
     u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
     if u is not None and u.secrets_visible:
-        return v                                  # droit « voit mes succes secrets » : tout, revelations comprises
+        return _json(v)                           # droit « voit mes succes secrets » : tout, revelations comprises
     # seul un acces par cle de copain (relaye par son serveur) dit ce qu'il a
     mine = set()
     if by_key:
         mine = {x.strip() for x in (request.headers.get(MINE_HEADER) or "").split(",") if x.strip()}
-    return A.mask_secrets(v, mine)
+    return _json(A.mask_secrets(v, mine))
+
+
+def _json(v):
+    """La vue est deja faite de types simples : la serialiser directement evite
+    l'encodeur generique de FastAPI (~10 fois plus lent sur ses ~370 Ko)."""
+    from ....core.fastjson import json_response
+    return json_response(v)
