@@ -1394,6 +1394,8 @@ function Rules({ data, onClose }) {
         <P><b>Complétude</b> : un tiroir de secrets entièrement trouvé, une section entièrement à son dernier palier, et tout à
           100 %. Ces médailles-là, comme les collections, <b>se perdent</b> si un nouveau secret ou un nouveau palier arrive avec
           une mise à jour : il suffit de le décrocher pour les retrouver.</P>
+        <P>Certains secrets se cachent derrière une adresse, d'autres derrière un geste. Et de temps en temps, en ouvrant
+          l'appli, l'accueil te joue un tour : plus il se fait attendre, plus il devient probable.</P>
 
         {k && <>
           <H>🔑 Clés</H>
