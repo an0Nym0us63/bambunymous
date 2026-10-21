@@ -4333,6 +4333,18 @@ def mask_secrets(v: dict, keep=()) -> dict:
     return {**v, "items": items, "keys": None}
 
 
+async def my_levels() -> dict:
+    """Mon plus haut palier par succes (indice), d'apres les paliers enregistres :
+    lu quand je regarde la vitrine d'un copain, pour reperer ce que j'ai aussi."""
+    st = await _state_get() or {}
+    out = {}
+    for aid, got in (st.get("unlocked") or {}).items():
+        lv = [int(i) for i in (got or {}) if str(i).isdigit()]
+        if lv and aid in BY_ID:
+            out[aid] = max(lv)
+    return out
+
+
 async def my_uniques() -> list:
     """Mes medailles uniques gagnees (envoyees quand je regarde chez un copain)."""
     st = await _state_get() or {}

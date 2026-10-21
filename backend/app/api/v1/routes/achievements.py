@@ -108,7 +108,7 @@ async def achievements_mine(acc=Depends(require_own_account)):
     """Mes medailles uniques : lues chez moi quand je visite un copain, pour
     cercler sur sa page les secrets que j'ai et qu'il n'a pas."""
     from ....services import achievements as A
-    return {"name": acc[0], "uniques": await A.my_uniques()}
+    return {"name": acc[0], "uniques": await A.my_uniques(), "levels": await A.my_levels()}
 
 
 @router.get("")

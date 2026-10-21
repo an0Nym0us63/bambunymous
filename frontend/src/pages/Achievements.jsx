@@ -130,10 +130,10 @@ export default function Achievements({ embedded = false }) {
           <ScoreHero data={data}/>
           <div style={{ flex:"2 1 300px", minWidth:0, display:"flex", flexDirection:"column", gap:8 }}>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-              <button onClick={() => setVitrine(null)} title="Ouvrir ta vitrine : toutes tes médailles"
+              <button onClick={() => setVitrine(null)} title={atFriend ? "Ouvrir sa vitrine : toutes ses médailles" : "Ouvrir ta vitrine : toutes tes médailles"}
                 style={{ fontSize:11, fontWeight:800, letterSpacing:".12em", textTransform:"uppercase", color:"var(--muted)",
                   background:"none", border:"none", padding:0, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:4 }}>
-                🏛️ Ta vitrine <span style={{ fontSize:9 }}>▸</span></button>
+                🏛️ {atFriend ? "Sa vitrine" : "Ta vitrine"} <span style={{ fontSize:9 }}>▸</span></button>
               {data.tickets_used > 0 && <span title="Paliers passés avec des tickets" style={{ display:"inline-flex", alignItems:"center",
                 gap:4, fontSize:11, color:"var(--muted)" }}><TicketStub size={0.7}/> {data.tickets_used} utilisé{data.tickets_used > 1 ? "s" : ""}</span>}
               <span style={{ flex:1 }}/>
@@ -335,6 +335,7 @@ export default function Achievements({ embedded = false }) {
       {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
       {ceremony && <TicketCeremony {...ceremony} onClose={() => setCeremony(null)}/>}
       {vitrine !== undefined && createPortal(<Showcase data={data} tier={vitrine} onTier={setVitrine}
+        mine={atFriend ? mine : null} owner={atFriend ? currentFriend()?.name : null}
         onOpen={id => setDetail(id)} onClose={() => setVitrine(undefined)}/>, document.body)}
       {detail && byId[detail] && createPortal(
         <div data-no-pull="" className="ach-room" onClick={closeDetail} style={{ position:"fixed", inset:0, zIndex:4300, background:"rgba(0,0,0,0.6)",
@@ -584,8 +585,13 @@ function MedalShelf({ tiers, medals, onOpen }) {
 // La vitrine : toutes mes medailles gagnees, rangees sur des etageres de verre,
 // une par type (Bronze… Eternel, Unique). Ouverte sur un type, elle ne montre
 // que lui. Toucher une medaille ouvre sa fiche.
-function Showcase({ data, tier, onTier, onOpen, onClose }) {
+function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
   useEffect(() => { egg("showcase"); }, []);
+  // Chez un copain : ses medailles, et discretement celles que j'ai aussi
+  const [own, setOwn] = useState("all");          // all | yes | no
+  const myLvl = mine?.levels || null;
+  const iHave = (it, idx) => myLvl ? (myLvl[it.id] ?? -1) >= idx || (idx === 0 && it.tiers.length === 1
+    && (mine.uniques || []).includes(it.id)) : null;
   useEffect(() => {
     const k = e => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", k);
@@ -593,11 +599,16 @@ function Showcase({ data, tier, onTier, onOpen, onClose }) {
   }, [onClose]);
   const shelves = data.tiers.map(t => ({
     t,
-    items: data.items.flatMap(it => it.tiers.filter(x => x.id === t.id && x.at).map(x => ({ it, at: x.at })))
+    items: data.items.flatMap(it => it.tiers.map((x, idx) => ({ x, idx })).filter(({ x }) => x.id === t.id && x.at)
+      .map(({ x, idx }) => ({ it, at: x.at, have: iHave(it, idx) })))
+      .filter(m => own === "all" || (own === "yes") === !!m.have)
       .sort((a, b) => String(b.at).localeCompare(String(a.at))),
   }));
+  const all = myLvl ? data.items.flatMap(it => it.tiers.map((x, idx) => x.at ? iHave(it, idx) : null)
+    .filter(v => v !== null)) : [];
+  const nYes = all.filter(Boolean).length, nNo = all.length - nYes;
   const shown = shelves.filter(s => (tier == null || s.t.id === tier) && s.items.length);
-  const total = shelves.reduce((n, s) => n + s.items.length, 0);
+  const total = data.items.reduce((n, it) => n + it.tiers.filter(x => x.at).length, 0);   // jamais filtre
   const chip = (on, c) => ({ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 10px 4px 5px", borderRadius:20,
     fontSize:11.5, fontWeight:800, cursor:"pointer", whiteSpace:"nowrap", flexShrink:0,
     border:`1px solid ${on ? c : "var(--border)"}`, color: on ? "var(--text)" : "var(--text2)",
@@ -616,13 +627,25 @@ function Showcase({ data, tier, onTier, onOpen, onClose }) {
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <span style={{ fontSize:24 }}>🏛️</span>
             <span style={{ flex:1, minWidth:0 }}>
-              <span style={{ display:"block", fontSize:17, fontWeight:900, color:"var(--text)" }}>Ta vitrine</span>
+              <span style={{ display:"block", fontSize:17, fontWeight:900, color:"var(--text)" }}>
+                {owner ? `La vitrine de ${owner}` : "Ta vitrine"}</span>
               <span style={{ fontSize:11.5, color:"var(--muted)" }}>{total} médaille{total > 1 ? "s" : ""} gagnée{total > 1 ? "s" : ""}
                 {tier != null && ` · ${shown[0]?.items.length || 0} en ${data.tiers.find(t => t.id === tier)?.label}`}</span>
             </span>
             <button onClick={onClose} aria-label="Fermer" style={{ background:"none", border:"none", color:"var(--muted)",
               fontSize:22, cursor:"pointer" }}>✕</button>
           </div>
+          {myLvl && (
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+              {[["all", "Toutes", null], ["yes", "✓ Que tu as aussi", nYes], ["no", "Qui te manquent", nNo]].map(([k, l, n]) => (
+                <button key={k} onClick={() => setOwn(k)} style={{ fontSize:11.5, fontWeight:800, padding:"4px 10px",
+                  borderRadius:20, cursor:"pointer", border:`1px solid ${own === k ? "#22c55e" : "var(--border)"}`,
+                  background: own === k ? "rgba(34,197,94,0.14)" : "transparent",
+                  color: own === k ? "var(--text)" : "var(--text2)" }}>
+                  {l}{n != null && <span style={{ color:"var(--muted)", fontWeight:700 }}> {n}</span>}</button>
+              ))}
+            </div>
+          )}
           <div className="no-scrollbar" style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:2 }}>
             <button onClick={() => onTier(null)} style={chip(tier == null, "#C9A227")}>
               <span style={{ width:18, textAlign:"center" }}>✨</span>Tout</button>
@@ -649,12 +672,21 @@ function Showcase({ data, tier, onTier, onOpen, onClose }) {
                 background:`linear-gradient(180deg, ${rgba(t.color, 0.10)}, ${rgba(t.color, 0.03)} 70%, ${rgba(t.color, 0.16)})`,
                 border:`1px solid ${rgba(t.color, 0.28)}`, boxShadow:"inset 0 1px 0 rgba(255,255,255,0.25)" }}>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(78px, 1fr))", gap:"12px 6px" }}>
-                  {items.map(({ it, at }) => (
-                    <button key={it.id} onClick={() => onOpen(it.id)} title={`${it.name} · ${dateFr(at)}`}
+                  {items.map(({ it, at, have }) => (
+                    <button key={it.id} onClick={() => onOpen(it.id)}
+                      title={`${it.name} · ${dateFr(at)}${have === true ? " · tu l'as aussi" : have === false ? " · tu ne l'as pas encore" : ""}`}
                       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, minWidth:0, background:"none",
                         border:"none", padding:"2px 0", cursor:"pointer", font:"inherit" }}>
-                      <Medal tier={t} emoji={it.emoji} size={46}/>
-                      <span style={{ fontSize:10.5, fontWeight:700, color:"var(--text)", textAlign:"center", lineHeight:1.2,
+                      <span style={{ position:"relative", display:"inline-flex" }}>
+                        <Medal tier={t} emoji={it.emoji} size={46}/>
+                        {/* je l'ai aussi : une petite coche, la medaille reste la sienne */}
+                        {have === true && <span aria-label="Tu l'as aussi" style={{ position:"absolute", right:-2, bottom:2,
+                          width:16, height:16, borderRadius:"50%", background:"#22c55e", color:"#fff", fontSize:10,
+                          fontWeight:900, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1,
+                          border:"2px solid var(--sheet-bg)", boxShadow:"0 1px 3px rgba(0,0,0,0.25)" }}>✓</span>}
+                      </span>
+                      <span style={{ fontSize:10.5, fontWeight:700, color: have === false ? "var(--text2)" : "var(--text)",
+                        textAlign:"center", lineHeight:1.2,
                         maxWidth:"100%", overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2,
                         WebkitBoxOrient:"vertical" }}>{it.name}</span>
                     </button>
