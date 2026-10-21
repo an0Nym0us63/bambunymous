@@ -1297,7 +1297,6 @@ CATALOG += [
     _a("planned", "mw", "📋", "Planificateur", "{n} modèles retenus pour « À faire » (profil choisi)", [1]),
     _a("queue_done", "mw", "✅", "Rayé de la liste", "{n} modèles de « À faire » imprimés ensuite", [1]),
     _a("good_seller", "objects", "💹", "Bon vendeur", "{n} objets vendus au-dessus du prix voulu", [1]),
-    _a("unlucky", "objects", "🩹", "Pas de chance", "{n} objets indisponibles (cassés, perdus…)", [1]),
     _a("restocks", "objects", "📦", "Réassort", "{n} réassorts d'accessoires", [1]),
     _a("acc_images", "objects", "🖼️", "Catalogue illustré", "{n} accessoires avec une image", [1]),
     _a("saved", "prints", "💡", "Économe", "{n} € économisés sur le prix normal du filament", [1], unit="€", money=True),
@@ -1641,7 +1640,7 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "wheel_played", "wheel_keys", "keys_earned", "keys_spent", "keys_max", "reveals", "tickets_won", "tickets_used",
         "grand_tour", "night_visit", "cutting_edge", "double_update", "shares", "mw_rates", "mw_boosts_given",
         "mw_likes_given", "mw_collected", "open_spools", "mw_points_bal", "profile_downloads", "queue_size", "accessory_units", "showcase", "household", "notes", "catalog", "assembled", "accessory_refs",
-        "to_order", "unlucky", "acc_images", "bunker", "devices", "mw_income"}
+        "to_order", "acc_images", "bunker", "devices", "mw_income"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
 # Seuils : six paliers (bronze -> legende), etendus a neuf (mythique, cosmique,
@@ -1809,7 +1808,6 @@ TIER_TABLE = {
     "tray_fixes": [1, 3, 5, 10, 20, 35, 50, 75, 100],
     "to_order": [1, 3, 5, 10, 20, 30, 45, 65, 100],
     "good_seller": [1, 3, 5, 10, 15, 25, 35, 50, 75],
-    "unlucky": [1, 2, 3, 5, 8, 12, 16, 20, 30],
     "restocks": [1, 5, 10, 20, 35, 50, 75, 100, 150],
     "acc_images": [1, 3, 5, 10, 15, 25, 35, 50, 75],
     "saved": [1, 5, 10, 25, 50, 100, 175, 250, 400],
@@ -2802,7 +2800,6 @@ def _batch21(push, d, now) -> None:
     # objets
     cumul("good_seller", [_ts(o.sold_date) or now for o in d.get("obj_more", [])
                           if o.desired_price and (o.sold_price or 0) > o.desired_price])
-    push("unlucky", now, sum(1 for o in d.get("obj_more", []) if o.status == "unavailable"))
     push("acc_images", now, d.get("acc_imgs") or 0)
     # couts des impressions : economies (prix normal - prix paye), electricite
     saved = elec = 0.0
