@@ -157,6 +157,8 @@ CATALOG = [
     _a("keys_spent", "game", "🗝️", "Serrurier", "{n} clés dépensées", [1]),
     _a("keys_max", "game", "💼", "Coffre-fort", "{n} clés détenues en même temps", [1]),
     _a("reveals", "game", "🔓", "Révélateur", "{n} étapes de secret révélées", [1]),
+    _a("tickets_won", "game", "🎟️", "Chasseur de tickets", "{n} tickets de palier gagnés", [1]),
+    _a("tickets_used", "game", "🪜", "Raccourci", "{n} tickets de palier utilisés", [1]),
     _a("video_prints", "photos", "🎞️", "Court-métrage", "{n} impressions avec au moins une vidéo", [1]),
     # Dans l'appli
     _a("visits", "app", "🚪", "Habitué", "{n} visites de pages", [1]),
@@ -1070,7 +1072,7 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "mw_follows", "friends", "stock", "stock_kg", "stock_colors", "rfid", "multicolor_fils",
         "photos_manual", "photo_prints", "photos_camera", "photos_max", "covers", "visits", "visit_days", "details",
         "actions", "updates", "notifs", "dismissals", "print_groups", "paparazzi", "souvenirs", "videos", "video_prints",
-        "wheel_played", "wheel_keys", "keys_earned", "keys_spent", "keys_max", "reveals",
+        "wheel_played", "wheel_keys", "keys_earned", "keys_spent", "keys_max", "reveals", "tickets_won", "tickets_used",
         "grand_tour", "night_visit", "cutting_edge", "double_update", "shares", "mw_rates", "mw_boosts_given",
         "mw_likes_given", "mw_collected", "open_spools", "mw_points_bal", "profile_downloads", "queue_size", "accessory_units", "showcase", "household", "notes", "catalog", "assembled", "accessory_refs"}
 for _x in CATALOG:
@@ -1219,6 +1221,8 @@ TIER_TABLE = {
     "keys_spent": [1, 5, 15, 30, 50, 80, 120, 175, 250],
     "keys_max": [5, 10, 15, 20, 30, 40, 50, 75, 100],
     "reveals": [1, 5, 10, 20, 35, 50, 75, 100, 150],
+    "tickets_won": [1, 2, 3, 5, 8, 12, 16, 20, 30],
+    "tickets_used": [1, 2, 3, 5, 8, 12, 16, 20, 30],
     # Photos : videos (21/10/2026)
     "videos": [1, 3, 5, 10, 20, 35, 50, 75, 100],
     "video_prints": [1, 2, 4, 8, 15, 25, 40, 60, 80],
@@ -2123,7 +2127,8 @@ def _game(push, d, now) -> None:
     k, w = g.get("keys") or {}, g.get("wheel") or {}
     for key, v in (("wheel_played", w.get("played")), ("wheel_keys", w.get("keys")),
                    ("keys_earned", k.get("earned")), ("keys_spent", k.get("spent_total")),
-                   ("keys_max", k.get("max_balance")), ("reveals", k.get("reveal_steps"))):
+                   ("keys_max", k.get("max_balance")), ("reveals", k.get("reveal_steps")),
+                   ("tickets_won", w.get("tickets_won")), ("tickets_used", w.get("tickets_used"))):
         if v:
             push(key, now, int(v))
     for aid, at in {**(w.get("flags") or {}), **(k.get("flags") or {})}.items():
@@ -2853,22 +2858,83 @@ async def evaluate(now: datetime | None = None) -> dict:
     now = now or datetime.utcnow()
     series = compute_series(await _load_data(), now)
     live = await _live_values()
+    st = await _state_get() or {}
+    bonus = st.get("bonus") or {}
     out = {}
     for a in CATALOG:
         s = series.get(a["id"], [])
         val = s[-1][1] if s else 0
         if a["id"] in live:
             val = live[a["id"]]
+        # tickets de palier : ce qu'ils ont ajoute au compteur, a partir du jour ou ils ont servi
+        bl = sorted((t, x) for t, x in ((_ts(d), _num(x)) for d, x in bonus.get(a["id"]) or []) if t)
+        if bl:
+            val = _addn(val, sum(x for _t, x in bl))
+        bat = (lambda t: sum(x for d, x in bl if d <= t)) if bl else (lambda t: 0)
         reached = {}
         for i, n in enumerate(a["tiers"]):
-            at = next((dt for dt, v in s if v >= n), None)
+            at = next((dt for dt, v in s if v + bat(dt) >= n), None)
+            for d, _x in bl:                            # atteint le jour d'un ticket ?
+                v_d = next((v for dt, v in reversed(s) if dt <= d), live.get(a["id"], 0) if a["id"] in live else 0)
+                if v_d + bat(d) >= n:
+                    at = min(at, d) if at else d
+                    break
             if at is None and a["id"] in live and val >= n:
                 at = now
             if at is not None:
                 reached[str(i)] = at.isoformat()
         out[a["id"]] = {"value": val, "reached": reached}
-    _sets(out, await _state_get() or {})
+    _sets(out, st)
     return out
+
+
+def _num(x) -> float:
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _addn(a, b):
+    """Somme qui reste entiere quand elle le peut (3 et non 3.0)."""
+    v = round((a or 0) + b, 3)
+    return int(v) if float(v).is_integer() else v
+
+
+async def use_ticket(aid: str) -> dict:
+    """Un ticket de palier : ajoute au compteur de ce succes ce qui manquait pour
+    son palier suivant. Le compte avance donc pour de bon (la prochaine
+    impression part de la). Ni cle ni notification : c'est un achat."""
+    a = BY_ID.get(aid)
+    if not a or len(a["tiers"]) < 2:
+        raise ValueError("Un ticket s'utilise sur un succès à paliers")
+    async with _lock():
+        st = await _state_get()
+        w = _wheel_init(st) if st else {}
+        if not st or w.get("tickets", 0) <= 0:
+            raise ValueError("Pas de ticket de palier : la roue en donne parfois")
+        r = (await evaluate())[aid]
+        got = set(r["reached"]) | set((st.get("unlocked") or {}).get(aid) or {})
+        lvl = max((int(i) for i in got), default=-1)
+        if lvl + 1 >= len(a["tiers"]):
+            raise ValueError("Tous les paliers sont déjà atteints")
+        add = round(a["tiers"][lvl + 1] - _num(r["value"]), 3)
+        if add <= 0:
+            add = 0
+        now = datetime.utcnow().isoformat()
+        st.setdefault("bonus", {}).setdefault(aid, []).append([now, add])
+        # le palier est date tout de suite : le passage ne le prendra pas pour une nouveaute (ni cle ni annonce)
+        st.setdefault("unlocked", {}).setdefault(aid, {})[str(lvl + 1)] = now
+        st.setdefault("ticket_tiers", {}).setdefault(aid, []).append(lvl + 1)
+        w["tickets"] -= 1
+        w["tickets_used"] = w.get("tickets_used", 0) + 1
+        label = tiers_of(a)[lvl + 1]["label"]
+        k = _keys_init(st)
+        k["log"] = ([{"at": now, "n": 0, "why": f"Ticket : {a['name']} passe {label}"}] + (k.get("log") or []))[:KEY_LOG_MAX]
+        await _state_put(st)
+        _CACHE["v"] = None
+    _bg_tick()
+    return {"id": aid, "tier": label, "added": _addn(0, add), "tickets": w["tickets"]}
 
 
 def _sets(out: dict, st: dict) -> None:
@@ -3176,7 +3242,8 @@ async def _spend_key(aid: str) -> dict:
 # se fait ici, jamais dans la page. Lots : (id, libelle, cles, chance en %).
 WHEEL_START = 3
 WHEEL_WEEKLY = 3
-PRIZES = [("none", "Pas cette fois", 0, 52.0), ("key1", "1 clé", 1, 30.0), ("replay", "Tour rejoué", 0, 6.0),
+PRIZES = [("none", "Pas cette fois", 0, 47.0), ("key1", "1 clé", 1, 30.0), ("replay", "Tour rejoué", 0, 6.0),
+          ("ticket", "Ticket de palier", 0, 5.0),
           ("key3", "3 clés", 3, 7.0), ("hint", "Coup de pouce", 0, 3.0), ("key5", "5 clés", 5, 1.8),
           ("jackpot", "Jackpot : 10 clés", 10, 0.2)]
 
@@ -3260,6 +3327,9 @@ async def spin(rng=None) -> dict:
             _keys_peak(k)
         if pid == "replay":
             w["spins"] += 1
+        if pid == "ticket":
+            w["tickets"] = w.get("tickets", 0) + 1
+            w["tickets_won"] = w.get("tickets_won", 0) + 1
         if pid == "hint":
             # la prochaine etape d'un secret pris au hasard, offerte
             import random
@@ -3311,7 +3381,7 @@ def wheel_view(st: dict) -> dict | None:
         return None
     loc = _local(datetime.utcnow())
     nxt = (loc + timedelta(days=7 - loc.weekday())).date()
-    return {"spins": w.get("spins", 0), "played": w.get("played", 0), "next": nxt.isoformat(),
+    return {"spins": w.get("spins", 0), "played": w.get("played", 0), "next": nxt.isoformat(), "tickets": w.get("tickets", 0),
             "weekly": WHEEL_WEEKLY, "start": WHEEL_START,
             "prizes": [{"id": i, "label": l, "keys": n, "pct": p} for i, l, n, p in PRIZES]}
 
@@ -3639,7 +3709,9 @@ async def view(fresh: bool = False) -> dict:
             "next": None if nxt is None or secret else a["tiers"][nxt],
             "prev": a["tiers"][lvl] if lvl >= 0 else 0,
             "tiers": [{**{k: t[k] for k in ("id", "label", "emoji", "color")}, "n": a["tiers"][i],
-                       "at": got.get(str(i))} for i, t in enumerate(tiers)],
+                       "at": got.get(str(i)),
+                       "ticket": i in ((st.get("ticket_tiers") or {}).get(a["id"]) or [])} for i, t in enumerate(tiers)],
+            "tickets": len((st.get("ticket_tiers") or {}).get(a["id"]) or []),
         })
     # derniers succes : le plus haut cran de chacun ; pas ceux du releve au
     # present constates au premier calcul (ils n'ont pas de vraie date)
@@ -3664,6 +3736,7 @@ async def view(fresh: bool = False) -> dict:
            "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES],
            "subs": [{"id": i, "emoji": e, "name": n} for i, e, n, _ids in SECRET_SUBS],
            "tiers": TIERS + [UNIQUE], "recent": [{"id": i, "tier": j, "at": at} for at, i, j in recent],
-           "since": (st or {}).get("since"), "sig": CATALOG_SIG}
+           "since": (st or {}).get("since"), "sig": CATALOG_SIG,
+           "tickets_used": sum(len(v) for v in ((st or {}).get("ticket_tiers") or {}).values())}
     _CACHE.update(t=time.time(), v=out)
     return out

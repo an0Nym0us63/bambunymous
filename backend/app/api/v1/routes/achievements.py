@@ -52,6 +52,16 @@ async def achievements_settle(since: str, _: str = Depends(require_admin)):
     return {"bonus": await A.settle(since)}
 
 
+@router.post("/ticket/{aid}")
+async def achievements_ticket(aid: str, _: str = Depends(require_admin)):
+    """Utilise un ticket de palier sur un succes a paliers."""
+    from ....services import achievements as A
+    try:
+        return await A.use_ticket(aid)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.post("/keys/{aid}")
 async def achievements_spend_key(aid: str, _: str = Depends(require_admin)):
     """Revele l'etape suivante d'un secret (vignette, titre, indice, descriptif)."""

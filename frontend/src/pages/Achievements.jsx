@@ -50,6 +50,12 @@ export default function Achievements({ embedded = false }) {
     catch (e) { setKeyErr(e.response?.data?.detail || e.message); }
   };
   const canSpend = isAdmin && !atFriend && !!data?.keys;
+  // ticket de palier : passer un succes a son palier suivant
+  const useTicket = async aid => {
+    setKeyErr(null);
+    try { await client.post(`/achievements/ticket/${aid}`); await load(); }
+    catch (e) { setKeyErr(e.response?.data?.detail || e.message); }
+  };
   const [mine, setMine] = useState(null);         // en visite : mes propres medailles uniques (lues chez moi)
 
   useEffect(() => {
@@ -112,6 +118,10 @@ export default function Achievements({ embedded = false }) {
               color:"var(--text2)", fontSize:13, fontWeight:900, cursor:"pointer", alignSelf:"center", flexShrink:0 }}>?</button>
         </div>
         <Bar value={pct / 100} tiers={data.tiers}/>
+        {data.tickets_used > 0 && (
+          <div style={{ fontSize:11.5, color:"var(--muted)", marginTop:-4 }}>
+            🎟️ {data.tickets_used} ticket{data.tickets_used > 1 ? "s" : ""} de palier utilisé{data.tickets_used > 1 ? "s" : ""}</div>
+        )}
         <MedalCounts tiers={data.tiers} medals={data.medals}/>
         {data.keys && !atFriend && <KeysBox keys={data.keys} onRules={() => setRules(true)}
           onWheel={canSpend && data.keys.wheel ? () => setSlot(true) : null}/>}
@@ -283,6 +293,7 @@ export default function Achievements({ embedded = false }) {
             <button onClick={closeDetail} aria-label="Fermer" style={{ position:"absolute", top:8, right:10, zIndex:1,
               background:"none", border:"none", color:"var(--muted)", fontSize:20, cursor:"pointer" }}>✕</button>
             <Card it={byId[detail]} sheet others={ringBy[detail]} shared={shared(byId[detail])} rivals={rivalsOf(byId[detail])}
+              tickets={canSpend ? data.keys?.wheel?.tickets || 0 : 0} onTicket={() => useTicket(detail)}
               keys={canSpend ? data.keys : null} onSpend={() => spend(detail)} keyErr={keyErr}/>
           </div>
         </div>, document.body
@@ -456,7 +467,7 @@ function KeysBox({ keys, onRules, onWheel }) {
           <span style={{ display:"block", fontSize:15, fontWeight:900, color:"var(--text)" }}>
             {w.spins} tour{w.spins > 1 ? "s" : ""} de roue</span>
           <span style={{ display:"block", fontSize:11.5, color:"var(--muted)" }}>
-            +{w.weekly} chaque lundi · des clés à gagner</span>
+            +{w.weekly} chaque lundi{w.tickets > 0 ? ` · 🎟️ ${w.tickets} ticket${w.tickets > 1 ? "s" : ""} de palier` : " · des clés à gagner"}</span>
         </span>
         {onWheel && (
           <button onClick={onWheel} style={{ padding:"8px 14px", borderRadius:20, border:"none", fontSize:13, fontWeight:900,
@@ -543,7 +554,8 @@ const progress = it => {
   return span > 0 ? Math.max(0, Math.min(1, (it.value - (it.prev || 0)) / span)) : 0;
 };
 
-function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr, rivals }) {
+function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr, rivals, tickets = 0, onTicket }) {
+  const [sure, setSure] = useState(false);       // ticket : un second toucher pour confirmer
   const ref = useRef(null);
   const [open, setOpen] = useState(sheet);
   useEffect(() => {
@@ -581,10 +593,28 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
           style={{ display:"inline-flex", animation: !shine ? "none" : got ? "bn-shine .35s ease-out" : "bn-jiggle .3s ease-in-out" }}>
           <Medal tier={top} emoji={it.emoji} size={52} locked={!got}/></span>
         <div style={{ flex:1, minWidth:0 }}>
-          <div style={{ fontSize:14, fontWeight:800, color: got ? "var(--text)" : "var(--text2)" }}>{it.name}</div>
+          <div style={{ fontSize:14, fontWeight:800, color: got ? "var(--text)" : "var(--text2)" }}>{it.name}
+            {it.tickets > 0 && <span title={`${it.tickets} palier${it.tickets > 1 ? "s" : ""} passé${it.tickets > 1 ? "s" : ""} avec un ticket`}
+              style={{ marginLeft:6, fontSize:11, fontWeight:800, color:"#F59E0B" }}>🎟️{it.tickets > 1 ? `×${it.tickets}` : ""}</span>}</div>
           <div style={{ fontSize:12, color:"var(--muted)", marginTop:2, lineHeight:1.35,
             fontStyle: it.masked ? "italic" : "normal" }}>
-            {it.masked ? "🔒 Descriptif caché" : unique && got ? it.desc : done ? `✓ Tous les paliers atteints · ${it.desc}` : it.desc}</div>
+            {it.masked ? "🔒 Descriptif caché" : unique && got ? it.desc : done ? `✓ Tous les paliers atteints · ${it.desc}`
+              : unique ? it.desc : (
+                // a paliers : ou j'en suis, et ce que demande le suivant
+                <span style={{ display:"flex", flexDirection:"column", gap:3, marginTop:2 }}>
+                  <span style={{ display:"flex", alignItems:"center", gap:5 }}>
+                    <span style={{ minWidth:58, fontSize:11, fontWeight:700 }}>Actuel</span>
+                    {got ? <><Medal tier={top} emoji="" size={14}/><b style={{ color:"var(--text)" }}>{top.label}</b></>
+                      : <span>pas encore de palier</span>}
+                  </span>
+                  <span style={{ display:"flex", alignItems:"center", gap:5 }}>
+                    <span style={{ minWidth:58, fontSize:11, fontWeight:700 }}>Prochain</span>
+                    <Medal tier={it.tiers[it.level + 1]} emoji="" size={14} locked/>
+                    <b style={{ color:"var(--text2)" }}>{it.tiers[it.level + 1]?.label}</b>
+                  </span>
+                  <span style={{ paddingLeft:63 }}>{it.desc}</span>
+                </span>
+              )}</div>
           {unique && got && (
             <div style={{ fontSize:11, fontWeight:700, color:top.color, marginTop:3 }}>Gagné le {dateFr(top.at)}</div>
           )}
@@ -626,12 +656,32 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
                   fontVariantNumeric:"tabular-nums" }}>{fmt(it.value, it.unit)} / {fmt(it.next, it.unit)}</span>}
               </div>
             )}
-            <div style={{ display:"flex", gap:6 }}>
-              {it.tiers.map(t => <Medal key={t.id} tier={t} emoji="" size={18} locked={!t.at}/>)}
+            <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+              {it.tiers.map((t, i) => {
+                const cur = i === it.level, nxt = i === it.level + 1;
+                return (
+                  <span key={t.id} title={cur ? `Actuel : ${t.label}` : nxt ? `Prochain : ${t.label}` : t.label}
+                    style={{ position:"relative", display:"inline-flex", borderRadius:"50%", padding:2,
+                      boxShadow: cur ? `0 0 0 2px ${t.color}` : "none",
+                      outline: nxt ? "1.5px dashed var(--muted)" : "none", outlineOffset: nxt ? 1 : 0 }}>
+                    <Medal tier={t} emoji="" size={18} locked={!t.at}/>
+                    {nxt && <span style={{ position:"absolute", top:-9, left:"50%", transform:"translateX(-50%)", fontSize:8,
+                      color:"var(--muted)" }}>▼</span>}
+                  </span>
+                );
+              })}
             </div>
           </>
         )
       ) : null}
+      {sheet && !unique && it.next != null && tickets > 0 && onTicket && (
+        <button onClick={e => { e.stopPropagation(); if (sure) { setSure(false); onTicket(); } else setSure(true); }}
+          style={{ alignSelf:"flex-start", padding:"7px 12px", borderRadius:20, fontSize:12.5, fontWeight:800, cursor:"pointer",
+            border:"1px solid #F59E0B", background: sure ? "#F59E0B" : "rgba(245,158,11,0.12)", color: sure ? "#fff" : "#b45309" }}>
+          {sure ? `Confirmer : passer ${it.tiers[it.level + 1]?.label} (+${fmt(it.next - (it.value || 0), it.unit)})`
+            : `🎟️ Utiliser un ticket (${tickets}) : passer ${it.tiers[it.level + 1]?.label}`}</button>
+      )}
+      {sheet && keyErr && !unique && <p style={{ margin:0, fontSize:12, color:"#ef4444" }}>{keyErr}</p>}
       {rivals?.length > 0 && (got || !it.secret) && (unique ? got && <PalsUnique rivals={rivals}/> : <Versus it={it} rivals={rivals}/>)}
       {open && !unique && (got || !it.secret) && (
         <div style={{ display:"flex", flexDirection:"column", gap:4, borderTop:"1px solid var(--border)", paddingTop:8 }}>
@@ -641,7 +691,7 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
               <Medal tier={t} emoji="" size={16} locked={!t.at}/>
               <span style={{ fontWeight:700, minWidth:58 }}>{t.label}</span>
               <span style={{ flex:1 }}>{money ? "" : it.tiers.length > 1 ? fmt(t.n, it.unit) : ""}</span>
-              <span style={{ fontSize:11 }}>{t.at ? dateFr(t.at) : "à gagner"}</span>
+              <span style={{ fontSize:11 }}>{t.ticket && <span title="Passé avec un ticket de palier">🎟️ </span>}{t.at ? dateFr(t.at) : "à gagner"}</span>
             </div>
           ))}
         </div>
@@ -726,6 +776,9 @@ function Rules({ data, onClose }) {
               </React.Fragment>
             ))}
           </div>
+          <P><b>Ticket de palier</b> 🎟️ : sur un succès à paliers (jamais un secret), il ajoute au compteur ce qui manquait
+            pour le palier suivant. Le compte avance pour de bon : la suite se compte à partir de là. Le palier ainsi passé
+            ne rapporte pas de clé, et il est marqué 🎟️, chez toi comme chez tes copains.</P>
           <P>Un tour peut aussi faire franchir des paliers ou débloquer un secret : leurs clés s'ajoutent au lot, et la
             machine les affiche en bonus. Les paliers de la section « Clés et roue » ne rapportent pas de clé (sinon, des
             clés en appelleraient d'autres sans fin) ; ses secrets, si.</P>

@@ -6,9 +6,10 @@ import client from "../api/client";
 // la page ne fait que jouer l'animation jusqu'a lui. Trois rouleaux qui
 // defilent et s'arretent l'un apres l'autre ; trois symboles pareils = gagne.
 // un symbole bien distinct par lot (🗝️ se confondait avec 🔑 sur certains ecrans)
-const SYM = { key1: "🔑", key3: "🍀", key5: "💎", jackpot: "💰", replay: "🔁", hint: "🔍" };
-const FILLER = ["🔑", "🍀", "💎", "💰", "🔁", "🔍", "🍒", "⭐", "🍋", "🔔"];
-const LEGEND = [["🔑", "1 clé"], ["🍀", "3 clés"], ["💎", "5 clés"], ["💰", "10 clés"], ["🔁", "rejoue"], ["🔍", "coup de pouce"]];
+const SYM = { key1: "🔑", key3: "🍀", key5: "💎", jackpot: "💰", replay: "🔁", hint: "🔍", ticket: "🎟️" };
+const FILLER = ["🔑", "🍀", "💎", "💰", "🔁", "🔍", "🎟️", "🍒", "⭐", "🍋", "🔔"];
+const LEGEND = [["🔑", "1 clé"], ["🍀", "3 clés"], ["💎", "5 clés"], ["💰", "10 clés"], ["🎟️", "ticket de palier"],
+  ["🔁", "rejoue"], ["🔍", "coup de pouce"]];
 const H = 76;                      // hauteur d'une case
 const LEN = 28;                    // cases par rouleau avant l'arret
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -123,11 +124,13 @@ export default function SlotMachine({ wheel, onClose, onDone }) {
               <div style={{ animation: win ? "bn-win .6s ease-in-out 3" : "none" }}>
                 <div style={{ fontSize: big ? 22 : 18, fontWeight:900, color: win ? "#fde047" : "rgba(255,255,255,.85)" }}>
                   {res.prize === "none" ? "Pas cette fois…" : res.prize === "replay" ? "🔁 Tour rejoué !"
+                    : res.prize === "ticket" ? "🎟️ Ticket de palier !"
                     : res.prize === "hint" ? "🔍 Coup de pouce !" : `🎉 ${res.label} !`}</div>
                 <div style={{ fontSize:12, color:"rgba(255,255,255,.75)", marginTop:2 }}>
                   {res.prize === "hint" && res.secret ? `${res.secret.step.charAt(0).toUpperCase() + res.secret.step.slice(1)} d'un secret, offert`
                     : res.keys ? `Tu as maintenant ${res.balance + (bonus || []).reduce((a, b) => a + b.n, 0)} clé${res.balance > 1 ? "s" : ""}`
-                    : res.prize === "replay" ? "Le tour t'est rendu" : "Retente ta chance"}</div>
+                    : res.prize === "replay" ? "Le tour t'est rendu"
+                    : res.prize === "ticket" ? "Ouvre un succès à paliers pour l'utiliser" : "Retente ta chance"}</div>
               </div>
             )}
             {phase === "done" && bonus?.length > 0 && (
