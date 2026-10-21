@@ -272,21 +272,44 @@ export default function Achievements({ embedded = false }) {
                   : [{ id:"", items }]
                 ).map(sb => (
                   <div key={sb.id} style={{ display:"flex", flexDirection:"column", gap:8 }}>
-                    {sb.id && (
-                      <button onClick={() => toggleSub(sb.id)} aria-expanded={openSubs.has(sb.id)}
-                        style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, fontWeight:800, color:"var(--text2)",
-                          background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:10, padding:"8px 10px",
-                          cursor:"pointer", textAlign:"left", width:"100%" }}>
-                        <span style={{ fontSize:10, color:"var(--muted)", transform: openSubs.has(sb.id) ? "rotate(90deg)" : "none",
-                          transition:"transform .15s" }}>▶</span>
-                        <span>{sb.emoji}</span>{sb.name}
-                        <span style={{ marginLeft:"auto", fontSize:11, fontWeight:700, color:"var(--muted)" }}>
-                          {sb.id === "unknown" ? `${sb.items.length} à découvrir` : (() => {
-                            const won = sb.items.filter(x => x.level >= 0).length, seen = sb.items.length - won;
-                            return `${won} gagné${won > 1 ? "s" : ""}` + (seen ? ` · ${seen} en vue` : "");
-                          })()}</span>
-                      </button>
-                    )}
+                    {sb.id && (() => {
+                      const col = SUB_COLOR[sb.id] || "#A855F7", isOpen = openSubs.has(sb.id), mystery = sb.id === "unknown";
+                      const won = sb.items.filter(x => x.level >= 0).length, seen = sb.items.length - won;
+                      return (
+                        <button onClick={() => toggleSub(sb.id)} aria-expanded={isOpen}
+                          style={{ display:"flex", alignItems:"center", gap:10, fontSize:13, fontWeight:800, color:"var(--text)",
+                            borderRadius:12, padding:"7px 10px 7px 7px", cursor:"pointer", textAlign:"left", width:"100%",
+                            transition:"box-shadow .15s, transform .15s",
+                            ...(mystery ? {
+                              background:`radial-gradient(80% 140% at 0% 50%, rgba(168,85,247,0.30), transparent 70%), ` +
+                                `radial-gradient(rgba(245,183,0,0.35) 1px, transparent 1.6px) 0 0 / 14px 14px, ` +
+                                `linear-gradient(135deg, #2a1650, #160d2e)`,
+                              color:"#f5edff", border:"1px solid rgba(196,167,255,0.45)",
+                              boxShadow:"0 6px 18px -10px rgba(124,58,237,0.8), inset 0 1px 0 rgba(255,255,255,0.12)" }
+                              : { ...feltCard(col), boxShadow: isOpen
+                                ? `0 0 0 2px ${rgba(col, 0.35)}, 0 8px 20px -10px ${rgba(col, 0.7)}`
+                                : `0 4px 14px -10px ${rgba(col, 0.7)}, inset 0 1px 0 rgba(255,255,255,0.10)` }) }}>
+                          <span aria-hidden style={{ width:30, height:30, flexShrink:0, borderRadius:"50%", display:"flex",
+                            alignItems:"center", justifyContent:"center", fontSize:15, position:"relative",
+                            background:`radial-gradient(circle at 35% 30%, ${rgba(col, 0.5)}, ${col} 72%)`,
+                            boxShadow:`0 2px 6px ${rgba(col, 0.45)}, inset 0 -2px 0 rgba(0,0,0,0.18)` }}>
+                            <span style={{ position:"absolute", inset:2, borderRadius:"50%", border:"1.5px dashed rgba(255,255,255,0.75)" }}/>
+                            <span style={{ position:"absolute", inset:6, borderRadius:"50%", background:"rgba(255,255,255,0.92)" }}/>
+                            <span style={{ position:"relative" }}>{sb.emoji}</span>
+                          </span>
+                          <span style={{ flex:1, minWidth:0 }}>{sb.name}</span>
+                          {/* que ce qu'on voit : rien sur la taille cachee d'une categorie */}
+                          {mystery
+                            ? <span style={pill("#F5B700", true)}>🔒 {sb.items.length} à découvrir</span>
+                            : <>
+                                {won > 0 && <span style={pill(col)}>✓ {won} gagné{won > 1 ? "s" : ""}</span>}
+                                {seen > 0 && <span style={pill("#8B5CF6")}>👁 {seen} en vue</span>}
+                              </>}
+                          <span style={{ fontSize:10, color: mystery ? "#d8c8ff" : "var(--muted)",
+                            transform: isOpen ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>
+                        </button>
+                      );
+                    })()}
                     {(!sb.id || openSubs.has(sb.id)) && (
                       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(84px, 1fr))", gap:8 }}>
                         {sb.items.map(it => <Tile key={it.id} it={it} others={ringBy[it.id]} shared={shared(it)} rivals={rivalsOf(it)} onOpen={() => setDetail(it.id)}/>)}
@@ -1310,6 +1333,12 @@ const feltBg = (c, c2 = c) => [
 ].join(", ");
 const feltCard = (c, c2) => ({ background: feltBg(c, c2), border:`1px solid ${rgba(c, 0.35)}`,
   boxShadow:`0 6px 18px -10px ${rgba(c, 0.55)}, inset 0 1px 0 rgba(255,255,255,0.10)` });
+// Tiroirs des secrets : une couleur chacun
+const SUB_COLOR = { calendar:"#F97316", clock:"#6366F1", measures:"#0EA5E9", colors:"#EC4899", counts:"#14B8A6",
+  ups:"#EF4444", trade:"#F59E0B", mw:"#22C55E", social:"#06B6D4", app:"#8B5CF6", eggs:"#EAB308", game:"#DC2626",
+  sets:"#D4A017" };
+const pill = (c, dark = false) => ({ fontSize:11, fontWeight:800, whiteSpace:"nowrap", padding:"3px 9px", borderRadius:20,
+  color: dark ? "#FFE08A" : c, background: rgba(c, dark ? 0.18 : 0.13), border:`1px solid ${rgba(c, 0.35)}` });
 // L'emoji d'une section, pose sur un jeton de casino
 function Chip({ emoji, color }) {
   return (
