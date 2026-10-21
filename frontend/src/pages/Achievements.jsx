@@ -642,8 +642,7 @@ function Spent({ it }) {
       background:"rgba(245,158,11,0.08)", border:"1px solid rgba(245,158,11,0.3)", color:"var(--text2)" }}>
       {uses.length > 0 && <div>🎟️ <b>{uses.reduce((n, u) => n + u.tickets, 0)} ticket{uses.reduce((n, u) => n + u.tickets, 0) > 1 ? "s" : ""}</b> :{" "}
         {uses.map((u, i) => <span key={i}>{i ? ", " : ""}{u.tier} ({u.tickets}{u.at ? ` · ${dateFr(u.at)}` : ""})</span>)}</div>}
-      {k && <div>🔑 {k.keys ? <b>{k.keys} clé{k.keys > 1 ? "s" : ""}</b> : <b>Clés</b>} : {k.steps.join(", ")}
-        {k.partial && <span style={{ color:"var(--muted)" }}> (le compte des clés commence au 22 octobre 2026)</span>}</div>}
+      {k && <div>🔑 {k.keys ? <b>{k.keys} clé{k.keys > 1 ? "s" : ""}</b> : <b>Clés</b>} : {k.steps.join(", ")}</div>}
     </div>
   );
 }
