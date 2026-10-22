@@ -109,7 +109,7 @@ CHECKS: list[dict] = []
 
 
 def check(category: str, label: str, icon: str = "•",
-          shown: int = 3, random_sample: bool = True):
+          shown: int = 3, random_sample: bool = True, hidden_default: bool = False):
     """
     Enregistre une verification. Signature attendue : async fn(db) -> list[Alert].
 
@@ -122,7 +122,7 @@ def check(category: str, label: str, icon: str = "•",
     """
     def deco(fn):
         CHECKS.append({"category": category, "label": label, "icon": icon,
-                       "fn": fn, "shown": shown, "random": random_sample})
+                       "fn": fn, "shown": shown, "random": random_sample, "hidden_default": hidden_default})
         return fn
     return deco
 
@@ -310,6 +310,37 @@ async def _prints_without_3mf(db) -> list[Alert]:
             detail="Relance possible depuis la fiche",
             value=p.print_date.strftime("%d/%m") if p.print_date else None,
             severity="warn",
+            link=f"/prints?id={p.id}",
+            entity="print", entity_id=p.id,
+            image=_print_image(p),
+        )
+        for p in rows
+    ]
+
+
+@check("no_mw", "Impressions sans modèle MakerWorld", "🌐", hidden_default=True)
+async def _prints_without_mw(db) -> list[Alert]:
+    """Impression terminee sans identifiant de modele MakerWorld (fichier local,
+    import, slicer hors MakerWorld) : ni fiche, ni plateaux, ni suivi. Masquee
+    par defaut : c'est normal pour beaucoup d'impressions."""
+    rows = (await db.execute(
+        select(Print)
+        .where(
+            or_(Print.design_id.is_(None), Print.design_id == ""),
+            Print.status != "IN_PROGRESS",
+        )
+        .order_by(Print.print_date.desc())
+        .limit(30)
+    )).scalars().all()
+    return [
+        Alert(
+            key=f"no_mw:print:{p.id}",
+            category="no_mw",
+            title=next((n for n in (p.translated_name, p.task_name, p.file_name)
+                        if n and str(n).strip() not in ("", "0")), f"Impression #{p.id}"),
+            detail="Pas de modèle MakerWorld associé",
+            value=p.print_date.strftime("%d/%m") if p.print_date else None,
+            severity="info",
             link=f"/prints?id={p.id}",
             entity="print", entity_id=p.id,
             image=_print_image(p),
@@ -513,7 +544,7 @@ async def _swatches_without_label(db) -> list[Alert]:
     ]
 
 
-@check("spool_not_dried", "Bobines à sécher (jamais séchées ou délai dépassé)", "💧",
+@check("spool_not_dried", "Bobines à sécher", "💧",
        shown=5, random_sample=False)
 async def _spools_not_dried(db) -> list[Alert]:
     """
@@ -630,9 +661,13 @@ async def get_prefs(db) -> dict:
     except Exception:
         p = {}
     known = [c["category"] for c in CHECKS]
-    order = [c for c in (p.get("order") or []) if c in known]
-    order += [c for c in known if c not in order]      # nouvelles categories a la fin
+    saved = [c for c in (p.get("order") or []) if c in known]
+    order = saved + [c for c in known if c not in saved]      # nouvelles categories a la fin
     hidden = [c for c in (p.get("hidden") or []) if c in known]
+    # une categorie « masquee par defaut » jamais reglee arrive masquee ; une fois
+    # les preferences enregistrees avec elle, c'est le choix fait qui compte
+    hidden += [c["category"] for c in CHECKS if c.get("hidden_default") and c["category"] not in saved
+               and c["category"] not in hidden]
     return {"order": order, "hidden": hidden}
 
 
