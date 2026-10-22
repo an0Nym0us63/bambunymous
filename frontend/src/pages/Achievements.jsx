@@ -135,6 +135,7 @@ export default function Achievements({ embedded = false }) {
       {/* Bilan : score (jauge), vitrine des medailles, puis le tresor (cles, tickets, machine) */}
       <div className="card" style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:16,
         background:"linear-gradient(135deg, rgba(245,183,0,0.10), rgba(139,92,246,0.10)), var(--surface)" }}>
+        <GradePlate v={data.score_max ? data.score / data.score_max : 0} friend={atFriend}/>
         <div style={{ display:"flex", gap:18, alignItems:"center", flexWrap:"wrap" }}>
           <ScoreHero data={data}/>
           <div style={{ flex:"2 1 300px", minWidth:0, display:"flex", flexDirection:"column", gap:8 }}>
@@ -155,7 +156,6 @@ export default function Achievements({ embedded = false }) {
             <MedalShelf tiers={shelfTiers(data.tiers)} medals={data.medals} onOpen={t => setVitrine(t)}/>
           </div>
         </div>
-        <GradePlate v={data.score_max ? data.score / data.score_max : 0} friend={atFriend}/>
         {data.keys && !atFriend && <Treasure keys={data.keys} onRules={() => setRules(true)} onSpent={canSpend ? load : null}
           onWheel={canSpend && data.keys.wheel ? () => setSlot(true) : null}/>}
       </div>
