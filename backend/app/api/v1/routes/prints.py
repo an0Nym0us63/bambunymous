@@ -201,6 +201,7 @@ def _search_condition(search: str):
             lk(Print.file_name),
             lk(Print.original_name),
             lk(Print.translated_name),
+            lk(Print.task_name),
             exists().where(and_(_PT.print_id == Print.id, lk(_PT.tag))),
             exists().where(and_(_FU.print_id == Print.id, or_(*usage_cols))),
             Print.id.in_(
@@ -1258,6 +1259,42 @@ async def _makerworld_for(design_id) -> dict:
     except Exception:
         logging.getLogger(__name__).exception("[MW] fiche du modele")
         return {"makerworld": None, "status": "error"}
+
+
+@router.get("/makerworld/pick")
+async def pick_for_makerworld(search: Optional[str] = None, unlinked: bool = False,
+                              limit: int = Query(40, le=100), offset: int = 0,
+                              _: str = Depends(require_admin)):
+    """Choisir les impressions a associer a un modele MakerWorld : liste A PLAT
+    (un print d'un groupe se choisit seul), avec le modele deja lie s'il y en a
+    un ; `unlinked` : seulement celles sans modele."""
+    from ....models.print_history import MakerWorldDesign as _MW
+    async with AsyncSessionLocal() as db:
+        q = (select(Print, Group.name, _MW.title_fr, _MW.title)
+             .outerjoin(Group, Group.id == Print.group_id)
+             .outerjoin(_MW, _MW.design_id == Print.design_id)
+             .where(Print.status != "IN_PROGRESS")
+             .order_by(Print.print_date.desc(), Print.id.desc()))
+        if search:
+            q = _apply_search(q, search)
+        if unlinked:
+            q = q.where(or_(Print.design_id.is_(None), Print.design_id == ""))
+        rows = (await db.execute(q.offset(offset).limit(limit + 1))).all()
+    more = len(rows) > limit
+    items = []
+    for p, gname, t_fr, t in rows[:limit]:
+        did = str(p.design_id) if p.design_id else None
+        items.append({
+            "id": p.id,
+            "name": next((n for n in (p.translated_name, p.task_name, p.file_name)
+                          if n and str(n).strip() not in ("", "0")), f"Impression #{p.id}"),
+            "date": p.print_date.isoformat() if p.print_date else None,
+            "status": p.status,
+            "group": gname,
+            "design_id": did,
+            "design_title": (t_fr or t) if did else None,
+        })
+    return {"items": items, "more": more, "next_offset": offset + limit if more else None}
 
 
 @router.post("/makerworld/assign")
