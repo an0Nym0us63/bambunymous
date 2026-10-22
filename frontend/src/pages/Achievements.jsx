@@ -145,7 +145,7 @@ export default function Achievements({ embedded = false }) {
                 style={{ width:26, height:26, borderRadius:"50%", border:"1px solid var(--border)", background:"var(--surface2)",
                   color:"var(--text2)", fontSize:13, fontWeight:900, cursor:"pointer", flexShrink:0 }}>?</button>
             </div>
-            <MedalShelf tiers={data.tiers.filter(t => !t.card)} medals={data.medals} onOpen={t => setVitrine(t)}/>
+            <MedalShelf tiers={shelfTiers(data.tiers)} medals={data.medals} onOpen={t => setVitrine(t)}/>
           </div>
         </div>
         {data.keys && !atFriend && <Treasure keys={data.keys} onRules={() => setRules(true)} onSpent={canSpend ? load : null}
@@ -598,13 +598,25 @@ function ScoreHero({ data }) {
   );
 }
 
+// Les types de la vitrine : les paliers, puis les cartes par rang (Valets, Dames,
+// Rois, As) et les quatre Jokers ensemble.
+function shelfTiers(tiers) {
+  const by = Object.fromEntries(tiers.map(t => [t.id, t]));
+  const cards = [["card_v", "Valets"], ["card_d", "Dames"], ["card_r", "Rois"], ["card_a", "As"]]
+    .filter(([id]) => by[id]).map(([id, label]) => ({ ...by[id], label, of:[id] }));
+  const jokers = tiers.filter(t => t.id.startsWith("card_j")).map(t => t.id);
+  if (by.card_ja) cards.push({ ...by.card_ja, id:"jokers", label:"Jokers", of: jokers });
+  return [...tiers.filter(t => !t.card), ...cards];
+}
+const countOf = (t, medals) => t.of ? t.of.reduce((n, id) => n + (medals[id] || 0), 0) : medals[t.id] || 0;
+
 // La vitrine : chaque palier, sa medaille (animee aux hauts rangs) et combien tu en as.
 function MedalShelf({ tiers, medals, onOpen }) {
   return (
     <div style={{ position:"relative", display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(48px, 1fr))", gap:"10px 4px",
       padding:"10px 6px 14px", borderRadius:14, background:"linear-gradient(180deg, transparent 55%, rgba(0,0,0,0.06))" }}>
       {tiers.map(t => {
-        const n = medals[t.id] || 0;
+        const n = countOf(t, medals);
         return (
           <button key={t.id} title={`${t.label} : ${n} — voir ces médailles`} onClick={() => onOpen?.(t.id)}
             style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:2, minWidth:0, background:"none",
@@ -739,10 +751,11 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, [onClose]);
-  const shelves = data.tiers.map(t => ({
+  const shelves = shelfTiers(data.tiers).map(t => ({
     t,
-    items: data.items.flatMap(it => it.tiers.map((x, idx) => ({ x, idx })).filter(({ x }) => x.id === t.id && x.at)
-      .map(({ x, idx }) => ({ it, at: x.at, have: iHave(it, idx) })))
+    items: data.items.flatMap(it => it.tiers.map((x, idx) => ({ x, idx }))
+      .filter(({ x }) => (t.of ? t.of.includes(x.id) : x.id === t.id) && x.at)
+      .map(({ x, idx }) => ({ it, at: x.at, have: iHave(it, idx), x })))
       .filter(m => own === "all" || (own === "yes") === !!m.have)
       .sort((a, b) => String(b.at).localeCompare(String(a.at))),
   }));
@@ -772,7 +785,7 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
               <span style={{ display:"block", fontSize:17, fontWeight:900, color:"var(--text)" }}>
                 {owner ? `La vitrine de ${owner}` : "Ta vitrine"}</span>
               <span style={{ fontSize:11.5, color:"var(--muted)" }}>{total} médaille{total > 1 ? "s" : ""} gagnée{total > 1 ? "s" : ""}
-                {tier != null && ` · ${shown[0]?.items.length || 0} en ${data.tiers.find(t => t.id === tier)?.label}`}</span>
+                {tier != null && ` · ${shown[0]?.items.length || 0} en ${shelfTiers(data.tiers).find(t => t.id === tier)?.label}`}</span>
             </span>
             <button onClick={onClose} aria-label="Fermer" style={{ background:"none", border:"none", color:"var(--muted)",
               fontSize:22, cursor:"pointer" }}>✕</button>
@@ -814,7 +827,7 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
                 background:`linear-gradient(180deg, ${rgba(t.color, 0.10)}, ${rgba(t.color, 0.03)} 70%, ${rgba(t.color, 0.16)})`,
                 border:`1px solid ${rgba(t.color, 0.28)}`, boxShadow:"inset 0 1px 0 rgba(255,255,255,0.25)" }}>
                 <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(78px, 1fr))", gap:"12px 6px" }}>
-                  {items.map(({ it, at, have }) => (
+                  {items.map(({ it, at, have, x }) => (
                     <button key={it.id} onClick={() => onOpen(it.id)}
                       title={`${it.name} · ${dateFr(at)}${have === true ? " · tu l'as aussi" : have === false ? " · tu ne l'as pas encore" : ""}`}
                       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4, minWidth:0, background:"none",
@@ -823,7 +836,7 @@ function Showcase({ data, tier, onTier, onOpen, onClose, mine, owner }) {
                         {/* il me manque : un anneau ambre en pointilles autour (la medaille reste la sienne) */}
                         {have === false && <span aria-hidden="true" style={{ position:"absolute", inset:-4, borderRadius:"50%",
                           border:"2px dashed rgba(245,158,11,0.85)", boxShadow:"0 0 12px rgba(245,158,11,0.35)" }}/>}
-                        <Medal tier={t} emoji={it.emoji} size={46}/>
+                        <Medal tier={x || t} emoji={it.emoji} size={46}/>
                         {/* je l'ai aussi : une petite coche, la medaille reste la sienne */}
                         {have === true && <span aria-label="Tu l'as aussi" style={{ position:"absolute", right:-2, bottom:2,
                           width:16, height:16, borderRadius:"50%", background:"#22c55e", color:"#fff", fontSize:10,
@@ -1638,7 +1651,7 @@ function PlayCard({ tier, emoji, size, locked }) {
   const n = parseInt(c.slice(1), 16), dark = ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000 < 80;
   const bc = dark ? "#C4B5FD" : c;
   const r = Math.max(3, size * 0.11), b = Math.max(1.2, size / 30);
-  const corners = size >= 34, gold = tier.id === "card_ja", ace = tier.id === "card_a";
+  const corners = size >= 34, gold = tier.id === "card_ja" || tier.id === "jokers", ace = tier.id === "card_a";
   const corner = flip => (
     <span style={{ position:"absolute", [flip ? "bottom" : "top"]: size * 0.04, [flip ? "right" : "left"]: size * 0.06,
       transform: flip ? "rotate(180deg)" : "none", fontSize: size * 0.2, fontWeight:900, lineHeight:1,
