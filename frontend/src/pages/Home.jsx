@@ -866,6 +866,87 @@ function PrinterLine({ status }) {
     </div>
   );
 }
+// toute la largeur sur une rangee : un bandeau. La vignette (un clic l'ouvre en grand),
+// le nom, le pourcentage en grand, le temps restant, l'heure de fin, la couche, la barre ;
+// plus large, les temperatures et la bobine en cours a droite
+function PrinterStrip({ status, showFin = true, showLayer = true }) {
+  const [info, setInfo] = useState(null);
+  const [big, setBig] = useState(false);
+  const box = useRef(null);
+  const [W, setW] = useState(0);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const st = String(status?.status || "").toUpperCase();
+  const live = LIVE_ST.includes(st);
+  const paused = st === "PAUSE" || st === "PAUSED";
+  useEffect(() => {
+    if (!status?.status) return;
+    client.get("/prints", { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
+      .then(r => { const p = (r.data?.prints || r.data?.items || [])[0]; if (p) setInfo(p); }).catch(() => {});
+  }, [status?.status, status?.job_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const s = stateOf(status);
+  const pct = Math.round(status?.progress || 0);
+  const fin = live && status?.remaining_minutes ? fmtFinishTime(status.remaining_minutes) : null;
+  const img = info ? apiUrl(`/prints/${info.id}/image`) : null;
+  const ams = (status?.ams_list || []).find(a => a.id === status?.active_ams_id);
+  const tray = ams?.trays?.find(t => t.id === status?.active_tray_id);
+  const nz = (status?.nozzles || []).find(n => n.active) || (status?.nozzles || [])[0];
+  const fact = (Icon, text, color) => <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5, fontWeight: 700,
+    color: color || "var(--muted)", whiteSpace: "nowrap" }}><Icon/>{text}</span>;
+  const side = W >= 470;
+  return (
+    <div ref={box} style={{ display: "flex", alignItems: "center", gap: 12, height: "100%", minWidth: 0 }}>
+      <div onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ height: "100%", aspectRatio: "1", minHeight: 64, maxHeight: 120, borderRadius: 14, overflow: "hidden",
+        flexShrink: 0, background: "var(--surface2)", cursor: img ? "zoom-in" : "default", display: "flex", alignItems: "center", justifyContent: "center",
+        color: "var(--muted)" }}>
+        {img ? <img src={img} alt="" onError={e => { e.currentTarget.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+          : <Printer size={26}/>}
+      </div>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
+            textOverflow: "ellipsis" }}><Words text={info?.file_name || status?.print_name || "Imprimante"}/></span>
+          {(!live || paused) && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
+            borderRadius: 20, whiteSpace: "nowrap", color: s.color, background: `${s.color}1f` }}>
+            <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
+        </div>
+        {live ? <>
+          <div style={{ display: "flex", alignItems: "baseline", gap: "2px 12px", flexWrap: "wrap", minWidth: 0 }}>
+            <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 24, fontWeight: 900, color: s.color, lineHeight: 1,
+              fontVariantNumeric: "tabular-nums" }}>{paused && <Pause size={18}/>}{pct}%</span>
+            {status.remaining_minutes > 0 && fact(() => <Clock size={13}/>, fmtTime(status.remaining_minutes))}
+            {showFin && fin && fact(() => <Calendar size={13}/>, `${fin.dayDiff ? "demain " : ""}${fin.time}`)}
+            {showLayer && status.total_layers > 0 && W >= 330 && fact(() => <Layers size={13}/>, `${status.layer}/${status.total_layers}`)}
+          </div>
+          <div style={{ height: 8, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}>
+            <div data-pk="" style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg, ${s.color}, ${s.color}cc)`,
+              boxShadow: `0 0 8px ${s.color}88`, transition: "width 1s" }}/></div>
+          {showLayer && status.total_layers > 0 && W < 330 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+            couche {status.layer} / {status.total_layers}</span>}
+        </> : <div style={{ fontSize: 12.5, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
+      </div>
+      {side && status?.connected && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end", flexShrink: 0 }}>
+          {tray && !tray.empty && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
+            <span style={{ width: 14, height: 14, borderRadius: "50%", background: `#${String(tray.color || "888").replace("#", "").slice(0, 6)}`,
+              boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>{tray.filament_type || "?"}
+            <span style={{ color: "var(--muted)", fontWeight: 700 }}>{slotLabel(status.active_ams_id, status.active_tray_id)}</span></span>}
+          <span style={{ display: "inline-flex", gap: 10 }}>
+            {nz && fact(IcoNozzle, `${Math.round(nz.temp || 0)}°`, (nz.temp || 0) > 40 ? "#ea580c" : undefined)}
+            {fact(IcoBed, `${Math.round(status.bed_temp || 0)}°`, (status.bed_temp || 0) > 40 ? "#dc2626" : undefined)}
+            {status.chamber_temp > 0 && fact(IcoChamber, `${Math.round(status.chamber_temp)}°`)}
+          </span>
+        </div>
+      )}
+      {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
+    </div>
+  );
+}
 // en demi-largeur : grande (vignette 4/3 au-dessus), moyenne (vignette 16/9), ou compacte (vignette a gauche)
 function PrinterCompact({ status, size = "big", showFin = true, showLayer = true }) {
   const [info, setInfo] = useState(null);
@@ -1185,7 +1266,8 @@ export default function Home() {
           const temps = o.headTemps && item.w !== 1 && item.h !== 1;
           return stateOf(st).label === "En cours" && !temps ? null : <PrinterHead status={st} temps={temps}/>;
         } },
-      render: (d, st, o, item) => item?.w === 1 || item?.h === 1 ? <PrinterCompact status={st} size={item.w !== 1 || item.h <= 1 ? "small" : o.half} showFin={o.fin} showLayer={o.layer}/>
+      render: (d, st, o, item) => item?.w !== 1 && item?.h === 1 ? <PrinterStrip status={st} showFin={o.fin} showLayer={o.layer}/>
+        : item?.w === 1 || item?.h === 1 ? <PrinterCompact status={st} size={item.w !== 1 || item.h <= 1 ? "small" : o.half} showFin={o.fin} showLayer={o.layer}/>
         : <StatusBanner status={st} defaultExpanded={o.open} showCamera={o.cam} showTemps={o.temps}/>,
       options: [
         { when: it => it.w !== 1, key: "headTemps", label: "Températures dans l'en-tête", def: true },
