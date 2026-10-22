@@ -75,12 +75,22 @@ const TINTS = [
 const TINT_STYLES = [["flat", "dégradé"], ["glow", "lueur"], ["bubbles", "bulles"], ["glass", "verre"]];
 const hueGap = (x, y) => { const d = Math.abs(x - y) % 360; return Math.min(d, 360 - d); };
 const NEAR = 32;
-function paint(rects) {
+const hueOf = hex => {
+  const m = String(hex || "").replace("#", "").match(/^([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i);
+  if (!m) return null;
+  const [r, g, b] = m.slice(1).map(x => parseInt(x, 16) / 255), mx = Math.max(r, g, b), d = mx - Math.min(r, g, b);
+  if (d < 0.08) return null;                                   // un gris : pas de teinte a eviter
+  const h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return (h * 60 + 360) % 360;
+};
+// fixed : ce qui entoure la grille avec ses teintes (le bandeau d'accueil)
+function paint(rects, fixed = []) {
   const out = {};
   const order = [...rects].sort((a, b) => a.r.top - b.r.top || a.r.left - b.r.left);
   const touch = (a, b) => a.left <= b.right + NEAR && b.left <= a.right + NEAR && a.top <= b.bottom + NEAR && b.top <= a.bottom + NEAR;
   order.forEach(({ id, r }, k) => {
-    const near = order.slice(0, k).filter(x => touch(r, x.r)).map(x => TINTS[out[x.id]].h);
+    const near = [...order.slice(0, k).filter(x => touch(r, x.r)).map(x => TINTS[out[x.id]].h),
+      ...fixed.filter(f => touch(r, f.r)).flatMap(f => f.hues)];
     const start = [...id].reduce((t, c) => t + c.charCodeAt(0), 0) % TINTS.length;
     let best = start, bestGap = -1;
     for (let i = 0; i < TINTS.length; i++) {
@@ -329,7 +339,9 @@ export default function HomeGrid({ status, blocks, top = null }) {
     if (!lay.tint || !box.current) return;
     const rects = [...box.current.querySelectorAll("[data-hg-id]")].map(el => ({ id: el.dataset.hgId, r: el.getBoundingClientRect() }))
       .filter(x => x.r.height > 12);
-    const next = paint(rects);
+    const banner = document.querySelector(".home-hello[data-hues]");
+    const fixed = banner ? [{ r: banner.getBoundingClientRect(), hues: banner.dataset.hues.split(",").map(hueOf).filter(h => h != null) }] : [];
+    const next = paint(rects, fixed);
     if (JSON.stringify(next) !== JSON.stringify(tints)) setTints(next);
   });
   // ce que l'accueil montre : une colonne sur telephone, sinon ce qui tient, au plus le maximum choisi
@@ -512,6 +524,9 @@ export default function HomeGrid({ status, blocks, top = null }) {
           --text:#fff; --text2:rgba(255,255,255,0.9); --muted:rgba(255,255,255,0.74); --surface2:rgba(255,255,255,0.16);
           --border:rgba(255,255,255,0.24); --surface:rgba(255,255,255,0.1); }
         .hg-tint-vivid > div > .card > span[aria-hidden] { display:none; }
+        /* en vif, le texte est blanc partout comme sur le bandeau (les boutons gardent leurs couleurs) */
+        .hg-tint-vivid > div > .card :not(button, button *, svg, svg *) { color:#fff !important; }
+        .hg-tint-vivid > div > .card svg:not(button svg) { color:#fff; }
         .hg-ts-glow > div > .card { background:
           radial-gradient(circle at 92% -10%, rgba(255,255,255,0.38), transparent 42%),
           radial-gradient(rgba(255,255,255,0.22) 1px, transparent 1.5px) 0 0 / 18px 18px,

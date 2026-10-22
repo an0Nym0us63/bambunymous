@@ -974,7 +974,7 @@ function Greeting({ status, o = {} }) {
     backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", whiteSpace: "nowrap" };
   const mini = size === "mini";
   return (
-    <div className={`card home-hello${size === "compact" ? " hh-compact" : ""}${mini ? " hh-mini" : ""}`} style={{ position: "relative",
+    <div data-hues={[sky.a, sky.b].join(",")} className={`card home-hello${size === "compact" ? " hh-compact" : ""}${mini ? " hh-mini" : ""}`} style={{ position: "relative",
       overflow: "hidden", border: "none", color: "#fff", background: `linear-gradient(120deg, ${sky.a}, ${sky.b})`,
       backgroundSize: opt("anim", false) ? "200% 200%" : undefined, animation: opt("anim", false) ? "hh-drift 14s ease-in-out infinite" : undefined,
       boxShadow: `0 14px 34px -18px ${sky.b}` }}>
