@@ -771,8 +771,8 @@ function PrinterHead({ status, temps = true }) {
     borderRadius: 20, whiteSpace: "nowrap", background: "var(--surface2)", color: "var(--text2)", fontVariantNumeric: "tabular-nums" };
   const on = temps && status?.connected;
   return <>
-    <span data-pk="" style={{ ...chip, color: s.color, background: `${s.color}1f` }}>
-      <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>
+    {s.label !== "En cours" && <span data-pk="" style={{ ...chip, color: s.color, background: `${s.color}1f` }}>
+      <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
     {on && nz && <span data-pk="" title={`Buse : ${Math.round(nz.temp || 0)}°${nz.target > 0 ? ` (consigne ${Math.round(nz.target)}°)` : ""}`}
       style={{ ...chip, color: hot(nz.temp, "#ea580c") }}><IcoNozzle/>{Math.round(nz.temp || 0)}°</span>}
     {on && <span data-pk="" title={`Plateau : ${Math.round(status.bed_temp || 0)}°${status.target_bed_temp > 0 ? ` (consigne ${Math.round(status.target_bed_temp)}°)` : ""}`}
@@ -827,6 +827,7 @@ function PrinterLine({ status }) {
 // en demi-largeur : grande (vignette 4/3 au-dessus), moyenne (vignette 16/9), ou compacte (vignette a gauche)
 function PrinterCompact({ status, size = "big", showFin = true, showLayer = true }) {
   const [info, setInfo] = useState(null);
+  const [big, setBig] = useState(false);
   const st = String(status?.status || "").toUpperCase();
   const live = LIVE_ST.includes(st);
   useEffect(() => {
@@ -839,8 +840,9 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
   const fin = live && status?.remaining_minutes ? fmtFinishTime(status.remaining_minutes) : null;
   const small = size === "small";
   const thumb = (
-    <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "var(--surface2)", flexShrink: 0,
-      ...(small ? { width: 56, height: 56 } : { width: "100%", aspectRatio: size === "mid" ? "16 / 9" : "4 / 3" }) }}>
+    <div onClick={info ? e => { e.stopPropagation(); setBig(true); } : undefined}
+      style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "var(--surface2)", flexShrink: 0, cursor: info ? "zoom-in" : undefined,
+      ...(small ? { width: 42, height: 42, borderRadius: 10 } : { width: "100%", aspectRatio: size === "mid" ? "16 / 9" : "4 / 3" }) }}>
       {info && <img data-pk="" src={apiUrl(`/prints/${info.id}/image`)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
         style={{ width: "100%", height: "100%", objectFit: small ? "cover" : "contain", display: "block" }}/>}
       {live && !small && <span data-pk="" style={{ position: "absolute", right: 8, top: 8, fontSize: 17, fontWeight: 900, color: "#fff",
@@ -863,25 +865,34 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
     <div style={{ fontSize: small ? 13 : 14, fontWeight: 800, color: "var(--text)", lineHeight: 1.25, overflow: "hidden", display: "-webkit-box",
       WebkitLineClamp: small ? 1 : 2, WebkitBoxOrient: "vertical" }}><Words text={info?.file_name || status?.print_name || s.label}/></div>
   );
+  // le portail de l'agrandissement renvoie ses clics : on les arrete
+  const zoom = big && info && <span onClick={e => e.stopPropagation()}>
+    <Lightbox images={[apiUrl(`/prints/${info.id}/image`)]} index={0} onClose={() => setBig(false)}/></span>;
+  const paused = st === "PAUSE" || st === "PAUSED";
+  // compacte : le nom en entier (sur deux lignes s'il le faut), puis l'avancement et le temps restant, puis la barre ;
+  // hors impression, l'etat a la place
   if (small) return (
-    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-      {thumb}
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-          <div style={{ flex: 1, minWidth: 0 }}>{name}</div>
-          {live && <span data-pk="" style={{ fontSize: 15, fontWeight: 900, color: s.color }}>{pct}%</span>}
-        </div>
-        {/* une seule ligne : le temps restant, et la fin si elle tient */}
-        {live ? <div style={{ display: "flex", gap: 8, fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden" }}>
-          {status.remaining_minutes > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Clock size={11}/>{fmtTime(status.remaining_minutes)}</span>}
-          {showFin && fin && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Calendar size={11}/>{fin.time}</span>}
-        </div> : <div style={{ fontSize: 12, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
-        {bar}
+    <div style={{ minHeight: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
+      <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)", lineHeight: 1.2, overflow: "hidden", display: "-webkit-box",
+        WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflowWrap: "break-word" }}><Words text={info?.file_name || status?.print_name || "Imprimante"}/></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
+        {thumb}
+        {live ? <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+          <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 18, fontWeight: 900, color: s.color, lineHeight: 1.1,
+            fontVariantNumeric: "tabular-nums" }}>{paused && <Pause size={14}/>}{pct}%</span>
+          {status.remaining_minutes > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, fontWeight: 700,
+            color: "var(--muted)", whiteSpace: "nowrap" }}><Clock size={12}/>{fmtTime(status.remaining_minutes)}</span>}
+        </div> : <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, whiteSpace: "nowrap",
+          padding: "2px 8px", borderRadius: 20, color: s.color, background: `${s.color}1f` }}>
+          <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
       </div>
+      {bar}
+      {zoom}
     </div>
   );
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+      {zoom}
       {thumb}
       {name}
       {live ? <>{facts}{bar}</> : <div style={{ fontSize: 12, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
@@ -1125,7 +1136,10 @@ export default function Home() {
       summary: (d, st) => ["RUNNING", "PAUSE", "PAUSED"].includes(String(st?.status || "").toUpperCase())
         ? <span data-pk="" style={{ fontSize: 14 }}>{Math.round(st.progress || 0)} %</span> : null,
       frame: { icon: <Printer size={15}/>, color: "#3B82F6",
-        extra: (st, item, o) => <PrinterHead status={st} temps={o.headTemps && item.w !== 1}/> },
+        extra: (st, item, o) => {
+          const temps = o.headTemps && item.w !== 1 && item.h !== 1;
+          return stateOf(st).label === "En cours" && !temps ? null : <PrinterHead status={st} temps={temps}/>;
+        } },
       render: (d, st, o, item) => item?.w === 1 || item?.h === 1 ? <PrinterCompact status={st} size={item.w !== 1 || item.h <= 1 ? "small" : o.half} showFin={o.fin} showLayer={o.layer}/>
         : <StatusBanner status={st} defaultExpanded={o.open} showCamera={o.cam} showTemps={o.temps}/>,
       options: [
