@@ -4,6 +4,7 @@ import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, Moon, A
 import { useAuth } from "../store/auth";
 import client, { apiUrl } from "../api/client";
 import AttentionSection from "../components/AttentionSection";
+import HomeTiles from "../components/HomeTiles";
 import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel } from "../utils/ams";
@@ -877,7 +878,7 @@ export default function Home() {
         activeNozzleId={status?.nozzles?.find(n => n.active)?.id ?? null}
       />}
       </div>
-      <div className="home-col"><AttentionSection/></div>
+      <div className="home-col"><HomeTiles status={status}/><AttentionSection/></div>
     </div>
   );
 }
