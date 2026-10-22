@@ -30,6 +30,12 @@ function fmtTime(mins) {
   return h > 0 ? `${h}h ${m > 0 ? m+"min" : ""}` : `${m}min`;
 }
 
+// « terminee il y a 12 min », « il y a 3 h », « hier », « il y a 4 j »
+function agoFr(iso) {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (!(m >= 0)) return null;
+  return m < 60 ? `il y a ${Math.max(1, m)} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : m < 2880 ? "hier" : `il y a ${Math.round(m / 1440)} j`;
+}
 // Heure de fin estimée + décalage en jours (0 = aujourd'hui, 1 = demain, etc.)
 function fmtFinishTime(mins) {
   if (!mins) return null;
@@ -1149,7 +1155,8 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
     {status?.chamber_temp > 0 && tempItem(IcoChamber, "Chambre", status.chamber_temp, status.target_chamber_temp, "#ca8a04", size)}
   </span>;
   // la ligne du bas (toute la largeur) : la couche et les temperatures, quand il n'y a pas de colonne a droite
-  const bottom = !side && live && (status?.connected || (showLayer && status.total_layers > 0));
+  // la ligne du bas reste hors impression : les temperatures (le plateau qui refroidit…)
+  const bottom = !side && (status?.connected || (live && showLayer && status.total_layers > 0));
   const layerInline = showLayer && status?.total_layers > 0 && side;
   return (
     <div ref={box} onClick={() => setPop(true)} style={{ display: "flex", flexDirection: "column", gap: 5, height: "100%", minWidth: 0, minHeight: 0, overflow: "hidden", cursor: "pointer" }}>
@@ -1180,7 +1187,10 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
             <div style={{ height: 8, borderRadius: 6, background: "var(--border)", overflow: "hidden", flexShrink: 0 }}>
               <div data-pk="" style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg, ${s.color}, ${s.color}cc)`,
                 boxShadow: `0 0 8px ${s.color}88`, transition: "width 1s" }}/></div>
-          </> : <div style={{ fontSize: 12.5, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
+          </> : <div style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 600, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+            {/* hors impression : depuis quand, et ce qu'a ete la derniere */}
+            <Words text={info ? [info.print_date && agoFr(info.print_date), info.duration_seconds && fmtTime(Math.round(info.duration_seconds / 60)),
+              info.total_weight_g && `${Math.round(info.total_weight_g)} g`].filter(Boolean).join(" · ") || "Dernière impression" : "Prête à imprimer"}/></div>}
         </div>
         {side && status?.connected && (
           <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end", flexShrink: 0 }}>
@@ -1194,7 +1204,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
       </div>
       {bottom && (
         <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", flexShrink: 0 }}>
-          {showLayer && status.total_layers > 0 && fact(() => <Layers size={11}/>, `${status.layer}/${status.total_layers}`, undefined, W < 340 ? 10.5 : 11.5)}
+          {live && showLayer && status.total_layers > 0 && fact(() => <Layers size={11}/>, `${status.layer}/${status.total_layers}`, undefined, W < 340 ? 10.5 : 11.5)}
           {status?.connected && <span style={{ marginLeft: "auto" }}>{temps(W < 340 ? 10.5 : 11.5, W < 340 ? 5 : 9)}</span>}
         </div>
       )}
@@ -1522,6 +1532,8 @@ export default function Home() {
         ? <span data-pk="" style={{ fontSize: 14 }}>{Math.round(st.progress || 0)} %</span> : null,
       frame: { icon: <Printer size={15}/>, color: "#3B82F6",
         extra: (st, item, o) => {
+          // sur une rangee, le bandeau et la version compacte disent deja l'etat : pas de doublon
+          if (item.h === 1) return null;
           const temps = o.headTemps && item.w !== 1 && item.h !== 1;
           return stateOf(st).label === "En cours" && !temps ? null : <PrinterHead status={st} temps={temps}/>;
         } },
