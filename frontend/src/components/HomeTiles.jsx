@@ -196,7 +196,7 @@ function Hero({ visual, value, unit, delta, sub, color = "var(--text)", reserve 
   const H = Math.max(40, H0 - reserve);
   const narrow = W < 215;
   const stack = !!visual && narrow && H >= 150;
-  const vs = !visual ? 0 : stack ? Math.min(W * (H >= 280 ? 0.9 : 0.66), H - 74, 200) : Math.min(H - 2, narrow ? 62 : zoom ? 150 : 108, W * 0.4);
+  const vs = !visual ? 0 : stack ? Math.min(W * (H >= 280 ? 0.9 : 0.66), H - 74, 200) : Math.min(H - 2, narrow ? 62 : zoom ? 150 : 132, W * 0.4);
   const fs = zoom ? 40 : stack ? 26 : Math.round(Math.max(20, Math.min(narrow ? 25 : 34, H * 0.4)));
   const used = stack ? vs + fs + 24 : fs + 22;
   const subLines = Math.max(0, Math.min(3, Math.floor((H - used) / 16)));
@@ -270,7 +270,7 @@ function Item({ img, dot, title, sub, right, size = 36, onClick, color, card = f
   );
 }
 // un anneau (0 a 1), un nombre au centre
-function Ring({ value, size = 54, color = "#3b82f6", stroke, children }) {
+function Ring({ value, size = 54, color = "#3b82f6", stroke, children, cap }) {
   const sw = stroke || Math.max(5, Math.round(size / 9));
   const r = (size - sw) / 2, C = 2 * Math.PI * r, v = Math.max(0, Math.min(1, value || 0));
   return (
@@ -282,7 +282,8 @@ function Ring({ value, size = 54, color = "#3b82f6", stroke, children }) {
       </svg>
       <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center",
         fontSize: size * (String(children ?? "").length > 4 ? 0.17 : String(children ?? "").length > 3 ? 0.2 : 0.24),
-        fontWeight: 900, color: "var(--text)", lineHeight: 1.05 }}>{children}</span>
+        fontWeight: 900, color: "var(--text)", lineHeight: 1.05, flexDirection: "column" }}>{children}
+        {cap && size >= 64 && <span style={{ fontSize: Math.max(9, size * 0.1), fontWeight: 700, color: "var(--muted)", marginTop: 1 }}>{cap}</span>}</span>
     </span>
   );
 }
@@ -431,6 +432,43 @@ function Versus({ rows, color, a = "aujourd'hui", b = "hier" }) {
   );
 }
 // des chiffres en petites cases (deux par rangee quand c'est etroit)
+// la hauteur que prennent des Stats de n cases dans W (pour reserver la place)
+const statsH = (n, W) => n ? Math.ceil(n / Math.max(1, Math.min(n, Math.floor((W + 6) / 96)))) * 49 - 6 : 0;
+// le chiffre-cle (qui prend ce qui reste), puis autant de blocs que la hauteur en tient, dans l'ordre :
+// une grande case se remplit au lieu de laisser un trou. blocks : [{ h: hauteur ou W => hauteur, node, opt }]
+// (opt : facultatif, on passe au suivant s'il ne tient pas)
+function Stack({ head, min = 70, blocks }) {
+  const { W, H, zoom } = useBox();
+  let left = H - min;
+  const on = [];
+  for (const b of blocks) {
+    if (!b) continue;
+    const h = typeof b.h === "function" ? b.h(W) : b.h;
+    if (h + 8 <= left) { on.push(b); left -= h + 8; } else if (!b.opt) break;
+  }
+  const used = on.reduce((a, b) => a + (typeof b.h === "function" ? b.h(W) : b.h) + 8, 0) + (on.length ? 4 : 0);
+  if (!on.length) return head;
+  return <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
+    <div style={{ display: "flex", flexDirection: "column", flexShrink: 0 }}><BoxCtx.Provider value={{ W, H: H - used, zoom }}>{head}</BoxCtx.Provider></div>
+    {on.map((b, i) => <div key={i} style={{ flexShrink: 0, marginTop: i ? 8 : 12 }}>{b.node}</div>)}
+  </div>;
+}
+// une bande de vignettes (les impressions du jour…) : autant que la largeur en tient
+function Thumbs({ list, size = 52, title }) {
+  const { W } = useBox();
+  const n = Math.max(1, Math.floor((W + 6) / (size + 6)));
+  const more = list.length - n;
+  return <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+    {title && <H2>{title}</H2>}
+    <div style={{ display: "flex", gap: 6 }}>{list.slice(0, more > 0 ? n - 1 : n).map(x => <span key={x.key} title={x.title} style={{ position: "relative", flexShrink: 0 }}>
+      <img data-pk="" src={x.img} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+        style={{ width: size, height: size, borderRadius: 12, objectFit: "cover", background: "var(--surface2)", display: "block" }}/>
+      {x.dot && <span style={{ position: "absolute", right: -2, bottom: -2, width: 11, height: 11, borderRadius: "50%", border: "2px solid var(--surface)", background: x.dot }}/>}
+    </span>)}
+    {more > 0 && <span style={{ width: size, height: size, borderRadius: 12, background: "var(--surface2)", display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: 13, fontWeight: 900, color: "var(--text2)", flexShrink: 0 }}>+{more + 1}</span>}</div>
+  </div>;
+}
 function Stats({ items }) {
   const { W, zoom } = useBox();
   const list = items.filter(it => it && it[1] != null && it[1] !== "" && it[1] !== "—");
@@ -542,15 +580,21 @@ function useDays(n) {
 // ── Les tuiles ───────────────────────────────────────────────────────────────
 // une liste qui defile dans la tuile (option « Defiler ») : toute la liste, la molette ou le doigt
 const Scroller = ({ children, gap = 6 }) => <div onWheel={e => e.stopPropagation()} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain",
-  display: "flex", flexDirection: "column", gap, marginRight: -6, paddingRight: 6 }}>{children}</div>;
+  display: "flex", flexDirection: "column", gap, marginRight: -6, paddingRight: 6, paddingBottom: 14,
+  maskImage: "linear-gradient(to bottom, #000 calc(100% - 22px), transparent)", WebkitMaskImage: "linear-gradient(to bottom, #000 calc(100% - 22px), transparent)" }}>{children}</div>;
 const SCROLL = def => B("scroll", "Défiler dans la tuile", def, { hint: "Toute la liste dans la tuile, qu'on fait défiler au doigt ou à la molette." });
 const rateColor = r => r == null ? "#94a3b8" : r >= 0.9 ? "#22c55e" : r >= 0.7 ? "#f59e0b" : "#ef4444";
 // Aujourd'hui : un anneau de reussite, le compte, l'ecart avec hier ; en grand, face a hier
-function Today({ v, o, sz }) {
+function Today({ v, p, o, sz }) {
+  const nav = useNavigate();
+  const t0 = ymd(new Date());
+  const mine = (p || []).filter(x => x.print_date && ymd(utc(x.print_date)) === t0);
+  const strip = mine.length > 0 && <Thumbs title="Imprimées aujourd'hui" list={mine.map(x => ({ key: x.id, img: printImg(x.id), title: x.file_name,
+    dot: okOf(x) ? "#22c55e" : "#ef4444" }))}/>;
   const rate = v?.count ? v.ok / v.count : null;
   const col = rateColor(rate);
   const sub = v && [o.weight && fmtG(v.weight_g), o.hours && `${fmtH(v.duration)} de machine`, o.cost && fmtEur(v.cost)].filter(Boolean).join(" · ");
-  const hero = reserve => <Hero reserve={reserve} visual={o.ring && rate != null ? s => <Ring value={rate} size={s} color={col}>{Math.round(rate * 100)}%</Ring> : null}
+  const hero = reserve => <Hero reserve={reserve} visual={o.ring && rate != null ? s => <Ring value={rate} size={s} color={col} cap="réussies">{Math.round(rate * 100)}%</Ring> : null}
     value={v ? v.count : "…"} unit={`impression${v?.count > 1 ? "s" : ""}`} sub={sub}
     delta={o.yesterday && v?.yesterday && <Delta now={v.count} before={v.yesterday.count}/>}/>;
   const versus = v?.yesterday && <Versus color="#3B82F6" rows={[["Impressions", v.count, v.yesterday.count, x => x || 0],
@@ -558,9 +602,17 @@ function Today({ v, o, sz }) {
   return (
     <Tile icon={<CalendarClock size={15}/>} color="#3B82F6" label="Aujourd'hui" to="/prints"
       mini={sz.h === 0.5} summary={v ? <>{v.count}{rate != null && <span style={{ fontSize: 12, color: col }}>{Math.round(rate * 100)} %</span>}</> : "…"}
-      zoom={<>{hero(0)}{versus && <><H2>Face à hier</H2>{versus}</>}</>}>
-      {({ W, H }) => versus && H >= (W < 240 ? 250 : 165)
-        ? <>{hero(W < 240 ? 150 : 110)}<div style={{ marginTop: 8 }}>{versus}</div></> : hero(0)}
+      zoom={<>{hero(0)}<Stats items={v ? [["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.count != null && v.ok != null ? v.count - v.ok : null, v.count - v.ok ? "#dc2626" : undefined],
+        ["Poids", fmtG(v.weight_g)], ["Machine", fmtH(v.duration)], ["Coût", fmtEur(v.cost)]] : []}/>
+        {versus && <><H2>Face à hier</H2>{versus}</>}
+        {mine.length > 0 && <><H2>Imprimées aujourd'hui</H2><div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {mine.map(x => <Item key={x.id} img={printImg(x.id)} dot={okOf(x) ? "#22c55e" : "#ef4444"} size={52} title={x.file_name || `Impression #${x.id}`}
+            sub={[x.print_date && utc(x.print_date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }), x.duration_seconds && fmtDur(x.duration_seconds),
+              x.total_weight_g && fmtG(x.total_weight_g)].filter(Boolean).join(" · ")} onClick={() => nav(`/prints?id=${x.id}`)}/>)}</div></>}</>}>
+      {({ W }) => <Stack min={W < 240 ? 150 : 96} head={hero(0)} blocks={[versus && { h: W < 240 ? 150 : 104, node: versus },
+        v && { opt: true, h: w => statsH(3, w), node: <Stats items={[["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.count - (v.ok || 0), v.count - (v.ok || 0) ? "#dc2626" : undefined],
+          ["Coût", fmtEur(v.cost)]]}/> },
+        strip && { opt: true, h: 76, node: strip }]}/>}
     </Tile>
   );
 }
@@ -686,6 +738,12 @@ function Last({ p, o, sz }) {
 // le stock : le total, et les bobines les plus basses (pastilles ou liste) qui remplissent la place
 const spoolPct = x => x.filament_weight_g ? (x.remaining_weight_g || 0) / x.filament_weight_g : null;
 const spoolName = x => x.filament_translated_name || x.filament_name || "Bobine";
+// le compte des bobines presque vides, quand la tuile a la largeur
+function FewChip({ n }) {
+  if (useBox().W < 215) return null;
+  return <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: "#dc2626", padding: "1px 7px", borderRadius: 10, background: "rgba(220,38,38,0.12)",
+    whiteSpace: "nowrap" }}>{n} presque vide{n > 1 ? "s" : ""}</span>;
+}
 function Stock({ s, o, sz }) {
   const list = Array.isArray(s) ? s : [];
   const kg = list.reduce((a, x) => a + (x.remaining_weight_g || 0), 0);
@@ -695,9 +753,11 @@ function Stock({ s, o, sz }) {
     <SpoolDot color={x.filament_color} pct={spoolPct(x)} size={20}/>
     <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}><W text={spoolName(x)}/></span>
     <span data-pk="" style={{ fontWeight: 800, color: "#d97706" }}>{Math.round(x.remaining_weight_g)} g</span></div>;
+  const few = list.filter(x => (x.remaining_weight_g ?? 999) < 200).length;
   const head = <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
     <span data-pk="" style={{ fontSize: 24, fontWeight: 900, color: "var(--text)", lineHeight: 1.05 }}>{s === undefined ? "…" : list.length}</span>
-    <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>bobines{o.kg ? ` · ${fmtG(kg)}` : ""}</span></div>;
+    <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>bobines{o.kg ? ` · ${fmtG(kg)}` : ""}</span>
+    {few > 0 && <FewChip n={few}/>}</div>;
   return (
     <Tile icon={<Package size={15}/>} color="#F59E0B" label="Stock" to="/filaments"
       mini={sz.h === 0.5} summary={<>{list.length}<span style={{ display: "inline-flex", gap: 2 }}>{low.slice(0, 3).map(x => <SpoolDot key={x.id} color={x.filament_color} pct={spoolPct(x)} size={22}/>)}</span></>}
@@ -709,12 +769,17 @@ function Stock({ s, o, sz }) {
         if (rest < 20) return head;
         if (o.style === "list") return <>{head}<div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 6 }}>{low.slice(0, fitRows(rest, 22, 5)).map(line)}</div></>;
         // les pastilles grandissent pour remplir la case ; trop nombreuses, seules les plus basses qui tiennent
-        let g = fitGrid(low.length, W, rest, { gap: 6, max: 56 });
+        // de la place : le poids sous chaque pastille
+        const lg = fitGrid(low.length, W, rest, { gap: 6, max: 60, extra: 15 });
+        const labels = lg.size >= 34;
+        let g = labels ? lg : fitGrid(low.length, W, rest, { gap: 6, max: 56 });
         if (g.size < 26) { const f = fillGrid(W, rest, 26, 6); g = { cols: f.cols, size: Math.min(f.size, Math.max(20, rest - 2)), n: f.n }; }
         return <>{head}<div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: 6, flex: 1, alignContent: "center",
           justifyContent: "space-evenly", marginTop: 4 }}>
-          {low.slice(0, g.n || low.length).map(x => <SpoolDot key={x.id} color={x.filament_color} pct={spoolPct(x)} size={g.size}
-            title={`${spoolName(x)} · ${Math.round(x.remaining_weight_g)} g`}/>)}</div></>;
+          {low.slice(0, g.n || low.length).map(x => <span key={x.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
+            <SpoolDot color={x.filament_color} pct={spoolPct(x)} size={g.size} title={`${spoolName(x)} · ${Math.round(x.remaining_weight_g)} g`}/>
+            {labels && <span style={{ fontSize: 10.5, fontWeight: 800, lineHeight: "14px", whiteSpace: "nowrap",
+              color: x.remaining_weight_g < 200 ? "#dc2626" : "var(--muted)" }}>{fmtG(x.remaining_weight_g)}</span>}</span>)}</div></>;
       }}
     </Tile>
   );
@@ -766,7 +831,17 @@ function Dry({ v, status, o, sz }) {
         if (drying.length === 1 && H >= 150) {
           // une seule unite et de la place : en grand (anneau centre ou a gauche quand c'est large)
           const a = drying[0], wide = W >= 260;
-          const ring = Math.floor(wide ? Math.min(H - 10, W * 0.42, 170) : Math.min(W * 0.78, H - 96, 170));
+          const trays = (a.trays || []).filter(t => !t.empty && t.color);
+          const extra = H - (wide ? 130 : 270) >= 52 ? 52 : 0;
+          const Hr = H - extra;
+          const ring = Math.floor(wide ? Math.min(Hr - 10, W * 0.42, 170) : Math.min(W * 0.78, Hr - 96, 170));
+          const pill = (txt, c) => <span style={{ fontSize: 11.5, fontWeight: 800, color: c, padding: "3px 9px", borderRadius: 12, background: `${c}1c`, whiteSpace: "nowrap" }}>{txt}</span>;
+          const below = extra > 0 && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
+            {trays.length > 0 && <span style={{ display: "inline-flex", gap: 4 }}>{trays.map(t => <SpoolDot key={t.id} color={t.color} size={26}
+              pct={t.remain >= 0 ? t.remain / 100 : null} title={`${t.filament_type || ""}`}/>)}</span>}
+            {a.humidity > 0 && pill(`💧 ${a.humidity} %`, "#0ea5e9")}
+            {a.temp > 0 && W >= 215 && pill(`${Math.round(a.temp)} °C dedans`, "#f97316")}
+          </div>;
           const end = a.dry_time ? new Date(Date.now() + a.dry_time * 60000) : null;
           const info = <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: wide ? "flex-start" : "center", textAlign: wide ? "left" : "center", minWidth: 0 }}>
             <span style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{amsLab(a)}{a.dry_filament ? <Muted size={12.5}> · {a.dry_filament}</Muted> : null}</span>
@@ -779,8 +854,9 @@ function Dry({ v, status, o, sz }) {
             <Ring value={prog(a)} size={ring} color="#f97316">{Math.round(prog(a) * 100)}%</Ring>
             <span aria-hidden="true" style={{ position: "absolute", inset: -4, borderRadius: "50%", boxShadow: "0 0 22px rgba(249,115,22,0.45)",
               animation: "dryPulse 2.5s ease-in-out infinite", pointerEvents: "none" }}/></span>;
-          return <div style={{ flex: 1, display: "flex", flexDirection: wide ? "row" : "column", alignItems: "center", justifyContent: "center", gap: wide ? 16 : 10 }}>
-            {big}{info}</div>;
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 14 }}>
+            <div style={{ display: "flex", flexDirection: wide ? "row" : "column", alignItems: "center", justifyContent: "center", gap: wide ? 16 : 10 }}>{big}{info}</div>
+            {below}</div>;
         }
         if (drying.length) {
           // une unite : grande si la place le permet ; plusieurs : une ligne chacune
@@ -806,9 +882,9 @@ function Humidity({ status, o, sz }) {
   if (!list.length) return null;
   const [lo, hi] = o.thr === "strict" ? [20, 30] : o.thr === "loose" ? [40, 55] : [30, 40];
   const col = h => h < lo ? "#22c55e" : h < hi ? "#f59e0b" : "#ef4444";
-  const drops = (W, H) => {
+  const drops = (W, H, grow = true) => {
     const g = fitGrid(list.length, W, H, { ar: DROP_AR, extra: DROP_EXTRA - (o.temp ? 0 : 14), max: 150, gap: 8 });
-    return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "center", gap: 8 }}>
+    return <div style={{ flex: grow ? 1 : undefined, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "center", gap: 8 }}>
       {list.map(a => <DropGauge key={a.id} value={a.humidity} color={col(a.humidity)} size={Math.max(40, g.size)} label={amsLab(a)}
         sub={o.temp && a.temp ? `${Math.round(a.temp)}°` : null}/>)}</div>;
   };
@@ -837,6 +913,15 @@ function Humidity({ status, o, sz }) {
       {({ W, H }) => {
         const fitsBars = H >= list.length * 19;
         if (o.style === "bars") return fitsBars ? bars(H) : columns(W);
+        const wet = list.reduce((b, a) => a.humidity > b.humidity ? a : b, list[0]);
+        const avg = Math.round(list.reduce((t, a) => t + a.humidity, 0) / list.length);
+        const g0 = fitGrid(list.length, W, H, { ar: DROP_AR, extra: DROP_EXTRA - (o.temp ? 0 : 14), max: 150, gap: 8 });
+        const used = g0.rows * (g0.size * DROP_AR + DROP_EXTRA) + 8 * (g0.rows - 1);
+        if (g0.size >= 46 && H - used >= 44) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 10 }}>
+          {drops(W, H - 34, false)}
+          <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+            <span>moyenne <b style={{ color: col(avg) }}>{avg} %</b></span>
+            {wet.humidity >= lo && W >= 215 && <span>· le plus humide <b style={{ color: col(wet.humidity) }}>{amsLab(wet)}</b></span>}</div></div>;
         return fitGrid(list.length, W, H, { ar: DROP_AR, extra: DROP_EXTRA - (o.temp ? 0 : 14), gap: 8 }).size >= 46 ? drops(W, H) : fitsBars ? bars(H) : columns(W);
       }}
     </Tile>
@@ -988,11 +1073,15 @@ function ToRate({ r, o, sz }) {
         if (!items.length) return <>{head}<Empty>Tout est évalué</Empty></>;
         const rest = H - 34;
         if (!o.thumbs || rest < 24) return head;
-        let g = fitGrid(items.length, W, rest, { gap: 6, max: 110 });
+        const lg = fitGrid(items.length, W, rest, { gap: 8, max: 120, extra: 17 });
+        const titled = lg.size >= 76;
+        let g = titled ? lg : fitGrid(items.length, W, rest, { gap: 6, max: 110 });
         if (g.size < 28) { const f = fillGrid(W, rest, 28, 6); g = { cols: f.cols, size: Math.min(f.size, Math.max(22, rest - 2)), n: f.n }; }
-        return <>{head}<div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: 6, flex: 1, alignContent: "center",
+        return <>{head}<div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: titled ? 8 : 6, flex: 1, alignContent: "center",
           justifyContent: "space-evenly", marginTop: 4 }}>
-          {items.slice(0, g.n || items.length).map(x => thumb(x, g.size))}</div></>;
+          {items.slice(0, g.n || items.length).map(x => titled ? <div key={x.design_id} style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+            {thumb(x, g.size)}<span style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              lineHeight: "14px" }}>{x.title_fr || x.title}</span></div> : thumb(x, g.size))}</div></>;
       }}
     </Tile>
   );
@@ -1049,8 +1138,9 @@ function Wheel({ a, o, sz = { h: 1 } }) {
             <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: fs, fontWeight: 900, color: c, lineHeight: 1.1 }}>{ic}{n}</span>
             <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{l}</span></div>)}</div>;
         // de la place : la roue en dessin, a gauche (large) ou au-dessus (etroit)
-        const art = wide ? Math.min(H - 12, W * 0.42, 200) : Math.min(W - 8, H - 110, 220);
-        if (art >= 80) return wide
+        const tall = wide && H >= 250;
+        const art = wide && !tall ? Math.min(H - 12, W * 0.42, 200) : Math.min(W - 8, H - 110, tall ? 260 : 220);
+        if (art >= 80) return wide && !tall
           ? <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 14 }}><WheelArt size={art} spin={spins > 0}/>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>{row}{btn(true)}</div></div>
           : <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "center", gap: 10 }}>
@@ -1196,7 +1286,8 @@ function Temps({ status, o, sz }) {
     </Tile>
   );
 }
-// le mois : le compte, l'ecart avec le mois dernier, les barres par jour
+const statsH3 = W => statsH(3, W);
+// le mois : le compte, l'ecart avec le mois dernier, les chiffres du mois et les barres par jour
 function Month({ v, o, sz }) {
   const name = new Date().toLocaleDateString("fr-FR", { month: "long" });
   const nd = new Date().getDate();
@@ -1217,9 +1308,9 @@ function Month({ v, o, sz }) {
         const hh = Math.min(H, 72);
         // haute : des chiffres du mois entre le compte et les barres
         const best = (days || []).reduce((b, x) => !b || (x.count || 0) > (b.count || 0) ? x : b, null);
-        const items = days && days.length && [["Par jour", `${Math.round((v?.count ? (days.reduce((a, x) => a + (x.count || 0), 0)) : 0) / nd * 10) / 10}`],
-          ["Meilleur jour", best?.count ? `${best.day.getDate()} · ${best.count}` : "—"], ["Jours actifs", `${days.filter(x => x.count).length} / ${nd}`]];
-        const statsH = items && H >= 300 ? Math.ceil(3 / Math.max(1, Math.min(3, Math.floor((W + 6) / 96)))) * 50 : 0;
+        const items = days && days.length && [["Par jour", String(Math.round(days.reduce((a, x) => a + (x.count || 0), 0) / nd * 10) / 10).replace(".", ",")],
+          ["Meilleur jour", best?.count ? `${best.day.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} · ${best.count}` : "—"], ["Jours actifs", `${days.filter(x => x.count).length} / ${nd}`]];
+        const statsH = items && H >= 210 + statsH3(W) ? statsH3(W) + 6 : 0;
         return <>
           <BoxCtx.Provider value={{ W, H: hh }}>{hero}</BoxCtx.Provider>
           {statsH > 0 && <div style={{ marginTop: 6 }}><Stats items={items}/></div>}
@@ -1242,7 +1333,13 @@ function Sales({ v, o, sz }) {
   const share = (v.sold || 0) / Math.max(1, (v.sold || 0) + (v.available || 0));
   const sub = [`${v.sold} vendu${v.sold > 1 ? "s" : ""}`, o.revenue && `${Math.round(v.revenue || 0)} €`,
     o.margin && `marge ${Math.round(v.margin || 0)} €${v.margin_pct ? ` (${Math.round(v.margin_pct)} %)` : ""}`].filter(Boolean).join(" · ");
-  const hero = <Hero visual={o.ring ? s => <Ring value={share} size={s} color="#EC4899">{v.sold}</Ring> : null} value={v.available} unit="à vendre" sub={sub}/>;
+  const hero = <Hero visual={o.ring ? s => <Ring value={share} size={s} color="#EC4899" cap="vendus">{v.sold}</Ring> : null} value={v.available} unit="à vendre" sub={sub}/>;
+  const split = <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div style={{ display: "flex", height: 10, borderRadius: 6, overflow: "hidden", background: "var(--surface2)" }}>
+      <span style={{ width: `${share * 100}%`, background: "linear-gradient(90deg, #f472b6, #ec4899)" }}/></div>
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
+      <span style={{ whiteSpace: "nowrap" }}><b style={{ color: "#db2777" }}>{Math.round(share * 100)} %</b> vendus</span>
+      <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginLeft: 8 }}>{v.total} objets</span></div></div>;
   return (
     <Tile icon={<ShoppingBag size={15}/>} color="#EC4899" label="Objets et ventes" to="/objects"
       mini={sz.h === 0.5} summary={<>{v.available}<span style={{ fontSize: 12, color: "var(--muted)" }}>à vendre · {v.sold} vendus</span></>}
@@ -1254,9 +1351,8 @@ function Sales({ v, o, sz }) {
         // haute : les chiffres en cases sous l'anneau
         const items = [o.revenue && ["Chiffre d'affaires", fmtEur(v.revenue)], o.margin && ["Marge", fmtEur(v.margin)],
           o.potential && ["Valeur du stock", fmtEur(v.potential_value)]].filter(Boolean);
-        const cols = Math.max(1, Math.min(items.length, Math.floor((W + 6) / 96)));
-        const statsH = items.length && H >= 280 ? Math.ceil(items.length / cols) * 50 : 0;
-        if (statsH) return <><BoxCtx.Provider value={{ W, H: H - statsH - 8 }}>{hero}</BoxCtx.Provider><Stats items={items}/></>;
+        if (H >= 190) return <Stack min={W < 215 ? 150 : 96} head={hero} blocks={[{ h: statsH(items.length, W), node: <Stats items={items}/> },
+          { h: 34, node: split }]}/>;
         return <>
           <BoxCtx.Provider value={{ W, H: o.potential && H >= 120 ? H - 22 : H }}>{hero}</BoxCtx.Provider>
           {o.potential && H >= 120 && <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -1500,16 +1596,31 @@ function Countdown({ status, o, sz }) {
   const hero = <Hero visual={s => <Ring value={pct / 100} size={s} color={color}>{pct}%</Ring>}
     value={live ? (left ? fmtDur(left * 60) : "bientôt") : "—"} unit={live ? (paused ? "en pause" : "restantes") : "rien en cours"}
     sub={live && [left && o.fin && `fin à ${finAt(left)}`, o.layer && status.total_layers > 0 && `couche ${status.layer} / ${status.total_layers}`].filter(Boolean).join(" · ")}/>;
+  const pace = { 1: "silencieux", 2: "standard", 3: "sport", 4: "ludicrous" }[status?.speed_level];
+  // ce qui est deja passe, estime d'apres l'avancement
+  const total = live && left && pct > 0 && pct < 100 ? left / (1 - pct / 100) : null;
+  const since = total ? new Date(Date.now() - (total - left) * 60000) : null;
+  const hm = d => d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const name = live && status?.print_name && <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+    {status.print_name}</div>;
+  const layers = live && status?.total_layers > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
+      <span>couche <b style={{ color: "var(--text)" }}>{status.layer}</b> / {status.total_layers}</span><span>{Math.round(100 * status.layer / status.total_layers)} %</span></div>
+    <div style={{ height: 8, borderRadius: 5, background: "var(--surface2)", overflow: "hidden" }}>
+      <div style={{ height: "100%", width: `${100 * status.layer / status.total_layers}%`, borderRadius: 5, background: `linear-gradient(90deg, ${color}99, ${color})` }}/></div></div>;
+  const facts = [since && ["Commencée", hm(since)], total && ["Durée totale", `≈ ${fmtDur(total * 60)}`], pace && ["Vitesse", pace]].filter(Boolean);
   return (
     <Tile icon={<Timer size={15}/>} color={color} label="Fin d'impression" zoom={live ? <>
       <BoxCtx.Provider value={{ W: 600, H: 180, zoom: true }}>{hero}</BoxCtx.Provider>
       <div style={{ height: 10, borderRadius: 6, background: "var(--surface2)", overflow: "hidden" }}>
         <div style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: color, boxShadow: `0 0 10px ${color}` }}/></div>
+      {name}
       <Stats items={[["Reste", left ? fmtDur(left * 60) : "—"], ["Fin", left ? finAt(left) : "—"],
-        ["Couche", status.total_layers > 0 ? `${status.layer} / ${status.total_layers}` : "—"], ["Avancement", `${pct} %`, color]]}/></> : null}
+        ["Couche", status.total_layers > 0 ? `${status.layer} / ${status.total_layers}` : "—"], ["Avancement", `${pct} %`, color], ...facts]}/></> : null}
       mini={sz.h === 0.5} summary={live ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
         <span style={{ color }}>{pct}%</span>{left > 0 && <>{fmtDur(left * 60)}<Muted>· {finAt(left)}</Muted></>}</span> : <Muted size={12.5}>rien en cours</Muted>}>
-      {live ? hero : <Empty>Rien en cours d'impression</Empty>}
+      {({ W }) => live ? <Stack min={W < 215 ? 150 : 76} head={hero} blocks={[name && { h: 18, node: name }, layers && { h: 30, node: layers },
+        facts.length && { h: statsH(facts.length, W), node: <Stats items={facts}/> }]}/> : <Empty>Rien en cours d'impression</Empty>}
     </Tile>
   );
 }
@@ -1608,7 +1719,11 @@ function Spool({ status, o, sz }) {
           </div>;
         }
         // sinon en ligne : la bobine a gauche (a la hauteur), le nom, la matiere, le poids et sa jauge
-        const sp = Math.floor(Math.max(36, Math.min(H - 4, narrow ? 64 : 104, W * 0.36)));
+        const sp = Math.floor(Math.max(36, Math.min(H - 4, narrow ? 64 : H >= 150 ? 150 : 104, W * 0.36)));
+        const price = si.price_override || si.price;
+        const facts = !narrow && H >= 150 && [price && g != null && tot && chip(`≈ ${fmtEur(price * g / tot)} restants`, "#16a34a"),
+          t.ams?.humidity > 0 && chip(`💧 ${t.ams.humidity} %`, "#0ea5e9"), si.needs_drying && chip("à sécher", "#0ea5e9"),
+          si.swatch === false && chip("échantillon à faire", "#f59e0b")].filter(Boolean);
         return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: narrow ? 8 : 14, minWidth: 0 }}>
           {spool(sp)}
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: narrow ? 2 : 4 }}>
@@ -1624,6 +1739,7 @@ function Spool({ status, o, sz }) {
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: narrow ? 12.5 : 15, fontWeight: 900, color: barCol, whiteSpace: "nowrap" }}>{weight}</span>
               <div style={{ flex: 1, minWidth: 20 }}>{bar(narrow ? 5 : 7)}</div></div>
+            {facts && facts.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>{facts}</div>}
           </div>
         </div>;
       }}
@@ -1640,16 +1756,20 @@ function Colors({ status, o, sz }) {
     alignItems: "center", gap: 3, minWidth: 0 }}>
     <span data-pk="" style={{ width: s, height: s, borderRadius: Math.round(s / 3.2), background: hexCss(t.color), border: "1px solid rgba(0,0,0,0.15)",
       boxShadow: on(t) ? "0 0 0 3px var(--surface), 0 0 0 5px #3b82f6" : "none", display: "block" }}/>
-    {label && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{t.filament_type}</span>}</span>;
+    {label && <span style={{ fontSize: 10.5, fontWeight: 800, color: on(t) ? "#3b82f6" : "var(--muted)", whiteSpace: "nowrap", lineHeight: "13px",
+      maxWidth: s + 6, overflow: "hidden", textOverflow: "ellipsis" }}>
+      {s >= 56 ? `${slotOf(t)} · ${t.filament_type}` : slotOf(t)}</span>}</span>;
   return (
     <Tile icon={<Palette size={15}/>} color="#EC4899" label="Couleurs chargées"
       zoom={<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: 12, justifyItems: "center" }}>{trays.map(t => dot(t, 64, true))}</div>}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 3 }}>{trays.slice(0, 18).map(t => <span key={`${t.ams.id}-${t.id}`}
         style={{ width: 13, height: 13, borderRadius: 4, background: hexCss(t.color), border: "1px solid rgba(0,0,0,0.2)" }}/>)}</span>}>
       {({ W, H }) => {
-        const g = fitGrid(trays.length, W - 6, H - 6, { gap: 6, max: 70 });
+        const lg = fitGrid(trays.length, W - 6, H - 6, { gap: 6, max: 64, extra: 16 });
+        const labels = lg.size >= 40;
+        const g = labels ? lg : fitGrid(trays.length, W - 6, H - 6, { gap: 6, max: 70 });
         return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: 6, justifyContent: "space-evenly", alignContent: "center", padding: 3 }}>
-          {trays.map(t => dot(t, g.size))}</div>;
+          {trays.map(t => dot(t, g.size, labels))}</div>;
       }}
     </Tile>
   );
@@ -1664,17 +1784,34 @@ function Streak({ o, sz }) {
     const g = fitGrid(30, W, H, { gap: 3, max: 40 });
     const m = Math.max(1, ...(days || []).map(x => x.count || 0));
     return <div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: 3, justifyContent: "center", alignContent: "center", flex: 1 }}>
-      {(days || []).map(x => <span key={ymd(x.day)} data-pk="" title={`${x.day.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : ${x.count || 0}`}
-        style={{ width: g.size, height: g.size, borderRadius: Math.max(2, g.size / 4), background: x.count ? `rgba(249,115,22,${0.3 + 0.7 * x.count / m})` : "var(--surface2)" }}/>)}</div>;
+      {(days || []).map((x, i) => <span key={ymd(x.day)} data-pk="" title={`${x.day.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : ${x.count || 0}`}
+        style={{ width: g.size, height: g.size, borderRadius: Math.max(2, g.size / 4), background: x.count ? `rgba(249,115,22,${0.3 + 0.7 * x.count / m})` : "var(--surface2)",
+          display: "flex", alignItems: "center", justifyContent: "center", fontSize: Math.min(13, g.size * 0.36), fontWeight: 800,
+          color: x.count ? "rgba(255,255,255,0.92)" : "var(--muted)", outline: i === days.length - 1 ? "2px solid #f97316" : "none", outlineOffset: 1 }}>
+        {g.size >= 26 ? x.day.getDate() : ""}</span>)}</div>;
   };
-  const hero = <Hero fill={false} value={days ? n : "…"} unit={`jour${n > 1 ? "s" : ""} d'affilée`} sub={days && `record sur 30 jours : ${best}`} color={n ? "#ea580c" : "var(--text)"}/>;
+  const active = (days || []).filter(x => x.count > 0).length;
+  const hero = <Hero fill={false} value={days ? n : "…"} unit={`jour${n > 1 ? "s" : ""} d'affilée`} sub={days && `record sur 30 jours : ${best} · ${active} jours actifs`}
+    color={n ? "#ea580c" : "var(--text)"} delta={n > 0 && n >= best ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#ea580c" }}>🔥 record en cours</span> : null}/>;
   return (
     <Tile icon={<CalendarCheck size={15}/>} color="#F97316" label="Série" zoom={<>{hero}{days && heat(700, 220)}</>}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Flame size={15} color="#ea580c"/>{days ? n : "…"}
         <Muted>jour{n > 1 ? "s" : ""}</Muted></span>}>
       {({ W, H }) => {
-        const hh = Math.min(H, 56);
-        return <><BoxCtx.Provider value={{ W, H: hh }}>{hero}</BoxCtx.Provider>{o.heat && days && H - hh >= 22 && heat(W, H - hh - 6)}</>;
+        const hh = Math.min(H, H >= 200 ? 78 : 56);
+        if (o.heat && days && H - hh < 22) {
+          // pas la place du calendrier : les derniers jours en carres, a droite (large) ou dessous
+          const wide = W >= 240, k = Math.min(days.length, wide ? 14 : 7, Math.floor((W - (wide ? 130 : 0)) / 15));
+          const row = <span style={{ display: "inline-flex", gap: 3 }}>{days.slice(-k).map(x => <span key={ymd(x.day)} title={`${x.day.getDate()} : ${x.count || 0}`}
+            style={{ width: 12, height: 12, borderRadius: 3, background: x.count ? "#f97316" : "var(--surface2)" }}/>)}</span>;
+          return <div style={{ flex: 1, display: "flex", flexDirection: wide ? "row" : "column", alignItems: wide ? "center" : "flex-start",
+            justifyContent: wide ? "space-between" : "center", gap: wide ? 10 : 6 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+              <span data-pk="" style={{ fontSize: 26, fontWeight: 900, color: n ? "#ea580c" : "var(--text)", lineHeight: 1 }}>{n}</span>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", whiteSpace: "nowrap" }}>jour{n > 1 ? "s" : ""} d'affilée</span></div>
+            {row}</div>;
+        }
+        return <><BoxCtx.Provider value={{ W, H: hh }}>{hero}</BoxCtx.Provider>{o.heat && days && heat(W, H - hh - 6)}</>;
       }}
     </Tile>
   );
@@ -1699,7 +1836,11 @@ function Goal({ d, o, sz }) {
       {o.period === "week" && week && <><H2>Les 7 derniers jours</H2><Bars values={week.map(val)} labels={week.map(x => x.day.toLocaleDateString("fr-FR", { weekday: "narrow" }))}
         color={color} height={120} hi={6} showValues fmt={fmt}/></>}</>}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{Math.round(done * 100)} %<Muted>{now == null ? "" : `${fmt(now)} / ${tf}`}</Muted></span>}>
-      {hero}
+      {({ W }) => <Stack min={W < 215 ? 150 : 90} head={hero} blocks={[
+        { h: statsH(2, W), node: <Stats items={[["Reste", now == null ? "…" : done >= 1 ? "atteint 🎉" : fmt(Math.max(0, target * scale - now)), done >= 1 ? "#16a34a" : undefined],
+          ["Par jour", now == null ? "…" : fmt(now / (o.period === "week" ? 7 : new Date().getDate()))]]}/> },
+        o.period === "week" && week && { h: 92, node: <Bars values={week.map(val)} labels={week.map(x => x.day.toLocaleDateString("fr-FR", { weekday: "narrow" }))}
+          color={color} height={74} hi={6}/> }]}/>}
     </Tile>
   );
 }
@@ -1713,7 +1854,7 @@ const sz = it => ({ w: it?.w || 1, h: typeof it?.h === "number" ? it.h : 1 });  
 const B = (key, label, def, extra = {}) => ({ key, label, def, ...extra });
 const C = (key, label, def, choices, extra = {}) => ({ key, label, def, choices, ...extra });
 export const TILES = {
-  today: { label: "Aujourd'hui", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Today v={d.today} o={o} sz={sz(it)}/>,
+  today: { label: "Aujourd'hui", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Today v={d.today} p={d.prints} o={o} sz={sz(it)}/>,
     options: [B("ring", "Anneau de réussite", true, { hint: "La part des impressions réussies du jour." }), B("yesterday", "Écart avec hier", true),
       B("weight", "Poids imprimé", true), B("hours", "Heures de machine", true), B("cost", "Coût du jour", false)] },
   week: { label: "Derniers jours", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Week o={o} sz={sz(it)}/>,
