@@ -11,7 +11,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 
 from ....db.session import AsyncSessionLocal
 from ....services.settings_service import get_setting, set_setting
-from .auth import get_current_user, require_own_account
+from .auth import get_current_user, oauth2_scheme, require_own_account
 
 router = APIRouter()
 KEY = "HOME_LAYOUT"
@@ -27,17 +27,18 @@ async def _all(db) -> dict:
 
 
 @router.get("/layout")
-async def home_layout(username: str = Depends(get_current_user)):
+async def home_layout(username: str = Depends(get_current_user), token: str = Depends(oauth2_scheme)):
     """Ma disposition ; tant que je n'en ai pas reglee, celle du compte principal
     (le premier administrateur qui en a une) : « inherited » le dit, et la
-    premiere modification en fait ma propre copie. Un copain qui passe (sa cle
-    est liee a un compte de la maison) voit l'accueil de ce compte, en lecture."""
+    premiere modification en fait ma propre copie. Un copain qui passe (cle fk_)
+    voit l'accueil du compte principal tel quel, options comprises, en lecture."""
+    friend = str(token or "").startswith("fk_")
     acc = (username, None)
     from sqlalchemy import select
     from ....models.user import User, ROLE_ADMIN
     async with AsyncSessionLocal() as db:
         d = await _all(db)
-        if acc[0] in d:
+        if acc[0] in d and not friend:
             return {"layout": d[acc[0]], "inherited": False}
         admins = (await db.execute(select(User.username).where(User.role == ROLE_ADMIN).order_by(User.id))).scalars().all()
         main = next((u for u in admins if u in d), None)

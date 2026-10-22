@@ -41,8 +41,16 @@ function defaults(defs) {
     },
   };
 }
-const fixer = defs => x => defs[x?.id] ? { id: x.id, w: defs[x.id].w.includes(x.w) ? x.w : defs[x.id].w[0],
-  h: defs[x.id].h.includes(x.h) ? x.h : defs[x.id].h[0], ...(x.o && typeof x.o === "object" ? { o: x.o } : {}) } : null;
+// les hauteurs permises d'une tuile a une largeur donnee : « h1 » en demi-largeur si
+// le type en a (une hauteur « auto » y occuperait une seule rangee etiree, et la
+// tuile voisine paraitrait aussi haute qu'elle, sans place pour une autre dessous)
+export const heightsOf = (def, w) => (w === 1 && def.h1) || def.h;
+const fixer = defs => x => {
+  const d = defs[x?.id];
+  if (!d) return null;
+  const w = d.w.includes(x.w) ? x.w : d.w[0], hs = heightsOf(d, w);
+  return { id: x.id, w, h: hs.includes(x.h) ? x.h : hs[0], ...(x.o && typeof x.o === "object" ? { o: x.o } : {}) };
+};
 // les options d'une tuile : celles de son type (avec leur valeur par defaut), et ce que la disposition en a fait
 const optsOf = (def, item) => Object.fromEntries((def.options || []).map(o => [o.key, item.o?.[o.key] ?? o.def]));
 // une disposition a n colonnes, remise d'aplomb : tuiles inconnues retirees, tailles
@@ -342,9 +350,10 @@ export default function HomeGrid({ status, blocks, top = null }) {
       </>}
       <button style={btn()} onClick={() => move(item.id, 0, -1)} aria-label="Monter"><ArrowUp size={13}/></button>
       <button style={btn()} onClick={() => move(item.id, 0, 1)} aria-label="Descendre"><ArrowDown size={13}/></button>
-      {def.w.length > 1 && def.w.map(w => <button key={"w" + w} style={btn(item.w === w)} onClick={() => update(item.id, { w })}
+      {def.w.length > 1 && def.w.map(w => <button key={"w" + w} style={btn(item.w === w)}
+        onClick={() => { const hs = heightsOf(def, w); update(item.id, { w, h: hs.includes(item.h) ? item.h : hs[0] }); }}
         title={w === 1 ? "Demi-largeur" : "Toute la largeur"}>{w === 1 ? "½" : "1"}</button>)}
-      {def.h.length > 1 && def.h.map(h => <button key={"h" + h} style={btn(item.h === h)} onClick={() => update(item.id, { h })}
+      {heightsOf(def, item.w).length > 1 && heightsOf(def, item.w).map(h => <button key={"h" + h} style={btn(item.h === h)} onClick={() => update(item.id, { h })}
         title={h === "auto" ? "Hauteur selon le contenu" : `${h} rangée${h > 1 ? "s" : ""} de haut`}>{h === "auto" ? "↕" : `${h}↕`}</button>)}
       {!def.required && <button style={btn()} onClick={() => hide(item.id)} aria-label="Masquer"><EyeOff size={13}/></button>}
     </>;

@@ -1064,7 +1064,7 @@ export default function Home() {
     activeNozzleId={st?.nozzles?.find(n => n.active)?.id ?? null}/> : null;
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {
-    printer: { label: "Imprimante", w: [2, 1], h: ["auto"], required: true,
+    printer: { label: "Imprimante", w: [2, 1], h: ["auto"], h1: [2, 3, 1], required: true,
       frame: { icon: <Printer size={15}/>, color: "#3B82F6",
         extra: (st, item, o) => <PrinterHead status={st} temps={o.headTemps && item.w !== 1}/> },
       render: (d, st, o, item) => item?.w === 1 ? <PrinterCompact status={st} size={o.half} showFin={o.fin} showLayer={o.layer}/>
