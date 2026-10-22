@@ -896,9 +896,14 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
   const ams = (status?.ams_list || []).find(a => a.id === status?.active_ams_id);
   const tray = ams?.trays?.find(t => t.id === status?.active_tray_id);
   const nz = (status?.nozzles || []).find(n => n.active) || (status?.nozzles || [])[0];
-  const fact = (Icon, text, color) => <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12.5, fontWeight: 700,
+  const fact = (Icon, text, color, size = 12.5) => <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size, fontWeight: 700,
     color: color || "var(--muted)", whiteSpace: "nowrap" }}><Icon/>{text}</span>;
   const side = W >= 470;
+  const temps = (size, gap) => <span style={{ display: "inline-flex", gap, flexShrink: 0, fontSize: size }}>
+    {nz && fact(IcoNozzle, `${Math.round(nz.temp || 0)}°`, (nz.temp || 0) > 40 ? "#ea580c" : undefined, size)}
+    {fact(IcoBed, `${Math.round(status?.bed_temp || 0)}°`, (status?.bed_temp || 0) > 40 ? "#dc2626" : undefined, size)}
+    {status?.chamber_temp > 0 && fact(IcoChamber, `${Math.round(status.chamber_temp)}°`, undefined, size)}
+  </span>;
   return (
     <div ref={box} style={{ display: "flex", alignItems: "center", gap: 12, height: "100%", minWidth: 0 }}>
       <div onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ height: "100%", aspectRatio: "1", minHeight: 64, maxHeight: 120, borderRadius: 14, overflow: "hidden",
@@ -926,8 +931,12 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
           <div style={{ height: 8, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}>
             <div data-pk="" style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg, ${s.color}, ${s.color}cc)`,
               boxShadow: `0 0 8px ${s.color}88`, transition: "width 1s" }}/></div>
-          {showLayer && status.total_layers > 0 && W < 330 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-            couche {status.layer} / {status.total_layers}</span>}
+          {/* sous la barre : la couche (si elle n'a pas tenu plus haut) et, sans colonne de droite, les temperatures */}
+          {((showLayer && status.total_layers > 0 && W < 330) || (!side && status?.connected)) && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
+              {showLayer && status.total_layers > 0 && W < 330 && fact(() => <Layers size={12}/>, `${status.layer}/${status.total_layers}`, undefined, 11.5)}
+              {!side && status?.connected && <span style={{ marginLeft: "auto" }}>{temps(11.5, 6)}</span>}
+            </div>)}
         </> : <div style={{ fontSize: 12.5, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
       </div>
       {side && status?.connected && (
@@ -936,11 +945,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
             <span style={{ width: 14, height: 14, borderRadius: "50%", background: `#${String(tray.color || "888").replace("#", "").slice(0, 6)}`,
               boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>{tray.filament_type || "?"}
             <span style={{ color: "var(--muted)", fontWeight: 700 }}>{slotLabel(status.active_ams_id, status.active_tray_id)}</span></span>}
-          <span style={{ display: "inline-flex", gap: 10 }}>
-            {nz && fact(IcoNozzle, `${Math.round(nz.temp || 0)}°`, (nz.temp || 0) > 40 ? "#ea580c" : undefined)}
-            {fact(IcoBed, `${Math.round(status.bed_temp || 0)}°`, (status.bed_temp || 0) > 40 ? "#dc2626" : undefined)}
-            {status.chamber_temp > 0 && fact(IcoChamber, `${Math.round(status.chamber_temp)}°`)}
-          </span>
+          {temps(12.5, 10)}
         </div>
       )}
       {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
