@@ -123,18 +123,20 @@ function Cell({ item, def, edit, children, actions, options, drag, selected, onS
 }
 // Les blocs historiques (imprimante, AMS, points d'attention) dans le meme cadre
 // que les tuiles : pastille d'icone, titre, lueur ; leurs cartes internes aplaties.
-function Frame({ def, children }) {
+function Frame({ def, children, extra }) {
   if (children == null || children === false) return null;
   const { icon, color } = def.frame;
   return (
-    <div className="card hg-frame" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10, position: "relative",
+    <div className="card hg-frame" style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6, position: "relative",
       overflow: "hidden", height: "100%", boxSizing: "border-box", minWidth: 0 }}>
       <span aria-hidden="true" style={{ position: "absolute", right: -24, top: -24, width: 80, height: 80, borderRadius: "50%",
         background: `${color}22`, pointerEvents: "none" }}/>
       <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
-        <span data-pk="" style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+        <span data-pk="" style={{ width: 22, height: 22, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center",
           background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>
         <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", letterSpacing: ".02em" }}>{def.label}</span>
+        {extra && <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap",
+          justifyContent: "flex-end" }}>{extra}</span>}
       </div>
       <div className="hg-frame-body" style={{ position: "relative", minWidth: 0 }}>{children}</div>
     </div>
@@ -183,6 +185,10 @@ export default function HomeGrid({ status, blocks }) {
       .catch(() => setLay(defaults(defs)));
     // chez un copain, pas de personnalisation : on ecraserait sa propre disposition
     const open = () => { if (!currentFriend()) setEdit(true); };
+    if (new URLSearchParams(window.location.search).get("edit") === "1" && !currentFriend()) {
+      setEdit(true);
+      window.history.replaceState(null, "", window.location.pathname);
+    }
     window.addEventListener("bn-home-edit", open);
     return () => window.removeEventListener("bn-home-edit", open);
   }, [friendId]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -293,7 +299,8 @@ export default function HomeGrid({ status, blocks }) {
     return (
       <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} options={options} drag={edit ? drag : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
-        {def.frame ? <Frame def={def}>{def.render(data, status, o)}</Frame> : def.render(data, status, o)}
+        {def.frame ? <Frame def={def} extra={def.frame.extra?.(status, item)}>{def.render(data, status, o, item)}</Frame>
+          : def.render(data, status, o, item)}
       </Cell>
     );
   };
@@ -307,7 +314,8 @@ export default function HomeGrid({ status, blocks }) {
         .hg-cell:not(.hg-edit):has(> div:empty) { display:none; }
         .hg-frame-body .card { background:transparent !important; border:none !important; box-shadow:none !important;
                   backdrop-filter:none !important; -webkit-backdrop-filter:none !important; padding-left:0 !important; padding-right:0 !important; }
-        .hg-frame-body > * + * { margin-top:10px; }
+        .hg-frame-body > * + * { margin-top:8px; }
+        .hg-frame-body > div > .card:first-child { padding-top:4px !important; }
         .hg-edit > div:empty { min-height:${ROW - 10}px; border-radius:16px; background:var(--surface2); display:flex;
                   align-items:flex-end; justify-content:center; padding-bottom:12px; box-sizing:border-box; }
         .hg-edit > div:empty::before { content:"Rien à montrer pour l'instant"; font-size:12px; color:var(--muted); font-weight:700; }

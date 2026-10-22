@@ -69,6 +69,35 @@ const sec = {
   display:"grid", gridTemplateColumns:"1fr 1fr", gap:12,
 };
 const card = { padding:16 };
+
+// L'accueil : le bouton « Personnaliser » du bandeau (choix de cet appareil), et
+// l'ouverture de la personnalisation quand il est masque
+function HomeDisplayCard() {
+  const [shown, setShown] = React.useState(() => { try { return localStorage.getItem("bn-home-edit-btn") !== "0"; } catch { return true; } });
+  const flip = () => {
+    const v = !shown;
+    setShown(v);
+    try { localStorage.setItem("bn-home-edit-btn", v ? "1" : "0"); } catch { /* indisponible */ }
+  };
+  return (
+    <div className="card" style={card}>
+      <div style={cardTitle}>Accueil</div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+        <span style={{ fontSize:14, color:"var(--text2)" }}>Bouton « Personnaliser » dans le bandeau</span>
+        <button type="button" onClick={flip} role="switch" aria-checked={shown}
+          style={{ width:46, height:26, borderRadius:20, border:"none", cursor:"pointer", position:"relative", flexShrink:0,
+            background: shown ? "#3b82f6" : "var(--border)", transition:"background .2s" }}>
+          <span style={{ position:"absolute", top:3, left: shown ? 23 : 3, width:20, height:20, borderRadius:"50%", background:"#fff",
+            transition:"left .2s", boxShadow:"0 1px 3px rgba(0,0,0,0.3)" }}/></button>
+      </div>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"8px 0 10px", lineHeight:1.45 }}>
+        Une fois l'accueil réglé, tu peux masquer le bouton : la personnalisation reste accessible ici.</p>
+      <button type="button" onClick={() => { window.location.href = "/?edit=1"; }}
+        style={{ padding:"8px 14px", borderRadius:10, border:"1px solid var(--border)", background:"var(--surface2)",
+          color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>Personnaliser l'accueil</button>
+    </div>
+  );
+}
 const cardTitle = {
   fontSize:11, fontWeight:600, color:"var(--muted)", textTransform:"uppercase",
   letterSpacing:"0.08em", marginBottom:16, display:"flex", alignItems:"center", gap:6,
@@ -1896,6 +1925,7 @@ export default function Settings() {
           </button>
         </div>
       </div>
+      <HomeDisplayCard/>
       <AdminOnly>
         <AttentionCard card={card} cardTitle={cardTitle}/>
       </AdminOnly>

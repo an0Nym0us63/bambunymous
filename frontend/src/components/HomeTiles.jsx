@@ -27,12 +27,12 @@ function Tile({ icon, color, label, onClick, wide, children }) {
   return (
     <div className="card" role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined} onClick={onClick}
       onKeyDown={e => { if (onClick && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onClick(); } }}
-      style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8, minWidth: 0, cursor: onClick ? "pointer" : "default",
+      style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6, minWidth: 0, cursor: onClick ? "pointer" : "default",
         position: "relative", overflow: "hidden", height: "100%", boxSizing: "border-box" }}>
       <span aria-hidden="true" style={{ position: "absolute", right: -24, top: -24, width: 80, height: 80, borderRadius: "50%",
         background: `${color}22`, pointerEvents: "none" }}/>
       <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
-        <span data-pk="" style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+        <span data-pk="" style={{ width: 22, height: 22, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center",
           background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>
         <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", letterSpacing: ".02em" }}><W text={label}/></span>
         {onClick && <ChevronRight size={14} style={{ marginLeft: "auto", color: "var(--muted)" }}/>}

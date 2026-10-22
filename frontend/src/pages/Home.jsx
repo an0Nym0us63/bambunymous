@@ -741,6 +741,70 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
 }
 
 
+// ── La tuile imprimante : son en-tete, et sa version en demi-largeur ─────────
+const LIVE_ST = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"];
+function stateOf(status) {
+  const st = String(status?.status || "").toUpperCase();
+  if (!status) return { label: "…", color: "#94a3b8" };
+  if (!status.connected) return { label: "Injoignable", color: "#ef4444" };
+  if (st === "PAUSE" || st === "PAUSED") return { label: "En pause", color: "#f59e0b" };
+  if (LIVE_ST.includes(st)) return { label: "En cours", color: "#22c55e" };
+  if (st === "FINISH") return { label: "Terminée", color: "#3b82f6" };
+  if (st === "FAILED") return { label: "Échouée", color: "#ef4444" };
+  return { label: "Au repos", color: "#94a3b8" };
+}
+// a droite du titre : l'etat, les temperatures, la connexion
+function PrinterHead({ status, compact = false }) {
+  const s = stateOf(status);
+  const nz = (status?.nozzles || []).find(n => n.active) || (status?.nozzles || [])[0];
+  const chip = { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 800, padding: "2px 8px",
+    borderRadius: 20, whiteSpace: "nowrap", background: "var(--surface2)", color: "var(--text2)" };
+  return <>
+    <span data-pk="" style={{ ...chip, color: s.color, background: `${s.color}1f` }}>
+      <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>
+    {!compact && status?.connected && nz && <span data-pk="" style={chip}><Thermometer size={11}/>buse {Math.round(nz.temp || 0)}°</span>}
+    {!compact && status?.connected && <span data-pk="" style={chip}>plateau {Math.round(status.bed_temp || 0)}°</span>}
+    {!compact && status?.connected && status.chamber_temp > 0 && <span data-pk="" style={chip}>chambre {Math.round(status.chamber_temp)}°</span>}
+    {!compact && (status?.connected ? <Wifi size={14} style={{ color: "#22c55e" }}/> : <WifiOff size={14} style={{ color: "#ef4444" }}/>)}
+  </>;
+}
+// en demi-largeur : la vignette en grand, le nom, la duree, la barre
+function PrinterCompact({ status }) {
+  const [info, setInfo] = useState(null);
+  const st = String(status?.status || "").toUpperCase();
+  const live = LIVE_ST.includes(st);
+  useEffect(() => {
+    if (!status?.status) return;
+    client.get("/prints", { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
+      .then(r => { const p = (r.data?.prints || r.data?.items || [])[0]; if (p) setInfo(p); }).catch(() => {});
+  }, [status?.status, status?.job_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const s = stateOf(status);
+  const pct = Math.round(status?.progress || 0);
+  const fin = live && status?.remaining_minutes ? fmtFinishTime(status.remaining_minutes) : null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "var(--surface2)", aspectRatio: "4 / 3" }}>
+        {info && <img data-pk="" src={apiUrl(`/prints/${info.id}/image`)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+          style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}/>}
+        {live && <span data-pk="" style={{ position: "absolute", right: 8, top: 8, fontSize: 18, fontWeight: 900, color: "#fff",
+          padding: "2px 9px", borderRadius: 10, background: `${s.color}dd`, boxShadow: "0 4px 12px rgba(0,0,0,0.25)" }}>{pct}%</span>}
+      </div>
+      <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", lineHeight: 1.25, overflow: "hidden", display: "-webkit-box",
+        WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}><Words text={info?.file_name || status?.print_name || s.label}/></div>
+      {live ? <>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 10px", fontSize: 12, color: "var(--muted)" }}>
+          {status.remaining_minutes > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Clock size={12}/>{fmtTime(status.remaining_minutes)}</span>}
+          {fin && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Calendar size={12}/>fin {fin.dayDiff ? "demain " : ""}{fin.time}</span>}
+          {status.total_layers > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Layers size={12}/>{status.layer}/{status.total_layers}</span>}
+        </div>
+        <div style={{ height: 10, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}>
+          <div data-pk="" style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg, ${s.color}, ${s.color}cc)`,
+            boxShadow: `0 0 8px ${s.color}88`, transition: "width 1s" }}/></div>
+      </> : <div style={{ fontSize: 12, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
+    </div>
+  );
+}
+
 // ── Page Home ──────────────────────────────────────────────────────────────
 // Un texte decoupe en mots : chacun peut bouger seul (effets de l'accueil)
 function Words({ text }) {
@@ -759,6 +823,8 @@ const SKY = [
 function Greeting({ status }) {
   const username = useAuth(s => s.username) || "";
   const visiting = useFriend(s => s.friend);         // chez un copain : son accueil, pas de personnalisation
+  // le bouton de personnalisation peut se masquer (Reglages > Affichage), choix de cet appareil
+  const editBtn = (() => { try { return localStorage.getItem("bn-home-edit-btn") !== "0"; } catch { return true; } })();
   const [name, setName] = useState(null);
   const [today, setToday] = useState(null);
   const st = String(status?.status || "").toUpperCase();
@@ -826,7 +892,7 @@ function Greeting({ status }) {
             {Math.round(status.progress || 0)} %</span>}
           {fin && <span data-pk="" style={pill}><Clock size={14}/>fin {fin.dayDiff ? "demain " : ""}{fin.time}</span>}
           {today && <span data-pk="" style={pill}><Layers size={14}/>{today.count} aujourd'hui</span>}
-          {!visiting && <button className="hh-edit" onClick={() => window.dispatchEvent(new Event("bn-home-edit"))} aria-label="Personnaliser l'accueil"
+          {!visiting && editBtn && <button className="hh-edit" onClick={() => window.dispatchEvent(new Event("bn-home-edit"))} aria-label="Personnaliser l'accueil"
             title="Personnaliser l'accueil" style={{ ...pill, cursor: "pointer", padding: "7px 9px" }}><LayoutGrid size={15}/></button>}
         </div>
       </div>
@@ -887,8 +953,10 @@ export default function Home() {
     activeNozzleId={st?.nozzles?.find(n => n.active)?.id ?? null}/> : null;
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {
-    printer: { label: "Imprimante", w: [2], h: ["auto"], required: true, frame: { icon: <Printer size={15}/>, color: "#3B82F6" },
-      render: (d, st, o) => <StatusBanner status={st} defaultExpanded={o.open} showCamera={o.cam} showTemps={o.temps}/>,
+    printer: { label: "Imprimante", w: [2, 1], h: ["auto"], required: true,
+      frame: { icon: <Printer size={15}/>, color: "#3B82F6", extra: (st, item) => <PrinterHead status={st} compact={item.w === 1}/> },
+      render: (d, st, o, item) => item?.w === 1 ? <PrinterCompact status={st}/>
+        : <StatusBanner status={st} defaultExpanded={o.open} showCamera={o.cam} showTemps={o.temps}/>,
       options: [{ key: "open", label: "Dépliée à l'ouverture", def: false }, { key: "cam", label: "Caméra dans le volet", def: true },
                 { key: "temps", label: "Températures dans le volet", def: true }] },
     ams: { label: "AMS", w: [2], h: ["auto"], frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" }, render: (d, st) => devices(st, "overview") },
