@@ -28,8 +28,18 @@ async def _all(db) -> dict:
 
 @router.get("/layout")
 async def home_layout(acc=Depends(require_own_account)):
+    """Ma disposition ; tant que je n'en ai pas reglee, celle du compte principal
+    (le premier administrateur qui en a une) : « inherited » le dit, et la
+    premiere modification en fait ma propre copie."""
+    from sqlalchemy import select
+    from ....models.user import User, ROLE_ADMIN
     async with AsyncSessionLocal() as db:
-        return {"layout": (await _all(db)).get(acc[0])}
+        d = await _all(db)
+        if acc[0] in d:
+            return {"layout": d[acc[0]], "inherited": False}
+        admins = (await db.execute(select(User.username).where(User.role == ROLE_ADMIN).order_by(User.id))).scalars().all()
+        main = next((u for u in admins if u in d), None)
+        return {"layout": d.get(main) if main else None, "inherited": bool(main), "from": main}
 
 
 @router.put("/layout")

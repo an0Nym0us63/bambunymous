@@ -152,6 +152,7 @@ export default function HomeGrid({ status, blocks }) {
   const [pick, setPick] = useState(null);            // colonne dont la case « + » est ouverte
   const [ec, setEc] = useState(null);                // en personnalisation : la disposition reglee (nombre de colonnes)
   const saved = useRef(null);
+  const [inh, setInh] = useState(null);             // disposition reprise du compte principal (son nom)
   // combien de colonnes tiennent vraiment a l'ecran
   const box = useRef(null);
   const [fit, setFit] = useState(() => Math.max(1, Math.floor((window.innerWidth - 280 + 12) / (COL_MIN + 12))));
@@ -166,7 +167,10 @@ export default function HomeGrid({ status, blocks }) {
   const showN = wide ? Math.max(1, Math.min(lay.max, fit)) : 1;
 
   useEffect(() => {
-    client.get("/home/layout").then(({ data }) => { const l = normalize(data?.layout, defs); setLay(l); saved.current = JSON.stringify(l); })
+    client.get("/home/layout").then(({ data }) => {
+      const l = normalize(data?.layout, defs); setLay(l); saved.current = JSON.stringify(l);
+      setInh(data?.inherited ? data.from || "le compte principal" : null);
+    })
       .catch(() => {});
     const open = () => setEdit(true);
     window.addEventListener("bn-home-edit", open);
@@ -178,6 +182,7 @@ export default function HomeGrid({ status, blocks }) {
     try {
       await client.put("/home/layout", { layout: reset ? null : l });
       saved.current = JSON.stringify(l);
+      if (!reset) setInh(null);
       toast(reset ? "Accueil remis par défaut" : "Disposition enregistrée", "success");
     } catch (e) { toast(e.response?.data?.detail || e.message, "error"); }
   };
@@ -306,6 +311,8 @@ export default function HomeGrid({ status, blocks }) {
               border: "none", background: "#3b82f6", color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>
               <Check size={14}/>Terminé</button>
           </div>
+          {inh && <div style={{ fontSize: 12, fontWeight: 700, color: "#7c3aed" }}>
+            Tu vois la disposition de {inh} : dès ta première modification, tu auras la tienne (la sienne ne change pas).</div>}
           <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.45 }}>
             {wide ? "Touche une tuile pour ses réglages, ou glisse-la pour la déplacer. " : "Touche une tuile pour la déplacer ou la régler. "}
             « ½ » et « 1 » règlent la largeur, « ↕ » la hauteur. Chaque nombre de colonnes a sa disposition ; celle à une colonne
