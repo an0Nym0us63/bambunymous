@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { usePrinter } from "../store/printer";
 import { Wifi, WifiOff, Clock, Pause, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
 import { useAuth } from "../store/auth";
@@ -778,8 +779,9 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
           isOnHead={selectedHotend.onHead}
           headSlot={selectedHotend.onHead ? headSlot : null}/>
       )}
-      {selectedTray && <TrayBottomSheet tray={selectedTray.tray} amsId={selectedTray.amsId} amsLabel={selectedTray.amsLabel}
-        slotNo={selectedTray.slotNo} onClose={()=>setSelectedTray(null)}/>}
+      {/* la fiche d'une bobine : par-dessus la page (portail), pas dans la tuile qui la couperait */}
+      {selectedTray && createPortal(<div onClick={e => e.stopPropagation()}><TrayBottomSheet tray={selectedTray.tray} amsId={selectedTray.amsId}
+        amsLabel={selectedTray.amsLabel} slotNo={selectedTray.slotNo} onClose={()=>setSelectedTray(null)}/></div>, document.body)}
     </div>
   );
 }

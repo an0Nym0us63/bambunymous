@@ -394,6 +394,46 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
 
 
 
+// ── Bobine en ligne (detail condense) ───────────────────────────────────────
+function TrayRow({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loaded, onClick, size = 44 }) {
+  const isActive = amsId === activeAmsId && tray.id === activeTrayId;
+  const empty = isEmptyTray(tray);
+  const posee = empty ? tray.drying_spool : null;
+  const spoolInfo = posee || loaded;
+  const vide = empty && !posee;
+  const colors = parseColors(tray, spoolInfo);
+  const mcType = multicolorType(tray, spoolInfo);
+  const name = spoolInfo?.translated_name ?? spoolInfo?.name ?? spoolInfo?.filament_name ?? tray.catalog_name ?? null;
+  const material = spoolInfo?.fila_type ?? spoolInfo?.filament_fila_type ?? spoolInfo?.material ?? spoolInfo?.filament_material ?? tray.filament_type ?? null;
+  const hasW = spoolInfo?.remaining_weight_g != null;
+  const hasT = (spoolInfo?.initial_weight_g ?? spoolInfo?.filament_weight_g) != null;
+  const pct = hasW && hasT ? Math.round((spoolInfo.remaining_weight_g / (spoolInfo.initial_weight_g ?? spoolInfo.filament_weight_g)) * 100) : (tray.remain ?? 0);
+  const w = hasW ? `${Math.round(spoolInfo.remaining_weight_g)} g` : tray.remain != null ? `≈ ${tray.remain * 10} g` : "";
+  const barBg = colorBg(opaqueColors(colors), mcType);
+  return (
+    <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: size, cursor: onClick ? "pointer" : "default",
+      borderRadius: 12, padding: "0 6px 0 2px", background: isActive ? "rgba(59,130,246,0.08)" : "transparent",
+      boxShadow: isActive ? "inset 0 0 0 1px rgba(59,130,246,0.35)" : "none" }}>
+      <div style={{ position: "relative", flexShrink: 0, opacity: posee ? 0.6 : 1 }}>
+        <SpoolSVG colors={vide ? null : (posee ? parseColors({}, posee) : colors)} empty={vide} size={size} active={isActive} type={posee ? multicolorType({}, posee) : mcType}/>
+      </div>
+      <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 5, minWidth: 0 }}>
+          <span style={{ fontSize: 10, fontWeight: 900, color: isActive ? "#3b82f6" : "var(--muted)", flexShrink: 0 }}>{label}</span>
+          <span style={{ fontSize: size >= 64 ? 13.5 : 12, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {vide ? "Vide" : posee ? `☀ ${posee.translated_name || posee.name || ""}` : (name || material || "—")}</span>
+        </div>
+        {!vide && <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{w}</span>
+          {name && material && <span style={{ fontSize: 10.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{material}</span>}
+        </div>}
+        {!vide && size >= 40 && <div style={{ height: 4, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${Math.max(0, Math.min(100, pct))}%`, borderRadius: 3, ...barBg }}/></div>}
+      </div>
+    </div>
+  );
+}
+
 // ── Détail AMS ─────────────────────────────────────────────────────────────
 function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, hideName = false, showNames = true, fitH = null }) {
   // la taille des bobines suit la largeur de la tuile
@@ -421,7 +461,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
       borderColor: isDrying ? "rgba(249,115,22,0.35)" : isActive ? "rgba(59,130,246,0.3)" : undefined,
       boxShadow: isDrying ? "0 0 0 1px rgba(249,115,22,0.1)" : isActive ? "0 0 0 1px rgba(59,130,246,0.1)" : undefined }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent: hideName ? "flex-end" : "space-between", marginBottom: isDrying ? 10 : fitH != null ? 4 : 12,
-        ...(hideName && !hasClimate(ams) && !isDrying ? { display:"none" } : {}) }}>
+        ...((hideName && !hasClimate(ams) && !isDrying) || (fitH != null && !isDrying) ? { display:"none" } : {}) }}>
         {!hideName && <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:12, fontWeight:700, letterSpacing:"0.06em", color: isDrying?"#f97316":isActive?"#3b82f6":"var(--muted)" }}>
             {amsName(ams.id)}
@@ -477,7 +517,21 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
           collait a gauche. On garde volontairement la MEME taille de carte
           que dans un AMS plein plutot que de les etirer, sinon deux slots
           externes auraient l'air de deux fois rien a cote d'un AMS. */}
-      {(() => {
+      {fitH != null && w > 0 && (() => {
+        const trays = traysInOrder(ams), n = trays.length || 1;
+        const cols = Math.min(n, w >= 560 ? 4 : w >= 260 ? 2 : 1);
+        const rows = Math.ceil(n / cols);
+        const room = fitH - 6 - (hideName && !isDrying ? 0 : 0);
+        const size = Math.max(26, Math.min(cols >= 4 ? 96 : 80, Math.floor((room - 6 * (rows - 1)) / rows)));
+        return (
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: "6px 10px" }}>
+            {trays.map(t => <TrayRow key={t.id} tray={t} amsId={ams.id} label={slotLabel(ams.id, t.id)} activeAmsId={activeAmsId}
+              activeTrayId={activeTrayId} spoolInfo={getInfo(t)} size={size}
+              onClick={() => onTrayClick && onTrayClick({ tray: t, amsId: ams.id, amsLabel: amsName(ams.id), slotNo: traySlotNo(ams, t) })}/>)}
+          </div>
+        );
+      })()}
+      {fitH == null && (() => {
         const n = traysInOrder(ams).length || 1;
         const GAP = 4, COLS = 4;
         const byW = w ? Math.max(30, Math.min(96, Math.floor((w - 32 - GAP * (COLS - 1)) / COLS) - 10)) : 68;
