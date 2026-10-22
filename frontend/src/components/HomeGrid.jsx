@@ -135,7 +135,8 @@ function normalize(lay, defs) {
   return { v: 2, max: Math.max(1, Math.min(4, parseInt(lay.max) || 2)), layouts,
     ...(lay.top && typeof lay.top === "object" ? { top: lay.top } : {}),
     ...(["soft", "vivid"].includes(lay.tint) ? { tint: lay.tint } : {}),
-    ...(TINT_STYLES.some(([k]) => k === lay.tintStyle) ? { tintStyle: lay.tintStyle } : {}) };
+    ...(TINT_STYLES.some(([k]) => k === lay.tintStyle) ? { tintStyle: lay.tintStyle } : {}),
+    ...(lay.tintColor === "one" ? { tintColor: "one", tintOne: lay.tintOne === "banner" ? "banner" : Math.max(0, Math.min(TINTS.length - 1, parseInt(lay.tintOne) || 0)) } : {}) };
 }
 // la disposition a n colonnes : la sienne, ou deduite de la plus proche reglee
 function layoutFor(lay, n) {
@@ -365,6 +366,11 @@ export default function HomeGrid({ status, blocks, top = null }) {
     return () => ro.disconnect();
   }, []);
   const [tints, setTints] = useState({});
+  const [bannerTint, setBannerTint] = useState(null);
+  // la teinte d'une tuile : la sienne (couleurs variees), ou la meme pour toutes
+  const tintOf = id => !lay.tint ? null
+    : lay.tintColor === "one" ? (lay.tintOne === "banner" ? (bannerTint || TINTS[0]) : TINTS[lay.tintOne || 0])
+    : tints[id] != null ? TINTS[tints[id]] : null;
   useLayoutEffect(() => {
     if (!lay.tint || !box.current) return;
     const rects = [...box.current.querySelectorAll("[data-hg-id]")].map(el => ({ id: el.dataset.hgId, r: el.getBoundingClientRect() }))
@@ -373,6 +379,8 @@ export default function HomeGrid({ status, blocks, top = null }) {
     const fixed = banner ? [{ r: banner.getBoundingClientRect(), hues: banner.dataset.hues.split(",").map(hueOf).filter(h => h != null) }] : [];
     const next = paint(rects, fixed);
     if (JSON.stringify(next) !== JSON.stringify(tints)) setTints(next);
+    const bh = banner?.dataset.hues?.split(",");
+    if (bh?.length >= 2 && (bh[0] !== bannerTint?.a || bh[1] !== bannerTint?.b)) setBannerTint({ a: bh[0], b: bh[1] });
   });
   // ce que l'accueil montre : une colonne sur telephone, sinon ce qui tient, au plus le maximum choisi
   const showN = wide ? Math.max(1, Math.min(lay.max, fit)) : 1;
@@ -492,7 +500,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
     } : null;
     return (
       <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} options={options} drag={edit ? drag : null}
-        tint={lay.tint && o._bg !== false && tints[item.id] != null ? TINTS[tints[item.id]] : null} tintMode={lay.tint} tintStyle={lay.tint === "vivid" ? lay.tintStyle || "glow" : null}
+        tint={lay.tint && o._bg !== false ? tintOf(item.id) : null} tintMode={lay.tint} tintStyle={lay.tint ? lay.tintStyle || "glow" : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
         {item.h === 0.5 && def.mini ? def.mini(data, status, o, item)
           : def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}
@@ -561,20 +569,35 @@ export default function HomeGrid({ status, blocks, top = null }) {
         /* en vif, le texte est blanc partout comme sur le bandeau (les boutons gardent leurs couleurs) */
         .hg-tint-vivid > div > .card :not(button, button *, svg, svg *) { color:#fff !important; }
         .hg-tint-vivid > div > .card svg:not(button svg) { color:#fff; }
-        .hg-ts-glow > div > .card { background:
+        .hg-tint-vivid.hg-ts-glow > div > .card { background:
           radial-gradient(circle at 92% -10%, rgba(255,255,255,0.38), transparent 42%),
           radial-gradient(rgba(255,255,255,0.22) 1px, transparent 1.5px) 0 0 / 18px 18px,
           linear-gradient(120deg, var(--hg-a), var(--hg-b)) !important; }
-        .hg-ts-bubbles > div > .card { background:
+        .hg-tint-vivid.hg-ts-bubbles > div > .card { background:
           radial-gradient(circle at calc(100% - 22px) 18px, rgba(255,255,255,0.24) 0 34px, transparent 35px),
           radial-gradient(circle at 12% calc(100% + 18px), rgba(255,255,255,0.15) 0 52px, transparent 53px),
           radial-gradient(circle at 68% 78%, rgba(255,255,255,0.11) 0 14px, transparent 15px),
           radial-gradient(circle at 40% 18%, rgba(255,255,255,0.09) 0 8px, transparent 9px),
           linear-gradient(135deg, var(--hg-a), var(--hg-b)) !important; }
-        .hg-ts-glass > div > .card { background:
+        .hg-tint-vivid.hg-ts-glass > div > .card { background:
           linear-gradient(165deg, rgba(255,255,255,0.32), rgba(255,255,255,0.04) 46%, rgba(255,255,255,0) 60%),
           linear-gradient(135deg, var(--hg-a), var(--hg-b)) !important;
           box-shadow:inset 0 0 0 1px rgba(255,255,255,0.35), inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 26px color-mix(in srgb, var(--hg-a) 32%, transparent) !important; }
+        /* en doux : les memes allures, en teinte legere sur le fond de la carte */
+        .hg-tint-soft.hg-ts-glow > div > .card { background:
+          radial-gradient(circle at 92% -10%, color-mix(in srgb, var(--hg-a) 38%, transparent), transparent 46%),
+          radial-gradient(color-mix(in srgb, var(--hg-a) 30%, transparent) 1px, transparent 1.5px) 0 0 / 18px 18px,
+          linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 16%, var(--surface)), color-mix(in srgb, var(--hg-b) 6%, var(--surface))) !important; }
+        .hg-tint-soft.hg-ts-bubbles > div > .card { background:
+          radial-gradient(circle at calc(100% - 22px) 18px, color-mix(in srgb, var(--hg-a) 26%, transparent) 0 34px, transparent 35px),
+          radial-gradient(circle at 12% calc(100% + 18px), color-mix(in srgb, var(--hg-b) 20%, transparent) 0 52px, transparent 53px),
+          radial-gradient(circle at 68% 78%, color-mix(in srgb, var(--hg-a) 16%, transparent) 0 14px, transparent 15px),
+          radial-gradient(circle at 40% 18%, color-mix(in srgb, var(--hg-a) 14%, transparent) 0 8px, transparent 9px),
+          linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 12%, var(--surface)), var(--surface)) !important; }
+        .hg-tint-soft.hg-ts-glass > div > .card { background:
+          linear-gradient(165deg, rgba(255,255,255,0.22), rgba(255,255,255,0.03) 46%, rgba(255,255,255,0) 60%),
+          linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 22%, var(--surface)), color-mix(in srgb, var(--hg-b) 10%, var(--surface))) !important;
+          box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--hg-a) 30%, transparent), inset 0 1px 0 rgba(255,255,255,0.35) !important; }
         .hg-notitle .frame-label { display:none !important; }
         .hg-notitle .frame-head:not(:has(.frame-extra)) { display:none !important; }
         .hg-frame-body .card { background:transparent !important; border:none !important; box-shadow:none !important;
@@ -624,13 +647,29 @@ export default function HomeGrid({ status, blocks, top = null }) {
               style={{ height: 30, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12.5, border: "1px solid var(--border)",
                 background: lay.tint === k ? "#EC4899" : "var(--surface2)", color: lay.tint === k ? "#fff" : "var(--text2)" }}>{l}</button>)}
           </div>
-          {lay.tint === "vivid" && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {lay.tint && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ width: 15 }}/>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Couleurs</span>
+            {[["multi", "variées"], ["one", "une seule"]].map(([k, l]) => <button key={k}
+              onClick={() => setLay(x => { const y = { ...x }; if (k === "one") { y.tintColor = "one"; y.tintOne = y.tintOne ?? "banner"; } else { delete y.tintColor; delete y.tintOne; } return y; })}
+              style={{ height: 30, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12.5, border: "1px solid var(--border)",
+                background: (lay.tintColor || "multi") === k ? "#EC4899" : "var(--surface2)", color: (lay.tintColor || "multi") === k ? "#fff" : "var(--text2)" }}>{l}</button>)}
+            {lay.tintColor === "one" && <span style={{ display: "inline-flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+              <button onClick={() => setLay(x => ({ ...x, tintOne: "banner" }))} title="Comme le bandeau d'accueil" style={{ height: 26, padding: "0 9px", borderRadius: 20,
+                cursor: "pointer", fontSize: 11.5, fontWeight: 800, color: "#fff", border: lay.tintOne === "banner" ? "2px solid var(--text)" : "2px solid transparent",
+                background: bannerTint ? `linear-gradient(135deg, ${bannerTint.a}, ${bannerTint.b})` : "#8b5cf6" }}>comme le bandeau</button>
+              {TINTS.map((t, i) => <button key={i} onClick={() => setLay(x => ({ ...x, tintOne: i }))} aria-label={`Couleur ${i + 1}`}
+                style={{ width: 24, height: 24, borderRadius: "50%", cursor: "pointer", background: `linear-gradient(135deg, ${t.a}, ${t.b})`,
+                  border: lay.tintOne === i ? "2px solid var(--text)" : "2px solid transparent", boxShadow: "0 0 0 1px rgba(0,0,0,0.1)" }}/>)}
+            </span>}
+          </div>}
+          {lay.tint && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <span style={{ width: 15 }}/>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Style</span>
             {TINT_STYLES.map(([k, l]) => <button key={k} onClick={() => setLay(x => ({ ...x, tintStyle: k }))}
               style={{ height: 30, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12.5, border: "1px solid var(--border)",
                 background: (lay.tintStyle || "glow") === k ? "#EC4899" : "var(--surface2)", color: (lay.tintStyle || "glow") === k ? "#fff" : "var(--text2)" }}>{l}</button>)}
-            <span style={{ fontSize: 12, color: "var(--muted)" }}>· les couleurs sont choisies pour que deux voisines ne se ressemblent pas</span>
+            {(lay.tintColor || "multi") === "multi" && <span style={{ fontSize: 12, color: "var(--muted)" }}>· les couleurs sont choisies pour que deux voisines ne se ressemblent pas</span>}
           </div>}
           {wide && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
