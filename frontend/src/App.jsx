@@ -50,7 +50,7 @@ function Rewind() {
 // Adresse inconnue : une page cachee si elle existe (chargee a la demande), sinon « introuvable »
 function LostOrHidden() {
   const slug = (useLocation().pathname || "/").replace(/^\/+|\/+$/g, "").toLowerCase();
-  if (isPrank(slug)) return <PrankRedirect slug={slug}/>;
+  if (isPrank(slug)) return <PrankRedirect key={slug} slug={slug} fallback={<NotFound/>}/>;
   return isHidden(slug) ? <HiddenPage key={slug} slug={slug}/> : <NotFound/>;
 }
 

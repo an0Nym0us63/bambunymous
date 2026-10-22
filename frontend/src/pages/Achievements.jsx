@@ -1510,7 +1510,7 @@ function Rules({ data, onClose }) {
           une mise à jour : il suffit de le décrocher pour les retrouver.</P>
         <P>Certains secrets se cachent derrière une adresse, d'autres derrière un geste. Et de temps en temps, en ouvrant
           l'appli, l'accueil te joue un tour : plus il se fait attendre, plus il devient probable. Ces tours-là ne se gagnent
-          que s'ils te tombent dessus par surprise, et ceux des jours de fête, seulement le jour même.</P>
+          que s'ils te tombent dessus par surprise, et ceux des jours de fête, seulement le jour même. Un tour déjà vécu peut se rejouer ; les autres, personne ne peut les provoquer.</P>
 
         <H>🎓 Grades</H>
         <P>Chaque section te donne un titre selon la part de ses points que tu as gagnés ({GRADE_AT.map(x => `${Math.round(x * 100)} %`).join(", ")}) :

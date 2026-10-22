@@ -4450,6 +4450,18 @@ async def card_fx_seen(username: str) -> None:
         await set_setting(db, KEY + "_CARDFX", json.dumps(seen))
 
 
+async def prank_replay_ok(slug: str) -> bool:
+    """Une farce tapee a son adresse (URL ou passage secret) : elle ne se joue
+    que deja tombee par surprise (rejouee pour le plaisir), ou, pour une fete,
+    le jour meme. Sinon l'adresse ne mene a rien : la surprise reste entiere."""
+    egg = "p_" + str(slug or "").replace("-", "_")
+    if egg not in PRANK_EGGS and egg not in FETE_EGGS:
+        return False
+    if egg in await eggs_found():
+        return True
+    return slug in FETE_SLUGS and slug in fetes_of(_today_paris(), await first_print_day())
+
+
 async def eggs_found() -> dict:
     """Les easter eggs trouves : {nom: date}."""
     from ..db.session import AsyncSessionLocal

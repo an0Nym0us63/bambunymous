@@ -42,10 +42,20 @@ export const usePrank = create(set => ({
 }));
 
 /** L'adresse de la farce : on la retient, puis direction l'accueil. */
-export function PrankRedirect({ slug }) {
-  const [go, setGo] = useState(false);
-  useEffect(() => { usePrank.getState().start(slug); setGo(true); }, [slug]);
-  return go ? <Navigate to="/" replace/> : null;
+// Une farce tapee a son adresse (URL ou passage secret) : elle ne se joue que
+// deja tombee par surprise (ou une fete le jour meme). Sinon, rien ne la
+// trahit : la page introuvable, comme pour n'importe quelle adresse.
+export function PrankRedirect({ slug, fallback = null }) {
+  const [ok, setOk] = useState(null);
+  useEffect(() => {
+    let alive = true;
+    client.get(`/achievements/prank/${encodeURIComponent(slug)}`)
+      .then(({ data }) => { if (!alive) return; if (data?.ok) usePrank.getState().start(slug); setOk(!!data?.ok); })
+      .catch(() => alive && setOk(false));
+    return () => { alive = false; };
+  }, [slug]);
+  if (ok === null) return null;
+  return ok ? <Navigate to="/" replace/> : fallback;
 }
 
 const Pranks = {};

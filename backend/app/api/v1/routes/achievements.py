@@ -89,6 +89,13 @@ async def achievements_card_fx_seen(acc=Depends(require_own_account)):
     return {"ok": True}
 
 
+@router.get("/prank/{slug}")
+async def achievements_prank_ok(slug: str, acc=Depends(require_own_account)):
+    """Cette farce peut-elle se jouer depuis son adresse ?"""
+    from ....services import achievements as A
+    return {"ok": await A.prank_replay_ok(slug)}
+
+
 @router.post("/surprise/shown")
 async def achievements_surprise_shown(body: dict | None = Body(None), acc=Depends(require_own_account)):
     from ....services import achievements as A
