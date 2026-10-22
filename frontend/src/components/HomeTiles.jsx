@@ -33,6 +33,7 @@ const ago = iso => {
   return m < 60 ? `il y a ${Math.max(1, m)} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : `il y a ${Math.round(m / 1440)} j`;
 };
 const noEmoji = t => String(t || "").replace(/^\p{Extended_Pictographic}️?\s*/u, "");
+const utc = iso => { const s = String(iso || "").trim().replace(" ", "T"); return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s}Z`); };
 const printImg = id => apiUrl(`/prints/${id}/image`);
 const LIVE = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"];
 const isLive = st => LIVE.includes(String(st?.status || "").toUpperCase());
@@ -172,7 +173,7 @@ function Zoom({ icon, color, label, to, onClose, children }) {
           </div>
         </div>
         <div ref={ref} style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: 14,
-          padding: narrow ? "14px 16px 22px" : "16px 18px 20px", position: "relative" }}>
+          padding: narrow ? "14px 16px 22px" : "16px 18px 20px", position: "relative" }} className="bn-zoom-body">
           {box.W > 0 && <BoxCtx.Provider value={b}>{kids(children, b)}</BoxCtx.Provider>}
         </div>
       </div>
@@ -440,6 +441,23 @@ function Stats({ items }) {
     {list.map(([l, x, c]) => <div key={l} className="card-sm" style={{ padding: zoom ? "9px 11px" : "6px 8px", minWidth: 0 }}>
       <div style={{ fontSize: zoom ? 11.5 : 10.5, fontWeight: 700, color: "var(--muted)", ...wrap }}>{l}</div>
       <div data-pk="" style={{ fontSize: zoom ? 17 : 14.5, fontWeight: 900, color: c || "var(--text)", marginTop: zoom ? 2 : 0, ...wrap }}>{x}</div></div>)}
+  </div>;
+}
+function Facts({ items }) {
+  const { W } = useBox();
+  const list = items.filter(it => it && it.v != null && it.v !== "");
+  const cols = Math.max(1, Math.min(2, Math.floor((W + 10) / 220)));
+  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
+    {list.map(it => <div key={it.l} style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 12px", borderRadius: 16,
+      background: `linear-gradient(135deg, ${it.c || "#64748b"}14, transparent 70%), var(--surface2)`, minWidth: 0 }}>
+      <span style={{ width: 38, height: 38, borderRadius: 12, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 18, background: `${it.c || "#64748b"}22`, color: it.c || "var(--text2)" }}>{it.i}</span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{it.l}</div>
+        <div style={{ fontSize: 15.5, fontWeight: 900, color: it.vc || "var(--text)", lineHeight: 1.2, overflowWrap: "anywhere" }}>{it.v}</div>
+        {it.d && <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginTop: 1 }}>{it.d}</div>}
+      </div>
+    </div>)}
   </div>;
 }
 const Chip = ({ children, color = "#64748B", title }) => <span data-pk="" title={title} style={{ display: "inline-flex", alignItems: "center", gap: 4,
@@ -1505,7 +1523,7 @@ function Spool({ status, o, sz }) {
     <SpoolSVG colors={colors} size={size} active={live} type={si.multicolor_type}/></span>;
   const chip = (txt, c) => <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 800,
     whiteSpace: "nowrap", color: c, background: `${c}1c` }}>{txt}</span>;
-  const ago = iso => { if (!iso) return "—"; const d = Math.round((Date.now() - new Date(iso).getTime()) / 86400000); return d <= 0 ? "aujourd'hui" : d === 1 ? "hier" : `il y a ${d} j`; };
+  const ago = iso => { if (!iso) return "—"; const d = Math.round((Date.now() - utc(iso).getTime()) / 86400000); return d <= 0 ? "aujourd'hui" : d === 1 ? "hier" : `il y a ${d} j`; };
   return (
     <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours" to="/filaments"
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
@@ -1527,22 +1545,33 @@ function Spool({ status, o, sz }) {
           </div>
         </div>
         <H2>La bobine</H2>
-        <Stats items={[
-          ["Code filament", t.tray_id_name || si.profile_id],
-          ["Bobine n°", si.tag_number],
-          ["Stock de ce filament", si.filament_stock_g != null ? fmtG(si.filament_stock_g) : null],
-          ["Support vide", si.spool_weight_g ? `${Math.round(si.spool_weight_g)} g` : null],
-          ["Prix de la bobine", si.price_override || si.price ? fmtEur(si.price_override || si.price) : null],
-          ["Valeur restante", (si.price_override || si.price) && g != null && tot ? fmtEur((si.price_override || si.price) * g / tot) : null],
-          ["Première utilisation", si.first_used_at ? new Date(si.first_used_at).toLocaleDateString("fr-FR") : null],
-          ["Dernière utilisation", si.last_used_at ? ago(si.last_used_at) : null],
-          ["Dernier séchage", si.last_dried_at ? ago(si.last_dried_at) : "jamais", si.needs_drying ? "#0ea5e9" : undefined]]}/>
+        <Facts items={(() => {
+          const price = si.price_override || si.price;
+          const day = iso => iso ? utc(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : null;
+          return [
+            { i: <span style={{ width: 18, height: 18, borderRadius: 6, background: color, border: "1px solid rgba(0,0,0,0.2)", display: "block" }}/>, l: "Couleur Bambu",
+              v: si.color_code ? `n° ${si.color_code}` : null, d: si.name_en && si.name_en !== name ? si.name_en : null, c: color },
+            { i: "📦", l: "Stock de ce filament", v: si.filament_stock_g != null ? fmtG(si.filament_stock_g) : null,
+              d: si.to_order ? "à commander" : null, c: "#f59e0b", vc: si.to_order ? "#d97706" : undefined },
+            { i: "💶", l: "Prix de la bobine", v: price ? fmtEur(price) : null,
+              d: price && g != null && tot ? `il en reste pour ${fmtEur(price * g / tot)}` : null, c: "#16a34a" },
+            { i: "🗓️", l: "Première utilisation", v: day(si.first_used_at) || "pas encore", d: si.first_used_at ? ago(si.first_used_at) : null, c: "#8b5cf6" },
+            { i: "🕒", l: "Dernière utilisation", v: si.last_used_at ? ago(si.last_used_at) : null, c: "#3b82f6" },
+            { i: "🔥", l: "Dernier séchage", v: si.last_dried_at ? ago(si.last_dried_at) : "jamais", d: si.needs_drying ? "il est temps de la sécher" : null,
+              c: "#f97316", vc: si.needs_drying ? "#0ea5e9" : undefined },
+            { i: "⚖️", l: "Bobine vide", v: si.spool_weight_g ? `${Math.round(si.spool_weight_g)} g` : null, d: si.spool_tare_name, c: "#64748b" },
+            { i: "➕", l: "Ajoutée au stock", v: day(si.created_at), c: "#14b8a6" },
+            { i: "🏷️", l: "Étiquette", v: si.label_printed == null ? null : si.label_printed ? "imprimée" : "à imprimer", c: "#ec4899" },
+          ];
+        })()}/>
         <H2>Dans l'AMS</H2>
-        <Stats items={[
-          ["Emplacement", slot],
-          ["Humidité", t.ams?.humidity ? `${t.ams.humidity} %` : null, "#0ea5e9"],
-          ["Température", t.ams?.temp ? `${Number(t.ams.temp).toFixed(1).replace(".", ",")} °C` : null],
-          ["Séchage", t.ams?.dry_time > 0 ? `${t.ams.dry_temperature || "?"} °C · encore ${fmtDur(t.ams.dry_time * 60)}` : null, "#f97316"]]}/>
+        <Facts items={[
+          { i: "📍", l: "Emplacement", v: slot, c: "#8b5cf6" },
+          { i: "💧", l: "Humidité", v: t.ams?.humidity ? `${t.ams.humidity} %` : null, c: "#0ea5e9", vc: "#0ea5e9" },
+          { i: "🌡️", l: "Température", v: t.ams?.temp ? `${Number(t.ams.temp).toFixed(1).replace(".", ",")} °C` : null, c: "#ef4444" },
+          { i: "☀️", l: "Séchage en cours", v: t.ams?.dry_time > 0 ? `${t.ams.dry_temperature || "?"} °C` : null,
+            d: t.ams?.dry_time > 0 ? `encore ${fmtDur(t.ams.dry_time * 60)}` : null, c: "#f97316", vc: "#ea580c" },
+        ]}/>
         {si.comment && <Line>{si.comment}</Line>}</>}>
       {({ W, H }) => {
         const narrow = W < 215;

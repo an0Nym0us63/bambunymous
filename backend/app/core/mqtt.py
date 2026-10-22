@@ -389,6 +389,53 @@ class MQTTManager:
         if sn and not state.serial:
             state.serial = sn
 
+        # ── Filament Track Switch (aiguillage) ──────────────────────────
+        # Format releve dans Bambu Studio (DevFilaSwitch.cpp) :
+        #  - aux (chaine hexa), bit 29 : switch installe ;
+        #  - device.fila_switch.in = [entree B, entree A] : (ams << 8) | bac, -1 = rien ;
+        #  - device.fila_switch.out = [sortie B, sortie A] : id de la buse servie, 0xE = rien ;
+        #  - device.fila_switch.stat : calibration (0 au repos, 1 en cours) ; info bit 0 : filament.
+        if "aux" in p:
+            try:
+                installed = bool((int(str(p["aux"]), 16) >> 29) & 1)
+            except (TypeError, ValueError):
+                installed = None
+            if installed is not None and installed != bool(state.fila_switch.get("installed")):
+                state.fila_switch = {"installed": True} if installed else {}
+                changed = True
+        fs = (p.get("device") or {}).get("fila_switch")
+        if isinstance(fs, dict):
+            cur = dict(state.fila_switch or {})
+            cur["installed"] = True
+            def _slot(v):
+                try:
+                    v = int(v)
+                except (TypeError, ValueError):
+                    return None
+                return None if v < 0 else {"ams": (v >> 8) & 0xFF, "tray": v & 0xFF}
+            def _out(v):
+                try:
+                    v = int(v)
+                except (TypeError, ValueError):
+                    return None
+                return None if v == 0xE or v < 0 else v
+            ins = fs.get("in")
+            if isinstance(ins, list) and len(ins) == 2:
+                cur["in_b"], cur["in_a"] = _slot(ins[0]), _slot(ins[1])
+            outs = fs.get("out")
+            if isinstance(outs, list) and len(outs) == 2:
+                cur["out_b"], cur["out_a"] = _out(outs[0]), _out(outs[1])
+            if "stat" in fs:
+                cur["calibrating"] = int(fs.get("stat") or 0) == 1
+            if "info" in fs:
+                try:
+                    cur["filament"] = bool(int(fs["info"]) & 1)
+                except (TypeError, ValueError):
+                    pass
+            if cur != state.fila_switch:
+                state.fila_switch = cur
+                changed = True
+
         # ── Températures (device block H2C) ──────────────────────────────
         device = p.get("device", {})
         extruder_infos = []
@@ -535,6 +582,20 @@ class MQTTManager:
                           humidity=int(ams_raw.get("humidity_raw", 0)),
                           temp=float(ams_raw.get("temp", 0)),
                           dry_time=int(ams_raw.get("dry_time", 0)))
+                # info (hexa) : bits 8-11 = buse alimentee (0xE : par l'aiguillage),
+                # bits 24-27 = entree de l'aiguillage (0 = B, 1 = A) -- cf. DevFilaSystem.cpp
+                if ams_raw.get("info") not in (None, ""):
+                    try:
+                        _inf = int(str(ams_raw.get("info")), 16)
+                        _ext = (_inf >> 8) & 0xF
+                        if _ext == 0xE:
+                            _port = (_inf >> 24) & 0xF
+                            ams.switch_port = {0: "B", 1: "A"}.get(_port, "")
+                            ams.extruder_id = -1
+                        else:
+                            ams.extruder_id = _ext
+                    except (TypeError, ValueError):
+                        pass
                 dry_setting = ams_raw.get("dry_setting", {}) or {}
                 if dry_setting:
                     ams.dry_temperature = max(int(dry_setting.get("dry_temperature", 0)), 0)

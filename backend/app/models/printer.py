@@ -39,6 +39,11 @@ class AMS:
     dry_temperature: int = 0   # température cible (°C)
     dry_duration: int = 0      # durée totale configurée (minutes)
     dry_filament: str = ""     # type de filament en cours de séchage
+    # La buse que l'AMS alimente (info, bits 8-11) : 0 = droite, 1 = gauche, -1 inconnu.
+    # Raccorde au Filament Track Switch (0xE), il peut alimenter les deux : switch_port
+    # dit alors sur quelle entree de l'aiguillage il est branche ("A" ou "B").
+    extruder_id: int = -1
+    switch_port: str = ""
 
 
 @dataclass
@@ -125,6 +130,10 @@ class PrinterState:
 
     # Vortek rack
     hotend_rack: HotendRack = field(default_factory=HotendRack)
+
+    # Filament Track Switch (aiguillage) : installe ?, ce qui entre en A et B (AMS, bac),
+    # la buse servie par chaque sortie, calibration, filament present. Vide sans switch.
+    fila_switch: dict = field(default_factory=dict)
 
     # Erreurs
     hms_errors: list[dict] = field(default_factory=list)

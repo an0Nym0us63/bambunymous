@@ -624,7 +624,7 @@ function DryBadge({ status }) {
 // part : "overview" (les AMS ou le rack), "detail" (la fiche de l'AMS ou de la buse
 // choisie), ou rien (les deux, l'un sous l'autre)
 export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId, part = null,
-  org = "grid", climate = true, selector = true, names = true, fitH = null }) {
+  org = "grid", climate = true, selector = true, names = true, fitH = null, dual = false }) {
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
   const headId  = rack?.head_id ?? -1;
@@ -737,7 +737,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
       <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
         isSelected={detailKind === "ams" && selectedAms?.id === ams.id}
         onClick={() => setSelAms(ams.id)}
-        spoolLookup={spoolLookup} climate={climate} pillH={pillH}
+        spoolLookup={spoolLookup} climate={climate} pillH={pillH} dual={dual}
         slotsWidth={`${(slotCount(ams) / columnWeight(col)) * 100}%`}/>
     </div>
   ))).filter(Boolean);
@@ -747,7 +747,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
     <div key={ams.id} style={{ flex: `${slotCount(ams)} 1 ${slotCount(ams) * 26 + 14}px`, minWidth: 0 }}>
       <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
         isSelected={detailKind === "ams" && selectedAms?.id === ams.id}
-        onClick={() => setSelAms(ams.id)} spoolLookup={spoolLookup} climate={climate} pillH={pillH}/>
+        onClick={() => setSelAms(ams.id)} spoolLookup={spoolLookup} climate={climate} pillH={pillH} dual={dual}/>
     </div>
   ));
   // le detail porte son propre choix d'unite : des onglets avec les couleurs de chaque unite
@@ -1094,6 +1094,11 @@ function PrinterPopup({ status, img, name, onClose }) {
           </div>}
         </div> : null}
 
+        {status?.fila_switch?.installed && <>
+          {section("Aiguillage")}
+          <SwitchDiagram fs={status.fila_switch} status={status}/>
+        </>}
+
         {status?.hms_decoded?.length > 0 && <>
           {section("Alertes de la machine")}
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1109,6 +1114,55 @@ function PrinterPopup({ status, img, name, onClose }) {
         {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
       </div>
     </div>, document.body);
+}
+// Le Filament Track Switch : ce qui entre en A et en B (l'AMS et son bac, sa couleur),
+// et la buse que sert chaque sortie. Format releve dans Bambu Studio (DevFilaSwitch).
+function SwitchDiagram({ fs, status }) {
+  const tray = slot => {
+    if (!slot) return null;
+    const a = (status?.ams_list || []).find(x => x.id === slot.ams);
+    return { label: slotLabel(slot.ams, slot.tray), t: a?.trays?.find(t => t.id === slot.tray) };
+  };
+  const nozzle = id => id == null ? "—" : (status?.nozzles?.length > 1 ? (id === 1 ? "Buse gauche" : "Buse droite") : "Buse");
+  const activeNz = (status?.nozzles || []).find(n => n.active)?.id;
+  const line = (port, slot, out) => {
+    const x = tray(slot);
+    const col = x?.t?.color && !x.t.empty ? `#${String(x.t.color).replace("#", "").slice(0, 6)}` : null;
+    const live = out != null && out === activeNz;
+    return (
+      <div key={port} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 34px minmax(0,1fr)", alignItems: "center", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 12, background: "var(--surface2)", minWidth: 0 }}>
+          <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: col || "transparent",
+            border: col ? "1px solid rgba(0,0,0,0.15)" : "1.5px dashed var(--border)" }}/>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 800, color: "#8b5cf6" }}>Entrée {port}</div>
+            <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {x ? `${x.label}${x.t?.filament_type ? ` · ${x.t.filament_type}` : ""}` : "rien"}</div>
+          </div>
+        </div>
+        <svg width="34" height="20" viewBox="0 0 34 20" aria-hidden="true">
+          <path d="M2 10 H28" stroke={live ? "#22c55e" : "var(--border)"} strokeWidth="2.5" strokeDasharray={live ? "5 3" : "none"}
+            style={live ? { animation: "bn-dash 1s linear infinite" } : undefined}/>
+          <path d="M24 5 L31 10 L24 15" fill="none" stroke={live ? "#22c55e" : "var(--border)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <div style={{ padding: "8px 10px", borderRadius: 12, minWidth: 0, background: live ? "rgba(34,197,94,0.1)" : "var(--surface2)",
+          border: `1px solid ${live ? "rgba(34,197,94,0.45)" : "transparent"}` }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)" }}>Sortie {port}</div>
+          <div style={{ fontSize: 13, fontWeight: 900, color: live ? "#16a34a" : "var(--text)" }}>{nozzle(out)}</div>
+        </div>
+      </div>
+    );
+  };
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {line("A", fs.in_a, fs.out_a)}
+      {line("B", fs.in_b, fs.out_b)}
+      {(fs.calibrating || fs.filament != null) && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+        {fs.calibrating && <span style={{ color: "#f59e0b" }}>● calibration en cours</span>}
+        {fs.filament != null && <span>{fs.filament ? "filament engagé dans l'aiguillage" : "aiguillage vide"}</span>}
+      </div>}
+    </div>
+  );
 }
 // toute la largeur sur une rangee : un bandeau. La vignette (un clic l'ouvre en grand),
 // le nom, le pourcentage en grand, le temps restant, l'heure de fin, la couche, la barre ;
@@ -1512,7 +1566,7 @@ export default function Home() {
   const fitOf = item => typeof item?.h === "number" ? item.h * 128 - 30 - (item.o?._title === false ? 0 : 28) : null;
   const devices = (st, part, o = {}, item) => (st?.status === "RUNNING" || st?.status === "PAUSED" || (st?.ams_list?.length > 0)) ? <DeviceGrid
     key={`${visKey}-${part}`} part={part} org={o.org} climate={o.climate !== false} selector={o.selector !== false} names={o.names !== false}
-    fitH={fitOf(item)}
+    fitH={fitOf(item)} dual={(st?.nozzles?.length || 0) > 1 || !!st?.fila_switch?.installed}
     amsList={st?.ams_list ?? []}
     activeAmsId={isRunning ? (st?.active_ams_id ?? -1) : -1}
     activeTrayId={isRunning ? (st?.active_tray_id ?? -1) : -1}

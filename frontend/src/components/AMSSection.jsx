@@ -199,7 +199,14 @@ function MatchIcon({ mode, size = 10 }) {
 }
 
 // ── Boîtier AMS compact ─────────────────────────────────────────────────────
-function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup, slotsWidth, climate = true, pillH = null }) {
+// la buse qu'un AMS alimente (« G », « D ») ou, par l'aiguillage, son entree (« ⇄ A ») ; null si sans objet
+export function amsRoute(ams, dual) {
+  if (ams?.switch_port) return { txt: `⇄ ${ams.switch_port}`, title: `Branché sur l'entrée ${ams.switch_port} de l'aiguillage`, color: "#8b5cf6" };
+  if (dual && ams?.extruder_id >= 0) return { txt: ams.extruder_id === 1 ? "G" : "D", title: `Alimente la buse ${ams.extruder_id === 1 ? "gauche" : "droite"}`, color: "#0ea5e9" };
+  return null;
+}
+function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup, slotsWidth, climate = true, pillH = null, dual = false }) {
+  const route = amsRoute(ams, dual);
   const dense = pillH != null;
   const isActive = ams.id === activeAmsId;
   const isDrying = ams.is_drying || ams.dry_time > 0;
@@ -238,6 +245,8 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
         {/* Pastille bleue toujours visible si actif, même en séchage */}
         {isActive && <span style={{ width:6, height:6, borderRadius:"50%",
           backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
+        {route && <span title={route.title} style={{ fontSize:9, fontWeight:900, padding:"0 5px", borderRadius:6, lineHeight:"13px",
+          color: route.color, background: `${route.color}1f`, whiteSpace:"nowrap" }}>{route.txt}</span>}
       </div>
       <div style={{
         width: slotsWidth ?? "100%", minWidth:0, borderRadius: dense ? 10 : 12, padding: dense ? 4 : 6, display:"flex", gap:4, boxSizing:"border-box",

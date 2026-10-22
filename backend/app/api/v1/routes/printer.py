@@ -100,6 +100,13 @@ class SpoolInfoOut(BaseModel):
     needs_drying: Optional[bool] = None
     # Restant cumule de toutes les bobines actives du filament.
     filament_stock_g: Optional[float] = None
+    # Pour la fiche « filament en cours » de l'accueil
+    color_code: Optional[str] = None     # code couleur du catalogue Bambu (ex. 10600)
+    name_en: Optional[str] = None
+    spool_tare_name: Optional[str] = None
+    created_at: Optional[str] = None     # bobine ajoutee le
+    to_order: Optional[bool] = None
+    label_printed: Optional[bool] = None
 
 class TrayOut(BaseModel):
     id: int
@@ -134,6 +141,8 @@ class AMSOut(BaseModel):
     dry_temperature: int = 0    # °C cible
     dry_duration: int = 0       # durée totale configurée (minutes)
     dry_filament: str = ""      # type filament en séchage
+    extruder_id: int = -1       # buse alimentee : 0 droite, 1 gauche, -1 inconnue
+    switch_port: str = ""       # entree de l'aiguillage ("A"/"B") quand il passe par lui
 
 
 class HotendSlotOut(BaseModel):
@@ -192,6 +201,7 @@ class PrinterStatusOut(BaseModel):
     hms_decoded: list[dict] = []
     print_error: int
     fw_version: str
+    fila_switch: dict = {}
 
 
 def _spool_info(spool_id, spools_map):
@@ -225,6 +235,12 @@ def _spool_info(spool_id, spools_map):
         last_used_at=str(s.last_used_at) if s.last_used_at else None,
         last_dried_at=str(s.last_dried_at) if getattr(s, "last_dried_at", None) else None,
         swatch=bool(getattr(f, "swatch", False)) if f else None,
+        color_code=getattr(f, "fila_color_code", None) if f else None,
+        name_en=getattr(f, "name_en", None) if f else None,
+        spool_tare_name=getattr(f, "spool_tare_name", None) if f else None,
+        created_at=str(s.created_at) if getattr(s, "created_at", None) else None,
+        to_order=bool(getattr(f, "to_order", False)) if f else None,
+        label_printed=bool(getattr(f, "label_printed", False)) if f else None,
     )
 
 
@@ -237,7 +253,10 @@ def _tray_spool_info(t, spools_map, stock_map=None):
     relit donc dans le filament charge a chaque appel.
     """
     cached = getattr(t, "_spool_info_cache", None)
-    si = SpoolInfoOut(**cached) if cached else _spool_info(t.spool_id, spools_map)
+    if t.spool_id and t.spool_id in spools_map:
+        si = _spool_info(t.spool_id, spools_map)
+    else:
+        si = SpoolInfoOut(**cached) if cached else _spool_info(t.spool_id, spools_map)
     if si is not None and t.spool_id in spools_map:
         sp, f = spools_map[t.spool_id]
         si.swatch = bool(f.swatch) if f is not None else None
@@ -340,6 +359,8 @@ async def printer_status(_: str = Depends(get_current_user)):
                 dry_temperature=a.dry_temperature,
                 dry_duration=a.dry_duration,
                 dry_filament=a.dry_filament,
+                extruder_id=getattr(a, "extruder_id", -1),
+                switch_port=getattr(a, "switch_port", ""),
             ) for a in s.ams_list
         ],
         ams_mapping=s.ams_mapping,
@@ -365,6 +386,7 @@ async def printer_status(_: str = Depends(get_current_user)):
         hms_decoded=decode_hms(s.hms_errors, model_id=getattr(s, "model_id", "") or "", model_name=getattr(s, "printer_model", "") or ""),
         print_error=s.print_error,
         fw_version=s.fw_version,
+        fila_switch=getattr(s, "fila_switch", {}) or {},
     )
 
 
