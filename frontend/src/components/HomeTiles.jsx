@@ -1062,7 +1062,7 @@ function LiveCam({ status, o, sz = { h: 2 } }) {
 }
 // les temperatures : jauges (consigne = plein) qui remplissent la case, ou lignes
 const tempRows = (status, o) => {
-  const nz = status.nozzles || [];
+  const nz = [...(status.nozzles || [])].sort((a, b) => b.id - a.id);   // gauche (1) puis droite (0)
   return [
     ...nz.map(n => ({ k: `n${n.id}`, ico: IcoNozzle, l: nz.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", v: n.temp, t: n.target, max: 300, c: "#f97316" })),
     ...(!nz.length && status.nozzle_temp != null ? [{ k: "n", ico: IcoNozzle, l: "Buse", v: status.nozzle_temp, t: status.target_nozzle_temp, max: 300, c: "#f97316" }] : []),

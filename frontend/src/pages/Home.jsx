@@ -993,7 +993,7 @@ function PrinterPopup({ status, img, name, onClose }) {
   const live = LIVE_ST.includes(st), paused = st === "PAUSE" || st === "PAUSED";
   const pct = Math.round(status?.progress || 0);
   const fin = live && status?.remaining_minutes ? fmtFinishTime(status.remaining_minutes) : null;
-  const nozzles = status?.nozzles || [];
+  const nozzles = [...(status?.nozzles || [])].sort((a, b) => b.id - a.id);   // gauche (1) puis droite (0)
   const ams = (status?.ams_list || []).find(a => a.id === status?.active_ams_id);
   const tray = ams?.trays?.find(t => t.id === status?.active_tray_id);
   const spool = tray?.spool_info;
@@ -1142,7 +1142,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
     color: color || "var(--muted)", whiteSpace: "nowrap" }}><Icon/>{text}</span>;
   const side = W >= 470;
   // les temperatures : chaque buse (D et G quand il y en a deux), le plateau, la chambre, avec leur consigne
-  const nozzles = status?.nozzles?.length ? status.nozzles : [];
+  const nozzles = [...(status?.nozzles || [])].sort((a, b) => b.id - a.id);   // gauche (1) puis droite (0)
   const tempItem = (Icon, label, v, t, hot, size) => (
     <span data-pk="" title={label} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size, fontWeight: 800, whiteSpace: "nowrap",
       color: (v || 0) > 40 ? hot : "var(--muted)" }}><Icon/>
