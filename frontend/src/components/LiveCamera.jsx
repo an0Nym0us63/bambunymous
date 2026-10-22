@@ -109,7 +109,7 @@ export default function LiveCamera({ mode = "auto", style, maxHeight }) {
 
   return (
     <div style={{ position: "relative", ...style }}>
-      <img ref={img} data-pk="" alt="Caméra de l'imprimante" style={{ width: "100%", display: broken ? "none" : "block", aspectRatio: "16/9",
+      <img ref={img} data-pk="" alt="Caméra de l'imprimante" style={{ width: "100%", display: broken ? "none" : "block", aspectRatio: style?.height ? undefined : "16/9", height: style?.height,
         objectFit: "cover", background: "#111", maxHeight, borderRadius: "inherit" }}/>
       {broken && <div style={{ padding: "26px 12px", textAlign: "center", fontSize: 12.5, color: "var(--muted)", background: "var(--surface2)",
         borderRadius: "inherit" }}>Caméra injoignable pour l'instant</div>}

@@ -215,7 +215,7 @@ function Today({ v, o, sz }) {
     <Tile icon={<CalendarClock size={15}/>} color="#3B82F6" label="Aujourd'hui" onClick={() => nav("/prints")}
       mini={sz.h === 0.5} summary={v ? <>{v.count}{rate != null && <span style={{ fontSize: 12, color: col }}>{Math.round(rate * 100)} %</span>}</> : "…"}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {o.ring && rate != null && <Ring value={rate} size={sz.h > 1 ? 70 : 50} color={col}>{Math.round(rate * 100)}%</Ring>}
+        {o.ring && rate != null && <Ring value={rate} size={sz.h > 2 ? 96 : sz.h > 1 ? 70 : 50} color={col}>{Math.round(rate * 100)}%</Ring>}
         <div style={{ minWidth: 0 }}>
           <Row><Big>{v ? v.count : "…"}</Big><Unit>impression{v?.count > 1 ? "s" : ""}</Unit>
             {o.yesterday && v?.yesterday && <Delta now={v.count} before={v.yesterday.count}/>}</Row>
@@ -244,7 +244,7 @@ function Week({ o, sz }) {
       <Row><Big>{v ? fmt(tot) : "…"}</Big>
         {v && o.avg && <Unit>· {fmt(o.metric === "n" ? Math.round(tot / n * 10) / 10 : tot / n)} / jour</Unit>}</Row>
       {v && <div style={{ marginTop: "auto", paddingTop: 6 }}>
-        <Bars values={v.map(val)} labels={v.map(lbl)} color="#8B5CF6" height={sz.h > 1 ? 90 : 30}
+        <Bars values={v.map(val)} labels={v.map(lbl)} color="#8B5CF6" height={sz.h > 1 ? 90 + (sz.h - 2) * 128 : 30}
           hi={v.findIndex(x => ymd(x.day) === today)} showValues={sz.h > 1 && sz.w > 1 && n <= 14} fmt={fmt}/></div>}
     </Tile>
   );
@@ -253,7 +253,7 @@ function Week({ o, sz }) {
 function Next({ q, o, sz }) {
   const nav = useNavigate();
   const models = (q?.models || []).filter(m => !o.ready || m.status === "ready");
-  const list = models.slice(0, sz.h > 1 ? (sz.h > 2 ? 6 : 3) : 1);
+  const list = models.slice(0, sz.h > 1 ? (sz.h > 3 ? 9 : sz.h > 2 ? 6 : 3) : 1);
   const ready = (q?.models || []).filter(m => m.status === "ready").length;
   return (
     <Tile icon={<ListChecks size={15}/>} color="#22C55E" label="À faire" onClick={() => nav("/prints?tab=queue")}
@@ -278,7 +278,7 @@ function Next({ q, o, sz }) {
 // les dernieres impressions : une (grande) ou une liste
 function Last({ p, o, sz }) {
   const nav = useNavigate();
-  const list = (p || []).slice(0, sz.h > 1 ? (sz.h > 2 ? 6 : 3) : 1);
+  const list = (p || []).slice(0, sz.h > 1 ? (sz.h > 3 ? 9 : sz.h > 2 ? 6 : 3) : 1);
   if (!list.length) return null;
   return (
     <Tile icon={<History size={15}/>} color="#0EA5E9" label={list.length > 1 ? "Dernières impressions" : "Dernière impression"}
@@ -315,7 +315,7 @@ function Stock({ s, o, sz }) {
   const list = Array.isArray(s) ? s : [];
   const kg = list.reduce((a, x) => a + (x.remaining_weight_g || 0), 0);
   const pct = x => x.filament_weight_g ? (x.remaining_weight_g || 0) / x.filament_weight_g : null;
-  const n = o.low * (sz.h > 1 ? 2 : 1);
+  const n = o.low * Math.max(1, Math.min(4, Math.floor(sz.h)));
   const low = list.filter(x => x.remaining_weight_g != null)
     .sort((a, b) => o.sort === "pct" ? (pct(a) ?? 1) - (pct(b) ?? 1) : a.remaining_weight_g - b.remaining_weight_g).slice(0, n);
   return (
@@ -353,7 +353,7 @@ function Dry({ v, status, o, sz }) {
             const tot = (a.dry_duration || 0) * 60, left = a.dry_time || 0;
             return (
               <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <Ring value={tot ? 1 - left / tot : 0.5} size={sz.h > 1 ? 64 : 48} color="#ef4444">{a.dry_temperature ? `${a.dry_temperature}°` : ""}</Ring>
+                <Ring value={tot ? 1 - left / tot : 0.5} size={sz.h > 2 ? 88 : sz.h > 1 ? 64 : 48} color="#ef4444">{a.dry_temperature ? `${a.dry_temperature}°` : ""}</Ring>
                 <div><div style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)" }}>{lab(a)}</div>
                   <div style={{ fontSize: 11.5, color: "var(--muted)" }}>encore {fmtDur(left)}{a.dry_filament ? ` · ${a.dry_filament}` : ""}</div></div>
               </div>
@@ -362,14 +362,14 @@ function Dry({ v, status, o, sz }) {
         </div>
       ) : (
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {o.ring && k?.active ? <Ring value={(k.ok || 0) / k.active} size={sz.h > 1 ? 64 : 48} color="#22c55e">{Math.round(100 * (k.ok || 0) / k.active)}%</Ring> : null}
+          {o.ring && k?.active ? <Ring value={(k.ok || 0) / k.active} size={sz.h > 2 ? 88 : sz.h > 1 ? 64 : 48} color="#22c55e">{Math.round(100 * (k.ok || 0) / k.active)}%</Ring> : null}
           <div style={{ minWidth: 0 }}>
             <Row><Big color={k?.to_dry ? "#dc2626" : "var(--text)"}>{v ? k?.to_dry ?? 0 : "…"}</Big><Unit>à sécher</Unit></Row>
             {k && <Sub>{k.soon ? `${k.soon} bientôt · ` : ""}{k.ok || 0} au sec{o.inams && k.to_dry_in_ams ? ` · ${k.to_dry_in_ams} dans l'AMS` : ""}</Sub>}
           </div>
         </div>
       )}
-      {sz.h > 1 && (v?.to_dry || []).slice(0, sz.h > 2 ? 6 : 3).map(x => (
+      {sz.h > 1 && (v?.to_dry || []).slice(0, sz.h > 3 ? 10 : sz.h > 2 ? 6 : 3).map(x => (
         <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, fontSize: 12, color: "var(--text2)" }}>
           <span data-pk="" style={{ width: 10, height: 10, borderRadius: "50%", background: hexCss(x.color), flexShrink: 0 }}/>
           <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span>
@@ -392,7 +392,7 @@ function Humidity({ status, o, sz }) {
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 8 }}>{list.map(a => <span key={a.id} style={{ color: col(a.humidity) }}>{a.humidity}%</span>)}</span>}>
       {o.style === "gauges" ? (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "space-around" }}>
-          {list.map(a => <Gauge key={a.id} value={a.humidity} color={col(a.humidity)} size={sz.w > 1 || list.length < 3 ? 74 : 60}
+          {list.map(a => <Gauge key={a.id} value={a.humidity} color={col(a.humidity)} size={sz.h > 2 ? 96 : sz.w > 1 || list.length < 3 ? 74 : 60}
             label={`${a.humidity}%`} sub={`${lab(a)}${o.temp && a.temp ? ` · ${Math.round(a.temp)}°` : ""}`}/>)}
         </div>
       ) : (
@@ -417,7 +417,7 @@ function Friends({ f, o, sz }) {
   const states = f?.states || {};
   const n = Object.keys(states).length;
   if (!f || !n) return null;
-  const list = p.slice(0, sz.h > 1 ? 5 : 2);
+  const list = p.slice(0, sz.h > 3 ? 11 : sz.h > 2 ? 8 : sz.h > 1 ? 5 : 2);
   return (
     <Tile icon={<Users size={15}/>} color="#14B8A6" label="Copains" badge={<span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488" }}>{p.length}/{n}</span>}
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 13 }}>{p.length ? `${p.map(x => x.name).join(", ")} imprime${p.length > 1 ? "nt" : ""}` : "personne n'imprime"}</span>}>
@@ -469,7 +469,7 @@ function MwPoints({ c, o, sz }) {
       mini={sz.h === 0.5} summary={<>{Math.round(c.profile.points?.total || 0)}{earned != null && <span style={{ fontSize: 12, color: "#16a34a" }}>+{Math.round(earned)}</span>}</>}>
       <Row><Big>{Math.round(c.profile.points?.total || 0)}</Big><Unit>points</Unit>
         {earned != null && <span data-pk="" style={{ fontSize: 12, fontWeight: 800, color: "#16a34a" }}>+{Math.round(earned)} en {per} j</span>}</Row>
-      {o.chart && hist && <div style={{ marginTop: 6 }}><Spark values={hist} color="#EAB308" height={sz.h > 1 ? 56 : 30}/></div>}
+      {o.chart && hist && <div style={{ marginTop: 6 }}><Spark values={hist} color="#EAB308" height={sz.h > 1 ? 56 + (sz.h - 2) * 128 : 30}/></div>}
       {o.stats && head && (sz.w > 1 || sz.h > 1) && (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, marginTop: "auto", paddingTop: 6 }}>
           {[["⬇️", head.downloads, "téléch."], ["🖨️", head.prints, "impr."], ["🚀", head.boosts, "boosts"], ["❤️", head.likes, "j'aime"]].map(([e, n, l]) => (
@@ -484,7 +484,7 @@ function ToRate({ r, o, sz }) {
   const nav = useNavigate();
   const items = r?.items || [];
   if (!r) return null;
-  const list = items.slice(0, sz.h > 1 ? 4 : 0);
+  const list = items.slice(0, sz.h > 3 ? 12 : sz.h > 2 ? 8 : sz.h > 1 ? 4 : 0);
   return (
     <Tile icon={<Star size={15}/>} color="#F97316" label="À évaluer" onClick={() => nav("/prints?tab=makerworld")}
       mini={sz.h === 0.5} summary={<span style={{ color: items.length ? "#ea580c" : "var(--text)" }}>{items.length}</span>}>
@@ -537,7 +537,7 @@ function Ach({ a, o, sz }) {
   const g = gradeOf(null, v);
   const nexts = useMemo(() => (a?.items || []).filter(x => x.cat === "cards" && x.level < 0 && x.prog?.[1])
     .sort((x, y) => y.prog[0] / y.prog[1] - x.prog[0] / x.prog[1] || CARD_ORDER.indexOf(x.tiers[0].id) - CARD_ORDER.indexOf(y.tiers[0].id)), [a]);
-  const recent = (a?.recent || []).slice(0, sz.h > 1 ? 4 : 1).map(r => ({ r, it: (a.items || []).find(x => x.id === r.id) })).filter(x => x.it);
+  const recent = (a?.recent || []).slice(0, sz.h > 2 ? 10 : sz.h > 1 ? 4 : 1).map(r => ({ r, it: (a.items || []).find(x => x.id === r.id) })).filter(x => x.it);
   if (!a) return null;
   return (
     <Tile icon={<Trophy size={15}/>} color="#D4A017" label="Succès" onClick={() => nav("/stats?tab=achievements")}
@@ -552,7 +552,7 @@ function Ach({ a, o, sz }) {
         </div>}
         {o.score && <Ring value={v} size={46} color="#D4A017">{Math.round(v * 100)}%</Ring>}
       </div>
-      {o.cards && nexts.slice(0, sz.h > 1 ? 3 : 1).map(nx => (
+      {o.cards && nexts.slice(0, sz.h > 3 ? 8 : sz.h > 2 ? 5 : sz.h > 1 ? 3 : 1).map(nx => (
         <div key={nx.id} onClick={e => { e.stopPropagation(); nav(`/stats?tab=achievements&a=${nx.id}`); }}
           style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
           <span data-pk=""><Medal tier={nx.tiers[0]} emoji={nx.emoji} size={30} locked/></span>
@@ -573,15 +573,19 @@ function Ach({ a, o, sz }) {
     </Tile>
   );
 }
-function LiveCam({ status, o }) {
+function LiveCam({ status, o, sz = { h: 2 } }) {
   const on = !!status?.connected;
   const pct = Math.round(status?.progress || 0);
   const live = ["RUNNING", "PAUSE", "PAUSED"].includes(String(status?.status || "").toUpperCase());
   return (
-    <Tile icon={<Video size={15}/>} color="#64748B" label="Caméra">
+    <Tile icon={<Video size={15}/>} color="#64748B" label="Caméra"
+      mini={sz.h === 0.5} summary={!on ? <span style={{ fontSize: 12.5, color: "var(--muted)" }}>hors ligne</span>
+        : <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13 }}>
+          <span style={{ width: 8, height: 8, borderRadius: "50%", background: live ? "#ef4444" : "#94a3b8" }}/>
+          {live ? `${pct} %${status.remaining_minutes ? ` · ${fmtDur(status.remaining_minutes * 60)}` : ""}` : "au repos"}</span>}>
       {on ? (
-        <div style={{ position: "relative", borderRadius: 10, overflow: "hidden" }}>
-          <LiveCamera mode={o.mode}/>
+        <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", flex: 1, minHeight: 0, background: "#111" }}>
+          <LiveCamera mode={o.mode} style={{ height: "100%" }}/>
           {o.overlay && live && <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "14px 10px 6px", color: "#fff",
             background: "linear-gradient(transparent, rgba(0,0,0,0.65))", display: "flex", alignItems: "center", gap: 8, fontSize: 12, fontWeight: 800 }}>
             <span style={{ flex: 1, height: 5, borderRadius: 5, background: "rgba(255,255,255,0.3)", overflow: "hidden" }}>
@@ -608,7 +612,7 @@ function Temps({ status, o, sz }) {
       {o.style === "gauges" ? (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "space-around" }}>
           {rows.map(r => <Gauge key={r.k} value={r.v} max={r.t > 0 ? r.t : r.max} color={(r.v || 0) > 40 ? r.c : "#94a3b8"}
-            size={sz.w > 1 ? 74 : 58} label={`${Math.round(r.v || 0)}°`} sub={`${r.l}${o.targets && r.t > 0 ? ` / ${Math.round(r.t)}°` : ""}`}/>)}
+            size={sz.h > 2 ? 96 : sz.w > 1 ? 74 : 58} label={`${Math.round(r.v || 0)}°`} sub={`${r.l}${o.targets && r.t > 0 ? ` / ${Math.round(r.t)}°` : ""}`}/>)}
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -636,7 +640,7 @@ function Month({ v, o, sz }) {
       {v && <Sub><W text={[fmtG(v.weight_g), fmtH(v.duration), o.cost && fmtEur(v.cost)].filter(Boolean).join(" · ")}/></Sub>}
       {o.compare && v?.prev && <div style={{ fontSize: 11, color: "var(--muted)" }}>à la même date le mois dernier : {v.prev.count}</div>}
       {days && days.length > 1 && <div style={{ marginTop: "auto", paddingTop: 6 }}>
-        <Bars values={days.map(x => x.count || 0)} color="#6366F1" height={sz.h > 2 ? 90 : 44} hi={days.length - 1}/></div>}
+        <Bars values={days.map(x => x.count || 0)} color="#6366F1" height={sz.h > 2 ? 90 + (sz.h - 3) * 128 : 44} hi={days.length - 1}/></div>}
     </Tile>
   );
 }
@@ -649,7 +653,7 @@ function Sales({ v, o, sz }) {
     <Tile icon={<ShoppingBag size={15}/>} color="#EC4899" label="Objets et ventes" onClick={() => nav("/objects")}
       mini={sz.h === 0.5} summary={<>{v.available}<span style={{ fontSize: 12, color: "var(--muted)" }}>à vendre · {v.sold} vendus</span></>}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        {o.ring && <Ring value={share} size={sz.h > 1 ? 64 : 48} color="#EC4899">{v.sold}</Ring>}
+        {o.ring && <Ring value={share} size={sz.h > 2 ? 88 : sz.h > 1 ? 64 : 48} color="#EC4899">{v.sold}</Ring>}
         <div style={{ minWidth: 0 }}>
           <Row><Big>{v.available}</Big><Unit>à vendre</Unit></Row>
           <Sub><W text={[`${v.sold} vendu${v.sold > 1 ? "s" : ""}`, o.revenue && `${Math.round(v.revenue || 0)} €`,
@@ -666,9 +670,16 @@ function Feed({ f, o, sz }) {
   const nav = useNavigate();
   if (!f) return null;
   const want = FEED_SECTIONS[o.section || "all"];
-  const items = (f.items || []).filter(x => !want || want.includes(x.section)).slice(0, o.count || (sz.h > 2 ? 10 : 6));
+  const all = (f.items || []).filter(x => !want || want.includes(x.section));
+  const fit = Math.max(2, Math.floor((sz.h * 128 - 58) / 33));
+  const items = all.slice(0, o.count === "auto" || !o.count ? fit : Math.min(o.count, fit));
+  const fresh = all.filter(x => !x.seen).length;
   return (
-    <Tile icon={<Rss size={15}/>} color="#0EA5E9" label="Le fil du jour" onClick={() => nav("/notifications")}>
+    <Tile icon={<Rss size={15}/>} color="#0EA5E9" label="Le fil du jour" onClick={() => nav("/notifications")}
+      mini={sz.h === 0.5} summary={!all.length ? <span style={{ fontSize: 12.5, color: "var(--muted)" }}>rien de neuf</span>
+        : <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, minWidth: 0 }}>
+          {fresh > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#fff", background: "#3b82f6", borderRadius: 20, padding: "1px 7px" }}>{fresh}</span>}
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{noEmoji(all[0].title)}</span></span>}>
       {!items.length ? <Line><W text="Rien de neuf."/></Line> : items.map((x, i) => {
         const sw = String(x.image || "").startsWith("color:") ? x.image.slice(6).split(",")[0] : null;
         return (
@@ -693,7 +704,14 @@ function Gallery({ g, o, sz }) {
   const nav = useNavigate();
   const list = (g || []).filter(p => !o.okOnly || p.status === "SUCCESS" || p.status === "PARTIAL").slice(0, o.count || 8);
   if (!list.length) return null;
-  const min = sz.w > 1 ? (sz.h > 1 ? 72 : 56) : 46;
+  const min = sz.h > 2 ? (sz.w > 1 ? 104 : 72) : sz.w > 1 ? (sz.h > 1 ? 72 : 56) : 46;
+  if (sz.h === 0.5) return (
+    <div className="card" style={{ height: "100%", boxSizing: "border-box", padding: "0 10px", display: "flex", alignItems: "center", gap: 6, overflow: "hidden" }}>
+      {list.map(p => <img key={p.id} data-pk="" src={apiUrl(`/prints/${p.id}/image`)} alt="" title={p.file_name || p.translated_name}
+        onClick={() => nav(`/prints?id=${p.id}`)} onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+        style={{ width: 38, height: 38, flexShrink: 0, objectFit: "cover", borderRadius: o.round ? "50%" : 8, background: "var(--surface2)", cursor: "pointer" }}/>)}
+    </div>
+  );
   return (
     <Tile icon={<Images size={15}/>} color="#14B8A6" label="Dernières impressions" onClick={() => nav("/prints?tab=gallery")}>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${min}px, 1fr))`, gap: 6 }}>
@@ -736,16 +754,19 @@ function Podium({ p, o, sz }) {
   const people = (p?.people || []).filter(x => x.status === "ok").sort((a, b) => (b.score || 0) - (a.score || 0));
   if (people.length < 2) return null;
   const max = Math.max(1, people[0].score || 0);
-  const list = people.slice(0, sz.h > 1 ? 6 : 3);
+  const list = people.slice(0, sz.h > 3 ? 14 : sz.h > 2 ? 10 : sz.h > 1 ? 6 : 3);
+  const top = <span style={{ fontSize: 13 }}>🥇 {list[0].me ? "Toi" : list[0].name} · {(list[0].score || 0).toLocaleString("fr-FR")}</span>;
   if (o.style === "podium" && list.length >= 2) {
     const order = [list[1], list[0], list[2]].filter(Boolean), hs = { 0: 1, 1: 0.72, 2: 0.52 };
+    const step = Math.max(46, sz.h * 128 - 110);
     return (
-      <Tile icon={<MedalIcon size={15}/>} color="#A855F7" label="Classement des copains" onClick={() => nav("/stats?tab=achievements")}>
-        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 6, marginTop: "auto", height: sz.h > 1 ? 120 : 76 }}>
+      <Tile icon={<MedalIcon size={15}/>} color="#A855F7" label="Classement des copains" onClick={() => nav("/stats?tab=achievements")}
+        mini={sz.h === 0.5} summary={top}>
+        <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 6, marginTop: "auto", height: step + 30 }}>
           {order.map(x => { const rank = list.indexOf(x); return (
             <div key={x.name} style={{ flex: 1, maxWidth: 90, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
               <span style={{ fontSize: 11.5, fontWeight: x.me ? 900 : 700, color: "var(--text)", ...clamp(1) }}>{x.me ? "Toi" : x.name}</span>
-              <div data-pk="" style={{ width: "100%", height: `${hs[rank] * (sz.h > 1 ? 80 : 46)}px`, borderRadius: "8px 8px 0 0",
+              <div data-pk="" style={{ width: "100%", height: `${hs[rank] * step}px`, borderRadius: "8px 8px 0 0",
                 background: ["#D4A017", "#94A3B8", "#B45309"][rank], display: "flex", alignItems: "flex-start", justifyContent: "center",
                 color: "#fff", fontWeight: 900, fontSize: 13, paddingTop: 3 }}>{rank + 1}</div>
             </div>); })}
@@ -755,7 +776,7 @@ function Podium({ p, o, sz }) {
   }
   return (
     <Tile icon={<MedalIcon size={15}/>} color="#A855F7" label="Classement des copains" onClick={() => nav("/stats?tab=achievements")}
-      mini={sz.h === 0.5} summary={<span style={{ fontSize: 13 }}>🥇 {list[0].me ? "Toi" : list[0].name} · {(list[0].score || 0).toLocaleString("fr-FR")}</span>}>
+      mini={sz.h === 0.5} summary={top}>
       {list.map((x, i) => (
         <div key={x.id || x.name} style={{ marginTop: i ? 5 : 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
@@ -810,7 +831,7 @@ function Alerts({ a, o, sz }) {
 // (rangees ; la premiere valeur est celle par defaut), ses options (une valeur
 // par defaut, un groupe, une explication ; « when » : seulement pour certaines
 // tailles). render(donnees, imprimante, options, taille).
-const sz = it => ({ w: it?.w || 1, h: typeof it?.h === "number" ? it.h : 1 });   // h : 0,5 (une ligne), 1, 2 ou 3
+const sz = it => ({ w: it?.w || 1, h: typeof it?.h === "number" ? it.h : 1 });   // h : 0,5 (une ligne), 1, 2, 3 ou 4
 const B = (key, label, def, extra = {}) => ({ key, label, def, ...extra });
 const C = (key, label, def, choices, extra = {}) => ({ key, label, def, choices, ...extra });
 export const TILES = {
@@ -847,7 +868,7 @@ export const TILES = {
   ach: { label: "Succès", w: [2, 1], h: [1, 2, 0.5], render: (d, st, o, it) => <Ach a={d.ach} o={o} sz={sz(it)}/>,
     options: [B("grade", "Grade de maker", true), B("score", "Anneau du score", false), B("cards", "Prochaines cartes", true), B("recent", "Dernières médailles", true)] },
   // au choix (dans « Ajouter »)
-  camera: { label: "Caméra", w: [2, 1], h: [2, 1, 3], render: (d, st, o) => <LiveCam status={st} o={o}/>,
+  camera: { label: "Caméra", w: [2, 1], h: [2, 1, 3], render: (d, st, o, it) => <LiveCam status={st} o={o} sz={sz(it)}/>,
     options: [C("mode", "Image", "auto", [["auto", "auto"], ["stream", "direct"], ["images", "toutes les 2 s"]],
       { hint: "Auto : le direct, et des images si le direct se fige." }), B("overlay", "Avancement sur l'image", true)] },
   temps: { label: "Températures", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Temps status={st} o={o} sz={sz(it)}/>,
@@ -858,7 +879,7 @@ export const TILES = {
     options: [B("ring", "Anneau vendus / à vendre", true), B("revenue", "Chiffre d'affaires", true), B("margin", "Marge", true),
       B("potential", "Valeur du stock", true, { hint: "Quand la tuile a la place." })] },
   feed: { label: "Le fil du jour", w: [2, 1], h: [2, 3, 1], render: (d, st, o, it) => <Feed f={d.feed} o={o} sz={sz(it)}/>,
-    options: [C("count", "Lignes", 6, [[4, "4"], [6, "6"], [10, "10"]]),
+    options: [C("count", "Lignes", "auto", [["auto", "selon la hauteur"], [4, "4 au plus"], [6, "6 au plus"], [10, "10 au plus"]]),
       C("section", "Montrer", "all", [["all", "tout"], ["prints", "impressions"], ["spools", "bobines et séchage"], ["mw", "MakerWorld"], ["friends", "copains"]]),
       B("time", "Heure", true), B("detail", "Détail (en pleine largeur)", true)] },
   gallery: { label: "Galerie", w: [2, 1], h: [1, 2], render: (d, st, o, it) => <Gallery g={d.prints} o={o} sz={sz(it)}/>,
@@ -873,3 +894,6 @@ export const TILES = {
     options: [C("style", "Affichage", "chips", [["chips", "pastilles"], ["icons", "icônes"], ["list", "liste"]]),
       B("detail", "Exemples (en liste, pleine largeur)", true)] },
 };
+// chaque tuile se pose sur 1/2, 1, 2, 3 ou 4 rangees ; sa hauteur par defaut reste en tete
+export const HEIGHTS = [0.5, 1, 2, 3, 4];
+for (const t of Object.values(TILES)) t.h = [t.h[0], ...HEIGHTS.filter(x => x !== t.h[0])];

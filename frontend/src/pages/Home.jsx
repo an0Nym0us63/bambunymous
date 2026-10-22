@@ -1066,12 +1066,22 @@ export default function Home() {
     rack={st?.hotend_rack}
     spoolLookup={spoolLookup}
     activeNozzleId={st?.nozzles?.find(n => n.active)?.id ?? null}/> : null;
+  // a demi-hauteur, l'AMS se resume a ses bacs : une pastille par bobine chargee
+  const amsSummary = st => {
+    const trays = (st?.ams_list || []).filter(a => a.id !== 255 && a.id !== 254).flatMap(a => a.trays || []);
+    if (!trays.length) return null;
+    return <span style={{ display: "inline-flex", gap: 3 }}>{trays.slice(0, 16).map((t, i) => <span key={i} data-pk="" title={t.empty ? "vide" : t.filament_type || ""}
+      style={{ width: 14, height: 14, borderRadius: "50%", border: "1px solid rgba(0,0,0,0.2)",
+        background: !t.empty && t.color ? `#${String(t.color).replace("#", "").slice(0, 6)}` : "var(--surface2)" }}/>)}</span>;
+  };
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {
-    printer: { label: "Imprimante", w: [2, 1], h: ["auto"], h1: [2, 3, 1], required: true,
+    printer: { label: "Imprimante", w: [2, 1], h: ["auto", 0.5, 1, 2, 3, 4], h1: [2, 3, 4, 1, 0.5], required: true,
+      summary: (d, st) => ["RUNNING", "PAUSE", "PAUSED"].includes(String(st?.status || "").toUpperCase())
+        ? <span data-pk="" style={{ fontSize: 14 }}>{Math.round(st.progress || 0)} %</span> : null,
       frame: { icon: <Printer size={15}/>, color: "#3B82F6",
         extra: (st, item, o) => <PrinterHead status={st} temps={o.headTemps && item.w !== 1}/> },
-      render: (d, st, o, item) => item?.w === 1 ? <PrinterCompact status={st} size={item.h <= 1 ? "small" : o.half} showFin={o.fin} showLayer={o.layer}/>
+      render: (d, st, o, item) => item?.w === 1 || item?.h === 1 ? <PrinterCompact status={st} size={item.w !== 1 || item.h <= 1 ? "small" : o.half} showFin={o.fin} showLayer={o.layer}/>
         : <StatusBanner status={st} defaultExpanded={o.open} showCamera={o.cam} showTemps={o.temps}/>,
       options: [
         { when: it => it.w !== 1, key: "headTemps", label: "Températures dans l'en-tête", def: true },
@@ -1082,10 +1092,14 @@ export default function Home() {
         { when: it => it.w !== 1, key: "open", label: "Volet déplié à l'ouverture", def: false },
         { when: it => it.w !== 1, key: "cam", label: "Caméra dans le volet", def: true },
         { when: it => it.w !== 1, key: "temps", label: "Températures dans le volet", def: true }] },
-    ams: { label: "AMS", w: [2], h: ["auto"], frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" }, render: (d, st) => devices(st, "overview") },
-    amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto"], frame: { icon: <Layers size={15}/>, color: "#6366F1" },
+    ams: { label: "AMS", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" }, render: (d, st) => devices(st, "overview") },
+    amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Layers size={15}/>, color: "#6366F1" },
       render: (d, st) => devices(st, "detail") },
-    attention: { label: "Points d'attention", w: [2], h: ["auto"], frame: { icon: <AlertTriangle size={15}/>, color: "#F59E0B" },
+    attention: { label: "Points d'attention", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: d => {
+        const cats = (d.attention?.categories || []).filter(c => c.total);
+        return <span style={{ display: "inline-flex", gap: 6, fontSize: 13 }}>{cats.length ? cats.map(c => <span key={c.category} title={c.label}>
+          {c.icon}<b style={{ color: "#b45309" }}>{c.total}</b></span>) : "rien à signaler"}</span>;
+      }, frame: { icon: <AlertTriangle size={15}/>, color: "#F59E0B" },
       render: (d, st, o) => <AttentionSection bare startOpen={o.open === "keep" ? null : o.open === "open"}/>,
       options: [{ key: "open", label: "À l'arrivée sur l'accueil", def: "keep",
         choices: [["keep", "comme je l'ai laissée"], ["open", "dépliée"], ["closed", "repliée"]] }] },

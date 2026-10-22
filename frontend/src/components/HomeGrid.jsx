@@ -155,9 +155,22 @@ function Cell({ item, def, edit, children, actions, options, drag, selected, onS
 }
 // Les blocs historiques (imprimante, AMS, points d'attention) dans le meme cadre
 // que les tuiles : pastille d'icone, titre, lueur ; leurs cartes internes aplaties.
-function Frame({ def, children, extra }) {
+function Frame({ def, children, extra, item, summary }) {
   if (children == null || children === false) return null;
   const { icon, color } = def.frame;
+  const fixed = typeof item?.h === "number";
+  // demi-hauteur : une ligne, l'icone, le nom, et l'essentiel a droite
+  if (item?.h === 0.5) return (
+    <div className="card hg-frame" style={{ padding: "0 12px", display: "flex", alignItems: "center", gap: 8, height: "100%", boxSizing: "border-box",
+      overflow: "hidden", minWidth: 0 }}>
+      <span data-pk="" style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+        background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>
+      <span className="frame-label" style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden",
+        textOverflow: "ellipsis", minWidth: 0, flexShrink: 1 }}>{def.label}</span>
+      <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 15, fontWeight: 900,
+        color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden" }}>{summary}{extra}</span>
+    </div>
+  );
   return (
     <div className="card hg-frame" style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6, position: "relative",
       overflow: "hidden", height: "100%", boxSizing: "border-box", minWidth: 0 }}>
@@ -170,7 +183,7 @@ function Frame({ def, children, extra }) {
         {extra && <span className="frame-extra" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap",
           justifyContent: "flex-end" }}>{extra}</span>}
       </div>
-      <div className="hg-frame-body" style={{ position: "relative", minWidth: 0 }}>{children}</div>
+      <div className="hg-frame-body" style={{ position: "relative", minWidth: 0, ...(fixed ? { flex: 1, minHeight: 0, overflowY: "auto" } : {}) }}>{children}</div>
     </div>
   );
 }
@@ -392,7 +405,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
     return (
       <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} options={options} drag={edit ? drag : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
-        {def.frame ? <Frame def={def} extra={def.frame.extra?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
+        {def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
           : def.render(data, status, o, item)}
       </Cell>
     );
