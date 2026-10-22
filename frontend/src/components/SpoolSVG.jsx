@@ -117,11 +117,11 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
 
       {/* Animation impression */}
       {active && (
+        // rotation en CSS : l'animation SVG (animateTransform) restait parfois figee
+        // au rechargement de la page, et ne repartait qu'a la creation suivante
         <circle cx="40" cy="40" r="32" stroke="#3b82f6" strokeWidth="2.5"
-          fill="none" strokeDasharray="6 3" opacity="0.9">
-          <animateTransform attributeName="transform" type="rotate"
-            from="0 40 40" to="360 40 40" dur="8s" repeatCount="indefinite"/>
-        </circle>
+          fill="none" strokeDasharray="6 3" opacity="0.9"
+          style={{ transformBox: "view-box", transformOrigin: "40px 40px", animation: "spin 8s linear infinite" }}/>
       )}
     </svg>
   );
