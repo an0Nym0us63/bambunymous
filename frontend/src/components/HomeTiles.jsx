@@ -443,6 +443,27 @@ function Stats({ items }) {
       <div data-pk="" style={{ fontSize: zoom ? 17 : 14.5, fontWeight: 900, color: c || "var(--text)", marginTop: zoom ? 2 : 0, ...wrap }}>{x}</div></div>)}
   </div>;
 }
+function FactCards({ groups }) {
+  const list = groups.map(g => ({ ...g, rows: g.rows.filter(r => r && r.v != null && r.v !== "") })).filter(g => g.rows.length);
+  return <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: 12 }}>
+    {list.map(g => <div key={g.t} style={{ borderRadius: 18, padding: "12px 14px", background: `linear-gradient(160deg, ${g.c}1a, transparent 55%), var(--surface2)`,
+      border: `1px solid ${g.c}33`, display: "flex", flexDirection: "column", gap: 2 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <span style={{ width: 28, height: 28, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 15,
+          background: `${g.c}26` }}>{g.i}</span>
+        <span style={{ fontSize: 13.5, fontWeight: 900, color: "var(--text)" }}>{g.t}</span>
+      </div>
+      {g.rows.map((r, k) => <div key={r.l} style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "7px 0",
+        borderTop: k ? "1px dashed var(--border)" : "none" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", flex: 1, minWidth: 0 }}>{r.l}</span>
+        <span style={{ textAlign: "right", minWidth: 0 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 14.5, fontWeight: 900, color: r.vc || "var(--text)" }}>{r.pre}{r.v}</span>
+          {r.d && <span style={{ display: "block", fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>{r.d}</span>}
+        </span>
+      </div>)}
+    </div>)}
+  </div>;
+}
 function Facts({ items }) {
   const { W } = useBox();
   const list = items.filter(it => it && it.v != null && it.v !== "");
@@ -1544,34 +1565,34 @@ function Spool({ status, o, sz }) {
             {bar(10)}
           </div>
         </div>
-        <H2>La bobine</H2>
-        <Facts items={(() => {
+        {(() => {
           const price = si.price_override || si.price;
           const day = iso => iso ? utc(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }) : null;
-          return [
-            { i: <span style={{ width: 18, height: 18, borderRadius: 6, background: color, border: "1px solid rgba(0,0,0,0.2)", display: "block" }}/>, l: "Couleur Bambu",
-              v: si.color_code ? `n° ${si.color_code}` : null, d: si.name_en && si.name_en !== name ? si.name_en : null, c: color },
-            { i: "📦", l: "Stock de ce filament", v: si.filament_stock_g != null ? fmtG(si.filament_stock_g) : null,
-              d: si.to_order ? "à commander" : null, c: "#f59e0b", vc: si.to_order ? "#d97706" : undefined },
-            { i: "💶", l: "Prix de la bobine", v: price ? fmtEur(price) : null,
-              d: price && g != null && tot ? `il en reste pour ${fmtEur(price * g / tot)}` : null, c: "#16a34a" },
-            { i: "🗓️", l: "Première utilisation", v: day(si.first_used_at) || "pas encore", d: si.first_used_at ? ago(si.first_used_at) : null, c: "#8b5cf6" },
-            { i: "🕒", l: "Dernière utilisation", v: si.last_used_at ? ago(si.last_used_at) : null, c: "#3b82f6" },
-            { i: "🔥", l: "Dernier séchage", v: si.last_dried_at ? ago(si.last_dried_at) : "jamais", d: si.needs_drying ? "il est temps de la sécher" : null,
-              c: "#f97316", vc: si.needs_drying ? "#0ea5e9" : undefined },
-            { i: "⚖️", l: "Bobine vide", v: si.spool_weight_g ? `${Math.round(si.spool_weight_g)} g` : null, d: si.spool_tare_name, c: "#64748b" },
-            { i: "➕", l: "Ajoutée au stock", v: day(si.created_at), c: "#14b8a6" },
-            { i: "🏷️", l: "Étiquette", v: si.label_printed == null ? null : si.label_printed ? "imprimée" : "à imprimer", c: "#ec4899" },
-          ];
-        })()}/>
-        <H2>Dans l'AMS</H2>
-        <Facts items={[
-          { i: "📍", l: "Emplacement", v: slot, c: "#8b5cf6" },
-          { i: "💧", l: "Humidité", v: t.ams?.humidity ? `${t.ams.humidity} %` : null, c: "#0ea5e9", vc: "#0ea5e9" },
-          { i: "🌡️", l: "Température", v: t.ams?.temp ? `${Number(t.ams.temp).toFixed(1).replace(".", ",")} °C` : null, c: "#ef4444" },
-          { i: "☀️", l: "Séchage en cours", v: t.ams?.dry_time > 0 ? `${t.ams.dry_temperature || "?"} °C` : null,
-            d: t.ams?.dry_time > 0 ? `encore ${fmtDur(t.ams.dry_time * 60)}` : null, c: "#f97316", vc: "#ea580c" },
-        ]}/>
+          return <FactCards groups={[
+            { t: "Le filament", i: "🎨", c: color, rows: [
+              { l: "Couleur Bambu", v: si.color_code ? `n° ${si.color_code}` : null, d: si.name_en && si.name_en !== name ? si.name_en : null,
+                pre: <span style={{ width: 14, height: 14, borderRadius: 4, background: color, border: "1px solid rgba(0,0,0,0.2)" }}/> },
+              { l: "Échantillon", v: si.swatch == null ? null : si.swatch ? "fait" : "à faire", vc: si.swatch === false ? "#d97706" : "#16a34a" },
+              { l: "Stock de ce filament", v: si.filament_stock_g != null ? fmtG(si.filament_stock_g) : null, d: si.to_order ? "à commander" : null } ] },
+            { t: "Le budget", i: "💶", c: "#16a34a", rows: [
+              { l: "Prix de la bobine", v: price ? fmtEur(price) : null },
+              { l: "Ce qu'il en reste", v: price && g != null && tot ? fmtEur(price * g / tot) : null, vc: "#16a34a" } ] },
+            { t: "Son histoire", i: "🗓️", c: "#8b5cf6", rows: [
+              { l: "Ajoutée au stock", v: day(si.created_at) },
+              { l: "Première utilisation", v: day(si.first_used_at) || "aujourd'hui", d: si.first_used_at ? ago(si.first_used_at) : null },
+              { l: "Dernier séchage", v: si.last_dried_at ? ago(si.last_dried_at) : "jamais", d: si.needs_drying ? "il est temps de la sécher" : null,
+                vc: si.needs_drying ? "#0ea5e9" : undefined } ] },
+            { t: "La bobine", i: "🧵", c: "#64748b", rows: [
+              { l: "Bobine vide", v: si.spool_weight_g ? `${Math.round(si.spool_weight_g)} g` : null, d: si.spool_tare_name },
+              { l: "Étiquette", v: si.label_printed == null ? null : si.label_printed ? "imprimée" : "à imprimer", vc: si.label_printed === false ? "#d97706" : undefined } ] },
+            { t: "Dans l'AMS", i: "📍", c: "#0ea5e9", rows: [
+              { l: "Emplacement", v: slot },
+              { l: "Humidité", v: t.ams?.humidity ? `${t.ams.humidity} %` : null, vc: "#0ea5e9" },
+              { l: "Température", v: t.ams?.temp ? `${Number(t.ams.temp).toFixed(1).replace(".", ",")} °C` : null },
+              { l: "Séchage", v: t.ams?.dry_time > 0 ? `${t.ams.dry_temperature || "?"} °C` : null, d: t.ams?.dry_time > 0 ? `encore ${fmtDur(t.ams.dry_time * 60)}` : null,
+                vc: "#ea580c" } ] },
+          ]}/>;
+        })()}
         {si.comment && <Line>{si.comment}</Line>}</>}>
       {({ W, H }) => {
         const narrow = W < 215;
