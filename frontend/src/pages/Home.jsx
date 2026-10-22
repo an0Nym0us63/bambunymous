@@ -753,23 +753,34 @@ function stateOf(status) {
   if (st === "FAILED") return { label: "Échouée", color: "#ef4444" };
   return { label: "Au repos", color: "#94a3b8" };
 }
-// a droite du titre : l'etat, les temperatures, la connexion
-function PrinterHead({ status, compact = false }) {
+// Les pictogrammes des temperatures : la buse, le plateau, la chambre
+const IcoNozzle = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+  strokeLinejoin="round" aria-hidden="true"><path d="M5 3h14v6h-3l-2 7h-4L8 9H5z"/><path d="M11 16h2l-1 4z" fill="currentColor"/></svg>;
+const IcoBed = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+  strokeLinecap="round" aria-hidden="true"><rect x="3" y="12" width="18" height="5" rx="1"/><path d="M6 20v-3M18 20v-3M8 8c0-2 2-2 2-4M12 8c0-2 2-2 2-4"/></svg>;
+const IcoChamber = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+  strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v18M12 8h5M12 12h5"/></svg>;
+// a droite du titre : l'etat (« Injoignable » dit aussi la connexion), et les temperatures en pictogrammes
+function PrinterHead({ status, temps = true }) {
   const s = stateOf(status);
   const nz = (status?.nozzles || []).find(n => n.active) || (status?.nozzles || [])[0];
-  const chip = { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 800, padding: "2px 8px",
-    borderRadius: 20, whiteSpace: "nowrap", background: "var(--surface2)", color: "var(--text2)" };
+  const hot = (v, t) => v > 40 ? t : "var(--text2)";
+  const chip = { display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
+    borderRadius: 20, whiteSpace: "nowrap", background: "var(--surface2)", color: "var(--text2)", fontVariantNumeric: "tabular-nums" };
+  const on = temps && status?.connected;
   return <>
     <span data-pk="" style={{ ...chip, color: s.color, background: `${s.color}1f` }}>
       <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>
-    {!compact && status?.connected && nz && <span data-pk="" style={chip}><Thermometer size={11}/>buse {Math.round(nz.temp || 0)}°</span>}
-    {!compact && status?.connected && <span data-pk="" style={chip}>plateau {Math.round(status.bed_temp || 0)}°</span>}
-    {!compact && status?.connected && status.chamber_temp > 0 && <span data-pk="" style={chip}>chambre {Math.round(status.chamber_temp)}°</span>}
-    {!compact && (status?.connected ? <Wifi size={14} style={{ color: "#22c55e" }}/> : <WifiOff size={14} style={{ color: "#ef4444" }}/>)}
+    {on && nz && <span data-pk="" title={`Buse : ${Math.round(nz.temp || 0)}°${nz.target > 0 ? ` (consigne ${Math.round(nz.target)}°)` : ""}`}
+      style={{ ...chip, color: hot(nz.temp, "#ea580c") }}><IcoNozzle/>{Math.round(nz.temp || 0)}°</span>}
+    {on && <span data-pk="" title={`Plateau : ${Math.round(status.bed_temp || 0)}°${status.target_bed_temp > 0 ? ` (consigne ${Math.round(status.target_bed_temp)}°)` : ""}`}
+      style={{ ...chip, color: hot(status.bed_temp, "#dc2626") }}><IcoBed/>{Math.round(status.bed_temp || 0)}°</span>}
+    {on && status.chamber_temp > 0 && <span data-pk="" title={`Chambre : ${Math.round(status.chamber_temp)}°`}
+      style={{ ...chip, color: hot(status.chamber_temp, "#ca8a04") }}><IcoChamber/>{Math.round(status.chamber_temp)}°</span>}
   </>;
 }
-// en demi-largeur : la vignette en grand, le nom, la duree, la barre
-function PrinterCompact({ status }) {
+// en demi-largeur : grande (vignette 4/3 au-dessus), moyenne (vignette 16/9), ou compacte (vignette a gauche)
+function PrinterCompact({ status, size = "big", showFin = true, showLayer = true }) {
   const [info, setInfo] = useState(null);
   const st = String(status?.status || "").toUpperCase();
   const live = LIVE_ST.includes(st);
@@ -781,26 +792,50 @@ function PrinterCompact({ status }) {
   const s = stateOf(status);
   const pct = Math.round(status?.progress || 0);
   const fin = live && status?.remaining_minutes ? fmtFinishTime(status.remaining_minutes) : null;
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "var(--surface2)", aspectRatio: "4 / 3" }}>
-        {info && <img data-pk="" src={apiUrl(`/prints/${info.id}/image`)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
-          style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}/>}
-        {live && <span data-pk="" style={{ position: "absolute", right: 8, top: 8, fontSize: 18, fontWeight: 900, color: "#fff",
-          padding: "2px 9px", borderRadius: 10, background: `${s.color}dd`, boxShadow: "0 4px 12px rgba(0,0,0,0.25)" }}>{pct}%</span>}
-      </div>
-      <div style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", lineHeight: 1.25, overflow: "hidden", display: "-webkit-box",
-        WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}><Words text={info?.file_name || status?.print_name || s.label}/></div>
-      {live ? <>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 10px", fontSize: 12, color: "var(--muted)" }}>
-          {status.remaining_minutes > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Clock size={12}/>{fmtTime(status.remaining_minutes)}</span>}
-          {fin && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Calendar size={12}/>fin {fin.dayDiff ? "demain " : ""}{fin.time}</span>}
-          {status.total_layers > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Layers size={12}/>{status.layer}/{status.total_layers}</span>}
+  const small = size === "small";
+  const thumb = (
+    <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "var(--surface2)", flexShrink: 0,
+      ...(small ? { width: 64, height: 64 } : { width: "100%", aspectRatio: size === "mid" ? "16 / 9" : "4 / 3" }) }}>
+      {info && <img data-pk="" src={apiUrl(`/prints/${info.id}/image`)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+        style={{ width: "100%", height: "100%", objectFit: small ? "cover" : "contain", display: "block" }}/>}
+      {live && !small && <span data-pk="" style={{ position: "absolute", right: 8, top: 8, fontSize: 17, fontWeight: 900, color: "#fff",
+        padding: "2px 9px", borderRadius: 10, background: `${s.color}dd`, boxShadow: "0 4px 12px rgba(0,0,0,0.25)" }}>{pct}%</span>}
+    </div>
+  );
+  const facts = live && (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 10px", fontSize: 12, color: "var(--muted)" }}>
+      {status.remaining_minutes > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Clock size={12}/>{fmtTime(status.remaining_minutes)}</span>}
+      {showFin && fin && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Calendar size={12}/>{fin.dayDiff ? "demain " : ""}{fin.time}</span>}
+      {showLayer && status.total_layers > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Layers size={12}/>{status.layer}/{status.total_layers}</span>}
+    </div>
+  );
+  const bar = live && (
+    <div style={{ height: small ? 7 : 10, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}>
+      <div data-pk="" style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg, ${s.color}, ${s.color}cc)`,
+        boxShadow: `0 0 8px ${s.color}88`, transition: "width 1s" }}/></div>
+  );
+  const name = (
+    <div style={{ fontSize: small ? 13 : 14, fontWeight: 800, color: "var(--text)", lineHeight: 1.25, overflow: "hidden", display: "-webkit-box",
+      WebkitLineClamp: small ? 1 : 2, WebkitBoxOrient: "vertical" }}><Words text={info?.file_name || status?.print_name || s.label}/></div>
+  );
+  if (small) return (
+    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+      {thumb}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>{name}</div>
+          {live && <span data-pk="" style={{ fontSize: 15, fontWeight: 900, color: s.color }}>{pct}%</span>}
         </div>
-        <div style={{ height: 10, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}>
-          <div data-pk="" style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg, ${s.color}, ${s.color}cc)`,
-            boxShadow: `0 0 8px ${s.color}88`, transition: "width 1s" }}/></div>
-      </> : <div style={{ fontSize: 12, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
+        {facts || <div style={{ fontSize: 12, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
+        {bar}
+      </div>
+    </div>
+  );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+      {thumb}
+      {name}
+      {live ? <>{facts}{bar}</> : <div style={{ fontSize: 12, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
     </div>
   );
 }
@@ -954,11 +989,18 @@ export default function Home() {
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {
     printer: { label: "Imprimante", w: [2, 1], h: ["auto"], required: true,
-      frame: { icon: <Printer size={15}/>, color: "#3B82F6", extra: (st, item) => <PrinterHead status={st} compact={item.w === 1}/> },
-      render: (d, st, o, item) => item?.w === 1 ? <PrinterCompact status={st}/>
+      frame: { icon: <Printer size={15}/>, color: "#3B82F6",
+        extra: (st, item, o) => <PrinterHead status={st} temps={o.headTemps && item.w !== 1}/> },
+      render: (d, st, o, item) => item?.w === 1 ? <PrinterCompact status={st} size={o.half} showFin={o.fin} showLayer={o.layer}/>
         : <StatusBanner status={st} defaultExpanded={o.open} showCamera={o.cam} showTemps={o.temps}/>,
-      options: [{ key: "open", label: "Dépliée à l'ouverture", def: false }, { key: "cam", label: "Caméra dans le volet", def: true },
-                { key: "temps", label: "Températures dans le volet", def: true }] },
+      options: [
+        { when: it => it.w !== 1, key: "headTemps", label: "Températures dans l'en-tête", def: true },
+        { when: it => it.w === 1, key: "half", label: "En demi-largeur", def: "big", choices: [["big", "grande"], ["mid", "moyenne"], ["small", "compacte"]] },
+        { when: it => it.w === 1, key: "fin", label: "Heure de fin", def: true },
+        { when: it => it.w === 1, key: "layer", label: "Couches", def: true },
+        { when: it => it.w !== 1, key: "open", label: "Volet déplié à l'ouverture", def: false },
+        { when: it => it.w !== 1, key: "cam", label: "Caméra dans le volet", def: true },
+        { when: it => it.w !== 1, key: "temps", label: "Températures dans le volet", def: true }] },
     ams: { label: "AMS", w: [2], h: ["auto"], frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" }, render: (d, st) => devices(st, "overview") },
     amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto"], frame: { icon: <Layers size={15}/>, color: "#6366F1" },
       render: (d, st) => devices(st, "detail") },

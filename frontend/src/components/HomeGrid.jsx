@@ -276,9 +276,11 @@ export default function HomeGrid({ status, blocks }) {
     // les options de la tuile (oui/non, ou un choix), propres a cette disposition
     const o = optsOf(def, item);
     const setOpt = (k, v) => update(item.id, { o: { ...(item.o || {}), [k]: v } });
-    const options = def.options?.length ? (
+    // seulement les options qui servent a la taille choisie (« when »)
+    const usable = (def.options || []).filter(op => !op.when || op.when(item));
+    const options = usable.length ? (
       <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 5, borderTop: "1px solid rgba(255,255,255,0.15)" }}>
-        {def.options.map(op => op.choices ? (
+        {usable.map(op => op.choices ? (
           <div key={op.key} style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
             <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, marginRight: 2 }}>{op.label}</span>
             {op.choices.map(([v, l]) => <button key={String(v)} style={btn(o[op.key] === v)} onClick={() => setOpt(op.key, v)}>{l}</button>)}
@@ -299,7 +301,7 @@ export default function HomeGrid({ status, blocks }) {
     return (
       <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} options={options} drag={edit ? drag : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
-        {def.frame ? <Frame def={def} extra={def.frame.extra?.(status, item)}>{def.render(data, status, o, item)}</Frame>
+        {def.frame ? <Frame def={def} extra={def.frame.extra?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
           : def.render(data, status, o, item)}
       </Cell>
     );
