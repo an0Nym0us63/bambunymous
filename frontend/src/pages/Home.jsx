@@ -13,7 +13,7 @@ import LiveCamera from "../components/LiveCamera";
 import Lightbox from "../components/Lightbox";
 import AmsOrderEditor from "../components/AmsOrderEditor";
 import { relayed } from "../components/Friends";
-import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
+import { AMSBox, AMSDetail, TrayBottomSheet, DryPopup } from "../components/AMSSection";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName } from "../utils/ams";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -586,6 +586,26 @@ const useDevSel = create(set => ({
   setSelAms: v => set({ selAms: v }), setSelHotend: v => set({ selHotend: v }), setView: v => set({ view: v }),
 }));
 
+// la pastille de sechage du detail condense : l'unite regardee seche → sa temperature et
+// son temps restant, un clic ouvre la fenetre du sechage
+function DryBadge({ status }) {
+  const selAms = useDevSel(s => s.selAms), view = useDevSel(s => s.view);
+  const [open, setOpen] = useState(false);
+  const list = status?.ams_list || [];
+  const run = ["RUNNING", "PAUSE", "PAUSED"].includes(String(status?.status || "").toUpperCase());
+  const id = selAms ?? (run && status?.active_ams_id >= 0 ? status.active_ams_id : list[0]?.id);
+  const ams = list.find(a => a.id === id);
+  if (!ams || view === "rack" || !(ams.is_drying || ams.dry_time > 0)) return null;
+  const m = ams.dry_time || 0, t = m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m} min`;
+  return <>
+    <button onClick={e => { e.stopPropagation(); setOpen(true); }} title="Voir le séchage" style={{ display: "inline-flex", alignItems: "center", gap: 5,
+      padding: "1px 8px", borderRadius: 20, fontSize: 10.5, fontWeight: 800, color: "#f97316", cursor: "pointer", whiteSpace: "nowrap",
+      background: "var(--sheet-bg)", border: "1px solid rgba(249,115,22,0.5)", boxShadow: "0 3px 10px rgba(0,0,0,0.18)" }}>
+      <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f97316", animation: "dryPulse 2.5s ease-in-out infinite" }}/>
+      {ams.dry_temperature > 0 ? `${ams.dry_temperature}°` : "Séchage"}{m > 0 ? ` · ${t}` : ""}</button>
+    {open && <DryPopup ams={ams} onClose={() => setOpen(false)}/>}
+  </>;
+}
 // part : "overview" (les AMS ou le rack), "detail" (la fiche de l'AMS ou de la buse
 // choisie), ou rien (les deux, l'un sous l'autre)
 export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId, part = null,
@@ -1359,7 +1379,8 @@ export default function Home() {
         { when: (it, o) => (o?.org ?? "grid") === "grid", key: "_amsGrid", label: "Ma grille", group: "Disposition des AMS",
           hint: "Commune à toutes les dispositions de l'accueil.", render: () => <AmsOrderEditor/> },
         { key: "climate", label: "Humidité et température sous chaque unité", def: true }] },
-    amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Layers size={15}/>, color: "#6366F1" },
+    amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Layers size={15}/>, color: "#6366F1",
+        badge: (st, item) => typeof item?.h === "number" && item.h >= 1 ? <DryBadge status={st}/> : null },
       render: (d, st, o, item) => devices(st, "detail", o, item), fit: true,
       options: [
         { key: "selector", label: "Choisir l'unité dans la tuile", def: true, hint: "Des onglets en tête de tuile ; sinon on la choisit dans la tuile AMS." },

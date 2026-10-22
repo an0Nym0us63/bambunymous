@@ -415,7 +415,7 @@ function TrayRow({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loa
       borderRadius: 14, padding: "2px 10px 2px 2px", boxSizing: "border-box", background: isActive ? "rgba(59,130,246,0.08)" : "transparent",
       border: `1px solid ${isActive ? "rgba(59,130,246,0.45)" : "transparent"}` }}>
       <div style={{ position: "relative", flexShrink: 0, opacity: posee ? 0.6 : 1 }}>
-        <SpoolSVG colors={vide ? null : (posee ? parseColors({}, posee) : colors)} empty={vide} size={size} active={false} type={posee ? multicolorType({}, posee) : mcType}/>
+        <SpoolSVG colors={vide ? null : (posee ? parseColors({}, posee) : colors)} empty={vide} size={size} active={isActive} type={posee ? multicolorType({}, posee) : mcType}/>
       </div>
       <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
         <div style={{ fontSize: size >= 64 ? 13.5 : 12, fontWeight: 800, color: "var(--text)", lineHeight: 1.2, minWidth: 0,
@@ -529,7 +529,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
   };
 
   return (
-    <div ref={box} className="card" style={{ padding: fitH != null ? "2px" : hideName ? "6px 2px 4px" : 16,
+    <div ref={box} className="card" style={{ position:"relative", padding: fitH != null ? "2px" : hideName ? "6px 2px 4px" : 16,
       borderColor: isDrying ? "rgba(249,115,22,0.35)" : isActive ? "rgba(59,130,246,0.3)" : undefined,
       boxShadow: isDrying ? "0 0 0 1px rgba(249,115,22,0.1)" : isActive ? "0 0 0 1px rgba(59,130,246,0.1)" : undefined }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent: hideName ? "flex-end" : "space-between", marginBottom: isDrying ? 10 : fitH != null ? 4 : 12,
@@ -562,17 +562,6 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
       </div>
 
       {/* Bandeau séchage */}
-      {/* hauteur imposee : un voyant orange sur une ligne (temperature, temps restant), les bobines restent */}
-      {isDrying && fitH != null && (
-        <div role="button" title="Voir le séchage" onClick={e => { e.stopPropagation(); setDryOpen(true); }}
-          style={{ display:"flex", alignItems:"center", gap:6, height:18, marginBottom:4, fontSize:11.5, fontWeight:800, color:"#f97316", whiteSpace:"nowrap",
-            overflow:"hidden", cursor:"pointer" }}>
-          <span style={{ width:8, height:8, borderRadius:"50%", background:"#f97316", animation:"dryPulse 2.5s ease-in-out infinite", flexShrink:0 }}/>
-          Séchage{ams.dry_temperature > 0 ? ` · ${ams.dry_temperature}°C` : ""}{ams.dry_time > 0 ? ` · encore ${fmtMins(ams.dry_time)}` : ""}
-          {ams.dry_filament && <span style={{ color:"var(--muted)", fontWeight:700, overflow:"hidden", textOverflow:"ellipsis" }}>· {ams.dry_filament}</span>}
-          <span style={{ marginLeft:"auto", color:"var(--muted)", fontWeight:700 }}>›</span>
-        </div>
-      )}
       {dryOpen && <DryPopup ams={ams} onClose={() => setDryOpen(false)}/>}
       {isDrying && fitH == null && (
         <div role="button" onClick={e => { e.stopPropagation(); setDryOpen(true); }} style={{ cursor:"pointer", marginBottom:14, padding:"10px 12px", borderRadius:10,
@@ -605,7 +594,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
         const trays = traysInOrder(ams), n = trays.length || 1;
         const cols = Math.min(n, w >= 560 ? 4 : w >= 260 ? 2 : 1);
         const rows = Math.ceil(n / cols);
-        const room = fitH - 6 - (isDrying ? 22 : 0);
+        const room = fitH - 6;
         const size = Math.max(26, Math.min(cols >= 4 ? 96 : 80, Math.floor((room - 4 * (rows - 1)) / rows) - 4));
         return (
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: "4px 10px" }}>
@@ -1227,7 +1216,7 @@ function MapTraySheet({ tray, amsId, onClose, onMapped }) {
 
 
 // ── Section principale ─────────────────────────────────────────────────────
-export { AMSBox, AMSDetail, TrayBottomSheet, amsName, EXT_AMS_ID };
+export { AMSBox, AMSDetail, TrayBottomSheet, DryPopup, amsName, EXT_AMS_ID };
 
 export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLookup }) {
   // Dédupliquer par id au cas où le polling enverrait des doublons

@@ -227,7 +227,7 @@ function FitBox({ children }) {
 }
 // Les blocs historiques (imprimante, AMS, points d'attention) dans le meme cadre
 // que les tuiles : pastille d'icone, titre, lueur ; leurs cartes internes aplaties.
-function Frame({ def, children, extra, item, summary }) {
+function Frame({ def, children, extra, item, summary, badge = null }) {
   if (children == null || children === false) return null;
   const { icon, color } = def.frame;
   const fixed = typeof item?.h === "number";
@@ -255,6 +255,7 @@ function Frame({ def, children, extra, item, summary }) {
         {extra && <span className="frame-extra" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap",
           justifyContent: "flex-end" }}>{extra}</span>}
       </div>
+      {badge && <div style={{ position: "absolute", top: 2, right: 10, zIndex: 3 }}>{badge}</div>}
       <div className="hg-frame-body" style={{ position: "relative", minWidth: 0, ...(fixed ? { flex: 1, minHeight: 0, overflowY: def.fit ? "hidden" : "auto" } : {}) }}>
         {fixed && def.fit ? <FitBox>{children}</FitBox> : children}</div>
     </div>
@@ -494,7 +495,8 @@ export default function HomeGrid({ status, blocks, top = null }) {
         tint={lay.tint && o._bg !== false && tints[item.id] != null ? TINTS[tints[item.id]] : null} tintMode={lay.tint} tintStyle={lay.tint === "vivid" ? lay.tintStyle || "glow" : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
         {item.h === 0.5 && def.mini ? def.mini(data, status, o, item)
-          : def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
+          : def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}
+            badge={def.frame.badge?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
           : def.render(data, status, o, item)}
       </Cell>
     );
