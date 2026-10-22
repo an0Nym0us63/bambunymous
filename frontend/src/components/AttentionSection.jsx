@@ -73,6 +73,26 @@ export default function AttentionSection({ bare = false }) {
   const [sheet, setSheet] = useState(null); // fiche ouverte SUR PLACE
   const [allOpen, setAllOpen] = useState(false);   // fenêtre "toutes les alertes"
 
+  // une tuile (« Alertes en bref ») demande d'ouvrir la section sur une categorie
+  useEffect(() => {
+    const f = e => {
+      setOpen(true);
+      try { localStorage.setItem("attention_collapsed", "0"); } catch { /* rien */ }
+      const cat = e.detail?.category;
+      setTimeout(() => {
+        const el = document.getElementById(cat ? `att-cat-${cat}` : "att-section");
+        if (!el) return;
+        // la page defile dans un conteneur (pas la fenetre) : on fait defiler celui-la
+        let p = el.parentElement;
+        while (p && !(p.scrollHeight > p.clientHeight + 10 && /(auto|scroll)/.test(getComputedStyle(p).overflowY))) p = p.parentElement;
+        const sc = p || document.scrollingElement;
+        sc.scrollTo({ top: sc.scrollTop + el.getBoundingClientRect().top - (p ? p.getBoundingClientRect().top : 0) - 80, behavior: "smooth" });
+      }, 120);
+    };
+    window.addEventListener("bn-attention-open", f);
+    return () => window.removeEventListener("bn-attention-open", f);
+  }, []);
+
   const toggle = () => {
     setOpen(o => {
       localStorage.setItem("attention_collapsed", o ? "1" : "0");
@@ -169,7 +189,7 @@ export default function AttentionSection({ bare = false }) {
   }
 
   return (
-    <div className="card" style={{ padding: 14 }}>
+    <div className="card" id="att-section" style={{ padding: 14, scrollMarginTop: 80 }}>
       <div onClick={toggle}
         style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer",
           marginBottom: open ? 10 : 0, userSelect:"none" }}>
@@ -199,7 +219,7 @@ export default function AttentionSection({ bare = false }) {
 
       <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
         {cats.map(c => (
-          <div key={c.category}>
+          <div key={c.category} id={`att-cat-${c.category}`} style={{ scrollMarginTop: 80 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <span style={{ fontSize: 12 }}>{c.icon}</span>
               <span style={{ fontSize: 11, fontWeight: 700, color: "var(--text)" }}>

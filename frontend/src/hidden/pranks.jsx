@@ -88,7 +88,10 @@ function makeCtl(layerRef) {
     // tuile, on descend jusqu'aux elements « atomes » (case d'AMS, bobine,
     // vignette, ligne ou mot de texte, puce, barre…). Repli : les tuiles.
     cards(max = 150) {
-      const tiles = ctl.tiles(30);
+      // l'accueil en tuiles a beaucoup de morceaux : un plafond trop bas en
+      // laissait la plupart immobiles (un sur trois seulement bougeait)
+      max = Math.round(max * 3.5);
+      const tiles = ctl.tiles(60);
       const layer = layerRef.current;
       const H = vh();
       const out = [];

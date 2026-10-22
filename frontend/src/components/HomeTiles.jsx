@@ -42,10 +42,12 @@ function Tile({ icon, color, label, onClick, wide, children }) {
 }
 const Big = ({ children, color = "var(--text)" }) =>
   <div data-pk="" style={{ fontSize: "clamp(19px, 5.4vw, 24px)", fontWeight: 900, color, lineHeight: 1.05, letterSpacing: "-.01em" }}>{children}</div>;
+// deux lignes au plus : une demi-tuile sur telephone garde tout son texte lisible
+const clamp2 = { overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", lineHeight: 1.35 };
 const Sub = ({ children }) =>
-  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{children}</div>;
+  <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 3, ...clamp2 }}>{children}</div>;
 const Line = ({ children }) =>
-  <div style={{ fontSize: 12.5, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{children}</div>;
+  <div style={{ fontSize: 12.5, color: "var(--text2)", ...clamp2 }}>{children}</div>;
 
 // ── donnees ──────────────────────────────────────────────────────────────────
 export function useTilesData() {
@@ -86,9 +88,10 @@ export function useTilesData() {
 
 // ── les tuiles ───────────────────────────────────────────────────────────────
 function Today({ v }) {
+  const nav = useNavigate();
   const rate = v?.count ? Math.round(100 * v.ok / v.count) : null;
   return (
-    <Tile icon={<CalendarClock size={15}/>} color="#3B82F6" label="Aujourd'hui">
+    <Tile icon={<CalendarClock size={15}/>} color="#3B82F6" label="Aujourd'hui" onClick={() => nav("/prints")}>
       <div style={{ display: "flex", alignItems: "baseline", gap: "4px 6px", flexWrap: "wrap" }}>
         <Big>{v ? v.count : "…"}</Big>
         <span style={{ fontSize: 12.5, color: "var(--text2)", fontWeight: 700 }}>impression{v?.count > 1 ? "s" : ""}</span>
@@ -101,11 +104,12 @@ function Today({ v }) {
   );
 }
 function Week({ v }) {
+  const nav = useNavigate();
   const max = Math.max(1, ...(v || []).map(x => x.duration || 0));
   const tot = (v || []).reduce((a, x) => ({ c: a.c + (x.count || 0), s: a.s + (x.duration || 0) }), { c: 0, s: 0 });
   const today = ymd(new Date());
   return (
-    <Tile icon={<BarChart3 size={15}/>} color="#8B5CF6" label="7 derniers jours">
+    <Tile icon={<BarChart3 size={15}/>} color="#8B5CF6" label="7 derniers jours" onClick={() => nav("/stats?tab=prints")}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
         <Big>{v ? fmtH(tot.s) : "…"}</Big>
       </div>
@@ -184,7 +188,7 @@ function Stock({ s }) {
         <span style={{ fontSize: 12.5, color: "var(--text2)", fontWeight: 700 }}>bobines · {fmtG(kg)}</span>
       </div>
       {low.map(x => (
-        <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, fontSize: 12, color: "var(--text2)" }}>
+        <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 5, fontSize: 12, color: "var(--text2)", minWidth: 0 }}>
           <span data-pk="" style={{ width: 10, height: 10, borderRadius: "50%", background: hexCss(x.filament_color), flexShrink: 0,
             border: "1px solid var(--border)" }}/>
           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}>
@@ -212,11 +216,12 @@ function Dry({ v, status }) {
   );
 }
 function Humidity({ status }) {
+  const nav = useNavigate();
   const list = (status?.ams_list || []).filter(a => a.humidity > 0 && a.id !== 255 && a.id !== 254);
   if (!list.length) return null;
   const col = h => h < 30 ? "#22c55e" : h < 40 ? "#f59e0b" : "#ef4444";
   return (
-    <Tile icon={<Droplets size={15}/>} color="#06B6D4" label="Humidité des AMS">
+    <Tile icon={<Droplets size={15}/>} color="#06B6D4" label="Humidité des AMS" onClick={() => nav("/stats?tab=drying")}>
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {list.map(a => (
           <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
@@ -266,12 +271,16 @@ function Friends({ f }) {
   return (
     <Tile icon={<Users size={15}/>} color="#14B8A6" label="Copains">
       {p.length ? p.slice(0, 3).map(x => (
-        <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
+        <div key={x.id} style={{ display: "flex", alignItems: "flex-start", gap: 8, marginTop: 4 }}>
           <span data-pk="" style={{ width: 22, height: 22, borderRadius: "50%", background: "#14B8A6", color: "#fff", fontSize: 11, fontWeight: 900,
             display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{(x.name || "?").slice(0, 1).toUpperCase()}</span>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            <b style={{ color: "var(--text)" }}>{x.name}</b> · {x.print?.name || x.print_name || "imprime"}</span>
-          <span data-pk="" style={{ fontSize: 11.5, fontWeight: 800, color: "#0d9488" }}>{Math.round(x.progress || 0)} %</span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+              <b data-pk="" style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</b>
+              <span data-pk="" style={{ fontSize: 11.5, fontWeight: 800, color: "#0d9488" }}>{Math.round(x.progress || 0)} %</span>
+            </div>
+            <div style={{ fontSize: 11.5, color: "var(--muted)", ...clamp2 }}><W text={x.print?.name || x.print_name || "imprime"}/></div>
+          </div>
         </div>
       )) : <Line><W text={`Personne n'imprime (${n} copain${n > 1 ? "s" : ""})`}/></Line>}
     </Tile>
@@ -296,7 +305,8 @@ function Ach({ a }) {
           </div>
         </div>
         {next && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 180px", minWidth: 0 }}>
+          <div onClick={e => { e.stopPropagation(); nav(`/stats?tab=achievements&a=${next.id}`); }}
+            style={{ display: "flex", alignItems: "center", gap: 8, flex: "1 1 180px", minWidth: 0 }}>
             <span data-pk=""><Medal tier={next.tiers[0]} emoji={next.emoji} size={32} locked/></span>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -308,7 +318,8 @@ function Ach({ a }) {
           </div>
         )}
         {lastIt && (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <div onClick={e => { e.stopPropagation(); nav(`/stats?tab=achievements&a=${lastIt.id}`); }}
+            style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
             <span data-pk=""><Medal tier={lastIt.tiers[lastR.tier]} emoji={lastIt.emoji} size={30}/></span>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 11, color: "var(--muted)" }}>Dernière médaille</div>
@@ -382,9 +393,10 @@ function Temps({ status }) {
   );
 }
 function Month({ v }) {
+  const nav = useNavigate();
   const name = new Date().toLocaleDateString("fr-FR", { month: "long" });
   return (
-    <Tile icon={<CalendarDays size={15}/>} color="#6366F1" label={`En ${name}`}>
+    <Tile icon={<CalendarDays size={15}/>} color="#6366F1" label={`En ${name}`} onClick={() => nav("/stats?tab=prints")}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
         <Big>{v ? v.count : "…"}</Big>
         <span style={{ fontSize: 12.5, color: "var(--text2)", fontWeight: 700 }}>impression{v?.count > 1 ? "s" : ""}</span>
@@ -416,7 +428,8 @@ function Feed({ f }) {
       {!items.length ? <Line><W text="Rien de neuf."/></Line> : items.map((x, i) => {
         const sw = String(x.image || "").startsWith("color:") ? x.image.slice(6).split(",")[0] : null;
         return (
-          <div key={x.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 0", borderTop: i ? "1px solid var(--border)" : "none" }}>
+          <div key={x.id} onClick={e => { if (x.link) { e.stopPropagation(); nav(x.link); } }}
+            style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 0", borderTop: i ? "1px solid var(--border)" : "none" }}>
             <span data-pk="" style={{ width: 38, flexShrink: 0, fontSize: 11, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>
               {new Date(x.time).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
             <span data-pk="" style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
@@ -436,8 +449,9 @@ function Gallery({ g }) {
     <Tile icon={<Images size={15}/>} color="#14B8A6" label="Dernières impressions" onClick={() => nav("/prints?tab=gallery")}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(56px, 1fr))", gap: 6 }}>
         {g.map(p => <img key={p.id} data-pk="" src={apiUrl(`/prints/${p.id}/image`)} alt="" title={p.file_name || p.translated_name}
+          onClick={e => { e.stopPropagation(); nav(`/prints?id=${p.id}`); }}
           onError={e => { e.currentTarget.style.display = "none"; }}
-          style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 9, background: "var(--surface2)",
+          style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 9, background: "var(--surface2)", cursor: "pointer",
             outline: p.status === "SUCCESS" || p.status === "PARTIAL" ? "none" : "2px solid rgba(239,68,68,0.6)" }}/>)}
       </div>
     </Tile>
@@ -476,14 +490,21 @@ function Podium({ p }) {
     </Tile>
   );
 }
+// ouvre les points d'attention de l'accueil (sur une categorie) ; sans la tuile a l'ecran, la fenetre des alertes
+const openAttention = category => {
+  if (document.getElementById("att-section")) window.dispatchEvent(new CustomEvent("bn-attention-open", { detail: { category } }));
+  else window.location.assign("/settings?tab=display");
+};
 function Alerts({ a }) {
   const cats = (a?.categories || []).filter(c => c.total);
   if (!a) return null;
   return (
-    <Tile icon={<BellRing size={15}/>} color="#F59E0B" label="Alertes en bref">
+    <Tile icon={<BellRing size={15}/>} color="#F59E0B" label="Alertes en bref" onClick={() => openAttention()}>
       {!cats.length ? <Line><W text="Rien à signaler."/></Line> : (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {cats.map(c => <span key={c.category} data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px",
+          {cats.map(c => <span key={c.category} data-pk="" role="button" tabIndex={0}
+            onClick={e => { e.stopPropagation(); openAttention(c.category); }}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px", cursor: "pointer",
             borderRadius: 20, fontSize: 12, fontWeight: 800, background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
             {c.icon} {c.label} <b>{c.total}</b></span>)}
         </div>

@@ -789,7 +789,7 @@ function Greeting({ status }) {
     fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.28)",
     backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", whiteSpace: "nowrap" };
   return (
-    <div className="card home-hello" style={{ position: "relative", overflow: "hidden", padding: "18px 20px", border: "none",
+    <div className="card home-hello" style={{ position: "relative", overflow: "hidden", border: "none",
       color: "#fff", background: `linear-gradient(120deg, ${sky.a}, ${sky.b})`,
       boxShadow: `0 14px 34px -18px ${sky.b}` }}>
       {/* le decor : un astre et sa lueur, des points tres discrets */}
@@ -798,25 +798,36 @@ function Greeting({ status }) {
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.25,
         background: "radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1.5px) 0 0 / 18px 18px",
         WebkitMaskImage: "linear-gradient(90deg, transparent 30%, #000)", maskImage: "linear-gradient(90deg, transparent 30%, #000)" }}/>
-      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "14px 20px", flexWrap: "wrap" }}>
-        <span data-pk="" aria-hidden="true" style={{ width: 48, height: 48, borderRadius: 16, flexShrink: 0, display: "flex",
+      <style>{`
+        .home-hello { padding:18px 20px; }
+        .hh-title { font-size:26px; } .hh-icon { width:48px; height:48px; } .hh-pills > * { font-size:12.5px; }
+        @media (max-width: 600px) {
+          .home-hello { padding:12px 14px; }
+          .hh-title { font-size:20px; } .hh-icon { width:38px !important; height:38px !important; border-radius:12px !important; }
+          .hh-date { font-size:10.5px !important; } .hh-line { font-size:12.5px !important; margin-top:3px !important; }
+          .hh-pills { width:100%; gap:6px !important; } .hh-pills > * { font-size:11.5px; padding:5px 9px !important; }
+          .hh-edit { position:absolute; top:-2px; right:-4px; }
+        }
+      `}</style>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "10px 16px", flexWrap: "wrap" }}>
+        <span data-pk="" aria-hidden="true" className="hh-icon" style={{ borderRadius: 16, flexShrink: 0, display: "flex",
           alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.3)" }}>
           {night ? <Moon size={24}/> : <Sun size={24}/>}</span>
         <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-          <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase", opacity: 0.85 }}>
+          <div className="hh-date" style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase", opacity: 0.85 }}>
             <Words text={date}/></div>
-          <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.1, marginTop: 2, letterSpacing: "-.01em" }}>
+          <div className="hh-title" style={{ fontWeight: 900, lineHeight: 1.1, marginTop: 2, letterSpacing: "-.01em" }}>
             <Words text={`${night ? "Bonsoir" : "Bonjour"}${first ? " " + first : ""}`}/></div>
-          {line && <div style={{ fontSize: 13.5, marginTop: 5, opacity: 0.92 }}><Words text={line}/></div>}
+          {line && <div className="hh-line" style={{ fontSize: 13.5, marginTop: 5, opacity: 0.92 }}><Words text={line}/></div>}
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <div className="hh-pills" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           {live && <span data-pk="" style={pill}>
             <span style={{ width: 46, height: 6, borderRadius: 6, background: "rgba(255,255,255,0.3)", overflow: "hidden" }}>
               <span style={{ display: "block", height: "100%", width: `${Math.round(status.progress || 0)}%`, background: "#fff" }}/></span>
             {Math.round(status.progress || 0)} %</span>}
           {fin && <span data-pk="" style={pill}><Clock size={14}/>fin {fin.dayDiff ? "demain " : ""}{fin.time}</span>}
           {today && <span data-pk="" style={pill}><Layers size={14}/>{today.count} aujourd'hui</span>}
-          <button onClick={() => window.dispatchEvent(new Event("bn-home-edit"))} aria-label="Personnaliser l'accueil"
+          <button className="hh-edit" onClick={() => window.dispatchEvent(new Event("bn-home-edit"))} aria-label="Personnaliser l'accueil"
             title="Personnaliser l'accueil" style={{ ...pill, cursor: "pointer", padding: "7px 9px" }}><LayoutGrid size={15}/></button>
         </div>
       </div>
