@@ -5,6 +5,7 @@ import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets
          BellRing } from "lucide-react";
 import client, { apiUrl } from "../api/client";
 import { mwImg } from "./MwImg";
+import LiveCamera from "./LiveCamera";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "../pages/Achievements";
 
 // Les tuiles de l'accueil (22/10/2026). Chaque tuile est une « .card » et ses
@@ -72,7 +73,7 @@ export function useTilesData() {
       put("month", get("/prints/kpis", { date_from: ymd(m0) }));
       put("sales", get("/objects/objects/stats"));
       put("feed", get("/notify/me/history"));
-      put("gallery", get("/prints", { limit: 12 }).then(r => (r.prints || r.items || []).filter(p => p.status !== "IN_PROGRESS").slice(0, 8)));
+      put("gallery", get("/prints", { limit: 16 }).then(r => (r.prints || r.items || []).filter(p => p.status !== "IN_PROGRESS").slice(0, 12)));
       put("attention", get("/attention"));
     };
     load();
@@ -103,17 +104,18 @@ function Today({ v }) {
     </Tile>
   );
 }
-function Week({ v }) {
+function Week({ v, metric = "h" }) {
   const nav = useNavigate();
-  const max = Math.max(1, ...(v || []).map(x => x.duration || 0));
+  const val = x => metric === "n" ? x.count || 0 : x.duration || 0;
+  const max = Math.max(1, ...(v || []).map(val));
   const tot = (v || []).reduce((a, x) => ({ c: a.c + (x.count || 0), s: a.s + (x.duration || 0) }), { c: 0, s: 0 });
   const today = ymd(new Date());
   return (
     <Tile icon={<BarChart3 size={15}/>} color="#8B5CF6" label="7 derniers jours" onClick={() => nav("/stats?tab=prints")}>
       <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-        <Big>{v ? fmtH(tot.s) : "…"}</Big>
+        <Big>{v ? (metric === "n" ? `${tot.c}` : fmtH(tot.s)) : "…"}</Big>
       </div>
-      {v && <Sub>{tot.c} impression{tot.c > 1 ? "s" : ""}</Sub>}
+      {v && <Sub>{metric === "n" ? `impression${tot.c > 1 ? "s" : ""} · ${fmtH(tot.s)}` : `${tot.c} impression${tot.c > 1 ? "s" : ""}`}</Sub>}
       {v && (
         <div style={{ display: "flex", gap: 5, alignItems: "flex-end", height: 44, marginTop: 8 }}>
           {v.map(x => {
@@ -122,7 +124,7 @@ function Week({ v }) {
               <div key={ymd(x.day)} title={`${x.day.toLocaleDateString("fr-FR", { weekday: "long" })} · ${fmtH(x.duration)} · ${x.count}`}
                 style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
                 <span data-pk="" style={{ width: "100%", maxWidth: 22, borderRadius: 5, minHeight: 3,
-                  height: `${Math.round(32 * (x.duration || 0) / max)}px`, background: on ? "#8B5CF6" : "rgba(139,92,246,0.35)" }}/>
+                  height: `${Math.round(32 * val(x) / max)}px`, background: on ? "#8B5CF6" : "rgba(139,92,246,0.35)" }}/>
                 <span style={{ fontSize: 10, color: on ? "var(--text)" : "var(--muted)", fontWeight: on ? 800 : 600 }}>
                   {x.day.toLocaleDateString("fr-FR", { weekday: "narrow" })}</span>
               </div>
@@ -351,24 +353,11 @@ function Wheel({ a }) {
   );
 }
 
-function LiveCam({ status }) {
-  const ref = useRef(null);
+function LiveCam({ status, mode }) {
   const on = !!status?.connected;
-  useEffect(() => {
-    if (!on) return undefined;
-    let busy = false;
-    const img = ref.current;
-    const done = () => { busy = false; };
-    img?.addEventListener("load", done); img?.addEventListener("error", done);
-    const tick = () => { if (!busy && img && !document.hidden) { busy = true; img.src = apiUrl(`/camera/snapshot?t=${Date.now()}`); } };
-    tick();
-    const t = setInterval(tick, 2000);
-    return () => { clearInterval(t); img?.removeEventListener("load", done); img?.removeEventListener("error", done); };
-  }, [on]);
   return (
     <Tile icon={<Video size={15}/>} color="#64748B" label="Caméra">
-      {on ? <img ref={ref} data-pk="" alt="Caméra de l'imprimante" style={{ width: "100%", aspectRatio: "16/9", objectFit: "cover",
-        borderRadius: 10, background: "#000", display: "block" }}/> : <Line><W text="L'imprimante ne répond pas."/></Line>}
+      {on ? <LiveCamera mode={mode} style={{ borderRadius: 10, overflow: "hidden" }}/> : <Line><W text="L'imprimante ne répond pas."/></Line>}
     </Tile>
   );
 }
@@ -419,9 +408,9 @@ function Sales({ v }) {
   );
 }
 const noEmoji = t => String(t || "").replace(/^\p{Extended_Pictographic}️?\s*/u, "");
-function Feed({ f }) {
+function Feed({ f, count = 6 }) {
   const nav = useNavigate();
-  const items = (f?.items || []).slice(0, 6);
+  const items = (f?.items || []).slice(0, count);
   if (!f) return null;
   return (
     <Tile icon={<Rss size={15}/>} color="#0EA5E9" label="Le fil du jour" onClick={() => nav("/notifications")}>
@@ -442,9 +431,10 @@ function Feed({ f }) {
     </Tile>
   );
 }
-function Gallery({ g }) {
+function Gallery({ g: all, count = 8 }) {
   const nav = useNavigate();
-  if (!g?.length) return null;
+  const g = (all || []).slice(0, count);
+  if (!g.length) return null;
   return (
     <Tile icon={<Images size={15}/>} color="#14B8A6" label="Dernières impressions" onClick={() => nav("/prints?tab=gallery")}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(56px, 1fr))", gap: 6 }}>
@@ -518,7 +508,8 @@ function Alerts({ a }) {
 // qu'elle accepte. La premiere valeur de chaque liste est sa taille par defaut.
 export const TILES = {
   today:    { label: "Aujourd'hui",          w: [1, 2], h: [1],    render: (d) => <Today v={d.today}/> },
-  week:     { label: "7 derniers jours",     w: [1, 2], h: [1, 2], render: (d) => <Week v={d.week}/> },
+  week:     { label: "7 derniers jours",     w: [1, 2], h: [1, 2], render: (d, st, o) => <Week v={d.week} metric={o.metric}/>,
+              options: [{ key: "metric", label: "Compter", def: "h", choices: [["h", "les heures"], ["n", "les impressions"]] }] },
   next:     { label: "Prochaine impression", w: [1, 2], h: [1],    render: (d) => <Next q={d.queue}/> },
   last:     { label: "Dernière impression",  w: [1, 2], h: [1],    render: (d) => <Last p={d.last}/> },
   stock:    { label: "Stock",                w: [1, 2], h: [1, 2], render: (d) => <Stock s={d.spools}/> },
@@ -530,12 +521,15 @@ export const TILES = {
   wheel:    { label: "Roue et clés",         w: [1, 2], h: [1],    render: (d) => <Wheel a={d.ach}/> },
   ach:      { label: "Succès",               w: [2],    h: [1, 2], render: (d) => <Ach a={d.ach}/> },
   // au choix (dans « Ajouter »)
-  camera:    { label: "Caméra",                 w: [2, 1], h: [2, 1, 3], render: (d, st) => <LiveCam status={st}/> },
+  camera:    { label: "Caméra",                 w: [2, 1], h: [2, 1, 3], render: (d, st, o) => <LiveCam status={st} mode={o.mode}/>,
+               options: [{ key: "mode", label: "Image", def: "auto", choices: [["auto", "auto"], ["stream", "direct"], ["images", "toutes les 2 s"]] }] },
   temps:     { label: "Températures",           w: [1, 2], h: [1],       render: (d, st) => <Temps status={st}/> },
   month:     { label: "Ce mois-ci",             w: [1, 2], h: [1],       render: (d) => <Month v={d.month}/> },
   sales:     { label: "Objets et ventes",       w: [1, 2], h: [1],       render: (d) => <Sales v={d.sales}/> },
-  feed:      { label: "Le fil du jour",         w: [2, 1], h: [2, 3],    render: (d) => <Feed f={d.feed}/> },
-  gallery:   { label: "Dernières impressions",  w: [2, 1], h: [1, 2],    render: (d) => <Gallery g={d.gallery}/> },
+  feed:      { label: "Le fil du jour",         w: [2, 1], h: [2, 3],    render: (d, st, o) => <Feed f={d.feed} count={o.count}/>,
+               options: [{ key: "count", label: "Lignes", def: 6, choices: [[4, "4"], [6, "6"], [10, "10"]] }] },
+  gallery:   { label: "Dernières impressions",  w: [2, 1], h: [1, 2],    render: (d, st, o) => <Gallery g={d.gallery} count={o.count}/>,
+               options: [{ key: "count", label: "Vignettes", def: 8, choices: [[4, "4"], [8, "8"], [12, "12"]] }] },
   shortcuts: { label: "Raccourcis",             w: [2, 1], h: [1],       render: () => <Shortcuts/> },
   podium:    { label: "Classement des copains", w: [1, 2], h: [1, 2],    render: (d) => <Podium p={d.podium}/> },
   alerts:    { label: "Alertes en bref",        w: [1, 2], h: [1],       render: (d) => <Alerts a={d.attention}/> },

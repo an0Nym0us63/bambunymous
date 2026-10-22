@@ -40,7 +40,9 @@ function defaults(defs) {
   };
 }
 const fixer = defs => x => defs[x?.id] ? { id: x.id, w: defs[x.id].w.includes(x.w) ? x.w : defs[x.id].w[0],
-  h: defs[x.id].h.includes(x.h) ? x.h : defs[x.id].h[0] } : null;
+  h: defs[x.id].h.includes(x.h) ? x.h : defs[x.id].h[0], ...(x.o && typeof x.o === "object" ? { o: x.o } : {}) } : null;
+// les options d'une tuile : celles de son type (avec leur valeur par defaut), et ce que la disposition en a fait
+const optsOf = (def, item) => Object.fromEntries((def.options || []).map(o => [o.key, item.o?.[o.key] ?? o.def]));
 // une disposition a n colonnes, remise d'aplomb : tuiles inconnues retirees, tailles
 // ramenees a ce que la tuile accepte, pas de doublon, la tuile obligatoire presente
 function cleanCols(cols, n, defs) {
@@ -88,7 +90,7 @@ function layoutFor(lay, n) {
   return out;
 }
 
-function Cell({ item, def, edit, children, actions, drag, selected, onSelect }) {
+function Cell({ item, def, edit, children, actions, options, drag, selected, onSelect }) {
   const span = item.h === "auto" ? "auto" : `span ${item.h}`;
   return (
     <div className={`hg-cell${edit ? " hg-edit" : ""}`} draggable={edit && drag ? true : undefined}
@@ -112,6 +114,7 @@ function Cell({ item, def, edit, children, actions, drag, selected, onSelect }) 
           boxShadow: "0 8px 22px rgba(0,0,0,0.35)" }}>
           <span style={{ fontSize: 12, fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{def.label}</span>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>{actions}</div>
+          {options}
         </div>
       )}
     </div>
@@ -257,6 +260,22 @@ export default function HomeGrid({ status, blocks }) {
         title={h === "auto" ? "Hauteur selon le contenu" : `${h} rangée${h > 1 ? "s" : ""} de haut`}>{h === "auto" ? "↕" : `${h}↕`}</button>)}
       {!def.required && <button style={btn()} onClick={() => hide(item.id)} aria-label="Masquer"><EyeOff size={13}/></button>}
     </>;
+    // les options de la tuile (oui/non, ou un choix), propres a cette disposition
+    const o = optsOf(def, item);
+    const setOpt = (k, v) => update(item.id, { o: { ...(item.o || {}), [k]: v } });
+    const options = def.options?.length ? (
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 5, borderTop: "1px solid rgba(255,255,255,0.15)" }}>
+        {def.options.map(op => op.choices ? (
+          <div key={op.key} style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, marginRight: 2 }}>{op.label}</span>
+            {op.choices.map(([v, l]) => <button key={String(v)} style={btn(o[op.key] === v)} onClick={() => setOpt(op.key, v)}>{l}</button>)}
+          </div>
+        ) : (
+          <button key={op.key} style={{ ...btn(!!o[op.key]), justifyContent: "flex-start", alignSelf: "flex-start" }}
+            onClick={() => setOpt(op.key, !o[op.key])}>{o[op.key] ? "✓" : "○"} {op.label}</button>
+        ))}
+      </div>
+    ) : null;
     const drag = wide ? {
       dragging: dragId === item.id,
       start: e => { setDragId(item.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", item.id); } catch { /* rien */ } },
@@ -265,9 +284,9 @@ export default function HomeGrid({ status, blocks }) {
       end: () => setDragId(null),
     } : null;
     return (
-      <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} drag={edit ? drag : null}
+      <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} options={options} drag={edit ? drag : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
-        {def.frame ? <Frame def={def}>{def.render(data, status)}</Frame> : def.render(data, status)}
+        {def.frame ? <Frame def={def}>{def.render(data, status, o)}</Frame> : def.render(data, status, o)}
       </Cell>
     );
   };

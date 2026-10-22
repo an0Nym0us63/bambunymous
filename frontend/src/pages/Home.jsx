@@ -6,6 +6,7 @@ import { create } from "zustand";
 import client, { apiUrl } from "../api/client";
 import AttentionSection from "../components/AttentionSection";
 import HomeGrid from "../components/HomeGrid";
+import LiveCamera from "../components/LiveCamera";
 import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel } from "../utils/ams";
@@ -59,11 +60,12 @@ const HMS_SEV = {
 
 const FR_ACCENT = "#8b5cf6";      // violet : le bandeau d'une autre machine ne se confond pas avec le mien
 
-function StatusBanner({ status, friend = null, switcher = null }) {
+function StatusBanner({ status, friend = null, switcher = null, defaultExpanded = false, showCamera = true, showTemps = true }) {
   // Chez un copain : ses donnees (impression en cours, camera) passent par le relais.
   const via = (path) => friend ? `/friends/${friend.id}/p${path}` : path;
   const img = (path) => friend ? relayed(`/api/v1/friends/${friend.id}/p${path}`) : apiUrl(path);
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(defaultExpanded);
+  useEffect(() => { setExpanded(defaultExpanded); }, [defaultExpanded]);
   const camRef      = useRef(null);
   const timerRef    = useRef(null);
   const inFlightRef = useRef(false);
@@ -104,7 +106,8 @@ function StatusBanner({ status, friend = null, switcher = null }) {
   // et l'img a zero, puis startCam repart proprement.
   useEffect(() => {
 
-    if (expanded) startCam(); else stopCam();
+    // la camera du panneau est desormais LiveCamera (flux reel, ou captures) : plus de releve ici
+    stopCam();
     return stopCam;
   }, [expanded, isRunning, visKey, friend?.id]);
 
@@ -254,23 +257,17 @@ function StatusBanner({ status, friend = null, switcher = null }) {
         <div style={{ borderTop:"1px solid var(--border)" }}>
           {/* Caméra */}
           {/* Camera injoignable (chez un copain notamment) : le bloc disparait, le panneau se reduit. */}
-          <img ref={camRef} alt="Camera"
-            style={{ width:"100%", display:"block", maxHeight:280, objectFit:"cover",
-              background:"#111" }}
-            onLoad={e => { inFlightRef.current = false; e.currentTarget.style.display = ""; }}
-            onError={e => { inFlightRef.current = false; if (!e.currentTarget.getAttribute("src")) return;
-              e.currentTarget.style.display="none"; }}
-          />
+          {showCamera && <LiveCamera maxHeight={280}/>}
 
           {/* Températures + infos */}
           <div style={{ padding:12, display:"flex", flexDirection:"column", gap:10 }}>
             {/* Buses */}
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+            {showTemps && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
               {left  && <TempChip label={isDualNozzle ? "Buse Gauche" : "Buse"} current={left.temp}  target={left.target}  active={left.active}/>}
               {right && isDualNozzle && <TempChip label="Buse Droite" current={right.temp} target={right.target} active={right.active}/>}
               <TempChip label="Plateau" current={status.bed_temp}     target={status.target_bed_temp} accent="#ef4444" />
               <TempChip label="Chambre" current={status.chamber_temp} target={status.target_chamber_temp} />
-            </div>
+            </div>}
             {/* Encart alertes HMS : criticite + libelle + lien wiki */}
             {status.hms_decoded?.length > 0 && (() => {
               const worst = status.hms_decoded[0]?.severity || "info";
@@ -888,7 +885,10 @@ export default function Home() {
     activeNozzleId={st?.nozzles?.find(n => n.active)?.id ?? null}/> : null;
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {
-    printer: { label: "Imprimante", w: [2], h: ["auto"], required: true, frame: { icon: <Printer size={15}/>, color: "#3B82F6" }, render: (d, st) => <StatusBanner status={st}/> },
+    printer: { label: "Imprimante", w: [2], h: ["auto"], required: true, frame: { icon: <Printer size={15}/>, color: "#3B82F6" },
+      render: (d, st, o) => <StatusBanner status={st} defaultExpanded={o.open} showCamera={o.cam} showTemps={o.temps}/>,
+      options: [{ key: "open", label: "Dépliée à l'ouverture", def: false }, { key: "cam", label: "Caméra dans le volet", def: true },
+                { key: "temps", label: "Températures dans le volet", def: true }] },
     ams: { label: "AMS", w: [2], h: ["auto"], frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" }, render: (d, st) => devices(st, "overview") },
     amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto"], frame: { icon: <Layers size={15}/>, color: "#6366F1" },
       render: (d, st) => devices(st, "detail") },
