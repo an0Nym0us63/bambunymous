@@ -342,6 +342,24 @@ function HumZoom({ list, col, o, lo, hi }) {
     <div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", gap: 16, padding: "8px 0" }}>
       {list.map(a => <DropGauge key={a.id} value={a.humidity} color={col(a.humidity)} size={Math.max(60, g.size)} label={amsLab(a)}
         sub={a.temp ? `${Number(a.temp).toFixed(1).replace(".", ",")} °C` : null}/>)}</div>
+    <H2>Unité par unité</H2>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 10 }}>
+      {list.map(a => { const c = col(a.humidity), trays = (a.trays || []).filter(t => !t.empty && t.color);
+        return <div key={a.id} style={{ padding: "11px 13px", borderRadius: 16, background: `linear-gradient(135deg, ${c}1a, transparent 65%), var(--surface2)`,
+          border: `1px solid ${c}33`, display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 900, color: "var(--text)" }}>{amsLab(a)}</span>
+            <span style={{ fontSize: 15, fontWeight: 900, color: c }}>{a.humidity} %</span>
+            {a.temp > 0 && <Muted size={12}>{Number(a.temp).toFixed(1).replace(".", ",")} °C</Muted>}
+            {a.is_drying && a.dry_time > 0 && <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: "#ea580c" }}>séchage · {fmtDur(a.dry_time * 60)}</span>}
+          </div>
+          <div style={{ height: 6, borderRadius: 4, background: "var(--border)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${Math.min(100, a.humidity)}%`, background: c }}/></div>
+          {trays.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {trays.map(t => <span key={t.id} title={t.filament_type} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "var(--text2)" }}>
+              <span style={{ width: 14, height: 14, borderRadius: 5, background: hexCss(t.color), border: "1px solid rgba(0,0,0,0.2)" }}/>{t.filament_type}</span>)}</div>}
+        </div>; })}
+    </div>
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
       {[["sec", `sous ${lo} %`, "#22c55e"], ["à surveiller", `${lo} à ${hi} %`, "#f59e0b"], ["humide", `au-delà de ${hi} %`, "#ef4444"]].map(([l, r, c]) => (
         <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 11px", borderRadius: 20, background: `${c}18`,
@@ -761,9 +779,7 @@ function Stock({ s, o, sz }) {
   return (
     <Tile icon={<Package size={15}/>} color="#F59E0B" label="Stock" to="/filaments"
       mini={sz.h === 0.5} summary={<>{list.length}<span style={{ display: "inline-flex", gap: 2 }}>{low.slice(0, 3).map(x => <SpoolDot key={x.id} color={x.filament_color} pct={spoolPct(x)} size={22}/>)}</span></>}
-      zoom={<><Stats items={[["Bobines", list.length], ["Poids", fmtG(kg)], ["Sous 200 g", list.filter(x => (x.remaining_weight_g ?? 999) < 200).length, "#dc2626"],
-        ["Sous 15 %", list.filter(x => (spoolPct(x) ?? 1) < 0.15).length, "#d97706"]]}/><H2>Les plus basses</H2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "6px 18px" }}>
-        {low.slice(0, 40).map(line)}</div></>}>
+      zoom={<StockZoom list={list} low={low} kg={kg}/>}>
       {({ W, H }) => {
         const rest = H - 34;
         if (rest < 20) return head;
@@ -783,6 +799,39 @@ function Stock({ s, o, sz }) {
       }}
     </Tile>
   );
+}
+function StockZoom({ list, low, kg }) {
+  const worth = list.reduce((t, x) => { const pr = x.price_override || x.filament_price; return t + (pr && x.filament_weight_g ? pr * (x.remaining_weight_g || 0) / x.filament_weight_g : 0); }, 0);
+  const inAms = list.filter(x => x.ams_tray).length;
+  // par matiere : le nombre de bobines et le poids, en barres
+  const by = Object.values(list.reduce((m, x) => { const k = x.filament_material || "Autre";
+    (m[k] = m[k] || { k, n: 0, g: 0, colors: [] }); m[k].n++; m[k].g += x.remaining_weight_g || 0; m[k].colors.push(x.filament_color); return m; }, {}))
+    .sort((a, b) => b.g - a.g);
+  const top = Math.max(1, ...by.map(x => x.g));
+  return <>
+    <Stats items={[["Bobines", list.length], ["Poids", fmtG(kg)], worth ? ["Valeur restante", fmtEur(worth), "#16a34a"] : null, inAms ? ["Dans l'AMS", inAms] : null,
+      ["Sous 200 g", list.filter(x => (x.remaining_weight_g ?? 999) < 200).length, "#dc2626"], ["Sous 15 %", list.filter(x => (spoolPct(x) ?? 1) < 0.15).length, "#d97706"]]}/>
+    {by.length > 1 && <><H2>Par matière</H2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {by.map(x => <div key={x.k} style={{ display: "grid", gridTemplateColumns: "92px minmax(0,1fr) auto", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.k}</span>
+        <span style={{ height: 14, borderRadius: 7, background: "var(--surface2)", overflow: "hidden", display: "flex" }}>
+          {x.colors.map((c, i) => <span key={i} style={{ width: `${(100 * x.g / top) / x.colors.length}%`, background: hexCss(c) }}/>)}</span>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap" }}>{x.n} · {fmtG(x.g)}</span></div>)}</div></>}
+    <H2>Les plus basses</H2>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 8 }}>
+      {low.slice(0, 40).map(x => { const pc = spoolPct(x); const c = pc == null ? "#94a3b8" : pc < 0.15 ? "#ef4444" : pc < 0.35 ? "#f59e0b" : "#22c55e";
+        return <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 14, background: "var(--surface2)", minWidth: 0 }}>
+          <SpoolDot color={x.filament_color} pct={pc} size={34}/>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{spoolName(x)}</span>
+              <span style={{ fontSize: 13, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{fmtG(x.remaining_weight_g)}</span></div>
+            {(x.filament_manufacturer || x.ams_tray) && <span style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {[x.filament_manufacturer, x.ams_tray && `dans l'AMS ${x.ams_tray}`].filter(Boolean).join(" · ")}</span>}
+            <span style={{ height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
+              <span style={{ display: "block", height: "100%", width: `${(pc ?? 0) * 100}%`, background: c }}/></span>
+          </div></div>; })}</div>
+  </>;
 }
 // le sechage : un anneau par AMS qui seche, sinon ce qui est a secher
 const amsLab = a => a.id >= 128 ? `HT-${String.fromCharCode(65 + a.id - 128)}` : `AMS-${String.fromCharCode(65 + a.id)}`;
@@ -967,12 +1016,13 @@ function Friends({ f, o, sz }) {
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 13 }}>{p.length ? `${p.map(x => x.name).join(", ")} imprime${p.length > 1 ? "nt" : ""}` : "personne n'imprime"}</span>}
       zoom={<><Stats items={[["Impriment", p.length, "#0d9488"], ["Au repos", Object.values(states).filter(s => s.state === "standby").length],
         ["Éteintes", Object.values(states).filter(s => s.state === "off").length]]}/>
-        {p.length ? p.map(x => ringRow(x, 64)) : <Line>Personne n'imprime en ce moment.</Line>}</>}>
-      {({ H }) => {
+        {p.length ? p.map(x => <div key={x.id} style={{ padding: "10px 12px", borderRadius: 16, background: "linear-gradient(135deg, rgba(20,184,166,0.1), transparent 60%), var(--surface2)" }}>
+          {ringRow(x, 64)}</div>) : <Line>Personne n'imprime en ce moment.</Line>}</>}>
+      {({ W: bw, H }) => {
         const room = H - (idle && H >= 90 ? 22 : 0), each = (room - 8 * (p.length - 1)) / Math.max(1, p.length);
         // large et bas : les copains cote a cote, un anneau chacun, le nom dessous
-        if (p.length > 1 && !o.scroll && W >= 240 && H < 110) {
-          const g = fitGrid(p.length, W, H, { extra: 16, gap: 8, max: 64 });
+        if (p.length > 1 && !o.scroll && bw >= 240 && H < 110) {
+          const g = fitGrid(p.length, bw, H, { extra: 16, gap: 8, max: 64 });
           if (g.rows === 1 && g.size >= 34) return <div style={{ flex: 1, display: "flex", justifyContent: "space-evenly", alignItems: "center" }}>
             {p.map(x => <div key={x.id} title={x.print?.name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 0 }}>
               <Ring value={(x.progress || 0) / 100} size={g.size} color="#14B8A6">{Math.round(x.progress || 0)}%</Ring>
@@ -1018,9 +1068,10 @@ function MwZoom({ c }) {
     <H2>Points gagnés, 30 jours</H2>
     {hist ? <Bars values={hist} color="#EAB308" height={180} hi={29} showValues={W / 30 >= 22} labels={days.map(d => d.getDate() % 5 === 0 ? String(d.getDate()) : "")}
       titles={days.map((d, i) => `${d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : +${hist[i]}`)}/> : <Muted>…</Muted>}
+    <H2>Ces 30 jours</H2>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
       {MW_STATS(c.head?.["30"]?.totals || c.head?.["7"]?.totals).map(([e, n, l]) => <div key={l} className="card-sm" style={{ textAlign: "center", padding: 10 }}>
-        <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{e} {n ?? 0}</div><Muted>{l} (30 j)</Muted></div>)}
+        <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{e} {n ?? 0}</div><Muted size={11}>{l}</Muted></div>)}
     </div>
   </>;
 }
