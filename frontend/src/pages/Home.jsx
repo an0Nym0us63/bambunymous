@@ -796,7 +796,7 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
   const small = size === "small";
   const thumb = (
     <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "var(--surface2)", flexShrink: 0,
-      ...(small ? { width: 64, height: 64 } : { width: "100%", aspectRatio: size === "mid" ? "16 / 9" : "4 / 3" }) }}>
+      ...(small ? { width: 56, height: 56 } : { width: "100%", aspectRatio: size === "mid" ? "16 / 9" : "4 / 3" }) }}>
       {info && <img data-pk="" src={apiUrl(`/prints/${info.id}/image`)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
         style={{ width: "100%", height: "100%", objectFit: small ? "cover" : "contain", display: "block" }}/>}
       {live && !small && <span data-pk="" style={{ position: "absolute", right: 8, top: 8, fontSize: 17, fontWeight: 900, color: "#fff",
@@ -827,7 +827,11 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
           <div style={{ flex: 1, minWidth: 0 }}>{name}</div>
           {live && <span data-pk="" style={{ fontSize: 15, fontWeight: 900, color: s.color }}>{pct}%</span>}
         </div>
-        {facts || <div style={{ fontSize: 12, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
+        {/* une seule ligne : le temps restant, et la fin si elle tient */}
+        {live ? <div style={{ display: "flex", gap: 8, fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden" }}>
+          {status.remaining_minutes > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Clock size={11}/>{fmtTime(status.remaining_minutes)}</span>}
+          {showFin && fin && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Calendar size={11}/>{fin.time}</span>}
+        </div> : <div style={{ fontSize: 12, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
         {bar}
       </div>
     </div>
@@ -1067,11 +1071,12 @@ export default function Home() {
     printer: { label: "Imprimante", w: [2, 1], h: ["auto"], h1: [2, 3, 1], required: true,
       frame: { icon: <Printer size={15}/>, color: "#3B82F6",
         extra: (st, item, o) => <PrinterHead status={st} temps={o.headTemps && item.w !== 1}/> },
-      render: (d, st, o, item) => item?.w === 1 ? <PrinterCompact status={st} size={o.half} showFin={o.fin} showLayer={o.layer}/>
+      render: (d, st, o, item) => item?.w === 1 ? <PrinterCompact status={st} size={item.h <= 1 ? "small" : o.half} showFin={o.fin} showLayer={o.layer}/>
         : <StatusBanner status={st} defaultExpanded={o.open} showCamera={o.cam} showTemps={o.temps}/>,
       options: [
         { when: it => it.w !== 1, key: "headTemps", label: "Températures dans l'en-tête", def: true },
-        { when: it => it.w === 1, key: "half", label: "En demi-largeur", def: "big", choices: [["big", "grande"], ["mid", "moyenne"], ["small", "compacte"]] },
+        { when: it => it.w === 1 && it.h > 1, key: "half", label: "Vignette", def: "big", hint: "Sur une rangée, la tuile est toujours compacte.",
+          choices: [["big", "grande"], ["mid", "moyenne"], ["small", "compacte"]] },
         { when: it => it.w === 1, key: "fin", label: "Heure de fin", def: true },
         { when: it => it.w === 1, key: "layer", label: "Couches", def: true },
         { when: it => it.w !== 1, key: "open", label: "Volet déplié à l'ouverture", def: false },

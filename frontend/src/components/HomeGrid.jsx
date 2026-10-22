@@ -18,7 +18,11 @@ import { TILES, useTilesData } from "./HomeTiles";
 const WIDE = 1024;
 const COL_MIN = 400;                               // largeur sous laquelle une colonne (deux sous-colonnes) se tasse trop
 const ROW = 118;                                   // hauteur d'une rangee (px)
-const HALF = 54;                                   // le pas de la grille : une demi-rangee (2 x 54 + l'ecart de 10 = 118)
+const HALF = 54;                                   // une demi-rangee (2 x 54 + l'ecart de 10 = 118)
+// La grille avance par pas de 8 px, sans ecart entre rangees : chaque case porte
+// sous elle sa marge de 10 px. Une demi-rangee = 64 px (8 pas), une rangee = 128
+// (16 pas), etc. : les tuiles « selon le contenu » s'ajustent a 8 px pres.
+const UNIT = 8, GAP = 10, PER_ROW = 16;
 
 function useWide() {
   const [w, setW] = useState(() => window.innerWidth >= WIDE);
@@ -107,16 +111,29 @@ function layoutFor(lay, n) {
 }
 
 function Cell({ item, def, edit, children, actions, options, drag, selected, onSelect }) {
-  const span = item.h === "auto" ? "auto" : `span ${Math.round(item.h * 2)}`;
+  // une hauteur choisie est stricte (les rangees ne grandissent pas avec le contenu) ;
+  // « selon le contenu » : la tuile se mesure et prend les demi-rangees qu'il lui faut
+  const body = useRef(null);
+  const [autoSpan, setAutoSpan] = useState(PER_ROW * 2);
+  const auto = item.h === "auto";
+  useEffect(() => {
+    const el = body.current;
+    if (!auto || !el || typeof ResizeObserver === "undefined") return undefined;
+    // le conteneur a la hauteur de son contenu : c'est lui qu'on observe
+    const ro = new ResizeObserver(() => setAutoSpan(Math.max(1, Math.ceil((el.getBoundingClientRect().height + GAP) / UNIT))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [auto]);
+  const span = auto ? `span ${autoSpan}` : `span ${Math.round(item.h * PER_ROW)}`;
   return (
     <div className={`hg-cell${edit ? " hg-edit" : ""}${item.o?._title === false ? " hg-notitle" : ""}`} draggable={edit && drag ? true : undefined}
       onClick={edit ? e => { e.stopPropagation(); onSelect(); } : undefined}
       onDragStart={drag?.start} onDragOver={drag?.over} onDrop={drag?.drop} onDragEnd={drag?.end}
-      style={{ gridColumn: `span ${item.w}`, gridRow: span, minWidth: 0, position: "relative",
+      style={{ gridColumn: `span ${item.w}`, gridRow: span, minWidth: 0, position: "relative", paddingBottom: GAP, boxSizing: "border-box",
         ...(edit ? { outline: selected ? "3px solid #3b82f6" : "2px dashed rgba(59,130,246,0.55)", outlineOffset: 2, borderRadius: 16,
           cursor: "pointer",
           opacity: drag?.dragging ? 0.4 : 1 } : {}) }}>
-      <div style={{ height: "100%", pointerEvents: edit ? "none" : undefined, filter: edit ? "saturate(0.85)" : undefined }}>
+      <div ref={body} style={{ height: auto ? "auto" : "100%", pointerEvents: edit ? "none" : undefined, filter: edit ? "saturate(0.85)" : undefined }}>
 {children}</div>
       {edit && !selected && (
         <span style={{ position: "absolute", left: 8, top: 8, zIndex: 3, display: "inline-flex", alignItems: "center", gap: 4, maxWidth: "calc(100% - 16px)",
@@ -426,8 +443,8 @@ export default function HomeGrid({ status, blocks, top = null }) {
         onChange={(k, v) => update(optItem.id, { o: { ...(optItem.o || {}), [k]: v } })} onClose={() => setOptFor(null)}/>}
       <style>{`
         .hg-cols { display:grid; gap:12px; align-items:start; }
-        .hg-col { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); grid-auto-rows:minmax(${HALF}px, auto);
-                  grid-auto-flow:row dense; gap:10px; min-width:0; }
+        .hg-col { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); column-gap:10px; grid-auto-rows:${UNIT}px; row-gap:0;
+                  grid-auto-flow:row dense; min-width:0; }
         .hg-cell:not(.hg-edit):has(> div:empty) { display:none; }
         .hg-notitle .tile-head { display:none !important; }
         .hg-notitle .frame-label { display:none !important; }
@@ -514,7 +531,8 @@ export default function HomeGrid({ status, blocks, top = null }) {
             {c.map(item => renderItem(item, ci))}
             {edit && (
               <div className="hg-drop" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); dropOn(null, ci); }}
-                style={{ flexDirection: "column", gap: 8, padding: 10, cursor: hidden.length ? "pointer" : "default" }}
+                style={{ flexDirection: "column", gap: 8, padding: 10, cursor: hidden.length ? "pointer" : "default",
+                  gridRow: `span ${pick === ci ? 22 : 7}`, overflow: "hidden" }}
                 onClick={() => hidden.length && setPick(p => p === ci ? null : ci)}>
                 {/* la case « + » : les tuiles pas encore en place, a poser dans cette colonne */}
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: hidden.length ? "#3b82f6" : "var(--muted)" }}>
