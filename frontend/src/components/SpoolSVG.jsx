@@ -61,6 +61,13 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
             <rect x="4" y="4" width="4" height="4" fill="#c0c0c0"/>
           </pattern>
         )}
+        {active && (
+          <linearGradient id={`cm${uid}`} x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#60a5fa" stopOpacity="0"/>
+            <stop offset="70%" stopColor="#3b82f6" stopOpacity="0.9"/>
+            <stop offset="100%" stopColor="#bfdbfe" stopOpacity="1"/>
+          </linearGradient>
+        )}
         {isGradient && (
           <linearGradient id={uid} x1="10" y1="40" x2="70" y2="40" gradientUnits="userSpaceOnUse">
             {colors.map((cl, i) => (
@@ -69,6 +76,10 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
           </linearGradient>
         )}
       </defs>
+
+      {/* En cours : un halo bleu qui respire derriere la bobine */}
+      {active && <circle cx="40" cy="40" r="34" fill="rgba(59,130,246,0.22)"
+        style={{ transformBox: "view-box", transformOrigin: "40px 40px", animation: "bn-spool-glow 2.4s ease-in-out infinite" }}/>}
 
       {/* Damier de transparence derrière le disque : rend l'alpha visible. */}
       {transp && <circle cx="40" cy="40" r="30" fill={`url(#${cbId})`}/>}
@@ -107,22 +118,32 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
       {/* Anneau extérieur (léger contour) */}
       <circle cx="40" cy="40" r="30" fill="none" stroke={ringColor} strokeWidth="2"/>
 
-      {/* Zone hub (cercle intérieur plus sombre) */}
-      <circle cx="40" cy="40" r="14" fill={hubColor}/>
-      {/* Trou central */}
-      <circle cx="40" cy="40" r="6" fill={empty ? "#111" : "rgba(0,0,0,0.65)"}/>
+      {/* Zone hub (cercle intérieur plus sombre), ses trois rayons ; en cours, il tourne */}
+      <g style={active ? { transformBox: "view-box", transformOrigin: "40px 40px", animation: "spin 6s linear infinite" } : undefined}>
+        <circle cx="40" cy="40" r="14" fill={hubColor}/>
+        {!empty && [0, 120, 240].map(a => {
+          const r = a * Math.PI / 180;
+          return <line key={a} x1={40 + 7 * Math.cos(r)} y1={40 + 7 * Math.sin(r)} x2={40 + 26 * Math.cos(r)} y2={40 + 26 * Math.sin(r)}
+            stroke={spokeColor} strokeWidth="3" strokeLinecap="round"/>;
+        })}
+        {/* Trou central */}
+        <circle cx="40" cy="40" r="6" fill={empty ? "#111" : "rgba(0,0,0,0.65)"}/>
+        {/* un repere sur le moyeu : on voit la bobine tourner */}
+        {active && <circle cx="40" cy="31" r="1.8" fill={dark ? "rgba(255,255,255,0.55)" : "rgba(0,0,0,0.35)"}/>}
+      </g>
 
       {/* Minuscule reflet */}
       <circle cx="34" cy="34" r="3" fill={dark ? "rgba(255,255,255,0.12)" : "rgba(255,255,255,0.30)"} opacity="0.8"/>
 
       {/* Animation impression */}
-      {active && (
-        // rotation en CSS : l'animation SVG (animateTransform) restait parfois figee
-        // au rechargement de la page, et ne repartait qu'a la creation suivante
-        <circle cx="40" cy="40" r="32" stroke="#3b82f6" strokeWidth="2.5"
-          fill="none" strokeDasharray="6 3" opacity="0.9"
-          style={{ transformBox: "view-box", transformOrigin: "40px 40px", animation: "spin 8s linear infinite" }}/>
-      )}
+      {/* En cours : une trainee lumineuse fait le tour (animations CSS : l'animation SVG
+          animateTransform restait parfois figee au rechargement de la page) */}
+      {active && <>
+        <circle cx="40" cy="40" r="33" stroke="rgba(59,130,246,0.25)" strokeWidth="2" fill="none"/>
+        <circle cx="40" cy="40" r="33" stroke={`url(#cm${uid})`} strokeWidth="3" strokeLinecap="round" fill="none"
+          strokeDasharray="70 140" style={{ transformBox: "view-box", transformOrigin: "40px 40px", animation: "spin 2.2s linear infinite",
+            filter: "drop-shadow(0 0 2px #3b82f6)" }}/>
+      </>}
     </svg>
   );
 }

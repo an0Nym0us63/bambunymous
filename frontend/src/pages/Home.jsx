@@ -10,6 +10,7 @@ import AttentionSection from "../components/AttentionSection";
 import HomeGrid from "../components/HomeGrid";
 import { gradeOf } from "./Achievements";
 import LiveCamera from "../components/LiveCamera";
+import SpoolSVG from "../components/SpoolSVG";
 import Lightbox from "../components/Lightbox";
 import AmsOrderEditor from "../components/AmsOrderEditor";
 import { relayed } from "../components/Friends";
@@ -953,21 +954,24 @@ function PrinterLine({ status }) {
 // en cours, la vitesse, les alertes de la machine.
 const SPEEDS = { 1: ["Silencieux", "#22c55e"], 2: ["Standard", "#3b82f6"], 3: ["Sport", "#f59e0b"], 4: ["Ludicrous", "#ef4444"] };
 function ArcGauge({ value, target, max, color, label, active }) {
-  const S = 108, sw = 10, r = S / 2 - sw / 2 - 2, C = Math.PI * r;
+  const S = 120, sw = 10, r = S / 2 - sw / 2 - 2, C = Math.PI * r;
   const v = Math.max(0, Math.min(1, (value || 0) / (target > 0 ? target : max)));
   const hot = (value || 0) > 40;
+  const c = hot ? color : "#94a3b8";
   return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "8px 4px", borderRadius: 14,
-      background: active ? "rgba(59,130,246,0.08)" : "var(--surface2)", border: `1px solid ${active ? "rgba(59,130,246,0.45)" : "transparent"}`, minWidth: 0 }}>
-      <svg width={S} height={S / 2 + sw / 2 + 2} viewBox={`0 0 ${S} ${S / 2 + sw / 2 + 2}`} aria-hidden="true">
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "10px 6px 8px", borderRadius: 16, minWidth: 0, position: "relative",
+      background: active ? `linear-gradient(160deg, ${color}26, transparent 70%), var(--surface2)` : "var(--surface2)",
+      border: `1px solid ${active ? `${color}88` : "transparent"}`, boxShadow: active ? `0 6px 18px ${color}33` : "none" }}>
+      <svg width={S} height={S / 2 + sw / 2 + 2} viewBox={`0 0 ${S} ${S / 2 + sw / 2 + 2}`} aria-hidden="true" style={{ overflow: "visible" }}>
         <path d={`M${sw / 2 + 2} ${S / 2} A${r} ${r} 0 0 1 ${S - sw / 2 - 2} ${S / 2}`} fill="none" stroke="var(--border)" strokeWidth={sw} strokeLinecap="round"/>
-        <path d={`M${sw / 2 + 2} ${S / 2} A${r} ${r} 0 0 1 ${S - sw / 2 - 2} ${S / 2}`} fill="none" stroke={hot ? color : "#94a3b8"} strokeWidth={sw}
-          strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - v)} style={{ transition: "stroke-dashoffset .6s" }}/>
+        <path d={`M${sw / 2 + 2} ${S / 2} A${r} ${r} 0 0 1 ${S - sw / 2 - 2} ${S / 2}`} fill="none" stroke={c} strokeWidth={sw}
+          strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - v)}
+          style={{ transition: "stroke-dashoffset .6s", filter: hot ? `drop-shadow(0 0 4px ${color}88)` : "none" }}/>
       </svg>
-      <div style={{ marginTop: -26, fontSize: 21, fontWeight: 900, color: hot ? color : "var(--text)", lineHeight: 1.1 }}>
-        {Math.round(value || 0)}°{target > 0 && <sup style={{ fontSize: 11, color: "var(--muted)", fontWeight: 700 }}>/{Math.round(target)}°</sup>}</div>
-      <div style={{ fontSize: 11.5, fontWeight: 800, color: active ? "#3b82f6" : "var(--text2)", display: "flex", alignItems: "center", gap: 4 }}>
-        {label}{active && <span style={{ fontSize: 9.5, padding: "1px 6px", borderRadius: 20, background: "rgba(59,130,246,0.15)" }}>active</span>}</div>
+      <div style={{ marginTop: -30, fontSize: 22, fontWeight: 900, color: hot ? color : "var(--text)", lineHeight: 1 }}>{Math.round(value || 0)}°</div>
+      <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", height: 14, marginTop: 2 }}>{target > 0 ? `consigne ${Math.round(target)}°` : ""}</div>
+      <div style={{ fontSize: 12, fontWeight: 800, color: active ? color : "var(--text2)", display: "flex", alignItems: "center", gap: 4, marginTop: 2 }}>
+        {label}{active && <span style={{ fontSize: 9.5, padding: "1px 7px", borderRadius: 20, color: "#fff", background: color }}>active</span>}</div>
     </div>
   );
 }
@@ -1008,40 +1012,48 @@ function PrinterPopup({ status, img, name, onClose }) {
             background: "var(--surface2)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
-          <div onClick={img ? () => setBig(true) : undefined} style={{ width: 120, height: 120, borderRadius: 16, overflow: "hidden", flexShrink: 0,
-            background: "var(--surface2)", cursor: img ? "zoom-in" : "default", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
-            {img ? <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
-              : <Printer size={36}/>}
-          </div>
-          <div style={{ flex: "1 1 200px", minWidth: 0, display: "flex", alignItems: "center", gap: 14 }}>
-            <div style={{ position: "relative", width: R * 2 + 14, height: R * 2 + 14, flexShrink: 0 }}>
-              <svg width={R * 2 + 14} height={R * 2 + 14} style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
-                <circle cx={R + 7} cy={R + 7} r={R} fill="none" stroke="var(--border)" strokeWidth="12"/>
-                <circle cx={R + 7} cy={R + 7} r={R} fill="none" stroke={s.color} strokeWidth="12" strokeLinecap="round"
-                  strokeDasharray={C} strokeDashoffset={C * (1 - (live ? pct : 0) / 100)} style={{ transition: "stroke-dashoffset .6s" }}/>
+        <div style={{ position: "relative", borderRadius: 20, overflow: "hidden", padding: 14, display: "flex", flexDirection: "column", gap: 12,
+          background: `linear-gradient(135deg, ${s.color}33, transparent 60%), var(--surface2)` }}>
+          {img && <img src={img} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
+            filter: "blur(22px) saturate(1.5)", opacity: 0.45, transform: "scale(1.3)" }}/>}
+          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
+            <div onClick={img ? () => setBig(true) : undefined} style={{ width: 92, height: 92, borderRadius: 18, overflow: "hidden", flexShrink: 0,
+              boxShadow: "0 10px 24px rgba(0,0,0,0.3)", background: "var(--surface)", cursor: img ? "zoom-in" : "default", display: "flex",
+              alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
+              {img ? <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+                : <Printer size={32}/>}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", lineHeight: 1.2, overflow: "hidden", display: "-webkit-box",
+                WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{name || status?.print_name || "Rien en cours"}</div>
+              {live && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", marginTop: 3 }}>
+                {status.remaining_minutes > 0 ? `encore ${fmtTime(status.remaining_minutes)}` : "bientôt fini"}{fin ? ` · fin ${fin.dayDiff ? "demain " : ""}${fin.time}` : ""}</div>}
+            </div>
+            <div style={{ position: "relative", width: 86, height: 86, flexShrink: 0 }}>
+              <svg width="86" height="86" viewBox="0 0 86 86" style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
+                <circle cx="43" cy="43" r="36" fill="none" stroke="rgba(148,163,184,0.25)" strokeWidth="9"/>
+                <circle cx="43" cy="43" r="36" fill="none" stroke={s.color} strokeWidth="9" strokeLinecap="round" strokeDasharray={2 * Math.PI * 36}
+                  strokeDashoffset={2 * Math.PI * 36 * (1 - (live ? pct : 0) / 100)} style={{ transition: "stroke-dashoffset .6s", filter: `drop-shadow(0 0 5px ${s.color})` }}/>
               </svg>
               <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-                <span style={{ fontSize: 30, fontWeight: 900, color: s.color, lineHeight: 1 }}>{live ? `${pct}%` : "—"}</span>
-                {paused && <span style={{ fontSize: 11, fontWeight: 800, color: s.color }}>en pause</span>}
+                <span style={{ fontSize: 20, fontWeight: 900, color: s.color, lineHeight: 1 }}>{live ? `${pct}%` : "—"}</span>
+                {paused && <span style={{ fontSize: 9.5, fontWeight: 800, color: s.color }}>pause</span>}
               </div>
             </div>
           </div>
+          {live && <div style={{ position: "relative", height: 8, borderRadius: 6, background: "rgba(148,163,184,0.25)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg, ${s.color}aa, ${s.color})`, boxShadow: `0 0 10px ${s.color}` }}/></div>}
         </div>
-        <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", marginTop: -4 }}>{name || status?.print_name || "Rien en cours"}</div>
 
-        {live && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))", gap: 8 }}>
-          {[["Reste", fmtTime(status.remaining_minutes) || "—"], ["Fin", fin ? `${fin.dayDiff ? "demain " : ""}${fin.time}` : "—"],
-            ...(status.total_layers > 0 ? [["Couche", `${status.layer} / ${status.total_layers}`]] : [])].map(([l, v]) => (
-            <div key={l} style={{ padding: "10px 12px", borderRadius: 12, background: "var(--surface2)" }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{l}</div>
-              <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{v}</div></div>))}
-        </div>}
-        {live && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ height: 10, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}>
-            <div style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg, ${s.color}, ${s.color}cc)`, boxShadow: `0 0 10px ${s.color}88` }}/></div>
-          {status.total_layers > 0 && <div style={{ height: 6, borderRadius: 4, background: "var(--border)", overflow: "hidden" }} title="Couches">
-            <div style={{ height: "100%", width: `${Math.round(100 * status.layer / status.total_layers)}%`, background: "#8b5cf6" }}/></div>}
+        {live && <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
+          {[[Clock, "Reste", fmtTime(status.remaining_minutes) || "—", "#3b82f6"], [Calendar, "Fin", fin ? `${fin.dayDiff ? "dem. " : ""}${fin.time}` : "—", "#8b5cf6"],
+            [Layers, "Couche", status.total_layers > 0 ? `${status.layer}/${status.total_layers}` : "—", "#14b8a6"]].map(([I, l, v, c]) => (
+            <div key={l} style={{ padding: "10px 10px", borderRadius: 14, background: "var(--surface2)", minWidth: 0, position: "relative", overflow: "hidden" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 800, color: c }}><I size={13}/>{l}</span>
+              <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v}</div>
+              {l === "Couche" && status.total_layers > 0 && <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 3, background: "var(--border)" }}>
+                <div style={{ height: "100%", width: `${Math.round(100 * status.layer / status.total_layers)}%`, background: c }}/></div>}
+            </div>))}
         </div>}
 
         {status?.connected && <>
@@ -1056,8 +1068,7 @@ function PrinterPopup({ status, img, name, onClose }) {
 
         {(tray && !tray.empty) || sp ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
           {tray && !tray.empty && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, background: "var(--surface2)" }}>
-            <span style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, background: `#${String(tray.color || "888").replace("#", "").slice(0, 6)}`,
-              boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2), 0 0 0 3px var(--surface)" }}/>
+            <span style={{ flexShrink: 0, display: "inline-flex" }}><SpoolSVG colors={[`#${String(tray.color || "888").replace("#", "").slice(0, 6)}`]} size={52} active={live}/></span>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>Filament en cours · {slotLabel(status.active_ams_id, status.active_tray_id)}</div>
               <div style={{ fontSize: 14.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>

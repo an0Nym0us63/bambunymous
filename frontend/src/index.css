@@ -103,6 +103,7 @@ body {
   50% { box-shadow: 0 0 0 4px rgba(59,130,246,0.30); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes bn-spool-glow { 0%, 100% { opacity: .35; transform: scale(.92); } 50% { opacity: .9; transform: scale(1.06); } }
 @keyframes dryGlow {
   0%,100% { opacity:0.7; text-shadow: 0 0 0px rgba(249,115,22,0); }
   50% { opacity:1; text-shadow: 0 0 8px rgba(249,115,22,0.8); }
