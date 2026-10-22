@@ -411,19 +411,21 @@ function TrayRow({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loa
   const w = hasW ? `${Math.round(spoolInfo.remaining_weight_g)} g` : tray.remain != null ? `≈ ${tray.remain * 10} g` : "";
   const barBg = colorBg(opaqueColors(colors), mcType);
   return (
-    <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: size, cursor: onClick ? "pointer" : "default",
-      borderRadius: 12, padding: "0 6px 0 2px", background: isActive ? "rgba(59,130,246,0.08)" : "transparent",
-      boxShadow: isActive ? "inset 0 0 0 1px rgba(59,130,246,0.35)" : "none" }}>
+    <div onClick={onClick} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: size + 4, cursor: onClick ? "pointer" : "default",
+      borderRadius: 14, padding: "2px 10px 2px 2px", boxSizing: "border-box", background: isActive ? "rgba(59,130,246,0.08)" : "transparent",
+      border: `1px solid ${isActive ? "rgba(59,130,246,0.45)" : "transparent"}` }}>
       <div style={{ position: "relative", flexShrink: 0, opacity: posee ? 0.6 : 1 }}>
-        <SpoolSVG colors={vide ? null : (posee ? parseColors({}, posee) : colors)} empty={vide} size={size} active={isActive} type={posee ? multicolorType({}, posee) : mcType}/>
+        <SpoolSVG colors={vide ? null : (posee ? parseColors({}, posee) : colors)} empty={vide} size={size} active={false} type={posee ? multicolorType({}, posee) : mcType}/>
       </div>
       <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
-        <div style={{ display: "flex", alignItems: "baseline", gap: 5, minWidth: 0 }}>
-          <span style={{ fontSize: 10, fontWeight: 900, color: isActive ? "#3b82f6" : "var(--muted)", flexShrink: 0 }}>{label}</span>
-          <span style={{ fontSize: size >= 64 ? 13.5 : 12, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        <div style={{ fontSize: size >= 64 ? 13.5 : 12, fontWeight: 800, color: "var(--text)", lineHeight: 1.2, minWidth: 0,
+          ...(size >= 56 ? { overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", wordBreak: "break-word" }
+            : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}>
+          <span style={{ fontSize: 10.5, fontWeight: 900, color: isActive ? "#3b82f6" : "var(--muted)", marginRight: 5 }}>{label}</span>
+          <span>
             {vide ? "Vide" : posee ? `☀ ${posee.translated_name || posee.name || ""}` : (name || material || "—")}</span>
         </div>
-        {!vide && <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+        {!vide && <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
           <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums" }}>{w}</span>
           {name && material && <span style={{ fontSize: 10.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{material}</span>}
         </div>}
@@ -461,7 +463,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
       borderColor: isDrying ? "rgba(249,115,22,0.35)" : isActive ? "rgba(59,130,246,0.3)" : undefined,
       boxShadow: isDrying ? "0 0 0 1px rgba(249,115,22,0.1)" : isActive ? "0 0 0 1px rgba(59,130,246,0.1)" : undefined }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent: hideName ? "flex-end" : "space-between", marginBottom: isDrying ? 10 : fitH != null ? 4 : 12,
-        ...((hideName && !hasClimate(ams) && !isDrying) || (fitH != null && !isDrying) ? { display:"none" } : {}) }}>
+        ...((hideName && !hasClimate(ams) && !isDrying) || fitH != null ? { display:"none" } : {}) }}>
         {!hideName && <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:12, fontWeight:700, letterSpacing:"0.06em", color: isDrying?"#f97316":isActive?"#3b82f6":"var(--muted)" }}>
             {amsName(ams.id)}
@@ -490,7 +492,15 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
       </div>
 
       {/* Bandeau séchage */}
-      {isDrying && (
+      {/* hauteur imposee : un voyant orange sur une ligne (temperature, temps restant), les bobines restent */}
+      {isDrying && fitH != null && (
+        <div style={{ display:"flex", alignItems:"center", gap:6, height:18, marginBottom:4, fontSize:11.5, fontWeight:800, color:"#f97316", whiteSpace:"nowrap", overflow:"hidden" }}>
+          <span style={{ width:8, height:8, borderRadius:"50%", background:"#f97316", animation:"dryPulse 2.5s ease-in-out infinite", flexShrink:0 }}/>
+          Séchage{ams.dry_temperature > 0 ? ` · ${ams.dry_temperature}°C` : ""}{ams.dry_time > 0 ? ` · encore ${fmtMins(ams.dry_time)}` : ""}
+          {ams.dry_filament && <span style={{ color:"var(--muted)", fontWeight:700, overflow:"hidden", textOverflow:"ellipsis" }}>· {ams.dry_filament}</span>}
+        </div>
+      )}
+      {isDrying && fitH == null && (
         <div style={{ marginBottom:14, padding:"10px 12px", borderRadius:10,
           background:"rgba(249,115,22,0.07)", border:"1px solid rgba(249,115,22,0.25)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
@@ -521,10 +531,10 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
         const trays = traysInOrder(ams), n = trays.length || 1;
         const cols = Math.min(n, w >= 560 ? 4 : w >= 260 ? 2 : 1);
         const rows = Math.ceil(n / cols);
-        const room = fitH - 6 - (hideName && !isDrying ? 0 : 0);
-        const size = Math.max(26, Math.min(cols >= 4 ? 96 : 80, Math.floor((room - 6 * (rows - 1)) / rows)));
+        const room = fitH - 6 - (isDrying ? 22 : 0);
+        const size = Math.max(26, Math.min(cols >= 4 ? 96 : 80, Math.floor((room - 4 * (rows - 1)) / rows) - 4));
         return (
-          <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: "6px 10px" }}>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: "4px 10px" }}>
             {trays.map(t => <TrayRow key={t.id} tray={t} amsId={ams.id} label={slotLabel(ams.id, t.id)} activeAmsId={activeAmsId}
               activeTrayId={activeTrayId} spoolInfo={getInfo(t)} size={size}
               onClick={() => onTrayClick && onTrayClick({ tray: t, amsId: ams.id, amsLabel: amsName(ams.id), slotNo: traySlotNo(ams, t) })}/>)}

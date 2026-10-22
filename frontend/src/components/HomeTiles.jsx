@@ -1022,7 +1022,7 @@ function Temps({ status, o, sz }) {
         <span style={{ color: hot(r) ? r.c : "var(--muted)", display: "inline-flex" }}><r.ico s={14}/></span>
         <span style={{ flex: 1, minWidth: 0, color: "var(--text2)", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.l}</span>
         <span data-pk="" style={{ fontSize: 16, fontWeight: 900, color: hot(r) ? r.c : "var(--text)" }}>{Math.round(r.v || 0)}°</span>
-        {o.targets && r.t > 0 && <span style={{ color: "var(--muted)", fontWeight: 700 }}>/ {Math.round(r.t)}°</span>}
+        {o.targets && r.t > 0 && <sup style={{ color: "var(--muted)", fontWeight: 700, fontSize: 10.5, lineHeight: 0 }}>/{Math.round(r.t)}°</sup>}
       </div>))}</div>;
   const cells = (W, H) => {
     const g = fitGrid(rows.length, W, H, { ar: 0.42, gap: 6, max: 200 });

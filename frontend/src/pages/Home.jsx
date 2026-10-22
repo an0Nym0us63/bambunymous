@@ -356,7 +356,8 @@ function WearBar({ wear }) {
   );
 }
 
-function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeNozzleId }) {
+function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeNozzleId, swatch = null }) {
+  const fill = swatch != null;
   const status = slotStatus(slot, isOnHead);
   const isHead = status === "head";
   const color  = isHead
@@ -367,8 +368,8 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
   const headBorderStyle = isHead ? (isRightNozzle ? "solid" : "dashed") : "solid";
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
-      <button onClick={onClick} style={{
+    <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap: fill ? 2 : 4, ...(fill ? { width:"100%", minWidth:0 } : {}) }}>
+      <button onClick={onClick} style={{ position:"relative", ...(fill ? { width:"100%", padding:6, boxSizing:"border-box" } : {}),
         border: isHead ? `1.5px ${headBorderStyle} rgba(59,130,246,0.6)` : isSelected ? "1.5px solid rgba(255,255,255,0.2)" : status === "empty" ? "1.5px dashed rgba(148,163,184,0.5)" : "1.5px solid var(--border)",
         borderRadius:10, padding:8,
         background: isHead ? "rgba(59,130,246,0.06)" : "var(--surface2)",
@@ -377,7 +378,7 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
         boxShadow: isHead ? "0 4px 16px rgba(59,130,246,0.15)" : "none",
       }}>
         {/* Couleur du slot — couleur réelle même sur la tête */}
-        <div style={{ width:22, height:22, borderRadius:6,
+        <div style={{ width: fill ? `min(100%, ${Math.round(swatch * 1.3)}px)` : 22, height: fill ? swatch : 22, borderRadius: fill ? Math.max(6, Math.round(swatch / 4)) : 6,
           background: color
             ? color
             : isHead ? "rgba(59,130,246,0.15)"
@@ -393,17 +394,17 @@ function SlotMini({ slot, num, isOnHead, isSelected, onClick, headColor, activeN
         {slot?.match_mode && !isHead && status==="loaded" && (
           <span style={{ position:"absolute", top:-2, right:-2, zIndex:1 }}><MatchBadge mode={slot.match_mode}/></span>
         )}
-        <span style={{ fontSize:9, fontFamily:"monospace", fontWeight:700,
+        <span style={{ fontSize: fill ? 11 : 9, fontWeight:800,
           color: isHead ? "#60a5fa" : "var(--muted)" }}>{num}</span>
       </button>
       {/* Barre de sélection — identique à AMSBox pour cohérence visuelle */}
-      <div style={{ height:2, borderRadius:1, background: isSelected ? "#3b82f6" : "transparent",
-        width: isSelected ? 32 : 8, transition:"all 0.3s" }} />
+      {!fill && <div style={{ height:2, borderRadius:1, background: isSelected ? "#3b82f6" : "transparent",
+        width: isSelected ? 32 : 8, transition:"all 0.3s" }} />}
     </div>
   );
 }
 
-function SlotDetail({ slot, num, isOnHead, headSlot }) {
+function SlotDetail({ slot, num, isOnHead, headSlot, fitH = null }) {
   const status   = slotStatus(slot, isOnHead);
   // Quand sur la tête, utiliser la couleur du headSlot
   const _colorSrc = (status === "head" && headSlot) ? headSlot : slot;
@@ -447,6 +448,38 @@ function SlotDetail({ slot, num, isOnHead, headSlot }) {
     ? filInfo.colors_array.split(",").map(c => c.trim())
     : cssColor ? [cssColor] : [];
   const multiType = filInfo?.multicolor_type;
+  const swatchBg = swatchHexes.length > 1
+    ? multiType === "gradient" ? `linear-gradient(135deg, ${swatchHexes.join(",")})`
+      : `linear-gradient(90deg, ${swatchHexes.map((c,i,a) => `${c} ${i/a.length*100}%, ${c} ${(i+1)/a.length*100}%`).join(",")})`
+    : swatchHexes[0] || "var(--border)";
+
+  // tuile a hauteur choisie : la couleur en grand a gauche, l'essentiel a cote
+  if (fitH != null) {
+    const sw = Math.max(40, Math.min(110, fitH - 14));
+    const filName = filInfo ? (filInfo.translated_name || filInfo.name) : fid || (status === "empty" ? "Pas de hotend" : "Filament non identifié");
+    const sub = filInfo ? [filInfo.manufacturer, filInfo.fila_type || filInfo.material].filter(Boolean).join(" · ") : "";
+    const chip = (txt, c, bg) => <span style={{ fontSize:10.5, fontWeight:800, padding:"1px 8px", borderRadius:20, color:c, background:bg, whiteSpace:"nowrap" }}>{txt}</span>;
+    return (
+      <div style={{ display:"flex", alignItems:"center", gap:12, minWidth:0, height:"100%" }}>
+        <div style={{ width:sw, height:sw, margin:5, borderRadius:Math.round(sw / 4), flexShrink:0, background: status === "empty" ? "rgba(148,163,184,0.12)" : swatchBg,
+          border:"1px solid rgba(0,0,0,0.08)", boxShadow: isHead ? "0 0 0 2px var(--surface), 0 0 0 4px #3b82f6" : "none" }}/>
+        <div style={{ minWidth:0, flex:1, display:"flex", flexDirection:"column", gap:3 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:6, minWidth:0, flexWrap:"wrap" }}>
+            <span style={{ fontSize:12, fontWeight:900, color: isHead ? "#3b82f6" : "var(--muted)" }}>Slot {num}</span>
+            {isHead && chip("Sur la tête", "#3b82f6", "rgba(59,130,246,0.12)")}
+            {status === "no_fila" && chip("Sans filament", "#d97706", "rgba(245,158,11,0.12)")}
+            {status === "empty" && chip("Vide", "var(--muted)", "var(--border)")}
+          </div>
+          {status !== "empty" && <div style={{ fontSize:15, fontWeight:900, color:"var(--text)", lineHeight:1.2, overflow:"hidden", display:"-webkit-box",
+            WebkitLineClamp: fitH >= 120 ? 2 : 1, WebkitBoxOrient:"vertical" }}>{filName}</div>}
+          {(sub || displaySlot.nozzle_type) && <div style={{ fontSize:11.5, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+            {[sub, displaySlot.nozzle_type && `${displaySlot.nozzle_type} · ${displaySlot.diameter} mm`].filter(Boolean).join(" · ")}</div>}
+          {timeStr && fitH >= 84 && <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:11.5, color:"var(--muted)" }}>
+            <Clock size={12}/><b style={{ color:"var(--text)" }}>{timeStr}</b> d'utilisation</div>}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ border:`1px solid ${borderColor}`, borderRadius:16, overflow:"hidden",
@@ -750,7 +783,25 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
         )}
 
         {/* Les 6 hotends du rack Vortek, dans leur disposition physique */}
-        {showRack && (
+        {showRack && dense && (() => {
+          const room = fitH - 30 - 4;
+          const one = room < 130;
+          const rowsN = one ? 1 : 2;
+          const swatch = Math.max(18, Math.min(72, Math.floor((room - (rowsN - 1) * 8) / rowsN) - 32));
+          const order = one ? slots : [slots[0], slots[2], slots[4], slots[1], slots[3], slots[5]];
+          return (
+            <div style={{ display:"grid", gridTemplateColumns:`repeat(${one ? 6 : 3}, minmax(0, 1fr))`, gap:8 }}>
+              {order.map(({ slot, num, onHead }) => (
+                <SlotMini key={num} slot={slot} num={num} isOnHead={onHead} swatch={swatch}
+                  headColor={onHead ? headColorValue : null}
+                  isSelected={detailKind === "hotend" && hotendNum === num}
+                  activeNozzleId={activeNozzleId}
+                  onClick={() => setSelHotend(num)}/>
+              ))}
+            </div>
+          );
+        })()}
+        {showRack && !dense && (
           <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:6, padding:"4px 0" }}>
             {[[slots[0], slots[2], slots[4]], [slots[1], slots[3], slots[5]]].map((row, i) => (
               <div key={i} style={{ display:"flex", gap:5, justifyContent:"center" }}>
@@ -777,7 +828,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
       {showDetail && detailKind === "hotend" && selectedHotend?.slot && (
         <SlotDetail slot={selectedHotend.slot} num={selectedHotend.num}
           isOnHead={selectedHotend.onHead}
-          headSlot={selectedHotend.onHead ? headSlot : null}/>
+          headSlot={selectedHotend.onHead ? headSlot : null} fitH={dense && part === "detail" ? fitH : null}/>
       )}
       {/* la fiche d'une bobine : par-dessus la page (portail), pas dans la tuile qui la couperait */}
       {selectedTray && createPortal(<div onClick={e => e.stopPropagation()}><TrayBottomSheet tray={selectedTray.tray} amsId={selectedTray.amsId}
@@ -907,7 +958,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
     <span data-pk="" title={label} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size, fontWeight: 800, whiteSpace: "nowrap",
       color: (v || 0) > 40 ? hot : "var(--muted)" }}><Icon/>
       {label && nozzles.length > 1 && label.startsWith("Buse") && <span style={{ fontSize: size - 2, fontWeight: 900 }}>{label.slice(-1)}</span>}
-      {Math.round(v || 0)}°{t > 0 && <span style={{ color: "var(--muted)", fontWeight: 700 }}>/{Math.round(t)}°</span>}</span>
+      {Math.round(v || 0)}°{t > 0 && <sup style={{ fontSize: "0.72em", color: "var(--muted)", fontWeight: 700, lineHeight: 0, marginLeft: 1 }}>/{Math.round(t)}°</sup>}</span>
   );
   const temps = (size, gap) => <span style={{ display: "inline-flex", gap, flexShrink: 0, alignItems: "center" }}>
     {nozzles.map(n => <React.Fragment key={n.id}>{tempItem(IcoNozzle, nozzles.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", n.temp, n.target, "#ea580c", size)}</React.Fragment>)}
