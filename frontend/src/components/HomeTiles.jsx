@@ -302,6 +302,50 @@ function Gauge({ value, max = 100, size = 74, color, label, sub }) {
     </div>
   );
 }
+// une goutte d'eau remplie au niveau (0 a 100), une vague qui ondule a la surface ;
+// sa hauteur : size, sa largeur : size * 0.75 ; la legende dessous (DROP_EXTRA)
+const DROP = "M30 3 C30 3 7 31 7 50 A23 23 0 0 0 53 50 C53 31 30 3 30 3 Z";
+const DROP_AR = 1 / 0.75, DROP_EXTRA = 34;
+function DropGauge({ value, color, size = 80, label, sub }) {
+  const id = useMemo(() => `dr${Math.random().toString(36).slice(2, 8)}`, []);
+  const v = Math.max(0, Math.min(100, value || 0));
+  const top = 75 - 72 * v / 100;   // la goutte va de y=3 (pointe) a y=73
+  const inside = v >= 46;           // le chiffre est dans l'eau : en blanc
+  return (
+    <div data-pk="" style={{ display: "flex", flexDirection: "column", alignItems: "center", width: Math.round(size * 0.75), flexShrink: 0 }}>
+      <svg width={Math.round(size * 0.75)} height={size} viewBox="0 0 60 80" aria-hidden="true" style={{ overflow: "visible" }}>
+        <defs><clipPath id={id}><path d={DROP}/></clipPath>
+          <linearGradient id={`${id}g`} x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={color} stopOpacity="0.75"/><stop offset="100%" stopColor={color}/></linearGradient></defs>
+        <path d={DROP} fill="var(--surface2)"/>
+        <g clipPath={`url(#${id})`}>
+          <path d={`M-60 ${top} q7.5 -4 15 0 t15 0 t15 0 t15 0 t15 0 t15 0 t15 0 t15 0 t15 0 t15 0 t15 0 t15 0 V82 H-60 Z`} fill={`url(#${id}g)`}
+            style={{ animation: "bn-wave 2.6s linear infinite" }}/>
+          <ellipse cx="22" cy="40" rx="4" ry="9" fill="rgba(255,255,255,0.35)"/>
+        </g>
+        <path d={DROP} fill="none" stroke={color} strokeOpacity="0.55" strokeWidth="2"/>
+        <text x="30" y="57" textAnchor="middle" fontSize="15" fontWeight="900" fill={inside ? "#fff" : "var(--text)"}
+          style={{ paintOrder: "stroke", stroke: inside ? "rgba(0,0,0,0.18)" : "none", strokeWidth: 2 }}>{Math.round(v)}%</text>
+      </svg>
+      <span style={{ fontSize: size > 110 ? 13 : 11, fontWeight: 800, color: "var(--text2)", marginTop: 2, whiteSpace: "nowrap" }}>{label}</span>
+      {sub && <span style={{ fontSize: size > 110 ? 12 : 10.5, color: "var(--muted)", fontWeight: 700, whiteSpace: "nowrap" }}>{sub}</span>}
+    </div>
+  );
+}
+// la vue en grand de l'humidite : des gouttes a la largeur reelle de la fenetre
+function HumZoom({ list, col, o, lo, hi }) {
+  const { W } = useBox();
+  const g = fitGrid(list.length, W, 360, { ar: DROP_AR, extra: DROP_EXTRA + 14, max: 130, gap: 16 });
+  return <>
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", gap: 16, padding: "8px 0" }}>
+      {list.map(a => <DropGauge key={a.id} value={a.humidity} color={col(a.humidity)} size={Math.max(60, g.size)} label={amsLab(a)}
+        sub={a.temp ? `${Number(a.temp).toFixed(1).replace(".", ",")} °C` : null}/>)}</div>
+    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      {[["sec", `sous ${lo} %`, "#22c55e"], ["à surveiller", `${lo} à ${hi} %`, "#f59e0b"], ["humide", `au-delà de ${hi} %`, "#ef4444"]].map(([l, r, c]) => (
+        <span key={l} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "5px 11px", borderRadius: 20, background: `${c}18`,
+          fontSize: 12, fontWeight: 800, color: c }}><span style={{ width: 8, height: 8, borderRadius: "50%", background: c }}/>{l} <Muted size={11.5}>{r}</Muted></span>))}
+    </div>
+  </>;
+}
 // des barres (une par valeur), « hi » en plein ; labels et valeurs si la place le permet
 function Bars({ values, labels, color, height = 40, hi = -1, showValues = false, fmt = v => v, titles }) {
   const max = Math.max(1, ...values);
@@ -719,11 +763,11 @@ function Humidity({ status, o, sz }) {
   if (!list.length) return null;
   const [lo, hi] = o.thr === "strict" ? [20, 30] : o.thr === "loose" ? [40, 55] : [30, 40];
   const col = h => h < lo ? "#22c55e" : h < hi ? "#f59e0b" : "#ef4444";
-  const gauges = (W, H) => {
-    const g = fitGrid(list.length, W, H, { ar: GAUGE_AR, extra: GAUGE_EXTRA, max: 170, gap: 8 });
+  const drops = (W, H) => {
+    const g = fitGrid(list.length, W, H, { ar: DROP_AR, extra: DROP_EXTRA - (o.temp ? 0 : 14), max: 150, gap: 8 });
     return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "center", gap: 8 }}>
-      {list.map(a => <Gauge key={a.id} value={a.humidity} color={col(a.humidity)} size={Math.max(40, g.size)} label={`${a.humidity}%`}
-        sub={`${amsLab(a)}${o.temp && a.temp ? ` · ${Math.round(a.temp)}°` : ""}`}/>)}</div>;
+      {list.map(a => <DropGauge key={a.id} value={a.humidity} color={col(a.humidity)} size={Math.max(40, g.size)} label={amsLab(a)}
+        sub={o.temp && a.temp ? `${Math.round(a.temp)}°` : null}/>)}</div>;
   };
   const bars = H => <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-evenly", flex: 1, gap: 4 }}>
     {list.map(a => (
@@ -746,11 +790,11 @@ function Humidity({ status, o, sz }) {
   return (
     <Tile icon={<Droplets size={15}/>} color="#06B6D4" label="Humidité des AMS" to="/stats?tab=drying"
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 8 }}>{list.map(a => <span key={a.id} style={{ color: col(a.humidity) }}>{a.humidity}%</span>)}</span>}
-      zoom={<>{gauges(700, 330)}<Muted>Seuils : sec sous {lo} %, à surveiller jusqu'à {hi} %, humide au-delà.</Muted></>}>
+      zoom={<HumZoom list={list} col={col} o={o} lo={lo} hi={hi}/>}>
       {({ W, H }) => {
         const fitsBars = H >= list.length * 19;
         if (o.style === "bars") return fitsBars ? bars(H) : columns(W);
-        return fitGrid(list.length, W, H, { ar: GAUGE_AR, extra: GAUGE_EXTRA, gap: 8 }).size >= 46 ? gauges(W, H) : fitsBars ? bars(H) : columns(W);
+        return fitGrid(list.length, W, H, { ar: DROP_AR, extra: DROP_EXTRA - (o.temp ? 0 : 14), gap: 8 }).size >= 46 ? drops(W, H) : fitsBars ? bars(H) : columns(W);
       }}
     </Tile>
   );
@@ -1551,7 +1595,7 @@ export const TILES = {
   dry: { label: "Séchage", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Dry v={d.dry} status={st} o={o} sz={sz(it)}/>,
     options: [B("ring", "Anneau « au sec »", true), B("inams", "Combien sont dans l'AMS", true)] },
   humidity: { label: "Humidité des AMS", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Humidity status={st} o={o} sz={sz(it)}/>,
-    options: [C("style", "Affichage", "gauges", [["gauges", "jauges"], ["bars", "barres"]], { hint: "Les jauges passent en barres quand la tuile est trop basse." }),
+    options: [C("style", "Affichage", "gauges", [["gauges", "gouttes"], ["bars", "barres"]], { hint: "Les gouttes passent en barres quand la tuile est trop basse." }),
       C("thr", "Seuils", "std", [["strict", "stricts (20/30 %)"], ["std", "normaux (30/40 %)"], ["loose", "souples (40/55 %)"]]),
       B("temp", "Température de l'AMS", false)] },
   friends: { label: "Copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Friends f={d.friends} o={o} sz={sz(it)}/>,

@@ -103,6 +103,7 @@ body {
   50% { box-shadow: 0 0 0 4px rgba(59,130,246,0.30); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes bn-wave { to { transform: translateX(30px); } }
 @keyframes bn-fade { from { opacity: 0; } }
 @keyframes bn-pop { from { opacity: 0; transform: translateY(10px) scale(.97); } }
 @keyframes bn-sheet-up { from { transform: translateY(100%); } }
