@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
 import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
 import { useAuth } from "../store/auth";
+import { useFriend } from "../store/friend";
 import { create } from "zustand";
 import client, { apiUrl } from "../api/client";
 import AttentionSection from "../components/AttentionSection";
@@ -757,6 +758,7 @@ const SKY = [
 ];
 function Greeting({ status }) {
   const username = useAuth(s => s.username) || "";
+  const visiting = useFriend(s => s.friend);         // chez un copain : son accueil, pas de personnalisation
   const [name, setName] = useState(null);
   const [today, setToday] = useState(null);
   const st = String(status?.status || "").toUpperCase();
@@ -824,8 +826,8 @@ function Greeting({ status }) {
             {Math.round(status.progress || 0)} %</span>}
           {fin && <span data-pk="" style={pill}><Clock size={14}/>fin {fin.dayDiff ? "demain " : ""}{fin.time}</span>}
           {today && <span data-pk="" style={pill}><Layers size={14}/>{today.count} aujourd'hui</span>}
-          <button className="hh-edit" onClick={() => window.dispatchEvent(new Event("bn-home-edit"))} aria-label="Personnaliser l'accueil"
-            title="Personnaliser l'accueil" style={{ ...pill, cursor: "pointer", padding: "7px 9px" }}><LayoutGrid size={15}/></button>
+          {!visiting && <button className="hh-edit" onClick={() => window.dispatchEvent(new Event("bn-home-edit"))} aria-label="Personnaliser l'accueil"
+            title="Personnaliser l'accueil" style={{ ...pill, cursor: "pointer", padding: "7px 9px" }}><LayoutGrid size={15}/></button>}
         </div>
       </div>
     </div>

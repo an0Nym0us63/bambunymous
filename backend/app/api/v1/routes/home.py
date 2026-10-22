@@ -11,7 +11,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException
 
 from ....db.session import AsyncSessionLocal
 from ....services.settings_service import get_setting, set_setting
-from .auth import require_own_account
+from .auth import get_current_user, require_own_account
 
 router = APIRouter()
 KEY = "HOME_LAYOUT"
@@ -27,10 +27,12 @@ async def _all(db) -> dict:
 
 
 @router.get("/layout")
-async def home_layout(acc=Depends(require_own_account)):
+async def home_layout(username: str = Depends(get_current_user)):
     """Ma disposition ; tant que je n'en ai pas reglee, celle du compte principal
     (le premier administrateur qui en a une) : « inherited » le dit, et la
-    premiere modification en fait ma propre copie."""
+    premiere modification en fait ma propre copie. Un copain qui passe (sa cle
+    est liee a un compte de la maison) voit l'accueil de ce compte, en lecture."""
+    acc = (username, None)
     from sqlalchemy import select
     from ....models.user import User, ROLE_ADMIN
     async with AsyncSessionLocal() as db:

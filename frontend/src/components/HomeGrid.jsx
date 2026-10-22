@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone } from "lucide-react";
 import client from "../api/client";
+import { currentFriend, useFriend } from "../store/friend";
 import { toast } from "../store/toast";
 import { TILES, useTilesData } from "./HomeTiles";
 
@@ -149,6 +150,7 @@ export default function HomeGrid({ status, blocks }) {
   const wide = useWide();
   const defs = useMemo(() => ({ ...blocks, ...TILES }), [blocks]);
   const [lay, setLay] = useState(() => defaults(defs));
+  const friendId = useFriend(s => s.friend?.id);
   const [edit, setEdit] = useState(false);
   const [dragId, setDragId] = useState(null);
   const [sel, setSel] = useState(null);
@@ -178,11 +180,12 @@ export default function HomeGrid({ status, blocks }) {
       const l = normalize(data?.layout, defs); setLay(l); saved.current = JSON.stringify(l);
       setInh(data?.inherited ? data.from || "le compte principal" : null);
     })
-      .catch(() => {});
-    const open = () => setEdit(true);
+      .catch(() => setLay(defaults(defs)));
+    // chez un copain, pas de personnalisation : on ecraserait sa propre disposition
+    const open = () => { if (!currentFriend()) setEdit(true); };
     window.addEventListener("bn-home-edit", open);
     return () => window.removeEventListener("bn-home-edit", open);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [friendId]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (edit) setEc(showN); }, [edit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async (l, reset = false) => {
