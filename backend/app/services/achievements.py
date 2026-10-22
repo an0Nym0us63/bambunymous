@@ -5347,7 +5347,8 @@ async def _notify(new: list, ev: dict, keys: int = 0) -> None:
         a = BY_ID[aid]
         t = tiers_of(a)[i]
         nxt = a["tiers"][i + 1] if i + 1 < len(a["tiers"]) else None
-        lines.append(f"{t['emoji']} {a['emoji']} {a['name']} · {t['label']}")
+        # une carte porte deja son rang dans son nom (« Valet · Impressions »)
+        lines.append(f"🃏 {'' if a.get('joker') else a['emoji'] + ' '}{a['name']}" if a.get("card_tier") else f"{t['emoji']} {a['emoji']} {a['name']} · {t['label']}")
         lines.append(f"   {describe(a, a['tiers'][i])}"
                      + (f" — prochain palier : {_fmt_n(nxt, a)}" if nxt is not None and not a.get("money") else ""))
     if len(items) > 8:
@@ -5356,8 +5357,8 @@ async def _notify(new: list, ev: dict, keys: int = 0) -> None:
         lines.append(f"🔑 +{keys} clé{'s' if keys > 1 else ''}")
     aid, i = items[0]
     a, t = BY_ID[aid], tiers_of(BY_ID[aid])[i]
-    title = (f"🏅 Succès débloqué : {a['name']} {t['emoji']}" if len(items) == 1
-             else f"🏅 {len(items)} succès débloqués")
+    title = ((f"🃏 Carte gagnée : {a['name']}" if a.get("card_tier") else f"🏅 Succès débloqué : {a['name']} {t['emoji']}")
+             if len(items) == 1 else f"🏅 {len(items)} succès débloqués")
     await N.notify("achievement_unlocked", title, "\n".join(lines),
                    click=N.app_link(cfg, f"/stats?tab=achievements&a={aid}"), priority=3)
 
