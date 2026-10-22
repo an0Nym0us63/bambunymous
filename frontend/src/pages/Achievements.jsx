@@ -129,7 +129,7 @@ export default function Achievements({ embedded = false }) {
   };
 
   return (
-    <div className="ach-room" style={{ maxWidth: embedded ? undefined : 900, width:"100%", margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
+    <div className={embedded ? "ach-room" : "ach-room page-wide"} style={{ "--page-max":"900px", width:"100%", margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
       {!embedded && <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Succès</h1>}
 
       {/* Le grade de maker, en tete, a part */}
@@ -201,7 +201,8 @@ export default function Achievements({ embedded = false }) {
         </div>
       )}
 
-      {/* Sections */}
+      {/* Sections : sur PC, en colonnes ; celle qu'on ouvre prend toute la ligne. */}
+      <div className="wide-list" style={{ "--wl-gap":"14px", "--wl-min":"440px" }}>
       {data.categories.map(c => {
         const items = data.items.filter(x => x.cat === c.id)
           .sort((a, b) => (b.level - a.level) || (progress(b) - progress(a)));
@@ -220,7 +221,7 @@ export default function Achievements({ embedded = false }) {
         const common = items.filter(x => shared(x) === true).length;
         const toFind = items.filter(x => shared(x) === false).length;
         return (
-          <div key={c.id} className="card" style={{ padding:0, overflow:"hidden", ...feltCard(CAT_COLOR[c.id] || "#8B5CF6") }}>
+          <div key={c.id} className={open ? "card wide-span" : "card"} style={{ padding:0, overflow:"hidden", ...feltCard(CAT_COLOR[c.id] || "#8B5CF6") }}>
             <button onClick={() => toggle(c.id)} aria-expanded={open}
               style={{ width:"100%", display:"flex", flexDirection:"column", gap:8, padding:"14px 16px", background:"none",
                 border:"none", cursor:"pointer", textAlign:"left", color:"var(--text)" }}>
@@ -362,6 +363,7 @@ export default function Achievements({ embedded = false }) {
           </div>
         );
       })}
+      </div>
 
       {data.since && <p style={{ ...msg, padding:"4px", fontSize:11 }}>
         Les dates viennent de ton historique ; ce qui ne s'y lit pas (MakerWorld, stock, copains) est daté du jour où il a été constaté.</p>}

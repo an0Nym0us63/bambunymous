@@ -58,7 +58,7 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
   return (
     <>
       <Section title="Inventaire" isGlobal>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
+        <div className="kpi-grid">
           {/* Memes couleurs que les sections de la page Objets : un etat garde
               son code visuel d'un ecran a l'autre. */}
           <KpiCard icon={ShoppingBag} label="Objets" value={stats.total} color="#64748b"/>
@@ -83,8 +83,7 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
         </div>
 
         {/* Repartition etat + origine */}
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",
-          gap:12, marginTop:12 }}>
+        <div className="kpi-grid" style={{ "--kpi-min":"280px", gap:12, marginTop:12 }}>
           {(stats.state_split || []).some(d => d.value > 0) && (
             <Donut palette title="Par état"
               data={stats.state_split.filter(d => d.value > 0).map(d => ({
@@ -110,8 +109,10 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
         </div>
       </Section>
 
+      {/* PC : ventes et ratios cote a cote. */}
+      <div className="wide-2" style={{ gap:20 }}>
       <Section title="Ventes">
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
+        <div className="kpi-grid">
           <KpiCard icon={Euro} label="Chiffre d'affaires" value={fmtEur(stats.revenue)} color="#22c55e"/>
           <KpiCard icon={Euro} label="Coût des vendus" value={fmtEur(stats.cost_sold)} color="#ef4444"/>
           <KpiCard icon={TrendingUp} label="Marge" value={fmtEur(stats.margin)} color={marginColor}
@@ -120,7 +121,7 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
       </Section>
 
       <Section title="Ratios">
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:10 }}>
+        <div className="kpi-grid">
           {/* Rapporte aux objets DESTINES A LA VENTE, pas au total. Un cadeau
               ou un objet garde pour soi n'a jamais ete propose : le compter
               comme une vente ratee ecrasait le taux -- 9 sur 174 affichait 5%,
@@ -141,12 +142,13 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
           )}
         </div>
       </Section>
+      </div>
 
       {((stats.top_margin || []).length > 0 || (stats.top_margin_pct || []).length > 0) && (
         <Section title="Meilleures marges">
-          {/* Empilees et non cote a cote : cote a cote, les barres etaient trop
-              etroites pour se lire. */}
-          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {/* Empilees sur telephone (cote a cote, les barres etaient trop
+              etroites pour se lire), cote a cote sur PC ou la place ne manque pas. */}
+          <div className="wide-2" style={{ gap:12 }}>
             {(stats.top_margin || []).length > 0 && (
               <div className="card" style={{ padding:"14px 16px" }}>
                 <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:"0 0 10px" }}>
@@ -190,8 +192,7 @@ function ObjectsStats({ stats, onOpen, onOpenObject, onOpenAccessory }) {
 
       {acc && acc.count > 0 && (
         <Section title="Accessoires" isGlobal>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",
-            gap:10, marginBottom:12 }}>
+          <div className="kpi-grid" style={{ "--kpi-min":"150px", marginBottom:12 }}>
             <KpiCard icon={Package} label="Références" value={acc.count} color="#3b82f6"
               sub={`${acc.stock_units} en stock`}/>
             {/* Stock et engage separes : depuis que lier un accessoire le sort
@@ -293,7 +294,7 @@ function DryingStats() {
   const AGE_HEX = ["#7dd3fc", "#38bdf8", "#0ea5e9", "#0369a1", "#1e3a8a", "#ef4444"];
 
   return (<>
-    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
+    <div className="kpi-grid" style={{ "--kpi-min":"150px" }}>
       <KpiCard icon={Droplets} label="À sécher" value={k.to_dry} color="#0EA5E9"
         sub={k.to_dry_in_ams ? `dont ${k.to_dry_in_ams} dans l'AMS` : `sur ${k.active} bobines`}/>
       <KpiCard icon={AlertTriangle} label="Jamais séchées" value={k.never} color="#ef4444"/>
@@ -329,6 +330,9 @@ function DryingStats() {
         hex:["#22c55e", "#84cc16", "#f59e0b", "#f97316", "#ef4444", "#8b5cf6"][i % 6] }))}/>
     </div>
 
+    {/* PC : les bobines a secher a gauche, les familles a droite. */}
+    <div className="wide-2" style={{ gap:20 }}>
+    {(d.to_dry.length > 0 || d.soon.length > 0) && <div style={{ display:"flex", flexDirection:"column", gap:20, minWidth:0 }}>
     {d.to_dry.length > 0 && (
       <Section title={`À sécher maintenant (${d.to_dry.length})`}>
         <div className="card" style={scroll}>
@@ -344,6 +348,7 @@ function DryingStats() {
         </div>
       </Section>
     )}
+    </div>}
 
     <Section title="Par famille">
       <div className="card" style={{ ...scroll, padding:"8px 12px" }}>
@@ -354,6 +359,7 @@ function DryingStats() {
         ))}
       </div>
     </Section>
+    </div>
 
     {open && <FilamentSheetFromSpool filamentId={open.filament_id} spoolId={open.id}
       onClose={() => { setOpen(null); load(); }}/>}
@@ -876,14 +882,14 @@ export default function Stats() {
   );
 
   if (loading) return (
-    <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+    <div className="page-wide" style={{ gap: 20 }}>
       {header}
       <p style={{ textAlign: "center", color: "var(--muted)", padding: 60 }}>Chargement…</p>
     </div>
   );
 
   if (error) return (
-    <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+    <div className="page-wide" style={{ gap: 20 }}>
       {header}
       <div style={{ padding: "12px 16px", background: "rgba(239,68,68,0.1)",
         border: "1px solid rgba(239,68,68,0.3)", borderRadius: 8, color: "#ef4444", fontSize: 13 }}>
@@ -895,7 +901,7 @@ export default function Stats() {
   const tabs = [["prints","Prints"],["filaments","Filaments"],["drying","Séchage"],["objects","Objets"],["achievements","Succès"]];
 
   return (
-    <div style={{ maxWidth: 960, margin: "0 auto", display: "flex", flexDirection: "column", gap: 20 }}>
+    <div className="page-wide" style={{ gap: 20 }}>
       {header}
 
       {/* Onglets */}
@@ -946,7 +952,7 @@ export default function Stats() {
         </p>
       ) : (<>
       <Section title="Impressions">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+        <div className="kpi-grid">
           <KpiCard icon={Layers} label="Terminées" value={data.total_prints} color="#3b82f6"
             sub={`${data.failed_prints} échec${data.failed_prints > 1 ? "s" : ""}`}/>
           <KpiCard icon={CheckCircle2} label="Taux de réussite" value={`${data.success_rate} %`} color="#22c55e"
@@ -961,7 +967,7 @@ export default function Stats() {
       </Section>
 
       <Section title="Moyennes par impression">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+        <div className="kpi-grid">
           <KpiCard icon={Euro} label="Coût moyen" value={fmtEur(data.avg_cost)} color="#ef4444"/>
           <KpiCard icon={Clock} label="Durée moyenne" value={fmtH(data.avg_duration_h * 3600)} color="#f59e0b"/>
           <KpiCard icon={Weight} label="Poids moyen" value={`${data.avg_weight_g} g`} color="#8b5cf6"/>
@@ -979,8 +985,7 @@ export default function Stats() {
       {/* Habitudes : quand imprimes-tu ? */}
       {(data.by_weekday || data.by_hour) && (
         <Section title="Habitudes d'impression">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))",
-            gap: 10, marginBottom: 12 }}>
+          <div className="kpi-grid" style={{ marginBottom: 12 }}>
             {data.peak_hour != null && (
               <KpiCard icon={Clock} label="Heure de pointe"
                 value={`${String(data.peak_hour).padStart(2,"0")}h`} color="#f59e0b"/>
@@ -993,7 +998,7 @@ export default function Stats() {
             <KpiCard icon={CheckCircle2} label="Taux de réussite"
               value={`${data.success_rate} %`} color="#22c55e"/>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
+          <div className="kpi-grid" style={{ "--kpi-min": "280px", gap: 12 }}>
             {(data.by_weekday || []).length > 0 && (
               <MiniBarChart data={data.by_weekday} title="Par jour de la semaine" color="#3b82f6"/>
             )}
@@ -1012,7 +1017,7 @@ export default function Stats() {
 
       {data.failed_prints > 0 && (
         <Section title="Perdu sur les échecs">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+          <div className="kpi-grid">
             <KpiCard icon={AlertTriangle} label="Échecs" value={data.failed_prints} color="#ef4444"/>
             <KpiCard icon={Weight} label="Filament" value={fmtKg(data.failed_weight_g)} color="#ef4444"/>
             <KpiCard icon={Euro} label="Coût" value={fmtEur(data.failed_cost)} color="#ef4444"/>
@@ -1028,7 +1033,7 @@ export default function Stats() {
       )}
 
       <Section title="Classements">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
+        <div className="kpi-grid" style={{ "--kpi-min": "280px", gap: 12 }}>
           <TopList title="⏱ Les plus longs" barColor="#f59e0b"
             prints={data.top_duration} groups={data.top_groups_duration}
             valueKey="duration_s" valueLabel={p => fmtH(p.duration_s)}
@@ -1055,7 +1060,7 @@ export default function Stats() {
       {tab === "filaments" && (<>
       {/* KPIs stock en tete */}
       <Section title="Stock actuel" isGlobal>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+        <div className="kpi-grid">
           <KpiCard icon={Package} label="Références" value={data.stock?.references} color="#3b82f6"/>
           <KpiCard icon={Package} label="Bobines actives" value={data.stock?.spools} color="#22c55e"/>
           <KpiCard icon={Weight} label="Poids en stock" value={fmtKg(data.stock?.weight_g)} color="#f59e0b"/>
@@ -1076,7 +1081,7 @@ export default function Stats() {
 
       {/* Consommation sur la periode */}
       <Section title="Consommé sur la période">
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(140px,1fr))", gap: 10 }}>
+        <div className="kpi-grid">
           <KpiCard icon={Weight} label="Filament utilisé" value={fmtKg(data.total_weight_g)} color="#8b5cf6"/>
           <KpiCard icon={Euro} label="Coût filament" value={fmtEur(data.total_cost)} color="#ef4444"/>
           {data.total_weight_g > 0 && (
@@ -1091,7 +1096,7 @@ export default function Stats() {
 
       {(matData.length > 0 || colorData.length > 0) && (
         <Section title="Répartition de la consommation">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>
+          <div className="kpi-grid" style={{ "--kpi-min": "280px", gap: 12 }}>
             {matData.length > 0 && <Donut data={matData} title="Par matériau"/>}
             {colorData.length > 0 && <Donut data={colorData} title="Par teinte" palette/>}
 

@@ -2924,7 +2924,7 @@ export default function Filaments() {
   ];
 
   return (
-    <div style={{ maxWidth:960, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
+    <div className="page-wide">
       {/* Mobile : le bouton part dans le header (une ligne de gagnee).
           Desktop : le header mobile n'existe pas, on le garde dans le flux. */}
       <HeaderAction>

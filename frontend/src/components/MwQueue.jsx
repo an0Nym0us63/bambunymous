@@ -303,7 +303,7 @@ export default function MwQueue() {
             {sorting ? "✓ Terminé" : "↕ Réorganiser"}</button></AdminOnly>
         </div>
 
-        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+        <div className="wide-list">
           {rows.map(r => {
             const [label, color, help] = STATUS[r.status] || STATUS.unknown;
             const isPicked = choosing ? chosen.includes(r.design_id) : !!picked?.has(r.design_id);
@@ -367,7 +367,7 @@ export default function MwQueue() {
                 </span>
               </Pressable>
               {!cutting && !marks && pos[r.design_id] === cutAt && cutAt < q.models.length - 1 && (
-                <div style={{ display:"flex", alignItems:"center", gap:8, color:"#3b82f6", fontSize:11, fontWeight:800 }}>
+                <div className="wide-span" style={{ display:"flex", alignItems:"center", gap:8, color:"#3b82f6", fontSize:11, fontWeight:800 }}>
                   <span style={{ flex:1, borderTop:"2px dashed #3b82f6" }}/>✂ jusqu'ici<span style={{ flex:1, borderTop:"2px dashed #3b82f6" }}/>
                 </div>
               )}
@@ -375,7 +375,7 @@ export default function MwQueue() {
             );
           })}
         </div>
-        <p style={{ fontSize:11, color:"var(--muted)", margin:0, lineHeight:1.5 }}>
+        <p style={{ fontSize:11, color:"var(--muted)", margin:0, lineHeight:1.5, maxWidth:"90ch" }}>
           Ouvre un modèle, déplie son profil, choisis plateaux et filaments, puis « 📌 Retenir pour « À faire » ». Sans
           cela, la liste prend le profil retenu, tous les plateaux et le filament le plus proche de ton stock.
           Pastilles : vert = dans l'AMS, orange = en stock, rouge = manque. Un modèle arrivé dans la liste sans place

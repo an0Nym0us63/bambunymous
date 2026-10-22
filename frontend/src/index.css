@@ -202,3 +202,23 @@ body.ach-room-on main.page-content {
   --text2:    #3f3560;
   --muted:    #6f6890;
 }
+
+/* Pages : colonne centree sur mobile et tablette, toute la largeur sur PC
+   (>= 1024 px, comme l'accueil). Le contenu se repartit alors en grilles de
+   cartes ou en colonnes (.wide-2) plutot que de s'etirer en longues lignes. */
+.page-wide { width:100%; max-width:var(--page-max, 960px); margin:0 auto; display:flex; flex-direction:column; gap:16px; }
+.wide-2 { display:flex; flex-direction:column; gap:16px; min-width:0; }
+.wide-2 > * { min-width:0; }
+.wide-2 > :only-child { grid-column:1 / -1; }
+/* Cartes de chiffres : sur PC les cartes s'etirent pour remplir la ligne
+   (auto-fit) au lieu de laisser des pistes vides a droite. */
+.kpi-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--kpi-min, 140px), 1fr)); gap:10px; }
+/* Liste de lignes : une colonne sur mobile, plusieurs sur PC. */
+.wide-list { display:flex; flex-direction:column; gap:var(--wl-gap, 6px); min-width:0; }
+@media (min-width: 1024px) {
+  .page-wide { max-width:none; }
+  .wide-2 { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); align-items:start; }
+  .wide-list { display:grid; grid-template-columns:repeat(auto-fill, minmax(var(--wl-min, 420px), 1fr)); align-items:start; }
+  .wide-list > .wide-span, .wide-2 > .wide-span { grid-column:1 / -1; }
+  .kpi-grid { grid-template-columns:repeat(auto-fit, minmax(var(--kpi-min, 140px), 1fr)); }
+}

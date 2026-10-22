@@ -84,7 +84,7 @@ export default function Notifications() {
   }
 
   return (
-    <div style={{ maxWidth:720, margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
+    <div className="page-wide" style={{ "--page-max":"720px", gap:14 }}>
       <div style={{ display:"flex", alignItems:"center", gap:10 }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>Notifications</h1>
         <button onClick={() => navigate("/settings?tab=notify")} title="Choisir mes notifications"
@@ -98,9 +98,10 @@ export default function Notifications() {
           : <>Aucune notification ces {data.days} derniers jours. Choisis celles que tu veux recevoir dans
             Paramètres › Notifs : elles s'afficheront ici.</>}</p>
       )}
+      {/* PC : les notifications d'un jour se rangent en colonnes. */}
       {groups.map(g => (
-        <div key={g.k} style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          <div style={{ fontSize:11, fontWeight:800, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em",
+        <div key={g.k} className="wide-list" style={{ "--wl-gap":"8px", "--wl-min":"380px", alignItems:"stretch" }}>
+          <div className="wide-span" style={{ fontSize:11, fontWeight:800, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em",
             padding:"0 4px" }}>{g.k}</div>
           {g.items.map(it => {
             const thumb = thumbOf(it);

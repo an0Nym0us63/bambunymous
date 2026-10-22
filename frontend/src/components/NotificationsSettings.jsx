@@ -163,6 +163,8 @@ export default function NotificationsSettings() {
         </button>
       ))}
     </div>
+    {/* Sur PC, les cartes du canal se rangent sur deux colonnes. */}
+    <div className="wide-2">
     {chTab === "ntfy" && channelCard("ntfy", "ntfy", <>
         Les notifications partent sur tes sujets ntfy (serveur public ntfy.sh ou le tien). Abonne-toi aux mêmes sujets
         dans l'appli ntfy du téléphone. Plusieurs sujets : chaque section choisit le sien plus bas. L'icône d'un sujet
@@ -398,7 +400,7 @@ export default function NotificationsSettings() {
       );
     })()}
     {(chTab === "ntfy" || chTab === "telegram") && (
-      <h3 style={{ fontSize:13, fontWeight:800, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em",
+      <h3 className="wide-span" style={{ fontSize:13, fontWeight:800, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.05em",
         margin:"6px 4px 0" }}>Ce qui part sur ntfy et Telegram</h3>
     )}
     {(chTab === "ntfy" || chTab === "telegram") && cfg.sections.map(sec => {
@@ -495,6 +497,7 @@ export default function NotificationsSettings() {
         </div>
       );
     })}
+    </div>
   </>);
 }
 

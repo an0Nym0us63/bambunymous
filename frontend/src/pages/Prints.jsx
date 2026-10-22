@@ -2883,7 +2883,7 @@ export default function Prints() {
     "PARTIAL":"Partiels","TO_REDO":"À refaire","FAILED":"Échoués"};
 
   return (
-    <div style={{ maxWidth:960, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
+    <div className="page-wide">
 
       {/* Titre */}
       <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Impressions</h1>

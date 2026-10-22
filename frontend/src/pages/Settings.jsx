@@ -1843,7 +1843,7 @@ export default function Settings() {
   );
 
   return (
-    <div style={{ maxWidth:640, margin:"0 auto", display:"flex", flexDirection:"column", gap:16 }}>
+    <div className="page-wide" style={{ "--page-max":"640px" }}>
       {/* Mobile : le bouton part dans le header (une ligne de gagnee).
           Desktop : le header mobile n'existe pas, on le garde dans le flux. */}
       <HeaderAction>
@@ -1882,7 +1882,8 @@ export default function Settings() {
       </div>
 
       {/* ── Affichage ─────────────────────────────────────────────── */}
-      {tab === "display" && (<>
+      {/* Sur PC, les cartes de chaque onglet se rangent sur deux colonnes (.wide-2). */}
+      {tab === "display" && (<div className="wide-2">
       <div className="card" style={card}>
         <div style={cardTitle}>Apparence</div>
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
@@ -1898,21 +1899,21 @@ export default function Settings() {
       <AdminOnly>
         <AttentionCard card={card} cardTitle={cardTitle}/>
       </AdminOnly>
-      </>)}
+      </div>)}
 
       {/* ── Filaments ─────────────────────────────────────────────── */}
       {tab === "filament" && (
-      <AdminOnly>
+      <AdminOnly><div className="wide-2">
         <DryRulesCard card={card} cardTitle={cardTitle}/>
         <SpoolTaresCard card={card} cardTitle={cardTitle}/>
         <LabelsCard card={card} cardTitle={cardTitle}/>
         <PriceReviewSection/>
-      </AdminOnly>
+      </div></AdminOnly>
       )}
 
       {/* ── Imprimante ────────────────────────────────────────────── */}
       {tab === "printer" && (
-      <AdminOnly>
+      <AdminOnly><div className="wide-2">
       <form onSubmit={handleSave} style={{ display:"flex", flexDirection:"column", gap:16 }}>
 
         {/* Imprimante */}
@@ -1965,36 +1966,36 @@ export default function Settings() {
           {saved ? "Sauvegardé ✓" : "Sauvegarder"}
         </button>
       </form>
-      <div style={{ marginTop:16 }}><AMSOrderSection/></div>
-      </AdminOnly>
+      <div><AMSOrderSection/></div>
+      </div></AdminOnly>
       )}
 
       {/* ── Comptes : moi, la securite, les utilisateurs, leur activite ── */}
-      {tab === "accounts" && (<>
+      {tab === "accounts" && (<div className="wide-2">
       <MyAccountSection/>
       <TwoFactorCard/>
       <UsersSection/>
       <AdminOnly><AchievementUsersSection/></AdminOnly>
       <ActivitySection/>
-      </>)}
+      </div>)}
 
       {/* ── Connexions : MakerWorld et les BambuNymous des copains ──────── */}
-      {tab === "links" && (<>
+      {tab === "links" && (<div className="wide-2">
       <AdminOnly><MakerWorldSettings/></AdminOnly>
       <AdminOnly home mw><RateTemplatesSettings/></AdminOnly>
       <FriendsCard/>
-      </>)}
+      </div>)}
 
       {/* ── Outils (maintenance) ──────────────────────────────────── */}
       {tab === "tools" && (
-      <AdminOnly>
+      <AdminOnly><div className="wide-2">
         <EnrichFromCatalogSection/>
         <RecalculateSection/>
         <TranslateNamesSection/>
         <SpoolnymousImport/>
         <RfidDebugSection/>
         <AchievementsExportSection/>
-      </AdminOnly>
+      </div></AdminOnly>
       )}
 
       {/* ── Appli Android (telechargement, reglages de l'appli) ──────── */}

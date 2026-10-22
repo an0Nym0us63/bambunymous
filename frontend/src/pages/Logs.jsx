@@ -117,7 +117,7 @@ export default function Logs({ embedded = false }) {
   );
 
   return (
-    <div style={{ maxWidth:1000, margin:"0 auto", display:"flex", flexDirection:"column", gap:12, height:"calc(100dvh - 100px)" }}>
+    <div className="page-wide" style={{ "--page-max":"1000px", gap:12, height:"calc(100dvh - 100px)" }}>
 
       {/* Header */}
       {!embedded && (

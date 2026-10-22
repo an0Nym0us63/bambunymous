@@ -1946,7 +1946,7 @@ export default function Objects() {
   }).filter(Boolean);
 
   return (
-    <div style={{ maxWidth:900, margin:"0 auto", display:"flex", flexDirection:"column", gap:12 }}>
+    <div className="page-wide" style={{ "--page-max":"900px", gap:12 }}>
       <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Objets & Accessoires</h1>
       </div>
