@@ -14,6 +14,7 @@ import { egg, installEggs, pageChanged, tapper } from "../../eggs";
 import NoAutofill from "../NoAutofill";
 import { PrankHost } from "../../hidden/prankHost";
 import MwAssignPicker from "../MwAssignPicker";
+import CardFx from "../CardFx";
 
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil"    },
@@ -229,6 +230,7 @@ export default function Layout() {
 
         <main className="page-content" style={S.page}><Outlet /></main>
         <PrankHost/>
+        <CardFx/>
         <MwAssignPicker/>
         <ShareProgress/>
         {!friend && <RfidScanBridge/>}

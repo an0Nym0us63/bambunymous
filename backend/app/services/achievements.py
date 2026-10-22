@@ -4274,6 +4274,46 @@ async def egg_lock(username: str, name: str, consume: bool = False, now=None) ->
     return None
 
 
+# ── Fete des cartes (22/10/2026) ─────────────────────────────────────────────
+# Une carte gagnee au fil de l'eau (pas un recalcul silencieux) est fetee a la
+# prochaine ouverture de l'appli, une fois par compte. Un compte qui n'a encore
+# rien vu commence maintenant : rien de ce qui precede ne lui est rejoue.
+CARD_LOG_MAX = 30
+
+
+async def card_fx(username: str) -> list:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    st = await _state_get() or {}
+    async with AsyncSessionLocal() as db:
+        seen = json.loads(await get_setting(db, KEY + "_CARDFX", "{}") or "{}")
+        if username not in seen:
+            seen[username] = datetime.utcnow().isoformat()
+            await set_setting(db, KEY + "_CARDFX", json.dumps(seen))
+            return []
+    out = []
+    for e in st.get("card_log") or []:
+        a = BY_ID.get(e.get("id"))
+        if not a or not a.get("card_tier") or str(e.get("at")) <= seen[username]:
+            continue
+        if not (st.get("unlocked") or {}).get(a["id"]):          # retournee depuis : plus de fete
+            continue
+        t = a["card_tier"]
+        out.append({"id": a["id"], "name": a["name"], "emoji": a["emoji"], "at": e["at"],
+                    "tier": {k: t[k] for k in ("id", "label", "emoji", "color", "card")}})
+    order = [f"card_{k}" for k in ("v", "d", "r", "a", "jv", "jd", "jr", "ja")]
+    return sorted(out, key=lambda x: -order.index(x["tier"]["id"]))
+
+
+async def card_fx_seen(username: str) -> None:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    async with AsyncSessionLocal() as db:
+        seen = json.loads(await get_setting(db, KEY + "_CARDFX", "{}") or "{}")
+        seen[username] = datetime.utcnow().isoformat()
+        await set_setting(db, KEY + "_CARDFX", json.dumps(seen))
+
+
 async def eggs_found() -> dict:
     """Les easter eggs trouves : {nom: date}."""
     from ..db.session import AsyncSessionLocal
@@ -4688,6 +4728,11 @@ async def _tick(notify: bool = True) -> list:
         new = []
     else:
         new = [(aid, i) for aid, i in new if _recent(st["unlocked"].get(aid, {}).get(str(i)))]
+    # cartes gagnees pour de bon (jamais un rattrapage) : leur fete a la prochaine ouverture
+    won = [aid for aid, _i in new if BY_ID[aid].get("card_tier")]
+    if won:
+        now_s = datetime.utcnow().isoformat()
+        st["card_log"] = ([{"id": aid, "at": now_s} for aid in won] + (st.get("card_log") or []))[:CARD_LOG_MAX]
     ok_n = await _ok_since((st.get("keys") or {}).get("since"))
     gains = _earn_keys(st, ev, new, ok_n)
     gains += _gift_keys(st)

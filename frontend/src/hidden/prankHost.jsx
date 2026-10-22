@@ -131,6 +131,8 @@ export function PrankHost() {
     let tries = 0;
     const fire = data => {
       if (document.getElementById("splash") && tries++ < 20) { setTimeout(() => fire(data), 300); return; }
+      // une carte gagnee se fete d'abord : la surprise attend (une minute au plus)
+      if (window.__bnCardFx && tries++ < 220) { setTimeout(() => fire(data), 300); return; }
       if (window.location.pathname !== "/" || usePrank.getState().slug) return;
       if (data.fete && FETE_SLUGS.includes(data.fete)) {
         // ce que la farce peut afficher : signe de l'annee lunaire, annees depuis la premiere impression

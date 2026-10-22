@@ -71,6 +71,20 @@ async def achievements_surprise(acc=Depends(require_own_account)):
     return r
 
 
+@router.get("/card-fx")
+async def achievements_card_fx(acc=Depends(require_own_account)):
+    """Les cartes gagnees depuis ma derniere ouverture : a feter."""
+    from ....services import achievements as A
+    return {"cards": await A.card_fx(acc[0])}
+
+
+@router.post("/card-fx/seen")
+async def achievements_card_fx_seen(acc=Depends(require_own_account)):
+    from ....services import achievements as A
+    await A.card_fx_seen(acc[0])
+    return {"ok": True}
+
+
 @router.post("/surprise/shown")
 async def achievements_surprise_shown(body: dict | None = Body(None), acc=Depends(require_own_account)):
     from ....services import achievements as A

@@ -1513,7 +1513,7 @@ function Rules({ data, onClose }) {
           sa main.</P>
         <P>Quatre <b>Jokers</b> : un pour tous les Valets, un pour toutes les Dames, un pour tous les Rois, et le <b>Joker
           d'or</b> pour tous les As. Comme les collections, une carte <b>se retourne</b> si un nouveau succès ou secret arrive :
-          il suffit de le décrocher pour la retrouver. Une carte gagnée rapporte {k ? k.rules.secret : 3} clés et un tour de roue
+          il suffit de le décrocher pour la retrouver. Une carte gagnée se fête à la prochaine ouverture de l'appli (plus elle est haute, plus la fête est grande) et rapporte {k ? k.rules.secret : 3} clés et un tour de roue
           (celles de « Clés et roue », un tour seulement).</P>
 
         {k && <>
