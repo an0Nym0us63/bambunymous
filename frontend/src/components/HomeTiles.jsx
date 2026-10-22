@@ -33,7 +33,20 @@ function W({ text }) {
 }
 
 // ── Gabarit et visuels communs ───────────────────────────────────────────────
-function Tile({ icon, color, label, onClick, badge, children }) {
+function Tile({ icon, color, label, onClick, badge, children, mini = false, summary = null }) {
+  // demi-hauteur : une seule ligne, l'icone, le nom, et l'essentiel en gros a droite
+  if (mini) return (
+    <div className="card" role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined} onClick={onClick}
+      style={{ padding: "0 12px", display: "flex", alignItems: "center", gap: 8, minWidth: 0, cursor: onClick ? "pointer" : "default",
+        position: "relative", overflow: "hidden", height: "100%", boxSizing: "border-box" }}>
+      <span data-pk="" style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+        background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>
+      <span className="tile-head" style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis",
+        whiteSpace: "nowrap", minWidth: 0, flexShrink: 1 }}><W text={label}/></span>
+      <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 15, fontWeight: 900,
+        color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden" }}>{summary}</span>
+    </div>
+  );
   return (
     <div className="card" role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined} onClick={onClick}
       onKeyDown={e => { if (onClick && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onClick(); } }}
@@ -199,7 +212,8 @@ function Today({ v, o, sz }) {
   const rate = v?.count ? v.ok / v.count : null;
   const col = rate == null ? "#94a3b8" : rate >= 0.9 ? "#22c55e" : rate >= 0.7 ? "#f59e0b" : "#ef4444";
   return (
-    <Tile icon={<CalendarClock size={15}/>} color="#3B82F6" label="Aujourd'hui" onClick={() => nav("/prints")}>
+    <Tile icon={<CalendarClock size={15}/>} color="#3B82F6" label="Aujourd'hui" onClick={() => nav("/prints")}
+      mini={sz.h === 0.5} summary={v ? <>{v.count}{rate != null && <span style={{ fontSize: 12, color: col }}>{Math.round(rate * 100)} %</span>}</> : "…"}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {o.ring && rate != null && <Ring value={rate} size={sz.h > 1 ? 70 : 50} color={col}>{Math.round(rate * 100)}%</Ring>}
         <div style={{ minWidth: 0 }}>
@@ -225,7 +239,8 @@ function Week({ o, sz }) {
   const today = ymd(new Date());
   const lbl = x => n === 7 ? x.day.toLocaleDateString("fr-FR", { weekday: "narrow" }) : n === 14 ? String(x.day.getDate()) : (x.day.getDate() % 5 === 0 ? String(x.day.getDate()) : "");
   return (
-    <Tile icon={<BarChart3 size={15}/>} color="#8B5CF6" label={`${n} derniers jours`} onClick={() => nav("/stats?tab=prints")}>
+    <Tile icon={<BarChart3 size={15}/>} color="#8B5CF6" label={`${n} derniers jours`} onClick={() => nav("/stats?tab=prints")}
+      mini={sz.h === 0.5} summary={v ? <>{fmt(tot)}<span style={{ width: 60, display: "inline-flex" }}><Spark values={v.map(val)} color="#8B5CF6" height={22}/></span></> : "…"}>
       <Row><Big>{v ? fmt(tot) : "…"}</Big>
         {v && o.avg && <Unit>· {fmt(o.metric === "n" ? Math.round(tot / n * 10) / 10 : tot / n)} / jour</Unit>}</Row>
       {v && <div style={{ marginTop: "auto", paddingTop: 6 }}>
@@ -242,6 +257,7 @@ function Next({ q, o, sz }) {
   const ready = (q?.models || []).filter(m => m.status === "ready").length;
   return (
     <Tile icon={<ListChecks size={15}/>} color="#22C55E" label="À faire" onClick={() => nav("/prints?tab=queue")}
+      mini={sz.h === 0.5} summary={q ? <>{ready}<span style={{ fontSize: 12, color: "var(--muted)" }}>/ {q.models?.length || 0} prêts</span></> : "…"}
       badge={q?.models?.length ? <span style={{ fontSize: 11, fontWeight: 800, color: "#16a34a" }}>{ready}/{q.models.length} prêts</span> : null}>
       {!list.length ? <Line><W text={q === undefined ? "…" : o.ready ? "Rien de prêt dans l'AMS" : "Rien dans « À faire »"}/></Line>
         : list.map((m, i) => (
@@ -265,7 +281,10 @@ function Last({ p, o, sz }) {
   const list = (p || []).slice(0, sz.h > 1 ? (sz.h > 2 ? 6 : 3) : 1);
   if (!list.length) return null;
   return (
-    <Tile icon={<History size={15}/>} color="#0EA5E9" label={list.length > 1 ? "Dernières impressions" : "Dernière impression"}>
+    <Tile icon={<History size={15}/>} color="#0EA5E9" label={list.length > 1 ? "Dernières impressions" : "Dernière impression"}
+      mini={sz.h === 0.5} summary={<span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis" }}>
+        <span style={{ color: list[0].status === "SUCCESS" || list[0].status === "PARTIAL" ? "#22c55e" : "#ef4444" }}>● </span>
+        {list[0].file_name || list[0].translated_name}</span>}>
       {list.map((x, i) => {
         const ok = x.status === "SUCCESS" || x.status === "PARTIAL";
         return (
@@ -300,7 +319,8 @@ function Stock({ s, o, sz }) {
   const low = list.filter(x => x.remaining_weight_g != null)
     .sort((a, b) => o.sort === "pct" ? (pct(a) ?? 1) - (pct(b) ?? 1) : a.remaining_weight_g - b.remaining_weight_g).slice(0, n);
   return (
-    <Tile icon={<Package size={15}/>} color="#F59E0B" label="Stock" onClick={() => nav("/filaments")}>
+    <Tile icon={<Package size={15}/>} color="#F59E0B" label="Stock" onClick={() => nav("/filaments")}
+      mini={sz.h === 0.5} summary={<>{list.length}<span style={{ display: "inline-flex", gap: 2 }}>{low.slice(0, 3).map(x => <SpoolDot key={x.id} color={x.filament_color} pct={pct(x)} size={22}/>)}</span></>}>
       <Row><Big>{s === undefined ? "…" : list.length}</Big><Unit>bobines{o.kg ? ` · ${fmtG(kg)}` : ""}</Unit></Row>
       {o.style === "dots" ? (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
@@ -324,7 +344,9 @@ function Dry({ v, status, o, sz }) {
   const lab = a => a.id >= 128 ? `HT-${String.fromCharCode(65 + a.id - 128)}` : `AMS-${String.fromCharCode(65 + a.id)}`;
   const k = v?.kpis;
   return (
-    <Tile icon={<Flame size={15}/>} color="#EF4444" label="Séchage" onClick={() => nav("/stats?tab=drying")}>
+    <Tile icon={<Flame size={15}/>} color="#EF4444" label="Séchage" onClick={() => nav("/stats?tab=drying")}
+      mini={sz.h === 0.5} summary={drying.length ? <span style={{ fontSize: 13, color: "#ef4444" }}>{drying.length} en cours · {fmtDur(drying[0].dry_time)}</span>
+        : <span style={{ color: k?.to_dry ? "#dc2626" : "var(--text)" }}>{k?.to_dry ?? "…"} <span style={{ fontSize: 12, color: "var(--muted)" }}>à sécher</span></span>}>
       {drying.length ? (
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
           {drying.map(a => {
@@ -366,7 +388,8 @@ function Humidity({ status, o, sz }) {
   const col = h => h < lo ? "#22c55e" : h < hi ? "#f59e0b" : "#ef4444";
   const lab = a => a.id >= 128 ? `HT-${String.fromCharCode(65 + a.id - 128)}` : `AMS-${String.fromCharCode(65 + a.id)}`;
   return (
-    <Tile icon={<Droplets size={15}/>} color="#06B6D4" label="Humidité des AMS" onClick={() => nav("/stats?tab=drying")}>
+    <Tile icon={<Droplets size={15}/>} color="#06B6D4" label="Humidité des AMS" onClick={() => nav("/stats?tab=drying")}
+      mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 8 }}>{list.map(a => <span key={a.id} style={{ color: col(a.humidity) }}>{a.humidity}%</span>)}</span>}>
       {o.style === "gauges" ? (
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "space-around" }}>
           {list.map(a => <Gauge key={a.id} value={a.humidity} color={col(a.humidity)} size={sz.w > 1 || list.length < 3 ? 74 : 60}
@@ -396,7 +419,8 @@ function Friends({ f, o, sz }) {
   if (!f || !n) return null;
   const list = p.slice(0, sz.h > 1 ? 5 : 2);
   return (
-    <Tile icon={<Users size={15}/>} color="#14B8A6" label="Copains" badge={<span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488" }}>{p.length}/{n}</span>}>
+    <Tile icon={<Users size={15}/>} color="#14B8A6" label="Copains" badge={<span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488" }}>{p.length}/{n}</span>}
+      mini={sz.h === 0.5} summary={<span style={{ fontSize: 13 }}>{p.length ? `${p.map(x => x.name).join(", ")} imprime${p.length > 1 ? "nt" : ""}` : "personne n'imprime"}</span>}>
       {list.length ? list.map(x => (
         <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
           {o.thumbs && x.print?.image ? <img data-pk="" src={x.print.image} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
@@ -441,7 +465,8 @@ function MwPoints({ c, o, sz }) {
   const earned = c.earned?.[per] ?? (per === "7" ? c.earned7 : c.earned30);
   const head = c.head?.[per]?.totals;
   return (
-    <Tile icon={<Coins size={15}/>} color="#EAB308" label="MakerWorld" onClick={() => nav("/prints?tab=makerworld")}>
+    <Tile icon={<Coins size={15}/>} color="#EAB308" label="MakerWorld" onClick={() => nav("/prints?tab=makerworld")}
+      mini={sz.h === 0.5} summary={<>{Math.round(c.profile.points?.total || 0)}{earned != null && <span style={{ fontSize: 12, color: "#16a34a" }}>+{Math.round(earned)}</span>}</>}>
       <Row><Big>{Math.round(c.profile.points?.total || 0)}</Big><Unit>points</Unit>
         {earned != null && <span data-pk="" style={{ fontSize: 12, fontWeight: 800, color: "#16a34a" }}>+{Math.round(earned)} en {per} j</span>}</Row>
       {o.chart && hist && <div style={{ marginTop: 6 }}><Spark values={hist} color="#EAB308" height={sz.h > 1 ? 56 : 30}/></div>}
@@ -461,7 +486,8 @@ function ToRate({ r, o, sz }) {
   if (!r) return null;
   const list = items.slice(0, sz.h > 1 ? 4 : 0);
   return (
-    <Tile icon={<Star size={15}/>} color="#F97316" label="À évaluer" onClick={() => nav("/prints?tab=makerworld")}>
+    <Tile icon={<Star size={15}/>} color="#F97316" label="À évaluer" onClick={() => nav("/prints?tab=makerworld")}
+      mini={sz.h === 0.5} summary={<span style={{ color: items.length ? "#ea580c" : "var(--text)" }}>{items.length}</span>}>
       <Row><Big color={items.length ? "#ea580c" : "var(--text)"}>{items.length}</Big><Unit>modèle{items.length > 1 ? "s" : ""}</Unit></Row>
       {o.thumbs && items.length > 0 && !list.length && (
         <div style={{ display: "flex", gap: 4, marginTop: 6 }}>
@@ -479,7 +505,7 @@ function ToRate({ r, o, sz }) {
     </Tile>
   );
 }
-function Wheel({ a, o }) {
+function Wheel({ a, o, sz = { h: 1 } }) {
   const nav = useNavigate();
   const k = a?.keys;
   if (!k) return null;
@@ -488,7 +514,11 @@ function Wheel({ a, o }) {
     <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 19, fontWeight: 900, color: c }}>{icon}{n}</span>
     <span style={{ fontSize: 10.5, color: "var(--muted)" }}>{l}</span></div>;
   return (
-    <Tile icon={<Dices size={15}/>} color="#EC4899" label="Roue et clés">
+    <Tile icon={<Dices size={15}/>} color="#EC4899" label="Roue et clés" onClick={sz.h === 0.5 ? () => nav("/stats?tab=achievements") : undefined}
+      mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 10, fontSize: 14 }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Dices size={13}/>{spins}</span>
+        {o.keys && <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#d97706" }}><Key size={13}/>{k.balance}</span>}
+        {o.tickets && <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#db2777" }}><Ticket size={13}/>{tickets}</span>}</span>}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         {cell(<Dices size={15}/>, spins, `tour${spins > 1 ? "s" : ""}`, "var(--text)")}
         {o.keys && cell(<Key size={15}/>, k.balance, `clé${k.balance > 1 ? "s" : ""}`, "#d97706")}
@@ -510,7 +540,8 @@ function Ach({ a, o, sz }) {
   const recent = (a?.recent || []).slice(0, sz.h > 1 ? 4 : 1).map(r => ({ r, it: (a.items || []).find(x => x.id === r.id) })).filter(x => x.it);
   if (!a) return null;
   return (
-    <Tile icon={<Trophy size={15}/>} color="#D4A017" label="Succès" onClick={() => nav("/stats?tab=achievements")}>
+    <Tile icon={<Trophy size={15}/>} color="#D4A017" label="Succès" onClick={() => nav("/stats?tab=achievements")}
+      mini={sz.h === 0.5} summary={<><GradeEmblem i={Math.max(0, g.i)} size={20} locked={g.i < 0}/><span style={{ fontSize: 13 }}>{g.name || "—"}</span></>}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
         {o.grade && <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
           <span data-pk=""><GradeEmblem i={Math.max(0, g.i)} size={34} locked={g.i < 0}/></span>
@@ -571,7 +602,9 @@ function Temps({ status, o, sz }) {
     ...(o.chamber && status.chamber_temp > 0 ? [{ k: "ch", l: "Chambre", v: status.chamber_temp, t: status.target_chamber_temp, max: 70, c: "#eab308" }] : []),
   ];
   return (
-    <Tile icon={<Thermometer size={15}/>} color="#F97316" label="Températures">
+    <Tile icon={<Thermometer size={15}/>} color="#F97316" label="Températures"
+      mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 8 }}>{rows.map(r => <span key={r.k} title={r.l}
+        style={{ color: (r.v || 0) > 40 ? r.c : "var(--text)" }}>{Math.round(r.v || 0)}°</span>)}</span>}>
       {o.style === "gauges" ? (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "space-around" }}>
           {rows.map(r => <Gauge key={r.k} value={r.v} max={r.t > 0 ? r.t : r.max} color={(r.v || 0) > 40 ? r.c : "#94a3b8"}
@@ -596,7 +629,8 @@ function Month({ v, o, sz }) {
   const name = new Date().toLocaleDateString("fr-FR", { month: "long" });
   const days = useDays(sz.h > 1 && o.chart ? new Date().getDate() : 0);
   return (
-    <Tile icon={<CalendarDays size={15}/>} color="#6366F1" label={`En ${name}`} onClick={() => nav("/stats?tab=prints")}>
+    <Tile icon={<CalendarDays size={15}/>} color="#6366F1" label={`En ${name}`} onClick={() => nav("/stats?tab=prints")}
+      mini={sz.h === 0.5} summary={<>{v ? v.count : "…"}{o.compare && v?.prev && <Delta now={v.count} before={v.prev.count}/>}</>}>
       <Row><Big>{v ? v.count : "…"}</Big><Unit>impression{v?.count > 1 ? "s" : ""}</Unit>
         {o.compare && v?.prev && <Delta now={v.count} before={v.prev.count}/>}</Row>
       {v && <Sub><W text={[fmtG(v.weight_g), fmtH(v.duration), o.cost && fmtEur(v.cost)].filter(Boolean).join(" · ")}/></Sub>}
@@ -612,7 +646,8 @@ function Sales({ v, o, sz }) {
   if (!v || !v.total) return null;
   const share = (v.sold || 0) / Math.max(1, (v.sold || 0) + (v.available || 0));
   return (
-    <Tile icon={<ShoppingBag size={15}/>} color="#EC4899" label="Objets et ventes" onClick={() => nav("/objects")}>
+    <Tile icon={<ShoppingBag size={15}/>} color="#EC4899" label="Objets et ventes" onClick={() => nav("/objects")}
+      mini={sz.h === 0.5} summary={<>{v.available}<span style={{ fontSize: 12, color: "var(--muted)" }}>à vendre · {v.sold} vendus</span></>}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {o.ring && <Ring value={share} size={sz.h > 1 ? 64 : 48} color="#EC4899">{v.sold}</Ring>}
         <div style={{ minWidth: 0 }}>
@@ -673,9 +708,16 @@ function Gallery({ g, o, sz }) {
 const SHORTCUTS = [["hist", "Historique", "/prints", History], ["fil", "Filaments", "/filaments", Package], ["todo", "À faire", "/prints?tab=queue", ListChecks],
   ["dry", "Séchage", "/stats?tab=drying", Flame], ["notif", "Notifications", "/notifications", BellRing], ["ach", "Succès", "/stats?tab=achievements", Trophy],
   ["obj", "Objets", "/objects", ShoppingBag], ["stats", "Statistiques", "/stats", BarChart3], ["gal", "Galerie", "/prints?tab=gallery", Images]];
-function Shortcuts({ o }) {
+function Shortcuts({ o, sz = { h: 1 } }) {
   const nav = useNavigate();
   const list = SHORTCUTS.filter(([k]) => o[`s_${k}`]);
+  if (sz.h === 0.5) return (
+    <div className="card" style={{ height: "100%", boxSizing: "border-box", padding: "0 10px", display: "flex", alignItems: "center", gap: 6 }}>
+      {list.map(([k, l, to, I]) => <button key={k} data-pk="" onClick={() => nav(to)} title={l} style={{ flex: 1, height: 36, borderRadius: 10,
+        border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", cursor: "pointer", display: "flex",
+        alignItems: "center", justifyContent: "center" }}><I size={17}/></button>)}
+    </div>
+  );
   return (
     <Tile icon={<Zap size={15}/>} color="#EAB308" label="Raccourcis">
       <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fill, minmax(${o.iconsOnly ? 40 : 96}px, 1fr))`, gap: 6 }}>
@@ -712,7 +754,8 @@ function Podium({ p, o, sz }) {
     );
   }
   return (
-    <Tile icon={<MedalIcon size={15}/>} color="#A855F7" label="Classement des copains" onClick={() => nav("/stats?tab=achievements")}>
+    <Tile icon={<MedalIcon size={15}/>} color="#A855F7" label="Classement des copains" onClick={() => nav("/stats?tab=achievements")}
+      mini={sz.h === 0.5} summary={<span style={{ fontSize: 13 }}>🥇 {list[0].me ? "Toi" : list[0].name} · {(list[0].score || 0).toLocaleString("fr-FR")}</span>}>
       {list.map((x, i) => (
         <div key={x.id || x.name} style={{ marginTop: i ? 5 : 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
@@ -738,6 +781,8 @@ function Alerts({ a, o, sz }) {
   const total = cats.reduce((n, c) => n + c.total, 0);
   return (
     <Tile icon={<BellRing size={15}/>} color="#F59E0B" label="Alertes" onClick={() => openAttention()}
+      mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 6, fontSize: 13 }}>{cats.length ? cats.map(c => <span key={c.category}
+        title={c.label}>{c.icon}<b style={{ color: "#b45309" }}>{c.total}</b></span>) : "rien à signaler"}</span>}
       badge={total ? <span style={{ fontSize: 11, fontWeight: 900, color: "#fff", background: "#f59e0b", borderRadius: 20, padding: "1px 7px" }}>{total}</span> : null}>
       {!cats.length ? <Line><W text="Rien à signaler."/></Line> : o.style === "list" || sz.h > 1 ? cats.map(c => (
         <div key={c.category} role="button" onClick={e => { e.stopPropagation(); openAttention(c.category); }}
@@ -765,51 +810,51 @@ function Alerts({ a, o, sz }) {
 // (rangees ; la premiere valeur est celle par defaut), ses options (une valeur
 // par defaut, un groupe, une explication ; « when » : seulement pour certaines
 // tailles). render(donnees, imprimante, options, taille).
-const sz = it => ({ w: it?.w || 1, h: typeof it?.h === "number" ? it.h : 1 });
+const sz = it => ({ w: it?.w || 1, h: typeof it?.h === "number" ? it.h : 1 });   // h : 0,5 (une ligne), 1, 2 ou 3
 const B = (key, label, def, extra = {}) => ({ key, label, def, ...extra });
 const C = (key, label, def, choices, extra = {}) => ({ key, label, def, choices, ...extra });
 export const TILES = {
-  today: { label: "Aujourd'hui", w: [1, 2], h: [1, 2], render: (d, st, o, it) => <Today v={d.today} o={o} sz={sz(it)}/>,
+  today: { label: "Aujourd'hui", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Today v={d.today} o={o} sz={sz(it)}/>,
     options: [B("ring", "Anneau de réussite", true, { hint: "La part des impressions réussies du jour." }), B("yesterday", "Écart avec hier", true),
       B("weight", "Poids imprimé", true), B("hours", "Heures de machine", true), B("cost", "Coût du jour", false)] },
-  week: { label: "Derniers jours", w: [1, 2], h: [1, 2, 3], render: (d, st, o, it) => <Week o={o} sz={sz(it)}/>,
+  week: { label: "Derniers jours", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Week o={o} sz={sz(it)}/>,
     options: [C("range", "Période", 7, [[7, "7 jours"], [14, "14 jours"], [30, "30 jours"]]),
       C("metric", "Compter", "h", [["h", "les heures"], ["n", "les impressions"], ["g", "les grammes"]]), B("avg", "Moyenne par jour", true)] },
-  next: { label: "À faire", w: [1, 2], h: [1, 2, 3], render: (d, st, o, it) => <Next q={d.queue} o={o} sz={sz(it)}/>,
+  next: { label: "À faire", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Next q={d.queue} o={o} sz={sz(it)}/>,
     options: [B("thumbs", "Vignettes", true), B("ready", "Seulement ce qui est prêt", false, { hint: "Les modèles dont les bobines sont dans l'AMS." }),
       B("weight", "Poids", true)] },
-  last: { label: "Dernières impressions", w: [1, 2], h: [1, 2, 3], render: (d, st, o, it) => <Last p={d.prints} o={o} sz={sz(it)}/>,
+  last: { label: "Dernières impressions", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Last p={d.prints} o={o} sz={sz(it)}/>,
     options: [B("when", "Depuis quand", true), B("cost", "Coût", false), B("photo", "Rappel « pas de photo »", true)] },
-  stock: { label: "Stock", w: [1, 2], h: [1, 2], render: (d, st, o, it) => <Stock s={d.spools} o={o} sz={sz(it)}/>,
+  stock: { label: "Stock", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Stock s={d.spools} o={o} sz={sz(it)}/>,
     options: [C("style", "Bobines basses", "dots", [["dots", "en pastilles"], ["list", "en liste"]], { hint: "L'anneau d'une pastille montre ce qui reste." }),
       C("low", "Combien", 4, [[2, "2"], [4, "4"], [6, "6"]]), C("sort", "Les plus basses", "g", [["g", "en grammes"], ["pct", "en pourcentage"]]),
       B("kg", "Poids total", true)] },
-  dry: { label: "Séchage", w: [1, 2], h: [1, 2, 3], render: (d, st, o, it) => <Dry v={d.dry} status={st} o={o} sz={sz(it)}/>,
+  dry: { label: "Séchage", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Dry v={d.dry} status={st} o={o} sz={sz(it)}/>,
     options: [B("ring", "Anneau « au sec »", true), B("inams", "Combien sont dans l'AMS", true)] },
-  humidity: { label: "Humidité des AMS", w: [1, 2], h: [1, 2], render: (d, st, o, it) => <Humidity status={st} o={o} sz={sz(it)}/>,
+  humidity: { label: "Humidité des AMS", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Humidity status={st} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "gauges", [["gauges", "jauges"], ["bars", "barres"]]),
       C("thr", "Seuils", "std", [["strict", "stricts (20/30 %)"], ["std", "normaux (30/40 %)"], ["loose", "souples (40/55 %)"]]),
       B("temp", "Température de l'AMS", false)] },
-  friends: { label: "Copains", w: [1, 2], h: [1, 2], render: (d, st, o, it) => <Friends f={d.friends} o={o} sz={sz(it)}/>,
+  friends: { label: "Copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Friends f={d.friends} o={o} sz={sz(it)}/>,
     options: [B("thumbs", "Vignette de leur impression", true), B("idle", "Ceux au repos", true)] },
-  mw: { label: "MakerWorld", w: [1, 2], h: [1, 2], render: (d, st, o, it) => <MwPoints c={d.mw} o={o} sz={sz(it)}/>,
+  mw: { label: "MakerWorld", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <MwPoints c={d.mw} o={o} sz={sz(it)}/>,
     options: [C("period", "Gains sur", "7", [["7", "7 jours"], ["30", "30 jours"], ["365", "un an"]]), B("chart", "Courbe des points (14 j)", true),
       B("stats", "Téléchargements, impressions, boosts, j'aime", true, { hint: "Quand la tuile a la place." })] },
-  rate: { label: "À évaluer", w: [1, 2], h: [1, 2], render: (d, st, o, it) => <ToRate r={d.rate} o={o} sz={sz(it)}/>,
+  rate: { label: "À évaluer", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <ToRate r={d.rate} o={o} sz={sz(it)}/>,
     options: [B("thumbs", "Vignettes", true)] },
-  wheel: { label: "Roue et clés", w: [1, 2], h: [1], render: (d, st, o) => <Wheel a={d.ach} o={o}/>,
+  wheel: { label: "Roue et clés", w: [1, 2], h: [1, 0.5], render: (d, st, o, it) => <Wheel a={d.ach} o={o} sz={sz(it)}/>,
     options: [B("keys", "Clés", true), B("tickets", "Tickets de palier", true)] },
-  ach: { label: "Succès", w: [2, 1], h: [1, 2], render: (d, st, o, it) => <Ach a={d.ach} o={o} sz={sz(it)}/>,
+  ach: { label: "Succès", w: [2, 1], h: [1, 2, 0.5], render: (d, st, o, it) => <Ach a={d.ach} o={o} sz={sz(it)}/>,
     options: [B("grade", "Grade de maker", true), B("score", "Anneau du score", false), B("cards", "Prochaines cartes", true), B("recent", "Dernières médailles", true)] },
   // au choix (dans « Ajouter »)
   camera: { label: "Caméra", w: [2, 1], h: [2, 1, 3], render: (d, st, o) => <LiveCam status={st} o={o}/>,
     options: [C("mode", "Image", "auto", [["auto", "auto"], ["stream", "direct"], ["images", "toutes les 2 s"]],
       { hint: "Auto : le direct, et des images si le direct se fige." }), B("overlay", "Avancement sur l'image", true)] },
-  temps: { label: "Températures", w: [1, 2], h: [1, 2], render: (d, st, o, it) => <Temps status={st} o={o} sz={sz(it)}/>,
+  temps: { label: "Températures", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Temps status={st} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "gauges", [["gauges", "jauges"], ["list", "lignes"]]), B("targets", "Consignes", true), B("chamber", "Chambre", true)] },
-  month: { label: "Ce mois-ci", w: [1, 2], h: [1, 2, 3], render: (d, st, o, it) => <Month v={d.month} o={o} sz={sz(it)}/>,
+  month: { label: "Ce mois-ci", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Month v={d.month} o={o} sz={sz(it)}/>,
     options: [B("compare", "Comparer au mois dernier", true), B("cost", "Coût", true), B("chart", "Barres par jour", true, { hint: "Quand la tuile a la place." })] },
-  sales: { label: "Objets et ventes", w: [1, 2], h: [1, 2], render: (d, st, o, it) => <Sales v={d.sales} o={o} sz={sz(it)}/>,
+  sales: { label: "Objets et ventes", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Sales v={d.sales} o={o} sz={sz(it)}/>,
     options: [B("ring", "Anneau vendus / à vendre", true), B("revenue", "Chiffre d'affaires", true), B("margin", "Marge", true),
       B("potential", "Valeur du stock", true, { hint: "Quand la tuile a la place." })] },
   feed: { label: "Le fil du jour", w: [2, 1], h: [2, 3, 1], render: (d, st, o, it) => <Feed f={d.feed} o={o} sz={sz(it)}/>,
@@ -819,12 +864,12 @@ export const TILES = {
   gallery: { label: "Galerie", w: [2, 1], h: [1, 2], render: (d, st, o, it) => <Gallery g={d.prints} o={o} sz={sz(it)}/>,
     options: [C("count", "Vignettes", 8, [[4, "4"], [8, "8"], [12, "12"], [16, "16"]]), B("okOnly", "Seulement les réussies", false),
       B("round", "Vignettes rondes", false)] },
-  shortcuts: { label: "Raccourcis", w: [2, 1], h: [1], render: (d, st, o) => <Shortcuts o={o}/>,
+  shortcuts: { label: "Raccourcis", w: [2, 1], h: [1, 0.5], render: (d, st, o, it) => <Shortcuts o={o} sz={sz(it)}/>,
     options: [B("iconsOnly", "Icônes seules", false, { hint: "Plus compact, le nom au survol." }),
       ...SHORTCUTS.map(([k, l], i) => B(`s_${k}`, l, i < 6, { group: "Raccourcis affichés" }))] },
-  podium: { label: "Classement des copains", w: [1, 2], h: [1, 2], render: (d, st, o, it) => <Podium p={d.podium} o={o} sz={sz(it)}/>,
+  podium: { label: "Classement des copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Podium p={d.podium} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "list", [["list", "liste"], ["podium", "podium"]]), B("bars", "Barres de score", true)] },
-  alerts: { label: "Alertes en bref", w: [1, 2], h: [1, 2], render: (d, st, o, it) => <Alerts a={d.attention} o={o} sz={sz(it)}/>,
+  alerts: { label: "Alertes en bref", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Alerts a={d.attention} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "chips", [["chips", "pastilles"], ["icons", "icônes"], ["list", "liste"]]),
       B("detail", "Exemples (en liste, pleine largeur)", true)] },
 };

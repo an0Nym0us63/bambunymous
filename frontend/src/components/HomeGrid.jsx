@@ -18,6 +18,7 @@ import { TILES, useTilesData } from "./HomeTiles";
 const WIDE = 1024;
 const COL_MIN = 400;                               // largeur sous laquelle une colonne (deux sous-colonnes) se tasse trop
 const ROW = 118;                                   // hauteur d'une rangee (px)
+const HALF = 54;                                   // le pas de la grille : une demi-rangee (2 x 54 + l'ecart de 10 = 118)
 
 function useWide() {
   const [w, setW] = useState(() => window.innerWidth >= WIDE);
@@ -106,7 +107,7 @@ function layoutFor(lay, n) {
 }
 
 function Cell({ item, def, edit, children, actions, options, drag, selected, onSelect }) {
-  const span = item.h === "auto" ? "auto" : `span ${item.h}`;
+  const span = item.h === "auto" ? "auto" : `span ${Math.round(item.h * 2)}`;
   return (
     <div className={`hg-cell${edit ? " hg-edit" : ""}${item.o?._title === false ? " hg-notitle" : ""}`} draggable={edit && drag ? true : undefined}
       onClick={edit ? e => { e.stopPropagation(); onSelect(); } : undefined}
@@ -358,7 +359,8 @@ export default function HomeGrid({ status, blocks, top = null }) {
         onClick={() => { const hs = heightsOf(def, w); update(item.id, { w, h: hs.includes(item.h) ? item.h : hs[0] }); }}
         title={w === 1 ? "Demi-largeur" : "Toute la largeur"}>{w === 1 ? "½" : "1"}</button>)}
       {heightsOf(def, item.w).length > 1 && heightsOf(def, item.w).map(h => <button key={"h" + h} style={btn(item.h === h)} onClick={() => update(item.id, { h })}
-        title={h === "auto" ? "Hauteur selon le contenu" : `${h} rangée${h > 1 ? "s" : ""} de haut`}>{h === "auto" ? "↕" : `${h}↕`}</button>)}
+        title={h === "auto" ? "Hauteur selon le contenu" : h === 0.5 ? "Une demi-rangée : une ligne de résumé" : `${h} rangée${h > 1 ? "s" : ""} de haut`}>
+        {h === "auto" ? "↕" : h === 0.5 ? "½↕" : `${h}↕`}</button>)}
       {!def.required && <button style={btn()} onClick={() => hide(item.id)} aria-label="Masquer"><EyeOff size={13}/></button>}
     </>;
     // les options de la tuile (oui/non, ou un choix), propres a cette disposition
@@ -408,7 +410,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
         onChange={(k, v) => update(optItem.id, { o: { ...(optItem.o || {}), [k]: v } })} onClose={() => setOptFor(null)}/>}
       <style>{`
         .hg-cols { display:grid; gap:12px; align-items:start; }
-        .hg-col { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); grid-auto-rows:minmax(${ROW}px, auto);
+        .hg-col { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); grid-auto-rows:minmax(${HALF}px, auto);
                   grid-auto-flow:row dense; gap:10px; min-width:0; }
         .hg-cell:not(.hg-edit):has(> div:empty) { display:none; }
         .hg-notitle .tile-head { display:none !important; }
