@@ -36,6 +36,9 @@ function agoFr(iso) {
   if (!(m >= 0)) return null;
   return m < 60 ? `il y a ${Math.max(1, m)} min` : m < 1440 ? `il y a ${Math.round(m / 60)} h` : m < 2880 ? "hier" : `il y a ${Math.round(m / 1440)} j`;
 }
+// l'heure de fin et, le lendemain ou plus tard, le nombre de jours en exposant : 01:34⁺¹
+const SUPS = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+const plusDays = n => n > 0 ? "⁺" + String(n).split("").map(c => SUPS[c]).join("") : "";
 // Heure de fin estimée + décalage en jours (0 = aujourd'hui, 1 = demain, etc.)
 function fmtFinishTime(mins) {
   if (!mins) return null;
@@ -1033,7 +1036,7 @@ function PrinterPopup({ status, img, name, onClose }) {
               <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", lineHeight: 1.2, overflow: "hidden", display: "-webkit-box",
                 WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{name || status?.print_name || "Rien en cours"}</div>
               {live && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", marginTop: 3 }}>
-                {status.remaining_minutes > 0 ? `encore ${fmtTime(status.remaining_minutes)}` : "bientôt fini"}{fin ? ` · fin ${fin.dayDiff ? "demain " : ""}${fin.time}` : ""}</div>}
+                {status.remaining_minutes > 0 ? `encore ${fmtTime(status.remaining_minutes)}` : "bientôt fini"}{fin ? ` · fin ${fin.time}${plusDays(fin.dayDiff)}` : ""}</div>}
             </div>
             <div style={{ position: "relative", width: 86, height: 86, flexShrink: 0 }}>
               <svg width="86" height="86" viewBox="0 0 86 86" style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
@@ -1052,7 +1055,7 @@ function PrinterPopup({ status, img, name, onClose }) {
         </div>
 
         {live && <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
-          {[[Clock, "Reste", fmtTime(status.remaining_minutes) || "—", "#3b82f6"], [Calendar, "Fin", fin ? `${fin.dayDiff ? "dem. " : ""}${fin.time}` : "—", "#8b5cf6"],
+          {[[Clock, "Reste", fmtTime(status.remaining_minutes) || "—", "#3b82f6"], [Calendar, "Fin", fin ? `${fin.time}${plusDays(fin.dayDiff)}` : "—", "#8b5cf6"],
             [Layers, "Couche", status.total_layers > 0 ? `${status.layer}/${status.total_layers}` : "—", "#14b8a6"]].map(([I, l, v, c]) => (
             <div key={l} style={{ padding: "10px 10px", borderRadius: 14, background: "var(--surface2)", minWidth: 0, position: "relative", overflow: "hidden" }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 800, color: c }}><I size={13}/>{l}</span>
@@ -1181,7 +1184,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
               <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 24, fontWeight: 900, color: s.color, lineHeight: 1,
                 fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{paused && <Pause size={18}/>}{pct}%</span>
               {status.remaining_minutes > 0 && fact(() => <Clock size={13}/>, fmtTime(status.remaining_minutes))}
-              {showFin && fin && fact(() => <Calendar size={13}/>, `${fin.dayDiff ? "demain " : ""}${fin.time}`)}
+              {showFin && fin && fact(() => <Calendar size={13}/>, `${fin.time}${plusDays(fin.dayDiff)}`)}
               {layerInline && fact(() => <Layers size={13}/>, `${status.layer}/${status.total_layers}`)}
             </div>
             <div style={{ height: 8, borderRadius: 6, background: "var(--border)", overflow: "hidden", flexShrink: 0 }}>
@@ -1242,7 +1245,7 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
   const facts = live && (
     <div style={{ display: "flex", flexWrap: "wrap", gap: "2px 10px", fontSize: 12, color: "var(--muted)" }}>
       {status.remaining_minutes > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Clock size={12}/>{fmtTime(status.remaining_minutes)}</span>}
-      {showFin && fin && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Calendar size={12}/>{fin.dayDiff ? "demain " : ""}{fin.time}</span>}
+      {showFin && fin && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Calendar size={12}/>{fin.time}{plusDays(fin.dayDiff)}</span>}
       {showLayer && status.total_layers > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Layers size={12}/>{status.layer}/{status.total_layers}</span>}
     </div>
   );
@@ -1424,7 +1427,7 @@ function Greeting({ status, o = {} }) {
             <span style={{ width: 46, height: 6, borderRadius: 6, background: "rgba(255,255,255,0.3)", overflow: "hidden" }}>
               <span style={{ display: "block", height: "100%", width: `${Math.round(status.progress || 0)}%`, background: "#fff" }}/></span>
             {Math.round(status.progress || 0)} %</span>}
-          {opt("pFin", true) && fin && <span data-pk="" style={pill}><Clock size={14}/>fin {fin.dayDiff ? "demain " : ""}{fin.time}</span>}
+          {opt("pFin", true) && fin && <span data-pk="" style={pill}><Clock size={14}/>fin {fin.time}{plusDays(fin.dayDiff)}</span>}
           {opt("pToday", true) && x.today && <span data-pk="" style={pill}><Layers size={14}/>{x.today.count} aujourd'hui</span>}
           {opt("pNext", false) && next && <span data-pk="" style={pill} title="Prochaine impression de « À faire »">⏭️ {next.title_fr || next.title}</span>}
           {opt("pFriends", false) && x.friends && <span data-pk="" style={pill}>👥 {nf ? `${nf} copain${nf > 1 ? "s" : ""} imprime${nf > 1 ? "nt" : ""}` : "copains au repos"}</span>}

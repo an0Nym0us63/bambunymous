@@ -446,7 +446,8 @@ function DryCard({ ams }) {
   const done = total ? Math.max(0, Math.min(1, 1 - left / total)) : null;
   const fmt = m => { const h = Math.floor(m / 60), mm = Math.round(m % 60); return h ? `${h} h ${String(mm).padStart(2, "0")}` : `${mm} min`; };
   const end = left ? new Date(Date.now() + left * 60000) : null;
-  const endTxt = end ? `${end.getDate() !== new Date().getDate() ? "demain " : ""}${end.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : "—";
+  const days = end ? Math.round((new Date(end.getFullYear(), end.getMonth(), end.getDate()) - new Date(new Date().setHours(0, 0, 0, 0))) / 86400000) : 0;
+  const endTxt = end ? `${end.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}${days > 0 ? "⁺" + String(days).split("").map(c => "⁰¹²³⁴⁵⁶⁷⁸⁹"[c]).join("") : ""}` : "—";
   const R = 64, C = 2 * Math.PI * R;
   const box = (label, value, color) => (
     <div style={{ padding: "10px 12px", borderRadius: 12, background: "var(--surface2)", minWidth: 0 }}>

@@ -684,7 +684,7 @@ function Dry({ v, status, o, sz }) {
           const info = <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: wide ? "flex-start" : "center", textAlign: wide ? "left" : "center", minWidth: 0 }}>
             <span style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{amsLab(a)}{a.dry_filament ? <Muted size={12.5}> · {a.dry_filament}</Muted> : null}</span>
             <span style={{ fontSize: 15, fontWeight: 900, color: "#ea580c" }}>encore {fmtDur((a.dry_time || 0) * 60)}</span>
-            {end && <Muted size={12}>fin à {end.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}{a.dry_temperature ? ` · ${a.dry_temperature} °C` : ""}</Muted>}
+            {end && <Muted size={12}>fin à {finAt(a.dry_time)}{a.dry_temperature ? ` · ${a.dry_temperature} °C` : ""}</Muted>}
             <div style={{ width: wide ? "100%" : Math.min(W, 180), height: 6, borderRadius: 4, background: "var(--surface2)", overflow: "hidden", marginTop: 2 }}>
               <div style={{ height: "100%", width: `${prog(a) * 100}%`, background: "linear-gradient(90deg, #fb923c, #f97316)" }}/></div>
           </div>;
@@ -1402,7 +1402,8 @@ function Alerts({ a, o, sz }) {
 // ── Nouvelles tuiles ─────────────────────────────────────────────────────────
 // la fin de l'impression : un compte a rebours en anneau (l'avancement), l'heure de fin, la couche
 const finAt = min => { const d = new Date(Date.now() + min * 60000); const t = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-  return d.getDate() !== new Date().getDate() ? `demain ${t}` : t; };
+  const n = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(new Date().setHours(0, 0, 0, 0))) / 86400000);
+  return n > 0 ? t + "⁺" + String(n).split("").map(c => "⁰¹²³⁴⁵⁶⁷⁸⁹"[c]).join("") : t; };
 function Countdown({ status, o, sz }) {
   const live = isLive(status);
   const pct = Math.round(status?.progress || 0);
