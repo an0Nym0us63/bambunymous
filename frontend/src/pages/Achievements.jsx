@@ -1517,7 +1517,8 @@ function Rules({ data, onClose }) {
         <H>🎓 Grades</H>
         <P>Chaque section te donne un titre selon la part de ses points que tu as gagnés ({GRADE_AT.map(x => `${Math.round(x * 100)} %`).join(", ")}) :
           par exemple, aux Impressions, de « {GRADES.prints[0]} » à « {GRADES.prints[4]} ». Ton <b>grade général</b> suit ton score
-          total, de « {GRADES._[0]} » à « {GRADES._[4]} ». Les grades ne rapportent pas de points : ils disent où tu en es.</P>
+          total, de « {GRADES._[0]} » à « {GRADES._[4]} ». Chaque grade a trois échelons (I, II, III), un par tiers de son
+          intervalle. Les grades ne rapportent pas de points : ils disent où tu en es.</P>
 
         <H>🃏 Mes cartes</H>
         <P>Chaque section et chaque tiroir de secrets a sa main de quatre cartes. Pour une section : le <b>Valet</b> quand tous
@@ -1847,11 +1848,20 @@ const GRADES = {
   secret: ["Fureteur", "Détective", "Chasseur de trésors", "Initié", "Gardien des secrets"],
   other: ["Apprenti", "Compagnon", "Artisan", "Maître", "Grand Maître"],
 };
+// Chaque grade a trois echelons (I, II, III), chacun un tiers de son intervalle
+// (le dernier grade va de 90 a 100 %). sub : l'echelon (0 a 2) ; stepLo et
+// nextAt : le debut de l'echelon et le seuil du suivant.
+const ROMAN = ["I", "II", "III"];
 export function gradeOf(cat, v) {
   const names = cat == null ? GRADES._ : GRADES[cat] || GRADES.other;
   let i = -1;
   GRADE_AT.forEach((x, j) => { if (v >= x) i = j; });
-  return { i, name: i >= 0 ? names[i] : null, next: names[i + 1] || null, general: cat == null };
+  if (i < 0) return { i, sub: -1, name: null, base: null, next: `${names[0]} I`, nextAt: GRADE_AT[0], stepLo: 0, general: cat == null };
+  const lo = GRADE_AT[i], hi = GRADE_AT[i + 1] ?? 1, step = (hi - lo) / 3;
+  const sub = Math.max(0, Math.min(2, Math.floor((v - lo) / step + 1e-9)));
+  const next = sub < 2 ? `${names[i]} ${ROMAN[sub + 1]}` : names[i + 1] ? `${names[i + 1]} I` : null;
+  const nextAt = sub < 2 ? lo + step * (sub + 1) : names[i + 1] ? hi : null;
+  return { i, sub, name: `${names[i]} ${ROMAN[sub]}`, base: names[i], next, nextAt, stepLo: lo + step * sub, general: cat == null };
 }
 // Les metaux des grades : fer, bronze, argent, or, puis l'irise de la legende
 const GRADE_METAL = [
@@ -1908,9 +1918,9 @@ function GradeBadge({ g }) {
 function GradePlate({ v, friend }) {
   const g = gradeOf(null, v);
   const i = Math.max(0, g.i), m = GRADE_METAL[i], none = g.i < 0;
-  const lo = none ? 0 : GRADE_AT[g.i], hi = GRADE_AT[g.i + 1];
+  const lo = g.stepLo, hi = g.nextAt;
   const p = hi ? Math.max(0, Math.min(1, (v - lo) / (hi - lo))) : 1;
-  const nx = GRADE_METAL[Math.min(4, g.i + 1)];
+  const nx = GRADE_METAL[g.sub < 2 && !none ? i : Math.min(4, g.i + 1)];
   return (
     <div className="card gplate" style={{ position:"relative", overflow:"hidden", padding:"16px 18px", borderRadius:18,
       border:`1px solid ${m.b}77`,
@@ -1956,6 +1966,15 @@ function GradePlate({ v, friend }) {
                 <span data-pk=""><GradeEmblem i={k} size={mine ? 30 : 24} locked={!got}/></span>
                 <span style={{ fontSize:9.5, fontWeight: mine ? 900 : 700, textAlign:"center", lineHeight:1.15,
                   color: got ? "var(--text)" : "var(--muted)" }}>{GRADES._[k]}</span>
+                {/* ses trois echelons : ceux deja franchis en plein */}
+                <span style={{ display:"flex", gap:2 }}>
+                  {ROMAN.map((r, j) => {
+                    const on = k < g.i || (mine && j <= g.sub);
+                    return <span key={r} data-pk="" style={{ fontSize:8.5, fontWeight:900, padding:"0 3px", borderRadius:4, lineHeight:"13px",
+                      color: on ? "#fff" : "var(--muted)", background: on ? GRADE_METAL[k].b : "transparent",
+                      border: on ? "none" : "1px solid var(--border)" }}>{r}</span>;
+                  })}
+                </span>
               </div>
             );
           })}
