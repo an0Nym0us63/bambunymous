@@ -52,7 +52,11 @@ const fixer = defs => x => {
   return { id: x.id, w, h: hs.includes(x.h) ? x.h : hs[0], ...(x.o && typeof x.o === "object" ? { o: x.o } : {}) };
 };
 // les options d'une tuile : celles de son type (avec leur valeur par defaut), et ce que la disposition en a fait
-const optsOf = (def, item) => Object.fromEntries((def.options || []).map(o => [o.key, item.o?.[o.key] ?? o.def]));
+// toutes les tuiles ont en plus une option commune : leur titre, affiche ou non
+const TITLE_OPT = { key: "_title", label: "Titre de la tuile", hint: "Masqué, la tuile gagne de la place (les infos de l'en-tête restent).",
+  def: true, group: "Général" };
+const allOpts = def => [TITLE_OPT, ...(def.options || []).map(op => op.group ? op : { ...op, group: "Contenu" })];
+const optsOf = (def, item) => Object.fromEntries(allOpts(def).map(o => [o.key, item.o?.[o.key] ?? o.def]));
 // une disposition a n colonnes, remise d'aplomb : tuiles inconnues retirees, tailles
 // ramenees a ce que la tuile accepte, pas de doublon, la tuile obligatoire presente
 function cleanCols(cols, n, defs) {
@@ -104,7 +108,7 @@ function layoutFor(lay, n) {
 function Cell({ item, def, edit, children, actions, options, drag, selected, onSelect }) {
   const span = item.h === "auto" ? "auto" : `span ${item.h}`;
   return (
-    <div className={`hg-cell${edit ? " hg-edit" : ""}`} draggable={edit && drag ? true : undefined}
+    <div className={`hg-cell${edit ? " hg-edit" : ""}${item.o?._title === false ? " hg-notitle" : ""}`} draggable={edit && drag ? true : undefined}
       onClick={edit ? e => { e.stopPropagation(); onSelect(); } : undefined}
       onDragStart={drag?.start} onDragOver={drag?.over} onDrop={drag?.drop} onDragEnd={drag?.end}
       style={{ gridColumn: `span ${item.w}`, gridRow: span, minWidth: 0, position: "relative",
@@ -141,11 +145,11 @@ function Frame({ def, children, extra }) {
       overflow: "hidden", height: "100%", boxSizing: "border-box", minWidth: 0 }}>
       <span aria-hidden="true" style={{ position: "absolute", right: -24, top: -24, width: 80, height: 80, borderRadius: "50%",
         background: `${color}22`, pointerEvents: "none" }}/>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
-        <span data-pk="" style={{ width: 22, height: 22, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center",
+      <div className="frame-head" style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
+        <span data-pk="" className="frame-label" style={{ width: 22, height: 22, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center",
           background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>
-        <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", letterSpacing: ".02em" }}>{def.label}</span>
-        {extra && <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap",
+        <span className="frame-label" style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", letterSpacing: ".02em" }}>{def.label}</span>
+        {extra && <span className="frame-extra" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap",
           justifyContent: "flex-end" }}>{extra}</span>}
       </div>
       <div className="hg-frame-body" style={{ position: "relative", minWidth: 0 }}>{children}</div>
@@ -360,7 +364,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
     // les options de la tuile (oui/non, ou un choix), propres a cette disposition
     const o = optsOf(def, item);
     // seulement les options qui servent a la taille choisie (« when ») ; elles se reglent dans leur panneau
-    const usable = (def.options || []).filter(op => !op.when || op.when(item));
+    const usable = allOpts(def).filter(op => !op.when || op.when(item));
     const options = usable.length ? (
       <button style={{ ...btn(), alignSelf: "flex-start", gap: 5, padding: "0 9px" }} onClick={() => setOptFor(item.id)}>
         <Settings2 size={13}/>Options ({usable.length})</button>
@@ -400,13 +404,16 @@ export default function HomeGrid({ status, blocks, top = null }) {
       {optFor === "top" && top && <OptionsSheet title={top.label} options={top.options} values={topOpts}
         onChange={setTopOpt} onClose={() => setOptFor(null)}/>}
       {optItem && optDef && <OptionsSheet title={optDef.label}
-        options={(optDef.options || []).filter(op => !op.when || op.when(optItem))} values={optsOf(optDef, optItem)}
+        options={allOpts(optDef).filter(op => !op.when || op.when(optItem))} values={optsOf(optDef, optItem)}
         onChange={(k, v) => update(optItem.id, { o: { ...(optItem.o || {}), [k]: v } })} onClose={() => setOptFor(null)}/>}
       <style>{`
         .hg-cols { display:grid; gap:12px; align-items:start; }
         .hg-col { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); grid-auto-rows:minmax(${ROW}px, auto);
                   grid-auto-flow:row dense; gap:10px; min-width:0; }
         .hg-cell:not(.hg-edit):has(> div:empty) { display:none; }
+        .hg-notitle .tile-head { display:none !important; }
+        .hg-notitle .frame-label { display:none !important; }
+        .hg-notitle .frame-head:not(:has(.frame-extra)) { display:none !important; }
         .hg-frame-body .card { background:transparent !important; border:none !important; box-shadow:none !important;
                   backdrop-filter:none !important; -webkit-backdrop-filter:none !important; padding-left:0 !important; padding-right:0 !important; }
         .hg-frame-body > * + * { margin-top:8px; }

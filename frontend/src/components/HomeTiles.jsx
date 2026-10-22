@@ -41,7 +41,7 @@ function Tile({ icon, color, label, onClick, badge, children }) {
         position: "relative", overflow: "hidden", height: "100%", boxSizing: "border-box" }}>
       <span aria-hidden="true" style={{ position: "absolute", right: -24, top: -24, width: 80, height: 80, borderRadius: "50%",
         background: `${color}22`, pointerEvents: "none" }}/>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative", minWidth: 0 }}>
+      <div className="tile-head" style={{ display: "flex", alignItems: "center", gap: 8, position: "relative", minWidth: 0 }}>
         <span data-pk="" style={{ width: 22, height: 22, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center",
           background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>
         <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", letterSpacing: ".02em", overflow: "hidden", textOverflow: "ellipsis",
@@ -72,7 +72,7 @@ function Ring({ value, size = 54, color = "#3b82f6", stroke = 7, children }) {
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round"
           strokeDasharray={C} strokeDashoffset={C * (1 - v)} style={{ transition: "stroke-dashoffset .6s" }}/>
       </svg>
-      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * 0.24,
+      <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: size * (String(children ?? "").length > 3 ? 0.2 : 0.24),
         fontWeight: 900, color: "var(--text)" }}>{children}</span>
     </span>
   );
