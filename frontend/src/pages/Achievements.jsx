@@ -623,7 +623,8 @@ const PLACE_OF = id => id === "egg_anonymous" ? ["/anonymous", "page"] : id === 
 function SecretPlace({ it }) {
   const nav = useNavigate();
   const place = PLACE_OF(it.id);
-  if (!place) return null;
+  // chez un copain : ses secrets se regardent, on n'y joue pas
+  if (!place || currentFriend()) return null;
   const [path, kind] = place;
   return (
     <button onClick={e => { e.stopPropagation(); nav(path); }}
