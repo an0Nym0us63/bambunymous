@@ -436,8 +436,78 @@ function TrayRow({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loa
   );
 }
 
+// ── Le sechage en grand (popup) ─────────────────────────────────────────────
+// L'avancement (anneau et barre), le temps restant et l'heure de fin, la consigne
+// et la temperature actuelle, l'humidite, le filament.
+function DryPopup({ ams, onClose }) {
+  React.useEffect(() => {
+    const k = e => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const total = (ams.dry_duration || 0) * 60, left = ams.dry_time || 0;
+  const done = total ? Math.max(0, Math.min(1, 1 - left / total)) : null;
+  const fmt = m => { const h = Math.floor(m / 60), mm = Math.round(m % 60); return h ? `${h} h ${String(mm).padStart(2, "0")}` : `${mm} min`; };
+  const end = left ? new Date(Date.now() + left * 60000) : null;
+  const endTxt = end ? `${end.getDate() !== new Date().getDate() ? "demain " : ""}${end.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}` : "—";
+  const R = 64, C = 2 * Math.PI * R;
+  const box = (label, value, color) => (
+    <div style={{ padding: "10px 12px", borderRadius: 12, background: "var(--surface2)", minWidth: 0 }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{label}</div>
+      <div style={{ fontSize: 18, fontWeight: 900, color: color || "var(--text)", whiteSpace: "nowrap" }}>{value}</div>
+    </div>
+  );
+  return createPortal(
+    <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 950, padding: 14,
+      background: "rgba(2,6,23,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width: "min(440px, 100%)", padding: 18, display: "flex", flexDirection: "column", gap: 14,
+        background: "var(--sheet-bg)", boxShadow: "0 30px 80px rgba(0,0,0,0.45)", position: "relative", overflow: "hidden" }}>
+        <span aria-hidden="true" style={{ position: "absolute", right: -70, top: -70, width: 200, height: 200, borderRadius: "50%", background: "rgba(249,115,22,0.15)" }}/>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative" }}>
+          <span style={{ width: 36, height: 36, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(249,115,22,0.15)", color: "#f97316" }}><Thermometer size={18}/></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>Séchage · {amsName(ams.id)}</div>
+            {ams.dry_filament && <div style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 700 }}>{ams.dry_filament}</div>}
+          </div>
+          <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)",
+            background: "var(--surface2)", color: "var(--text2)", cursor: "pointer", fontSize: 16 }}>✕</button>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 18, position: "relative" }}>
+          <svg width={R * 2 + 16} height={R * 2 + 16} style={{ flexShrink: 0, transform: "rotate(-90deg)" }} aria-hidden="true">
+            <circle cx={R + 8} cy={R + 8} r={R} fill="none" stroke="var(--surface2)" strokeWidth="12"/>
+            {done != null && <circle cx={R + 8} cy={R + 8} r={R} fill="none" stroke="#f97316" strokeWidth="12" strokeLinecap="round"
+              strokeDasharray={C} strokeDashoffset={C * (1 - done)} style={{ transition: "stroke-dashoffset .6s" }}/>}
+          </svg>
+          <div style={{ position: "absolute", left: 0, width: R * 2 + 16, textAlign: "center" }}>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "#f97316" }}>{done != null ? `${Math.round(done * 100)}%` : "…"}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{ams.dry_temperature ? `${ams.dry_temperature}°C` : ""}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>Reste</div>
+            <div style={{ fontSize: 28, fontWeight: 900, color: "var(--text)", lineHeight: 1.05 }}>{left ? fmt(left) : "—"}</div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 700 }}>fin à {endTxt}</div>
+          </div>
+        </div>
+        {done != null && <div>
+          <div style={{ height: 10, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${done * 100}%`, borderRadius: 6, background: "linear-gradient(90deg, #fb923c, #f97316)",
+              boxShadow: "0 0 10px rgba(249,115,22,0.5)" }}/></div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--muted)", fontWeight: 700, marginTop: 4 }}>
+            <span>{fmt(total - left)} écoulées</span><span>sur {fmt(total)}</span></div>
+        </div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
+          {box("Consigne", ams.dry_temperature ? `${ams.dry_temperature}°C` : "—", "#f97316")}
+          {box("Dans l'AMS", ams.temp != null ? `${Number(ams.temp).toFixed(1).replace(".", ",")} °C` : "—")}
+          {box("Humidité", ams.humidity != null ? `${ams.humidity} %` : "—", "#0ea5e9")}
+        </div>
+      </div>
+    </div>, document.body);
+}
+
 // ── Détail AMS ─────────────────────────────────────────────────────────────
 function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, hideName = false, showNames = true, fitH = null }) {
+  const [dryOpen, setDryOpen] = React.useState(false);
   // la taille des bobines suit la largeur de la tuile
   const box = React.useRef(null);
   const [w, setW] = React.useState(0);
@@ -494,14 +564,18 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
       {/* Bandeau séchage */}
       {/* hauteur imposee : un voyant orange sur une ligne (temperature, temps restant), les bobines restent */}
       {isDrying && fitH != null && (
-        <div style={{ display:"flex", alignItems:"center", gap:6, height:18, marginBottom:4, fontSize:11.5, fontWeight:800, color:"#f97316", whiteSpace:"nowrap", overflow:"hidden" }}>
+        <div role="button" title="Voir le séchage" onClick={e => { e.stopPropagation(); setDryOpen(true); }}
+          style={{ display:"flex", alignItems:"center", gap:6, height:18, marginBottom:4, fontSize:11.5, fontWeight:800, color:"#f97316", whiteSpace:"nowrap",
+            overflow:"hidden", cursor:"pointer" }}>
           <span style={{ width:8, height:8, borderRadius:"50%", background:"#f97316", animation:"dryPulse 2.5s ease-in-out infinite", flexShrink:0 }}/>
           Séchage{ams.dry_temperature > 0 ? ` · ${ams.dry_temperature}°C` : ""}{ams.dry_time > 0 ? ` · encore ${fmtMins(ams.dry_time)}` : ""}
           {ams.dry_filament && <span style={{ color:"var(--muted)", fontWeight:700, overflow:"hidden", textOverflow:"ellipsis" }}>· {ams.dry_filament}</span>}
+          <span style={{ marginLeft:"auto", color:"var(--muted)", fontWeight:700 }}>›</span>
         </div>
       )}
+      {dryOpen && <DryPopup ams={ams} onClose={() => setDryOpen(false)}/>}
       {isDrying && fitH == null && (
-        <div style={{ marginBottom:14, padding:"10px 12px", borderRadius:10,
+        <div role="button" onClick={e => { e.stopPropagation(); setDryOpen(true); }} style={{ cursor:"pointer", marginBottom:14, padding:"10px 12px", borderRadius:10,
           background:"rgba(249,115,22,0.07)", border:"1px solid rgba(249,115,22,0.25)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
             <span style={{ fontSize:12, fontWeight:700, color:"#f97316" }}>Séchage en cours</span>
