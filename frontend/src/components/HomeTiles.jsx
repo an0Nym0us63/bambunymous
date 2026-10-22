@@ -196,13 +196,13 @@ function Hero({ visual, value, unit, delta, sub, color = "var(--text)", reserve 
   const H = Math.max(40, H0 - reserve);
   const narrow = W < 215;
   const stack = !!visual && narrow && H >= 150;
-  const vs = !visual ? 0 : stack ? Math.min(W * (H >= 280 ? 0.9 : 0.66), H - 74, 200) : Math.min(H - 2, narrow ? 62 : zoom ? 150 : 132, W * 0.4);
+  const vs = !visual ? 0 : stack ? Math.min(W * (H >= 280 ? 0.9 : 0.66), H - 74, 200) : Math.min(H - 2, narrow ? 62 : zoom ? 140 : 132, W * 0.4);
   const fs = zoom ? 40 : stack ? 26 : Math.round(Math.max(20, Math.min(narrow ? 25 : 34, H * 0.4)));
   const used = stack ? vs + fs + 24 : fs + 22;
   const subLines = Math.max(0, Math.min(3, Math.floor((H - used) / 16)));
   return (
     <div style={{ display: "flex", flexDirection: stack ? "column" : "row", alignItems: "center", justifyContent: "center", gap: stack ? 6 : 12,
-      textAlign: stack ? "center" : "left", minWidth: 0, ...(fill ? { flex: 1, minHeight: 0 } : {}) }}>
+      textAlign: stack ? "center" : "left", minWidth: 0, ...(fill && !zoom ? { flex: 1, minHeight: 0 } : {}) }}>
       {visual && vs >= 24 && visual(Math.floor(vs))}
       <div style={{ minWidth: 0, flex: stack ? undefined : 1, display: "flex", flexDirection: "column", alignItems: stack ? "center" : "flex-start", gap: 2 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "0 6px", flexWrap: "wrap", justifyContent: stack ? "center" : "flex-start", minWidth: 0 }}>
@@ -1324,7 +1324,23 @@ function Temps({ status, o, sz }) {
         <span data-pk="" style={{ fontSize: 16, fontWeight: 900, color: hot(r) ? r.c : "var(--text)" }}>{Math.round(r.v || 0)}°</span></div>)}</div>;
   };
   return (
-    <Tile icon={<Thermometer size={15}/>} color="#F97316" label="Températures" zoom={gauges(700, 300)}
+    <Tile icon={<Thermometer size={15}/>} color="#F97316" label="Températures" zoom={({ W }) => <>
+      <div style={{ display: "flex", minHeight: 230 }}>{gauges(W, 230)}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 }}>
+        {rows.map(r => { const v = r.v || 0, t = r.t || 0;
+          const st = t > 0 ? (Math.abs(v - t) <= 3 ? ["à température", "#16a34a"] : v < t ? ["chauffe", r.c] : ["redescend", "#0ea5e9"])
+            : v > 40 ? ["refroidit", "#0ea5e9"] : ["au repos", "var(--muted)"];
+          return <div key={r.k} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 13px", borderRadius: 16,
+            background: `linear-gradient(135deg, ${hot(r) ? r.c : "#94a3b8"}1c, transparent 65%), var(--surface2)` }}>
+            <span style={{ width: 40, height: 40, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              background: `${hot(r) ? r.c : "#94a3b8"}26`, color: hot(r) ? r.c : "var(--muted)" }}><r.ico s={20}/></span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)" }}>{r.l}</div>
+              <div style={{ fontSize: 11.5, fontWeight: 800, color: st[1], whiteSpace: "nowrap" }}>● {st[0]}</div></div>
+            <div style={{ textAlign: "right" }}>
+              <div style={{ fontSize: 22, fontWeight: 900, color: hot(r) ? r.c : "var(--text)", lineHeight: 1 }}>{Math.round(v)}°</div>
+              {t > 0 && <Muted size={11}>consigne {Math.round(t)}°</Muted>}</div>
+          </div>; })}</div></>}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 10, fontSize: 13.5 }}>{rows.map(r =>
         <span key={r.k} title={r.l} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: hot(r) ? r.c : "var(--text)" }}>
           <r.ico s={13}/>{Math.round(r.v || 0)}°</span>)}</span>}>
@@ -1812,7 +1828,13 @@ function Colors({ status, o, sz }) {
       {s >= 56 ? `${slotOf(t)} · ${t.filament_type}` : slotOf(t)}</span>}</span>;
   return (
     <Tile icon={<Palette size={15}/>} color="#EC4899" label="Couleurs chargées"
-      zoom={<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(80px, 1fr))", gap: 12, justifyItems: "center" }}>{trays.map(t => dot(t, 64, true))}</div>}
+      zoom={<>
+        <Stats items={[["Bobines chargées", trays.length], ...Object.entries(trays.reduce((m, t) => { const k = t.filament_type || "?"; m[k] = (m[k] || 0) + 1; return m; }, {}))
+          .sort((a, b) => b[1] - a[1]).slice(0, 3)]}/>
+        {[...new Map(trays.map(t => [t.ams.id, t.ams])).values()].map(a => <div key={a.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}><H2>{amsLab(a)}</H2>
+            {a.humidity > 0 && <Muted size={11.5}>💧 {a.humidity} %</Muted>}</div>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>{trays.filter(t => t.ams.id === a.id).map(t => dot(t, 64, true))}</div></div>)}</>}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 3 }}>{trays.slice(0, 18).map(t => <span key={`${t.ams.id}-${t.id}`}
         style={{ width: 13, height: 13, borderRadius: 4, background: hexCss(t.color), border: "1px solid rgba(0,0,0,0.2)" }}/>)}</span>}>
       {({ W, H }) => {
@@ -1845,7 +1867,10 @@ function Streak({ o, sz }) {
   const hero = <Hero fill={false} value={days ? n : "…"} unit={`jour${n > 1 ? "s" : ""} d'affilée`} sub={days && `record sur 30 jours : ${best} · ${active} jours actifs`}
     color={n ? "#ea580c" : "var(--text)"} delta={n > 0 && n >= best ? <span style={{ fontSize: 11.5, fontWeight: 800, color: "#ea580c" }}>🔥 record en cours</span> : null}/>;
   return (
-    <Tile icon={<CalendarCheck size={15}/>} color="#F97316" label="Série" zoom={<>{hero}{days && heat(700, 220)}</>}
+    <Tile icon={<CalendarCheck size={15}/>} color="#F97316" label="Série" zoom={<>{hero}
+      {days && <Stats items={[["Série en cours", `${n} j`, "#ea580c"], ["Record (30 j)", `${best} j`], ["Jours actifs", `${active} / 30`],
+        ["Impressions (30 j)", days.reduce((t, x) => t + (x.count || 0), 0)]]}/>}
+      {days && <><H2>Les 30 derniers jours</H2>{heat(700, 240)}</>}</>}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><Flame size={15} color="#ea580c"/>{days ? n : "…"}
         <Muted>jour{n > 1 ? "s" : ""}</Muted></span>}>
       {({ W, H }) => {
