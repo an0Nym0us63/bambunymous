@@ -120,6 +120,13 @@ export default function Achievements({ embedded = false }) {
   // Chez moi : le palier de chacun de mes copains sur un succes (-1 : pas encore)
   const pals = atFriend ? [] : (pod?.people || []).filter(p => !p.me && p.status === "ok" && p.levels);
   const rivalsOf = it => pals.length ? pals.map(p => ({ name: p.name, level: p.levels[it.id]?.[0] ?? -1 })) : null;
+  // la main de cartes d'une section (c_…) ou d'un tiroir (s_…), dans l'ordre Valet, Dame, Roi, As
+  const Hand = ({ of, size = 22 }) => {
+    const h = data.items.filter(x => x.cat === "cards" && x.sub === of)
+      .sort((a, b) => CARD_ORDER.indexOf(a.tiers[0].id) - CARD_ORDER.indexOf(b.tiers[0].id));
+    return h.length ? <span title="Tes cartes" style={{ display:"flex", gap:2, flexShrink:0 }}>
+      {h.map(x => <Medal key={x.id} tier={x.tiers[0]} emoji={x.emoji} size={size} locked={x.level < 0}/>)}</span> : null;
+  };
 
   return (
     <div className="ach-room" style={{ maxWidth: embedded ? undefined : 900, width:"100%", margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
@@ -252,6 +259,7 @@ export default function Achievements({ embedded = false }) {
                     <Medal tier={t} emoji="" size={16}/>{sum.medals[t.id]}</span>
                 ))}
                 {!Object.keys(sum.medals).length && <span style={{ fontSize:11.5, color:"var(--muted)" }}>Aucune médaille pour l'instant</span>}
+                {c.id !== "cards" && c.id !== "secret" && <span style={{ marginLeft:"auto" }}><Hand of={`c_${c.id}`}/></span>}
               </div>
             </button>
             {open && (
@@ -321,7 +329,8 @@ export default function Achievements({ embedded = false }) {
                           </span>
                           <span style={{ flex:1, minWidth:0 }}>{sb.name}
                             {spentIn(sb.items).keys > 0 && <span title="Clés dépensées dans ce tiroir"
-                              style={{ marginLeft:6, fontSize:11, fontWeight:800, color:"#F59E0B" }}>🔑 {spentIn(sb.items).keys}</span>}</span>
+                              style={{ marginLeft:6, fontSize:11, fontWeight:800, color:"#F59E0B" }}>🔑 {spentIn(sb.items).keys}</span>}
+                            {c.id === "secret" && <span style={{ display:"flex", marginTop:3 }}><Hand of={`s_${sb.id}`} size={18}/></span>}</span>
                           {/* que ce qu'on voit : rien sur la taille cachee d'une categorie */}
                           {sb.hand
                             ? <span style={{ display:"flex", gap:2 }}>
