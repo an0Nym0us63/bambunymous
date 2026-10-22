@@ -224,7 +224,8 @@ export default function Achievements({ embedded = false }) {
               <div style={{ display:"flex", alignItems:"center", gap:12, width:"100%" }}>
                 <Chip emoji={c.emoji} color={CAT_COLOR[c.id] || "#8B5CF6"}/>
                 <span style={{ flex:1, minWidth:0 }}>
-                  <span style={{ display:"flex", alignItems:"center", gap:8, fontSize:15, fontWeight:800 }}>{c.name}
+                  <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"4px 8px", fontSize:15, fontWeight:800 }}>{c.name}
+                    <GradeBadge g={gradeOf(c.id, sum.max ? sum.score / sum.max : 0)}/>
                     {/* mes cles, la ou on les depense */}
                     {c.id === "secret" && data.keys && !atFriend && (
                       <span title="Tes clés, pour révéler les secrets (touche un secret)" style={{ fontSize:12, fontWeight:900,
@@ -593,6 +594,13 @@ function ScoreHero({ data }) {
         </div>
         {nx && <div style={{ fontSize:12, color:"var(--text2)" }}>
           encore <b>{need.toLocaleString("fr-FR")} pts</b> pour <span style={{ color:nx.color, fontWeight:800 }}>{nx.label}</span></div>}
+        {(() => {
+          const g = gradeOf(null, data.score / max);
+          return <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", fontSize:11.5, color:"var(--text2)" }}>
+            <GradeBadge g={g} big/>
+            {g.next && <span>prochain : <b style={{ color: GRADE_COLORS[g.i + 1] }}>{g.next}</b> à {Math.round(GRADE_AT[g.i + 1] * 100)} %</span>}
+          </div>;
+        })()}
         <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
           <span style={chip("rgba(59,130,246,0.12)", "#3b82f6")}>🏅 {got}/{tiered.length} succès</span>
           {done > 0 && <span style={chip("rgba(34,197,94,0.12)", "#16a34a")}>✓ {done} au max</span>}
@@ -1506,6 +1514,11 @@ function Rules({ data, onClose }) {
           l'appli, l'accueil te joue un tour : plus il se fait attendre, plus il devient probable. Ces tours-là ne se gagnent
           que s'ils te tombent dessus par surprise, et ceux des jours de fête, seulement le jour même.</P>
 
+        <H>🎓 Grades</H>
+        <P>Chaque section te donne un titre selon la part de ses points que tu as gagnés ({GRADE_AT.map(x => `${Math.round(x * 100)} %`).join(", ")}) :
+          par exemple, aux Impressions, de « {GRADES.prints[0]} » à « {GRADES.prints[4]} ». Ton <b>grade général</b> suit ton score
+          total, de « {GRADES._[0]} » à « {GRADES._[4]} ». Les grades ne rapportent pas de points : ils disent où tu en es.</P>
+
         <H>🃏 Mes cartes</H>
         <P>Chaque section et chaque tiroir de secrets a sa main de quatre cartes. Pour une section : le <b>Valet</b> quand tous
           ses succès ont au moins le Bronze, la <b>Dame</b> au Platine, le <b>Roi</b> au Mythique, l'<b>As</b> à l'Éternel. Pour
@@ -1816,6 +1829,45 @@ export function TicketStub({ n, size = 1, dim = false }) {
 }
 
 const sectionTitle = { fontSize:11, fontWeight:800, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", padding:"0 4px" };
+
+// Grades : un titre par section selon la part de ses points gagnes, et un grade
+// general sur le score total. Une section sans titres a elle prend ceux du compagnonnage.
+const GRADE_AT = [0.05, 0.2, 0.4, 0.65, 0.9];
+const GRADE_COLORS = ["#94A3B8", "#22C55E", "#3B82F6", "#A855F7", "#F59E0B"];
+const GRADES = {
+  _: ["Curieux", "Bidouilleur", "Maker", "Fabricant", "Légende du fablab"],
+  prints: ["Bidouilleur", "Imprimeur", "Artisan", "Maître imprimeur", "Légende de la buse"],
+  filaments: ["Curieux", "Collectionneur", "Coloriste", "Alchimiste", "Gardien de l'arc-en-ciel"],
+  objects: ["Brocanteur", "Marchand", "Commerçant", "Négociant", "Magnat"],
+  mw: ["Visiteur", "Habitué", "Créateur", "Star", "Icône"],
+  photos: ["Amateur", "Photographe", "Reporter", "Artiste", "Légende du cadre"],
+  app: ["Nouveau", "Familier", "Habitué", "Expert", "Ange gardien"],
+  social: ["Solitaire", "Sociable", "Rassembleur", "Chef de bande", "Âme de la bande"],
+  game: ["Chanceux", "Joueur", "Parieur", "Flambeur", "Maître du casino"],
+  cards: ["Joueur du dimanche", "Habitué du tapis", "Croupier", "Brelan d'as", "Roi du tapis vert"],
+  secret: ["Fouineur", "Détective", "Chasseur de trésors", "Initié", "Gardien des secrets"],
+  other: ["Apprenti", "Compagnon", "Artisan", "Maître", "Grand Maître"],
+};
+function gradeOf(cat, v) {
+  const names = cat == null ? GRADES._ : GRADES[cat] || GRADES.other;
+  let i = -1;
+  GRADE_AT.forEach((x, j) => { if (v >= x) i = j; });
+  return { i, name: i >= 0 ? names[i] : null, next: names[i + 1] || null, general: cat == null };
+}
+// le badge d'un grade : sobre au debut, eclatant au dernier
+function GradeBadge({ g, big = false }) {
+  if (!g || g.i < 0) return big ? <span style={{ fontSize:11.5, color:"var(--muted)" }}>🎓 pas encore de grade</span> : null;
+  const c = GRADE_COLORS[g.i], top = g.i === 4;
+  return (
+    <span title={g.general ? "Ton grade général" : "Ton grade dans cette section"}
+      style={{ display:"inline-flex", alignItems:"center", gap:4, whiteSpace:"nowrap", fontWeight:900,
+        fontSize: big ? 12.5 : 10.5, padding: big ? "3px 10px" : "2px 8px", borderRadius:20, letterSpacing:".02em",
+        color: top ? "#3b2300" : "#fff",
+        background: top ? "linear-gradient(135deg, #FDE68A, #F59E0B 55%, #FDE68A)" : c,
+        boxShadow: top ? "0 0 10px rgba(245,158,11,0.6)" : `0 2px 6px ${c}55` }}>
+      🎓 {g.name}</span>
+  );
+}
 
 // Ambiance « salle de jeu » : chaque section a sa couleur (tapis, reflets, jeton)
 const CAT_COLOR = { prints:"#0EA5E9", filaments:"#F97316", objects:"#EC4899", mw:"#22C55E", photos:"#8B5CF6",
