@@ -59,7 +59,7 @@ const Chip = ({ children }) => (
  * retire l'alerte tout de suite en local — inutile d'attendre un aller-retour.
  */
 // bare : dans un cadre de tuile de l'accueil (qui porte deja le titre)
-export default function AttentionSection({ bare = false }) {
+export default function AttentionSection({ bare = false, startOpen = null }) {
   const navigate = useNavigate();
   const [cats, setCats] = useState(null);
   const [err, setErr]   = useState(null);
@@ -68,8 +68,9 @@ export default function AttentionSection({ bare = false }) {
   // l'ecran a chaque ouverture de l'accueil. On ne l'ouvre que si l'utilisateur
   // l'a explicitement depliee auparavant.
   const [open, setOpen] = useState(
-    () => localStorage.getItem("attention_collapsed") === "0"
+    () => startOpen ?? localStorage.getItem("attention_collapsed") === "0"
   );
+  useEffect(() => { if (startOpen != null) setOpen(startOpen); }, [startOpen]);
   const [sheet, setSheet] = useState(null); // fiche ouverte SUR PLACE
   const [allOpen, setAllOpen] = useState(false);   // fenêtre "toutes les alertes"
 

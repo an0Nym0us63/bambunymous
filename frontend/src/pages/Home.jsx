@@ -1081,7 +1081,9 @@ export default function Home() {
     amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto"], frame: { icon: <Layers size={15}/>, color: "#6366F1" },
       render: (d, st) => devices(st, "detail") },
     attention: { label: "Points d'attention", w: [2], h: ["auto"], frame: { icon: <AlertTriangle size={15}/>, color: "#F59E0B" },
-      render: () => <AttentionSection bare/> },
+      render: (d, st, o) => <AttentionSection bare startOpen={o.open === "keep" ? null : o.open === "open"}/>,
+      options: [{ key: "open", label: "À l'arrivée sur l'accueil", def: "keep",
+        choices: [["keep", "comme je l'ai laissée"], ["open", "dépliée"], ["closed", "repliée"]] }] },
   };
   return (
     <div className="home-grid">
