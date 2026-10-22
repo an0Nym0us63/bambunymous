@@ -53,6 +53,7 @@ CATEGORIES = [
     ("app", "📱", "Dans l'appli"),
     ("social", "🤝", "Copains"),
     ("game", "🎲", "Clés et roue"),
+    ("cards", "🃏", "Mes cartes"),
     ("secret", "🔮", "Secrets"),
 ]
 
@@ -2089,7 +2090,23 @@ for _x in CATALOG:
 # Collections de medailles (secrets) : toute une section au moins a un palier.
 # Seuls comptent les succes qui ont ce palier (un succes plafonne a 6 paliers
 # ne bloque pas Mythique et au-dela) ; une matiere jamais imprimee non plus.
-SET_CATS = [c for c in CATEGORIES if c[0] != "secret"]
+SET_CATS = [c for c in CATEGORIES if c[0] not in ("secret", "cards")]
+# Mes cartes (22/10/2026) : une main par section a paliers et par tiroir de
+# secrets, generee depuis leurs listes (une section ou un tiroir ajoute plus
+# tard a d'office les siennes). Valet, Dame, Roi, As : toute la section au
+# moins Bronze, Platine, Mythique, Eternel ; un tiroir trouve a 25, 50, 75,
+# 100 %. Un Joker par rang : toutes les cartes de ce rang (celui des As est
+# en or). Recalculees a chaque passage, comme les collections.
+CARD_RANKS = [("v", "Valet", "V", 0, 25), ("d", "Dame", "D", 3, 50), ("r", "Roi", "R", 6, 75), ("a", "As", "A", 8, 100)]
+CARD_TIERS = {}
+for _k, _l, _c, _i, _p in CARD_RANKS:
+    CARD_TIERS[_k] = {"id": f"card_{_k}", "label": _l, "emoji": "🃏", "color": TIERS[_i]["color"],
+                      "score": [3, 5, 8, 13][len(CARD_TIERS)], "card": _c}
+for _n, (_k, _l, _c, _i, _p) in enumerate(CARD_RANKS):
+    CARD_TIERS["j" + _k] = {"id": f"card_j{_k}", "label": "Joker d'or" if _k == "a" else f"Joker des {_l}s",
+                            "emoji": "🃏", "color": "#D4A017" if _k == "a" else TIERS[_i]["color"],
+                            "score": [5, 8, 13, 21][_n], "card": "★"}
+CARD_I = {_i for _k, _l, _c, _i, _p in CARD_RANKS}
 
 
 def _set_id(cat: str, tier: str) -> str:
@@ -2104,6 +2121,14 @@ for _cid, _cemo, _cname in SET_CATS:
     for _i, _t in enumerate(TIERS):
         if not _members(_cid, _i):
             continue
+        if _i in CARD_I:
+            _k, _l, _c, _i2, _p = next(r for r in CARD_RANKS if r[3] == _i)
+            CATALOG.append({
+                "id": f"card_{_cid}_{_k}", "cat": "cards", "sub": f"c_{_cid}", "live": False, "emoji": _cemo,
+                "name": f"{_l} · {_cname}", "tiers": [1], "card_tier": CARD_TIERS[_k], "set": (_cid, _i),
+                "desc": f"Tous les succès de la section {_cname} au moins au palier {_t['label']}",
+                "lore": f"{_l} de {_cname} : toute la section au moins {_t['label']}. Elle se retourne si un succès arrive."})
+            continue
         CATALOG.append({
             "id": _set_id(_cid, _t["id"]), "cat": "secret", "sub": "sets", "hidden": True, "live": False,
             "emoji": _t["emoji"], "name": f"Collection {_t['label']} · {_cname}",
@@ -2112,14 +2137,33 @@ for _cid, _cemo, _cname in SET_CATS:
             "lore": f"Toute la section {_cname} au palier {_t['label']} : une vitrine parfaitement assortie.",
             "set": (_cid, _i)})
 SECRET_SUBS.append(("sets", "🏆", "Collections de médailles",
-                    " ".join(a["id"] for a in CATALOG if a.get("set"))))
-SUB_OF.update({a["id"]: "sets" for a in CATALOG if a.get("set")})
+                    " ".join(a["id"] for a in CATALOG if a.get("set") and a["cat"] == "secret")))
+SUB_OF.update({a["id"]: "sets" for a in CATALOG if a.get("set") and a["cat"] == "secret"})
+# les tiroirs ont leurs cartes (l'As remplace « Tiroir complet ») ; celui des collections non
+_DRAWERS = [x for x in SECRET_SUBS if x[0] != "sets"]
+for _sid, _semo, _sname, _ids in _DRAWERS:
+    for _k, _l, _c, _i, _p in CARD_RANKS:
+        CATALOG.append({
+            "id": f"card_s_{_sid}_{_k}", "cat": "cards", "sub": f"s_{_sid}", "live": False, "emoji": _semo,
+            "name": f"{_l} · {_sname}", "tiers": [1], "card_tier": CARD_TIERS[_k], "pile": (_sid, _p),
+            "desc": (f"Tous les secrets du tiroir « {_sname} »" if _p == 100
+                     else f"{_p} % des secrets du tiroir « {_sname} »"),
+            "lore": f"{_l} de « {_sname} » : {_p} % du tiroir trouvé. Un secret ajouté peut la retourner."})
+for _k, _l, _c, _i, _p in CARD_RANKS:
+    CATALOG.append({
+        "id": f"card_joker_{_k}", "cat": "cards", "sub": "jokers", "live": False, "emoji": "🃏",
+        "name": CARD_TIERS["j" + _k]["label"], "tiers": [1], "card_tier": CARD_TIERS["j" + _k], "joker": _k,
+        "desc": f"Toutes les cartes « {_l} » : chaque section et chaque tiroir",
+        "lore": ("Tous les As. Le jeu est complet, la main est parfaite." if _k == "a"
+                 else f"Tous les {_l}s du jeu dans ta main.")})
+CARD_GROUPS = ([("jokers", "🃏", "Jokers")] + [(f"c_{c}", e, n) for c, e, n in SET_CATS]
+               + [(f"s_{x[0]}", x[1], x[2]) for x in _DRAWERS])
 
 # Completude (22/10/2026) : un tiroir de secrets entierement trouve, une section
 # entierement au dernier palier, et tout a 100 %. Recalcules a chaque passage
 # comme les collections : un secret ou un palier ajoute plus tard les fait
 # perdre jusqu'a ce qu'on le rattrape.
-_SUBS_NOW = list(SECRET_SUBS)
+_SUBS_NOW = [x for x in SECRET_SUBS if x[0] == "sets"]
 for _sid, _semo, _sname, _ids in _SUBS_NOW:
     CATALOG.append({
         "id": f"sub_{_sid}", "cat": "secret", "sub": "complete", "hidden": True, "live": False, "emoji": _semo,
@@ -2128,6 +2172,8 @@ for _sid, _semo, _sname, _ids in _SUBS_NOW:
         "lore": f"Plus un seul secret de « {_sname} » ne t'échappe. Jusqu'au prochain…",
         "complete": ("sub", _sid)})
 for _cid, _cemo, _cname in CATEGORIES:
+    if _cid == "cards":                 # toutes les cartes : c'est le Joker d'or
+        continue
     CATALOG.append({
         "id": f"full_{_cid}", "cat": "secret", "sub": "complete", "hidden": True, "live": False, "emoji": _cemo,
         "name": f"Complétude · {_cname}",
@@ -2166,7 +2212,12 @@ CATALOG_SIG = _signature()
 
 
 def tiers_of(a: dict) -> list:
+    if a.get("card_tier"):
+        return [a["card_tier"]]
     return [UNIQUE] if len(a["tiers"]) == 1 else TIERS[:len(a["tiers"])]
+
+
+ALL_TIERS = TIERS + [UNIQUE] + list(CARD_TIERS.values())
 
 
 # ── Donnees ──────────────────────────────────────────────────────────────────
@@ -4388,6 +4439,7 @@ async def evaluate(now: datetime | None = None, cached: bool = False) -> dict:
                 reached[str(i)] = at.isoformat()
         out[a["id"]] = {"value": val, "reached": reached}
     _sets(out, st)
+    _cards(out)
     _completes(out, st)
     return out
 
@@ -4519,6 +4571,37 @@ def _sets(out: dict, st: dict) -> None:
         dates = [at(m, i) for m in mem]
         ok = bool(mem) and all(dates)
         out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {}}
+
+
+def _cards(out: dict) -> None:
+    """Cartes des tiroirs (le n-ieme secret trouve date la carte) puis Jokers
+    (la derniere carte du rang). Les cartes des sections sont des collections."""
+    def got(aid):
+        return (out.get(aid) or {}).get("reached", {}).get("0")
+    for a in CATALOG:
+        if not a.get("pile"):
+            continue
+        sid, p = a["pile"]
+        mem = [m["id"] for m in CATALOG if SUB_OF.get(m["id"]) == sid and m["cat"] == "secret"]
+        need = max(1, -(-len(mem) * p // 100))
+        dates = sorted(d for d in (got(m) for m in mem) if d)
+        ok = bool(mem) and len(dates) >= need
+        out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": dates[need - 1]} if ok else {}, "prog": [len(dates), need]}
+    for a in CATALOG:
+        if a.get("set") and a["cat"] == "cards":
+            cat, i = a["set"]
+            mem = _members(cat, i)
+            n = sum(1 for m in mem if (out.get(m["id"]) or {}).get("reached", {}).get(str(i)))
+            out[a["id"]]["prog"] = [n, len(mem)]
+    for a in CATALOG:
+        if not a.get("joker"):
+            continue
+        mem = [m["id"] for m in CATALOG if m["cat"] == "cards" and not m.get("joker")
+               and m["card_tier"]["id"] == f"card_{a['joker']}"]
+        dates = [got(m) for m in mem]
+        ok = bool(mem) and all(dates)
+        out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {},
+                        "prog": [sum(1 for d in dates if d), len(mem)]}
 
 
 def _completes(out: dict, st: dict) -> None:
@@ -4769,7 +4852,13 @@ def _earn_keys(st: dict, ev: dict, new: list, ok_since: int = 0) -> list:
     if tiers:
         add(KEYS_TIER * len(tiers), f"{len(tiers)} palier{'s' if len(tiers) > 1 else ''} franchi{'s' if len(tiers) > 1 else ''}")
     for aid, _i in secrets:
-        add(KEYS_SECRET, f"Secret « {BY_ID[aid]['name']} »")
+        a = BY_ID[aid]
+        if a.get("card_tier"):
+            # une carte de « Cles et roue » ne rapporte pas de cle (meme raison que ses paliers)
+            if not aid.startswith(("card_game_", "card_s_game_")):
+                add(KEYS_SECRET, f"Carte « {a['name']} »")
+            continue
+        add(KEYS_SECRET, f"Secret « {a['name']} »")
     return gains
 
 
@@ -4797,7 +4886,7 @@ async def spend_key(aid: str) -> dict:
 
 async def _spend_key(aid: str) -> dict:
     a = BY_ID.get(aid)
-    if not a or len(a["tiers"]) != 1:
+    if not a or len(a["tiers"]) != 1 or not a.get("hidden"):
         raise ValueError("Ce succès n'est pas un secret")
     st = await _state_get() or {}
     k = st.get("keys")
@@ -4842,7 +4931,7 @@ async def _spend_key(aid: str) -> dict:
 def _auto_plan(st: dict, budget: int) -> list:
     import zlib
     hint_lvl = next(i for i, r in enumerate(REVEALS) if r[0] == "hint") + 1
-    todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and not a.get("set")
+    todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and a.get("hidden") and not a.get("set")
             and not (st.get("unlocked") or {}).get(a["id"])]
     lvl = {aid: _reveal_level(st, aid) for aid in todo}
     to_hint = lambda aid: sum(REVEALS[i][2] for i in range(lvl[aid], hint_lvl))
@@ -5135,7 +5224,7 @@ async def spin(rng=None) -> dict:
         if pid == "hint":
             # la prochaine etape d'un secret pris au hasard, offerte
             import random
-            todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and not a.get("set")
+            todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and a.get("hidden") and not a.get("set")
                     and not (st.get("unlocked") or {}).get(a["id"]) and _reveal_level(st, a["id"]) < len(REVEALS)]
             if todo:
                 aid = (rng or random.SystemRandom()).choice(todo)
@@ -5466,7 +5555,7 @@ def mask_secrets(v: dict, keep=()) -> dict:
     (que celui qui regarde a gagnees lui aussi)."""
     items = []
     for it in v["items"]:
-        if len(it["tiers"]) == 1 and it["level"] >= 0 and it["id"] not in keep:
+        if len(it["tiers"]) == 1 and it["level"] >= 0 and it["id"] not in keep and it.get("cat") != "cards":
             it = {**it, "desc": "Descriptif caché", "lore": None, "masked": True}
         items.append(it)
     # ce que j'ai revele de mes secrets reste visible : les copains s'entraident
@@ -5502,7 +5591,7 @@ async def view(fresh: bool = False) -> dict:
             not isinstance(st.get("keys"), dict) or st["keys"].get("reveal_v") != REVEAL_V):
         _keys_init(st)                         # mise en route (ou reprise) des cles sans attendre le prochain passage
         await _state_put(st)
-    medals = {t["id"]: 0 for t in TIERS + [UNIQUE]}
+    medals = {t["id"]: 0 for t in ALL_TIERS}
     score = score_max = 0
     items = []
     for a in CATALOG:
@@ -5542,7 +5631,7 @@ async def view(fresh: bool = False) -> dict:
             "value": None if secret else r["value"], "level": lvl,
             "next": None if nxt is None or secret else a["tiers"][nxt],
             "prev": a["tiers"][lvl] if lvl >= 0 else 0,
-            "tiers": [{**{k: t[k] for k in ("id", "label", "emoji", "color")}, "n": a["tiers"][i],
+            "tiers": [{**{k: t[k] for k in ("id", "label", "emoji", "color", "card") if k in t}, "n": a["tiers"][i],
                        # ce que demande ce palier (fiche : actuel et prochain, chacun le sien)
                        **({"desc": describe(a, a["tiers"][i])} if len(a["tiers"]) > 1 else {}),
                        "at": got.get(str(i)),
@@ -5551,6 +5640,8 @@ async def view(fresh: bool = False) -> dict:
             "ticket_uses": ticket_uses(st, a["id"]),
             "key_use": key_use(st, a["id"]) if len(a["tiers"]) == 1 else None,
             "ticket_cost": ticket_cost(nxt) if nxt is not None and len(a["tiers"]) > 1 else None,
+            # carte : ou j'en suis (trouves / demandes)
+            **({"prog": r.get("prog")} if a.get("card_tier") else {}),
         })
     # derniers succes : le plus haut cran de chacun ; pas ceux du releve au
     # present constates au premier calcul (ils n'ont pas de vraie date)
@@ -5574,7 +5665,8 @@ async def view(fresh: bool = False) -> dict:
     out = {"items": items, "medals": medals, "score": score, "score_max": score_max, "keys": keys,
            "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES],
            "subs": [{"id": i, "emoji": e, "name": n} for i, e, n, _ids in SECRET_SUBS],
-           "tiers": TIERS + [UNIQUE], "recent": [{"id": i, "tier": j, "at": at} for at, i, j in recent],
+           "card_groups": [{"id": i, "emoji": e, "name": n} for i, e, n in CARD_GROUPS],
+           "tiers": ALL_TIERS, "recent": [{"id": i, "tier": j, "at": at} for at, i, j in recent],
            "since": (st or {}).get("since"), "sig": CATALOG_SIG,
            "tickets_used": sum(tickets_paid(st, k) for k in ((st or {}).get("ticket_tiers") or {})),
            "keys_spent": int((((st or {}).get("keys") or {}).get("spent_total")) or 0)}

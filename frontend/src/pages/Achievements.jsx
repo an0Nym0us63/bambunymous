@@ -145,7 +145,7 @@ export default function Achievements({ embedded = false }) {
                 style={{ width:26, height:26, borderRadius:"50%", border:"1px solid var(--border)", background:"var(--surface2)",
                   color:"var(--text2)", fontSize:13, fontWeight:900, cursor:"pointer", flexShrink:0 }}>?</button>
             </div>
-            <MedalShelf tiers={data.tiers} medals={data.medals} onOpen={t => setVitrine(t)}/>
+            <MedalShelf tiers={data.tiers.filter(t => !t.card)} medals={data.medals} onOpen={t => setVitrine(t)}/>
           </div>
         </div>
         {data.keys && !atFriend && <Treasure keys={data.keys} onRules={() => setRules(true)} onSpent={canSpend ? load : null}
@@ -282,11 +282,16 @@ export default function Achievements({ embedded = false }) {
                 {(c.id === "secret" && data.subs?.length
                   ? [...data.subs.map(sb => ({ ...sb, items: items.filter(x => x.sub === sb.id) })),
                      { id:"unknown", emoji:"❓", name:"À découvrir", items: items.filter(x => !x.sub) }].filter(sb => sb.items.length)
+                  : c.id === "cards" && data.card_groups?.length
+                  ? data.card_groups.map(g => ({ ...g, hand: true, items: items.filter(x => x.sub === g.id)
+                      .sort((a, b) => CARD_ORDER.indexOf(a.tiers[0].id) - CARD_ORDER.indexOf(b.tiers[0].id)) }))
+                      .filter(g => g.items.length)
                   : [{ id:"", items }]
                 ).map(sb => (
                   <div key={sb.id} style={{ display:"flex", flexDirection:"column", gap:8 }}>
                     {sb.id && (() => {
-                      const col = SUB_COLOR[sb.id] || "#A855F7", isOpen = openSubs.has(sb.id), mystery = sb.id === "unknown";
+                      const col = SUB_COLOR[sb.id] || (sb.hand && (CAT_COLOR[sb.id.slice(2)] || SUB_COLOR[sb.id.slice(2)])) || "#A855F7";
+                      const isOpen = openSubs.has(sb.id), mystery = sb.id === "unknown";
                       const won = sb.items.filter(x => x.level >= 0).length, seen = sb.items.length - won;
                       return (
                         <button onClick={() => toggleSub(sb.id)} aria-expanded={isOpen}
@@ -314,7 +319,10 @@ export default function Achievements({ embedded = false }) {
                             {spentIn(sb.items).keys > 0 && <span title="Clés dépensées dans ce tiroir"
                               style={{ marginLeft:6, fontSize:11, fontWeight:800, color:"#F59E0B" }}>🔑 {spentIn(sb.items).keys}</span>}</span>
                           {/* que ce qu'on voit : rien sur la taille cachee d'une categorie */}
-                          {mystery
+                          {sb.hand
+                            ? <span style={{ display:"flex", gap:2 }}>
+                                {sb.items.map(x => <Medal key={x.id} tier={x.tiers[0]} emoji={x.emoji} size={24} locked={x.level < 0}/>)}</span>
+                            : mystery
                             ? <span style={pill("#F5B700", true)}>🔒 {sb.items.length} à découvrir</span>
                             : <>
                                 {won > 0 && <span style={pill(col)}>✓ {won} gagné{won > 1 ? "s" : ""}</span>}
@@ -427,6 +435,11 @@ function Tile({ it, onOpen, others, shared, rivals }) {
             background:"rgba(245,158,11,0.16)", color:"#D97706", lineHeight:1.3 }}>
           {it.tickets > 0 ? `🎟️${it.tickets}` : `🔑${it.key_use.keys || ""}`}</span>
       )}
+      {it.prog && !got && (
+        <span title={`${it.prog[0]}/${it.prog[1]}`} style={{ width:"70%", height:3, borderRadius:3, background:"var(--surface2)", overflow:"hidden" }}>
+          <span style={{ display:"block", width:`${Math.round(100 * Math.min(1, it.prog[0] / (it.prog[1] || 1)))}%`, height:"100%",
+            background: top.color }}/></span>
+      )}
       {it.tiers.length > 1 && it.next != null && (
         <span style={{ width:"70%", height:3, borderRadius:3, background:"var(--surface2)", overflow:"hidden" }}>
           <span style={{ display:"block", width:`${Math.round(p * 100)}%`, height:"100%",
@@ -500,7 +513,7 @@ function Compare({ people, cat }) {
 // Le score dans une jauge : l'anneau prend la couleur du palier atteint (un
 // neuvieme du chemin par palier), le nombre monte au chargement.
 function ScoreRing({ score, max, tiers, size = 138 }) {
-  const ladder = tiers.filter(t => t.id !== "unique");
+  const ladder = tiers.filter(t => t.id !== "unique" && !t.card);
   const v = max ? Math.max(0, Math.min(1, score / max)) : 0;
   const t = ladder[Math.min(ladder.length - 1, Math.floor(v * ladder.length))] || ladder[0];
   const [shown, setShown] = useState(0);
@@ -543,7 +556,7 @@ function ScoreRing({ score, max, tiers, size = 138 }) {
 // Le bandeau du score : la jauge, et a cote ton rang general, ce qu'il manque
 // pour le suivant, tes succes et tes secrets.
 function ScoreHero({ data }) {
-  const ladder = data.tiers.filter(t => t.id !== "unique");
+  const ladder = data.tiers.filter(t => t.id !== "unique" && !t.card);
   const max = data.score_max || 1;
   const i = Math.min(ladder.length - 1, Math.floor(Math.min(1, data.score / max) * ladder.length));
   const t = ladder[i], nx = ladder[i + 1];
@@ -571,6 +584,10 @@ function ScoreHero({ data }) {
           <span style={chip("rgba(59,130,246,0.12)", "#3b82f6")}>🏅 {got}/{tiered.length} succès</span>
           {done > 0 && <span style={chip("rgba(34,197,94,0.12)", "#16a34a")}>✓ {done} au max</span>}
           <span style={chip("rgba(236,72,153,0.12)", "#db2777")}>🔮 {data.medals?.unique || 0} secrets</span>
+          {(() => {
+            const n = data.tiers.filter(t => t.card).reduce((a, t) => a + (data.medals?.[t.id] || 0), 0);
+            return n > 0 && <span style={chip("rgba(212,160,23,0.14)", "#B8860B")}>🃏 {n} carte{n > 1 ? "s" : ""}</span>;
+          })()}
         </div>
       </div>
     </div>
@@ -1185,7 +1202,7 @@ function Reveal({ it, keys, onSpend, err }) {
 // Barre du score : sa couleur suit l'avancement, palier par palier (un neuvieme
 // du chemin par palier : Bronze au debut, Eternel tout au bout).
 function Bar({ value, tiers }) {
-  const ladder = (tiers || []).filter(t => t.id !== "unique");
+  const ladder = (tiers || []).filter(t => t.id !== "unique" && !t.card);
   const v = Math.max(0, Math.min(1, value));
   const color = ladder.length ? ladder[Math.min(ladder.length - 1, Math.floor(v * ladder.length))].color : "#F59E0B";
   return (
@@ -1297,6 +1314,9 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
           {unique && got && (
             <div style={{ fontSize:11, fontWeight:700, color:top.color, marginTop:3 }}>Gagné le {dateFr(top.at)}</div>
           )}
+          {it.prog && !got && (
+            <div style={{ fontSize:11.5, color:"var(--text2)", marginTop:3 }}>Où tu en es : <b>{it.prog[0]} / {it.prog[1]}</b></div>
+          )}
           {sheet && <Spent it={it}/>}
           {sheet && got && <SecretPlace it={it}/>}
         </div>
@@ -1318,7 +1338,7 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
         <p style={{ margin:0, fontSize:12.5, fontWeight:700, color:"#8B5CF6" }}>
           🎁 Catégorie, vignette et titre offerts grâce à {it.gift_from.join(", ")}</p>
       )}
-      {sheet && unique && !got && keys && <Reveal it={it} keys={keys} onSpend={onSpend} err={keyErr}/>}
+      {sheet && unique && it.secret && !got && keys && <Reveal it={it} keys={keys} onSpend={onSpend} err={keyErr}/>}
       {unique && got && it.lore && (
         <p style={{ margin:0, fontSize:12.5, color:"var(--text2)", lineHeight:1.5, fontStyle:"italic",
           padding:"8px 10px", borderRadius:10, background:`${top.color}14`, borderLeft:`3px solid ${top.color}` }}>
@@ -1402,7 +1422,7 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
 // Les regles, en une feuille : paliers et points, secrets, cles, copains.
 function Rules({ data, onClose }) {
   useTrackDetail("Succès · Règles");
-  const ladder = data.tiers.filter(t => t.id !== "unique");
+  const ladder = data.tiers.filter(t => t.id !== "unique" && !t.card);
   const uniq = data.tiers.find(t => t.id === "unique");
   const k = data.keys;
   const cum = ladder.map((t, i) => ladder.slice(0, i + 1).reduce((a, x) => a + x.score, 0));
@@ -1452,13 +1472,23 @@ function Rules({ data, onClose }) {
         <H>🤫 Secrets</H>
         <P>Une médaille unique, cachée tant qu'elle n'est pas gagnée. Les secrets inconnus attendent dans « À découvrir » ;
           une fois gagnés, ils rejoignent leur sous-section. Les <b>collections</b> récompensent une section entière à un même
-          palier.</P>
-        <P><b>Complétude</b> : un tiroir de secrets entièrement trouvé, une section entièrement à son dernier palier, et tout à
-          100 %. Ces médailles-là, comme les collections, <b>se perdent</b> si un nouveau secret ou un nouveau palier arrive avec
+          palier intermédiaire (Argent, Or, Diamant, Légende, Cosmique) ; les autres sont des cartes.</P>
+        <P><b>Complétude</b> : toutes les collections, une section entièrement à son dernier palier, et tout à
+          100 %. Un tiroir de secrets entièrement trouvé, c'est son As. Ces médailles-là, comme les collections, <b>se perdent</b> si un nouveau secret ou un nouveau palier arrive avec
           une mise à jour : il suffit de le décrocher pour les retrouver.</P>
         <P>Certains secrets se cachent derrière une adresse, d'autres derrière un geste. Et de temps en temps, en ouvrant
           l'appli, l'accueil te joue un tour : plus il se fait attendre, plus il devient probable. Ces tours-là ne se gagnent
           que s'ils te tombent dessus par surprise, et ceux des jours de fête, seulement le jour même.</P>
+
+        <H>🃏 Mes cartes</H>
+        <P>Chaque section et chaque tiroir de secrets a sa main de quatre cartes. Pour une section : le <b>Valet</b> quand tous
+          ses succès ont au moins le Bronze, la <b>Dame</b> au Platine, le <b>Roi</b> au Mythique, l'<b>As</b> à l'Éternel. Pour
+          un tiroir : 25, 50, 75 % de ses secrets trouvés, et tous pour l'As. Une section ou un tiroir qui apparaît a d'office
+          sa main.</P>
+        <P>Quatre <b>Jokers</b> : un pour tous les Valets, un pour toutes les Dames, un pour tous les Rois, et le <b>Joker
+          d'or</b> pour tous les As. Comme les collections, une carte <b>se retourne</b> si un nouveau succès ou secret arrive :
+          il suffit de le décrocher pour la retrouver. Une carte gagnée rapporte {k ? k.rules.secret : 3} clés et un tour de roue
+          (celles de « Clés et roue », un tour seulement).</P>
 
         {k && <>
           <H>🔑 Clés</H>
@@ -1594,7 +1624,62 @@ function PalsUnique({ rivals }) {
 
 // Medaille : disque a la teinte du cran, liseré, ruban ; grisee tant qu'elle
 // n'est pas gagnee.
+// Une carte a jouer : de dos tant qu'elle n'est pas gagnee ; de face, son rang
+// dans les coins et l'enseigne de sa section au centre. L'As a le liseré
+// arc-en-ciel de l'Eternel, le Joker d'or brille.
+const CARD_ORDER = ["card_v", "card_d", "card_r", "card_a", "card_jv", "card_jd", "card_jr", "card_ja"];
+function PlayCard({ tier, emoji, size, locked }) {
+  const h = size, w = Math.round(size * 0.72), c = tier.color;
+  // dos : une couleur trop sombre (l'As, noir comme l'Eternel) se perdrait sur le tapis
+  const n = parseInt(c.slice(1), 16), dark = ((n >> 16) * 299 + ((n >> 8) & 255) * 587 + (n & 255) * 114) / 1000 < 80;
+  const bc = dark ? "#C4B5FD" : c;
+  const r = Math.max(3, size * 0.11), b = Math.max(1.2, size / 30);
+  const corners = size >= 34, gold = tier.id === "card_ja", ace = tier.id === "card_a";
+  const corner = flip => (
+    <span style={{ position:"absolute", [flip ? "bottom" : "top"]: size * 0.04, [flip ? "right" : "left"]: size * 0.06,
+      transform: flip ? "rotate(180deg)" : "none", fontSize: size * 0.2, fontWeight:900, lineHeight:1,
+      fontFamily:"Georgia, 'Times New Roman', serif", color: gold ? "#7a5300" : c }}>{tier.card}</span>
+  );
+  return (
+    <span style={{ position:"relative", width:size, height:size, flexShrink:0, display:"inline-flex", alignItems:"center",
+      justifyContent:"center" }}>
+      {ace && !locked && size >= 30 && (
+        <span aria-hidden="true" style={{ position:"absolute", width: w + 4, height: h + 4, borderRadius: r + 2, overflow:"hidden" }}>
+          <span style={{ position:"absolute", inset:"-50%", animation:"bn-medal-turn 4s linear infinite",
+            background:"conic-gradient(#ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #6366f1, #d946ef, #ef4444)" }}/>
+        </span>
+      )}
+      {locked ? (
+        <span style={{ position:"relative", width:w, height:h, borderRadius:r, boxSizing:"border-box", opacity:0.7,
+          border:`${b}px solid ${rgba(bc, 0.55)}`, boxShadow:"0 1px 4px rgba(0,0,0,0.25)",
+          background:`repeating-linear-gradient(45deg, ${rgba(bc, 0.30)} 0 ${Math.max(2, size / 16)}px, transparent 0 ${Math.max(4, size / 8)}px), ` +
+            "linear-gradient(160deg, #3b3355, #1d1830)" }}>
+          <span style={{ position:"absolute", inset: size * 0.09, borderRadius: r * 0.6, border:`1px solid ${rgba(bc, 0.45)}` }}/>
+        </span>
+      ) : (
+        <span style={{ position:"relative", width:w, height:h, borderRadius:r, boxSizing:"border-box", overflow:"hidden",
+          display:"flex", alignItems:"center", justifyContent:"center",
+          border:`${b}px solid ${gold ? "#B8860B" : c}`, boxShadow:`0 2px 6px rgba(0,0,0,0.28), 0 0 ${size / 6}px ${rgba(c, 0.35)}`,
+          background: gold ? "linear-gradient(135deg, #fff6cf, #e9b62f 45%, #fff1b5 60%, #c99412)"
+            : `linear-gradient(160deg, #fffdf7, #f1ebde)` }}>
+          {size >= 30 && <span aria-hidden="true" style={{ position:"absolute", inset: size * 0.07, borderRadius: r * 0.6,
+            border:`1px solid ${rgba(gold ? "#B8860B" : c, 0.35)}` }}/>}
+          {corners && corner(false)}
+          {corners && corner(true)}
+          <span style={{ position:"relative", fontSize: size * (corners ? 0.34 : 0.42), lineHeight:1 }}>{emoji || (corners ? "" : tier.card)}</span>
+          {gold && size >= 30 && (
+            <span aria-hidden="true" style={{ position:"absolute", top:"-20%", bottom:"-20%", width:"40%",
+              background:"linear-gradient(90deg, transparent, rgba(255,255,255,.8), transparent)",
+              animation:"bn-medal-sweep 3s ease-in-out infinite" }}/>
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function Medal({ tier, emoji, size = 48, locked = false }) {
+  if (tier?.card) return <PlayCard tier={tier} emoji={emoji} size={size} locked={locked}/>;
   const c = locked ? "#8a8f98" : tier.color;
   const id = `m${tier.id}${locked ? "l" : ""}`;
   // chaque palier vit a sa facon, de plus en plus fort : lueur (Bronze), eclat (Argent), paillettes (Or),
@@ -1708,7 +1793,7 @@ const sectionTitle = { fontSize:11, fontWeight:800, color:"var(--muted)", textTr
 
 // Ambiance « salle de jeu » : chaque section a sa couleur (tapis, reflets, jeton)
 const CAT_COLOR = { prints:"#0EA5E9", filaments:"#F97316", objects:"#EC4899", mw:"#22C55E", photos:"#8B5CF6",
-  app:"#6366F1", social:"#14B8A6", game:"#EF4444", secret:"#A855F7" };
+  app:"#6366F1", social:"#14B8A6", game:"#EF4444", cards:"#D4A017", secret:"#A855F7" };
 const rgba = (hex, a) => {
   const n = parseInt(hex.slice(1), 16);
   return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
@@ -1725,7 +1810,7 @@ const feltCard = (c, c2) => ({ background: feltBg(c, c2), border:`1px solid ${rg
 // Tiroirs des secrets : une couleur chacun
 const SUB_COLOR = { calendar:"#F97316", clock:"#6366F1", measures:"#0EA5E9", colors:"#EC4899", counts:"#14B8A6",
   ups:"#EF4444", trade:"#F59E0B", mw:"#22C55E", social:"#06B6D4", app:"#8B5CF6", eggs:"#EAB308", game:"#DC2626",
-  sets:"#D4A017" };
+  sets:"#D4A017", jokers:"#D4A017" };
 const pill = (c, dark = false) => ({ fontSize:11, fontWeight:800, whiteSpace:"nowrap", padding:"3px 9px", borderRadius:20,
   color: dark ? "#FFE08A" : c, background: rgba(c, dark ? 0.18 : 0.13), border:`1px solid ${rgba(c, 0.35)}` });
 // L'emoji d'une section, pose sur un jeton de casino
