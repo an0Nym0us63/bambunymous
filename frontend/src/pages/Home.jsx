@@ -738,27 +738,74 @@ function Words({ text }) {
   return String(text ?? "").split(/(\s+)/).map((p, i) => /\s/.test(p) || !p ? p : <span key={i} data-pk="">{p}</span>);
 }
 
-// Le bonjour : le nom, la date, et ou en est l'imprimante
+// Le bonjour : un bandeau aux couleurs du moment de la journee (matin dore,
+// apres-midi bleu, soiree violette, nuit), le nom, et ou en est l'imprimante
+// -- avec le vrai nom de l'impression (celui de la carte, pas celui de la tache).
+const SKY = [
+  { from: 5, a: "#F59E0B", b: "#EC4899", c: "#FDE68A" },     // matin
+  { from: 12, a: "#0EA5E9", b: "#6366F1", c: "#BAE6FD" },    // apres-midi
+  { from: 18, a: "#7C3AED", b: "#DB2777", c: "#F5D0FE" },    // soiree
+  { from: 22, a: "#1E1B4B", b: "#4338CA", c: "#C7D2FE" },    // nuit
+];
 function Greeting({ status }) {
   const username = useAuth(s => s.username) || "";
-  const h = new Date().getHours(), night = h >= 18 || h < 5;
-  const name = username ? username.charAt(0).toUpperCase() + username.slice(1) : "";
-  const date = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const [name, setName] = useState(null);
+  const [today, setToday] = useState(null);
   const st = String(status?.status || "").toUpperCase();
+  const live = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"].includes(st);
+  useEffect(() => {
+    if (!live) { setName(null); return; }
+    client.get("/prints", { params: { limit: 1, status: "IN_PROGRESS" } })
+      .then(r => { const p = (r.data?.prints || r.data?.items || [])[0]; setName(p ? (p.file_name || p.translated_name) : null); })
+      .catch(() => {});
+  }, [live, status?.job_id]);
+  useEffect(() => {
+    client.get("/prints/kpis", { params: { date_from: new Date().toLocaleDateString("sv") } })
+      .then(r => setToday(r.data)).catch(() => {});
+  }, [st]);
+  const h = new Date().getHours();
+  const sky = h < 5 ? SKY[3] : [...SKY].reverse().find(x => h >= x.from);
+  const night = h >= 18 || h < 5;
+  const first = username ? username.charAt(0).toUpperCase() + username.slice(1) : "";
+  const date = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const what = name || "L'impression";
   const line = !status ? "" : !status.connected ? "L'imprimante ne répond pas pour l'instant."
-    : st === "RUNNING" ? `${status.print_name || "Une impression"} tourne, fin vers ${fmtFinishTime(status.remaining_minutes)?.time || "bientôt"}.`
-    : st === "PAUSE" || st === "PAUSED" ? `${status.print_name || "L'impression"} est en pause.`
+    : st === "PAUSE" || st === "PAUSED" ? `${what} est en pause.`
+    : live ? `${what} est en cours d'impression.`
     : "L'imprimante est au repos, prête à imprimer.";
+  const fin = live && status.remaining_minutes ? fmtFinishTime(status.remaining_minutes) : null;
+  const pill = { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 999, fontSize: 12.5,
+    fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.28)",
+    backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", whiteSpace: "nowrap" };
   return (
-    <div className="card home-hello" style={{ padding:"14px 18px", display:"flex", alignItems:"center", gap:14 }}>
-      <span data-pk="" aria-hidden="true" style={{ width:42, height:42, borderRadius:13, flexShrink:0, display:"flex",
-        alignItems:"center", justifyContent:"center", background:"rgba(245,183,0,0.14)", color:"#F5B700" }}>
-        {night ? <Moon size={21}/> : <Sun size={21}/>}</span>
-      <div style={{ minWidth:0, flex:1 }}>
-        <div style={{ fontSize:21, fontWeight:800, color:"var(--text)", lineHeight:1.15 }}>
-          <Words text={`${night ? "Bonsoir" : "Bonjour"}${name ? " " + name : ""}`}/></div>
-        <div style={{ fontSize:12.5, color:"var(--muted)", marginTop:2, textTransform:"capitalize" }}><Words text={date}/></div>
-        {line && <div style={{ fontSize:13, color:"var(--text2)", marginTop:4 }}><Words text={line}/></div>}
+    <div className="card home-hello" style={{ position: "relative", overflow: "hidden", padding: "18px 20px", border: "none",
+      color: "#fff", background: `linear-gradient(120deg, ${sky.a}, ${sky.b})`,
+      boxShadow: `0 14px 34px -18px ${sky.b}` }}>
+      {/* le decor : un astre et sa lueur, des points tres discrets */}
+      <span aria-hidden="true" style={{ position: "absolute", right: -40, top: -60, width: 220, height: 220, borderRadius: "50%",
+        background: `radial-gradient(circle at 40% 40%, ${sky.c}, transparent 65%)`, opacity: 0.55, pointerEvents: "none" }}/>
+      <span aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.25,
+        background: "radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1.5px) 0 0 / 18px 18px",
+        WebkitMaskImage: "linear-gradient(90deg, transparent 30%, #000)", maskImage: "linear-gradient(90deg, transparent 30%, #000)" }}/>
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "14px 20px", flexWrap: "wrap" }}>
+        <span data-pk="" aria-hidden="true" style={{ width: 48, height: 48, borderRadius: 16, flexShrink: 0, display: "flex",
+          alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.3)" }}>
+          {night ? <Moon size={24}/> : <Sun size={24}/>}</span>
+        <div style={{ flex: "1 1 220px", minWidth: 0 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase", opacity: 0.85 }}>
+            <Words text={date}/></div>
+          <div style={{ fontSize: 26, fontWeight: 900, lineHeight: 1.1, marginTop: 2, letterSpacing: "-.01em" }}>
+            <Words text={`${night ? "Bonsoir" : "Bonjour"}${first ? " " + first : ""}`}/></div>
+          {line && <div style={{ fontSize: 13.5, marginTop: 5, opacity: 0.92 }}><Words text={line}/></div>}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {live && <span data-pk="" style={pill}>
+            <span style={{ width: 46, height: 6, borderRadius: 6, background: "rgba(255,255,255,0.3)", overflow: "hidden" }}>
+              <span style={{ display: "block", height: "100%", width: `${Math.round(status.progress || 0)}%`, background: "#fff" }}/></span>
+            {Math.round(status.progress || 0)} %</span>}
+          {fin && <span data-pk="" style={pill}><Clock size={14}/>fin {fin.dayDiff ? "demain " : ""}{fin.time}</span>}
+          {today && <span data-pk="" style={pill}><Layers size={14}/>{today.count} aujourd'hui</span>}
+        </div>
       </div>
     </div>
   );
