@@ -11,6 +11,7 @@ import { TILES, useTilesData } from "./HomeTiles";
 // « auto » : selon son contenu), parmi celles que son type accepte.
 
 const WIDE = 1024;
+const COL_MIN = 400;                               // largeur sous laquelle une colonne (deux sous-colonnes) se tasse trop
 const ROW = 118;                                   // hauteur d'une rangee (px)
 
 function useWide() {
@@ -127,6 +128,16 @@ export default function HomeGrid({ status, blocks }) {
   const [sel, setSel] = useState(null);
   const [pick, setPick] = useState(null);            // colonne dont la case « + » est ouverte
   const saved = useRef(null);
+  // combien de colonnes tiennent vraiment : 4 choisies sur un ecran moyen en montrent 3, puis 2, puis 1
+  const box = useRef(null);
+  const [fit, setFit] = useState(4);
+  useEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(([e]) => setFit(Math.max(1, Math.floor((e.contentRect.width + 12) / (COL_MIN + 12)))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const view = wide ? "dash" : "mobile";
 
   useEffect(() => {
@@ -149,6 +160,10 @@ export default function HomeGrid({ status, blocks }) {
 
   // ── les listes de la vue en cours : [colonnes] (mobile : une seule) ──
   const cols = view === "dash" ? lay.dash.columns : [lay.mobile.items];
+  // a l'affichage (hors personnalisation), les colonnes en trop se fondent dans
+  // les autres, en alternance : 4 sur 2 -> [1re + 3e, 2e + 4e]
+  const shownCols = edit || cols.length <= fit ? cols
+    : [...Array(fit)].map((_, i) => cols.filter((_c, j) => j % fit === i).flat());
   const setCols = next => setLay(l => view === "dash" ? { ...l, dash: { ...l.dash, columns: next } } : { ...l, mobile: { items: next[0] } });
   const where = id => { for (let c = 0; c < cols.length; c++) { const i = cols[c].findIndex(x => x.id === id); if (i >= 0) return [c, i]; } return null; };
   const update = (id, patch) => setCols(cols.map(c => c.map(x => x.id === id ? { ...x, ...patch } : x)));
@@ -266,6 +281,8 @@ export default function HomeGrid({ status, blocks }) {
             {wide ? " un téléphone" : " un ordinateur"}.</div>
           {wide && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              {lay.dash.cols > fit && <span style={{ width: "100%", fontSize: 12, color: "#d97706", fontWeight: 700 }}>
+                Sur cet écran, {fit} colonne{fit > 1 ? "s tiennent" : " tient"} : hors personnalisation, les {lay.dash.cols} colonnes se regroupent en {fit}.</span>}
               <Columns size={15} style={{ color: "var(--muted)" }}/>
               <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>Colonnes</span>
               {[1, 2, 3, 4].map(n => <button key={n} onClick={() => setNCols(n)} style={{ width: 32, height: 30, borderRadius: 9, cursor: "pointer",
@@ -283,8 +300,8 @@ export default function HomeGrid({ status, blocks }) {
           )}
         </div>
       )}
-      <div className="hg-cols" style={{ gridTemplateColumns: `repeat(${cols.length}, minmax(0,1fr))` }}>
-        {cols.map((c, ci) => (
+      <div ref={box} className="hg-cols" style={{ gridTemplateColumns: `repeat(${shownCols.length}, minmax(0,1fr))` }}>
+        {shownCols.map((c, ci) => (
           <div key={ci} className="hg-col">
             {c.map(item => renderItem(item, ci))}
             {edit && (
