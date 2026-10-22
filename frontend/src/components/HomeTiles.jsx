@@ -1563,9 +1563,14 @@ function Spool({ status, o, sz }) {
           {spool(sp)}
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: narrow ? 2 : 4 }}>
             {!narrow && H >= 90 && <div>{chip(slot, "#8B5CF6")}</div>}
-            <span style={{ fontSize: narrow ? 14 : 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15, ...clamp(narrow && H >= 80 ? 2 : 1) }}>{name}</span>
-            <span style={{ fontSize: narrow ? 11 : 12.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {narrow ? slot : [type, si.brand].filter(Boolean).join(" · ")}</span>
+            <span style={{ fontSize: narrow ? 14 : 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15, ...clamp(1) }}>{name}</span>
+            {narrow ? <>
+              {/* etroite : la matiere, puis la marque dessous ; l'emplacement seulement s'il reste de la place */}
+              {type && <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.2 }}>{type}</span>}
+              {si.brand && H >= 76 && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.2 }}>{si.brand}</span>}
+              {H >= 120 && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{slot}</span>}
+            </> : <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {[type, si.brand].filter(Boolean).join(" · ")}</span>}
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: narrow ? 12.5 : 15, fontWeight: 900, color: barCol, whiteSpace: "nowrap" }}>{weight}</span>
               <div style={{ flex: 1, minWidth: 20 }}>{bar(narrow ? 5 : 7)}</div></div>
