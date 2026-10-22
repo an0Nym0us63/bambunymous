@@ -29,8 +29,9 @@ function defaults(defs) {
   const small = ["today", "week", "next", "last", "stock", "dry", "humidity", "friends", "mw", "rate", "wheel", "ach"].filter(id => defs[id]);
   return {
     v: 1,
-    dash: { cols: 2, columns: [["printer", "ams"].filter(id => defs[id]).map(it), [...small, "attention"].filter(id => defs[id]).map(it)] },
-    mobile: { items: ["printer", "ams", ...small, "attention"].filter(id => defs[id]).map(it) },
+    dash: { cols: 2, columns: [["printer", "ams", "amsdetail"].filter(id => defs[id]).map(it), [...small, "attention"].filter(id => defs[id]).map(it)] },
+    mobile: { items: ["printer", "ams", "amsdetail", ...small, "attention"].filter(id => defs[id]).map(it) },
+    amsSplit: true,
   };
 }
 // Remet d'aplomb une disposition gardee : tuiles inconnues retirees, tailles
@@ -54,7 +55,13 @@ function normalize(lay, defs) {
     if (!dash.columns.some(c => c.some(x => x.id === id))) dash.columns[0].unshift({ id, w: d.w[0], h: d.h[0] });
     if (!mobile.items.some(x => x.id === id)) mobile.items.unshift({ id, w: d.w[0], h: d.h[0] });
   }
-  return { v: 1, dash, mobile };
+  // l'ancienne tuile AMS (apercu + detail) a ete coupee en deux : le detail se place juste apres l'apercu
+  if (!lay.amsSplit && defs.amsdetail) {
+    const after = list => { const i = list.findIndex(x => x.id === "ams"); if (i >= 0 && !list.some(x => x.id === "amsdetail")) list.splice(i + 1, 0, { id: "amsdetail", w: 2, h: "auto" }); };
+    dash.columns.forEach(after);
+    after(mobile.items);
+  }
+  return { v: 1, dash, mobile, amsSplit: true };
 }
 
 function Cell({ item, def, edit, children, actions, drag, selected, onSelect }) {
@@ -86,6 +93,26 @@ function Cell({ item, def, edit, children, actions, drag, selected, onSelect }) 
     </div>
   );
 }
+// Les blocs historiques (imprimante, AMS, points d'attention) dans le meme cadre
+// que les tuiles : pastille d'icone, titre, lueur ; leurs cartes internes aplaties.
+function Frame({ def, children }) {
+  if (children == null || children === false) return null;
+  const { icon, color } = def.frame;
+  return (
+    <div className="card hg-frame" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10, position: "relative",
+      overflow: "hidden", height: "100%", boxSizing: "border-box", minWidth: 0 }}>
+      <span aria-hidden="true" style={{ position: "absolute", right: -24, top: -24, width: 80, height: 80, borderRadius: "50%",
+        background: `${color}22`, pointerEvents: "none" }}/>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
+        <span data-pk="" style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+          background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>
+        <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", letterSpacing: ".02em" }}>{def.label}</span>
+      </div>
+      <div className="hg-frame-body" style={{ position: "relative", minWidth: 0 }}>{children}</div>
+    </div>
+  );
+}
+
 const btn = (on = false) => ({ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 3, minWidth: 24, height: 26,
   padding: "0 5px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800,
   color: on ? "#0f172a" : "#fff", background: on ? "#fff" : "rgba(255,255,255,0.14)" });
@@ -188,7 +215,7 @@ export default function HomeGrid({ status, blocks }) {
     return (
       <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} drag={edit ? drag : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
-        {def.render(data, status)}
+        {def.frame ? <Frame def={def}>{def.render(data, status)}</Frame> : def.render(data, status)}
       </Cell>
     );
   };
@@ -200,6 +227,9 @@ export default function HomeGrid({ status, blocks }) {
         .hg-col { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); grid-auto-rows:minmax(${ROW}px, auto);
                   grid-auto-flow:row dense; gap:10px; min-width:0; }
         .hg-cell:not(.hg-edit):has(> div:empty) { display:none; }
+        .hg-frame-body .card { background:transparent !important; border:none !important; box-shadow:none !important;
+                  backdrop-filter:none !important; -webkit-backdrop-filter:none !important; padding-left:0 !important; padding-right:0 !important; }
+        .hg-frame-body > * + * { margin-top:10px; }
         .hg-edit > div:empty { min-height:${ROW - 10}px; border-radius:16px; background:var(--surface2); display:flex;
                   align-items:flex-end; justify-content:center; padding-bottom:12px; box-sizing:border-box; }
         .hg-edit > div:empty::before { content:"Rien à montrer pour l'instant"; font-size:12px; color:var(--muted); font-weight:700; }

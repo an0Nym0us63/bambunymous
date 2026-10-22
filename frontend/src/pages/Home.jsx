@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
+import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
 import { useAuth } from "../store/auth";
+import { create } from "zustand";
 import client, { apiUrl } from "../api/client";
 import AttentionSection from "../components/AttentionSection";
 import HomeGrid from "../components/HomeGrid";
@@ -542,7 +543,17 @@ const VIEW_KEY = "home.deviceView";
 // la vue cachee : assez pour etre vu, pas au point de devenir un bruit de fond.
 const BLINK_MS = 20000;
 
-export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId }) {
+// La selection (AMS ou buse regardes, vue AMS/rack) est partagee : l'apercu et
+// le detail peuvent vivre dans deux tuiles de l'accueil et rester accordes.
+const useDevSel = create(set => ({
+  selAms: null, selHotend: null,
+  view: (() => { try { return localStorage.getItem(VIEW_KEY) === "rack" ? "rack" : "ams"; } catch { return "ams"; } })(),
+  setSelAms: v => set({ selAms: v }), setSelHotend: v => set({ selHotend: v }), setView: v => set({ view: v }),
+}));
+
+// part : "overview" (les AMS ou le rack), "detail" (la fiche de l'AMS ou de la buse
+// choisie), ou rien (les deux, l'un sous l'autre)
+export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId, part = null }) {
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
   const headId  = rack?.head_id ?? -1;
@@ -565,17 +576,15 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
   const autoAmsId = uniqueAmsList.length ? (activeAmsId >= 0 ? activeAmsId : uniqueAmsList[0]?.id ?? 0) : null;
   // Deux selections, une par vue : basculer vers le rack puis revenir ne doit
   // pas perdre l'AMS qu'on regardait.
-  const [selAms, setSelAms] = useState(null);
-  const [selHotend, setSelHotend] = useState(null);
+  const selAms = useDevSel(s => s.selAms), setSelAms = useDevSel(s => s.setSelAms);
+  const selHotend = useDevSel(s => s.selHotend), setSelHotend = useDevSel(s => s.setSelHotend);
   const [selectedTray, setSelectedTray] = useState(null);
   const [amsOrder, setAmsOrder] = useState(null);
 
   // La tuile montre SOIT les AMS, SOIT le rack : cote a cote, trois colonnes
   // d'AMS ecrasaient tout sur un telephone, et empiler le rack dessous doublait
   // la hauteur de la carte. Choix retenu par appareil (commodite locale).
-  const [view, setViewState] = useState(() => {
-    try { return localStorage.getItem(VIEW_KEY) === "rack" ? "rack" : "ams"; } catch { return "ams"; }
-  });
+  const view = useDevSel(s => s.view), setViewState = useDevSel(s => s.setView);
   const setView = (v) => {
     setViewState(v);
     setBlink(false);
@@ -621,7 +630,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
       .catch(() => setAmsOrder(null));
   }, []);
 
-  if (!uniqueAmsList.length && !hasRack) return (
+  if (!uniqueAmsList.length && !hasRack) return part === "detail" ? null : (
     <div className="card" style={{ padding:24, textAlign:"center", color:"var(--muted)", fontSize:14 }}>Aucun AMS détecté</div>
   );
 
@@ -679,9 +688,10 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
     );
   })();
 
+  const showOverview = part !== "detail", showDetail = part !== "overview";
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      <div className="card" style={{ padding:12 }}>
+      {showOverview && <div className="card" style={{ padding:12 }}>
         {hasRack && (
           <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:10 }}>
             <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>
@@ -714,14 +724,14 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
             ))}
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Détail partagé — AMS (grille de trays) ou hotend rack (fiche), selon la vue */}
-      {detailKind === "ams" && selectedAms && (
+      {showDetail && detailKind === "ams" && selectedAms && (
         <AMSDetail ams={selectedAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
           spoolLookup={spoolLookup} onTrayClick={setSelectedTray}/>
       )}
-      {detailKind === "hotend" && selectedHotend?.slot && (
+      {showDetail && detailKind === "hotend" && selectedHotend?.slot && (
         <SlotDetail slot={selectedHotend.slot} num={selectedHotend.num}
           isOnHead={selectedHotend.onHead}
           headSlot={selectedHotend.onHead ? headSlot : null}/>
@@ -857,24 +867,28 @@ export default function Home() {
     return () => { stopPolling(); clearInterval(spoolInterval); };
   }, []);
 
+  const devices = (st, part) => (st?.status === "RUNNING" || st?.status === "PAUSED" || (st?.ams_list?.length > 0)) ? <DeviceGrid
+    key={`${visKey}-${part}`} part={part}
+    amsList={st?.ams_list ?? []}
+    activeAmsId={isRunning ? (st?.active_ams_id ?? -1) : -1}
+    activeTrayId={isRunning ? (st?.active_tray_id ?? -1) : -1}
+    rack={st?.hotend_rack}
+    spoolLookup={spoolLookup}
+    activeNozzleId={st?.nozzles?.find(n => n.active)?.id ?? null}/> : null;
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {
-    printer: { label: "Imprimante", w: [2], h: ["auto"], required: true, render: (d, st) => <StatusBanner status={st}/> },
-    ams: { label: "AMS et bobines", w: [2], h: ["auto"], render: (d, st) =>
-      (st?.status === "RUNNING" || st?.status === "PAUSED" || (st?.ams_list?.length > 0)) ? <DeviceGrid key={visKey}
-        amsList={st?.ams_list ?? []}
-        activeAmsId={isRunning ? (st?.active_ams_id ?? -1) : -1}
-        activeTrayId={isRunning ? (st?.active_tray_id ?? -1) : -1}
-        rack={st?.hotend_rack}
-        spoolLookup={spoolLookup}
-        activeNozzleId={st?.nozzles?.find(n => n.active)?.id ?? null}/> : null },
-    attention: { label: "Points d'attention", w: [2], h: ["auto"], render: () => <AttentionSection/> },
+    printer: { label: "Imprimante", w: [2], h: ["auto"], required: true, frame: { icon: <Printer size={15}/>, color: "#3B82F6" }, render: (d, st) => <StatusBanner status={st}/> },
+    ams: { label: "AMS", w: [2], h: ["auto"], frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" }, render: (d, st) => devices(st, "overview") },
+    amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto"], frame: { icon: <Layers size={15}/>, color: "#6366F1" },
+      render: (d, st) => devices(st, "detail") },
+    attention: { label: "Points d'attention", w: [2], h: ["auto"], frame: { icon: <AlertTriangle size={15}/>, color: "#F59E0B" },
+      render: () => <AttentionSection bare/> },
   };
   return (
     <div className="home-grid">
       <style>{`
         .home-grid { display:flex; flex-direction:column; gap:12px; max-width:640px; width:100%; margin:0 auto; }
-        @media (min-width: 1024px) { .home-grid { max-width:1320px; } }
+        @media (min-width: 1024px) { .home-grid { max-width:none; } }
       `}</style>
       <Greeting status={status}/>
       <HomeGrid status={status} blocks={blocks}/>

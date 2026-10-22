@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets, Coins, Star, Users, Trophy,
-         Dices, ChevronRight, Camera } from "lucide-react";
+         Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
+         BellRing } from "lucide-react";
 import client, { apiUrl } from "../api/client";
 import { mwImg } from "./MwImg";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "../pages/Achievements";
@@ -65,11 +66,18 @@ export function useTilesData() {
       put("dry", get("/filaments/drying/overview"));
       put("friends", get("/friends/shared/printing"));
       put("ach", get("/achievements"));
+      const m0 = new Date(now.getFullYear(), now.getMonth(), 1);
+      put("month", get("/prints/kpis", { date_from: ymd(m0) }));
+      put("sales", get("/objects/objects/stats"));
+      put("feed", get("/notify/me/history"));
+      put("gallery", get("/prints", { limit: 12 }).then(r => (r.prints || r.items || []).filter(p => p.status !== "IN_PROGRESS").slice(0, 8)));
+      put("attention", get("/attention"));
     };
     load();
     put("queue", get("/makerworld/queue"));
     put("mw", get("/makerworld/creator"));
     put("rate", get("/makerworld/to-rate"));
+    put("podium", get("/achievements/podium"));
     const iv = setInterval(load, 120000);
     return () => { dead = true; clearInterval(iv); };
   }, []);
@@ -332,6 +340,158 @@ function Wheel({ a }) {
   );
 }
 
+function LiveCam({ status }) {
+  const ref = useRef(null);
+  const on = !!status?.connected;
+  useEffect(() => {
+    if (!on) return undefined;
+    let busy = false;
+    const img = ref.current;
+    const done = () => { busy = false; };
+    img?.addEventListener("load", done); img?.addEventListener("error", done);
+    const tick = () => { if (!busy && img && !document.hidden) { busy = true; img.src = apiUrl(`/camera/snapshot?t=${Date.now()}`); } };
+    tick();
+    const t = setInterval(tick, 2000);
+    return () => { clearInterval(t); img?.removeEventListener("load", done); img?.removeEventListener("error", done); };
+  }, [on]);
+  return (
+    <Tile icon={<Video size={15}/>} color="#64748B" label="Caméra">
+      {on ? <img ref={ref} data-pk="" alt="Caméra de l'imprimante" style={{ width: "100%", aspectRatio: "16/9", objectFit: "cover",
+        borderRadius: 10, background: "#000", display: "block" }}/> : <Line><W text="L'imprimante ne répond pas."/></Line>}
+    </Tile>
+  );
+}
+function Temps({ status }) {
+  if (!status?.connected) return null;
+  const nz = status.nozzles || [];
+  const row = (label, cur, tgt, col) => (
+    <div key={label} style={{ display: "flex", alignItems: "baseline", gap: 6, fontSize: 12 }}>
+      <span style={{ flex: 1, color: "var(--text2)", fontWeight: 700 }}>{label}</span>
+      <span data-pk="" style={{ fontSize: 17, fontWeight: 900, color: cur > 40 ? col : "var(--text)" }}>{Math.round(cur || 0)}°</span>
+      {tgt > 0 && <span style={{ color: "var(--muted)", fontWeight: 700 }}>/ {Math.round(tgt)}°</span>}
+    </div>
+  );
+  return (
+    <Tile icon={<Thermometer size={15}/>} color="#F97316" label="Températures">
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {nz.map(n => row(nz.length > 1 ? `Buse ${n.id === 1 ? "gauche" : "droite"}` : "Buse", n.temp, n.target, "#f97316"))}
+        {row("Plateau", status.bed_temp, status.target_bed_temp, "#ef4444")}
+        {status.chamber_temp > 0 && row("Chambre", status.chamber_temp, status.target_chamber_temp, "#eab308")}
+      </div>
+    </Tile>
+  );
+}
+function Month({ v }) {
+  const name = new Date().toLocaleDateString("fr-FR", { month: "long" });
+  return (
+    <Tile icon={<CalendarDays size={15}/>} color="#6366F1" label={`En ${name}`}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <Big>{v ? v.count : "…"}</Big>
+        <span style={{ fontSize: 12.5, color: "var(--text2)", fontWeight: 700 }}>impression{v?.count > 1 ? "s" : ""}</span>
+      </div>
+      {v && <Sub><W text={`${fmtG(v.weight_g)} · ${fmtH(v.duration)} · ${(v.cost || 0).toFixed(2).replace(".", ",")} €`}/></Sub>}
+    </Tile>
+  );
+}
+function Sales({ v }) {
+  const nav = useNavigate();
+  if (!v || !v.total) return null;
+  return (
+    <Tile icon={<ShoppingBag size={15}/>} color="#EC4899" label="Objets et ventes" onClick={() => nav("/objects")}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+        <Big>{v.available}</Big>
+        <span style={{ fontSize: 12.5, color: "var(--text2)", fontWeight: 700 }}>à vendre</span>
+      </div>
+      <Sub><W text={`${v.sold} vendu${v.sold > 1 ? "s" : ""} · ${Math.round(v.revenue || 0)} € · marge ${Math.round(v.margin || 0)} €`}/></Sub>
+    </Tile>
+  );
+}
+const noEmoji = t => String(t || "").replace(/^\p{Extended_Pictographic}️?\s*/u, "");
+function Feed({ f }) {
+  const nav = useNavigate();
+  const items = (f?.items || []).slice(0, 6);
+  if (!f) return null;
+  return (
+    <Tile icon={<Rss size={15}/>} color="#0EA5E9" label="Le fil du jour" onClick={() => nav("/notifications")}>
+      {!items.length ? <Line><W text="Rien de neuf."/></Line> : items.map((x, i) => {
+        const sw = String(x.image || "").startsWith("color:") ? x.image.slice(6).split(",")[0] : null;
+        return (
+          <div key={x.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 0", borderTop: i ? "1px solid var(--border)" : "none" }}>
+            <span data-pk="" style={{ width: 38, flexShrink: 0, fontSize: 11, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>
+              {new Date(x.time).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</span>
+            <span data-pk="" style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 12, background: sw ? hexCss(sw) : `${x.section_color || "#64748B"}22` }}>{sw ? "" : x.section_emoji}</span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--text)", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <W text={noEmoji(x.title)}/></span>
+          </div>
+        );
+      })}
+    </Tile>
+  );
+}
+function Gallery({ g }) {
+  const nav = useNavigate();
+  if (!g?.length) return null;
+  return (
+    <Tile icon={<Images size={15}/>} color="#14B8A6" label="Dernières impressions" onClick={() => nav("/prints?tab=gallery")}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(56px, 1fr))", gap: 6 }}>
+        {g.map(p => <img key={p.id} data-pk="" src={apiUrl(`/prints/${p.id}/image`)} alt="" title={p.file_name || p.translated_name}
+          onError={e => { e.currentTarget.style.display = "none"; }}
+          style={{ width: "100%", aspectRatio: "1", objectFit: "cover", borderRadius: 9, background: "var(--surface2)",
+            outline: p.status === "SUCCESS" || p.status === "PARTIAL" ? "none" : "2px solid rgba(239,68,68,0.6)" }}/>)}
+      </div>
+    </Tile>
+  );
+}
+function Shortcuts() {
+  const nav = useNavigate();
+  const go = [["Historique", "/prints", History], ["Filaments", "/filaments", Package], ["À faire", "/prints?tab=queue", ListChecks],
+    ["Séchage", "/stats?tab=drying", Flame], ["Notifications", "/notifications", BellRing], ["Succès", "/stats?tab=achievements", Trophy]];
+  return (
+    <Tile icon={<Zap size={15}/>} color="#EAB308" label="Raccourcis">
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(92px, 1fr))", gap: 6 }}>
+        {go.map(([l, to, I]) => (
+          <button key={to} data-pk="" onClick={() => nav(to)} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 10px",
+            borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", fontWeight: 700,
+            fontSize: 12, cursor: "pointer", minWidth: 0 }}><I size={14}/><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l}</span></button>
+        ))}
+      </div>
+    </Tile>
+  );
+}
+function Podium({ p }) {
+  const nav = useNavigate();
+  const people = (p?.people || []).filter(x => x.status === "ok").sort((a, b) => (b.score || 0) - (a.score || 0));
+  if (people.length < 2) return null;
+  return (
+    <Tile icon={<MedalIcon size={15}/>} color="#A855F7" label="Classement des copains" onClick={() => nav("/stats?tab=achievements")}>
+      {people.slice(0, 4).map((x, i) => (
+        <div key={x.id || x.name} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: i ? 4 : 0, fontSize: 12.5 }}>
+          <span data-pk="" style={{ width: 18, fontWeight: 900, color: ["#D4A017", "#94A3B8", "#B45309"][i] || "var(--muted)" }}>{i + 1}</span>
+          <span style={{ flex: 1, minWidth: 0, fontWeight: x.me ? 900 : 700, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {x.me ? "Toi" : x.name}</span>
+          <span data-pk="" style={{ fontWeight: 800, color: "var(--text2)" }}>{(x.score || 0).toLocaleString("fr-FR")}</span>
+        </div>
+      ))}
+    </Tile>
+  );
+}
+function Alerts({ a }) {
+  const cats = (a?.categories || []).filter(c => c.total);
+  if (!a) return null;
+  return (
+    <Tile icon={<BellRing size={15}/>} color="#F59E0B" label="Alertes en bref">
+      {!cats.length ? <Line><W text="Rien à signaler."/></Line> : (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {cats.map(c => <span key={c.category} data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px",
+            borderRadius: 20, fontSize: 12, fontWeight: 800, background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
+            {c.icon} {c.label} <b>{c.total}</b></span>)}
+        </div>
+      )}
+    </Tile>
+  );
+}
+
 // Le catalogue : chaque tuile dit les largeurs (en sous-colonnes : 1 = moitie,
 // 2 = toute la colonne) et les hauteurs (en rangees, « auto » = selon son contenu)
 // qu'elle accepte. La premiere valeur de chaque liste est sa taille par defaut.
@@ -348,4 +508,14 @@ export const TILES = {
   rate:     { label: "À évaluer",            w: [1, 2], h: [1],    render: (d) => <ToRate r={d.rate}/> },
   wheel:    { label: "Roue et clés",         w: [1, 2], h: [1],    render: (d) => <Wheel a={d.ach}/> },
   ach:      { label: "Succès",               w: [2],    h: [1, 2], render: (d) => <Ach a={d.ach}/> },
+  // au choix (dans « Ajouter »)
+  camera:    { label: "Caméra",                 w: [2, 1], h: [2, 1, 3], render: (d, st) => <LiveCam status={st}/> },
+  temps:     { label: "Températures",           w: [1, 2], h: [1],       render: (d, st) => <Temps status={st}/> },
+  month:     { label: "Ce mois-ci",             w: [1, 2], h: [1],       render: (d) => <Month v={d.month}/> },
+  sales:     { label: "Objets et ventes",       w: [1, 2], h: [1],       render: (d) => <Sales v={d.sales}/> },
+  feed:      { label: "Le fil du jour",         w: [2, 1], h: [2, 3],    render: (d) => <Feed f={d.feed}/> },
+  gallery:   { label: "Dernières impressions",  w: [2, 1], h: [1, 2],    render: (d) => <Gallery g={d.gallery}/> },
+  shortcuts: { label: "Raccourcis",             w: [2, 1], h: [1],       render: () => <Shortcuts/> },
+  podium:    { label: "Classement des copains", w: [1, 2], h: [1, 2],    render: (d) => <Podium p={d.podium}/> },
+  alerts:    { label: "Alertes en bref",        w: [1, 2], h: [1],       render: (d) => <Alerts a={d.attention}/> },
 };

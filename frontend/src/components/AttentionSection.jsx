@@ -58,7 +58,8 @@ const Chip = ({ children }) => (
  * définitivement (un filament qu'on ne compte pas racheter). La mise en sourdine
  * retire l'alerte tout de suite en local — inutile d'attendre un aller-retour.
  */
-export default function AttentionSection() {
+// bare : dans un cadre de tuile de l'accueil (qui porte deja le titre)
+export default function AttentionSection({ bare = false }) {
   const navigate = useNavigate();
   const [cats, setCats] = useState(null);
   const [err, setErr]   = useState(null);
@@ -156,8 +157,8 @@ export default function AttentionSection() {
     // charge", et on ne pouvait pas les distinguer.
     return (
       <div className="card" style={{ padding:14 }}>
-        <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-          letterSpacing:"0.08em", margin:"0 0 10px" }}>Points d'attention</p>
+        {!bare && <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
+          letterSpacing:"0.08em", margin:"0 0 10px" }}>Points d'attention</p>}
         <div style={{ padding:"10px 12px", borderRadius:10, background:"var(--surface2)",
           display:"flex", alignItems:"center", gap:8 }}>
           <span>✅</span>
@@ -174,9 +175,9 @@ export default function AttentionSection() {
           marginBottom: open ? 10 : 0, userSelect:"none" }}>
         {open ? <ChevronDown size={13} color="var(--muted)"/>
               : <ChevronRight size={13} color="var(--muted)"/>}
-        <p style={{ fontSize: 10, color: "var(--muted)", textTransform: "uppercase",
-          letterSpacing: "0.08em", margin: 0, flex: 1 }}>
-          Points d'attention
+        <p style={{ fontSize: bare ? 12 : 10, color: "var(--muted)", textTransform: bare ? "none" : "uppercase",
+          letterSpacing: bare ? 0 : "0.08em", margin: 0, flex: 1, fontWeight: bare ? 700 : undefined }}>
+          {bare ? (open ? "Replier" : "Déplier") : "Points d'attention"}
         </p>
         <span style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)",
           background: "var(--surface2)", padding: "1px 7px", borderRadius: 8 }}>
