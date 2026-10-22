@@ -1895,8 +1895,7 @@ function GradeBadge({ g }) {
       whiteSpace:"nowrap", padding:"1px 9px 1px 3px", borderRadius:20, fontSize:11.5, fontWeight:900, letterSpacing:".02em",
       background:`linear-gradient(135deg, ${m.a}55, ${m.b}22)`, border:`1px solid ${m.b}66` }}>
       <GradeEmblem i={g.i} size={18}/>
-      <span style={{ backgroundImage:`linear-gradient(90deg, var(--text) 40%, ${m.b})`, WebkitBackgroundClip:"text", backgroundClip:"text",
-        color:"transparent", filter:"brightness(1.15)" }}>{g.name}</span>
+      <span style={{ color:"var(--text)" }}>{g.name}</span>
     </span>
   );
 }
@@ -1918,10 +1917,10 @@ function GradePlate({ v, friend }) {
         <span style={{ fontSize:10.5, fontWeight:800, letterSpacing:".16em", textTransform:"uppercase", color:"var(--muted)" }}>
           🎓 {friend ? "Son grade de maker" : "Ton grade de maker"}</span>
         <span style={{ fontSize:22, fontWeight:900, lineHeight:1.1, letterSpacing:".01em",
-          backgroundImage: none ? "none" : i === 4 ? "linear-gradient(90deg, #ef4444, #f59e0b, #eab308, #22c55e, #06b6d4, #6366f1, #d946ef)"
-            : `linear-gradient(90deg, var(--text) 30%, ${m.b} 75%, var(--text))`,
-          WebkitBackgroundClip: none ? undefined : "text", backgroundClip: none ? undefined : "text",
-          color: none ? "var(--muted)" : "transparent" }}>{none ? "Pas encore de grade" : g.name}</span>
+          // une seule couleur, lisible jusqu'au bout ; le metal en halo (la legende garde son arc-en-ciel)
+          ...(i === 4 && !none ? { backgroundImage:"linear-gradient(90deg, #dc2626, #d97706, #ca8a04, #16a34a, #0891b2, #4f46e5, #c026d3)",
+            WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }
+            : { color: none ? "var(--muted)" : "var(--text)", textShadow: none ? "none" : `0 0 14px ${m.b}88` }) }}>{none ? "Pas encore de grade" : g.name}</span>
         <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:2 }}>
           <span style={{ display:"flex", gap:3 }}>
             {GRADE_AT.map((_x, k) => <GradeEmblem key={k} i={k} size={13} locked={k > g.i}/>)}</span>
