@@ -456,32 +456,6 @@ function DryCard({ ams }) {
   );
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-        <DryCard ams={ams}/>
-    </div>
-  );
-}
-function DryPopup({ ams, onClose }) {
-  React.useEffect(() => {
-    const k = e => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  return createPortal(
-    <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 950, padding: 14,
-      background: "rgba(2,6,23,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <div onClick={e => e.stopPropagation()} className="card" style={{ width: "min(440px, 100%)", padding: 18, display: "flex", flexDirection: "column", gap: 14,
-        background: "var(--sheet-bg)", boxShadow: "0 30px 80px rgba(0,0,0,0.45)", position: "relative", overflow: "hidden" }}>
-        <span aria-hidden="true" style={{ position: "absolute", right: -70, top: -70, width: 200, height: 200, borderRadius: "50%", background: "rgba(249,115,22,0.15)" }}/>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative" }}>
-          <span style={{ width: 36, height: 36, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center",
-            background: "rgba(249,115,22,0.15)", color: "#f97316" }}><Thermometer size={18}/></span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>Séchage · {amsName(ams.id)}</div>
-            {ams.dry_filament && <div style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 700 }}>{ams.dry_filament}</div>}
-          </div>
-          <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)",
-            background: "var(--surface2)", color: "var(--text2)", cursor: "pointer", fontSize: 16 }}>✕</button>
-        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 18, position: "relative" }}>
           <svg width={R * 2 + 16} height={R * 2 + 16} style={{ flexShrink: 0, transform: "rotate(-90deg)" }} aria-hidden="true">
             <circle cx={R + 8} cy={R + 8} r={R} fill="none" stroke="var(--surface2)" strokeWidth="12"/>
@@ -510,6 +484,32 @@ function DryPopup({ ams, onClose }) {
           {box("Dans l'AMS", ams.temp != null ? `${Number(ams.temp).toFixed(1).replace(".", ",")} °C` : "—")}
           {box("Humidité", ams.humidity != null ? `${ams.humidity} %` : "—", "#0ea5e9")}
         </div>
+    </div>
+  );
+}
+function DryPopup({ ams, onClose }) {
+  React.useEffect(() => {
+    const k = e => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return createPortal(
+    <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 950, padding: 14,
+      background: "rgba(2,6,23,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width: "min(440px, 100%)", padding: 18, display: "flex", flexDirection: "column", gap: 14,
+        background: "var(--sheet-bg)", boxShadow: "0 30px 80px rgba(0,0,0,0.45)", position: "relative", overflow: "hidden" }}>
+        <span aria-hidden="true" style={{ position: "absolute", right: -70, top: -70, width: 200, height: 200, borderRadius: "50%", background: "rgba(249,115,22,0.15)" }}/>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative" }}>
+          <span style={{ width: 36, height: 36, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(249,115,22,0.15)", color: "#f97316" }}><Thermometer size={18}/></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>Séchage · {amsName(ams.id)}</div>
+            {ams.dry_filament && <div style={{ fontSize: 12.5, color: "var(--muted)", fontWeight: 700 }}>{ams.dry_filament}</div>}
+          </div>
+          <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)",
+            background: "var(--surface2)", color: "var(--text2)", cursor: "pointer", fontSize: 16 }}>✕</button>
+        </div>
+        <DryCard ams={ams}/>
       </div>
     </div>, document.body);
 }
