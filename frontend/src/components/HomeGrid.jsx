@@ -380,7 +380,12 @@ export default function HomeGrid({ status, blocks, top = null }) {
     const next = paint(rects, fixed);
     if (JSON.stringify(next) !== JSON.stringify(tints)) setTints(next);
     const bh = banner?.dataset.hues?.split(",");
-    if (bh?.length >= 2 && (bh[0] !== bannerTint?.a || bh[1] !== bannerTint?.b)) setBannerTint({ a: bh[0], b: bh[1] });
+    if (bh?.length >= 2) {
+      // la teinte du bandeau, prise dans la palette (vive) : le soir, le bandeau est presque noir
+      const h = hueOf(bh[0]) ?? hueOf(bh[1]);
+      const k = h == null ? 0 : TINTS.reduce((b, t, i) => hueGap(t.h, h) < hueGap(TINTS[b].h, h) ? i : b, 0);
+      if (TINTS[k] !== bannerTint) setBannerTint(TINTS[k]);
+    }
   });
   // ce que l'accueil montre : une colonne sur telephone, sinon ce qui tient, au plus le maximum choisi
   const showN = wide ? Math.max(1, Math.min(lay.max, fit)) : 1;
@@ -559,7 +564,10 @@ export default function HomeGrid({ status, blocks, top = null }) {
                   grid-auto-flow:row dense; min-width:0; }
         .hg-cell:not(.hg-edit):has(> div:empty) { display:none; }
         .hg-notitle .tile-head { display:none !important; }
-        .hg-tint-soft > div > .card { background:linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 24%, var(--surface)), color-mix(in srgb, var(--hg-b) 9%, var(--surface))) !important;
+        .hg-tint-soft { --hg-base: var(--surface); }
+        .hg-tint-soft > div > .card { --surface: color-mix(in srgb, var(--hg-a) 7%, transparent); --surface2: color-mix(in srgb, var(--hg-a) 13%, transparent);
+          --border: color-mix(in srgb, var(--hg-a) 24%, transparent); }
+        .hg-tint-soft > div > .card { background:linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 24%, var(--hg-base)), color-mix(in srgb, var(--hg-b) 9%, var(--hg-base))) !important;
           border-color:color-mix(in srgb, var(--hg-a) 30%, transparent) !important; }
         .hg-tint-vivid > div > .card { background:linear-gradient(135deg, var(--hg-a), var(--hg-b)) !important; border-color:transparent !important;
           box-shadow:0 8px 22px color-mix(in srgb, var(--hg-a) 30%, transparent) !important; color:#fff;
@@ -587,16 +595,16 @@ export default function HomeGrid({ status, blocks, top = null }) {
         .hg-tint-soft.hg-ts-glow > div > .card { background:
           radial-gradient(circle at 92% -10%, color-mix(in srgb, var(--hg-a) 38%, transparent), transparent 46%),
           radial-gradient(color-mix(in srgb, var(--hg-a) 30%, transparent) 1px, transparent 1.5px) 0 0 / 18px 18px,
-          linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 16%, var(--surface)), color-mix(in srgb, var(--hg-b) 6%, var(--surface))) !important; }
+          linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 16%, var(--hg-base)), color-mix(in srgb, var(--hg-b) 6%, var(--hg-base))) !important; }
         .hg-tint-soft.hg-ts-bubbles > div > .card { background:
           radial-gradient(circle at calc(100% - 22px) 18px, color-mix(in srgb, var(--hg-a) 26%, transparent) 0 34px, transparent 35px),
           radial-gradient(circle at 12% calc(100% + 18px), color-mix(in srgb, var(--hg-b) 20%, transparent) 0 52px, transparent 53px),
           radial-gradient(circle at 68% 78%, color-mix(in srgb, var(--hg-a) 16%, transparent) 0 14px, transparent 15px),
           radial-gradient(circle at 40% 18%, color-mix(in srgb, var(--hg-a) 14%, transparent) 0 8px, transparent 9px),
-          linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 12%, var(--surface)), var(--surface)) !important; }
+          linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 12%, var(--hg-base)), var(--hg-base)) !important; }
         .hg-tint-soft.hg-ts-glass > div > .card { background:
           linear-gradient(165deg, rgba(255,255,255,0.22), rgba(255,255,255,0.03) 46%, rgba(255,255,255,0) 60%),
-          linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 22%, var(--surface)), color-mix(in srgb, var(--hg-b) 10%, var(--surface))) !important;
+          linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 22%, var(--hg-base)), color-mix(in srgb, var(--hg-b) 10%, var(--hg-base))) !important;
           box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--hg-a) 30%, transparent), inset 0 1px 0 rgba(255,255,255,0.35) !important; }
         .hg-notitle .frame-label { display:none !important; }
         .hg-notitle .frame-head:not(:has(.frame-extra)) { display:none !important; }
