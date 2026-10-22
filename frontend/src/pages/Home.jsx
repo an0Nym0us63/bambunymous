@@ -416,7 +416,8 @@ function SlotDetail({ slot, num, isOnHead, headSlot, fitH = null }) {
   React.useEffect(() => {
     const fid = ((isOnHead && headSlot ? headSlot.filament_id : slot?.filament_id) || "").toUpperCase();
     const col  = rawColor.slice(0,6).toLowerCase();
-    if (!fid) { setFilInfo(null); return; }
+    setFilInfo(null);   // on change d'emplacement : rien de l'ancien ne reste affiche
+    if (!fid) return;
     client.get("/filaments/filaments")
       .then(r => {
         const fils = r.data || [];
@@ -444,7 +445,10 @@ function SlotDetail({ slot, num, isOnHead, headSlot, fitH = null }) {
   const bg = isHead ? "rgba(59,130,246,0.04)" : "var(--surface2)";
 
   // Couleur swatch : colors_array de notre filament si dispo, sinon couleur du slot
-  const swatchHexes = filInfo?.colors_array
+  // la couleur est celle de l'emplacement ; celle du catalogue seulement si c'est le meme
+  // filament a la meme couleur (un repli sur le seul profil donnerait un autre coloris)
+  const exact = filInfo && (filInfo.color || "").toLowerCase().slice(0, 6) === rawColor.slice(0, 6).toLowerCase();
+  const swatchHexes = exact && filInfo.colors_array
     ? filInfo.colors_array.split(",").map(c => c.trim())
     : cssColor ? [cssColor] : [];
   const multiType = filInfo?.multicolor_type;
@@ -456,7 +460,8 @@ function SlotDetail({ slot, num, isOnHead, headSlot, fitH = null }) {
   // tuile a hauteur choisie : la couleur en grand a gauche, l'essentiel a cote
   if (fitH != null) {
     const sw = Math.max(40, Math.min(110, fitH - 14));
-    const filName = filInfo ? (filInfo.translated_name || filInfo.name) : fid || (status === "empty" ? "Pas de hotend" : "Filament non identifié");
+    const filName = filInfo && exact ? (filInfo.translated_name || filInfo.name)
+      : filInfo ? (filInfo.fila_type || filInfo.material || fid) : fid || (status === "empty" ? "Pas de hotend" : "Filament non identifié");
     const sub = filInfo ? [filInfo.manufacturer, filInfo.fila_type || filInfo.material].filter(Boolean).join(" · ") : "";
     const chip = (txt, c, bg) => <span style={{ fontSize:10.5, fontWeight:800, padding:"1px 8px", borderRadius:20, color:c, background:bg, whiteSpace:"nowrap" }}>{txt}</span>;
     return (
@@ -535,7 +540,7 @@ function SlotDetail({ slot, num, isOnHead, headSlot, fitH = null }) {
             {/* Filament identifié */}
             <div style={{ padding:"10px 12px", borderRadius:10,
               background:"var(--surface)", border:"1px solid var(--border)" }}>
-              {filInfo ? (
+              {filInfo && exact ? (
                 <>
                   <p style={{ fontWeight:700, fontSize:13, color:"var(--text)", margin:"0 0 2px" }}>
                     {filInfo.translated_name || filInfo.name}
@@ -598,10 +603,10 @@ function DryBadge({ status }) {
   if (!ams || view === "rack" || !(ams.is_drying || ams.dry_time > 0)) return null;
   const m = ams.dry_time || 0, t = m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m} min`;
   return <>
-    <button onClick={e => { e.stopPropagation(); setOpen(true); }} title="Voir le séchage" style={{ display: "inline-flex", alignItems: "center", gap: 5,
-      padding: "1px 8px", borderRadius: 20, fontSize: 10.5, fontWeight: 800, color: "#f97316", cursor: "pointer", whiteSpace: "nowrap",
-      background: "var(--sheet-bg)", border: "1px solid rgba(249,115,22,0.5)", boxShadow: "0 3px 10px rgba(0,0,0,0.18)" }}>
-      <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#f97316", animation: "dryPulse 2.5s ease-in-out infinite" }}/>
+    <button onClick={e => { e.stopPropagation(); setOpen(true); }} title="Voir le séchage" style={{ display: "inline-flex", alignItems: "center", gap: 4,
+      height: 13, padding: "0 7px", borderRadius: "0 0 8px 8px", fontSize: 9.5, lineHeight: "13px", fontWeight: 800, color: "#fff", cursor: "pointer",
+      whiteSpace: "nowrap", background: "#f97316", border: "none", boxShadow: "0 2px 6px rgba(249,115,22,0.35)" }}>
+      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#fff", animation: "dryPulse 2.5s ease-in-out infinite" }}/>
       {ams.dry_temperature > 0 ? `${ams.dry_temperature}°` : "Séchage"}{m > 0 ? ` · ${t}` : ""}</button>
     {open && <DryPopup ams={ams} onClose={() => setOpen(false)}/>}
   </>;
@@ -902,6 +907,7 @@ function PrinterHead({ status, temps = true }) {
 function PrinterLine({ status }) {
   const [info, setInfo] = useState(null);
   const [big, setBig] = useState(false);
+  const [pop, setPop] = useState(false);
   const st = String(status?.status || "").toUpperCase();
   const live = LIVE_ST.includes(st);
   const paused = st === "PAUSE" || st === "PAUSED";
@@ -914,10 +920,10 @@ function PrinterLine({ status }) {
   const pct = Math.round(status?.progress || 0);
   const img = info ? apiUrl(`/prints/${info.id}/image`) : null;
   return (
-    <div className="card" role={img ? "button" : undefined} onClick={img ? () => setBig(true) : undefined}
+    <div className="card" role="button" onClick={() => setPop(true)}
       style={{ position: "relative", height: "100%", boxSizing: "border-box", padding: "0 12px", display: "flex", alignItems: "center", gap: 10,
-        overflow: "hidden", minWidth: 0, cursor: img ? "zoom-in" : "default" }}>
-      <span data-pk="" style={{ width: 36, height: 36, borderRadius: 9, overflow: "hidden", flexShrink: 0, background: "var(--surface2)",
+        overflow: "hidden", minWidth: 0, cursor: "pointer" }}>
+      <span data-pk="" onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ cursor: img ? "zoom-in" : undefined, width: 36, height: 36, borderRadius: 9, overflow: "hidden", flexShrink: 0, background: "var(--surface2)",
         display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
         {img ? <img src={img} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/> : <Printer size={17}/>}</span>
@@ -936,8 +942,153 @@ function PrinterLine({ status }) {
         <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
       {/* le portail renvoie ses clics a la ligne : on les arrete pour que fermer ne rouvre pas */}
       {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
+      {pop && <PrinterPopup status={status} img={img} name={info?.file_name || status?.print_name} onClose={() => setPop(false)}/>}
     </div>
   );
+}
+// ── Le statut complet de l'imprimante (popup) ───────────────────────────────
+// Ouverte d'un clic sur la tuile (la vignette, elle, s'ouvre en grand) : la
+// vignette et le nom, l'avancement en anneau, le temps restant et la fin, les
+// couches, chaque buse (l'active marquee), le plateau, la chambre, le filament
+// en cours, la vitesse, les alertes de la machine.
+const SPEEDS = { 1: ["Silencieux", "#22c55e"], 2: ["Standard", "#3b82f6"], 3: ["Sport", "#f59e0b"], 4: ["Ludicrous", "#ef4444"] };
+function ArcGauge({ value, target, max, color, label, active }) {
+  const S = 108, sw = 10, r = S / 2 - sw / 2 - 2, C = Math.PI * r;
+  const v = Math.max(0, Math.min(1, (value || 0) / (target > 0 ? target : max)));
+  const hot = (value || 0) > 40;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, padding: "8px 4px", borderRadius: 14,
+      background: active ? "rgba(59,130,246,0.08)" : "var(--surface2)", border: `1px solid ${active ? "rgba(59,130,246,0.45)" : "transparent"}`, minWidth: 0 }}>
+      <svg width={S} height={S / 2 + sw / 2 + 2} viewBox={`0 0 ${S} ${S / 2 + sw / 2 + 2}`} aria-hidden="true">
+        <path d={`M${sw / 2 + 2} ${S / 2} A${r} ${r} 0 0 1 ${S - sw / 2 - 2} ${S / 2}`} fill="none" stroke="var(--border)" strokeWidth={sw} strokeLinecap="round"/>
+        <path d={`M${sw / 2 + 2} ${S / 2} A${r} ${r} 0 0 1 ${S - sw / 2 - 2} ${S / 2}`} fill="none" stroke={hot ? color : "#94a3b8"} strokeWidth={sw}
+          strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - v)} style={{ transition: "stroke-dashoffset .6s" }}/>
+      </svg>
+      <div style={{ marginTop: -26, fontSize: 21, fontWeight: 900, color: hot ? color : "var(--text)", lineHeight: 1.1 }}>
+        {Math.round(value || 0)}°{target > 0 && <sup style={{ fontSize: 11, color: "var(--muted)", fontWeight: 700 }}>/{Math.round(target)}°</sup>}</div>
+      <div style={{ fontSize: 11.5, fontWeight: 800, color: active ? "#3b82f6" : "var(--text2)", display: "flex", alignItems: "center", gap: 4 }}>
+        {label}{active && <span style={{ fontSize: 9.5, padding: "1px 6px", borderRadius: 20, background: "rgba(59,130,246,0.15)" }}>active</span>}</div>
+    </div>
+  );
+}
+function PrinterPopup({ status, img, name, onClose }) {
+  const [big, setBig] = useState(false);
+  useEffect(() => {
+    const k = e => { if (e.key === "Escape" && !big) onClose(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [big]); // eslint-disable-line react-hooks/exhaustive-deps
+  const s = stateOf(status);
+  const st = String(status?.status || "").toUpperCase();
+  const live = LIVE_ST.includes(st), paused = st === "PAUSE" || st === "PAUSED";
+  const pct = Math.round(status?.progress || 0);
+  const fin = live && status?.remaining_minutes ? fmtFinishTime(status.remaining_minutes) : null;
+  const nozzles = status?.nozzles || [];
+  const ams = (status?.ams_list || []).find(a => a.id === status?.active_ams_id);
+  const tray = ams?.trays?.find(t => t.id === status?.active_tray_id);
+  const spool = tray?.spool_info;
+  const sp = SPEEDS[status?.speed_level];
+  const R = 70, C = 2 * Math.PI * R;
+  const section = t => <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)" }}>{t}</div>;
+  return createPortal(
+    <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 950, padding: 14,
+      background: "rgba(2,6,23,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflowY: "auto", padding: 18,
+        display: "flex", flexDirection: "column", gap: 16, background: "var(--sheet-bg)", boxShadow: "0 30px 80px rgba(0,0,0,0.45)", position: "relative" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <span style={{ width: 36, height: 36, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center",
+            background: `${s.color}22`, color: s.color }}><Printer size={18}/></span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>Imprimante</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: s.color }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}
+              {status?.fw_version && <span style={{ color: "var(--muted)", fontWeight: 600 }}>· micrologiciel {status.fw_version}</span>}</div>
+          </div>
+          <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)",
+            background: "var(--surface2)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div onClick={img ? () => setBig(true) : undefined} style={{ width: 120, height: 120, borderRadius: 16, overflow: "hidden", flexShrink: 0,
+            background: "var(--surface2)", cursor: img ? "zoom-in" : "default", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
+            {img ? <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+              : <Printer size={36}/>}
+          </div>
+          <div style={{ flex: "1 1 200px", minWidth: 0, display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ position: "relative", width: R * 2 + 14, height: R * 2 + 14, flexShrink: 0 }}>
+              <svg width={R * 2 + 14} height={R * 2 + 14} style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
+                <circle cx={R + 7} cy={R + 7} r={R} fill="none" stroke="var(--border)" strokeWidth="12"/>
+                <circle cx={R + 7} cy={R + 7} r={R} fill="none" stroke={s.color} strokeWidth="12" strokeLinecap="round"
+                  strokeDasharray={C} strokeDashoffset={C * (1 - (live ? pct : 0) / 100)} style={{ transition: "stroke-dashoffset .6s" }}/>
+              </svg>
+              <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+                <span style={{ fontSize: 30, fontWeight: 900, color: s.color, lineHeight: 1 }}>{live ? `${pct}%` : "—"}</span>
+                {paused && <span style={{ fontSize: 11, fontWeight: 800, color: s.color }}>en pause</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", marginTop: -4 }}>{name || status?.print_name || "Rien en cours"}</div>
+
+        {live && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(96px, 1fr))", gap: 8 }}>
+          {[["Reste", fmtTime(status.remaining_minutes) || "—"], ["Fin", fin ? `${fin.dayDiff ? "demain " : ""}${fin.time}` : "—"],
+            ...(status.total_layers > 0 ? [["Couche", `${status.layer} / ${status.total_layers}`]] : [])].map(([l, v]) => (
+            <div key={l} style={{ padding: "10px 12px", borderRadius: 12, background: "var(--surface2)" }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>{l}</div>
+              <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{v}</div></div>))}
+        </div>}
+        {live && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ height: 10, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}>
+            <div style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg, ${s.color}, ${s.color}cc)`, boxShadow: `0 0 10px ${s.color}88` }}/></div>
+          {status.total_layers > 0 && <div style={{ height: 6, borderRadius: 4, background: "var(--border)", overflow: "hidden" }} title="Couches">
+            <div style={{ height: "100%", width: `${Math.round(100 * status.layer / status.total_layers)}%`, background: "#8b5cf6" }}/></div>}
+        </div>}
+
+        {status?.connected && <>
+          {section("Températures")}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(112px, 1fr))", gap: 8 }}>
+            {nozzles.map(n => <ArcGauge key={n.id} value={n.temp} target={n.target} max={300} color="#f97316"
+              label={nozzles.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse"} active={nozzles.length > 1 && n.active}/>)}
+            <ArcGauge value={status.bed_temp} target={status.target_bed_temp} max={120} color="#ef4444" label="Plateau"/>
+            {status.chamber_temp > 0 && <ArcGauge value={status.chamber_temp} target={status.target_chamber_temp} max={70} color="#eab308" label="Chambre"/>}
+          </div>
+        </>}
+
+        {(tray && !tray.empty) || sp ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
+          {tray && !tray.empty && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, background: "var(--surface2)" }}>
+            <span style={{ width: 40, height: 40, borderRadius: "50%", flexShrink: 0, background: `#${String(tray.color || "888").replace("#", "").slice(0, 6)}`,
+              boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2), 0 0 0 3px var(--surface)" }}/>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>Filament en cours · {slotLabel(status.active_ams_id, status.active_tray_id)}</div>
+              <div style={{ fontSize: 14.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {spool?.translated_name || spool?.name || tray.filament_type || "?"}</div>
+              <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>
+                {[spool?.fila_type || tray.filament_type, spool?.remaining_weight_g != null ? `${Math.round(spool.remaining_weight_g)} g` : tray.remain != null ? `${tray.remain} %` : null].filter(Boolean).join(" · ")}</div>
+            </div>
+          </div>}
+          {sp && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, background: "var(--surface2)" }}>
+            <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+              background: `${sp[1]}22`, color: sp[1], fontSize: 18 }}>⚡</span>
+            <div><div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>Vitesse</div>
+              <div style={{ fontSize: 14.5, fontWeight: 900, color: sp[1] }}>{sp[0]}{status.speed_mag ? <span style={{ color: "var(--muted)", fontWeight: 700 }}> · {status.speed_mag} %</span> : null}</div></div>
+          </div>}
+        </div> : null}
+
+        {status?.hms_decoded?.length > 0 && <>
+          {section("Alertes de la machine")}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {status.hms_decoded.map((h, i) => { const sc = HMS_SEV[h.severity] || HMS_SEV.info; return (
+              <a key={i} href={h.wiki} target="_blank" rel="noreferrer" style={{ display: "flex", gap: 10, alignItems: "flex-start", textDecoration: "none",
+                padding: "9px 11px", borderRadius: 12, background: `${sc.color}12`, border: `1px solid ${sc.color}44` }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: sc.color, marginTop: 5, flexShrink: 0 }}/>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--text)", lineHeight: 1.4 }}>
+                  <b style={{ color: sc.color, fontSize: 10.5, textTransform: "uppercase", marginRight: 6 }}>{sc.label}</b>{h.label || h.code}</span>
+                <ExternalLink size={13} style={{ color: "var(--muted)", flexShrink: 0, marginTop: 2 }}/></a>); })}
+          </div>
+        </>}
+        {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
+      </div>
+    </div>, document.body);
 }
 // toute la largeur sur une rangee : un bandeau. La vignette (un clic l'ouvre en grand),
 // le nom, le pourcentage en grand, le temps restant, l'heure de fin, la couche, la barre ;
@@ -945,6 +1096,7 @@ function PrinterLine({ status }) {
 function PrinterStrip({ status, showFin = true, showLayer = true }) {
   const [info, setInfo] = useState(null);
   const [big, setBig] = useState(false);
+  const [pop, setPop] = useState(false);
   const box = useRef(null);
   const [W, setW] = useState(0);
   useEffect(() => {
@@ -989,7 +1141,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
   const bottom = !side && live && (status?.connected || (showLayer && status.total_layers > 0));
   const layerInline = showLayer && status?.total_layers > 0 && side;
   return (
-    <div ref={box} style={{ display: "flex", flexDirection: "column", gap: 5, height: "100%", minWidth: 0, minHeight: 0, overflow: "hidden" }}>
+    <div ref={box} onClick={() => setPop(true)} style={{ display: "flex", flexDirection: "column", gap: 5, height: "100%", minWidth: 0, minHeight: 0, overflow: "hidden", cursor: "pointer" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minHeight: 0, minWidth: 0 }}>
         <div onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ height: "100%", aspectRatio: "1", maxHeight: 120, borderRadius: 14,
           overflow: "hidden", flexShrink: 0, background: "var(--surface2)", cursor: img ? "zoom-in" : "default", display: "flex", alignItems: "center",
@@ -1036,6 +1188,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
         </div>
       )}
       {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
+      {pop && <PrinterPopup status={status} img={img} name={info?.file_name || status?.print_name} onClose={() => setPop(false)}/>}
     </div>
   );
 }
@@ -1043,6 +1196,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
 function PrinterCompact({ status, size = "big", showFin = true, showLayer = true }) {
   const [info, setInfo] = useState(null);
   const [big, setBig] = useState(false);
+  const [pop, setPop] = useState(false);
   const st = String(status?.status || "").toUpperCase();
   const live = LIVE_ST.includes(st);
   useEffect(() => {
@@ -1081,13 +1235,15 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
       WebkitLineClamp: small ? 1 : 2, WebkitBoxOrient: "vertical" }}><Words text={info?.file_name || status?.print_name || s.label}/></div>
   );
   // le portail de l'agrandissement renvoie ses clics : on les arrete
+  const popup = pop && <PrinterPopup status={status} img={info ? apiUrl(`/prints/${info.id}/image`) : null} name={info?.file_name || status?.print_name}
+    onClose={() => setPop(false)}/>;
   const zoom = big && info && <span onClick={e => e.stopPropagation()}>
     <Lightbox images={[apiUrl(`/prints/${info.id}/image`)]} index={0} onClose={() => setBig(false)}/></span>;
   const paused = st === "PAUSE" || st === "PAUSED";
   // compacte : le nom en entier (sur deux lignes s'il le faut), puis l'avancement et le temps restant, puis la barre ;
   // hors impression, l'etat a la place
   if (small) return (
-    <div style={{ minHeight: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
+    <div onClick={() => setPop(true)} style={{ minHeight: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, cursor: "pointer" }}>
       <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)", lineHeight: 1.2, overflow: "hidden", display: "-webkit-box",
         WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflowWrap: "break-word" }}><Words text={info?.file_name || status?.print_name || "Imprimante"}/></div>
       <div style={{ display: "flex", alignItems: "center", gap: 9, minWidth: 0 }}>
@@ -1102,12 +1258,12 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
           <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
       </div>
       {bar}
-      {zoom}
+      {zoom}{popup}
     </div>
   );
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-      {zoom}
+    <div onClick={() => setPop(true)} style={{ display: "flex", flexDirection: "column", gap: 7, cursor: "pointer" }}>
+      {zoom}{popup}
       {thumb}
       {name}
       {live ? <>{facts}{bar}</> : <div style={{ fontSize: 12, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}

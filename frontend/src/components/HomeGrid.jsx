@@ -255,7 +255,7 @@ function Frame({ def, children, extra, item, summary, badge = null }) {
         {extra && <span className="frame-extra" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap",
           justifyContent: "flex-end" }}>{extra}</span>}
       </div>
-      {badge && <div style={{ position: "absolute", top: 2, right: 10, zIndex: 3 }}>{badge}</div>}
+      {badge && <div style={{ position: "absolute", top: 0, right: 18, zIndex: 3 }}>{badge}</div>}
       <div className="hg-frame-body" style={{ position: "relative", minWidth: 0, ...(fixed ? { flex: 1, minHeight: 0, overflowY: def.fit ? "hidden" : "auto" } : {}) }}>
         {fixed && def.fit ? <FitBox>{children}</FitBox> : children}</div>
     </div>
