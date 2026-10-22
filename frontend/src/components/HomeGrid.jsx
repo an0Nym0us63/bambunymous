@@ -54,7 +54,8 @@ const fixer = defs => x => {
   const d = defs[x?.id];
   if (!d) return null;
   const w = d.w.includes(x.w) ? x.w : d.w[0], hs = heightsOf(d, w);
-  return { id: x.id, w, h: hs.includes(x.h) ? x.h : hs[0], ...(x.o && typeof x.o === "object" ? { o: x.o } : {}) };
+  const h = x.h === 0.5 && hs.includes(1) ? 1 : x.h;
+  return { id: x.id, w, h: hs.includes(h) ? h : hs[0], ...(x.o && typeof x.o === "object" ? { o: x.o } : {}) };
 };
 // les options d'une tuile : celles de son type (avec leur valeur par defaut), et ce que la disposition en a fait
 // toutes les tuiles ont en plus une option commune : leur titre, affiche ou non
@@ -134,7 +135,7 @@ function normalize(lay, defs) {
   if (!Object.keys(layouts).length) return defaults(defs);
   return { v: 2, max: Math.max(1, Math.min(4, parseInt(lay.max) || 2)), layouts,
     ...(lay.top && typeof lay.top === "object" ? { top: lay.top } : {}),
-    ...(["soft", "vivid"].includes(lay.tint) ? { tint: lay.tint } : {}),
+    ...(["soft", "vivid", "banner"].includes(lay.tint) ? { tint: lay.tint } : {}),
     ...(TINT_STYLES.some(([k]) => k === lay.tintStyle) ? { tintStyle: lay.tintStyle } : {}),
     ...(lay.tintColor === "one" ? { tintColor: "one", tintOne: lay.tintOne === "banner" ? "banner" : Math.max(0, Math.min(TINTS.length - 1, parseInt(lay.tintOne) || 0)) } : {}) };
 }
@@ -175,7 +176,7 @@ function Cell({ item, def, edit, children, actions, options, drag, selected, onS
       onClick={edit ? e => { e.stopPropagation(); onSelect(); } : undefined}
       onDragStart={drag?.start} onDragOver={drag?.over} onDrop={drag?.drop} onDragEnd={drag?.end}
       style={{ gridColumn: `span ${item.w}`, gridRow: span, minWidth: 0, position: "relative", paddingBottom: GAP, boxSizing: "border-box",
-        ...(tint ? { "--hg-a": tint.a, "--hg-b": tint.b } : {}),
+        ...(tint ? { "--hg-a": tint.a, "--hg-b": tint.b, "--hg-c": tint.c || tint.a } : {}),
         ...(edit ? { outline: selected ? "3px solid #3b82f6" : "2px dashed rgba(59,130,246,0.55)", outlineOffset: 2, borderRadius: 16,
           cursor: "pointer",
           opacity: drag?.dragging ? 0.4 : 1 } : {}) }}>
@@ -244,7 +245,8 @@ function Frame({ def, children, extra, item, summary, badge = null }) {
         color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden" }}>{summary}{extra}</span>
     </div>
   );
-  return (
+  return (<>
+    {badge && <div style={{ position: "absolute", top: -7, right: 22, zIndex: 4 }}>{badge}</div>}
     <div className="card hg-frame" style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6, position: "relative",
       overflow: "hidden", height: "100%", boxSizing: "border-box", minWidth: 0 }}>
       <span aria-hidden="true" style={{ position: "absolute", right: -24, top: -24, width: 80, height: 80, borderRadius: "50%",
@@ -256,11 +258,10 @@ function Frame({ def, children, extra, item, summary, badge = null }) {
         {extra && <span className="frame-extra" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap",
           justifyContent: "flex-end" }}>{extra}</span>}
       </div>
-      {badge && <div style={{ position: "absolute", top: 0, right: 18, zIndex: 3 }}>{badge}</div>}
       <div className="hg-frame-body" style={{ position: "relative", minWidth: 0, ...(fixed ? { flex: 1, minHeight: 0, overflowY: def.fit ? "hidden" : "auto" } : {}) }}>
         {fixed && def.fit ? <FitBox>{children}</FitBox> : children}</div>
     </div>
-  );
+  </>);
 }
 
 // Le panneau des options d'une tuile (ou du bandeau) : chaque option avec son
@@ -367,8 +368,10 @@ export default function HomeGrid({ status, blocks, top = null }) {
   }, []);
   const [tints, setTints] = useState({});
   const [bannerTint, setBannerTint] = useState(null);
+  const [bannerExact, setBannerExact] = useState(null);
   // la teinte d'une tuile : la sienne (couleurs variees), ou la meme pour toutes
   const tintOf = id => !lay.tint ? null
+    : lay.tint === "banner" ? (bannerExact || { a: "#7C3AED", b: "#DB2777", c: "#F5D0FE" })
     : lay.tintColor === "one" ? (lay.tintOne === "banner" ? (bannerTint || TINTS[0]) : TINTS[lay.tintOne || 0])
     : tints[id] != null ? TINTS[tints[id]] : null;
   useLayoutEffect(() => {
@@ -380,6 +383,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
     const next = paint(rects, fixed);
     if (JSON.stringify(next) !== JSON.stringify(tints)) setTints(next);
     const bh = banner?.dataset.hues?.split(",");
+    if (bh?.length >= 3 && (bh[0] !== bannerExact?.a || bh[1] !== bannerExact?.b)) setBannerExact({ a: bh[0], b: bh[1], c: bh[2] });
     if (bh?.length >= 2) {
       // la teinte du bandeau, prise dans la palette (vive) : le soir, le bandeau est presque noir
       const h = hueOf(bh[0]) ?? hueOf(bh[1]);
@@ -505,7 +509,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
     } : null;
     return (
       <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} options={options} drag={edit ? drag : null}
-        tint={lay.tint && o._bg !== false ? tintOf(item.id) : null} tintMode={lay.tint} tintStyle={lay.tint ? lay.tintStyle || "glow" : null}
+        tint={lay.tint && o._bg !== false ? tintOf(item.id) : null} tintMode={lay.tint === "banner" ? "vivid" : lay.tint} tintStyle={lay.tint === "banner" ? "banner" : lay.tint ? lay.tintStyle || "glow" : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
         {item.h === 0.5 && def.mini ? def.mini(data, status, o, item)
           : def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}
@@ -591,6 +595,10 @@ export default function HomeGrid({ status, blocks, top = null }) {
           linear-gradient(165deg, rgba(255,255,255,0.32), rgba(255,255,255,0.04) 46%, rgba(255,255,255,0) 60%),
           linear-gradient(135deg, var(--hg-a), var(--hg-b)) !important;
           box-shadow:inset 0 0 0 1px rgba(255,255,255,0.35), inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 26px color-mix(in srgb, var(--hg-a) 32%, transparent) !important; }
+        .hg-tint-vivid.hg-ts-banner > div > .card { background:
+          radial-gradient(circle at 88% -30%, color-mix(in srgb, var(--hg-c) 55%, transparent), transparent 55%),
+          radial-gradient(rgba(255,255,255,0.16) 1px, transparent 1.5px) 0 0 / 18px 18px,
+          linear-gradient(120deg, var(--hg-a), var(--hg-b)) !important; box-shadow:0 14px 34px -18px var(--hg-b) !important; }
         /* en doux : les memes allures, en teinte legere sur le fond de la carte */
         .hg-tint-soft.hg-ts-glow > div > .card { background:
           radial-gradient(circle at 92% -10%, color-mix(in srgb, var(--hg-a) 38%, transparent), transparent 46%),
@@ -650,12 +658,12 @@ export default function HomeGrid({ status, blocks, top = null }) {
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <Palette size={15} style={{ color: "var(--muted)" }}/>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Fonds des tuiles</span>
-            {[[undefined, "neutres"], ["soft", "colorés doux"], ["vivid", "colorés vifs"]].map(([k, l]) => <button key={l}
+            {[[undefined, "neutres"], ["soft", "colorés doux"], ["vivid", "colorés vifs"], ["banner", "comme le bandeau"]].map(([k, l]) => <button key={l}
               onClick={() => setLay(x => { const y = { ...x }; if (k) y.tint = k; else delete y.tint; return y; })}
               style={{ height: 30, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12.5, border: "1px solid var(--border)",
                 background: lay.tint === k ? "#EC4899" : "var(--surface2)", color: lay.tint === k ? "#fff" : "var(--text2)" }}>{l}</button>)}
           </div>
-          {lay.tint && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {lay.tint && lay.tint !== "banner" && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <span style={{ width: 15 }}/>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Couleurs</span>
             {[["multi", "variées"], ["one", "une seule"]].map(([k, l]) => <button key={k}
@@ -671,7 +679,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
                   border: lay.tintOne === i ? "2px solid var(--text)" : "2px solid transparent", boxShadow: "0 0 0 1px rgba(0,0,0,0.1)" }}/>)}
             </span>}
           </div>}
-          {lay.tint && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {lay.tint && lay.tint !== "banner" && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <span style={{ width: 15 }}/>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Style</span>
             {TINT_STYLES.map(([k, l]) => <button key={k} onClick={() => setLay(x => ({ ...x, tintStyle: k }))}

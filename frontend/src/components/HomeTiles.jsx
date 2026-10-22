@@ -8,6 +8,7 @@ import client, { apiUrl } from "../api/client";
 import { mwImg } from "./MwImg";
 import LiveCamera from "./LiveCamera";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "../pages/Achievements";
+import { DryCard } from "./AMSSection";
 
 // Les tuiles de l'accueil (22/10/2026, refaites le meme jour). Chaque tuile :
 //  - connait sa place reelle (largeur et hauteur en pixels, mesurees) et s'agence
@@ -129,38 +130,48 @@ function Tile({ icon, color, label, to, zoom, onClick, badge, children, mini = f
     </div>
   );
 }
-// la tuile en grand : par-dessus la page, son detail, et un lien vers sa page
+// la tuile en grand : par-dessus la page, son detail, et un lien vers sa page.
+// Un en-tete degrade a la couleur de la tuile ; sur telephone, un panneau qui monte du bas.
 function Zoom({ icon, color, label, to, onClose, children }) {
   const nav = useNavigate();
   const [ref, box] = useMeasure();
+  const narrow = typeof window !== "undefined" && window.innerWidth < 560;
   useEffect(() => {
     const k = e => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const b = { W: box.W, H: box.H, zoom: true };
+  const big = React.isValidElement(icon) ? React.cloneElement(icon, { size: 22 }) : icon;
   return createPortal(
-    <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 900, padding: 14,
-      background: "rgba(2,6,23,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>
-      <div className="card" onClick={e => e.stopPropagation()} style={{ width: "min(780px, 100%)", height: "min(620px, 86vh)", padding: 16,
-        display: "flex", flexDirection: "column", gap: 12, position: "relative", overflow: "hidden", boxSizing: "border-box",
-        background: "var(--sheet-bg)", boxShadow: "0 30px 80px rgba(0,0,0,0.45)" }}>
-        <span aria-hidden="true" style={{ position: "absolute", right: -60, top: -60, width: 200, height: 200, borderRadius: "50%",
-          background: `${color}26`, pointerEvents: "none" }}/>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, position: "relative" }}>
-          <span style={{ width: 34, height: 34, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center",
-            background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 17, fontWeight: 900, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis",
-            whiteSpace: "nowrap" }}>{label}</span>
-          {to && <button onClick={() => { onClose(); nav(to); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 12px",
-            borderRadius: 10, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 12.5, color: "#fff", background: color }}>
-            Ouvrir<ArrowUpRight size={14}/></button>}
-          <button onClick={onClose} aria-label="Fermer" style={{ width: 34, height: 34, borderRadius: 10, border: "1px solid var(--border)",
-            background: "var(--surface2)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <X size={17}/></button>
+    <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 900, padding: narrow ? 0 : 14,
+      background: "rgba(2,6,23,0.55)", backdropFilter: "blur(6px)", display: "flex", alignItems: narrow ? "flex-end" : "center", justifyContent: "center",
+      cursor: "default", animation: "bn-fade .2s ease-out" }}>
+      <div onClick={e => e.stopPropagation()} style={{ width: narrow ? "100%" : "min(780px, 100%)", height: narrow ? "88vh" : "min(640px, 86vh)",
+        display: "flex", flexDirection: "column", position: "relative", overflow: "hidden", boxSizing: "border-box",
+        borderRadius: narrow ? "26px 26px 0 0" : 24, background: "var(--sheet-bg)", border: "1px solid var(--border)",
+        boxShadow: "0 30px 80px rgba(0,0,0,0.45)", animation: narrow ? "bn-sheet-up .3s cubic-bezier(.2,.8,.2,1)" : "bn-pop .24s cubic-bezier(.2,.8,.2,1)" }}>
+        {/* l'en-tete : un degrade de la couleur de la tuile, deux halos */}
+        <div style={{ position: "relative", padding: narrow ? "10px 16px 14px" : "16px 18px", overflow: "hidden", flexShrink: 0,
+          background: `linear-gradient(135deg, ${color}38, ${color}10 55%, transparent)` }}>
+          <span aria-hidden="true" style={{ position: "absolute", right: -50, top: -70, width: 180, height: 180, borderRadius: "50%", background: `${color}30` }}/>
+          <span aria-hidden="true" style={{ position: "absolute", right: 90, top: -30, width: 70, height: 70, borderRadius: "50%", background: `${color}1c` }}/>
+          {narrow && <div style={{ width: 42, height: 4, borderRadius: 4, background: "var(--border)", margin: "0 auto 10px" }}/>}
+          <div style={{ display: "flex", alignItems: "center", gap: 12, position: "relative" }}>
+            <span style={{ width: 44, height: 44, borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+              background: `linear-gradient(135deg, ${color}, ${color}bb)`, color: "#fff", boxShadow: `0 8px 20px ${color}55` }}>{big}</span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 900, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis",
+              whiteSpace: "nowrap", letterSpacing: "-.01em" }}>{label}</span>
+            {to && <button onClick={() => { onClose(); nav(to); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 13px",
+              borderRadius: 12, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 12.5, color: "#fff", background: color,
+              boxShadow: `0 6px 16px ${color}55` }}>Ouvrir<ArrowUpRight size={14}/></button>}
+            <button onClick={onClose} aria-label="Fermer" style={{ width: 36, height: 36, borderRadius: 12, border: "1px solid var(--border)",
+              background: "var(--surface)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <X size={17}/></button>
+          </div>
         </div>
-        <div ref={ref} style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: 12,
-          position: "relative" }}>
+        <div ref={ref} style={{ flex: 1, minHeight: 0, overflowY: "auto", overflowX: "hidden", display: "flex", flexDirection: "column", gap: 14,
+          padding: narrow ? "14px 16px 22px" : "16px 18px 20px", position: "relative" }}>
           {box.W > 0 && <BoxCtx.Provider value={b}>{kids(children, b)}</BoxCtx.Provider>}
         </div>
       </div>
@@ -545,7 +556,10 @@ function Next({ q, o, sz }) {
     <Tile icon={<ListChecks size={15}/>} color="#22C55E" label="À faire" to="/prints?tab=queue"
       mini={sz.h === 0.5} summary={q ? <>{ready}<span style={{ fontSize: 12, color: "var(--muted)" }}>/ {q.models?.length || 0} prêts</span></> : "…"}
       badge={q?.models?.length ? <span style={{ fontSize: 11, fontWeight: 800, color: "#16a34a" }}>{ready}/{q.models.length}</span> : null}
-      zoom={models.length ? <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{models.map(m => row(m, 56))}</div> : null}>
+      zoom={models.length ? <>
+        <Stats items={[["Modèles", models.length], ["Prêts", ready, "#16a34a"], ["À préparer", models.length - ready, "#d97706"],
+          ["Durée", fmtH(models.reduce((t, m) => t + (m.seconds || 0), 0))]]}/>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{models.map(m => row(m, 56))}</div></> : null}>
       {({ W, H }) => {
         if (!models.length) return <Empty>{q === undefined ? "…" : o.ready ? "Rien de prêt dans l'AMS" : "Rien dans « À faire »"}</Empty>;
         if (o.scroll) return <Scroller>{models.map((m, i) => row(m, i ? 34 : Math.min(52, H)))}</Scroller>;
@@ -571,7 +585,10 @@ function Last({ p, o, sz }) {
     <Tile icon={<History size={15}/>} color="#0EA5E9" label="Dernières impressions" to="/prints"
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis" }}>
         <span style={{ color: okOf(list[0]) ? "#22c55e" : "#ef4444" }}>● </span>{list[0].file_name || list[0].translated_name}</span>}
-      zoom={<div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{list.map(x => row(x, 56))}</div>}>
+      zoom={<>
+        <Stats items={[["Réussies", `${list.filter(okOf).length} / ${list.length}`, "#16a34a"], ["Durée", fmtH(list.reduce((t, x) => t + (x.duration_seconds || 0), 0))],
+          ["Poids", fmtG(list.reduce((t, x) => t + (x.total_weight_g || 0), 0))]]}/>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{list.map(x => row(x, 56))}</div></>}>
       {({ W, H }) => {
         if (o.scroll) return <Scroller>{list.map((x, i) => row(x, i ? 34 : Math.min(52, H)))}</Scroller>;
         return fitList(list, row, W, H);
@@ -597,7 +614,8 @@ function Stock({ s, o, sz }) {
   return (
     <Tile icon={<Package size={15}/>} color="#F59E0B" label="Stock" to="/filaments"
       mini={sz.h === 0.5} summary={<>{list.length}<span style={{ display: "inline-flex", gap: 2 }}>{low.slice(0, 3).map(x => <SpoolDot key={x.id} color={x.filament_color} pct={spoolPct(x)} size={22}/>)}</span></>}
-      zoom={<>{head}<H2>Les plus basses</H2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "6px 18px" }}>
+      zoom={<><Stats items={[["Bobines", list.length], ["Poids", fmtG(kg)], ["Sous 200 g", list.filter(x => (x.remaining_weight_g ?? 999) < 200).length, "#dc2626"],
+        ["Sous 15 %", list.filter(x => (spoolPct(x) ?? 1) < 0.15).length, "#d97706"]]}/><H2>Les plus basses</H2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: "6px 18px" }}>
         {low.slice(0, 40).map(line)}</div></>}>
       {({ W, H }) => {
         const rest = H - 34;
@@ -624,26 +642,64 @@ function Dry({ v, status, o, sz }) {
     <span data-pk="" style={{ width: 10, height: 10, borderRadius: "50%", background: hexCss(x.color), flexShrink: 0 }}/>
     <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</span>
     <span style={{ fontWeight: 800, color: "#dc2626" }}>{x.age_days != null ? `${x.age_days} j` : "jamais"}</span></div>;
-  const rings = size => <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>{drying.map(a => {
-    const tot = (a.dry_duration || 0) * 60, left = a.dry_time || 0;
-    return <div key={a.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-      <Ring value={tot ? 1 - left / tot : 0.5} size={size} color="#ef4444">{a.dry_temperature ? `${a.dry_temperature}°` : ""}</Ring>
-      <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text)" }}>{amsLab(a)}</span>
-      <Muted size={11}>encore {fmtDur(left)}</Muted></div>;
-  })}</div>;
+  const prog = a => { const tot = (a.dry_duration || 0) * 60; return tot ? Math.max(0, Math.min(1, 1 - (a.dry_time || 0) / tot)) : 0; };
+  // une unite qui seche : l'anneau (avancement, temperature au centre), son nom, le restant, la barre
+  const dryRow = (a, ring, W) => (
+    <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+      <span style={{ position: "relative", flexShrink: 0, display: "inline-flex" }}>
+        <Ring value={prog(a)} size={ring} color="#f97316">{a.dry_temperature ? `${a.dry_temperature}°` : ""}</Ring>
+        <span aria-hidden="true" style={{ position: "absolute", inset: -3, borderRadius: "50%", boxShadow: "0 0 14px rgba(249,115,22,0.45)",
+          animation: "dryPulse 2.5s ease-in-out infinite", pointerEvents: "none" }}/></span>
+      <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+          <span style={{ fontSize: ring >= 60 ? 16 : 13.5, fontWeight: 900, color: "var(--text)" }}>{amsLab(a)}</span>
+          {a.dry_filament && W >= 150 && <Muted size={11.5} style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{a.dry_filament}</Muted>}
+        </div>
+        <span style={{ fontSize: ring >= 60 ? 14 : 12, fontWeight: 800, color: "#ea580c", whiteSpace: "nowrap" }}>encore {fmtDur((a.dry_time || 0) * 60)}</span>
+        <div style={{ height: 5, borderRadius: 4, background: "var(--surface2)", overflow: "hidden" }}>
+          <div style={{ height: "100%", width: `${prog(a) * 100}%`, borderRadius: 4, background: "linear-gradient(90deg, #fb923c, #f97316)" }}/></div>
+      </div>
+    </div>
+  );
   const hero = <Hero visual={o.ring && k?.active ? s => <Ring value={(k.ok || 0) / k.active} size={s} color="#22c55e">{Math.round(100 * (k.ok || 0) / k.active)}%</Ring> : null}
     value={v ? k?.to_dry ?? 0 : "…"} unit="à sécher" color={k?.to_dry ? "#dc2626" : "var(--text)"}
     sub={k && `${k.soon ? `${k.soon} bientôt · ` : ""}${k.ok || 0} au sec${o.inams && k.to_dry_in_ams ? ` · ${k.to_dry_in_ams} dans l'AMS` : ""}`}/>;
   return (
-    <Tile icon={<Flame size={15}/>} color="#EF4444" label="Séchage" to="/stats?tab=drying"
-      mini={sz.h === 0.5} summary={drying.length ? <span style={{ fontSize: 13, color: "#ef4444" }}>{drying.length} en cours · {fmtDur(drying[0].dry_time)}</span>
+    <Tile icon={<Flame size={15}/>} color="#F97316" label="Séchage" to="/stats?tab=drying"
+      mini={sz.h === 0.5} summary={drying.length ? <span style={{ fontSize: 13, color: "#ef4444" }}>{drying.length} en cours · {fmtDur(drying[0].dry_time * 60)}</span>
         : <span style={{ color: k?.to_dry ? "#dc2626" : "var(--text)" }}>{k?.to_dry ?? "…"} <span style={{ fontSize: 12, color: "var(--muted)" }}>à sécher</span></span>}
-      zoom={<>{drying.length > 0 && <><H2>En cours</H2>{rings(110)}</>}<BoxCtx.Provider value={{ W: 600, H: 120, zoom: true }}>{hero}</BoxCtx.Provider>
+      zoom={<>
+        {drying.map(a => <div key={a.id} style={{ padding: 16, borderRadius: 18, background: "linear-gradient(135deg, rgba(249,115,22,0.12), transparent 60%), var(--surface2)" }}>
+          <div style={{ fontSize: 15, fontWeight: 900, color: "var(--text)", marginBottom: 10 }}>{amsLab(a)}{a.dry_filament ? <Muted size={12.5}> · {a.dry_filament}</Muted> : null}</div>
+          <DryCard ams={a}/></div>)}
+        {k && <Stats items={[["À sécher", k.to_dry ?? 0, k.to_dry ? "#dc2626" : undefined], ["Bientôt", k.soon ?? 0, "#d97706"], ["Au sec", k.ok ?? 0, "#16a34a"],
+          ["Dans l'AMS", k.to_dry_in_ams ?? 0]]}/>}
         {todo.length > 0 && <><H2>À sécher</H2><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "6px 18px" }}>{todo.map(line)}</div></>}</>}>
       {({ W, H }) => {
+        if (drying.length === 1 && H >= 150) {
+          // une seule unite et de la place : en grand (anneau centre ou a gauche quand c'est large)
+          const a = drying[0], wide = W >= 260;
+          const ring = Math.floor(wide ? Math.min(H - 10, W * 0.42, 170) : Math.min(W * 0.78, H - 96, 170));
+          const end = a.dry_time ? new Date(Date.now() + a.dry_time * 60000) : null;
+          const info = <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: wide ? "flex-start" : "center", textAlign: wide ? "left" : "center", minWidth: 0 }}>
+            <span style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{amsLab(a)}{a.dry_filament ? <Muted size={12.5}> · {a.dry_filament}</Muted> : null}</span>
+            <span style={{ fontSize: 15, fontWeight: 900, color: "#ea580c" }}>encore {fmtDur((a.dry_time || 0) * 60)}</span>
+            {end && <Muted size={12}>fin à {end.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}{a.dry_temperature ? ` · ${a.dry_temperature} °C` : ""}</Muted>}
+            <div style={{ width: wide ? "100%" : Math.min(W, 180), height: 6, borderRadius: 4, background: "var(--surface2)", overflow: "hidden", marginTop: 2 }}>
+              <div style={{ height: "100%", width: `${prog(a) * 100}%`, background: "linear-gradient(90deg, #fb923c, #f97316)" }}/></div>
+          </div>;
+          const big = <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+            <Ring value={prog(a)} size={ring} color="#f97316">{Math.round(prog(a) * 100)}%</Ring>
+            <span aria-hidden="true" style={{ position: "absolute", inset: -4, borderRadius: "50%", boxShadow: "0 0 22px rgba(249,115,22,0.45)",
+              animation: "dryPulse 2.5s ease-in-out infinite", pointerEvents: "none" }}/></span>;
+          return <div style={{ flex: 1, display: "flex", flexDirection: wide ? "row" : "column", alignItems: "center", justifyContent: "center", gap: wide ? 16 : 10 }}>
+            {big}{info}</div>;
+        }
         if (drying.length) {
-          const g = fitGrid(drying.length, W, H, { ar: 1, extra: 34, max: 120 });
-          return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}>{rings(Math.max(36, g.size))}</div>;
+          // une unite : grande si la place le permet ; plusieurs : une ligne chacune
+          const each = (H - 8 * (drying.length - 1)) / drying.length;
+          const ring = Math.max(34, Math.min(each, W < 215 ? 64 : 84, W * 0.42));
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>{drying.map(a => dryRow(a, Math.floor(ring), W))}</div>;
         }
         // l'anneau prend ce que la liste « a secher » laisse (rien de liste quand c'est bas)
         const listH = H < 120 || !todo.length ? 0 : Math.min(Math.round(H * 0.5), todo.length * 23 + 28);
@@ -737,7 +793,9 @@ function Friends({ f, o, sz }) {
   return (
     <Tile icon={<Users size={15}/>} color="#14B8A6" label="Copains" to="/stats?tab=friends" badge={<span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488" }}>{p.length}/{n}</span>}
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 13 }}>{p.length ? `${p.map(x => x.name).join(", ")} imprime${p.length > 1 ? "nt" : ""}` : "personne n'imprime"}</span>}
-      zoom={<>{p.length ? p.map(x => ringRow(x, 64)) : <Line>Personne n'imprime en ce moment.</Line>}{idle}</>}>
+      zoom={<><Stats items={[["Impriment", p.length, "#0d9488"], ["Au repos", Object.values(states).filter(s => s.state === "standby").length],
+        ["Éteintes", Object.values(states).filter(s => s.state === "off").length]]}/>
+        {p.length ? p.map(x => ringRow(x, 64)) : <Line>Personne n'imprime en ce moment.</Line>}</>}>
       {({ H }) => {
         const room = H - (idle && H >= 90 ? 22 : 0), each = (room - 8 * (p.length - 1)) / Math.max(1, p.length);
         // large et bas : les copains cote a cote, un anneau chacun, le nom dessous
@@ -885,7 +943,13 @@ function Wheel({ a, o, sz = { h: 1 } }) {
     cursor: "pointer", color: "#3b2300", width: full ? "100%" : undefined, background: spins ? "linear-gradient(135deg, #FDE68A, #F59E0B)" : "var(--surface2)" }}>
     {spins ? "Tourner" : "Voir"}</button>;
   return (
-    <Tile icon={<Dices size={15}/>} color="#EC4899" label="Roue et clés" onClick={() => nav("/stats?tab=achievements")}
+    <Tile icon={<Dices size={15}/>} color="#EC4899" label="Roue et clés" to="/stats?tab=achievements"
+      zoom={<div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18, paddingTop: 6 }}>
+        <WheelArt size={220} spin={spins > 0}/>
+        <div style={{ display: "flex", gap: 28 }}>{cells.map(([ic, n, l, c]) => <div key={l} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 34, fontWeight: 900, color: c }}>{ic}{n}</span>
+          <Muted size={13}>{l}</Muted></div>)}</div>
+        <div style={{ width: "min(320px, 100%)" }}>{btn(true)}</div></div>}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 10, fontSize: 14 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Dices size={13}/>{spins}</span>
         {o.keys && <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#d97706" }}><Key size={13}/>{k.balance}</span>}
@@ -1149,7 +1213,8 @@ function Feed({ f, o, sz }) {
         : <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, minWidth: 0 }}>
           {fresh > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#fff", background: "#3b82f6", borderRadius: 20, padding: "1px 7px" }}>{fresh}</span>}
           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{noEmoji(all[0].title)}</span></span>}
-      zoom={all.length ? <div>{all.map((x, i) => row(x, i, true, false))}</div> : null}>
+      zoom={all.length ? <><Stats items={[["Aujourd'hui", all.length], ["Non lus", fresh, "#3b82f6"]]}/>
+        <div>{all.map((x, i) => row(x, i, true, false))}</div></> : null}>
       {({ W, H }) => {
         if (!all.length) return <Empty>Rien de neuf.</Empty>;
         const detail = o.detail && W >= 300 && H >= 100;
@@ -1348,7 +1413,12 @@ function Countdown({ status, o, sz }) {
     value={live ? (left ? fmtDur(left * 60) : "bientôt") : "—"} unit={live ? (paused ? "en pause" : "restantes") : "rien en cours"}
     sub={live && [left && o.fin && `fin à ${finAt(left)}`, o.layer && status.total_layers > 0 && `couche ${status.layer} / ${status.total_layers}`].filter(Boolean).join(" · ")}/>;
   return (
-    <Tile icon={<Timer size={15}/>} color={color} label="Fin d'impression" zoom={live ? hero : null}
+    <Tile icon={<Timer size={15}/>} color={color} label="Fin d'impression" zoom={live ? <>
+      <BoxCtx.Provider value={{ W: 600, H: 180, zoom: true }}>{hero}</BoxCtx.Provider>
+      <div style={{ height: 10, borderRadius: 6, background: "var(--surface2)", overflow: "hidden" }}>
+        <div style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: color, boxShadow: `0 0 10px ${color}` }}/></div>
+      <Stats items={[["Reste", left ? fmtDur(left * 60) : "—"], ["Fin", left ? finAt(left) : "—"],
+        ["Couche", status.total_layers > 0 ? `${status.layer} / ${status.total_layers}` : "—"], ["Avancement", `${pct} %`, color]]}/></> : null}
       mini={sz.h === 0.5} summary={live ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
         <span style={{ color }}>{pct}%</span>{left > 0 && <>{fmtDur(left * 60)}<Muted>· {finAt(left)}</Muted></>}</span> : <Muted size={12.5}>rien en cours</Muted>}>
       {live ? hero : <Empty>Rien en cours d'impression</Empty>}
@@ -1368,7 +1438,12 @@ function Spool({ status, o, sz }) {
   const hero = t && <Hero visual={s => <SpoolDot color={t.color} pct={pct} size={s}/>} value={t.filament_type || "?"} unit={t.tray_id_name || amsLab(t.ams)}
     sub={[pct != null && `${Math.round(pct * 100)} % restant`, `${amsLab(t.ams)} · bac ${t.id + 1}`].filter(Boolean).join(" · ")}/>;
   return (
-    <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours" zoom={hero}
+    <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours" zoom={t && <>
+      <BoxCtx.Provider value={{ W: 600, H: 180, zoom: true }}>{hero}</BoxCtx.Provider>
+      <Stats items={[["Reste", t.spool_info?.remaining_weight_g != null ? `${Math.round(t.spool_info.remaining_weight_g)} g` : pct != null ? `${Math.round(pct * 100)} %` : "—"],
+        ["Emplacement", `${amsLab(t.ams)} · bac ${t.id + 1}`], ["Humidité de l'AMS", t.ams?.humidity ? `${t.ams.humidity} %` : "—", "#0ea5e9"],
+        ["Température de l'AMS", t.ams?.temp ? `${Number(t.ams.temp).toFixed(1).replace(".", ",")} °C` : "—"]]}/>
+      {t.spool_info?.translated_name && <Line>{t.spool_info.translated_name}{t.spool_info.fila_type ? ` · ${t.spool_info.fila_type}` : ""}</Line>}</>}
       mini={sz.h === 0.5} summary={t ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
         <SpoolDot color={t.color} pct={pct} size={22}/>{t.filament_type}{pct != null && <Muted>{Math.round(pct * 100)} %</Muted>}</span> : <Muted size={12.5}>aucun</Muted>}>
       {t ? hero : <Empty>{live ? "Bobine inconnue" : "Pas d'impression en cours"}</Empty>}
@@ -1437,7 +1512,12 @@ function Goal({ d, o, sz }) {
   const hero = <Hero visual={s => <Ring value={done} size={s} color={color}>{Math.round(done * 100)}%</Ring>}
     value={now == null ? "…" : fmt(now)} unit={`sur ${tf}`} sub={o.period === "week" ? "ces 7 derniers jours" : "ce mois-ci"}/>;
   return (
-    <Tile icon={<Target size={15}/>} color={color} label="Objectif" zoom={hero}
+    <Tile icon={<Target size={15}/>} color={color} label="Objectif" zoom={<>
+      <BoxCtx.Provider value={{ W: 600, H: 180, zoom: true }}>{hero}</BoxCtx.Provider>
+      <Stats items={[["Fait", now == null ? "…" : fmt(now), color], ["Objectif", tf],
+        ["Reste", now == null ? "…" : done >= 1 ? "atteint 🎉" : fmt(Math.max(0, target * scale - now))]]}/>
+      {o.period === "week" && week && <><H2>Les 7 derniers jours</H2><Bars values={week.map(val)} labels={week.map(x => x.day.toLocaleDateString("fr-FR", { weekday: "narrow" }))}
+        color={color} height={120} hi={6} showValues fmt={fmt}/></>}</>}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{Math.round(done * 100)} %<Muted>{now == null ? "" : `${fmt(now)} / ${tf}`}</Muted></span>}>
       {hero}
     </Tile>
@@ -1524,5 +1604,5 @@ export const TILES = {
         { hint: "En heures, en impressions ou en grammes selon la mesure." })] },
 };
 // chaque tuile se pose sur 1/2, 1, 2, 3 ou 4 rangees ; sa hauteur par defaut reste en tete
-export const HEIGHTS = [0.5, 1, 2, 3, 4];
-for (const t of Object.values(TILES)) t.h = [t.h[0], ...HEIGHTS.filter(x => x !== t.h[0])];
+export const HEIGHTS = [1, 2, 3, 4];
+for (const t of Object.values(TILES)) { const d = t.h[0] === 0.5 ? 1 : t.h[0]; t.h = [d, ...HEIGHTS.filter(x => x !== d)]; }

@@ -1377,7 +1377,7 @@ function Greeting({ status, o = {} }) {
     backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", whiteSpace: "nowrap" };
   const mini = size === "mini";
   return (
-    <div data-hues={[sky.a, sky.b].join(",")} className={`card home-hello${size === "compact" ? " hh-compact" : ""}${mini ? " hh-mini" : ""}`} style={{ position: "relative",
+    <div data-hues={[sky.a, sky.b, sky.c].join(",")} className={`card home-hello${size === "compact" ? " hh-compact" : ""}${mini ? " hh-mini" : ""}`} style={{ position: "relative",
       overflow: "hidden", border: "none", color: "#fff", background: `linear-gradient(120deg, ${sky.a}, ${sky.b})`,
       backgroundSize: opt("anim", false) ? "200% 200%" : undefined, animation: opt("anim", false) ? "hh-drift 14s ease-in-out infinite" : undefined,
       boxShadow: `0 14px 34px -18px ${sky.b}` }}>
@@ -1526,7 +1526,7 @@ export default function Home() {
   };
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {
-    printer: { label: "Imprimante", w: [2, 1], h: ["auto", 0.5, 1, 2, 3, 4], h1: [2, 3, 4, 1, 0.5], required: true,
+    printer: { label: "Imprimante", w: [2, 1], h: ["auto", 1, 2, 3, 4], h1: [2, 3, 4, 1], required: true,
       mini: (d, st) => <PrinterLine status={st}/>,
       summary: (d, st) => ["RUNNING", "PAUSE", "PAUSED"].includes(String(st?.status || "").toUpperCase())
         ? <span data-pk="" style={{ fontSize: 14 }}>{Math.round(st.progress || 0)} %</span> : null,
@@ -1549,7 +1549,7 @@ export default function Home() {
         { when: it => it.w !== 1, key: "open", label: "Volet déplié à l'ouverture", def: false },
         { when: it => it.w !== 1, key: "cam", label: "Caméra dans le volet", def: true },
         { when: it => it.w !== 1, key: "temps", label: "Températures dans le volet", def: true }] },
-    ams: { label: "AMS", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" },
+    ams: { label: "AMS", w: [2], h: ["auto", 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" },
       render: (d, st, o, item) => devices(st, "overview", o, item), fit: true,
       options: [
         { key: "org", label: "Organisation", def: "grid", group: "Disposition des AMS",
@@ -1558,13 +1558,13 @@ export default function Home() {
         { when: (it, o) => (o?.org ?? "grid") === "grid", key: "_amsGrid", label: "Ma grille", group: "Disposition des AMS",
           hint: "Commune à toutes les dispositions de l'accueil.", render: () => <AmsOrderEditor/> },
         { key: "climate", label: "Humidité et température sous chaque unité", def: true }] },
-    amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Layers size={15}/>, color: "#6366F1",
+    amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto", 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Layers size={15}/>, color: "#6366F1",
         badge: (st, item) => typeof item?.h === "number" && item.h >= 1 ? <DryBadge status={st}/> : null },
       render: (d, st, o, item) => devices(st, "detail", o, item), fit: true,
       options: [
         { key: "selector", label: "Choisir l'unité dans la tuile", def: true, hint: "Des onglets en tête de tuile ; sinon on la choisit dans la tuile AMS." },
         { key: "names", label: "Nom des bobines", def: true }] },
-    attention: { label: "Points d'attention", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: d => {
+    attention: { label: "Points d'attention", w: [2], h: ["auto", 1, 2, 3, 4], summary: d => {
         const cats = (d.attention?.categories || []).filter(c => c.total);
         return <span style={{ display: "inline-flex", gap: 6, fontSize: 13 }}>{cats.length ? cats.map(c => <span key={c.category} title={c.label}>
           {c.icon}<b style={{ color: "#b45309" }}>{c.total}</b></span>) : "rien à signaler"}</span>;

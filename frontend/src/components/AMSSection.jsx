@@ -439,12 +439,9 @@ function TrayRow({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loa
 // ── Le sechage en grand (popup) ─────────────────────────────────────────────
 // L'avancement (anneau et barre), le temps restant et l'heure de fin, la consigne
 // et la temperature actuelle, l'humidite, le filament.
-function DryPopup({ ams, onClose }) {
-  React.useEffect(() => {
-    const k = e => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+// le sechage d'une unite : l'anneau d'avancement, le temps restant et la fin, la barre,
+// la consigne, la temperature et l'humidite (dans sa fenetre, et dans la tuile Sechage en grand)
+function DryCard({ ams }) {
   const total = (ams.dry_duration || 0) * 60, left = ams.dry_time || 0;
   const done = total ? Math.max(0, Math.min(1, 1 - left / total)) : null;
   const fmt = m => { const h = Math.floor(m / 60), mm = Math.round(m % 60); return h ? `${h} h ${String(mm).padStart(2, "0")}` : `${mm} min`; };
@@ -457,6 +454,18 @@ function DryPopup({ ams, onClose }) {
       <div style={{ fontSize: 18, fontWeight: 900, color: color || "var(--text)", whiteSpace: "nowrap" }}>{value}</div>
     </div>
   );
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <DryCard ams={ams}/>
+    </div>
+  );
+}
+function DryPopup({ ams, onClose }) {
+  React.useEffect(() => {
+    const k = e => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   return createPortal(
     <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 950, padding: 14,
       background: "rgba(2,6,23,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1216,7 +1225,7 @@ function MapTraySheet({ tray, amsId, onClose, onMapped }) {
 
 
 // ── Section principale ─────────────────────────────────────────────────────
-export { AMSBox, AMSDetail, TrayBottomSheet, DryPopup, amsName, EXT_AMS_ID };
+export { AMSBox, AMSDetail, TrayBottomSheet, DryPopup, DryCard, amsName, EXT_AMS_ID };
 
 export default function AMSSection({ amsList, activeAmsId, activeTrayId, spoolLookup }) {
   // Dédupliquer par id au cas où le polling enverrait des doublons
