@@ -901,53 +901,67 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
   const fact = (Icon, text, color, size = 12.5) => <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size, fontWeight: 700,
     color: color || "var(--muted)", whiteSpace: "nowrap" }}><Icon/>{text}</span>;
   const side = W >= 470;
-  const temps = (size, gap) => <span style={{ display: "inline-flex", gap, flexShrink: 0, fontSize: size }}>
-    {nz && fact(IcoNozzle, `${Math.round(nz.temp || 0)}°`, (nz.temp || 0) > 40 ? "#ea580c" : undefined, size)}
-    {fact(IcoBed, `${Math.round(status?.bed_temp || 0)}°`, (status?.bed_temp || 0) > 40 ? "#dc2626" : undefined, size)}
-    {status?.chamber_temp > 0 && fact(IcoChamber, `${Math.round(status.chamber_temp)}°`, undefined, size)}
+  // les temperatures : chaque buse (D et G quand il y en a deux), le plateau, la chambre, avec leur consigne
+  const nozzles = status?.nozzles?.length ? status.nozzles : [];
+  const tempItem = (Icon, label, v, t, hot, size) => (
+    <span data-pk="" title={label} style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: size, fontWeight: 800, whiteSpace: "nowrap",
+      color: (v || 0) > 40 ? hot : "var(--muted)" }}><Icon/>
+      {label && nozzles.length > 1 && label.startsWith("Buse") && <span style={{ fontSize: size - 2, fontWeight: 900 }}>{label.slice(-1)}</span>}
+      {Math.round(v || 0)}°{t > 0 && <span style={{ color: "var(--muted)", fontWeight: 700 }}>/{Math.round(t)}°</span>}</span>
+  );
+  const temps = (size, gap) => <span style={{ display: "inline-flex", gap, flexShrink: 0, alignItems: "center" }}>
+    {nozzles.map(n => <React.Fragment key={n.id}>{tempItem(IcoNozzle, nozzles.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", n.temp, n.target, "#ea580c", size)}</React.Fragment>)}
+    {tempItem(IcoBed, "Plateau", status?.bed_temp, status?.target_bed_temp, "#dc2626", size)}
+    {status?.chamber_temp > 0 && tempItem(IcoChamber, "Chambre", status.chamber_temp, status.target_chamber_temp, "#ca8a04", size)}
   </span>;
+  // la ligne du bas (toute la largeur) : la couche et les temperatures, quand il n'y a pas de colonne a droite
+  const bottom = !side && live && (status?.connected || (showLayer && status.total_layers > 0));
+  const layerInline = showLayer && status?.total_layers > 0 && side;
   return (
-    <div ref={box} style={{ display: "flex", alignItems: "center", gap: 12, height: "100%", minWidth: 0 }}>
-      <div onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ height: "100%", aspectRatio: "1", minHeight: 64, maxHeight: 120, borderRadius: 14, overflow: "hidden",
-        flexShrink: 0, background: "var(--surface2)", cursor: img ? "zoom-in" : "default", display: "flex", alignItems: "center", justifyContent: "center",
-        color: "var(--muted)" }}>
-        {img ? <img src={img} alt="" onError={e => { e.currentTarget.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
-          : <Printer size={26}/>}
-      </div>
-      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
-            textOverflow: "ellipsis" }}><Words text={info?.file_name || status?.print_name || "Imprimante"}/></span>
-          {(!live || paused) && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
-            borderRadius: 20, whiteSpace: "nowrap", color: s.color, background: `${s.color}1f` }}>
-            <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
+    <div ref={box} style={{ display: "flex", flexDirection: "column", gap: 5, height: "100%", minWidth: 0, minHeight: 0, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minHeight: 0, minWidth: 0 }}>
+        <div onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ height: "100%", aspectRatio: "1", maxHeight: 120, borderRadius: 14,
+          overflow: "hidden", flexShrink: 0, background: "var(--surface2)", cursor: img ? "zoom-in" : "default", display: "flex", alignItems: "center",
+          justifyContent: "center", color: "var(--muted)" }}>
+          {img ? <img src={img} alt="" onError={e => { e.currentTarget.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+            : <Printer size={26}/>}
         </div>
-        {live ? <>
-          <div style={{ display: "flex", alignItems: "baseline", gap: "2px 12px", flexWrap: "wrap", minWidth: 0 }}>
-            <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 24, fontWeight: 900, color: s.color, lineHeight: 1,
-              fontVariantNumeric: "tabular-nums" }}>{paused && <Pause size={18}/>}{pct}%</span>
-            {status.remaining_minutes > 0 && fact(() => <Clock size={13}/>, fmtTime(status.remaining_minutes))}
-            {showFin && fin && fact(() => <Calendar size={13}/>, `${fin.dayDiff ? "demain " : ""}${fin.time}`)}
-            {showLayer && status.total_layers > 0 && W >= 330 && fact(() => <Layers size={13}/>, `${status.layer}/${status.total_layers}`)}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
+              textOverflow: "ellipsis", lineHeight: 1.2 }}><Words text={info?.file_name || status?.print_name || "Imprimante"}/></span>
+            {(!live || paused) && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
+              borderRadius: 20, whiteSpace: "nowrap", color: s.color, background: `${s.color}1f` }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
           </div>
-          <div style={{ height: 8, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}>
-            <div data-pk="" style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg, ${s.color}, ${s.color}cc)`,
-              boxShadow: `0 0 8px ${s.color}88`, transition: "width 1s" }}/></div>
-          {/* sous la barre : la couche (si elle n'a pas tenu plus haut) et, sans colonne de droite, les temperatures */}
-          {((showLayer && status.total_layers > 0 && W < 330) || (!side && status?.connected)) && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0, overflow: "hidden" }}>
-              {showLayer && status.total_layers > 0 && W < 330 && fact(() => <Layers size={12}/>, `${status.layer}/${status.total_layers}`, undefined, 11.5)}
-              {!side && status?.connected && <span style={{ marginLeft: "auto" }}>{temps(11.5, 6)}</span>}
-            </div>)}
-        </> : <div style={{ fontSize: 12.5, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
+          {live ? <>
+            {/* une seule ligne : ce qui ne tient pas est coupe, jamais renvoye a la ligne */}
+            <div style={{ display: "flex", alignItems: "baseline", gap: 12, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap" }}>
+              <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 24, fontWeight: 900, color: s.color, lineHeight: 1,
+                fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>{paused && <Pause size={18}/>}{pct}%</span>
+              {status.remaining_minutes > 0 && fact(() => <Clock size={13}/>, fmtTime(status.remaining_minutes))}
+              {showFin && fin && fact(() => <Calendar size={13}/>, `${fin.dayDiff ? "demain " : ""}${fin.time}`)}
+              {layerInline && fact(() => <Layers size={13}/>, `${status.layer}/${status.total_layers}`)}
+            </div>
+            <div style={{ height: 8, borderRadius: 6, background: "var(--border)", overflow: "hidden", flexShrink: 0 }}>
+              <div data-pk="" style={{ height: "100%", width: `${pct}%`, borderRadius: 6, background: `linear-gradient(90deg, ${s.color}, ${s.color}cc)`,
+                boxShadow: `0 0 8px ${s.color}88`, transition: "width 1s" }}/></div>
+          </> : <div style={{ fontSize: 12.5, color: "var(--muted)" }}><Words text={info ? "Dernière impression" : "Prête à imprimer"}/></div>}
+        </div>
+        {side && status?.connected && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end", flexShrink: 0 }}>
+            {tray && !tray.empty && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
+              <span style={{ width: 14, height: 14, borderRadius: "50%", background: `#${String(tray.color || "888").replace("#", "").slice(0, 6)}`,
+                boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>{tray.filament_type || "?"}
+              <span style={{ color: "var(--muted)", fontWeight: 700 }}>{slotLabel(status.active_ams_id, status.active_tray_id)}</span></span>}
+            {temps(12, 10)}
+          </div>
+        )}
       </div>
-      {side && status?.connected && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end", flexShrink: 0 }}>
-          {tray && !tray.empty && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
-            <span style={{ width: 14, height: 14, borderRadius: "50%", background: `#${String(tray.color || "888").replace("#", "").slice(0, 6)}`,
-              boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>{tray.filament_type || "?"}
-            <span style={{ color: "var(--muted)", fontWeight: 700 }}>{slotLabel(status.active_ams_id, status.active_tray_id)}</span></span>}
-          {temps(12.5, 10)}
+      {bottom && (
+        <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, overflow: "hidden", whiteSpace: "nowrap", flexShrink: 0 }}>
+          {showLayer && status.total_layers > 0 && fact(() => <Layers size={11}/>, `${status.layer}/${status.total_layers}`, undefined, W < 340 ? 10.5 : 11.5)}
+          {status?.connected && <span style={{ marginLeft: "auto" }}>{temps(W < 340 ? 10.5 : 11.5, W < 340 ? 5 : 9)}</span>}
         </div>
       )}
       {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
