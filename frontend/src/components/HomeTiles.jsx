@@ -9,6 +9,7 @@ import { mwImg } from "./MwImg";
 import LiveCamera from "./LiveCamera";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "../pages/Achievements";
 import { DryCard } from "./AMSSection";
+import SpoolSVG from "./SpoolSVG";
 
 // Les tuiles de l'accueil (22/10/2026, refaites le meme jour). Chaque tuile :
 //  - connait sa place reelle (largeur et hauteur en pixels, mesurees) et s'agence
@@ -1471,6 +1472,7 @@ function Countdown({ status, o, sz }) {
   );
 }
 // le filament en cours : la bobine qui imprime (sa couleur, sa matiere, ce qui reste)
+const slotOf = t => t.ams.id >= 128 ? amsLab(t.ams) : `${String.fromCharCode(65 + t.ams.id)}${t.id + 1}`;
 function activeTray(status) {
   const ams = (status?.ams_list || []).find(a => a.id === status?.active_ams_id);
   const tray = ams?.trays?.find(t => t.id === status?.active_tray_id);
@@ -1479,19 +1481,84 @@ function activeTray(status) {
 function Spool({ status, o, sz }) {
   const t = activeTray(status);
   const live = isLive(status);
-  const pct = t?.remain != null && t.remain >= 0 ? t.remain / 100 : null;
-  const hero = t && <Hero visual={s => <SpoolDot color={t.color} pct={pct} size={s}/>} value={t.filament_type || "?"} unit={t.tray_id_name || amsLab(t.ams)}
-    sub={[pct != null && `${Math.round(pct * 100)} % restant`, `${amsLab(t.ams)} · bac ${t.id + 1}`].filter(Boolean).join(" · ")}/>;
+  if (!t) return (
+    <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours">
+      <Empty>{live ? "Bobine inconnue" : "Pas d'impression en cours"}</Empty>
+    </Tile>
+  );
+  const si = t.spool_info || {};
+  const color = hexCss(si.color || t.color);
+  const colors = si.colors_array ? si.colors_array.split(",").map(c => hexCss(c.trim())) : [color];
+  const name = si.translated_name || si.name || t.filament_type || "Bobine";
+  const type = si.fila_type || si.material || t.filament_type;
+  const g = si.remaining_weight_g, tot = si.initial_weight_g;
+  const pct = g != null && tot ? Math.max(0, Math.min(1, g / tot)) : t.remain != null && t.remain >= 0 ? t.remain / 100 : null;
+  const slot = `${slotOf(t)} · ${amsLab(t.ams)}`;
+  const weight = g != null ? `${Math.round(g)} g` : pct != null ? `${Math.round(pct * 100)} %` : "—";
+  const barCol = pct == null ? "#94a3b8" : pct < 0.15 ? "#ef4444" : pct < 0.35 ? "#f59e0b" : color;
+  const bar = h => <div style={{ height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden" }}>
+    <div data-pk="" style={{ height: "100%", width: `${(pct ?? 0) * 100}%`, borderRadius: h, background: barCol, boxShadow: `0 0 8px ${barCol}66` }}/></div>;
+  const spool = size => <span data-pk="" style={{ display: "inline-flex", flexShrink: 0, filter: `drop-shadow(0 6px 14px ${color}55)` }}>
+    <SpoolSVG colors={colors} size={size} active={live} type={si.multicolor_type}/></span>;
+  const chip = (txt, c) => <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 800,
+    whiteSpace: "nowrap", color: c, background: `${c}1c` }}>{txt}</span>;
+  const ago = iso => { if (!iso) return "—"; const d = Math.round((Date.now() - new Date(iso).getTime()) / 86400000); return d <= 0 ? "aujourd'hui" : d === 1 ? "hier" : `il y a ${d} j`; };
   return (
-    <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours" zoom={t && <>
-      <BoxCtx.Provider value={{ W: 600, H: 180, zoom: true }}>{hero}</BoxCtx.Provider>
-      <Stats items={[["Reste", t.spool_info?.remaining_weight_g != null ? `${Math.round(t.spool_info.remaining_weight_g)} g` : pct != null ? `${Math.round(pct * 100)} %` : "—"],
-        ["Emplacement", `${amsLab(t.ams)} · bac ${t.id + 1}`], ["Humidité de l'AMS", t.ams?.humidity ? `${t.ams.humidity} %` : "—", "#0ea5e9"],
-        ["Température de l'AMS", t.ams?.temp ? `${Number(t.ams.temp).toFixed(1).replace(".", ",")} °C` : "—"]]}/>
-      {t.spool_info?.translated_name && <Line>{t.spool_info.translated_name}{t.spool_info.fila_type ? ` · ${t.spool_info.fila_type}` : ""}</Line>}</>}
-      mini={sz.h === 0.5} summary={t ? <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
-        <SpoolDot color={t.color} pct={pct} size={22}/>{t.filament_type}{pct != null && <Muted>{Math.round(pct * 100)} %</Muted>}</span> : <Muted size={12.5}>aucun</Muted>}>
-      {t ? hero : <Empty>{live ? "Bobine inconnue" : "Pas d'impression en cours"}</Empty>}
+    <Tile icon={<Disc3 size={15}/>} color="#8B5CF6" label="Filament en cours" to="/filaments"
+      mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13.5 }}>
+        <SpoolDot color={color} pct={pct} size={22}/>{name}<Muted>{weight}</Muted></span>}
+      zoom={<>
+        {/* la bobine en vedette, sur un fond de sa couleur */}
+        <div style={{ position: "relative", overflow: "hidden", borderRadius: 22, padding: 18, display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap",
+          background: `radial-gradient(circle at 15% 50%, ${color}55, transparent 60%), linear-gradient(135deg, ${color}22, transparent 70%), var(--surface2)` }}>
+          {spool(140)}
+          <div style={{ flex: "1 1 180px", minWidth: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{chip(slot, "#8B5CF6")}{live && chip("● en cours", "#22c55e")}
+              {si.needs_drying && chip("à sécher", "#0ea5e9")}{si.swatch === false && chip("échantillon à faire", "#f59e0b")}</div>
+            <div style={{ fontSize: 26, fontWeight: 900, color: "var(--text)", lineHeight: 1.1 }}>{name}</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text2)" }}>{[type, si.brand].filter(Boolean).join(" · ")}</div>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
+              <span style={{ fontSize: 30, fontWeight: 900, color: barCol }}>{weight}</span>
+              {tot && g != null && <Muted size={13}>sur {Math.round(tot)} g · {Math.round((pct ?? 0) * 100)} %</Muted>}</div>
+            {bar(10)}
+          </div>
+        </div>
+        <Stats items={[
+          ["Stock de ce filament", si.filament_stock_g != null ? fmtG(si.filament_stock_g) : "—"],
+          ["Prix", si.price ? fmtEur(si.price_override || si.price) : "—"],
+          ["Humidité de l'AMS", t.ams?.humidity ? `${t.ams.humidity} %` : "—", "#0ea5e9"],
+          ["Température de l'AMS", t.ams?.temp ? `${Number(t.ams.temp).toFixed(1).replace(".", ",")} °C` : "—"],
+          ["Dernier séchage", ago(si.last_dried_at)],
+          ["Première utilisation", si.first_used_at ? new Date(si.first_used_at).toLocaleDateString("fr-FR") : "—"]]}/>
+        {si.comment && <Line>{si.comment}</Line>}</>}>
+      {({ W, H }) => {
+        const narrow = W < 215;
+        // etroite et haute : la bobine au centre, le reste dessous
+        if (narrow && H >= 150) {
+          const sp = Math.floor(Math.min(W * 0.62, H - 92, 130));
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 5, textAlign: "center", minWidth: 0 }}>
+            {spool(sp)}
+            <span style={{ fontSize: 15, fontWeight: 900, color: "var(--text)", maxWidth: "100%", ...clamp(1) }}>{name}</span>
+            <Muted size={11.5}>{slot}</Muted>
+            <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 13, fontWeight: 900, color: barCol, whiteSpace: "nowrap" }}>{weight}</span><div style={{ flex: 1 }}>{bar(6)}</div></div>
+          </div>;
+        }
+        // sinon en ligne : la bobine a gauche (a la hauteur), le nom, la matiere, le poids et sa jauge
+        const sp = Math.floor(Math.max(36, Math.min(H - 4, narrow ? 64 : 104, W * 0.36)));
+        return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: narrow ? 8 : 14, minWidth: 0 }}>
+          {spool(sp)}
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: narrow ? 2 : 4 }}>
+            {!narrow && H >= 90 && <div>{chip(slot, "#8B5CF6")}</div>}
+            <span style={{ fontSize: narrow ? 14 : 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15, ...clamp(narrow && H >= 80 ? 2 : 1) }}>{name}</span>
+            <span style={{ fontSize: narrow ? 11 : 12.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {narrow ? slot : [type, si.brand].filter(Boolean).join(" · ")}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: narrow ? 12.5 : 15, fontWeight: 900, color: barCol, whiteSpace: "nowrap" }}>{weight}</span>
+              <div style={{ flex: 1, minWidth: 20 }}>{bar(narrow ? 5 : 7)}</div></div>
+          </div>
+        </div>;
+      }}
     </Tile>
   );
 }
