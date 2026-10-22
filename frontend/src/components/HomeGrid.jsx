@@ -125,6 +125,7 @@ export default function HomeGrid({ status, blocks }) {
   const [edit, setEdit] = useState(false);
   const [dragId, setDragId] = useState(null);
   const [sel, setSel] = useState(null);
+  const [pick, setPick] = useState(null);            // colonne dont la case « + » est ouverte
   const saved = useRef(null);
   const view = wide ? "dash" : "mobile";
 
@@ -181,11 +182,12 @@ export default function HomeGrid({ status, blocks }) {
   const hidden = Object.keys(defs).filter(id => !shown.has(id));
   // une tuile ajoutee va dans la colonne la moins chargee (les blocs « auto » comptent pour 3 rangees)
   const load = c => c.reduce((n, x) => n + (x.h === "auto" ? 3 : x.h) * (x.w === 2 ? 2 : 1), 0);
-  const add = id => {
+  const add = (id, col = null) => {
     const next = cols.map(c => [...c]);
-    const ci = next.reduce((b, c, i) => load(c) < load(next[b]) ? i : b, 0);
+    const ci = col ?? next.reduce((b, c, i) => load(c) < load(next[b]) ? i : b, 0);
     next[ci].push({ id, w: defs[id].w[0], h: defs[id].h[0] });
     setCols(next);
+    setPick(null);
   };
   const setNCols = n => setLay(l => {
     const cur = l.dash.columns.map(c => [...c]);
@@ -285,9 +287,22 @@ export default function HomeGrid({ status, blocks }) {
         {cols.map((c, ci) => (
           <div key={ci} className="hg-col">
             {c.map(item => renderItem(item, ci))}
-            {edit && wide && (
-              <div className="hg-drop" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); dropOn(null, ci); }}>
-                {c.length ? "Déposer ici" : "Colonne vide · dépose une tuile"}</div>
+            {edit && (
+              <div className="hg-drop" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); dropOn(null, ci); }}
+                style={{ flexDirection: "column", gap: 8, padding: 10, cursor: hidden.length ? "pointer" : "default" }}
+                onClick={() => hidden.length && setPick(p => p === ci ? null : ci)}>
+                {/* la case « + » : les tuiles pas encore en place, a poser dans cette colonne */}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6, color: hidden.length ? "#3b82f6" : "var(--muted)" }}>
+                  <Plus size={16}/>{hidden.length ? "Ajouter une tuile" : "Toutes les tuiles sont en place"}
+                  {wide && <span style={{ color: "var(--muted)", fontWeight: 600 }}> · ou dépose-en une ici</span>}</span>
+                {pick === ci && (
+                  <div onClick={e => e.stopPropagation()} style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center" }}>
+                    {hidden.map(id => <button key={id} onClick={() => add(id, ci)} style={{ display: "inline-flex", alignItems: "center", gap: 4,
+                      padding: "6px 11px", borderRadius: 20, cursor: "pointer", fontSize: 12, fontWeight: 700, border: "1px solid rgba(59,130,246,0.5)",
+                      background: "var(--surface)", color: "#3b82f6" }}><Plus size={13}/>{defs[id].label}</button>)}
+                  </div>
+                )}
+              </div>
             )}
           </div>
         ))}
