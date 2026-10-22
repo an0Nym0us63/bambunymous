@@ -136,8 +136,13 @@ export default function Achievements({ embedded = false }) {
       <GradePlate v={data.score_max ? data.score / data.score_max : 0} friend={atFriend}/>
 
       {/* Bilan : score (jauge), vitrine des medailles, puis le tresor (cles, tickets, machine) */}
-      <div className="card" style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:16,
+      <div className="card" style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:16, position:"relative",
         background:"linear-gradient(135deg, rgba(245,183,0,0.10), rgba(139,92,246,0.10)), var(--surface)" }}>
+        {/* les regles : un petit « ? » discret dans le coin de la carte */}
+        <button onClick={() => setRules(true)} aria-label="Règles des succès" title="Règles : paliers, points, clés, secrets"
+          style={{ position:"absolute", top:8, right:8, zIndex:2, width:22, height:22, borderRadius:"50%", border:"none", background:"transparent",
+            color:"var(--muted)", fontSize:12, fontWeight:900, cursor:"pointer", opacity:0.65, display:"flex", alignItems:"center", justifyContent:"center",
+            boxShadow:"inset 0 0 0 1.5px var(--border)" }}>?</button>
         <div style={{ display:"flex", gap:18, alignItems:"center", flexWrap:"wrap" }}>
           <ScoreHero data={data}/>
           <div style={{ flex:"2 1 300px", minWidth:0, display:"flex", flexDirection:"column", gap:8 }}>
@@ -150,10 +155,6 @@ export default function Achievements({ embedded = false }) {
                 style={usageBtn}><TicketStub size={0.7}/> {data.tickets_used} utilisé{data.tickets_used > 1 ? "s" : ""} ▸</button>}
               {data.keys_spent > 0 && <button onClick={() => setUsage("keys")} title="Ce que tes clés ont révélé"
                 style={usageBtn}>🔑 {data.keys_spent} dépensée{data.keys_spent > 1 ? "s" : ""} ▸</button>}
-              <span style={{ flex:1 }}/>
-              <button onClick={() => setRules(true)} aria-label="Règles des succès" title="Règles : paliers, points, clés, secrets"
-                style={{ width:26, height:26, borderRadius:"50%", border:"1px solid var(--border)", background:"var(--surface2)",
-                  color:"var(--text2)", fontSize:13, fontWeight:900, cursor:"pointer", flexShrink:0 }}>?</button>
             </div>
             <MedalShelf tiers={shelfTiers(data.tiers)} medals={data.medals} onOpen={t => setVitrine(t)}/>
           </div>
@@ -562,7 +563,8 @@ function ScoreRing({ score, max, tiers, size = 138 }) {
           style={{ transition:"stroke-dashoffset 1.2s cubic-bezier(.2,.8,.2,1)", filter:`drop-shadow(0 0 4px ${t.color})` }}/>
       </svg>
       <div style={{ position:"absolute", inset:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
-        <span style={{ fontSize:27 * k, fontWeight:900, color:"var(--text)", fontVariantNumeric:"tabular-nums", lineHeight:1 }}>
+        <span style={{ fontSize:Math.min(27 * k, size * 0.92 / Math.max(4, shown.toLocaleString("fr-FR").length)), fontWeight:900, color:"var(--text)",
+          fontVariantNumeric:"tabular-nums", lineHeight:1, whiteSpace:"nowrap" }}>
           {shown.toLocaleString("fr-FR")}</span>
         <span style={{ fontSize:Math.max(10, 11 * k), color:"var(--muted)", marginTop:2 }}>points</span>
         <span style={{ marginTop:4, fontSize:Math.max(10, 11 * k), fontWeight:900, padding:"1px 8px", borderRadius:20, color:"#fff",
