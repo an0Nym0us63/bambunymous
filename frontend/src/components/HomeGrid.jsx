@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone } from "lucide-react";
+import { createPortal } from "react-dom";
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X } from "lucide-react";
 import client from "../api/client";
 import { currentFriend, useFriend } from "../store/friend";
 import { toast } from "../store/toast";
@@ -73,7 +74,8 @@ function normalize(lay, defs) {
   const layouts = {};
   for (const n of [1, 2, 3, 4]) if (lay.layouts?.[n]) layouts[n] = cleanCols(lay.layouts[n], n, defs);
   if (!Object.keys(layouts).length) return defaults(defs);
-  return { v: 2, max: Math.max(1, Math.min(4, parseInt(lay.max) || 2)), layouts };
+  return { v: 2, max: Math.max(1, Math.min(4, parseInt(lay.max) || 2)), layouts,
+    ...(lay.top && typeof lay.top === "object" ? { top: lay.top } : {}) };
 }
 // la disposition a n colonnes : la sienne, ou deduite de la plus proche reglee
 function layoutFor(lay, n) {
@@ -143,11 +145,83 @@ function Frame({ def, children, extra }) {
   );
 }
 
+// Le panneau des options d'une tuile (ou du bandeau) : chaque option avec son
+// libelle, son explication et la bonne commande (interrupteur, choix, texte).
+// Les options peuvent etre groupees (« group »). Les changements s'appliquent
+// aussitot ; « Terminé » de la personnalisation enregistre.
+function OptionsSheet({ title, options, values, onChange, onClose }) {
+  useEffect(() => {
+    const k = e => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onClose]);
+  const groups = [];
+  options.forEach(op => {
+    const g = op.group || "";
+    let cur = groups.find(x => x.name === g);
+    if (!cur) groups.push(cur = { name: g, items: [] });
+    cur.items.push(op);
+  });
+  const sw = on => ({ width: 42, height: 24, borderRadius: 20, border: "none", cursor: "pointer", position: "relative", flexShrink: 0,
+    background: on ? "#3b82f6" : "var(--border)", transition: "background .2s" });
+  return createPortal(
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 4600, background: "rgba(0,0,0,0.5)", display: "flex",
+      alignItems: "center", justifyContent: "center", padding: 14 }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 460, maxHeight: "86vh", overflowY: "auto",
+        padding: "14px 16px", background: "var(--sheet-bg, var(--surface))", backdropFilter: "none", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Settings2 size={18} style={{ color: "#3b82f6" }}/>
+          <span style={{ flex: 1, fontSize: 15, fontWeight: 900, color: "var(--text)" }}>Options · {title}</span>
+          <button onClick={onClose} aria-label="Fermer" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }}><X size={20}/></button>
+        </div>
+        {groups.map(g => (
+          <div key={g.name} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {g.name && <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)",
+              marginTop: 4 }}>{g.name}</div>}
+            {g.items.map(op => {
+              const v = values[op.key];
+              return (
+                <div key={op.key} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>{op.label}</div>
+                      {op.hint && <div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.4, marginTop: 1 }}>{op.hint}</div>}
+                    </div>
+                    {!op.choices && op.type !== "text" && (
+                      <button role="switch" aria-checked={!!v} onClick={() => onChange(op.key, !v)} style={sw(!!v)}>
+                        <span style={{ position: "absolute", top: 3, left: v ? 21 : 3, width: 18, height: 18, borderRadius: "50%",
+                          background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}/></button>
+                    )}
+                  </div>
+                  {op.choices && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {op.choices.map(([cv, cl]) => <button key={String(cv)} onClick={() => onChange(op.key, cv)}
+                        style={{ padding: "6px 11px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 700,
+                          border: `1px solid ${v === cv ? "#3b82f6" : "var(--border)"}`, background: v === cv ? "rgba(59,130,246,0.12)" : "var(--surface2)",
+                          color: v === cv ? "#3b82f6" : "var(--text2)" }}>{cl}</button>)}
+                    </div>
+                  )}
+                  {op.type === "text" && (
+                    <input value={v || ""} maxLength={op.max || 80} placeholder={op.placeholder || ""} onChange={e => onChange(op.key, e.target.value)}
+                      style={{ width: "100%", boxSizing: "border-box", padding: "8px 11px", borderRadius: 10, fontSize: 13,
+                        border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", outline: "none" }}/>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+        <button onClick={onClose} style={{ alignSelf: "flex-end", padding: "8px 14px", borderRadius: 10, border: "none", background: "#3b82f6",
+          color: "#fff", fontWeight: 800, cursor: "pointer" }}>OK</button>
+      </div>
+    </div>, document.body);
+}
+
 const btn = (on = false) => ({ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 3, minWidth: 24, height: 26,
   padding: "0 5px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800,
   color: on ? "#0f172a" : "#fff", background: on ? "#fff" : "rgba(255,255,255,0.14)" });
 
-export default function HomeGrid({ status, blocks }) {
+export default function HomeGrid({ status, blocks, top = null }) {
   const data = useTilesData();
   const wide = useWide();
   const defs = useMemo(() => ({ ...blocks, ...TILES }), [blocks]);
@@ -157,6 +231,7 @@ export default function HomeGrid({ status, blocks }) {
   const [dragId, setDragId] = useState(null);
   const [sel, setSel] = useState(null);
   const [pick, setPick] = useState(null);            // colonne dont la case « + » est ouverte
+  const [optFor, setOptFor] = useState(null);        // tuile (id) ou « top » dont le panneau d'options est ouvert
   const [ec, setEc] = useState(null);                // en personnalisation : la disposition reglee (nombre de colonnes)
   const saved = useRef(null);
   const [inh, setInh] = useState(null);             // disposition reprise du compte principal (son nom)
@@ -275,21 +350,11 @@ export default function HomeGrid({ status, blocks }) {
     </>;
     // les options de la tuile (oui/non, ou un choix), propres a cette disposition
     const o = optsOf(def, item);
-    const setOpt = (k, v) => update(item.id, { o: { ...(item.o || {}), [k]: v } });
-    // seulement les options qui servent a la taille choisie (« when »)
+    // seulement les options qui servent a la taille choisie (« when ») ; elles se reglent dans leur panneau
     const usable = (def.options || []).filter(op => !op.when || op.when(item));
     const options = usable.length ? (
-      <div style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: 5, borderTop: "1px solid rgba(255,255,255,0.15)" }}>
-        {usable.map(op => op.choices ? (
-          <div key={op.key} style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, marginRight: 2 }}>{op.label}</span>
-            {op.choices.map(([v, l]) => <button key={String(v)} style={btn(o[op.key] === v)} onClick={() => setOpt(op.key, v)}>{l}</button>)}
-          </div>
-        ) : (
-          <button key={op.key} style={{ ...btn(!!o[op.key]), justifyContent: "flex-start", alignSelf: "flex-start" }}
-            onClick={() => setOpt(op.key, !o[op.key])}>{o[op.key] ? "✓" : "○"} {op.label}</button>
-        ))}
-      </div>
+      <button style={{ ...btn(), alignSelf: "flex-start", gap: 5, padding: "0 9px" }} onClick={() => setOptFor(item.id)}>
+        <Settings2 size={13}/>Options ({usable.length})</button>
     ) : null;
     const drag = wide ? {
       dragging: dragId === item.id,
@@ -307,8 +372,27 @@ export default function HomeGrid({ status, blocks }) {
     );
   };
 
+  // le bandeau : ses options (communes a toutes les dispositions)
+  const topOpts = top ? Object.fromEntries((top.options || []).map(op => [op.key, lay.top?.[op.key] ?? op.def])) : {};
+  const setTopOpt = (k, v) => setLay(l => ({ ...l, top: { ...(l.top || {}), [k]: v } }));
+  const optItem = optFor && optFor !== "top" ? cols.flat().find(x => x.id === optFor) : null;
+  const optDef = optItem ? defs[optItem.id] : null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
+      {top && (
+        <div style={{ position: "relative", ...(edit ? { outline: "2px dashed rgba(59,130,246,0.55)", outlineOffset: 3, borderRadius: 18 } : {}) }}>
+          {top.render(topOpts)}
+          {edit && <button onClick={() => setOptFor("top")} style={{ position: "absolute", left: 10, bottom: -14, zIndex: 3, display: "inline-flex",
+            alignItems: "center", gap: 5, padding: "6px 11px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 12,
+            color: "#fff", background: "rgba(15,23,42,0.88)", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
+            <Settings2 size={13}/>Options du bandeau</button>}
+        </div>
+      )}
+      {optFor === "top" && top && <OptionsSheet title={top.label} options={top.options} values={topOpts}
+        onChange={setTopOpt} onClose={() => setOptFor(null)}/>}
+      {optItem && optDef && <OptionsSheet title={optDef.label}
+        options={(optDef.options || []).filter(op => !op.when || op.when(optItem))} values={optsOf(optDef, optItem)}
+        onChange={(k, v) => update(optItem.id, { o: { ...(optItem.o || {}), [k]: v } })} onClose={() => setOptFor(null)}/>}
       <style>{`
         .hg-cols { display:grid; gap:12px; align-items:start; }
         .hg-col { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); grid-auto-rows:minmax(${ROW}px, auto);

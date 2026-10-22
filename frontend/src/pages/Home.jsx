@@ -7,6 +7,7 @@ import { create } from "zustand";
 import client, { apiUrl } from "../api/client";
 import AttentionSection from "../components/AttentionSection";
 import HomeGrid from "../components/HomeGrid";
+import { gradeOf } from "./Achievements";
 import LiveCamera from "../components/LiveCamera";
 import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
@@ -855,15 +856,39 @@ const SKY = [
   { from: 18, a: "#7C3AED", b: "#DB2777", c: "#F5D0FE" },    // soiree
   { from: 22, a: "#1E1B4B", b: "#4338CA", c: "#C7D2FE" },    // nuit
 ];
-function Greeting({ status }) {
+// les ambiances fixes du bandeau
+const MOODS = {
+  ocean: { a: "#0EA5E9", b: "#2563EB", c: "#BAE6FD" }, aurora: { a: "#10B981", b: "#6366F1", c: "#A7F3D0" },
+  sunset: { a: "#F97316", b: "#DB2777", c: "#FED7AA" }, forest: { a: "#15803D", b: "#0F766E", c: "#BBF7D0" },
+  grape: { a: "#7C3AED", b: "#C026D3", c: "#F5D0FE" }, carbon: { a: "#334155", b: "#0F172A", c: "#94A3B8" },
+};
+// une astuce par jour (la meme toute la journee)
+const TIPS = [
+  "Un plateau propre, sans traces de doigts, colle bien mieux : un coup d'alcool isopropylique avant d'imprimer.",
+  "Le PLA n'aime pas l'humidité : une bobine qui craque en sortant de la buse a besoin d'un séchage.",
+  "Pour des pièces solides, augmente le nombre de parois avant le remplissage.",
+  "Un Benchy de temps en temps permet de vérifier que tout va bien.",
+  "Le PETG colle trop sur le PEI lisse : un peu de colle en bâton sert de démoulant.",
+  "Orienter la pièce pour limiter les supports, c'est du temps et du filament gagnés.",
+  "Les bobines à moitié vides vont bien dans l'AMS : finis-les avant d'en entamer d'autres.",
+  "Une première couche légèrement écrasée, c'est la moitié d'une impression réussie.",
+  "Le TPU s'imprime lentement, sans rétraction excessive : patience !",
+  "Un « brim » de quelques millimètres évite que les coins se soulèvent sur l'ABS et l'ASA.",
+  "Les filaments chargés (fibre de carbone, bois) usent les buses : préfère l'acier trempé.",
+  "Photographie tes impressions réussies : ton historique n'en sera que plus beau.",
+  "Évaluer les modèles sur MakerWorld rapporte des points… et aide les créateurs.",
+  "Une ironing (repassage) sur la dernière couche donne des dessus parfaitement lisses.",
+];
+function Greeting({ status, o = {} }) {
   const username = useAuth(s => s.username) || "";
   const visiting = useFriend(s => s.friend);         // chez un copain : son accueil, pas de personnalisation
   // le bouton de personnalisation peut se masquer (Reglages > Affichage), choix de cet appareil
   const editBtn = (() => { try { return localStorage.getItem("bn-home-edit-btn") !== "0"; } catch { return true; } })();
   const [name, setName] = useState(null);
-  const [today, setToday] = useState(null);
+  const [x, setX] = useState({});                    // ce que montrent les pastilles en option
   const st = String(status?.status || "").toUpperCase();
   const live = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"].includes(st);
+  const opt = (k, d) => o[k] ?? d;
   useEffect(() => {
     if (!live) { setName(null); return; }
     client.get("/prints", { params: { limit: 1, status: "IN_PROGRESS" } })
@@ -871,13 +896,19 @@ function Greeting({ status }) {
       .catch(() => {});
   }, [live, status?.job_id]);
   useEffect(() => {
-    client.get("/prints/kpis", { params: { date_from: new Date().toLocaleDateString("sv") } })
-      .then(r => setToday(r.data)).catch(() => {});
-  }, [st]);
+    const put = (k, p) => p.then(r => setX(v => ({ ...v, [k]: r.data }))).catch(() => {});
+    if (opt("pToday", true)) put("today", client.get("/prints/kpis", { params: { date_from: new Date().toLocaleDateString("sv") } }));
+    if (opt("pNext", false)) put("queue", client.get("/makerworld/queue"));
+    if (opt("pFriends", false)) put("friends", client.get("/friends/shared/printing"));
+    if (opt("pGrade", false) || opt("pWheel", false)) put("ach", client.get("/achievements"));
+  }, [st, o.pToday, o.pNext, o.pFriends, o.pGrade, o.pWheel]); // eslint-disable-line react-hooks/exhaustive-deps
   const h = new Date().getHours();
-  const sky = h < 5 ? SKY[3] : [...SKY].reverse().find(x => h >= x.from);
+  const mood = opt("mood", "time");
+  const sky = mood !== "time" && MOODS[mood] ? MOODS[mood] : h < 5 ? SKY[3] : [...SKY].reverse().find(v => h >= v.from);
   const night = h >= 18 || h < 5;
+  const size = opt("size", "normal");
   const first = username ? username.charAt(0).toUpperCase() + username.slice(1) : "";
+  const hello = opt("hello", "auto") === "auto" ? (night ? "Bonsoir" : "Bonjour") : opt("hello", "auto");
   const date = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
   const what = name || "L'impression";
   const line = !status ? "" : !status.connected ? "L'imprimante ne répond pas pour l'instant."
@@ -885,22 +916,26 @@ function Greeting({ status }) {
     : live ? `${what} est en cours d'impression.`
     : "L'imprimante est au repos, prête à imprimer.";
   const fin = live && status.remaining_minutes ? fmtFinishTime(status.remaining_minutes) : null;
+  const tip = TIPS[Math.floor(Date.now() / 86400000) % TIPS.length];
+  const next = (x.queue?.models || []).find(m => m.status === "ready") || (x.queue?.models || [])[0];
+  const grade = x.ach ? gradeOf(null, x.ach.score_max ? x.ach.score / x.ach.score_max : 0) : null;
+  const nf = (x.friends?.printing || []).length;
+  const spins = x.ach?.keys?.wheel?.spins || 0;
   const pill = { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 999, fontSize: 12.5,
     fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.28)",
     backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", whiteSpace: "nowrap" };
+  const mini = size === "mini";
   return (
-    <div className="card home-hello" style={{ position: "relative", overflow: "hidden", border: "none",
-      color: "#fff", background: `linear-gradient(120deg, ${sky.a}, ${sky.b})`,
+    <div className={`card home-hello${size === "compact" ? " hh-compact" : ""}${mini ? " hh-mini" : ""}`} style={{ position: "relative",
+      overflow: "hidden", border: "none", color: "#fff", background: `linear-gradient(120deg, ${sky.a}, ${sky.b})`,
+      backgroundSize: opt("anim", false) ? "200% 200%" : undefined, animation: opt("anim", false) ? "hh-drift 14s ease-in-out infinite" : undefined,
       boxShadow: `0 14px 34px -18px ${sky.b}` }}>
-      {/* le decor : un astre et sa lueur, des points tres discrets */}
-      <span aria-hidden="true" style={{ position: "absolute", right: -40, top: -60, width: 220, height: 220, borderRadius: "50%",
-        background: `radial-gradient(circle at 40% 40%, ${sky.c}, transparent 65%)`, opacity: 0.55, pointerEvents: "none" }}/>
-      <span aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.25,
-        background: "radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1.5px) 0 0 / 18px 18px",
-        WebkitMaskImage: "linear-gradient(90deg, transparent 30%, #000)", maskImage: "linear-gradient(90deg, transparent 30%, #000)" }}/>
       <style>{`
+        @keyframes hh-drift { 0%, 100% { background-position: 0% 50% } 50% { background-position: 100% 50% } }
         .home-hello { padding:18px 20px; }
         .hh-title { font-size:26px; } .hh-icon { width:48px; height:48px; } .hh-pills > * { font-size:12.5px; }
+        .hh-compact { padding:12px 16px; } .hh-compact .hh-title { font-size:20px; } .hh-compact .hh-icon { width:38px; height:38px; }
+        .hh-mini { padding:8px 14px; } .hh-mini .hh-title { font-size:16px; } .hh-mini .hh-icon { width:30px; height:30px; border-radius:10px !important; }
         @media (max-width: 600px) {
           .home-hello { padding:12px 14px; }
           .hh-title { font-size:20px; } .hh-icon { width:38px !important; height:38px !important; border-radius:12px !important; }
@@ -909,24 +944,41 @@ function Greeting({ status }) {
           .hh-edit { position:absolute; top:-2px; right:-4px; }
         }
       `}</style>
-      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: "10px 16px", flexWrap: "wrap" }}>
-        <span data-pk="" aria-hidden="true" className="hh-icon" style={{ borderRadius: 16, flexShrink: 0, display: "flex",
+      {/* le decor : un astre et sa lueur, des points tres discrets */}
+      {opt("decor", true) && <>
+        <span aria-hidden="true" style={{ position: "absolute", right: -40, top: -60, width: 220, height: 220, borderRadius: "50%",
+          background: `radial-gradient(circle at 40% 40%, ${sky.c}, transparent 65%)`, opacity: 0.55, pointerEvents: "none" }}/>
+        <span aria-hidden="true" style={{ position: "absolute", inset: 0, pointerEvents: "none", opacity: 0.25,
+          background: "radial-gradient(rgba(255,255,255,0.5) 1px, transparent 1.5px) 0 0 / 18px 18px",
+          WebkitMaskImage: "linear-gradient(90deg, transparent 30%, #000)", maskImage: "linear-gradient(90deg, transparent 30%, #000)" }}/>
+      </>}
+      <div style={{ position: "relative", display: "flex", alignItems: "center", gap: mini ? "6px 12px" : "10px 16px", flexWrap: "wrap" }}>
+        {opt("icon", true) && <span data-pk="" aria-hidden="true" className="hh-icon" style={{ borderRadius: 16, flexShrink: 0, display: "flex",
           alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.3)" }}>
-          {night ? <Moon size={24}/> : <Sun size={24}/>}</span>
+          {night ? <Moon size={mini ? 17 : 24}/> : <Sun size={mini ? 17 : 24}/>}</span>}
         <div style={{ flex: "1 1 220px", minWidth: 0 }}>
-          <div className="hh-date" style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase", opacity: 0.85 }}>
-            <Words text={date}/></div>
-          <div className="hh-title" style={{ fontWeight: 900, lineHeight: 1.1, marginTop: 2, letterSpacing: "-.01em" }}>
-            <Words text={`${night ? "Bonsoir" : "Bonjour"}${first ? " " + first : ""}`}/></div>
-          {line && <div className="hh-line" style={{ fontSize: 13.5, marginTop: 5, opacity: 0.92 }}><Words text={line}/></div>}
+          {opt("date", true) && !mini && <div className="hh-date" style={{ fontSize: 11.5, fontWeight: 800, letterSpacing: ".12em",
+            textTransform: "uppercase", opacity: 0.85 }}><Words text={date}/></div>}
+          <div className="hh-title" style={{ fontWeight: 900, lineHeight: 1.1, marginTop: mini ? 0 : 2, letterSpacing: "-.01em" }}>
+            <Words text={`${hello}${opt("name", true) && first ? " " + first : ""}`}/>
+            {mini && opt("line", true) && line && <span style={{ fontSize: 12.5, fontWeight: 600, opacity: 0.9, marginLeft: 10 }}><Words text={line}/></span>}</div>
+          {!mini && opt("line", true) && line && <div className="hh-line" style={{ fontSize: 13.5, marginTop: 5, opacity: 0.92 }}><Words text={line}/></div>}
+          {!mini && opt("message", "") && <div style={{ fontSize: 13, marginTop: 4, fontStyle: "italic", opacity: 0.95 }}>
+            <Words text={opt("message", "")}/></div>}
+          {!mini && opt("tip", false) && <div style={{ fontSize: 12, marginTop: 6, padding: "6px 10px", borderRadius: 10,
+            background: "rgba(255,255,255,0.14)", lineHeight: 1.4 }}>💡 <Words text={tip}/></div>}
         </div>
         <div className="hh-pills" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          {live && <span data-pk="" style={pill}>
+          {opt("pProgress", true) && live && <span data-pk="" style={pill}>
             <span style={{ width: 46, height: 6, borderRadius: 6, background: "rgba(255,255,255,0.3)", overflow: "hidden" }}>
               <span style={{ display: "block", height: "100%", width: `${Math.round(status.progress || 0)}%`, background: "#fff" }}/></span>
             {Math.round(status.progress || 0)} %</span>}
-          {fin && <span data-pk="" style={pill}><Clock size={14}/>fin {fin.dayDiff ? "demain " : ""}{fin.time}</span>}
-          {today && <span data-pk="" style={pill}><Layers size={14}/>{today.count} aujourd'hui</span>}
+          {opt("pFin", true) && fin && <span data-pk="" style={pill}><Clock size={14}/>fin {fin.dayDiff ? "demain " : ""}{fin.time}</span>}
+          {opt("pToday", true) && x.today && <span data-pk="" style={pill}><Layers size={14}/>{x.today.count} aujourd'hui</span>}
+          {opt("pNext", false) && next && <span data-pk="" style={pill} title="Prochaine impression de « À faire »">⏭️ {next.title_fr || next.title}</span>}
+          {opt("pFriends", false) && x.friends && <span data-pk="" style={pill}>👥 {nf ? `${nf} copain${nf > 1 ? "s" : ""} imprime${nf > 1 ? "nt" : ""}` : "copains au repos"}</span>}
+          {opt("pGrade", false) && grade?.name && <span data-pk="" style={pill}>🎓 {grade.name}</span>}
+          {opt("pWheel", false) && spins > 0 && <span data-pk="" style={pill}>🎰 {spins} tour{spins > 1 ? "s" : ""} de roue</span>}
           {!visiting && editBtn && <button className="hh-edit" onClick={() => window.dispatchEvent(new Event("bn-home-edit"))} aria-label="Personnaliser l'accueil"
             title="Personnaliser l'accueil" style={{ ...pill, cursor: "pointer", padding: "7px 9px" }}><LayoutGrid size={15}/></button>}
         </div>
@@ -934,6 +986,30 @@ function Greeting({ status }) {
     </div>
   );
 }
+// les options du bandeau (communes a toutes les dispositions du compte)
+const GREETING_OPTIONS = [
+  { group: "Allure", key: "mood", label: "Ambiance", hint: "Les couleurs du bandeau : selon le moment de la journée, ou une teinte fixe.", def: "time",
+    choices: [["time", "selon l'heure"], ["ocean", "océan"], ["aurora", "aurore"], ["sunset", "couchant"], ["forest", "forêt"], ["grape", "raisin"], ["carbon", "carbone"]] },
+  { group: "Allure", key: "size", label: "Taille", hint: "« mini » tient sur une ligne.", def: "normal", choices: [["normal", "normale"], ["compact", "compacte"], ["mini", "mini"]] },
+  { group: "Allure", key: "decor", label: "Décor", hint: "La lueur de l'astre et le semis de points.", def: true },
+  { group: "Allure", key: "anim", label: "Couleurs qui ondulent", hint: "Le dégradé glisse doucement.", def: false },
+  { group: "Allure", key: "icon", label: "Soleil ou lune", def: true },
+  { group: "Texte", key: "hello", label: "Salutation", def: "auto",
+    choices: [["auto", "Bonjour / Bonsoir"], ["Salut", "Salut"], ["Hello", "Hello"], ["Coucou", "Coucou"], ["Yo", "Yo"]] },
+  { group: "Texte", key: "name", label: "Ton prénom", def: true },
+  { group: "Texte", key: "date", label: "La date", def: true },
+  { group: "Texte", key: "line", label: "Où en est l'imprimante", def: true },
+  { group: "Texte", key: "message", label: "Un message à toi", hint: "Une phrase sous le bonjour (laisse vide pour rien).", type: "text",
+    placeholder: "Aujourd'hui, on imprime le monde !", def: "", max: 90 },
+  { group: "Texte", key: "tip", label: "L'astuce du jour", hint: "Un conseil d'impression, différent chaque jour.", def: false },
+  { group: "Pastilles", key: "pProgress", label: "Avancement de l'impression", def: true },
+  { group: "Pastilles", key: "pFin", label: "Heure de fin", def: true },
+  { group: "Pastilles", key: "pToday", label: "Impressions du jour", def: true },
+  { group: "Pastilles", key: "pNext", label: "Prochaine impression de « À faire »", def: false },
+  { group: "Pastilles", key: "pFriends", label: "Copains qui impriment", def: false },
+  { group: "Pastilles", key: "pGrade", label: "Ton grade de maker", def: false },
+  { group: "Pastilles", key: "pWheel", label: "Tours de roue disponibles", def: false },
+];
 
 export default function Home() {
   const { status, startPolling, stopPolling } = usePrinter();
@@ -1013,8 +1089,8 @@ export default function Home() {
         .home-grid { display:flex; flex-direction:column; gap:12px; max-width:640px; width:100%; margin:0 auto; }
         @media (min-width: 1024px) { .home-grid { max-width:none; } }
       `}</style>
-      <Greeting status={status}/>
-      <HomeGrid status={status} blocks={blocks}/>
+      <HomeGrid status={status} blocks={blocks}
+        top={{ label: "Bandeau d'accueil", options: GREETING_OPTIONS, render: o => <Greeting status={status} o={o}/> }}/>
     </div>
   );
 }
