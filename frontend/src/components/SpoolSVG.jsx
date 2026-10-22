@@ -118,14 +118,9 @@ export default function SpoolSVG({ colors, empty, size=68, active, type }) {
       {/* Anneau extérieur (léger contour) */}
       <circle cx="40" cy="40" r="30" fill="none" stroke={ringColor} strokeWidth="2"/>
 
-      {/* Zone hub (cercle intérieur plus sombre), ses trois rayons ; en cours, il tourne */}
+      {/* Zone hub (cercle intérieur plus sombre) ; en cours, il tourne (le repère le montre) */}
       <g style={active ? { transformBox: "view-box", transformOrigin: "40px 40px", animation: "spin 6s linear infinite" } : undefined}>
         <circle cx="40" cy="40" r="14" fill={hubColor}/>
-        {!empty && [0, 120, 240].map(a => {
-          const r = a * Math.PI / 180;
-          return <line key={a} x1={40 + 7 * Math.cos(r)} y1={40 + 7 * Math.sin(r)} x2={40 + 26 * Math.cos(r)} y2={40 + 26 * Math.sin(r)}
-            stroke={spokeColor} strokeWidth="3" strokeLinecap="round"/>;
-        })}
         {/* Trou central */}
         <circle cx="40" cy="40" r="6" fill={empty ? "#111" : "rgba(0,0,0,0.65)"}/>
         {/* un repere sur le moyeu : on voit la bobine tourner */}
