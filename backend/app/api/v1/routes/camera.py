@@ -371,6 +371,7 @@ async def camera_stream(request: Request):
         with _HUB.lock:
             _HUB.subs += 1
         last, waited = -1, 0.0
+        first_at = last_at = None              # temps de direct vraiment regarde (succes « Spectateur »)
         try:
             while True:
                 if await request.is_disconnected():
@@ -379,6 +380,8 @@ async def camera_stream(request: Request):
                     seq, fr, alive = _HUB.seq, _HUB.frame, _HUB.thread is not None
                 if fr and seq != last:
                     last, waited = seq, 0.0
+                    last_at = time.monotonic()
+                    first_at = first_at or last_at
                     yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(fr)).encode()
                            + b"\r\n\r\n" + fr + b"\r\n")
                     continue
@@ -394,5 +397,11 @@ async def camera_stream(request: Request):
                 if _HUB.subs <= 0:
                     _HUB.subs = 0
                     _HUB.idle_since = time.monotonic()
+            if first_at and last_at:
+                try:
+                    from ....services import home_stats
+                    await home_stats.camera_watched(last_at - first_at)
+                except Exception:
+                    logger.debug("camera : temps regarde non compte")
     return StreamingResponse(frames(), media_type="multipart/x-mixed-replace; boundary=frame",
                              headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})

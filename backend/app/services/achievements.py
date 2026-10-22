@@ -1565,6 +1565,21 @@ CATALOG += [
        lore="Un jour entier d'impression, et pas une seconde hors ligne. Une liaison de satellite."),
     _a("same_taste", "secret", "👯", "Même goût", "Le même modèle MakerWorld qu'un copain, à une semaine près", [1],
        lore="Vous ne vous étiez rien dit, et pourtant : le même modèle, la même semaine."),
+    # L'accueil a la carte et la camera en direct (22/10/2026)
+    _a("home_saves", "app", "🏗️", "Architecte", "{n} dispositions de l'accueil enregistrées", [1]),
+    _a("home_tiles", "app", "🧱", "Tapissier", "{n} tuiles différentes déjà affichées sur l'accueil", [1]),
+    _a("home_tweaks", "app", "📐", "Retoucheur", "{n} largeurs, hauteurs ou options de tuiles changées", [1]),
+    _a("cam_hours", "app", "🎥", "Spectateur", "{n} h de caméra en direct regardées", [1], unit="h"),
+    _a("home_first", "secret", "🖼️", "Décorateur", "Enregistrer sa première disposition de l'accueil", [1],
+       lore="Un accueil à ton image : les tuiles sont là où tu les veux."),
+    _a("home_multi", "secret", "🖥️", "Multi-écran", "Régler les quatre dispositions, d'une à quatre colonnes", [1],
+       lore="Téléphone, portable, grand écran, très grand écran : chacun a son accueil sur mesure."),
+    _a("home_four", "secret", "🔭", "Grand écran", "Afficher l'accueil sur quatre colonnes", [1],
+       lore="Quatre colonnes : l'atelier tout entier sous les yeux."),
+    _a("home_minimal", "secret", "🪷", "Minimaliste", "Un accueil réduit à la seule tuile de l'imprimante", [1],
+       lore="L'essentiel, et rien d'autre : l'imprimante, point."),
+    _a("home_all", "secret", "🎪", "Tout l'éventail", "Toutes les tuiles affichées en même temps", [1],
+       lore="Pas une tuile ne manque : l'accueil déborde de partout."),
 ]
 CATALOG += [_a(f"egg_{k}", "secret", e, t, d, [1], lore=l) for k, (e, t, d, _h, l) in EGGS.items()]
 HIDDEN_EGGS = {"anonymous", "teapot"} | {k for k in EGGS if k.startswith("h_")}
@@ -1595,7 +1610,7 @@ SECRET_SUBS = [
     ("mw", "🌐", "MakerWorld", "self_print bestseller pioneer harsh recycled"),
     ("social", "🤝", "Copains", "night_owl_visit mutual_visit share_all same_taste"),
     ("famous", "🗿", "Modèles célèbres", "benchy_print calib_print dragon_print skull_print"),
-    ("app", "📱", "Photos et appli", "zero_alert paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
+    ("app", "📱", "Photos et appli", "home_first home_multi home_four home_minimal home_all zero_alert paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
      "action_cam making_of festival retro_video family_film flash_video bunker pwd_changes black_photo white_photo "
      "panorama hires_photo photo_burst purge_day tinkerer"),
     ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS if k not in HIDDEN_EGGS | PRANK_EGGS | FETE_EGGS)),
@@ -1885,6 +1900,11 @@ HINTS = {
     "oven": "Il fait chaud là-dedans. Très chaud.",
     "marathon_online": "Une très longue impression, et une liaison qui ne lâche jamais.",
     "same_taste": "Les grands esprits impriment la même chose.",
+    "home_first": "Ton accueil peut te ressembler : touche à sa disposition.",
+    "home_multi": "Une colonne, deux, trois, quatre : chaque écran mérite son accueil.",
+    "home_four": "Un très grand écran, et un accueil qui en profite pleinement.",
+    "home_minimal": "Moins, c'est parfois mieux : ne garde que l'essentiel.",
+    "home_all": "Et si tu affichais absolument tout, en même temps ?",
     "bunker": "Un mot de passe, c'est bien. Avec un code qui change toutes les 30 secondes, c'est mieux.",
     "pwd_changes": "Un bon secret se renouvelle de temps en temps.",
     "making_of": "Une seule impression, deux façons de la montrer : l'une bouge, l'autre pas.",
@@ -1908,7 +1928,8 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         # releves (ach_watch) et etats du moment, lot du 22/10/2026
         "bon_public", "sky_layers", "clean_prints", "online_streak", "dry_days_ams", "swaps_max", "swaps_total", "duels",
         "band_prints", "queue_cleared", "rainbow_ams", "zero_alert", "mille_feuille", "doctor", "oven", "marathon_online",
-        "same_taste"}
+        "same_taste", "home_saves", "home_tiles", "home_tweaks", "cam_hours", "home_first", "home_multi", "home_four",
+        "home_minimal", "home_all"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
 # Seuils : six paliers (bronze -> legende), etendus a neuf (mythique, cosmique,
@@ -2086,6 +2107,10 @@ TIER_TABLE = {
     "swaps_total": [50, 200, 500, 1000, 2500, 5000, 10000, 25000, 50000],
     "duels": [1, 3, 5, 10, 20, 35, 50, 75, 100],
     "band_prints": [1, 2, 3, 5, 8, 12, 16, 20, 30],
+    "home_saves": [1, 3, 5, 10, 20, 35, 50, 75, 100],
+    "home_tiles": [3, 5, 7, 9, 11, 13, 15, 18, 21],
+    "home_tweaks": [5, 15, 30, 50, 80, 120, 175, 250, 400],
+    "cam_hours": [1, 3, 5, 10, 20, 35, 50, 75, 100],
     "to_order": [1, 3, 5, 10, 20, 30, 45, 65, 100],
     "good_seller": [1, 3, 5, 10, 15, 25, 35, 50, 75],
     "restocks": [1, 5, 10, 20, 35, 50, 75, 100, 150],
@@ -4018,6 +4043,11 @@ async def _live_values() -> dict:
         out["friends"] = len(await list_friends())
     except Exception:
         pass
+    try:
+        from . import home_stats
+        out.update(await home_stats.values())
+    except Exception as e:
+        logger.info(f"[SUCCES] accueil illisible : {e}")
     try:
         from . import ach_watch
         out.update(await ach_watch.values())

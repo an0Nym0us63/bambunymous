@@ -51,9 +51,22 @@ async def home_layout_set(body: dict = Body(...), acc=Depends(require_own_accoun
         raise HTTPException(400, "Disposition trop grande")
     async with AsyncSessionLocal() as db:
         d = await _all(db)
+        old = d.get(acc[0])
         if lay is None:
             d.pop(acc[0], None)                 # retour a la disposition par defaut
         else:
             d[acc[0]] = lay
         await set_setting(db, KEY, json.dumps(d))
+    if lay is not None:                         # pour les succes : ce qui a ete regle
+        from ....services import home_stats
+        await home_stats.layout_saved(old, lay, (body or {}).get("known"))
     return {"layout": lay}
+
+
+@router.post("/event")
+async def home_event(body: dict = Body(...), acc=Depends(require_own_account)):
+    """Ce que la page constate et que le serveur ne voit pas (l'accueil sur 4 colonnes)."""
+    from ....services import home_stats
+    if (body or {}).get("four"):
+        await home_stats.seen_four()
+    return {"ok": True}

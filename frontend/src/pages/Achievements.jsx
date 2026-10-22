@@ -1498,7 +1498,7 @@ function Rules({ data, onClose }) {
         <P>Certains gestes ne laissent de trace nulle part ailleurs : l'appli les note elle-même <b>à partir du moment où elle
           les voit</b> (séchages dans l'AMS, pesées, réassorts, visites chez tes copains et des copains chez toi ; et depuis
           le 22/10/2026 : connexion de l'imprimante, couches, changements de bobine, alertes, humidité des AMS, impressions en
-          même temps que les copains). Tes
+          même temps que les copains, dispositions de l'accueil, temps de caméra en direct). Tes
           évaluations et tes points MakerWorld, eux, sont relus sur <b>tout ton historique</b>.</P>
         <P>Quand des seuils changent ou qu'un succès apparaît, tout se recalcule en silence : ce que ton historique méritait
           déjà t'est donné, sans notification ni clé.</P>

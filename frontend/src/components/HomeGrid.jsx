@@ -168,6 +168,10 @@ export default function HomeGrid({ status, blocks }) {
   }, []);
   // ce que l'accueil montre : une colonne sur telephone, sinon ce qui tient, au plus le maximum choisi
   const showN = wide ? Math.max(1, Math.min(lay.max, fit)) : 1;
+  // l'accueil sur 4 colonnes : le serveur ne le voit pas, la page le lui dit (une fois par lancement)
+  useEffect(() => {
+    if (showN === 4 && !window.__bnFour) { window.__bnFour = true; client.post("/home/event", { four: true }).catch(() => {}); }
+  }, [showN]);
 
   useEffect(() => {
     client.get("/home/layout").then(({ data }) => {
@@ -183,7 +187,7 @@ export default function HomeGrid({ status, blocks }) {
 
   const save = async (l, reset = false) => {
     try {
-      await client.put("/home/layout", { layout: reset ? null : l });
+      await client.put("/home/layout", { layout: reset ? null : l, known: Object.keys(defs) });
       saved.current = JSON.stringify(l);
       if (!reset) setInh(null);
       toast(reset ? "Accueil remis par défaut" : "Disposition enregistrée", "success");
