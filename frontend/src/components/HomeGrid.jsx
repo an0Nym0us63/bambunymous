@@ -4,11 +4,14 @@ import client from "../api/client";
 import { toast } from "../store/toast";
 import { TILES, useTilesData } from "./HomeTiles";
 
-// La grille de l'accueil, a la carte (22/10/2026). Deux dispositions par
-// compte : « dash » (PC, des colonnes, chacune coupee en deux sous-colonnes) et
-// « mobile » (une colonne en deux sous-colonnes). Chaque tuile a une largeur
-// (1 = moitie de sa colonne, 2 = toute la colonne) et une hauteur (rangees, ou
-// « auto » : selon son contenu), parmi celles que son type accepte.
+// La grille de l'accueil, a la carte (22/10/2026). Une disposition par nombre
+// de colonnes (1 a 4), propre a chaque compte ; celle a une colonne est aussi
+// celle du telephone. Chaque colonne est coupee en deux sous-colonnes. L'accueil
+// montre la disposition du nombre de colonnes qui tiennent a l'ecran, sans
+// depasser le maximum choisi ; une disposition jamais reglee se deduit d'une
+// autre. Chaque tuile a une largeur (1 = moitie de sa colonne, 2 = toute la
+// colonne) et une hauteur (rangees, ou « auto » : selon son contenu), parmi
+// celles que son type accepte.
 
 const WIDE = 1024;
 const COL_MIN = 400;                               // largeur sous laquelle une colonne (deux sous-colonnes) se tasse trop
@@ -29,40 +32,60 @@ function defaults(defs) {
   const it = id => ({ id, w: defs[id].w[0], h: defs[id].h[0] });
   const small = ["today", "week", "next", "last", "stock", "dry", "humidity", "friends", "mw", "rate", "wheel", "ach"].filter(id => defs[id]);
   return {
-    v: 1,
-    dash: { cols: 2, columns: [["printer", "ams", "amsdetail"].filter(id => defs[id]).map(it), [...small, "attention"].filter(id => defs[id]).map(it)] },
-    mobile: { items: ["printer", "ams", "amsdetail", ...small, "attention"].filter(id => defs[id]).map(it) },
-    amsSplit: true,
+    v: 2, max: 2,
+    layouts: {
+      1: [["printer", "ams", "amsdetail", ...small, "attention"].filter(id => defs[id]).map(it)],
+      2: [["printer", "ams", "amsdetail"].filter(id => defs[id]).map(it), [...small, "attention"].filter(id => defs[id]).map(it)],
+    },
   };
 }
-// Remet d'aplomb une disposition gardee : tuiles inconnues retirees, tailles
-// ramenees a ce que la tuile accepte ; une tuile apparue depuis attend dans « Ajouter ».
+const fixer = defs => x => defs[x?.id] ? { id: x.id, w: defs[x.id].w.includes(x.w) ? x.w : defs[x.id].w[0],
+  h: defs[x.id].h.includes(x.h) ? x.h : defs[x.id].h[0] } : null;
+// une disposition a n colonnes, remise d'aplomb : tuiles inconnues retirees, tailles
+// ramenees a ce que la tuile accepte, pas de doublon, la tuile obligatoire presente
+function cleanCols(cols, n, defs) {
+  const fix = fixer(defs);
+  const out = [...Array(n)].map((_, i) => ((cols || [])[i] || []).map(fix).filter(Boolean));
+  (cols || []).slice(n).forEach(c => out[n - 1].push(...(c || []).map(fix).filter(Boolean)));
+  const seen = new Set();
+  const res = out.map(c => c.filter(x => !seen.has(x.id) && seen.add(x.id)));
+  for (const [id, d] of Object.entries(defs)) if (d.required && !seen.has(id)) res[0].unshift({ id, w: d.w[0], h: d.h[0] });
+  return res;
+}
+// Remet d'aplomb une disposition gardee (et convertit l'ancien format : PC + mobile)
 function normalize(lay, defs) {
-  const base = defaults(defs);
-  if (!lay || lay.v !== 1) return base;
-  const fix = x => defs[x?.id] ? { id: x.id, w: defs[x.id].w.includes(x.w) ? x.w : defs[x.id].w[0],
-    h: defs[x.id].h.includes(x.h) ? x.h : defs[x.id].h[0] } : null;
-  const cols = Math.max(1, Math.min(4, parseInt(lay.dash?.cols) || 2));
-  const columns = [...Array(cols)].map((_, i) => ((lay.dash?.columns || [])[i] || []).map(fix).filter(Boolean));
-  // une colonne retiree : ses tuiles passent dans la derniere
-  (lay.dash?.columns || []).slice(cols).forEach(c => columns[cols - 1].push(...(c || []).map(fix).filter(Boolean)));
-  const uniq = arr => { const seen = new Set(); return arr.filter(x => !seen.has(x.id) && seen.add(x.id)); };
-  const all = new Set();
-  const dash = { cols, columns: columns.map(c => uniq(c).filter(x => !all.has(x.id) && all.add(x.id))) };
-  const mobile = { items: uniq((lay.mobile?.items || []).map(fix).filter(Boolean)) };
-  // une tuile obligatoire n'est jamais absente
-  for (const [id, d] of Object.entries(defs)) {
-    if (!d.required) continue;
-    if (!dash.columns.some(c => c.some(x => x.id === id))) dash.columns[0].unshift({ id, w: d.w[0], h: d.h[0] });
-    if (!mobile.items.some(x => x.id === id)) mobile.items.unshift({ id, w: d.w[0], h: d.h[0] });
+  if (!lay) return defaults(defs);
+  if (lay.v === 1) {
+    const n = Math.max(1, Math.min(4, parseInt(lay.dash?.cols) || 2));
+    const cols = (lay.dash?.columns || []).map(c => [...(c || [])]);
+    const mob = [...(lay.mobile?.items || [])];
+    // l'ancienne tuile AMS (apercu + detail) a ete coupee en deux : le detail juste apres l'apercu
+    if (!lay.amsSplit && defs.amsdetail) {
+      const after = list => { const i = list.findIndex(x => x?.id === "ams"); if (i >= 0 && !list.some(x => x?.id === "amsdetail")) list.splice(i + 1, 0, { id: "amsdetail", w: 2, h: "auto" }); };
+      cols.forEach(after); after(mob);
+    }
+    lay = { v: 2, max: n, layouts: { [n]: cols, ...(n !== 1 ? { 1: [mob] } : {}) } };
   }
-  // l'ancienne tuile AMS (apercu + detail) a ete coupee en deux : le detail se place juste apres l'apercu
-  if (!lay.amsSplit && defs.amsdetail) {
-    const after = list => { const i = list.findIndex(x => x.id === "ams"); if (i >= 0 && !list.some(x => x.id === "amsdetail")) list.splice(i + 1, 0, { id: "amsdetail", w: 2, h: "auto" }); };
-    dash.columns.forEach(after);
-    after(mobile.items);
-  }
-  return { v: 1, dash, mobile, amsSplit: true };
+  if (lay.v !== 2) return defaults(defs);
+  const layouts = {};
+  for (const n of [1, 2, 3, 4]) if (lay.layouts?.[n]) layouts[n] = cleanCols(lay.layouts[n], n, defs);
+  if (!Object.keys(layouts).length) return defaults(defs);
+  return { v: 2, max: Math.max(1, Math.min(4, parseInt(lay.max) || 2)), layouts };
+}
+// la disposition a n colonnes : la sienne, ou deduite de la plus proche reglee
+function layoutFor(lay, n) {
+  if (lay.layouts[n]) return lay.layouts[n];
+  const have = Object.keys(lay.layouts).map(Number).sort((a, b) => Math.abs(a - n) - Math.abs(b - n) || b - a);
+  const src = lay.layouts[have[0]];
+  if (src.length > n) return [...Array(n)].map((_, i) => src.filter((_c, j) => j % n === i).flat());
+  // moins de colonnes que voulu : les tuiles se repartissent, dans l'ordre, vers la colonne la moins chargee
+  const out = [...Array(n)].map(() => []);
+  const load = c => c.reduce((t, x) => t + (x.h === "auto" ? 3 : x.h) * (x.w === 2 ? 2 : 1), 0);
+  src.forEach((c, ci) => c.forEach(x => {
+    const k = ci < n && !out[ci].length ? ci : out.reduce((b, cc, i) => load(cc) < load(out[b]) ? i : b, 0);
+    out[k].push(x);
+  }));
+  return out;
 }
 
 function Cell({ item, def, edit, children, actions, drag, selected, onSelect }) {
@@ -127,18 +150,20 @@ export default function HomeGrid({ status, blocks }) {
   const [dragId, setDragId] = useState(null);
   const [sel, setSel] = useState(null);
   const [pick, setPick] = useState(null);            // colonne dont la case « + » est ouverte
+  const [ec, setEc] = useState(null);                // en personnalisation : la disposition reglee (nombre de colonnes)
   const saved = useRef(null);
-  // combien de colonnes tiennent vraiment : 4 choisies sur un ecran moyen en montrent 3, puis 2, puis 1
+  // combien de colonnes tiennent vraiment a l'ecran
   const box = useRef(null);
-  const [fit, setFit] = useState(4);
+  const [fit, setFit] = useState(() => Math.max(1, Math.floor((window.innerWidth - 280 + 12) / (COL_MIN + 12))));
   useEffect(() => {
-    const el = box.current;
+    const el = box.current?.parentElement;
     if (!el || typeof ResizeObserver === "undefined") return undefined;
     const ro = new ResizeObserver(([e]) => setFit(Math.max(1, Math.floor((e.contentRect.width + 12) / (COL_MIN + 12)))));
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-  const view = wide ? "dash" : "mobile";
+  // ce que l'accueil montre : une colonne sur telephone, sinon ce qui tient, au plus le maximum choisi
+  const showN = wide ? Math.max(1, Math.min(lay.max, fit)) : 1;
 
   useEffect(() => {
     client.get("/home/layout").then(({ data }) => { const l = normalize(data?.layout, defs); setLay(l); saved.current = JSON.stringify(l); })
@@ -147,6 +172,7 @@ export default function HomeGrid({ status, blocks }) {
     window.addEventListener("bn-home-edit", open);
     return () => window.removeEventListener("bn-home-edit", open);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (edit) setEc(showN); }, [edit]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async (l, reset = false) => {
     try {
@@ -155,16 +181,20 @@ export default function HomeGrid({ status, blocks }) {
       toast(reset ? "Accueil remis par défaut" : "Disposition enregistrée", "success");
     } catch (e) { toast(e.response?.data?.detail || e.message, "error"); }
   };
-  const done = () => { setEdit(false); setSel(null); if (JSON.stringify(lay) !== saved.current) save(lay); };
+  const done = () => { setEdit(false); setSel(null); setPick(null); if (JSON.stringify(lay) !== saved.current) save(lay); };
   const reset = () => { const l = defaults(defs); setLay(l); save(l, true); };
 
-  // ── les listes de la vue en cours : [colonnes] (mobile : une seule) ──
-  const cols = view === "dash" ? lay.dash.columns : [lay.mobile.items];
-  // a l'affichage (hors personnalisation), les colonnes en trop se fondent dans
-  // les autres, en alternance : 4 sur 2 -> [1re + 3e, 2e + 4e]
-  const shownCols = edit || cols.length <= fit ? cols
-    : [...Array(fit)].map((_, i) => cols.filter((_c, j) => j % fit === i).flat());
-  const setCols = next => setLay(l => view === "dash" ? { ...l, dash: { ...l.dash, columns: next } } : { ...l, mobile: { items: next[0] } });
+  // ── la disposition affichee (ou reglee) ──
+  const n = edit && ec ? (wide ? ec : 1) : showN;
+  const cols = layoutFor(lay, n);
+  const custom = !!lay.layouts[n];
+  const shownCols = cols;
+  const setCols = next => setLay(l => ({ ...l, layouts: { ...l.layouts, [n]: next } }));
+  const toAuto = () => setLay(l => {
+    if (Object.keys(l.layouts).length <= 1) return l;        // il en faut au moins une reglee
+    const { [n]: _gone, ...rest } = l.layouts;
+    return { ...l, layouts: rest };
+  });
   const where = id => { for (let c = 0; c < cols.length; c++) { const i = cols[c].findIndex(x => x.id === id); if (i >= 0) return [c, i]; } return null; };
   const update = (id, patch) => setCols(cols.map(c => c.map(x => x.id === id ? { ...x, ...patch } : x)));
   const move = (id, dc, di) => {
@@ -196,7 +226,7 @@ export default function HomeGrid({ status, blocks }) {
   const shown = new Set(cols.flat().map(x => x.id));
   const hidden = Object.keys(defs).filter(id => !shown.has(id));
   // une tuile ajoutee va dans la colonne la moins chargee (les blocs « auto » comptent pour 3 rangees)
-  const load = c => c.reduce((n, x) => n + (x.h === "auto" ? 3 : x.h) * (x.w === 2 ? 2 : 1), 0);
+  const load = c => c.reduce((t, x) => t + (x.h === "auto" ? 3 : x.h) * (x.w === 2 ? 2 : 1), 0);
   const add = (id, col = null) => {
     const next = cols.map(c => [...c]);
     const ci = col ?? next.reduce((b, c, i) => load(c) < load(next[b]) ? i : b, 0);
@@ -204,20 +234,13 @@ export default function HomeGrid({ status, blocks }) {
     setCols(next);
     setPick(null);
   };
-  const setNCols = n => setLay(l => {
-    const cur = l.dash.columns.map(c => [...c]);
-    while (cur.length < n) cur.push([]);
-    const keep = cur.slice(0, n);
-    cur.slice(n).forEach(c => keep[n - 1].push(...c));
-    return { ...l, dash: { cols: n, columns: keep } };
-  });
 
   const renderItem = (item, ci) => {
     const def = defs[item.id];
     if (!def) return null;
     const p = where(item.id);
     const actions = <>
-      {view === "dash" && cols.length > 1 && <>
+      {cols.length > 1 && <>
         <button style={btn()} disabled={p[0] === 0} onClick={() => move(item.id, -1, 0)} aria-label="Colonne de gauche"><ArrowLeft size={13}/></button>
         <button style={btn()} disabled={p[0] === cols.length - 1} onClick={() => move(item.id, 1, 0)} aria-label="Colonne de droite"><ArrowRight size={13}/></button>
       </>}
@@ -264,30 +287,53 @@ export default function HomeGrid({ status, blocks }) {
         <div className="card" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10,
           border: "1px solid rgba(59,130,246,0.45)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {wide ? <Monitor size={16}/> : <Smartphone size={16}/>}
+            {n === 1 ? <Smartphone size={16}/> : <Monitor size={16}/>}
             <span style={{ fontWeight: 900, fontSize: 14, color: "var(--text)" }}>
-              Personnaliser l'accueil · {wide ? "disposition PC" : "disposition mobile"}</span>
+              Personnaliser l'accueil · {n === 1 ? "une colonne (téléphone)" : `${n} colonnes`}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 800, padding: "2px 8px", borderRadius: 20,
+              background: custom ? "rgba(34,197,94,0.14)" : "var(--surface2)", color: custom ? "#16a34a" : "var(--muted)" }}>
+              {custom ? "réglée" : "automatique"}</span>
             <span style={{ flex: 1 }}/>
+            {custom && Object.keys(lay.layouts).length > 1 && (
+              <button onClick={toAuto} title="Cette disposition se déduira à nouveau des autres" style={{ padding: "7px 10px", borderRadius: 10,
+                border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
+                Repasser en automatique</button>
+            )}
             <button onClick={reset} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 10px", borderRadius: 10,
               border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
-              <RotateCcw size={14}/>Par défaut</button>
+              <RotateCcw size={14}/>Tout par défaut</button>
             <button onClick={done} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10,
               border: "none", background: "#3b82f6", color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>
               <Check size={14}/>Terminé</button>
           </div>
           <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.45 }}>
             {wide ? "Touche une tuile pour ses réglages, ou glisse-la pour la déplacer. " : "Touche une tuile pour la déplacer ou la régler. "}
-            « ½ » et « 1 » règlent la largeur, « ↕ » la hauteur. L'autre disposition ({wide ? "mobile" : "PC"}) se règle depuis
-            {wide ? " un téléphone" : " un ordinateur"}.</div>
+            « ½ » et « 1 » règlent la largeur, « ↕ » la hauteur. Chaque nombre de colonnes a sa disposition ; celle à une colonne
+            est aussi celle du téléphone. Une disposition « automatique » se déduit des autres tant qu'on ne la règle pas.</div>
           {wide && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              {lay.dash.cols > fit && <span style={{ width: "100%", fontSize: 12, color: "#d97706", fontWeight: 700 }}>
-                Sur cet écran, {fit} colonne{fit > 1 ? "s tiennent" : " tient"} : hors personnalisation, les {lay.dash.cols} colonnes se regroupent en {fit}.</span>}
-              <Columns size={15} style={{ color: "var(--muted)" }}/>
-              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>Colonnes</span>
-              {[1, 2, 3, 4].map(n => <button key={n} onClick={() => setNCols(n)} style={{ width: 32, height: 30, borderRadius: 9, cursor: "pointer",
-                fontWeight: 800, border: "1px solid var(--border)", background: lay.dash.cols === n ? "#3b82f6" : "var(--surface2)",
-                color: lay.dash.cols === n ? "#fff" : "var(--text2)" }}>{n}</button>)}
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <Columns size={15} style={{ color: "var(--muted)" }}/>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Disposition à régler</span>
+                {[1, 2, 3, 4].map(k => <button key={k} onClick={() => { setEc(k); setSel(null); setPick(null); }}
+                  title={k === 1 ? "Une colonne : c'est aussi l'accueil du téléphone" : `${k} colonnes`}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 30, padding: "0 10px", borderRadius: 9, cursor: "pointer",
+                    fontWeight: 800, border: "1px solid var(--border)", background: n === k ? "#3b82f6" : "var(--surface2)",
+                    color: n === k ? "#fff" : "var(--text2)" }}>
+                  {k === 1 && <Smartphone size={13}/>}{k}
+                  <span style={{ width: 6, height: 6, borderRadius: "50%", background: lay.layouts[k] ? "#22c55e" : "transparent",
+                    border: lay.layouts[k] ? "none" : "1px solid currentColor", opacity: 0.8 }}/></button>)}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <Monitor size={15} style={{ color: "var(--muted)" }}/>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Au plus sur grand écran</span>
+                {[1, 2, 3, 4].map(k => <button key={k} onClick={() => setLay(l => ({ ...l, max: k }))} style={{ width: 32, height: 30, borderRadius: 9,
+                  cursor: "pointer", fontWeight: 800, border: "1px solid var(--border)", background: lay.max === k ? "#8B5CF6" : "var(--surface2)",
+                  color: lay.max === k ? "#fff" : "var(--text2)" }}>{k}</button>)}
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>
+                  · ici, {Math.min(lay.max, fit)} colonne{Math.min(lay.max, fit) > 1 ? "s" : ""} s'affiche{Math.min(lay.max, fit) > 1 ? "nt" : ""}
+                  {fit < lay.max ? ` (l'écran n'en tient que ${fit})` : ""}</span>
+              </div>
             </div>
           )}
           {hidden.length > 0 && (
@@ -300,7 +346,8 @@ export default function HomeGrid({ status, blocks }) {
           )}
         </div>
       )}
-      <div ref={box} className="hg-cols" style={{ gridTemplateColumns: `repeat(${shownCols.length}, minmax(0,1fr))` }}>
+      <div ref={box} className="hg-cols" style={{ gridTemplateColumns: `repeat(${shownCols.length}, minmax(0,1fr))`,
+        ...(edit && wide && n === 1 ? { width: "100%", maxWidth: 420, margin: "0 auto" } : {}) }}>
         {shownCols.map((c, ci) => (
           <div key={ci} className="hg-col">
             {c.map(item => renderItem(item, ci))}
