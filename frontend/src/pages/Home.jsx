@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
+import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, Moon, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
+import { useAuth } from "../store/auth";
 import client, { apiUrl } from "../api/client";
 import AttentionSection from "../components/AttentionSection";
 import { relayed } from "../components/Friends";
@@ -732,6 +733,37 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
 
 
 // ── Page Home ──────────────────────────────────────────────────────────────
+// Un texte decoupe en mots : chacun peut bouger seul (effets de l'accueil)
+function Words({ text }) {
+  return String(text ?? "").split(/(\s+)/).map((p, i) => /\s/.test(p) || !p ? p : <span key={i} data-pk="">{p}</span>);
+}
+
+// Le bonjour : le nom, la date, et ou en est l'imprimante
+function Greeting({ status }) {
+  const username = useAuth(s => s.username) || "";
+  const h = new Date().getHours(), night = h >= 18 || h < 5;
+  const name = username ? username.charAt(0).toUpperCase() + username.slice(1) : "";
+  const date = new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+  const st = String(status?.status || "").toUpperCase();
+  const line = !status ? "" : !status.connected ? "L'imprimante ne répond pas pour l'instant."
+    : st === "RUNNING" ? `${status.print_name || "Une impression"} tourne, fin vers ${fmtFinishTime(status.remaining_minutes)?.time || "bientôt"}.`
+    : st === "PAUSE" || st === "PAUSED" ? `${status.print_name || "L'impression"} est en pause.`
+    : "L'imprimante est au repos, prête à imprimer.";
+  return (
+    <div className="card home-hello" style={{ padding:"14px 18px", display:"flex", alignItems:"center", gap:14 }}>
+      <span data-pk="" aria-hidden="true" style={{ width:42, height:42, borderRadius:13, flexShrink:0, display:"flex",
+        alignItems:"center", justifyContent:"center", background:"rgba(245,183,0,0.14)", color:"#F5B700" }}>
+        {night ? <Moon size={21}/> : <Sun size={21}/>}</span>
+      <div style={{ minWidth:0, flex:1 }}>
+        <div style={{ fontSize:21, fontWeight:800, color:"var(--text)", lineHeight:1.15 }}>
+          <Words text={`${night ? "Bonsoir" : "Bonjour"}${name ? " " + name : ""}`}/></div>
+        <div style={{ fontSize:12.5, color:"var(--muted)", marginTop:2, textTransform:"capitalize" }}><Words text={date}/></div>
+        {line && <div style={{ fontSize:13, color:"var(--text2)", marginTop:4 }}><Words text={line}/></div>}
+      </div>
+    </div>
+  );
+}
+
 export default function Home() {
   const { status, startPolling, stopPolling } = usePrinter();
   const [spoolLookup, setSpoolLookup] = useState({});
@@ -776,7 +808,18 @@ export default function Home() {
   }, []);
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", gap:12, maxWidth:640, margin:"0 auto" }}>
+    <div className="home-grid">
+      {/* Sur PC, plus large : l'imprimante et ses bobines a gauche, les points d'attention a droite */}
+      <style>{`
+        .home-grid { display:grid; gap:12px; grid-template-columns:minmax(0,1fr); max-width:640px; width:100%; margin:0 auto; }
+        .home-col { display:flex; flex-direction:column; gap:12px; min-width:0; }
+        @media (min-width: 1024px) {
+          .home-grid { max-width:1240px; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); align-items:start; }
+          .home-grid > .home-hello { grid-column:1 / -1; }
+        }
+      `}</style>
+      <Greeting status={status}/>
+      <div className="home-col">
       <StatusBanner status={status} />
       {(status?.status === "RUNNING" || status?.status === "PAUSED" || (status?.ams_list?.length > 0)) && <DeviceGrid key={visKey}
         amsList={status?.ams_list ?? []}
@@ -786,7 +829,8 @@ export default function Home() {
         spoolLookup={spoolLookup}
         activeNozzleId={status?.nozzles?.find(n => n.active)?.id ?? null}
       />}
-      <AttentionSection/>
+      </div>
+      <div className="home-col"><AttentionSection/></div>
     </div>
   );
 }
