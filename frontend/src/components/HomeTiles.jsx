@@ -431,12 +431,15 @@ function Versus({ rows, color, a = "aujourd'hui", b = "hier" }) {
 }
 // des chiffres en petites cases (deux par rangee quand c'est etroit)
 function Stats({ items }) {
-  const { W } = useBox();
-  const cols = Math.max(1, Math.min(items.length, Math.floor((W + 6) / 96)));
-  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, 1fr)`, gap: 6 }}>
-    {items.map(([l, x, c]) => <div key={l} className="card-sm" style={{ padding: "6px 8px", minWidth: 0 }}>
-      <div style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l}</div>
-      <div data-pk="" style={{ fontSize: 14.5, fontWeight: 900, color: c || "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x}</div></div>)}
+  const { W, zoom } = useBox();
+  const list = items.filter(it => it && it[1] != null && it[1] !== "" && it[1] !== "—");
+  const cols = Math.max(1, Math.min(list.length, Math.floor((W + 6) / (zoom ? 150 : 96))));
+  const wrap = zoom ? { overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", lineHeight: 1.25 }
+    : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" };
+  return <div style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: zoom ? 8 : 6 }}>
+    {list.map(([l, x, c]) => <div key={l} className="card-sm" style={{ padding: zoom ? "9px 11px" : "6px 8px", minWidth: 0 }}>
+      <div style={{ fontSize: zoom ? 11.5 : 10.5, fontWeight: 700, color: "var(--muted)", ...wrap }}>{l}</div>
+      <div data-pk="" style={{ fontSize: zoom ? 17 : 14.5, fontWeight: 900, color: c || "var(--text)", marginTop: zoom ? 2 : 0, ...wrap }}>{x}</div></div>)}
   </div>;
 }
 const Chip = ({ children, color = "#64748B", title }) => <span data-pk="" title={title} style={{ display: "inline-flex", alignItems: "center", gap: 4,
@@ -1523,13 +1526,23 @@ function Spool({ status, o, sz }) {
             {bar(10)}
           </div>
         </div>
+        <H2>La bobine</H2>
         <Stats items={[
-          ["Stock de ce filament", si.filament_stock_g != null ? fmtG(si.filament_stock_g) : "—"],
-          ["Prix", si.price ? fmtEur(si.price_override || si.price) : "—"],
-          ["Humidité de l'AMS", t.ams?.humidity ? `${t.ams.humidity} %` : "—", "#0ea5e9"],
-          ["Température de l'AMS", t.ams?.temp ? `${Number(t.ams.temp).toFixed(1).replace(".", ",")} °C` : "—"],
-          ["Dernier séchage", ago(si.last_dried_at)],
-          ["Première utilisation", si.first_used_at ? new Date(si.first_used_at).toLocaleDateString("fr-FR") : "—"]]}/>
+          ["Code filament", t.tray_id_name || si.profile_id],
+          ["Bobine n°", si.tag_number],
+          ["Stock de ce filament", si.filament_stock_g != null ? fmtG(si.filament_stock_g) : null],
+          ["Support vide", si.spool_weight_g ? `${Math.round(si.spool_weight_g)} g` : null],
+          ["Prix de la bobine", si.price_override || si.price ? fmtEur(si.price_override || si.price) : null],
+          ["Valeur restante", (si.price_override || si.price) && g != null && tot ? fmtEur((si.price_override || si.price) * g / tot) : null],
+          ["Première utilisation", si.first_used_at ? new Date(si.first_used_at).toLocaleDateString("fr-FR") : null],
+          ["Dernière utilisation", si.last_used_at ? ago(si.last_used_at) : null],
+          ["Dernier séchage", si.last_dried_at ? ago(si.last_dried_at) : "jamais", si.needs_drying ? "#0ea5e9" : undefined]]}/>
+        <H2>Dans l'AMS</H2>
+        <Stats items={[
+          ["Emplacement", slot],
+          ["Humidité", t.ams?.humidity ? `${t.ams.humidity} %` : null, "#0ea5e9"],
+          ["Température", t.ams?.temp ? `${Number(t.ams.temp).toFixed(1).replace(".", ",")} °C` : null],
+          ["Séchage", t.ams?.dry_time > 0 ? `${t.ams.dry_temperature || "?"} °C · encore ${fmtDur(t.ams.dry_time * 60)}` : null, "#f97316"]]}/>
         {si.comment && <Line>{si.comment}</Line>}</>}>
       {({ W, H }) => {
         const narrow = W < 215;
