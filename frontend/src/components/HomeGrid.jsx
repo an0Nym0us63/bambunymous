@@ -179,7 +179,14 @@ export default function HomeGrid({ status, blocks }) {
   const hide = id => setCols(cols.map(c => c.filter(x => x.id !== id)));
   const shown = new Set(cols.flat().map(x => x.id));
   const hidden = Object.keys(defs).filter(id => !shown.has(id));
-  const add = id => { const next = cols.map(c => [...c]); next[next.length - 1].push({ id, w: defs[id].w[0], h: defs[id].h[0] }); setCols(next); };
+  // une tuile ajoutee va dans la colonne la moins chargee (les blocs « auto » comptent pour 3 rangees)
+  const load = c => c.reduce((n, x) => n + (x.h === "auto" ? 3 : x.h) * (x.w === 2 ? 2 : 1), 0);
+  const add = id => {
+    const next = cols.map(c => [...c]);
+    const ci = next.reduce((b, c, i) => load(c) < load(next[b]) ? i : b, 0);
+    next[ci].push({ id, w: defs[id].w[0], h: defs[id].h[0] });
+    setCols(next);
+  };
   const setNCols = n => setLay(l => {
     const cur = l.dash.columns.map(c => [...c]);
     while (cur.length < n) cur.push([]);
