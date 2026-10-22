@@ -199,7 +199,7 @@ function MatchIcon({ mode, size = 10 }) {
 }
 
 // ── Boîtier AMS compact ─────────────────────────────────────────────────────
-function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup, slotsWidth }) {
+function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup, slotsWidth, climate = true }) {
   const isActive = ams.id === activeAmsId;
   const isDrying = ams.is_drying || ams.dry_time > 0;
   const getInfo = t => t.spool_info ?? null;
@@ -251,7 +251,7 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
       {/* Hauteur reservee meme sans capteur (externe) : sinon la tuile est
           plus courte que les AMS voisins et, dans la grille, son nom et ses
           slots ne s'alignent plus. On garde le bloc, vide, a la meme hauteur. */}
-      <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", columnGap:8, fontSize:9,
+      {climate && <div style={{ display:"flex", flexWrap:"wrap", justifyContent:"center", columnGap:8, fontSize:9,
         color:"var(--muted)", whiteSpace:"nowrap",
         minHeight:12, visibility: hasClimate(ams) ? "visible" : "hidden" }}>
         <span style={{ display:"flex", alignItems:"center", gap:2 }}><Droplets size={8}/>{ams.humidity}%</span>
@@ -260,7 +260,7 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
           animation: isDrying ? "dryGlow 2.5s ease-in-out infinite" : "none" }}>
           <Sun size={8} style={{ color: isDrying ? "#f97316" : undefined }}/>{(ams.temp ?? 0).toFixed(1)}°
         </span>
-      </div>
+      </div>}
       <div style={{ height:2, borderRadius:1,
         background: isSelected ? "#3b82f6" : "transparent",
         width: isSelected ? 32 : 8, transition:"all 0.3s" }} />
@@ -270,7 +270,7 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
 
 // ── Bobine SVG — vue de face, disque plat ──────────────────────────────────
 // ── Tray card ──────────────────────────────────────────────────────────────
-function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loaded, onClick }) {
+function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loaded, onClick, size = 68, showName = true }) {
   const isActive = amsId===activeAmsId && tray.id===activeTrayId;
   const empty = isEmptyTray(tray);
   // Bobine POSEE pour le sechage (emplacement vide) : memes details qu'une
@@ -291,8 +291,8 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
     : (tray.remain ?? 0);
   // Toujours en grammes : si bobine mappée → remaining_weight_g, sinon remain% × 10 (≈1kg)
   const wLabel = hasW
-    ? `${Math.round(spoolInfo.remaining_weight_g)}g`
-    : tray.remain != null ? `~${tray.remain * 10}g` : null;
+    ? `${Math.round(spoolInfo.remaining_weight_g)} g`
+    : tray.remain != null ? `≈ ${tray.remain * 10} g` : null;
 
   // Barre de progression : couleur du filament, contour si trop clair
   const lum = luminance((c1||"").replace("#",""));
@@ -317,7 +317,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
         {vide ? "" : (material || "—")}
       </p>
       {/* Barre de progression couleur filament */}
-      <div style={{ width:48, height:5, background: barTrackColor,
+      <div style={{ width: Math.round(size * 0.72), height:5, background: barTrackColor,
         borderRadius:3, overflow:"hidden",
         boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)" }}>
         {!vide && (
@@ -333,18 +333,18 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
         transform: isActive ? "scale(1.06)" : "scale(1)", transition:"transform 0.3s" }}>
         {empty && tray.drying_spool ? (
           <div style={{ opacity:0.6, position:"relative" }} title="Posée pour séchage (non insérée)">
-            <SpoolSVG colors={parseColors({}, tray.drying_spool)} empty={false} size={68} active={false}
+            <SpoolSVG colors={parseColors({}, tray.drying_spool)} empty={false} size={size} active={false}
               type={multicolorType({}, tray.drying_spool)}/>
             {/* Hachures legeres : la bobine est la, mais pas inseree. */}
-            <span style={{ position:"absolute", left:"50%", top:"50%", width:68, height:68,
+            <span style={{ position:"absolute", left:"50%", top:"50%", width:size, height:size,
               transform:"translate(-50%,-50%)", borderRadius:"50%", pointerEvents:"none",
               background:"repeating-linear-gradient(-45deg, rgba(255,255,255,0.28) 0px, rgba(255,255,255,0.28) 1.5px, transparent 1.5px, transparent 7px)" }}/>
           </div>
         ) : (
-          <SpoolSVG colors={empty?null:colors} empty={empty} size={68} active={isActive} type={mcType}/>
+          <SpoolSVG colors={empty?null:colors} empty={empty} size={size} active={isActive} type={mcType}/>
         )}
         {/* Label slot */}
-        <div style={{ position:"absolute", bottom:10, left:"50%",
+        <div style={{ position:"absolute", bottom: Math.round(size * 0.14), left:"50%",
           transform:"translateX(-50%)", padding:"1px 7px", borderRadius:20,
           fontSize:9, fontWeight:700, whiteSpace:"nowrap",
           background: isActive ? "#3b82f6" : "rgba(0,0,0,0.55)",
@@ -359,18 +359,20 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
           </span>
         )}
       </div>
-      <p style={{ fontSize:9, color:"var(--muted)", fontFamily:"monospace", height:14,
-        display:"flex", alignItems:"center", justifyContent:"center" }}>
+      <p style={{ fontSize:11, fontWeight:800, color:"var(--text)", height:14, fontVariantNumeric:"tabular-nums",
+        display:"flex", alignItems:"center", justifyContent:"center", gap:4, whiteSpace:"nowrap" }}>
         {vide ? "" : posee ? (hasW ? wLabel : "") : wLabel}
+        {!vide && !posee && pct > 0 && size >= 80 && <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)" }}>{Math.max(0, Math.min(100, pct))} %</span>}
       </p>
-      <p style={{ fontSize:9, color:"var(--text2)", textAlign:"center",
-        whiteSpace:"normal", wordBreak:"break-word", maxWidth:80, lineHeight:"12px" }}>
+      {showName && <p style={{ fontSize:10, color:"var(--text2)", textAlign:"center",
+        whiteSpace:"normal", wordBreak:"break-word", maxWidth: size + 20, lineHeight:"12px",
+        overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
         {empty
           ? (tray.drying_spool
               ? <span style={{ color:"#f59e0b" }}>☀ {tray.drying_spool.translated_name || tray.drying_spool.name}</span>
               : "Vide")
           : (name || "")}
-      </p>
+      </p>}
       {sansEchantillon(tray, spoolInfo) && (
         <span title={SWATCH_TITLE} style={{ display:"inline-flex", alignItems:"center", gap:3,
           padding:"1px 6px", borderRadius:20, fontSize:9, fontWeight:700, whiteSpace:"nowrap",
@@ -392,7 +394,17 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
 
 
 // ── Détail AMS ─────────────────────────────────────────────────────────────
-function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick }) {
+function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, hideName = false, showNames = true }) {
+  // la taille des bobines suit la largeur de la tuile
+  const box = React.useRef(null);
+  const [w, setW] = React.useState(0);
+  React.useLayoutEffect(() => {
+    const el = box.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const isActive = ams.id===activeAmsId;
   const isDrying = ams.is_drying || ams.dry_time > 0;
   const getInfo = t => t.spool_info ?? null;
@@ -404,11 +416,12 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
   };
 
   return (
-    <div className="card" style={{ padding:16,
+    <div ref={box} className="card" style={{ padding: hideName ? "6px 2px 4px" : 16,
       borderColor: isDrying ? "rgba(249,115,22,0.35)" : isActive ? "rgba(59,130,246,0.3)" : undefined,
       boxShadow: isDrying ? "0 0 0 1px rgba(249,115,22,0.1)" : isActive ? "0 0 0 1px rgba(59,130,246,0.1)" : undefined }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom: isDrying ? 10 : 16 }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent: hideName ? "flex-end" : "space-between", marginBottom: isDrying ? 10 : 12,
+        ...(hideName && !hasClimate(ams) && !isDrying ? { display:"none" } : {}) }}>
+        {!hideName && <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:12, fontWeight:700, letterSpacing:"0.06em", color: isDrying?"#f97316":isActive?"#3b82f6":"var(--muted)" }}>
             {amsName(ams.id)}
           </span>
@@ -424,7 +437,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
               <Thermometer size={13} style={{ color:"#f97316" }}/>
             </span>
           )}
-        </div>
+        </div>}
         {hasClimate(ams) && (
         <div style={{ display:"flex", gap:12, fontSize:10, color:"var(--muted)" }}>
           <span style={{ display:"flex", alignItems:"center", gap:3 }}><Droplets size={10}/>{ams.humidity}%</span>
@@ -466,6 +479,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
       {(() => {
         const n = traysInOrder(ams).length || 1;
         const GAP = 4, COLS = 4;
+        const size = w ? Math.max(44, Math.min(96, Math.floor((w - 32 - GAP * (COLS - 1)) / COLS) - 10)) : 68;
         return (
       <div style={{ display:"grid", gridTemplateColumns:`repeat(${n},minmax(0,1fr))`, gap:GAP,
         width: n < COLS
@@ -476,7 +490,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick })
           <TrayCard key={t.id} tray={t} amsId={ams.id}
             label={slotLabel(ams.id, t.id)}
             activeAmsId={activeAmsId} activeTrayId={activeTrayId}
-            spoolInfo={getInfo(t)}
+            spoolInfo={getInfo(t)} size={size} showName={showNames}
             onClick={()=>onTrayClick&&onTrayClick({tray:t,amsId:ams.id,amsLabel:amsName(ams.id),
               slotNo:traySlotNo(ams, t)})}
           />

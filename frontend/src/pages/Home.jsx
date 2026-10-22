@@ -10,9 +10,10 @@ import HomeGrid from "../components/HomeGrid";
 import { gradeOf } from "./Achievements";
 import LiveCamera from "../components/LiveCamera";
 import Lightbox from "../components/Lightbox";
+import AmsOrderEditor from "../components/AmsOrderEditor";
 import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
-import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel } from "../utils/ams";
+import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName } from "../utils/ams";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function hexCss(hex) {
@@ -553,7 +554,8 @@ const useDevSel = create(set => ({
 
 // part : "overview" (les AMS ou le rack), "detail" (la fiche de l'AMS ou de la buse
 // choisie), ou rien (les deux, l'un sous l'autre)
-export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId, part = null }) {
+export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId, part = null,
+  org = "grid", climate = true, selector = true, names = true }) {
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
   const headId  = rack?.head_id ?? -1;
@@ -625,9 +627,13 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
     }
   }, [headId]);
 
+  // la disposition se relit quand on l'enregistre depuis les reglages de la tuile
   useEffect(() => {
-    client.get("/settings/ams-order").then(({ data }) => setAmsOrder(data.order ?? null))
+    const load = () => client.get("/settings/ams-order").then(({ data }) => setAmsOrder(data.order ?? null))
       .catch(() => setAmsOrder(null));
+    load();
+    window.addEventListener("bn-ams-order", load);
+    return () => window.removeEventListener("bn-ams-order", load);
   }, []);
 
   if (!uniqueAmsList.length && !hasRack) return part === "detail" ? null : (
@@ -657,10 +663,38 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
       <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
         isSelected={detailKind === "ams" && selectedAms?.id === ams.id}
         onClick={() => setSelAms(ams.id)}
-        spoolLookup={spoolLookup}
+        spoolLookup={spoolLookup} climate={climate}
         slotsWidth={`${(slotCount(ams) / columnWeight(col)) * 100}%`}/>
     </div>
   ))).filter(Boolean);
+  // « selon la place » : les unites a la suite, chacune aussi large que ses emplacements,
+  // et la rangee passe a la ligne quand la tuile est etroite
+  const flow = uniqueAmsList.map(ams => (
+    <div key={ams.id} style={{ flex: `${slotCount(ams)} 1 ${slotCount(ams) * 26 + 14}px`, minWidth: 0 }}>
+      <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
+        isSelected={detailKind === "ams" && selectedAms?.id === ams.id}
+        onClick={() => setSelAms(ams.id)} spoolLookup={spoolLookup} climate={climate}/>
+    </div>
+  ));
+  // le detail porte son propre choix d'unite : des onglets avec les couleurs de chaque unite
+  const tabs = selector && uniqueAmsList.length > 1 && (
+    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2, scrollbarWidth: "none" }}>
+      {uniqueAmsList.map(a => {
+        const on = selectedAms?.id === a.id, act = a.id === activeAmsId;
+        return (
+          <button key={a.id} onClick={e => { e.stopPropagation(); setSelAms(a.id); }} style={{ display: "inline-flex", alignItems: "center", gap: 6,
+            padding: "5px 9px", borderRadius: 20, cursor: "pointer", flexShrink: 0, fontSize: 11.5, fontWeight: 800,
+            border: `1px solid ${on ? "#3b82f6" : "var(--border)"}`, background: on ? "rgba(59,130,246,0.12)" : "var(--surface2)",
+            color: on ? "#3b82f6" : "var(--text2)" }}>
+            {amsName(a.id)}
+            <span style={{ display: "inline-flex", gap: 2 }}>{(a.trays || []).map(t => <span key={t.id} style={{ width: 7, height: 7, borderRadius: 2,
+              background: t.color && !t.empty ? `#${String(t.color).replace("#", "").slice(0, 6)}` : "var(--border)" }}/>)}</span>
+            {act && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite" }}/>}
+          </button>
+        );
+      })}
+    </div>
+  );
 
   // Bouton de bascule : il annonce l'essentiel de la vue CACHEE, pour qu'on
   // n'ait pas a basculer juste pour savoir. Vue AMS → buse montee sur la tete
@@ -701,8 +735,9 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
           </div>
         )}
 
-        {!showRack && (
-          <div style={{ display:"grid", gridTemplateColumns: template,
+        {!showRack && (org === "auto"
+          ? <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>{flow}</div>
+          : <div style={{ display:"grid", gridTemplateColumns: template,
             gridTemplateRows: `repeat(${nbLignes}, auto)`, columnGap:10, rowGap:10 }}>
             {units}
           </div>
@@ -727,9 +762,10 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
       </div>}
 
       {/* Détail partagé — AMS (grille de trays) ou hotend rack (fiche), selon la vue */}
+      {showDetail && detailKind === "ams" && selectedAms && part === "detail" && tabs}
       {showDetail && detailKind === "ams" && selectedAms && (
         <AMSDetail ams={selectedAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
-          spoolLookup={spoolLookup} onTrayClick={setSelectedTray}/>
+          spoolLookup={spoolLookup} onTrayClick={setSelectedTray} hideName={part === "detail" && !!tabs} showNames={names}/>
       )}
       {showDetail && detailKind === "hotend" && selectedHotend?.slot && (
         <SlotDetail slot={selectedHotend.slot} num={selectedHotend.num}
@@ -1113,8 +1149,8 @@ export default function Home() {
     return () => { stopPolling(); clearInterval(spoolInterval); };
   }, []);
 
-  const devices = (st, part) => (st?.status === "RUNNING" || st?.status === "PAUSED" || (st?.ams_list?.length > 0)) ? <DeviceGrid
-    key={`${visKey}-${part}`} part={part}
+  const devices = (st, part, o = {}) => (st?.status === "RUNNING" || st?.status === "PAUSED" || (st?.ams_list?.length > 0)) ? <DeviceGrid
+    key={`${visKey}-${part}`} part={part} org={o.org} climate={o.climate !== false} selector={o.selector !== false} names={o.names !== false}
     amsList={st?.ams_list ?? []}
     activeAmsId={isRunning ? (st?.active_ams_id ?? -1) : -1}
     activeTrayId={isRunning ? (st?.active_tray_id ?? -1) : -1}
@@ -1151,9 +1187,20 @@ export default function Home() {
         { when: it => it.w !== 1, key: "open", label: "Volet déplié à l'ouverture", def: false },
         { when: it => it.w !== 1, key: "cam", label: "Caméra dans le volet", def: true },
         { when: it => it.w !== 1, key: "temps", label: "Températures dans le volet", def: true }] },
-    ams: { label: "AMS", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" }, render: (d, st) => devices(st, "overview") },
+    ams: { label: "AMS", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" },
+      render: (d, st, o) => devices(st, "overview", o),
+      options: [
+        { key: "org", label: "Organisation", def: "grid", group: "Disposition des AMS",
+          hint: "Ta grille, ou les unités à la suite, qui passent à la ligne selon la largeur de la tuile.",
+          choices: [["grid", "ma grille"], ["auto", "selon la place"]] },
+        { when: (it, o) => (o?.org ?? "grid") === "grid", key: "_amsGrid", label: "Ma grille", group: "Disposition des AMS",
+          hint: "Commune à toutes les dispositions de l'accueil.", render: () => <AmsOrderEditor/> },
+        { key: "climate", label: "Humidité et température sous chaque unité", def: true }] },
     amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Layers size={15}/>, color: "#6366F1" },
-      render: (d, st) => devices(st, "detail") },
+      render: (d, st, o) => devices(st, "detail", o),
+      options: [
+        { key: "selector", label: "Choisir l'unité dans la tuile", def: true, hint: "Des onglets en tête de tuile ; sinon on la choisit dans la tuile AMS." },
+        { key: "names", label: "Nom des bobines", def: true }] },
     attention: { label: "Points d'attention", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: d => {
         const cats = (d.attention?.categories || []).filter(c => c.total);
         return <span style={{ display: "inline-flex", gap: 6, fontSize: 13 }}>{cats.length ? cats.map(c => <span key={c.category} title={c.label}>

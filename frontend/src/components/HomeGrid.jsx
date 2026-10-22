@@ -276,7 +276,7 @@ function OptionsSheet({ title, options, values, onChange, onClose, head = null }
                       <div style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)" }}>{op.label}</div>
                       {op.hint && <div style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.4, marginTop: 1 }}>{op.hint}</div>}
                     </div>
-                    {!op.choices && op.type !== "text" && (
+                    {!op.choices && op.type !== "text" && !op.render && (
                       <button role="switch" aria-checked={!!v} onClick={() => onChange(op.key, !v)} style={sw(!!v)}>
                         <span style={{ position: "absolute", top: 3, left: v ? 21 : 3, width: 18, height: 18, borderRadius: "50%",
                           background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,0.3)" }}/></button>
@@ -290,6 +290,7 @@ function OptionsSheet({ title, options, values, onChange, onClose, head = null }
                           color: v === cv ? "#3b82f6" : "var(--text2)" }}>{cl}</button>)}
                     </div>
                   )}
+                  {op.render && <div style={{ borderRadius: 12, border: "1px solid var(--border)", padding: 10, background: "var(--surface)" }}>{op.render()}</div>}
                   {op.type === "text" && (
                     <input value={v || ""} maxLength={op.max || 80} placeholder={op.placeholder || ""} onChange={e => onChange(op.key, e.target.value)}
                       style={{ width: "100%", boxSizing: "border-box", padding: "8px 11px", borderRadius: 10, fontSize: 13,
@@ -361,6 +362,9 @@ export default function HomeGrid({ status, blocks, top = null }) {
     const open = () => { if (!currentFriend()) setEdit(true); };
     if (new URLSearchParams(window.location.search).get("edit") === "1" && !currentFriend()) {
       setEdit(true);
+      // ?tile=… : ouvre directement les reglages de cette tuile (depuis les parametres)
+      const t = new URLSearchParams(window.location.search).get("tile");
+      if (t) setOptFor(t);
       window.history.replaceState(null, "", window.location.pathname);
     }
     window.addEventListener("bn-home-edit", open);
@@ -448,7 +452,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
     // les options de la tuile (oui/non, ou un choix), propres a cette disposition
     const o = optsOf(def, item);
     // seulement les options qui servent a la taille choisie (« when ») ; elles se reglent dans leur panneau
-    const usable = allOpts(def).filter(op => !op.when || op.when(item));
+    const usable = allOpts(def).filter(op => !op.when || op.when(item, optsOf(def, item)));
     const options = null;
     const drag = wide ? {
       dragging: dragId === item.id,
@@ -509,7 +513,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
           </div>
         );
       })()}
-        options={allOpts(optDef).filter(op => !op.when || op.when(optItem))} values={optsOf(optDef, optItem)}
+        options={allOpts(optDef).filter(op => !op.when || op.when(optItem, optsOf(optDef, optItem)))} values={optsOf(optDef, optItem)}
         onChange={(k, v) => update(optItem.id, { o: { ...(optItem.o || {}), [k]: v } })} onClose={() => setOptFor(null)}/>}
       <style>{`
         .hg-cols { display:grid; gap:12px; align-items:start; }
