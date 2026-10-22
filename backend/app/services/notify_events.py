@@ -106,7 +106,7 @@ async def _cfg_for(event: str):
 
 
 async def _send(cfg, event: str, title: str, message: str, link=None, priority=3, file=None,
-                filename=None, attach=None, actions=None, click=None, icon=None):
+                filename=None, attach=None, actions=None, click=None, icon=None, swatch=None):
     """Envoi d'un type active : lien vers l'appli en clic et en premier bouton.
     file : image locale (piece jointe) ; attach : adresse https de la grande
     image (sans file, ou copie publique de file pour l'appli et le journal) ;
@@ -115,7 +115,7 @@ async def _send(cfg, event: str, title: str, message: str, link=None, priority=3
     acts = ([("Ouvrir BambuNymous", url)] if url else []) + list(actions or [])
     try:
         await N.send(title, message, click=click or url, priority=priority, file=file, filename=filename,
-                     attach=attach, actions=acts, event=event, icon=icon)
+                     attach=attach, actions=acts, event=event, icon=icon, swatch=swatch)
         logger.info(f"[NOTIF] {event} envoyee : {title}")
     except Exception as e:
         logger.warning(f"[NOTIF] {event} : {e}")
@@ -617,6 +617,39 @@ def _where(ams_id, slot) -> str:
         return f"AMS {ams_id} slot {int(slot) + 1}"
 
 
+def _hexes(*vals) -> list:
+    """Couleurs « #RRGGBB » lisibles dans ce qu'on donne (une couleur, une liste)."""
+    import re
+    out = []
+    for v in vals:
+        for x in re.findall(r"[0-9a-fA-F]{6}", str(v or "")):
+            c = "#" + x[:6].upper()
+            if c not in out:
+                out.append(c)
+    return out[:4]
+
+
+async def _spool_swatch(sid=None, tray=None):
+    """« color:#RRGGBB,… » de la bobine (le filament en stock, sinon la couleur lue
+    par l'AMS), pour la pastille de la notification dans l'appli."""
+    cols = []
+    if sid:
+        try:
+            from sqlalchemy import select
+            from ..db.session import AsyncSessionLocal
+            from ..models.filament import Spool, Filament
+            async with AsyncSessionLocal() as db:
+                f = (await db.execute(select(Filament).join(Spool, Spool.filament_id == Filament.id)
+                                      .where(Spool.id == sid))).scalar_one_or_none()
+            if f:
+                cols = _hexes(f.colors_array) or _hexes(f.color)
+        except Exception:
+            cols = []
+    if not cols and tray is not None:
+        cols = _hexes(getattr(tray, "raw_color", None) or getattr(tray, "color", None))
+    return "color:" + ",".join(cols) if cols else None
+
+
 async def spool_loaded(ams_id: int, slot: int):
     cfg = await _cfg_for("spool_loaded")
     t = _tray_now(ams_id, slot)
@@ -632,7 +665,8 @@ async def spool_loaded(ams_id: int, slot: int):
     if not known:
         lines.append("❓ Non reconnue dans ton stock : touche pour l'attribuer.")
     await _send(cfg, "spool_loaded", f"{'🧵 Bobine chargée' if known else '❓ Bobine non reconnue'} · {_where(ams_id, slot)}",
-                "\n".join(lines), link="/", priority=2 if known else 3)
+                "\n".join(lines), link="/", priority=2 if known else 3,
+                swatch=await _spool_swatch(t.spool_id if known else None, t))
 
 
 async def spool_removed(ams_id: int, slot: int, before):
@@ -642,7 +676,7 @@ async def spool_removed(ams_id: int, slot: int, before):
     sid, text = before or (None, "")
     lines = [x.replace("🧵 ", "") for x in (await _spool_lines([sid]) if sid else [])] or ([text] if text else [])
     await _send(cfg, "spool_removed", f"📤 Bobine retirée · {_where(ams_id, slot)}", "\n".join(lines),
-                link="/", priority=2)
+                link="/", priority=2, swatch=await _spool_swatch(sid))
 
 
 async def _friend_visual(cfg, fid: str, info: dict) -> dict:

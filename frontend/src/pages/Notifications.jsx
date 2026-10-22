@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import SpoolSVG from "../components/SpoolSVG";
 import { SlidersHorizontal } from "lucide-react";
 import client, { apiUrl } from "../api/client";
 import { notifSeenEvent } from "../components/NotifBell";
@@ -152,6 +153,15 @@ export default function Notifications() {
 // Grande icone : l'image si elle se charge, sinon l'emoji de la section sur
 // un disque de sa teinte (comme la notification de l'appli Android)
 function BigIcon({ thumb, it }) {
+  // une bobine : dessinee dans la couleur de son filament
+  if (typeof thumb === "string" && thumb.startsWith("color:")) {
+    const cols = thumb.slice(6).split(",").filter(c => /^#[0-9A-Fa-f]{6}$/.test(c));
+    if (cols.length) return (
+      <span style={{ width:46, height:46, borderRadius:12, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+        background:"var(--surface2)", border:"1px solid var(--border)" }}>
+        <SpoolSVG colors={cols} size={40}/></span>
+    );
+  }
   const [broken, setBroken] = useState(false);
   if (thumb && !broken) return (
     <img src={thumb} alt="" loading="lazy" onError={() => setBroken(true)} style={{ width:46, height:46, borderRadius:12,

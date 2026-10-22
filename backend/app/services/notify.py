@@ -1174,7 +1174,7 @@ _KIND_FR = {"ntfy": "ntfy", "telegram": "Telegram", "app": "l'appli Android", "j
 
 async def send(title: str, message: str = "", click=None, attach=None, tags=None, priority=None,
                actions=None, file=None, filename=None, icon=None, event=None, topic=None, chat=None,
-               _log: bool = True) -> None:
+               _log: bool = True, swatch=None) -> None:
     """icon : petite image de la notification (Android ; iOS l'ignore). Par
     defaut le logo BambuNymous, servi par l'appli si son adresse est connue.
     Part sur chaque canal active (ntfy, bot Telegram, appli Android) ; un canal
@@ -1193,7 +1193,7 @@ async def send(title: str, message: str = "", click=None, attach=None, tags=None
     log_id = None
     if _log and event in EVENTS:
         try:
-            log_id = await _log_sent(cfg, event, title, message, click, attach)
+            log_id = await _log_sent(cfg, event, title, message, click, attach, swatch)
         except Exception as e:
             logger.warning(f"[NOTIF] historique : {e}")
     kinds = [k for k in _on(cfg) if k in PUSH_KINDS]
@@ -1274,8 +1274,10 @@ async def _recipients(cfg, event: str) -> list:
     return out
 
 
-async def _log_sent(cfg, event, title, message, click, attach):
-    """Ecrit la notification dans le journal ; rend son id (ou None)."""
+async def _log_sent(cfg, event, title, message, click, attach, swatch=None):
+    """Ecrit la notification dans le journal ; rend son id (ou None). swatch :
+    couleurs d'une bobine (« color:#RRGGBB,#RRGGBB »), dessinees par l'appli a la
+    place de l'image quand il n'y en a pas."""
     from datetime import datetime, timedelta
     from sqlalchemy import delete
     from ..db.session import AsyncSessionLocal
@@ -1291,7 +1293,8 @@ async def _log_sent(cfg, event, title, message, click, attach):
     async with AsyncSessionLocal() as db:
         row = NotifLog(event=event, section=EVENTS[event]["section"], title=(title or "")[:250],
                        message=message or "", link=link[:500] or None,
-                       image=attach if attach and str(attach).startswith("https://") else None,
+                       image=attach if attach and str(attach).startswith("https://")
+                       else (swatch if swatch and str(swatch).startswith("color:") else None),
                        users="," + ",".join(users) + ",")
         db.add(row)
         await db.execute(delete(NotifLog).where(NotifLog.created_at < datetime.utcnow() - timedelta(days=HISTORY_DAYS)))
