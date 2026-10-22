@@ -1533,6 +1533,38 @@ CATALOG += [
        lore="Dix réglages changés dans la journée : tu cherches LA bonne configuration."),
     _a("duo_dry", "secret", "🧖", "Spa en duo", "Faire sécher deux AMS en même temps", [1],
        lore="Deux AMS au chaud en même temps : séance de spa pour toutes les bobines."),
+    # Lot du 22/10/2026 : file, surprises, fetes ; releves de l'imprimante et des copains (ach_watch)
+    _a("sur_mesure", "mw", "🎯", "Sur mesure", "{n} plateaux imprimés avec un filament choisi plateau par plateau", [1]),
+    _a("bon_public", "app", "🎭", "Bon public", "{n} surprises vécues à l'ouverture de l'appli", [1]),
+    _a("fete_days", "app", "🎉", "Toujours là pour la fête", "{n} fêtes vécues le jour même", [1]),
+    _a("sky_layers", "prints", "🏙️", "Gratte-ciel", "Une impression réussie de {n} couches", [1]),
+    _a("clean_prints", "prints", "🎼", "Sans fausse note", "{n} impressions réussies sans aucune alerte de l'imprimante", [1]),
+    _a("online_streak", "prints", "📶", "Toujours connectée", "{n} h d'affilée avec l'imprimante en ligne", [1], unit="h"),
+    _a("dry_days_ams", "filaments", "🏜️", "Air sec", "{n} jours avec tous les AMS sous 30 % d'humidité", [1], unit="j"),
+    _a("swaps_max", "filaments", "💃", "Valse en pleine impression", "{n} changements de filament dans une même impression", [1]),
+    _a("swaps_total", "filaments", "🎻", "Chef d'orchestre", "{n} changements de filament pendant les impressions", [1]),
+    _a("duels", "social", "⚔️", "Duel", "{n} fois où un copain imprime en même temps que toi", [1]),
+    _a("band_prints", "social", "🎸", "Toute la bande", "{n} fois où tous tes copains impriment en même temps que toi", [1]),
+    _a("cameleon", "secret", "🦎", "Caméléon", "Un modèle imprimé plateau par plateau dans d'autres couleurs que celles du créateur", [1],
+       lore="Le créateur l'avait voulu ainsi ; toi, tu l'as voulu autrement, plateau par plateau."),
+    _a("queue_cleared", "secret", "🧹", "File vidée", "Vider « À faire » après y avoir eu au moins 10 modèles", [1],
+       lore="Dix modèles en attente, et plus un seul : la liste est rayée jusqu'au bout."),
+    _a("fete_year", "secret", "🗓️", "Tour du calendrier", "Une fête vécue dans chacun des 12 mois", [1],
+       lore="Janvier, février… décembre : il y a toujours une raison de faire la fête."),
+    _a("rainbow_ams", "secret", "🌈", "Arc-en-ciel AMS", "4 familles de couleurs différentes chargées en même temps dans un même AMS", [1],
+       lore="Quatre bobines, quatre couleurs que tout oppose : l'AMS a des airs de palette de peintre."),
+    _a("zero_alert", "secret", "🧘", "Zéro alerte", "Plus aucun point d'attention à l'accueil", [1],
+       lore="Rien à signaler. Pas une bobine à sécher, pas une impression oubliée : la paix."),
+    _a("mille_feuille", "secret", "🍰", "Mille-feuille", "Une impression réussie de 1 000 couches pile", [1],
+       lore="Mille couches, pas une de plus, pas une de moins. Le pâtissier serait fier."),
+    _a("doctor", "secret", "🩺", "Docteur", "10 codes d'alerte différents rencontrés par l'imprimante", [1],
+       lore="Dix alertes différentes : tu connais ton imprimante mieux que son propre manuel."),
+    _a("oven", "secret", "🔥", "Four", "La chambre de l'imprimante au-dessus de 45 °C", [1],
+       lore="Plus de 45 °C dans la chambre : de quoi faire lever une pâte… ou imprimer de l'ABS."),
+    _a("marathon_online", "secret", "🛰️", "Marathon connecté", "Une impression de plus de 24 h réussie sans la moindre coupure", [1],
+       lore="Un jour entier d'impression, et pas une seconde hors ligne. Une liaison de satellite."),
+    _a("same_taste", "secret", "👯", "Même goût", "Le même modèle MakerWorld qu'un copain, à une semaine près", [1],
+       lore="Vous ne vous étiez rien dit, et pourtant : le même modèle, la même semaine."),
 ]
 CATALOG += [_a(f"egg_{k}", "secret", e, t, d, [1], lore=l) for k, (e, t, d, _h, l) in EGGS.items()]
 HIDDEN_EGGS = {"anonymous", "teapot"} | {k for k in EGGS if k.startswith("h_")}
@@ -1548,22 +1580,22 @@ PRANK_EGGS = {k for k in EGGS if k.startswith("p_")} - FETE_EGGS
 SECRET_SUBS = [
     ("calendar", "📅", "Calendrier", "halloween christmas new_year friday13 pi_day leap_day valentine may_day bastille "
      "all_year april_fool music summer_solstice winter_solstice easter st_patrick fathers_day crepes epiphany "
-     "palindrome_date anniversary all_seasons santa new_years_day star_wars towel_day pi_approx cat_day mid_august back_to_school beaujolais_print gta_print lunar_print holi_print diwali_print thanksgiving_print all_saints dia_muertos st_nicholas st_john earth_day equinox dst_summer dst_winter programmers mothers_day ascension mardi_gras black_friday double_day twelve"),
+     "palindrome_date anniversary all_seasons santa new_years_day star_wars towel_day pi_approx cat_day mid_august back_to_school fete_year beaujolais_print gta_print lunar_print holi_print diwali_print thanksgiving_print all_saints dia_muertos st_nicholas st_john earth_day equinox dst_summer dst_winter programmers mothers_day ascension mardi_gras black_friday double_day twelve"),
     ("clock", "🕛", "Heures et lune", "midnight noon mirror sequence elite last_minute saturday_night monday_morning "
      "sunday_morning full_moon new_moon all_nighter cinderella wake_up night_visit palindrome_time after_midnight snack_time tea_time aperitif wolf_hour end_noon end_evening"),
-    ("measures", "⚖️", "Poids et durées", "tiny flash titan answer42 beast kilo pi_grams palindrome full_day marathon42 "
+    ("measures", "⚖️", "Poids et durées", "mille_feuille oven marathon_online tiny flash titan answer42 beast kilo pi_grams palindrome full_day marathon42 "
      "bullseye tortoise hare one_hour watchmaker hundred_pieces triple3 suite123 min42 gram1 g100 g500 g_palindrome equal supersonic wink mammoth"),
-    ("colors", "🎨", "Couleurs et matières", "rainbow16 panda tricolore carbon rubber barbie smurf hulk fire pumpkin "
+    ("colors", "🎨", "Couleurs et matières", "cameleon rainbow_ams rainbow16 panda tricolore carbon rubber barbie smurf hulk fire pumpkin "
      "xmas_tree silk galaxy glow marble wood translucent sparkle soluble rainbow6 vader snow mouse clockwork prince chick belgium italy reggae bee ladybug sailor rainbow_ultimate mix2 lab3 abs_first asa_first pc_first nylon_first"),
-    ("counts", "🔢", "Compteurs et séries", "first_print n1001 hundred lucky777 leet y2k dont_panic weekend10 on_fire "
+    ("counts", "🔢", "Compteurs et séries", "queue_cleared first_print n1001 hundred lucky777 leet y2k dont_panic weekend10 on_fire "
      "rainbow_day triplets broken_record pi314 err404 devil666 almost1000 byte256 kilobyte ten_thousand onetwothree seventh lucky13 forager perfect_month all_hours plate7 unfaithful mega_group novelist"),
-    ("ups", "🎢", "Hauts et bas", "comeback phoenix bad_day insomniac comeback30 hibernation first_try so_close big_fall black_week revenge flawless_month"),
+    ("ups", "🎢", "Hauts et bas", "doctor comeback phoenix bad_day insomniac comeback30 hibernation first_try so_close big_fall black_week revenge flawless_month"),
     ("trade", "🛒", "Ventes et bobines", "penny luxury market_day museum sold_hot finally_sold eternal_spool "
      "devoured_spool big_order pit_stop psycho_price one_euro big_spool gold_spool bargain spring_clean sauna duo_dry"),
     ("mw", "🌐", "MakerWorld", "self_print bestseller pioneer harsh recycled"),
-    ("social", "🤝", "Copains", "night_owl_visit mutual_visit share_all"),
+    ("social", "🤝", "Copains", "night_owl_visit mutual_visit share_all same_taste"),
     ("famous", "🗿", "Modèles célèbres", "benchy_print calib_print dragon_print skull_print"),
-    ("app", "📱", "Photos et appli", "paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
+    ("app", "📱", "Photos et appli", "zero_alert paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
      "action_cam making_of festival retro_video family_film flash_video bunker pwd_changes black_photo white_photo "
      "panorama hires_photo photo_burst purge_day tinkerer"),
     ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS if k not in HIDDEN_EGGS | PRANK_EGGS | FETE_EGGS)),
@@ -1843,6 +1875,16 @@ HINTS = {
     "purge_day": "Un grand ménage dans l'appli, en une seule journée.",
     "tinkerer": "Une journée à tourner les boutons des réglages, encore et encore.",
     "duo_dry": "Plusieurs AMS, une même envie de chaleur, au même moment.",
+    "cameleon": "Choisis tes couleurs plateau par plateau, et surtout pas celles prévues.",
+    "queue_cleared": "Une longue liste d'envies… jusqu'à la dernière.",
+    "fete_year": "Chaque mois a sa fête. Toutes les saisons, sans en manquer une.",
+    "rainbow_ams": "Un seul AMS, et pas deux bobines du même ton.",
+    "zero_alert": "Un accueil sans rien à te reprocher.",
+    "mille_feuille": "Un chiffre rond, compté couche par couche.",
+    "doctor": "Ton imprimante t'a déjà tout dit… ou presque : collectionne ses messages.",
+    "oven": "Il fait chaud là-dedans. Très chaud.",
+    "marathon_online": "Une très longue impression, et une liaison qui ne lâche jamais.",
+    "same_taste": "Les grands esprits impriment la même chose.",
     "bunker": "Un mot de passe, c'est bien. Avec un code qui change toutes les 30 secondes, c'est mieux.",
     "pwd_changes": "Un bon secret se renouvelle de temps en temps.",
     "making_of": "Une seule impression, deux façons de la montrer : l'une bouge, l'autre pas.",
@@ -1862,7 +1904,11 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "wheel_played", "wheel_keys", "keys_earned", "keys_spent", "keys_max", "reveals", "tickets_won", "tickets_used",
         "grand_tour", "night_visit", "cutting_edge", "double_update", "shares", "mw_rates", "mw_boosts_given",
         "mw_likes_given", "mw_collected", "open_spools", "mw_points_bal", "profile_downloads", "queue_size", "accessory_units", "showcase", "household", "notes", "catalog", "assembled", "accessory_refs",
-        "to_order", "acc_images", "bunker", "devices", "mw_income"}
+        "to_order", "acc_images", "bunker", "devices", "mw_income",
+        # releves (ach_watch) et etats du moment, lot du 22/10/2026
+        "bon_public", "sky_layers", "clean_prints", "online_streak", "dry_days_ams", "swaps_max", "swaps_total", "duels",
+        "band_prints", "queue_cleared", "rainbow_ams", "zero_alert", "mille_feuille", "doctor", "oven", "marathon_online",
+        "same_taste"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
 # Seuils : six paliers (bronze -> legende), etendus a neuf (mythique, cosmique,
@@ -2028,6 +2074,18 @@ TIER_TABLE = {
     "auto_found": [5, 15, 30, 50, 75, 100, 140, 190, 250],
     "weighings": [1, 5, 15, 30, 50, 80, 120, 175, 250],
     "tray_fixes": [1, 3, 5, 10, 20, 35, 50, 75, 100],
+    # Lot du 22/10/2026 (seuils valides par l'utilisateur)
+    "sur_mesure": [1, 3, 5, 10, 20, 35, 50, 75, 100],
+    "bon_public": [1, 3, 5, 10, 15, 25, 40, 60, 88],
+    "fete_days": [1, 2, 4, 6, 9, 12, 16, 21, 27],
+    "sky_layers": [200, 500, 1000, 1500, 2000, 3000, 4000, 6000, 10000],
+    "clean_prints": [5, 10, 25, 50, 100, 200, 400, 700, 1000],
+    "dry_days_ams": [1, 3, 7, 14, 30, 60, 100, 180, 365],
+    "online_streak": [24, 48, 72, 168, 336, 720, 1440, 2160, 4380],
+    "swaps_max": [5, 10, 25, 50, 100, 200, 400, 700, 1000],
+    "swaps_total": [50, 200, 500, 1000, 2500, 5000, 10000, 25000, 50000],
+    "duels": [1, 3, 5, 10, 20, 35, 50, 75, 100],
+    "band_prints": [1, 2, 3, 5, 8, 12, 16, 20, 30],
     "to_order": [1, 3, 5, 10, 20, 30, 45, 65, 100],
     "good_seller": [1, 3, 5, 10, 15, 25, 35, 50, 75],
     "restocks": [1, 5, 10, 20, 35, 50, 75, 100, 150],
@@ -2393,6 +2451,15 @@ async def _load_data() -> dict:
     except Exception:
         logger.exception("[SUCCES] journal")
         alog = {}
+    # « A faire » : les choix de filament plateau par plateau, et la couleur des filaments choisis
+    try:
+        from .mw_queue import config as _qcfg
+        qplans = (await _qcfg()).get("plans") or {}
+        async with AsyncSessionLocal() as db:
+            fil_color = {i: c for i, c in (await db.execute(select(Filament.id, Filament.color))).all()}
+    except Exception:
+        logger.exception("[SUCCES] plans « A faire »")
+        qplans, fil_color = {}, {}
     try:
         from .login_watch import _devices_get
         devices = len({dev for v in (await _devices_get()).values() if isinstance(v, dict) for dev in v})
@@ -2411,7 +2478,8 @@ async def _load_data() -> dict:
             "queue": _queue_size(), "my_designs": my_designs,
             "alog": alog, "devices": devices, "photo_stats": photo_stats, "fil_more": fil_more, "spool_modes": spool_modes,
             "obj_more": obj_more, "acc_imgs": acc_imgs, "pcosts": pcosts, "totp": totp,
-            "game": {"keys": st.get("keys") or {}, "wheel": st.get("wheel") or {}}, "videos": videos, "eggs": await eggs_found(), "ams_live": _ams_live()}
+            "game": {"keys": st.get("keys") or {}, "wheel": st.get("wheel") or {}}, "videos": videos, "eggs": await eggs_found(), "ams_live": _ams_live(),
+            "qplans": qplans, "fil_color": fil_color}
 
 
 def _ams_live() -> int:
@@ -2977,6 +3045,7 @@ def compute_series(d: dict, now: datetime) -> dict:
     _batch21(push, d, now)
     _batch21b(push, d, now)
     _fun200(push, d, now)
+    _batch22(push, d, now)
     acc = 0
     for dt, q in sorted(((_ts(lk.created_at) or now), (lk.quantity or 0)) for lk in d["links"]):
         acc += q
@@ -3549,6 +3618,47 @@ def _fun200(push, d, now) -> None:
             push(f"egg_{k}", datetime.fromisoformat(at), 1)
 
 
+def _batch22(push, d, now) -> None:
+    """Lot du 22/10/2026 : plateaux sur mesure, Cameleon, fetes vecues."""
+    plans = d.get("qplans") or {}
+    colors = d.get("fil_color") or {}
+    ok = defaultdict(list)                        # (modele, plateau) -> dates des impressions reussies
+    for p in d["prints"]:
+        if p.design_id and p.print_date and (p.status or "").upper() in ("SUCCESS", "PARTIAL"):
+            try:
+                pn = int(str(p.plate_id or "1").strip() or 1)
+            except ValueError:
+                continue
+            ok[(str(p.design_id), pn)].append(p.print_date)
+    sur, cam = [], []
+    for did, plan in plans.items():
+        picks = {int(k): v for k, v in ((plan or {}).get("plate_picks") or {}).items() if str(k).isdigit() and v}
+        if not picks:
+            continue
+        for pn in picks:
+            sur += ok.get((str(did), pn), [])
+        # Cameleon : chaque plateau choisi imprime, chaque filament d'une autre couleur que celle prevue
+        if all(ok.get((str(did), pn)) for pn in picks):
+            def other(key, fid):
+                want = _rgb(str(key).split("|")[-1].lstrip("#")[:6])
+                got = _rgb(str(colors.get(fid) or "").lstrip("#")[:6])
+                return bool(want and got) and sum((a - b) ** 2 for a, b in zip(want, got)) ** 0.5 > 60
+            if all(other(k, fid) for pn in picks for k, fid in (picks[pn] or {}).items()):
+                cam.append(max(min(ok[(str(did), pn)]) for pn in picks))
+    for i, t in enumerate(sorted(sur), 1):
+        push("sur_mesure", t, i)
+    if cam:
+        push("cameleon", min(cam), 1)
+    # fetes vecues le jour meme (leurs farces), et une dans chacun des 12 mois
+    fetes = sorted(datetime.fromisoformat(at) for k, at in (d.get("eggs") or {}).items() if k in FETE_EGGS and at)
+    months = set()
+    for i, t in enumerate(fetes, 1):
+        push("fete_days", t, i)
+        months.add(_local(t).month)
+        if len(months) == 12:
+            push("fete_year", t, 1)
+
+
 def _wide(push, d, now) -> None:
     """Fournee de succes a paliers : couleurs, estimations, moments de la
     journee, annulations, records, taux, mois et week-ends, kilos, matieres
@@ -3908,6 +4018,24 @@ async def _live_values() -> dict:
         out["friends"] = len(await list_friends())
     except Exception:
         pass
+    try:
+        from . import ach_watch
+        out.update(await ach_watch.values())
+    except Exception as e:
+        logger.info(f"[SUCCES] releves illisibles : {e}")
+    try:
+        from ..db.session import AsyncSessionLocal
+        from .settings_service import get_setting
+        async with AsyncSessionLocal() as db:
+            seen = json.loads(await get_setting(db, KEY + "_SURPRISE_SEEN", "") or "{}")
+            out["bon_public"] = sum(int(v or 0) for v in seen.values()) if isinstance(seen, dict) else 0
+            from .attention import build_attention
+            cats, _errs = await build_attention(db)
+            out["zero_alert"] = 0 if cats else 1
+        best = ((await _state_get() or {}).get("best") or {}).get("queue_size") or 0
+        out["queue_cleared"] = 1 if best >= 10 and _queue_size() == 0 else 0
+    except Exception as e:
+        logger.info(f"[SUCCES] etats du moment illisibles : {e}")
     return out
 
 
@@ -4231,6 +4359,14 @@ async def surprise_shown(username: str, farce: str | None = None, now=None) -> N
             d = await _surprise_counts(db)
             _at, pending = await _surprise_state(db)
             had = bool(pending.pop(username, None))
+            if had:
+                try:
+                    seen = json.loads(await get_setting(db, KEY + "_SURPRISE_SEEN", "") or "{}")
+                except ValueError:
+                    seen = {}
+                seen = seen if isinstance(seen, dict) else {}
+                seen[username] = int(seen.get(username) or 0) + 1
+                await set_setting(db, KEY + "_SURPRISE_SEEN", json.dumps(seen))
             d[username] = 0
             await set_setting(db, KEY + "_SURPRISE", json.dumps(d))
             await set_setting(db, KEY + "_SURPRISE_PENDING", json.dumps(pending))

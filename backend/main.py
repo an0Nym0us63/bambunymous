@@ -163,6 +163,8 @@ async def lifespan(app: FastAPI):
     _bg(_nx.update_loop())
     from app.services import achievements as _ach
     _bg(_ach.warm())                 # succes : gros calcul prepare d'avance
+    from app.services import ach_watch as _aw
+    _bg(_aw.loop())                  # succes : releves de l'imprimante et des copains
     await mqtt_manager.start()
     # Catalogue filaments Bambu (m0h31h31/3DPrint-Filament-RFID-Tool) :
     # téléchargé au démarrage depuis GitHub, re-vérifié toutes les 24h via ETag.

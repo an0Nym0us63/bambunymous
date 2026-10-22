@@ -1492,7 +1492,9 @@ function Rules({ data, onClose }) {
           l'échelle : son premier seuil donne d'un coup tous les paliers d'en dessous.</P>
         <P>Ce qui se lit <b>au présent</b> (stock, MakerWorld, copains…) garde ce qui a été gagné, même si la valeur redescend.</P>
         <P>Certains gestes ne laissent de trace nulle part ailleurs : l'appli les note elle-même <b>à partir du moment où elle
-          les voit</b> (séchages dans l'AMS, pesées, réassorts, visites chez tes copains et des copains chez toi). Tes
+          les voit</b> (séchages dans l'AMS, pesées, réassorts, visites chez tes copains et des copains chez toi ; et depuis
+          le 22/10/2026 : connexion de l'imprimante, couches, changements de bobine, alertes, humidité des AMS, impressions en
+          même temps que les copains). Tes
           évaluations et tes points MakerWorld, eux, sont relus sur <b>tout ton historique</b>.</P>
         <P>Quand des seuils changent ou qu'un succès apparaît, tout se recalcule en silence : ce que ton historique méritait
           déjà t'est donné, sans notification ni clé.</P>
@@ -1838,7 +1840,7 @@ const GRADES = {
   social: ["Solitaire", "Sociable", "Rassembleur", "Chef de bande", "Âme de la bande"],
   game: ["Chanceux", "Joueur", "Parieur", "Flambeur", "Maître du casino"],
   cards: ["Joueur du dimanche", "Habitué du tapis", "Croupier", "Brelan d'as", "Roi du tapis vert"],
-  secret: ["Fouineur", "Détective", "Chasseur de trésors", "Initié", "Gardien des secrets"],
+  secret: ["Fureteur", "Détective", "Chasseur de trésors", "Initié", "Gardien des secrets"],
   other: ["Apprenti", "Compagnon", "Artisan", "Maître", "Grand Maître"],
 };
 function gradeOf(cat, v) {
