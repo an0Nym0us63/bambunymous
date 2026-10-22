@@ -458,7 +458,7 @@ async def enforce_readonly(request, call_next):
             return await call_next(request)
         # Notifications de l'appli : chaque compte gere SES telephones et ses
         # choix (controle par route : son compte, jamais une cle copain).
-        if path.startswith(("/api/v1/notify/me", "/api/v1/notify/devices")):
+        if path.startswith(("/api/v1/notify/me", "/api/v1/notify/devices", "/api/v1/home/layout")):
             return await call_next(request)
         if auth.lower().startswith("bearer "):
             payload = decode_token_payload(auth.split(" ", 1)[1].strip())

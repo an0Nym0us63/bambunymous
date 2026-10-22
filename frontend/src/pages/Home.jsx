@@ -1,10 +1,10 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, Moon, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
+import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
 import { useAuth } from "../store/auth";
 import client, { apiUrl } from "../api/client";
 import AttentionSection from "../components/AttentionSection";
-import HomeTiles from "../components/HomeTiles";
+import HomeGrid from "../components/HomeGrid";
 import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel } from "../utils/ams";
@@ -799,13 +799,15 @@ function Greeting({ status }) {
             <Words text={`${night ? "Bonsoir" : "Bonjour"}${first ? " " + first : ""}`}/></div>
           {line && <div style={{ fontSize: 13.5, marginTop: 5, opacity: 0.92 }}><Words text={line}/></div>}
         </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           {live && <span data-pk="" style={pill}>
             <span style={{ width: 46, height: 6, borderRadius: 6, background: "rgba(255,255,255,0.3)", overflow: "hidden" }}>
               <span style={{ display: "block", height: "100%", width: `${Math.round(status.progress || 0)}%`, background: "#fff" }}/></span>
             {Math.round(status.progress || 0)} %</span>}
           {fin && <span data-pk="" style={pill}><Clock size={14}/>fin {fin.dayDiff ? "demain " : ""}{fin.time}</span>}
           {today && <span data-pk="" style={pill}><Layers size={14}/>{today.count} aujourd'hui</span>}
+          <button onClick={() => window.dispatchEvent(new Event("bn-home-edit"))} aria-label="Personnaliser l'accueil"
+            title="Personnaliser l'accueil" style={{ ...pill, cursor: "pointer", padding: "7px 9px" }}><LayoutGrid size={15}/></button>
         </div>
       </div>
     </div>
@@ -855,30 +857,28 @@ export default function Home() {
     return () => { stopPolling(); clearInterval(spoolInterval); };
   }, []);
 
+  // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
+  const blocks = {
+    printer: { label: "Imprimante", w: [2], h: ["auto"], required: true, render: (d, st) => <StatusBanner status={st}/> },
+    ams: { label: "AMS et bobines", w: [2], h: ["auto"], render: (d, st) =>
+      (st?.status === "RUNNING" || st?.status === "PAUSED" || (st?.ams_list?.length > 0)) ? <DeviceGrid key={visKey}
+        amsList={st?.ams_list ?? []}
+        activeAmsId={isRunning ? (st?.active_ams_id ?? -1) : -1}
+        activeTrayId={isRunning ? (st?.active_tray_id ?? -1) : -1}
+        rack={st?.hotend_rack}
+        spoolLookup={spoolLookup}
+        activeNozzleId={st?.nozzles?.find(n => n.active)?.id ?? null}/> : null },
+    attention: { label: "Points d'attention", w: [2], h: ["auto"], render: () => <AttentionSection/> },
+  };
   return (
     <div className="home-grid">
-      {/* Sur PC, plus large : l'imprimante et ses bobines a gauche, les points d'attention a droite */}
       <style>{`
-        .home-grid { display:grid; gap:12px; grid-template-columns:minmax(0,1fr); max-width:640px; width:100%; margin:0 auto; }
-        .home-col { display:flex; flex-direction:column; gap:12px; min-width:0; }
-        @media (min-width: 1024px) {
-          .home-grid { max-width:1240px; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr); align-items:start; }
-          .home-grid > .home-hello { grid-column:1 / -1; }
-        }
+        .home-grid { display:flex; flex-direction:column; gap:12px; max-width:640px; width:100%; margin:0 auto; }
+        @media (min-width: 1024px) { .home-grid { max-width:1320px; } }
       `}</style>
       <Greeting status={status}/>
-      <div className="home-col">
-      <StatusBanner status={status} />
-      {(status?.status === "RUNNING" || status?.status === "PAUSED" || (status?.ams_list?.length > 0)) && <DeviceGrid key={visKey}
-        amsList={status?.ams_list ?? []}
-        activeAmsId={isRunning ? (status?.active_ams_id ?? -1) : -1}
-        activeTrayId={isRunning ? (status?.active_tray_id ?? -1) : -1}
-        rack={status?.hotend_rack}
-        spoolLookup={spoolLookup}
-        activeNozzleId={status?.nozzles?.find(n => n.active)?.id ?? null}
-      />}
-      </div>
-      <div className="home-col"><HomeTiles status={status}/><AttentionSection/></div>
+      <HomeGrid status={status} blocks={blocks}/>
     </div>
   );
 }
+

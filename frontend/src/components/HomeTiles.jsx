@@ -26,7 +26,7 @@ function Tile({ icon, color, label, onClick, wide, children }) {
     <div className="card" role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined} onClick={onClick}
       onKeyDown={e => { if (onClick && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); onClick(); } }}
       style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 8, minWidth: 0, cursor: onClick ? "pointer" : "default",
-        gridColumn: wide ? "1 / -1" : undefined, position: "relative", overflow: "hidden" }}>
+        position: "relative", overflow: "hidden", height: "100%", boxSizing: "border-box" }}>
       <span aria-hidden="true" style={{ position: "absolute", right: -24, top: -24, width: 80, height: 80, borderRadius: "50%",
         background: `${color}22`, pointerEvents: "none" }}/>
       <div style={{ display: "flex", alignItems: "center", gap: 8, position: "relative" }}>
@@ -47,7 +47,7 @@ const Line = ({ children }) =>
   <div style={{ fontSize: 12.5, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{children}</div>;
 
 // ── donnees ──────────────────────────────────────────────────────────────────
-function useTilesData() {
+export function useTilesData() {
   const [d, setD] = useState({});
   useEffect(() => {
     let dead = false;
@@ -332,23 +332,20 @@ function Wheel({ a }) {
   );
 }
 
-export default function HomeTiles({ status }) {
-  const d = useTilesData();
-  return (
-    <div className="home-tiles">
-      <style>{`.home-tiles { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); gap:10px; }`}</style>
-      <Today v={d.today}/>
-      <Week v={d.week}/>
-      <Next q={d.queue}/>
-      <Last p={d.last}/>
-      <Stock s={d.spools}/>
-      <Dry v={d.dry} status={status}/>
-      <Humidity status={status}/>
-      <Friends f={d.friends}/>
-      <MwPoints c={d.mw}/>
-      <ToRate r={d.rate}/>
-      <Wheel a={d.ach}/>
-      <Ach a={d.ach}/>
-    </div>
-  );
-}
+// Le catalogue : chaque tuile dit les largeurs (en sous-colonnes : 1 = moitie,
+// 2 = toute la colonne) et les hauteurs (en rangees, « auto » = selon son contenu)
+// qu'elle accepte. La premiere valeur de chaque liste est sa taille par defaut.
+export const TILES = {
+  today:    { label: "Aujourd'hui",          w: [1, 2], h: [1],    render: (d) => <Today v={d.today}/> },
+  week:     { label: "7 derniers jours",     w: [1, 2], h: [1, 2], render: (d) => <Week v={d.week}/> },
+  next:     { label: "Prochaine impression", w: [1, 2], h: [1],    render: (d) => <Next q={d.queue}/> },
+  last:     { label: "Dernière impression",  w: [1, 2], h: [1],    render: (d) => <Last p={d.last}/> },
+  stock:    { label: "Stock",                w: [1, 2], h: [1, 2], render: (d) => <Stock s={d.spools}/> },
+  dry:      { label: "Séchage",              w: [1, 2], h: [1],    render: (d, st) => <Dry v={d.dry} status={st}/> },
+  humidity: { label: "Humidité des AMS",     w: [1, 2], h: [1, 2], render: (d, st) => <Humidity status={st}/> },
+  friends:  { label: "Copains",              w: [1, 2], h: [1, 2], render: (d) => <Friends f={d.friends}/> },
+  mw:       { label: "Points MakerWorld",    w: [1, 2], h: [1],    render: (d) => <MwPoints c={d.mw}/> },
+  rate:     { label: "À évaluer",            w: [1, 2], h: [1],    render: (d) => <ToRate r={d.rate}/> },
+  wheel:    { label: "Roue et clés",         w: [1, 2], h: [1],    render: (d) => <Wheel a={d.ach}/> },
+  ach:      { label: "Succès",               w: [2],    h: [1, 2], render: (d) => <Ach a={d.ach}/> },
+};

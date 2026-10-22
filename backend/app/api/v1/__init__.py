@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from .routes import attention, rfid, auth, users, printer, settings, filaments, import_db, logs, camera, prints, import_zip, objects, import_spoolnymous, share, makerworld, notify, friends, achievements
+from .routes import attention, rfid, auth, users, printer, settings, filaments, import_db, logs, camera, prints, import_zip, objects, import_spoolnymous, share, makerworld, notify, friends, achievements, home
 
 router = APIRouter(prefix="/api/v1")
 router.include_router(auth.router,      prefix="/auth",      tags=["auth"])
@@ -20,5 +20,6 @@ router.include_router(makerworld.router, prefix="/makerworld",  tags=["makerworl
 router.include_router(notify.router,     prefix="/notify",      tags=["notify"])
 router.include_router(friends.router,    prefix="/friends",     tags=["friends"])
 router.include_router(achievements.router, prefix="/achievements", tags=["achievements"])
+router.include_router(home.router,      prefix="/home",        tags=["home"])
 
 router.include_router(import_spoolnymous.router)
