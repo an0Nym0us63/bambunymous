@@ -2145,7 +2145,7 @@ for _sid, _semo, _sname, _ids in _DRAWERS:
     for _k, _l, _c, _i, _p in CARD_RANKS:
         CATALOG.append({
             "id": f"card_s_{_sid}_{_k}", "cat": "cards", "sub": f"s_{_sid}", "live": False, "emoji": _semo,
-            "name": f"{_l} · {_sname}", "tiers": [1], "card_tier": CARD_TIERS[_k], "pile": (_sid, _p),
+            "name": f"{_l} · Secrets {_sname}", "tiers": [1], "card_tier": CARD_TIERS[_k], "pile": (_sid, _p),
             "desc": (f"Tous les secrets du tiroir « {_sname} »" if _p == 100
                      else f"{_p} % des secrets du tiroir « {_sname} »"),
             "lore": f"{_l} de « {_sname} » : {_p} % du tiroir trouvé. Un secret ajouté peut la retourner."})
@@ -2157,7 +2157,7 @@ for _k, _l, _c, _i, _p in CARD_RANKS:
         "lore": ("Tous les As. Le jeu est complet, la main est parfaite." if _k == "a"
                  else f"Tous les {_l}s du jeu dans ta main.")})
 CARD_GROUPS = ([("jokers", "🃏", "Jokers")] + [(f"c_{c}", e, n) for c, e, n in SET_CATS]
-               + [(f"s_{x[0]}", x[1], x[2]) for x in _DRAWERS])
+               + [(f"s_{x[0]}", x[1], f"Secrets · {x[2]}") for x in _DRAWERS])
 
 # Completude (22/10/2026) : un tiroir de secrets entierement trouve, une section
 # entierement au dernier palier, et tout a 100 %. Recalcules a chaque passage

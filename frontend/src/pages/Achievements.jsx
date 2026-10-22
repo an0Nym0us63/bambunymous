@@ -286,9 +286,13 @@ export default function Achievements({ embedded = false }) {
                   ? data.card_groups.map(g => ({ ...g, hand: true, items: items.filter(x => x.sub === g.id)
                       .sort((a, b) => CARD_ORDER.indexOf(a.tiers[0].id) - CARD_ORDER.indexOf(b.tiers[0].id)) }))
                       .filter(g => g.items.length)
+                      // les mains des sections, puis celles des tiroirs de secrets (memes noms parfois : Copains, MakerWorld…)
+                      .map((g, i, arr) => ({ ...g, head: g.id[0] !== arr[i - 1]?.id[0]
+                        ? { c:"Mains des sections", s:"Mains des tiroirs de secrets" }[g.id[0]] : null }))
                   : [{ id:"", items }]
                 ).map(sb => (
                   <div key={sb.id} style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                    {sb.head && <div style={{ ...sectionTitle, marginTop:6 }}>{sb.head}</div>}
                     {sb.id && (() => {
                       const col = SUB_COLOR[sb.id] || (sb.hand && (CAT_COLOR[sb.id.slice(2)] || SUB_COLOR[sb.id.slice(2)])) || "#A855F7";
                       const isOpen = openSubs.has(sb.id), mystery = sb.id === "unknown";
