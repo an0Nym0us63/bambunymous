@@ -132,10 +132,12 @@ export default function Achievements({ embedded = false }) {
     <div className="ach-room" style={{ maxWidth: embedded ? undefined : 900, width:"100%", margin:"0 auto", display:"flex", flexDirection:"column", gap:14 }}>
       {!embedded && <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0 }}>Succès</h1>}
 
+      {/* Le grade de maker, en tete, a part */}
+      <GradePlate v={data.score_max ? data.score / data.score_max : 0} friend={atFriend}/>
+
       {/* Bilan : score (jauge), vitrine des medailles, puis le tresor (cles, tickets, machine) */}
       <div className="card" style={{ padding:"16px 18px", display:"flex", flexDirection:"column", gap:16,
         background:"linear-gradient(135deg, rgba(245,183,0,0.10), rgba(139,92,246,0.10)), var(--surface)" }}>
-        <GradePlate v={data.score_max ? data.score / data.score_max : 0} friend={atFriend}/>
         <div style={{ display:"flex", gap:18, alignItems:"center", flexWrap:"wrap" }}>
           <ScoreHero data={data}/>
           <div style={{ flex:"2 1 300px", minWidth:0, display:"flex", flexDirection:"column", gap:8 }}>
@@ -1662,7 +1664,7 @@ function PalsUnique({ rivals }) {
 // Une carte a jouer : de dos tant qu'elle n'est pas gagnee ; de face, son rang
 // dans les coins et l'enseigne de sa section au centre. L'As a le liseré
 // arc-en-ciel de l'Eternel, le Joker d'or brille.
-const CARD_ORDER = ["card_v", "card_d", "card_r", "card_a", "card_jv", "card_jd", "card_jr", "card_ja"];
+export const CARD_ORDER = ["card_v", "card_d", "card_r", "card_a", "card_jv", "card_jd", "card_jr", "card_ja"];
 function PlayCard({ tier, emoji, size, locked }) {
   const h = size, w = Math.round(size * 0.72), c = tier.color;
   // dos : une couleur trop sombre (l'As, noir comme l'Eternel) se perdrait sur le tapis
@@ -1843,7 +1845,7 @@ const GRADES = {
   secret: ["Fureteur", "Détective", "Chasseur de trésors", "Initié", "Gardien des secrets"],
   other: ["Apprenti", "Compagnon", "Artisan", "Maître", "Grand Maître"],
 };
-function gradeOf(cat, v) {
+export function gradeOf(cat, v) {
   const names = cat == null ? GRADES._ : GRADES[cat] || GRADES.other;
   let i = -1;
   GRADE_AT.forEach((x, j) => { if (v >= x) i = j; });
@@ -1859,7 +1861,7 @@ const GRADE_METAL = [
 ];
 // L'ecusson d'un grade : un blason de metal, une buse gravee au centre, et ses
 // echelons (etoiles) en dessous. Le dernier a un liseré arc-en-ciel et un reflet.
-function GradeEmblem({ i, size = 22, locked = false }) {
+export function GradeEmblem({ i, size = 22, locked = false }) {
   const m = GRADE_METAL[Math.max(0, i)], id = `ge${i}${locked ? "l" : ""}${size}`, top = i === 4 && !locked;
   return (
     <svg width={size} height={size * 1.15} viewBox="0 0 40 46" aria-hidden="true" style={{ flexShrink:0, overflow:"visible",
@@ -1906,31 +1908,55 @@ function GradePlate({ v, friend }) {
   const i = Math.max(0, g.i), m = GRADE_METAL[i], none = g.i < 0;
   const lo = none ? 0 : GRADE_AT[g.i], hi = GRADE_AT[g.i + 1];
   const p = hi ? Math.max(0, Math.min(1, (v - lo) / (hi - lo))) : 1;
+  const nx = GRADE_METAL[Math.min(4, g.i + 1)];
   return (
-    <div style={{ position:"relative", overflow:"hidden", display:"flex", alignItems:"center", gap:14, padding:"12px 16px",
-      borderRadius:16, border:`1px solid ${m.b}66`,
-      background:`radial-gradient(120% 140% at 0% 50%, ${m.a}66, transparent 60%), linear-gradient(135deg, ${m.b}22, transparent 70%), var(--surface)`,
-      boxShadow:`inset 0 1px 0 rgba(255,255,255,.25), 0 8px 24px -14px ${m.b}` }}>
-      <style>{`@keyframes bn-grade-sweep { 0%, 55% { transform: translateX(0) skewX(-20deg) } 100% { transform: translateX(80px) skewX(-20deg) } }`}</style>
-      <GradeEmblem i={i} size={58} locked={none}/>
-      <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:3 }}>
-        <span style={{ fontSize:10.5, fontWeight:800, letterSpacing:".16em", textTransform:"uppercase", color:"var(--muted)" }}>
-          🎓 {friend ? "Son grade de maker" : "Ton grade de maker"}</span>
-        <span style={{ fontSize:22, fontWeight:900, lineHeight:1.1, letterSpacing:".01em",
-          // une seule couleur, lisible jusqu'au bout ; le metal en halo (la legende garde son arc-en-ciel)
-          ...(i === 4 && !none ? { backgroundImage:"linear-gradient(90deg, #dc2626, #d97706, #ca8a04, #16a34a, #0891b2, #4f46e5, #c026d3)",
-            WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }
-            : { color: none ? "var(--muted)" : "var(--text)", textShadow: none ? "none" : `0 0 14px ${m.b}88` }) }}>{none ? "Pas encore de grade" : g.name}</span>
-        <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:2 }}>
-          <span style={{ display:"flex", gap:3 }}>
-            {GRADE_AT.map((_x, k) => <GradeEmblem key={k} i={k} size={13} locked={k > g.i}/>)}</span>
-          {g.next ? <>
-            <span style={{ flex:1, height:6, borderRadius:6, background:"var(--surface2)", overflow:"hidden", minWidth:40 }}>
-              <span style={{ display:"block", height:"100%", width:`${Math.round(p * 100)}%`, borderRadius:6,
-                background:`linear-gradient(90deg, ${m.b}, ${GRADE_METAL[Math.min(4, g.i + 1)].b})` }}/></span>
-            <span style={{ fontSize:11, color:"var(--text2)", whiteSpace:"nowrap" }}>
-              <b>{g.next}</b> à {Math.round(hi * 100)} %</span>
-          </> : <span style={{ fontSize:11, fontWeight:800, color:m.b }}>Tout en haut ✨</span>}
+    <div className="card gplate" style={{ position:"relative", overflow:"hidden", padding:"16px 18px", borderRadius:18,
+      border:`1px solid ${m.b}77`,
+      // le metal sur toute la largeur : teinte a gauche, reflets en biais, l'eclat du grade suivant a droite
+      background:`linear-gradient(100deg, ${m.a}88 0%, ${m.b}33 45%, ${nx.a}55 100%), ` +
+        `repeating-linear-gradient(115deg, rgba(255,255,255,0.07) 0 2px, transparent 2px 14px), var(--surface)`,
+      boxShadow:`inset 0 1px 0 rgba(255,255,255,.3), 0 10px 28px -16px ${m.b}` }}>
+      <style>{`
+        @keyframes bn-grade-sweep { 0%, 55% { transform: translateX(0) skewX(-20deg) } 100% { transform: translateX(80px) skewX(-20deg) } }
+        .gplate-in { display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
+        .gplate-ladder { display:flex; gap:6px; align-items:flex-end; margin-left:auto; }
+        @media (max-width: 620px) { .gplate-ladder { margin-left:0; width:100%; justify-content:space-between; } }
+      `}</style>
+      <div className="gplate-in">
+        <span data-pk=""><GradeEmblem i={i} size={62} locked={none}/></span>
+        <div style={{ flex:"1 1 180px", minWidth:0, display:"flex", flexDirection:"column", gap:4 }}>
+          <span style={{ fontSize:10.5, fontWeight:800, letterSpacing:".16em", textTransform:"uppercase", color:"var(--muted)" }}>
+            🎓 {friend ? "Son grade de maker" : "Ton grade de maker"}</span>
+          <span style={{ fontSize:24, fontWeight:900, lineHeight:1.1,
+            ...(i === 4 && !none ? { backgroundImage:"linear-gradient(90deg, #dc2626, #d97706, #ca8a04, #16a34a, #0891b2, #4f46e5, #c026d3)",
+              WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }
+              : { color: none ? "var(--muted)" : "var(--text)", textShadow: none ? "none" : `0 0 14px ${m.b}88` }) }}>
+            {none ? "Pas encore de grade" : g.name}</span>
+          {g.next ? (
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginTop:2 }}>
+              <span style={{ flex:1, height:7, borderRadius:7, background:"rgba(0,0,0,0.10)", overflow:"hidden", minWidth:60 }}>
+                <span style={{ display:"block", height:"100%", width:`${Math.round(p * 100)}%`, borderRadius:7,
+                  background:`linear-gradient(90deg, ${m.b}, ${nx.b})` }}/></span>
+              <span style={{ fontSize:11.5, color:"var(--text2)", whiteSpace:"nowrap" }}>
+                <b>{g.next}</b> à {Math.round(hi * 100)} %</span>
+            </div>
+          ) : <span style={{ fontSize:12, fontWeight:800, color:m.b }}>Tout en haut ✨</span>}
+        </div>
+        {/* l'echelle des cinq grades : le mien en avant, les suivants a conquerir */}
+        <div className="gplate-ladder">
+          {GRADE_AT.map((x, k) => {
+            const mine = k === g.i, got = k <= g.i;
+            return (
+              <div key={k} title={`${GRADES._[k]} · ${Math.round(x * 100)} %`} style={{ display:"flex", flexDirection:"column",
+                alignItems:"center", gap:3, width:58, padding:"6px 2px", borderRadius:12,
+                background: mine ? "rgba(255,255,255,0.35)" : "transparent",
+                border: mine ? `1px solid ${GRADE_METAL[k].b}88` : "1px solid transparent" }}>
+                <span data-pk=""><GradeEmblem i={k} size={mine ? 30 : 24} locked={!got}/></span>
+                <span style={{ fontSize:9.5, fontWeight: mine ? 900 : 700, textAlign:"center", lineHeight:1.15,
+                  color: got ? "var(--text)" : "var(--muted)" }}>{GRADES._[k]}</span>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

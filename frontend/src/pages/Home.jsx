@@ -540,7 +540,7 @@ const VIEW_KEY = "home.deviceView";
 // la vue cachee : assez pour etre vu, pas au point de devenir un bruit de fond.
 const BLINK_MS = 20000;
 
-function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId }) {
+export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId }) {
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
   const headId  = rack?.head_id ?? -1;

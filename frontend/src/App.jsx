@@ -4,6 +4,8 @@ import { useAuth } from "./store/auth";
 import Layout from "./components/layout/Layout";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
+import Accueil1 from "./pages/Accueil1";
+import Accueil2 from "./pages/Accueil2";
 import Settings from "./pages/Settings";
 import Logs from "./pages/Logs";
 import Stats from "./pages/Stats";
@@ -103,6 +105,8 @@ export default function App() {
         </PrivateRoute>
       }>
         <Route index element={<Home />} />
+        <Route path="accueil1" element={<Accueil1 />} />
+        <Route path="accueil2" element={<Accueil2 />} />
         <Route path="filaments" element={<Filaments />} />
         <Route path="settings" element={<Settings />} />
         <Route path="logs" element={<Logs />} />
