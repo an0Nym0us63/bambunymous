@@ -162,7 +162,7 @@ function Frame({ def, children, extra }) {
 // libelle, son explication et la bonne commande (interrupteur, choix, texte).
 // Les options peuvent etre groupees (« group »). Les changements s'appliquent
 // aussitot ; « Terminé » de la personnalisation enregistre.
-function OptionsSheet({ title, options, values, onChange, onClose }) {
+function OptionsSheet({ title, options, values, onChange, onClose, head = null }) {
   useEffect(() => {
     const k = e => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", k);
@@ -184,9 +184,10 @@ function OptionsSheet({ title, options, values, onChange, onClose }) {
         padding: "14px 16px", background: "var(--sheet-bg, var(--surface))", backdropFilter: "none", display: "flex", flexDirection: "column", gap: 12 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <Settings2 size={18} style={{ color: "#3b82f6" }}/>
-          <span style={{ flex: 1, fontSize: 15, fontWeight: 900, color: "var(--text)" }}>Options · {title}</span>
+          <span style={{ flex: 1, fontSize: 15, fontWeight: 900, color: "var(--text)" }}>{title}</span>
           <button onClick={onClose} aria-label="Fermer" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }}><X size={20}/></button>
         </div>
+        {head}
         {groups.map(g => (
           <div key={g.name} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             {g.name && <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)",
@@ -355,22 +356,15 @@ export default function HomeGrid({ status, blocks, top = null }) {
       </>}
       <button style={btn()} onClick={() => move(item.id, 0, -1)} aria-label="Monter"><ArrowUp size={13}/></button>
       <button style={btn()} onClick={() => move(item.id, 0, 1)} aria-label="Descendre"><ArrowDown size={13}/></button>
-      {def.w.length > 1 && def.w.map(w => <button key={"w" + w} style={btn(item.w === w)}
-        onClick={() => { const hs = heightsOf(def, w); update(item.id, { w, h: hs.includes(item.h) ? item.h : hs[0] }); }}
-        title={w === 1 ? "Demi-largeur" : "Toute la largeur"}>{w === 1 ? "½" : "1"}</button>)}
-      {heightsOf(def, item.w).length > 1 && heightsOf(def, item.w).map(h => <button key={"h" + h} style={btn(item.h === h)} onClick={() => update(item.id, { h })}
-        title={h === "auto" ? "Hauteur selon le contenu" : h === 0.5 ? "Une demi-rangée : une ligne de résumé" : `${h} rangée${h > 1 ? "s" : ""} de haut`}>
-        {h === "auto" ? "↕" : h === 0.5 ? "½↕" : `${h}↕`}</button>)}
-      {!def.required && <button style={btn()} onClick={() => hide(item.id)} aria-label="Masquer"><EyeOff size={13}/></button>}
+      {!def.required && <button style={btn()} onClick={() => hide(item.id)} aria-label="Masquer" title="Masquer la tuile"><EyeOff size={13}/></button>}
+      <button style={{ ...btn(), marginLeft: "auto" }} onClick={() => setOptFor(item.id)} aria-label="Réglages de la tuile"
+        title="Taille et options"><Settings2 size={14}/></button>
     </>;
     // les options de la tuile (oui/non, ou un choix), propres a cette disposition
     const o = optsOf(def, item);
     // seulement les options qui servent a la taille choisie (« when ») ; elles se reglent dans leur panneau
     const usable = allOpts(def).filter(op => !op.when || op.when(item));
-    const options = usable.length ? (
-      <button style={{ ...btn(), alignSelf: "flex-start", gap: 5, padding: "0 9px" }} onClick={() => setOptFor(item.id)}>
-        <Settings2 size={13}/>Options ({usable.length})</button>
-    ) : null;
+    const options = null;
     const drag = wide ? {
       dragging: dragId === item.id,
       start: e => { setDragId(item.id); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", item.id); } catch { /* rien */ } },
@@ -397,15 +391,37 @@ export default function HomeGrid({ status, blocks, top = null }) {
       {top && (
         <div style={{ position: "relative", ...(edit ? { outline: "2px dashed rgba(59,130,246,0.55)", outlineOffset: 3, borderRadius: 18 } : {}) }}>
           {top.render(topOpts)}
-          {edit && <button onClick={() => setOptFor("top")} style={{ position: "absolute", left: 10, bottom: -14, zIndex: 3, display: "inline-flex",
-            alignItems: "center", gap: 5, padding: "6px 11px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 12,
+          {edit && <button onClick={() => setOptFor("top")} aria-label="Réglages du bandeau" title="Réglages du bandeau"
+            style={{ position: "absolute", left: 10, bottom: -14, zIndex: 3, display: "inline-flex",
+            alignItems: "center", gap: 5, padding: "7px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 12,
             color: "#fff", background: "rgba(15,23,42,0.88)", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
-            <Settings2 size={13}/>Options du bandeau</button>}
+            <Settings2 size={15}/></button>}
         </div>
       )}
       {optFor === "top" && top && <OptionsSheet title={top.label} options={top.options} values={topOpts}
         onChange={setTopOpt} onClose={() => setOptFor(null)}/>}
-      {optItem && optDef && <OptionsSheet title={optDef.label}
+      {optItem && optDef && <OptionsSheet title={optDef.label} head={(() => {
+        const it = optItem, d = optDef, hs = heightsOf(d, it.w);
+        const chip = on => ({ padding: "6px 11px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 700,
+          border: `1px solid ${on ? "#3b82f6" : "var(--border)"}`, background: on ? "rgba(59,130,246,0.12)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--text2)" });
+        const hl = h => h === "auto" ? "selon le contenu" : h === 0.5 ? "½ (une ligne)" : `${h} rangée${h > 1 ? "s" : ""}`;
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)" }}>Disposition</div>
+            {d.w.length > 1 && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)", minWidth: 80 }}>Largeur</span>
+              {d.w.map(w => <button key={w} style={chip(it.w === w)}
+                onClick={() => { const h2 = heightsOf(d, w); update(it.id, { w, h: h2.includes(it.h) ? it.h : h2[0] }); }}>
+                {w === 1 ? "demi-colonne" : "toute la colonne"}</button>)}
+            </div>}
+            {hs.length > 1 && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: "var(--text)", minWidth: 80 }}>Hauteur</span>
+              {[...hs].sort((a, b) => (a === "auto" ? 9 : a) - (b === "auto" ? 9 : b)).map(h => <button key={h} style={chip(it.h === h)}
+                onClick={() => update(it.id, { h })}>{hl(h)}</button>)}
+            </div>}
+          </div>
+        );
+      })()}
         options={allOpts(optDef).filter(op => !op.when || op.when(optItem))} values={optsOf(optDef, optItem)}
         onChange={(k, v) => update(optItem.id, { o: { ...(optItem.o || {}), [k]: v } })} onClose={() => setOptFor(null)}/>}
       <style>{`
