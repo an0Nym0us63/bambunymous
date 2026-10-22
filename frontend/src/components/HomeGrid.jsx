@@ -1,6 +1,6 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X, Palette } from "lucide-react";
 import client from "../api/client";
 import { currentFriend, useFriend } from "../store/friend";
 import { toast } from "../store/toast";
@@ -60,8 +60,39 @@ const fixer = defs => x => {
 // toutes les tuiles ont en plus une option commune : leur titre, affiche ou non
 const TITLE_OPT = { key: "_title", label: "Titre de la tuile", hint: "Masqué, la tuile gagne de la place (les infos de l'en-tête restent).",
   def: true, group: "Général" };
-const allOpts = def => [TITLE_OPT, ...(def.options || []).map(op => op.group ? op : { ...op, group: "Contenu" })];
+const BG_OPT = { key: "_bg", label: "Fond coloré", hint: "Quand les fonds colorés sont activés pour l'accueil.", def: true, group: "Général" };
+const allOpts = def => [TITLE_OPT, BG_OPT, ...(def.options || []).map(op => op.group ? op : { ...op, group: "Contenu" })];
 const optsOf = (def, item) => Object.fromEntries(allOpts(def).map(o => [o.key, item.o?.[o.key] ?? o.def]));
+// Fonds colores : une teinte par tuile, jamais proche de celle d'une voisine
+// (a gauche, a droite, au-dessus, au-dessous, ou en coin). La voisine se lit a
+// l'ecran, la ou la grille a vraiment pose la tuile.
+const TINTS = [
+  { h: 215, a: "#2563EB", b: "#0284C7" }, { h: 285, a: "#7C3AED", b: "#A21CAF" }, { h: 25, a: "#EA580C", b: "#F97316" },
+  { h: 150, a: "#059669", b: "#16A34A" }, { h: 330, a: "#DB2777", b: "#BE185D" }, { h: 180, a: "#0F766E", b: "#0E7490" },
+  { h: 245, a: "#4F46E5", b: "#4338CA" }, { h: 355, a: "#DC2626", b: "#E11D48" }, { h: 45, a: "#B45309", b: "#CA8A04" },
+];
+// en fonds vifs, l'allure commune a toutes les tuiles (les couleurs restent celles du systeme)
+const TINT_STYLES = [["flat", "dégradé"], ["glow", "lueur"], ["bubbles", "bulles"], ["glass", "verre"]];
+const hueGap = (x, y) => { const d = Math.abs(x - y) % 360; return Math.min(d, 360 - d); };
+const NEAR = 32;
+function paint(rects) {
+  const out = {};
+  const order = [...rects].sort((a, b) => a.r.top - b.r.top || a.r.left - b.r.left);
+  const touch = (a, b) => a.left <= b.right + NEAR && b.left <= a.right + NEAR && a.top <= b.bottom + NEAR && b.top <= a.bottom + NEAR;
+  order.forEach(({ id, r }, k) => {
+    const near = order.slice(0, k).filter(x => touch(r, x.r)).map(x => TINTS[out[x.id]].h);
+    const start = [...id].reduce((t, c) => t + c.charCodeAt(0), 0) % TINTS.length;
+    let best = start, bestGap = -1;
+    for (let i = 0; i < TINTS.length; i++) {
+      const t = (start + i) % TINTS.length;
+      const g = near.length ? Math.min(...near.map(h => hueGap(h, TINTS[t].h))) : 180;
+      if (g >= 40) { best = t; break; }
+      if (g > bestGap) { best = t; bestGap = g; }
+    }
+    out[id] = best;
+  });
+  return out;
+}
 // une disposition a n colonnes, remise d'aplomb : tuiles inconnues retirees, tailles
 // ramenees a ce que la tuile accepte, pas de doublon, la tuile obligatoire presente
 function cleanCols(cols, n, defs) {
@@ -92,7 +123,9 @@ function normalize(lay, defs) {
   for (const n of [1, 2, 3, 4]) if (lay.layouts?.[n]) layouts[n] = cleanCols(lay.layouts[n], n, defs);
   if (!Object.keys(layouts).length) return defaults(defs);
   return { v: 2, max: Math.max(1, Math.min(4, parseInt(lay.max) || 2)), layouts,
-    ...(lay.top && typeof lay.top === "object" ? { top: lay.top } : {}) };
+    ...(lay.top && typeof lay.top === "object" ? { top: lay.top } : {}),
+    ...(["soft", "vivid"].includes(lay.tint) ? { tint: lay.tint } : {}),
+    ...(TINT_STYLES.some(([k]) => k === lay.tintStyle) ? { tintStyle: lay.tintStyle } : {}) };
 }
 // la disposition a n colonnes : la sienne, ou deduite de la plus proche reglee
 function layoutFor(lay, n) {
@@ -110,7 +143,7 @@ function layoutFor(lay, n) {
   return out;
 }
 
-function Cell({ item, def, edit, children, actions, options, drag, selected, onSelect }) {
+function Cell({ item, def, edit, children, actions, options, drag, selected, onSelect, tint, tintMode, tintStyle }) {
   // une hauteur choisie est stricte (les rangees ne grandissent pas avec le contenu) ;
   // « selon le contenu » : la tuile se mesure et prend les demi-rangees qu'il lui faut
   const body = useRef(null);
@@ -126,10 +159,12 @@ function Cell({ item, def, edit, children, actions, options, drag, selected, onS
   }, [auto]);
   const span = auto ? `span ${autoSpan}` : `span ${Math.round(item.h * PER_ROW)}`;
   return (
-    <div className={`hg-cell${edit ? " hg-edit" : ""}${item.o?._title === false ? " hg-notitle" : ""}`} draggable={edit && drag ? true : undefined}
+    <div data-hg-id={item.id} className={`hg-cell${edit ? " hg-edit" : ""}${item.o?._title === false ? " hg-notitle" : ""}${tint ? ` hg-tint-${tintMode}` : ""}${tint && tintStyle ? ` hg-ts-${tintStyle}` : ""}`}
+      draggable={edit && drag ? true : undefined}
       onClick={edit ? e => { e.stopPropagation(); onSelect(); } : undefined}
       onDragStart={drag?.start} onDragOver={drag?.over} onDrop={drag?.drop} onDragEnd={drag?.end}
       style={{ gridColumn: `span ${item.w}`, gridRow: span, minWidth: 0, position: "relative", paddingBottom: GAP, boxSizing: "border-box",
+        ...(tint ? { "--hg-a": tint.a, "--hg-b": tint.b } : {}),
         ...(edit ? { outline: selected ? "3px solid #3b82f6" : "2px dashed rgba(59,130,246,0.55)", outlineOffset: 2, borderRadius: 16,
           cursor: "pointer",
           opacity: drag?.dragging ? 0.4 : 1 } : {}) }}>
@@ -289,6 +324,14 @@ export default function HomeGrid({ status, blocks, top = null }) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
+  const [tints, setTints] = useState({});
+  useLayoutEffect(() => {
+    if (!lay.tint || !box.current) return;
+    const rects = [...box.current.querySelectorAll("[data-hg-id]")].map(el => ({ id: el.dataset.hgId, r: el.getBoundingClientRect() }))
+      .filter(x => x.r.height > 12);
+    const next = paint(rects);
+    if (JSON.stringify(next) !== JSON.stringify(tints)) setTints(next);
+  });
   // ce que l'accueil montre : une colonne sur telephone, sinon ce qui tient, au plus le maximum choisi
   const showN = wide ? Math.max(1, Math.min(lay.max, fit)) : 1;
   // l'accueil sur 4 colonnes : le serveur ne le voit pas, la page le lui dit (une fois par lancement)
@@ -404,6 +447,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
     } : null;
     return (
       <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} options={options} drag={edit ? drag : null}
+        tint={lay.tint && o._bg !== false && tints[item.id] != null ? TINTS[tints[item.id]] : null} tintMode={lay.tint} tintStyle={lay.tint === "vivid" ? lay.tintStyle || "glow" : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
         {item.h === 0.5 && def.mini ? def.mini(data, status, o, item)
           : def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
@@ -461,6 +505,27 @@ export default function HomeGrid({ status, blocks, top = null }) {
                   grid-auto-flow:row dense; min-width:0; }
         .hg-cell:not(.hg-edit):has(> div:empty) { display:none; }
         .hg-notitle .tile-head { display:none !important; }
+        .hg-tint-soft > div > .card { background:linear-gradient(135deg, color-mix(in srgb, var(--hg-a) 24%, var(--surface)), color-mix(in srgb, var(--hg-b) 9%, var(--surface))) !important;
+          border-color:color-mix(in srgb, var(--hg-a) 30%, transparent) !important; }
+        .hg-tint-vivid > div > .card { background:linear-gradient(135deg, var(--hg-a), var(--hg-b)) !important; border-color:transparent !important;
+          box-shadow:0 8px 22px color-mix(in srgb, var(--hg-a) 30%, transparent) !important; color:#fff;
+          --text:#fff; --text2:rgba(255,255,255,0.9); --muted:rgba(255,255,255,0.74); --surface2:rgba(255,255,255,0.16);
+          --border:rgba(255,255,255,0.24); --surface:rgba(255,255,255,0.1); }
+        .hg-tint-vivid > div > .card > span[aria-hidden] { display:none; }
+        .hg-ts-glow > div > .card { background:
+          radial-gradient(circle at 92% -10%, rgba(255,255,255,0.38), transparent 42%),
+          radial-gradient(rgba(255,255,255,0.22) 1px, transparent 1.5px) 0 0 / 18px 18px,
+          linear-gradient(120deg, var(--hg-a), var(--hg-b)) !important; }
+        .hg-ts-bubbles > div > .card { background:
+          radial-gradient(circle at calc(100% - 22px) 18px, rgba(255,255,255,0.24) 0 34px, transparent 35px),
+          radial-gradient(circle at 12% calc(100% + 18px), rgba(255,255,255,0.15) 0 52px, transparent 53px),
+          radial-gradient(circle at 68% 78%, rgba(255,255,255,0.11) 0 14px, transparent 15px),
+          radial-gradient(circle at 40% 18%, rgba(255,255,255,0.09) 0 8px, transparent 9px),
+          linear-gradient(135deg, var(--hg-a), var(--hg-b)) !important; }
+        .hg-ts-glass > div > .card { background:
+          linear-gradient(165deg, rgba(255,255,255,0.32), rgba(255,255,255,0.04) 46%, rgba(255,255,255,0) 60%),
+          linear-gradient(135deg, var(--hg-a), var(--hg-b)) !important;
+          box-shadow:inset 0 0 0 1px rgba(255,255,255,0.35), inset 0 1px 0 rgba(255,255,255,0.55), 0 10px 26px color-mix(in srgb, var(--hg-a) 32%, transparent) !important; }
         .hg-notitle .frame-label { display:none !important; }
         .hg-notitle .frame-head:not(:has(.frame-extra)) { display:none !important; }
         .hg-frame-body .card { background:transparent !important; border:none !important; box-shadow:none !important;
@@ -500,8 +565,24 @@ export default function HomeGrid({ status, blocks, top = null }) {
             Tu vois la disposition de {inh} : dès ta première modification, tu auras la tienne (la sienne ne change pas).</div>}
           <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.45 }}>
             {wide ? "Touche une tuile pour ses réglages, ou glisse-la pour la déplacer. " : "Touche une tuile pour la déplacer ou la régler. "}
-            « ½ » et « 1 » règlent la largeur, « ↕ » la hauteur. Chaque nombre de colonnes a sa disposition ; celle à une colonne
+            L'engrenage règle sa largeur, sa hauteur et ses options. Chaque nombre de colonnes a sa disposition ; celle à une colonne
             est aussi celle du téléphone. Une disposition « automatique » se déduit des autres tant qu'on ne la règle pas.</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <Palette size={15} style={{ color: "var(--muted)" }}/>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Fonds des tuiles</span>
+            {[[undefined, "neutres"], ["soft", "colorés doux"], ["vivid", "colorés vifs"]].map(([k, l]) => <button key={l}
+              onClick={() => setLay(x => { const y = { ...x }; if (k) y.tint = k; else delete y.tint; return y; })}
+              style={{ height: 30, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12.5, border: "1px solid var(--border)",
+                background: lay.tint === k ? "#EC4899" : "var(--surface2)", color: lay.tint === k ? "#fff" : "var(--text2)" }}>{l}</button>)}
+          </div>
+          {lay.tint === "vivid" && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ width: 15 }}/>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Style</span>
+            {TINT_STYLES.map(([k, l]) => <button key={k} onClick={() => setLay(x => ({ ...x, tintStyle: k }))}
+              style={{ height: 30, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12.5, border: "1px solid var(--border)",
+                background: (lay.tintStyle || "glow") === k ? "#EC4899" : "var(--surface2)", color: (lay.tintStyle || "glow") === k ? "#fff" : "var(--text2)" }}>{l}</button>)}
+            <span style={{ fontSize: 12, color: "var(--muted)" }}>· les couleurs sont choisies pour que deux voisines ne se ressemblent pas</span>
+          </div>}
           {wide && (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
