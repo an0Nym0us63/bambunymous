@@ -555,7 +555,7 @@ const useDevSel = create(set => ({
 // part : "overview" (les AMS ou le rack), "detail" (la fiche de l'AMS ou de la buse
 // choisie), ou rien (les deux, l'un sous l'autre)
 export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId, part = null,
-  org = "grid", climate = true, selector = true, names = true }) {
+  org = "grid", climate = true, selector = true, names = true, fitH = null }) {
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
   const headId  = rack?.head_id ?? -1;
@@ -658,12 +658,17 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
   // une sous-grille par colonne : une case vide en haut d'une colonne avait
   // alors une hauteur nulle, et l'unite du bas remontait d'un cran, decalee
   // de ses voisines (l'externe seul en bas de sa colonne).
+  // hauteur imposee : chaque rangee d'unites a sa part, les pastilles s'y ajustent
+  const dense = fitH != null;
+  const nRows = org === "auto" ? Math.max(1, Math.ceil(uniqueAmsList.length / 2)) : nbLignes;
+  const rowH = dense ? (fitH - (hasRack ? 30 : 0) - 8 - 6 * (nRows - 1)) / nRows : null;
+  const pillH = dense ? Math.max(14, Math.min(46, Math.round(rowH - 14 - (climate ? 13 : 0) - 14))) : null;
   const units = cols.flatMap((col, ci) => col.map((ams, ri) => ams && (
     <div key={ams.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth:0 }}>
       <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
         isSelected={detailKind === "ams" && selectedAms?.id === ams.id}
         onClick={() => setSelAms(ams.id)}
-        spoolLookup={spoolLookup} climate={climate}
+        spoolLookup={spoolLookup} climate={climate} pillH={pillH}
         slotsWidth={`${(slotCount(ams) / columnWeight(col)) * 100}%`}/>
     </div>
   ))).filter(Boolean);
@@ -673,7 +678,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
     <div key={ams.id} style={{ flex: `${slotCount(ams)} 1 ${slotCount(ams) * 26 + 14}px`, minWidth: 0 }}>
       <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
         isSelected={detailKind === "ams" && selectedAms?.id === ams.id}
-        onClick={() => setSelAms(ams.id)} spoolLookup={spoolLookup} climate={climate}/>
+        onClick={() => setSelAms(ams.id)} spoolLookup={spoolLookup} climate={climate} pillH={pillH}/>
     </div>
   ));
   // le detail porte son propre choix d'unite : des onglets avec les couleurs de chaque unite
@@ -725,9 +730,9 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
   const showOverview = part !== "detail", showDetail = part !== "overview";
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-      {showOverview && <div className="card" style={{ padding:12 }}>
+      {showOverview && <div className="card" style={{ padding: dense ? "2px 4px" : 12 }}>
         {hasRack && (
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom:10 }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8, marginBottom: dense ? 6 : 10 }}>
             <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>
               {showRack ? <>Rack Vortek <span style={{ fontFamily:"monospace", marginLeft:4 }}>{filled}/6</span></> : "AMS"}
             </span>
@@ -736,9 +741,9 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
         )}
 
         {!showRack && (org === "auto"
-          ? <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>{flow}</div>
+          ? <div style={{ display:"flex", flexWrap:"wrap", gap: dense ? 6 : 10 }}>{flow}</div>
           : <div style={{ display:"grid", gridTemplateColumns: template,
-            gridTemplateRows: `repeat(${nbLignes}, auto)`, columnGap:10, rowGap:10 }}>
+            gridTemplateRows: `repeat(${nbLignes}, auto)`, columnGap:10, rowGap: dense ? 6 : 10 }}>
             {units}
           </div>
         )}
@@ -762,10 +767,11 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
       </div>}
 
       {/* Détail partagé — AMS (grille de trays) ou hotend rack (fiche), selon la vue */}
-      {showDetail && detailKind === "ams" && selectedAms && part === "detail" && tabs}
+      {showDetail && detailKind === "ams" && selectedAms && part === "detail" && (!dense || fitH >= 150) && tabs}
       {showDetail && detailKind === "ams" && selectedAms && (
         <AMSDetail ams={selectedAms} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
-          spoolLookup={spoolLookup} onTrayClick={setSelectedTray} hideName={part === "detail" && !!tabs} showNames={names}/>
+          spoolLookup={spoolLookup} onTrayClick={setSelectedTray} hideName={part === "detail" && !!tabs} showNames={names}
+          fitH={dense && part === "detail" ? fitH - (fitH >= 150 && tabs ? 40 : 0) : null}/>
       )}
       {showDetail && detailKind === "hotend" && selectedHotend?.slot && (
         <SlotDetail slot={selectedHotend.slot} num={selectedHotend.num}
@@ -1149,8 +1155,11 @@ export default function Home() {
     return () => { stopPolling(); clearInterval(spoolInterval); };
   }, []);
 
-  const devices = (st, part, o = {}) => (st?.status === "RUNNING" || st?.status === "PAUSED" || (st?.ams_list?.length > 0)) ? <DeviceGrid
+  // hauteur choisie : la place du corps de la tuile (sous son titre), pour condenser l'AMS
+  const fitOf = item => typeof item?.h === "number" ? item.h * 128 - 30 - (item.o?._title === false ? 0 : 28) : null;
+  const devices = (st, part, o = {}, item) => (st?.status === "RUNNING" || st?.status === "PAUSED" || (st?.ams_list?.length > 0)) ? <DeviceGrid
     key={`${visKey}-${part}`} part={part} org={o.org} climate={o.climate !== false} selector={o.selector !== false} names={o.names !== false}
+    fitH={fitOf(item)}
     amsList={st?.ams_list ?? []}
     activeAmsId={isRunning ? (st?.active_ams_id ?? -1) : -1}
     activeTrayId={isRunning ? (st?.active_tray_id ?? -1) : -1}
@@ -1188,7 +1197,7 @@ export default function Home() {
         { when: it => it.w !== 1, key: "cam", label: "Caméra dans le volet", def: true },
         { when: it => it.w !== 1, key: "temps", label: "Températures dans le volet", def: true }] },
     ams: { label: "AMS", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" },
-      render: (d, st, o) => devices(st, "overview", o),
+      render: (d, st, o, item) => devices(st, "overview", o, item), fit: true,
       options: [
         { key: "org", label: "Organisation", def: "grid", group: "Disposition des AMS",
           hint: "Ta grille, ou les unités à la suite, qui passent à la ligne selon la largeur de la tuile.",
@@ -1197,7 +1206,7 @@ export default function Home() {
           hint: "Commune à toutes les dispositions de l'accueil.", render: () => <AmsOrderEditor/> },
         { key: "climate", label: "Humidité et température sous chaque unité", def: true }] },
     amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto", 0.5, 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Layers size={15}/>, color: "#6366F1" },
-      render: (d, st, o) => devices(st, "detail", o),
+      render: (d, st, o, item) => devices(st, "detail", o, item), fit: true,
       options: [
         { key: "selector", label: "Choisir l'unité dans la tuile", def: true, hint: "Des onglets en tête de tuile ; sinon on la choisit dans la tuile AMS." },
         { key: "names", label: "Nom des bobines", def: true }] },

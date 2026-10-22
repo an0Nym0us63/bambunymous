@@ -198,6 +198,33 @@ function Cell({ item, def, edit, children, actions, options, drag, selected, onS
     </div>
   );
 }
+// Un contenu qui doit tenir dans sa case sans defiler : s'il depasse, il est
+// reduit d'un bloc (echelle), en gardant sa largeur utile.
+function FitBox({ children }) {
+  const outer = useRef(null), inner = useRef(null);
+  const [k, setK] = useState(1);
+  useEffect(() => {
+    const o = outer.current, i = inner.current;
+    if (!o || !i || typeof ResizeObserver === "undefined") return undefined;
+    const fit = () => {
+      const H = o.clientHeight, need = i.scrollHeight;
+      if (!H || !need) return;
+      setK(cur => {
+        const next = Math.min(1, H / need);
+        return Math.abs(next - cur) > 0.01 ? Math.max(0.4, next) : cur;
+      });
+    };
+    const ro = new ResizeObserver(fit);
+    ro.observe(o); ro.observe(i);
+    fit();
+    return () => ro.disconnect();
+  }, []);
+  return (
+    <div ref={outer} style={{ height: "100%", overflow: "hidden" }}>
+      <div ref={inner} style={{ width: `${100 / k}%`, transform: k < 1 ? `scale(${k})` : undefined, transformOrigin: "top left" }}>{children}</div>
+    </div>
+  );
+}
 // Les blocs historiques (imprimante, AMS, points d'attention) dans le meme cadre
 // que les tuiles : pastille d'icone, titre, lueur ; leurs cartes internes aplaties.
 function Frame({ def, children, extra, item, summary }) {
@@ -228,7 +255,8 @@ function Frame({ def, children, extra, item, summary }) {
         {extra && <span className="frame-extra" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0, flexWrap: "wrap",
           justifyContent: "flex-end" }}>{extra}</span>}
       </div>
-      <div className="hg-frame-body" style={{ position: "relative", minWidth: 0, ...(fixed ? { flex: 1, minHeight: 0, overflowY: "auto" } : {}) }}>{children}</div>
+      <div className="hg-frame-body" style={{ position: "relative", minWidth: 0, ...(fixed ? { flex: 1, minHeight: 0, overflowY: def.fit ? "hidden" : "auto" } : {}) }}>
+        {fixed && def.fit ? <FitBox>{children}</FitBox> : children}</div>
     </div>
   );
 }

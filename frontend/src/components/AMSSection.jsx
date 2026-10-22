@@ -124,7 +124,7 @@ function HatchOverlay({ radius = 0 }) {
 }
 
 // ── Mini pastille ──────────────────────────────────────────────────────────
-function ColorPill({ tray, spoolInfo, active }) {
+function ColorPill({ tray, spoolInfo, active, h = 28 }) {
   const colors = parseColors(tray, spoolInfo);
   const c1 = colors?.[0];
   const isEmpty = isEmptyTray(tray);
@@ -141,7 +141,7 @@ function ColorPill({ tray, spoolInfo, active }) {
   const lum = luminance((c1||"").replace("#",""));
   const ringColor = active ? "#3b82f6" : isEmpty ? "rgba(148,163,184,0.2)" : lum > 200 ? "rgba(0,0,0,0.15)" : "rgba(255,255,255,0.1)";
   return (
-    <div style={{ flex:1, height:28, borderRadius:6, transition:"all 0.2s",
+    <div style={{ flex:1, height:h, borderRadius:6, transition:"all 0.2s",
       boxShadow: active ? `0 0 0 2px ${ringColor}` : `0 0 0 1px ${ringColor}`,
       position:"relative", ...bg }}>
       {/* Slot vide : aucun indicateur de detection. Un slot sans filament
@@ -199,7 +199,8 @@ function MatchIcon({ mode, size = 10 }) {
 }
 
 // ── Boîtier AMS compact ─────────────────────────────────────────────────────
-function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup, slotsWidth, climate = true }) {
+function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup, slotsWidth, climate = true, pillH = null }) {
+  const dense = pillH != null;
   const isActive = ams.id === activeAmsId;
   const isDrying = ams.is_drying || ams.dry_time > 0;
   const getInfo = t => t.spool_info ?? null;
@@ -224,7 +225,7 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
 
   return (
     <button onClick={onClick} style={{
-      display:"flex", flexDirection:"column", alignItems:"center", gap:6,
+      display:"flex", flexDirection:"column", alignItems:"center", gap: dense ? 3 : 6,
       background:"none", border:"none", cursor:"pointer", width:"100%", padding:0,
     }}>
       <div style={{ display:"flex", alignItems:"center", gap:4 }}>
@@ -239,14 +240,14 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
           backgroundColor:"#3b82f6", animation:"livePulse 2s infinite" }} />}
       </div>
       <div style={{
-        width: slotsWidth ?? "100%", minWidth:0, borderRadius:12, padding:6, display:"flex", gap:4, boxSizing:"border-box",
+        width: slotsWidth ?? "100%", minWidth:0, borderRadius: dense ? 10 : 12, padding: dense ? 4 : 6, display:"flex", gap:4, boxSizing:"border-box",
         border:`1px solid ${borderColor}`,
         background: bg,
         boxShadow: boxShadow,
         animation: isDrying ? "dryPulse 2.5s ease-in-out infinite" : "none",
         transition:"all 0.2s",
       }}>
-        {traysInOrder(ams).map(t => <ColorPill key={t.id} tray={t} spoolInfo={getInfo(t)} active={isActive && t.id===activeTrayId} />)}
+        {traysInOrder(ams).map(t => <ColorPill key={t.id} tray={t} spoolInfo={getInfo(t)} active={isActive && t.id===activeTrayId} h={pillH ?? 28}/>)}
       </div>
       {/* Hauteur reservee meme sans capteur (externe) : sinon la tuile est
           plus courte que les AMS voisins et, dans la grille, son nom et ses
@@ -261,16 +262,16 @@ function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLook
           <Sun size={8} style={{ color: isDrying ? "#f97316" : undefined }}/>{(ams.temp ?? 0).toFixed(1)}°
         </span>
       </div>}
-      <div style={{ height:2, borderRadius:1,
+      {!dense && <div style={{ height:2, borderRadius:1,
         background: isSelected ? "#3b82f6" : "transparent",
-        width: isSelected ? 32 : 8, transition:"all 0.3s" }} />
+        width: isSelected ? 32 : 8, transition:"all 0.3s" }} />}
     </button>
   );
 }
 
 // ── Bobine SVG — vue de face, disque plat ──────────────────────────────────
 // ── Tray card ──────────────────────────────────────────────────────────────
-function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loaded, onClick, size = 68, showName = true }) {
+function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loaded, onClick, size = 68, showName = true, compact = false }) {
   const isActive = amsId===activeAmsId && tray.id===activeTrayId;
   const empty = isEmptyTray(tray);
   // Bobine POSEE pour le sechage (emplacement vide) : memes details qu'une
@@ -310,12 +311,12 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
           sans les deux, un libelle long comme "Support for PLA/PETG" imposait
           sa largeur en nowrap et elargissait TOUTE la colonne, decalant les
           slots voisins. Le titre complet reste accessible au survol. */}
-      <p title={vide ? "" : (material || "")}
+      {!compact && <p title={vide ? "" : (material || "")}
         style={{ fontSize:10, color:"var(--muted)", fontWeight:600, lineHeight:"13px",
         textAlign:"center", whiteSpace:"nowrap", height:13,
         maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis" }}>
         {vide ? "" : (material || "—")}
-      </p>
+      </p>}
       {/* Barre de progression couleur filament */}
       <div style={{ width: Math.round(size * 0.72), height:5, background: barTrackColor,
         borderRadius:3, overflow:"hidden",
@@ -394,7 +395,7 @@ function TrayCard({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: lo
 
 
 // ── Détail AMS ─────────────────────────────────────────────────────────────
-function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, hideName = false, showNames = true }) {
+function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, hideName = false, showNames = true, fitH = null }) {
   // la taille des bobines suit la largeur de la tuile
   const box = React.useRef(null);
   const [w, setW] = React.useState(0);
@@ -416,10 +417,10 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
   };
 
   return (
-    <div ref={box} className="card" style={{ padding: hideName ? "6px 2px 4px" : 16,
+    <div ref={box} className="card" style={{ padding: fitH != null ? "2px" : hideName ? "6px 2px 4px" : 16,
       borderColor: isDrying ? "rgba(249,115,22,0.35)" : isActive ? "rgba(59,130,246,0.3)" : undefined,
       boxShadow: isDrying ? "0 0 0 1px rgba(249,115,22,0.1)" : isActive ? "0 0 0 1px rgba(59,130,246,0.1)" : undefined }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent: hideName ? "flex-end" : "space-between", marginBottom: isDrying ? 10 : 12,
+      <div style={{ display:"flex", alignItems:"center", justifyContent: hideName ? "flex-end" : "space-between", marginBottom: isDrying ? 10 : fitH != null ? 4 : 12,
         ...(hideName && !hasClimate(ams) && !isDrying ? { display:"none" } : {}) }}>
         {!hideName && <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:12, fontWeight:700, letterSpacing:"0.06em", color: isDrying?"#f97316":isActive?"#3b82f6":"var(--muted)" }}>
@@ -479,7 +480,10 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
       {(() => {
         const n = traysInOrder(ams).length || 1;
         const GAP = 4, COLS = 4;
-        const size = w ? Math.max(44, Math.min(96, Math.floor((w - 32 - GAP * (COLS - 1)) / COLS) - 10)) : 68;
+        const byW = w ? Math.max(30, Math.min(96, Math.floor((w - 32 - GAP * (COLS - 1)) / COLS) - 10)) : 68;
+        // hauteur imposee : la bobine prend ce que laissent la matiere, la barre, le poids (et le nom s'il tient)
+        const compact = fitH != null && fitH < 170;
+        const size = fitH != null ? Math.max(26, Math.min(byW, fitH - (compact ? 30 : 64) - (hideName || !hasClimate(ams) ? 0 : 22))) : byW;
         return (
       <div style={{ display:"grid", gridTemplateColumns:`repeat(${n},minmax(0,1fr))`, gap:GAP,
         width: n < COLS
@@ -490,7 +494,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
           <TrayCard key={t.id} tray={t} amsId={ams.id}
             label={slotLabel(ams.id, t.id)}
             activeAmsId={activeAmsId} activeTrayId={activeTrayId}
-            spoolInfo={getInfo(t)} size={size} showName={showNames}
+            spoolInfo={getInfo(t)} size={size} showName={showNames && !compact} compact={compact}
             onClick={()=>onTrayClick&&onTrayClick({tray:t,amsId:ams.id,amsLabel:amsName(ams.id),
               slotNo:traySlotNo(ams, t)})}
           />
