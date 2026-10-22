@@ -405,7 +405,8 @@ export default function HomeGrid({ status, blocks, top = null }) {
     return (
       <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} options={options} drag={edit ? drag : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
-        {def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
+        {item.h === 0.5 && def.mini ? def.mini(data, status, o, item)
+          : def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
           : def.render(data, status, o, item)}
       </Cell>
     );

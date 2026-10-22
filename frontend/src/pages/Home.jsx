@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import { usePrinter } from "../store/printer";
-import { Wifi, WifiOff, Clock, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
+import { Wifi, WifiOff, Clock, Pause, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
 import { useAuth } from "../store/auth";
 import { useFriend } from "../store/friend";
 import { create } from "zustand";
@@ -9,6 +9,7 @@ import AttentionSection from "../components/AttentionSection";
 import HomeGrid from "../components/HomeGrid";
 import { gradeOf } from "./Achievements";
 import LiveCamera from "../components/LiveCamera";
+import Lightbox from "../components/Lightbox";
 import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet } from "../components/AMSSection";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel } from "../utils/ams";
@@ -780,6 +781,49 @@ function PrinterHead({ status, temps = true }) {
       style={{ ...chip, color: hot(status.chamber_temp, "#ca8a04") }}><IcoChamber/>{Math.round(status.chamber_temp)}°</span>}
   </>;
 }
+// sur une ligne : la vignette (un clic l'ouvre en grand), le nom, puis selon l'etat :
+// en cours = pourcentage, temps restant et barre ; en pause = pareil en orange ;
+// sinon l'etat seul (terminee, au repos, echouee, injoignable)
+function PrinterLine({ status }) {
+  const [info, setInfo] = useState(null);
+  const [big, setBig] = useState(false);
+  const st = String(status?.status || "").toUpperCase();
+  const live = LIVE_ST.includes(st);
+  const paused = st === "PAUSE" || st === "PAUSED";
+  useEffect(() => {
+    if (!status?.status) return;
+    client.get("/prints", { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
+      .then(r => { const p = (r.data?.prints || r.data?.items || [])[0]; if (p) setInfo(p); }).catch(() => {});
+  }, [status?.status, status?.job_id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const s = stateOf(status);
+  const pct = Math.round(status?.progress || 0);
+  const img = info ? apiUrl(`/prints/${info.id}/image`) : null;
+  return (
+    <div className="card" role={img ? "button" : undefined} onClick={img ? () => setBig(true) : undefined}
+      style={{ position: "relative", height: "100%", boxSizing: "border-box", padding: "0 12px", display: "flex", alignItems: "center", gap: 10,
+        overflow: "hidden", minWidth: 0, cursor: img ? "zoom-in" : "default" }}>
+      <span data-pk="" style={{ width: 36, height: 36, borderRadius: 9, overflow: "hidden", flexShrink: 0, background: "var(--surface2)",
+        display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
+        {img ? <img src={img} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/> : <Printer size={17}/>}</span>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
+        textOverflow: "ellipsis" }}>{info?.file_name || status?.print_name || info?.translated_name || "Imprimante"}</span>
+      {live ? <>
+        {status.remaining_minutes > 0 && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 12, fontWeight: 700,
+          color: "var(--muted)", whiteSpace: "nowrap", flexShrink: 0 }}><Clock size={12}/>{fmtTime(status.remaining_minutes)}</span>}
+        <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 16, fontWeight: 900, color: s.color, flexShrink: 0,
+          fontVariantNumeric: "tabular-nums" }}>{paused && <Pause size={14}/>}{pct}%</span>
+        <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 4, background: "var(--border)" }}>
+          <span data-pk="" style={{ display: "block", height: "100%", width: `${pct}%`, background: s.color, boxShadow: `0 0 8px ${s.color}88`,
+            transition: "width 1s" }}/></span>
+      </> : <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
+        borderRadius: 20, whiteSpace: "nowrap", flexShrink: 0, color: s.color, background: `${s.color}1f` }}>
+        <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
+      {/* le portail renvoie ses clics a la ligne : on les arrete pour que fermer ne rouvre pas */}
+      {big && img && <span onClick={e => e.stopPropagation()}><Lightbox images={[img]} index={0} onClose={() => setBig(false)}/></span>}
+    </div>
+  );
+}
 // en demi-largeur : grande (vignette 4/3 au-dessus), moyenne (vignette 16/9), ou compacte (vignette a gauche)
 function PrinterCompact({ status, size = "big", showFin = true, showLayer = true }) {
   const [info, setInfo] = useState(null);
@@ -1077,6 +1121,7 @@ export default function Home() {
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {
     printer: { label: "Imprimante", w: [2, 1], h: ["auto", 0.5, 1, 2, 3, 4], h1: [2, 3, 4, 1, 0.5], required: true,
+      mini: (d, st) => <PrinterLine status={st}/>,
       summary: (d, st) => ["RUNNING", "PAUSE", "PAUSED"].includes(String(st?.status || "").toUpperCase())
         ? <span data-pk="" style={{ fontSize: 14 }}>{Math.round(st.progress || 0)} %</span> : null,
       frame: { icon: <Printer size={15}/>, color: "#3B82F6",
