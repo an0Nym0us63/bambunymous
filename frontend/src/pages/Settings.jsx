@@ -1042,6 +1042,44 @@ function RecalculateSection() {
     </div>
   );
 }
+// Export de diagnostic : les impressions recentes telles qu'en base (dates, durees, pauses, statut)
+// et le calcul jour par jour, dans un fichier a transmettre quand un chiffre parait faux.
+function DiagExportSection() {
+  const [days, setDays] = React.useState(14);
+  const [loading, setLoading] = React.useState(false);
+  const run = async () => {
+    setLoading(true);
+    try {
+      const { data } = await client.get("/prints/diag/export", { params: { days, tz: -new Date().getTimezoneOffset() } });
+      const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = `bambunymous-diagnostic-${new Date().toISOString().slice(0, 10)}.json`;
+      a.dispatchEvent(new MouseEvent("click"));
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    finally { setLoading(false); }
+  };
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Exporter pour diagnostic</h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        Télécharge les impressions des derniers jours telles qu'enregistrées (dates, durées, pauses, statut, poids, coût)
+        et le calcul jour par jour des tuiles. Aucune bobine, aucun compte, aucun réglage.
+      </p>
+      <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+        <select value={days} onChange={e => setDays(+e.target.value)} style={{ height:34, borderRadius:10, border:"1px solid var(--border)",
+          background:"var(--surface2)", color:"var(--text)", fontWeight:700, fontSize:13, padding:"0 8px" }}>
+          {[7, 14, 30, 60].map(n => <option key={n} value={n}>{n} derniers jours</option>)}
+        </select>
+        <button onClick={run} disabled={loading}
+          style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:loading?"wait":"pointer",
+            border:"none", background: loading ? "var(--border)" : "#3b82f6", color:"white" }}>
+          {loading ? "Préparation…" : "⤓ Télécharger le fichier"}
+        </button>
+      </div>
+    </div>
+  );
+}
 // Pastille couleur — degrade sur un calque interne d'un conteneur overflow:hidden
 // et anneau en box-shadow : un border sur un element peint laisse transparaitre
 // le fond et cree un halo.
@@ -1834,6 +1872,7 @@ export default function Settings() {
       <AdminOnly><div className="wide-2">
         <EnrichFromCatalogSection/>
         <RecalculateSection/>
+        <DiagExportSection/>
         <TranslateNamesSection/>
         <SpoolnymousImport/>
         <RfidDebugSection/>

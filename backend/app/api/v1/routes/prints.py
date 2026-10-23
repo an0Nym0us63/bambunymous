@@ -1297,9 +1297,33 @@ async def prints_kpis_daily(
             for k, v in days.items()]
 
 
+@router.get("/diag/export")
+async def diag_export(days: int = Query(14, ge=1, le=120), tz: int = 0, _: str = Depends(require_admin)):
+    """Export de diagnostic (Parametres) : les impressions des derniers jours avec tout ce que les
+    calculs utilisent (dates brutes telles qu'en base, durees, pauses, statut), et le resultat de
+    /kpis/daily pour la meme periode et le meme fuseau. Ni bobine, ni compte, ni reglage."""
+    import aiosqlite, os
+    from datetime import timedelta
+    db_path = os.getenv("DATABASE_URL", "sqlite+aiosqlite:////data/bambunymous.db").replace("sqlite+aiosqlite:///", "")
+    since = (datetime.utcnow() - timedelta(days=days + 4)).strftime("%Y-%m-%d %H:%M:%S")
+    cols = ("id, job_id, file_name, status, print_type, print_date, typeof(print_date) AS print_date_type, created_at, updated_at, "
+            "estimated_seconds, duration_seconds, paused_seconds, paused_since, total_weight_g, total_cost, group_id, plate_id")
+    rows = []
+    async with aiosqlite.connect(db_path) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(f"SELECT {cols} FROM prints WHERE datetime(print_date) >= ? OR datetime(created_at) >= ? "
+                              "OR status = 'IN_PROGRESS' ORDER BY id", (since, since)) as cur:
+            async for r in cur:
+                rows.append(dict(r))
+    today = (datetime.utcnow() + timedelta(minutes=tz)).date()
+    daily = await prints_kpis_daily((today - timedelta(days=days - 1)).isoformat(), today.isoformat(), tz=tz, detail=True, _="")
+    return {"generated_utc": datetime.utcnow().isoformat(timespec="seconds"), "tz": tz, "days": days,
+            "prints": rows, "daily": daily}
+
+
 @router.get("/debug")
-async def debug_prints():  # noqa — public debug route
-    """Route de debug — dump brut de la table prints (pas d'auth requis)."""
+async def debug_prints(_: str = Depends(require_admin)):
+    """Route de debug — dump brut de la table prints (administrateur seulement)."""
     import aiosqlite, os
     db_path = os.getenv("DATABASE_URL", "sqlite+aiosqlite:////data/bambunymous.db")
     db_path = db_path.replace("sqlite+aiosqlite:///", "")
