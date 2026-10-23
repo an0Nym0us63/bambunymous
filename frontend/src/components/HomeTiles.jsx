@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { QUEUE_SORTS, sortQueue } from "../utils/queueSort";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets, Coins, Star, Users, Trophy,
@@ -804,6 +805,23 @@ const FilaDots = ({ list, size = 14 }) => <span style={{ display: "inline-flex",
   {(list || []).map((f, i) => <span key={i} title={`${f.type} ${Math.round(f.g)} g → ${f.chosen ? f.chosen.name + (f.chosen.in_ams ? " (AMS)" : "") : "rien en stock"}`}
     style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, background: hexCss(f.chosen?.color || f.color),
       border: `2px solid ${!f.chosen ? "#ef4444" : f.chosen.enough_ams ? "#22c55e" : f.chosen.enough_stock ? "#f59e0b" : "#ef4444"}` }}/>)}</span>;
+// la fenetre de « À faire » : les modeles en deux sections, triees au choix (la priorite a chaque ouverture)
+function NextSorted({ models, card }) {
+  const [by, setBy] = useState("prio");
+  const list = sortQueue(models, by);
+  const grid = l => <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(320px, 100%), 1fr))", gap: 8 }}>{l.map(card)}</div>;
+  return <>
+    <label onClick={e => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "var(--muted)", flexWrap: "wrap" }}>
+      Trier
+      <select value={by} onChange={e => setBy(e.target.value)} style={{ height: 30, borderRadius: 9, border: "1px solid var(--border)", maxWidth: "100%",
+        background: "var(--surface2)", color: "var(--text)", fontWeight: 700, fontSize: 12.5, padding: "0 8px" }}>
+        {QUEUE_SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+      </select>
+    </label>
+    {list.some(canGo) && <><H2>Imprimables maintenant</H2>{grid(list.filter(canGo))}</>}
+    {list.some(m => !canGo(m)) && <><H2>À préparer</H2>{grid(list.filter(m => !canGo(m)))}</>}
+  </>;
+}
 function Next({ q, o, sz }) {
   const [sheet, setSheet] = useState(null);
   const narrow = useRef(false);   // etroite : le bouton « fiche » passe en coin de la vignette
@@ -841,6 +859,9 @@ function Next({ q, o, sz }) {
         <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {[m.profile?.title, m.profile && m.profile.plates_total > 1 && `${m.profile.plates}/${m.profile.plates_total} plateaux`, m.seconds && fmtDur(m.seconds),
             m.weight_g && fmtG(m.weight_g), m.cost != null && fmtEur(m.cost)].filter(Boolean).join(" · ")}</div>
+        {m.ready_now?.plates > 0 && <div style={{ fontSize: 11.5, fontWeight: 800, color: "#16a34a" }}>
+          ▶ faisable maintenant : {m.ready_now.plates} plateau{m.ready_now.plates > 1 ? "x" : ""}
+          {m.ready_now.seconds ? ` · ${fmtDur(m.ready_now.seconds)}` : ""}{m.ready_now.weight_g ? ` · ${fmtG(m.ready_now.weight_g)}` : ""}</div>}
         <FilaDots list={m.filaments}/>
       </div>
       <ChevronRight size={16} style={{ color: "var(--muted)", alignSelf: "center", flexShrink: 0 }}/>
@@ -855,10 +876,7 @@ function Next({ q, o, sz }) {
           t.stock ? ["À charger", t.stock, "#d97706"] : null, t.short ? ["Manque", t.short, "#dc2626"] : null,
           ["Durée", fmtH(t.seconds ?? all.reduce((a, m) => a + (m.seconds || 0), 0))], ["Poids", fmtG(t.weight_g ?? all.reduce((a, m) => a + (m.weight_g || 0), 0))],
           t.cost ? ["Coût", fmtEur(t.cost)] : null]}/>
-        {models.some(canGo) && <><H2>Imprimables maintenant</H2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 8 }}>{models.filter(canGo).map(card)}</div></>}
-        {models.some(m => !canGo(m)) && <><H2>À préparer</H2>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 8 }}>{models.filter(m => !canGo(m)).map(card)}</div></>}
+        <NextSorted models={models} card={card}/>
       </> : null}>
       {({ W, H }) => { narrow.current = W < 215; return <>
         {!models.length ? <Empty>{q === undefined ? "…" : o.ready ? "Rien de prêt dans l'AMS" : "Rien dans « À faire »"}</Empty>

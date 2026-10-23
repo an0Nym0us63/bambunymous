@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { QUEUE_SORTS, sortQueue } from "../utils/queueSort";
 import { useTrackDetail } from "../utils/track";
 import { useUrlTab } from "../utils/useUrlTab";
 import { createPortal } from "react-dom";
@@ -82,8 +83,8 @@ export default function MwQueue() {
   const [pick, setPick] = useState(false);
   const [filter, setFilter] = useState("all");
   // le tri au sein d'un filtre (l'ordre de priorite par defaut) ; garde dans ce navigateur
-  const [sortBy, setSortByState] = useState(() => { try { const v = localStorage.getItem("mwQueueSort"); return ["prio", "nplates", "nhours", "ngrams", "ready"].includes(v) ? v : "prio"; } catch { return "prio"; } });
-  const setSortBy = v => { setSortByState(v); try { localStorage.setItem("mwQueueSort", v); } catch { /* stockage indisponible */ } };
+  // le tri : a chaque ouverture, l'ordre de priorite (le choix ne se garde pas)
+  const [sortBy, setSortBy] = useState("prio");
   const [model, setModel] = useState(null);
   const [tab, setTab] = useUrlTab("afaire", "models", ["models", "filaments"]);
   useTrackDetail(`À faire · ${tab === "filaments" ? "Filaments pour tout imprimer" : "Modèles"}`);
@@ -189,17 +190,8 @@ export default function MwQueue() {
   if (err) return <p style={msg}>{err}</p>;
   if (!q) return <p style={msg}>Lecture de la liste… (la première fois, chaque fiche est lue sur MakerWorld)</p>;
   const t = q.totals;
-  // « le plus pret » : pret AMS, puis en partie (la part des plateaux prets), puis stock OK, puis ce qui manque
-  const readiness = r => ({ ams: 3, partial: 2, stock: 1, short: 0 }[r.status] ?? -1)
-    + (r.status === "partial" && r.plates_count ? (r.plates_ready?.length || 0) / r.plates_count : 0);
-  // ce qu'on peut lancer tout de suite avec les bobines chargees (plateaux prets, leurs heures, leurs grammes)
-  const now = (r, k) => r.ready_now?.[k] || 0;
-  const SORTS = { ready: (a, b) => readiness(b) - readiness(a),
-    nplates: (a, b) => now(b, "plates") - now(a, "plates") || readiness(b) - readiness(a),
-    nhours: (a, b) => now(b, "seconds") - now(a, "seconds") || readiness(b) - readiness(a),
-    ngrams: (a, b) => now(b, "weight_g") - now(a, "weight_g") || readiness(b) - readiness(a) };
   const filtered = q.models.filter(r => sorting || cutting || choosing || filter === "all" || r.status === filter);
-  const rows = sorting || cutting || !SORTS[sortBy] ? filtered : [...filtered].sort(SORTS[sortBy]);
+  const rows = sorting || cutting ? filtered : sortQueue(filtered, sortBy);
   const cutAt = q.until ? q.models.findIndex(r => r.design_id === q.until.design_id) : -1;
   const picked = q.picked ? new Set(q.picked.ids) : null;
   const marks = choosing || picked;                // cases a cocher visibles
@@ -313,11 +305,7 @@ export default function MwQueue() {
               Trier
               <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ height:30, borderRadius:9, border:"1px solid var(--border)",
                 background:"var(--surface2)", color:"var(--text)", fontWeight:700, fontSize:12.5, padding:"0 8px" }}>
-                <option value="prio">par priorité</option>
-                <option value="nplates">le plus de plateaux faisables maintenant</option>
-                <option value="nhours">le plus d'heures faisables maintenant</option>
-                <option value="ngrams">le plus de grammes faisables maintenant</option>
-                <option value="ready">la plus grande part prête</option>
+                {QUEUE_SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </select>
             </label>
           )}
