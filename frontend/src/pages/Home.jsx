@@ -820,8 +820,10 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
     </>}
   </Zoom>;
   return (
-    <div ref={root} onClick={() => setOpen("all")} style={{ display: "flex", flexDirection: "column", gap: 6, cursor: "pointer", height: fitH != null ? "100%" : undefined,
-      minWidth: 0, overflow: "hidden" }}>
+    <div ref={root} onClick={() => setOpen("all")} style={{ display: "flex", flexDirection: "column", gap: 6, cursor: "pointer", minWidth: 0, overflow: "hidden",
+      // hauteur imposee : la tuile s'ancre aux bords du cadre (un height 100 % n'y prend pas, et elle
+      // gardait alors la hauteur estimee, un peu trop grande : le bas etait rogne)
+      ...(fitH != null ? { position: "absolute", inset: 0 } : {}) }}>
       {!(view === "rack" && hasRack && !low) && head}
       {view === "rack" && hasRack && !low ? <div onClick={e => e.stopPropagation()} style={{ flex: 1, minHeight: 0 }}>{rackTile}</div>
         : <HubGrid list={list} order={order} act={act} actTray={actTray} H={H - (low ? 0 : 32)} climate={climate} fs={routes} onPick={id => setOpen(id)}/>}
