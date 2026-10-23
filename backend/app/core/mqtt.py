@@ -849,6 +849,14 @@ class MQTTManager:
                 rack.holder_pos = holder.get("pos", 0)
                 rack.holder_stat = holder.get("stat", 0)
                 rack.holder_job = holder.get("job", 0)
+                try:
+                    rack.holder_cali = int(holder.get("info", -1))
+                except (TypeError, ValueError):
+                    rack.holder_cali = -1
+                try:
+                    rack.reading = (int(nozzle.get("state", 0)) >> 4) & 0xF
+                except (TypeError, ValueError):
+                    rack.reading = 0
                 exist_bits = nozzle.get("exist", 0)
                 logger.info(f"[RACK] nozzle.info brut: {nozzle['info'][:3]}")
                 for n in nozzle["info"]:
@@ -862,6 +870,7 @@ class MQTTManager:
                         wear=float(n.get("wear", 0)),
                         print_time=int(n.get("p_t", 0)),  # p_t en secondes (confirme log MQTT: p_t=61251 ≈ 17h)
                         empty=not bool((n.get("fila_id") or "").strip()),
+                        stat=int(n["stat"]) if str(n.get("stat", "")).lstrip("-").isdigit() else -1,
                     ))
                 src_in_rack = bool(exist_bits & (1 << src_id)) if 0 <= src_id < 64 else False
                 rack.head_id = src_id if not src_in_rack else -1

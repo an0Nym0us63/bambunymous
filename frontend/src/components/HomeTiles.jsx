@@ -565,6 +565,8 @@ export function useTilesData() {
         get("/prints/kpis", { date_from: ymd(y), date_to: ymd(y) })])
         .then(([all, ok, yd]) => ({ ...all, ok: ok.count, yesterday: yd })));
       put("prints", get("/prints", { limit: 16 }).then(r => (r.prints || r.items || []).filter(p => p.status !== "IN_PROGRESS")));
+      // l'impression en cours, avec son vrai nom (celui de l'imprimante est souvent le nom du profil)
+      put("live", get("/prints", { status: "IN_PROGRESS", limit: 1 }).then(r => (r.prints || r.items || [])[0] || null));
       put("spools", get("/filaments/spools", { archived: false }));
       put("dry", get("/filaments/drying/overview"));
       put("friends", get("/friends/shared/printing"));
@@ -621,7 +623,7 @@ const Scroller = ({ children, gap = 6 }) => <div onWheel={e => e.stopPropagation
 const SCROLL = def => B("scroll", "Défiler dans la tuile", def, { hint: "Toute la liste dans la tuile, qu'on fait défiler au doigt ou à la molette." });
 const rateColor = r => r == null ? "#94a3b8" : r >= 0.9 ? "#22c55e" : r >= 0.7 ? "#f59e0b" : "#ef4444";
 // Aujourd'hui : un anneau de reussite, le compte, l'ecart avec hier ; en grand, face a hier
-function Today({ v, p, o, sz, st }) {
+function Today({ v, p, o, sz, st, lp }) {
   const nav = useNavigate();
   const t0 = ymd(new Date());
   const mine = (p || []).filter(x => x.print_date && ymd(utc(x.print_date)) === t0);
@@ -645,15 +647,16 @@ function Today({ v, p, o, sz, st }) {
           {mine.map(x => <Item key={x.id} img={printImg(x.id)} dot={okOf(x) ? "#22c55e" : "#ef4444"} size={52} title={x.file_name || `Impression #${x.id}`}
             sub={[x.print_date && utc(x.print_date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }), x.duration_seconds && fmtDur(x.duration_seconds),
               x.total_weight_g && fmtG(x.total_weight_g)].filter(Boolean).join(" · ")} onClick={() => nav(`/prints?id=${x.id}`)}/>)}</div></>}</>}>
-      {({ W, H }) => v && v.count === 0 ? <TodayEmpty st={st} y={v.yesterday} W={W} H={H}/> : <Stack min={W < 240 ? 150 : 96} head={hero(0)} blocks={[versus && { h: W < 240 ? 150 : 104, node: versus },
+      {({ W, H }) => v && v.count === 0 ? <TodayEmpty st={st} y={v.yesterday} W={W} H={H} lp={lp}/> : <Stack min={W < 240 ? 150 : 96} head={hero(0)} blocks={[versus && { h: W < 240 ? 150 : 104, node: versus },
         v && { opt: true, h: w => statsH(3, w), node: <Stats items={[["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.count - (v.ok || 0), v.count - (v.ok || 0) ? "#dc2626" : undefined],
           ["Coût", fmtEur(v.cost)]]}/> },
         strip && { opt: true, h: 76, node: strip }]}/>}
     </Tile>
   );
 }
+const liveName = (lp, st) => lp?.translated_name || lp?.file_name || st?.print_name || "";
 // aujourd'hui, rien encore : la premiere du jour en cours (son anneau, sa fin), ou l'imprimante qui dort
-function TodayEmpty({ st, y, W, H }) {
+function TodayEmpty({ st, y, W, H, lp }) {
   const live = isLive(st);
   const pct = Math.round(st?.progress || 0), left = st?.remaining_minutes || 0;
   const narrow = W < 215, s = Math.max(40, Math.min(H - 6, narrow ? 64 : 88, W * 0.36));
@@ -674,7 +677,7 @@ function TodayEmpty({ st, y, W, H }) {
       <span style={{ fontSize: narrow ? 14 : 16, fontWeight: 900, color: "var(--text)", lineHeight: 1.2 }}>
         {live ? "La première du jour arrive" : "Pas encore d'impression aujourd'hui"}</span>
       {live && <span style={{ fontSize: 12, fontWeight: 800, color: "#3B82F6", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {st.print_name ? `${st.print_name} · ` : ""}{left ? `fin à ${finAt(left)}` : "bientôt finie"}</span>}
+        {liveName(lp, st) ? `${liveName(lp, st)} · ` : ""}{left ? `fin à ${finAt(left)}` : "bientôt finie"}</span>}
       {H >= 70 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{live ? yest : `${yest} · l'imprimante se repose`}</span>}
     </div>
   </div>;
@@ -859,29 +862,31 @@ function groupCards(prints) {
       snapshots: x.members.flatMap(m => m.snapshots || []), cover_photo: x.members.find(m => m.cover_photo)?.cover_photo || null };
   });
 }
-function Last({ p, o, sz }) {
+function Last({ p, o, sz, st, lp }) {
   const nav = useNavigate();
   const narrowL = useRef(false);   // etroite : le bouton « fiche » passe en coin de la vignette
-  const list = groupCards(p);
+  const live = isLive(st) && lp ? { ...lp, live: true } : null;
+  const list = [...(live ? [live] : []), ...groupCards(p)];
   if (!list.length) return null;
-  const sub = x => [x.members && `${x.members.length} impressions`, o.when && x.print_date && ago(x.print_date), x.duration_seconds && fmtDur(x.duration_seconds), x.total_weight_g && fmtG(x.total_weight_g),
+  const sub = x => x.live ? <span style={{ color: "#3b82f6", fontWeight: 800 }}>● en cours · {Math.round(st?.progress || 0)} %{st?.remaining_minutes ? ` · fin à ${finAt(st.remaining_minutes)}` : ""}</span>
+    : [x.members && `${x.members.length} impressions`, o.when && x.print_date && ago(x.print_date), x.duration_seconds && fmtDur(x.duration_seconds), x.total_weight_g && fmtG(x.total_weight_g),
     o.cost && x.total_cost && fmtEur(x.total_cost)].filter(Boolean).join(" · ");
   // un clic sur la tuile ouvre la fenetre ; le petit bouton de chaque impression ouvre sa fiche
   const go = (x, s = 26) => <button type="button" aria-label="Ouvrir la fiche" title="Ouvrir la fiche de l'impression"
     onClick={e => { e.stopPropagation(); nav(`/prints?id=${x.id}`); }} style={{ width: s, height: s, borderRadius: s / 3.2, border: "1px solid var(--border)",
       flexShrink: 0, background: "var(--surface)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
     <ArrowUpRight size={s >= 26 ? 14 : 12}/></button>;
-  const row = (x, size, card, inZoom) => <Item key={x.id} img={printImg(x.id)} dot={x.partial ? "#f59e0b" : okOf(x) ? "#22c55e" : "#ef4444"} size={size} card={card}
+  const row = (x, size, card, inZoom) => <Item key={x.id} img={printImg(x.id)} dot={x.live ? "#3b82f6" : x.partial ? "#f59e0b" : okOf(x) ? "#22c55e" : "#ef4444"} size={size} card={card}
     title={x.file_name || x.translated_name || `Impression #${x.id}`} sub={sub(x)} onClick={inZoom ? () => nav(`/prints?id=${x.id}`) : undefined}
-    right={<>{o.photo && !hasPhoto(x) && (size >= 44 || card) && <PhotoHint/>}{!inZoom && (card || (!narrowL.current && size >= 30)) && go(x)}</>}
+    right={<>{o.photo && !x.live && !hasPhoto(x) && (size >= 44 || card) && <PhotoHint/>}{!inZoom && (card || (!narrowL.current && size >= 30)) && go(x)}</>}
     corner={!inZoom && !card && narrowL.current ? go(x, 20) : null}/>;
   return (
     <Tile icon={<History size={15}/>} color="#0EA5E9" label="Dernières impressions" to="/prints"
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis" }}>
         <span style={{ color: okOf(list[0]) ? "#22c55e" : "#ef4444" }}>● </span>{list[0].file_name || list[0].translated_name}</span>}
       zoom={<>
-        <Stats items={[["Réussies", `${list.filter(okOf).length} / ${list.length}`, "#16a34a"], ["Durée", fmtH(list.reduce((t, x) => t + (x.duration_seconds || 0), 0))],
-          ["Poids", fmtG(list.reduce((t, x) => t + (x.total_weight_g || 0), 0))]]}/>
+        {(done => <Stats items={[["Réussies", `${done.filter(okOf).length} / ${done.length}`, "#16a34a"], ["Durée", fmtH(done.reduce((t, x) => t + (x.duration_seconds || 0), 0))],
+          ["Poids", fmtG(done.reduce((t, x) => t + (x.total_weight_g || 0), 0))]]}/>)(list.filter(x => !x.live))}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{list.map(x => row(x, 56, false, true))}</div></>}>
       {({ W, H }) => {
         narrowL.current = W < 215;
@@ -2361,7 +2366,7 @@ const sz = it => ({ w: it?.w || 1, h: typeof it?.h === "number" ? it.h : 1 });  
 const B = (key, label, def, extra = {}) => ({ key, label, def, ...extra });
 const C = (key, label, def, choices, extra = {}) => ({ key, label, def, choices, ...extra });
 export const TILES = {
-  today: { label: "Aujourd'hui", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Today v={d.today} p={d.prints} o={o} sz={sz(it)} st={st}/>,
+  today: { label: "Aujourd'hui", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Today v={d.today} p={d.prints} o={o} sz={sz(it)} st={st} lp={d.live}/>,
     options: [B("ring", "Anneau de réussite", true, { hint: "La part des impressions réussies du jour." }), B("yesterday", "Écart avec hier", true),
       B("weight", "Poids imprimé", true), B("hours", "Heures de machine", true), B("cost", "Coût du jour", false)] },
   week: { label: "Derniers jours", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Week o={o} sz={sz(it)}/>,
@@ -2370,7 +2375,7 @@ export const TILES = {
   next: { label: "À faire", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Next q={d.queue} o={o} sz={sz(it)}/>,
     options: [B("thumbs", "Vignettes", true), B("ready", "Seulement ce qui est prêt", false, { hint: "Les modèles imprimables tout de suite avec l'AMS (en tout ou en partie)." }),
       B("weight", "Poids", true), SCROLL(false)] },
-  last: { label: "Dernières impressions", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Last p={d.prints} o={o} sz={sz(it)}/>,
+  last: { label: "Dernières impressions", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Last p={d.prints} o={o} sz={sz(it)} st={st} lp={d.live}/>,
     options: [B("when", "Depuis quand", true), B("cost", "Coût", false), B("photo", "Rappel « pas de photo »", true), SCROLL(true)] },
   stock: { label: "Stock", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Stock s={d.spools} o={o} sz={sz(it)}/>,
     options: [C("style", "Bobines basses", "dots", [["dots", "en pastilles"], ["list", "en liste"]], { hint: "Autant que la tuile en tient ; l'anneau d'une pastille montre ce qui reste." }),

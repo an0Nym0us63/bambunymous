@@ -160,6 +160,7 @@ class HotendSlotOut(BaseModel):
     wear: float
     print_time: int
     empty: bool
+    stat: int = -1
     spool_id: Optional[int] = None
 
 
@@ -171,6 +172,8 @@ class HotendRackOut(BaseModel):
     holder_pos: int
     holder_stat: int
     holder_job: int
+    holder_cali: int = -1
+    reading: int = 0
     head_id: int = -1
 
 
@@ -382,7 +385,7 @@ async def printer_status(_: str = Depends(get_current_user)):
                 id=h.id, color=h.color, filament_id=h.filament_id,
                 diameter=h.diameter, nozzle_type=h.nozzle_type,
                 serial=h.serial, wear=h.wear, print_time=h.print_time,
-                empty=h.empty, spool_id=h.spool_id,
+                empty=h.empty, spool_id=h.spool_id, stat=getattr(h, "stat", -1),
             ) for h in s.hotend_rack.hotends],
             active_id=s.hotend_rack.active_id,
             target_id=s.hotend_rack.target_id,
@@ -390,6 +393,8 @@ async def printer_status(_: str = Depends(get_current_user)):
             holder_pos=s.hotend_rack.holder_pos,
             holder_stat=s.hotend_rack.holder_stat,
             holder_job=s.hotend_rack.holder_job,
+            holder_cali=getattr(s.hotend_rack, "holder_cali", -1),
+            reading=getattr(s.hotend_rack, "reading", 0),
             head_id=s.hotend_rack.head_id,
         ),
         hms_errors=s.hms_errors,

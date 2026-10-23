@@ -489,7 +489,7 @@ function SlotDetail({ slot, num, isOnHead, headSlot, fitH = null }) {
           {status !== "empty" && <div style={{ fontSize:15, fontWeight:900, color:"var(--text)", lineHeight:1.2, overflow:"hidden", display:"-webkit-box",
             WebkitLineClamp: fitH >= 120 ? 2 : 1, WebkitBoxOrient:"vertical" }}>{filName}</div>}
           {(sub || displaySlot.nozzle_type) && <div style={{ fontSize:11.5, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
-            {[sub, displaySlot.nozzle_type && `${displaySlot.nozzle_type} · ${displaySlot.diameter} mm`].filter(Boolean).join(" · ")}</div>}
+            {[sub, displaySlot.nozzle_type && `${nozzleKind(displaySlot.nozzle_type) || displaySlot.nozzle_type} · ${displaySlot.diameter} mm`].filter(Boolean).join(" · ")}</div>}
           {timeStr && fitH >= 84 && <div style={{ display:"flex", alignItems:"center", gap:5, fontSize:11.5, color:"var(--muted)" }}>
             <Clock size={12}/><b style={{ color:"var(--text)" }}>{timeStr}</b> d'utilisation</div>}
         </div>
@@ -543,6 +543,11 @@ function SlotDetail({ slot, num, isOnHead, headSlot, fitH = null }) {
             <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace", margin:0 }}>
               {displaySlot.nozzle_type || "—"} · {displaySlot.diameter}mm
             </p>
+            {(nozzleKind(displaySlot.nozzle_type) || nozzleHealth(displaySlot.stat)) && <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:5 }}>
+              {nozzleKind(displaySlot.nozzle_type) && <span style={{ fontSize:11, fontWeight:800, color:"var(--text2)", background:"var(--surface)",
+                border:"1px solid var(--border)", padding:"1px 8px", borderRadius:20 }}>{nozzleKind(displaySlot.nozzle_type)}</span>}
+              {(h => h && <span style={{ fontSize:11, fontWeight:800, color:h[1], background:`${h[1]}1f`, padding:"1px 8px", borderRadius:20 }}>● {h[0]}</span>)(nozzleHealth(displaySlot.stat))}
+            </div>}
           </div>
         </div>
 
@@ -587,6 +592,46 @@ function SlotDetail({ slot, num, isOnHead, headSlot, fitH = null }) {
   );
 }
 
+
+// ── Ce que dit le rack Vortek (cf. DevNozzleRack / DevNozzleSystem de Bambu Studio) ──
+// position du support (holder.pos), ce qu'il fait (holder.stat), sa calibration (holder.info)
+const RACK_POS = { 1: "Côté A en haut", 2: "Côté B en haut", 3: "Au centre" };
+const RACK_DOING = { 1: "Centrage de la buse", 2: "Centrage de la tête", 3: "Calibration du rack", 4: "Coupe du filament", 5: "Déverrouillage de la buse",
+  6: "Levée du rack", 7: "Dépose de la buse", 8: "Prise de la buse", 9: "Verrouillage de la buse" };
+// le type d'une buse (« HS01 ») : la 2e lettre dit le debit, les 2 chiffres la matiere
+function nozzleKind(type) {
+  const t = String(type || "").toUpperCase();
+  if (t.length < 4 || t === "N/A") return null;
+  const flow = { S: "Débit standard", A: "Débit standard", X: "Débit standard", H: "Haut débit", E: "Haut débit", U: "Haut débit TPU", B: "Haut débit E3D" }[t[1]];
+  const mat = { "00": "acier inoxydable", "01": "acier trempé", "05": "carbure de tungstène" }[t.slice(2, 4)];
+  return [flow, mat].filter(Boolean).join(" · ") || null;
+}
+// l'etat d'une buse (stat) : bit 0 = infos pas encore sures ; bits 1-2 : normal, anormal, inconnu
+function nozzleHealth(stat) {
+  if (stat == null || stat < 0) return null;
+  const st = (stat >> 1) & 3;
+  if (st === 1) return ["Anomalie signalée", "#ef4444"];
+  if (st === 2) return ["État inconnu", "#94a3b8"];
+  if (stat & 1) return ["Infos à confirmer", "#f59e0b"];
+  return ["En bon état", "#16a34a"];
+}
+// une ligne d'etat du rack : position, ce qu'il fait en ce moment, calibration, lecture des buses
+function RackState({ rack, compact = false }) {
+  if (!rack) return null;
+  const doing = RACK_DOING[rack.holder_stat];
+  const swap = rack.target_id >= 16 && rack.active_id >= 0 && rack.target_id !== rack.active_id;
+  const chip = (txt, c, pulse) => <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: compact ? 10.5 : 11.5, fontWeight: 800,
+    padding: compact ? "1px 8px" : "3px 10px", borderRadius: 20, color: c, background: `${c === "var(--muted)" ? "#94a3b8" : c}1f`, whiteSpace: "nowrap" }}>
+    {pulse && <span style={{ width: 6, height: 6, borderRadius: "50%", background: c, animation: "livePulse 1.4s infinite" }}/>}{txt}</span>;
+  const items = [
+    doing && chip(swap ? `${doing} · vers la ${rack.target_id - 15}` : doing, "#3b82f6", true),
+    rack.reading > 0 && chip(`Lecture des buses · ${rack.reading}`, "#8b5cf6", true),
+    RACK_POS[rack.holder_pos] && chip(RACK_POS[rack.holder_pos], "var(--muted)"),
+    rack.holder_cali === 0 && chip("Rack à calibrer", "#f59e0b"),
+  ].filter(Boolean);
+  if (!items.length) return null;
+  return <div style={{ display: "flex", gap: 6, flexWrap: compact ? "nowrap" : "wrap", overflow: "hidden", minWidth: 0 }}>{items}</div>;
+}
 
 // Vue retenue de la tuile AMS/rack, par appareil.
 const VIEW_KEY = "home.deviceView";
@@ -1036,9 +1081,11 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
             <span style={{ fontSize:10, fontWeight:700, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em" }}>
               {showRack ? <>Rack Vortek <span style={{ fontFamily:"monospace", marginLeft:4 }}>{filled}/6</span></> : "AMS"}
             </span>
+            {showRack && dense && <div style={{ flex: 1, minWidth: 0, display: "flex", justifyContent: "flex-end" }}><RackState rack={rack} compact/></div>}
             {toggle}
           </div>
         )}
+        {showRack && !dense && <div style={{ marginBottom: 10 }}><RackState rack={rack}/></div>}
 
         {!showRack && (org === "auto"
           ? <div style={{ display:"flex", flexWrap:"wrap", gap: dense ? 6 : 10 }}>{flow}</div>

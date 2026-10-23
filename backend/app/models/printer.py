@@ -76,6 +76,7 @@ class HotendSlot:
     wear: float = 0.0
     print_time: int = 0
     empty: bool = False
+    stat: int = -1             # bit 0 : 0 = infos fiables ; bits 1-2 : 0 normal, 1 anormal, 2 inconnu
     spool_id: Optional[int] = None
     _spool_info_cache: Optional[dict] = None  # cache dict de spool_info pour éviter re-query
 
@@ -89,6 +90,8 @@ class HotendRack:
     holder_pos: int = 0        # 1=A, 2=B, 3=Centre
     holder_stat: int = 0
     holder_job: int = 0
+    holder_cali: int = -1      # calibration du rack : 0 a faire, 1 faite, -1 inconnue (holder.info)
+    reading: int = 0           # buses encore a lire (nozzle.state, bits 4-7)
     head_id: int = -1          # id de l'hotend sur la tête (-1 si dans le rack)
     head_in_rack_idx: int = -1 # index dans hotends[] si src_id est dans le rack
 
