@@ -9,11 +9,24 @@ const GROUPS = {
            "bulles", "feux", "reflexe"],
   puzzles: ["bambulab", "pilule", "coffre", "labyrinthe", "memoire", "morpion", "simon", "pendu", "calcul", "piano",
             "etoiles", "chat", "tresor", "des", "pile-ou-face", "morse", "taquin", "bobine", "lune", "pluie"],
+  // lot du 23/10/2026 : geek, atelier d'impression, amour
+  geek: ["hal-9000", "terminal", "binaire", "pixel-art", "invaders", "hacker", "loading", "captcha"],
+  atelier: ["plateau", "premiere-couche", "sechoir", "purge", "supports", "slicer", "tri-ams", "buse-bouchee"],
+  amour: ["coeur", "cupidon", "je-t-aime", "rendez-vous", "bouquet", "lettre", "etoile-filante", "calin", "fleur"],
+  spectacle: ["feu-de-camp", "cinema", "planetarium", "timelapse", "orchestre", "vinyle", "ascii", "ciel-polaire"],
+  defis: ["radio", "cryptex", "sudoku", "laser", "nonogramme", "mastermind", "hanoi", "dactylo", "enigme"],
+  fantaisie: ["fortune", "machine-a-cafe", "chien", "plante", "photomaton", "horoscope", "dessin", "boite-a-musique"],
 };
 const LOADERS = {
   scenes: () => import("./scenes"),
   arcade: () => import("./arcade"),
   puzzles: () => import("./puzzles"),
+  geek: () => import("./geek"),
+  atelier: () => import("./atelier"),
+  amour: () => import("./amour"),
+  spectacle: () => import("./spectacle"),
+  defis: () => import("./defis"),
+  fantaisie: () => import("./fantaisie"),
 };
 const GROUP_OF = Object.fromEntries(Object.entries(GROUPS).flatMap(([g, slugs]) => slugs.map(s => [s, g])));
 const CACHE = {};
