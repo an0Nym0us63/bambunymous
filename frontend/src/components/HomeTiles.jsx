@@ -374,16 +374,18 @@ function HumZoom({ list, col, o, lo, hi }) {
   </>;
 }
 // des barres (une par valeur), « hi » en plein ; labels et valeurs si la place le permet
-function Bars({ values, labels, color, height = 40, hi = -1, showValues = false, fmt = v => v, titles }) {
+function Bars({ values, labels, color, height = 40, hi = -1, showValues = false, fmt = v => v, titles, onPick, picked = -1 }) {
   const max = Math.max(1, ...values);
   const gap = values.length > 20 ? 2 : 4;
   return (
     <div style={{ display: "flex", gap, alignItems: "flex-end", height: height + (labels ? 15 : 0) + (showValues ? 14 : 0) }}>
       {values.map((v, i) => (
-        <div key={i} title={titles?.[i]} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+        <div key={i} title={titles?.[i]} onClick={onPick ? e => { e.stopPropagation(); onPick(i); } : undefined}
+          style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, cursor: onPick ? "pointer" : undefined }}>
           {showValues && <span style={{ fontSize: 9.5, color: "var(--muted)", fontWeight: 700, whiteSpace: "nowrap" }}>{v ? fmt(v) : ""}</span>}
           <span data-pk="" style={{ width: "100%", maxWidth: 30, borderRadius: values.length > 20 ? 3 : 5, minHeight: 3,
-            height: `${Math.max(3, Math.round(height * v / max))}px`, background: i === hi ? color : `${color}59` }}/>
+            height: `${Math.max(3, Math.round(height * v / max))}px`, background: i === hi || i === picked ? color : `${color}59`,
+            outline: i === picked ? `2px solid ${color}` : "none", outlineOffset: 2 }}/>
           {labels && <span style={{ fontSize: 10, height: 13, color: i === hi ? "var(--text)" : "var(--muted)", fontWeight: i === hi ? 800 : 600,
             whiteSpace: "nowrap" }}>{labels[i]}</span>}
         </div>
@@ -686,7 +688,7 @@ function TodayEmpty({ st, y, W, H, lp }) {
 const METRICS = { h: ["les heures", x => x.duration || 0, fmtH], n: ["les impressions", x => x.count || 0, x => `${x}`], g: ["les grammes", x => x.weight_g || 0, fmtG] };
 const dayLabel = (n, x) => n <= 7 ? x.day.toLocaleDateString("fr-FR", { weekday: "narrow" }) : n <= 14 ? String(x.day.getDate())
   : (x.day.getDate() % 5 === 0 ? String(x.day.getDate()) : "");
-function DaysChart({ v, n, metric, color, H, W, big }) {
+function DaysChart({ v, n, metric, color, H, W, big, onPick, picked }) {
   const [, val, fmt] = METRICS[metric] || METRICS.h;
   const today = ymd(new Date());
   const labels = H >= 60;
@@ -694,13 +696,14 @@ function DaysChart({ v, n, metric, color, H, W, big }) {
   const h = Math.max(12, H - (labels ? 15 : 0) - (values ? 14 : 0));
   return <Bars values={v.map(val)} labels={labels ? v.map(x => dayLabel(n, x)) : null} color={color} height={h}
     hi={v.findIndex(x => ymd(x.day) === today)} showValues={values} fmt={fmt}
-    titles={v.map(x => `${x.day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} : ${fmt(val(x))}`)}/>;
+    titles={v.map(x => `${x.day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} : ${fmt(val(x))}`)} onPick={onPick} picked={picked}/>;
 }
 // la hauteur d'un graphe en grand : a la mesure de la largeur (un telephone n'a pas besoin d'un graphe d'un demi-ecran)
 const zoomChartH = W => Math.round(Math.max(110, Math.min(220, W * 0.45)));
 function WeekZoom({ o }) {
   const [n, setN] = useState(o.range || 7);
   const [m, setM] = useState(o.metric || "h");
+  const [pick, setPick] = useState(null);   // le jour touche (son detail sous le graphe)
   const v = useDays(n);
   const { W } = useBox();
   const [, val, fmt] = METRICS[m];
@@ -721,8 +724,39 @@ function WeekZoom({ o }) {
         ["Jours actifs", v ? `${active} / ${n}` : "…"]].map(([l, x]) => (
         <div key={l}><Muted>{l}</Muted><div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)" }}>{x}</div></div>))}
     </div>
-    {v && <div><DaysChart v={v} n={n} metric={m} color="#8B5CF6" W={W} H={zoomChartH(W)} big/></div>}
+    {v && <div><DaysChart v={v} n={n} metric={m} color="#8B5CF6" W={W} H={zoomChartH(W)} big onPick={i => setPick(v[i]?.date)}
+      picked={v.findIndex(x => x.date === pick)}/></div>}
+    {v && <DayDetail date={pick || v[v.length - 1]?.date}/>}
   </>;
+}
+// le detail d'un jour : les impressions qui ont tourne ce jour-la, et combien d'heures chacune y a pris
+function DayDetail({ date }) {
+  const nav = useNavigate();
+  const [items, setItems] = useState(null);
+  useEffect(() => {
+    if (!date) return undefined;
+    let dead = false;
+    setItems(null);
+    client.get("/prints/kpis/daily", { params: { date_from: date, date_to: date, tz: -new Date().getTimezoneOffset(), detail: 1 } })
+      .then(r => { if (!dead) setItems(r.data?.[0]?.items || []); }).catch(() => { if (!dead) setItems([]); });
+    return () => { dead = true; };
+  }, [date]);
+  const d = date ? new Date(`${date}T12:00:00`) : null;
+  return <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+    <H2>{d ? d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : ""}{items ? ` · ${fmtH(items.reduce((t, x) => t + x.seconds, 0))}` : ""}</H2>
+    {items == null ? <Muted>…</Muted> : !items.length ? <Muted>L'imprimante n'a pas tourné ce jour-là.</Muted>
+      : items.map((x, i) => <div key={`${x.id}-${i}`} onClick={() => nav(`/prints?id=${x.id}`)} style={{ display: "flex", alignItems: "center", gap: 10,
+        padding: "8px 10px", borderRadius: 12, background: "var(--surface2)", cursor: "pointer", minWidth: 0 }}>
+        <img src={printImg(x.id)} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+          style={{ width: 36, height: 36, borderRadius: 9, objectFit: "cover", background: "var(--surface)", flexShrink: 0 }}/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</div>
+          <div style={{ fontSize: 11.5, color: "var(--muted)" }}>lancée le {new Date(x.start).toLocaleString("fr-FR", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+            {x.status === "IN_PROGRESS" ? " · en cours" : ""}</div>
+        </div>
+        <span style={{ fontSize: 14, fontWeight: 900, color: "#8B5CF6", whiteSpace: "nowrap" }}>{fmtDur(x.seconds)}</span>
+      </div>)}
+  </div>;
 }
 function Week({ o, sz }) {
   const n = o.range || 7;

@@ -1234,6 +1234,7 @@ async def prints_kpis_daily(
     date_from: str,
     date_to: Optional[str] = None,
     tz: int = 0,
+    detail: bool = False,
     _: str = Depends(get_current_user),
 ):
     """Les chiffres de /kpis jour par jour, en une requete (les tuiles de l'accueil en demandaient un
@@ -1253,13 +1254,14 @@ async def prints_kpis_daily(
     lo = datetime.combine(d0, datetime.min.time()) - off              # bornes en UTC
     hi = datetime.combine(d1 + timedelta(days=1), datetime.min.time()) - off
     now = datetime.utcnow()
-    days = {(d0 + timedelta(days=i)).isoformat(): {"count": 0, "duration": 0.0, "weight_g": 0.0, "cost": 0.0}
+    days = {(d0 + timedelta(days=i)).isoformat(): {"count": 0, "duration": 0.0, "weight_g": 0.0, "cost": 0.0, "items": []}
             for i in range((d1 - d0).days + 1)}
     async with AsyncSessionLocal() as db:
         # une impression peut avoir commence avant la periode et tourner dedans : 4 jours de marge
-        rows = (await db.execute(select(Print.print_date, Print.duration_seconds, Print.total_weight_g, Print.total_cost, Print.status)
+        rows = (await db.execute(select(Print.print_date, Print.duration_seconds, Print.total_weight_g, Print.total_cost, Print.status,
+                                        Print.id, Print.file_name)
                                  .where(Print.print_date >= lo - timedelta(days=4), Print.print_date < hi))).all()
-    for start, dur, w, c, status in rows:
+    for start, dur, w, c, status, pid, fname in rows:
         if not start:
             continue
         if getattr(start, "tzinfo", None) is not None:
@@ -1281,9 +1283,13 @@ async def prints_kpis_daily(
             k = t.date().isoformat()
             if k in days:
                 days[k]["duration"] += (nxt - t).total_seconds()
+                if detail:
+                    days[k]["items"].append({"id": pid, "name": fname, "start": local.isoformat(timespec="minutes"),
+                                             "seconds": int((nxt - t).total_seconds()), "status": status})
             t = nxt
     return [{"date": k, "count": v["count"], "duration": int(v["duration"]), "weight_g": round(v["weight_g"], 1),
-             "cost": round(v["cost"], 2)} for k, v in days.items()]
+             "cost": round(v["cost"], 2), **({"items": sorted(v["items"], key=lambda x: x["start"])} if detail else {})}
+            for k, v in days.items()]
 
 
 @router.get("/debug")
