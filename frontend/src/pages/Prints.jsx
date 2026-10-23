@@ -710,6 +710,26 @@ const TRAD_BY = {
 // Fiche publique du modele sur MakerWorld, lue en cache par le serveur. Pas
 // encore lue : le serveur la lance, on redemande 4 s plus tard (une fois).
 const fmtK = n => n == null ? null : n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k` : String(n);
+// pourquoi ce modele n'est pas (ou plus) dans « A evaluer » : deja note, le mien, pas encore reussi…
+function RateStatusLine({ designId }) {
+  const [st, setSt] = useState(null);
+  useEffect(() => {
+    let dead = false;
+    client.get(`/makerworld/rate-status/${designId}`).then(r => { if (!dead) setSt(r.data); }).catch(() => {});
+    return () => { dead = true; };
+  }, [designId]);
+  if (!st) return null;
+  const txt = {
+    rated: st.noscore ? "⭐ Compté comme évalué : MakerWorld a une évaluation sans note pour ce modèle"
+      : `⭐ Déjà évalué sur MakerWorld${st.score ? ` (${st.score}/5)` : ""}`,
+    pending: "⭐ MakerWorld attend ton évaluation",
+    mine: "Ton modèle : pas d'évaluation à faire",
+    no_print: "Pas encore d'impression réussie de ce modèle",
+    unknown: "Évaluations MakerWorld illisibles pour le moment",
+    to_rate: "⭐ À évaluer",
+  }[st.state];
+  return txt ? <div style={{ fontSize:11, fontWeight:700, color: st.state === "rated" && st.noscore ? "#d97706" : "var(--muted)", padding:"0 10px 8px" }}>{txt}</div> : null;
+}
 function MakerWorldCard({ designId, note, prints = [] }) {
   const mineOf = useMine([designId]);            // chez un copain : l'ai-je deja ?
   const visiting = useFriend((s) => s.friend);
@@ -797,6 +817,7 @@ function MakerWorldCard({ designId, note, prints = [] }) {
             color:"white", textDecoration:"none", border:"1px solid #f59e0b" }}/>
         </div>
       )}
+      {!toRate.has(String(designId)) && <RateStatusLine designId={designId}/>}
       <MakerWorldPlates designId={designId} profiles={mw.profiles || []} prints={prints}/>
       <AdminOnly home mw>
         <button onClick={() => setPick(true)} style={{ display:"block", width:"100%", padding:"7px", border:"none",

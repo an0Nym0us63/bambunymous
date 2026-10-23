@@ -322,6 +322,13 @@ async def mw_creator_page(uid: str, offset: int = 0, fresh: bool = False, _: str
     return await _call(mw.creator_page(uid, offset, fresh))
 
 
+@router.get("/rate-status/{design_id}")
+async def mw_rate_status(design_id: str, fresh: bool = False, _: str = Depends(get_current_user)):
+    """L'etat de l'evaluation d'un modele, et pourquoi il est (ou non) dans « A evaluer »."""
+    from ....services import mw_rate
+    return await _call(mw_rate.rate_status(design_id, fresh))
+
+
 @router.get("/to-rate")
 async def mw_to_rate(fresh: bool = False, _: str = Depends(get_current_user)):
     """Mes impressions de modeles MakerWorld pas encore evaluees, avec leurs photos."""

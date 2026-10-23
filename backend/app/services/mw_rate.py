@@ -75,7 +75,7 @@ async def my_ratings(fresh: bool = False):
             if _is_rated(h):
                 rated.add(did)
                 imgs = h.get("images")
-                details.append({"id": h.get("id"), "design_id": did, "score": h.get("score") or 0,
+                details.append({"id": h.get("id"), "design_id": did, "score": h.get("score") or 0, "noscore": "score" not in h,
                                 "content": h.get("content") or "", "at": h.get("createTime"),
                                 "images": len(imgs) if isinstance(imgs, list) else 0})
             elif h.get("userCanRating", True):
@@ -139,6 +139,31 @@ async def own_designs():
     except Exception:
         logger.exception("[MW] mes modeles (a evaluer)")
     return uid, ids
+
+
+async def rate_status(design_id: str, fresh: bool = False) -> dict:
+    """Ou en est l'evaluation d'un modele, et pourquoi il est (ou n'est pas) dans « A evaluer »."""
+    from sqlalchemy import select, func
+    from ..db.session import AsyncSessionLocal
+    from ..models.print_history import Print
+    from .makerworld_account import DONE_STATUSES
+    did = str(design_id or "").strip()
+    r = await my_ratings(fresh)
+    _uid, mine = await own_designs()
+    async with AsyncSessionLocal() as db:
+        done = (await db.execute(select(func.count(Print.id)).where(Print.design_id == did, Print.status.in_(DONE_STATUSES)))).scalar() or 0
+    if did in (mine or set()):
+        return {"state": "mine", "done": done}
+    if r is None:
+        return {"state": "unknown", "done": done}
+    rated, pending = r
+    det = [d for d in (_CACHE.get("details") or []) if d.get("design_id") == did]
+    if did in pending:
+        return {"state": "pending", "done": done, "profiles": len(pending[did])}
+    if did in rated:
+        best = max(det, key=lambda d: d.get("score") or 0) if det else {}
+        return {"state": "rated", "done": done, "score": best.get("score") or 0, "noscore": bool(det) and all(d.get("noscore") for d in det)}
+    return {"state": "to_rate" if done else "no_print", "done": done}
 
 
 async def to_rate(fresh: bool = False) -> dict:
