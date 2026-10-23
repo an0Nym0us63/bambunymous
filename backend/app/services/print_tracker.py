@@ -42,6 +42,7 @@ def _job(job_id: str) -> dict:
                 "m50": False, "m99": False, "m100": False,
                 "l2": False, "l3": False, "last_layer": 0,
                 "start_time": time.time(),
+                "paused": 0.0, "pause_since": None,
             }
         return _JOBS[job_id]
 
@@ -128,6 +129,9 @@ async def restore_in_progress():
                     # created_at est en UTC naif : .timestamp() le lirait en heure locale
                     st["start_time"] = (p.created_at.replace(tzinfo=timezone.utc).timestamp()
                                         if p.created_at else time.time())
+                    st["paused"] = float(p.paused_seconds or 0)
+                    st["pause_since"] = (p.paused_since.replace(tzinfo=timezone.utc).timestamp()
+                                         if p.paused_since else None)
 
                 # Reconstruire les flags milestones depuis les snapshots déjà pris
                 snaps_r = await db.execute(
@@ -534,6 +538,40 @@ def on_progress(job_id: str, pct: float, layer: int):
                 _bg(_snap(pid, "layer2"))
 
 
+async def _save_pause(pid: int, paused: float, since: Optional[float]):
+    try:
+        async with AsyncSessionLocal() as db:
+            # seulement en cours : ecrite en arriere-plan, elle peut arriver apres la cloture
+            await db.execute(update(Print).where(Print.id == pid, Print.status == "IN_PROGRESS").values(
+                paused_seconds=round(paused, 1),
+                paused_since=datetime.utcfromtimestamp(since) if since else None))
+            await db.commit()
+    except Exception as e:
+        logger.warning(f"[PAUSE] enregistrement impossible print #{pid}: {e}")
+
+
+def on_state(job_id: str, gcode_state: str, now: Optional[float] = None):
+    """Suit les pauses d'un job (gcode_state PAUSE) : la duree reelle les retire.
+    Enregistre en base a chaque bascule, pour survivre a un redemarrage."""
+    if not job_id or job_id in _PROCESSED or not gcode_state: return
+    now = now or time.time()
+    with _LOCK:
+        if job_id not in _JOBS: return
+        st = _JOBS[job_id]
+        pid = st.get("print_id")
+        if gcode_state == "PAUSE":
+            if st.get("pause_since"): return
+            st["pause_since"] = now
+        else:
+            since = st.get("pause_since")
+            if not since: return
+            st["paused"] = st.get("paused", 0.0) + max(0.0, now - since)
+            st["pause_since"] = None
+        paused, since = st.get("paused", 0.0), st.get("pause_since")
+    logger.info(f"[PAUSE] job={job_id} {'en pause' if since else 'reprise'} · cumul {paused / 60:.1f} min")
+    if pid: _bg(_save_pause(pid, paused, since))
+
+
 def on_finish(job_id: str, gcode_state: str):
     if not job_id or job_id in _PROCESSED: return
     now = time.time()
@@ -548,6 +586,13 @@ def on_finish(job_id: str, gcode_state: str):
 
     st = _job(job_id); pid = st.get("print_id")
     if not pid: return
+    # la fin date de sa premiere observation (pas de l'anti-rebond) ; une pause encore
+    # ouverte (annulation depuis la pause) se referme a cet instant
+    with _LOCK:
+        if st.get("pause_since"):
+            st["paused"] = st.get("paused", 0.0) + max(0.0, t0 - st["pause_since"])
+            st["pause_since"] = None
+        paused = st.get("paused", 0.0)
     final = "SUCCESS" if gcode_state == "FINISH" else "FAILED"
     logger.info(f"[PRINT] 🏁 Fin job={job_id} print_id={pid} statut={final}")
     if final == "FAILED":
@@ -571,7 +616,8 @@ def on_finish(job_id: str, gcode_state: str):
         _err = int(getattr(get_state(), "print_error", 0) or 0)
     except Exception:
         _err = 0
-    _bg(_finalize(pid, job_id, final, st.get("start_time"), pct=int(st.get("last_pct", 0) or 0), print_error=_err))
+    _bg(_finalize(pid, job_id, final, st.get("start_time"), pct=int(st.get("last_pct", 0) or 0), print_error=_err,
+                  t_end=t0, paused=paused))
 
 
 async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_id: str = ""):
@@ -652,22 +698,26 @@ async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_i
     return None, "notfound"
 
 async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
-                    pct: int = 0, print_error: int = 0):
+                    pct: int = 0, print_error: int = 0,
+                    t_end: Optional[float] = None, paused: float = 0.0):
     logger.info(f"[FINAL] ▶ Démarrage finalisation print #{pid} → {status}")
     try:
         async with AsyncSessionLocal() as db:
             p = await db.get(Print, pid)
             if not p: return
             p.status = status; p.updated_at = datetime.utcnow()
+            # La duree reelle : du lancement a la fin, pauses retirees (bobine vide,
+            # erreur, pause manuelle). Hors de toute mesure (au-dela du double de
+            # l'estimation : une attente non suivie, un redemarrage), on se replie :
+            # un echec prend la part de l'estimation reellement imprimee, un succes
+            # garde l'estimation.
             est = p.estimated_seconds or 0
-            real = time.time() - t0 if t0 else None
-            if real is not None and (est <= 0 or real <= est * 1.3):
-                p.duration_seconds = real
+            p.paused_seconds = round(paused, 1) if paused else p.paused_seconds
+            p.paused_since = None
+            real = max(0.0, (t_end or time.time()) - t0 - (paused or 0)) if t0 else None
+            if real is not None and (est <= 0 or real <= est * 2):
+                p.duration_seconds = round(real)
             elif status == "FAILED" and est > 0 and pct > 0:
-                # Un echec apres une longue pause (bobine vide, erreur, annulation tardive)
-                # depasse l'estimation : le temps ecoule ne dit plus le temps d'impression.
-                # On prend la part de l'estimation reellement imprimee, plutot que de
-                # laisser l'estimation complete (qu'il fallait corriger a la main).
                 p.duration_seconds = round(est * min(pct, 100) / 100)
             # Coûts
             await _costs(db, p)

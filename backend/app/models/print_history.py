@@ -65,6 +65,10 @@ class Print(Base):
     # Passe avant plate_id.
     mw_plates           = Column(Text, nullable=True)
     printer_model       = Column(String(32),  default="H2C")
+    # Temps passe en pause pendant le print (bobine vide, erreur, pause manuelle) : retire
+    # du temps ecoule pour la duree reelle. paused_since (UTC) = pause en cours.
+    paused_seconds      = Column(Float, nullable=True)
+    paused_since        = Column(DateTime, nullable=True)
 
     group_id            = Column(Integer, ForeignKey("groups.id", ondelete="SET NULL"), nullable=True)
 

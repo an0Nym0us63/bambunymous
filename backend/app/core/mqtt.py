@@ -319,7 +319,7 @@ class MQTTManager:
         # ── Historique impressions ─────────────────────────────────────────
         import threading as _pth, asyncio as _pio
         from app.services.print_tracker import (
-            create_print as _cp, on_progress as _op, on_finish as _of
+            create_print as _cp, on_progress as _op, on_finish as _of, on_state as _os
         )
         from app.db.session import AsyncSessionLocal as _PAS
         from app.services.settings_service import get_setting as _PGS
@@ -380,6 +380,9 @@ class MQTTManager:
         # pct100 ne partait jamais.
         if _jid and _gst in ("RUNNING", "FINISH"):
             _op(_jid, _pct, _lay)
+        # Pauses (retirees de la duree reelle)
+        if _jid and _gst:
+            _os(_jid, _gst)
         # Fin
         if _jid and _gst in ("FINISH", "FAILED"):
             _of(_jid, _gst)

@@ -89,6 +89,8 @@ async def _migrate():
         ("filaments", "spool_tare_name",      "TEXT"),
         ("prints",    "mw_profile_id",        "TEXT"),
         ("prints",    "mw_plates",            "TEXT"),
+        ("prints",    "paused_seconds",       "REAL"),
+        ("prints",    "paused_since",         "TIMESTAMP"),
         ("makerworld_designs", "profiles",     "TEXT"),
         ("makerworld_designs", "creator_uid",  "TEXT"),
         ("filaments", "multicolor_type",      "TEXT DEFAULT 'monochrome'"),
