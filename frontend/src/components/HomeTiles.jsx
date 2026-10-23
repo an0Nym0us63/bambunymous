@@ -582,11 +582,12 @@ export function useTilesData() {
       put("sales", get("/objects/objects/stats"));
       put("feed", get("/notify/me/history"));
       put("attention", get("/attention"));
+      // a evaluer : relu avec le reste (une impression qui vient de finir y entre sans recharger la page)
+      put("rate", get("/makerworld/to-rate"));
     };
     load();
     put("queue", get("/makerworld/queue"));
     put("mw", get("/makerworld/creator"));
-    put("rate", get("/makerworld/to-rate"));
     put("podium", get("/achievements/podium"));
     const iv = setInterval(load, 120000);
     return () => { dead = true; clearInterval(iv); };
