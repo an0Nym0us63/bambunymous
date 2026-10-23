@@ -541,8 +541,15 @@ async def _compute() -> dict:
             # chaque plateau : faisable tout de suite avec l'AMS ? deja imprime (par moi) ?
             mine = done_plates.get(str(did), {})
             row["plates"] = [{"index": pl.get("index"), "name": pl.get("name") or "",
-                              "ready": pl.get("index") in ready, "printed": mine.get(pl.get("index"), 0)}
+                              "ready": pl.get("index") in ready, "printed": mine.get(pl.get("index"), 0),
+                              "seconds": _num(pl.get("seconds")) or None,
+                              "weight_g": round(sum(_num(f.get("g")) for f in pl.get("filaments") or []), 1) or None}
                              for pl in plates]
+            # faisable tout de suite avec ce qui est charge : les plateaux prets (ceux pas encore
+            # imprimes d'abord), leurs heures et leurs grammes -- pour trier « A faire » par ce qu'on peut lancer
+            now = [x for x in row["plates"] if x["ready"] and not x["printed"]] or [x for x in row["plates"] if x["ready"]]
+            row["ready_now"] = {"plates": len(now), "seconds": int(sum(x["seconds"] or 0 for x in now)),
+                                "weight_g": round(sum(x["weight_g"] or 0 for x in now), 1)}
             row["stock_ok"] = bool(ok_stock and items)    # tout le modele faisable avec le stock
             # Exemplaires complets faisables tout de suite avec l'AMS (sur la quantite voulue).
             row["copies_ready"] = (min(qty, min(int(ams.get(f, {}).get("g", 0) // n) for f, n in one_of.items() if n > 0))

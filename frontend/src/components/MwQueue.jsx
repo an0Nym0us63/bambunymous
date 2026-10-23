@@ -82,7 +82,7 @@ export default function MwQueue() {
   const [pick, setPick] = useState(false);
   const [filter, setFilter] = useState("all");
   // le tri au sein d'un filtre (l'ordre de priorite par defaut) ; garde dans ce navigateur
-  const [sortBy, setSortByState] = useState(() => { try { return localStorage.getItem("mwQueueSort") || "prio"; } catch { return "prio"; } });
+  const [sortBy, setSortByState] = useState(() => { try { const v = localStorage.getItem("mwQueueSort"); return ["prio", "nplates", "nhours", "ngrams", "ready"].includes(v) ? v : "prio"; } catch { return "prio"; } });
   const setSortBy = v => { setSortByState(v); try { localStorage.setItem("mwQueueSort", v); } catch { /* stockage indisponible */ } };
   const [model, setModel] = useState(null);
   const [tab, setTab] = useUrlTab("afaire", "models", ["models", "filaments"]);
@@ -192,10 +192,12 @@ export default function MwQueue() {
   // « le plus pret » : pret AMS, puis en partie (la part des plateaux prets), puis stock OK, puis ce qui manque
   const readiness = r => ({ ams: 3, partial: 2, stock: 1, short: 0 }[r.status] ?? -1)
     + (r.status === "partial" && r.plates_count ? (r.plates_ready?.length || 0) / r.plates_count : 0);
-  const platesOf = r => r.profile?.plates || r.plates_count || r.plates?.length || 1;
-  const SORTS = { ready: (a, b) => readiness(b) - readiness(a), weight: (a, b) => (a.weight_g || 0) - (b.weight_g || 0),
-    time: (a, b) => (a.seconds || 0) - (b.seconds || 0), plates: (a, b) => platesOf(a) - platesOf(b),
-    cost: (a, b) => (a.cost || 0) - (b.cost || 0) };
+  // ce qu'on peut lancer tout de suite avec les bobines chargees (plateaux prets, leurs heures, leurs grammes)
+  const now = (r, k) => r.ready_now?.[k] || 0;
+  const SORTS = { ready: (a, b) => readiness(b) - readiness(a),
+    nplates: (a, b) => now(b, "plates") - now(a, "plates") || readiness(b) - readiness(a),
+    nhours: (a, b) => now(b, "seconds") - now(a, "seconds") || readiness(b) - readiness(a),
+    ngrams: (a, b) => now(b, "weight_g") - now(a, "weight_g") || readiness(b) - readiness(a) };
   const filtered = q.models.filter(r => sorting || cutting || choosing || filter === "all" || r.status === filter);
   const rows = sorting || cutting || !SORTS[sortBy] ? filtered : [...filtered].sort(SORTS[sortBy]);
   const cutAt = q.until ? q.models.findIndex(r => r.design_id === q.until.design_id) : -1;
@@ -312,11 +314,10 @@ export default function MwQueue() {
               <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ height:30, borderRadius:9, border:"1px solid var(--border)",
                 background:"var(--surface2)", color:"var(--text)", fontWeight:700, fontSize:12.5, padding:"0 8px" }}>
                 <option value="prio">par priorité</option>
-                <option value="ready">le plus prêt d'abord</option>
-                <option value="time">le plus court d'abord</option>
-                <option value="weight">le plus léger d'abord</option>
-                <option value="plates">le moins de plateaux d'abord</option>
-                <option value="cost">le moins cher d'abord</option>
+                <option value="nplates">le plus de plateaux faisables maintenant</option>
+                <option value="nhours">le plus d'heures faisables maintenant</option>
+                <option value="ngrams">le plus de grammes faisables maintenant</option>
+                <option value="ready">la plus grande part prête</option>
               </select>
             </label>
           )}
@@ -363,6 +364,11 @@ export default function MwQueue() {
                     {r.profile ? `${r.profile.title || "Profil"}${r.profile.plates < r.profile.plates_total ? ` · ${r.profile.plates}/${r.profile.plates_total} plateaux` : ""}` : "profil inconnu"}
                     {" · "}{fmtDur(r.seconds)} · {g(r.weight_g)}{r.cost != null ? ` · ${moneyVal(r.cost, 2)} €` : ""}{r.printed ? ` · imprimé ${r.printed}×` : ""}</span>
                   {r.plates?.length > 1 && <PlateChips plates={r.plates}/>}
+                  {r.ready_now?.plates > 0 && (
+                    <span style={{ display:"block", fontSize:10.5, fontWeight:800, color:"#16a34a", marginTop:3 }}>
+                      ▶ faisable maintenant : {r.ready_now.plates} plateau{r.ready_now.plates > 1 ? "x" : ""}
+                      {r.ready_now.seconds ? ` · ${fmtDur(r.ready_now.seconds)}` : ""}{r.ready_now.weight_g ? ` · ${g(r.ready_now.weight_g)}` : ""}</span>
+                  )}
                   <span style={{ display:"flex", gap:3, marginTop:4, flexWrap:"wrap" }}>
                     {r.filaments.map((f, i) => (
                       <span key={i} title={`${f.type} ${Math.round(f.g)} g → ${f.chosen ? f.chosen.name + (f.chosen.in_ams ? " (AMS)" : "") : "rien en stock"}`}
