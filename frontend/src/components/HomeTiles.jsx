@@ -1622,7 +1622,44 @@ function WheelArt({ size, spin }) {
     </span>
   );
 }
-// la roue : tours, cles et tickets ; le bouton pour tourner
+// le bilan de la roue (la fenetre) : ce qu'on a, ce qui vient, ce qu'on a fait, le journal des cles
+function WheelZoom({ a, cells, spins, go }) {
+  const k = a.keys, w = k.wheel || {};
+  const next = w.next ? new Date(`${w.next}T12:00:00`).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" }) : null;
+  const soon = [
+    k.to_next != null && [<Key key="k" size={15}/>, "#d97706", `Prochaine clé dans ${k.to_next} impression${k.to_next > 1 ? "s" : ""} réussie${k.to_next > 1 ? "s" : ""}`],
+    w.to_spin_prints != null && [<Dices key="d" size={15}/>, "var(--text)", `Prochain tour dans ${w.to_spin_prints} impression${w.to_spin_prints > 1 ? "s" : ""}`],
+    next && w.weekly && [<Dices key="w" size={15}/>, "var(--text)", `+${w.weekly} tour${w.weekly > 1 ? "s" : ""}${w.weekly_tickets ? ` et +${w.weekly_tickets} ticket${w.weekly_tickets > 1 ? "s" : ""}` : ""} ${next}`],
+    w.to_ticket_prints != null && [<Ticket key="t" size={15}/>, "#db2777", `Prochain ticket dans ${w.to_ticket_prints} impression${w.to_ticket_prints > 1 ? "s" : ""}${w.to_ticket != null ? ` ou ${w.to_ticket} secret${w.to_ticket > 1 ? "s" : ""} trouvé${w.to_ticket > 1 ? "s" : ""}` : ""}`],
+  ].filter(Boolean);
+  const card = (l, x, color = "var(--text)") => <div key={l} className="card-sm" style={{ padding: 10 }}><Muted>{l}</Muted>
+    <div style={{ fontSize: 18, fontWeight: 900, color }}>{x ?? "—"}</div></div>;
+  return <>
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 26, flexWrap: "wrap" }}>
+      <WheelArt size={170} spin={spins > 0}/>
+      <div style={{ display: "flex", gap: 24 }}>{cells.map(([ic, n, l, c]) => <div key={l} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 32, fontWeight: 900, color: c }}>{ic}{n}</span>
+        <Muted size={13}>{l}</Muted></div>)}</div>
+    </div>
+    {spins > 0 && <button onClick={go} style={{ alignSelf: "center", width: "min(320px, 100%)", padding: "10px 14px", borderRadius: 12, border: "none", fontWeight: 900,
+      fontSize: 14, cursor: "pointer", color: "#3b2300", background: "linear-gradient(135deg, #FDE68A, #F59E0B)" }}>Tourner la roue</button>}
+    {soon.length > 0 && <><H2>Ce qui vient</H2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{soon.map(([ic, c, t], i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 9,
+        padding: "7px 10px", borderRadius: 10, background: "var(--surface2)", fontSize: 13, fontWeight: 700, color: "var(--text2)" }}>
+        <span style={{ color: c, display: "inline-flex" }}>{ic}</span>{t}</div>)}</div></>}
+    <H2>Jusqu'ici</H2>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>
+      {card("Clés gagnées", k.earned, "#d97706")}{card("Clés dépensées", a.keys_spent)}{card("Tours joués", w.played)}{card("Tickets utilisés", a.tickets_used, "#db2777")}
+    </div>
+    {k.log?.length > 0 && <><H2>Journal des clés</H2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{k.log.slice(0, 10).map((l, i) => <div key={i} style={{ display: "flex", gap: 8, alignItems: "center",
+        fontSize: 12.5, padding: "5px 8px", borderRadius: 8, background: i % 2 ? "transparent" : "var(--surface2)", minWidth: 0 }}>
+        <span style={{ width: 58, flexShrink: 0, color: "var(--muted)", fontWeight: 700 }}>{l.at ? new Date(l.at).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : ""}</span>
+        <span style={{ flex: 1, minWidth: 0, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{l.why}</span>
+        {l.n ? <b style={{ flexShrink: 0, color: l.n > 0 ? "#16a34a" : "#dc2626" }}>{l.n > 0 ? "+" : ""}{l.n}</b> : null}</div>)}</div></>}
+  </>;
+}
+// la roue : tours, cles et tickets ; un clic, le bilan (et de la, la page)
 function Wheel({ a, o, sz = { h: 1 } }) {
   const nav = useNavigate();
   const k = a?.keys;
@@ -1632,17 +1669,12 @@ function Wheel({ a, o, sz = { h: 1 } }) {
     ...(o.keys ? [[<Key key="k" size={15}/>, k.balance, `clé${k.balance > 1 ? "s" : ""}`, "#d97706"]] : []),
     ...(o.tickets ? [[<Ticket key="t" size={15}/>, tickets, `ticket${tickets > 1 ? "s" : ""}`, "#db2777"]] : [])];
   const go = e => { e?.stopPropagation(); nav("/stats?tab=achievements"); };
-  const btn = full => <button onClick={go} data-pk="" style={{ flexShrink: 0, padding: "8px 12px", borderRadius: 10, border: "none", fontWeight: 900, fontSize: 12.5,
-    cursor: "pointer", color: "#3b2300", width: full ? "100%" : undefined, background: spins ? "linear-gradient(135deg, #FDE68A, #F59E0B)" : "var(--surface2)" }}>
-    {spins ? "Tourner" : "Voir"}</button>;
+  // des tours a jouer : un mot discret (la roue tourne deja dans le dessin)
+  const ready = spins > 0 && <span data-pk="" style={{ alignSelf: "center", fontSize: 11.5, fontWeight: 900, color: "#b45309", background: "rgba(245,158,11,0.16)",
+    borderRadius: 10, padding: "2px 9px", whiteSpace: "nowrap" }}>{spins} tour{spins > 1 ? "s" : ""} à jouer</span>;
   return (
     <Tile icon={<Dices size={15}/>} color="#EC4899" label="Roue et clés" to="/stats?tab=achievements"
-      zoom={<div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 18, paddingTop: 6 }}>
-        <WheelArt size={220} spin={spins > 0}/>
-        <div style={{ display: "flex", gap: 28 }}>{cells.map(([ic, n, l, c]) => <div key={l} style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 34, fontWeight: 900, color: c }}>{ic}{n}</span>
-          <Muted size={13}>{l}</Muted></div>)}</div>
-        <div style={{ width: "min(320px, 100%)" }}>{btn(true)}</div></div>}
+      zoom={<WheelZoom a={a} cells={cells} spins={spins} go={go}/>}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 10, fontSize: 14 }}>
         <span style={{ display: "inline-flex", alignItems: "center", gap: 3 }}><Dices size={13}/>{spins}</span>
         {o.keys && <span style={{ display: "inline-flex", alignItems: "center", gap: 3, color: "#d97706" }}><Key size={13}/>{k.balance}</span>}
@@ -1659,11 +1691,11 @@ function Wheel({ a, o, sz = { h: 1 } }) {
         const art = wide && !tall ? Math.min(H - 12, W * 0.42, 200) : Math.min(W - 8, H - 110, tall ? 260 : 220);
         if (art >= 80) return wide && !tall
           ? <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 14 }}><WheelArt size={art} spin={spins > 0}/>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>{row}{btn(true)}</div></div>
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>{row}{ready}</div></div>
           : <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "stretch", justifyContent: "center", gap: 10 }}>
-            <div style={{ display: "flex", justifyContent: "center" }}><WheelArt size={art} spin={spins > 0}/></div>{row}{btn(true)}</div>;
-        if (wide) return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>{row}{btn(false)}</div>;
-        return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>{row}{H >= 84 && btn(true)}</div>;
+            <div style={{ display: "flex", justifyContent: "center" }}><WheelArt size={art} spin={spins > 0}/></div>{row}{ready}</div>;
+        if (wide) return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>{row}{ready}</div>;
+        return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>{row}{H >= 84 && ready}</div>;
       }}
     </Tile>
   );
