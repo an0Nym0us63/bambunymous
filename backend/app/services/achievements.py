@@ -736,6 +736,10 @@ CATALOG = [
 # Easter eggs : des gestes caches dans l'appli, signales par la page elle-meme
 # (POST /achievements/egg/{nom}). nom : (emoji, titre, ce qu'il faut faire, indice, histoire)
 EGGS = {
+    # une farce faite pour une seule maison (son adresse) : ailleurs, le secret n'existe pas (ONLY_WON)
+    "merci_don": ("💸", "Généreux donateur", "Être remercié pour un don… jamais fait",
+                  "Il paraît que tu as été très généreux. Vraiment très.",
+                  "Cinq cents euros, un reçu en bonne et due forme, et un tampon : fallait pas. Dix, ça irait aussi."),
     "developer": ("🤓", "Développeur", "Tapoter 5 fois de suite sur le numéro de version",
                   "Comme sur un téléphone Android : insiste sur un petit numéro qui ne paie pas de mine.",
                   "Tu es maintenant développeur. Aucun pouvoir en plus, mais quelle classe."),
@@ -1595,6 +1599,12 @@ CATALOG += [
 ]
 CATALOG += [_a(f"egg_{k}", "secret", e, t, d, [1], lore=l) for k, (e, t, d, _h, l) in EGGS.items()]
 HIDDEN_EGGS = {"anonymous", "teapot"} | {k for k in EGGS if k.startswith("h_")}
+# des secrets qui n'existent que la ou ils sont gagnes : ailleurs, ni affiches, ni comptes dans le
+# total, la completude, les tiroirs ou les revelations par cles (impossibles a gagner chez les autres)
+ONLY_WON = {"egg_merci_don"}
+for _x in CATALOG:
+    if _x["id"] in ONLY_WON:
+        _x["only_won"] = True
 # les fetes (farces du jour J et visites ce jour-la) ont leur propre rayon
 FETE_EGGS = {"p_" + s.replace("-", "_") for s in ["anniversaire", "nouvel-an", "galette", "chandeleur", "saint-valentin",
              "mardi-gras", "poisson-avril", "paques", "muguet", "fete-meres", "fete-peres", "fete-musique", "quatorze-juillet",
@@ -1625,8 +1635,8 @@ SECRET_SUBS = [
     ("app", "📱", "Photos et appli", "home_first home_multi home_two home_three home_four home_copy home_minimal home_pages home_all zero_alert paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
      "action_cam making_of festival retro_video family_film flash_video bunker pwd_changes black_photo white_photo "
      "panorama hires_photo photo_burst purge_day tinkerer"),
-    ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS if k not in HIDDEN_EGGS | PRANK_EGGS | FETE_EGGS)),
-    ("pranks", "🌀", "Farces", " ".join(f"egg_{k}" for k in EGGS if k in PRANK_EGGS)),
+    ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS if k not in HIDDEN_EGGS | PRANK_EGGS | FETE_EGGS and f"egg_{k}" not in ONLY_WON)),
+    ("pranks", "🌀", "Farces", " ".join([f"egg_{k}" for k in EGGS if k in PRANK_EGGS] + sorted(ONLY_WON))),
     ("fetes", "🎉", "Fêtes", " ".join([f"egg_{k}" for k in EGGS if k in FETE_EGGS] + FETE_VISITS)),
     ("hidden", "🗺️", "Pages cachées", " ".join(f"egg_{k}" for k in EGGS if k in HIDDEN_EGGS)),
     ("game", "🎰", "Clés et roue", "jackpot lucky5 bad_luck win_streak last_key full_reveal"),
@@ -4510,6 +4520,8 @@ async def prank_replay_ok(slug: str) -> bool:
     """Une farce tapee a son adresse (URL ou passage secret) : elle ne se joue
     que deja tombee par surprise (rejouee pour le plaisir), ou, pour une fete,
     le jour meme. Sinon l'adresse ne mene a rien : la surprise reste entiere."""
+    if slug == "don":
+        return "merci_don" in await eggs_found()
     egg = "p_" + str(slug or "").replace("-", "_")
     if egg not in PRANK_EGGS and egg not in FETE_EGGS:
         return False
@@ -4811,7 +4823,7 @@ def _sets(out: dict, st: dict) -> None:
             continue
         cat, i = a["set"]
         mem = [m for m in _members(cat, i)
-               if not (m.get("only_started") and not (out.get(m["id"]) or {}).get("value") and not stored.get(m["id"]))]
+               if not ((m.get("only_started") or m.get("only_won")) and not (out.get(m["id"]) or {}).get("value") and not stored.get(m["id"]))]
         dates = [at(m, i) for m in mem]
         ok = bool(mem) and all(dates)
         out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {}}
@@ -4826,7 +4838,7 @@ def _cards(out: dict) -> None:
         if not a.get("pile"):
             continue
         sid, p = a["pile"]
-        mem = [m["id"] for m in CATALOG if SUB_OF.get(m["id"]) == sid and m["cat"] == "secret"]
+        mem = [m["id"] for m in CATALOG if SUB_OF.get(m["id"]) == sid and m["cat"] == "secret" and (not m.get("only_won") or got(m["id"]))]
         need = max(1, -(-len(mem) * p // 100))
         dates = sorted(d for d in (got(m) for m in mem) if d)
         ok = bool(mem) and len(dates) >= need
@@ -4867,7 +4879,7 @@ def _completes(out: dict, st: dict) -> None:
         mem = [m for m in CATALOG if not m.get("complete") and (
             kind == "all" or (kind == "cat" and m["cat"] == key) or (kind == "sub" and SUB_OF.get(m["id"]) == key))]
         mem = [m for m in mem
-               if not (m.get("only_started") and not (out.get(m["id"]) or {}).get("value") and not stored.get(m["id"]))]
+               if not ((m.get("only_started") or m.get("only_won")) and not (out.get(m["id"]) or {}).get("value") and not stored.get(m["id"]))]
         dates = [at(m, len(m["tiers"]) - 1) for m in mem]
         ok = bool(mem) and all(dates)
         out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {}}
@@ -5197,7 +5209,7 @@ async def _spend_key(aid: str) -> dict:
 def _auto_plan(st: dict, budget: int) -> list:
     import zlib
     hint_lvl = next(i for i, r in enumerate(REVEALS) if r[0] == "hint") + 1
-    todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and a.get("hidden") and not a.get("set")
+    todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and a.get("hidden") and not a.get("set") and not a.get("only_won")
             and not (st.get("unlocked") or {}).get(a["id"])]
     lvl = {aid: _reveal_level(st, aid) for aid in todo}
     to_hint = lambda aid: sum(REVEALS[i][2] for i in range(lvl[aid], hint_lvl))
@@ -5490,7 +5502,7 @@ async def spin(rng=None) -> dict:
         if pid == "hint":
             # la prochaine etape d'un secret pris au hasard, offerte
             import random
-            todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and a.get("hidden") and not a.get("set")
+            todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and a.get("hidden") and not a.get("set") and not a.get("only_won")
                     and not (st.get("unlocked") or {}).get(a["id"]) and _reveal_level(st, a["id"]) < len(REVEALS)]
             if todo:
                 aid = (rng or random.SystemRandom()).choice(todo)
@@ -5874,6 +5886,8 @@ async def view(fresh: bool = False) -> dict:
         lvl = max((int(i) for i in got), default=-1)
         if a.get("only_started") and lvl < 0 and not r["value"]:
             continue                                   # matiere jamais imprimee : on ne l'affiche pas
+        if a.get("only_won") and lvl < 0:
+            continue                                   # secret d'une seule maison : ailleurs, il n'existe pas
         for i in got:
             medals[tiers[int(i)]["id"]] += 1
             score += tiers[int(i)]["score"]

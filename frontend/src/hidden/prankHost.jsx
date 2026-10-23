@@ -33,7 +33,17 @@ export const FETE_SLUGS_MONDE = ["nouvel-an-chinois", "saint-patrick", "holi", "
   "thanksgiving", "pi"];
 FETE_SLUGS.push(...FETE_SLUGS_MONDE);
 
-export const isPrank = slug => PRANK_SLUGS.includes(slug) || FETE_SLUGS.includes(slug);
+// une farce pour quelques maisons : elle tombe a l'ouverture sur ces installations-la (reconnues par l'empreinte
+// de leur adresse), une fois, jusqu'au bout ; ensuite elle se rejoue a son adresse. Jamais tiree au sort.
+const MAISON = { slug: "don", egg: "merci_don", hosts: ["c15afe7465412e1963b40eaf44eb5ac70130e50c3df3ea618d789f4976215ab2",
+  "4fd27201adaaf0d9a3443294dc64cfd0d3a84a4f32c626b542072851bfb63c17"] };
+async function isMaison() {
+  try {
+    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(window.location.hostname.toLowerCase()));
+    return MAISON.hosts.includes([...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join(""));
+  } catch { return false; }
+}
+export const isPrank = slug => PRANK_SLUGS.includes(slug) || FETE_SLUGS.includes(slug) || slug === MAISON.slug;
 
 export const usePrank = create(set => ({
   slug: null,
@@ -59,7 +69,7 @@ export function PrankRedirect({ slug, fallback = null }) {
 }
 
 const Pranks = {};
-const load = slug => (FETE_SLUGS_MONDE.includes(slug) ? import("./pranks6") : FETE_SLUGS.includes(slug) ? import("./pranks4")
+const load = slug => (slug === MAISON.slug ? import("./pranks7") : FETE_SLUGS_MONDE.includes(slug) ? import("./pranks6") : FETE_SLUGS.includes(slug) ? import("./pranks4")
   : PRANK_SLUGS_5.includes(slug) ? import("./pranks5") : PRANK_SLUGS_3.includes(slug) ? import("./pranks3")
   : PRANK_SLUGS_2.includes(slug) ? import("./pranks2") : import("./pranks"));
 function effectOf(slug) {
@@ -158,26 +168,41 @@ export function PrankHost() {
       }
       openPassage();
     };
-    client.post("/achievements/surprise")
+    const roll = () => client.post("/achievements/surprise")
       .then(({ data }) => { if (data?.hit) setTimeout(() => fire(data), 1200); })
       .catch(() => {});
+    // la farce de cette maison passe avant tout, tant qu'elle n'a pas ete vue jusqu'au bout
+    // vue jusqu'au bout : le serveur le sait (le secret est tombe) ; un compte qui ne compte pas pour les
+    // succes ne l'enregistre pas la-bas, cet appareil s'en souvient alors. Interrompue (appli fermee, page
+    // rechargee), rien n'est retenu : elle revient a l'ouverture suivante.
+    const seen = () => { try { return localStorage.getItem("bn-" + MAISON.slug) === "1"; } catch { return false; } };
+    isMaison().then(me => !me || seen() ? roll() : client.get(`/achievements/prank/${MAISON.slug}`).then(({ data }) => {
+      if (data?.ok) { roll(); return; }
+      const go = () => {
+        if (document.getElementById("splash") || window.__bnCardFx) { setTimeout(go, 300); return; }
+        if (!usePrank.getState().slug) start(MAISON.slug);
+      };
+      setTimeout(go, 1200);
+    }).catch(roll));
   }, [pathname, visiting, start, nav]);
   const doneRef = useRef(false);
   // on QUITTE l'accueil : la farce s'arrete (et l'effet remet tout en place). Pas
   // a l'arrivee : la farce est retenue sur son adresse, juste avant d'aller a l'accueil.
   const prev = useRef(pathname);
   useEffect(() => {
-    if (slug && prev.current === "/" && pathname !== "/") stop();
+    if (slug && slug !== MAISON.slug && prev.current === "/" && pathname !== "/") stop();
     prev.current = pathname;
   }, [pathname, slug, stop]);
   useEffect(() => { doneRef.current = false; }, [slug]);
-  const ready = useHomeReady(slug, pathname === "/");
-  if (!slug || pathname !== "/" || !ready) return null;
+  // celle de la maison ne se laisse pas semer : quitter l'accueil ne l'arrete pas
+  const ready = useHomeReady(slug, pathname === "/" || slug === MAISON.slug);
+  if (!slug || (pathname !== "/" && slug !== MAISON.slug) || !ready) return null;
   const Effect = effectOf(slug);
   const done = () => {
     if (doneRef.current) return;
     doneRef.current = true;
-    egg("p_" + slug.replace(/-/g, "_"));
+    if (slug === MAISON.slug) { try { localStorage.setItem("bn-" + MAISON.slug, "1"); } catch { /* rien */ } }
+    egg(slug === MAISON.slug ? MAISON.egg : "p_" + slug.replace(/-/g, "_"));
     setTimeout(() => { if (usePrank.getState().slug === slug) stop(); }, 1500);
   };
   return <Suspense fallback={null}><Effect key={slug} done={done}/></Suspense>;

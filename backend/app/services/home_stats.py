@@ -135,7 +135,8 @@ async def guide_read(seconds: float, sections: list, opened: bool, searches: int
 async def values() -> dict:
     d = await get()
     return {"home_saves": int(d["saves"]), "home_tiles": len(d["tiles"]), "home_tweaks": int(d["tweaks"]),
-            "cam_hours": round(float(d["cam_s"] or 0) / 3600, 3),   # au fil des minutes, pas par heure entiere "home_first": 1 if d["first"] else 0,
+            "cam_hours": round(float(d["cam_s"] or 0) / 3600, 3),   # au fil des minutes, pas par heure entiere
+            "home_first": 1 if d["first"] else 0,
             "home_multi": 1 if d["multi"] else 0, "home_four": 1 if d["four"] else 0,
             "home_three": 1 if d.get("three") else 0, "home_two": 1 if d.get("two") else 0, "home_copy": 1 if d.get("copied") else 0,
             "home_minimal": 1 if d["minimal"] else 0, "home_all": 1 if d["all"] else 0,
