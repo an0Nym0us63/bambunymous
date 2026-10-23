@@ -659,14 +659,83 @@ function RackStrip({ rack }) {
     </div>
   </div>;
 }
+// ── Le rack Vortek en dessin (comme Bambu Studio) : la tete d'outil a gauche, le rack en 3 x 2
+// (rang A en haut : 1 3 5, rang B en bas : 2 4 6), les rangs a droite, fleche sur celui qui est leve ──
+const FLOW_SHORT = { S: "Standard", A: "Standard", X: "Standard", H: "Haut débit", E: "Haut débit", U: "TPU HF", B: "E3D HF" };
+const flowShort = t => FLOW_SHORT[String(t || "").toUpperCase()[1]] || "";
+// une buse dessinee : le radiateur a ailettes, le corps (un trait a la couleur du filament), la pointe
+function NozzleArt({ color, h = 54, dim = false }) {
+  const w = h * 0.5;
+  return <svg width={w} height={h} viewBox="0 0 26 52" aria-hidden="true" style={{ opacity: dim ? 0.35 : 1, flexShrink: 0 }}>
+    <rect x="2" y="1" width="22" height="13" rx="2.5" fill="#cbd5e1" stroke="#64748b" strokeWidth="1"/>
+    {[4.5, 8, 11.5].map(y => <line key={y} x1="4" x2="22" y1={y} y2={y} stroke="#64748b" strokeWidth="1"/>)}
+    <rect x="7" y="14" width="12" height="27" rx="2" fill="#e2e8f0" stroke="#64748b" strokeWidth="1"/>
+    <rect x="11" y="16" width="4" height="23" rx="2" fill={color || "#94a3b8"} stroke={color ? "rgba(0,0,0,0.25)" : "none"} strokeWidth=".6"/>
+    <path d="M9 41 H17 L14.5 50 H11.5 Z" fill="#94a3b8" stroke="#475569" strokeWidth="1" strokeLinejoin="round"/>
+  </svg>;
+}
+function VortekRack({ rack, H = 240, sel = null, onPick }) {
+  const slot = num => rack.hotends.find(h => h.id === num + 15) || null;
+  const headId = rack.head_id, headNum = headId >= 16 ? headId - 15 : null;
+  const head = rack.hotends.find(h => h.id === 0) || (headNum ? slot(headNum) : null);
+  const col = x => x && !x.empty && x.color ? `#${String(x.color).replace("#", "").slice(0, 6)}` : null;
+  const cellH = Math.max(70, Math.min(150, (H - 30) / 2)), art = Math.max(30, Math.min(64, cellH - 50));
+  const fs = cellH >= 110 ? 12.5 : 11;
+  const cell = num => {
+    const x = slot(num), onHead = headNum === num, has = x && x.nozzle_type && !onHead;
+    const hl = nozzleHealth(x?.stat), picked = sel === num;
+    return <button key={num} type="button" onClick={e => { e.stopPropagation(); onPick?.(num); }} style={{ position: "relative", minWidth: 0, height: cellH,
+      borderRadius: 12, cursor: "pointer", font: "inherit", color: "inherit", padding: "6px 4px", display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", gap: 3, background: picked ? "rgba(14,165,233,0.12)" : "var(--surface2)",
+      border: `1.5px solid ${picked ? "#0ea5e9" : "var(--border)"}` }}>
+      <span style={{ position: "absolute", top: 5, left: 8, fontSize: 11, fontWeight: 900, color: "#0ea5e9" }}>{num}</span>
+      {hl && hl[0] !== "En bon état" && <span title={hl[0]} style={{ position: "absolute", top: 7, right: 8, width: 8, height: 8, borderRadius: "50%", background: hl[1] }}/>}
+      <NozzleArt color={col(x)} h={art} dim={!has}/>
+      {has ? <>
+        <span style={{ fontSize: fs, fontWeight: 800, color: "var(--text)", lineHeight: 1.1 }}>{String(x.diameter).replace(".", ",")} mm</span>
+        <span style={{ fontSize: fs - 1.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.1, whiteSpace: "nowrap" }}>{flowShort(x.nozzle_type)}</span>
+      </> : <span style={{ fontSize: fs, fontWeight: 700, color: "var(--muted)" }}>{onHead ? "sur la tête" : "Vide"}</span>}
+    </button>;
+  };
+  const up = { 1: "A", 2: "B" }[rack.holder_pos], centre = rack.holder_pos === 3;
+  const rank = r => <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 3,
+    color: up === r ? "#0ea5e9" : "var(--muted)" }}>
+    <span style={{ width: 22, height: 22, borderRadius: "50%", border: `1.5px solid currentColor`, display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: 12, fontWeight: 900, background: up === r ? "rgba(14,165,233,0.14)" : "transparent" }}>↑</span>
+    <span style={{ fontSize: 11.5, fontWeight: 900, whiteSpace: "nowrap" }}>Rang {r}</span></div>;
+  return <div style={{ display: "grid", gridTemplateColumns: "minmax(78px, 0.9fr) minmax(0, 3fr) 52px", gap: 8, minWidth: 0 }}>
+    {/* la tete d'outil */}
+    <div style={{ borderRadius: 14, padding: "8px 6px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4,
+      background: "linear-gradient(180deg, rgba(14,165,233,0.14), transparent 70%), var(--surface2)", border: "1px solid rgba(14,165,233,0.35)" }}>
+      <span style={{ fontSize: 11, fontWeight: 900, color: "var(--text2)", textAlign: "center", lineHeight: 1.15 }}>Tête d'outil</span>
+      <NozzleArt color={col(head)} h={Math.min(84, art * 1.3)} dim={!head}/>
+      {headNum && <span style={{ fontSize: 10.5, fontWeight: 900, color: "#0ea5e9" }}>buse {headNum}</span>}
+      {head?.nozzle_type && <><span style={{ fontSize: fs, fontWeight: 800, color: "var(--text)", lineHeight: 1.1 }}>{String(head.diameter).replace(".", ",")} mm</span>
+        <span style={{ fontSize: fs - 1.5, fontWeight: 700, color: "var(--muted)", lineHeight: 1.1 }}>{flowShort(head.nozzle_type)}</span></>}
+    </div>
+    {/* le rack : rang A en haut, rang B en bas */}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6, alignContent: "center" }}>
+      {[1, 3, 5, 2, 4, 6].map(cell)}
+    </div>
+    {/* les rangs ; au centre, la maison */}
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+      {rank("A")}
+      <span title={centre ? "Rack au centre" : "Position de repos"} style={{ fontSize: 15, color: centre ? "#16a34a" : "var(--muted)", opacity: centre ? 1 : 0.45 }}>⌂</span>
+      {rank("B")}
+    </div>
+  </div>;
+}
 // la tuile Vortek : toujours le rack ; un clic l'ouvre en grand (le rack et la fiche de la buse touchee)
-function VortekTile({ st, tile, full, low = false }) {
+function VortekTile({ st, fitH = null, low = false }) {
   const [open, setOpen] = useState(false);
+  const [sel, setSel] = useState(null);
   const has = (st?.hotend_rack?.hotends || []).some(h => !h.empty && h.filament_id);
   if (!has) return <div style={{ padding: 16, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>Pas de rack Vortek</div>;
   const r = st.hotend_rack, headSlot = r.hotends.find(h => h.id === 0);
+  const headNum = r.head_id >= 16 ? r.head_id - 15 : null;
+  const pick = num => { setSel(num); setOpen(true); };
   // une rangee : l'etat, puis six pastilles (le numero dedans), celle sur la tete cerclee de bleu
-  const row = low && <div style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, minWidth: 0 }}>
+  const row = <div style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, minWidth: 0 }}>
     <RackState rack={r} compact/>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 6, padding: "0 4px" }}>
       {[1, 2, 3, 4, 5, 6].map(num => { const head = r.head_id === num + 15, src = head && headSlot ? headSlot : r.hotends.find(h => h.id === num + 15);
@@ -676,10 +745,16 @@ function VortekTile({ st, tile, full, low = false }) {
           color: c ? (light ? "#0f172a" : "#fff") : "var(--muted)", background: c || "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)",
           border: c ? "1px solid rgba(0,0,0,0.18)" : "1px dashed rgba(148,163,184,0.6)", outline: head ? "2px solid #3b82f6" : "none", outlineOffset: 1.5 }}>{num}</span>; })}
     </div></div>;
-  return <div onClick={() => setOpen(true)} style={{ cursor: "pointer", height: "100%", minWidth: 0 }}>
-    {low ? row : tile}
-    {open && <Zoom icon={<Layers size={15}/>} color="#0EA5E9" label="Rack Vortek" onClose={() => setOpen(false)}>
-      <div onClick={e => e.stopPropagation()}>{full}</div></Zoom>}
+  const H = fitH ?? 260;
+  const selNum = sel ?? headNum ?? 1, selSlot = r.hotends.find(h => h.id === selNum + 15);
+  return <div onClick={() => setOpen(true)} style={{ cursor: "pointer", height: "100%", minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
+    {low ? row : <><RackState rack={r} compact/><VortekRack rack={r} H={H - 28} onPick={pick}/></>}
+    {open && <Zoom icon={<Layers size={15}/>} color="#0EA5E9" label="Rack Vortek" onClose={() => { setOpen(false); setSel(null); }}>
+      <div onClick={e => e.stopPropagation()} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <RackState rack={r}/>
+        <VortekRack rack={r} H={320} sel={selNum} onPick={setSel}/>
+        <SlotDetail slot={selSlot || { id: selNum + 15, empty: true }} num={selNum} isOnHead={headNum === selNum} headSlot={headNum === selNum ? headSlot : null}/>
+      </div></Zoom>}
   </div>;
 }
 
@@ -1939,9 +2014,7 @@ export default function Home() {
     vortek: { label: "Rack Vortek", w: [2], h: [2, 1, 3], frame: { icon: <Layers size={15}/>, color: "#0EA5E9" },
       summary: (d, st) => { const r = st?.hotend_rack; const n = (r?.hotends || []).filter(h => h.id >= 16 && !h.empty && h.filament_id).length;
         return r ? <span style={{ fontSize: 13 }}>{n}/6{r.head_id >= 16 ? ` · buse ${r.head_id - 15} sur la tête` : ""}</span> : null; },
-      render: (d, st, o, item) => <VortekTile st={st} low={item?.h === 1}
-        tile={devices(st, "overview", { ...o, forceView: "rack" }, typeof item?.h === "number" ? { ...item, h: item.h - (item.h === 1 ? 0.3 : 0.15) } : item)}
-        full={devices(st, null, { ...o, forceView: "rack" })}/> },
+      render: (d, st, o, item) => <VortekTile st={st} low={item?.h === 1} fitH={fitOf(item)}/> },
     ams: { label: "AMS", w: [2], h: [2, 1, 3], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" },
       render: (d, st, o, item) => <AmsHub st={st} spoolLookup={spoolLookup} fitH={fitOf(item)} o={o}
         rackTile={devices(st, "overview", o, typeof item?.h === "number" ? { ...item, h: item.h - 0.15 } : item)} rackFull={devices(st, null, o)}/>,
