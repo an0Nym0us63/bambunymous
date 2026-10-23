@@ -612,8 +612,12 @@ const HUB_LIVE = ["RUNNING", "PAUSE", "PAUSED", "PREPARE"];
 const isDrying = a => !!(a?.is_drying || a?.dry_time > 0);
 const dryLeft = m => !m ? "" : m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m} min`;
 // un emplacement : sa couleur, ce qui reste (le haut s'assombrit a mesure qu'elle se vide), cercle s'il imprime
+// l'anneau de l'emplacement actif pulse ; il ne rebondit (sur place) que quand l'emplacement change pendant
+// qu'on regarde : pas a l'arrivee sur la page (bn-pop, qui glisse verticalement, se rejouait a chaque retour)
+let hubShownAt = 0;
 function HubSwatch({ t, active, h, radius = 6 }) {
   const p = trayPct(t), c = trayHex(t), r = p != null ? p / 100 : null;
+  const [pop] = useState(() => active && Date.now() - hubShownAt > 1500);
   return (
     <span title={t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ")}
       style={{ position: "relative", display: "block", height: h, minWidth: 0, borderRadius: radius,
@@ -621,7 +625,7 @@ function HubSwatch({ t, active, h, radius = 6 }) {
           : "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)",
         border: c ? "1px solid rgba(0,0,0,0.18)" : "1px dashed rgba(148,163,184,0.6)",
         outline: active ? "2px solid #3b82f6" : "none", outlineOffset: 1.5,
-        animation: active ? "bn-pop .5s ease-out, bn-ring 2s ease-out .5s infinite" : "none" }}/>
+        animation: active ? (pop ? "bn-swap .55s ease-out, bn-ring 2s ease-out .55s infinite" : "bn-ring 2s ease-out infinite") : "none" }}/>
   );
 }
 // une unite : son nom, ses badges (entree de l'aiguillage, sechage), ses emplacements
@@ -733,6 +737,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
   const [tray, setTray] = useState(null);
   const view = useDevSel(s => s.view), setView = useDevSel(s => s.setView);
   const before = useRef(null);   // la vue de la tuile a l'ouverture de la fenetre, rendue a la fermeture
+  useState(() => { hubShownAt = Date.now(); return 0; });
   // la mesure s'accroche quand la tuile apparait vraiment : au chargement (F5), l'etat de
   // l'imprimante n'est pas encore la et la tuile ne montre d'abord rien ; un effet lance au
   // montage ne voyait alors aucun element, ne mesurait jamais, et la hauteur estimee debordait
