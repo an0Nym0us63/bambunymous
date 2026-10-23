@@ -2272,6 +2272,7 @@ function headModel(st) {
   return { L: side(1), R: side(0), dual: nz.length > 1 };
 }
 export function HeadArt({ st, h = 160 }) {
+  const small = h < 110;
   const { L, R } = headModel(st);
   const w = h * 200 / 170;
   const tube = (x, s, id) => {
@@ -2291,7 +2292,8 @@ export function HeadArt({ st, h = 160 }) {
       <rect x={x - 14} y="118" width="28" height="18" rx="4" fill={dark ? "#475569" : "#94a3b8"} stroke="#334155"/>
       <path d={`M${x - 7} 136 H${x + 7} L${x + 3} 150 H${x - 3} Z`} fill={s.n.temp > 40 ? hot : "#64748b"} stroke="#334155" strokeLinejoin="round"
         style={s.n.active && s.n.temp > 150 ? { filter: `drop-shadow(0 0 5px ${hot})` } : undefined}/>
-      {s.n.active && <rect x={x - 22} y="112" width="44" height="42" rx="8" fill="none" stroke="#22c55e" strokeWidth="2" strokeDasharray="4 3" opacity=".8"/>}
+      {s.n.active && <rect x={x - 22} y="112" width="44" height="42" rx="8" fill={small ? "rgba(34,197,94,0.18)" : "none"} stroke="#22c55e"
+        strokeWidth={small ? 5 : 2} strokeDasharray={small ? "none" : "4 3"} opacity={small ? 1 : 0.8}/>}
     </g>;
   };
   return <svg viewBox="0 0 200 170" width={w} height={h} aria-label="Tête d'impression" style={{ display: "block", overflow: "visible" }}>
@@ -2345,9 +2347,9 @@ function Toolhead({ status, sz }) {
         // une ligne par buse : son cote (vert si elle imprime), le filament, la temperature, son etat si la place le permet
         const lines = <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 5 }}>
           {[["G", m.L], ["D", m.R]].map(([k, s]) => s && <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 800, minWidth: 0 }}>
-            <span style={{ width: 16, flexShrink: 0, color: s.n.active ? "#16a34a" : "var(--muted)" }}>{k}</span>
+            <span style={{ width: 11, flexShrink: 0, color: s.n.active ? "#16a34a" : "var(--muted)" }}>{k}</span>
             <span style={{ width: 11, height: 11, borderRadius: 3, flexShrink: 0, background: s.color || "transparent", border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
-            <span style={{ width: 38, flexShrink: 0, color: s.n.temp > 40 ? heat(s.n.temp) : "var(--text)" }}>{Math.round(s.n.temp)}°</span>
+            <span style={{ width: 34, flexShrink: 0, color: s.n.temp > 40 ? heat(s.n.temp) : "var(--text)" }}>{Math.round(s.n.temp)}°</span>
             {/* le filament : son nom, et dessous l'etat, l'emplacement, la matiere et la marque */}
             {(W >= 230 || (H >= 150 && W >= 140)) && <span style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
               <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -2357,7 +2359,7 @@ function Toolhead({ status, sz }) {
           </div>)}</div>;
         // bas : le dessin a gauche, les buses a cote ; haut : le dessin centre, les buses dessous (en cartes si la place le permet)
         if (H < 150) return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <HeadArt st={status} h={Math.max(50, Math.min(H - 4, 120, W * 0.42 * 170 / 200))}/>{lines}</div>;
+          <HeadArt st={status} h={Math.max(50, Math.min(H - 4, 120, W * 0.3 * 170 / 200))}/>{lines}</div>;
         const cards = W >= 200 && H >= 230;
         return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>
           <div style={{ display: "flex", justifyContent: "center" }}><HeadArt st={status} h={Math.max(70, Math.min(H - (cards ? 96 : 56), 200, (W - 8) * 170 / 200))}/></div>
