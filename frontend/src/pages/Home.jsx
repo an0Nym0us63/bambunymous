@@ -15,7 +15,7 @@ import Lightbox from "../components/Lightbox";
 import AmsOrderEditor from "../components/AmsOrderEditor";
 import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet, DryCard, amsRoute } from "../components/AMSSection";
-import { Zoom, TempPanel } from "../components/HomeTiles";
+import { Zoom, TempPanel, HeadArt } from "../components/HomeTiles";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName, switchRoutes, trayPct } from "../utils/ams";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -1507,6 +1507,7 @@ function PrinterPopup({ status, img, name, onClose }) {
 
         {status?.connected && <>
           {section("Températures")}
+          {(status.nozzles || []).length > 1 && <div style={{ display: "flex", justifyContent: "center" }}><HeadArt st={status} h={150}/></div>}
           <TempPanel status={status} cardH={104}/>
         </>}
 

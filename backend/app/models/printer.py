@@ -62,6 +62,9 @@ class NozzleTemp:
     temp: float = 0.0
     target: float = 0.0
     active: bool = False
+    # l'emplacement charge dans cette buse (extruder.info[].snow) : unite et bac, -1 si rien
+    slot_ams: int = -1
+    slot_tray: int = -1
 
 
 @dataclass

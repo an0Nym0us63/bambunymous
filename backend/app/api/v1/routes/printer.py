@@ -63,6 +63,8 @@ class NozzleTempOut(BaseModel):
     temp: float
     target: float
     active: bool
+    slot_ams: int = -1      # l'emplacement charge dans cette buse (unite, bac), -1 si rien
+    slot_tray: int = -1
 
 
 class SpoolInfoOut(BaseModel):
@@ -319,7 +321,8 @@ async def printer_status(_: str = Depends(get_current_user)):
         total_layers=s.total_layers,
         remaining_minutes=s.remaining_minutes,
         nozzles=[
-            NozzleTempOut(id=n.id, temp=n.temp, target=n.target, active=n.active)
+            NozzleTempOut(id=n.id, temp=n.temp, target=n.target, active=n.active,
+                          slot_ams=getattr(n, "slot_ams", -1), slot_tray=getattr(n, "slot_tray", -1))
             for n in s.nozzles
         ],
         bed_temp=s.bed_temp,

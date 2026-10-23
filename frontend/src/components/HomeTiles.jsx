@@ -3,14 +3,14 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets, Coins, Star, Users, Trophy,
          Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
-         BellRing, Split, Fan, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck } from "lucide-react";
+         BellRing, Split, Fan, Wrench, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck } from "lucide-react";
 import client, { apiUrl } from "../api/client";
 import { mwImg } from "./MwImg";
 import LiveCamera from "./LiveCamera";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "../pages/Achievements";
 import { DryCard } from "./AMSSection";
 import SpoolSVG from "./SpoolSVG";
-import { switchRoutes } from "../utils/ams";
+import { switchRoutes, slotLabel } from "../utils/ams";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
 // Les tuiles de l'accueil (22/10/2026, refaites le meme jour). Chaque tuile :
@@ -2249,6 +2249,119 @@ function FilaSwitch({ status, o, sz }) {
     </Tile>
   );
 }
+// ── La tete d'impression (double buse) : comme dans l'appli Bambu. Sur la H2C, seule la buse gauche
+// bouge : baissee (plus bas que la droite) quand elle imprime, remontee (plus haut) sinon ; la droite
+// est fixe. Le filament arrive dans chacune par le haut. Buse 1 = gauche, 0 = droite. ──
+function headModel(st) {
+  const nz = st?.nozzles || [];
+  const ams = st?.ams_list || [];
+  const tray = (a, t) => ams.find(x => x.id === a)?.trays?.find(x => x.id === t);
+  const routes = switchRoutes(st);
+  const side = id => {
+    const n = nz.find(x => x.id === id);
+    if (!n) return null;
+    // ce qui est charge : l'emplacement que l'imprimante annonce pour cette buse, sinon (buse active)
+    // l'emplacement actif, sinon l'entree de l'aiguillage qui va vers elle
+    let a = n.slot_ams >= 0 ? n.slot_ams : null, t = n.slot_tray >= 0 ? n.slot_tray : null;
+    if (a == null && n.active && st.active_ams_id >= 0) { a = st.active_ams_id; t = st.active_tray_id; }
+    if (a == null && routes) { const p = routes.out_a === id ? routes.in_a : routes.out_b === id ? routes.in_b : null; if (p) { a = p.ams; t = p.tray; } }
+    const tr = a != null ? tray(a, t) : null;
+    return { n, slot: a != null ? slotLabel(a, t) : null, color: trayCol(tr), type: tr?.spool_info?.fila_type || tr?.filament_type || "",
+      name: tr?.spool_info?.translated_name || tr?.spool_info?.name || "" };
+  };
+  return { L: side(1), R: side(0), dual: nz.length > 1 };
+}
+export function HeadArt({ st, h = 160 }) {
+  const { L, R } = headModel(st);
+  const w = h * 200 / 170;
+  const tube = (x, s, id) => {
+    const c = s?.color || "#94a3b8";
+    return <g key={id}>
+      <defs><linearGradient id={`hd-t${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={c} stopOpacity=".15"/><stop offset=".55" stopColor={c}/></linearGradient></defs>
+      <rect x={x - 7} y="0" width="14" height="46" rx="7" fill={`url(#hd-t${id})`} stroke={s?.color ? "rgba(0,0,0,0.15)" : "rgba(148,163,184,0.4)"}/>
+      {s?.n?.active && s?.color && <rect x={x - 2} y="4" width="4" height="38" rx="2" fill="#fff" opacity=".35"
+        style={{ animation: "bn-feed 1.6s linear infinite" }}/>}
+      <rect x={x - 11} y="40" width="22" height="14" rx="4" fill="#cbd5e1" stroke="#64748b"/>
+    </g>;
+  };
+  const nozzle = (x, s, id, dark, moves) => {
+    if (!s) return null;
+    const up = moves && !s.n.active, dy = moves ? (s.n.active ? 10 : -12) : 0, hot = heat(s.n.temp);
+    return <g key={id} transform={`translate(0 ${dy})`} style={{ transition: "transform .6s" }} opacity={up ? 0.75 : 1}>
+      <rect x={x - 14} y="118" width="28" height="18" rx="4" fill={dark ? "#475569" : "#94a3b8"} stroke="#334155"/>
+      <path d={`M${x - 7} 136 H${x + 7} L${x + 3} 150 H${x - 3} Z`} fill={s.n.temp > 40 ? hot : "#64748b"} stroke="#334155" strokeLinejoin="round"
+        style={s.n.active && s.n.temp > 150 ? { filter: `drop-shadow(0 0 5px ${hot})` } : undefined}/>
+      {s.n.active && <rect x={x - 22} y="112" width="44" height="42" rx="8" fill="none" stroke="#22c55e" strokeWidth="2" strokeDasharray="4 3" opacity=".8"/>}
+    </g>;
+  };
+  return <svg viewBox="0 0 200 170" width={w} height={h} aria-label="Tête d'impression" style={{ display: "block", overflow: "visible" }}>
+    {tube(70, L, "l")}{tube(130, R, "r")}
+    {/* le corps : moitie gauche claire, moitie droite sombre, le ventilateur au milieu */}
+    <path d="M40 62 Q40 52 50 52 H100 V122 H48 Q40 122 40 114 Z" fill="#cbd5e1" stroke="#64748b"/>
+    <path d="M100 52 H150 Q160 52 160 62 V114 Q160 122 152 122 H100 Z" fill="#64748b" stroke="#334155"/>
+    <path d="M56 62 L72 74 M144 62 L128 74" stroke="#94a3b8" strokeWidth="5" strokeLinecap="round" opacity=".6"/>
+    <circle cx="100" cy="88" r="17" fill="#94a3b8" stroke="#475569" strokeWidth="2"/>
+    <circle cx="100" cy="88" r="9" fill="#e2e8f0" stroke="#475569" strokeWidth="2"/>
+    <circle cx="100" cy="88" r="3" fill="#475569"/>
+    {[["l", 64, L], ["r", 136, R]].map(([k, x, s]) => <rect key={k} x={x - 5} y="80" width="10" height="16" rx="5" fill={s?.n?.active ? "#22c55e" : "#86efac"}
+      opacity={s?.n?.active ? 1 : 0.45}/>)}
+    {nozzle(70, L, "nl", false, true)}{nozzle(130, R, "nr", true, false)}
+  </svg>;
+}
+// une buse en carte : cote, temperature et consigne, levee ou en impression, le filament charge
+function HeadSide({ s, label, big = false }) {
+  if (!s) return null;
+  const hot = heat(s.n.temp), live = s.n.active;
+  return <div style={{ padding: big ? "10px 12px" : "6px 9px", borderRadius: 14, minWidth: 0, display: "flex", flexDirection: "column", gap: big ? 4 : 2,
+    background: live ? "linear-gradient(135deg, rgba(34,197,94,0.14), transparent 70%), var(--surface2)" : "var(--surface2)",
+    border: `1.5px solid ${live ? "rgba(34,197,94,0.6)" : "transparent"}` }}>
+    <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+      <span style={{ fontSize: big ? 13 : 11.5, fontWeight: 900, color: "var(--text2)" }}>{label}</span>
+      <span style={{ marginLeft: "auto", fontSize: big ? 11.5 : 10, fontWeight: 800, color: live ? "#16a34a" : "var(--muted)", whiteSpace: "nowrap" }}>
+        {live ? "● imprime" : label.startsWith("G") ? "levée" : "au repos"}</span></div>
+    <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
+      <span style={{ fontSize: big ? 22 : 16, fontWeight: 900, color: s.n.temp > 40 ? hot : "var(--text)", lineHeight: 1.05 }}>{Math.round(s.n.temp)}°</span>
+      {s.n.target > 0 && <span style={{ fontSize: big ? 11.5 : 10, fontWeight: 800, color: "var(--muted)" }}>/{Math.round(s.n.target)}°</span>}</div>
+    <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+      <span style={{ width: big ? 13 : 10, height: big ? 13 : 10, borderRadius: 4, flexShrink: 0, background: s.color || "transparent",
+        border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
+      <span style={{ fontSize: big ? 12 : 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {s.slot ? [s.slot, big ? (s.name || s.type) : s.type].filter(Boolean).join(" · ") : "rien de chargé"}</span></div>
+  </div>;
+}
+function Toolhead({ status, sz }) {
+  if (!status?.connected || (status?.nozzles || []).length < 2) return null;
+  const m = headModel(status);
+  return (
+    <Tile icon={<Wrench size={15}/>} color="#22C55E" label="Tête d'impression"
+      mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 10, fontSize: 13.5 }}>
+        {[["G", m.L], ["D", m.R]].map(([k, s]) => s && <span key={k} style={{ color: s.n.active ? "#16a34a" : "var(--muted)" }}>{k} {Math.round(s.n.temp)}°</span>)}</span>}
+      zoom={<>
+        <div style={{ display: "flex", justifyContent: "center" }}><HeadArt st={status} h={220}/></div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}><HeadSide s={m.L} label="Gauche" big/><HeadSide s={m.R} label="Droite" big/></div>
+      </>}>
+      {({ W, H }) => {
+        // une ligne par buse : son cote (vert si elle imprime), le filament, la temperature, son etat si la place le permet
+        const lines = <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 5 }}>
+          {[["G", m.L], ["D", m.R]].map(([k, s]) => s && <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 800, minWidth: 0 }}>
+            <span style={{ width: 16, color: s.n.active ? "#16a34a" : "var(--muted)" }}>{k}</span>
+            <span style={{ width: 11, height: 11, borderRadius: 3, flexShrink: 0, background: s.color || "transparent", border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
+            <span style={{ color: s.n.temp > 40 ? heat(s.n.temp) : "var(--text)" }}>{Math.round(s.n.temp)}°</span>
+            {W >= 230 && <span style={{ fontSize: 11, color: s.n.active ? "#16a34a" : "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {s.n.active ? "● imprime" : k === "G" ? "levée" : "au repos"}{s.slot ? ` · ${s.slot}` : ""}</span>}</div>)}</div>;
+        // bas : le dessin a gauche, les buses a cote ; haut : le dessin centre, les buses dessous (en cartes si la place le permet)
+        if (H < 150) return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+          <HeadArt st={status} h={Math.max(50, Math.min(H - 4, 120, W * 0.42 * 170 / 200))}/>{lines}</div>;
+        const cards = W >= 200 && H >= 230;
+        return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>
+          <div style={{ display: "flex", justifyContent: "center" }}><HeadArt st={status} h={Math.max(70, Math.min(H - (cards ? 96 : 56), 200, (W - 8) * 170 / 200))}/></div>
+          {cards ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}><HeadSide s={m.L} label="Gauche"/><HeadSide s={m.R} label="Droite"/></div>
+            : <div style={{ flex: "0 0 auto", display: "flex" }}>{lines}</div>}
+        </div>;
+      }}
+    </Tile>
+  );
+}
 // les couleurs chargees : toutes les bobines de l'AMS en pastilles, celle qui imprime cerclee
 function Colors({ status, o, sz }) {
   const trays = (status?.ams_list || []).filter(a => a.id !== 255 && a.id !== 254).flatMap(a => (a.trays || []).map(t => ({ ...t, ams: a })))
@@ -2428,6 +2541,7 @@ export const TILES = {
   countdown: { label: "Fin d'impression", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Countdown status={st} o={o} sz={sz(it)}/>,
     options: [B("fin", "Heure de fin", true), B("layer", "Couche", true)] },
   spool: { label: "Filament en cours", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Spool status={st} o={o} sz={sz(it)}/> },
+  head: { label: "Tête d'impression", w: [1, 2], h: [2, 1, 3], render: (d, st, o, it) => <Toolhead status={st} sz={sz(it)}/> },
   switch: { label: "Aiguillage (Track Switch)", w: [2, 1], h: [2, 1, 3, 0.5], render: (d, st, o, it) => <FilaSwitch status={st} o={o} sz={sz(it)}/> },
   colors: { label: "Couleurs chargées", w: [2, 1], h: [1, 2, 0.5], render: (d, st, o, it) => <Colors status={st} o={o} sz={sz(it)}/> },
   streak: { label: "Série", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Streak o={o} sz={sz(it)}/>,

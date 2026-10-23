@@ -476,6 +476,14 @@ class MQTTManager:
                     n.temp   = float(temp_raw)
                     n.target = 0.0
                 n.active = (eid == active_nozzle_idx)
+                # ce qui est charge dans cette buse : snow = (unite << 8) | bac ; 0xFFFF ou absent = rien
+                if "snow" in ext:
+                    try:
+                        _sn = int(ext.get("snow"))
+                        _a, _t = _sn >> 8, _sn & 0xFF
+                        n.slot_ams, n.slot_tray = (-1, -1) if _a in (0xFF,) or _sn < 0 else (_a, _t if _a < 128 else 0)
+                    except (TypeError, ValueError):
+                        pass
                 changed = True
 
         # Repli mono-buse (P1 / X1 / A1) : ces machines ne remontent pas
