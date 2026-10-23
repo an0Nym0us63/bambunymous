@@ -729,6 +729,15 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
   const [tray, setTray] = useState(null);
   const view = useDevSel(s => s.view), setView = useDevSel(s => s.setView);
   const before = useRef(null);   // la vue de la tuile a l'ouverture de la fenetre, rendue a la fermeture
+  const root = useRef(null);
+  const [mh, setMh] = useState(0);
+  useEffect(() => {
+    const el = root.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(([e]) => setMh(Math.floor(e.contentRect.height)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   useEffect(() => {
     const load = () => client.get("/settings/ams-order").then(({ data }) => setOrder(data.order ?? null)).catch(() => setOrder(null));
     load();
@@ -745,7 +754,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
   const routes = switchRoutes(st);
   const go = v => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* indisponible */ } };
   if (!list.length && !hasRack) return <div style={{ padding: 16, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>Aucun AMS détecté</div>;
-  const H = fitH ?? 230;
+  const H = mh || fitH || 230;
   const low = H < 96;                               // une rangee : ni en-tete ni bascule
   const pill = (on, label, dot, onClick) => <button type="button" onClick={e => { e.stopPropagation(); onClick(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5,
     padding: "2px 9px", height: 22, borderRadius: 20, cursor: "pointer", fontSize: 10.5, fontWeight: 800, whiteSpace: "nowrap",
@@ -753,12 +762,16 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
     {dot && <span style={{ width: 9, height: 9, borderRadius: "50%", background: dot, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>}{label}<ArrowLeftRight size={11}/></button>;
   const dryN = list.filter(isDrying).length;
   const head = !low && (
-    <div style={{ display: "flex", alignItems: "center", gap: 8, height: 22, minWidth: 0 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8, height: 26, minWidth: 0, flexShrink: 0 }}>
       <span style={{ flex: 1, minWidth: 0, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden" }}>
         {actT ? <><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite" }}/>
           <span style={{ color: "#3b82f6" }}>{slotLabel(act, actTray)}</span>
           <span style={{ width: 11, height: 11, borderRadius: 4, background: trayHex(actT) || "var(--border)", border: "1px solid rgba(0,0,0,0.2)" }}/>
-          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{actT.spool_info?.name || actT.filament_type}</span></>
+          <span style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.15, overflow: "hidden" }}>
+            <span style={{ color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis" }}>{actT.spool_info?.translated_name || actT.spool_info?.name || actT.filament_type}</span>
+            {(actT.spool_info?.fila_type || actT.spool_info?.material || actT.spool_info?.brand) && <span style={{ fontSize: 10, fontWeight: 700, color: "var(--muted)",
+              overflow: "hidden", textOverflow: "ellipsis" }}>{[actT.spool_info?.fila_type || actT.spool_info?.material || actT.filament_type, actT.spool_info?.brand].filter(Boolean).join(" · ")}</span>}
+          </span></>
           : <span style={{ color: "var(--muted)" }}>{list.filter(a => a.id !== 255).length} unités · {list.flatMap(a => a.trays || []).filter(t => trayHex(t)).length} bobines</span>}
         {dryN > 0 && <span style={{ color: "#ea580c" }}>· {dryN} sèche{dryN > 1 ? "nt" : ""}</span>}
       </span>
@@ -807,10 +820,11 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
     </>}
   </Zoom>;
   return (
-    <div onClick={() => setOpen("all")} style={{ display: "flex", flexDirection: "column", gap: 6, cursor: "pointer", height: fitH ?? undefined, minWidth: 0, overflow: "hidden" }}>
+    <div ref={root} onClick={() => setOpen("all")} style={{ display: "flex", flexDirection: "column", gap: 6, cursor: "pointer", height: fitH != null ? "100%" : undefined,
+      minWidth: 0, overflow: "hidden" }}>
       {!(view === "rack" && hasRack && !low) && head}
       {view === "rack" && hasRack && !low ? <div onClick={e => e.stopPropagation()} style={{ flex: 1, minHeight: 0 }}>{rackTile}</div>
-        : <HubGrid list={list} order={order} act={act} actTray={actTray} H={H - (low ? 0 : 28)} climate={climate} fs={routes} onPick={id => setOpen(id)}/>}
+        : <HubGrid list={list} order={order} act={act} actTray={actTray} H={H - (low ? 0 : 32)} climate={climate} fs={routes} onPick={id => setOpen(id)}/>}
       {popup}
     </div>
   );
