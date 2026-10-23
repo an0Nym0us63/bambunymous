@@ -873,11 +873,11 @@ function Last({ p, o, sz, st, lp }) {
     o.cost && x.total_cost && fmtEur(x.total_cost)].filter(Boolean).join(" · ");
   // un clic sur la tuile ouvre la fenetre ; le petit bouton de chaque impression ouvre sa fiche
   const go = (x, s = 26) => <button type="button" aria-label="Ouvrir la fiche" title="Ouvrir la fiche de l'impression"
-    onClick={e => { e.stopPropagation(); nav(`/prints?id=${x.id}`); }} style={{ width: s, height: s, borderRadius: s / 3.2, border: "1px solid var(--border)",
+    onClick={e => { e.stopPropagation(); nav(x.members ? `/prints?group=${x.group_id}` : `/prints?id=${x.id}`); }} style={{ width: s, height: s, borderRadius: s / 3.2, border: "1px solid var(--border)",
       flexShrink: 0, background: "var(--surface)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
     <ArrowUpRight size={s >= 26 ? 14 : 12}/></button>;
   const row = (x, size, card, inZoom) => <Item key={x.id} img={printImg(x.id)} dot={x.live ? "#3b82f6" : x.partial ? "#f59e0b" : okOf(x) ? "#22c55e" : "#ef4444"} size={size} card={card}
-    title={x.file_name || x.translated_name || `Impression #${x.id}`} sub={sub(x)} onClick={inZoom ? () => nav(`/prints?id=${x.id}`) : undefined}
+    title={x.file_name || x.translated_name || `Impression #${x.id}`} sub={sub(x)} onClick={inZoom ? () => nav(x.members ? `/prints?group=${x.group_id}` : `/prints?id=${x.id}`) : undefined}
     right={<>{o.photo && !x.live && !hasPhoto(x) && (size >= 44 || card) && <PhotoHint/>}{!inZoom && (card || (!narrowL.current && size >= 30)) && go(x)}</>}
     corner={!inZoom && !card && narrowL.current ? go(x, 20) : null}/>;
   return (

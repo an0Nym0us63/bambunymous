@@ -2608,6 +2608,24 @@ export default function Prints() {
     next.delete("id");
     setSearchParams(next, { replace: true });
   };
+  // un groupe ouvert par son adresse (?group=ID, depuis l'accueil) : ses impressions, puis sa fiche
+  const deepGroup = searchParams.get("group");
+  const [groupDeep, setGroupDeep] = useState(null);
+  useEffect(() => {
+    if (!deepGroup) { setGroupDeep(null); return; }
+    client.get("/prints", { params: { group_id: deepGroup, limit: 200 } })
+      .then(r => { const ps = r.data?.prints || r.data?.items || [];
+        if (ps.length) setGroupDeep({ id: Number(deepGroup), name: ps[0].group_name || `Groupe #${deepGroup}`, prints: ps,
+          latestDate: ps.reduce((d, p) => !d || (p.print_date && p.print_date > d) ? p.print_date : d, null),
+          number_of_items: ps[0].group_number_of_items || 1, cover_print_id: ps[0].group_cover_print_id }); })
+      .catch(() => {});
+  }, [deepGroup]);
+  const closeGroupDeep = () => {
+    setGroupDeep(null);
+    const next = new URLSearchParams(searchParams);
+    next.delete("group");
+    setSearchParams(next, { replace: true });
+  };
   const sentinelRef = useRef(null);
   const loadingMoreRef = useRef(false);
   const printsRef = useRef([]);
@@ -3274,6 +3292,11 @@ export default function Prints() {
           </button>
         </div>
       )}
+
+      {groupDeep && <GroupBottomSheet groupId={groupDeep.id} name={groupDeep.name} prints={groupDeep.prints} latestDate={groupDeep.latestDate}
+        number_of_items={groupDeep.number_of_items} cover_print_id={groupDeep.cover_print_id} onClose={closeGroupDeep}
+        onSelectPrint={p => setSelected(p)} onUngroup={() => { closeGroupDeep(); load(); loadGroups(); }}
+        onDelete={id => setPrints(ps => ps.filter(p => p.id !== id))} onUpdated={() => { load(); loadGroups(); }}/>}
 
       {selected && <PrintDetail p={selected} onClose={()=>{ setSelected(null); closeDeep(); }}
         onDelete={id=>{setPrints(ps=>ps.filter(p=>p.id!==id));setTotal(t=>t-1);}}
