@@ -93,6 +93,12 @@ async def friends_proxy(fid: str, path: str, request: Request, _: str = Depends(
     if code < 400:
         from ....services import ach_log
         ach_log.visit_out(fid, request.headers.get("x-app-page"))   # ma visite chez lui (succes)
+        if path.startswith("camera/"):
+            # sa camera regardee chez lui compte dans MON temps de camera (meme horloge que la mienne),
+            # pendant qu'il imprime vraiment
+            from .camera import _watch_tick
+            from ....services import friends_shared as FS
+            _watch_tick(printing=await FS.is_printing(fid))
     if code == 401:
         # Pas de deconnexion chez moi : c'est l'acces au copain qui est refuse.
         raise HTTPException(403, "Accès refusé par le BambuNymous du copain (invitation révoquée ?)")

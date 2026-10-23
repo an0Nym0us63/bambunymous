@@ -131,6 +131,26 @@ def printer_state(st: dict) -> str:
     return "printing" if str(st.get("status") or "").upper() in LIVE else "standby"
 
 
+# un copain imprime-t-il ? relu au plus une fois par minute (sa camera regardee compte alors)
+_PRINTING = {}
+
+
+async def is_printing(fid) -> bool:
+    import time
+    hit = _PRINTING.get(str(fid))
+    if hit and time.time() - hit[0] < 60:
+        return hit[1]
+    ok = False
+    try:
+        f = next((x for x in await _load() if str(x["id"]) == str(fid)), None)
+        if f:
+            ok = printer_state(await _ask(f, "printer/status")) == "printing"
+    except Exception:
+        ok = False
+    _PRINTING[str(fid)] = (time.time(), ok)
+    return ok
+
+
 def my_state() -> dict:
     from ..core.mqtt import get_state
     s = get_state()

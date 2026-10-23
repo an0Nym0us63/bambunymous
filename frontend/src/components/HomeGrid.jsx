@@ -137,7 +137,7 @@ function normalize(lay, defs) {
   for (const n of [1, 2, 3, 4]) if (lay.layouts?.[n]) layouts[n] = cleanCols(lay.layouts[n], n === 1 ? Math.max(1, Math.min(MAX_PAGES, lay.layouts[1].length)) : n, defs);
   if (!Object.keys(layouts).length) return defaults(defs);
   return { v: 2, max: Math.max(1, Math.min(4, parseInt(lay.max) || 2)), layouts,
-    ...(lay.bannerAll === true ? { bannerAll: true } : {}),
+    ...(lay.bannerFirst === true ? { bannerFirst: true } : {}),
     ...(Array.isArray(lay.pageNames) ? { pageNames: lay.pageNames.slice(0, MAX_PAGES).map(x => String(x || "").slice(0, PAGE_NAME_MAX)) } : {}),
     ...(lay.top && typeof lay.top === "object" ? { top: lay.top } : {}),
     ...(["soft", "vivid", "banner"].includes(lay.tint) ? { tint: lay.tint } : {}),
@@ -726,7 +726,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
   const optDef = optItem ? defs[optItem.id] : null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
-      {top && (!paged || nPages < 2 || cur === 0 || edit || lay.bannerAll) && (
+      {top && (!paged || nPages < 2 || cur === 0 || edit || !lay.bannerFirst) && (
         <div style={{ position: "relative", ...(edit ? { outline: "2px dashed rgba(59,130,246,0.55)", outlineOffset: 3, borderRadius: 18 } : {}) }}>
           {top.render(topOpts)}
           {edit && <button onClick={() => setOptFor("top")} aria-label="Réglages du bandeau" title="Réglages du bandeau"
@@ -991,7 +991,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
           {edit && <PageBar names={[...Array(nPages).keys()].map(i => pageName(lay, i))} cur={cur} onGo={i => goPage(i, true)}
             renaming={renaming} setRenaming={setRenaming} onRename={v => setNames(x => x.map((y, i) => i === cur ? v : y))}
             onAdd={nPages < MAX_PAGES ? addPage : null} onDel={nPages > 1 ? delPage : null} hasBanner={!!top}
-            bannerAll={lay.bannerAll} setBannerAll={v => setLay(l => { const y = { ...l }; if (v) y.bannerAll = true; else delete y.bannerAll; return y; })}/>}
+            bannerAll={!lay.bannerFirst} setBannerAll={v => setLay(l => { const y = { ...l }; if (v) delete y.bannerFirst; else y.bannerFirst = true; return y; })}/>}
           {!edit && nPages > 1 && <PageDots names={[...Array(nPages).keys()].map(i => pageName(lay, i))} cur={cur} onGo={i => goPage(i)} flash={flash}/>}
           <div style={{ position: "relative" }}>
             <Pager count={nPages} cur={cur} onGo={i => goPage(i)}>

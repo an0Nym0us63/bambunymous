@@ -325,8 +325,51 @@ async def _serve(ip: str, code: str, model: str, model_id: str = "") -> Response
                    headers={"Cache-Control": "no-store"})
 
 
+# Le temps de camera regardee (succes) : une seule horloge pour tout ce qui montre la camera (le flux
+# continu ou les captures qui se rafraichissent), qui compte le temps reel une seule fois meme si
+# plusieurs ecrans la montrent. Credite au fil de l'eau (toutes les 30 s) : avant, le flux ne creditait
+# qu'a sa fin, et l'enregistrement etait annule avec lui a la fermeture de la page ; les captures ne
+# comptaient pas du tout. Un copain qui regarde par le relais ne compte pas.
+WATCH_GAP = 15.0        # au-dela, l'ecran ne regardait plus : le trou ne compte pas
+WATCH_FLUSH = 30.0
+_WATCH = {"last": None, "pending": 0.0}
+
+
+def _printing_here() -> bool:
+    try:
+        return str(getattr(get_state(), "status", "") or "").upper() in ("RUNNING", "PAUSE", "PAUSED", "PREPARE")
+    except Exception:
+        return False
+
+
+def _watch_tick(request: Request | None = None, printing: bool | None = None):
+    """Une image de camera montree. Ne compte que pendant une vraie impression (la mienne, ou
+    celle du copain qu'on regarde : « printing » le dit) ; hors impression, l'horloge s'arrete."""
+    if request is not None:
+        auth = request.headers.get("authorization") or ""
+        tok = auth.split(" ", 1)[1].strip() if auth.lower().startswith("bearer ") else request.query_params.get("_t", "")
+        if tok.startswith("fk_"):
+            return
+    if not (_printing_here() if printing is None else printing):
+        _WATCH["last"] = None
+        return
+    now = time.monotonic()
+    last = _WATCH["last"]
+    _WATCH["last"] = now
+    if last is not None and 0 < now - last <= WATCH_GAP:
+        _WATCH["pending"] += now - last
+    if _WATCH["pending"] >= WATCH_FLUSH:
+        sec, _WATCH["pending"] = _WATCH["pending"], 0.0
+        try:
+            from ....services import home_stats
+            asyncio.get_running_loop().create_task(home_stats.camera_watched(sec))
+        except Exception:
+            logger.debug("camera : temps regarde non compte")
+
+
 @router.get("/snapshot")
-async def camera_snapshot():
+async def camera_snapshot(request: Request):
+    _watch_tick(request)
     async with AsyncSessionLocal() as db:
         ip   = await get_setting(db, "PRINTER_IP")
         code = await get_setting(db, "PRINTER_ACCESS_CODE")
@@ -371,7 +414,7 @@ async def camera_stream(request: Request):
         with _HUB.lock:
             _HUB.subs += 1
         last, waited = -1, 0.0
-        first_at = last_at = None              # temps de direct vraiment regarde (succes « Spectateur »)
+        tick_at = 0.0
         try:
             while True:
                 if await request.is_disconnected():
@@ -380,8 +423,8 @@ async def camera_stream(request: Request):
                     seq, fr, alive = _HUB.seq, _HUB.frame, _HUB.thread is not None
                 if fr and seq != last:
                     last, waited = seq, 0.0
-                    last_at = time.monotonic()
-                    first_at = first_at or last_at
+                    if time.monotonic() - tick_at >= 2:      # le temps regarde, au fil de l'eau
+                        tick_at = time.monotonic(); _watch_tick(request)
                     yield (b"--frame\r\nContent-Type: image/jpeg\r\nContent-Length: " + str(len(fr)).encode()
                            + b"\r\n\r\n" + fr + b"\r\n")
                     continue
@@ -397,11 +440,5 @@ async def camera_stream(request: Request):
                 if _HUB.subs <= 0:
                     _HUB.subs = 0
                     _HUB.idle_since = time.monotonic()
-            if first_at and last_at:
-                try:
-                    from ....services import home_stats
-                    await home_stats.camera_watched(last_at - first_at)
-                except Exception:
-                    logger.debug("camera : temps regarde non compte")
     return StreamingResponse(frames(), media_type="multipart/x-mixed-replace; boundary=frame",
                              headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})

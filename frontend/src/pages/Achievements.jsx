@@ -17,6 +17,8 @@ import TicketCeremony from "../components/TicketCeremony";
 
 const fmt = (n, unit) => {
   if (n == null) return "";
+  // des heures qui avancent a la minute : « 0 h 22 »
+  if (unit === "h" && typeof n === "number" && !Number.isInteger(n)) { const m = Math.round(n * 60); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; }
   const v = typeof n === "number" && !Number.isInteger(n) ? n.toFixed(n < 10 ? 2 : 1).replace(".", ",")
     : Number(n).toLocaleString("fr-FR");
   return unit ? `${v} ${unit}` : v;
