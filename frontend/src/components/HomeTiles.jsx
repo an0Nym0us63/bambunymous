@@ -2032,6 +2032,15 @@ function Spool({ status, o, sz }) {
 // l'aiguillage (Filament Track Switch) : les entrees A et B (les AMS qui y sont branches, la bobine
 // engagee), le corps, les sorties vers les buses gauche et droite. Le chemin qui imprime est trace a la
 // couleur de son filament. Sorties : id de buse, 1 = gauche, 0 = droite (comme les badges de l'AMS).
+// les unites d'une entree, en clair : « AMS A et B », « AMS A, D et HT-A », « HT-A »
+const unitsLabel = u => {
+  if (!u.length) return "aucun AMS";
+  const ids = [...u].sort((a, b) => a.id - b.id);
+  const letters = ids.filter(a => a.id < 128).map(a => String.fromCharCode(65 + a.id));
+  const items = [...letters, ...ids.filter(a => a.id >= 128).map(amsLab)];
+  const list = items.length > 1 ? `${items.slice(0, -1).join(", ")} et ${items[items.length - 1]}` : items[0];
+  return letters.length ? `AMS ${list}` : list;
+};
 const SIDE = id => id == null ? null : id === 1 ? "G" : "D";
 const SIDE_L = id => id == null ? "—" : id === 1 ? "Gauche" : "Droite";
 function switchModel(status) {
@@ -2057,7 +2066,7 @@ function SwitchArt({ m, W, H }) {
   const VW = 380, VH = 180, HL = m.hl;
   const inY = { A: 42, B: 138 }, pY = { A: 72, B: 108 }, oY = { G: 72, D: 108 }, nY = { G: 42, D: 138 };
   const cut = (t, n) => t.length > n ? `${t.slice(0, n - 1)}…` : t;
-  const units = u => u.length ? (u.length <= 2 ? u.map(amsLab).join(" · ") : `${amsLab(u[0])} +${u.length - 1}`) : "aucun AMS";
+  const units = unitsLabel;
   const path = x => { const s = SIDE(x.out), y = inY[x.p], p = pY[x.p];
     return s ? `M122 ${y} C142 ${y} 140 ${p} 160 ${p} C186 ${p} 194 ${oY[s]} 220 ${oY[s]} C240 ${oY[s]} 238 ${nY[s]} 258 ${nY[s]}`
       : `M122 ${y} C142 ${y} 140 ${p} 160 ${p} L178 ${p}`; };
@@ -2165,7 +2174,7 @@ function FilaSwitch({ status, o, sz }) {
                 <span style={{ fontSize: 14, fontWeight: 900, color: x.live ? m.hl : "var(--text)" }}>{SIDE_L(x.out)}</span>
                 {n && <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 900, color: n.temp > 40 ? "#f97316" : "var(--text2)" }}>{Math.round(n.temp)}°</span>}</div>
               {H >= 230 && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {x.units.map(amsLab).join(" · ") || "aucun AMS"}</span>}
+                {unitsLabel(x.units)}</span>}
             </div>; })}</div>;
         if (!big) return rows(W);
         return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}><SwitchArt m={m} W={h * 380 / 180} H={h}/></div>;
