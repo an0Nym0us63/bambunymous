@@ -2078,6 +2078,15 @@ async def restore_spool_weights(
             spool.remaining_weight_g = round((spool.remaining_weight_g or 0) + add_g, 1)
             fu.grams_used = round(max(0, (fu.grams_used or 0) - add_g), 1)
             restored.append({"spool_id": fu.spool_id, "added_g": add_g, "usage_id": fu.id})
+        if restored:
+            # Les grammes consommes ont baisse : le poids et le cout du print (et des
+            # objets qui en derivent) suivent, sinon l'en-tete gardait l'ancien total.
+            from ....services.print_tracker import _costs as _calc_costs
+            await db.flush()
+            pr = await db.get(Print, print_id)
+            if pr:
+                await _calc_costs(db, pr)
+                await _propagate_from_print(db, print_id)
         await db.commit()
     # Le poids restant des bobines vient de changer : sans ca, l'accueil
     # continuait d'afficher l'ancienne valeur jusqu'a la prochaine mutation

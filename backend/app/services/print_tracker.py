@@ -4,7 +4,7 @@ Gère : création, milestones (%, couches), snapshots, fin de print.
 Logique identique à Spoolnymous (processMessage + safe_update_status).
 """
 import asyncio, logging, re, time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Optional, Dict, Any
@@ -125,7 +125,9 @@ async def restore_in_progress():
                 st = _job(p.job_id)
                 with _LOCK:
                     st["print_id"]   = p.id
-                    st["start_time"] = p.created_at.timestamp() if p.created_at else time.time()
+                    # created_at est en UTC naif : .timestamp() le lirait en heure locale
+                    st["start_time"] = (p.created_at.replace(tzinfo=timezone.utc).timestamp()
+                                        if p.created_at else time.time())
 
                 # Reconstruire les flags milestones depuis les snapshots déjà pris
                 snaps_r = await db.execute(
@@ -657,11 +659,16 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
             p = await db.get(Print, pid)
             if not p: return
             p.status = status; p.updated_at = datetime.utcnow()
-            if t0:
-                real = time.time() - t0
-                est  = p.estimated_seconds or 0
-                if est <= 0 or real <= est * 1.3:
-                    p.duration_seconds = real
+            est = p.estimated_seconds or 0
+            real = time.time() - t0 if t0 else None
+            if real is not None and (est <= 0 or real <= est * 1.3):
+                p.duration_seconds = real
+            elif status == "FAILED" and est > 0 and pct > 0:
+                # Un echec apres une longue pause (bobine vide, erreur, annulation tardive)
+                # depasse l'estimation : le temps ecoule ne dit plus le temps d'impression.
+                # On prend la part de l'estimation reellement imprimee, plutot que de
+                # laisser l'estimation complete (qu'il fallait corriger a la main).
+                p.duration_seconds = round(est * min(pct, 100) / 100)
             # Coûts
             await _costs(db, p)
             # Note: déduction des bobines faite au démarrage dans _apply_meta/_enrich
