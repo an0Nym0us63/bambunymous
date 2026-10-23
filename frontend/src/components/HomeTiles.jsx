@@ -2941,7 +2941,8 @@ function SwitchMini({ m, W, H }) {
   const inY = { A: 32, B: 88 }, oY = { G: 32, D: 88 };
   const pin = { A: 46, B: 74 }, pout = { G: 46, D: 74 };
   const path = x => { const sd = SIDE(x.out), y = inY[x.p], q = pin[x.p];
-    if (sd && (x.p === "A") !== (sd === "G")) return fluid([[38, y], [62, q], [108, pout[sd]], [132, oY[sd]]]);
+    // croise : les memes proportions que le grand schema (pente franche aux bouts, traversee douce au milieu)
+    if (sd && (x.p === "A") !== (sd === "G")) return fluid([[38, y], [62, x.p === "A" ? 53 : 67], [108, sd === "G" ? 53 : 67], [132, oY[sd]]]);
     return sd ? `M38 ${y} C52 ${y} 50 ${q} 62 ${q} C85 ${q} 85 ${pout[sd]} 108 ${pout[sd]} C120 ${pout[sd]} 118 ${oY[sd]} 132 ${oY[sd]}`
       : `M38 ${y} C52 ${y} 50 ${q} 62 ${q} L74 ${q}`; };
   const served = sd => m.ports.find(x => SIDE(x.out) === sd);
