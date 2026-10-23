@@ -36,7 +36,8 @@ FETE_SLUGS.push(...FETE_SLUGS_MONDE);
 // une farce pour quelques maisons : elle tombe a l'ouverture sur ces installations-la, une fois, jusqu'au bout ;
 // ensuite elle se rejoue a son adresse. Jamais tiree au sort. C'est le serveur qui sait s'il en est une (il a ete
 // joint sous l'une de leurs adresses) : la page peut tourner sur une adresse locale.
-const MAISON = { slug: "don", egg: "merci_don" };
+// seenKey : la marque de cet appareil, versionnee comme celle du serveur (une remise a zero change les deux)
+const MAISON = { slug: "don", egg: "merci_don", seenKey: "bn-don-vu-2" };
 export const isPrank = slug => PRANK_SLUGS.includes(slug) || FETE_SLUGS.includes(slug) || slug === MAISON.slug;
 
 export const usePrank = create(set => ({
@@ -166,12 +167,11 @@ export function PrankHost() {
       .then(({ data }) => { if (data?.hit) setTimeout(() => fire(data), 1200); })
       .catch(() => {});
     // la farce de cette maison passe avant tout, tant qu'elle n'a pas ete vue jusqu'au bout
-    // vue jusqu'au bout : le serveur le sait (le secret est tombe) ; un compte qui ne compte pas pour les
-    // succes ne l'enregistre pas la-bas, cet appareil s'en souvient alors. Interrompue (appli fermee, page
-    // rechargee), rien n'est retenu : elle revient a l'ouverture suivante.
-    const seen = () => { try { return localStorage.getItem("bn-" + MAISON.slug) === "1"; } catch { return false; } };
-    (seen() ? Promise.resolve({ data: { ok: true } }) : client.get(`/achievements/prank/${MAISON.slug}`)).then(({ data }) => {
-      if (!data?.maison || data?.ok) { roll(); return; }
+    // vue jusqu'au bout : le serveur le retient (« vu », a part du secret), cet appareil aussi. Interrompue
+    // (appli fermee, page rechargee), rien n'est retenu : elle revient a l'ouverture suivante.
+    const seen = () => { try { return localStorage.getItem(MAISON.seenKey) === "1"; } catch { return false; } };
+    (seen() ? Promise.resolve({ data: {} }) : client.get(`/achievements/prank/${MAISON.slug}`)).then(({ data }) => {
+      if (!data?.maison || data?.vu) { roll(); return; }
       const go = () => {
         if (document.getElementById("splash") || window.__bnCardFx) { setTimeout(go, 300); return; }
         if (!usePrank.getState().slug) start(MAISON.slug);
@@ -195,7 +195,10 @@ export function PrankHost() {
   const done = () => {
     if (doneRef.current) return;
     doneRef.current = true;
-    if (slug === MAISON.slug) { try { localStorage.setItem("bn-" + MAISON.slug, "1"); } catch { /* rien */ } }
+    if (slug === MAISON.slug) {
+      try { localStorage.setItem(MAISON.seenKey, "1"); } catch { /* rien */ }
+      client.post(`/achievements/prank/${MAISON.slug}/vu`).catch(() => {});
+    }
     egg(slug === MAISON.slug ? MAISON.egg : "p_" + slug.replace(/-/g, "_"));
     setTimeout(() => { if (usePrank.getState().slug === slug) stop(); }, 1500);
   };

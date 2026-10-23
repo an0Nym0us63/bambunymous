@@ -4552,6 +4552,25 @@ def note_host(host: str) -> None:
         pass
 
 
+# « vue jusqu'au bout » : une marque a part du secret (qui reste acquis), versionnee ; changer la
+# version remet la farce en jeu partout, une fois de plus (remise a zero du 23/10/2026)
+MAISON_VU = KEY + "_MAISON_VU_2"
+
+
+async def maison_vu() -> bool:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        return bool(await get_setting(db, MAISON_VU, ""))
+
+
+async def maison_vu_set() -> None:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, MAISON_VU, datetime.utcnow().isoformat())
+
+
 async def is_maison() -> bool:
     if _MAISON["seen"] is None:
         from ..db.session import AsyncSessionLocal

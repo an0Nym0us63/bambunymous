@@ -97,8 +97,19 @@ async def achievements_prank_ok(slug: str, acc=Depends(require_own_account)):
         # une des maisons de cette farce, et seulement pour un compte administrateur (le proprietaire) : ni un
         # compte secondaire, ni un copain ne la voient (ni ne la « consomment » avant lui). Pas « le premier
         # administrateur » : c'est souvent le compte « admin » cree a l'installation, que personne n'utilise.
-        return {"ok": await A.prank_replay_ok(slug), "maison": acc[1] == ROLE_ADMIN and await A.is_maison()}
+        # « vu » : vue jusqu'au bout depuis la derniere remise a zero ; « ok » : rejouable a son adresse
+        return {"ok": await A.prank_replay_ok(slug), "maison": acc[1] == ROLE_ADMIN and await A.is_maison(),
+                "vu": await A.maison_vu()}
     return {"ok": await A.prank_replay_ok(slug)}
+
+
+@router.post("/prank/don/vu")
+async def achievements_don_vu(acc=Depends(require_own_account)):
+    """La farce de la maison est allee jusqu'au bout (un administrateur) : elle ne retombe plus seule."""
+    from ....services import achievements as A
+    if acc[1] == ROLE_ADMIN and await A.is_maison():
+        await A.maison_vu_set()
+    return {"ok": True}
 
 
 @router.post("/surprise/shown")
