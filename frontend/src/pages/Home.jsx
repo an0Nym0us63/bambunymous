@@ -1308,7 +1308,7 @@ function PrinterPopup({ status, img, name, onClose }) {
 
         {status?.fila_switch?.installed && <>
           {section("Aiguillage")}
-          <SwitchDiagram fs={status.fila_switch} status={status}/>
+          <SwitchDiagram fs={switchRoutes(status)} status={status}/>
         </>}
 
         {status?.hms_decoded?.length > 0 && <>
@@ -1374,9 +1374,9 @@ function SwitchDiagram({ fs, status }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {line("A", fs.in_a, fs.out_a)}
       {line("B", fs.in_b, fs.out_b)}
-      {(fs.calibrating || fs.filament != null) && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+      {/* la presence du filament (info bit 0) n'est pas fiable : Bambu Studio la lit pareil pour A et B */}
+      {fs.calibrating && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
         {fs.calibrating && <span style={{ color: "#f59e0b" }}>● calibration en cours</span>}
-        {fs.filament != null && <span>{fs.filament ? "filament engagé dans l'aiguillage" : "aiguillage vide"}</span>}
       </div>}
     </div>
   );
