@@ -1223,6 +1223,44 @@ async def prints_kpis(
         return {"count": r.count or 0, "duration": int(r.duration or 0),
                 "weight_g": float(r.weight or 0), "cost": round(float(r.cost or 0), 2)}
 
+@router.get("/kpis/daily")
+async def prints_kpis_daily(
+    date_from: str,
+    date_to: Optional[str] = None,
+    _: str = Depends(get_current_user),
+):
+    """Les memes chiffres que /kpis, jour par jour, en une requete : les tuiles de l'accueil
+    en demandaient un appel par jour (jusqu'a 80 au chargement, la page attendait derriere).
+    Jours sans impression inclus (a zero), du plus ancien au plus recent."""
+    from datetime import timedelta
+    try:
+        d0 = datetime.strptime(date_from[:10], "%Y-%m-%d").date()
+        d1 = datetime.strptime((date_to or date_from)[:10], "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(400, "Dates attendues au format AAAA-MM-JJ")
+    if d1 < d0 or (d1 - d0).days > 400:
+        raise HTTPException(400, "Période invalide (400 jours au plus)")
+    async with AsyncSessionLocal() as db:
+        day = func.date(Print.print_date)
+        q = select(
+            day.label("day"),
+            func.count(Print.id).label("count"),
+            func.sum(func.coalesce(Print.duration_seconds, 0)).label("duration"),
+            func.sum(func.coalesce(Print.total_weight_g, 0)).label("weight"),
+            func.sum(func.coalesce(Print.total_cost, 0)).label("cost"),
+        ).where(Print.status != "IN_PROGRESS")
+        for c in _period_clauses(d0.isoformat(), d1.isoformat()):
+            q = q.where(c)
+        rows = {str(r.day): r for r in (await db.execute(q.group_by(day))).all()}
+    out = []
+    for i in range((d1 - d0).days + 1):
+        k = (d0 + timedelta(days=i)).isoformat()
+        r = rows.get(k)
+        out.append({"date": k, "count": (r.count or 0) if r else 0, "duration": int(r.duration or 0) if r else 0,
+                    "weight_g": float(r.weight or 0) if r else 0.0, "cost": round(float(r.cost or 0), 2) if r else 0.0})
+    return out
+
+
 @router.get("/debug")
 async def debug_prints():  # noqa — public debug route
     """Route de debug — dump brut de la table prints (pas d'auth requis)."""

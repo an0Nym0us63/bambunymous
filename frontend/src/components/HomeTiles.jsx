@@ -587,15 +587,27 @@ export function useTilesData() {
   }, []);
   return d;
 }
-// une serie par jour (n jours jusqu'a aujourd'hui), chargee par la tuile qui la demande
+// une serie par jour (n jours jusqu'a aujourd'hui). Toutes les tuiles partagent UNE requete :
+// les 31 derniers jours, gardes une minute (avant : un appel par jour et par tuile, jusqu'a 80
+// au chargement, qui bouchaient les connexions du navigateur et retardaient tout l'accueil)
+const DAYS_MAX = 31;
+let daysCache = null;   // { at, key, p }
+function loadDays() {
+  const now = new Date(), key = ymd(now);
+  if (daysCache && daysCache.key === key && Date.now() - daysCache.at < 60000) return daysCache.p;
+  const from = new Date(now); from.setDate(now.getDate() - DAYS_MAX + 1);
+  const p = client.get("/prints/kpis/daily", { params: { date_from: ymd(from), date_to: key } })
+    .then(r => (r.data || []).map(x => ({ ...x, day: new Date(`${x.date}T12:00:00`) })))
+    .catch(() => { daysCache = null; return null; });
+  daysCache = { at: Date.now(), key, p };
+  return p;
+}
 function useDays(n) {
   const [v, setV] = useState(null);
   useEffect(() => {
+    if (!n) { setV(null); return undefined; }
     let dead = false;
-    const now = new Date();
-    const days = [...Array(n)].map((_, i) => { const x = new Date(now); x.setDate(now.getDate() - n + 1 + i); return x; });
-    Promise.all(days.map(x => client.get("/prints/kpis", { params: { date_from: ymd(x), date_to: ymd(x) } }).then(r => r.data).catch(() => ({}))))
-      .then(rs => { if (!dead) setV(rs.map((r, i) => ({ day: days[i], ...r }))); });
+    loadDays().then(all => { if (!dead && all) setV(all.slice(-Math.min(n, DAYS_MAX))); });
     return () => { dead = true; };
   }, [n]);
   return v;
