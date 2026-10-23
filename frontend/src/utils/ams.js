@@ -51,6 +51,16 @@ export function switchRoutes(status) {
   return { ...fs, out_a: out_a ?? null, out_b: out_b ?? null };
 }
 
+// Ce qui reste d'une bobine, en % : le poids suivi par BambuNymous (restant / poids initial) ;
+// le « remain » de l'AMS seulement si la bobine n'est pas associee (c'est une estimation de
+// l'AMS, juste pour une bobine Bambu, montree en plus dans la fiche).
+export function trayPct(t) {
+  const si = t?.spool_info;
+  const tot = si?.initial_weight_g ?? si?.filament_weight_g;
+  if (si?.remaining_weight_g != null && tot) return Math.max(0, Math.min(100, Math.round(si.remaining_weight_g / tot * 100)));
+  return t?.remain >= 0 ? Math.min(100, t.remain) : null;
+}
+
 // Nombre de slots qu'une unite occupe en largeur sur l'accueil. On le deduit
 // de ses bacs reels quand on les a, sinon de sa nature.
 export function slotCount(ams) {

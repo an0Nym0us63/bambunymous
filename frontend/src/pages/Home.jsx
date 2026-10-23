@@ -16,7 +16,7 @@ import AmsOrderEditor from "../components/AmsOrderEditor";
 import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet, DryPopup, DryCard, amsRoute } from "../components/AMSSection";
 import { Zoom } from "../components/HomeTiles";
-import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName, switchRoutes } from "../utils/ams";
+import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName, switchRoutes, trayPct } from "../utils/ams";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function hexCss(hex) {
@@ -633,7 +633,7 @@ const isDrying = a => !!(a?.is_drying || a?.dry_time > 0);
 const dryLeft = m => !m ? "" : m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m} min`;
 // un emplacement : sa couleur, ce qui reste (le haut s'assombrit a mesure qu'elle se vide), cercle s'il imprime
 function HubSwatch({ t, active, h, radius = 6 }) {
-  const c = trayHex(t), r = t?.remain >= 0 ? Math.min(100, t.remain) / 100 : null;
+  const p = trayPct(t), c = trayHex(t), r = p != null ? p / 100 : null;
   return (
     <span title={t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ")}
       style={{ position: "relative", display: "block", height: h, minWidth: 0, borderRadius: radius,
@@ -689,7 +689,7 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
           {trays.map(t => <HubSwatch key={`${t.id}${act && t.id === actTray ? "a" : ""}`} t={t} active={act && t.id === actTray} h="100%" radius={big ? 9 : 6}/>)}</span>
         {h >= 62 && <span style={{ display: "grid", gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: big ? 6 : 3 }}>
           {trays.map(t => <span key={t.id} style={{ fontSize: big ? 11 : 9.5, fontWeight: 800, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
-            color: act && t.id === actTray ? "#3b82f6" : "var(--muted)" }}>{trayHex(t) ? (t.remain >= 0 ? `${t.remain}%` : t.filament_type || "") : "—"}</span>)}</span>}
+            color: act && t.id === actTray ? "#3b82f6" : "var(--muted)" }}>{trayHex(t) ? (trayPct(t) != null ? `${trayPct(t)}%` : t.filament_type || "") : "—"}</span>)}</span>}
       </span>
     </button>
   );

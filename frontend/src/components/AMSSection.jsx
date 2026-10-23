@@ -6,7 +6,7 @@ import { colorBg, opaqueColors } from "../utils/colors";
 import { createPortal } from "react-dom";
 import { FilamentSheetFromSpool } from "../pages/Filaments";
 import SpoolSVG from "./SpoolSVG";
-import { EXT_AMS_ID, amsName, slotLabel, isExternal } from "../utils/ams";
+import { EXT_AMS_ID, amsName, slotLabel, isExternal, trayPct } from "../utils/ams";
 import AdminOnly from "./AdminOnly";
 import { showAlert } from "../utils/dialog";
 
@@ -676,7 +676,8 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
   const color  = hexDisplay(tray.color);
   const info   = tray.spool_info;
   const match  = MATCH_LABEL[tray.match_mode];
-  const pct    = tray.remain ?? 0;
+  // ce qui reste : le poids suivi par BambuNymous ; le % de l'AMS reste dans « Données imprimante »
+  const pct    = trayPct(tray) ?? 0;
   const isEmpty = tray.empty || !tray.filament_type;
   const [mapOpen, setMapOpen] = React.useState(false);
 
@@ -808,7 +809,7 @@ function TrayBottomSheet({ tray, amsId, amsLabel, slotNo, onClose }) {
             <Row label="Couleur"       value={(() => { const arr = (info?.colors_array||tray?.colors_array||"").split(",").filter(Boolean); return arr.length > 1 ? arr.map(hexDisplay).filter(Boolean).join(" / ") : color; })()} mono/>
             <Row label="Profile ID"    value={tray.tray_info_idx || tray.tray_id_name}/>
             <Row label="Tag UID"       value={tray.tag_uid && !tray.tag_uid.match(/^0+$/) ? tray.tag_uid : null} mono/>
-            <Row label="Restant"       value={`${tray.remain}%`}/>
+            <Row label="Restant selon l'AMS" value={tray.remain != null && tray.remain >= 0 ? `${tray.remain}%` : null}/>
             <Row label="UUID tray (RFID)" value={tray.uuid && !tray.uuid.match(/^0+$/) ? tray.uuid : null} mono/>
 
             {/* ── Section DB (bobine liée) ── */}
