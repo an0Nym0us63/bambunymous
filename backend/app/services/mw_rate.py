@@ -33,10 +33,9 @@ def _design_id(h) -> str:
 
 
 def _is_rated(h) -> bool:
-    """Une impression partagee cree chez MakerWorld une evaluation vide (score 0,
-    sans texte ni photo) : elle reste a remplir. Sans champ score, on la compte faite."""
-    if "score" not in h:
-        return True
+    """Une impression partagee cree chez MakerWorld une evaluation a remplir : sans note
+    (score absent ou 0), sans texte ni photo. Elle reste a faire -- MakerWorld l'affiche
+    dans « Notes » avec « Noter » (23/10/2026 : un score absent la faisait compter faite)."""
     return bool(h.get("score") or (h.get("content") or "").strip() or h.get("images"))
 
 
@@ -54,7 +53,7 @@ async def my_ratings(fresh: bool = False):
     from .makerworld import _get_json
     from .makerworld_account import token
     hit = _CACHE.get("ratings")
-    if hit and not fresh and time.time() - hit[0] < 1800:
+    if hit and not fresh and time.time() - hit[0] < 600:          # 10 min : une impression finie y entre vite
         return hit[1]
     tok = await token()
     if not tok:
