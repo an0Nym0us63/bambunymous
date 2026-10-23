@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "re
 import { createPortal } from "react-dom";
 import { BookOpen, ChevronRight, List, Search, X } from "lucide-react";
 import client from "../api/client";
+import { egg } from "../eggs";
 import "./guide.css";
 
 // Le guide d'utilisation (23/10/2026), dans l'appli et a son theme. Il n'est plus servi en acces libre :
@@ -188,7 +189,11 @@ export default function Guide() {
   const words = useMemo(() => norm(q).split(/\s+/).filter(w => w.length > 1), [q]);
   useEffect(() => {
     if (!words.length) return undefined;
-    const t = setTimeout(() => { searches.current += 1; }, 1500);
+    const t = setTimeout(() => {
+      searches.current += 1;
+      // chercher les secrets dans le guide : il n'en dit pas un mot… mais ca se remarque
+      if (words.some(w => /^(easter|secret|secrets|oeuf|oeufs)$/.test(w))) egg("guide_secret");
+    }, 1500);
     return () => clearTimeout(t);
   }, [words.join(" ")]); // eslint-disable-line react-hooks/exhaustive-deps
   const hits = useMemo(() => !words.length ? null : index.current.map(b => {

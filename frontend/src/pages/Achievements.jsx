@@ -581,7 +581,7 @@ function ScoreRing({ score, max, tiers, size = 138 }) {
   const R = 56, C = 2 * Math.PI * R;
   const k = size / 138;
   return (
-    <div style={{ position:"relative", width:size, height:size, flexShrink:0 }}>
+    <div data-egg="score_tap" data-egg-n="10" style={{ position:"relative", width:size, height:size, flexShrink:0 }}>
       <div aria-hidden="true" style={{ position:"absolute", inset:8, borderRadius:"50%",
         background:`radial-gradient(circle, ${t.color}33, transparent 70%)`, animation:"bn-ring-glow 3s ease-in-out infinite" }}/>
       <svg width={size} height={size} viewBox="0 0 138 138" style={{ position:"absolute", inset:0, transform:"rotate(-90deg)" }}>

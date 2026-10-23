@@ -1928,7 +1928,9 @@ function VersionLine({ version }) {
   React.useEffect(() => { client.get("/version/check").then(({ data }) => setChk(data)).catch(() => {}); }, []);
   const n = chk?.behind || 0;
   return (
-    <div style={{ textAlign:"center", marginTop:8 }}>
+    <div style={{ textAlign:"center", marginTop:8, position:"relative" }}>
+      {/* un tout petit bateau, presque invisible, au bout de la page */}
+      <span data-egg="micro_benchy" aria-hidden="true" style={{ position:"absolute", right:4, bottom:-2, fontSize:9, opacity:.16, cursor:"default", userSelect:"none" }}>⛵</span>
       <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace", margin:0 }}>
         <span onClick={devTap} style={{ cursor:"default", userSelect:"none" }}>v{version.commit?.slice(0,8) || "dev"}</span> · {version.build_date?.slice(0,10) || "?"}
         {chk && !chk.dev && !chk.error && (n

@@ -41,13 +41,13 @@ export async function egg(name) {
       if (!nc.has(name)) {
         nc.add(name);
         try { localStorage.setItem(NC_KEY, JSON.stringify([...nc])); } catch { /* stockage indisponible */ }
-        celebrate(data, name, true);
+        queued(done => celebrate(data, name, true, null, done));
       }
       return;
     }
     d.add(name);
     try { localStorage.setItem(KEY, JSON.stringify([...d])); } catch { /* stockage indisponible */ }
-    if (data?.new) celebrate(data, name);
+    if (data?.new) queued(done => celebrate(data, name, false, null, done));
   } catch { /* hors connexion, ou pas connecte : on retentera */ }
 }
 
@@ -65,7 +65,7 @@ export function tapper(n, ms, fn) {
 // Bravo : une carte qui monte en bas de l'ecran, se ferme au toucher ou seule.
 // Un murmure : la meme petite carte que les succes, pour une simple annonce
 export function whisper(emoji, title, text) {
-  celebrate({ emoji, name: title, lore: text }, "w_", false);
+  queued(done => celebrate({ emoji, name: title, lore: text }, "w_", false, null, done));
 }
 
 // Le bandeau dit ce qu'on vient de trouver : page cachee, farce, ou easter egg
@@ -114,17 +114,21 @@ function celebrate(e, name = "", uncounted = false, kind = null, onGone = null) 
 }
 
 // Un palier de succes atteint pendant qu'on utilise l'appli : la meme carte que les secrets, une a la fois
+// (les secrets trouves passent par la meme file : plusieurs a la fois s'enchainent au lieu de s'empiler)
 const cheers = [];
 let cheering = false;
 function nextCheer() {
-  const c = cheers.shift();
-  if (!c) { cheering = false; return; }
+  const show = cheers.shift();
+  if (!show) { cheering = false; return; }
   cheering = true;
-  celebrate({ emoji: c.emoji, name: c.name, lore: c.text }, "", false, [c.head, c.color], () => setTimeout(nextCheer, 250));
+  show(() => setTimeout(nextCheer, 250));
+}
+function queued(show) {
+  cheers.push(show);
+  if (!cheering) nextCheer();
 }
 export function cheer(c) {
-  cheers.push(c);
-  if (!cheering) nextCheer();
+  queued(done => celebrate({ emoji: c.emoji, name: c.name, lore: c.text }, "", false, [c.head, c.color], done));
 }
 
 function ensureStyle() {
@@ -140,7 +144,46 @@ function ensureStyle() {
 
 const WORDS = [["bambu", "magic_word"], ["sudo", "sudo"], ["bonjour", "hello"], ["ping", "ping"],
   ["merci", "thanks"], ["xyzzy", "xyzzy"], ["aide", "help"], ["matrix", "matrix"], ["lumos", "lumos"],
-  ["benchy", "benchy"], ["spaghetti", "spaghetti"], ["iddqd", "iddqd"], ["coucou", "coucou"], ["buse", "buse"]];
+  ["benchy", "benchy"], ["spaghetti", "spaghetti"], ["iddqd", "iddqd"], ["coucou", "coucou"], ["buse", "buse"],
+  // lot du 23/10/2026
+  ["g28", "g28"], ["m600", "m600"], ["warping", "warping"], ["stringing", "stringing"], ["octoprint", "octoprint"],
+  ["voron", "voron"], ["jarvis", "jarvis"], ["skynet", "skynet"], ["hodor", "hodor"], ["gandalf", "gandalf"], ["yoda", "yoda"],
+  ["rickroll", "rickroll"], ["pizza", "pizza"], ["abracadabra", "abracadabra"], ["tardis", "tardis"]];
+// Petits effets qui accompagnent certains secrets (rejouables : c'est pour le plaisir)
+const FX = {
+  // retour a l'origine : la page file dans le coin, puis revient
+  g28: () => fxAnim([{ transform: "none" }, { transform: "translate(-45vw,-45vh) scale(.2)", offset: .45 },
+    { transform: "translate(-45vw,-45vh) scale(.2)", offset: .6 }, { transform: "none" }], 1800),
+  // tout danse
+  rickroll: () => fxAnim([0, 1, 2, 3, 4, 5, 6, 7, 8].map(i => ({ transform: i === 8 ? "none" : `rotate(${i % 2 ? 3 : -3}deg) translateY(${i % 2 ? -8 : 0}px)` })), 2400),
+  // disparu… et revenu
+  abracadabra: () => fxAnim([{ opacity: 1, filter: "none" }, { opacity: 0, filter: "blur(12px)", offset: .4 },
+    { opacity: 0, filter: "blur(12px)", offset: .6 }, { opacity: 1, filter: "none" }], 2200),
+  pizza: () => fxRain(["🍕"]),
+  // la buse qui file : des fils partout
+  stringing: () => fxRain(["〰️", "➰", "🧵"]),
+  // la piece qui se souleve dans les coins
+  warping: () => fxAnim([{ transform: "none" }, { transform: "perspective(600px) rotateX(8deg)", offset: .5 }, { transform: "none" }], 1600),
+  // l'ecran qui crie
+  caps_lock: () => fxAnim([{ transform: "none" }, { transform: "scale(1.04)", offset: .2 }, { transform: "scale(.98)", offset: .4 }, { transform: "none" }], 500),
+};
+function fxAnim(frames, ms) {
+  try { (document.querySelector("main.page-content") || document.body).animate(frames, { duration: ms, easing: "ease-in-out" }); } catch { /* sans animations */ }
+}
+function fxRain(set, up = false) {
+  for (let i = 0; i < 22; i++) {
+    const e = document.createElement("span");
+    e.textContent = set[i % set.length];
+    e.setAttribute("aria-hidden", "true");
+    e.style.cssText = `position:fixed;left:${Math.random() * 96}vw;${up ? "bottom" : "top"}:-40px;font-size:${22 + Math.random() * 20}px;` +
+      "z-index:9500;pointer-events:none";
+    document.body.appendChild(e);
+    const a = e.animate([{ transform: "none", opacity: 1 }, { transform: `translateY(${up ? "-" : ""}112vh) rotate(${Math.random() * 360 - 180}deg)`, opacity: .9 }],
+      { duration: 2600 + Math.random() * 1800, delay: Math.random() * 900, easing: "linear", fill: "forwards" });
+    a.onfinish = () => e.remove();
+  }
+}
+const eggFx = name => { egg(name); FX[name]?.(); };
 const escTap = tapper(10, 5000, () => egg("escape"));
 const undoTap = tapper(10, 5000, () => egg("undo"));
 const shiftTap = tapper(5, 2000, () => egg("sticky"));
@@ -152,7 +195,8 @@ export function installEggs() {
   window.__bnEggs = true;
   ensureStyle();
   const K = ["arrowup", "arrowup", "arrowdown", "arrowdown", "arrowleft", "arrowright", "arrowleft", "arrowright", "b", "a"];
-  let ki = 0, word = "";
+  let ki = 0, word = "", held = 0;
+  const capsTap = tapper(12, 8000, () => eggFx("caps_lock"));
   window.addEventListener("keydown", e => {
     const k = (e.key || "").toLowerCase();
     ki = k === K[ki] ? ki + 1 : (k === K[0] ? 1 : 0);
@@ -161,7 +205,7 @@ export function installEggs() {
     const typing = tag === "input" || tag === "textarea" || tag === "select" || e.target?.isContentEditable;
     if (!typing && k.length === 1) {
       word = (word + k).slice(-12);
-      for (const [w, name] of WORDS) if (word.endsWith(w)) egg(name);
+      for (const [w, name] of WORDS) if (word.endsWith(w)) eggFx(name);
     }
     // raccourcis : tout selectionner (hors champ), chercher dans la page, s'evader
     if ((e.ctrlKey || e.metaKey) && k === "a" && !typing) egg("select_all");
@@ -174,7 +218,17 @@ export function installEggs() {
     if (k === "shift" && !e.repeat) shiftTap();
     if (k === "tab") tabTap();
     if (e.altKey && k === "f4") egg("alt_f4");
+    // lot du 23/10/2026 : touches oubliees, raccourcis, majuscules qui crient, touche coincee
+    if (k === "pause") egg("pause_key");
+    if (k === "insert") egg("insert_key");
+    if (k === "f1") { e.preventDefault(); egg("f1"); }
+    if ((e.ctrlKey || e.metaKey) && !typing && (k === "y" || (e.shiftKey && k === "z"))) egg("redo");
+    if ((e.ctrlKey || e.metaKey) && k === "d") egg("bookmark");
+    if (typing && k.length === 1 && /[a-z]/i.test(k) && e.getModifierState?.("CapsLock")) capsTap();
+    if (e.repeat) { if (++held === 80) egg("key_hold"); } else held = 0;
   });
+  // la touche Impr. ecran n'arrive qu'au relachement (le systeme garde l'appui)
+  window.addEventListener("keyup", e => { if ((e.key || "").toLowerCase() === "printscreen") egg("print_screen"); });
   // au doigt : glisser haut, haut, bas, bas, gauche, droite, gauche, droite, puis toucher deux fois
   const S = ["U", "U", "D", "D", "L", "R", "L", "R", "T", "T"];
   let si = 0, x0 = 0, y0 = 0;
@@ -338,6 +392,142 @@ export function installEggs() {
     sessionStorage.setItem("bn-reloads", JSON.stringify(r));
     if (r.length >= 5) setTimeout(() => egg("impatient"), 1500);
   } catch { /* stockage indisponible */ }
+  installEggs2();
+}
+
+// ── Lot du 23/10/2026 ───────────────────────────────────────────────────────
+function installEggs2() {
+  // le chargeur branche pendant qu'on est la
+  try {
+    navigator.getBattery?.().then(b => { b.addEventListener("chargingchange", () => { if (b.charging) egg("plugged"); }); }).catch(() => {});
+  } catch { /* pas d'API batterie */ }
+  // le theme du systeme bascule sous nos yeux
+  try { window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => egg("os_theme")); } catch { /* rien */ }
+  // un stylet, un ecran de cinema
+  window.addEventListener("pointerdown", e => { if (e.pointerType === "pen") egg("stylus"); }, { passive: true });
+  if ((screen.width || 0) * (window.devicePixelRatio || 1) >= 3800) egg("ultra_hd");
+  // trois onglets de l'appli ouverts en meme temps
+  try {
+    const me = Math.random().toString(36).slice(2), seen = new Map();
+    const ch = new BroadcastChannel("bn-eggs");
+    ch.onmessage = ({ data }) => {
+      if (!data?.id) return;
+      seen.set(data.id, Date.now());
+      if (data.t === "hi") ch.postMessage({ t: "here", id: me });
+      const live = [...seen.values()].filter(t => Date.now() - t < 5000).length;
+      if (live >= 2) egg("clones");
+    };
+    ch.postMessage({ t: "hi", id: me });
+  } catch { /* pas de canal */ }
+  // gestes a plusieurs doigts : cinq doigts ; deux doigts qui tournent ; deux doigts tenus la nuit (lampe de poche)
+  let rot = null, torchT = null;
+  const angle = t => Math.atan2(t[1].clientY - t[0].clientY, t[1].clientX - t[0].clientX) * 180 / Math.PI;
+  window.addEventListener("touchstart", e => {
+    if (e.touches.length >= 5) egg("high_five");
+    if (e.touches.length === 2) {
+      rot = { a: angle(e.touches), total: 0 };
+      const h = new Date().getHours();
+      clearTimeout(torchT);
+      if (h >= 21 || h < 6) torchT = setTimeout(torch, 3000);
+    }
+  }, { passive: true });
+  window.addEventListener("touchmove", e => {
+    if (e.touches.length !== 2 || !rot) return;
+    const a = angle(e.touches);
+    let d = a - rot.a;
+    if (d > 180) d -= 360;
+    if (d < -180) d += 360;
+    rot.total += d; rot.a = a;
+    if (Math.abs(d) > 2) clearTimeout(torchT);
+    if (Math.abs(rot.total) > 270) { rot.total = 0; egg("spinner"); }
+  }, { passive: true });
+  window.addEventListener("touchend", e => { if (e.touches.length < 2) { rot = null; clearTimeout(torchT); } }, { passive: true });
+  // le crabe : beaucoup de defilement de cote, a la molette ou au pave
+  let side = 0, sideT = 0;
+  window.addEventListener("wheel", e => {
+    const now = Date.now();
+    if (now - sideT > 5000) side = 0;
+    sideT = now;
+    if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) side += Math.abs(e.deltaX);
+    if (side > 5000) { side = 0; egg("crab"); }
+  }, { passive: true });
+  // heures et jours : l'apero du vendredi, le lundi aux aurores, la pleine lune, midi pile, le dimanche matin, l'heure du the
+  const cal = () => {
+    const d = new Date(), h = d.getHours(), m = d.getMinutes(), day = d.getDay();
+    if (day === 5 && h === 18) egg("apero");
+    if (day === 1 && h >= 5 && h < 7) egg("monday_morning");
+    if (h === 12 && m === 0) egg("noon");
+    if (day === 0 && h >= 6 && h < 8) egg("sunday_early");
+    if (h === 17 && m === 0) egg("tea_time");
+    const phase = (((d.getTime() - Date.UTC(2000, 0, 6, 18, 14)) / 86400000) % 29.530588853 + 29.530588853) % 29.530588853;
+    if (phase > 14.3 && phase < 15.3 && (h >= 20 || h < 6)) egg("full_moon");
+  };
+  cal();
+  document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") cal(); });
+  // dix doubles clics en six secondes
+  const dbl = tapper(10, 6000, () => egg("double_double"));
+  window.addEventListener("dblclick", () => dbl());
+  // une selection gigantesque (hors champ)
+  document.addEventListener("selectionchange", () => {
+    const tag = (document.activeElement?.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea") return;
+    if (String(window.getSelection?.() || "").length > 1500) egg("bookworm");
+  });
+  // la fenetre redimensionnee vingt fois en dix secondes
+  let rz = null;
+  const resizes = tapper(20, 10000, () => egg("resizer"));
+  window.addEventListener("resize", () => { clearTimeout(rz); rz = setTimeout(resizes, 120); });
+  // le centieme lancement sur cet appareil
+  try {
+    const n = (parseInt(localStorage.getItem("bn-launches")) || 0) + 1;
+    localStorage.setItem("bn-launches", String(n));
+    if (n >= 100) egg("launches_100");
+  } catch { /* stockage indisponible */ }
+  // un joker dans un champ
+  window.addEventListener("input", e => { if ((e.target?.tagName || "") === "INPUT" && (e.target.value || "").trim() === "*") egg("wildcard"); });
+  // un cercle bien rond, au doigt ou a la souris (bouton tenu)
+  let path = null;
+  window.addEventListener("pointerdown", e => { path = [[e.clientX, e.clientY]]; }, { passive: true });
+  window.addEventListener("pointermove", e => { if (path && (e.buttons || e.pointerType === "touch")) path.push([e.clientX, e.clientY]); }, { passive: true });
+  window.addEventListener("pointerup", () => { if (path && round(path)) egg("circle"); path = null; }, { passive: true });
+  // ce qui se cache dans les pages : un element marque data-egg, a toucher data-egg-n fois (4 s au plus)
+  const marks = {};
+  window.addEventListener("click", e => {
+    const el = e.target?.closest?.("[data-egg]");
+    if (!el) return;
+    const name = el.getAttribute("data-egg"), n = parseInt(el.getAttribute("data-egg-n")) || 1;
+    if (!marks[name]) marks[name] = tapper(n, 4000, () => egg(name));
+    marks[name]();
+  }, true);
+}
+
+// un trace ferme, assez grand, a rayon regulier : un cercle
+function round(p) {
+  if (p.length < 24) return false;
+  const cx = p.reduce((t, q) => t + q[0], 0) / p.length, cy = p.reduce((t, q) => t + q[1], 0) / p.length;
+  const r = p.map(q => Math.hypot(q[0] - cx, q[1] - cy)), mean = r.reduce((t, x) => t + x, 0) / r.length;
+  if (mean < 50) return false;
+  const dev = Math.sqrt(r.reduce((t, x) => t + (x - mean) ** 2, 0) / r.length) / mean;
+  const closed = Math.hypot(p[0][0] - p[p.length - 1][0], p[0][1] - p[p.length - 1][1]) < mean * 0.45;
+  let turn = 0;
+  for (let i = 1; i < p.length; i++) {
+    let d = Math.atan2(p[i][1] - cy, p[i][0] - cx) - Math.atan2(p[i - 1][1] - cy, p[i - 1][0] - cx);
+    if (d > Math.PI) d -= 2 * Math.PI;
+    if (d < -Math.PI) d += 2 * Math.PI;
+    turn += d;
+  }
+  return closed && dev < 0.12 && Math.abs(turn) > 5.6;
+}
+
+// lampe de poche : l'ecran tout blanc quelques secondes
+function torch() {
+  egg("torch");
+  const w = document.createElement("div");
+  w.setAttribute("aria-hidden", "true");
+  w.style.cssText = "position:fixed;inset:0;z-index:9700;background:#fff;opacity:0;transition:opacity .4s;pointer-events:none";
+  document.body.appendChild(w);
+  requestAnimationFrame(() => { w.style.opacity = "1"; });
+  setTimeout(() => { w.style.opacity = "0"; setTimeout(() => w.remove(), 500); }, 5000);
 }
 
 // Changements de page : 15 en 30 secondes ; cloche : 10 en 5 secondes

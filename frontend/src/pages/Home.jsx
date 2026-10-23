@@ -1422,7 +1422,7 @@ function PrinterPopup({ status, img, name, onClose }) {
               {live && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", marginTop: 3 }}>
                 {status.remaining_minutes > 0 ? `encore ${fmtTime(status.remaining_minutes)}` : "bientôt fini"}{fin ? ` · fin ${fin.time}${plusDays(fin.dayDiff)}` : ""}</div>}
             </div>
-            <div style={{ position: "relative", width: 86, height: 86, flexShrink: 0, gridColumn: narrowPop ? 2 : undefined, gridRow: narrowPop ? 1 : undefined }}>
+            <div data-egg="chrono" data-egg-n="5" style={{ position: "relative", width: 86, height: 86, flexShrink: 0, gridColumn: narrowPop ? 2 : undefined, gridRow: narrowPop ? 1 : undefined }}>
               <svg width="86" height="86" viewBox="0 0 86 86" style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
                 <circle cx="43" cy="43" r="36" fill="none" stroke="rgba(148,163,184,0.25)" strokeWidth="9"/>
                 <circle cx="43" cy="43" r="36" fill="none" stroke={s.color} strokeWidth="9" strokeLinecap="round" strokeDasharray={2 * Math.PI * 36}
@@ -1805,7 +1805,7 @@ function Greeting({ status, o = {} }) {
           WebkitMaskImage: "linear-gradient(90deg, transparent 30%, #000)", maskImage: "linear-gradient(90deg, transparent 30%, #000)" }}/>
       </>}
       <div style={{ position: "relative", display: "flex", alignItems: "center", gap: mini ? "6px 12px" : "10px 16px", flexWrap: "wrap" }}>
-        {opt("icon", true) && <span data-pk="" aria-hidden="true" className="hh-icon" style={{ borderRadius: 16, flexShrink: 0, display: "flex",
+        {opt("icon", true) && <span data-pk="" data-egg="astronome" data-egg-n="7" aria-hidden="true" className="hh-icon" style={{ borderRadius: 16, flexShrink: 0, display: "flex",
           alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.18)", border: "1px solid rgba(255,255,255,0.3)" }}>
           {night ? <Moon size={mini ? 17 : 24}/> : <Sun size={mini ? 17 : 24}/>}</span>}
         <div style={{ flex: "1 1 220px", minWidth: 0 }}>

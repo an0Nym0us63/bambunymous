@@ -2596,7 +2596,7 @@ function Alerts({ a, o, sz }) {
       badge={total ? <span style={{ fontSize: 11, fontWeight: 900, color: "#fff", background: "#f59e0b", borderRadius: 20, padding: "1px 7px" }}>{total}</span> : null}
       zoom={<AllAlertsModal key={pick || "all"} inline initialCat={pick} onChanged={() => window.dispatchEvent(new Event("bn-tiles-reload"))}/>}>
       {({ W, H }) => {
-        if (!cats.length) return <Empty>Rien à signaler.</Empty>;
+        if (!cats.length) return <div data-egg="calme_plat" data-egg-n="5" style={{ flex: 1, display: "flex" }}><Empty>Rien à signaler.</Empty></div>;
         const style = o.style || "chips";
         // liste : une ligne par categorie ; haute, ses premieres alertes dessous
         if (style === "list") {
