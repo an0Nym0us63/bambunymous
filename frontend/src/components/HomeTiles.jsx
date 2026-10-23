@@ -2267,7 +2267,7 @@ function headModel(st) {
     if (a == null && routes) { const p = routes.out_a === id ? routes.in_a : routes.out_b === id ? routes.in_b : null; if (p) { a = p.ams; t = p.tray; } }
     const tr = a != null ? tray(a, t) : null;
     return { n, slot: a != null ? slotLabel(a, t) : null, color: trayCol(tr), type: tr?.spool_info?.fila_type || tr?.filament_type || "",
-      name: tr?.spool_info?.translated_name || tr?.spool_info?.name || "" };
+      name: tr?.spool_info?.translated_name || tr?.spool_info?.name || "", brand: tr?.spool_info?.brand || "" };
   };
   return { L: side(1), R: side(0), dual: nz.length > 1 };
 }
@@ -2327,6 +2327,7 @@ function HeadSide({ s, label, big = false }) {
         border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
       <span style={{ fontSize: big ? 12 : 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
         {s.slot ? [s.slot, big ? (s.name || s.type) : s.type].filter(Boolean).join(" · ") : "rien de chargé"}</span></div>
+    {big && s.slot && (s.type || s.brand) && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{[s.name && s.type, s.brand].filter(Boolean).join(" · ")}</span>}
   </div>;
 }
 function Toolhead({ status, sz }) {
@@ -2344,11 +2345,16 @@ function Toolhead({ status, sz }) {
         // une ligne par buse : son cote (vert si elle imprime), le filament, la temperature, son etat si la place le permet
         const lines = <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 5 }}>
           {[["G", m.L], ["D", m.R]].map(([k, s]) => s && <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 800, minWidth: 0 }}>
-            <span style={{ width: 16, color: s.n.active ? "#16a34a" : "var(--muted)" }}>{k}</span>
+            <span style={{ width: 16, flexShrink: 0, color: s.n.active ? "#16a34a" : "var(--muted)" }}>{k}</span>
             <span style={{ width: 11, height: 11, borderRadius: 3, flexShrink: 0, background: s.color || "transparent", border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
-            <span style={{ color: s.n.temp > 40 ? heat(s.n.temp) : "var(--text)" }}>{Math.round(s.n.temp)}°</span>
-            {W >= 230 && <span style={{ fontSize: 11, color: s.n.active ? "#16a34a" : "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {s.n.active ? "● imprime" : k === "G" ? "levée" : "au repos"}{s.slot ? ` · ${s.slot}` : ""}</span>}</div>)}</div>;
+            <span style={{ width: 38, flexShrink: 0, color: s.n.temp > 40 ? heat(s.n.temp) : "var(--text)" }}>{Math.round(s.n.temp)}°</span>
+            {/* le filament : son nom, et dessous l'etat, l'emplacement, la matiere et la marque */}
+            {(W >= 230 || (H >= 150 && W >= 140)) && <span style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {s.name || s.type || (s.slot ? "filament inconnu" : "rien de chargé")}</span>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: s.n.active ? "#16a34a" : "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {[s.n.active ? "● imprime" : k === "G" ? "levée" : "au repos", s.slot, s.name && s.type, s.brand].filter(Boolean).join(" · ")}</span></span>}
+          </div>)}</div>;
         // bas : le dessin a gauche, les buses a cote ; haut : le dessin centre, les buses dessous (en cartes si la place le permet)
         if (H < 150) return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
           <HeadArt st={status} h={Math.max(50, Math.min(H - 4, 120, W * 0.42 * 170 / 200))}/>{lines}</div>;
