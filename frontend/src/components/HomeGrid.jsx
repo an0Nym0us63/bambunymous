@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X, Palette, Copy, Heading, Trash2, Pencil } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X, Palette, Copy, Heading, Trash2, Pencil, Send } from "lucide-react";
 import client from "../api/client";
 import { currentFriend, useFriend } from "../store/friend";
 import { toast } from "../store/toast";
@@ -137,6 +137,7 @@ function normalize(lay, defs) {
   for (const n of [1, 2, 3, 4]) if (lay.layouts?.[n]) layouts[n] = cleanCols(lay.layouts[n], n === 1 ? Math.max(1, Math.min(MAX_PAGES, lay.layouts[1].length)) : n, defs);
   if (!Object.keys(layouts).length) return defaults(defs);
   return { v: 2, max: Math.max(1, Math.min(4, parseInt(lay.max) || 2)), layouts,
+    ...(lay.bannerAll === true ? { bannerAll: true } : {}),
     ...(Array.isArray(lay.pageNames) ? { pageNames: lay.pageNames.slice(0, MAX_PAGES).map(x => String(x || "").slice(0, PAGE_NAME_MAX)) } : {}),
     ...(lay.top && typeof lay.top === "object" ? { top: lay.top } : {}),
     ...(["soft", "vivid", "banner"].includes(lay.tint) ? { tint: lay.tint } : {}),
@@ -164,12 +165,18 @@ function layoutFor(lay, n) {
 // cote, qu'on fait glisser au doigt ; apres le dernier revient le premier. Chacun a un nom bref.
 const MAX_PAGES = 4, PAGE_NAME_MAX = 16, PAGE_KEY = "bnHomePage";
 const pageName = (lay, i) => (lay.pageNames?.[i] || "").trim() || `Écran ${i + 1}`;
-// un element qui defile deja de cote (ou qui prend le geste : curseur, champ) garde le glissement
-function ownsSwipe(t, stop) {
+// qui prend le geste : un champ ou un curseur, toujours ; un element qui defile de cote, seulement s'il
+// peut encore aller dans ce sens (un debordement de quelques pixels, ou un rang deja au bout, laisse
+// passer l'ecran). dir : -1 le doigt va a gauche, 1 a droite, 0 pas encore connu
+function ownsSwipe(t, stop, dir = 0) {
   for (let n = t; n && n !== stop; n = n.parentElement) {
     if (n.dataset?.noswipe != null || /^(INPUT|TEXTAREA|SELECT)$/.test(n.tagName)) return true;
     const ox = getComputedStyle(n).overflowX;
-    if ((ox === "auto" || ox === "scroll") && n.scrollWidth > n.clientWidth + 2) return true;
+    if ((ox === "auto" || ox === "scroll") && n.scrollWidth > n.clientWidth + 8) {
+      if (!dir) return true;
+      if (dir < 0 && n.scrollLeft < n.scrollWidth - n.clientWidth - 2) return true;
+      if (dir > 0 && n.scrollLeft > 2) return true;
+    }
   }
   return false;
 }
@@ -178,6 +185,15 @@ function ownsSwipe(t, stop) {
 // la page defile comme d'habitude ; plutot horizontal, l'ecran suit le doigt.
 function Pager({ count, cur, onGo, children }) {
   const box = useRef(null);
+  // jusqu'en bas de l'ecran (au-dessus de la barre du bas) : un ecran peu rempli se glisse partout
+  const [minH, setMinH] = useState(0);
+  useLayoutEffect(() => {
+    const f = () => { const el = box.current; if (!el) return;
+      const nav = document.querySelector("nav.show-mobile"), navH = nav && nav.offsetWidth ? nav.getBoundingClientRect().height : 0;
+      setMinH(Math.max(0, Math.round(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY) - navH - 12))); };
+    f(); window.addEventListener("resize", f);
+    return () => window.removeEventListener("resize", f);
+  }, [count, cur]);
   const [drag, setDrag] = useState(0);
   const [anim, setAnim] = useState(false);
   const g = useRef(null);
@@ -189,7 +205,7 @@ function Pager({ count, cur, onGo, children }) {
     const start = e => {
       if (st.current.count < 2 || e.touches.length !== 1) { g.current = null; return; }
       const t = e.touches[0];
-      g.current = { x: t.clientX, y: t.clientY, t: Date.now(), dx: 0, lock: ownsSwipe(e.target, el) ? "skip" : null };
+      g.current = { x: t.clientX, y: t.clientY, t: Date.now(), dx: 0, lock: null, target: e.target };
     };
     const move = e => {
       const s = g.current;
@@ -197,8 +213,8 @@ function Pager({ count, cur, onGo, children }) {
       const t = e.touches[0], dx = t.clientX - s.x, dy = t.clientY - s.y;
       if (!s.lock) {
         if (Math.abs(dx) < 9 && Math.abs(dy) < 9) return;
-        s.lock = Math.abs(dx) > Math.abs(dy) * 1.25 ? "h" : "v";
-        if (s.lock === "v") return;
+        s.lock = Math.abs(dx) > Math.abs(dy) * 1.25 ? (ownsSwipe(s.target, el, dx < 0 ? -1 : 1) ? "skip" : "h") : "v";
+        if (s.lock !== "h") return;
       }
       e.preventDefault();
       s.dx = dx; setAnim(false); setDrag(dx);
@@ -230,7 +246,7 @@ function Pager({ count, cur, onGo, children }) {
     return null;
   };
   const tr = anim ? "transform .23s cubic-bezier(.2,.7,.3,1)" : "none";
-  return <div ref={box} style={{ position: "relative", overflowX: "clip", touchAction: "pan-y" }}>
+  return <div ref={box} style={{ position: "relative", overflowX: "clip", touchAction: "pan-y", minHeight: count > 1 ? minH : undefined }}>
     {[...Array(count).keys()].map(i => { const k = at(i);
       return <div key={i} aria-hidden={i !== cur} style={i === cur ? { position: "relative", transform: `translateX(${drag}px)`, transition: tr }
         : { position: "absolute", top: 0, left: 0, width: "100%", visibility: k == null ? "hidden" : "visible", pointerEvents: "none",
@@ -425,24 +441,33 @@ const btn = (on = false) => ({ display: "inline-flex", alignItems: "center", jus
   padding: "0 5px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 800,
   color: on ? "#0f172a" : "#fff", background: on ? "#fff" : "rgba(255,255,255,0.14)" });
 
-// La barre des ecrans : un point par ecran (le courant, allonge, porte son nom) ; en reglage, des
-// onglets nommes, et de quoi renommer, ajouter (quatre au plus) ou supprimer l'ecran courant.
-function PageBar({ names, cur, edit, onGo, renaming, setRenaming, onRename, onAdd, onDel }) {
-  if (!edit) return <div style={{ display: "flex", justifyContent: "center", alignItems: "center", gap: 6 }}>
-    {names.map((nm, i) => <button key={i} type="button" onClick={() => onGo(i)} aria-label={nm} title={nm}
-      style={{ height: 22, minWidth: i === cur ? 0 : 22, padding: i === cur ? "0 10px" : 0, borderRadius: 11, border: "none", cursor: "pointer",
-        display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 5, background: i === cur ? "var(--surface2)" : "transparent",
-        color: "var(--text2)", fontSize: 11.5, fontWeight: 800 }}>
-      <span style={{ width: 7, height: 7, borderRadius: "50%", background: i === cur ? "#3b82f6" : "var(--muted)", opacity: i === cur ? 1 : 0.5 }}/>
-      {i === cur && nm}</button>)}
-  </div>;
+// Ou l'on est : un fin trait par ecran, colle au-dessus de la barre du bas (rien ne se decale), le
+// courant plus long et en couleur ; le nom de l'ecran s'affiche juste au-dessus a chaque changement.
+function PageDots({ names, cur, onGo, flash }) {
+  const nav = document.querySelector("nav.show-mobile");
+  const bottom = (nav && nav.offsetWidth ? nav.getBoundingClientRect().height : 0) + 6;
+  // a la racine de la page : un parent transforme ferait d'un « fixed » un simple « absolute »
+  return createPortal(<>
+    {flash != null && <div style={{ position: "fixed", left: "50%", bottom: bottom + 18, zIndex: 40, pointerEvents: "none", padding: "5px 13px",
+      borderRadius: 20, fontSize: 12.5, fontWeight: 900, color: "#fff", background: "rgba(15,23,42,0.82)", boxShadow: "0 6px 18px rgba(0,0,0,0.3)",
+      whiteSpace: "nowrap", animation: "hgFlash 1.3s ease forwards" }}>{names[flash]}</div>}
+    <div style={{ position: "fixed", left: "50%", transform: "translateX(-50%)", bottom, zIndex: 40, display: "flex", gap: 3 }}>
+      {names.map((nm, i) => <button key={i} type="button" onClick={() => onGo(i)} aria-label={nm} title={nm}
+        style={{ padding: "6px 2px", border: "none", background: "transparent", cursor: "pointer", display: "flex" }}>
+        <span style={{ display: "block", height: 4, width: i === cur ? 26 : 10, borderRadius: 4, transition: "width .2s, background .2s",
+          background: i === cur ? "#3b82f6" : "var(--muted)", opacity: i === cur ? 1 : 0.45, boxShadow: "0 0 0 1px rgba(0,0,0,0.08)" }}/></button>)}
+    </div>
+  </>, document.body);
+}
+// En reglage : des onglets nommes, et de quoi renommer, ajouter (quatre au plus) ou supprimer l'ecran courant.
+function PageBar({ names, cur, onGo, renaming, setRenaming, onRename, onAdd, onDel, bannerAll, setBannerAll, hasBanner }) {
   const tab = on => ({ height: 32, padding: "0 10px", borderRadius: 10, cursor: "pointer", fontWeight: 800, fontSize: 12.5, whiteSpace: "nowrap",
     display: "inline-flex", alignItems: "center", gap: 6, border: `1px solid ${on ? "#3b82f6" : "var(--border)"}`,
     background: on ? "rgba(59,130,246,0.12)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--text2)" });
   return <div className="card" style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, border: "1px dashed rgba(59,130,246,0.5)" }}>
     <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4 }}>
       Les écrans du téléphone se font glisser au doigt (après le dernier revient le premier). Touche l'écran courant pour le renommer ;
-      les flèches ← → d'une tuile l'envoient sur l'écran voisin.</div>
+      le bouton « Écran » d'une tuile l'envoie sur l'écran de ton choix.</div>
     <div data-noswipe="" style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
       {names.map((nm, i) => i === cur && renaming
         ? <input key={i} autoFocus defaultValue={nm.startsWith("Écran ") ? "" : nm} placeholder={nm} maxLength={PAGE_NAME_MAX}
@@ -456,6 +481,11 @@ function PageBar({ names, cur, edit, onGo, renaming, setRenaming, onRename, onAd
       {onDel && <button type="button" onClick={onDel} style={{ ...tab(false), marginLeft: "auto", color: "#ef4444" }} title="Supprimer cet écran">
         <Trash2 size={14}/></button>}
     </div>
+    {hasBanner && names.length > 1 && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+      <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>Bandeau d'accueil</span>
+      {[[false, "sur le premier écran"], [true, "sur tous les écrans"]].map(([v, l]) => <button key={l} type="button" onClick={() => setBannerAll(v)}
+        style={{ ...tab(!!bannerAll === v), height: 28 }}>{l}</button>)}
+    </div>}
   </div>;
 }
 
@@ -477,6 +507,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
   const [page, setPageState] = useState(() => { try { return Math.max(0, parseInt(localStorage.getItem(PAGE_KEY)) || 0); } catch { return 0; } });
   const [flash, setFlash] = useState(null);
   const [renaming, setRenaming] = useState(false);
+  const [sendFor, setSendFor] = useState(null);      // la tuile dont le choix « envoyer vers un ecran » est ouvert
   // combien de colonnes tiennent vraiment a l'ecran
   const box = useRef(null);
   const [fit, setFit] = useState(() => Math.max(1, Math.floor((window.innerWidth - 280 + 12) / (COL_MIN + 12))));
@@ -645,12 +676,16 @@ export default function HomeGrid({ status, blocks, top = null }) {
     if (!def) return null;
     const p = where(item.id);
     const actions = <>
-      {cols.length > 1 && (paged ? <>
-        <button style={btn()} onClick={() => toPage(item.id, (p[0] - 1 + nPages) % nPages)} aria-label="Vers l'écran précédent"
-          title={`Vers « ${pageName(lay, (p[0] - 1 + nPages) % nPages)} »`}><ArrowLeft size={13}/></button>
-        <button style={btn()} onClick={() => toPage(item.id, (p[0] + 1) % nPages)} aria-label="Vers l'écran suivant"
-          title={`Vers « ${pageName(lay, (p[0] + 1) % nPages)} »`}><ArrowRight size={13}/></button>
-      </> : <>
+      {cols.length > 1 && (paged ? <span style={{ position: "relative", display: "inline-flex" }}>
+        <button style={{ ...btn(sendFor === item.id), padding: "0 7px", gap: 4 }} onClick={() => setSendFor(f => f === item.id ? null : item.id)}
+          aria-label="Envoyer vers un autre écran" title="Envoyer vers un autre écran"><Send size={12}/>Écran</button>
+        {sendFor === item.id && <span style={{ position: "absolute", top: 30, left: 0, zIndex: 30, display: "flex", flexDirection: "column", gap: 4, padding: 6,
+          borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 10px 26px rgba(0,0,0,0.3)", minWidth: 150 }}>
+          {[...Array(nPages).keys()].filter(i => i !== p[0]).map(i => <button key={i} onClick={() => { toPage(item.id, i); setSendFor(null); }}
+            style={{ textAlign: "left", padding: "7px 10px", borderRadius: 8, border: "none", cursor: "pointer", background: "var(--surface2)",
+              color: "var(--text)", fontSize: 12.5, fontWeight: 800, whiteSpace: "nowrap" }}>→ {pageName(lay, i)}</button>)}
+        </span>}
+      </span> : <>
         <button style={btn()} disabled={p[0] === 0} onClick={() => move(item.id, -1, 0)} aria-label="Colonne de gauche"><ArrowLeft size={13}/></button>
         <button style={btn()} disabled={p[0] === cols.length - 1} onClick={() => move(item.id, 1, 0)} aria-label="Colonne de droite"><ArrowRight size={13}/></button>
       </>)}
@@ -691,7 +726,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
   const optDef = optItem ? defs[optItem.id] : null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
-      {top && (
+      {top && (!paged || nPages < 2 || cur === 0 || edit || lay.bannerAll) && (
         <div style={{ position: "relative", ...(edit ? { outline: "2px dashed rgba(59,130,246,0.55)", outlineOffset: 3, borderRadius: 18 } : {}) }}>
           {top.render(topOpts)}
           {edit && <button onClick={() => setOptFor("top")} aria-label="Réglages du bandeau" title="Réglages du bandeau"
@@ -729,7 +764,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
         onChange={(k, v) => update(optItem.id, { o: { ...(optItem.o || {}), [k]: v } })} onClose={() => setOptFor(null)}/>}
       <style>{`
         .hg-cols { display:grid; gap:12px; align-items:start; }
-        @keyframes hgFlash { 0% { opacity:0; transform:translate(-50%, -6px) } 15%, 70% { opacity:1; transform:translate(-50%, 0) } 100% { opacity:0 } }
+        @keyframes hgFlash { 0% { opacity:0; transform:translate(-50%, 6px) } 15%, 70% { opacity:1; transform:translate(-50%, 0) } 100% { opacity:0 } }
         .hg-col { display:grid; grid-template-columns:repeat(2, minmax(0,1fr)); column-gap:10px; grid-auto-rows:${UNIT}px; row-gap:0;
                   grid-auto-flow:row dense; min-width:0; }
         .hg-cell:not(.hg-edit):has(> div:empty) { display:none; }
@@ -953,13 +988,12 @@ export default function HomeGrid({ status, blocks, top = null }) {
         // le telephone : les ecrans, la barre qui les nomme (en reglage : renommer, ajouter, supprimer)
         return <div ref={box} style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0,
           ...(edit && wide ? { width: "100%", maxWidth: 420, margin: "0 auto" } : {}) }}>
-          {(nPages > 1 || edit) && <PageBar names={[...Array(nPages).keys()].map(i => pageName(lay, i))} cur={cur} edit={edit} onGo={i => goPage(i, true)}
+          {edit && <PageBar names={[...Array(nPages).keys()].map(i => pageName(lay, i))} cur={cur} onGo={i => goPage(i, true)}
             renaming={renaming} setRenaming={setRenaming} onRename={v => setNames(x => x.map((y, i) => i === cur ? v : y))}
-            onAdd={nPages < MAX_PAGES ? addPage : null} onDel={nPages > 1 ? delPage : null}/>}
+            onAdd={nPages < MAX_PAGES ? addPage : null} onDel={nPages > 1 ? delPage : null} hasBanner={!!top}
+            bannerAll={lay.bannerAll} setBannerAll={v => setLay(l => { const y = { ...l }; if (v) y.bannerAll = true; else delete y.bannerAll; return y; })}/>}
+          {!edit && nPages > 1 && <PageDots names={[...Array(nPages).keys()].map(i => pageName(lay, i))} cur={cur} onGo={i => goPage(i)} flash={flash}/>}
           <div style={{ position: "relative" }}>
-            {flash != null && !edit && <div style={{ position: "absolute", top: 6, left: "50%", transform: "translateX(-50%)", zIndex: 5, pointerEvents: "none",
-              padding: "6px 14px", borderRadius: 20, fontSize: 13, fontWeight: 900, color: "#fff", background: "rgba(15,23,42,0.82)",
-              boxShadow: "0 6px 18px rgba(0,0,0,0.3)", animation: "hgFlash 1.3s ease forwards", whiteSpace: "nowrap" }}>{pageName(lay, flash)}</div>}
             <Pager count={nPages} cur={cur} onGo={i => goPage(i)}>
               {i => <div className="hg-cols" style={{ gridTemplateColumns: "minmax(0,1fr)" }}>{column(cols[i], i)}</div>}
             </Pager>
