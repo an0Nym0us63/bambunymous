@@ -1674,9 +1674,11 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
               textOverflow: "ellipsis", lineHeight: 1.2 }}><Words text={info?.file_name || status?.print_name || "Imprimante"}/></span>
-            {(!live || paused || !s.plain) && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
-              borderRadius: 20, whiteSpace: "nowrap", color: s.color, background: `${s.color}1f` }}>
-              <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
+            {/* l'etape, toujours : « Impression » quand elle imprime, sinon chauffe, calibration, raison d'une pause… */}
+            <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
+              borderRadius: 20, whiteSpace: "nowrap", color: s.color, background: `${s.color}1f`, flexShrink: 0 }}>
+              <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color, ...(s.plain ? { animation: "livePulse 2s infinite" } : {}) }}/>
+              {s.plain ? "Impression" : s.label}</span>
           </div>
           {live ? <>
             {/* une seule ligne : ce qui ne tient pas est coupe, jamais renvoye a la ligne */}
