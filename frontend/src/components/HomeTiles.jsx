@@ -1356,9 +1356,9 @@ const tempRows = (status, o) => {
   const nz = [...(status.nozzles || [])].sort((a, b) => b.id - a.id);   // gauche (1) puis droite (0)
   const bed = { k: "bed", ico: IcoBed, l: "Plateau", v: status.bed_temp, t: status.target_bed_temp, max: 120, c: "#ef4444" };
   return [
-    bed,
     ...nz.map(n => ({ k: `n${n.id}`, ico: IcoNozzle, l: nz.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", v: n.temp, t: n.target, max: 300, c: "#f97316" })),
     ...(!nz.length && status.nozzle_temp != null ? [{ k: "n", ico: IcoNozzle, l: "Buse", v: status.nozzle_temp, t: status.target_nozzle_temp, max: 300, c: "#f97316" }] : []),
+    bed,
     ...(o.chamber && status.chamber_temp > 0 ? [{ k: "ch", ico: IcoChamber, l: "Chambre", v: status.chamber_temp, t: status.target_chamber_temp, max: 70, c: "#eab308" }] : []),
   ];
 };
