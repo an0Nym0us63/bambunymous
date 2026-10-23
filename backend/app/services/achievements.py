@@ -5575,6 +5575,13 @@ def _sets(out: dict, st: dict) -> None:
         out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {}}
 
 
+def joker_members(rank: str, android: bool) -> list:
+    """Les cartes qu'un Joker demande : toutes celles de ce rang, sections et tiroirs ; celle du
+    tiroir Android seulement si l'appli sert dans la maison (sinon le Joker serait impossible)."""
+    return [m["id"] for m in CATALOG if m["cat"] == "cards" and not m.get("joker") and m["card_tier"]["id"] == f"card_{rank}"
+            and (android or (m.get("pile") or ("",))[0] != "android")]
+
+
 def _cards(out: dict) -> None:
     """Cartes des tiroirs (le n-ieme secret trouve date la carte) puis Jokers
     (la derniere carte du rang). Les cartes des sections sont des collections."""
@@ -5595,11 +5602,12 @@ def _cards(out: dict) -> None:
             mem = _members(cat, i)
             n = sum(1 for m in mem if (out.get(m["id"]) or {}).get("reached", {}).get(str(i)))
             out[a["id"]]["prog"] = [n, len(mem)]
+    # le tiroir Android ne compte pour les Jokers que si l'appli sert dans la maison (sinon ils seraient impossibles)
+    android = any(got(f"egg_{k}") for k in ANDROID_EGGS)
     for a in CATALOG:
         if not a.get("joker"):
             continue
-        mem = [m["id"] for m in CATALOG if m["cat"] == "cards" and not m.get("joker")
-               and m["card_tier"]["id"] == f"card_{a['joker']}"]
+        mem = joker_members(a["joker"], android)
         dates = [got(m) for m in mem]
         ok = bool(mem) and all(dates)
         out[a["id"]] = {"value": 1 if ok else 0, "reached": {"0": max(dates)} if ok else {},
