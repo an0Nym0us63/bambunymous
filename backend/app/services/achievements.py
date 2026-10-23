@@ -5321,6 +5321,77 @@ async def secrets_by_account(usernames: list) -> list:
     return out
 
 
+# ── La famille (24/10/2026) : des comptes de la maison qui cherchent les secrets pour eux ──
+# Seulement ce qui se trouve en cherchant (easter eggs, cachettes, Android, farces, fetes, pages
+# cachees). Chacun a les siens ; ce que la maison a deja se voit comme chez un copain : categorie,
+# medaille et titre, « untel l'a deja ». Le reste des succes reste celui de la maison.
+FAMILY_SUBS = ("eggs", "cachettes", "android", "pranks", "fetes", "hidden")
+FAMILY_IDS = {aid for sid, _e, _n, ids in SECRET_SUBS if sid in FAMILY_SUBS
+              for aid in ids.split() if aid.startswith("egg_") and aid not in ONLY_WON}
+
+
+async def family() -> dict:
+    """{"secrets": [comptes qui ont leurs propres secrets], "wheel": [comptes qui peuvent tourner la roue]}."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        try:
+            d = json.loads(await get_setting(db, KEY + "_FAMILY", "") or "{}")
+        except ValueError:
+            d = {}
+    d = d if isinstance(d, dict) else {}
+    return {k: [str(x) for x in (d.get(k) or []) if isinstance(x, str)] for k in ("secrets", "wheel")}
+
+
+async def set_family(secrets=None, wheel=None) -> dict:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    d = await family()
+    if secrets is not None:
+        d["secrets"] = sorted({str(x).strip() for x in secrets if str(x).strip()})
+    if wheel is not None:
+        d["wheel"] = sorted({str(x).strip() for x in wheel if str(x).strip()})
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, KEY + "_FAMILY", json.dumps(d))
+    return d
+
+
+def family_view(v: dict, mine: dict, house: str) -> dict:
+    """La page vue par un compte de la famille : ses secrets a lui (entiers), ceux de la maison
+    qu'il n'a pas encore « a portee » (titre, medaille, categorie ; ni descriptif, ni histoire)."""
+    medals = dict(v["medals"])
+    score = v["score"]
+    items = []
+    for it in v["items"]:
+        aid = it["id"]
+        if aid not in FAMILY_IDS:
+            items.append(it)
+            continue
+        a, k = BY_ID[aid], aid[4:]
+        t0 = tiers_of(a)[0]
+        base = {**it, "emoji": a["emoji"], "name": a["name"], "sub": a.get("sub") or SUB_OF.get(aid), "gift_from": [],
+                "next": None, "prev": a["tiers"][0]}
+        if k in mine:
+            if it["level"] < 0:
+                medals[t0["id"]] = medals.get(t0["id"], 0) + 1
+                score += t0["score"]
+            at = mine[k] or it["tiers"][0].get("at")
+            items.append({**base, "level": 0, "reveal": len(REVEALS), "hint": None, "masked": False,
+                          "desc": describe(a, a["tiers"][0]), "lore": a.get("lore"),
+                          "tiers": [{**it["tiers"][0], "at": at}]})
+        elif it["level"] >= 0:
+            medals[t0["id"]] = max(0, medals.get(t0["id"], 0) - 1)
+            score -= t0["score"]
+            items.append({**base, "level": -1, "reveal": max(it.get("reveal") or 0, FREE_FROM_FRIENDS), "hint": None,
+                          "masked": True, "desc": "Descriptif caché", "lore": None, "house": house,
+                          "tiers": [{**it["tiers"][0], "at": None}]})
+        else:
+            items.append(it)
+    found = sum(1 for aid in FAMILY_IDS if aid[4:] in mine)
+    return {**v, "items": items, "medals": medals, "score": score,
+            "family": {"house": house, "found": found, "total": len(FAMILY_IDS)}}
+
+
 async def eggs_found() -> dict:
     """Les easter eggs trouves : {nom: date}."""
     from ..db.session import AsyncSessionLocal

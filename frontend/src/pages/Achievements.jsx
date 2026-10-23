@@ -69,7 +69,9 @@ export default function Achievements({ embedded = false }) {
     try { await client.post(`/achievements/keys/${aid}`); await load(); }
     catch (e) { setKeyErr(e.response?.data?.detail || e.message); }
   };
-  const canSpend = isAdmin && !atFriend && !!data?.keys;
+  // cles et tickets : le compte principal seul ; la roue : lui, ou un compte a qui il l'a permise
+  const canSpend = isAdmin && !atFriend && !!data?.keys && data?.me?.main !== false;
+  const canSpin = !atFriend && !!data?.keys?.wheel && (canSpend || !!data?.me?.wheel);
   // ticket de palier : passer un succes a son palier suivant
   const [ceremony, setCeremony] = useState(null);
   const useTicket = async aid => {
@@ -100,8 +102,10 @@ export default function Achievements({ embedded = false }) {
     const add = (ids, name) => (ids || []).forEach(id => { (out[id] = out[id] || []).push(name); });
     if (atFriend) add(mine?.uniques, "Toi");
     else for (const p of pod?.people || []) if (!p.me && p.status === "ok") add(p.uniques, p.name);
+    // compte de la famille : ce que la maison a deja trouve et lui pas encore
+    if (!atFriend) for (const it of data?.items || []) if (it.house && it.level < 0 && !(out[it.id] || []).includes(it.house)) add([it.id], it.house);
     return out;
-  }, [pod, mine, atFriend]);
+  }, [pod, mine, atFriend, data]);
   // En visite : parmi ses medailles uniques, celles que j'ai aussi (ou pas)
   const mineSet = useMemo(() => atFriend && mine ? new Set(mine.uniques || []) : null, [mine, atFriend]);
   const shared = it => mineSet && it.tiers.length === 1 && it.level >= 0 ? mineSet.has(it.id) : undefined;
@@ -170,7 +174,7 @@ export default function Achievements({ embedded = false }) {
           </div>
         </div>
         {data.keys && !atFriend && <Treasure keys={data.keys} onRules={() => setRules(true)} onSpent={canSpend ? load : null}
-          onWheel={canSpend && data.keys.wheel ? () => setSlot(true) : null}/>}
+          onWheel={canSpin ? () => setSlot(true) : null}/>}
       </div>
 
       {/* Podium general entre copains */}
@@ -289,10 +293,14 @@ export default function Achievements({ embedded = false }) {
                   </div>
                 )}
                 {/* Legende des reperes entre copains (ce qui s'applique ici seulement) */}
-                {c.id === "secret" && (near > 0 || common + toFind > 0) && (
+                {c.id === "secret" && (near > 0 || common + toFind > 0 || data.family) && (
                   <div style={{ display:"flex", flexDirection:"column", gap:4, padding:"8px 10px", borderRadius:10, fontSize:11.5,
                     lineHeight:1.45, color:"var(--text2)", background:"rgba(245,158,11,0.08)", border:"1px dashed rgba(245,158,11,0.5)" }}>
-                    {near > 0 && !atFriend && <span><b style={{ color:"#F59E0B" }}>👀 À portée</b> : pas encore à toi, mais un copain l'a déjà
+                    {data.family && <span><b style={{ color:"#EC4899" }}>🥚 Tes trouvailles : {data.family.found} / {data.family.total}</b>.
+                      Easter eggs, cachettes, Android, farces, fêtes et pages cachées : ici, ce sont les tiennes. Le reste des succès est celui
+                      de la maison.</span>}
+                    {near > 0 && !atFriend && <span><b style={{ color:"#F59E0B" }}>👀 À portée</b> : pas encore à toi, mais {data.family
+                      ? "quelqu'un de la maison ou un copain" : "un copain"} l'a déjà
                       débloqué (son initiale est sur la médaille). Rien n'est dévoilé : à toi de trouver comment.</span>}
                     {near > 0 && atFriend && <span><b style={{ color:"#F59E0B" }}>« toi »</b> : tu l'as déjà, lui pas encore.</span>}
                     {common + toFind > 0 && <span><b style={{ color:"#22c55e" }}>✓ toi aussi</b> / <b style={{ color:"#ef4444" }}>pas toi</b> :
@@ -1688,6 +1696,13 @@ function Rules({ data, onClose }) {
           montre le palier de chacun ; dans la grille, ▲ signale un copain devant toi.</P>
         <P>Un secret qu'un copain a déjà est <b>cerclé</b> chez toi, et ses trois premières étapes te sont offertes
           (« grâce à … »). Ses descriptifs restent cachés, sauf si tu as le droit de voir ses secrets.</P>
+
+        <H>🏠 Les comptes de la maison</H>
+        <P>Les <b>clés</b> et les <b>tickets</b> ne se dépensent que depuis le compte principal. La <b>roue</b> aussi, sauf
+          pour un compte à qui il l'a permise : le lot va alors à la maison.</P>
+        <P>Un compte de la <b>famille</b> (case cochée par l'administrateur) cherche les easter eggs, cachettes, secrets Android,
+          farces, fêtes et pages cachées pour lui-même : il voit ses trouvailles en entier, et celles de la maison comme chez un
+          copain (catégorie, médaille et titre, « untel l'a déjà »). Le reste des succès est celui de la maison.</P>
       </div>
     </div>
   );

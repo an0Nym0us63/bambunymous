@@ -30,15 +30,57 @@ async def achievements_users(db: AsyncSession = Depends(get_db), _: str = Depend
     """Comptes de la maison, et ceux dont l'activite fait avancer les succes."""
     from ....services import achievements as A
     counted = set(await A.counted_users())
+    fam = await A.family()
+    main = await _main_name(db)
     rows = (await db.execute(select(User.username, User.role, User.active, User.friend_key_hash))).all()
-    return [{"username": u, "role": r, "active": bool(a), "friend": bool(fk), "counted": u in counted}
+    return [{"username": u, "role": r, "active": bool(a), "friend": bool(fk), "counted": u in counted, "main": u == main,
+             "family": u in fam["secrets"] and u != main, "wheel": u == main or u in fam["wheel"]}
             for u, r, a, fk in rows]
 
 
 @router.put("/users")
 async def achievements_users_set(body: dict = Body(...), _: str = Depends(require_admin)):
     from ....services import achievements as A
-    return {"counted": await A.set_counted_users(body.get("counted") or [])}
+    out = {}
+    if "counted" in body:
+        out["counted"] = await A.set_counted_users(body.get("counted") or [])
+    if "family" in body or "wheel" in body:
+        out.update(await A.set_family(body.get("family"), body.get("wheel")))
+    return out
+
+
+async def _main_name(db) -> str | None:
+    """Le compte principal (celui des cles, des tickets et de la roue)."""
+    from .users import _root_admin_id
+    mid = await _root_admin_id(db)
+    u = await db.get(User, mid) if mid else None
+    return u.username if u else None
+
+
+async def _me(username: str, db) -> dict:
+    """Ce compte, pour la page des succes : principal, famille (ses propres secrets), roue."""
+    from ....services import achievements as A
+    fam = await A.family()
+    main = await _main_name(db)
+    is_main = username == main
+    return {"main": is_main, "house": main, "family": not is_main and username in fam["secrets"],
+            "wheel": is_main or username in fam["wheel"]}
+
+
+async def require_main(username: str = Depends(get_current_user), _: str = Depends(require_admin),
+                       db: AsyncSession = Depends(get_db)) -> str:
+    """Cles et tickets : le compte principal seul (les autres comptes jouent, ils ne depensent pas)."""
+    if not (await _me(username, db))["main"]:
+        raise HTTPException(403, "Réservé au compte principal")
+    return username
+
+
+async def require_wheel(acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)) -> str:
+    """La roue : le compte principal, ou un compte a qui il l'a permis, meme en lecture seule (le lot va a la maison)."""
+    username = acc[0]
+    if not (await _me(username, db))["wheel"]:
+        raise HTTPException(403, "La roue n'est pas ouverte à ce compte")
+    return username
 
 
 @router.get("/passage")
@@ -201,7 +243,7 @@ async def achievements_egg(name: str, acc=Depends(require_own_account)):
 
 
 @router.post("/wheel/spin")
-async def achievements_spin(_: str = Depends(require_admin)):
+async def achievements_spin(_: str = Depends(require_wheel)):
     """Un tour de roue : tire le lot cote serveur et l'applique."""
     from ....services import achievements as A
     try:
@@ -211,7 +253,7 @@ async def achievements_spin(_: str = Depends(require_admin)):
 
 
 @router.post("/wheel/extra")
-async def achievements_wheel_extra(body: dict, username: str = Depends(get_current_user), _: str = Depends(require_admin),
+async def achievements_wheel_extra(body: dict, username: str = Depends(require_main),
                                    db: AsyncSession = Depends(get_db)):
     # administrateur, ET un secret : le token RFID suivi du mot de passe du compte
     import asyncio
@@ -233,14 +275,14 @@ async def achievements_wheel_extra(body: dict, username: str = Depends(get_curre
 
 
 @router.post("/wheel/settle")
-async def achievements_settle(since: str, _: str = Depends(require_admin)):
+async def achievements_settle(since: str, _: str = Depends(require_wheel)):
     """Apres un tour : les cles rapportees en plus par les succes qu'il a debloques."""
     from ....services import achievements as A
     return {"bonus": await A.settle(since)}
 
 
 @router.post("/ticket/{aid}")
-async def achievements_ticket(aid: str, _: str = Depends(require_admin)):
+async def achievements_ticket(aid: str, _: str = Depends(require_main)):
     """Utilise un ticket de palier sur un succes a paliers."""
     from ....services import achievements as A
     try:
@@ -250,7 +292,7 @@ async def achievements_ticket(aid: str, _: str = Depends(require_admin)):
 
 
 @router.post("/keys-auto")
-async def achievements_keys_auto(body: dict = Body(...), _: str = Depends(require_admin)):
+async def achievements_keys_auto(body: dict = Body(...), _: str = Depends(require_main)):
     """Depenser n cles d'un coup, au mieux (le plus d'indices possible). dry : l'apercu seul."""
     from ....services import achievements as A
     try:
@@ -260,7 +302,7 @@ async def achievements_keys_auto(body: dict = Body(...), _: str = Depends(requir
 
 
 @router.post("/keys/{aid}")
-async def achievements_spend_key(aid: str, _: str = Depends(require_admin)):
+async def achievements_spend_key(aid: str, _: str = Depends(require_main)):
     """Revele l'etape suivante d'un secret (vignette, titre, indice, descriptif)."""
     from ....services import achievements as A
     try:
@@ -293,8 +335,16 @@ async def achievements_view(request: Request, fresh: bool = False, token: str = 
     from ....services import achievements as A
     v = await A.view(fresh)
     by_key = bool(token and token.startswith("fk_"))
-    if role == ROLE_ADMIN and not by_key:
-        return _json(v)
+    if not by_key:
+        me = await _me(username, db)
+        if me["family"]:                          # un compte de la famille : ses secrets a lui
+            mine = (await A._eggs_by()).get(username) or {}
+            if role != ROLE_ADMIN:               # la roue permise : son tresor reste visible
+                v = {**A.mask_secrets(v), "keys": v["keys"] if me["wheel"] else None}
+            v = A.family_view(v, mine, me["house"] or "La maison")
+        v = {**v, "me": me}
+        if role == ROLE_ADMIN or me["family"]:
+            return _json(v)
     u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
     if u is not None and u.secrets_visible:
         return _json(v)                           # droit « voit mes succes secrets » : tout, revelations comprises

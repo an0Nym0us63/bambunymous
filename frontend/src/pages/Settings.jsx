@@ -269,23 +269,35 @@ function AchievementUsersSection() {
   const [busy, setBusy] = React.useState(false);
   const load = () => client.get("/achievements/users").then(r => setList(Array.isArray(r.data) ? r.data : [])).catch(() => setList([]));
   React.useEffect(() => { load(); }, []);
-  const toggle = async u => {
-    const next = list.map(x => x.username === u ? { ...x, counted: !x.counted } : x);
+  // f : "counted" (fait avancer les succes), "family" (ses propres secrets), "wheel" (peut tourner la roue)
+  const toggle = async (u, f = "counted") => {
+    const next = list.map(x => x.username === u ? { ...x, [f]: !x[f] } : x);
     setList(next); setBusy(true);
-    try { await client.put("/achievements/users", { counted: next.filter(x => x.counted).map(x => x.username) }); }
+    try { await client.put("/achievements/users", { [f]: next.filter(x => x[f] && !(f !== "counted" && x.main)).map(x => x.username) }); }
     catch { load(); }
     setBusy(false);
   };
+  const pill = (u, f, on, label, color) => (
+    <button type="button" disabled={busy || u.main} onClick={() => toggle(u.username, f)}
+      title={u.main ? "Le compte principal a tout" : undefined}
+      style={{ padding:"3px 9px", borderRadius:20, fontSize:11.5, fontWeight:800, cursor: u.main ? "default" : "pointer",
+        border:`1px solid ${on ? color : "var(--border)"}`, background: on ? `${color}22` : "transparent",
+        color: on ? color : "var(--muted)", opacity: u.main ? 0.7 : 1 }}>{on ? "✓ " : ""}{label}</button>
+  );
   return (
     <div className="card" style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:10 }}>
       <div style={{ fontSize:14, fontWeight:800, color:"var(--text)" }}>🏆 Comptes qui font avancer les succès</div>
       <p style={{ margin:0, fontSize:12.5, color:"var(--muted)", lineHeight:1.5 }}>
         Visites, fiches consultées, actions et easter eggs ne comptent que pour les comptes cochés. Les autres peuvent
         jouer et trouver les secrets : ils voient le succès, marqué « non comptabilisé ».</p>
+      <p style={{ margin:0, fontSize:12.5, color:"var(--muted)", lineHeight:1.5 }}>
+        <b style={{ color:"#EC4899" }}>🥚 Ses secrets</b> : le compte cherche les easter eggs, cachettes, farces, fêtes, pages cachées et
+        secrets Android pour lui-même, et voit ceux de la maison comme un copain. <b style={{ color:"#8B5CF6" }}>🎰 Roue</b> : il peut
+        tourner la roue (le lot va à la maison). Clés et tickets restent au compte principal.</p>
       {!list ? <span style={{ fontSize:12.5, color:"var(--muted)" }}>Chargement…</span>
         : list.map(u => (
-          <label key={u.username} style={{ display:"flex", alignItems:"center", gap:10, padding:"6px 2px", cursor:"pointer",
-            opacity: u.active ? 1 : 0.55 }}>
+          <div key={u.username} style={{ display:"flex", flexDirection:"column", gap:4, padding:"4px 0", opacity: u.active ? 1 : 0.55 }}>
+          <label style={{ display:"flex", alignItems:"center", gap:10, padding:"2px 2px", cursor:"pointer" }}>
             <input type="checkbox" checked={u.counted} disabled={busy} onChange={() => toggle(u.username)}
               style={{ width:18, height:18, accentColor:"#F59E0B" }}/>
             <span style={{ flex:1, minWidth:0, fontSize:13.5, fontWeight:700, color:"var(--text)" }}>{u.username}
@@ -295,6 +307,11 @@ function AchievementUsersSection() {
             <span style={{ fontSize:11.5, fontWeight:800, color: u.counted ? "#22c55e" : "var(--muted)" }}>
               {u.counted ? "compte" : "ne compte pas"}</span>
           </label>
+          {!u.friend && <div style={{ display:"flex", gap:6, flexWrap:"wrap", paddingLeft:30 }}>
+            {u.main ? <span style={{ fontSize:11.5, fontWeight:800, color:"#8B5CF6" }}>👑 compte principal : clés, tickets et roue</span>
+              : <>{pill(u, "family", u.family, "🥚 ses secrets", "#EC4899")}{pill(u, "wheel", u.wheel, "🎰 roue", "#8B5CF6")}</>}
+          </div>}
+          </div>
         ))}
     </div>
   );
