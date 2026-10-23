@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets, Coins, Star, Users, Trophy,
          Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
-         BellRing, Split, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Maximize2, Timer, Palette, Target, Disc3, CalendarCheck } from "lucide-react";
+         BellRing, Split, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck } from "lucide-react";
 import client, { apiUrl } from "../api/client";
 import { mwImg } from "./MwImg";
 import LiveCamera from "./LiveCamera";
@@ -127,7 +127,7 @@ function Tile({ icon, color, label, to, zoom, onClick, badge, children, mini = f
         <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", letterSpacing: ".02em", overflow: "hidden", textOverflow: "ellipsis",
           whiteSpace: "nowrap", minWidth: 0 }}><W text={label}/></span>
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
-          {badge}{zoom ? <Maximize2 size={12} style={{ color: "var(--muted)" }}/> : act && <ChevronRight size={14} style={{ color: "var(--muted)" }}/>}</span>
+          {badge}{!zoom && act && <ChevronRight size={14} style={{ color: "var(--muted)" }}/>}</span>
       </div>
       <div ref={ref} style={{ position: "relative", minWidth: 0, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
         {box.W > 0 && <BoxCtx.Provider value={box}>{kids(children, box)}</BoxCtx.Provider>}
