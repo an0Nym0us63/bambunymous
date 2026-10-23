@@ -57,6 +57,13 @@ async def achievements_passage_open(acc=Depends(require_own_account)):
     return {"open": True, "new": await A.open_passage(acc[0])}
 
 
+@router.get("/news")
+async def achievements_news(acc=Depends(require_own_account)):
+    """Les paliers debloques depuis mon dernier passage : a annoncer a l'ecran."""
+    from ....services import achievements as A
+    return {"news": await A.tier_news(acc[0])}
+
+
 @router.get("/surprise/odds")
 async def achievements_surprise_odds(_u: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     """La surprise de chaque compte de la maison (chance a la prochaine ouverture, surprises recues),

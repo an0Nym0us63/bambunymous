@@ -72,8 +72,8 @@ export function whisper(emoji, title, text) {
 const KIND = n => n === "w_" ? ["🔮 Psst…", "#7C3AED"] : n.startsWith("h_") ? ["🗺️ Page cachée réussie !", "#22C55E"]
   : n.startsWith("p_") ? ["🌀 Farce découverte !", "#8B5CF6"] : ["🥚 Easter egg trouvé !", "#EC4899"];
 
-function celebrate(e, name = "", uncounted = false) {
-  const [head, col] = KIND(name);
+function celebrate(e, name = "", uncounted = false, kind = null, onGone = null) {
+  const [head, col] = kind || KIND(name);
   const box = document.createElement("div");
   box.setAttribute("role", "status");
   box.style.cssText = "position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:9600;" +
@@ -106,9 +106,25 @@ function celebrate(e, name = "", uncounted = false) {
   ensureStyle();
   document.body.appendChild(box);
   requestAnimationFrame(() => { box.style.opacity = "1"; box.style.transform = "translate(-50%,0)"; });
-  const close = () => { box.style.opacity = "0"; box.style.transform = "translate(-50%,20px)"; setTimeout(() => box.remove(), 400); };
+  let gone = false;
+  const close = () => { if (gone) return; gone = true; box.style.opacity = "0"; box.style.transform = "translate(-50%,20px)";
+    setTimeout(() => { box.remove(); onGone?.(); }, 400); };
   box.onclick = close;
   setTimeout(close, 6000);
+}
+
+// Un palier de succes atteint pendant qu'on utilise l'appli : la meme carte que les secrets, une a la fois
+const cheers = [];
+let cheering = false;
+function nextCheer() {
+  const c = cheers.shift();
+  if (!c) { cheering = false; return; }
+  cheering = true;
+  celebrate({ emoji: c.emoji, name: c.name, lore: c.text }, "", false, [c.head, c.color], () => setTimeout(nextCheer, 250));
+}
+export function cheer(c) {
+  cheers.push(c);
+  if (!cheering) nextCheer();
 }
 
 function ensureStyle() {

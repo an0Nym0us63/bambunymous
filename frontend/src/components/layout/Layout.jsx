@@ -15,6 +15,7 @@ import NoAutofill from "../NoAutofill";
 import { PrankHost } from "../../hidden/prankHost";
 import MwAssignPicker from "../MwAssignPicker";
 import CardFx from "../CardFx";
+import AchNews from "../AchNews";
 
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil"    },
@@ -231,6 +232,7 @@ export default function Layout() {
         <main className="page-content" style={S.page}><Outlet /></main>
         <PrankHost/>
         <CardFx/>
+        <AchNews/>
         <MwAssignPicker/>
         <ShareProgress/>
         {!friend && <RfidScanBridge/>}

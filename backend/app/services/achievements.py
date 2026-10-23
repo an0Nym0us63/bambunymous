@@ -4529,6 +4529,53 @@ async def card_fx(username: str) -> list:
     return sorted(out, key=lambda x: -order.index(x["tier"]["id"]))
 
 
+_NEWS_TICK = {"at": -1e9}
+
+
+async def tier_news(username: str) -> list:
+    """Les paliers debloques depuis le dernier passage de ce compte, pour les annoncer a
+    l'ecran pendant qu'on utilise l'appli. Compare l'ensemble des paliers debloques a ce
+    que le compte a deja vu (pas des dates : un palier peut etre date d'avant son calcul).
+    Le premier appel ne fait que noter l'existant. Ni les easter eggs (deja annonces sur
+    l'appareil qui les trouve), ni les cartes (leur propre fete a l'ouverture).
+    Quelqu'un est devant l'appli : un passage en fond, au plus toutes les 3 min (la boucle n'en
+    fait qu'un par quart d'heure) ; ce qu'il debloque s'annonce a la demande suivante."""
+    import time as _time
+    if _time.monotonic() - _NEWS_TICK["at"] > 180:
+        _NEWS_TICK["at"] = _time.monotonic()
+        try:
+            _bg_tick()
+        except RuntimeError:
+            pass
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    st = await _state_get() or {}
+    now = {f"{aid}:{i}": at for aid, tiers in (st.get("unlocked") or {}).items() if isinstance(tiers, dict)
+           for i, at in tiers.items()}
+    async with AsyncSessionLocal() as db:
+        try:
+            seen = json.loads(await get_setting(db, KEY + "_NEWS", "") or "{}")
+        except ValueError:
+            seen = {}
+        seen = seen if isinstance(seen, dict) else {}
+        mine = seen.get(username)
+        seen[username] = sorted(now)
+        await set_setting(db, KEY + "_NEWS", json.dumps(seen))
+    if mine is None:
+        return []
+    out = []
+    for k in sorted(set(now) - set(mine), key=lambda k: str(now[k])):
+        aid, i = k.rsplit(":", 1)
+        a = BY_ID.get(aid)
+        if not a or aid.startswith("egg_") or a.get("card_tier") or not str(i).isdigit() or int(i) >= len(a["tiers"]):
+            continue
+        t = tiers_of(a)[int(i)]
+        out.append({"id": aid, "name": a["name"], "emoji": a["emoji"], "secret": bool(a.get("hidden")),
+                    "tier": {x: t[x] for x in ("id", "label", "emoji", "color") if x in t},
+                    "desc": describe(a, a["tiers"][int(i)]), "unique": len(a["tiers"]) == 1})
+    return out[:12]
+
+
 async def card_fx_seen(username: str) -> None:
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting, set_setting
