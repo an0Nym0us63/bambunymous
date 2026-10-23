@@ -825,7 +825,13 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
       // gardait alors la hauteur estimee, un peu trop grande : le bas etait rogne)
       ...(fitH != null ? { position: "absolute", inset: 0 } : {}) }}>
       {!(view === "rack" && hasRack && !low) && head}
-      {view === "rack" && hasRack && !low ? <div onClick={e => e.stopPropagation()} style={{ flex: 1, minHeight: 0 }}>{rackTile}</div>
+      {view === "rack" && hasRack && !low ? <div onClick={e => {
+          e.stopPropagation();
+          // une case du rack (la buse est deja choisie par son propre clic) : la fenetre sur l'onglet rack ;
+          // la bascule vers les AMS garde son role
+          const btn = e.target.closest("button");
+          if (btn && !btn.title) { setTab("rack"); setOpen("all"); }
+        }} style={{ flex: 1, minHeight: 0 }}>{rackTile}</div>
         : <HubGrid list={list} order={order} act={act} actTray={actTray} H={H - (low ? 0 : 32)} climate={climate} fs={routes} onPick={id => setOpen(id)}/>}
       {popup}
     </div>
