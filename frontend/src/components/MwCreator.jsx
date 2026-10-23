@@ -22,6 +22,7 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
   const [err, setErr] = useState(null);
   const [period, setPeriod] = useState("30");
   const [type, setType] = useState("points");
+  const [order, setOrder] = useState("value");     // value (le type choisi) | new | old (date de publication)
   const [hist, setHist] = useState(null);        // { items, total }
   const [more, setMore] = useState(false);
   const [view, setView] = useState("models");    // models | points
@@ -107,7 +108,10 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
     return [l, v ?? 0, v == null ? "—" : `${h.complete ? "" : "≥ "}${v > 0 ? "+" : ""}${fmt(v)}`];
   });
   const val = m => m.period?.[type] ?? 0;
-  const models = [...data.models].sort((a, b) => val(b) - val(a) || (b[type] || 0) - (a[type] || 0));
+  // date de publication (a defaut, l'identifiant : MakerWorld les numerote dans l'ordre)
+  const born = m => Date.parse(m.created || "") || Number(m.design_id) || 0;
+  const models = [...data.models].sort(order === "new" ? (a, b) => born(b) - born(a) : order === "old" ? (a, b) => born(a) - born(b)
+    : (a, b) => val(b) - val(a) || (b[type] || 0) - (a[type] || 0));
   const typeShort = TYPES.find(t => t[0] === type)?.[2];
   // Compteurs (hors points) : releves journaliers pris par l'appli, depuis peu.
   const partial = type !== "points" && period !== "all" && data.counters_partial;
@@ -210,6 +214,11 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
             <select value={period} onChange={e => setPeriod(e.target.value)} aria-label="Période" style={sel}>
               {PERIODS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
             </select>
+            <select value={order} onChange={e => setOrder(e.target.value)} aria-label="Tri" style={sel}>
+              <option value="value">Les meilleurs</option>
+              <option value="new">Plus récents</option>
+              <option value="old">Plus anciens</option>
+            </select>
           </span>
         )}
 
@@ -250,6 +259,8 @@ export default function MwCreator({ reload = 0, onOpen, onLoaded }) {
                   {m.title_fr || m.title}{m.exclusive ? <span style={{ fontSize:10, color:"#a78bfa", fontWeight:800 }}> · exclusif</span> : null}</span>
                 <span style={{ display:"block", fontSize:11, color:"var(--muted)", marginTop:2 }}>
                   ⬇️ {fmt(m.downloads)} · 🖨️ {fmt(m.prints)} · ⚡ {fmt(m.boosts)} · ❤ {fmt(m.likes)}</span>
+                {order !== "value" && Date.parse(m.created || "") > 0 && <span style={{ display:"block", fontSize:10.5, color:"var(--muted)", marginTop:1 }}>
+                  publié le {new Date(m.created).toLocaleDateString("fr-FR", { day:"numeric", month:"short", year:"numeric" })}</span>}
               </span>
               <span style={{ textAlign:"right", flexShrink:0 }}>
                 <span style={{ display:"block", fontSize:13, fontWeight:800, color: val(m) ? "#22c55e" : "var(--muted)" }}>
