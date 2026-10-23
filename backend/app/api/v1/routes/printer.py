@@ -143,6 +143,11 @@ class AMSOut(BaseModel):
     dry_filament: str = ""      # type filament en séchage
     extruder_id: int = -1       # buse alimentee : 0 droite, 1 gauche, -1 inconnue
     switch_port: str = ""       # entree de l'aiguillage ("A"/"B") quand il passe par lui
+    dry_status: int = -1        # phase du sechage (-1 inconnue, 0 arret, 1 verif., 2 sechage, 3 refroid., 4 arret, 5 erreur, 6 hors controle)
+    dry_sub_status: int = 0     # 1 chauffe, 2 deshumidification
+    dry_fan1: int = 0
+    dry_fan2: int = 0
+    dry_cannot: list[int] = []  # raisons qui empechent de secher (dry_sf_reason)
 
 
 class HotendSlotOut(BaseModel):
@@ -361,6 +366,11 @@ async def printer_status(_: str = Depends(get_current_user)):
                 dry_filament=a.dry_filament,
                 extruder_id=getattr(a, "extruder_id", -1),
                 switch_port=getattr(a, "switch_port", ""),
+                dry_status=getattr(a, "dry_status", -1),
+                dry_sub_status=getattr(a, "dry_sub_status", 0),
+                dry_fan1=getattr(a, "dry_fan1", 0),
+                dry_fan2=getattr(a, "dry_fan2", 0),
+                dry_cannot=list(getattr(a, "dry_cannot", []) or []),
             ) for a in s.ams_list
         ],
         ams_mapping=s.ams_mapping,

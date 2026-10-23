@@ -587,6 +587,10 @@ class MQTTManager:
                 if ams_raw.get("info") not in (None, ""):
                     try:
                         _inf = int(str(ams_raw.get("info")), 16)
+                        ams.dry_status = (_inf >> 4) & 0xF
+                        ams.dry_fan1 = (_inf >> 18) & 0x3
+                        ams.dry_fan2 = (_inf >> 20) & 0x3
+                        ams.dry_sub_status = (_inf >> 22) & 0x3
                         _ext = (_inf >> 8) & 0xF
                         if _ext == 0xE:
                             _port = (_inf >> 24) & 0xF
@@ -596,6 +600,9 @@ class MQTTManager:
                             ams.extruder_id = _ext
                     except (TypeError, ValueError):
                         pass
+                _sf = ams_raw.get("dry_sf_reason")
+                if isinstance(_sf, list):
+                    ams.dry_cannot = [int(x) for x in _sf if str(x).lstrip("-").isdigit()]
                 dry_setting = ams_raw.get("dry_setting", {}) or {}
                 if dry_setting:
                     ams.dry_temperature = max(int(dry_setting.get("dry_temperature", 0)), 0)

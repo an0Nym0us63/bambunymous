@@ -44,6 +44,15 @@ class AMS:
     # dit alors sur quelle entree de l'aiguillage il est branche ("A" ou "B").
     extruder_id: int = -1
     switch_port: str = ""
+    # Le sechage tel que l'AMS le decrit (info, cf. DevFilaSystem) : phase (bits 4-7 :
+    # 0 arret, 1 verification, 2 sechage, 3 refroidissement, 4 arret en cours, 5 erreur,
+    # 6 chauffe hors controle), sous-phase (bits 22-23 : 1 chauffe, 2 deshumidification),
+    # ventilateurs (bits 18-19, 20-21), et ce qui empeche de secher (dry_sf_reason).
+    dry_status: int = -1
+    dry_sub_status: int = 0
+    dry_fan1: int = 0
+    dry_fan2: int = 0
+    dry_cannot: list = field(default_factory=list)
 
 
 @dataclass

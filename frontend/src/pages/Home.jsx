@@ -14,7 +14,7 @@ import SpoolSVG from "../components/SpoolSVG";
 import Lightbox from "../components/Lightbox";
 import AmsOrderEditor from "../components/AmsOrderEditor";
 import { relayed } from "../components/Friends";
-import { AMSBox, AMSDetail, TrayBottomSheet, DryPopup, DryCard, amsRoute } from "../components/AMSSection";
+import { AMSBox, AMSDetail, TrayBottomSheet, DryCard, amsRoute } from "../components/AMSSection";
 import { Zoom } from "../components/HomeTiles";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName, switchRoutes, trayPct } from "../utils/ams";
 
@@ -602,26 +602,6 @@ const useDevSel = create(set => ({
   setSelAms: v => set({ selAms: v }), setSelHotend: v => set({ selHotend: v }), setView: v => set({ view: v }),
 }));
 
-// la pastille de sechage du detail condense : l'unite regardee seche → sa temperature et
-// son temps restant, un clic ouvre la fenetre du sechage
-function DryBadge({ status }) {
-  const selAms = useDevSel(s => s.selAms), view = useDevSel(s => s.view);
-  const [open, setOpen] = useState(false);
-  const list = status?.ams_list || [];
-  const run = ["RUNNING", "PAUSE", "PAUSED"].includes(String(status?.status || "").toUpperCase());
-  const id = selAms ?? (run && status?.active_ams_id >= 0 ? status.active_ams_id : list[0]?.id);
-  const ams = list.find(a => a.id === id);
-  if (!ams || view === "rack" || !(ams.is_drying || ams.dry_time > 0)) return null;
-  const m = ams.dry_time || 0, t = m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m} min`;
-  return <>
-    <button onClick={e => { e.stopPropagation(); setOpen(true); }} title="Voir le séchage" style={{ display: "inline-flex", alignItems: "center", gap: 4,
-      height: 13, padding: "0 7px", borderRadius: "0 0 8px 8px", fontSize: 9.5, lineHeight: "13px", fontWeight: 800, color: "#fff", cursor: "pointer",
-      whiteSpace: "nowrap", background: "#f97316", border: "none", boxShadow: "0 2px 6px rgba(249,115,22,0.35)" }}>
-      <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#fff", animation: "dryPulse 2.5s ease-in-out infinite" }}/>
-      {ams.dry_temperature > 0 ? `${ams.dry_temperature}°` : "Séchage"}{m > 0 ? ` · ${t}` : ""}</button>
-    {open && <DryPopup ams={ams} onClose={() => setOpen(false)}/>}
-  </>;
-}
 // ── La tuile « AMS » tout en un ──────────────────────────────────────────────
 // Les unites rangees comme ma grille (qui est au-dessus de qui), leurs couleurs, celle qui
 // imprime cerclee (l'emplacement actif pulse, et s'anime quand il change), celle qui seche
@@ -648,6 +628,14 @@ function HubSwatch({ t, active, h, radius = 6 }) {
 function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = false, uw = 200, fs = null }) {
   const dry = isDrying(a), trays = a.trays || [];
   const route = a.switch_port ? amsRoute(a, true, fs).txt.replace(" ", "") : null;
+  // l'en-tete d'une unite : le nom, puis dans l'ordre ce qui tient — sechage, buse (aiguillage), humidite
+  // si le sechage et la buse ne tiennent pas avec le nom entier, le nom se raccourcit (« A »)
+  const want = (route ? 30 : 0) + (climate && a.humidity > 0 ? 38 : 0);
+  const short = !big && uw - 14 - (amsName(a.id).length * 7 + (act ? 10 : 0)) < want && a.id < 128;
+  const label = short ? amsName(a.id).replace("AMS-", "") : amsName(a.id);
+  let room = uw - 14 - (label.length * 7 + (act ? 10 : 0));
+  const fits = w => (room -= w + 4) >= 0;
+  const showHum = climate && a.humidity > 0 && fits(34), showRoute = !!route && fits(26);
   const compact = h < 38 && !big;
   const ring = sel ? "#8b5cf6" : act ? "#3b82f6" : dry ? "rgba(249,115,22,0.6)" : "var(--border)";
   const chip = (txt, c, bg) => <span style={{ fontSize: 9, fontWeight: 900, lineHeight: "13px", padding: "0 5px", borderRadius: 6, color: c, background: bg, whiteSpace: "nowrap" }}>{txt}</span>;
@@ -667,19 +655,22 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
     </button>
   );
   const head = big ? 20 : 15;
+  const tab = !big && dry && <span title={`Séchage${a.dry_filament ? ` ${a.dry_filament}` : ""}`} style={{ position: "absolute", top: -6, left: "50%", transform: "translateX(-50%)", zIndex: 2,
+    padding: "0 7px", height: 13, lineHeight: "13px", borderRadius: 7, fontSize: 9, fontWeight: 900, color: "#fff", background: "#f97316",
+    whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(249,115,22,0.35)" }}>🔥 {a.dry_filament ? `${a.dry_filament} · ` : ""}{dryLeft(a.dry_time)}</span>;
   const badges = big && <span style={{ display: "flex", gap: 4, flexWrap: "wrap", height: 14, overflow: "hidden", flexShrink: 0 }}>
     {dry && chip(`🔥 ${a.dry_temperature > 0 ? `${a.dry_temperature}° · ` : ""}${dryLeft(a.dry_time)}`, "#fff", "#f97316")}
     {route && chip(route, "#8b5cf6", "rgba(139,92,246,0.14)")}
     {climate && a.humidity > 0 && chip(`💧${a.humidity}%`, a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#d97706" : "#0ea5e9", "rgba(14,165,233,0.12)")}</span>;
   return (
+    <div style={{ position: "relative", height: h, minWidth: 0 }}>{tab}
     <button type="button" onClick={click} style={{ ...box, display: "flex", flexDirection: "column", gap: big ? 6 : 3, padding: big ? "8px 10px 10px" : "4px 6px 6px" }}>
       <span style={{ display: "flex", alignItems: "center", gap: 4, height: head, minWidth: 0, overflow: "hidden", flexShrink: 0 }}>
-        <span style={{ fontSize: big ? 13.5 : 10.5, fontWeight: 900, color: act ? "#3b82f6" : sel ? "#8b5cf6" : "var(--text2)", whiteSpace: "nowrap" }}>{amsName(a.id)}</span>
+        <span style={{ fontSize: big ? 13.5 : 10.5, fontWeight: 900, color: act ? "#3b82f6" : sel ? "#8b5cf6" : "var(--text2)", whiteSpace: "nowrap" }}>{label}</span>
         {act && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite", flexShrink: 0 }}/>}
-        {!big && route && !dry && uw >= 150 && chip(route, "#8b5cf6", "rgba(139,92,246,0.14)")}
-        {!big && dry && chip(`🔥${dryLeft(a.dry_time)}`, "#fff", "#f97316")}
+        {!big && showRoute && chip(route, "#8b5cf6", "rgba(139,92,246,0.14)")}
         <span style={{ flex: 1 }}/>
-        {!big && climate && a.humidity > 0 && uw >= 104 && <span style={{ fontSize: big ? 11.5 : 9.5, fontWeight: 800, color: a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#f59e0b" : "var(--muted)",
+        {!big && showHum && <span style={{ fontSize: big ? 11.5 : 9.5, fontWeight: 800, color: a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#f59e0b" : "var(--muted)",
           whiteSpace: "nowrap" }}>💧{a.humidity}%</span>}
       </span>
       {badges}
@@ -691,7 +682,7 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
           {trays.map(t => <span key={t.id} style={{ fontSize: big ? 11 : 9.5, fontWeight: 800, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
             color: act && t.id === actTray ? "#3b82f6" : "var(--muted)" }}>{trayHex(t) ? (trayPct(t) != null ? `${trayPct(t)}%` : t.filament_type || "") : "—"}</span>)}</span>}
       </span>
-    </button>
+    </button></div>
   );
 }
 // la grille des unites, comme ma disposition ; h : la hauteur dont elle dispose
@@ -1828,28 +1819,14 @@ export default function Home() {
         { when: it => it.w !== 1, key: "open", label: "Volet déplié à l'ouverture", def: false },
         { when: it => it.w !== 1, key: "cam", label: "Caméra dans le volet", def: true },
         { when: it => it.w !== 1, key: "temps", label: "Températures dans le volet", def: true }] },
-    ams: { label: "AMS", w: [2], h: ["auto", 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" },
-      render: (d, st, o, item) => devices(st, "overview", o, item), fit: true,
-      options: [
-        { key: "org", label: "Organisation", def: "grid", group: "Disposition des AMS",
-          hint: "Ta grille, ou les unités à la suite, qui passent à la ligne selon la largeur de la tuile.",
-          choices: [["grid", "ma grille"], ["auto", "selon la place"]] },
-        { when: (it, o) => (o?.org ?? "grid") === "grid", key: "_amsGrid", label: "Ma grille", group: "Disposition des AMS",
-          hint: "Commune à toutes les dispositions de l'accueil.", render: () => <AmsOrderEditor/> },
-        { key: "climate", label: "Humidité et température sous chaque unité", def: true }] },
-    amshub: { label: "AMS · tout en un", w: [2], h: [2, 1, 3], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" },
+    // l'AMS tout en un (23/10/2026) : remplace l'ancien apercu et la tuile « Detail de l'AMS »
+    ams: { label: "AMS", w: [2], h: [2, 1, 3], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" },
       render: (d, st, o, item) => <AmsHub st={st} spoolLookup={spoolLookup} fitH={fitOf(item)} o={o}
         rackTile={devices(st, "overview", o, typeof item?.h === "number" ? { ...item, h: item.h - 0.15 } : item)} rackFull={devices(st, null, o)}/>,
       options: [
         { key: "_amsGrid", label: "Ma grille", group: "Disposition des AMS", hint: "La place de chaque unité : qui est au-dessus de qui. Commune à tout l'accueil.",
           render: () => <AmsOrderEditor/> },
         { key: "climate", label: "Humidité de chaque unité", def: true }] },
-    amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto", 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Layers size={15}/>, color: "#6366F1",
-        badge: (st, item) => typeof item?.h === "number" && item.h >= 1 ? <DryBadge status={st}/> : null },
-      render: (d, st, o, item) => devices(st, "detail", o, item), fit: true,
-      options: [
-        { key: "selector", label: "Choisir l'unité dans la tuile", def: true, hint: "Des onglets en tête de tuile ; sinon on la choisit dans la tuile AMS." },
-        { key: "names", label: "Nom des bobines", def: true }] },
     attention: { label: "Points d'attention", w: [2], h: ["auto", 1, 2, 3, 4], summary: d => {
         const cats = (d.attention?.categories || []).filter(c => c.total);
         return <span style={{ display: "inline-flex", gap: 6, fontSize: 13 }}>{cats.length ? cats.map(c => <span key={c.category} title={c.label}>

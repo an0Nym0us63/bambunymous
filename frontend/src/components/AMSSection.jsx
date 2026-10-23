@@ -457,6 +457,12 @@ function TrayRow({ tray, amsId, label, activeAmsId, activeTrayId, spoolInfo: loa
 // et la temperature actuelle, l'humidite, le filament.
 // le sechage d'une unite : l'anneau d'avancement, le temps restant et la fin, la barre,
 // la consigne, la temperature et l'humidite (dans sa fenetre, et dans la tuile Sechage en grand)
+const DRY_PHASE = { 1: ["Vérification", "#0ea5e9"], 2: ["Séchage", "#f97316"], 3: ["Refroidissement", "#0ea5e9"], 4: ["Arrêt en cours", "#94a3b8"],
+  5: ["Erreur", "#ef4444"], 6: ["Chauffe hors contrôle", "#ef4444"], 7: ["Test", "#94a3b8"] };
+const DRY_SUB = { 1: "chauffe", 2: "déshumidification" };
+const DRY_CANNOT = { 0: "une impression est en cours", 1: "alimentation insuffisante", 2: "l'AMS est occupé", 3: "du filament est engagé à la sortie de l'AMS",
+  4: "le séchage démarre", 5: "pas en mode 2D", 6: "un séchage est déjà en cours", 7: "mise à jour en cours",
+  8: "alimentation insuffisante : brancher l'alimentation de l'AMS", 10: "filament à la sortie de l'AMS : le décharger à la main" };
 function DryCard({ ams }) {
   const total = (ams.dry_duration || 0) * 60, left = ams.dry_time || 0;
   const done = total ? Math.max(0, Math.min(1, 1 - left / total)) : null;
@@ -496,11 +502,28 @@ function DryCard({ ams }) {
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: "var(--muted)", fontWeight: 700, marginTop: 4 }}>
             <span>{fmt(total - left)} écoulées</span><span>sur {fmt(total)}</span></div>
         </div>}
+        {/* le mode (le preset de filament), la phase et sa sous-phase, les ventilateurs */}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {ams.dry_filament && <span style={{ padding: "4px 11px", borderRadius: 20, fontSize: 12.5, fontWeight: 900, color: "#fff", background: "#f97316" }}>
+            Mode {ams.dry_filament}</span>}
+          {DRY_PHASE[ams.dry_status] && <span style={{ padding: "4px 11px", borderRadius: 20, fontSize: 12.5, fontWeight: 800,
+            color: DRY_PHASE[ams.dry_status][1], background: `${DRY_PHASE[ams.dry_status][1]}1f` }}>
+            ● {DRY_PHASE[ams.dry_status][0]}{DRY_SUB[ams.dry_sub_status] ? ` · ${DRY_SUB[ams.dry_sub_status]}` : ""}</span>}
+          {(ams.dry_fan1 || ams.dry_fan2) ? <span style={{ padding: "4px 11px", borderRadius: 20, fontSize: 12.5, fontWeight: 800, color: "var(--text2)",
+            background: "var(--surface2)" }}>
+            <span style={{ display: "inline-block", animation: "spin 1.2s linear infinite" }}>✻</span> ventilateur{ams.dry_fan1 && ams.dry_fan2 ? "s" : ""}
+            {ams.dry_fan1 && ams.dry_fan2 ? " 1 et 2" : ams.dry_fan1 ? " 1" : " 2"}</span> : null}
+        </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 8 }}>
+          {ams.dry_filament && box("Mode", ams.dry_filament, "#f97316")}
           {box("Consigne", ams.dry_temperature ? `${ams.dry_temperature}°C` : "—", "#f97316")}
+          {ams.dry_duration > 0 && box("Durée réglée", fmt(ams.dry_duration * 60))}
           {box("Dans l'AMS", ams.temp != null ? `${Number(ams.temp).toFixed(1).replace(".", ",")} °C` : "—")}
           {box("Humidité", ams.humidity != null ? `${ams.humidity} %` : "—", "#0ea5e9")}
         </div>
+        {ams.dry_cannot?.filter(r => r !== 4 && r !== 6).length > 0 && <div style={{ padding: "9px 12px", borderRadius: 12, fontSize: 12.5, fontWeight: 700, color: "#b45309",
+          background: "rgba(245,158,11,0.12)" }}>
+          Séchage impossible pour l'instant : {ams.dry_cannot.filter(r => r !== 4 && r !== 6).map(r => DRY_CANNOT[r] || `raison ${r}`).join(" ; ")}</div>}
     </div>
   );
 }
