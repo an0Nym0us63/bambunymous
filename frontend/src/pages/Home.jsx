@@ -836,7 +836,7 @@ function HubSwatch({ t, active, h, radius = 6 }) {
 // une unite : son nom, ses badges (entree de l'aiguillage, sechage), ses emplacements
 function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = false, uw = 200, fs = null }) {
   const dry = isDrying(a), trays = a.trays || [];
-  const route = a.switch_port ? amsRoute(a, true, fs).txt.replace(" ", "") : null;
+  const route = a.switch_port ? amsRoute(a, true, fs).txt.replace(" ", "\u00A0") : null;
   // l'en-tete d'une unite : le nom, puis dans l'ordre ce qui tient — sechage, buse (aiguillage), humidite
   // si le sechage et la buse ne tiennent pas avec le nom entier, le nom se raccourcit (« A »)
   const want = (route ? 30 : 0) + (climate && a.humidity > 0 ? 38 : 0);
