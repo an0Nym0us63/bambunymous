@@ -645,7 +645,7 @@ function HubSwatch({ t, active, h, radius = 6 }) {
   );
 }
 // une unite : son nom, ses badges (entree de l'aiguillage, sechage), ses emplacements
-function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = false }) {
+function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = false, uw = 200 }) {
   const dry = isDrying(a), trays = a.trays || [];
   const compact = h < 38 && !big;
   const ring = sel ? "#8b5cf6" : act ? "#3b82f6" : dry ? "rgba(249,115,22,0.6)" : "var(--border)";
@@ -675,18 +675,18 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
       <span style={{ display: "flex", alignItems: "center", gap: 4, height: head, minWidth: 0, overflow: "hidden", flexShrink: 0 }}>
         <span style={{ fontSize: big ? 13.5 : 10.5, fontWeight: 900, color: act ? "#3b82f6" : sel ? "#8b5cf6" : "var(--text2)", whiteSpace: "nowrap" }}>{amsName(a.id)}</span>
         {act && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite", flexShrink: 0 }}/>}
-        {!big && a.switch_port && !dry && chip(`⇄${a.switch_port}`, "#8b5cf6", "rgba(139,92,246,0.14)")}
+        {!big && a.switch_port && !dry && uw >= 150 && chip(`⇄${a.switch_port}`, "#8b5cf6", "rgba(139,92,246,0.14)")}
         {!big && dry && chip(`🔥${dryLeft(a.dry_time)}`, "#fff", "#f97316")}
         <span style={{ flex: 1 }}/>
-        {!big && climate && a.humidity > 0 && <span style={{ fontSize: big ? 11.5 : 9.5, fontWeight: 800, color: a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#f59e0b" : "var(--muted)",
+        {!big && climate && a.humidity > 0 && uw >= 104 && <span style={{ fontSize: big ? 11.5 : 9.5, fontWeight: 800, color: a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#f59e0b" : "var(--muted)",
           whiteSpace: "nowrap" }}>💧{a.humidity}%</span>}
       </span>
       {badges}
       <span style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 3 }}>
-        <span style={{ height: Math.max(10, Math.min(big ? 64 : 58, h - head - (big ? 22 : 0) - (h >= 100 ? 28 : 14))), display: "grid",
+        <span style={{ height: Math.max(10, Math.min(big ? 56 : h >= 120 ? 46 : 32, h - head - (big ? 22 : 0) - (h >= 62 ? 26 : 12))), display: "grid",
           gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: big ? 6 : 3 }}>
           {trays.map(t => <HubSwatch key={`${t.id}${act && t.id === actTray ? "a" : ""}`} t={t} active={act && t.id === actTray} h="100%" radius={big ? 9 : 6}/>)}</span>
-        {h >= 100 && <span style={{ display: "grid", gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: big ? 6 : 3 }}>
+        {h >= 62 && <span style={{ display: "grid", gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: big ? 6 : 3 }}>
           {trays.map(t => <span key={t.id} style={{ fontSize: big ? 11 : 9.5, fontWeight: 800, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
             color: act && t.id === actTray ? "#3b82f6" : "var(--muted)" }}>{trayHex(t) ? (t.remain >= 0 ? `${t.remain}%` : t.filament_type || "") : "—"}</span>)}</span>}
       </span>
@@ -695,16 +695,26 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
 }
 // la grille des unites, comme ma disposition ; h : la hauteur dont elle dispose
 function HubGrid({ list, order, act, actTray, H, climate, onPick, big = false, sel = null }) {
+  const ref = useRef(null);
+  const [GW, setGW] = useState(0);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(([e]) => setGW(Math.round(e.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
   const cols = grilleAccueil(list, lireDisposition(order));
   const nR = cols[0]?.length || 1;
   const gap = big ? 10 : 6;
   const uh = Math.max(20, Math.floor((H - gap * (nR - 1)) / nR));
   return (
-    <div style={{ display: "grid", gridTemplateColumns: cols.map(c => `${columnWeight(c)}fr`).join(" "), gridTemplateRows: `repeat(${nR}, ${uh}px)`, gap }}>
+    <div ref={ref} style={{ display: "grid", gridTemplateColumns: cols.map(c => `${columnWeight(c)}fr`).join(" "), gridTemplateRows: `repeat(${nR}, ${uh}px)`, gap }}>
       {cols.flatMap((col, ci) => col.map((a, ri) => a && (
         <div key={a.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth: 0, display: "flex", justifyContent: "center" }}>
           <div style={{ width: `${Math.max(0.78, slotCount(a) / columnWeight(col)) * 100}%`, minWidth: 0 }}>
-            <HubUnit a={a} act={a.id === act} actTray={actTray} h={uh} climate={climate} onClick={onPick} big={big} sel={sel === a.id}/></div>
+            <HubUnit a={a} act={a.id === act} actTray={actTray} h={uh} climate={climate} onClick={onPick} big={big} sel={sel === a.id}
+              uw={GW ? (GW - gap * (cols.length - 1)) * columnWeight(col) / cols.reduce((t, c) => t + columnWeight(c), 0) * Math.max(0.78, slotCount(a) / columnWeight(col)) : 200}/></div>
         </div>
       ))).filter(Boolean)}
     </div>
@@ -794,9 +804,9 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
     </>}
   </Zoom>;
   return (
-    <div onClick={() => setOpen("all")} style={{ display: "flex", flexDirection: "column", gap: 6, cursor: "pointer", height: fitH ?? undefined, minWidth: 0 }}>
-      {!(view === "rack" && hasRack) && head}
-      {view === "rack" && hasRack ? <div onClick={e => e.stopPropagation()} style={{ flex: 1, minHeight: 0 }}>{rackTile}</div>
+    <div onClick={() => setOpen("all")} style={{ display: "flex", flexDirection: "column", gap: 6, cursor: "pointer", height: fitH ?? undefined, minWidth: 0, overflow: "hidden" }}>
+      {!(view === "rack" && hasRack && !low) && head}
+      {view === "rack" && hasRack && !low ? <div onClick={e => e.stopPropagation()} style={{ flex: 1, minHeight: 0 }}>{rackTile}</div>
         : <HubGrid list={list} order={order} act={act} actTray={actTray} H={H - (low ? 0 : 28)} climate={climate} onPick={id => setOpen(id)}/>}
       {popup}
     </div>
