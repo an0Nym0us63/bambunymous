@@ -68,8 +68,11 @@ async def home_layout_set(body: dict = Body(...), acc=Depends(require_own_accoun
 
 @router.post("/event")
 async def home_event(body: dict = Body(...), acc=Depends(require_own_account)):
-    """Ce que la page constate et que le serveur ne voit pas (l'accueil sur 4 colonnes)."""
+    """Ce que la page constate et que le serveur ne voit pas (l'accueil sur 2, 3 ou 4 colonnes)."""
     from ....services import home_stats
     if (body or {}).get("four"):
         await home_stats.seen_four()
+    cols = (body or {}).get("cols")
+    if isinstance(cols, int) and cols in (2, 3, 4):
+        await home_stats.seen_cols(cols)
     return {"ok": True}

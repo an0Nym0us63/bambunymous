@@ -393,9 +393,10 @@ export default function HomeGrid({ status, blocks, top = null }) {
   });
   // ce que l'accueil montre : une colonne sur telephone, sinon ce qui tient, au plus le maximum choisi
   const showN = wide ? Math.max(1, Math.min(lay.max, fit)) : 1;
-  // l'accueil sur 4 colonnes : le serveur ne le voit pas, la page le lui dit (une fois par lancement)
+  // l'accueil sur 2, 3 ou 4 colonnes : le serveur ne le voit pas, la page le lui dit (une fois par lancement et par mode)
   useEffect(() => {
-    if (showN === 4 && !window.__bnFour) { window.__bnFour = true; client.post("/home/event", { four: true }).catch(() => {}); }
+    const seen = (window.__bnCols = window.__bnCols || {});
+    if (showN >= 2 && !seen[showN] && !currentFriend()) { seen[showN] = true; client.post("/home/event", { cols: showN }).catch(() => {}); }
   }, [showN]);
 
   useEffect(() => {

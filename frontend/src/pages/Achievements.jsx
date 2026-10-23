@@ -1496,7 +1496,9 @@ function Rules({ data, onClose }) {
           succès. Les seuils des paliers se voient dans le détail de chaque succès.</P>
         <P>Un succès qui a <b>moins de neuf seuils</b> (un plafond naturel : 5 AMS, le niveau MakerWorld…) les place en haut de
           l'échelle : son premier seuil donne d'un coup tous les paliers d'en dessous.</P>
-        <P>Ce qui se lit <b>au présent</b> (stock, MakerWorld, copains…) garde ce qui a été gagné, même si la valeur redescend.</P>
+        <P>Ce qui se lit <b>au présent</b> (stock, MakerWorld, copains…) garde ce qui a été gagné, même si la valeur redescend.
+          Exception : les secrets qui tiennent à <b>ta disposition de l'accueil</b> suivent ce qu'elle est : la défaire les
+          retire, la refaire les rend, sans nouvelle clé.</P>
         <P>Certains gestes ne laissent de trace nulle part ailleurs : l'appli les note elle-même <b>à partir du moment où elle
           les voit</b> (séchages dans l'AMS, pesées, réassorts, visites chez tes copains et des copains chez toi ; et depuis
           le 22/10/2026 : connexion de l'imprimante, couches, changements de bobine, alertes, humidité des AMS, impressions en

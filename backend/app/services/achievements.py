@@ -1576,6 +1576,10 @@ CATALOG += [
        lore="Téléphone, portable, grand écran, très grand écran : chacun a son accueil sur mesure."),
     _a("home_four", "secret", "🔭", "Grand écran", "Afficher l'accueil sur quatre colonnes", [1],
        lore="Quatre colonnes : l'atelier tout entier sous les yeux."),
+    _a("home_three", "secret", "🪟", "Triptyque", "Afficher l'accueil sur trois colonnes", [1],
+       lore="Trois panneaux côte à côte, comme un retable : chaque tuile a sa chapelle."),
+    _a("home_two", "secret", "📖", "Double page", "Afficher l'accueil sur deux colonnes", [1],
+       lore="Deux colonnes, comme un livre ouvert : l'atelier se lit d'une page à l'autre."),
     _a("home_minimal", "secret", "🪷", "Minimaliste", "Un accueil réduit à la seule tuile de l'imprimante", [1],
        lore="L'essentiel, et rien d'autre : l'imprimante, point."),
     _a("home_all", "secret", "🎪", "Tout l'éventail", "Toutes les tuiles affichées en même temps", [1],
@@ -1610,7 +1614,7 @@ SECRET_SUBS = [
     ("mw", "🌐", "MakerWorld", "self_print bestseller pioneer harsh recycled"),
     ("social", "🤝", "Copains", "night_owl_visit mutual_visit share_all same_taste"),
     ("famous", "🗿", "Modèles célèbres", "benchy_print calib_print dragon_print skull_print"),
-    ("app", "📱", "Photos et appli", "home_first home_multi home_four home_minimal home_all zero_alert paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
+    ("app", "📱", "Photos et appli", "home_first home_multi home_two home_three home_four home_minimal home_all zero_alert paparazzi souvenirs grand_tour cutting_edge double_update novel christmas_visit "
      "action_cam making_of festival retro_video family_film flash_video bunker pwd_changes black_photo white_photo "
      "panorama hires_photo photo_burst purge_day tinkerer"),
     ("eggs", "🥚", "Easter eggs", " ".join(f"egg_{k}" for k in EGGS if k not in HIDDEN_EGGS | PRANK_EGGS | FETE_EGGS)),
@@ -1903,6 +1907,8 @@ HINTS = {
     "home_first": "Ton accueil peut te ressembler : touche à sa disposition.",
     "home_multi": "Une colonne, deux, trois, quatre : chaque écran mérite son accueil.",
     "home_four": "Un très grand écran, et un accueil qui en profite pleinement.",
+    "home_three": "Un écran large mérite plus qu'une ou deux colonnes : essaie le juste milieu.",
+    "home_two": "Ton accueil sur un écran d'ordinateur : il s'ouvre comme un livre.",
     "home_minimal": "Moins, c'est parfois mieux : ne garde que l'essentiel.",
     "home_all": "Et si tu affichais absolument tout, en même temps ?",
     "bunker": "Un mot de passe, c'est bien. Avec un code qui change toutes les 30 secondes, c'est mieux.",
@@ -1929,7 +1935,10 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "bon_public", "sky_layers", "clean_prints", "online_streak", "dry_days_ams", "swaps_max", "swaps_total", "duels",
         "band_prints", "queue_cleared", "rainbow_ams", "zero_alert", "mille_feuille", "doctor", "oven", "marathon_online",
         "same_taste", "home_saves", "home_tiles", "home_tweaks", "cam_hours", "home_first", "home_multi", "home_four",
-        "home_minimal", "home_all"}
+        "home_three", "home_two", "home_minimal", "home_all"}
+# Lus au present ET retires si on defait ce qui les donne (l'etat de la disposition de l'accueil).
+# Regagne apres une perte, un palier revient sans notification ni cle (pas de cles a la chaine).
+REVOCABLE = {"home_multi", "home_minimal", "home_all"}
 for _x in CATALOG:
     _x["live"] = _x["id"] in LIVE
 # Seuils : six paliers (bronze -> legende), etendus a neuf (mythique, cosmique,
@@ -4883,10 +4892,20 @@ async def _tick(notify: bool = True) -> list:
     # seuils changes depuis le dernier passage : on recalcule en silence
     silent = first or st.get("sig") != CATALOG_SIG
     new = []
+    ever = st.setdefault("ever", {})
     for aid, r in ev.items():
         old = dict(st["unlocked"].get(aid) or {})
         best = max(st["best"].get(aid, 0) or 0, r["value"] or 0)
         st["best"][aid] = best
+        if aid in REVOCABLE:
+            # la valeur du moment, pas la meilleure : defaire retire le succes
+            st["best"][aid] = r["value"] or 0
+            got = {i: old.get(i, at) for i, at in r["reached"].items()}
+            seen = set(ever.get(aid) or []) | {str(i) for i in old}
+            new += [(aid, int(i)) for i in got if i not in old and str(i) not in seen]
+            ever[aid] = sorted(seen | {str(i) for i in got})
+            st["unlocked"][aid] = got
+            continue
         if BY_ID[aid].get("live"):
             # lu au present : acquis meme si la valeur redescend, mais toujours
             # selon les seuils du moment (meilleure valeur jamais vue)

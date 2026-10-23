@@ -12,7 +12,7 @@ _LOCK = asyncio.Lock()
 
 def _empty() -> dict:
     return {"saves": 0, "tiles": [], "tweaks": 0, "cam_s": 0.0, "first": None, "multi": None, "four": None,
-            "minimal": None, "all": None}
+            "three": None, "two": None, "minimal": None, "all": None}
 
 
 async def get() -> dict:
@@ -73,20 +73,28 @@ async def layout_saved(old: dict | None, new: dict | None, known: list | None) -
         d["first"] = d["first"] or now
         d["tiles"] = sorted(set(d["tiles"]) | ids)
         d["tweaks"] += tweaks_between(old, new)
-        if not d["multi"] and {"1", "2", "3", "4"} <= set(b):
-            d["multi"] = now
-        if not d["minimal"] and any(set(items) == {"printer"} for items in b.values()):
-            d["minimal"] = now
-        if not d["all"] and len(known) >= 10 and any(known <= set(items) for items in b.values()):
-            d["all"] = now
+        # ce qui depend de la disposition suit la disposition (23/10/2026) : la defaire
+        # retire le succes (multi, minimal, all) ; le refaire le rend, sans nouvelle cle
+        keep = lambda k, ok: (d[k] or now) if ok else None  # noqa: E731
+        d["multi"] = keep("multi", {"1", "2", "3", "4"} <= set(b))
+        d["minimal"] = keep("minimal", any(set(items) == {"printer"} for items in b.values()))
+        d["all"] = keep("all", len(known) >= 10 and any(known <= set(items) for items in b.values()))
     await _update(f)
 
 
 async def seen_four() -> None:
+    await seen_cols(4)
+
+
+async def seen_cols(n: int) -> None:
+    """L'accueil vient d'etre affiche sur n colonnes (2, 3 ou 4) : la page le dit, le serveur ne le voit pas."""
+    k = {2: "two", 3: "three", 4: "four"}.get(int(n))
+    if not k:
+        return
     now = datetime.utcnow().isoformat()
 
     def f(d):
-        d["four"] = d["four"] or now
+        d[k] = d.get(k) or now
     await _update(f)
 
 
@@ -104,4 +112,5 @@ async def values() -> dict:
     return {"home_saves": int(d["saves"]), "home_tiles": len(d["tiles"]), "home_tweaks": int(d["tweaks"]),
             "cam_hours": int(float(d["cam_s"] or 0) // 3600), "home_first": 1 if d["first"] else 0,
             "home_multi": 1 if d["multi"] else 0, "home_four": 1 if d["four"] else 0,
+            "home_three": 1 if d.get("three") else 0, "home_two": 1 if d.get("two") else 0,
             "home_minimal": 1 if d["minimal"] else 0, "home_all": 1 if d["all"] else 0}
