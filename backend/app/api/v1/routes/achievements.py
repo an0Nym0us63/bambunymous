@@ -65,6 +65,17 @@ async def achievements_eggs_found(acc=Depends(require_own_account)):
     return {"found": sorted(await A.eggs_seen_by(acc[0]))}
 
 
+@router.get("/secrets-by-account")
+async def achievements_secrets_by_account(acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+    """Pour l'administrateur (un vrai compte de la maison, jamais une cle de copain) : les secrets
+    trouves par chaque compte de la maison, compte ou pas."""
+    from ....services import achievements as A
+    if acc[1] != ROLE_ADMIN:
+        raise HTTPException(403, "Réservé aux administrateurs")
+    users = (await db.execute(select(User).where(User.active.is_(True)).order_by(User.id))).scalars().all()
+    return {"accounts": await A.secrets_by_account([u.username for u in users])}
+
+
 @router.get("/news")
 async def achievements_news(acc=Depends(require_own_account)):
     """Les paliers debloques depuis mon dernier passage : a annoncer a l'ecran."""
@@ -157,6 +168,9 @@ async def achievements_surprise_shown(body: dict | None = Body(None), acc=Depend
 async def achievements_egg(name: str, acc=Depends(require_own_account)):
     """Un easter egg trouve dans l'appli (jamais par une cle de copain)."""
     from ....services import achievements as A
+    # deja vu par CE compte (sur n'importe quel appareil) : rien a rejouer
+    if name in A.EGGS and name in await A.eggs_seen_by(acc[0]):
+        return {"new": False, "already": True, "mine": True, "id": f"egg_{name}"}
     found = await A.eggs_found()
     if name in A.EGGS and name in found:
         # deja trouve par la maison : rien de plus pour la maison ; ce compte, lui, l'a trouve (une fois)

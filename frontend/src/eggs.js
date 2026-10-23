@@ -47,6 +47,13 @@ export async function egg(name) {
           : "Cette farce ne se gagne que si elle te tombe dessus par surprise, à l'ouverture de l'appli.");
       return;
     }
+    if (data?.already && data.mine) {
+      // deja vu par ce compte (un autre appareil) : rien a rejouer
+      d.add(name);
+      noteFound(name);
+      try { localStorage.setItem(KEY_(), JSON.stringify([...d])); } catch { /* stockage indisponible */ }
+      return;
+    }
     if (data?.already) {
       // deja trouve dans la maison : ce compte l'a trouve lui aussi ; on le lui dit une fois (ca ne compte
       // pas), puis on ne redemande plus et l'objet s'efface pour lui
@@ -63,7 +70,8 @@ export async function egg(name) {
       if (!nc.has(name)) {
         nc.add(name);
         try { localStorage.setItem(NC_(), JSON.stringify([...nc])); } catch { /* stockage indisponible */ }
-        queued(done => celebrate(data, name, true, null, done));
+        // personne dans la maison ne l'a encore : ca ne compte pas, mais ca merite un bravo
+        queued(done => celebrate(data, name, "Bravo ! Même la maison ne l'a pas encore. (Ce compte ne compte pas pour les succès.)", null, done));
         noteFound(name);
       }
       return;
@@ -436,6 +444,10 @@ function installEggs2() {
   if (!currentFriend()) client.get("/achievements/eggs-found", { home: true }).then(({ data }) => {
     const add = (data?.found || []).filter(n => !useEggsFound.getState().found.has(n));
     if (add.length) useEggsFound.setState({ found: new Set([...useEggsFound.getState().found, ...add]) });
+    // et cet appareil le retient : ce que ce compte a deja trouve ne se rejoue pas ici non plus
+    const d = done(), before = d.size;
+    (data?.found || []).forEach(n => d.add(n));
+    if (d.size !== before) { try { localStorage.setItem(KEY_(), JSON.stringify([...d])); } catch { /* rien */ } }
   }).catch(() => {});
   window.__bnEgg = name => { if (NATIVE.has(name)) egg(name); };
   // ce que l'appli a annonce avant que la page soit prete

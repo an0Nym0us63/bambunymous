@@ -5276,9 +5276,8 @@ async def prank_replay_ok(slug: str) -> bool:
     return slug in FETE_SLUGS and slug in fetes_of(_today_paris(), await first_print_day())
 
 
-async def eggs_seen_by(username: str) -> list:
-    """Ce que CE compte a trouve lui-meme (24/10/2026), compte ou pas : les objets caches
-    ne s'effacent que pour lui, les autres comptes de la maison les voient toujours."""
+async def _eggs_by() -> dict:
+    """{compte: {secret: date}} : ce que chaque compte a trouve lui-meme (24/10/2026), compte ou pas."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting
     async with AsyncSessionLocal() as db:
@@ -5286,23 +5285,40 @@ async def eggs_seen_by(username: str) -> list:
             d = json.loads(await get_setting(db, KEY + "_EGGS_BY", "") or "{}")
         except ValueError:
             d = {}
-    return list((d if isinstance(d, dict) else {}).get(username) or [])
+    d = d if isinstance(d, dict) else {}
+    # premiere forme (une simple liste) : sans date
+    return {u: (v if isinstance(v, dict) else {k: None for k in (v or [])}) for u, v in d.items()}
+
+
+async def eggs_seen_by(username: str) -> list:
+    """Ce que CE compte a trouve lui-meme : les objets caches ne s'effacent que pour lui, et un
+    secret deja vu ne lui est plus jamais rejoue (sur aucun appareil)."""
+    return list((await _eggs_by()).get(username) or {})
 
 
 async def egg_seen(username: str, name: str) -> None:
     from ..db.session import AsyncSessionLocal
-    from .settings_service import get_setting, set_setting
+    from .settings_service import set_setting
+    d = await _eggs_by()
+    mine = d.get(username) or {}
+    if name in mine:
+        return
+    mine[name] = datetime.utcnow().isoformat()
+    d[username] = mine
     async with AsyncSessionLocal() as db:
-        try:
-            d = json.loads(await get_setting(db, KEY + "_EGGS_BY", "") or "{}")
-        except ValueError:
-            d = {}
-        d = d if isinstance(d, dict) else {}
-        mine = d.get(username) or []
-        if name in mine:
-            return
-        d[username] = (mine + [name])[-2000:]
         await set_setting(db, KEY + "_EGGS_BY", json.dumps(d))
+
+
+async def secrets_by_account(usernames: list) -> list:
+    """Pour l'administrateur : combien de secrets chaque compte a trouves lui-meme, lesquels et quand."""
+    d = await _eggs_by()
+    out = []
+    for u in usernames:
+        mine = d.get(u) or {}
+        items = sorted(({"id": k, "emoji": EGGS[k][0], "name": EGGS[k][1], "at": at} for k, at in mine.items() if k in EGGS),
+                       key=lambda x: str(x["at"] or ""), reverse=True)
+        out.append({"username": u, "count": len(items), "last": items[0]["at"] if items else None, "items": items})
+    return out
 
 
 async def eggs_found() -> dict:

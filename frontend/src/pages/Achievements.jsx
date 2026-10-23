@@ -400,7 +400,7 @@ export default function Achievements({ embedded = false }) {
 
       {rules && createPortal(<Rules data={data} onClose={() => setRules(false)}/>, document.body)}
       {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
-      {oddsOpen && odds && <OddsSheet odds={odds} onClose={() => setOddsOpen(false)}/>}
+      {oddsOpen && odds && <OddsSheet odds={odds} admin={isAdmin && !atFriend} onClose={() => setOddsOpen(false)}/>}
       {ceremony && <TicketCeremony {...ceremony} onClose={() => setCeremony(null)}/>}
       {usage && createPortal(<UsageSheet data={data} kind={usage} onKind={setUsage} onOpen={id => setDetail(id)}
         onClose={() => setUsage(null)}/>, document.body)}
@@ -707,8 +707,15 @@ const oddsPct = p => (p * 100).toLocaleString("fr-FR", { maximumFractionDigits: 
 const oddsWhen = s => { if (!s) return "jamais"; const d = new Date(/Z|[+-]\d\d:\d\d$/.test(s) ? s : s + "Z");
   return `${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`; };
 // la surprise de chaque compte : chance a la prochaine ouverture, ouvertures sans, surprises recues
-function OddsSheet({ odds, onClose }) {
+function OddsSheet({ odds, admin, onClose }) {
   useEffect(() => { const k = e => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
+  // pour l'administrateur : les secrets que chaque compte a trouves lui-meme (compte ou pas)
+  const [secrets, setSecrets] = useState(null);
+  const [openU, setOpenU] = useState(null);
+  useEffect(() => {
+    if (!admin) return;
+    client.get("/achievements/secrets-by-account").then(r => setSecrets(Object.fromEntries((r.data?.accounts || []).map(a => [a.username, a])))).catch(() => {});
+  }, [admin]);
   return createPortal(
     <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4000, background:"rgba(2,6,23,0.6)", backdropFilter:"blur(4px)",
       display:"flex", alignItems:"center", justifyContent:"center", padding:14 }}>
@@ -742,6 +749,15 @@ function OddsSheet({ odds, onClose }) {
                 {a.pending ? "Une surprise est tirée : elle tombe à la prochaine ouverture" : `${a.n} ouverture${a.n > 1 ? "s" : ""} sans surprise`}
                 {" · "}<b>{a.shown}</b> surprise{a.shown > 1 ? "s" : ""} reçue{a.shown > 1 ? "s" : ""}</div>
               <div style={{ fontSize:11, color:"var(--muted)" }}>Dernière ouverture comptée : {oddsWhen(a.last)}</div>
+              {secrets?.[a.username] && (sc => <>
+                <button type="button" onClick={() => setOpenU(u => u === a.username ? null : a.username)} disabled={!sc.count}
+                  style={{ marginTop:4, padding:0, border:"none", background:"none", cursor: sc.count ? "pointer" : "default", fontSize:12, fontWeight:800,
+                    color:"#EC4899", textAlign:"left" }}>
+                  🥚 {sc.count} secret{sc.count > 1 ? "s" : ""} trouvé{sc.count > 1 ? "s" : ""} lui-même{sc.count ? (openU === a.username ? " ▴" : " ▾") : ""}</button>
+                {openU === a.username && <div style={{ marginTop:4, display:"flex", flexWrap:"wrap", gap:4 }}>
+                  {sc.items.map(x => <span key={x.id} title={x.at ? oddsWhen(x.at) : ""} style={{ fontSize:11, fontWeight:700, padding:"2px 7px", borderRadius:12,
+                    background:"var(--surface2)", color:"var(--text2)" }}>{x.emoji} {x.name}</span>)}</div>}
+              </>)(secrets[a.username])}
             </div>
           </div>
         ))}
