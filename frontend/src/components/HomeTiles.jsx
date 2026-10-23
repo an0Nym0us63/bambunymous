@@ -2129,10 +2129,7 @@ function FilaSwitch({ status, o, sz }) {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>
           {m.fs.calibrating && <span style={{ color: "#f59e0b" }}>● calibration en cours</span>}
 </div>
-        {/* ce que l'imprimante envoie, tel quel : pour verifier le sens des sorties */}
-        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "ui-monospace, monospace", lineHeight: 1.5 }}>
-          brut · in_a {JSON.stringify(status.fila_switch.in_a ?? null)} · in_b {JSON.stringify(status.fila_switch.in_b ?? null)} · out_a {String(status.fila_switch.out_a ?? "—")} · out_b {String(status.fila_switch.out_b ?? "—")}
-          {" · "}buse active {String(m.nz.find(n => n.active)?.id ?? "—")}</div>
+
       </>}>
       {({ W, H }) => {
         const h = Math.min(H, W * 180 / 380);
