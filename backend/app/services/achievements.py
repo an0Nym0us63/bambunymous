@@ -5342,11 +5342,15 @@ async def _spend_key(aid: str) -> dict:
 def _auto_plan(st: dict, budget: int) -> list:
     import zlib
     hint_lvl = next(i for i, r in enumerate(REVEALS) if r[0] == "hint") + 1
+    # ni les farces tirees au hasard (elles ne se gagnent que si elles tombent par surprise : un indice
+    # n'y peut rien) ; et d'abord les secrets dates (calendrier, fetes), pour pouvoir les anticiper
     todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and a.get("hidden") and not a.get("set") and not a.get("only_won")
-            and not (st.get("unlocked") or {}).get(a["id"])]
+            and a["id"][4:] not in PRANK_EGGS and not (st.get("unlocked") or {}).get(a["id"])]
+    dated = lambda aid: SUB_OF.get(aid) in ("calendar", "fetes")      # noqa: E731
     lvl = {aid: _reveal_level(st, aid) for aid in todo}
     to_hint = lambda aid: sum(REVEALS[i][2] for i in range(lvl[aid], hint_lvl))
-    order = sorted((aid for aid in todo if lvl[aid] < hint_lvl), key=lambda aid: (to_hint(aid), -lvl[aid], zlib.crc32(aid.encode())))
+    order = sorted((aid for aid in todo if lvl[aid] < hint_lvl),
+                   key=lambda aid: (not dated(aid), to_hint(aid), -lvl[aid], zlib.crc32(aid.encode())))
     plan, left = [], budget
 
     def take(aid, upto):
@@ -5362,7 +5366,7 @@ def _auto_plan(st: dict, budget: int) -> list:
     for aid in order:                      # 2) le reste, etape par etape
         take(aid, hint_lvl)
     if all(lvl[aid] >= hint_lvl for aid in todo):
-        for aid in sorted(todo, key=lambda a: zlib.crc32(a.encode())):   # 3) les descriptifs
+        for aid in sorted(todo, key=lambda a: (not dated(a), zlib.crc32(a.encode()))):   # 3) les descriptifs
             take(aid, len(REVEALS))
     return plan
 
