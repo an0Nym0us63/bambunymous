@@ -106,6 +106,10 @@ body {
 @keyframes bn-swap { 0% { transform: scale(.8); } 60% { transform: scale(1.08); } 100% { transform: scale(1); } }
 @keyframes bn-ring { 0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.55); } 80%, 100% { box-shadow: 0 0 0 7px rgba(59,130,246,0); } }
 .bn-zoom-body > * { flex-shrink: 0; }
+/* une vignette de plateau (image sur fond blanc) : le blanc se fond dans ce qui est dessous, une ombre la detache */
+.bn-plate { mix-blend-mode: multiply; }
+[data-theme="dark"] .bn-plate, :root:not([data-theme="light"]) .bn-plate { mix-blend-mode: normal; border-radius: 16px; filter: drop-shadow(0 10px 18px rgba(0,0,0,0.45)); }
+[data-theme="light"] .bn-plate { mix-blend-mode: multiply; border-radius: 0; filter: none; }
 @keyframes bn-dash { to { stroke-dashoffset: -16; } }
 @keyframes bn-wave { to { transform: translateX(30px); } }
 @keyframes bn-fade { from { opacity: 0; } }

@@ -1217,6 +1217,8 @@ function ArcGauge({ value, target, max, color, label, active }) {
 }
 function PrinterPopup({ status, img, name, onClose }) {
   const [big, setBig] = useState(false);
+  // telephone : la vignette en grand en haut avec l'anneau a cote, le nom dessous sur toute la largeur
+  const narrowPop = typeof window !== "undefined" && window.innerWidth < 520;
   useEffect(() => {
     const k = e => { if (e.key === "Escape" && !big) onClose(); };
     window.addEventListener("keydown", k);
@@ -1236,7 +1238,7 @@ function PrinterPopup({ status, img, name, onClose }) {
   return createPortal(
     <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 950, padding: 14,
       background: "rgba(2,6,23,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>
-      <div onClick={e => e.stopPropagation()} className="card" style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflowY: "auto", padding: 18,
+      <div onClick={e => e.stopPropagation()} className="card bn-zoom-body" style={{ width: "min(560px, 100%)", maxHeight: "90vh", overflowY: "auto", padding: 18,
         display: "flex", flexDirection: "column", gap: 16, background: "var(--sheet-bg)", boxShadow: "0 30px 80px rgba(0,0,0,0.45)", position: "relative" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ width: 36, height: 36, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center",
@@ -1255,20 +1257,21 @@ function PrinterPopup({ status, img, name, onClose }) {
           background: `linear-gradient(135deg, ${s.color}33, transparent 60%), var(--surface2)` }}>
           {img && <img src={img} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
             filter: "blur(22px) saturate(1.5)", opacity: 0.45, transform: "scale(1.3)" }}/>}
-          <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 14 }}>
-            <div onClick={img ? () => setBig(true) : undefined} style={{ width: 92, height: 92, borderRadius: 18, overflow: "hidden", flexShrink: 0,
-              boxShadow: "0 10px 24px rgba(0,0,0,0.3)", background: "var(--surface)", cursor: img ? "zoom-in" : "default", display: "flex",
-              alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
-              {img ? <img src={img} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+          <div style={{ position: "relative", display: "grid", gridTemplateColumns: narrowPop ? "1fr auto" : "auto minmax(0,1fr) auto",
+            alignItems: "center", gap: narrowPop ? "10px 12px" : 14 }}>
+            <div onClick={img ? () => setBig(true) : undefined} style={{ width: narrowPop ? 128 : 104, height: narrowPop ? 128 : 104, flexShrink: 0,
+              cursor: img ? "zoom-in" : "default", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
+              {img ? <img src={img} alt="" className="bn-plate" style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                onError={e => { e.currentTarget.style.display = "none"; }}/>
                 : <Printer size={32}/>}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ minWidth: 0, gridColumn: narrowPop ? "1 / -1" : undefined, gridRow: narrowPop ? 2 : undefined }}>
               <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", lineHeight: 1.2, overflow: "hidden", display: "-webkit-box",
                 WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{name || status?.print_name || "Rien en cours"}</div>
               {live && <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", marginTop: 3 }}>
                 {status.remaining_minutes > 0 ? `encore ${fmtTime(status.remaining_minutes)}` : "bientôt fini"}{fin ? ` · fin ${fin.time}${plusDays(fin.dayDiff)}` : ""}</div>}
             </div>
-            <div style={{ position: "relative", width: 86, height: 86, flexShrink: 0 }}>
+            <div style={{ position: "relative", width: 86, height: 86, flexShrink: 0, gridColumn: narrowPop ? 2 : undefined, gridRow: narrowPop ? 1 : undefined }}>
               <svg width="86" height="86" viewBox="0 0 86 86" style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
                 <circle cx="43" cy="43" r="36" fill="none" stroke="rgba(148,163,184,0.25)" strokeWidth="9"/>
                 <circle cx="43" cy="43" r="36" fill="none" stroke={s.color} strokeWidth="9" strokeLinecap="round" strokeDasharray={2 * Math.PI * 36}
