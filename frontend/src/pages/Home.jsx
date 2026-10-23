@@ -127,28 +127,13 @@ function StatusBanner({ status, friend = null, switcher = null, defaultExpanded 
     return stopCam;
   }, [expanded, isRunning, visKey, friend?.id]);
 
-  const [printInfo, setPrintInfo] = useState(null);
+  const printInfo = useLivePrint(status, via, friend?.id);
 
   // Au moins un tray chargé dont le filament n'a pas été retrouvé en base
   const hasUnmatched = (status?.ams_list || []).some(ams =>
     (ams.trays || []).some(t => t.match_mode === "notfound")
   );
 
-  // Charger les infos du print en cours (vignette + nom).
-  // En cours, en pause ou en preparation : l'impression IN_PROGRESS. Sinon
-  // (arretee, echouee, terminee, au repos) : la plus RECENTE, quel que soit son
-  // resultat -- avant, tout ce qui n'etait pas RUNNING allait chercher le
-  // dernier print REUSSI, d'ou la vignette d'un autre print en pause ou apres
-  // un arret. Rechargee aussi quand le travail change (job_id).
-  useEffect(() => {
-    if (!status?.status) return;
-    const live = ["RUNNING", "PAUSE", "PREPARE", "SLICING"].includes(status.status);
-    client.get(via("/prints"), { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
-      .then(r => { const p = r.data?.prints?.[0]; if (p) setPrintInfo(p); })
-      .catch(() => {});
-  }, [status?.status, status?.job_id, friend?.id]);
-  // Changement de machine (moi / un copain) : la vignette de l'autre ne reste pas.
-  useEffect(() => { setPrintInfo(null); }, [friend?.id]);
 
   if (!status) return <div className="card" style={{ height:56, animation:"pulse 2s infinite" }} />;
   const cfg    = STATUS_CFG[status.status] ?? STATUS_CFG.IDLE;
@@ -225,7 +210,7 @@ function StatusBanner({ status, friend = null, switcher = null, defaultExpanded 
           <div style={{ width:72, height:72, borderRadius:10, overflow:"hidden", flexShrink:0,
             background:"var(--surface2)" }}>
             {printInfo && (friend || printInfo.plate_image) && (
-              <img key={`${friend?.id || "me"}-${printInfo.id}`} src={img(`/prints/${printInfo.id}/image`)} alt=""
+              <img key={`${friend?.id || "me"}-${printInfo.id}${imgV(printInfo)}`} src={img(`/prints/${printInfo.id}/image${imgV(printInfo)}`)} alt=""
                 style={{ width:"100%", height:"100%", objectFit:"cover" }}
                 onError={e => e.currentTarget.style.display="none"}/>
             )}
@@ -1313,6 +1298,8 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
 
 // ── La tuile imprimante : son en-tete, et sa version en demi-largeur ─────────
 const LIVE_ST = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"];
+// l'adresse de l'image change quand elle arrive : le navigateur la recharge (et une erreur d'avant ne la masque plus)
+const imgV = p => (p?.plate_image ? `?v=${encodeURIComponent(String(p.plate_image).slice(-24))}` : "");
 function stateOf(status) {
   const st = String(status?.status || "").toUpperCase();
   if (!status) return { label: "…", color: "#94a3b8" };
@@ -1352,28 +1339,49 @@ function PrinterHead({ status, temps = true }) {
 // sur une ligne : la vignette (un clic l'ouvre en grand), le nom, puis selon l'etat :
 // en cours = pourcentage, temps restant et barre ; en pause = pareil en orange ;
 // sinon l'etat seul (terminee, au repos, echouee, injoignable)
-function PrinterLine({ status }) {
+// L'impression a montrer (vignette + nom). En cours, en pause ou en preparation : l'impression
+// IN_PROGRESS ; sinon la plus recente, quel que soit son resultat. Relue quand l'etat ou le travail
+// change, et, tant qu'elle tourne, toutes les 8 s jusqu'a avoir son image : au lancement, la fiche
+// n'existe pas encore ou son image sort du 3MF quelques secondes apres (il fallait faire F5).
+function useLivePrint(status, via = x => x, who = null) {
   const [info, setInfo] = useState(null);
+  const st = String(status?.status || "").toUpperCase();
+  const live = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"].includes(st);
+  const job = status?.job_id ? String(status.job_id) : "";
+  useEffect(() => { setInfo(null); }, [who]);
+  useEffect(() => {
+    if (!st) return undefined;
+    let stop = false, timer = null, tries = 0;
+    const load = () => client.get(via("/prints"), { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
+      .then(r => {
+        if (stop) return;
+        const p = (r.data?.prints || r.data?.items || [])[0];
+        if (p) setInfo(p);
+        const behind = !p || !p.plate_image || (job && p.job_id && String(p.job_id) !== job);
+        if (live && behind && ++tries < 40) timer = setTimeout(load, 8000);
+      }).catch(() => { if (!stop && live && ++tries < 40) timer = setTimeout(load, 8000); });
+    load();
+    return () => { stop = true; clearTimeout(timer); };
+  }, [st, job, who]); // eslint-disable-line react-hooks/exhaustive-deps
+  return info;
+}
+function PrinterLine({ status }) {
+  const info = useLivePrint(status);
   const [big, setBig] = useState(false);
   const [pop, setPop] = useState(false);
   const st = String(status?.status || "").toUpperCase();
   const live = LIVE_ST.includes(st);
   const paused = st === "PAUSE" || st === "PAUSED";
-  useEffect(() => {
-    if (!status?.status) return;
-    client.get("/prints", { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
-      .then(r => { const p = (r.data?.prints || r.data?.items || [])[0]; if (p) setInfo(p); }).catch(() => {});
-  }, [status?.status, status?.job_id]); // eslint-disable-line react-hooks/exhaustive-deps
   const s = stateOf(status);
   const pct = Math.round(status?.progress || 0);
-  const img = info ? apiUrl(`/prints/${info.id}/image`) : null;
+  const img = info ? apiUrl(`/prints/${info.id}/image${imgV(info)}`) : null;
   return (
     <div className="card" role="button" onClick={() => setPop(true)}
       style={{ position: "relative", height: "100%", boxSizing: "border-box", padding: "0 12px", display: "flex", alignItems: "center", gap: 10,
         overflow: "hidden", minWidth: 0, cursor: "pointer" }}>
       <span data-pk="" onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ cursor: img ? "zoom-in" : undefined, width: 36, height: 36, borderRadius: 9, overflow: "hidden", flexShrink: 0, background: "var(--surface2)",
         display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)" }}>
-        {img ? <img src={img} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+        {img ? <img key={img} src={img} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}/> : <Printer size={17}/>}</span>
       <span style={{ flex: 1, minWidth: 0, fontSize: 13.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
         textOverflow: "ellipsis" }}>{info?.file_name || status?.print_name || info?.translated_name || "Imprimante"}</span>
@@ -1608,7 +1616,7 @@ function SwitchDiagram({ fs, status }) {
 // le nom, le pourcentage en grand, le temps restant, l'heure de fin, la couche, la barre ;
 // plus large, les temperatures et la bobine en cours a droite
 function PrinterStrip({ status, showFin = true, showLayer = true }) {
-  const [info, setInfo] = useState(null);
+  const info = useLivePrint(status);
   const [big, setBig] = useState(false);
   const [pop, setPop] = useState(false);
   const box = useRef(null);
@@ -1623,15 +1631,10 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
   const st = String(status?.status || "").toUpperCase();
   const live = LIVE_ST.includes(st);
   const paused = st === "PAUSE" || st === "PAUSED";
-  useEffect(() => {
-    if (!status?.status) return;
-    client.get("/prints", { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
-      .then(r => { const p = (r.data?.prints || r.data?.items || [])[0]; if (p) setInfo(p); }).catch(() => {});
-  }, [status?.status, status?.job_id]); // eslint-disable-line react-hooks/exhaustive-deps
   const s = stateOf(status);
   const pct = Math.round(status?.progress || 0);
   const fin = live && status?.remaining_minutes ? fmtFinishTime(status.remaining_minutes) : null;
-  const img = info ? apiUrl(`/prints/${info.id}/image`) : null;
+  const img = info ? apiUrl(`/prints/${info.id}/image${imgV(info)}`) : null;
   const ams = (status?.ams_list || []).find(a => a.id === status?.active_ams_id);
   const tray = ams?.trays?.find(t => t.id === status?.active_tray_id);
   const nz = (status?.nozzles || []).find(n => n.active) || (status?.nozzles || [])[0];
@@ -1661,7 +1664,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
         <div onClick={img ? e => { e.stopPropagation(); setBig(true); } : undefined} style={{ height: "100%", aspectRatio: "1", maxHeight: 120, borderRadius: 14,
           overflow: "hidden", flexShrink: 0, background: "var(--surface2)", cursor: img ? "zoom-in" : "default", display: "flex", alignItems: "center",
           justifyContent: "center", color: "var(--muted)" }}>
-          {img ? <img src={img} alt="" onError={e => { e.currentTarget.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+          {img ? <img key={img} src={img} alt="" onError={e => { e.currentTarget.style.display = "none"; }} style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
             : <Printer size={26}/>}
         </div>
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
@@ -1712,16 +1715,11 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
 }
 // en demi-largeur : grande (vignette 4/3 au-dessus), moyenne (vignette 16/9), ou compacte (vignette a gauche)
 function PrinterCompact({ status, size = "big", showFin = true, showLayer = true }) {
-  const [info, setInfo] = useState(null);
+  const info = useLivePrint(status);
   const [big, setBig] = useState(false);
   const [pop, setPop] = useState(false);
   const st = String(status?.status || "").toUpperCase();
   const live = LIVE_ST.includes(st);
-  useEffect(() => {
-    if (!status?.status) return;
-    client.get("/prints", { params: { limit: 1, ...(live ? { status: "IN_PROGRESS" } : {}) } })
-      .then(r => { const p = (r.data?.prints || r.data?.items || [])[0]; if (p) setInfo(p); }).catch(() => {});
-  }, [status?.status, status?.job_id]); // eslint-disable-line react-hooks/exhaustive-deps
   const s = stateOf(status);
   const pct = Math.round(status?.progress || 0);
   const fin = live && status?.remaining_minutes ? fmtFinishTime(status.remaining_minutes) : null;
@@ -1730,7 +1728,7 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
     <div onClick={info ? e => { e.stopPropagation(); setBig(true); } : undefined}
       style={{ position: "relative", borderRadius: 12, overflow: "hidden", background: "var(--surface2)", flexShrink: 0, cursor: info ? "zoom-in" : undefined,
       ...(small ? { width: 42, height: 42, borderRadius: 10 } : { width: "100%", aspectRatio: size === "mid" ? "16 / 9" : "4 / 3" }) }}>
-      {info && <img data-pk="" src={apiUrl(`/prints/${info.id}/image`)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+      {info && <img key={imgV(info)} data-pk="" src={apiUrl(`/prints/${info.id}/image${imgV(info)}`)} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
         style={{ width: "100%", height: "100%", objectFit: small ? "cover" : "contain", display: "block" }}/>}
       {live && !small && <span data-pk="" style={{ position: "absolute", right: 8, top: 8, fontSize: 17, fontWeight: 900, color: "#fff",
         padding: "2px 9px", borderRadius: 10, background: `${s.color}dd`, boxShadow: "0 4px 12px rgba(0,0,0,0.25)" }}>{pct}%</span>}
@@ -1753,10 +1751,10 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
       WebkitLineClamp: small ? 1 : 2, WebkitBoxOrient: "vertical" }}><Words text={info?.file_name || status?.print_name || s.label}/></div>
   );
   // le portail de l'agrandissement renvoie ses clics : on les arrete
-  const popup = pop && <PrinterPopup status={status} img={info ? apiUrl(`/prints/${info.id}/image`) : null} name={info?.file_name || status?.print_name}
+  const popup = pop && <PrinterPopup status={status} img={info ? apiUrl(`/prints/${info.id}/image${imgV(info)}`) : null} name={info?.file_name || status?.print_name}
     onClose={() => setPop(false)}/>;
   const zoom = big && info && <span onClick={e => e.stopPropagation()}>
-    <Lightbox images={[apiUrl(`/prints/${info.id}/image`)]} index={0} onClose={() => setBig(false)}/></span>;
+    <Lightbox images={[apiUrl(`/prints/${info.id}/image${imgV(info)}`)]} index={0} onClose={() => setBig(false)}/></span>;
   const paused = st === "PAUSE" || st === "PAUSED";
   // compacte : le nom en entier (sur deux lignes s'il le faut), puis l'avancement et le temps restant, puis la barre ;
   // hors impression, l'etat a la place

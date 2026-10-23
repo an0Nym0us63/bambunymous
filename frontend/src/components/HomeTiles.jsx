@@ -2383,10 +2383,17 @@ function headModel(st) {
   const live = isLive(st);
   const L = side(1), R = side(0);
   // pendant une impression : la buse active imprime ; au repos, elle est seulement selectionnee
-  // (la gauche, baissee) ; l'autre levee (gauche) ou au repos (droite)
+  // (la gauche, baissee) ; l'autre levee (gauche) ou au repos (droite).
+  // Au lancement (chauffe, calibration, nettoyage : gcode PREPARE ou une etape stg_cur hors 0),
+  // la buse active prepare, elle n'imprime pas encore -- souvent la gauche, sans filament.
+  // En pause, elle attend. Et sans filament, une buse n'imprime jamais.
+  const gs = String(st?.status || "").toUpperCase(), stage = st?.print_stage;
+  const prep = live && (gs === "PREPARE" || gs === "SLICING" || (stage != null && stage !== 0 && stage !== 255 && stage !== -1));
+  const paused = gs === "PAUSE" || gs === "PAUSED";
   for (const [x, left] of [[L, true], [R, false]]) if (x) {
-    x.printing = live && x.n.active;
-    x.state = x.printing ? "● imprime" : x.n.active ? (left ? "baissée" : "sélectionnée") : left ? "levée" : "au repos";
+    const on = live && x.n.active;
+    x.printing = on && !prep && !paused && !!x.slot;
+    x.state = x.printing ? "● imprime" : on && paused ? "en pause" : on && prep ? "préparation" : x.n.active ? (left ? "baissée" : "sélectionnée") : left ? "levée" : "au repos";
   }
   return { L, R, dual: nz.length > 1, live };
 }
