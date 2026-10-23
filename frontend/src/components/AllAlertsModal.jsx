@@ -40,12 +40,14 @@ function Dot({ a, size = 22 }) {
   );
 }
 
-export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" }) {
+// inline : le contenu seul (dans la fenetre d'une tuile de l'accueil), sans voile ni titre ;
+// initialCat : ouverte sur une categorie
+export default function AllAlertsModal({ onClose, onChanged, initialTab = "all", inline = false, initialCat = "" }) {
   useTrackDetail("Accueil · Points d'attention");
   const [tab, setTab]   = useState(initialTab);   // "all" | "dismissed"
   const [data, setData] = useState(null);
   const [dis, setDis]   = useState(null);         // sourdines, avec leur duree
-  const [cat, setCat]   = useState("");
+  const [cat, setCat]   = useState(initialCat || "");
   const [q, setQ]       = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr]   = useState(null);
@@ -170,27 +172,33 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
 
   const iconBtn = (color) => ({ flexShrink:0, background:"none", border:"none",
     cursor:"pointer", color, fontSize:12, padding:"0 3px" });
+  // des actions nommees en clair : « 7 j », « Jamais », « Remettre »
+  const pill = (color) => ({ flexShrink:0, cursor:"pointer", color, fontSize:11, fontWeight:800, padding:"3px 8px", borderRadius:8,
+    border:"1px solid var(--border)", background:"var(--surface2)", whiteSpace:"nowrap" });
 
-  return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9999,
-      background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center",
-      justifyContent:"center", padding:16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ width:"100%", maxWidth:600,
+  // sans filtre : les alertes regroupees par categorie, un en-tete par categorie (qui la filtre au toucher)
+  const grouped = !cat && !q;
+  const order = Object.fromEntries(catList.map((c, i) => [c.category, i]));
+  const rows = grouped ? [...shown].sort((x, y) => (order[x.category] ?? 99) - (order[y.category] ?? 99)) : shown;
+  const catOf = k => catList.find(c => c.category === k);
+  const pad = inline ? 0 : 16;
+  const body = (
+      <div onClick={e => e.stopPropagation()} style={inline ? { display:"flex", flexDirection:"column" } : { width:"100%", maxWidth:600,
         maxHeight:"88vh", display:"flex", flexDirection:"column",
         background:"var(--sheet-bg)", borderRadius:16, overflow:"hidden" }}>
 
-        <div style={{ padding:"12px 16px 0", display:"flex", alignItems:"center", gap:10 }}>
+        {!inline && <div style={{ padding:"12px 16px 0", display:"flex", alignItems:"center", gap:10 }}>
           <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0, flex:1 }}>
             Points d'attention
           </p>
           <button type="button" onClick={onClose}
             style={{ background:"none", border:"none", color:"var(--muted)",
               fontSize:18, cursor:"pointer" }}>✕</button>
-        </div>
+        </div>}
 
         {/* Deux onglets plutot que deux fenetres : elles affichaient deja les
             memes lignes, avec les memes filtres. */}
-        <div style={{ display:"flex", gap:4, padding:"10px 16px 14px" }}>
+        <div style={{ display:"flex", gap:4, padding:`10px ${pad}px 14px` }}>
           {[["all", "Toutes", (data?.alerts || []).filter(a => !a.dismissed).length],
             ["dismissed", "Ignorées", (dis || []).length]].map(([k, lbl, n]) => (
             <button key={k} type="button"
@@ -206,7 +214,7 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
 
         {err && <p style={{ margin:0, padding:"0 16px 8px", fontSize:12, color:"#ef4444" }}>⚠ {err}</p>}
 
-        <div style={{ padding:"0 16px 10px", display:"flex", flexDirection:"column", gap:8 }}>
+        <div style={{ padding:`0 ${pad}px 10px`, display:"flex", flexDirection:"column", gap:8 }}>
           {/* Compteur DANS le champ plutot qu'au-dessus de la liste : c'est la
               qu'on regarde en tapant, et la reponse arrive sans deplacer les
               yeux. Affiche des qu'un filtre est actif -- recherche ou
@@ -244,7 +252,7 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
 
         </div>
 
-        <div style={{ flex:1, overflowY:"auto", padding:"0 8px 12px" }}>
+        <div style={{ flex:1, overflowY: inline ? "visible" : "auto", padding: inline ? "0 0 12px" : "0 8px 12px" }}>
           {(tab === "all" ? !data : !dis) ? (
             <p style={{ fontSize:12, color:"var(--muted)", padding:12, margin:0 }}>Chargement…</p>
           ) : !shown.length ? (
@@ -252,8 +260,19 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
               {source.length ? "Aucune alerte ne correspond."
                 : tab === "all" ? "Aucune alerte." : "Aucune alerte ignorée."}
             </p>
-          ) : shown.map(a => (
-            <div key={a.key} style={{ display:"flex", alignItems:"center", gap:10,
+          ) : rows.map((a, i) => (
+            <React.Fragment key={a.key}>
+            {grouped && (i === 0 || rows[i - 1].category !== a.category) && (
+              <button type="button" onClick={() => setCat(a.category)} title="Voir seulement cette catégorie"
+                style={{ display:"flex", alignItems:"center", gap:8, width:"100%", marginTop: i ? 12 : 2, marginBottom:2, padding:"6px 8px",
+                  borderRadius:10, border:"none", cursor:"pointer", background:"rgba(245,158,11,0.10)", color:"var(--text)", textAlign:"left" }}>
+                <span style={{ fontSize:16 }}>{catOf(a.category)?.icon || a.cat_icon || a.icon}</span>
+                <b style={{ flex:1, fontSize:13 }}>{catOf(a.category)?.label || a.cat_label || a.label}</b>
+                <span style={{ fontSize:12, fontWeight:900, color:"#b45309" }}>{counts[a.category]}</span>
+                <span style={{ fontSize:11, color:"var(--muted)" }}>›</span>
+              </button>
+            )}
+            <div style={{ display:"flex", alignItems:"center", gap:10,
               padding:"8px", borderRadius:8 }}>
               <div onClick={() => openAlert(a)}
                 style={{ display:"flex", alignItems:"center", gap:10, flex:1, minWidth:0,
@@ -283,7 +302,7 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
                   {fmtUntil(a)}
                 </span>
                 <AdminOnly><button type="button" onClick={() => restore(a)} title="Remettre en circulation"
-                  style={iconBtn("var(--muted)")}>↩</button></AdminOnly>
+                  style={pill("#3b82f6")}>↩ Remettre</button></AdminOnly>
               </>) : (<>
                 {a.value && (
                   <span style={{ flexShrink:0, fontSize:10, fontWeight:700,
@@ -293,16 +312,17 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
                   </span>
                 )}
                 <AdminOnly><button type="button" onClick={() => dismiss(a, 7)} title="Ignorer 7 jours"
-                  style={iconBtn("var(--muted)")}>7j</button>
+                  style={pill("var(--text2)")}>7 j</button>
                 <button type="button" onClick={() => dismiss(a, null)} title="Ne plus jamais afficher"
-                  style={iconBtn("#ef4444")}>✕</button></AdminOnly>
+                  style={pill("#ef4444")}>Jamais</button></AdminOnly>
               </>)}
             </div>
+            </React.Fragment>
           ))}
         </div>
 
         {tab === "dismissed" && !!(dis || []).length && (
-          <div style={{ padding:"10px 16px", display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ padding:`10px ${pad}px`, display:"flex", flexDirection:"column", gap:8 }}>
             {/* Le bouton restreint n'apparait que si un filtre est actif ET
                 qu'il ne selectionne pas deja tout : sinon il ferait doublon
                 avec celui d'en dessous. */}
@@ -323,7 +343,8 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
           </div>
         )}
       </div>
-
+  );
+  const sheets = (<>
       {/* Fiches ouvertes par-dessus la liste — on ne perd pas ses filtres. */}
       {sheet?.kind === "filament" && (
         <FilamentSheet f={sheet.data} onClose={() => setSheet(null)}
@@ -340,6 +361,13 @@ export default function AllAlertsModal({ onClose, onChanged, initialTab = "all" 
           onDelete={() => { setSheet(null); load(); onChanged?.(); }}
           onChanged={() => { load(); onChanged?.(); }}/>
       )}
+  </>);
+  if (inline) return <>{body}{sheets}</>;
+  return createPortal(
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:9999,
+      background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"center",
+      justifyContent:"center", padding:16 }}>
+      {body}{sheets}
     </div>,
     document.body
   );

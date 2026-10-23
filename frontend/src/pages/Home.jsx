@@ -7,7 +7,6 @@ import { useAuth } from "../store/auth";
 import { useFriend } from "../store/friend";
 import { create } from "zustand";
 import client, { apiUrl } from "../api/client";
-import AttentionSection from "../components/AttentionSection";
 import HomeGrid from "../components/HomeGrid";
 import { gradeOf } from "./Achievements";
 import LiveCamera from "../components/LiveCamera";
@@ -2012,14 +2011,6 @@ export default function Home() {
         { key: "_amsGrid", label: "Ma grille", group: "Disposition des AMS", hint: "La place de chaque unité : qui est au-dessus de qui. Commune à tout l'accueil.",
           render: () => <AmsOrderEditor/> },
         { key: "climate", label: "Humidité de chaque unité", def: true }] },
-    attention: { label: "Points d'attention", w: [2], h: ["auto", 1, 2, 3], summary: d => {
-        const cats = (d.attention?.categories || []).filter(c => c.total);
-        return <span style={{ display: "inline-flex", gap: 6, fontSize: 13 }}>{cats.length ? cats.map(c => <span key={c.category} title={c.label}>
-          {c.icon}<b style={{ color: "#b45309" }}>{c.total}</b></span>) : "rien à signaler"}</span>;
-      }, frame: { icon: <AlertTriangle size={15}/>, color: "#F59E0B" },
-      render: (d, st, o) => <AttentionSection bare startOpen={o.open === "keep" ? null : o.open === "open"}/>,
-      options: [{ key: "open", label: "À l'arrivée sur l'accueil", def: "keep",
-        choices: [["keep", "comme je l'ai laissée"], ["open", "dépliée"], ["closed", "repliée"]] }] },
   };
   return (
     <div className="home-grid">

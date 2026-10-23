@@ -225,32 +225,23 @@
 
 <section id="imprimante-attention">
   <h2>Les points d'attention</h2>
-  <p>Le bloc <span class="ui">Points d'attention</span> (en bas de l'accueil par défaut) liste ce qui mérite ton attention dans ton stock et tes fiches : bobines presque vides, filaments en fin de stock, impressions sans bobine associée, bobines à sécher, filaments sans prix… Les alertes sont recalculées à chaque ouverture : quand le problème est réglé, l'alerte disparaît.</p>
-  <figure class="phone"><img src="img/imprimante-attention.webp" alt="Bloc Points d'attention déplié : Replier, 162, catégories Bobines à finir (sous 15 %), Filaments en fin de stock (sous 25 %), Impressions sans métadonnées, avec leurs alertes"><figcaption>Les points d'attention, dépliés.</figcaption></figure>
-
-  <section id="imprimante-attention-bloc">
-    <h3>Dans le bloc</h3>
-    <ul>
-      <li>La ligne <span class="ui">▸ Déplier</span> / <span class="ui">▾ Replier</span> ouvre ou ferme la liste, avec le nombre total d'alertes. Repliée par défaut, elle reste comme tu l'as laissée sur cet appareil ; l'option du bloc <span class="ui">À l'arrivée sur l'accueil</span> peut l'imposer (<span class="ui">comme je l'ai laissée</span>, <span class="ui">dépliée</span>, <span class="ui">repliée</span>).</li>
-      <li>Dépliée : par catégorie (icône, nom, « 5 / 7 » = montrées / total), quelques alertes. Chacune montre la couleur du filament ou la vignette de l'impression, le titre, la marque et la matière, un détail (« Bobine #13 ») et à droite la valeur clé (« 85 g · 8 % », une date…).</li>
-      <li><strong>Touche une alerte</strong> pour ouvrir la fiche concernée (filament, bobine ou impression) par-dessus l'accueil.</li>
-      <li><strong>Appui long</strong> (ou clic droit, ou le bouton <span class="ui">⋯</span>) : un menu propose <span class="ui">Voir</span>, <span class="ui">Ignorer 7 jours</span> et <span class="ui">Ne plus jamais afficher</span> <span class="admin">admin</span>, et <span class="ui">Annuler</span>. Une alerte ignorée disparaît aussitôt.</li>
-      <li>L'icône liste <span class="ui">Voir toutes les alertes</span> ouvre la fenêtre complète.</li>
-      <li>Rien à signaler : « ✅ Rien à signaler. »</li>
-    </ul>
-  </section>
+  <p>Les <b>points d'attention</b> signalent ce qui mérite ton attention dans ton stock et tes fiches : bobines presque vides, filaments en fin de stock, impressions sans bobine associée, bobines à sécher, filaments sans prix… Ils sont recalculés à chaque ouverture : quand le problème est réglé, l'alerte disparaît.</p>
+  <p>Sur l'accueil, ils passent par la tuile <a href="#tuiles-alerts">Alertes</a> : ses catégories et leurs nombres, et une fenêtre qui permet de tout voir et de tout gérer. (L'ancien bloc dépliable « Points d'attention » a disparu : là où il était, la tuile Alertes prend sa place, à la même taille.)</p>
 
   <section id="imprimante-attention-toutes">
-    <h3>Toutes les alertes</h3>
-    <figure class="phone"><img src="img/imprimante-alertes.webp" alt="Fenêtre Points d'attention : onglets Toutes (192) et Ignorées (0), champ Filtrer, liste Toutes les catégories, alertes avec valeur, bouton 7j et croix rouge"><figcaption>La fenêtre de toutes les alertes.</figcaption></figure>
+    <h3>La fenêtre des alertes</h3>
+    <figure class="phone"><img src="img/imprimante-alertes.webp" alt="Fenêtre Alertes : onglets Toutes (7) et Ignorées (1), champ Filtrer, liste Toutes les catégories, alertes regroupées par catégorie (Stock bas, Séchage) avec leur valeur et les boutons 7 j et Jamais"><figcaption>La fenêtre des alertes, regroupées par catégorie.</figcaption></figure>
     <ul>
+      <li>Elle s'ouvre en touchant la tuile <a href="#tuiles-alerts">Alertes</a> ; toucher une catégorie de la tuile l'ouvre directement filtrée sur elle.</li>
       <li>Deux onglets : <span class="ui">Toutes (n)</span> et <span class="ui">Ignorées (n)</span>.</li>
+      <li>Sans filtre, les alertes sont <b>regroupées par catégorie</b> : un en-tête par catégorie (icône, nom, nombre), qu'on touche pour n'afficher qu'elle.</li>
       <li>Le champ <span class="ui">Filtrer : nom, marque, matière…</span> (le compteur « x / y » apparaît dans le champ) et la liste <span class="ui">Toutes les catégories</span> pour n'en voir qu'une.</li>
-      <li>Onglet <span class="ui">Toutes</span> : à droite de chaque alerte, <span class="ui">7j</span> (ignorer 7 jours) et la croix rouge (ne plus jamais afficher) <span class="admin">admin</span>.</li>
-      <li>Onglet <span class="ui">Ignorées</span> : « Définitivement », « Encore n j » ou « Expiré », et <span class="ui">↩</span> pour remettre l'alerte en circulation <span class="admin">admin</span> ; en bas, <span class="ui">Tout remettre en circulation</span> (ou seulement celles filtrées).</li>
-      <li>Touche une ligne pour ouvrir sa fiche.</li>
+      <li>Chaque alerte montre la couleur du filament (ou la vignette de l'impression), son titre, la marque, la matière, un détail, et à droite la valeur clé (« 85 g · 8 % », une date…).</li>
+      <li>Onglet <span class="ui">Toutes</span> : <span class="ui">7 j</span> ignore l'alerte 7 jours, <span class="ui">Jamais</span> ne l'affiche plus jamais <span class="admin">admin</span>. Elle disparaît aussitôt, et la tuile se met à jour.</li>
+      <li>Onglet <span class="ui">Ignorées</span> : « Définitivement », « Encore n j » ou « Expiré », et <span class="ui">↩ Remettre</span> pour remettre l'alerte en circulation <span class="admin">admin</span> ; en bas, <span class="ui">Tout remettre en circulation</span> (ou seulement celles filtrées).</li>
+      <li>Touche une alerte pour ouvrir sa fiche (filament, bobine ou impression) par-dessus la fenêtre, sans perdre tes filtres.</li>
     </ul>
-    <p>L'ordre des catégories et celles qui s'affichent se règlent dans les <a href="#parametres">Paramètres</a>. Pour un résumé compact, ajoute la tuile <a href="#tuiles-alerts">Alertes en bref</a>.</p>
+    <p>L'ordre des catégories et celles qui s'affichent se règlent dans les <a href="#parametres">Paramètres</a>.</p>
   </section>
 </section>
 

@@ -12,7 +12,7 @@
   <p>De haut en bas :</p>
   <ol>
     <li>le <a href="#accueil-bandeau">bandeau d'accueil</a>, toujours en haut ;</li>
-    <li>la <a href="#accueil-grille">grille</a>, qui mélange quatre <strong>blocs</strong> propres à l'accueil (<span class="ui">Imprimante</span>, <span class="ui">AMS</span>, <span class="ui">Rack Vortek</span>, <span class="ui">Points d'attention</span>) et les <strong>tuiles</strong> du catalogue (<span class="ui">Aujourd'hui</span>, <span class="ui">Stock</span>, <span class="ui">Séchage</span>…).</li>
+    <li>la <a href="#accueil-grille">grille</a>, qui mélange trois <strong>blocs</strong> propres à l'accueil (<span class="ui">Imprimante</span>, <span class="ui">AMS</span>, <span class="ui">Rack Vortek</span>) et les <strong>tuiles</strong> du catalogue (<span class="ui">Aujourd'hui</span>, <span class="ui">Stock</span>, <span class="ui">Séchage</span>…).</li>
   </ol>
   <p>L'accueil se tient à jour tout seul : l'état de l'imprimante est relu toutes les 3 secondes, les tuiles toutes les 2 minutes et, en plus, dès que l'imprimante change d'état (lancement, pause, fin, échec, nouvelle impression).</p>
   <p>Sur téléphone, la page tient dans la largeur de l'écran ; sur un grand écran (à partir de 1024 px de large), elle prend toute la largeur et les tuiles se répartissent en plusieurs colonnes.</p>
@@ -98,7 +98,7 @@
     <li>Les tuiles se tassent : une petite tuile vient combler un trou laissé plus haut.</li>
     <li>Une tuile qui n'a rien à montrer (par exemple <span class="ui">Copains</span> si tu n'as pas de copain) disparaît de l'accueil ; elle réapparaît dès qu'elle a du contenu.</li>
   </ul>
-  <p><strong>Toucher une tuile</strong> ouvre sa vue en grand (une fenêtre détaillée, qui monte du bas sur téléphone) ou mène à sa page. Le détail de chaque tuile est dans <a href="#tuiles">Les tuiles</a> ; les blocs Imprimante, AMS, Rack Vortek et Points d'attention dans <a href="#imprimante">L'imprimante sur l'accueil</a>.</p>
+  <p><strong>Toucher une tuile</strong> ouvre sa vue en grand (une fenêtre détaillée, qui monte du bas sur téléphone) ou mène à sa page. Le détail de chaque tuile est dans <a href="#tuiles">Les tuiles</a> ; les blocs Imprimante, AMS et Rack Vortek, et les points d'attention, dans <a href="#imprimante">L'imprimante sur l'accueil</a>.</p>
 
   <section id="accueil-hauteurs">
     <h3>Tailles possibles</h3>
@@ -108,7 +108,6 @@
       <tr><td>Bloc <span class="ui">Imprimante</span></td><td>toute la colonne (par défaut) ou demi-colonne</td><td>selon le contenu (par défaut), 1, 2 ou 3 rangées ; en demi-colonne : 2 (par défaut), 3 ou 1</td></tr>
       <tr><td>Bloc <span class="ui">AMS</span></td><td>toute la colonne</td><td>2 (par défaut), 1 ou 3 rangées</td></tr>
       <tr><td>Bloc <span class="ui">Rack Vortek</span></td><td>toute la colonne (par défaut) ou demi-colonne</td><td>2 (par défaut), 1 ou 3 rangées</td></tr>
-      <tr><td>Bloc <span class="ui">Points d'attention</span></td><td>toute la colonne</td><td>selon le contenu (par défaut), 1, 2 ou 3 rangées</td></tr>
     </table>
     <p>La taille par défaut de chaque tuile du catalogue est indiquée dans sa fiche (<a href="#tuiles">Les tuiles</a>).</p>
   </section>
@@ -116,7 +115,7 @@
   <section id="accueil-defaut">
     <h3>La disposition par défaut</h3>
     <ul>
-      <li><strong>Sur téléphone (une colonne)</strong> : Imprimante, AMS, puis Aujourd'hui, Derniers jours, À faire, Dernières impressions, Stock, Séchage, Humidité des AMS, Copains, MakerWorld, À évaluer, Roue et clés, Succès, Points d'attention.</li>
+      <li><strong>Sur téléphone (une colonne)</strong> : Imprimante, AMS, puis Aujourd'hui, Derniers jours, À faire, Dernières impressions, Stock, Séchage, Humidité des AMS, Copains, MakerWorld, À évaluer, Roue et clés, Succès, Alertes.</li>
       <li><strong>Sur ordinateur (deux colonnes)</strong> : Imprimante et AMS dans la première colonne, toutes les autres tuiles dans la seconde.</li>
     </ul>
     <p>Le bloc Rack Vortek et seize autres tuiles (Caméra, Températures, Ce mois-ci, Galerie…) ne sont pas posés d'office : tu les ajoutes depuis la liste <span class="ui">Ajouter</span> du mode personnalisation.</p>

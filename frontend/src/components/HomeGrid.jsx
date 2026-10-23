@@ -42,8 +42,8 @@ function defaults(defs) {
   return {
     v: 2, max: 2,
     layouts: {
-      1: [["printer", "ams", "amsdetail", ...small, "attention"].filter(id => defs[id]).map(it)],
-      2: [["printer", "ams", "amsdetail"].filter(id => defs[id]).map(it), [...small, "attention"].filter(id => defs[id]).map(it)],
+      1: [["printer", "ams", "amsdetail", ...small, "alerts"].filter(id => defs[id]).map(it)],
+      2: [["printer", "ams", "amsdetail"].filter(id => defs[id]).map(it), [...small, "alerts"].filter(id => defs[id]).map(it)],
     },
   };
 }
@@ -109,6 +109,10 @@ function paint(rects, fixed = []) {
 // une disposition a n colonnes, remise d'aplomb : tuiles inconnues retirees, tailles
 // ramenees a ce que la tuile accepte, pas de doublon, la tuile obligatoire presente
 function cleanCols(cols, n, defs) {
+  // l'ancienne tuile « Points d'attention » (retiree le 23/10/2026) devient « Alertes »
+  const ren = x => x?.id === "attention" && defs.alerts ? { id: "alerts", w: defs.alerts.w.includes(x.w) ? x.w : defs.alerts.w[0],
+    h: defs.alerts.h.includes(x.h) ? x.h : defs.alerts.h[0] } : x;
+  cols = (cols || []).map(c => (c || []).map(ren));
   const fix = fixer(defs);
   const out = [...Array(n)].map((_, i) => ((cols || [])[i] || []).map(fix).filter(Boolean));
   (cols || []).slice(n).forEach(c => out[n - 1].push(...(c || []).map(fix).filter(Boolean)));

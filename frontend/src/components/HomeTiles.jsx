@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import AllAlertsModal from "./AllAlertsModal";
 import { useFriend } from "../store/friend";
 import { relayed } from "./Friends";
 import { stageLabel } from "../utils/printStage";
@@ -653,7 +654,9 @@ export function useTilesData(status = null) {
     put("podium", get("/achievements/podium"));
     loadRef.current = load;
     const iv = setInterval(load, 120000);
-    return () => { dead = true; clearInterval(iv); loadRef.current = null; };
+    const again = () => load();
+    window.addEventListener("bn-tiles-reload", again);
+    return () => { dead = true; clearInterval(iv); loadRef.current = null; window.removeEventListener("bn-tiles-reload", again); };
   }, []);
   return d;
 }
@@ -2444,17 +2447,14 @@ function Podium({ p, o, sz }) {
     </Tile>
   );
 }
-// ouvre les points d'attention de l'accueil (sur une categorie) ; sans la tuile a l'ecran, les reglages
-const openAttention = category => {
-  if (document.getElementById("att-section")) window.dispatchEvent(new CustomEvent("bn-attention-open", { detail: { category } }));
-  else window.location.assign("/settings?tab=display");
-};
 function Alerts({ a, o, sz }) {
   const cats = (a?.categories || []).filter(c => c.total);
+  // la categorie touchee dans la tuile : la fenetre s'ouvre filtree dessus (le clic remonte a la tuile)
+  const [pick, setPick] = useState("");
   if (!a) return null;
   const total = cats.reduce((n, c) => n + c.total, 0);
   const listRow = (c, detail) => (
-    <div key={c.category} role="button" onClick={e => { e.stopPropagation(); openAttention(c.category); }}
+    <div key={c.category} role="button" onClick={() => setPick(c.category)}
       style={{ display: "flex", alignItems: "center", gap: 8, height: 24, cursor: "pointer" }}>
       <span data-pk="" style={{ fontSize: 15 }}>{c.icon}</span>
       <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}
@@ -2466,14 +2466,7 @@ function Alerts({ a, o, sz }) {
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 6, fontSize: 13 }}>{cats.length ? cats.map(c => <span key={c.category}
         title={c.label}>{c.icon}<b style={{ color: "#b45309" }}>{c.total}</b></span>) : "rien à signaler"}</span>}
       badge={total ? <span style={{ fontSize: 11, fontWeight: 900, color: "#fff", background: "#f59e0b", borderRadius: 20, padding: "1px 7px" }}>{total}</span> : null}
-      zoom={cats.length ? <>{cats.map(c => <div key={c.category} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 900, color: "var(--text)" }}><span style={{ fontSize: 18 }}>{c.icon}</span>{c.label}
-          <span style={{ marginLeft: "auto", color: "#b45309" }}>{c.total}</span></div>
-        {(c.alerts || []).map(x => <div key={x.key} className="card-sm" style={{ padding: "7px 10px", display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ flex: 1, minWidth: 0 }}><b style={{ fontSize: 12.5, color: "var(--text)" }}>{x.title}</b> <Muted>{x.detail}</Muted></span>
-          <span style={{ fontWeight: 800, color: "#b45309", fontSize: 12.5 }}>{x.value}</span></div>)}
-        <button onClick={() => openAttention(c.category)} style={{ alignSelf: "flex-start", border: "none", background: "none", color: "#d97706", fontWeight: 800,
-          cursor: "pointer", fontSize: 12.5, padding: 0 }}>Voir dans les points d'attention →</button></div>)}</> : null}>
+      zoom={<AllAlertsModal key={pick || "all"} inline initialCat={pick} onChanged={() => window.dispatchEvent(new Event("bn-tiles-reload"))}/>}>
       {({ W, H }) => {
         if (!cats.length) return <Empty>Rien à signaler.</Empty>;
         // haute : chaque categorie avec ses alertes dessous, autant que la place en tient
@@ -2493,7 +2486,7 @@ function Alerts({ a, o, sz }) {
           {cats.slice(0, fitRows(H, 24, 3)).map(c => listRow(c, o.detail && W >= 300))}</div>;
         return <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignContent: "center", flex: 1 }}>
           {cats.map(c => <span key={c.category} data-pk="" role="button" tabIndex={0} title={c.label}
-            onClick={e => { e.stopPropagation(); openAttention(c.category); }}
+            onClick={() => setPick(c.category)}
             style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px", cursor: "pointer",
               borderRadius: 20, fontSize: 12, fontWeight: 800, background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
             {c.icon}{o.style !== "icons" && W >= 200 && ` ${c.label}`} <b>{c.total}</b></span>)}</div>;
