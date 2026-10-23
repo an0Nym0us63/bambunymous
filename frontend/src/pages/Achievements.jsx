@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import HiddenMark from "../components/HiddenMark";
+import Cachettes from "../components/Cachettes";
 import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { currentFriend } from "../store/friend";
@@ -421,6 +422,7 @@ export default function Achievements({ embedded = false }) {
         </div>, document.body
       )}
       <HiddenMark egg="egg_in_egg" e="🥚" side="left"/>
+      <Cachettes spot="achievements"/>
     </div>
   );
 }

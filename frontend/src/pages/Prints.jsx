@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import HiddenMark from "../components/HiddenMark";
+import Cachettes from "../components/Cachettes";
 import { createPortal } from "react-dom";
 import Lightbox from "../components/Lightbox";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
@@ -3426,6 +3427,7 @@ export default function Prints() {
         />
       )}
       <HiddenMark egg="rubber_duck" e="🦆" side="right"/>
+      <Cachettes spot="prints"/>
     </div>
   );
 }

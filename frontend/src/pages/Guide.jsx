@@ -4,6 +4,7 @@ import { BookOpen, ChevronRight, List, Search, X } from "lucide-react";
 import client from "../api/client";
 import { egg } from "../eggs";
 import "./guide.css";
+import Cachettes from "../components/Cachettes";
 
 // Le guide d'utilisation (23/10/2026), dans l'appli et a son theme. Il n'est plus servi en acces libre :
 // les chapitres et les captures viennent de /api/v1/guide, reserves aux comptes de la maison.
@@ -252,6 +253,7 @@ export default function Guide() {
           </div>}
           {html == null ? <p className="gd-loading">Chargement du guide…</p>
             : <div ref={content} className="gd-content" hidden={!!hits} onClick={onContent} dangerouslySetInnerHTML={{ __html: html }}/>}
+          {html != null && !hits && <Cachettes spot="guide"/>}
         </main>
       </div>
       {narrow && menu && createPortal(<div className="bn-guide gd-drawer" onClick={() => setMenu(false)}>

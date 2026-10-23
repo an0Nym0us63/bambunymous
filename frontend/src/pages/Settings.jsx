@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import Cachettes from "../components/Cachettes";
 import { Save, Wifi, RefreshCw, Sun, Moon, Users, KeyRound, Trash2, Activity } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useUrlTab } from "../utils/useUrlTab";
@@ -1931,6 +1932,7 @@ function VersionLine({ version }) {
     <div style={{ textAlign:"center", marginTop:8, position:"relative" }}>
       {/* un tout petit bateau, presque invisible, au bout de la page */}
       <span data-egg="micro_benchy" aria-hidden="true" style={{ position:"absolute", right:4, bottom:-2, fontSize:9, opacity:.16, cursor:"default", userSelect:"none" }}>⛵</span>
+      <Cachettes spot="settings" side="left"/>
       <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace", margin:0 }}>
         <span onClick={devTap} style={{ cursor:"default", userSelect:"none" }}>v{version.commit?.slice(0,8) || "dev"}</span> · {version.build_date?.slice(0,10) || "?"}
         {chk && !chk.dev && !chk.error && (n

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import HiddenMark from "../components/HiddenMark";
+import Cachettes from "../components/Cachettes";
 import { useUrlTab } from "../utils/useUrlTab";
 import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
 import client, { apiUrl } from "../api/client";
@@ -2143,6 +2144,7 @@ export default function Objects() {
           onCreated={(id)=>{ setCreatingAcc(false); loadAccessories(); if (id) setSelectedAcc(id); }}/>
       )}
       <HiddenMark egg="lost_key" e="🗝️" side="left"/>
+      <Cachettes spot="objects"/>
     </div>
   );
 }

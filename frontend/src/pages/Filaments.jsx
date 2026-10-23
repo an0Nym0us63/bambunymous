@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import HiddenMark from "../components/HiddenMark";
+import Cachettes from "../components/Cachettes";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { useUrlTab, keepTabs } from "../utils/useUrlTab";
@@ -3093,6 +3094,7 @@ export default function Filaments() {
         </div>
       )}
       <HiddenMark egg="snail" e="🐌" side="left"/>
+      <Cachettes spot="filaments"/>
     </div>
   );
 }

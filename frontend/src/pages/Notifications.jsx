@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import HiddenMark from "../components/HiddenMark";
+import Cachettes from "../components/Cachettes";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import SpoolSVG from "../components/SpoolSVG";
 import { SlidersHorizontal } from "lucide-react";
@@ -149,6 +150,7 @@ export default function Notifications() {
       )}
       <p style={{ ...msg, padding:"4px", fontSize:11 }}>Gardées {data.days} jours.</p>
       <HiddenMark egg="clover" e="🍀" side="left"/>
+      <Cachettes spot="notifications"/>
     </div>
   );
 }

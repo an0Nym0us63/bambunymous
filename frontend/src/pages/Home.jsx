@@ -10,6 +10,7 @@ import client, { apiUrl } from "../api/client";
 import HomeGrid from "../components/HomeGrid";
 import { gradeOf } from "./Achievements";
 import { egg } from "../eggs";
+import Cachettes from "../components/Cachettes";
 import LiveCamera from "../components/LiveCamera";
 import SpoolSVG from "../components/SpoolSVG";
 import Lightbox from "../components/Lightbox";
@@ -1354,6 +1355,11 @@ function ArcGauge({ value, target, max, color, label, active }) {
     </div>
   );
 }
+// pleine lune (age de la lune entre 14,3 et 15,3 jours, depuis une nouvelle lune connue)
+const fullMoon = (d = new Date()) => {
+  const age = (((d.getTime() - Date.UTC(2000, 0, 6, 18, 14)) / 86400000) % 29.530588853 + 29.530588853) % 29.530588853;
+  return age > 14.3 && age < 15.3;
+};
 function PrinterPopup({ status, img, name, onClose }) {
   const [big, setBig] = useState(false);
   // telephone : la vignette en grand en haut avec l'anneau a cote, le nom dessous sur toute la largeur
@@ -1402,7 +1408,14 @@ function PrinterPopup({ status, img, name, onClose }) {
             <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>Imprimante
               {/* la nuit, un hibou veille sur l'imprimante (presque invisible) */}
               {(h => h >= 22 || h < 5)(new Date().getHours()) && <span data-egg="owl" aria-hidden="true" style={{ fontSize: 9, opacity: 0.18,
-                marginLeft: 6, verticalAlign: "middle", cursor: "default", userSelect: "none" }}>🦉</span>}</div>
+                marginLeft: 6, verticalAlign: "middle", cursor: "default", userSelect: "none" }}>🦉</span>}
+              {/* ce que l'etat du moment fait apparaitre, presque invisible */}
+              {[["c_wolf", "🐺", (h => (h >= 21 || h < 5) && fullMoon())(new Date().getHours())],
+                ["c_spider", "🕸️", !status?.connected],
+                ["c_finish_flag", "🏁", live && pct >= 99],
+                ["c_sloth", "🦥", live && status?.remaining_minutes > 720],
+                ["c_pause", "🧘", paused]].filter(x => x[2]).map(([k, e]) => <span key={k} data-egg={k} aria-hidden="true" style={{ fontSize: 9,
+                  opacity: 0.18, marginLeft: 6, verticalAlign: "middle", cursor: "default", userSelect: "none" }}>{e}</span>)}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: s.color }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}
               {status?.fw_version && <span style={{ color: "var(--muted)", fontWeight: 600 }}>· micrologiciel {status.fw_version}</span>}</div>
@@ -1459,6 +1472,9 @@ function PrinterPopup({ status, img, name, onClose }) {
         {status?.connected && <>
           {section("Températures", Thermometer, "#f97316")}
           <TempStrip status={status}/>
+          {/* atelier etouffant : un lezard prend le soleil sous les temperatures */}
+          {status.chamber_temp >= 45 && <div aria-hidden="true" style={{ textAlign: "left", marginTop: -10, lineHeight: 1 }}>
+            <span data-egg="c_lizard" style={{ fontSize: 9, opacity: 0.2, cursor: "default", userSelect: "none" }}>🦎</span></div>}
           {/* atelier glacial : un bonhomme de neige se cache sous les temperatures */}
           {status.chamber_temp > 0 && status.chamber_temp < 15 && <div aria-hidden="true" style={{ textAlign: "right", marginTop: -10, lineHeight: 1 }}>
             <span data-egg="snowman" style={{ fontSize: 9, opacity: 0.2, cursor: "default", userSelect: "none" }}>⛄</span></div>}
@@ -1467,6 +1483,9 @@ function PrinterPopup({ status, img, name, onClose }) {
         {amsList.length > 0 && <>
           {section("AMS", Disc3, "#8B5CF6", act >= 0 ? `● ${slotLabel(act, actTray)}` : `${amsList.filter(a => a.id !== 255).length} unité${amsList.length > 1 ? "s" : ""}`)}
           <HubGrid list={amsList} order={order} act={act} actTray={actTray} H={Math.min(300, amsRows * (narrowPop ? 100 : 116))} climate big={!narrowPop} fs={switchRoutes(status)}/>
+          {/* un AMS trop humide : une grenouille s'y plait */}
+          {amsList.some(a => a.humidity >= 60) && <div aria-hidden="true" style={{ textAlign: "right", marginTop: -10, lineHeight: 1 }}>
+            <span data-egg="c_frog" style={{ fontSize: 9, opacity: 0.2, cursor: "default", userSelect: "none" }}>🐸</span></div>}
         </>}
 
         {tray && !tray.empty ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
@@ -2008,6 +2027,7 @@ export default function Home() {
       `}</style>
       <HomeGrid status={status} blocks={blocks}
         top={{ label: "Bandeau d'accueil", options: GREETING_OPTIONS, render: o => <Greeting status={status} o={o}/> }}/>
+      <Cachettes spot="home"/>
     </div>
   );
 }

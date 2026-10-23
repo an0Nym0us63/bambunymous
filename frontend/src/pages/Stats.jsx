@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import HiddenMark from "../components/HiddenMark";
+import Cachettes from "../components/Cachettes";
 import { useUrlTab } from "../utils/useUrlTab";
 
 import { Weight, Euro, Clock, Layers, Package, AlertTriangle, CheckCircle2, ShoppingBag, TrendingUp, Tag, Filter, Droplets } from "lucide-react";
@@ -1148,6 +1149,7 @@ export default function Stats() {
         <ObjectsStats stats={objStats} onOpen={openDetail} onOpenObject={openObject} onOpenAccessory={openAccessory}/>
       )}
       <HiddenMark egg="lost_sock" e="🧦" side="right"/>
+      <Cachettes spot="stats"/>
     </div>
   );
 }
