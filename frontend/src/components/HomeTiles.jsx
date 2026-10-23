@@ -146,7 +146,8 @@ function Zoom({ icon, color, label, to, onClose, children }) {
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const b = { W: box.W, H: box.H, zoom: true };
+  // la place du contenu : la boite mesuree, moins ses marges interieures
+  const b = { W: box.W - (narrow ? 32 : 36), H: box.H - (narrow ? 36 : 36), zoom: true };
   const big = React.isValidElement(icon) ? React.cloneElement(icon, { size: 22 }) : icon;
   return createPortal(
     <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 900, padding: narrow ? 0 : 14,
@@ -1353,17 +1354,96 @@ function LiveCam({ status, o, sz = { h: 2 } }) {
 // les temperatures : jauges (consigne = plein) qui remplissent la case, ou lignes
 const tempRows = (status, o) => {
   const nz = [...(status.nozzles || [])].sort((a, b) => b.id - a.id);   // gauche (1) puis droite (0)
+  const bed = { k: "bed", ico: IcoBed, l: "Plateau", v: status.bed_temp, t: status.target_bed_temp, max: 120, c: "#ef4444" };
   return [
+    bed,
     ...nz.map(n => ({ k: `n${n.id}`, ico: IcoNozzle, l: nz.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", v: n.temp, t: n.target, max: 300, c: "#f97316" })),
     ...(!nz.length && status.nozzle_temp != null ? [{ k: "n", ico: IcoNozzle, l: "Buse", v: status.nozzle_temp, t: status.target_nozzle_temp, max: 300, c: "#f97316" }] : []),
-    { k: "bed", ico: IcoBed, l: "Plateau", v: status.bed_temp, t: status.target_bed_temp, max: 120, c: "#ef4444" },
     ...(o.chamber && status.chamber_temp > 0 ? [{ k: "ch", ico: IcoChamber, l: "Chambre", v: status.chamber_temp, t: status.target_chamber_temp, max: 70, c: "#eab308" }] : []),
   ];
 };
+// la couleur d'une temperature : bleu froid, ambre tiede, orange chaud, rouge brulant
+const HEAT = [[20, [96, 165, 250]], [45, [251, 191, 36]], [120, [249, 115, 22]], [240, [239, 68, 68]]];
+function heat(v) {
+  const x = Math.max(HEAT[0][0], Math.min(HEAT[HEAT.length - 1][0], v || 0));
+  for (let i = 1; i < HEAT.length; i++) if (x <= HEAT[i][0]) {
+    const [a, ca] = HEAT[i - 1], [b, cb] = HEAT[i], k = (x - a) / (b - a);
+    return `rgb(${ca.map((c, j) => Math.round(c + (cb[j] - c) * k)).join(",")})`;
+  }
+  return "rgb(239,68,68)";
+}
+// ce que fait la source : chauffe, a temperature, refroidit, au repos
+function tempState(v, t) {
+  if (t > 0) return Math.abs(v - t) <= 3 ? ["✓", "à température", "#16a34a"] : v < t ? ["▲", "chauffe", "#f97316"] : ["▼", "redescend", "#0ea5e9"];
+  return v > 40 ? ["▼", "refroidit", "#0ea5e9"] : ["", "au repos", "var(--muted)"];
+}
+// une source en carte : en largeur (icone, valeur, barre et repere de consigne) ou, haute, en thermometre
+function ThermoCell({ r, w, h, targets }) {
+  const v = r.v || 0, t = r.t || 0, c = heat(v), [ic, st, sc] = tempState(v, t);
+  const frac = x => Math.max(0, Math.min(1, x / r.max));
+  const hot = v > 40;
+  const icon = s => <span style={{ width: s, height: s, borderRadius: s / 3, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+    background: `${c.replace("rgb", "rgba").replace(")", ",0.18)")}`, color: c, boxShadow: hot ? `0 0 12px ${c.replace("rgb", "rgba").replace(")", ",0.45)")}` : "none",
+    animation: ic === "▲" ? "dryPulse 2.2s ease-in-out infinite" : "none" }}><r.ico s={Math.round(s * 0.56)}/></span>;
+  // tres etroite : la consigne se lit au repere de la barre, pas en chiffres
+  const val = (fs, tgt = targets) => <span style={{ display: "inline-flex", alignItems: "baseline", gap: 3, whiteSpace: "nowrap" }}>
+    <span data-pk="" style={{ fontSize: fs, fontWeight: 900, color: hot ? c : "var(--text)", lineHeight: 1 }}>{Math.round(v)}°</span>
+    {tgt && t > 0 && <span style={{ fontSize: Math.max(10, fs * 0.42), fontWeight: 800, color: "var(--muted)" }}>/{Math.round(t)}°</span>}</span>;
+  const card = { width: w, height: h, boxSizing: "border-box", borderRadius: 14, padding: "8px 10px", minWidth: 0, overflow: "hidden", position: "relative",
+    background: `linear-gradient(160deg, ${c.replace("rgb", "rgba").replace(")", ",0.16)")}, transparent 70%), var(--surface2)` };
+  // haute : un thermometre (tube et bulbe) a gauche, le reste a droite
+  if (h >= 150 && w >= 96) {
+    const tubeH = h - 46, bulb = 22, fill = frac(v);
+    return <div title={`${r.l} : ${st}`} style={{ ...card, display: "flex", gap: 10, padding: "10px 12px" }}>
+      <div style={{ position: "relative", width: bulb, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
+        <div style={{ width: 12, height: tubeH, borderRadius: 6, background: "var(--surface)", border: "1px solid var(--border)", position: "relative", overflow: "hidden" }}>
+          <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${fill * 100}%`, background: `linear-gradient(to top, ${heat(20)}, ${c})`,
+            transition: "height .8s" }}/>
+          {targets && t > 0 && <div style={{ position: "absolute", left: -2, right: -2, bottom: `${frac(t) * 100}%`, height: 2, background: "var(--text)" }}/>}
+        </div>
+        <div style={{ width: bulb, height: bulb, borderRadius: "50%", marginTop: -5, background: c, boxShadow: `0 0 14px ${c}`, border: "2px solid var(--surface)" }}/>
+      </div>
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>{icon(24)}
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.l}</span></div>
+        <div>{val(Math.min(30, (w - 44) * 0.24))}</div>
+        <span style={{ fontSize: 11.5, fontWeight: 800, color: sc }}>{ic} {st}</span>
+      </div>
+    </div>;
+  }
+  // en largeur : icone et nom, la valeur, une barre (avec le repere de la consigne)
+  const big = h >= 84;
+  return <div title={`${r.l} : ${st}`} style={{ ...card, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: 4 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+      {w >= 84 && icon(big ? 22 : 18)}
+      <span style={{ fontSize: w < 84 ? 10.5 : 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>{r.l}</span>
+      {ic && w >= 100 && <span style={{ fontSize: 10, fontWeight: 900, color: sc }}>{ic}</span>}</div>
+    {val(Math.max(15, Math.min(big ? 28 : 21, w * 0.19)), targets && w >= 84)}
+    <div style={{ position: "relative", height: 6, borderRadius: 4, background: "var(--surface)", border: "1px solid var(--border)" }}>
+      <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${frac(v) * 100}%`, borderRadius: 4,
+        background: `linear-gradient(90deg, ${heat(20)}, ${c})`, transition: "width .8s" }}/>
+      {targets && t > 0 && <div style={{ position: "absolute", top: -3, bottom: -3, left: `calc(${frac(t) * 100}% - 1px)`, width: 2, borderRadius: 1, background: "var(--text)" }}/>}
+    </div>
+  </div>;
+}
+// la disposition des cartes : le plus de colonnes qui laisse des cartes lisibles
+function thermoGrid(n, W, H, gap = 8) {
+  let best = null;
+  for (let cols = n; cols >= 1; cols--) {
+    const rows = Math.ceil(n / cols), w = (W - gap * (cols - 1)) / cols, h = Math.min(220, (H - gap * (rows - 1)) / rows);
+    if (w < 68 || h < 62) continue;
+    const score = Math.min(w / 1.3, h);
+    if (!best || score > best.score) best = { cols, rows, w: Math.floor(w), h: Math.floor(h), score };
+  }
+  return best;
+}
 function Temps({ status, o, sz }) {
   if (!status?.connected) return null;
   const rows = tempRows(status, o);
   const hot = r => (r.v || 0) > 40;
+  const thermo = (W, H) => { const g = thermoGrid(rows.length, W, H);
+    return g && <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.w}px)`, gap: 8, justifyContent: "center", alignContent: "center" }}>
+      {rows.map(r => <ThermoCell key={r.k} r={r} w={g.w} h={g.h} targets={o.targets}/>)}</div>; };
   const gauges = (W, H) => {
     const g = fitGrid(rows.length, W, H, { ar: GAUGE_AR, extra: GAUGE_EXTRA, max: 180, gap: 8 });
     return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "center", gap: 8 }}>
@@ -1387,7 +1467,7 @@ function Temps({ status, o, sz }) {
   };
   return (
     <Tile icon={<Thermometer size={15}/>} color="#F97316" label="Températures" zoom={({ W }) => <>
-      <div style={{ display: "flex", minHeight: 230 }}>{gauges(W, 230)}</div>
+      <div style={{ display: "flex", minHeight: 330 }}>{thermo(W, 330)}</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 }}>
         {rows.map(r => { const v = r.v || 0, t = r.t || 0;
           const st = t > 0 ? (Math.abs(v - t) <= 3 ? ["à température", "#16a34a"] : v < t ? ["chauffe", r.c] : ["redescend", "#0ea5e9"])
@@ -1407,9 +1487,10 @@ function Temps({ status, o, sz }) {
         <span key={r.k} title={r.l} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: hot(r) ? r.c : "var(--text)" }}>
           <r.ico s={13}/>{Math.round(r.v || 0)}°</span>)}</span>}>
       {({ W, H }) => {
-        // les jauges seulement si elles restent lisibles, sinon des lignes
+        // des cartes thermometre si elles tiennent, sinon les jauges (style « jauges »), sinon des lignes
+        if (!o.style || o.style === "thermo") { const th = thermo(W, H); if (th) return th; }
         const g = fitGrid(rows.length, W, H, { ar: GAUGE_AR, extra: GAUGE_EXTRA, gap: 8 });
-        if (o.style !== "list" && g.size >= 50) return gauges(W, H);
+        if (o.style === "gauges" && g.size >= 50) return gauges(W, H);
         return H >= rows.length * 22 ? lines : cells(W, H);
       }}
     </Tile>
@@ -2175,7 +2256,8 @@ export const TILES = {
     options: [C("mode", "Image", "auto", [["auto", "auto"], ["stream", "direct"], ["images", "toutes les 2 s"]],
       { hint: "Auto : le direct, et des images si le direct se fige." }), B("overlay", "Avancement sur l'image", true)] },
   temps: { label: "Températures", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Temps status={st} o={o} sz={sz(it)}/>,
-    options: [C("style", "Affichage", "gauges", [["gauges", "jauges"], ["list", "lignes"]], { hint: "Les jauges passent en lignes quand elles seraient trop petites." }),
+    options: [C("style", "Affichage", "thermo", [["thermo", "thermomètres"], ["gauges", "jauges"], ["list", "lignes"]],
+      { hint: "Thermomètres : une carte par source, sa couleur suit la chaleur, la consigne marquée sur la barre. Tout passe en lignes quand ce serait trop petit." }),
       B("targets", "Consignes", true), B("chamber", "Chambre", true)] },
   month: { label: "Ce mois-ci", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Month v={d.month} o={o} sz={sz(it)}/>,
     options: [B("compare", "Comparer au mois dernier", true), B("cost", "Coût", true), B("chart", "Barres par jour", true, { hint: "Quand la tuile a la place." })] },
