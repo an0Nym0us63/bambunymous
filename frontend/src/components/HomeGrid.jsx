@@ -1,10 +1,11 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X, Palette } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X, Palette, Copy } from "lucide-react";
 import client from "../api/client";
 import { currentFriend, useFriend } from "../store/friend";
 import { toast } from "../store/toast";
 import { TILES, useTilesData } from "./HomeTiles";
+import { showConfirm } from "../utils/dialog";
 
 // La grille de l'accueil, a la carte (22/10/2026). Une disposition par nombre
 // de colonnes (1 a 4), propre a chaque compte ; celle a une colonne est aussi
@@ -703,6 +704,21 @@ export default function HomeGrid({ status, blocks, top = null }) {
                   <span style={{ width: 6, height: 6, borderRadius: "50%", background: lay.layouts[k] ? "#22c55e" : "transparent",
                     border: lay.layouts[k] ? "none" : "1px solid currentColor", opacity: 0.8 }}/></button>)}
               </div>
+              {/* reprendre une autre disposition : ses tuiles (tailles et options comprises), redistribuees sur n colonnes */}
+              {Object.keys(lay.layouts).map(Number).some(k => k !== n) && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <Copy size={15} style={{ color: "var(--muted)" }}/>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Reprendre la disposition de</span>
+                {[1, 2, 3, 4].filter(k => k !== n && lay.layouts[k]).map(k => <button key={k} title={`Remplacer la disposition à ${n} colonne${n > 1 ? "s" : ""} par celle à ${k}, redistribuée`}
+                  onClick={async () => {
+                    if (!(await showConfirm(`Remplacer la disposition à ${n} colonne${n > 1 ? "s" : ""} par celle à ${k} colonne${k > 1 ? "s" : ""} ? Les tuiles sont réparties sur ${n} colonne${n > 1 ? "s" : ""}, à réorganiser ensuite.`,
+                      { confirmLabel: "Reprendre" }))) return;
+                    setLay(l => ({ ...l, layouts: { ...l.layouts, [n]: layoutFor({ layouts: { [k]: l.layouts[k] } }, n).map(c => c.map(x => ({ ...x }))) } }));
+                    setSel(null); setPick(null);
+                  }}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 30, padding: "0 10px", borderRadius: 9, cursor: "pointer", fontWeight: 800,
+                    border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)" }}>{k === 1 && <Smartphone size={13}/>}{k}</button>)}
+                <span style={{ fontSize: 12, color: "var(--muted)" }}>· sur celle à {n} colonne{n > 1 ? "s" : ""}</span>
+              </div>}
               <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                 <Monitor size={15} style={{ color: "var(--muted)" }}/>
                 <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Au plus sur grand écran</span>
