@@ -6,6 +6,7 @@ import { currentFriend, useFriend } from "../store/friend";
 import { toast } from "../store/toast";
 import { TILES, useTilesData } from "./HomeTiles";
 import { showConfirm } from "../utils/dialog";
+import { useIsAdmin } from "../store/auth";
 
 // La grille de l'accueil, a la carte (22/10/2026). Une disposition par nombre
 // de colonnes (1 a 4), propre a chaque compte ; celle a une colonne est aussi
@@ -511,6 +512,62 @@ function PageBar({ names, cur, onGo, renaming, setRenaming, onRename, onAdd, onD
   </div>;
 }
 
+// Envoyer mes dispositions a d'autres comptes (administrateur) : la famille qui ne veut pas s'en occuper
+function SendSheet({ onSend, onClose }) {
+  const [accounts, setAccounts] = useState(null);
+  const [picked, setPicked] = useState(() => new Set());
+  const [busy, setBusy] = useState(false);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    client.get("/home/layout/accounts").then(({ data }) => setAccounts(data.accounts || [])).catch(() => setAccounts([]));
+    const k = e => { if (e.key === "Escape") closeRef.current(); };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, []);
+  const flip = u => setPicked(p => { const n = new Set(p); if (n.has(u)) n.delete(u); else n.add(u); return n; });
+  const all = accounts && accounts.length > 0 && accounts.every(a => picked.has(a.username));
+  const go = async () => { setBusy(true); try { await onSend([...picked]); onClose(); } finally { setBusy(false); } };
+  return createPortal(
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 4600, background: "rgba(0,0,0,0.5)", display: "flex",
+      alignItems: "center", justifyContent: "center", padding: 14 }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 440, maxHeight: "86vh", overflowY: "auto",
+        padding: "14px 16px", background: "var(--sheet-bg, var(--surface))", backdropFilter: "none", display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Send size={18} style={{ color: "#3b82f6" }}/>
+          <span style={{ flex: 1, fontSize: 15, fontWeight: 900, color: "var(--text)" }}>Envoyer mes dispositions</span>
+          <button onClick={onClose} aria-label="Fermer" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--muted)" }}><X size={20}/></button>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.45 }}>
+          Les comptes cochés reçoivent une copie de <b>toutes</b> tes dispositions : téléphone et ordinateur, écrans et leurs noms, bandeau, fonds
+          des tuiles. Les leurs sont remplacées. Ensuite chacun reste libre : ce qu'ils changent ne revient pas chez toi, et inversement.</div>
+        {accounts == null ? <div style={{ fontSize: 13, color: "var(--muted)" }}>Chargement…</div>
+          : !accounts.length ? <div style={{ fontSize: 13, color: "var(--muted)" }}>Aucun autre compte.</div>
+          : <>
+            <button type="button" onClick={() => setPicked(all ? new Set() : new Set(accounts.map(a => a.username)))}
+              style={{ alignSelf: "flex-start", padding: "5px 11px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--surface2)",
+                color: "var(--text2)", fontSize: 12, fontWeight: 800, cursor: "pointer" }}>{all ? "Tout décocher" : "Tout cocher"}</button>
+            {accounts.map(a => { const on = picked.has(a.username);
+              return <button key={a.username} type="button" onClick={() => flip(a.username)} style={{ display: "flex", alignItems: "center", gap: 10,
+                padding: "9px 11px", borderRadius: 12, cursor: "pointer", textAlign: "left",
+                border: `1px solid ${on ? "#3b82f6" : "var(--border)"}`, background: on ? "rgba(59,130,246,0.1)" : "var(--surface2)" }}>
+                <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                  border: on ? "none" : "2px solid var(--border)", background: on ? "#3b82f6" : "transparent", color: "#fff" }}>{on && <Check size={14}/>}</span>
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <span style={{ display: "block", fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>{a.username}</span>
+                  <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{a.own ? "a sa propre disposition (elle sera remplacée)" : "voit celle du compte principal"}</span>
+                </span>
+                {a.role === "admin" && <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)" }}>admin</span>}
+              </button>; })}
+          </>}
+        <button type="button" disabled={!picked.size || busy} onClick={go} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 6,
+          padding: "10px 14px", borderRadius: 12, border: "none", fontWeight: 900, fontSize: 13.5, cursor: picked.size && !busy ? "pointer" : "default",
+          background: picked.size ? "#3b82f6" : "var(--surface2)", color: picked.size ? "#fff" : "var(--muted)" }}>
+          <Send size={15}/>{busy ? "Envoi…" : picked.size ? `Envoyer à ${picked.size} compte${picked.size > 1 ? "s" : ""}` : "Coche un ou plusieurs comptes"}</button>
+      </div>
+    </div>, document.body);
+}
+
 export default function HomeGrid({ status, blocks, top = null }) {
   const data = useTilesData(status);
   const wide = useWide();
@@ -602,6 +659,17 @@ export default function HomeGrid({ status, blocks, top = null }) {
     } catch (e) { toast(e.response?.data?.detail || e.message, "error"); }
   };
   const done = () => { setEdit(false); setSel(null); setPick(null); if (JSON.stringify(lay) !== saved.current) save(lay); };
+  // envoyer mes dispositions : d'abord enregistrer celle en cours (c'est la copie enregistree qui part)
+  const isAdmin = useIsAdmin();
+  const [sendOpen, setSendOpen] = useState(false);
+  const sendTo = async to => {
+    try {
+      await client.put("/home/layout", { layout: lay, known: Object.keys(defs) });
+      saved.current = JSON.stringify(lay); setInh(null);
+      const { data } = await client.post("/home/layout/send", { to });
+      toast(data.sent?.length ? `Dispositions envoyées à ${data.sent.join(", ")}` : "Aucun compte n'a reçu la disposition", data.sent?.length ? "success" : "error");
+    } catch (e) { toast(e.response?.data?.detail || e.message, "error"); }
+  };
   const reset = () => { const l = defaults(defs); setLay(l); save(l, true); };
 
   // ── la disposition affichee (ou reglee) ──
@@ -766,6 +834,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
             <Settings2 size={15}/></button>}
         </div>
       )}
+      {sendOpen && <SendSheet onSend={sendTo} onClose={() => setSendOpen(false)}/>}
       {optFor === "top" && top && <OptionsSheet title={top.label} options={top.options} values={topOptsOf(topSet(topFor))}
         onChange={setTopOpt} onClose={() => setOptFor(null)} head={(() => {
           const chip = on => ({ flex: 1, padding: "7px 11px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800,
@@ -890,6 +959,10 @@ export default function HomeGrid({ status, blocks, top = null }) {
             <button onClick={reset} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 10px", borderRadius: 10,
               border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
               <RotateCcw size={14}/>Tout par défaut</button>
+            {isAdmin && !currentFriend() && <button onClick={() => setSendOpen(true)} title="Envoyer toutes mes dispositions à d'autres comptes"
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 10px", borderRadius: 10,
+              border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)", fontWeight: 700, fontSize: 12.5, cursor: "pointer" }}>
+              <Send size={14}/>Envoyer</button>}
             <button onClick={done} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10,
               border: "none", background: "#3b82f6", color: "#fff", fontWeight: 800, fontSize: 12.5, cursor: "pointer" }}>
               <Check size={14}/>Terminé</button>

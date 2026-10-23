@@ -66,6 +66,44 @@ async def home_layout_set(body: dict = Body(...), acc=Depends(require_own_accoun
     return {"layout": lay}
 
 
+@router.get("/layout/accounts")
+async def home_layout_accounts(acc=Depends(require_own_account)):
+    """Les autres comptes de la maison, pour leur envoyer ma disposition (administrateur) :
+    nom, role, et s'ils ont deja la leur (sinon ils voient celle du compte principal)."""
+    if acc[1] != "admin":
+        raise HTTPException(403, "Réservé aux administrateurs")
+    from sqlalchemy import select
+    from ....models.user import User
+    async with AsyncSessionLocal() as db:
+        d = await _all(db)
+        users = (await db.execute(select(User).where(User.active.is_(True)).order_by(User.username))).scalars().all()
+    return {"accounts": [{"username": u.username, "role": u.role, "own": u.username in d}
+                         for u in users if u.username != acc[0]]}
+
+
+@router.post("/layout/send")
+async def home_layout_send(body: dict = Body(...), acc=Depends(require_own_account)):
+    """Copie TOUTES mes dispositions (telephone et ordinateur, ecrans, bandeau, fonds) vers ces
+    comptes : pour la famille qui ne veut pas s'en occuper. Remplace les leurs ; rien n'est lie
+    ensuite (une modification de leur cote ne revient pas chez moi, ni l'inverse)."""
+    if acc[1] != "admin":
+        raise HTTPException(403, "Réservé aux administrateurs")
+    to = [str(x) for x in ((body or {}).get("to") or []) if isinstance(x, str)][:50]
+    from sqlalchemy import select
+    from ....models.user import User
+    async with AsyncSessionLocal() as db:
+        d = await _all(db)
+        mine = d.get(acc[0])
+        if not mine:
+            raise HTTPException(400, "Enregistre d'abord ta disposition")
+        known = set((await db.execute(select(User.username).where(User.active.is_(True)))).scalars().all())
+        sent = [u for u in dict.fromkeys(to) if u in known and u != acc[0]]
+        for u in sent:
+            d[u] = json.loads(json.dumps(mine))
+        await set_setting(db, KEY, json.dumps(d))
+    return {"sent": sent}
+
+
 @router.post("/event")
 async def home_event(body: dict = Body(...), acc=Depends(require_own_account)):
     """Ce que la page constate et que le serveur ne voit pas (l'accueil sur 2, 3 ou 4 colonnes)."""
