@@ -2461,8 +2461,11 @@ function PodiumSteps({ people, H, big = false }) {
           <GradeEmblem i={Math.max(0, g.i)} size={16}/>{g.name}</span>}
         <div data-pk="" style={{ width: "100%", height: Math.round(hs[r] * step), borderRadius: "10px 10px 0 0", position: "relative", overflow: "hidden",
           background: `linear-gradient(180deg, ${POD_HI[r]}, ${POD[r]})`, boxShadow: `0 8px 20px ${POD[r]}55`,
-          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: big ? 8 : 3, color: "#fff" }}>
+          // marche basse (tuile d'une rangee) : le score a cote du rang plutot que dessous, il reste lisible
+          display: "flex", flexDirection: big || hs[r] * step >= 46 ? "column" : "row", alignItems: big || hs[r] * step >= 46 ? "center" : "baseline",
+          justifyContent: big || hs[r] * step >= 46 ? "flex-start" : "center", gap: 4, flexWrap: "wrap", paddingTop: big ? 8 : 3, color: "#fff" }}>
           <span style={{ fontSize: big ? 28 : 15, fontWeight: 900, lineHeight: 1, textShadow: "0 1px 2px rgba(0,0,0,0.25)" }}>{r + 1}</span>
+          {!(big || hs[r] * step >= 46) && <span style={{ fontSize: 10, fontWeight: 800, lineHeight: 1, textShadow: "0 1px 2px rgba(0,0,0,0.25)" }}>{fmtN(x.score)}</span>}
           {(big || hs[r] * step >= 46) && <span style={{ fontSize: big ? 13 : 10.5, fontWeight: 800, marginTop: 2, textShadow: "0 1px 2px rgba(0,0,0,0.25)" }}>{fmtN(x.score)}</span>}
         </div>
       </div>; })}
@@ -2473,7 +2476,11 @@ function Podium({ p, a, o, sz }) {
   if (people.length < 2) return null;
   const max = Math.max(1, people[0].score || 0);
   const meI = people.findIndex(x => x.me);
-  const top = <span style={{ fontSize: 13 }}>🥇 {podName(people[0])} · {fmtN(people[0].score)}</span>;
+  // en une ligne : le podium garde ses trois scores, la liste le premier
+  const top = o.style === "podium"
+    ? <span style={{ fontSize: 13, display: "inline-flex", gap: 10, whiteSpace: "nowrap" }}>{people.slice(0, 3).map((x, r) =>
+      <span key={x.id || x.name}>{["🥇", "🥈", "🥉"][r]} {podName(x)} <b style={{ ...gradText(`color-mix(in srgb, ${POD[r]} 75%, #000000)`, POD[r]) }}>{fmtN(x.score)}</b></span>)}</span>
+    : <span style={{ fontSize: 13 }}>🥇 {podName(people[0])} · {fmtN(people[0].score)}</span>;
   // une ligne : rang (medaille), avatar, nom et grade, score en degrade, barre, ecart avec celui de devant
   const row = (x, r, h) => { const g = podGrade(x), ahead = r > 0 ? (people[r - 1].score || 0) - (x.score || 0) : null, c = POD[r] || "#A855F7";
     return <div key={x.id || x.name} style={{ display: "flex", alignItems: "center", gap: 8, height: h, padding: "0 6px", borderRadius: 12, minWidth: 0,
@@ -2498,6 +2505,15 @@ function Podium({ p, a, o, sz }) {
       mini={sz.h === 0.5} summary={top}
       zoom={<PodiumZoom people={people} a={a} meI={meI}/>}>
       {({ H }) => {
+        // trop bas pour des marches (tuile d'une ligne) : les trois en rangee, avatar cercle de sa medaille, nom, score
+        if (o.style === "podium" && H < 96) { const av = Math.max(20, Math.min(30, H - 6));
+          return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "space-evenly", gap: 6, minWidth: 0 }}>
+            {people.slice(0, 3).map((x, r) => <div key={x.id || x.name} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              <PodAvatar x={x} size={av} ring={POD[r]}/>
+              <div style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r + 1}. {podName(x)}</span>
+                <span data-pk="" style={{ fontSize: 14, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${POD[r]} 75%, #000000)`, POD_HI[r]) }}>{fmtN(x.score)}</span>
+              </div></div>)}</div>; }
         if (o.style === "podium") return <PodiumSteps people={people} H={H}/>;
         if (o.scroll) return <Scroller gap={4}>{people.map((x, r) => row(x, r, 40))}</Scroller>;
         const n = Math.min(people.length, fitRows(H, 30, 4) || 1), h = Math.max(26, Math.min(48, Math.floor((H - 4 * (n - 1)) / n)));
