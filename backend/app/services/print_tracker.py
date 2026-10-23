@@ -301,6 +301,11 @@ async def _create_print_locked(job_id: str, url: str, taskname: str,
         pid = p.id; await db.commit()
 
     logger.info(f"[PRINT] ✅ Print créé: id={pid} job={job_id} ams_mapping={ams_mapping}")
+    try:
+        from . import mw_queue
+        mw_queue.touch()
+    except Exception:
+        pass
     # Fiche MakerWorld du modele, en arriere-plan (une requete, en cache).
     try:
         from .makerworld import launch as _mw_launch
@@ -737,6 +742,11 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
         tw = p.total_weight_g or 0
         tc = p.total_cost or 0
         logger.info(f"[FINAL] ✅ Print {pid} → {status} | poids={tw:.1f}g coût={tc:.2f}€")
+        try:
+            from . import mw_queue
+            mw_queue.touch()                     # « A faire » : ce qui est fait et faisable vient de changer
+        except Exception:
+            pass
         with _LOCK: _JOBS.pop(job_id, None)
     except Exception as e:
         logger.error(f"_finalize pid={pid}: {e}", exc_info=True)

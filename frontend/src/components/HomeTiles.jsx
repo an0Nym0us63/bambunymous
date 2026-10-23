@@ -590,9 +590,10 @@ export function useTilesData() {
       put("attention", get("/attention"));
       // a evaluer : relu avec le reste (une impression qui vient de finir y entre sans recharger la page)
       put("rate", get("/makerworld/to-rate"));
+      // « À faire » aussi : ce qui imprime, ce qui vient de finir, ce qui devient faisable bougent sans cesse
+      put("queue", get("/makerworld/queue"));
     };
     load();
-    put("queue", get("/makerworld/queue"));
     put("mw", get("/makerworld/creator"));
     put("podium", get("/achievements/podium"));
     const iv = setInterval(load, 120000);

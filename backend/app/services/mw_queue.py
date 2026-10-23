@@ -118,6 +118,13 @@ async def _save(d: dict) -> None:
     _INVALID[0] = True
 
 
+def touch() -> None:
+    """Une impression commence ou finit : ce qui est fait et faisable change. Le resultat en cache
+    passe pour vieux, le prochain appel le rend tout de suite et le recalcule en fond."""
+    if _CACHE[1] is not None:
+        _CACHE[0] = 0.0
+
+
 async def config() -> dict:
     d = await _load()
     return {"collections": d["collections"], "plans": d["plans"]}
@@ -327,7 +334,9 @@ async def queue(fresh: bool = False, until: str | None = None, pick: list | None
     models = []
     for r in raw["models"]:
         on = live if live and live["design_id"] == r["design_id"] else None
-        printing = bool(on or r.get("_inprog"))
+        # « en cours » se lit a chaque appel (etat en direct, impression ouverte dans l'historique),
+        # jamais dans le calcul en cache : une impression finie depuis restait « en cours »
+        printing = bool(on or str(r["design_id"]) in on_plates)
         pp = on_plates.get(str(r["design_id"])) if printing else None
         if pp and r.get("plates"):
             r = {**r, "plates": [{**p, "printing": p.get("index") in pp} for p in r["plates"]]}
