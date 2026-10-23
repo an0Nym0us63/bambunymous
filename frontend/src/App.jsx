@@ -11,6 +11,8 @@ import Notifications from "./pages/Notifications";
 import Objects from "./pages/Objects";
 import Filaments from "./pages/Filaments";
 import Prints from "./pages/Prints";
+// le guide d'utilisation : charge a la demande
+const Guide = React.lazy(() => import("./pages/Guide"));
 // le banc d'essai des tuiles : seulement en developpement
 const TileBench = import.meta.env.DEV ? React.lazy(() => import("./pages/TileBench")) : null;
 import DialogHost from "./components/DialogHost";
@@ -117,6 +119,9 @@ export default function App() {
         <Route path="anonymous" element={<Anonymous />} />
         <Route path="rembobiner" element={<Rewind />} />
         <Route path="teapot" element={<Teapot />} />
+        <Route path="guide" element={<React.Suspense fallback={null}><Guide /></React.Suspense>} />
+        {/* l'ancienne adresse du guide (fichiers statiques, ouverts a tous jusqu'au 23/10/2026) */}
+        <Route path="doc/*" element={<Navigate to="/guide" replace />} />
         {TileBench && <Route path="banc-tuiles" element={<React.Suspense fallback={null}><TileBench /></React.Suspense>} />}
         <Route path="*" element={<LostOrHidden />} />
       </Route>

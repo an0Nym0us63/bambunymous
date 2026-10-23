@@ -12,7 +12,8 @@ _LOCK = asyncio.Lock()
 
 def _empty() -> dict:
     return {"saves": 0, "tiles": [], "tweaks": 0, "cam_s": 0.0, "first": None, "multi": None, "four": None,
-            "three": None, "two": None, "minimal": None, "all": None, "copied": None, "pages": None}
+            "three": None, "two": None, "minimal": None, "all": None, "copied": None, "pages": None,
+            "guide_s": 0.0, "guide_sections": [], "guide_opens": 0, "guide_searches": 0}
 
 
 async def get() -> dict:
@@ -118,6 +119,19 @@ async def camera_watched(seconds: float) -> None:
     await _update(f)
 
 
+async def guide_read(seconds: float, sections: list, opened: bool, searches: int) -> None:
+    """Le guide lu : temps, sections (chacune comptee une fois), ouvertures, recherches."""
+    if seconds < 1 and not sections and not opened and not searches:
+        return
+
+    def f(d):
+        d["guide_s"] = round(float(d.get("guide_s") or 0) + seconds, 1)
+        d["guide_sections"] = sorted(set(d.get("guide_sections") or []) | set(sections))[:2000]
+        d["guide_opens"] = int(d.get("guide_opens") or 0) + (1 if opened else 0)
+        d["guide_searches"] = int(d.get("guide_searches") or 0) + searches
+    await _update(f)
+
+
 async def values() -> dict:
     d = await get()
     return {"home_saves": int(d["saves"]), "home_tiles": len(d["tiles"]), "home_tweaks": int(d["tweaks"]),
@@ -125,4 +139,7 @@ async def values() -> dict:
             "home_multi": 1 if d["multi"] else 0, "home_four": 1 if d["four"] else 0,
             "home_three": 1 if d.get("three") else 0, "home_two": 1 if d.get("two") else 0, "home_copy": 1 if d.get("copied") else 0,
             "home_minimal": 1 if d["minimal"] else 0, "home_all": 1 if d["all"] else 0,
-            "home_pages": 1 if d.get("pages") else 0}
+            "home_pages": 1 if d.get("pages") else 0,
+            # le guide d'utilisation (23/10/2026)
+            "guide_minutes": round(float(d.get("guide_s") or 0) / 60, 1), "guide_sections": len(d.get("guide_sections") or []),
+            "guide_opens": int(d.get("guide_opens") or 0), "guide_searches": int(d.get("guide_searches") or 0)}

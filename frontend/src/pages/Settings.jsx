@@ -1727,8 +1727,8 @@ export default function Settings() {
       {/* Mobile : le bouton part dans le header (une ligne de gagnee).
           Desktop : le header mobile n'existe pas, on le garde dans le flux. */}
       <HeaderAction>
-        {/* le guide d'utilisation (site statique servi a /doc/) */}
-        <a href="/doc/index.html" aria-label="Guide d'utilisation" title="Guide d'utilisation"
+        {/* le guide d'utilisation (une page de l'appli) */}
+        <a href="/guide" onClick={e => { e.preventDefault(); navigate("/guide"); }} aria-label="Guide d'utilisation" title="Guide d'utilisation"
           style={{ padding:"5px 10px", borderRadius:20, border:"1px solid var(--border)",
             background:"var(--surface2)", display:"flex", alignItems:"center",
             color:"var(--muted)", fontSize:12, textDecoration:"none" }}>
@@ -1744,7 +1744,7 @@ export default function Settings() {
 
       <div className="hidden-mobile" style={{ display:"none", alignItems:"center", justifyContent:"flex-end" }}>
         <h1 className="page-title" style={{ fontSize:18, fontWeight:700, color:"var(--text)", margin:0, marginRight:"auto" }}>Paramètres</h1>
-        <a href="/doc/index.html" style={{ padding:"6px 14px", borderRadius:20, border:"1px solid var(--border)",
+        <a href="/guide" onClick={e => { e.preventDefault(); navigate("/guide"); }} style={{ padding:"6px 14px", borderRadius:20, border:"1px solid var(--border)",
           background:"var(--surface2)", display:"flex", alignItems:"center", gap:6, marginRight:8,
           color:"var(--muted)", fontSize:12, textDecoration:"none" }}>
           📖 Guide d'utilisation

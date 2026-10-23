@@ -153,8 +153,8 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
                 cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>
               <Trophy size={16} color="#F59E0B"/> Succès
             </button>
-            {/* le guide d'utilisation : un site statique servi a /doc/ (frontend/public/doc) */}
-            <a href="/doc/index.html" onClick={() => setRect(null)}
+            {/* le guide d'utilisation : une page de l'appli (reservee aux comptes de la maison) */}
+            <a href="/guide" onClick={e => { e.preventDefault(); setRect(null); navigate("/guide"); }}
               style={{ width:"100%", display:"flex", alignItems:"center", gap:10, boxSizing:"border-box",
                 padding:"12px 14px", borderBottom:"1px solid var(--border)", textDecoration:"none",
                 color:"var(--text)", fontSize:13, fontWeight:600 }}>

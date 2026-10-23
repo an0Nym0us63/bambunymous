@@ -1570,6 +1570,10 @@ CATALOG += [
     _a("home_tiles", "app", "🧱", "Tapissier", "{n} tuiles différentes déjà affichées sur l'accueil", [1]),
     _a("home_tweaks", "app", "📐", "Retoucheur", "{n} largeurs, hauteurs ou options de tuiles changées", [1]),
     _a("cam_hours", "app", "🎥", "Spectateur", "{n} h de caméra en direct regardées", [1], unit="h"),
+    _a("guide_minutes", "app", "📖", "Lecteur assidu", "{n} min passées dans le guide d'utilisation", [1], unit="min"),
+    _a("guide_sections", "app", "🔖", "Rat de bibliothèque", "{n} parties du guide lues", [1]),
+    _a("guide_opens", "app", "🧭", "Habitué du guide", "Ouvrir le guide {n} fois", [1]),
+    _a("guide_searches", "app", "🔎", "Fouineur", "{n} recherches dans le guide", [1]),
     _a("home_first", "secret", "🖼️", "Décorateur", "Enregistrer sa première disposition de l'accueil", [1],
        lore="Un accueil à ton image : les tuiles sont là où tu les veux."),
     _a("home_multi", "secret", "🖥️", "Multi-écran", "Régler les quatre dispositions, d'une à quatre colonnes", [1],
@@ -1941,7 +1945,8 @@ LIVE = {"mw_designs", "mw_downloads", "mw_prints", "mw_boosts", "mw_fans", "mw_l
         "bon_public", "sky_layers", "clean_prints", "online_streak", "dry_days_ams", "swaps_max", "swaps_total", "duels",
         "band_prints", "queue_cleared", "rainbow_ams", "zero_alert", "mille_feuille", "doctor", "oven", "marathon_online",
         "same_taste", "home_saves", "home_tiles", "home_tweaks", "cam_hours", "home_first", "home_multi", "home_four",
-        "home_three", "home_two", "home_copy", "home_minimal", "home_all", "home_pages"}
+        "home_three", "home_two", "home_copy", "home_minimal", "home_all", "home_pages",
+        "guide_minutes", "guide_sections", "guide_opens", "guide_searches"}
 # Lus au present ET retires si on defait ce qui les donne (l'etat de la disposition de l'accueil).
 # Regagne apres une perte, un palier revient sans notification ni cle (pas de cles a la chaine).
 REVOCABLE = {"home_multi", "home_minimal", "home_all", "home_pages"}
@@ -2126,6 +2131,11 @@ TIER_TABLE = {
     "home_tiles": [3, 5, 7, 9, 11, 13, 15, 18, 21],
     "home_tweaks": [5, 15, 30, 50, 80, 120, 175, 250, 400],
     "cam_hours": [1, 3, 5, 10, 20, 35, 50, 75, 100],
+    # le guide d'utilisation (23/10/2026, seuils a valider)
+    "guide_minutes": [5, 15, 30, 60, 120, 240, 480, 720, 1200],
+    "guide_sections": [5, 15, 30, 60, 100, 150, 200, 275, 340],
+    "guide_opens": [1, 3, 5, 10, 20, 35, 50, 75, 100],
+    "guide_searches": [1, 5, 10, 25, 50, 100, 175, 250, 400],
     "to_order": [1, 3, 5, 10, 20, 30, 45, 65, 100],
     "good_seller": [1, 3, 5, 10, 15, 25, 35, 50, 75],
     "restocks": [1, 5, 10, 20, 35, 50, 75, 100, 150],
