@@ -36,6 +36,9 @@ const ago = iso => {
 const noEmoji = t => String(t || "").replace(/^\p{Extended_Pictographic}️?\s*/u, "");
 const utc = iso => { const s = String(iso || "").trim().replace(" ", "T"); return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s}Z`); };
 const printImg = id => apiUrl(`/prints/${id}/image`);
+// la couleur d'un emplacement d'AMS, comme la tuile AMS : celle de la bobine associee d'abord
+// (l'AMS remonte parfois autre chose : un gris pour une bobine rouge), puis celle de l'AMS
+const trayCol = t => { const c = t && !t.empty && (t.spool_info?.color || t.spool_info?.filament_color || t.color); return c ? hexCss(c) : null; };
 const LIVE = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"];
 const isLive = st => LIVE.includes(String(st?.status || "").toUpperCase());
 
@@ -346,7 +349,7 @@ function HumZoom({ list, col, o, lo, hi }) {
         sub={a.temp ? `${Number(a.temp).toFixed(1).replace(".", ",")} °C` : null}/>)}</div>
     <H2>Unité par unité</H2>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 10 }}>
-      {list.map(a => { const c = col(a.humidity), trays = (a.trays || []).filter(t => !t.empty && t.color);
+      {list.map(a => { const c = col(a.humidity), trays = (a.trays || []).filter(trayCol);
         return <div key={a.id} style={{ padding: "11px 13px", borderRadius: 16, background: `linear-gradient(135deg, ${c}1a, transparent 65%), var(--surface2)`,
           border: `1px solid ${c}33`, display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
@@ -359,7 +362,7 @@ function HumZoom({ list, col, o, lo, hi }) {
             <div style={{ height: "100%", width: `${Math.min(100, a.humidity)}%`, background: c }}/></div>
           {trays.length > 0 && <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
             {trays.map(t => <span key={t.id} title={t.filament_type} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, color: "var(--text2)" }}>
-              <span style={{ width: 14, height: 14, borderRadius: 5, background: hexCss(t.color), border: "1px solid rgba(0,0,0,0.2)" }}/>{t.filament_type}</span>)}</div>}
+              <span style={{ width: 14, height: 14, borderRadius: 5, background: trayCol(t), border: "1px solid rgba(0,0,0,0.2)" }}/>{t.filament_type}</span>)}</div>}
         </div>; })}
     </div>
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -940,13 +943,13 @@ function Dry({ v, status, o, sz }) {
         if (drying.length === 1 && H >= 150) {
           // une seule unite et de la place : en grand (anneau centre ou a gauche quand c'est large)
           const a = drying[0], wide = W >= 260;
-          const trays = (a.trays || []).filter(t => !t.empty && t.color);
+          const trays = (a.trays || []).filter(trayCol);
           const extra = H - (wide ? 130 : 270) >= 52 ? 52 : 0;
           const Hr = H - extra;
           const ring = Math.floor(wide ? Math.min(Hr - 10, W * 0.42, 170) : Math.min(W * 0.78, Hr - 96, 170));
           const pill = (txt, c) => <span style={{ fontSize: 11.5, fontWeight: 800, color: c, padding: "3px 9px", borderRadius: 12, background: `${c}1c`, whiteSpace: "nowrap" }}>{txt}</span>;
           const below = extra > 0 && <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, flexWrap: "wrap", minWidth: 0 }}>
-            {trays.length > 0 && <span style={{ display: "inline-flex", gap: 4 }}>{trays.map(t => <SpoolDot key={t.id} color={t.color} size={26}
+            {trays.length > 0 && <span style={{ display: "inline-flex", gap: 4 }}>{trays.map(t => <SpoolDot key={t.id} color={trayCol(t)} size={26}
               pct={t.remain >= 0 ? t.remain / 100 : null} title={`${t.filament_type || ""}`}/>)}</span>}
             {a.humidity > 0 && pill(`💧 ${a.humidity} %`, "#0ea5e9")}
             {a.temp > 0 && W >= 215 && pill(`${Math.round(a.temp)} °C dedans`, "#f97316")}
@@ -1883,7 +1886,7 @@ function switchModel(status) {
   const ams = status?.ams_list || [];
   const nz = status?.nozzles || [];
   const slot = s => { if (!s) return null; const a = ams.find(x => x.id === s.ams); const t = a?.trays?.find(x => x.id === s.tray);
-    return { label: s.ams >= 128 ? amsLab({ id: s.ams }) : `${String.fromCharCode(65 + s.ams)}${s.tray + 1}`, color: t && !t.empty && t.color ? hexCss(t.color) : null,
+    return { label: s.ams >= 128 ? amsLab({ id: s.ams }) : `${String.fromCharCode(65 + s.ams)}${s.tray + 1}`, color: trayCol(t),
       type: t?.filament_type || "" }; };
   const activeAms = ams.find(x => x.id === status?.active_ams_id);
   const activeNz = nz.find(n => n.active)?.id;
@@ -1891,7 +1894,7 @@ function switchModel(status) {
   let live = activeAms?.switch_port || null;
   if (!live && activeNz != null) live = fs.out_a === activeNz ? "A" : fs.out_b === activeNz ? "B" : null;
   const tray = activeAms?.trays?.find(x => x.id === status?.active_tray_id);
-  const liveColor = tray?.color ? hexCss(tray.color) : "#22c55e";
+  const liveColor = trayCol(tray) || "#22c55e";
   const port = p => ({ p, units: ams.filter(x => x.switch_port === p), slot: slot(fs[`in_${p.toLowerCase()}`]), out: fs[`out_${p.toLowerCase()}`] ?? null,
     live: live === p });
   return { fs, ports: [port("A"), port("B")], nz, liveColor, hl: "#22c55e", temp: id => nz.find(n => n.id === id) };
@@ -1979,8 +1982,8 @@ function FilaSwitch({ status, o, sz }) {
             {x.units.length ? x.units.map(a => <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", width: 50 }}>{amsLab(a)}</span>
               <span style={{ display: "inline-flex", gap: 4 }}>{(a.trays || []).map(t => <span key={t.id} title={t.filament_type}
-                style={{ width: 18, height: 18, borderRadius: 6, background: !t.empty && t.color ? hexCss(t.color) : "transparent",
-                  border: !t.empty && t.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)",
+                style={{ width: 18, height: 18, borderRadius: 6, background: trayCol(t) || "transparent",
+                  border: trayCol(t) ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)",
                   boxShadow: a.id === status.active_ams_id && t.id === status.active_tray_id ? `0 0 0 2px var(--surface), 0 0 0 4px ${m.hl}` : "none" }}/>)}</span>
               {a.humidity > 0 && <Muted size={11.5} style={{ marginLeft: "auto" }}>💧 {a.humidity} %</Muted>}</div>)
               : <Muted size={12}>Aucun AMS branché sur cette entrée</Muted>}
@@ -2019,12 +2022,12 @@ function FilaSwitch({ status, o, sz }) {
 // les couleurs chargees : toutes les bobines de l'AMS en pastilles, celle qui imprime cerclee
 function Colors({ status, o, sz }) {
   const trays = (status?.ams_list || []).filter(a => a.id !== 255 && a.id !== 254).flatMap(a => (a.trays || []).map(t => ({ ...t, ams: a })))
-    .filter(t => !t.empty && t.color);
+    .filter(trayCol);
   if (!trays.length) return null;
   const on = t => t.ams.id === status?.active_ams_id && t.id === status?.active_tray_id;
   const dot = (t, s, label) => <span key={`${t.ams.id}-${t.id}`} title={`${amsLab(t.ams)} · ${t.filament_type || ""}`} style={{ display: "flex", flexDirection: "column",
     alignItems: "center", gap: 3, minWidth: 0 }}>
-    <span data-pk="" style={{ width: s, height: s, borderRadius: Math.round(s / 3.2), background: hexCss(t.color), border: "1px solid rgba(0,0,0,0.15)",
+    <span data-pk="" style={{ width: s, height: s, borderRadius: Math.round(s / 3.2), background: trayCol(t), border: "1px solid rgba(0,0,0,0.15)",
       boxShadow: on(t) ? "0 0 0 3px var(--surface), 0 0 0 5px #3b82f6" : "none", display: "block" }}/>
     {label && <span style={{ fontSize: 10.5, fontWeight: 800, color: on(t) ? "#3b82f6" : "var(--muted)", whiteSpace: "nowrap", lineHeight: "13px",
       maxWidth: s + 6, overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -2039,7 +2042,7 @@ function Colors({ status, o, sz }) {
             {a.humidity > 0 && <Muted size={11.5}>💧 {a.humidity} %</Muted>}</div>
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>{trays.filter(t => t.ams.id === a.id).map(t => dot(t, 64, true))}</div></div>)}</>}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 3 }}>{trays.slice(0, 18).map(t => <span key={`${t.ams.id}-${t.id}`}
-        style={{ width: 13, height: 13, borderRadius: 4, background: hexCss(t.color), border: "1px solid rgba(0,0,0,0.2)" }}/>)}</span>}>
+        style={{ width: 13, height: 13, borderRadius: 4, background: trayCol(t), border: "1px solid rgba(0,0,0,0.2)" }}/>)}</span>}>
       {({ W, H }) => {
         const lg = fitGrid(trays.length, W - 6, H - 6, { gap: 6, max: 64, extra: 16 });
         const labels = lg.size >= 40;

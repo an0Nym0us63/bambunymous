@@ -762,7 +762,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
             color: on ? "#3b82f6" : "var(--text2)" }}>
             {amsName(a.id)}
             <span style={{ display: "inline-flex", gap: 2 }}>{(a.trays || []).map(t => <span key={t.id} style={{ width: 7, height: 7, borderRadius: 2,
-              background: t.color && !t.empty ? `#${String(t.color).replace("#", "").slice(0, 6)}` : "var(--border)" }}/>)}</span>
+              background: trayHex(t) || "var(--border)" }}/>)}</span>
             {act && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite" }}/>}
           </button>
         );
@@ -1077,7 +1077,7 @@ function PrinterPopup({ status, img, name, onClose }) {
 
         {(tray && !tray.empty) || sp ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
           {tray && !tray.empty && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, background: "var(--surface2)" }}>
-            <span style={{ flexShrink: 0, display: "inline-flex" }}><SpoolSVG colors={[`#${String(tray.color || "888").replace("#", "").slice(0, 6)}`]} size={52} active={live}/></span>
+            <span style={{ flexShrink: 0, display: "inline-flex" }}><SpoolSVG colors={[trayHex(tray) || "#888888"]} size={52} active={live}/></span>
             <div style={{ minWidth: 0 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>Filament en cours · {slotLabel(status.active_ams_id, status.active_tray_id)}</div>
               <div style={{ fontSize: 14.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -1115,6 +1115,11 @@ function PrinterPopup({ status, img, name, onClose }) {
       </div>
     </div>, document.body);
 }
+// la couleur d'un emplacement d'AMS, comme la tuile AMS : la bobine associee d'abord, puis l'AMS
+function trayHex(t) {
+  const c = t && !t.empty && (t.spool_info?.color || t.spool_info?.filament_color || t.color);
+  return c ? `#${String(c).replace("#", "").slice(0, 6)}` : null;
+}
 // Le Filament Track Switch : ce qui entre en A et en B (l'AMS et son bac, sa couleur),
 // et la buse que sert chaque sortie. Format releve dans Bambu Studio (DevFilaSwitch).
 function SwitchDiagram({ fs, status }) {
@@ -1127,7 +1132,7 @@ function SwitchDiagram({ fs, status }) {
   const activeNz = (status?.nozzles || []).find(n => n.active)?.id;
   const line = (port, slot, out) => {
     const x = tray(slot);
-    const col = x?.t?.color && !x.t.empty ? `#${String(x.t.color).replace("#", "").slice(0, 6)}` : null;
+    const col = trayHex(x?.t);
     const live = out != null && out === activeNz;
     return (
       <div key={port} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 34px minmax(0,1fr)", alignItems: "center", gap: 6 }}>
@@ -1252,7 +1257,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
         {side && status?.connected && (
           <div style={{ display: "flex", flexDirection: "column", gap: 5, alignItems: "flex-end", flexShrink: 0 }}>
             {tray && !tray.empty && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: "var(--text2)" }}>
-              <span style={{ width: 14, height: 14, borderRadius: "50%", background: `#${String(tray.color || "888").replace("#", "").slice(0, 6)}`,
+              <span style={{ width: 14, height: 14, borderRadius: "50%", background: trayHex(tray) || "#888888",
                 boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>{tray.filament_type || "?"}
               <span style={{ color: "var(--muted)", fontWeight: 700 }}>{slotLabel(status.active_ams_id, status.active_tray_id)}</span></span>}
             {temps(12, 10)}
@@ -1579,7 +1584,7 @@ export default function Home() {
     if (!trays.length) return null;
     return <span style={{ display: "inline-flex", gap: 3 }}>{trays.slice(0, 16).map((t, i) => <span key={i} data-pk="" title={t.empty ? "vide" : t.filament_type || ""}
       style={{ width: 14, height: 14, borderRadius: "50%", border: "1px solid rgba(0,0,0,0.2)",
-        background: !t.empty && t.color ? `#${String(t.color).replace("#", "").slice(0, 6)}` : "var(--surface2)" }}/>)}</span>;
+        background: trayHex(t) || "var(--surface2)" }}/>)}</span>;
   };
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {
