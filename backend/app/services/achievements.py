@@ -4469,11 +4469,12 @@ async def card_fx(username: str) -> list:
             seen[username] = datetime.utcnow().isoformat()
             await set_setting(db, KEY + "_CARDFX", json.dumps(seen))
             return []
-    out = []
+    out, done = [], set()
     for e in st.get("card_log") or []:
         a = BY_ID.get(e.get("id"))
-        if not a or not a.get("card_tier") or str(e.get("at")) <= seen[username]:
+        if not a or not a.get("card_tier") or str(e.get("at")) <= seen[username] or a["id"] in done:
             continue
+        done.add(a["id"])
         if not (st.get("unlocked") or {}).get(a["id"]):          # retournee depuis : plus de fete
             continue
         t = a["card_tier"]
@@ -4918,7 +4919,12 @@ async def _tick(notify: bool = True) -> list:
         else:
             # date reelle tiree de l'historique ; un palier deja connu garde la sienne
             got = {i: old.get(i, at) for i, at in r["reached"].items()}
-        new += [(aid, int(i)) for i in got if i not in old]
+        # un palier deja obtenu une fois n'est plus jamais une nouveaute : s'il sort un instant
+        # (un calcul qui le rate) puis revient, ni notification, ni cles, ni carte a feter de nouveau
+        # (une Dame fetee plusieurs fois le meme jour, 23/10/2026)
+        seen = set(ever.get(aid) or []) | {str(i) for i in old}
+        new += [(aid, int(i)) for i in got if i not in old and str(i) not in seen]
+        ever[aid] = sorted(seen | {str(i) for i in got})
         st["unlocked"][aid] = got
     st["unlocked"] = {k: v for k, v in st["unlocked"].items() if v and k in BY_ID}
     # Seul ce qui vient d'arriver compte (notification, cles) : un palier ou un
@@ -4929,7 +4935,9 @@ async def _tick(notify: bool = True) -> list:
     else:
         new = [(aid, i) for aid, i in new if _recent(st["unlocked"].get(aid, {}).get(str(i)))]
     # cartes gagnees pour de bon (jamais un rattrapage) : leur fete a la prochaine ouverture
-    won = [aid for aid, _i in new if BY_ID[aid].get("card_tier")]
+    # (une carte ne se fete qu'une fois : deja dans le journal, elle n'y revient pas)
+    logged = {e.get("id") for e in st.get("card_log") or []}
+    won = [aid for aid in dict.fromkeys(aid for aid, _i in new if BY_ID[aid].get("card_tier")) if aid not in logged]
     if won:
         now_s = datetime.utcnow().isoformat()
         st["card_log"] = ([{"id": aid, "at": now_s} for aid in won] + (st.get("card_log") or []))[:CARD_LOG_MAX]
