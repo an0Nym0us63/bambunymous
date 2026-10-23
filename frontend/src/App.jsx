@@ -13,6 +13,7 @@ import Filaments from "./pages/Filaments";
 import Prints from "./pages/Prints";
 // le banc d'essai des tuiles : seulement en developpement
 const TileBench = import.meta.env.DEV ? React.lazy(() => import("./pages/TileBench")) : null;
+const CardBench = import.meta.env.DEV ? React.lazy(() => import("./pages/CardBench")) : null;
 import DialogHost from "./components/DialogHost";
 import { ContextMenuHost } from "./components/ContextMenu";
 import { CreatorPageHost } from "./components/MwCreatorPage";
@@ -118,6 +119,7 @@ export default function App() {
         <Route path="rembobiner" element={<Rewind />} />
         <Route path="teapot" element={<Teapot />} />
         {TileBench && <Route path="banc-tuiles" element={<React.Suspense fallback={null}><TileBench /></React.Suspense>} />}
+        {CardBench && <Route path="banc-cartes" element={<React.Suspense fallback={null}><CardBench /></React.Suspense>} />}
         <Route path="*" element={<LostOrHidden />} />
       </Route>
     </Routes>
