@@ -357,6 +357,39 @@ function DropGauge({ value, color, size = 80, label, sub }) {
     </div>
   );
 }
+// un thermometre en verre, rempli de liquide (comme les gouttes de l'humidite) : le tube monte avec la
+// temperature, du froid a la chaleur, la consigne en repere ; le chiffre en degrade et le nom dessous
+const THERMO = "M13 54.25 V11 A7 7 0 0 1 27 11 V54.25 A12 12 0 1 1 13 54.25 Z";
+function ThermoGauge({ v, t, max, size = 90, c, label, sub, active = false, targets = true, bare = false }) {
+  const id = useMemo(() => `tg${Math.random().toString(36).slice(2, 8)}`, []);
+  const f = x => Math.max(0, Math.min(1, (x || 0) / max));
+  const top = 56 - 50 * f(v);            // le tube va de y=6 a y=56 ; le bulbe est toujours plein
+  const ty = 56 - 50 * f(t);
+  const w = Math.round(size * 0.5);
+  return (
+    <div data-pk="" style={{ display: "flex", flexDirection: "column", alignItems: "center", width: bare ? w : Math.max(w, 46), flexShrink: 0 }}>
+      <svg width={w} height={size} viewBox="0 0 40 80" aria-hidden="true" style={{ overflow: "visible",
+        filter: active ? `drop-shadow(0 0 7px ${c})` : v > 40 ? `drop-shadow(0 2px 6px ${c}66)` : "none" }}>
+        <defs><clipPath id={id}><path d={THERMO}/></clipPath>
+          <linearGradient id={`${id}g`} x1="0" y1="1" x2="0" y2="0"><stop offset="0" stopColor={heat(20)}/><stop offset="1" stopColor={c}/></linearGradient></defs>
+        <path d={THERMO} fill="var(--surface2)"/>
+        <g clipPath={`url(#${id})`}>
+          <path d={`M-40 ${top} q5 -2.5 10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0 V82 H-40 Z`} fill={`url(#${id}g)`}
+            style={{ animation: "bn-wave 2.6s linear infinite" }}/>
+          <rect x="15.5" y="9" width="3" height="40" rx="1.5" fill="rgba(255,255,255,0.35)"/>
+        </g>
+        <path d={THERMO} fill="none" stroke={c} strokeOpacity="0.6" strokeWidth="1.8"/>
+        {/* les graduations, et la consigne en repere */}
+        {[0.25, 0.5, 0.75].map(k => <line key={k} x1="27" x2="30" y1={56 - 50 * k} y2={56 - 50 * k} stroke="var(--muted)" strokeOpacity="0.5" strokeWidth="1"/>)}
+        {targets && t > 0 && <g><line x1="9" x2="31" y1={ty} y2={ty} stroke="var(--text)" strokeWidth="1.6" strokeLinecap="round"/>
+          <path d={`M31 ${ty} l5 -3.5 v7 Z`} fill="var(--text)"/></g>}
+      </svg>
+      {!bare && <span style={{ fontSize: size > 110 ? 18 : 15, fontWeight: 900, lineHeight: 1.1, marginTop: 2, whiteSpace: "nowrap",
+        ...gradText(`color-mix(in srgb, ${c} 72%, #000000)`, c) }}>{label}</span>}
+      {!bare && sub && <span style={{ fontSize: size > 110 ? 12 : 10.5, color: active ? c : "var(--muted)", fontWeight: 800, whiteSpace: "nowrap" }}>{sub}</span>}
+    </div>
+  );
+}
 // la vue en grand de l'humidite : des gouttes a la largeur reelle de la fenetre
 function HumZoom({ list, col, o, lo, hi }) {
   const { W } = useBox();
@@ -1998,6 +2031,29 @@ function Temps({ status, o, sz }) {
   const thermo = (W, H) => { const g = thermoGrid(rows.length, W, H);
     return g && <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.w}px)`, gap: 8, justifyContent: "center", alignContent: "center" }}>
       {rows.map(r => <ThermoCell key={r.k} r={r} w={g.w} h={g.h} targets={o.targets}/>)}</div>; };
+  // des thermometres en verre, sans carte autour (comme les gouttes de l'humidite)
+  const glass = (W, H) => {
+    const g = fitGrid(rows.length, W, H, { ar: 2, extra: 34, max: 75, gap: 8 });
+    // basse : chaque thermometre a gauche, le chiffre en degrade et le nom a droite
+    if (g.size < 34 && H >= 44) {
+      const cols = Math.max(1, Math.min(rows.length, Math.floor((W + 8) / 84))), nr = Math.ceil(rows.length / cols);
+      const th = Math.min(96, Math.floor((H - 8 * (nr - 1)) / nr) - 2);
+      if (th >= 26) return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 8, alignContent: "center" }}>
+        {rows.map(r => { const c = heat(r.v), [ic, st, sc] = tempState(r.v || 0, r.t || 0);
+          return <div key={r.k} title={`${r.l} : ${st}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: 0 }}>
+            <ThermoGauge bare v={r.v} t={r.t} max={r.max} size={th} c={c} active={r.active} targets={o.targets}/>
+            <div style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
+              <span data-pk="" style={{ fontSize: th >= 70 ? 22 : th >= 44 ? 18 : 15, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${c} 72%, #000000)`, c) }}>{Math.round(r.v || 0)}°</span>
+              <span style={{ fontSize: th >= 44 ? 10.5 : 9.5, fontWeight: 800, color: r.active ? c : "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.l}</span>
+              {th >= 56 && <span style={{ fontSize: 10, fontWeight: 800, color: sc, whiteSpace: "nowrap" }}>{o.targets && r.t > 0 ? `${ic ? `${ic} ` : ""}${Math.round(r.t)}°` : ic ? `${ic} ${st}` : st}</span>}
+            </div></div>; })}</div>;
+    }
+    if (g.size < 24) return null;
+    return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "center", gap: 8 }}>
+      {rows.map(r => <div key={r.k} title={`${r.l} : ${tempState(r.v || 0, r.t || 0)[1]}`}>
+        <ThermoGauge v={r.v} t={r.t} max={r.max} size={g.size * 2} c={heat(r.v)} active={r.active} targets={o.targets}
+          label={`${Math.round(r.v || 0)}°`} sub={`${r.l}${o.targets && r.t > 0 && g.size >= 34 ? ` · ${Math.round(r.t)}°` : ""}`}/></div>)}</div>;
+  };
   const gauges = (W, H) => {
     const g = fitGrid(rows.length, W, H, { ar: GAUGE_AR, extra: GAUGE_EXTRA, max: 180, gap: 8 });
     return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "center", gap: 8 }}>
@@ -2026,8 +2082,9 @@ function Temps({ status, o, sz }) {
         <span key={r.k} title={r.l} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: hot(r) ? r.c : "var(--text)" }}>
           <r.ico s={13}/>{r.s && <span style={{ fontSize: 10, fontWeight: 900 }}>{r.s}</span>}{Math.round(r.v || 0)}°</span>)}</span>}>
       {({ W, H }) => {
-        // des cartes thermometre si elles tiennent, sinon les jauges (style « jauges »), sinon des lignes
-        if (!o.style || o.style === "thermo") { const th = thermo(W, H); if (th) return th; }
+        // des thermometres en verre (par defaut), des cadrans en cartes, des jauges, sinon des lignes
+        if (!o.style || o.style === "glass") { const gl = glass(W, H); if (gl) return gl; }
+        if (o.style === "thermo") { const th = thermo(W, H); if (th) return th; }
         const g = fitGrid(rows.length, W, H, { ar: GAUGE_AR, extra: GAUGE_EXTRA, gap: 8 });
         if (o.style === "gauges" && g.size >= 50) return gauges(W, H);
         return H >= rows.length * 22 ? lines : cells(W, H);
@@ -3117,8 +3174,8 @@ export const TILES = {
     options: [C("mode", "Image", "auto", [["auto", "auto"], ["stream", "direct"], ["images", "toutes les 2 s"]],
       { hint: "Auto : le direct, et des images si le direct se fige." }), B("overlay", "Avancement sur l'image", true)] },
   temps: { label: "Températures", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Temps status={st} o={o} sz={sz(it)}/>,
-    options: [C("style", "Affichage", "thermo", [["thermo", "thermomètres"], ["gauges", "jauges"], ["list", "lignes"]],
-      { hint: "Thermomètres : une carte par source, sa couleur suit la chaleur, la consigne marquée sur la barre. Tout passe en lignes quand ce serait trop petit." }),
+    options: [C("style", "Affichage", "glass", [["glass", "thermomètres"], ["thermo", "cadrans"], ["gauges", "jauges"], ["list", "lignes"]],
+      { hint: "Thermomètres : un tube qui se remplit du froid à la chaleur, la consigne en repère. Cadrans : une carte par source. Tout passe en lignes quand ce serait trop petit." }),
       B("targets", "Consignes", true), B("chamber", "Chambre", true)] },
   month: { label: "Ce mois-ci", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Month v={d.month} o={o} sz={sz(it)}/>,
     options: [B("ring", "Anneau de réussite", true), B("compare", "Comparer au mois dernier", true), B("cost", "Coût", true), B("chart", "Barres par jour", true, { hint: "Quand la tuile a la place." })] },
