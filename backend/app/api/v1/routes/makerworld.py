@@ -140,7 +140,14 @@ async def mw_collections(fresh: bool = False, _: str = Depends(get_current_user)
 @router.get("/collections/{cid}")
 async def mw_collection_designs(cid: str, offset: int = 0, limit: int = 30, fresh: bool = False,
                                 _: str = Depends(get_current_user)):
-    return await _call(acc.collection_designs(cid, offset, limit, fresh))
+    from ....services import mw_added
+    r = await _call(acc.collection_designs(cid, offset, limit, fresh))
+    # qui l'a range ici depuis BambuNymous (rien pour ce qui a ete range ailleurs)
+    marks = await mw_added.of_collection(str(cid))
+    if marks and isinstance(r, dict) and isinstance(r.get("items"), list):
+        r = {**r, "items": [{**x, "added": marks[str(x.get("design_id"))]} if str(x.get("design_id")) in marks else x
+                            for x in r["items"]]}
+    return r
 
 
 @router.get("/following/creators")
@@ -186,8 +193,24 @@ async def mw_design_collections(design_id: str, _: str = Depends(get_current_use
 
 
 @router.put("/design/{design_id}/collections")
-async def mw_set_design_collections(design_id: str, body: dict = Body({}), _: str = Depends(require_mw)):
-    return await _call(acc.set_design_collections(design_id, body.get("ids") or []))
+async def mw_set_design_collections(design_id: str, body: dict = Body({}), username: str = Depends(require_mw)):
+    from ....services import mw_added
+    ids = [str(i) for i in (body.get("ids") or []) if str(i).isdigit()]
+    # ce qui y etait deja : seuls les vrais ajouts portent le nom de qui les fait (illisible : on ne marque
+    # que ce qui n'a pas deja de marque)
+    try:
+        before = (await acc.design_collections(design_id)).get("in")
+        before = None if before is None else [str(c) for c in before]
+    except Exception:
+        before = None
+    r = await _call(acc.set_design_collections(design_id, ids))
+    if before is None:
+        known = await mw_added.of_design(str(design_id))
+        added, removed = [i for i in ids if i not in known], []
+    else:
+        added, removed = [i for i in ids if i not in before], [c for c in before if c not in ids]
+    await mw_added.record(str(design_id), added, removed, username)
+    return r
 
 
 @router.get("/collection/{kind}")

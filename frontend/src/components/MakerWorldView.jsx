@@ -502,6 +502,11 @@ export default function MakerWorldView({ onSearch }) {
                         : <div style={{ width:"100%", aspectRatio:"1" }}/>}
                       {x.printed > 0 && <span style={ribbon("#22c55e")}>✓ IMPRIMÉ</span>}
                       {!x.printed && x.in_progress > 0 && <span style={ribbon("#f59e0b")}>EN COURS</span>}
+                      {/* qui l'a range dans cette collection, depuis BambuNymous */}
+                      {x.added?.by && <span title={`Ajouté à la collection par ${x.added.by}${x.added.at ? ` le ${new Date(x.added.at + "Z").toLocaleDateString("fr-FR")}` : ""}`}
+                        style={{ position:"absolute", left:6, bottom:6, maxWidth:"calc(100% - 12px)", display:"inline-flex", alignItems:"center", gap:3,
+                          padding:"2px 7px", borderRadius:20, fontSize:10, fontWeight:800, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+                          background:"rgba(15,23,42,0.72)", backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)" }}>＋ {x.added.by}</span>}
                     </a>
                     <div style={{ padding:"7px 8px 8px", display:"flex", flexDirection:"column", gap:4, flex:1 }}>
                       <a href={x.url} onClick={e => { e.preventDefault(); setModel(x); }} onPointerDown={() => prefetchModel(x.design_id)}
