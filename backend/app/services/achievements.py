@@ -4520,7 +4520,8 @@ async def card_fx_seen(username: str) -> None:
 # a ete joint (l'appli peut tourner sur une adresse locale, en http : la page ne le saurait pas).
 # Une fois vue, la maison est retenue pour de bon.
 MAISON_HOSTS = {"c15afe7465412e1963b40eaf44eb5ac70130e50c3df3ea618d789f4976215ab2",
-                "4fd27201adaaf0d9a3443294dc64cfd0d3a84a4f32c626b542072851bfb63c17"}
+                "4fd27201adaaf0d9a3443294dc64cfd0d3a84a4f32c626b542072851bfb63c17",
+                "41f8ec918583d04f2cd225698b9bc1d29e824cf845f9c337af7b2c537c51cf3a"}
 _MAISON = {"seen": None, "checked": set()}
 
 
