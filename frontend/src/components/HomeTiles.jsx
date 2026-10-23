@@ -2757,8 +2757,12 @@ function headModel(st) {
     // 254 / 255 : la bobine externe (rangee par l'appli sous l'unite 255 : E1, E2)
     if (a === 254) a = 255;
     const tr = a != null ? tray(a, t) : null;
-    // un emplacement vide (ou que l'AMS ne decrit pas) : aucun filament, et pas de numero qui ne veut rien dire
-    const loaded = tr && !tr.empty && (trayCol(tr) || tr.filament_type);
+    // un emplacement vide (ou que l'AMS ne decrit pas) : aucun filament, et pas de numero qui ne veut rien dire ;
+    // l'imprimante dit aussi si du filament est vraiment engage (fin d'impression : retire, meme si
+    // l'emplacement reste annonce)
+    // (la buse qui imprime en a forcement : le bit ne compte qu'en dehors d'une impression)
+    const engaged = (isLive(st) && n.active) || n.has_filament !== false;
+    const loaded = engaged && tr && !tr.empty && (trayCol(tr) || tr.filament_type);
     return { n, slot: loaded ? slotLabel(a, t) : null, color: loaded ? trayCol(tr) : null, type: loaded ? (tr?.spool_info?.fila_type || tr?.filament_type || "") : "",
       name: loaded ? (tr?.spool_info?.translated_name || tr?.spool_info?.name || "") : "", brand: loaded ? (tr?.spool_info?.brand || "") : "" };
   };

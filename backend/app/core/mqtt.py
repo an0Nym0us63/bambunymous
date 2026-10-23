@@ -487,6 +487,12 @@ class MQTTManager:
                         n.slot_ams, n.slot_tray = (-1, -1) if _a in (0xFF,) or _sn < 0 else (_a, _t if _a < 128 else 0)
                     except (TypeError, ValueError):
                         pass
+                # info : bit 1 = filament dans l'extrudeuse, bit 2 = dans le tampon (DevExtruder de Bambu Studio)
+                if "info" in ext:
+                    try:
+                        n.has_filament = bool((int(ext.get("info")) >> 1) & 1)
+                    except (TypeError, ValueError):
+                        pass
                 changed = True
 
         # Repli mono-buse (P1 / X1 / A1) : ces machines ne remontent pas

@@ -65,6 +65,10 @@ class NozzleTemp:
     # l'emplacement charge dans cette buse (extruder.info[].snow) : unite et bac, -1 si rien
     slot_ams: int = -1
     slot_tray: int = -1
+    # du filament est-il engage dans l'extrudeuse (extruder.info[].info, bit 1, comme Bambu Studio) ;
+    # None : l'imprimante ne le dit pas. Fin d'impression, filament retire : False, meme si snow
+    # garde le dernier emplacement
+    has_filament: bool | None = None
 
 
 @dataclass
