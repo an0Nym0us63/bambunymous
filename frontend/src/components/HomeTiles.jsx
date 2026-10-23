@@ -1872,8 +1872,18 @@ function Spool({ status, o, sz }) {
   const slot = `${slotOf(t)} · ${amsLab(t.ams)}`;
   const weight = g != null ? `${Math.round(g)} g` : pct != null ? `${Math.round(pct * 100)} %` : "—";
   const barCol = pct == null ? "#94a3b8" : pct < 0.15 ? "#ef4444" : pct < 0.35 ? "#f59e0b" : color;
-  const bar = h => <div style={{ height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden" }}>
-    <div data-pk="" style={{ height: "100%", width: `${(pct ?? 0) * 100}%`, borderRadius: h, background: barCol, boxShadow: `0 0 8px ${barCol}66` }}/></div>;
+  // une couleur tres claire (blanc, jade…) se perd sur le fond : la barre garde un contour, le texte du % passe en sombre
+  const light = (c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); if (!m) return false; const n = parseInt(m[1], 16);
+    return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.72; })(barCol);
+  const bar = h => <div style={{ height: h, borderRadius: h, background: "var(--surface2)", overflow: "hidden", boxShadow: "inset 0 0 0 1px var(--border)" }}>
+    <div data-pk="" style={{ height: "100%", width: `${(pct ?? 0) * 100}%`, borderRadius: h, background: barCol,
+      boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barCol}66` }}/></div>;
+  // le pourcentage restant, en pastille a la couleur de la bobine
+  const pctPill = fs => pct == null ? null : <span data-pk="" style={{ display: "inline-flex", alignItems: "baseline", gap: 1, padding: `1px ${Math.round(fs * 0.55)}px`,
+    borderRadius: 20, fontSize: fs, fontWeight: 900, whiteSpace: "nowrap", flexShrink: 0, lineHeight: 1.35,
+    color: light ? "#0f172a" : "#fff", background: light ? `linear-gradient(135deg, ${barCol}, #e2e8f0)` : `linear-gradient(135deg, ${barCol}, ${barCol}cc)`,
+    border: light ? "1px solid rgba(0,0,0,0.18)" : "none", boxShadow: `0 3px 10px ${light ? "rgba(0,0,0,0.12)" : `${barCol}55`}` }}>
+    {Math.round(pct * 100)}<span style={{ fontSize: fs * 0.7 }}>%</span></span>;
   const spool = size => <span data-pk="" style={{ display: "inline-flex", flexShrink: 0, filter: `drop-shadow(0 6px 14px ${color}55)` }}>
     <SpoolSVG colors={colors} size={size} active={live} type={si.multicolor_type}/></span>;
   const chip = (txt, c) => <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 8px", borderRadius: 20, fontSize: 11, fontWeight: 800,
@@ -1894,7 +1904,7 @@ function Spool({ status, o, sz }) {
             <div style={{ fontSize: 26, fontWeight: 900, color: "var(--text)", lineHeight: 1.1 }}>{name}</div>
             <div style={{ fontSize: 14, fontWeight: 700, color: "var(--text2)" }}>{[type, si.brand].filter(Boolean).join(" · ")}</div>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginTop: 4 }}>
-              <span style={{ fontSize: 30, fontWeight: 900, color: barCol }}>{weight}</span>
+              <span style={{ fontSize: 30, fontWeight: 900, color: light ? "var(--text)" : barCol }}>{weight}</span>{pctPill(15)}
               {tot && g != null && <Muted size={13}>sur {Math.round(tot)} g · {Math.round((pct ?? 0) * 100)} %</Muted>}</div>
             {bar(10)}
           </div>
@@ -1938,7 +1948,8 @@ function Spool({ status, o, sz }) {
             <span style={{ fontSize: 15, fontWeight: 900, color: "var(--text)", maxWidth: "100%", ...clamp(1) }}>{name}</span>
             <Muted size={11.5}>{slot}</Muted>
             <div style={{ width: "100%", display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 13, fontWeight: 900, color: barCol, whiteSpace: "nowrap" }}>{weight}</span><div style={{ flex: 1 }}>{bar(6)}</div></div>
+              <span style={{ fontSize: 13, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span><div style={{ flex: 1 }}>{bar(6)}</div>
+              {pctPill(11)}</div>
           </div>;
         }
         // sinon en ligne : la bobine a gauche (a la hauteur), le nom, la matiere, le poids et sa jauge
@@ -1951,17 +1962,20 @@ function Spool({ status, o, sz }) {
           {spool(sp)}
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: narrow ? 2 : 4 }}>
             {!narrow && H >= 90 && <div>{chip(slot, "#8B5CF6")}</div>}
-            <span style={{ fontSize: narrow ? 14 : 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15, ...clamp(1) }}>{name}</span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+              <span style={{ fontSize: narrow ? 14 : 20, fontWeight: 900, color: "var(--text)", lineHeight: 1.15, minWidth: 0, ...clamp(1) }}>{name}</span>
+              {!narrow && pctPill(H < 80 ? 12 : 14)}</span>
             {narrow ? <>
               {/* etroite : la matiere, puis la marque dessous ; l'emplacement seulement s'il reste de la place */}
               {type && <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.2 }}>{type}</span>}
               {si.brand && H >= 76 && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.2 }}>{si.brand}</span>}
               {H >= 120 && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{slot}</span>}
             </> : <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {[type, si.brand].filter(Boolean).join(" · ")}</span>}
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: narrow ? 12.5 : 15, fontWeight: 900, color: barCol, whiteSpace: "nowrap" }}>{weight}</span>
-              <div style={{ flex: 1, minWidth: 20 }}>{bar(narrow ? 5 : 7)}</div></div>
+              {[type, si.brand, H < 80 && g != null ? `${Math.round(g)} g` : null].filter(Boolean).join(" · ")}</span>}
+            {!narrow && H < 80 ? bar(6) : <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: narrow ? 12.5 : 15, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span>
+              <div style={{ flex: 1, minWidth: 20 }}>{bar(narrow ? 5 : 7)}</div>
+              {narrow && pctPill(10.5)}</div>}
             {facts && facts.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>{facts}</div>}
           </div>
         </div>;

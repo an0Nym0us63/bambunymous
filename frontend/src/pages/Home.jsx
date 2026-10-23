@@ -720,15 +720,19 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
   const [tray, setTray] = useState(null);
   const view = useDevSel(s => s.view), setView = useDevSel(s => s.setView);
   const before = useRef(null);   // la vue de la tuile a l'ouverture de la fenetre, rendue a la fermeture
-  const root = useRef(null);
+  // la mesure s'accroche quand la tuile apparait vraiment : au chargement (F5), l'etat de
+  // l'imprimante n'est pas encore la et la tuile ne montre d'abord rien ; un effet lance au
+  // montage ne voyait alors aucun element, ne mesurait jamais, et la hauteur estimee debordait
   const [mh, setMh] = useState(0);
-  useEffect(() => {
-    const el = root.current;
-    if (!el || typeof ResizeObserver === "undefined") return undefined;
-    const ro = new ResizeObserver(([e]) => setMh(Math.floor(e.contentRect.height)));
-    ro.observe(el);
-    return () => ro.disconnect();
+  const ro = useRef(null);
+  const root = useCallback(el => {
+    ro.current?.disconnect();
+    ro.current = null;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    ro.current = new ResizeObserver(([e]) => setMh(Math.floor(e.contentRect.height)));
+    ro.current.observe(el);
   }, []);
+  useEffect(() => () => ro.current?.disconnect(), []);
   useEffect(() => {
     const load = () => client.get("/settings/ams-order").then(({ data }) => setOrder(data.order ?? null)).catch(() => setOrder(null));
     load();
