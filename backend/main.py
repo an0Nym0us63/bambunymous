@@ -479,6 +479,11 @@ async def enforce_readonly(request, call_next):
 
 @app.middleware("http")
 async def no_cache_api(request, call_next):
+    try:   # l'adresse sous laquelle on m'a joint (une farce reservee a quelques maisons)
+        from app.services.achievements import note_host
+        note_host(request.headers.get("x-forwarded-host") or request.headers.get("host") or "")
+    except Exception:
+        pass
     response = await call_next(request)
     if request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"

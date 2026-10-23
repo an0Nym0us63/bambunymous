@@ -93,6 +93,13 @@ async def achievements_card_fx_seen(acc=Depends(require_own_account)):
 async def achievements_prank_ok(slug: str, acc=Depends(require_own_account)):
     """Cette farce peut-elle se jouer depuis son adresse ?"""
     from ....services import achievements as A
+    if slug == "don":
+        # une des maisons de cette farce, et seulement pour le compte principal (le premier administrateur) :
+        # ni un autre compte, ni un copain ne la voient (ni ne la « consomment » avant lui)
+        from ....db.session import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            main = (await db.execute(select(User.username).where(User.role == ROLE_ADMIN).order_by(User.id).limit(1))).scalar_one_or_none()
+        return {"ok": await A.prank_replay_ok(slug), "maison": acc[0] == main and await A.is_maison()}
     return {"ok": await A.prank_replay_ok(slug)}
 
 

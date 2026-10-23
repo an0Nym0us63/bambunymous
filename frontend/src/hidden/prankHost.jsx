@@ -33,16 +33,10 @@ export const FETE_SLUGS_MONDE = ["nouvel-an-chinois", "saint-patrick", "holi", "
   "thanksgiving", "pi"];
 FETE_SLUGS.push(...FETE_SLUGS_MONDE);
 
-// une farce pour quelques maisons : elle tombe a l'ouverture sur ces installations-la (reconnues par l'empreinte
-// de leur adresse), une fois, jusqu'au bout ; ensuite elle se rejoue a son adresse. Jamais tiree au sort.
-const MAISON = { slug: "don", egg: "merci_don", hosts: ["c15afe7465412e1963b40eaf44eb5ac70130e50c3df3ea618d789f4976215ab2",
-  "4fd27201adaaf0d9a3443294dc64cfd0d3a84a4f32c626b542072851bfb63c17"] };
-async function isMaison() {
-  try {
-    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(window.location.hostname.toLowerCase()));
-    return MAISON.hosts.includes([...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join(""));
-  } catch { return false; }
-}
+// une farce pour quelques maisons : elle tombe a l'ouverture sur ces installations-la, une fois, jusqu'au bout ;
+// ensuite elle se rejoue a son adresse. Jamais tiree au sort. C'est le serveur qui sait s'il en est une (il a ete
+// joint sous l'une de leurs adresses) : la page peut tourner sur une adresse locale.
+const MAISON = { slug: "don", egg: "merci_don" };
 export const isPrank = slug => PRANK_SLUGS.includes(slug) || FETE_SLUGS.includes(slug) || slug === MAISON.slug;
 
 export const usePrank = create(set => ({
@@ -176,14 +170,14 @@ export function PrankHost() {
     // succes ne l'enregistre pas la-bas, cet appareil s'en souvient alors. Interrompue (appli fermee, page
     // rechargee), rien n'est retenu : elle revient a l'ouverture suivante.
     const seen = () => { try { return localStorage.getItem("bn-" + MAISON.slug) === "1"; } catch { return false; } };
-    isMaison().then(me => !me || seen() ? roll() : client.get(`/achievements/prank/${MAISON.slug}`).then(({ data }) => {
-      if (data?.ok) { roll(); return; }
+    (seen() ? Promise.resolve({ data: { ok: true } }) : client.get(`/achievements/prank/${MAISON.slug}`)).then(({ data }) => {
+      if (!data?.maison || data?.ok) { roll(); return; }
       const go = () => {
         if (document.getElementById("splash") || window.__bnCardFx) { setTimeout(go, 300); return; }
         if (!usePrank.getState().slug) start(MAISON.slug);
       };
       setTimeout(go, 1200);
-    }).catch(roll));
+    }).catch(roll);
   }, [pathname, visiting, start, nav]);
   const doneRef = useRef(false);
   // on QUITTE l'accueil : la farce s'arrete (et l'effet remet tout en place). Pas

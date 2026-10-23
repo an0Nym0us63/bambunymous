@@ -4516,6 +4516,50 @@ async def card_fx_seen(username: str) -> None:
         await set_setting(db, KEY + "_CARDFX", json.dumps(seen))
 
 
+# Les maisons de la farce « don » : reconnues par l'empreinte d'une adresse sous laquelle le serveur
+# a ete joint (l'appli peut tourner sur une adresse locale, en http : la page ne le saurait pas).
+# Une fois vue, la maison est retenue pour de bon.
+MAISON_HOSTS = {"c15afe7465412e1963b40eaf44eb5ac70130e50c3df3ea618d789f4976215ab2",
+                "4fd27201adaaf0d9a3443294dc64cfd0d3a84a4f32c626b542072851bfb63c17"}
+_MAISON = {"seen": None, "checked": set()}
+
+
+def note_host(host: str) -> None:
+    """Appele a chaque requete (sans attendre) : l'adresse sous laquelle on m'a joint."""
+    if _MAISON["seen"]:
+        return
+    h = (host or "").split(",")[0].strip().split(":")[0].lower()
+    if not h or h in _MAISON["checked"] or len(_MAISON["checked"]) > 200:
+        return
+    _MAISON["checked"].add(h)
+    import hashlib
+    if hashlib.sha256(h.encode()).hexdigest() not in MAISON_HOSTS:
+        return
+    _MAISON["seen"] = True
+
+    async def keep():
+        from ..db.session import AsyncSessionLocal
+        from .settings_service import set_setting
+        async with AsyncSessionLocal() as db:
+            await set_setting(db, KEY + "_MAISON", datetime.utcnow().isoformat())
+    try:
+        import asyncio
+        t = asyncio.get_running_loop().create_task(keep())
+        _BG.add(t)
+        t.add_done_callback(_BG.discard)
+    except RuntimeError:
+        pass
+
+
+async def is_maison() -> bool:
+    if _MAISON["seen"] is None:
+        from ..db.session import AsyncSessionLocal
+        from .settings_service import get_setting
+        async with AsyncSessionLocal() as db:
+            _MAISON["seen"] = bool(await get_setting(db, KEY + "_MAISON", ""))
+    return bool(_MAISON["seen"])
+
+
 async def prank_replay_ok(slug: str) -> bool:
     """Une farce tapee a son adresse (URL ou passage secret) : elle ne se joue
     que deja tombee par surprise (rejouee pour le plaisir), ou, pour une fete,
