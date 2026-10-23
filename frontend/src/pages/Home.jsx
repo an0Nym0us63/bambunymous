@@ -1740,7 +1740,7 @@ function Greeting({ status, o = {} }) {
     if (opt("pNext", false)) put("queue", client.get("/makerworld/queue"));
     if (opt("pFriends", false)) put("friends", client.get("/friends/shared/printing"));
     if (opt("pGrade", false) || opt("pWheel", false)) put("ach", client.get("/achievements"));
-  }, [st, o.pToday, o.pNext, o.pFriends, o.pGrade, o.pWheel]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [st, !!o.pToday, !!o.pNext, !!o.pFriends, !!o.pGrade, !!o.pWheel]); // eslint-disable-line react-hooks/exhaustive-deps
   const h = new Date().getHours();
   const mood = opt("mood", "time");
   const sky = mood !== "time" && MOODS[mood] ? MOODS[mood] : h < 5 ? SKY[3] : [...SKY].reverse().find(v => h >= v.from);
@@ -1760,9 +1760,22 @@ function Greeting({ status, o = {} }) {
   const grade = x.ach ? gradeOf(null, x.ach.score_max ? x.ach.score / x.ach.score_max : 0) : null;
   const nf = (x.friends?.printing || []).length;
   const spins = x.ach?.keys?.wheel?.spins || 0;
+  const ps = opt("pStyle", "glass");
   const pill = { display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 999, fontSize: 12.5,
     fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.16)", border: "1px solid rgba(255,255,255,0.28)",
-    backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", whiteSpace: "nowrap" };
+    backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)", whiteSpace: "nowrap",
+    // pleine : blanche, le texte a la couleur du bandeau ; contour : un simple trait ; texte : ni fond ni trait
+    ...(ps === "solid" ? { background: "rgba(255,255,255,0.94)", color: sky.b, border: "1px solid transparent", fontWeight: 800 } : {}),
+    ...(ps === "outline" ? { background: "transparent", border: "1.5px solid rgba(255,255,255,0.7)", backdropFilter: "none", WebkitBackdropFilter: "none" } : {}),
+    ...(ps === "plain" ? { background: "transparent", border: "none", padding: "2px 2px", fontWeight: 800, backdropFilter: "none", WebkitBackdropFilter: "none",
+      textShadow: "0 1px 2px rgba(0,0,0,0.25)" } : {}) };
+  // une pastille : masquee (false), en entier (true), ou l'icone seule, avec le nombre quand elle en porte un
+  const shown = (k, d) => { const m = opt(k, d); return m === false || m == null ? null : m === "icon" ? "icon" : "full"; };
+  const P = (k, d, cond, icon, full, short, title) => { const m = shown(k, d);
+    return m && cond ? <span data-pk="" style={m === "icon" ? { ...pill, gap: 5, ...(ps === "plain" ? {} : { padding: "7px 10px" }) } : pill}
+      title={m === "icon" ? title : undefined} aria-label={m === "icon" ? title : undefined}>{icon}{m === "icon" ? short : full}</span> : null; };
+  const barIcon = <span style={{ width: 46, height: 6, borderRadius: 6, background: ps === "solid" ? `${sky.b}33` : "rgba(255,255,255,0.3)", overflow: "hidden" }}>
+    <span style={{ display: "block", height: "100%", width: `${Math.round(status?.progress || 0)}%`, background: ps === "solid" ? sky.b : "#fff" }}/></span>;
   const mini = size === "mini";
   return (
     <div data-hues={[sky.a, sky.b, sky.c].join(",")} className={`card home-hello${size === "compact" ? " hh-compact" : ""}${mini ? " hh-mini" : ""}`} style={{ position: "relative",
@@ -1808,25 +1821,26 @@ function Greeting({ status, o = {} }) {
             background: "rgba(255,255,255,0.14)", lineHeight: 1.4 }}>💡 <Words text={tip}/></div>}
         </div>
         <div className="hh-pills" style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          {opt("pProgress", true) && live && <span data-pk="" style={pill}>
-            <span style={{ width: 46, height: 6, borderRadius: 6, background: "rgba(255,255,255,0.3)", overflow: "hidden" }}>
-              <span style={{ display: "block", height: "100%", width: `${Math.round(status.progress || 0)}%`, background: "#fff" }}/></span>
-            {Math.round(status.progress || 0)} %</span>}
-          {opt("pFin", true) && fin && <span data-pk="" style={pill}><Clock size={14}/>fin {fin.time}{plusDays(fin.dayDiff)}</span>}
-          {opt("pToday", true) && x.today && <span data-pk="" style={pill}><Layers size={14}/>{x.today.count} aujourd'hui</span>}
-          {opt("pNext", false) && next && <span data-pk="" style={pill} title="Prochaine impression de « À faire »">⏭️ {next.title_fr || next.title}</span>}
-          {opt("pFriends", false) && x.friends && <span data-pk="" style={pill}>👥 {nf ? `${nf} copain${nf > 1 ? "s" : ""} imprime${nf > 1 ? "nt" : ""}` : "copains au repos"}</span>}
-          {opt("pGrade", false) && grade?.name && <span data-pk="" style={pill}>🎓 {grade.name}</span>}
-          {opt("pWheel", false) && spins > 0 && <span data-pk="" style={pill}>🎰 {spins} tour{spins > 1 ? "s" : ""} de roue</span>}
+          {P("pProgress", true, live, barIcon, `${Math.round(status?.progress || 0)} %`, null, `Avancement : ${Math.round(status?.progress || 0)} %`)}
+          {P("pFin", true, fin, <Clock size={14}/>, fin && `fin ${fin.time}${plusDays(fin.dayDiff)}`, fin && `${fin.time}${plusDays(fin.dayDiff)}`, fin && `Fin à ${fin.time}`)}
+          {P("pToday", true, x.today, <Layers size={14}/>, `${x.today?.count} aujourd'hui`, x.today?.count, `${x.today?.count} impression(s) aujourd'hui`)}
+          {P("pNext", false, next, "⏭️", next && (next.title_fr || next.title), null, next && `Prochaine impression : ${next.title_fr || next.title}`)}
+          {P("pFriends", false, x.friends, "👥", nf ? `${nf} copain${nf > 1 ? "s" : ""} imprime${nf > 1 ? "nt" : ""}` : "copains au repos", nf || null,
+            nf ? `${nf} copain${nf > 1 ? "s" : ""} imprime${nf > 1 ? "nt" : ""}` : "Copains au repos")}
+          {P("pGrade", false, grade?.name, "🎓", grade?.name, null, grade?.name && `Grade : ${grade.name}`)}
+          {P("pWheel", false, spins > 0, "🎰", `${spins} tour${spins > 1 ? "s" : ""} de roue`, spins, `${spins} tour${spins > 1 ? "s" : ""} de roue`)}
           {!visiting && editBtn && <button className="hh-edit" onClick={() => window.dispatchEvent(new Event("bn-home-edit"))} aria-label="Personnaliser l'accueil"
-            title="Personnaliser l'accueil" style={{ ...pill, cursor: "pointer", padding: "7px 9px" }}><LayoutGrid size={15}/></button>}
+            title="Personnaliser l'accueil" style={{ ...pill, cursor: "pointer", padding: ps === "plain" ? "2px 2px" : "7px 9px" }}><LayoutGrid size={15}/></button>}
         </div>
       </div>
     </div>
   );
 }
-// les options du bandeau (communes a toutes les dispositions du compte)
+// les options du bandeau : un jeu pour l'ordinateur, un pour le telephone (qui reprend celui de l'ordinateur
+// tant qu'on ne l'a pas regle) ; chaque pastille s'affiche en entier, en icone seule, ou pas du tout
+const PILL_MODES = [[true, "affichée"], ["icon", "icône seule"], [false, "masquée"]];
 const GREETING_OPTIONS = [
+  { group: "Allure", key: "show", label: "Afficher le bandeau", hint: "Masqué, il ne reste qu'en personnalisation, pour pouvoir le remettre.", def: true },
   { group: "Allure", key: "mood", label: "Ambiance", hint: "Les couleurs du bandeau : selon le moment de la journée, ou une teinte fixe.", def: "time",
     choices: [["time", "selon l'heure"], ["ocean", "océan"], ["aurora", "aurore"], ["sunset", "couchant"], ["forest", "forêt"], ["grape", "raisin"], ["carbon", "carbone"]] },
   { group: "Allure", key: "size", label: "Taille", hint: "« mini » tient sur une ligne.", def: "normal", choices: [["normal", "normale"], ["compact", "compacte"], ["mini", "mini"]] },
@@ -1841,13 +1855,15 @@ const GREETING_OPTIONS = [
   { group: "Texte", key: "message", label: "Un message à toi", hint: "Une phrase sous le bonjour (laisse vide pour rien).", type: "text",
     placeholder: "Aujourd'hui, on imprime le monde !", def: "", max: 90 },
   { group: "Texte", key: "tip", label: "L'astuce du jour", hint: "Un conseil d'impression, différent chaque jour.", def: false },
-  { group: "Pastilles", key: "pProgress", label: "Avancement de l'impression", def: true },
-  { group: "Pastilles", key: "pFin", label: "Heure de fin", def: true },
-  { group: "Pastilles", key: "pToday", label: "Impressions du jour", def: true },
-  { group: "Pastilles", key: "pNext", label: "Prochaine impression de « À faire »", def: false },
-  { group: "Pastilles", key: "pFriends", label: "Copains qui impriment", def: false },
-  { group: "Pastilles", key: "pGrade", label: "Ton grade de maker", def: false },
-  { group: "Pastilles", key: "pWheel", label: "Tours de roue disponibles", def: false },
+  { group: "Pastilles", key: "pStyle", label: "Style des pastilles", def: "glass",
+    choices: [["glass", "verre"], ["solid", "pleines"], ["outline", "contour"], ["plain", "texte seul"]] },
+  { group: "Pastilles", key: "pProgress", label: "Avancement de l'impression", hint: "En icône seule : la barre.", def: true, choices: PILL_MODES },
+  { group: "Pastilles", key: "pFin", label: "Heure de fin", hint: "En icône seule : l'horloge et l'heure.", def: true, choices: PILL_MODES },
+  { group: "Pastilles", key: "pToday", label: "Impressions du jour", hint: "En icône seule : l'icône et le nombre.", def: true, choices: PILL_MODES },
+  { group: "Pastilles", key: "pNext", label: "Prochaine impression de « À faire »", hint: "En icône seule : ⏭️, le nom au survol.", def: false, choices: PILL_MODES },
+  { group: "Pastilles", key: "pFriends", label: "Copains qui impriment", hint: "En icône seule : 👥 et le nombre.", def: false, choices: PILL_MODES },
+  { group: "Pastilles", key: "pGrade", label: "Ton grade de maker", hint: "En icône seule : 🎓, le grade au survol.", def: false, choices: PILL_MODES },
+  { group: "Pastilles", key: "pWheel", label: "Tours de roue disponibles", hint: "En icône seule : 🎰 et le nombre.", def: false, choices: PILL_MODES },
 ];
 
 export default function Home() {

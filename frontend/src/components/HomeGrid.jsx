@@ -144,6 +144,7 @@ function normalize(lay, defs) {
     ...(lay.bannerFirst === true ? { bannerFirst: true } : {}),
     ...(Array.isArray(lay.pageNames) ? { pageNames: lay.pageNames.slice(0, MAX_PAGES).map(x => String(x || "").slice(0, PAGE_NAME_MAX)) } : {}),
     ...(lay.top && typeof lay.top === "object" ? { top: lay.top } : {}),
+    ...(lay.topPhone && typeof lay.topPhone === "object" ? { topPhone: lay.topPhone } : {}),
     ...(["soft", "vivid", "banner"].includes(lay.tint) ? { tint: lay.tint } : {}),
     ...(TINT_STYLES.some(([k]) => k === lay.tintStyle) ? { tintStyle: lay.tintStyle } : {}),
     ...(lay.tintColor === "one" ? { tintColor: "one", tintOne: lay.tintOne === "banner" ? "banner" : Math.max(0, Math.min(TINTS.length - 1, parseInt(lay.tintOne) || 0)) } : {}) };
@@ -740,25 +741,47 @@ export default function HomeGrid({ status, blocks, top = null }) {
     );
   };
 
-  // le bandeau : ses options (communes a toutes les dispositions)
-  const topOpts = top ? Object.fromEntries((top.options || []).map(op => [op.key, lay.top?.[op.key] ?? op.def])) : {};
-  const setTopOpt = (k, v) => setLay(l => ({ ...l, top: { ...(l.top || {}), [k]: v } }));
+  // le bandeau : un jeu d'options pour l'ordinateur, un pour le telephone (l'accueil a une colonne), qui reprend
+  // celui de l'ordinateur tant qu'on ne l'a pas regle
+  const topSet = dev => (dev === "phone" ? lay.topPhone || lay.top : lay.top) || {};
+  const optsOf = set => top ? Object.fromEntries((top.options || []).map(op => [op.key, set[op.key] ?? op.def])) : {};
+  const topOpts = optsOf(topSet(paged ? "phone" : "pc"));
+  const [topFor, setTopFor] = useState("pc");
+  const setTopOpt = (k, v) => setLay(l => topFor === "phone"
+    ? { ...l, topPhone: { ...(l.topPhone || l.top || {}), [k]: v } } : { ...l, top: { ...(l.top || {}), [k]: v } });
+  const topHidden = top && topOpts.show === false;
   const optItem = optFor && optFor !== "top" ? cols.flat().find(x => x.id === optFor) : null;
   const optDef = optItem ? defs[optItem.id] : null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12, minWidth: 0 }}>
-      {top && (!paged || nPages < 2 || cur === 0 || edit || !lay.bannerFirst) && (
+      {top && (!paged || nPages < 2 || cur === 0 || edit || !lay.bannerFirst) && (!topHidden || edit) && (
         <div style={{ position: "relative", ...(edit ? { outline: "2px dashed rgba(59,130,246,0.55)", outlineOffset: 3, borderRadius: 18 } : {}) }}>
-          {top.render(topOpts)}
-          {edit && <button onClick={() => setOptFor("top")} aria-label="Réglages du bandeau" title="Réglages du bandeau"
+          {/* masque : en personnalisation, une simple ligne pour pouvoir le remettre */}
+          {topHidden ? <div style={{ padding: "12px 16px 16px", borderRadius: 18, background: "var(--surface2)", color: "var(--muted)", fontSize: 13, fontWeight: 700 }}>
+            Bandeau d'accueil masqué{paged ? " sur le téléphone" : " sur l'ordinateur"}</div> : top.render(topOpts)}
+          {edit && <button onClick={() => { setTopFor(paged ? "phone" : "pc"); setOptFor("top"); }} aria-label="Réglages du bandeau" title="Réglages du bandeau"
             style={{ position: "absolute", left: 10, bottom: -14, zIndex: 3, display: "inline-flex",
             alignItems: "center", gap: 5, padding: "7px 9px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 12,
             color: "#fff", background: "rgba(15,23,42,0.88)", boxShadow: "0 4px 12px rgba(0,0,0,0.3)" }}>
             <Settings2 size={15}/></button>}
         </div>
       )}
-      {optFor === "top" && top && <OptionsSheet title={top.label} options={top.options} values={topOpts}
-        onChange={setTopOpt} onClose={() => setOptFor(null)}/>}
+      {optFor === "top" && top && <OptionsSheet title={top.label} options={top.options} values={optsOf(topSet(topFor))}
+        onChange={setTopOpt} onClose={() => setOptFor(null)} head={(() => {
+          const chip = on => ({ flex: 1, padding: "7px 11px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800,
+            border: `1px solid ${on ? "#3b82f6" : "var(--border)"}`, background: on ? "rgba(59,130,246,0.12)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--text2)" });
+          return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", gap: 6 }}>
+              {[["pc", "🖥️ Ordinateur"], ["phone", "📱 Téléphone"]].map(([k, l]) => <button key={k} type="button" style={chip(topFor === k)} onClick={() => setTopFor(k)}>{l}</button>)}
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 11.5, color: "var(--muted)", lineHeight: 1.4 }}>
+              <span style={{ flex: 1 }}>{topFor === "pc" ? "Ces réglages valent sur ordinateur et tablette (accueil en colonnes)."
+                : lay.topPhone ? "Le téléphone a ses propres réglages." : "Le téléphone reprend ceux de l'ordinateur ; change un réglage ici et il aura les siens."}</span>
+              {topFor === "phone" && lay.topPhone && <button type="button" onClick={() => setLay(l => { const y = { ...l }; delete y.topPhone; return y; })}
+                style={{ padding: "5px 10px", borderRadius: 20, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)",
+                  fontSize: 11.5, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>Comme l'ordinateur</button>}
+            </div>
+          </div>; })()}/>}
       {optItem && optDef && <OptionsSheet title={optDef.label} head={(() => {
         const it = optItem, d = optDef, hs = heightsOf(d, it.w);
         const chip = on => ({ padding: "6px 11px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 700,
