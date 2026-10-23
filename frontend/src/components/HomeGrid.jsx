@@ -714,6 +714,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
                       { confirmLabel: "Reprendre" }))) return;
                     setLay(l => ({ ...l, layouts: { ...l.layouts, [n]: layoutFor({ layouts: { [k]: l.layouts[k] } }, n).map(c => c.map(x => ({ ...x }))) } }));
                     setSel(null); setPick(null);
+                    client.post("/home/event", { copied: true }).catch(() => {});
                   }}
                   style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 30, padding: "0 10px", borderRadius: 9, cursor: "pointer", fontWeight: 800,
                     border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)" }}>{k === 1 && <Smartphone size={13}/>}{k}</button>)}

@@ -72,6 +72,8 @@ async def home_event(body: dict = Body(...), acc=Depends(require_own_account)):
     from ....services import home_stats
     if (body or {}).get("four"):
         await home_stats.seen_four()
+    if (body or {}).get("copied"):
+        await home_stats.layout_copied()
     cols = (body or {}).get("cols")
     if isinstance(cols, int) and cols in (2, 3, 4):
         await home_stats.seen_cols(cols)
