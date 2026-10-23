@@ -2089,8 +2089,8 @@ function Spool({ status, o, sz }) {
               {[type, si.brand, H < 80 && g != null ? `${Math.round(g)} g` : null].filter(Boolean).join(" · ")}</span>}
             {!narrow && H < 80 ? bar(6) : <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: narrow ? 12.5 : 15, fontWeight: 900, color: light ? "var(--text)" : barCol, whiteSpace: "nowrap" }}>{weight}</span>
-              <div style={{ flex: 1, minWidth: 20 }}>{bar(narrow ? 5 : 7)}</div>
-              {narrow && pctPill(10.5)}</div>}
+              {(!narrow || W >= 175) && <div style={{ flex: 1, minWidth: 0 }}>{bar(narrow ? 5 : 7)}</div>}
+              {narrow && <span style={{ marginLeft: "auto" }}>{pctPill(10.5)}</span>}</div>}
             {facts && facts.length > 0 && <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>{facts}</div>}
           </div>
         </div>;
@@ -2179,6 +2179,39 @@ function SwitchArt({ m, W, H }) {
     </svg>
   );
 }
+// le schema en petit : les entrees en pastilles a la couleur de leur bobine (A, B), le corps, les buses
+// G et D ; le chemin qui imprime en vert, le filament qui avance dedans a sa couleur
+function SwitchMini({ m, W, H }) {
+  const VW = 170, VH = 120;
+  const s = Math.min(W / VW, H / VH);
+  const inY = { A: 32, B: 88 }, oY = { G: 32, D: 88 };
+  const path = x => { const sd = SIDE(x.out);
+    return sd ? `M38 ${inY[x.p]} C62 ${inY[x.p]} 62 60 85 60 C108 60 108 ${oY[sd]} 132 ${oY[sd]}` : `M38 ${inY[x.p]} C62 ${inY[x.p]} 62 60 80 60`; };
+  const served = sd => m.ports.find(x => SIDE(x.out) === sd);
+  return <svg viewBox={`0 0 ${VW} ${VH}`} width={VW * s} height={VH * s} style={{ display: "block", overflow: "visible" }} aria-label="Aiguillage">
+    {[...m.ports].sort((a, b) => a.live - b.live).map(x => <g key={x.p}>
+      {x.live ? <>
+        <path d={path(x)} fill="none" stroke={m.hl} strokeWidth="8" strokeLinecap="round" style={{ filter: `drop-shadow(0 0 4px ${m.hl}88)` }}/>
+        <path d={path(x)} fill="none" stroke={m.liveColor} strokeWidth="3.5" strokeLinecap="round" strokeDasharray="8 6" style={{ animation: "bn-dash .8s linear infinite" }}/>
+      </> : <path d={path(x)} fill="none" stroke="var(--muted)" strokeOpacity=".45" strokeWidth="3" strokeLinecap="round" strokeDasharray="4 5"/>}
+    </g>)}
+    <rect x="70" y="40" width="30" height="40" rx="9" fill="#111827" stroke="rgba(255,255,255,0.12)"/>
+    <path d="M78 52 L92 68 M78 68 L92 52" stroke="rgba(255,255,255,0.35)" strokeWidth="2.5" strokeLinecap="round"/>
+    {m.ports.map(x => { const c = x.slot?.color, y = inY[x.p];
+      return <g key={x.p}>
+        <circle cx="22" cy={y} r="17" fill={c || "var(--surface2)"} stroke={x.live ? m.hl : c ? "rgba(0,0,0,0.25)" : "var(--muted)"} strokeWidth={x.live ? 3 : 1.5}
+          strokeDasharray={c ? "none" : "3 3"}/>
+        <text x="22" y={y + 5} textAnchor="middle" fontSize="14" fontWeight="900"
+          fill={c && (parseInt(c.slice(1, 3), 16) * 0.299 + parseInt(c.slice(3, 5), 16) * 0.587 + parseInt(c.slice(5, 7), 16) * 0.114) > 160 ? "#0f172a" : "#fff"}>{x.p}</text>
+      </g>; })}
+    {[["G", 1], ["D", 0]].map(([sd, id]) => { const by = served(sd), on = !!by?.live, n = m.temp(id), y = oY[sd];
+      return <g key={sd}>
+        <rect x="132" y={y - 16} width="36" height="32" rx="9" fill={on ? `${m.hl}22` : "var(--surface2)"} stroke={on ? m.hl : "var(--border)"} strokeWidth={on ? 2.5 : 1}/>
+        <text x="150" y={y - 1} textAnchor="middle" fontSize="12.5" fontWeight="900" fill={on ? m.hl : "var(--text)"}>{sd}</text>
+        {n && <text x="150" y={y + 11} textAnchor="middle" fontSize="9.5" fontWeight="800" fill={n.temp > 40 ? "#f97316" : "var(--muted)"}>{Math.round(n.temp)}°</text>}
+      </g>; })}
+  </svg>;
+}
 function FilaSwitch({ status, o, sz }) {
   if (!status?.fila_switch?.installed) return null;
   const m = switchModel(status);
@@ -2229,6 +2262,22 @@ function FilaSwitch({ status, o, sz }) {
         // le schema seulement si son texte reste lisible (pas plus petit qu'aux 9/10e) ;
         // sinon, haute : une carte par entree (entree, bobine, fleche, buse) ; basse : une ligne par entree
         const big = h >= 162;
+        // demi-colonne : le schema compact, qui remplit la place
+        if (!big && W < 260 && H >= 80) {
+          // sous le schema, s'il reste de la place : chaque entree en clair (sa bobine, sa buse)
+          const dh = Math.min(H, W * 120 / 170), extra = H - dh >= 44;
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 6, minWidth: 0 }}>
+            <SwitchMini m={m} W={W} H={extra ? H - 44 : H}/>
+            {extra && <div style={{ alignSelf: "stretch", display: "flex", flexDirection: "column", gap: 3 }}>
+              {m.ports.map(x => <div key={x.p} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, minWidth: 0,
+                color: x.live ? m.hl : "var(--text2)" }}>
+                <span style={{ color: "#8b5cf6" }}>{x.p}</span>
+                <span style={{ width: 10, height: 10, borderRadius: 3, flexShrink: 0, background: x.slot?.color || "transparent",
+                  border: x.slot?.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
+                <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.slot ? `${x.slot.label}${x.slot.type ? ` · ${x.slot.type}` : ""}` : "vide"}</span>
+                <span style={{ marginLeft: "auto", whiteSpace: "nowrap" }}>→ {SIDE(x.out) || "—"}</span></div>)}</div>}
+          </div>;
+        }
         if (!big && H >= 150) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>
           {m.ports.map(x => { const n = m.temp(x.out);
             return <div key={x.p} style={{ padding: "8px 10px", borderRadius: 14, display: "flex", flexDirection: "column", gap: 4,
@@ -2360,11 +2409,11 @@ function Toolhead({ status, sz }) {
                 {[s.n.active ? "● imprime" : k === "G" ? "levée" : "au repos", s.slot, s.name && s.type, s.brand].filter(Boolean).join(" · ")}</span></span>}
           </div>)}</div>;
         // bas : le dessin a gauche, les buses a cote ; haut : le dessin centre, les buses dessous (en cartes si la place le permet)
-        if (H < 150) return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
+        if (H < 150 && (W >= 215 || H < 120)) return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
           <HeadArt st={status} h={Math.max(50, Math.min(H - 4, 120, W * 0.3 * 170 / 200))}/>{lines}</div>;
         const cards = W >= 200 && H >= 230;
-        return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>
-          <div style={{ display: "flex", justifyContent: "center" }}><HeadArt st={status} h={Math.max(70, Math.min(H - (cards ? 96 : 56), 200, (W - 8) * 170 / 200))}/></div>
+        return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
+          <div style={{ display: "flex", justifyContent: "center" }}><HeadArt st={status} h={Math.max(50, Math.min(H - (cards ? 96 : 50), 200, (W - 8) * 170 / 200))}/></div>
           {cards ? <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}><HeadSide s={m.L} label="Gauche"/><HeadSide s={m.R} label="Droite"/></div>
             : <div style={{ flex: "0 0 auto", display: "flex" }}>{lines}</div>}
         </div>;
