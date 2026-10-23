@@ -2413,40 +2413,132 @@ function Shortcuts({ o, sz = { h: 1 } }) {
   );
 }
 // le classement des copains : liste ou podium, qui remplit la case
-function Podium({ p, o, sz }) {
-  const people = (p?.people || []).filter(x => x.status === "ok").sort((a, b) => (b.score || 0) - (a.score || 0));
+// le classement des copains : rangs, grades, scores, ecarts ; en grand, le podium, le detail, les sections, les medailles
+const POD = ["#D4A017", "#94A3B8", "#B45309"];
+const POD_HI = ["#FDE68A", "#E2E8F0", "#FDBA74"];
+const AV_COLORS = ["#8B5CF6", "#0EA5E9", "#14B8A6", "#F97316", "#EC4899", "#6366F1", "#22C55E"];
+const avColor = name => AV_COLORS[[...(name || "?")].reduce((t, c) => t + c.charCodeAt(0), 0) % AV_COLORS.length];
+const PodAvatar = ({ x, size = 30, ring = null }) => <span style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "inline-flex",
+  alignItems: "center", justifyContent: "center", fontSize: size * 0.42, fontWeight: 900, color: "#fff",
+  background: `linear-gradient(135deg, ${avColor(x.name)}, color-mix(in srgb, ${avColor(x.name)} 60%, #000000))`,
+  boxShadow: ring ? `0 0 0 2px var(--surface), 0 0 0 4px ${ring}` : "none" }}>{x.me ? "★" : (x.name || "?").slice(0, 1).toUpperCase()}</span>;
+const podName = x => (x.me ? "Toi" : x.name);
+const podGrade = x => gradeOf(null, x.score_max ? (x.score || 0) / x.score_max : 0);
+const fmtN = n => Math.round(n || 0).toLocaleString("fr-FR");
+// les marches : 2e, 1er, 3e ; chacun avec son avatar, son grade, son score
+function PodiumSteps({ people, H, big = false }) {
+  const list = people.slice(0, 3), order = [list[1], list[0], list[2]].filter(Boolean), hs = { 0: 1, 1: 0.7, 2: 0.48 };
+  const av = big ? 48 : Math.max(22, Math.min(34, H * 0.2));
+  const step = Math.max(26, H - av - (big ? 64 : 30));
+  return <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: big ? 12 : 6, flex: 1 }}>
+    {order.map(x => { const r = list.indexOf(x), g = podGrade(x);
+      return <div key={x.id || x.name} style={{ flex: 1, maxWidth: big ? 150 : 110, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 }}>
+        <span style={{ position: "relative", display: "inline-flex" }}>
+          <PodAvatar x={x} size={av} ring={POD[r]}/>
+          {r === 0 && <span style={{ position: "absolute", top: -av * 0.42, left: "50%", transform: "translateX(-50%)", fontSize: av * 0.5 }}>👑</span>}
+        </span>
+        <span style={{ fontSize: big ? 14 : 11.5, fontWeight: 900, color: "var(--text)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{podName(x)}</span>
+        {big && g.name && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
+          <GradeEmblem i={Math.max(0, g.i)} size={16}/>{g.name}</span>}
+        <div data-pk="" style={{ width: "100%", height: Math.round(hs[r] * step), borderRadius: "10px 10px 0 0", position: "relative", overflow: "hidden",
+          background: `linear-gradient(180deg, ${POD_HI[r]}, ${POD[r]})`, boxShadow: `0 8px 20px ${POD[r]}55`,
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-start", paddingTop: big ? 8 : 3, color: "#fff" }}>
+          <span style={{ fontSize: big ? 28 : 15, fontWeight: 900, lineHeight: 1, textShadow: "0 1px 2px rgba(0,0,0,0.25)" }}>{r + 1}</span>
+          {(big || hs[r] * step >= 46) && <span style={{ fontSize: big ? 13 : 10.5, fontWeight: 800, marginTop: 2, textShadow: "0 1px 2px rgba(0,0,0,0.25)" }}>{fmtN(x.score)}</span>}
+        </div>
+      </div>; })}
+  </div>;
+}
+function Podium({ p, a, o, sz }) {
+  const people = (p?.people || []).filter(x => x.status === "ok").sort((x, y) => (y.score || 0) - (x.score || 0));
   if (people.length < 2) return null;
   const max = Math.max(1, people[0].score || 0);
-  const top = <span style={{ fontSize: 13 }}>🥇 {people[0].me ? "Toi" : people[0].name} · {(people[0].score || 0).toLocaleString("fr-FR")}</span>;
-  const row = (x, i) => (
-    <div key={x.id || x.name} style={{ height: o.bars ? 26 : 20 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5 }}>
-        <span data-pk="" style={{ width: 18, fontWeight: 900, color: ["#D4A017", "#94A3B8", "#B45309"][i] || "var(--muted)" }}>{i + 1}</span>
-        <span style={{ flex: 1, minWidth: 0, fontWeight: x.me ? 900 : 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.me ? "Toi" : x.name}</span>
-        <span data-pk="" style={{ fontWeight: 800, color: "var(--text2)" }}>{(x.score || 0).toLocaleString("fr-FR")}</span></div>
-      {o.bars && <div style={{ height: 4, borderRadius: 4, background: "var(--surface2)", marginLeft: 26, overflow: "hidden", marginTop: 2 }}>
-        <div data-pk="" style={{ height: "100%", width: `${Math.round(100 * (x.score || 0) / max)}%`, background: x.me ? "#A855F7" : "#C4B5FD" }}/></div>}
-    </div>);
-  const podium = H => {
-    const list = people.slice(0, 3), order = [list[1], list[0], list[2]].filter(Boolean), hs = { 0: 1, 1: 0.72, 2: 0.52 };
-    const step = Math.max(24, H - 22);
-    return <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 6, flex: 1 }}>
-      {order.map(x => { const rank = list.indexOf(x); return (
-        <div key={x.name} style={{ flex: 1, maxWidth: 110, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 0 }}>
-          <span style={{ fontSize: 11.5, fontWeight: x.me ? 900 : 700, color: "var(--text)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.me ? "Toi" : x.name}</span>
-          <div data-pk="" style={{ width: "100%", height: Math.round(hs[rank] * step), borderRadius: "8px 8px 0 0",
-            background: ["#D4A017", "#94A3B8", "#B45309"][rank], display: "flex", alignItems: "flex-start", justifyContent: "center",
-            color: "#fff", fontWeight: 900, fontSize: 13, paddingTop: 3 }}>{rank + 1}</div>
-        </div>); })}</div>;
-  };
+  const meI = people.findIndex(x => x.me);
+  const top = <span style={{ fontSize: 13 }}>🥇 {podName(people[0])} · {fmtN(people[0].score)}</span>;
+  // une ligne : rang (medaille), avatar, nom et grade, score en degrade, barre, ecart avec celui de devant
+  const row = (x, r, h) => { const g = podGrade(x), ahead = r > 0 ? (people[r - 1].score || 0) - (x.score || 0) : null, c = POD[r] || "#A855F7";
+    return <div key={x.id || x.name} style={{ display: "flex", alignItems: "center", gap: 8, height: h, padding: "0 6px", borderRadius: 12, minWidth: 0,
+      background: x.me ? "linear-gradient(90deg, rgba(168,85,247,0.14), transparent)" : "transparent" }}>
+      <span data-pk="" style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 11.5, fontWeight: 900, color: r < 3 ? "#fff" : "var(--muted)", background: r < 3 ? `linear-gradient(135deg, ${POD_HI[r]}, ${POD[r]})` : "var(--surface2)" }}>{r + 1}</span>
+      {h >= 34 && <PodAvatar x={x} size={Math.min(30, h - 8)}/>}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: x.me ? 900 : 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            {podName(x)}{h >= 40 && g.name && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}> · {g.name}</span>}</span>
+          <span data-pk="" style={{ fontSize: 13.5, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${c} 75%, #000000)`, c) }}>{fmtN(x.score)}</span></div>
+        {o.bars && <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <div style={{ flex: 1, height: 5, borderRadius: 5, background: "var(--surface2)", overflow: "hidden" }}>
+            <div data-pk="" style={{ height: "100%", width: `${Math.round(100 * (x.score || 0) / max)}%`, borderRadius: 5,
+              background: x.me ? "linear-gradient(90deg, #A855F7, #EC4899)" : `linear-gradient(90deg, ${c}, ${r < 3 ? POD_HI[r] : "#C4B5FD"})` }}/></div>
+          {ahead != null && h >= 34 && <span style={{ fontSize: 9.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>−{fmtN(ahead)}</span>}</div>}
+      </div>
+    </div>; };
   return (
     <Tile icon={<MedalIcon size={15}/>} color="#A855F7" label="Classement des copains" to="/stats?tab=achievements"
       mini={sz.h === 0.5} summary={top}
-      zoom={<>{podium(200)}<div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{people.map(row)}</div></>}>
-      {({ H }) => o.style === "podium" ? podium(H) : o.scroll ? <Scroller gap={5}>{people.map(row)}</Scroller>
-        : <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>{people.slice(0, fitRows(H, o.bars ? 26 : 20, 5)).map(row)}</div>}
+      zoom={<PodiumZoom people={people} a={a} meI={meI}/>}>
+      {({ H }) => {
+        if (o.style === "podium") return <PodiumSteps people={people} H={H}/>;
+        if (o.scroll) return <Scroller gap={4}>{people.map((x, r) => row(x, r, 40))}</Scroller>;
+        const n = Math.min(people.length, fitRows(H, 30, 4) || 1), h = Math.max(26, Math.min(48, Math.floor((H - 4 * (n - 1)) / n)));
+        // le compte est toujours montre (s'il ne tient pas, la derniere ligne est la sienne)
+        const shown = people.slice(0, n);
+        if (meI >= n && n > 1) shown[n - 1] = people[meI];
+        return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4 }}>
+          {shown.map(x => row(x, people.indexOf(x), h))}</div>;
+      }}
     </Tile>
   );
+}
+function PodiumZoom({ people, a, meI }) {
+  const cats = (a?.categories || []).filter(c => people.some(x => x.cats?.[c.id]?.max));
+  const tiers = (a?.tiers || []).filter(t => !String(t.id).startsWith("card_"));
+  const me = people[meI];
+  return <>
+    <div style={{ height: 300, display: "flex" }}><PodiumSteps people={people} H={300} big/></div>
+    <H2>Le classement</H2>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{people.map((x, r) => { const g = podGrade(x), pct = x.score_max ? Math.round(100 * x.score / x.score_max) : 0;
+      const gap = me && !x.me ? (x.score || 0) - (me.score || 0) : null;
+      return <div key={x.id || x.name} className="card-sm" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+        border: x.me ? "1.5px solid #A855F7" : undefined }}>
+        <span style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 900,
+          color: r < 3 ? "#fff" : "var(--muted)", background: r < 3 ? `linear-gradient(135deg, ${POD_HI[r]}, ${POD[r]})` : "var(--surface2)" }}>{r + 1}</span>
+        <PodAvatar x={x} size={34}/>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 14, fontWeight: 900, color: "var(--text)" }}>{podName(x)}</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11.5, color: "var(--muted)", fontWeight: 700, flexWrap: "wrap" }}>
+            {g.name && <><GradeEmblem i={Math.max(0, g.i)} size={14}/>{g.name} ·</>} {x.got}/{x.total} succès · {(x.uniques || []).length} médailles uniques</div>
+          <div style={{ height: 5, borderRadius: 5, background: "var(--surface2)", overflow: "hidden", marginTop: 4 }}>
+            <div style={{ height: "100%", width: `${pct}%`, background: x.me ? "linear-gradient(90deg, #A855F7, #EC4899)" : `linear-gradient(90deg, ${POD[r] || "#A855F7"}, ${POD_HI[r] || "#C4B5FD"})` }}/></div>
+        </div>
+        <div style={{ textAlign: "right", flexShrink: 0 }}>
+          <div style={{ fontSize: 17, fontWeight: 900, ...gradText("#7C3AED", "#EC4899") }}>{fmtN(x.score)}</div>
+          <Muted size={11}>{pct} % du total</Muted>
+          {gap != null && <div style={{ fontSize: 11, fontWeight: 800, color: gap > 0 ? "#dc2626" : "#16a34a" }}>{gap > 0 ? `+${fmtN(gap)} devant toi` : `${fmtN(-gap)} derrière toi`}</div>}
+        </div>
+      </div>; })}</div>
+    {cats.length > 0 && <><H2>Section par section</H2>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 8 }}>
+        {cats.map(c => { const ranked = [...people].sort((x, y) => (y.cats?.[c.id]?.score || 0) - (x.cats?.[c.id]?.score || 0));
+          const cmax = Math.max(1, ...people.map(x => x.cats?.[c.id]?.score || 0));
+          return <div key={c.id} className="card-sm" style={{ padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 900, fontSize: 13, color: "var(--text)" }}>{c.emoji} {c.name}
+              <span style={{ marginLeft: "auto", fontSize: 11, color: "#b45309" }}>👑 {podName(ranked[0])}</span></div>
+            {ranked.map(x => <div key={x.id || x.name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5 }}>
+              <span style={{ width: 54, flexShrink: 0, fontWeight: x.me ? 900 : 700, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{podName(x)}</span>
+              <div style={{ flex: 1, height: 6, borderRadius: 6, background: "var(--surface2)", overflow: "hidden" }}>
+                <div style={{ height: "100%", width: `${Math.round(100 * (x.cats?.[c.id]?.score || 0) / cmax)}%`, background: x.me ? "#A855F7" : avColor(x.name) }}/></div>
+              <span style={{ width: 40, textAlign: "right", fontWeight: 800, color: "var(--muted)" }}>{fmtN(x.cats?.[c.id]?.score)}</span></div>)}
+          </div>; })}</div></>}
+    {tiers.length > 0 && <><H2>Les médailles</H2>
+      <div style={{ overflowX: "auto" }}><table style={{ borderCollapse: "collapse", fontSize: 12, minWidth: "100%" }}>
+        <thead><tr><th/>{tiers.map(t => <th key={t.id} title={t.label} style={{ padding: "2px 4px" }}><Medal tier={t} emoji="" size={18}/></th>)}</tr></thead>
+        <tbody>{people.map(x => { const sum = id => Object.values(x.cats || {}).reduce((n, c) => n + (c.medals?.[id] || 0), 0);
+          return <tr key={x.id || x.name}><td style={{ fontWeight: x.me ? 900 : 700, color: "var(--text2)", paddingRight: 8, whiteSpace: "nowrap" }}>{podName(x)}</td>
+            {tiers.map(t => <td key={t.id} style={{ textAlign: "center", fontWeight: 800, color: sum(t.id) ? "var(--text)" : "var(--muted)", padding: "3px 4px" }}>{sum(t.id) || "·"}</td>)}</tr>; })}</tbody>
+      </table></div></>}
+  </>;
 }
 function Alerts({ a, o, sz }) {
   const cats = (a?.categories || []).filter(c => c.total);
@@ -3235,7 +3327,7 @@ export const TILES = {
   shortcuts: { label: "Raccourcis", w: [2, 1], h: [1, 0.5], render: (d, st, o, it) => <Shortcuts o={o} sz={sz(it)}/>,
     options: [B("iconsOnly", "Icônes seules", false, { hint: "Sinon le nom s'affiche quand il tient." }),
       ...SHORTCUTS.map(([k, l], i) => B(`s_${k}`, l, i < 6, { group: "Raccourcis affichés" }))] },
-  podium: { label: "Classement des copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Podium p={d.podium} o={o} sz={sz(it)}/>,
+  podium: { label: "Classement des copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Podium p={d.podium} a={d.ach} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "list", [["list", "liste"], ["podium", "podium"]]), B("bars", "Barres de score", true), SCROLL(false)] },
   alerts: { label: "Alertes en bref", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Alerts a={d.attention} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "chips", [["chips", "pastilles"], ["icons", "icônes"], ["list", "liste"]], { hint: "Pastilles : une pilule par catégorie. Icônes : une grosse icône, le nombre en badge. Liste : une ligne par catégorie, et ses alertes dessous quand la tuile est haute." }),
