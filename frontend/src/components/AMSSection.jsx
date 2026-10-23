@@ -527,7 +527,8 @@ function DryPopup({ ams, onClose }) {
 }
 
 // ── Détail AMS ─────────────────────────────────────────────────────────────
-function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, hideName = false, showNames = true, fitH = null }) {
+// bare : seulement les bobines (la fenetre « Mes AMS » montre deja le climat et le sechage)
+function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, hideName = false, showNames = true, fitH = null, bare = false }) {
   const [dryOpen, setDryOpen] = React.useState(false);
   // la taille des bobines suit la largeur de la tuile
   const box = React.useRef(null);
@@ -554,7 +555,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
       borderColor: isDrying ? "rgba(249,115,22,0.35)" : isActive ? "rgba(59,130,246,0.3)" : undefined,
       boxShadow: isDrying ? "0 0 0 1px rgba(249,115,22,0.1)" : isActive ? "0 0 0 1px rgba(59,130,246,0.1)" : undefined }}>
       <div style={{ display:"flex", alignItems:"center", justifyContent: hideName ? "flex-end" : "space-between", marginBottom: isDrying ? 10 : fitH != null ? 4 : 12,
-        ...((hideName && !hasClimate(ams) && !isDrying) || fitH != null ? { display:"none" } : {}) }}>
+        ...((hideName && !hasClimate(ams) && !isDrying) || fitH != null || bare ? { display:"none" } : {}) }}>
         {!hideName && <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           <span style={{ fontSize:12, fontWeight:700, letterSpacing:"0.06em", color: isDrying?"#f97316":isActive?"#3b82f6":"var(--muted)" }}>
             {amsName(ams.id)}
@@ -584,7 +585,7 @@ function AMSDetail({ ams, activeAmsId, activeTrayId, spoolLookup, onTrayClick, h
 
       {/* Bandeau séchage */}
       {dryOpen && <DryPopup ams={ams} onClose={() => setDryOpen(false)}/>}
-      {isDrying && fitH == null && (
+      {isDrying && fitH == null && !bare && (
         <div role="button" onClick={e => { e.stopPropagation(); setDryOpen(true); }} style={{ cursor:"pointer", marginBottom:14, padding:"10px 12px", borderRadius:10,
           background:"rgba(249,115,22,0.07)", border:"1px solid rgba(249,115,22,0.25)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>

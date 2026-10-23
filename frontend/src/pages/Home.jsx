@@ -14,7 +14,8 @@ import SpoolSVG from "../components/SpoolSVG";
 import Lightbox from "../components/Lightbox";
 import AmsOrderEditor from "../components/AmsOrderEditor";
 import { relayed } from "../components/Friends";
-import { AMSBox, AMSDetail, TrayBottomSheet, DryPopup } from "../components/AMSSection";
+import { AMSBox, AMSDetail, TrayBottomSheet, DryPopup, DryCard } from "../components/AMSSection";
+import { Zoom } from "../components/HomeTiles";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName } from "../utils/ams";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -621,6 +622,187 @@ function DryBadge({ status }) {
     {open && <DryPopup ams={ams} onClose={() => setOpen(false)}/>}
   </>;
 }
+// ── La tuile « AMS » tout en un ──────────────────────────────────────────────
+// Les unites rangees comme ma grille (qui est au-dessus de qui), leurs couleurs, celle qui
+// imprime cerclee (l'emplacement actif pulse, et s'anime quand il change), celle qui seche
+// teintee d'orange ; une bascule vers le rack Vortek. Un clic sur une unite ouvre la
+// fenetre sur elle : la grille en grand pour passer de l'une a l'autre, ses chiffres,
+// son sechage, ses bobines ; et le rack.
+const HUB_LIVE = ["RUNNING", "PAUSE", "PAUSED", "PREPARE"];
+const isDrying = a => !!(a?.is_drying || a?.dry_time > 0);
+const dryLeft = m => !m ? "" : m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m} min`;
+// un emplacement : sa couleur, ce qui reste (le haut s'assombrit a mesure qu'elle se vide), cercle s'il imprime
+function HubSwatch({ t, active, h, radius = 6 }) {
+  const c = trayHex(t), r = t?.remain >= 0 ? Math.min(100, t.remain) / 100 : null;
+  return (
+    <span title={t?.empty ? "vide" : [t?.filament_type, r != null ? `${Math.round(r * 100)} %` : null].filter(Boolean).join(" · ")}
+      style={{ position: "relative", display: "block", height: h, minWidth: 0, borderRadius: radius,
+        background: c ? (r != null && h >= 18 ? `linear-gradient(to bottom, rgba(0,0,0,0.30) ${(1 - r) * 100}%, transparent ${(1 - r) * 100}%), ${c}` : c)
+          : "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)",
+        border: c ? "1px solid rgba(0,0,0,0.18)" : "1px dashed rgba(148,163,184,0.6)",
+        outline: active ? "2px solid #3b82f6" : "none", outlineOffset: 1.5,
+        animation: active ? "bn-pop .5s ease-out, bn-ring 2s ease-out .5s infinite" : "none" }}/>
+  );
+}
+// une unite : son nom, ses badges (entree de l'aiguillage, sechage), ses emplacements
+function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = false }) {
+  const dry = isDrying(a), trays = a.trays || [];
+  const compact = h < 38 && !big;
+  const ring = sel ? "#8b5cf6" : act ? "#3b82f6" : dry ? "rgba(249,115,22,0.6)" : "var(--border)";
+  const chip = (txt, c, bg) => <span style={{ fontSize: 9, fontWeight: 900, lineHeight: "13px", padding: "0 5px", borderRadius: 6, color: c, background: bg, whiteSpace: "nowrap" }}>{txt}</span>;
+  const box = { position: "relative", width: "100%", height: h, boxSizing: "border-box", minWidth: 0, overflow: "hidden", cursor: onClick ? "pointer" : "default", textAlign: "left",
+    borderRadius: compact ? 9 : 12, border: `1.5px solid ${ring}`, color: "inherit", font: "inherit",
+    background: dry ? "linear-gradient(135deg, rgba(249,115,22,0.16), transparent 65%), var(--surface2)" : act ? "linear-gradient(135deg, rgba(59,130,246,0.10), transparent 65%), var(--surface2)" : "var(--surface2)",
+    boxShadow: act ? "0 0 0 3px rgba(59,130,246,0.14), 0 6px 18px rgba(59,130,246,0.12)" : sel ? "0 0 0 3px rgba(139,92,246,0.18)" : "none", transition: "all .3s" };
+  const click = onClick ? e => { e.stopPropagation(); onClick(a.id); } : undefined;
+  // tres bas (une rangee) : le nom, puis les emplacements en pastilles sur la meme ligne
+  if (compact) return (
+    <button type="button" onClick={click} style={{ ...box, display: "flex", alignItems: "center", gap: 5, padding: "0 6px" }}>
+      <span style={{ fontSize: 9.5, fontWeight: 900, color: act ? "#3b82f6" : "var(--text2)", whiteSpace: "nowrap", flexShrink: 0 }}>{amsName(a.id).replace("AMS-", "")}</span>
+      <span style={{ flex: 1, minWidth: 0, display: "grid", gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: 2 }}>
+        {trays.map(t => <HubSwatch key={`${t.id}${act && t.id === actTray ? "a" : ""}`} t={t} active={act && t.id === actTray} h={Math.max(8, h - 10)} radius={3}/>)}</span>
+      {dry && <span title={`Séchage · ${dryLeft(a.dry_time)}`} style={{ width: 6, height: 6, borderRadius: "50%", background: "#f97316", flexShrink: 0,
+        animation: "dryPulse 2.5s ease-in-out infinite" }}/>}
+    </button>
+  );
+  const head = big ? 20 : 15;
+  const badges = big && <span style={{ display: "flex", gap: 4, flexWrap: "wrap", height: 14, overflow: "hidden", flexShrink: 0 }}>
+    {dry && chip(`🔥 ${a.dry_temperature > 0 ? `${a.dry_temperature}° · ` : ""}${dryLeft(a.dry_time)}`, "#fff", "#f97316")}
+    {a.switch_port && chip(`⇄${a.switch_port}`, "#8b5cf6", "rgba(139,92,246,0.14)")}
+    {climate && a.humidity > 0 && chip(`💧${a.humidity}%`, a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#d97706" : "#0ea5e9", "rgba(14,165,233,0.12)")}</span>;
+  return (
+    <button type="button" onClick={click} style={{ ...box, display: "flex", flexDirection: "column", gap: big ? 6 : 3, padding: big ? "8px 10px 10px" : "4px 6px 6px" }}>
+      <span style={{ display: "flex", alignItems: "center", gap: 4, height: head, minWidth: 0, overflow: "hidden", flexShrink: 0 }}>
+        <span style={{ fontSize: big ? 13.5 : 10.5, fontWeight: 900, color: act ? "#3b82f6" : sel ? "#8b5cf6" : "var(--text2)", whiteSpace: "nowrap" }}>{amsName(a.id)}</span>
+        {act && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite", flexShrink: 0 }}/>}
+        {!big && a.switch_port && !dry && chip(`⇄${a.switch_port}`, "#8b5cf6", "rgba(139,92,246,0.14)")}
+        {!big && dry && chip(`🔥${dryLeft(a.dry_time)}`, "#fff", "#f97316")}
+        <span style={{ flex: 1 }}/>
+        {!big && climate && a.humidity > 0 && <span style={{ fontSize: big ? 11.5 : 9.5, fontWeight: 800, color: a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#f59e0b" : "var(--muted)",
+          whiteSpace: "nowrap" }}>💧{a.humidity}%</span>}
+      </span>
+      {badges}
+      <span style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 3 }}>
+        <span style={{ height: Math.max(10, Math.min(big ? 64 : 58, h - head - (big ? 22 : 0) - (h >= 100 ? 28 : 14))), display: "grid",
+          gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: big ? 6 : 3 }}>
+          {trays.map(t => <HubSwatch key={`${t.id}${act && t.id === actTray ? "a" : ""}`} t={t} active={act && t.id === actTray} h="100%" radius={big ? 9 : 6}/>)}</span>
+        {h >= 100 && <span style={{ display: "grid", gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: big ? 6 : 3 }}>
+          {trays.map(t => <span key={t.id} style={{ fontSize: big ? 11 : 9.5, fontWeight: 800, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
+            color: act && t.id === actTray ? "#3b82f6" : "var(--muted)" }}>{trayHex(t) ? (t.remain >= 0 ? `${t.remain}%` : t.filament_type || "") : "—"}</span>)}</span>}
+      </span>
+    </button>
+  );
+}
+// la grille des unites, comme ma disposition ; h : la hauteur dont elle dispose
+function HubGrid({ list, order, act, actTray, H, climate, onPick, big = false, sel = null }) {
+  const cols = grilleAccueil(list, lireDisposition(order));
+  const nR = cols[0]?.length || 1;
+  const gap = big ? 10 : 6;
+  const uh = Math.max(20, Math.floor((H - gap * (nR - 1)) / nR));
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: cols.map(c => `${columnWeight(c)}fr`).join(" "), gridTemplateRows: `repeat(${nR}, ${uh}px)`, gap }}>
+      {cols.flatMap((col, ci) => col.map((a, ri) => a && (
+        <div key={a.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth: 0, display: "flex", justifyContent: "center" }}>
+          <div style={{ width: `${Math.max(0.78, slotCount(a) / columnWeight(col)) * 100}%`, minWidth: 0 }}>
+            <HubUnit a={a} act={a.id === act} actTray={actTray} h={uh} climate={climate} onClick={onPick} big={big} sel={sel === a.id}/></div>
+        </div>
+      ))).filter(Boolean)}
+    </div>
+  );
+}
+function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
+  const list = [...new Map((st?.ams_list || []).map(a => [a.id, a])).values()];
+  const [order, setOrder] = useState(null);
+  const [open, setOpen] = useState(null);          // l'unite ouverte dans la fenetre
+  const [tab, setTab] = useState("ams");
+  const [tray, setTray] = useState(null);
+  const view = useDevSel(s => s.view), setView = useDevSel(s => s.setView);
+  const before = useRef(null);   // la vue de la tuile a l'ouverture de la fenetre, rendue a la fermeture
+  useEffect(() => {
+    const load = () => client.get("/settings/ams-order").then(({ data }) => setOrder(data.order ?? null)).catch(() => setOrder(null));
+    load();
+    window.addEventListener("bn-ams-order", load);
+    return () => window.removeEventListener("bn-ams-order", load);
+  }, []);
+  const run = HUB_LIVE.includes(String(st?.status || "").toUpperCase());
+  const act = run ? st?.active_ams_id ?? -1 : -1, actTray = run ? st?.active_tray_id ?? -1 : -1;
+  const actAms = list.find(a => a.id === act), actT = actAms?.trays?.find(t => t.id === actTray);
+  const rack = st?.hotend_rack;
+  const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
+  const headNum = rack?.head_id >= 16 && rack.head_id <= 21 ? rack.head_id - 15 : null;
+  const climate = o?.climate !== false;
+  const go = v => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* indisponible */ } };
+  if (!list.length && !hasRack) return <div style={{ padding: 16, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>Aucun AMS détecté</div>;
+  const H = fitH ?? 230;
+  const low = H < 96;                               // une rangee : ni en-tete ni bascule
+  const pill = (on, label, dot, onClick) => <button type="button" onClick={e => { e.stopPropagation(); onClick(); }} style={{ display: "inline-flex", alignItems: "center", gap: 5,
+    padding: "2px 9px", height: 22, borderRadius: 20, cursor: "pointer", fontSize: 10.5, fontWeight: 800, whiteSpace: "nowrap",
+    border: `1px solid ${on ? "rgba(59,130,246,0.5)" : "var(--border)"}`, background: on ? "rgba(59,130,246,0.1)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--muted)" }}>
+    {dot && <span style={{ width: 9, height: 9, borderRadius: "50%", background: dot, boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.2)" }}/>}{label}<ArrowLeftRight size={11}/></button>;
+  const dryN = list.filter(isDrying).length;
+  const head = !low && (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, height: 22, minWidth: 0 }}>
+      <span style={{ flex: 1, minWidth: 0, display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden" }}>
+        {actT ? <><span style={{ width: 8, height: 8, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite" }}/>
+          <span style={{ color: "#3b82f6" }}>{slotLabel(act, actTray)}</span>
+          <span style={{ width: 11, height: 11, borderRadius: 4, background: trayHex(actT) || "var(--border)", border: "1px solid rgba(0,0,0,0.2)" }}/>
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{actT.spool_info?.name || actT.filament_type}</span></>
+          : <span style={{ color: "var(--muted)" }}>{list.filter(a => a.id !== 255).length} unités · {list.flatMap(a => a.trays || []).filter(t => trayHex(t)).length} bobines</span>}
+        {dryN > 0 && <span style={{ color: "#ea580c" }}>· {dryN} sèche{dryN > 1 ? "nt" : ""}</span>}
+      </span>
+      {hasRack && pill(false, view === "rack" ? "AMS" : headNum ? `Rack · buse ${headNum}` : "Rack", null, () => go(view === "rack" ? "ams" : "rack"))}
+    </div>
+  );
+  // la fenetre : l'unite choisie, ou l'active, ou la premiere
+  const selId = open === "all" ? (act >= 0 ? act : list[0]?.id) : open;
+  const sel = list.find(a => a.id === selId) || list[0];
+  const popup = open != null && <Zoom icon={<Disc3 size={15}/>} color="#8B5CF6" label="Mes AMS" to="/filaments" onClose={() => { setOpen(null); setTab("ams"); if (before.current) { go(before.current); before.current = null; } }}>
+    {({ W }) => <>
+      {hasRack && <div style={{ display: "flex", gap: 6 }}>
+        {[["ams", "AMS"], ["rack", headNum ? `Rack Vortek · buse ${headNum}` : "Rack Vortek"]].map(([k, l]) => <button key={k} type="button"
+          onClick={() => { if (!before.current) before.current = view; setTab(k); go(k === "rack" ? "rack" : "ams"); }} style={{ padding: "6px 14px", borderRadius: 20, border: "none", cursor: "pointer", fontWeight: 800,
+            fontSize: 12.5, background: tab === k ? "#8B5CF6" : "var(--surface2)", color: tab === k ? "#fff" : "var(--text2)" }}>{l}</button>)}</div>}
+      {tab === "rack" ? rackFull : <>
+        {/* la grille en grand : on y choisit l'unite */}
+        <HubGrid list={list} order={order} act={act} actTray={actTray} H={Math.min(300, (cols => (cols[0]?.length || 1) * 128)(grilleAccueil(list, lireDisposition(order))))}
+          climate big sel={sel?.id} onPick={id => setOpen(id)}/>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${W >= 520 ? 4 : 2}, minmax(0, 1fr))`, gap: 8 }}>
+          {[["Bobines chargées", list.flatMap(a => a.trays || []).filter(t => trayHex(t)).length],
+            ["En cours", actT ? slotLabel(act, actTray) : "—", "#3b82f6"],
+            ["Humidité moyenne", (() => { const h = list.filter(a => a.humidity > 0); return h.length ? `${Math.round(h.reduce((t, a) => t + a.humidity, 0) / h.length)} %` : "—"; })()],
+            ["En séchage", dryN ? list.filter(isDrying).map(a => amsName(a.id)).join(", ") : "aucun", dryN ? "#ea580c" : undefined]].map(([l, v, c]) =>
+            <div key={l} className="card-sm" style={{ padding: "9px 11px", minWidth: 0 }}>
+              <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{l}</div>
+              <div style={{ fontSize: 16, fontWeight: 900, color: c || "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v}</div></div>)}
+        </div>
+        {sel && <div style={{ borderRadius: 20, padding: 14, display: "flex", flexDirection: "column", gap: 12,
+          background: `linear-gradient(135deg, ${isDrying(sel) ? "rgba(249,115,22,0.12)" : sel.id === act ? "rgba(59,130,246,0.10)" : "rgba(139,92,246,0.08)"}, transparent 60%), var(--surface2)` }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 20, fontWeight: 900, color: "var(--text)" }}>{amsName(sel.id)}</span>
+            {sel.id === act && <span style={{ fontSize: 12, fontWeight: 800, color: "#3b82f6" }}>● imprime{actT ? ` · ${slotLabel(act, actTray)}` : ""}</span>}
+            {sel.switch_port && <span style={{ fontSize: 12, fontWeight: 800, color: "#8b5cf6" }}>⇄ entrée {sel.switch_port} de l'aiguillage</span>}
+            <span style={{ flex: 1 }}/>
+            {sel.humidity > 0 && <span style={{ fontSize: 13, fontWeight: 800, color: "#0ea5e9" }}>💧 {sel.humidity} %</span>}
+            {sel.temp > 0 && <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text2)" }}>🌡 {Number(sel.temp).toFixed(1).replace(".", ",")} °C</span>}
+          </div>
+          {isDrying(sel) && <DryCard ams={sel}/>}
+          <AMSDetail ams={sel} activeAmsId={act} activeTrayId={actTray} spoolLookup={spoolLookup} onTrayClick={setTray} hideName showNames bare/>
+        </div>}
+      </>}
+      {tray && createPortal(<div onClick={e => e.stopPropagation()}><TrayBottomSheet tray={tray.tray} amsId={tray.amsId} amsLabel={tray.amsLabel} slotNo={tray.slotNo}
+        onClose={() => setTray(null)}/></div>, document.body)}
+    </>}
+  </Zoom>;
+  return (
+    <div onClick={() => setOpen("all")} style={{ display: "flex", flexDirection: "column", gap: 6, cursor: "pointer", height: fitH ?? undefined, minWidth: 0 }}>
+      {!(view === "rack" && hasRack) && head}
+      {view === "rack" && hasRack ? <div onClick={e => e.stopPropagation()} style={{ flex: 1, minHeight: 0 }}>{rackTile}</div>
+        : <HubGrid list={list} order={order} act={act} actTray={actTray} H={H - (low ? 0 : 28)} climate={climate} onPick={id => setOpen(id)}/>}
+      {popup}
+    </div>
+  );
+}
+
 // part : "overview" (les AMS ou le rack), "detail" (la fiche de l'AMS ou de la buse
 // choisie), ou rien (les deux, l'un sous l'autre)
 export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId, part = null,
@@ -1620,6 +1802,13 @@ export default function Home() {
         { when: (it, o) => (o?.org ?? "grid") === "grid", key: "_amsGrid", label: "Ma grille", group: "Disposition des AMS",
           hint: "Commune à toutes les dispositions de l'accueil.", render: () => <AmsOrderEditor/> },
         { key: "climate", label: "Humidité et température sous chaque unité", def: true }] },
+    amshub: { label: "AMS · tout en un", w: [2], h: [2, 1, 3], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" },
+      render: (d, st, o, item) => <AmsHub st={st} spoolLookup={spoolLookup} fitH={fitOf(item)} o={o}
+        rackTile={devices(st, "overview", o, typeof item?.h === "number" ? { ...item, h: item.h - 0.15 } : item)} rackFull={devices(st, null, o)}/>,
+      options: [
+        { key: "_amsGrid", label: "Ma grille", group: "Disposition des AMS", hint: "La place de chaque unité : qui est au-dessus de qui. Commune à tout l'accueil.",
+          render: () => <AmsOrderEditor/> },
+        { key: "climate", label: "Humidité de chaque unité", def: true }] },
     amsdetail: { label: "Détail de l'AMS", w: [2], h: ["auto", 1, 2, 3, 4], summary: (d, st) => amsSummary(st), frame: { icon: <Layers size={15}/>, color: "#6366F1",
         badge: (st, item) => typeof item?.h === "number" && item.h >= 1 ? <DryBadge status={st}/> : null },
       render: (d, st, o, item) => devices(st, "detail", o, item), fit: true,

@@ -2294,4 +2294,5 @@ export const TILES = {
 };
 // chaque tuile se pose sur 1/2, 1, 2, 3 ou 4 rangees ; sa hauteur par defaut reste en tete
 export const HEIGHTS = [1, 2, 3, 4];
+export { Zoom };
 for (const t of Object.values(TILES)) { const d = t.h[0] === 0.5 ? 1 : t.h[0]; t.h = [d, ...HEIGHTS.filter(x => x !== d)]; }

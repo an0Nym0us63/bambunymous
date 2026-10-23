@@ -103,6 +103,7 @@ body {
   50% { box-shadow: 0 0 0 4px rgba(59,130,246,0.30); }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes bn-ring { 0% { box-shadow: 0 0 0 0 rgba(59,130,246,0.55); } 80%, 100% { box-shadow: 0 0 0 7px rgba(59,130,246,0); } }
 .bn-zoom-body > * { flex-shrink: 0; }
 @keyframes bn-dash { to { stroke-dashoffset: -16; } }
 @keyframes bn-wave { to { transform: translateX(30px); } }
