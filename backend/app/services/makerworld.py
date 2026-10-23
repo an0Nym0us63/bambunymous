@@ -721,10 +721,24 @@ async def model_detail(design_id: str, stale_ok: bool = False) -> dict:
         logger.exception("[MW] filaments face au stock")
         stock = {}
     printer = await my_printer()
-    return {**base, "stock": stock, "printer": printer, "profiles": rank_profiles(base.get("profiles") or [], printer), "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
+    # Le profil d'une impression, ramene a celui de la fiche : l'imprimante peut donner l'identifiant
+    # d'instance au lieu du profil ; un profil inconnu de la fiche vaut « n'importe lequel » (« :n »).
+    # Sans cela, un plateau imprime n'etait reconnu sur aucun profil.
+    profs = base.get("profiles") or []
+    by_inst = {str(p.get("instance_id")): str(p.get("profile_id")) for p in profs if p.get("instance_id")}
+    known = {str(p.get("profile_id")) for p in profs if p.get("profile_id")}
+    def norm(k):
+        prof, _, n = k.partition(":")
+        prof = by_inst.get(prof, prof)
+        return f"{prof if prof in known else ''}:{n}"
+    counts = {}
+    for r in done:
+        for k in plate_keys(r[2], r[3], r[4]):
+            counts[norm(k)] = counts.get(norm(k), 0) + 1
+    return {**base, "stock": stock, "printer": printer, "profiles": rank_profiles(profs, printer), "title_fr": base.get("title_mw_fr") or (m.title_fr if m else None),
             "printed": len(done), "in_progress": sum(1 for r in rows if r[1] == "IN_PROGRESS"),
-            "printed_plates": sorted({k for r in done for k in plate_keys(r[2], r[3], r[4])}),
-            "printing_plates": sorted({k for r in rows if r[1] == "IN_PROGRESS" for k in plate_keys(r[2], r[3], r[4])})}
+            "printed_plates": sorted(counts), "printed_plate_counts": counts,
+            "printing_plates": sorted({norm(k) for r in rows if r[1] == "IN_PROGRESS" for k in plate_keys(r[2], r[3], r[4])})}
 
 
 def plate_keys(plate_id, profile_id, manual) -> list:

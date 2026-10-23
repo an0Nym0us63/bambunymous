@@ -223,7 +223,10 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   };
 
   const done = new Set(m?.printed_plates || []);
-  const plateDone = (prof, idx) => done.has(`${prof.profile_id}:${idx}`) || done.has(`:${idx}`);
+  // combien de fois ce plateau a ete imprime (sur ce profil, ou sans profil connu)
+  const counts = m?.printed_plate_counts || {};
+  const plateTimes = (prof, idx) => (counts[`${prof.profile_id}:${idx}`] || 0) + (counts[`:${idx}`] || 0);
+  const plateDone = (prof, idx) => plateTimes(prof, idx) > 0 || done.has(`${prof.profile_id}:${idx}`) || done.has(`:${idx}`);
   const onNow = new Set(m?.printing_plates || []);
   const platePrinting = (prof, idx) => onNow.has(`${prof.profile_id}:${idx}`) || onNow.has(`:${idx}`);
 
@@ -488,7 +491,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                         const can = p.plates.filter(pl => (!sel || sel.includes(pl.index))
                           && plateInAms(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`));
                         const todo = can.filter(pl => !plateDone(p, pl.index)).map(pl => pl.index);
-                        const again = can.filter(pl => plateDone(p, pl.index)).map(pl => pl.index);
+                        const again = can.filter(pl => plateDone(p, pl.index)).map(pl => `${pl.index} (${plateTimes(p, pl.index) || 1}×)`);
                         return (todo.length > 0 || again.length > 0) && (
                           <div style={{ padding:"0 10px 8px", fontSize:12, fontWeight:700, display:"flex", flexDirection:"column", gap:2 }}>
                             {todo.length > 0 && <span style={{ color:"#16a34a" }}>
@@ -541,8 +544,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                     alignItems:"flex-start", gap:3 }}>
                                     {live && <span title="Ce plateau est en cours d'impression" style={{ fontSize:9.5, fontWeight:800,
                                       color:"white", background:"#f59e0b", padding:"1px 6px", borderRadius:20 }}>⏳ EN COURS</span>}
-                                    {ok && <span style={{ fontSize:9.5, fontWeight:800, color:"white",
-                                      background:"#22c55e", padding:"1px 6px", borderRadius:20 }}>✓ IMPRIMÉ</span>}
+                                    {ok && <span title={`Déjà imprimé ${plateTimes(p, pl.index) || 1} fois`} style={{ fontSize:9.5, fontWeight:800, color:"white",
+                                      background:"#22c55e", padding:"1px 6px", borderRadius:20 }}>✓ FAIT {plateTimes(p, pl.index) || 1}×</span>}
                                     {ready ? <span title={ok ? "Déjà imprimé, et tous ses filaments sont dans l'AMS : tu peux le relancer"
                                         : "Tous ses filaments sont dans l'AMS, en quantité suffisante"}
                                         style={{ fontSize:9.5, fontWeight:800, color:"white",

@@ -202,6 +202,9 @@ const Muted = ({ children, size = 11.5, style }) => <span style={{ fontSize: siz
 const H2 = ({ children }) => <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)" }}>{children}</div>;
 // le chiffre-cle et son visuel (un anneau, une jauge…), agences selon la place :
 // en ligne (visuel a gauche) ou, etroit et haut, en colonne centree
+// un grand chiffre en degrade, a la couleur de sa tuile (plutot qu'un gros chiffre noir)
+const gradText = (a, b) => ({ backgroundImage: `linear-gradient(135deg, ${a}, ${b})`, WebkitBackgroundClip: "text", backgroundClip: "text",
+  WebkitTextFillColor: "transparent", filter: `drop-shadow(0 2px 8px ${a}40)` });
 function Hero({ visual, value, unit, delta, sub, color = "var(--text)", reserve = 0, fill = true, accent = null }) {
   const { W, H: H0, zoom } = useBox();
   const H = Math.max(40, H0 - reserve);
@@ -218,8 +221,7 @@ function Hero({ visual, value, unit, delta, sub, color = "var(--text)", reserve 
       <div style={{ minWidth: 0, flex: stack ? undefined : "0 1 auto", display: "flex", flexDirection: "column", alignItems: stack ? "center" : "flex-start", gap: 2 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "0 6px", flexWrap: "wrap", justifyContent: stack ? "center" : "flex-start", minWidth: 0 }}>
           <span data-pk="" style={{ fontSize: fs, fontWeight: 900, lineHeight: 1.05, color, letterSpacing: "-.01em", whiteSpace: "nowrap",
-            ...(accent ? { backgroundImage: `linear-gradient(135deg, ${accent[0]}, ${accent[1]})`, WebkitBackgroundClip: "text", backgroundClip: "text",
-              WebkitTextFillColor: "transparent", filter: `drop-shadow(0 2px 8px ${accent[0]}40)` } : {}) }}>{value}</span>
+            ...(accent ? gradText(accent[0], accent[1]) : {}) }}>{value}</span>
           {unit && <span style={{ fontSize: zoom ? 15 : 12.5, fontWeight: 700, color: "var(--text2)" }}>{unit}</span>}
         </div>
         {delta}
@@ -800,7 +802,7 @@ function Week({ o, sz }) {
         const statsH = items && H >= 260 ? (Math.ceil(items.length / Math.max(1, Math.min(3, Math.floor((W + 6) / 96)))) * 50) : 0;
         return <>
           {head && <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
-            <span data-pk="" style={{ fontSize: H >= 200 ? 30 : 24, fontWeight: 900, color: "var(--text)", lineHeight: 1.05 }}>{v ? fmt(tot) : "…"}</span>
+            <span data-pk="" style={{ fontSize: H >= 200 ? 30 : 24, fontWeight: 900, color: "var(--text)", lineHeight: 1.05, ...gradText("#7C3AED", "#C084FC") }}>{v ? fmt(tot) : "…"}</span>
             {v && o.avg && W >= 150 && <Muted size={12}>· {fmt(o.metric === "n" ? Math.round(tot / n * 10) / 10 : tot / n)} / jour</Muted>}</div>}
           {statsH > 0 && <div style={{ marginTop: 8 }}><Stats items={items}/></div>}
           {v && <div style={{ marginTop: "auto" }}><DaysChart v={v} n={n} metric={o.metric} color="#8B5CF6" W={W} H={Math.min(220, H - (head ? 36 : 0) - (statsH ? statsH + 10 : 0))}/></div>}
@@ -994,7 +996,7 @@ function Stock({ s, o, sz }) {
     <span data-pk="" style={{ fontWeight: 800, color: "#d97706" }}>{Math.round(x.remaining_weight_g)} g</span></div>;
   const few = list.filter(x => (x.remaining_weight_g ?? 999) < 200).length;
   const head = <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
-    <span data-pk="" style={{ fontSize: 24, fontWeight: 900, color: "var(--text)", lineHeight: 1.05 }}>{s === undefined ? "…" : list.length}</span>
+    <span data-pk="" style={{ fontSize: 24, fontWeight: 900, color: "var(--text)", lineHeight: 1.05, ...gradText("#D97706", "#F59E0B") }}>{s === undefined ? "…" : list.length}</span>
     <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>bobines{o.kg ? ` · ${fmtG(kg)}` : ""}</span>
     {few > 0 && <FewChip n={few}/>}</div>;
   return (
@@ -1580,12 +1582,13 @@ function MwPoints({ c, o, sz }) {
         const vals = (ser || []).map(d => d[metric] || 0);
         return <>
           <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
-            <span data-pk="" style={{ fontSize: 24, fontWeight: 900, color: "var(--text)", lineHeight: 1.05 }}>{Math.round(c.profile.points?.total || 0)}</span>
+            <span data-pk="" style={{ fontSize: 24, fontWeight: 900, color: "var(--text)", lineHeight: 1.05, ...gradText("#CA8A04", "#F97316") }}>{Math.round(c.profile.points?.total || 0)}</span>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>points</span>
             {earned != null && <span data-pk="" style={{ fontSize: 12, fontWeight: 800, color: "#16a34a" }}>+{Math.round(earned)}{W >= 170 ? ` en ${per} j` : ""}</span>}
             {/* aujourd'hui, quand il s'est passe quelque chose */}
             {today && W >= 280 && (today.points > 0 || today.boosts > 0 || today.downloads > 0) && <span data-pk="" style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800,
-              color: "var(--text2)", background: "var(--surface2)", borderRadius: 10, padding: "2px 8px", whiteSpace: "nowrap" }}>
+              color: "#a16207", background: "linear-gradient(135deg, rgba(234,179,8,0.18), rgba(249,115,22,0.12))", border: "1px solid rgba(234,179,8,0.35)",
+              borderRadius: 10, padding: "2px 8px", whiteSpace: "nowrap" }}>
               aujourd'hui {[today.points > 0 && `+${mwNum(today.points)} pts`, today.boosts > 0 && `🚀 ${today.boosts}`, today.downloads > 0 && `⬇️ ${today.downloads}`].filter(Boolean).join(" · ")}</span>}
           </div>
           {o.chart && ser && chartH >= 18 && (vals.some(Boolean) ? <div style={{ marginTop: "auto" }}>
@@ -1615,8 +1618,8 @@ function ToRate({ r, o, sz }) {
     style={{ width: s, height: s, borderRadius: Math.round(s / 4), objectFit: "cover", display: "block" }}/>
     : <span key={x.design_id} style={{ width: s, height: s, borderRadius: Math.round(s / 4), background: "var(--surface2)", display: "block" }}/>;
   const head = <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-    <span data-pk="" style={{ fontSize: 24, fontWeight: 900, color: items.length ? "#ea580c" : "var(--text)", lineHeight: 1.05 }}>{items.length}</span>
-    <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>modèle{items.length > 1 ? "s" : ""}</span></div>;
+    <span data-pk="" style={{ fontSize: 24, fontWeight: 900, color: items.length ? "#ea580c" : "var(--text)", lineHeight: 1.05, ...(items.length ? gradText("#EA580C", "#F59E0B") : {}) }}>{items.length}</span>
+    <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>modèle{items.length > 1 ? "s" : ""} à évaluer</span></div>;
   return (
     <Tile icon={<Star size={15}/>} color="#F97316" label="À évaluer" to="/prints?tab=makerworld"
       mini={sz.h === 0.5} summary={<span style={{ color: items.length ? "#ea580c" : "var(--text)" }}>{items.length}</span>}
@@ -2065,7 +2068,8 @@ function Sales({ v, o, sz }) {
   const sold = v.total_sold ?? v.sold;
   const sub = [`${sold} vendu${sold > 1 ? "s" : ""}`, o.revenue && `${Math.round(v.revenue || 0)} €`,
     o.margin && `marge ${Math.round(v.margin || 0)} €${v.margin_pct ? ` (${Math.round(v.margin_pct)} %)` : ""}`].filter(Boolean).join(" · ");
-  const hero = <Hero visual={o.ring ? s => <Ring value={share} size={s} color={SALE_C} cap="vendus">{sold}</Ring> : null} value={v.available} unit="à vendre" sub={sub}/>;
+  const hero = <Hero visual={o.ring ? s => <Ring value={share} size={s} color={SALE_C} cap="vendus">{sold}</Ring> : null} value={v.available} unit="à vendre" sub={sub}
+    accent={["#DB2777", "#F472B6"]}/>;
   const tm = v.this_month;
   const monthLine = tm && <div data-pk="" style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
     {new Date().toLocaleDateString("fr-FR", { month: "long" })} : {tm.count ? <><b style={{ color: SALE_C }}>{tm.count} vente{tm.count > 1 ? "s" : ""}</b> · {fmtEur(tm.revenue)} · marge {fmtEur(tm.margin)}</> : "aucune vente pour l'instant"}</div>;
