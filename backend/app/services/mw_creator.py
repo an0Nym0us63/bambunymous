@@ -437,6 +437,57 @@ async def overview(fresh: bool = False, period: str = "30") -> dict:
             "history": history_summary(hist)}
 
 
+# ── Series jour par jour (tuile et fenetre de l'accueil, 23/10/2026) ─────────
+# Les points : l'historique complet de MakerWorld (le meme que l'apercu, en cache),
+# ventile modele / profil / boost, et les depenses a part. Les compteurs (telechargements,
+# impressions, boosts recus, j'aime) : l'ecart entre deux releves quotidiens successifs,
+# attribue au jour du second ; avant le premier releve, l'historique importe du compte.
+async def series(days: int = 30, tz: int = 0, fresh: bool = False) -> dict:
+    days = max(1, min(int(days), 365))
+    off = timedelta(minutes=max(-840, min(840, int(tz))))
+    today = (datetime.now(timezone.utc) + off).date()
+    keys = [(today - timedelta(days=days - 1 - i)).isoformat() for i in range(days)]
+    out = {k: {"date": k, "model": 0.0, "profile": 0.0, "boost": 0.0, "spent": 0.0,
+               "downloads": 0, "prints": 0, "boosts": 0, "likes": 0, "src": None} for k in keys}
+    for x in await recent_points(365, max_pages=200, fresh=fresh):
+        try:
+            t = datetime.fromisoformat(str(x["time"]).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            continue
+        k = (t + off).date().isoformat()
+        if k not in out:
+            continue
+        pts = x.get("points") or 0
+        if pts < 0:
+            out[k]["spent"] += -pts
+            continue
+        src = "boost" if str(x.get("type") or "").startswith("boost") else "profile" if x.get("label") == "Profil" else "model"
+        out[k][src] += pts
+    daily = await _daily_get()
+    snaps = sorted(daily)
+    for a, b in zip(snaps, snaps[1:]):
+        if b not in out:
+            continue
+        prev, cur = daily[a], daily[b]
+        for did, vals in cur.items():
+            base = prev.get(did) or [0] * len(METRICS)
+            for i, m in enumerate(METRICS):
+                out[b][m] += max(0, int(vals[i]) - int(base[i]))
+        out[b]["src"] = "releve"
+    hd = (await _history_get()).get("days") or {}
+    first = snaps[1] if len(snaps) > 1 else None
+    for k, v in out.items():
+        if v["src"] is None and k in hd and (first is None or k < first):
+            for i, m in enumerate(METRICS):
+                v[m] = int(hd[k][i])
+            v["src"] = "historique"
+    for v in out.values():
+        for f in ("model", "profile", "boost", "spent"):
+            v[f] = round(v[f], 2)
+        v["points"] = round(v["model"] + v["profile"] + v["boost"], 2)
+    return {"days": list(out.values()), "first_snapshot": snaps[0] if snaps else None}
+
+
 # ── Notifications ──────────────────────────────────────────────────────────
 async def _snap_get():
     from ..db.session import AsyncSessionLocal

@@ -229,6 +229,16 @@ async def mw_creator_history(body: dict = Body({}), _: str = Depends(require_adm
         raise HTTPException(400, str(e))
 
 
+@router.get("/creator/series")
+async def mw_creator_series(days: int = 30, tz: int = 0, _: str = Depends(get_current_user)):
+    """Jour par jour : points gagnes (modele, profil, boost), depenses, et compteurs du compte."""
+    from ....services import mw_creator as C
+    try:
+        return await C.series(days, tz)
+    except C.CreatorError as e:
+        raise HTTPException(400, str(e))
+
+
 @router.get("/creator/points")
 async def mw_creator_points(offset: int = 0, _: str = Depends(get_current_user)):
     from ....services import mw_creator as C

@@ -1391,65 +1391,178 @@ function Friends({ f, o, sz }) {
   );
 }
 // les points MakerWorld : le solde, les gains, la courbe (en grand : 30 jours en barres)
-function useMwHist(on, days) {
-  const [hist, setHist] = useState(null);
+// les series MakerWorld jour par jour (points par origine, depenses, compteurs du compte), en cache 5 min
+const _mwSer = {};
+function useMwSeries(on, days) {
+  const [v, setV] = useState(() => _mwSer[days]?.v ?? null);
   useEffect(() => {
-    if (!on) return;
-    client.get("/makerworld/creator/points").then(({ data }) => {
-      const out = Array(days).fill(0), now = Date.now();
-      (data?.items || []).forEach(x => {
-        const d = Math.floor((now - new Date(x.time).getTime()) / 86400000);
-        if (d >= 0 && d < days) out[days - 1 - d] += Number(x.point ?? x.points ?? x.amount ?? 0) || 0;
-      });
-      setHist(out);
-    }).catch(() => setHist(null));
+    if (!on) return undefined;
+    let live = true;
+    const c = _mwSer[days];
+    if (c && Date.now() - c.at < 300000) { setV(c.v); return undefined; }
+    client.get("/makerworld/creator/series", { params: { days, tz: -new Date().getTimezoneOffset() } })
+      .then(({ data }) => { _mwSer[days] = { v: data?.days || [], at: Date.now() }; if (live) setV(_mwSer[days].v); })
+      .catch(() => { if (live) setV(null); });
+    return () => { live = false; };
   }, [on, days]);
-  return hist;
+  return v;
 }
+const MW_C = "#EAB308";
+// ce qu'on peut suivre jour par jour : la valeur d'un jour, son nom, sa couleur
+const MW_METRICS = [["points", "Points", MW_C, "⭐"], ["downloads", "Téléchargements", "#3B82F6", "⬇️"], ["prints", "Impressions", "#22C55E", "🖨️"],
+  ["boosts", "Boosts reçus", "#8B5CF6", "🚀"], ["likes", "J'aime", "#EC4899", "❤️"]];
+const MW_SRC = [["model", "modèles", MW_C], ["profile", "profils", "#F97316"], ["boost", "boosts", "#8B5CF6"]];
 const MW_STATS = head => [["⬇️", head?.downloads, "téléch."], ["🖨️", head?.prints, "impr."], ["🚀", head?.boosts, "boosts"], ["❤️", head?.likes, "j'aime"]];
+const mwNum = v => { const n = Math.round(v || 0); return n >= 10000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1).replace(".", ",")} k` : n.toLocaleString("fr-FR"); };
+const mwDay = k => new Date(`${k}T12:00:00`);
+// des barres empilees : une par jour, les parts dans l'ordre de « parts »
+function StackBars({ rows, parts, height = 120, labels, titles }) {
+  const max = Math.max(1, ...rows.map(r => parts.reduce((t, [k]) => t + (r[k] || 0), 0)));
+  const gap = rows.length > 40 ? 1 : rows.length > 20 ? 2 : 4;
+  return <div style={{ display: "flex", gap, alignItems: "flex-end", height: height + (labels ? 15 : 0) }}>
+    {rows.map((r, i) => <div key={i} title={titles?.[i]} style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+      <div style={{ width: "100%", maxWidth: 30, display: "flex", flexDirection: "column-reverse", borderRadius: rows.length > 40 ? 2 : 4, overflow: "hidden",
+        height: Math.max(2, Math.round(height * parts.reduce((t, [k]) => t + (r[k] || 0), 0) / max)), background: "var(--surface2)" }}>
+        {parts.map(([k, , c]) => r[k] > 0 && <span key={k} style={{ display: "block", flex: r[k], background: c }}/>)}</div>
+      {labels && <span style={{ fontSize: 10, height: 13, color: "var(--muted)", fontWeight: 600, whiteSpace: "nowrap" }}>{labels[i]}</span>}
+    </div>)}
+  </div>;
+}
+// la fenetre : le profil, le solde, et tout jour par jour sur la periode choisie
 function MwZoom({ c }) {
-  const hist = useMwHist(true, 30);
+  const [days, setDays] = useState(30);
+  const [metric, setMetric] = useState("downloads");
+  const ser = useMwSeries(true, days);
+  const [per, setPer] = useState(null);          // l'apercu sur la periode (modeles et leurs ecarts)
+  const [bill, setBill] = useState(null);        // les dernieres transactions
+  const [sheet, setSheet] = useState(null);      // la fiche d'un modele, ouverte par-dessus
+  useEffect(() => {
+    let live = true;
+    setPer(null);
+    client.get("/makerworld/creator", { params: { period: String(days === 90 ? 90 : days) } }).then(({ data }) => live && setPer(data)).catch(() => {});
+    return () => { live = false; };
+  }, [days]);
+  useEffect(() => { client.get("/makerworld/creator/points").then(({ data }) => setBill(data?.items || [])).catch(() => setBill([])); }, []);
   const { W } = useBox();
-  const days = [...Array(30)].map((_, i) => { const d = new Date(); d.setDate(d.getDate() - 29 + i); return d; });
+  const pr = c.profile, H = zoomChartH(W);
+  const lab = (ser || []).map((d, i, a) => { const dt = mwDay(d.date), step = a.length > 60 ? 15 : a.length > 20 ? 5 : 1;
+    return a.length > 60 ? (dt.getDate() === 1 ? dt.toLocaleDateString("fr-FR", { month: "short" }) : "") : dt.getDate() % step === 0 || a.length <= 7 ? String(dt.getDate()) : ""; });
+  const tot = k => (ser || []).reduce((t, d) => t + (d[k] || 0), 0);
+  const m = MW_METRICS.find(x => x[0] === metric);
+  const chip = on => ({ height: 28, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12, border: "1px solid var(--border)",
+    background: on ? MW_C : "var(--surface2)", color: on ? "#1c1917" : "var(--text2)", whiteSpace: "nowrap" });
+  const top = (per?.models || []).map(x => ({ ...x, p: x.period || {} })).filter(x => x.p.points > 0 || x.p.downloads > 0 || x.p.prints > 0)
+    .sort((a, b) => (b.p.points || 0) - (a.p.points || 0) || (b.p.downloads || 0) - (a.p.downloads || 0)).slice(0, 6);
+  const card = (label, value, color = "var(--text)", sub = null) => <div className="card-sm" style={{ padding: "9px 11px", minWidth: 0 }}>
+    <Muted size={11}>{label}</Muted><div style={{ fontSize: 19, fontWeight: 900, color, whiteSpace: "nowrap" }}>{value}</div>{sub && <Muted size={10.5}>{sub}</Muted>}</div>;
   return <>
-    <div style={{ display: "flex", gap: 22, flexWrap: "wrap" }}>
-      <div><Muted>Solde</Muted><div style={{ fontSize: 28, fontWeight: 900, color: "var(--text)" }}>{Math.round(c.profile.points?.total || 0)}</div></div>
-      {["7", "30", "365"].map(p => { const e = c.earned?.[p] ?? (p === "7" ? c.earned7 : p === "30" ? c.earned30 : null);
-        return e != null && <div key={p}><Muted>{p === "365" ? "Sur un an" : `Sur ${p} jours`}</Muted>
-          <div style={{ fontSize: 22, fontWeight: 900, color: "#16a34a" }}>+{Math.round(e)}</div></div>; })}
+    {/* le profil */}
+    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      {pr.avatar && <img src={mwImg(pr.avatar, 120)} alt="" style={{ width: 52, height: 52, borderRadius: "50%", objectFit: "cover" }}/>}
+      <div style={{ flex: 1, minWidth: 160 }}>
+        <div style={{ fontSize: 16, fontWeight: 900, color: "var(--text)" }}>{pr.name || "Mon profil"}{pr.level != null && <span style={{ marginLeft: 8, fontSize: 11.5,
+          fontWeight: 900, color: "#1c1917", background: MW_C, borderRadius: 8, padding: "1px 7px" }}>niv. {pr.level}</span>}</div>
+        <Muted size={12}>{[pr.handle && `@${pr.handle}`, `${mwNum(pr.fans)} abonnés`, `${mwNum(pr.follows)} abonnements`, `${mwNum(pr.designs)} modèles`].filter(Boolean).join(" · ")}</Muted>
+      </div>
     </div>
-    <H2>Points gagnés, 30 jours</H2>
-    {hist ? <Bars values={hist} color="#EAB308" height={zoomChartH(W)} hi={29} showValues={W / 30 >= 22} labels={days.map(d => d.getDate() % 5 === 0 ? String(d.getDate()) : "")}
-      titles={days.map((d, i) => `${d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : +${hist[i]}`)}/> : <Muted>…</Muted>}
-    <H2>Ces 30 jours</H2>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
-      {MW_STATS(c.head?.["30"]?.totals || c.head?.["7"]?.totals).map(([e, n, l]) => <div key={l} className="card-sm" style={{ textAlign: "center", padding: 10 }}>
-        <div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{e} {n ?? 0}</div><Muted size={11}>{l}</Muted></div>)}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(118px, 1fr))", gap: 8 }}>
+      {card("Solde", mwNum(pr.points?.total), "var(--text)", pr.points?.exclusive ? `dont ${mwNum(pr.points.exclusive)} exclusifs` : null)}
+      {["7", "30", "365"].map(p => c.earned?.[p] != null && <React.Fragment key={p}>{card(p === "365" ? "Gagnés sur un an" : `Gagnés sur ${p} j`, `+${mwNum(c.earned[p])}`, "#16a34a")}</React.Fragment>)}
+      {c.earned_total != null && card("Gagnés en tout", mwNum(c.earned_total), "#16a34a")}
+      {c.spent_total != null && card("Dépensés en tout", mwNum(c.spent_total), "#dc2626")}
     </div>
+    {/* la periode */}
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+      <Muted size={12}>Période</Muted>{[7, 30, 90, 365].map(d => <button key={d} type="button" style={chip(days === d)} onClick={() => setDays(d)}>{d === 365 ? "1 an" : `${d} j`}</button>)}</div>
+    <H2>Points gagnés par jour</H2>
+    {ser ? <>
+      <StackBars rows={ser} parts={MW_SRC} height={H} labels={lab}
+        titles={ser.map(d => `${mwDay(d.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : +${mwNum(d.points)} (modèles ${mwNum(d.model)}, profils ${mwNum(d.profile)}, boosts ${mwNum(d.boost)})${d.spent ? ` · dépensés ${mwNum(d.spent)}` : ""}`)}/>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>
+        {MW_SRC.map(([k, l, col]) => <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+          <span style={{ width: 10, height: 10, borderRadius: 3, background: col }}/>{l} <b style={{ color: "var(--text)" }}>+{mwNum(tot(k))}</b></span>)}
+        <span>total <b style={{ color: "#16a34a" }}>+{mwNum(tot("points"))}</b></span>
+        {tot("spent") > 0 && <span>dépensés <b style={{ color: "#dc2626" }}>{mwNum(tot("spent"))}</b></span>}</div>
+    </> : <Muted>…</Muted>}
+    <H2>Activité par jour</H2>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {MW_METRICS.slice(1).map(([k, l, , e]) => <button key={k} type="button" style={chip(metric === k)} onClick={() => setMetric(k)}>{e} {l} · {mwNum(tot(k))}</button>)}</div>
+    {ser ? <Bars values={ser.map(d => d[metric] || 0)} color={m[2]} height={H} labels={lab} showValues={W / ser.length >= 22}
+      titles={ser.map(d => `${mwDay(d.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : ${d[metric] || 0} ${m[1].toLowerCase()}`)}/> : <Muted>…</Muted>}
+    {ser && !ser.some(d => d.src) && <Muted size={11.5}>Les compteurs jour par jour se remplissent avec les relevés quotidiens (ou l'import de l'historique, page MakerWorld).</Muted>}
+    {top.length > 0 && <><H2>Meilleurs modèles de la période</H2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {top.map(x => <div key={x.design_id} onClick={e => { e.stopPropagation(); setSheet({ design_id: x.design_id, title: x.title, title_fr: x.title_fr, cover_url: x.cover_url }); }}
+          style={{ display: "flex", alignItems: "center", gap: 10, padding: 7, borderRadius: 12, background: "var(--surface2)", cursor: "pointer", minWidth: 0 }}>
+          {x.cover_url ? <img src={mwImg(x.cover_url, 120)} alt="" style={{ width: 44, height: 44, borderRadius: 9, objectFit: "cover", flexShrink: 0 }}/>
+            : <span style={{ width: 44, height: 44, borderRadius: 9, background: "var(--surface)", flexShrink: 0 }}/>}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.title_fr || x.title}</div>
+            <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              ⬇️ {mwNum(x.p.downloads)} · 🖨️ {mwNum(x.p.prints)} · 🚀 {mwNum(x.p.boosts)} · ❤️ {mwNum(x.p.likes)}</div></div>
+          <b style={{ fontSize: 14, color: "#16a34a", whiteSpace: "nowrap" }}>+{mwNum(x.p.points)}</b></div>)}
+      </div></>}
+    <H2>Depuis toujours</H2>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(110px, 1fr))", gap: 8 }}>
+      {card("⬇️ Téléchargements", mwNum(pr.downloads), "var(--text)", pr.profile_downloads ? `+ ${mwNum(pr.profile_downloads)} de profils` : null)}
+      {card("🖨️ Impressions", mwNum(pr.prints), "var(--text)", pr.profile_prints ? `+ ${mwNum(pr.profile_prints)} de profils` : null)}
+      {card("🚀 Boosts reçus", mwNum(pr.boosts))}{card("❤️ J'aime", mwNum(pr.likes))}{card("📁 Collections", mwNum(pr.collections))}
+    </div>
+    <H2>Dernières transactions</H2>
+    {bill == null ? <Muted>…</Muted> : !bill.length ? <Muted>Aucune.</Muted> :
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{bill.slice(0, 12).map((x, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 8,
+        fontSize: 12.5, padding: "5px 8px", borderRadius: 9, background: i % 2 ? "transparent" : "var(--surface2)", minWidth: 0 }}>
+        <span style={{ width: 62, flexShrink: 0, color: "var(--muted)", fontWeight: 700 }}>{x.time ? new Date(x.time).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }) : ""}</span>
+        <span style={{ flexShrink: 0, fontWeight: 800, color: "var(--text2)" }}>{x.label}</span>
+        <span style={{ flex: 1, minWidth: 0, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.instance_title || x.title || ""}</span>
+        <b style={{ flexShrink: 0, color: x.points < 0 ? "#dc2626" : "#16a34a" }}>{x.points > 0 ? "+" : ""}{String(x.points).replace(".", ",")}</b></div>)}</div>}
+    {sheet && <span onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+      <MakerWorldModelSheet designId={sheet.design_id} preview={sheet} onClose={() => setSheet(null)}/></span>}
   </>;
 }
+// la tuile : le solde et ses gains, la courbe de ce qu'on suit (14 jours), les compteurs, le modele du moment
 function MwPoints({ c, o, sz }) {
-  const hist = useMwHist(o.chart && !!c?.profile, 14);
+  const metric = o.metric || "points";
+  const ser = useMwSeries(o.chart && !!c?.profile, 14);
   if (!c?.profile) return null;
   const per = o.period || "7";
   const earned = c.earned?.[per] ?? (per === "7" ? c.earned7 : c.earned30);
   const head = c.head?.[per]?.totals;
+  const m = MW_METRICS.find(x => x[0] === metric) || MW_METRICS[0];
+  const today = ser?.[ser.length - 1];
+  const best = (c.models || []).map(x => ({ ...x, p: x.period || {} })).filter(x => x.p.points > 0 || x.p.downloads > 0)
+    .sort((a, b) => (b.p.points || 0) - (a.p.points || 0) || (b.p.downloads || 0) - (a.p.downloads || 0))[0];
   return (
-    <Tile icon={<Coins size={15}/>} color="#EAB308" label="MakerWorld" to="/prints?tab=makerworld" zoom={<MwZoom c={c}/>}
+    <Tile icon={<Coins size={15}/>} color={MW_C} label="MakerWorld" to="/prints?tab=makerworld" zoom={<MwZoom c={c}/>}
       mini={sz.h === 0.5} summary={<>{Math.round(c.profile.points?.total || 0)}{earned != null && <span style={{ fontSize: 12, color: "#16a34a" }}>+{Math.round(earned)}</span>}</>}>
       {({ W, H }) => {
         const stats = o.stats && head && H >= 120;
-        const chartH = H - 36 - (stats ? 40 : 0);
+        const bestRow = o.best !== false && best && H >= 200;
+        const chartH = H - 36 - (stats ? 40 : 0) - (bestRow ? 52 : 0);
+        const vals = (ser || []).map(d => d[metric] || 0);
         return <>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
             <span data-pk="" style={{ fontSize: 24, fontWeight: 900, color: "var(--text)", lineHeight: 1.05 }}>{Math.round(c.profile.points?.total || 0)}</span>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>points</span>
-            {earned != null && <span data-pk="" style={{ fontSize: 12, fontWeight: 800, color: "#16a34a" }}>+{Math.round(earned)}{W >= 170 ? ` en ${per} j` : ""}</span>}</div>
-          {o.chart && hist && chartH >= 18 && (hist.some(Boolean) ? <div style={{ marginTop: "auto" }}><Spark values={hist} color="#EAB308" height={Math.min(chartH, 320)}/></div>
-            : chartH >= 30 && <Empty>Pas de points ces 14 jours</Empty>)}
-          {stats && <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, marginTop: o.chart && hist ? 6 : "auto" }}>
+            {earned != null && <span data-pk="" style={{ fontSize: 12, fontWeight: 800, color: "#16a34a" }}>+{Math.round(earned)}{W >= 170 ? ` en ${per} j` : ""}</span>}
+            {/* aujourd'hui, quand il s'est passe quelque chose */}
+            {today && W >= 280 && (today.points > 0 || today.boosts > 0 || today.downloads > 0) && <span data-pk="" style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800,
+              color: "var(--text2)", background: "var(--surface2)", borderRadius: 10, padding: "2px 8px", whiteSpace: "nowrap" }}>
+              aujourd'hui {[today.points > 0 && `+${mwNum(today.points)} pts`, today.boosts > 0 && `🚀 ${today.boosts}`, today.downloads > 0 && `⬇️ ${today.downloads}`].filter(Boolean).join(" · ")}</span>}
+          </div>
+          {o.chart && ser && chartH >= 18 && (vals.some(Boolean) ? <div style={{ marginTop: "auto" }}>
+            {metric !== "points" && chartH >= 40 && <Muted size={10.5}>{m[3]} {m[1].toLowerCase()} · 14 j : {mwNum(vals.reduce((t, v) => t + v, 0))}</Muted>}
+            <Spark values={vals} color={m[2]} height={Math.min(chartH - (metric !== "points" && chartH >= 40 ? 14 : 0), 320)}/></div>
+            : chartH >= 30 && <Empty>Rien ces 14 jours</Empty>)}
+          {bestRow && <div title="Le modèle qui rapporte le plus sur 30 jours" style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, minWidth: 0 }}>
+            {best.cover_url && <img data-pk="" src={mwImg(best.cover_url, 90)} alt="" style={{ width: 40, height: 40, borderRadius: 9, objectFit: "cover", flexShrink: 0 }}/>}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)" }}>🏆 en tête sur 30 j</div>
+              <div style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{best.title_fr || best.title}</div></div>
+            <b data-pk="" style={{ fontSize: 13, color: "#16a34a", whiteSpace: "nowrap" }}>+{mwNum(best.p.points)}</b></div>}
+          {stats && <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 4, marginTop: o.chart && ser ? 6 : "auto" }}>
             {MW_STATS(head).map(([e, n, l]) => <div key={l} data-pk="" style={{ textAlign: "center", minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{W >= 200 ? `${e} ` : ""}{n ?? 0}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{W >= 200 ? `${e} ` : ""}{mwNum(n)}</div>
               <div style={{ fontSize: 10, color: "var(--muted)" }}>{l}</div></div>)}</div>}
         </>;
       }}
@@ -2757,8 +2870,10 @@ export const TILES = {
   friends: { label: "Copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Friends f={d.friends} o={o} sz={sz(it)}/>,
     options: [B("thumbs", "Vignette de leur impression", true), B("idle", "Ceux au repos", true), SCROLL(false)] },
   mw: { label: "MakerWorld", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <MwPoints c={d.mw} o={o} sz={sz(it)}/>,
-    options: [C("period", "Gains sur", "7", [["7", "7 jours"], ["30", "30 jours"], ["365", "un an"]]), B("chart", "Courbe des points (14 j)", true),
-      B("stats", "Téléchargements, impressions, boosts, j'aime", true, { hint: "Quand la tuile a la place." })] },
+    options: [C("period", "Gains sur", "7", [["7", "7 jours"], ["30", "30 jours"], ["365", "un an"]]), B("chart", "Courbe (14 jours)", true),
+      C("metric", "La courbe suit", "points", [["points", "les points"], ["downloads", "les téléchargements"], ["prints", "les impressions"], ["boosts", "les boosts reçus"], ["likes", "les j'aime"]]),
+      B("stats", "Téléchargements, impressions, boosts, j'aime", true, { hint: "Quand la tuile a la place." }),
+      B("best", "Le modèle en tête (30 jours)", true, { hint: "Quand la tuile a de la hauteur." })] },
   rate: { label: "À évaluer", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <ToRate r={d.rate} o={o} sz={sz(it)}/>,
     options: [B("thumbs", "Vignettes", true)] },
   wheel: { label: "Roue et clés", w: [1, 2], h: [1, 0.5], render: (d, st, o, it) => <Wheel a={d.ach} o={o} sz={sz(it)}/>,
