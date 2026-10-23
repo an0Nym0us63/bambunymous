@@ -202,7 +202,7 @@ const Muted = ({ children, size = 11.5, style }) => <span style={{ fontSize: siz
 const H2 = ({ children }) => <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)" }}>{children}</div>;
 // le chiffre-cle et son visuel (un anneau, une jauge…), agences selon la place :
 // en ligne (visuel a gauche) ou, etroit et haut, en colonne centree
-function Hero({ visual, value, unit, delta, sub, color = "var(--text)", reserve = 0, fill = true }) {
+function Hero({ visual, value, unit, delta, sub, color = "var(--text)", reserve = 0, fill = true, accent = null }) {
   const { W, H: H0, zoom } = useBox();
   const H = Math.max(40, H0 - reserve);
   const narrow = W < 215;
@@ -217,7 +217,9 @@ function Hero({ visual, value, unit, delta, sub, color = "var(--text)", reserve 
       {visual && vs >= 24 && visual(Math.floor(vs))}
       <div style={{ minWidth: 0, flex: stack ? undefined : "0 1 auto", display: "flex", flexDirection: "column", alignItems: stack ? "center" : "flex-start", gap: 2 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "0 6px", flexWrap: "wrap", justifyContent: stack ? "center" : "flex-start", minWidth: 0 }}>
-          <span data-pk="" style={{ fontSize: fs, fontWeight: 900, lineHeight: 1.05, color, letterSpacing: "-.01em", whiteSpace: "nowrap" }}>{value}</span>
+          <span data-pk="" style={{ fontSize: fs, fontWeight: 900, lineHeight: 1.05, color, letterSpacing: "-.01em", whiteSpace: "nowrap",
+            ...(accent ? { backgroundImage: `linear-gradient(135deg, ${accent[0]}, ${accent[1]})`, WebkitBackgroundClip: "text", backgroundClip: "text",
+              WebkitTextFillColor: "transparent", filter: `drop-shadow(0 2px 8px ${accent[0]}40)` } : {}) }}>{value}</span>
           {unit && <span style={{ fontSize: zoom ? 15 : 12.5, fontWeight: 700, color: "var(--text2)" }}>{unit}</span>}
         </div>
         {delta}
@@ -643,6 +645,7 @@ function Today({ v, p, o, sz, st, lp }) {
   const sub = v && [o.weight && fmtG(v.weight_g), o.hours && `${fmtH(v.duration)} de machine`, o.cost && fmtEur(v.cost)].filter(Boolean).join(" · ");
   const hero = reserve => <Hero reserve={reserve} visual={o.ring && rate != null ? s => <Ring value={rate} size={s} color={col} cap="réussies">{Math.round(rate * 100)}%</Ring> : null}
     value={v ? v.count : "…"} unit={`impression${v?.count > 1 ? "s" : ""}`} sub={sub}
+    accent={rate == null ? ["#3B82F6", "#06B6D4"] : rate >= 0.9 ? ["#16A34A", "#06B6D4"] : rate >= 0.7 ? ["#D97706", "#F59E0B"] : ["#DC2626", "#F97316"]}
     delta={o.yesterday && v?.yesterday && <Delta now={v.count} before={v.yesterday.count}/>}/>;
   const versus = v?.yesterday && <Versus color="#3B82F6" rows={[["Impressions", v.count, v.yesterday.count, x => x || 0],
     ["Poids", v.weight_g, v.yesterday.weight_g, fmtG], ["Machine", v.duration, v.yesterday.duration, fmtH], ["Coût", v.cost, v.yesterday.cost, fmtEur]]}/>;
@@ -1371,6 +1374,26 @@ function Friends({ f, o, sz }) {
               {p.map(x => <FrPoster key={x.id} x={x} thumbs={o.thumbs} h={rowH}/>)}</div>
             {strip > 0 && <FrIdle list={others}/>}</div>;
         }
+        // un seul copain, pas la place d'une affiche : une carte en largeur (plateau, nom, impression, avancement, fin)
+        if (p.length === 1 && !o.scroll && bw >= 200 && room >= 50) {
+          const x = p[0], t = Math.min(room, 110), end = frEnd(x);
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, minHeight: 0 }}>
+            <div title={x.print?.name || x.print_name} style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+              <div style={{ width: t, height: t, borderRadius: 14, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                background: `radial-gradient(circle, ${FR_C}2e, transparent 70%), var(--surface2)` }}>
+                <FrImg src={o.thumbs ? x.print?.image : null} style={{ width: "86%", height: "86%", objectFit: "contain" }} fallback={<FrAvatar name={x.name} size={t * 0.5}/>}/></div>
+              <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+                <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+                  <b data-pk="" style={{ flex: 1, minWidth: 0, fontSize: 15, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</b>
+                  <span data-pk="" style={{ fontSize: 22, fontWeight: 900, color: FR_C, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{frPct(x)}%</span></div>
+                <div style={{ fontSize: 12, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><W text={x.print?.name || x.print_name || "imprime"}/></div>
+                <div style={{ height: 6, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}>
+                  <div data-pk="" style={{ height: "100%", width: `${frPct(x)}%`, background: FR_C }}/></div>
+                {end && t >= 64 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>fin {end}</span>}
+              </div>
+            </div>
+            {strip > 0 && <FrIdle list={others}/>}</div>;
+        }
         // bas : un anneau d'avancement par copain, son plateau au centre, son nom et son pourcentage dessous
         const r = fitGrid(p.length, bw, room, { gap: 10, extra: o.thumbs ? 30 : 18, max: 96 });
         if (!o.scroll && r.size >= 40) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, minHeight: 0 }}>
@@ -1958,7 +1981,7 @@ function Month({ v, o, sz }) {
     hi={days.length - 1} labels={H >= 60 ? days.map(x => x.day.getDate() % 5 === 0 || x.day.getDate() === 1 ? String(x.day.getDate()) : "") : null}
     titles={days.map(x => `${x.day.getDate()} ${name} : ${x.count || 0}`)}/>;
   const sub = v && [fmtG(v.weight_g), fmtH(v.duration), o.cost && fmtEur(v.cost)].filter(Boolean).join(" · ");
-  const hero = <Hero fill={false} value={v ? v.count : "…"} unit={`impression${v?.count > 1 ? "s" : ""} en ${name}`} sub={sub}
+  const hero = <Hero fill={false} value={v ? v.count : "…"} unit={`impression${v?.count > 1 ? "s" : ""} en ${name}`} sub={sub} accent={["#4F46E5", "#A855F7"]}
     visual={o.ring !== false && rate != null ? s => <Ring value={rate} size={s} color={rateColor(rate)} cap="réussies">{Math.round(rate * 100)}%</Ring> : null}
     delta={o.compare && v?.prev && <Delta now={v.count} before={v.prev.count} label="le mois dernier"/>}/>;
   return (
@@ -1990,8 +2013,11 @@ function MonthZoom({ v, name, hero, rate }) {
   const { W } = useBox();
   useEffect(() => {
     const m0 = new Date(); m0.setDate(1);
-    client.get("/prints", { params: { date_from: ymd(m0), sort: "duration", limit: 6 } })
-      .then(({ data }) => setLongest((data?.prints || data?.items || []).filter(x => x.status !== "IN_PROGRESS").slice(0, 6))).catch(() => setLongest([]));
+    // tout le mois, trie ici par la duree de chaque impression : le tri « duree » du serveur classe les
+    // groupes par leur total et rend tous leurs membres (d'ou des impressions courtes en tete)
+    client.get("/prints", { params: { date_from: ymd(m0), limit: 200 } })
+      .then(({ data }) => setLongest((data?.prints || data?.items || []).filter(x => x.status !== "IN_PROGRESS")
+        .sort((a, b) => (b.duration_seconds || b.estimated_seconds || 0) - (a.duration_seconds || a.estimated_seconds || 0)).slice(0, 6))).catch(() => setLongest([]));
   }, []);
   const f = monthFigures(days, nd);
   const m = MONTH_METRICS.find(x => x[0] === metric);
