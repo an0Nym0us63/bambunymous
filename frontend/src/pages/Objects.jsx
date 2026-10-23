@@ -1807,6 +1807,13 @@ export default function Objects() {
   const [loading, setLoading] = useState(false);
   const [selected, setSelected] = useState(null);
   const [selectedAcc, setSelectedAcc] = useState(null);   // fiche accessoire
+  // ?id=… (depuis l'accueil) : la fiche de cet objet s'ouvre directement
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (!id) return;
+    client.get(`/objects/objects/${id}`).then(r => setSelected(r.data)).catch(() => {});
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
   const [creatingAcc, setCreatingAcc] = useState(false);  // creation accessoire
   // Plus de filtre par etat : les sections repliables le font, et mieux --
   // elles montrent les cinq etats a la fois avec leurs comptes, la ou une

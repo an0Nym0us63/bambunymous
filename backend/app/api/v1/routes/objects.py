@@ -279,6 +279,37 @@ async def objects_stats(
         ],
         # Cout moyen de fabrication d'un objet.
         "avg_cost": round(sum((o.cost_total or 0) for o in rows) / total, 2) if total else 0,
+        # Les ventes dans le temps (tous temps, par sold_date) : douze mois, ce mois-ci, les dernieres
+        **_sales_timeline(by_status["sold"]),
+    }
+
+
+def _sales_timeline(sold: list) -> dict:
+    from datetime import datetime as _dt
+    now = _dt.now()
+    months = []
+    for k in range(11, -1, -1):
+        y, m = now.year, now.month - k
+        while m <= 0:
+            y, m = y - 1, m + 12
+        months.append((y, m))
+    by = {ym: {"count": 0, "revenue": 0.0, "margin": 0.0} for ym in months}
+    for o in sold:
+        d = o.sold_date
+        if not d or (d.year, d.month) not in by:
+            continue
+        b = by[(d.year, d.month)]
+        b["count"] += 1
+        b["revenue"] += o.sold_price or 0
+        b["margin"] += (o.sold_price or 0) - (o.cost_total or 0)
+    cur = by[months[-1]]
+    recent = sorted([o for o in sold if o.sold_date], key=lambda o: o.sold_date, reverse=True)[:8]
+    return {
+        "by_month": [{"month": f"{y}-{m:02d}", "count": v["count"], "revenue": round(v["revenue"], 2), "margin": round(v["margin"], 2)}
+                     for (y, m), v in by.items()],
+        "this_month": {"count": cur["count"], "revenue": round(cur["revenue"], 2), "margin": round(cur["margin"], 2)},
+        "recent_sales": [{"id": o.id, "name": o.translated_name or o.name, "price": o.sold_price, "thumbnail": o.thumbnail,
+                          "margin": round((o.sold_price or 0) - (o.cost_total or 0), 2), "date": o.sold_date.isoformat()} for o in recent],
     }
 
 

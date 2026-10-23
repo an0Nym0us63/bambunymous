@@ -1907,29 +1907,38 @@ function Temps({ status, o, sz }) {
   );
 }
 const statsH3 = W => statsH(3, W);
-// le mois : le compte, l'ecart avec le mois dernier, les chiffres du mois et les barres par jour
+// le mois : le compte (le mois est dit dans la tuile meme : titre masque, on sait de quoi on parle),
+// la reussite, l'ecart avec le mois dernier, les chiffres du mois et les barres par jour
+const MONTH_METRICS = [["count", "Impressions", x => String(Math.round(x || 0))], ["duration", "Heures", fmtH], ["weight_g", "Poids", fmtG], ["cost", "Coût", fmtEur]];
+function monthFigures(days, nd) {
+  if (!days || !days.length) return null;
+  const best = days.reduce((b, x) => !b || (x.count || 0) > (b.count || 0) ? x : b, null);
+  let streak = 0;
+  for (let k = days.length - 1; k >= 0 && days[k].count; k--) streak++;
+  return { best, active: days.filter(x => x.count).length, perDay: days.reduce((a, x) => a + (x.count || 0), 0) / nd, streak };
+}
 function Month({ v, o, sz }) {
   const name = new Date().toLocaleDateString("fr-FR", { month: "long" });
   const nd = new Date().getDate();
   const days = useDays(o.chart ? nd : 0);
+  const rate = v?.count ? (v.ok ?? v.count) / v.count : null;
   const chart = (W, H) => days && days.length > 1 && <Bars values={days.map(x => x.count || 0)} color="#6366F1" height={Math.max(12, H - (H >= 60 ? 15 : 0))}
     hi={days.length - 1} labels={H >= 60 ? days.map(x => x.day.getDate() % 5 === 0 || x.day.getDate() === 1 ? String(x.day.getDate()) : "") : null}
     titles={days.map(x => `${x.day.getDate()} ${name} : ${x.count || 0}`)}/>;
   const sub = v && [fmtG(v.weight_g), fmtH(v.duration), o.cost && fmtEur(v.cost)].filter(Boolean).join(" · ");
-  const hero = <Hero fill={false} value={v ? v.count : "…"} unit={`impression${v?.count > 1 ? "s" : ""}`} sub={sub}
+  const hero = <Hero fill={false} value={v ? v.count : "…"} unit={`impression${v?.count > 1 ? "s" : ""} en ${name}`} sub={sub}
+    visual={o.ring !== false && rate != null ? s => <Ring value={rate} size={s} color={rateColor(rate)} cap="réussies">{Math.round(rate * 100)}%</Ring> : null}
     delta={o.compare && v?.prev && <Delta now={v.count} before={v.prev.count} label="le mois dernier"/>}/>;
   return (
     <Tile icon={<CalendarDays size={15}/>} color="#6366F1" label={`En ${name}`} to="/stats?tab=prints"
-      mini={sz.h === 0.5} summary={<>{v ? v.count : "…"}{o.compare && v?.prev && <Delta now={v.count} before={v.prev.count}/>}</>}
-      zoom={<>{hero}{v?.prev && <Versus color="#6366F1" a={`en ${name}`} b="à la même date le mois dernier" rows={[["Impressions", v.count, v.prev.count, x => x || 0],
-        ["Poids", v.weight_g, v.prev.weight_g, fmtG], ["Machine", v.duration, v.prev.duration, fmtH], ["Coût", v.cost, v.prev.cost, fmtEur]]}/>}
-        <H2>Impressions par jour</H2><MonthZoomChart/></>}>
+      mini={sz.h === 0.5} summary={<>{v ? v.count : "…"}<span style={{ fontSize: 12, color: "var(--muted)" }}>en {name}</span>{o.compare && v?.prev && <Delta now={v.count} before={v.prev.count}/>}</>}
+      zoom={<MonthZoom v={v} name={name} hero={hero} rate={rate}/>}>
       {({ W, H }) => {
         const hh = Math.min(H, 72);
         // haute : des chiffres du mois entre le compte et les barres
-        const best = (days || []).reduce((b, x) => !b || (x.count || 0) > (b.count || 0) ? x : b, null);
-        const items = days && days.length && [["Par jour", String(Math.round(days.reduce((a, x) => a + (x.count || 0), 0) / nd * 10) / 10).replace(".", ",")],
-          ["Meilleur jour", best?.count ? `${best.day.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} · ${best.count}` : "—"], ["Jours actifs", `${days.filter(x => x.count).length} / ${nd}`]];
+        const f = monthFigures(days, nd);
+        const items = f && [["Par jour", String(Math.round(f.perDay * 10) / 10).replace(".", ",")],
+          ["Meilleur jour", f.best?.count ? `${f.best.day.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} · ${f.best.count}` : "—"], ["Jours actifs", `${f.active} / ${nd}`]];
         const statsH = items && H >= 210 + statsH3(W) ? statsH3(W) + 6 : 0;
         return <>
           <BoxCtx.Provider value={{ W, H: hh }}>{hero}</BoxCtx.Provider>
@@ -1940,46 +1949,132 @@ function Month({ v, o, sz }) {
     </Tile>
   );
 }
-function MonthZoomChart() {
-  const days = useDays(new Date().getDate());
+// la fenetre du mois : face au mois dernier, les chiffres du mois, les barres au choix, les plus longues
+function MonthZoom({ v, name, hero, rate }) {
+  const nd = new Date().getDate();
+  const days = useDays(nd);
+  const [metric, setMetric] = useState("count");
+  const [longest, setLongest] = useState(null);
   const { W } = useBox();
-  if (!days) return <Muted>…</Muted>;
-  return <Bars values={days.map(x => x.count || 0)} color="#6366F1" height={zoomChartH(W)} hi={days.length - 1} showValues={W / days.length >= 22}
-    labels={days.map(x => String(x.day.getDate()))} titles={days.map(x => `${x.day.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : ${x.count || 0}`)}/>;
+  useEffect(() => {
+    const m0 = new Date(); m0.setDate(1);
+    client.get("/prints", { params: { date_from: ymd(m0), sort: "duration", limit: 6 } })
+      .then(({ data }) => setLongest((data?.prints || data?.items || []).filter(x => x.status !== "IN_PROGRESS").slice(0, 6))).catch(() => setLongest([]));
+  }, []);
+  const f = monthFigures(days, nd);
+  const m = MONTH_METRICS.find(x => x[0] === metric);
+  const chip = on => ({ height: 28, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12, border: "1px solid var(--border)",
+    background: on ? "#6366F1" : "var(--surface2)", color: on ? "#fff" : "var(--text2)", whiteSpace: "nowrap" });
+  return <>
+    {hero}
+    {v?.prev && <Versus color="#6366F1" a={`en ${name}`} b="à la même date le mois dernier" rows={[["Impressions", v.count, v.prev.count, x => x || 0],
+      ["Réussies", v.ok, v.prev.ok, x => x || 0], ["Poids", v.weight_g, v.prev.weight_g, fmtG], ["Machine", v.duration, v.prev.duration, fmtH], ["Coût", v.cost, v.prev.cost, fmtEur]]}/>}
+    {f && <Stats items={[["Par jour", String(Math.round(f.perDay * 10) / 10).replace(".", ",")],
+      ["Meilleur jour", f.best?.count ? `${f.best.day.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} · ${f.best.count}` : "—"],
+      ["Jours actifs", `${f.active} / ${nd}`], ["Série en cours", `${f.streak} j`],
+      rate != null && ["Réussite", `${Math.round(rate * 100)} %`, rateColor(rate)], v?.failed ? ["Ratées", v.failed, "#dc2626"] : null,
+      v?.count ? ["Coût moyen", fmtEur(v.cost / v.count)] : null, v?.count ? ["Durée moyenne", fmtH(v.duration / v.count)] : null].filter(Boolean)}/>}
+    <H2>Par jour</H2>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{MONTH_METRICS.map(([k, l]) => <button key={k} type="button" style={chip(metric === k)} onClick={() => setMetric(k)}>{l}</button>)}</div>
+    {days ? <Bars values={days.map(x => x[m[0]] || 0)} color="#6366F1" height={zoomChartH(W)} hi={days.length - 1} showValues={W / days.length >= 26} fmt={m[2]}
+      labels={days.map(x => String(x.day.getDate()))} titles={days.map(x => `${x.day.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : ${m[2](x[m[0]])}`)}/> : <Muted>…</Muted>}
+    {longest?.length > 0 && <><H2>Les plus longues du mois</H2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{longest.map(x => <Item key={x.id} img={printImg(x.id)} size={44}
+        dot={okOf(x) ? "#22c55e" : "#ef4444"} title={x.file_name || x.translated_name} sub={[fmtH(x.duration_seconds || x.estimated_seconds), fmtG(x.total_weight_g), fmtEur(x.total_cost)].join(" · ")}/>)}</div></>}
+  </>;
 }
-// objets et ventes : un anneau vendus / a vendre, le chiffre et la marge
+// objets et ventes : un anneau vendus / a vendre, le chiffre et la marge ; ce mois-ci, les recettes sur douze mois
+const SALE_C = "#EC4899";
+const monthShort = ym => new Date(`${ym}-15T12:00:00`).toLocaleDateString("fr-FR", { month: "short" }).replace(".", "");
 function Sales({ v, o, sz }) {
   if (!v || !v.total) return null;
-  const share = (v.sold || 0) / Math.max(1, (v.sold || 0) + (v.available || 0));
-  const sub = [`${v.sold} vendu${v.sold > 1 ? "s" : ""}`, o.revenue && `${Math.round(v.revenue || 0)} €`,
+  const share = (v.total_sold ?? v.sold ?? 0) / Math.max(1, (v.total_sold ?? v.sold ?? 0) + (v.available || 0));
+  const sold = v.total_sold ?? v.sold;
+  const sub = [`${sold} vendu${sold > 1 ? "s" : ""}`, o.revenue && `${Math.round(v.revenue || 0)} €`,
     o.margin && `marge ${Math.round(v.margin || 0)} €${v.margin_pct ? ` (${Math.round(v.margin_pct)} %)` : ""}`].filter(Boolean).join(" · ");
-  const hero = <Hero visual={o.ring ? s => <Ring value={share} size={s} color="#EC4899" cap="vendus">{v.sold}</Ring> : null} value={v.available} unit="à vendre" sub={sub}/>;
-  const split = <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-    <div style={{ display: "flex", height: 10, borderRadius: 6, overflow: "hidden", background: "var(--surface2)" }}>
-      <span style={{ width: `${share * 100}%`, background: "linear-gradient(90deg, #f472b6, #ec4899)" }}/></div>
-    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
-      <span style={{ whiteSpace: "nowrap" }}><b style={{ color: "#db2777" }}>{Math.round(share * 100)} %</b> vendus</span>
-      <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginLeft: 8 }}>{v.total} objets</span></div></div>;
+  const hero = <Hero visual={o.ring ? s => <Ring value={share} size={s} color={SALE_C} cap="vendus">{sold}</Ring> : null} value={v.available} unit="à vendre" sub={sub}/>;
+  const tm = v.this_month;
+  const monthLine = tm && <div data-pk="" style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+    {new Date().toLocaleDateString("fr-FR", { month: "long" })} : {tm.count ? <><b style={{ color: SALE_C }}>{tm.count} vente{tm.count > 1 ? "s" : ""}</b> · {fmtEur(tm.revenue)} · marge {fmtEur(tm.margin)}</> : "aucune vente pour l'instant"}</div>;
+  const months = v.by_month || [];
+  const chart = h => months.some(x => x.revenue) && <Bars values={months.map(x => x.revenue)} color={SALE_C} height={h} hi={months.length - 1}
+    labels={h >= 50 ? months.map((x, k) => k % 2 === months.length % 2 ? monthShort(x.month) : "") : null}
+    titles={months.map(x => `${monthShort(x.month)} : ${x.count} vente${x.count > 1 ? "s" : ""} · ${fmtEur(x.revenue)}`)}/>;
   return (
-    <Tile icon={<ShoppingBag size={15}/>} color="#EC4899" label="Objets et ventes" to="/objects"
-      mini={sz.h === 0.5} summary={<>{v.available}<span style={{ fontSize: 12, color: "var(--muted)" }}>à vendre · {v.sold} vendus</span></>}
-      zoom={<>{hero}<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 8 }}>
-        {[["Objets", v.total], ["À vendre", v.available], ["Vendus", v.sold], ["Chiffre d'affaires", fmtEur(v.revenue)], ["Marge", fmtEur(v.margin)],
-          ["Coût du stock", fmtEur(v.stock_cost)], ["Valeur du stock", fmtEur(v.potential_value)]].map(([l, x]) => <div key={l} className="card-sm" style={{ padding: 10 }}>
-          <Muted>{l}</Muted><div style={{ fontSize: 18, fontWeight: 900, color: "var(--text)" }}>{x ?? "—"}</div></div>)}</div></>}>
+    <Tile icon={<ShoppingBag size={15}/>} color={SALE_C} label="Objets et ventes" to="/objects"
+      mini={sz.h === 0.5} summary={<>{v.available}<span style={{ fontSize: 12, color: "var(--muted)" }}>à vendre · {sold} vendus</span></>}
+      zoom={<SalesZoom v={v} hero={hero}/>}>
       {({ W, H }) => {
-        // haute : les chiffres en cases sous l'anneau
+        // haute : le mois, les recettes sur douze mois, les chiffres en cases
         const items = [o.revenue && ["Chiffre d'affaires", fmtEur(v.revenue)], o.margin && ["Marge", fmtEur(v.margin)],
           o.potential && ["Valeur du stock", fmtEur(v.potential_value)]].filter(Boolean);
-        if (H >= 190) return <Stack min={W < 215 ? 150 : 96} head={hero} blocks={[{ h: statsH(items.length, W), node: <Stats items={items}/> },
-          { h: 34, node: split }]}/>;
-        return <>
-          <BoxCtx.Provider value={{ W, H: o.potential && H >= 120 ? H - 22 : H }}>{hero}</BoxCtx.Provider>
-          {o.potential && H >= 120 && <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            En stock : {fmtEur(v.potential_value)} de valeur</div>}</>;
+        const showMonth = o.month !== false && tm && H >= 110;
+        const ch = o.chart !== false && months.some(x => x.revenue) ? Math.min(140, H - 120 - (showMonth ? 22 : 0) - (H >= 260 ? statsH(items.length, W) + 8 : 0)) : 0;
+        return <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, minHeight: 0 }}>
+          <BoxCtx.Provider value={{ W, H: Math.min(H - (showMonth ? 22 : 0) - (ch >= 30 ? ch + 8 : 0) - (H >= 260 ? statsH(items.length, W) + 8 : 0), 96) }}>{hero}</BoxCtx.Provider>
+          {showMonth && monthLine}
+          {ch >= 30 && <div style={{ marginTop: "auto" }}>{chart(ch)}</div>}
+          {H >= 260 && items.length > 0 && <Stats items={items}/>}
+        </div>;
       }}
     </Tile>
   );
+}
+// la fenetre des ventes : l'inventaire, les ventes dans le temps, les meilleures, les dernieres, les accessoires
+function SalesZoom({ v, hero }) {
+  const { W } = useBox();
+  const [metric, setMetric] = useState("revenue");
+  const nav = useNavigate();
+  const months = v.by_month || [];
+  const card = (l, x, color = "var(--text)") => <div key={l} className="card-sm" style={{ padding: 10 }}><Muted>{l}</Muted>
+    <div style={{ fontSize: 18, fontWeight: 900, color, whiteSpace: "nowrap" }}>{x ?? "—"}</div></div>;
+  const chip = on => ({ height: 28, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12, border: "1px solid var(--border)",
+    background: on ? SALE_C : "var(--surface2)", color: on ? "#fff" : "var(--text2)", whiteSpace: "nowrap" });
+  const fm = metric === "count" ? (x => String(x || 0)) : (x => `${Math.round(x || 0)} €`);
+  const split = (v.state_split || []).filter(x => x.value > 0);
+  const SPLIT_C = { "À vendre": SALE_C, "Vendus": "#22c55e", "Offerts": "#f59e0b", "Perso": "#6366f1", "Indisponibles": "#94a3b8" };
+  const tot = split.reduce((t, x) => t + x.value, 0) || 1;
+  const objRow = (x, right, sub) => <div key={x.id} onClick={e => { e.stopPropagation(); nav(`/objects?id=${x.id}`); }} style={{ display: "flex", alignItems: "center", gap: 10,
+    padding: 6, borderRadius: 11, background: "var(--surface2)", cursor: "pointer", minWidth: 0 }}>
+    <img src={apiUrl(`/objects/objects/${x.id}/image`)} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+      style={{ width: 40, height: 40, borderRadius: 9, objectFit: "cover", flexShrink: 0, background: "var(--surface)" }}/>
+    <div style={{ flex: 1, minWidth: 0 }}><div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</div>
+      {sub && <Muted size={11.5}>{sub}</Muted>}</div>{right}</div>;
+  return <>
+    {hero}
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8 }}>
+      {card("Objets", v.total)}{card("À vendre", v.available, SALE_C)}{card("Vendus", v.total_sold ?? v.sold, "#16a34a")}
+      {card("Chiffre d'affaires", fmtEur(v.revenue))}{card("Marge", `${fmtEur(v.margin)}${v.margin_pct ? ` · ${Math.round(v.margin_pct)} %` : ""}`, v.margin >= 0 ? "#16a34a" : "#dc2626")}
+      {card("Coût du stock", fmtEur(v.stock_cost))}{card("Valeur du stock", fmtEur(v.potential_value))}{card("Coût moyen d'un objet", fmtEur(v.avg_cost))}
+      {v.gifted > 0 && card(`Offerts (${v.gifted})`, fmtEur(v.cost_gifted), "#d97706")}{v.personal > 0 && card(`Gardés (${v.personal})`, fmtEur(v.cost_personal), "#6366f1")}
+    </div>
+    {split.length > 0 && <><H2>Où en sont les objets</H2>
+      <div style={{ display: "flex", height: 14, borderRadius: 8, overflow: "hidden" }}>{split.map(x => <span key={x.name} title={`${x.name} : ${x.value}`}
+        style={{ width: `${x.value / tot * 100}%`, background: SPLIT_C[x.name] || "#94a3b8" }}/>)}</div>
+      <div style={{ display: "flex", gap: 12, flexWrap: "wrap", fontSize: 12, fontWeight: 700, color: "var(--text2)" }}>{split.map(x => <span key={x.name}
+        style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><span style={{ width: 10, height: 10, borderRadius: 3, background: SPLIT_C[x.name] || "#94a3b8" }}/>{x.name} <b>{x.value}</b></span>)}</div></>}
+    {months.length > 0 && <><H2>Ventes sur douze mois</H2>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{[["revenue", "Recettes"], ["margin", "Marge"], ["count", "Nombre"]].map(([k, l]) =>
+        <button key={k} type="button" style={chip(metric === k)} onClick={() => setMetric(k)}>{l}</button>)}</div>
+      <Bars values={months.map(x => Math.max(0, x[metric] || 0))} color={SALE_C} height={zoomChartH(W)} hi={months.length - 1} showValues={W / 12 >= 40} fmt={fm}
+        labels={months.map(x => monthShort(x.month))} titles={months.map(x => `${monthShort(x.month)} : ${x.count} vente${x.count > 1 ? "s" : ""} · ${fmtEur(x.revenue)} · marge ${fmtEur(x.margin)}`)}/></>}
+    {v.recent_sales?.length > 0 && <><H2>Dernières ventes</H2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{v.recent_sales.map(x => objRow(x,
+        <div style={{ textAlign: "right", flexShrink: 0 }}><b style={{ fontSize: 13.5, color: "var(--text)" }}>{fmtEur(x.price)}</b>
+          <div style={{ fontSize: 11, fontWeight: 800, color: x.margin >= 0 ? "#16a34a" : "#dc2626" }}>{x.margin >= 0 ? "+" : ""}{fmtEur(x.margin)}</div></div>,
+        new Date(x.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })))}</div></>}
+    {v.top_margin?.length > 0 && <><H2>Les meilleures marges</H2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{v.top_margin.map(x => objRow(x,
+        <b style={{ fontSize: 13.5, color: "#16a34a", flexShrink: 0 }}>+{fmtEur(x.margin)}</b>, `vendu ${fmtEur(x.sold_price)}`))}</div></>}
+    {v.top_margin_pct?.length > 0 && <><H2>Les meilleurs rendements</H2>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{v.top_margin_pct.map(x => objRow(x,
+        <b style={{ fontSize: 13.5, color: "#16a34a", flexShrink: 0 }}>{Math.round(x.margin_pct)} %</b>, `coût ${fmtEur(x.cost)} · vendu ${fmtEur(x.sold_price)}`))}</div></>}
+    {v.accessories?.count > 0 && <><H2>Accessoires</H2>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8 }}>
+        {card("En stock", `${v.accessories.stock_units} · ${fmtEur(v.accessories.stock_value)}`)}{card("Utilisés", `${v.accessories.used_units} · ${fmtEur(v.accessories.used_value)}`)}
+        {v.accessories.out_of_stock > 0 && card("En rupture", v.accessories.out_of_stock, "#dc2626")}</div>
+      {v.accessories.out_of_stock_names?.length > 0 && <Muted size={12}>À racheter : {v.accessories.out_of_stock_names.join(", ")}</Muted>}</>}
+  </>;
 }
 // le fil : autant de lignes que la hauteur en tient ; en grand, tout le fil du jour
 const FEED_SECTIONS = { all: null, prints: ["prints", "printer"], spools: ["spools", "dry"], mw: ["mw"], friends: ["friends"] };
@@ -2889,9 +2984,10 @@ export const TILES = {
       { hint: "Thermomètres : une carte par source, sa couleur suit la chaleur, la consigne marquée sur la barre. Tout passe en lignes quand ce serait trop petit." }),
       B("targets", "Consignes", true), B("chamber", "Chambre", true)] },
   month: { label: "Ce mois-ci", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Month v={d.month} o={o} sz={sz(it)}/>,
-    options: [B("compare", "Comparer au mois dernier", true), B("cost", "Coût", true), B("chart", "Barres par jour", true, { hint: "Quand la tuile a la place." })] },
+    options: [B("ring", "Anneau de réussite", true), B("compare", "Comparer au mois dernier", true), B("cost", "Coût", true), B("chart", "Barres par jour", true, { hint: "Quand la tuile a la place." })] },
   sales: { label: "Objets et ventes", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Sales v={d.sales} o={o} sz={sz(it)}/>,
     options: [B("ring", "Anneau vendus / à vendre", true), B("revenue", "Chiffre d'affaires", true), B("margin", "Marge", true),
+      B("month", "Les ventes du mois", true, { hint: "Quand la tuile a la place." }), B("chart", "Recettes sur douze mois", true, { hint: "Quand la tuile a la place." }),
       B("potential", "Valeur du stock", true, { hint: "Quand la tuile a la place." })] },
   feed: { label: "Le fil du jour", w: [2, 1], h: [2, 3, 1], render: (d, st, o, it) => <Feed f={d.feed} o={o} sz={sz(it)}/>,
     options: [C("count", "Lignes", "auto", [["auto", "selon la hauteur"], [4, "4 au plus"], [6, "6 au plus"], [10, "10 au plus"]]),

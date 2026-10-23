@@ -1215,11 +1215,15 @@ async def prints_kpis(
 ):
     async with AsyncSessionLocal() as db:
         from sqlalchemy import or_ as _or
+        from sqlalchemy import case as _case
         q = select(
             func.count(Print.id).label("count"),
             func.sum(_PRINT_DURATION).label("duration"),
             func.sum(func.coalesce(Print.total_weight_g, 0)).label("weight"),
             func.sum(func.coalesce(Print.total_cost, 0)).label("cost"),
+            # reussies (dont en partie) et ratees : le taux de reussite d'une periode
+            func.sum(_case((Print.status.in_(("SUCCESS", "PARTIAL")), 1), else_=0)).label("ok"),
+            func.sum(_case((Print.status.in_(("FAILED", "CANCELLED", "TO_REDO")), 1), else_=0)).label("ko"),
         ).where(Print.status != "IN_PROGRESS")
         if status:   q = q.where(Print.status == status)
         if group_id: q = q.where(Print.group_id == group_id)
@@ -1231,7 +1235,8 @@ async def prints_kpis(
             q = q.where(c)
         r = (await db.execute(q)).one()
         return {"count": r.count or 0, "duration": int(r.duration or 0),
-                "weight_g": float(r.weight or 0), "cost": round(float(r.cost or 0), 2)}
+                "weight_g": float(r.weight or 0), "cost": round(float(r.cost or 0), 2),
+                "ok": int(r.ok or 0), "failed": int(r.ko or 0)}
 
 @router.get("/kpis/daily")
 async def prints_kpis_daily(
