@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useFriend } from "../store/friend";
 import { stageLabel } from "../utils/printStage";
 import { QUEUE_SORTS, sortQueue } from "../utils/queueSort";
 import { createPortal } from "react-dom";
@@ -1218,62 +1219,129 @@ function Humidity({ status, o, sz }) {
   );
 }
 // les copains : qui imprime (vignette, avancement), autant que la place en tient
+const FR_C = "#14B8A6";
+const FR_STATE = { standby: ["au repos", "#22c55e"], off: ["éteinte", "#94a3b8"], unreachable: ["injoignable", "#ef4444"], printing: ["imprime", FR_C] };
+const frPct = x => Math.round(x.progress || 0);
+const frEnd = x => (x.remaining_minutes > 0 ? finAt(x.remaining_minutes) : null);
+// l'initiale du copain, quand son impression n'a pas de vignette
+const FrAvatar = ({ name, size }) => <span style={{ width: size, height: size, borderRadius: "50%", background: FR_C, color: "#fff", fontSize: size * 0.42,
+  fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{(name || "?").slice(0, 1).toUpperCase()}</span>;
+// une affiche par copain qui imprime : son plateau en grand, son nom, l'avancement et l'heure de fin
+// par-dessus, un liseré d'avancement en bas
+function FrPoster({ x, thumbs, h }) {
+  const small = h < 110, img = thumbs && x.print?.image, end = frEnd(x);
+  return <div title={x.print?.name || x.print_name} style={{ position: "relative", height: h, borderRadius: 14, overflow: "hidden", minWidth: 0,
+    background: `radial-gradient(circle at 50% 38%, ${FR_C}2e, transparent 70%), var(--surface2)`, border: "1px solid var(--border)" }}>
+    {img ? <img data-pk="" src={x.print.image} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+      style={{ position: "absolute", inset: "6% 8% 30%", width: "84%", height: "64%", objectFit: "contain" }}/>
+      : <div style={{ position: "absolute", inset: "0 0 28%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <FrAvatar name={x.name} size={Math.min(56, h * 0.36)}/></div>}
+    {end && !small && <span data-pk="" style={{ position: "absolute", top: 6, right: 6, fontSize: 10.5, fontWeight: 800, color: "#fff", padding: "1px 7px",
+      borderRadius: 10, background: "rgba(15,23,42,0.55)", backdropFilter: "blur(4px)" }}>fin {end}</span>}
+    <div style={{ position: "absolute", left: 0, right: 0, bottom: 4, padding: small ? "10px 8px 3px" : "18px 10px 5px", display: "flex", alignItems: "flex-end", gap: 6,
+      background: "linear-gradient(to top, var(--surface) 35%, transparent)" }}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div data-pk="" style={{ fontSize: small ? 11.5 : 13, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</div>
+        {!small && <div style={{ fontSize: 10.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <W text={x.print?.name || x.print_name || "imprime"}/></div>}
+      </div>
+      <span data-pk="" style={{ fontSize: small ? 14 : 18, fontWeight: 900, color: FR_C, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{frPct(x)}%</span>
+    </div>
+    <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: 4, background: "var(--border)" }}>
+      <div data-pk="" style={{ height: "100%", width: `${frPct(x)}%`, background: FR_C, boxShadow: `0 0 6px ${FR_C}99`, transition: "width 1s" }}/></div>
+  </div>;
+}
+// les autres copains : une pastille nommee chacun, a la couleur de leur etat
+const FrIdle = ({ list, wrap = false }) => <div style={{ display: "flex", gap: 5, flexWrap: wrap ? "wrap" : "nowrap", overflow: "hidden", minWidth: 0 }}>
+  {list.map(([id, s]) => { const [l, c] = FR_STATE[s.state] || FR_STATE.off;
+    return <span key={id} title={`${s.name || "Copain"} : ${l}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, fontWeight: 700, padding: "1px 8px",
+      borderRadius: 10, background: "var(--surface2)", color: "var(--text2)", whiteSpace: "nowrap", flexShrink: 0 }}>
+      <span style={{ width: 6, height: 6, borderRadius: "50%", background: c }}/>{s.name || "Copain"}{wrap && <span style={{ color: "var(--muted)", fontWeight: 600 }}>· {l}</span>}</span>; })}</div>;
+// la fenetre : une grande carte par copain qui imprime, puis l'etat des autres
+function FriendsZoom({ p, states, thumbs }) {
+  const visit = useFriend(s => s.visit);
+  const others = Object.entries(states).filter(([, s]) => s.state !== "printing");
+  const go = (id, s) => <button type="button" onClick={e => { e.stopPropagation(); visit({ id, name: s?.name, role: s?.role }); }}
+    style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 11px", borderRadius: 10, border: "none", background: FR_C, color: "#fff",
+      fontSize: 12, fontWeight: 800, cursor: "pointer", whiteSpace: "nowrap" }}>Aller chez {s?.name || "lui"}<ArrowUpRight size={13}/></button>;
+  return <>
+    <Stats items={[["Impriment", p.length, "#0d9488"], ["Au repos", others.filter(([, s]) => s.state === "standby").length],
+      ["Éteintes", others.filter(([, s]) => s.state === "off").length], others.some(([, s]) => s.state === "unreachable") ? ["Injoignables", others.filter(([, s]) => s.state === "unreachable").length, "#dc2626"] : null]}/>
+    {p.length ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(min(340px, 100%), 1fr))", gap: 10 }}>
+      {p.map(x => { const end = frEnd(x);
+        return <div key={x.id} style={{ display: "flex", gap: 12, padding: 12, borderRadius: 16, minWidth: 0,
+          background: `linear-gradient(135deg, ${FR_C}1c, transparent 60%), var(--surface2)`, border: `1px solid ${FR_C}40` }}>
+          <div style={{ width: 104, height: 104, borderRadius: 12, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            background: `radial-gradient(circle, ${FR_C}2e, transparent 70%), var(--surface)` }}>
+            {thumbs && x.print?.image ? <img src={x.print.image} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+              style={{ width: "88%", height: "88%", objectFit: "contain" }}/> : <FrAvatar name={x.name} size={52}/>}</div>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <b style={{ flex: 1, minWidth: 0, fontSize: 15, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</b>
+              <span style={{ fontSize: 22, fontWeight: 900, color: FR_C, fontVariantNumeric: "tabular-nums", lineHeight: 1 }}>{frPct(x)}%</span></div>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", ...clamp(2) }}><W text={x.print?.name || x.print_name || "imprime"}/></div>
+            <div style={{ height: 6, borderRadius: 6, background: "var(--border)", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${frPct(x)}%`, background: FR_C }}/></div>
+            <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{[x.remaining_minutes > 0 && `reste ${fmtDur(x.remaining_minutes * 60)}`, end && `fin ${end}`,
+              x.total_layers > 0 && `couche ${x.layer || 0}/${x.total_layers}`].filter(Boolean).join(" · ")}</div>
+            <div style={{ marginTop: "auto" }}>{go(x.id, states[x.id] || { name: x.name })}</div>
+          </div>
+        </div>; })}</div> : <Line>Personne n'imprime en ce moment.</Line>}
+    {others.length > 0 && <><H2>Les autres</H2><FrIdle list={others} wrap/></>}
+  </>;
+}
 function Friends({ f, o, sz }) {
   const p = f?.printing || [];
   const states = f?.states || {};
   const n = Object.keys(states).length;
   if (!f || !n) return null;
-  const row = (x, big) => (
-    <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 8, height: big ? 48 : 36 }}>
+  const others = Object.entries(states).filter(([, s]) => s.state !== "printing");
+  // tres petit : une ligne par copain (vignette, nom, avancement)
+  const row = x => (
+    <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 8, height: 36 }}>
       {o.thumbs && x.print?.image ? <img data-pk="" src={x.print.image} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
-        style={{ width: big ? 44 : 32, height: big ? 44 : 32, borderRadius: 8, objectFit: "cover", flexShrink: 0, background: "var(--surface2)" }}/>
-        : <span data-pk="" style={{ width: big ? 40 : 28, height: big ? 40 : 28, borderRadius: "50%", background: "#14B8A6", color: "#fff", fontSize: 12, fontWeight: 900,
-          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{(x.name || "?").slice(0, 1).toUpperCase()}</span>}
+        style={{ width: 32, height: 32, borderRadius: 8, objectFit: "contain", flexShrink: 0, background: "var(--surface2)" }}/> : <FrAvatar name={x.name} size={28}/>}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
           <b data-pk="" style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</b>
-          <span data-pk="" style={{ fontSize: 11.5, fontWeight: 800, color: "#0d9488" }}>{Math.round(x.progress || 0)} %</span></div>
+          <span data-pk="" style={{ fontSize: 11.5, fontWeight: 800, color: "#0d9488" }}>{frPct(x)} %</span></div>
         <div style={{ height: 4, borderRadius: 4, background: "var(--surface2)", overflow: "hidden", margin: "2px 0" }}>
-          <div data-pk="" style={{ height: "100%", width: `${Math.round(x.progress || 0)}%`, background: "#14B8A6" }}/></div>
-        <div style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}><W text={x.print?.name || x.print_name || "imprime"}/></div>
+          <div data-pk="" style={{ height: "100%", width: `${frPct(x)}%`, background: FR_C }}/></div>
       </div>
     </div>
   );
-  // avec de la place : une grande ligne par copain, l'avancement en anneau
-  const ringRow = (x, size) => (
-    <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-      <Ring value={(x.progress || 0) / 100} size={size} color="#14B8A6">{Math.round(x.progress || 0)}%</Ring>
-      {o.thumbs && x.print?.image && <img data-pk="" src={x.print.image} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
-        style={{ width: size, height: size, borderRadius: 10, objectFit: "cover", flexShrink: 0 }}/>}
-      <div style={{ minWidth: 0 }}>
-        <div data-pk="" style={{ fontSize: 14, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</div>
-        <div style={{ fontSize: 11.5, color: "var(--muted)", ...clamp(2) }}><W text={x.print?.name || x.print_name || "imprime"}/></div></div>
-    </div>);
-  const idle = o.idle && Object.values(states).some(s => s.state !== "printing") && (
-    <div style={{ fontSize: 11.5, color: "var(--muted)" }}>
-      {Object.values(states).filter(s => s.state === "standby").length} au repos · {Object.values(states).filter(s => s.state === "off").length} éteinte(s)</div>);
   return (
-    <Tile icon={<Users size={15}/>} color="#14B8A6" label="Copains" to="/stats?tab=friends" badge={<span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488" }}>{p.length}/{n}</span>}
+    <Tile icon={<Users size={15}/>} color={FR_C} label="Copains" to="/stats?tab=friends" badge={<span style={{ fontSize: 11, fontWeight: 800, color: "#0d9488" }}>{p.length}/{n}</span>}
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 13 }}>{p.length ? `${p.map(x => x.name).join(", ")} imprime${p.length > 1 ? "nt" : ""}` : "personne n'imprime"}</span>}
-      zoom={<><Stats items={[["Impriment", p.length, "#0d9488"], ["Au repos", Object.values(states).filter(s => s.state === "standby").length],
-        ["Éteintes", Object.values(states).filter(s => s.state === "off").length]]}/>
-        {p.length ? p.map(x => <div key={x.id} style={{ padding: "10px 12px", borderRadius: 16, background: "linear-gradient(135deg, rgba(20,184,166,0.1), transparent 60%), var(--surface2)" }}>
-          {ringRow(x, 64)}</div>) : <Line>Personne n'imprime en ce moment.</Line>}</>}>
+      zoom={<FriendsZoom p={p} states={states} thumbs={o.thumbs}/>}>
       {({ W: bw, H }) => {
-        const room = H - (idle && H >= 90 ? 22 : 0), each = (room - 8 * (p.length - 1)) / Math.max(1, p.length);
-        // large et bas : les copains cote a cote, un anneau chacun, le nom dessous
-        if (p.length > 1 && !o.scroll && bw >= 240 && H < 110) {
-          const g = fitGrid(p.length, bw, H, { extra: 16, gap: 8, max: 64 });
-          if (g.rows === 1 && g.size >= 34) return <div style={{ flex: 1, display: "flex", justifyContent: "space-evenly", alignItems: "center" }}>
-            {p.map(x => <div key={x.id} title={x.print?.name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 0 }}>
-              <Ring value={(x.progress || 0) / 100} size={g.size} color="#14B8A6">{Math.round(x.progress || 0)}%</Ring>
-              <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text)", maxWidth: g.size + 30, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</span></div>)}</div>;
+        const strip = o.idle && others.length > 0 && H >= 96 ? 26 : 0;
+        const room = H - strip;
+        if (!p.length) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>
+          <Empty>Personne n'imprime en ce moment</Empty>{o.idle && others.length > 0 && <FrIdle list={others} wrap={H >= 90}/>}</div>;
+        // les affiches, autant que la place en tient (une grille qui remplit la tuile)
+        const g = fitGrid(p.length, bw, room, { gap: 8, ar: 0.95, max: 260 });
+        if (!o.scroll && g.size >= 80) {
+          const rowH = Math.floor((room - 8 * (g.rows - 1)) / g.rows);
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, minHeight: 0 }}>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, minmax(0, 1fr))`, gap: 8 }}>
+              {p.map(x => <FrPoster key={x.id} x={x} thumbs={o.thumbs} h={rowH}/>)}</div>
+            {strip > 0 && <FrIdle list={others}/>}</div>;
         }
-        if (p.length && !o.scroll && each >= 52) return <><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          {p.map(x => ringRow(x, Math.min(64, Math.floor(each))))}</div>{H >= 90 && <div style={{ marginTop: "auto" }}>{idle}</div>}</>;
-        return !p.length ? <><Empty>Personne n'imprime en ce moment</Empty>{H >= 80 && idle}</> : o.scroll ? <><Scroller gap={4}>{p.map(x => row(x))}</Scroller>{H >= 90 && idle}</> : <>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{p.slice(0, fitRows(H - (idle && H >= 90 ? 18 : 0), 36, 4)).map(x => row(x))}</div>
-        {H >= 90 && <div style={{ marginTop: "auto" }}>{idle}</div>}</>;
+        // bas : un anneau d'avancement par copain, son plateau au centre, son nom et son pourcentage dessous
+        const r = fitGrid(p.length, bw, room, { gap: 10, extra: 18, max: 96 });
+        if (!o.scroll && r.size >= 40) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, minHeight: 0 }}>
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${r.cols}, minmax(0, 1fr))`, gap: 10, justifyItems: "center" }}>
+            {p.map(x => <div key={x.id} title={x.print?.name || x.print_name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 0, maxWidth: "100%" }}>
+              <Ring value={frPct(x) / 100} size={r.size} color={FR_C}>
+                {o.thumbs && x.print?.image ? <img data-pk="" src={x.print.image} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
+                  style={{ width: r.size * 0.6, height: r.size * 0.6, objectFit: "contain", display: "block" }}/> : `${frPct(x)}%`}</Ring>
+              <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {x.name}{o.thumbs && x.print?.image && <span style={{ color: FR_C }}> · {frPct(x)}%</span>}</span></div>)}</div>
+          {strip > 0 && <FrIdle list={others}/>}</div>;
+        return o.scroll ? <><Scroller gap={4}>{p.map(row)}</Scroller>{strip > 0 && <FrIdle list={others}/>}</> : <>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{p.slice(0, fitRows(room, 36, 4)).map(row)}</div>
+          {strip > 0 && <div style={{ marginTop: "auto" }}><FrIdle list={others}/></div>}</>;
       }}
     </Tile>
   );

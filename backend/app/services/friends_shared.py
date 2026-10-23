@@ -149,9 +149,9 @@ async def printing() -> dict:
         try:
             st = await _ask(f, "printer/status")
         except Exception:
-            states[f["id"]] = {"state": "unreachable"}
+            states[f["id"]] = {"state": "unreachable", "name": f.get("name"), "role": f.get("role")}
             return None
-        states[f["id"]] = {"state": printer_state(st), "progress": st.get("progress")}
+        states[f["id"]] = {"state": printer_state(st), "progress": st.get("progress"), "name": f.get("name"), "role": f.get("role")}
         try:
             if states[f["id"]]["state"] != "printing":
                 return None
