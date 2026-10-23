@@ -670,7 +670,8 @@ function spentIn(items) {
 // Pages cachees et farces deja gagnees : un bouton pour y retourner
 const PLACE_OF = id => id === "egg_anonymous" ? ["/anonymous", "page"] : id === "egg_teapot" ? ["/teapot", "page"]
   : id.startsWith("egg_h_") ? ["/" + id.slice(6).replace(/_/g, "-"), "page"]
-  : id.startsWith("egg_p_") ? ["/" + id.slice(6).replace(/_/g, "-"), "farce"] : null;
+  : id.startsWith("egg_p_") ? ["/" + id.slice(6).replace(/_/g, "-"), "farce"]
+  : id === "egg_merci_don" ? ["/don", "farce"] : null;
 
 function SecretPlace({ it }) {
   const nav = useNavigate();
