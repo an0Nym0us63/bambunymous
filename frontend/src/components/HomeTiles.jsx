@@ -10,6 +10,7 @@ import LiveCamera from "./LiveCamera";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "../pages/Achievements";
 import { DryCard } from "./AMSSection";
 import SpoolSVG from "./SpoolSVG";
+import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
 // Les tuiles de l'accueil (22/10/2026, refaites le meme jour). Chaque tuile :
 //  - connait sa place reelle (largeur et hauteur en pixels, mesurees) et s'agence
@@ -233,7 +234,7 @@ function fitList(list, row, W, H) {
     {row(list[0], first)}{H - first >= 40 && list.slice(1, 1 + rest).map(x => row(x, 34))}</div>;
 }
 // une rangee d'element de liste : vignette, titre, sous-titre, a droite une valeur
-function Item({ img, dot, title, sub, right, size = 36, onClick, color, card = false }) {
+function Item({ img, dot, title, sub, right, size = 36, onClick, color, card = false, corner }) {
   if (card) return (
     <div onClick={onClick ? e => { e.stopPropagation(); onClick(); } : undefined}
       style={{ height: size, display: "flex", flexDirection: "column", gap: 3, minWidth: 0, cursor: onClick ? "pointer" : undefined }}>
@@ -258,6 +259,7 @@ function Item({ img, dot, title, sub, right, size = 36, onClick, color, card = f
             display: "block" }}/>}
         {dot && <span style={{ position: "absolute", right: -3, bottom: -3, width: 12, height: 12, borderRadius: "50%",
           border: "2px solid var(--surface)", background: dot }}/>}
+        {corner && <span style={{ position: "absolute", left: -3, top: -3 }}>{corner}</span>}
       </span>}
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: size >= 44 ? 13.5 : 12.5, fontWeight: 800, color: "var(--text)", lineHeight: 1.25,
@@ -700,28 +702,86 @@ function Week({ o, sz }) {
     </Tile>
   );
 }
-// a faire : autant de modeles que la place en tient (le premier en grand s'il y a la place)
-const queueSub = (m, o) => <>{m.status === "ready" ? <span style={{ color: "#16a34a", fontWeight: 800 }}>● prêt</span> : <span>○ à préparer</span>}
-  {m.seconds ? ` · ${fmtDur(m.seconds)}` : ""}{o.weight && m.weight_g ? ` · ${fmtG(m.weight_g)}` : ""}</>;
+// a faire : autant de modeles que la place en tient (le premier en grand s'il y a la place).
+// Les etats sont ceux de la page « A faire » (ams, partial, stock, short) ; un clic ouvre la
+// fenetre, le petit bouton de chaque modele ouvre directement sa fiche.
+const QSTATE = {
+  ams: ["prêt (AMS)", "#16a34a", "●"], partial: ["en partie prêt", "#16a34a", "◐"], stock: ["à charger", "#d97706", "○"],
+  short: ["filament manquant", "#dc2626", "✕"], unknown: ["inconnu", "var(--muted)", "?"],
+};
+const qState = m => QSTATE[m.status] || QSTATE.unknown;
+const canGo = m => m.status === "ams" || m.status === "partial";
+const queueSub = (m, o) => { const [l, c, ic] = qState(m);
+  return <><span style={{ color: c, fontWeight: 800 }}>{ic} {m.printing ? `en cours${m.progress != null ? ` · ${m.progress} %` : ""}` : l}</span>
+    {m.seconds ? ` · ${fmtDur(m.seconds)}` : ""}{o.weight && m.weight_g ? ` · ${fmtG(m.weight_g)}` : ""}</>; };
+// les filaments d'un modele : une pastille par couleur, cerclee selon ce qu'on a (vert AMS, orange stock, rouge rien)
+const FilaDots = ({ list, size = 14 }) => <span style={{ display: "inline-flex", gap: 3, flexWrap: "wrap" }}>
+  {(list || []).map((f, i) => <span key={i} title={`${f.type} ${Math.round(f.g)} g → ${f.chosen ? f.chosen.name + (f.chosen.in_ams ? " (AMS)" : "") : "rien en stock"}`}
+    style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, background: hexCss(f.chosen?.color || f.color),
+      border: `2px solid ${!f.chosen ? "#ef4444" : f.chosen.enough_ams ? "#22c55e" : f.chosen.enough_stock ? "#f59e0b" : "#ef4444"}` }}/>)}</span>;
 function Next({ q, o, sz }) {
-  const nav = useNavigate();
-  const models = (q?.models || []).filter(m => !o.ready || m.status === "ready");
-  const ready = (q?.models || []).filter(m => m.status === "ready").length;
+  const [sheet, setSheet] = useState(null);
+  const narrow = useRef(false);   // etroite : le bouton « fiche » passe en coin de la vignette
+  const all = q?.models || [];
+  const models = all.filter(m => !o.ready || canGo(m));
+  const t = q?.totals || {};
+  const ready = t.ams ?? all.filter(m => m.status === "ams").length;
+  const part = t.partial ?? all.filter(m => m.status === "partial").length;
+  const open = m => setSheet({ design_id: m.design_id, title: m.title, title_fr: m.title_fr, cover_url: m.cover_url });
+  // le petit bouton « fiche » : ouvre le modele sans passer par la fenetre
+  const go = (m, s = 26) => <button type="button" aria-label="Ouvrir la fiche" title="Ouvrir la fiche du modèle"
+    onClick={e => { e.stopPropagation(); open(m); }} style={{ width: s, height: s, borderRadius: s / 3.2, border: "1px solid var(--border)", flexShrink: 0,
+      background: "var(--surface)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+    <ArrowUpRight size={s >= 26 ? 14 : 12}/></button>;
   const row = (m, size, card) => <Item key={m.design_id} img={o.thumbs || card ? (m.cover_url ? mwImg(m.cover_url, 320) : null) : undefined} size={size} card={card}
-    title={m.title_fr || m.title} sub={queueSub(m, o)} onClick={() => nav("/prints?tab=queue")}/>;
+    dot={canGo(m) ? "#22c55e" : null} title={m.title_fr || m.title} sub={queueSub(m, o)}
+    right={card || (!narrow.current && size >= 30) ? go(m) : null} corner={!card && narrow.current && o.thumbs ? go(m, 20) : null}/>;
+  // en grand : une carte par modele, tout ce que la page dit de lui
+  const card = m => { const [l, c, ic] = qState(m);
+    return <div key={m.design_id} onClick={() => open(m)} style={{ display: "flex", gap: 12, padding: 10, borderRadius: 16, cursor: "pointer", minWidth: 0,
+      background: `linear-gradient(135deg, ${canGo(m) ? "rgba(34,197,94,0.12)" : "transparent"}, transparent 60%), var(--surface2)`,
+      border: `1px solid ${m.printing ? "#3b82f6" : canGo(m) ? "rgba(34,197,94,0.35)" : "var(--border)"}` }}>
+      {m.cover_url ? <img src={mwImg(m.cover_url, 240)} alt="" style={{ width: 72, height: 72, borderRadius: 12, objectFit: "cover", flexShrink: 0 }}/>
+        : <span style={{ width: 72, height: 72, borderRadius: 12, background: "var(--surface)", flexShrink: 0 }}/>}
+      <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)", ...clamp(2) }}>{m.title_fr || m.title || `Modèle ${m.design_id}`}</div>
+        <div style={{ display: "flex", gap: 5, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 11, fontWeight: 800, color: m.printing ? "#fff" : c, padding: "1px 8px", borderRadius: 10,
+            background: m.printing ? "#3b82f6" : `${c === "var(--muted)" ? "#94a3b8" : c}1f` }}>
+            {m.printing ? `🖨️ en cours${m.progress != null ? ` · ${m.progress} %` : ""}` : `${ic} ${l}`}</span>
+          {m.planned && <span style={{ fontSize: 11, fontWeight: 800, color: "#16a34a" }}>📌 retenu</span>}
+          {(m.qty || 1) > 1 && <span style={{ fontSize: 11, fontWeight: 800, color: "var(--text2)" }}>×{m.qty}</span>}
+          {m.printed > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>déjà imprimé {m.printed}×</span>}
+        </div>
+        <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {[m.profile?.title, m.profile && m.profile.plates_total > 1 && `${m.profile.plates}/${m.profile.plates_total} plateaux`, m.seconds && fmtDur(m.seconds),
+            m.weight_g && fmtG(m.weight_g), m.cost != null && fmtEur(m.cost)].filter(Boolean).join(" · ")}</div>
+        <FilaDots list={m.filaments}/>
+      </div>
+      <ChevronRight size={16} style={{ color: "var(--muted)", alignSelf: "center", flexShrink: 0 }}/>
+    </div>; };
   return (
     <Tile icon={<ListChecks size={15}/>} color="#22C55E" label="À faire" to="/prints?tab=queue"
-      mini={sz.h === 0.5} summary={q ? <>{ready}<span style={{ fontSize: 12, color: "var(--muted)" }}>/ {q.models?.length || 0} prêts</span></> : "…"}
-      badge={q?.models?.length ? <span style={{ fontSize: 11, fontWeight: 800, color: "#16a34a" }}>{ready}/{q.models.length}</span> : null}
+      mini={sz.h === 0.5} summary={q ? <>{ready + part}<span style={{ fontSize: 12, color: "var(--muted)" }}>/ {all.length} prêts</span></> : "…"}
+      badge={all.length ? <span title="prêts avec l'AMS / dans la liste" style={{ fontSize: 11, fontWeight: 800, color: ready + part ? "#16a34a" : "var(--muted)" }}>
+        {ready + part}/{all.length}</span> : null}
       zoom={models.length ? <>
-        <Stats items={[["Modèles", models.length], ["Prêts", ready, "#16a34a"], ["À préparer", models.length - ready, "#d97706"],
-          ["Durée", fmtH(models.reduce((t, m) => t + (m.seconds || 0), 0))]]}/>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{models.map(m => row(m, 56))}</div></> : null}>
-      {({ W, H }) => {
-        if (!models.length) return <Empty>{q === undefined ? "…" : o.ready ? "Rien de prêt dans l'AMS" : "Rien dans « À faire »"}</Empty>;
-        if (o.scroll) return <Scroller>{models.map((m, i) => row(m, i ? 34 : Math.min(52, H)))}</Scroller>;
-        return fitList(models, row, W, H);
-      }}
+        <Stats items={[["Modèles", all.length], ["Prêts (AMS)", ready, "#16a34a"], part ? ["En partie", part, "#16a34a"] : null,
+          t.stock ? ["À charger", t.stock, "#d97706"] : null, t.short ? ["Manque", t.short, "#dc2626"] : null,
+          ["Durée", fmtH(t.seconds ?? all.reduce((a, m) => a + (m.seconds || 0), 0))], ["Poids", fmtG(t.weight_g ?? all.reduce((a, m) => a + (m.weight_g || 0), 0))],
+          t.cost ? ["Coût", fmtEur(t.cost)] : null]}/>
+        {models.some(canGo) && <><H2>Imprimables maintenant</H2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 8 }}>{models.filter(canGo).map(card)}</div></>}
+        {models.some(m => !canGo(m)) && <><H2>À préparer</H2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 8 }}>{models.filter(m => !canGo(m)).map(card)}</div></>}
+      </> : null}>
+      {({ W, H }) => { narrow.current = W < 215; return <>
+        {!models.length ? <Empty>{q === undefined ? "…" : o.ready ? "Rien de prêt dans l'AMS" : "Rien dans « À faire »"}</Empty>
+          : o.scroll ? <Scroller>{models.map((m, i) => row(m, i ? 34 : Math.min(52, H)))}</Scroller> : fitList(models, row, W, H)}
+        {/* la fiche s'ouvre par-dessus ; ses clics et ses touches ne remontent pas jusqu'a la tuile */}
+        {sheet && <span onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+          <MakerWorldModelSheet designId={sheet.design_id} preview={sheet} onClose={() => setSheet(null)}/></span>}
+      </>; }}
     </Tile>
   );
 }
@@ -1937,7 +1997,7 @@ export const TILES = {
     options: [C("range", "Période", 7, [[7, "7 jours"], [14, "14 jours"], [30, "30 jours"]]),
       C("metric", "Compter", "h", [["h", "les heures"], ["n", "les impressions"], ["g", "les grammes"]]), B("avg", "Moyenne par jour", true)] },
   next: { label: "À faire", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Next q={d.queue} o={o} sz={sz(it)}/>,
-    options: [B("thumbs", "Vignettes", true), B("ready", "Seulement ce qui est prêt", false, { hint: "Les modèles dont les bobines sont dans l'AMS." }),
+    options: [B("thumbs", "Vignettes", true), B("ready", "Seulement ce qui est prêt", false, { hint: "Les modèles imprimables tout de suite avec l'AMS (en tout ou en partie)." }),
       B("weight", "Poids", true), SCROLL(false)] },
   last: { label: "Dernières impressions", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Last p={d.prints} o={o} sz={sz(it)}/>,
     options: [B("when", "Depuis quand", true), B("cost", "Coût", false), B("photo", "Rappel « pas de photo »", true), SCROLL(true)] },
