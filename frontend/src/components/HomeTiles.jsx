@@ -2362,7 +2362,15 @@ function headModel(st) {
     return { n, slot: loaded ? slotLabel(a, t) : null, color: loaded ? trayCol(tr) : null, type: loaded ? (tr?.spool_info?.fila_type || tr?.filament_type || "") : "",
       name: loaded ? (tr?.spool_info?.translated_name || tr?.spool_info?.name || "") : "", brand: loaded ? (tr?.spool_info?.brand || "") : "" };
   };
-  return { L: side(1), R: side(0), dual: nz.length > 1 };
+  const live = isLive(st);
+  const L = side(1), R = side(0);
+  // pendant une impression : la buse active imprime ; au repos, elle est seulement selectionnee
+  // (la gauche, baissee) ; l'autre levee (gauche) ou au repos (droite)
+  for (const [x, left] of [[L, true], [R, false]]) if (x) {
+    x.printing = live && x.n.active;
+    x.state = x.printing ? "● imprime" : x.n.active ? (left ? "baissée" : "sélectionnée") : left ? "levée" : "au repos";
+  }
+  return { L, R, dual: nz.length > 1, live };
 }
 export function HeadArt({ st, h = 160 }) {
   const small = h < 110;
@@ -2373,7 +2381,7 @@ export function HeadArt({ st, h = 160 }) {
     return <g key={id}>
       <defs><linearGradient id={`hd-t${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor={c} stopOpacity=".15"/><stop offset=".55" stopColor={c}/></linearGradient></defs>
       <rect x={x - 7} y="0" width="14" height="46" rx="7" fill={`url(#hd-t${id})`} stroke={s?.color ? "rgba(0,0,0,0.15)" : "rgba(148,163,184,0.4)"}/>
-      {s?.n?.active && s?.color && <rect x={x - 2} y="4" width="4" height="38" rx="2" fill="#fff" opacity=".35"
+      {s?.printing && s?.color && <rect x={x - 2} y="4" width="4" height="38" rx="2" fill="#fff" opacity=".35"
         style={{ animation: "bn-feed 1.6s linear infinite" }}/>}
       <rect x={x - 11} y="40" width="22" height="14" rx="4" fill="#cbd5e1" stroke="#64748b"/>
     </g>;
@@ -2384,8 +2392,8 @@ export function HeadArt({ st, h = 160 }) {
     return <g key={id} transform={`translate(0 ${dy})`} style={{ transition: "transform .6s" }} opacity={up ? 0.75 : 1}>
       <rect x={x - 14} y="118" width="28" height="18" rx="4" fill={dark ? "#475569" : "#94a3b8"} stroke="#334155"/>
       <path d={`M${x - 7} 136 H${x + 7} L${x + 3} 150 H${x - 3} Z`} fill={s.n.temp > 40 ? hot : "#64748b"} stroke="#334155" strokeLinejoin="round"
-        style={s.n.active && s.n.temp > 150 ? { filter: `drop-shadow(0 0 5px ${hot})` } : undefined}/>
-      {s.n.active && <rect x={x - 22} y="112" width="44" height="42" rx="8" fill={small ? "rgba(34,197,94,0.18)" : "none"} stroke="#22c55e"
+        style={s.printing && s.n.temp > 150 ? { filter: `drop-shadow(0 0 5px ${hot})` } : undefined}/>
+      {s.printing && <rect x={x - 22} y="112" width="44" height="42" rx="8" fill={small ? "rgba(34,197,94,0.18)" : "none"} stroke="#22c55e"
         strokeWidth={small ? 5 : 2} strokeDasharray={small ? "none" : "4 3"} opacity={small ? 1 : 0.8}/>}
     </g>;
   };
@@ -2398,7 +2406,7 @@ export function HeadArt({ st, h = 160 }) {
     <circle cx="100" cy="88" r="17" fill="#94a3b8" stroke="#475569" strokeWidth="2"/>
     <circle cx="100" cy="88" r="9" fill="#e2e8f0" stroke="#475569" strokeWidth="2"/>
     <circle cx="100" cy="88" r="3" fill="#475569"/>
-    {[["l", 64, L], ["r", 136, R]].map(([k, x, s]) => <rect key={k} x={x - 5} y="80" width="10" height="16" rx="5" fill={s?.n?.active ? "#22c55e" : "#86efac"}
+    {[["l", 64, L], ["r", 136, R]].map(([k, x, s]) => <rect key={k} x={x - 5} y="80" width="10" height="16" rx="5" fill={s?.printing ? "#22c55e" : "#86efac"}
       opacity={s?.n?.active ? 1 : 0.45}/>)}
     {nozzle(70, L, "nl", false, true)}{nozzle(130, R, "nr", true, false)}
   </svg>;
@@ -2406,14 +2414,14 @@ export function HeadArt({ st, h = 160 }) {
 // une buse en carte : cote, temperature et consigne, levee ou en impression, le filament charge
 function HeadSide({ s, label, big = false }) {
   if (!s) return null;
-  const hot = heat(s.n.temp), live = s.n.active;
+  const hot = heat(s.n.temp), live = s.printing;
   return <div style={{ padding: big ? "10px 12px" : "6px 9px", borderRadius: 14, minWidth: 0, display: "flex", flexDirection: "column", gap: big ? 4 : 2,
     background: live ? "linear-gradient(135deg, rgba(34,197,94,0.14), transparent 70%), var(--surface2)" : "var(--surface2)",
     border: `1.5px solid ${live ? "rgba(34,197,94,0.6)" : "transparent"}` }}>
     <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
       <span style={{ fontSize: big ? 13 : 11.5, fontWeight: 900, color: "var(--text2)" }}>{label}</span>
       <span style={{ marginLeft: "auto", fontSize: big ? 11.5 : 10, fontWeight: 800, color: live ? "#16a34a" : "var(--muted)", whiteSpace: "nowrap" }}>
-        {live ? "● imprime" : label.startsWith("G") ? "levée" : "au repos"}</span></div>
+        {s.state}</span></div>
     <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
       <span style={{ fontSize: big ? 22 : 16, fontWeight: 900, color: s.n.temp > 40 ? hot : "var(--text)", lineHeight: 1.05 }}>{Math.round(s.n.temp)}°</span>
       {s.n.target > 0 && <span style={{ fontSize: big ? 11.5 : 10, fontWeight: 800, color: "var(--muted)" }}>/{Math.round(s.n.target)}°</span>}</div>
@@ -2431,7 +2439,7 @@ function Toolhead({ status, sz }) {
   return (
     <Tile icon={<Wrench size={15}/>} color="#22C55E" label="Tête d'impression"
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 10, fontSize: 13.5 }}>
-        {[["G", m.L], ["D", m.R]].map(([k, s]) => s && <span key={k} style={{ color: s.n.active ? "#16a34a" : "var(--muted)" }}>{k} {Math.round(s.n.temp)}°</span>)}</span>}
+        {[["G", m.L], ["D", m.R]].map(([k, s]) => s && <span key={k} style={{ color: s.printing ? "#16a34a" : "var(--muted)" }}>{k} {Math.round(s.n.temp)}°</span>)}</span>}
       zoom={<>
         <div style={{ display: "flex", justifyContent: "center" }}><HeadArt st={status} h={220}/></div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}><HeadSide s={m.L} label="Gauche" big/><HeadSide s={m.R} label="Droite" big/></div>
@@ -2440,15 +2448,15 @@ function Toolhead({ status, sz }) {
         // une ligne par buse : son cote (vert si elle imprime), le filament, la temperature, son etat si la place le permet
         const lines = <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 5 }}>
           {[["G", m.L], ["D", m.R]].map(([k, s]) => s && <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 800, minWidth: 0 }}>
-            <span style={{ width: 11, flexShrink: 0, color: s.n.active ? "#16a34a" : "var(--muted)" }}>{k}</span>
+            <span style={{ width: 11, flexShrink: 0, color: s.printing ? "#16a34a" : "var(--muted)" }}>{k}</span>
             <span style={{ width: 11, height: 11, borderRadius: 3, flexShrink: 0, background: s.color || "transparent", border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
             <span style={{ width: 34, flexShrink: 0, color: s.n.temp > 40 ? heat(s.n.temp) : "var(--text)" }}>{Math.round(s.n.temp)}°</span>
             {/* le filament : son nom, et dessous l'etat, l'emplacement, la matiere et la marque */}
             {(W >= 230 || (H >= 150 && W >= 140)) && <span style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
               <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {s.name || s.type || "aucun filament"}</span>
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: s.n.active ? "#16a34a" : "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {[s.n.active ? "● imprime" : k === "G" ? "levée" : "au repos", s.slot, s.name && s.type, s.brand].filter(Boolean).join(" · ")}</span></span>}
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: s.printing ? "#16a34a" : "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {[s.state, s.slot, s.name && s.type, s.brand].filter(Boolean).join(" · ")}</span></span>}
           </div>)}</div>;
         // bas : le dessin a gauche, les buses a cote ; haut : le dessin centre, les buses dessous (en cartes si la place le permet)
         if (H < 150 && (W >= 215 || H < 120)) return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
