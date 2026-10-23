@@ -488,7 +488,7 @@ async def prints_gallery(_: str = Depends(get_current_user)):
             acc["total_cost_filament"] += p.total_cost_filament or 0
             acc["electric_cost"]       += p.electric_cost or 0
             acc["total_cost"]          += p.total_cost or 0
-            acc["duration_seconds"]    += p.duration_seconds or 0
+            acc["duration_seconds"]    += p.duration_seconds or p.estimated_seconds or 0
             if not acc["latest_date"] or (p.print_date and p.print_date > acc["latest_date"]):
                 acc["latest_date"] = p.print_date
         elif photos:
@@ -1217,7 +1217,7 @@ async def prints_kpis(
         from sqlalchemy import or_ as _or
         q = select(
             func.count(Print.id).label("count"),
-            func.sum(func.coalesce(Print.duration_seconds, 0)).label("duration"),
+            func.sum(_PRINT_DURATION).label("duration"),
             func.sum(func.coalesce(Print.total_weight_g, 0)).label("weight"),
             func.sum(func.coalesce(Print.total_cost, 0)).label("cost"),
         ).where(Print.status != "IN_PROGRESS")
@@ -1263,10 +1263,10 @@ async def prints_kpis_daily(
     async with AsyncSessionLocal() as db:
         # une impression peut avoir commence avant la periode et tourner dedans : 4 jours de marge
         rows = (await db.execute(select(Print.print_date, Print.duration_seconds, Print.total_weight_g, Print.total_cost, Print.status,
-                                        Print.id, Print.file_name)
+                                        Print.id, Print.file_name, Print.estimated_seconds)
                                  .where(func.datetime(Print.print_date) >= (lo - timedelta(days=4)).strftime("%Y-%m-%d %H:%M:%S"),
                                         func.datetime(Print.print_date) < hi.strftime("%Y-%m-%d %H:%M:%S")))).all()
-    for start, dur, w, c, status, pid, fname in rows:
+    for start, dur, w, c, status, pid, fname, est in rows:
         if not start:
             continue
         if getattr(start, "tzinfo", None) is not None:
@@ -1278,7 +1278,7 @@ async def prints_kpis_daily(
                 days[k]["count"] += 1
                 days[k]["weight_g"] += float(w or 0)
                 days[k]["cost"] += float(c or 0)
-            secs = float(dur or 0)
+            secs = float(dur or est or 0)   # sans duree mesuree : l'estimation, comme partout ailleurs
         else:
             secs = max(0.0, (now - start).total_seconds())
         # les heures, jour par jour, la ou elles ont tourne

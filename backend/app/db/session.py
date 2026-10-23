@@ -58,6 +58,7 @@ async def init_db():
     await _migrate_print_job_id_unique()
     await _purge_activity_log()
     await _normalize_print_dates()
+    await _repair_print_durations()
 
 
 async def _migrate():
@@ -267,6 +268,74 @@ async def _migrate_label_printed():
 # texte, ces dates sortaient des bornes d'un jour (le « T » passe apres l'espace).
 _DATE_FMT_GLOB = "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]"
 _DATE_NORM = "strftime('%Y-%m-%d %H:%M:%f', {x}) || '000'"
+
+
+async def _repair_print_durations():
+    """Une fois (23/10/2026) : les durees faussees par l'heure de depart relue apres un redemarrage
+    (UTC lu comme heure locale : +1 h ou +2 h), et celles restees vides parce que ce decalage les
+    poussait au-dela du seuil. La fin reelle est l'heure de la photo de fin (pct100, ou fail-… pour
+    un echec) ; le debut, la creation de la fiche. Une duree qui ne s'explique pas ainsi n'est pas
+    touchee. Le cout d'electricite suit ; le cout filament ne bouge pas."""
+    from sqlalchemy import text as _text
+    from .session import AsyncSessionLocal as _S
+    from ..services.settings_service import get_setting, set_setting
+    FLAG = "MIGR_DURATIONS_20261023"
+    try:
+        async with _S() as db:
+            if await get_setting(db, FLAG):
+                return
+            try:
+                rate = float(str(await get_setting(db, "COST_BY_HOUR") or 0).replace(",", ".").strip() or 0)
+            except ValueError:
+                rate = 0.0
+            rows = (await db.execute(_text(
+                "SELECT p.id, p.status, p.estimated_seconds, p.duration_seconds, p.total_cost_filament, p.group_id, "
+                "(julianday(MAX(s.taken_at)) - julianday(p.created_at)) * 86400.0 AS real "
+                "FROM prints p JOIN print_snapshots s ON s.print_id = p.id "
+                "WHERE p.status IN ('SUCCESS', 'FAILED') AND p.created_at IS NOT NULL "
+                "AND (s.trigger = 'pct100' OR s.trigger LIKE 'fail-%') GROUP BY p.id"))).all()
+            fixed = []
+            for pid, status, est, dur, fil, gid, real in rows:
+                if real is None or real <= 0:
+                    continue
+                est = est or 0
+                new = None
+                if dur is None:
+                    if est <= 0 or real <= est * 2:
+                        new = real
+                else:
+                    delta = dur - real
+                    for h in (3600, 7200):
+                        if abs(delta - h) <= 180:
+                            new = dur - h
+                if new is None:
+                    continue
+                elec = round(new / 3600 * rate, 4)
+                await db.execute(_text("UPDATE prints SET duration_seconds = :d, electric_cost = :e, total_cost = :t WHERE id = :i"),
+                                 {"d": round(new), "e": elec, "t": round((fil or 0) + elec, 4), "i": pid})
+                fixed.append(pid)
+            # ce qui reste vide (ni photo de fin, ni mesure) sur une impression reussie : son estimation
+            rest = (await db.execute(_text(
+                "SELECT id, estimated_seconds, total_cost_filament FROM prints WHERE status = 'SUCCESS' "
+                "AND duration_seconds IS NULL AND estimated_seconds > 0"))).all()
+            for pid, est, fil in rest:
+                elec = round(est / 3600 * rate, 4)
+                await db.execute(_text("UPDATE prints SET duration_seconds = :d, electric_cost = :e, total_cost = :t WHERE id = :i"),
+                                 {"d": round(est), "e": elec, "t": round((fil or 0) + elec, 4), "i": pid})
+                fixed.append(pid)
+            await db.commit()
+            if fixed:
+                try:   # les objets tires de ces impressions (ou de leurs groupes) suivent le cout
+                    from ..api.v1.routes.prints import _propagate_from_print
+                    for pid in fixed:
+                        await _propagate_from_print(db, pid)
+                    await db.commit()
+                except Exception as e:
+                    print(f"[migration] couts des objets non repercutes : {e}")
+            await set_setting(db, FLAG, "1")
+            print(f"[migration] {len(fixed)} duree(s) d'impression reparee(s)")
+    except Exception as e:
+        print(f"[migration] reparation des durees ignoree : {e}")
 
 
 async def _normalize_print_dates():

@@ -130,6 +130,8 @@ async def restore_in_progress():
                     st["start_time"] = (p.created_at.replace(tzinfo=timezone.utc).timestamp()
                                         if p.created_at else time.time())
                     st["paused"] = float(p.paused_seconds or 0)
+                    # tant qu'on ne l'a pas revue tourner, une fin observee a pu arriver pendant l'arret
+                    st["unseen"] = True
                     st["pause_since"] = (p.paused_since.replace(tzinfo=timezone.utc).timestamp()
                                          if p.paused_since else None)
 
@@ -559,6 +561,8 @@ def on_state(job_id: str, gcode_state: str, now: Optional[float] = None):
         if job_id not in _JOBS: return
         st = _JOBS[job_id]
         pid = st.get("print_id")
+        if gcode_state in ("RUNNING", "PAUSE", "PREPARE"):
+            st.pop("unseen", None)
         if gcode_state == "PAUSE":
             if st.get("pause_since"): return
             st["pause_since"] = now
@@ -594,7 +598,10 @@ def on_finish(job_id: str, gcode_state: str):
             st["pause_since"] = None
         paused = st.get("paused", 0.0)
     final = "SUCCESS" if gcode_state == "FINISH" else "FAILED"
-    logger.info(f"[PRINT] 🏁 Fin job={job_id} print_id={pid} statut={final}")
+    # finie pendant un arret du serveur (jamais revue tourner depuis la reprise) : l'heure de fin
+    # est inconnue, le temps d'arret ne doit pas compter -- repli sur l'estimation
+    end_known = not st.get("unseen")
+    logger.info(f"[PRINT] 🏁 Fin job={job_id} print_id={pid} statut={final}{'' if end_known else ' (fin pendant un arret : duree estimee)'}")
     if final == "FAILED":
         pct = int(st.get("last_pct", 0))
         logger.info(f"[MILESTONE] 📸 Snapshot échec à {pct}% print_id={pid}")
@@ -617,7 +624,7 @@ def on_finish(job_id: str, gcode_state: str):
     except Exception:
         _err = 0
     _bg(_finalize(pid, job_id, final, st.get("start_time"), pct=int(st.get("last_pct", 0) or 0), print_error=_err,
-                  t_end=t0, paused=paused))
+                  t_end=t0, paused=paused, end_known=end_known))
 
 
 async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_id: str = ""):
@@ -699,7 +706,7 @@ async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_i
 
 async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
                     pct: int = 0, print_error: int = 0,
-                    t_end: Optional[float] = None, paused: float = 0.0):
+                    t_end: Optional[float] = None, paused: float = 0.0, end_known: bool = True):
     logger.info(f"[FINAL] ▶ Démarrage finalisation print #{pid} → {status}")
     try:
         async with AsyncSessionLocal() as db:
@@ -713,12 +720,15 @@ async def _finalize(pid: int, job_id: str, status: str, t0: Optional[float],
             # garde l'estimation.
             est = p.estimated_seconds or 0
             p.paused_seconds = round(paused, 1) if paused else p.paused_seconds
-            p.paused_since = None
-            real = max(0.0, (t_end or time.time()) - t0 - (paused or 0)) if t0 else None
+            # en SQL : une pause ecrite en arriere-plan apres la lecture de la fiche serait sinon gardee
+            await db.execute(update(Print).where(Print.id == pid).values(paused_since=None))
+            real = max(0.0, (t_end or time.time()) - t0 - (paused or 0)) if t0 and end_known else None
             if real is not None and (est <= 0 or real <= est * 2):
                 p.duration_seconds = round(real)
             elif status == "FAILED" and est > 0 and pct > 0:
                 p.duration_seconds = round(est * min(pct, 100) / 100)
+            elif status == "SUCCESS" and est > 0 and p.duration_seconds is None:
+                p.duration_seconds = est     # rien de mesurable : l'estimation, ecrite (jamais 0)
             # Coûts
             await _costs(db, p)
             # Note: déduction des bobines faite au démarrage dans _apply_meta/_enrich
