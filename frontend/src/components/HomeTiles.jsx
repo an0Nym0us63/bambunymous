@@ -2864,11 +2864,19 @@ export function switchModel(status) {
   const liveColor = trayCol(tray) || "#22c55e";
   const port = p => ({ p, units: ams.filter(x => x.switch_port === p), slot: slot(fs[`in_${p.toLowerCase()}`]), out: fs[`out_${p.toLowerCase()}`] ?? null,
     live: live === p });
-  return { fs, ports: [port("A"), port("B")], nz, liveColor, hl: "#22c55e", temp: id => nz.find(n => n.id === id) };
+  const ports = [port("A"), port("B")];
+  // au repos : la machine n'annonce aucune sortie ; on trace alors les rails droits, en attente
+  const rest = !fs.calibrating && ports.every(x => x.out == null);
+  // « au repos » ne s'ecrit que si rien n'imprime (sinon le chemin est seulement inconnu)
+  const idle = rest && !ports.some(x => x.live);
+  return { fs, ports, rest, idle, nz, liveColor, hl: "#22c55e", temp: id => nz.find(n => n.id === id) };
 }
 // les rails souples de l'aiguillage : chaque entree a son tube jusqu'a sa buse (droit ou croise),
 // le filament continu dedans a la couleur de sa bobine ; celui qui imprime en vert, par-dessus, qui avance
-function SwitchRail({ d, live, color, hl, w = 10 }) {
+function SwitchRail({ d, live, color, hl, w = 10, idle = false }) {
+  // au repos : le rail en pointilles, estompe (pas de chemin annonce par la machine)
+  if (idle) return <path d={d} fill="none" stroke="#4b5563" strokeWidth={w * 0.55} strokeLinecap="round" strokeDasharray={`${w * 0.2} ${w * 1.1}`}
+    opacity="0.8" style={{ transition: "d .8s cubic-bezier(.5,1.3,.5,1)" }}/>;
   return <g>
     <path d={d} fill="none" stroke={live ? hl : "#374151"} strokeWidth={w} strokeLinecap="round"
       style={{ transition: "d .8s cubic-bezier(.5,1.3,.5,1)", ...(live ? { filter: `drop-shadow(0 0 5px ${hl}88)` } : {}) }}/>
@@ -2897,7 +2905,7 @@ export function SwitchArt({ m, W, H }) {
   const inY = { A: 42, B: 138 }, pY = { A: 72, B: 108 }, oY = { G: 72, D: 108 }, nY = { G: 42, D: 138 };
   const cut = (t, n) => t.length > n ? `${t.slice(0, n - 1)}…` : t;
   const units = unitsLabel;
-  const path = x => { const s = SIDE(x.out), y = inY[x.p], p = pY[x.p];
+  const path = x => { const s = m.rest ? (x.p === "A" ? "G" : "D") : SIDE(x.out), y = inY[x.p], p = pY[x.p];
     if (s && (x.p === "A") !== (s === "G")) return fluid([[122, y], [150, p], [230, oY[s]], [258, nY[s]]]);
     return s ? `M122 ${y} C138 ${y} 136 ${p} 150 ${p} C190 ${p} 190 ${oY[s]} 230 ${oY[s]} C246 ${oY[s]} 244 ${nY[s]} 258 ${nY[s]}`
       : `M122 ${y} C138 ${y} 136 ${p} 150 ${p} L170 ${p}`; };
@@ -2907,10 +2915,11 @@ export function SwitchArt({ m, W, H }) {
     <svg viewBox={`0 0 ${VW} ${VH}`} width={W} height={H} style={{ display: "block", overflow: "visible" }} aria-label="Aiguillage">
       {/* le corps de l'aiguillage, dessous : les rails le traversent */}
       <rect x="150" y="46" width="80" height="88" rx="16" fill="#111827" stroke="rgba(255,255,255,0.12)"/>
-      {[A, B].sort((a, b) => a.live - b.live).map(x => <SwitchRail key={x.p} d={path(x)} live={x.live} color={x.slot?.color} hl={HL} w={11}/>)}
+      {[A, B].sort((a, b) => a.live - b.live).map(x => <SwitchRail key={x.p} d={path(x)} live={x.live} color={x.slot?.color} hl={HL} w={11} idle={m.rest}/>)}
       {[["A", 72], ["B", 108]].map(([p, y]) => <circle key={p} cx="150" cy={y} r="4.5" fill={m.ports.find(x => x.p === p).live ? HL : "#4b5563"}/>)}
       {[["G", 72], ["D", 108]].map(([sd, y]) => <circle key={sd} cx="230" cy={y} r="4.5" fill={servedBy(sd)?.live ? HL : "#4b5563"}/>)}
       {m.fs.calibrating && <text x="190" y="148" textAnchor="middle" fontSize="11" fontWeight="800" fill="#f59e0b">calibration</text>}
+      {m.idle && <text x="190" y="148" textAnchor="middle" fontSize="11" fontWeight="800" fill="var(--muted)">au repos</text>}
       {/* les entrees */}
       {[A, B].map(x => { const y = inY[x.p] - 31;
         return <g key={x.p}>{box(4, y, 118, x.live)}
@@ -2940,7 +2949,7 @@ function SwitchMini({ m, W, H }) {
   const s = Math.min(W / VW, H / VH);
   const inY = { A: 32, B: 88 }, oY = { G: 32, D: 88 };
   const pin = { A: 46, B: 74 }, pout = { G: 46, D: 74 };
-  const path = x => { const sd = SIDE(x.out), y = inY[x.p], q = pin[x.p];
+  const path = x => { const sd = m.rest ? (x.p === "A" ? "G" : "D") : SIDE(x.out), y = inY[x.p], q = pin[x.p];
     // croise : les memes proportions que le grand schema (pente franche aux bouts, traversee douce au milieu)
     if (sd && (x.p === "A") !== (sd === "G")) return fluid([[38, y], [62, x.p === "A" ? 53 : 67], [108, sd === "G" ? 53 : 67], [132, oY[sd]]]);
     return sd ? `M38 ${y} C52 ${y} 50 ${q} 62 ${q} C85 ${q} 85 ${pout[sd]} 108 ${pout[sd]} C120 ${pout[sd]} 118 ${oY[sd]} 132 ${oY[sd]}`
@@ -2948,7 +2957,8 @@ function SwitchMini({ m, W, H }) {
   const served = sd => m.ports.find(x => SIDE(x.out) === sd);
   return <svg viewBox={`0 0 ${VW} ${VH}`} width={VW * s} height={VH * s} style={{ display: "block", overflow: "visible" }} aria-label="Aiguillage">
     <rect x="62" y="34" width="46" height="52" rx="11" fill="#111827" stroke="rgba(255,255,255,0.12)"/>
-    {[...m.ports].sort((a, b) => a.live - b.live).map(x => <SwitchRail key={x.p} d={path(x)} live={x.live} color={x.slot?.color} hl={m.hl} w={8}/>)}
+    {[...m.ports].sort((a, b) => a.live - b.live).map(x => <SwitchRail key={x.p} d={path(x)} live={x.live} color={x.slot?.color} hl={m.hl} w={8} idle={m.rest}/>)}
+    {m.idle && <text x="85" y="104" textAnchor="middle" fontSize="10" fontWeight="800" fill="var(--muted)">au repos</text>}
     {m.ports.map(x => { const c = x.slot?.color, y = inY[x.p];
       return <g key={x.p}>
         {/* une entree vide : le cercle en creux, sa lettre lisible (en couleur de texte, pas en blanc), « vide » dessous */}
