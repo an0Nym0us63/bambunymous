@@ -2051,19 +2051,20 @@ function Temps({ status, o, sz }) {
     if (g.size < 34 && H >= 44) {
       const cols = Math.max(1, Math.min(rows.length, Math.floor((W + 8) / 84))), nr = Math.ceil(rows.length / cols);
       const th = Math.min(96, Math.floor((H - 8 * (nr - 1)) / nr) - 2);
-      // le chiffre a la taille que laisse la colonne (thermometre compris), jamais coupe
-      const colW = (W - 8 * (cols - 1)) / cols, textW = colW - th * 0.5 - 8;
-      const fs = Math.max(13, Math.min(th >= 70 ? 24 : 21, textW / 2.6));
+      // le texte d'abord (« 220° » tient toujours), le thermometre prend ce qui reste
+      const colW = (W - 8 * (cols - 1)) / cols;
+      const fs = Math.max(12, Math.min(th >= 70 ? 24 : 21, colW * 0.55 / 2.6));
+      const thW = Math.max(14, Math.min(th * 0.5, colW - fs * 2.7 - 8));
       if (th >= 26) return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 8, alignContent: "center" }}>
         {rows.map(r => { const c = heat(r.v), [ic, st, sc] = tempState(r.v || 0, r.t || 0);
-          return <div key={r.k} title={`${r.l} : ${st}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: 0 }}>
-            <ThermoGauge bare v={r.v} t={r.t} max={r.max} size={th} c={c} active={r.active} targets={o.targets}/>
-            <div style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
+          return <div key={r.k} title={`${r.l} : ${st}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 0, overflow: "hidden" }}>
+            <ThermoGauge bare v={r.v} t={r.t} max={r.max} size={Math.round(thW * 2)} c={c} active={r.active} targets={o.targets}/>
+            <div style={{ minWidth: 0, flex: "0 1 auto", overflow: "hidden", display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
               <span data-pk="" style={{ fontSize: fs, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${c} 72%, #000000)`, c) }}>{Math.round(r.v || 0)}°</span>
               {/* le pictogramme (comme l'en-tete de l'imprimante) plutot que le nom : buse G / D, plateau, chambre */}
               <span title={r.l} style={{ display: "inline-flex", alignItems: "center", gap: 2, color: r.active ? c : "var(--muted)", marginTop: 1 }}>
                 <r.ico s={13}/>{r.s && <span style={{ fontSize: 10.5, fontWeight: 900 }}>{r.s}</span>}</span>
-              {th >= 56 && <span style={{ fontSize: 10, fontWeight: 800, color: sc, whiteSpace: "nowrap" }}>{o.targets && r.t > 0 ? `${ic ? `${ic} ` : ""}${Math.round(r.t)}°` : ic ? `${ic} ${st}` : st}</span>}
+              {th >= 56 && <span style={{ fontSize: 10, fontWeight: 800, color: sc, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{o.targets && r.t > 0 ? `${ic ? `${ic} ` : ""}${Math.round(r.t)}°` : colW < 110 ? (ic || "repos") : ic ? `${ic} ${st}` : st}</span>}
             </div></div>; })}</div>;
     }
     if (g.size < 24) return null;
