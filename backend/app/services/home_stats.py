@@ -12,7 +12,7 @@ _LOCK = asyncio.Lock()
 
 def _empty() -> dict:
     return {"saves": 0, "tiles": [], "tweaks": 0, "cam_s": 0.0, "first": None, "multi": None, "four": None,
-            "three": None, "two": None, "minimal": None, "all": None, "copied": None}
+            "three": None, "two": None, "minimal": None, "all": None, "copied": None, "pages": None}
 
 
 async def get() -> dict:
@@ -79,6 +79,9 @@ async def layout_saved(old: dict | None, new: dict | None, known: list | None) -
         d["multi"] = keep("multi", {"1", "2", "3", "4"} <= set(b))
         d["minimal"] = keep("minimal", any(set(items) == {"printer"} for items in b.values()))
         d["all"] = keep("all", len(known) >= 10 and any(known <= set(items) for items in b.values()))
+        # l'accueil du telephone en ecrans : la disposition a une colonne en porte un par colonne
+        one = ((new or {}).get("layouts") or {}).get("1") or ((new or {}).get("layouts") or {}).get(1) or []
+        d["pages"] = keep("pages", isinstance(one, list) and len(one) >= 3)
     await _update(f)
 
 
@@ -121,4 +124,5 @@ async def values() -> dict:
             "cam_hours": int(float(d["cam_s"] or 0) // 3600), "home_first": 1 if d["first"] else 0,
             "home_multi": 1 if d["multi"] else 0, "home_four": 1 if d["four"] else 0,
             "home_three": 1 if d.get("three") else 0, "home_two": 1 if d.get("two") else 0, "home_copy": 1 if d.get("copied") else 0,
-            "home_minimal": 1 if d["minimal"] else 0, "home_all": 1 if d["all"] else 0}
+            "home_minimal": 1 if d["minimal"] else 0, "home_all": 1 if d["all"] else 0,
+            "home_pages": 1 if d.get("pages") else 0}
