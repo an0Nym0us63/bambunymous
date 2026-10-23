@@ -57,6 +57,7 @@ async def init_db():
     await _migrate_activity_kind()
     await _migrate_print_job_id_unique()
     await _purge_activity_log()
+    await _normalize_print_dates()
 
 
 async def _migrate():
@@ -257,6 +258,35 @@ async def _migrate_label_printed():
                 print(f"[migration] etiquette cochee sur {res.rowcount or 0} filament(s) avec echantillon")
     except Exception as e:
         print(f"[migration] label_printed ignoree : {e}")
+
+
+# Le format unique des dates d'impression : celui qu'ecrit SQLAlchemy, « AAAA-MM-JJ HH:MM:SS.ffffff »
+# (UTC, sans fuseau). D'anciennes ecritures ont laisse « 2026-10-22T16:12:00 » : comparees comme du
+# texte, ces dates sortaient des bornes d'un jour (le « T » passe apres l'espace).
+_DATE_FMT_GLOB = "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9] [0-9][0-9]:[0-9][0-9]:[0-9][0-9].[0-9][0-9][0-9][0-9][0-9][0-9]"
+_DATE_NORM = "strftime('%Y-%m-%d %H:%M:%f', {x}) || '000'"
+
+
+async def _normalize_print_dates():
+    """Remet toutes les dates d'impression au format unique, puis pose un declencheur qui reformate
+    toute date ecrite autrement (meme par une requete brute) : l'enregistrement est toujours le meme."""
+    from sqlalchemy import text as _text
+    try:
+        async with engine.begin() as conn:
+            res = await conn.execute(_text(
+                f"UPDATE prints SET print_date = {_DATE_NORM.format(x='print_date')} "
+                f"WHERE print_date IS NOT NULL AND print_date NOT GLOB '{_DATE_FMT_GLOB}' "
+                f"AND strftime('%Y-%m-%d %H:%M:%f', print_date) IS NOT NULL"))
+            if res.rowcount:
+                print(f"[migration] {res.rowcount} date(s) d'impression remises au format unique")
+            for ev, cond in (("INSERT", "INSERT"), ("UPDATE", "UPDATE OF print_date")):
+                await conn.execute(_text(
+                    f"CREATE TRIGGER IF NOT EXISTS prints_date_format_{ev.lower()} AFTER {cond} ON prints "
+                    f"WHEN NEW.print_date IS NOT NULL AND NEW.print_date NOT GLOB '{_DATE_FMT_GLOB}' "
+                    f"AND strftime('%Y-%m-%d %H:%M:%f', NEW.print_date) IS NOT NULL "
+                    f"BEGIN UPDATE prints SET print_date = {_DATE_NORM.format(x='NEW.print_date')} WHERE id = NEW.id; END"))
+    except Exception as e:
+        print(f"[migration] format des dates d'impression ignore : {e}")
 
 
 async def _migrate_last_seen():
