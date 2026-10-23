@@ -2879,6 +2879,18 @@ function SwitchRail({ d, live, color, hl, w = 10 }) {
       style={{ transition: "d .8s cubic-bezier(.5,1.3,.5,1)", ...(live ? { animation: "bn-dash .8s linear infinite" } : {}) }}/>}
   </g>;
 }
+// un trait fluide qui passe par ces points (depart et arrivee a l'horizontale, sans palier au milieu) :
+// pour un rail croise, qui sinon s'aplatissait a l'entree et a la sortie du corps (trois vagues)
+function fluid(pts) {
+  const tan = i => i === 0 || i === pts.length - 1 ? [(pts[Math.min(i + 1, pts.length - 1)][0] - pts[Math.max(i - 1, 0)][0]) / 2, 0]
+    : [(pts[i + 1][0] - pts[i - 1][0]) / 2, (pts[i + 1][1] - pts[i - 1][1]) / 2];
+  let d = `M${pts[0][0]} ${pts[0][1]}`;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [a, b] = [pts[i], pts[i + 1]], ta = tan(i), tb = tan(i + 1);
+    d += ` C${a[0] + ta[0] / 3} ${a[1] + ta[1] / 3} ${b[0] - tb[0] / 3} ${b[1] - tb[1] / 3} ${b[0]} ${b[1]}`;
+  }
+  return d;
+}
 export function SwitchArt({ m, W, H }) {
   const [A, B] = m.ports;
   const VW = 380, VH = 180, HL = m.hl;
@@ -2886,6 +2898,7 @@ export function SwitchArt({ m, W, H }) {
   const cut = (t, n) => t.length > n ? `${t.slice(0, n - 1)}…` : t;
   const units = unitsLabel;
   const path = x => { const s = SIDE(x.out), y = inY[x.p], p = pY[x.p];
+    if (s && (x.p === "A") !== (s === "G")) return fluid([[122, y], [150, p], [230, oY[s]], [258, nY[s]]]);
     return s ? `M122 ${y} C138 ${y} 136 ${p} 150 ${p} C190 ${p} 190 ${oY[s]} 230 ${oY[s]} C246 ${oY[s]} 244 ${nY[s]} 258 ${nY[s]}`
       : `M122 ${y} C138 ${y} 136 ${p} 150 ${p} L170 ${p}`; };
   const servedBy = side => m.ports.find(x => SIDE(x.out) === side);
@@ -2928,6 +2941,7 @@ function SwitchMini({ m, W, H }) {
   const inY = { A: 32, B: 88 }, oY = { G: 32, D: 88 };
   const pin = { A: 46, B: 74 }, pout = { G: 46, D: 74 };
   const path = x => { const sd = SIDE(x.out), y = inY[x.p], q = pin[x.p];
+    if (sd && (x.p === "A") !== (sd === "G")) return fluid([[38, y], [62, q], [108, pout[sd]], [132, oY[sd]]]);
     return sd ? `M38 ${y} C52 ${y} 50 ${q} 62 ${q} C85 ${q} 85 ${pout[sd]} 108 ${pout[sd]} C120 ${pout[sd]} 118 ${oY[sd]} 132 ${oY[sd]}`
       : `M38 ${y} C52 ${y} 50 ${q} 62 ${q} L74 ${q}`; };
   const served = sd => m.ports.find(x => SIDE(x.out) === sd);
