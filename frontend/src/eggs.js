@@ -455,7 +455,7 @@ function installEggs2() {
   const cal = () => {
     const d = new Date(), h = d.getHours(), m = d.getMinutes(), day = d.getDay();
     if (day === 5 && h === 18) egg("apero");
-    if (day === 1 && h >= 5 && h < 7) egg("monday_morning");
+    if (day === 1 && h === 7) egg("monday_morning");
     if (h === 12 && m === 0) egg("noon");
     if (day === 0 && h >= 6 && h < 8) egg("sunday_early");
     if (h === 17 && m === 0) egg("tea_time");
@@ -464,15 +464,16 @@ function installEggs2() {
   };
   cal();
   document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") cal(); });
-  // dix doubles clics en six secondes
-  const dbl = tapper(10, 6000, () => egg("double_double"));
-  window.addEventListener("dblclick", () => dbl());
-  // une selection gigantesque (hors champ)
-  document.addEventListener("selectionchange", () => {
-    const tag = (document.activeElement?.tagName || "").toLowerCase();
-    if (tag === "input" || tag === "textarea") return;
-    if (String(window.getSelection?.() || "").length > 1500) egg("bookworm");
-  });
+  // cote a cote : sur ordinateur, la fenetre a la moitie de l'ecran (l'autre moitie pour autre chose)
+  const half = () => {
+    if (window.matchMedia("(pointer: fine)").matches && screen.width >= 1200) {
+      const r = window.outerWidth / screen.availWidth;
+      if (r > 0.45 && r < 0.55 && window.outerHeight > screen.availHeight * 0.85) egg("split_screen");
+    }
+  };
+  let hz = null;
+  window.addEventListener("resize", () => { clearTimeout(hz); hz = setTimeout(half, 800); });
+  half();
   // la fenetre redimensionnee vingt fois en dix secondes
   let rz = null;
   const resizes = tapper(20, 10000, () => egg("resizer"));

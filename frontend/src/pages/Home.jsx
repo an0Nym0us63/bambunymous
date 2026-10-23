@@ -9,6 +9,7 @@ import { create } from "zustand";
 import client, { apiUrl } from "../api/client";
 import HomeGrid from "../components/HomeGrid";
 import { gradeOf } from "./Achievements";
+import { egg } from "../eggs";
 import LiveCamera from "../components/LiveCamera";
 import SpoolSVG from "../components/SpoolSVG";
 import Lightbox from "../components/Lightbox";
@@ -1365,6 +1366,9 @@ function PrinterPopup({ status, img, name, onClose }) {
   const s = stateOf(status);
   const st = String(status?.status || "").toUpperCase();
   const live = LIVE_ST.includes(st), paused = st === "PAUSE" || st === "PAUSED";
+  // regarder la fin d'une impression en direct, fenetre ouverte
+  const wasLive = useRef(live);
+  useEffect(() => { if (wasLive.current && st === "FINISH") egg("front_row"); wasLive.current = live; }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
   const pct = Math.round(status?.progress || 0);
   const fin = live && status?.remaining_minutes ? fmtFinishTime(status.remaining_minutes) : null;
   const nozzles = [...(status?.nozzles || [])].sort((a, b) => b.id - a.id);   // gauche (1) puis droite (0)

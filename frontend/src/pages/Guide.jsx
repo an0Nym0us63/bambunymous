@@ -151,6 +151,9 @@ export default function Guide() {
       const lim = (sc === window ? 0 : sc.getBoundingClientRect().top) + top + 140;
       for (const h of heads) { if (h.getBoundingClientRect().top < lim) c = h; else break; }
       if (c) setCur(c.tagName === "H1" ? c.closest("article").id : idOf(c));
+      // tout au bout du guide : la derniere ligne du dernier chapitre a l'ecran
+      const end = root.lastElementChild?.getBoundingClientRect();
+      if (end && end.bottom > 0 && end.bottom <= window.innerHeight) egg("guide_end");
     }); };
     sc.addEventListener("scroll", f, { passive: true });
     f();
@@ -189,11 +192,7 @@ export default function Guide() {
   const words = useMemo(() => norm(q).split(/\s+/).filter(w => w.length > 1), [q]);
   useEffect(() => {
     if (!words.length) return undefined;
-    const t = setTimeout(() => {
-      searches.current += 1;
-      // chercher les secrets dans le guide : il n'en dit pas un mot… mais ca se remarque
-      if (words.some(w => /^(easter|secret|secrets|oeuf|oeufs)$/.test(w))) egg("guide_secret");
-    }, 1500);
+    const t = setTimeout(() => { searches.current += 1; }, 1500);
     return () => clearTimeout(t);
   }, [words.join(" ")]); // eslint-disable-line react-hooks/exhaustive-deps
   const hits = useMemo(() => !words.length ? null : index.current.map(b => {
