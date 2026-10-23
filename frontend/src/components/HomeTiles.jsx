@@ -289,16 +289,23 @@ function Item({ img, dot, title, sub, right, size = 36, onClick, color, card = f
 function Ring({ value, size = 54, color = "#3b82f6", stroke, children, cap }) {
   const sw = stroke || Math.max(5, Math.round(size / 9));
   const r = (size - sw) / 2, C = 2 * Math.PI * r, v = Math.max(0, Math.min(1, value || 0));
+  const gid = useMemo(() => `rg${Math.random().toString(36).slice(2, 8)}`, []);
+  // l'arc et le chiffre en degrade, de la couleur de l'anneau vers sa teinte claire
+  const light = `color-mix(in srgb, ${color} 55%, #ffffff)`;
+  const prim = x => typeof x === "string" || typeof x === "number";
+  const txt = prim(children) || (Array.isArray(children) && children.every(prim));
   return (
     <span data-pk="" style={{ position: "relative", width: size, height: size, flexShrink: 0, display: "inline-flex" }}>
       <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
+        <defs><linearGradient id={gid} x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor={color}/><stop offset="1" style={{ stopColor: light }}/></linearGradient></defs>
         <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="var(--surface2)" strokeWidth={sw}/>
-        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={sw} strokeLinecap="round"
-          strokeDasharray={C} strokeDashoffset={C * (1 - v)} style={{ transition: "stroke-dashoffset .6s" }}/>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={`url(#${gid})`} strokeWidth={sw} strokeLinecap="round"
+          strokeDasharray={C} strokeDashoffset={C * (1 - v)} style={{ transition: "stroke-dashoffset .6s", filter: `drop-shadow(0 0 ${Math.round(sw / 2)}px ${color}55)` }}/>
       </svg>
       <span style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", textAlign: "center",
         fontSize: size * (String(children ?? "").length > 4 ? 0.17 : String(children ?? "").length > 3 ? 0.2 : 0.24),
-        fontWeight: 900, color: "var(--text)", lineHeight: 1.05, flexDirection: "column" }}>{children}
+        fontWeight: 900, color: "var(--text)", lineHeight: 1.05, flexDirection: "column" }}>
+        {txt ? <span style={gradText(`color-mix(in srgb, ${color} 72%, #000000)`, color)}>{children}</span> : children}
         {cap && size >= 64 && <span style={{ fontSize: Math.max(9, size * 0.1), fontWeight: 700, color: "var(--muted)", marginTop: 1 }}>{cap}</span>}</span>
     </span>
   );
@@ -1866,7 +1873,31 @@ function tempState(v, t) {
   if (t > 0) return Math.abs(v - t) <= 3 ? ["✓", "à température", "#16a34a"] : v < t ? ["▲", "chauffe", "#f97316"] : ["▼", "redescend", "#0ea5e9"];
   return v > 40 ? ["▼", "refroidit", "#0ea5e9"] : ["", "au repos", "var(--muted)"];
 }
-// une source en carte : en largeur (icone, valeur, barre et repere de consigne) ou, haute, en thermometre
+// un cadran en arc (270°) : la temperature en degrade du froid a la chaleur, la consigne en point sur l'arc,
+// le chiffre au centre
+function ArcDial({ v, t, max, size, c, targets }) {
+  const gid = useMemo(() => `ad${Math.random().toString(36).slice(2, 8)}`, []);
+  const sw = Math.max(5, Math.round(size / 11)), r = size / 2 - sw / 2 - 2, cx = size / 2, cy = size / 2;
+  const A0 = 135, SPAN = 270, frac = x => Math.max(0, Math.min(1, (x || 0) / max));
+  const pt = a => [cx + r * Math.cos(a * Math.PI / 180), cy + r * Math.sin(a * Math.PI / 180)];
+  const arc = f => { const a1 = A0 + SPAN * Math.max(0.001, f), [x0, y0] = pt(A0), [x1, y1] = pt(a1);
+    return `M${x0} ${y0} A${r} ${r} 0 ${SPAN * f > 180 ? 1 : 0} 1 ${x1} ${y1}`; };
+  const [tx, ty] = pt(A0 + SPAN * frac(t));
+  const light = `color-mix(in srgb, ${c} 55%, #ffffff)`;
+  return <svg width={size} height={size} style={{ display: "block", overflow: "visible" }} aria-hidden="true">
+    <defs><linearGradient id={gid} x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor={heat(20)}/><stop offset="1" stopColor={c}/></linearGradient></defs>
+    <path d={arc(1)} fill="none" stroke="var(--surface)" strokeWidth={sw} strokeLinecap="round"/>
+    {v > 0 && <path d={arc(frac(v))} fill="none" stroke={`url(#${gid})`} strokeWidth={sw} strokeLinecap="round"
+      style={{ filter: v > 40 ? `drop-shadow(0 0 ${sw}px ${c})` : "none", transition: "d .8s" }}/>}
+    {targets && t > 0 && <circle cx={tx} cy={ty} r={sw * 0.62} fill="var(--surface)" stroke="var(--text)" strokeWidth={Math.max(1.5, sw / 3.5)}/>}
+    <foreignObject x="0" y={size * 0.22} width={size} height={size * 0.6}>
+      <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", lineHeight: 1 }}>
+        <span data-pk="" style={{ fontSize: size * 0.27, fontWeight: 900, ...gradText(`color-mix(in srgb, ${c} 72%, #000000)`, c) }}>{Math.round(v)}°</span>
+        {targets && t > 0 && size >= 70 && <span style={{ fontSize: Math.max(9, size * 0.12), fontWeight: 800, color: "var(--muted)", marginTop: 2 }}>/{Math.round(t)}°</span>}
+      </div></foreignObject>
+  </svg>;
+}
+// une source en carte : un cadran, ou (basse) une barre, ou (haute) un thermometre
 function ThermoCell({ r, w, h, targets }) {
   const v = r.v || 0, t = r.t || 0, c = heat(v), [ic, st, sc] = tempState(v, t);
   const frac = x => Math.max(0, Math.min(1, x / r.max));
@@ -1908,6 +1939,19 @@ function ThermoCell({ r, w, h, targets }) {
         <span style={{ fontSize: Math.max(9.5, Math.min(11.5, (w - 44) / 9)), fontWeight: 800, color: sc, whiteSpace: "nowrap", overflow: "hidden",
           textOverflow: "ellipsis" }}>{w < 150 && ic ? ic : `${ic ? `${ic} ` : ""}${st}`}</span>
       </div>
+    </div>;
+  }
+  // un cadran des que la carte a un peu de hauteur : le nom et l'etat dessous
+  if (h >= 64 && w >= 64) {
+    const size = Math.min(w - 12, h - (h >= 92 ? 30 : 8), 150);
+    return <div title={`${r.l} : ${st}`} style={{ ...card, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2, padding: "6px 6px 7px" }}>
+      {r.active && <span style={{ position: "absolute", top: 6, right: 7 }}>{activeChip}</span>}
+      <ArcDial v={v} t={t} max={r.max} size={size} c={c} targets={targets}/>
+      <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: -size * (h >= 92 ? 0.14 : 0.26), minWidth: 0, maxWidth: "100%" }}>
+        <span style={{ color: c, display: "inline-flex" }}><r.ico s={12}/></span>
+        <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.l}</span>
+        {ic && <span style={{ fontSize: 10.5, fontWeight: 900, color: sc }}>{ic}</span>}</div>
+      {w >= 120 && h >= 92 && <span style={{ fontSize: 10, fontWeight: 800, color: sc, whiteSpace: "nowrap" }}>{st}</span>}
     </div>;
   }
   // en largeur : icone et nom, la valeur, une barre (avec le repere de la consigne)

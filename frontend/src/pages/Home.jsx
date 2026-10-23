@@ -77,12 +77,12 @@ const HMS_SEV = {
 
 const FR_ACCENT = "#8b5cf6";      // violet : le bandeau d'une autre machine ne se confond pas avec le mien
 
-function StatusBanner({ status, friend = null, switcher = null, defaultExpanded = false, showCamera = true, showTemps = true }) {
+function StatusBanner({ status, friend = null, switcher = null }) {
   // Chez un copain : ses donnees (impression en cours, camera) passent par le relais.
   const via = (path) => friend ? `/friends/${friend.id}/p${path}` : path;
   const img = (path) => friend ? relayed(`/api/v1/friends/${friend.id}/p${path}`) : apiUrl(path);
-  const [expanded, setExpanded] = useState(defaultExpanded);
-  useEffect(() => { setExpanded(defaultExpanded); }, [defaultExpanded]);
+  const expanded = false;          // plus de volet (23/10/2026) : la fenetre de l'imprimante le remplace
+  const [pop, setPop] = useState(false);
   const camRef      = useRef(null);
   const timerRef    = useRef(null);
   const inFlightRef = useRef(false);
@@ -178,7 +178,7 @@ function StatusBanner({ status, friend = null, switcher = null, defaultExpanded 
     <div className="card" style={{ overflow:"hidden", ...(friend ? { borderColor:"rgba(139,92,246,0.45)" } : null) }}>
 
       {/* Header cliquable (div : il peut contenir le selecteur des copains) */}
-      <div role="button" tabIndex={0} onClick={() => setExpanded(e => !e)}
+      <div role="button" tabIndex={0} onClick={() => setPop(true)}
         style={{ width:"100%", background:"none", border:"none", cursor:"pointer", padding:0, position:"relative", zIndex:1 }}>
 
         {/* Nom du print — ligne complète en haut */}
@@ -254,67 +254,9 @@ function StatusBanner({ status, friend = null, switcher = null, defaultExpanded 
         </div>
       </div>
 
-      {/* Panneau déplié */}
-      {expanded && (
-        <div style={{ borderTop:"1px solid var(--border)" }}>
-          {/* Caméra */}
-          {/* Camera injoignable (chez un copain notamment) : le bloc disparait, le panneau se reduit. */}
-          {showCamera && <LiveCamera maxHeight={280}/>}
-
-          {/* Températures + infos */}
-          <div style={{ padding:12, display:"flex", flexDirection:"column", gap:10 }}>
-            {/* Buses */}
-            {showTemps && <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-              {left  && <TempChip label={isDualNozzle ? "Buse Gauche" : "Buse"} current={left.temp}  target={left.target}  active={left.active}/>}
-              {right && isDualNozzle && <TempChip label="Buse Droite" current={right.temp} target={right.target} active={right.active}/>}
-              <TempChip label="Plateau" current={status.bed_temp}     target={status.target_bed_temp} accent="#ef4444" />
-              <TempChip label="Chambre" current={status.chamber_temp} target={status.target_chamber_temp} />
-            </div>}
-            {/* Encart alertes HMS : criticite + libelle + lien wiki */}
-            {status.hms_decoded?.length > 0 && (() => {
-              const worst = status.hms_decoded[0]?.severity || "info";
-              const tone = HMS_SEV[worst] || HMS_SEV.info;
-              return (
-                <div style={{ borderRadius:14, overflow:"hidden",
-                  border:`1px solid ${tone.color}44`,
-                  background:`linear-gradient(180deg, ${tone.color}1f, ${tone.color}0a)` }}>
-                  <div style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 12px",
-                    background:`${tone.color}22`, color:tone.color, fontSize:11, fontWeight:800,
-                    letterSpacing:"0.02em" }}>
-                    <AlertTriangle size={14}/>
-                    {status.hms_decoded.length} alerte{status.hms_decoded.length>1?"s":""} imprimante
-                  </div>
-                  <div style={{ display:"flex", flexDirection:"column" }}>
-                    {status.hms_decoded.map((h,i) => {
-                      const sc = HMS_SEV[h.severity] || HMS_SEV.info;
-                      return (
-                        <a key={i} href={h.wiki} target="_blank" rel="noreferrer"
-                          style={{ display:"flex", gap:10, alignItems:"flex-start", textDecoration:"none",
-                            padding:"10px 12px",
-                            borderTop: i>0 ? "1px solid var(--border)" : "none" }}>
-                          <span style={{ flexShrink:0, width:8, height:8, borderRadius:"50%",
-                            background:sc.color, marginTop:5, boxShadow:`0 0 0 3px ${sc.color}22` }}/>
-                          <span style={{ flex:1, minWidth:0 }}>
-                            <span style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-                              <span style={{ fontSize:9, fontWeight:800, color:sc.color,
-                                textTransform:"uppercase", letterSpacing:"0.04em" }}>{sc.label}</span>
-                              <span style={{ fontSize:10, color:"var(--muted)", fontFamily:"monospace" }}>{h.code}</span>
-                            </span>
-                            <span style={{ display:"block", fontSize:12.5, color:"var(--text)", lineHeight:1.45, marginTop:2 }}>
-                              {h.label || "Code non répertorié — appuyez pour ouvrir le wiki"}
-                            </span>
-                          </span>
-                          <ExternalLink size={13} style={{ flexShrink:0, color:"var(--muted)", marginTop:3 }}/>
-                        </a>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
-        </div>
-      )}
+      {/* plus de volet : un clic ouvre la fenetre de l'imprimante, comme les autres tuiles */}
+      {pop && <span onClick={e => e.stopPropagation()}><PrinterPopup status={status} img={printInfo && (friend || printInfo.plate_image) ? img(`/prints/${printInfo.id}/image${imgV(printInfo)}`) : null}
+        name={printInfo?.file_name || status?.print_name} onClose={() => setPop(false)}/></span>}
     </div>
   );
 }
@@ -2046,16 +1988,14 @@ export default function Home() {
         } },
       render: (d, st, o, item) => item?.w !== 1 && item?.h === 1 ? <PrinterStrip status={st} showFin={o.fin} showLayer={o.layer}/>
         : item?.w === 1 || item?.h === 1 ? <PrinterCompact status={st} size={item.w !== 1 || item.h <= 1 ? "small" : o.half} showFin={o.fin} showLayer={o.layer}/>
-        : <StatusBanner status={st} defaultExpanded={o.open} showCamera={o.cam} showTemps={o.temps}/>,
+        : <StatusBanner status={st}/>,
       options: [
         { when: it => it.w !== 1, key: "headTemps", label: "Températures dans l'en-tête", def: true },
         { when: it => it.w === 1 && it.h > 1, key: "half", label: "Vignette", def: "big", hint: "Sur une rangée, la tuile est toujours compacte.",
           choices: [["big", "grande"], ["mid", "moyenne"], ["small", "compacte"]] },
         { when: it => it.w === 1, key: "fin", label: "Heure de fin", def: true },
         { when: it => it.w === 1, key: "layer", label: "Couches", def: true },
-        { when: it => it.w !== 1, key: "open", label: "Volet déplié à l'ouverture", def: false },
-        { when: it => it.w !== 1, key: "cam", label: "Caméra dans le volet", def: true },
-        { when: it => it.w !== 1, key: "temps", label: "Températures dans le volet", def: true }] },
+        ] },
     // l'AMS tout en un (23/10/2026) : remplace l'ancien apercu et la tuile « Detail de l'AMS »
     vortek: { label: "Rack Vortek", w: [2, 1], h: [2, 1, 3], frame: { icon: <Layers size={15}/>, color: "#0EA5E9" },
       summary: (d, st) => { const r = st?.hotend_rack; const n = (r?.hotends || []).filter(h => h.id >= 16 && !h.empty && h.filament_id).length;
