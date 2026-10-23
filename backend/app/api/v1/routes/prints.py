@@ -331,10 +331,14 @@ def _period_clauses(date_from: Optional[str], date_to: Optional[str]):
     clauses = []
     d_from = _p(date_from)
     d_to = _p(date_to)
+    # comparees une fois normalisees : la base a des dates « 2026-10-22 16:12:00 » et d'autres
+    # « 2026-10-22T16:12:00 » (imports) ; comparees comme du texte, le « T » passait apres l'espace
+    # et une impression du jour sortait des bornes
+    pd = func.datetime(Print.print_date)
     if d_from:
-        clauses.append(Print.print_date >= d_from)
+        clauses.append(pd >= d_from.strftime("%Y-%m-%d %H:%M:%S"))
     if d_to:
-        clauses.append(Print.print_date < d_to + timedelta(days=1))
+        clauses.append(pd < (d_to + timedelta(days=1)).strftime("%Y-%m-%d %H:%M:%S"))
     return clauses
 
 
@@ -791,11 +795,11 @@ async def prints_stats(
         period = []
         if d_from or d_to:
             if d_from:
-                period.append(Print.print_date >= d_from)
+                period.append(func.datetime(Print.print_date) >= d_from.strftime("%Y-%m-%d %H:%M:%S"))
             if d_to:
-                period.append(Print.print_date < d_to)
+                period.append(func.datetime(Print.print_date) < d_to.strftime("%Y-%m-%d %H:%M:%S"))
         elif days and days > 0:
-            period.append(Print.print_date >= datetime.utcnow() - timedelta(days=days))
+            period.append(func.datetime(Print.print_date) >= (datetime.utcnow() - timedelta(days=days)).strftime("%Y-%m-%d %H:%M:%S"))
 
         def W(*extra):
             return [done, *period, *extra]
@@ -1260,7 +1264,8 @@ async def prints_kpis_daily(
         # une impression peut avoir commence avant la periode et tourner dedans : 4 jours de marge
         rows = (await db.execute(select(Print.print_date, Print.duration_seconds, Print.total_weight_g, Print.total_cost, Print.status,
                                         Print.id, Print.file_name)
-                                 .where(Print.print_date >= lo - timedelta(days=4), Print.print_date < hi))).all()
+                                 .where(func.datetime(Print.print_date) >= (lo - timedelta(days=4)).strftime("%Y-%m-%d %H:%M:%S"),
+                                        func.datetime(Print.print_date) < hi.strftime("%Y-%m-%d %H:%M:%S")))).all()
     for start, dur, w, c, status, pid, fname in rows:
         if not start:
             continue
