@@ -598,7 +598,7 @@ function loadDays() {
   const now = new Date(), key = ymd(now);
   if (daysCache && daysCache.key === key && Date.now() - daysCache.at < 60000) return daysCache.p;
   const from = new Date(now); from.setDate(now.getDate() - DAYS_MAX + 1);
-  const p = client.get("/prints/kpis/daily", { params: { date_from: ymd(from), date_to: key } })
+  const p = client.get("/prints/kpis/daily", { params: { date_from: ymd(from), date_to: key, tz: -now.getTimezoneOffset() } })
     .then(r => (r.data || []).map(x => ({ ...x, day: new Date(`${x.date}T12:00:00`) })))
     .catch(() => { daysCache = null; return null; });
   daysCache = { at: Date.now(), key, p };
@@ -696,11 +696,13 @@ function DaysChart({ v, n, metric, color, H, W, big }) {
     hi={v.findIndex(x => ymd(x.day) === today)} showValues={values} fmt={fmt}
     titles={v.map(x => `${x.day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} : ${fmt(val(x))}`)}/>;
 }
+// la hauteur d'un graphe en grand : a la mesure de la largeur (un telephone n'a pas besoin d'un graphe d'un demi-ecran)
+const zoomChartH = W => Math.round(Math.max(110, Math.min(220, W * 0.45)));
 function WeekZoom({ o }) {
   const [n, setN] = useState(o.range || 7);
   const [m, setM] = useState(o.metric || "h");
   const v = useDays(n);
-  const { W, H } = useBox();
+  const { W } = useBox();
   const [, val, fmt] = METRICS[m];
   const tot = (v || []).reduce((a, x) => a + val(x), 0);
   const best = (v || []).reduce((b, x) => !b || val(x) > val(b) ? x : b, null);
@@ -719,7 +721,7 @@ function WeekZoom({ o }) {
         ["Jours actifs", v ? `${active} / ${n}` : "…"]].map(([l, x]) => (
         <div key={l}><Muted>{l}</Muted><div style={{ fontSize: 20, fontWeight: 900, color: "var(--text)" }}>{x}</div></div>))}
     </div>
-    {v && <div style={{ marginTop: "auto" }}><DaysChart v={v} n={n} metric={m} color="#8B5CF6" W={W} H={Math.max(140, H - 175)} big/></div>}
+    {v && <div><DaysChart v={v} n={n} metric={m} color="#8B5CF6" W={W} H={zoomChartH(W)} big/></div>}
   </>;
 }
 function Week({ o, sz }) {
@@ -1249,7 +1251,7 @@ function MwZoom({ c }) {
           <div style={{ fontSize: 22, fontWeight: 900, color: "#16a34a" }}>+{Math.round(e)}</div></div>; })}
     </div>
     <H2>Points gagnés, 30 jours</H2>
-    {hist ? <Bars values={hist} color="#EAB308" height={180} hi={29} showValues={W / 30 >= 22} labels={days.map(d => d.getDate() % 5 === 0 ? String(d.getDate()) : "")}
+    {hist ? <Bars values={hist} color="#EAB308" height={zoomChartH(W)} hi={29} showValues={W / 30 >= 22} labels={days.map(d => d.getDate() % 5 === 0 ? String(d.getDate()) : "")}
       titles={days.map((d, i) => `${d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : +${hist[i]}`)}/> : <Muted>…</Muted>}
     <H2>Ces 30 jours</H2>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
@@ -1661,7 +1663,7 @@ function MonthZoomChart() {
   const days = useDays(new Date().getDate());
   const { W } = useBox();
   if (!days) return <Muted>…</Muted>;
-  return <Bars values={days.map(x => x.count || 0)} color="#6366F1" height={150} hi={days.length - 1} showValues={W / days.length >= 22}
+  return <Bars values={days.map(x => x.count || 0)} color="#6366F1" height={zoomChartH(W)} hi={days.length - 1} showValues={W / days.length >= 22}
     labels={days.map(x => String(x.day.getDate()))} titles={days.map(x => `${x.day.toLocaleDateString("fr-FR", { day: "numeric", month: "long" })} : ${x.count || 0}`)}/>;
 }
 // objets et ventes : un anneau vendus / a vendre, le chiffre et la marge
