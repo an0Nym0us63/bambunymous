@@ -2470,27 +2470,60 @@ function Alerts({ a, o, sz }) {
       zoom={<AllAlertsModal key={pick || "all"} inline initialCat={pick} onChanged={() => window.dispatchEvent(new Event("bn-tiles-reload"))}/>}>
       {({ W, H }) => {
         if (!cats.length) return <Empty>Rien à signaler.</Empty>;
-        // haute : chaque categorie avec ses alertes dessous, autant que la place en tient
-        const spare = H - cats.length * 27;
-        if (o.style !== "icons" && spare >= 40) {
-          const per = Math.max(0, Math.floor(spare / cats.length / 19));
-          return <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{cats.map(c => <div key={c.category}>
-            {listRow(c, false)}
-            {(c.alerts || []).slice(0, per).map(x => <div key={x.key} style={{ display: "flex", gap: 6, alignItems: "baseline", height: 19, paddingLeft: 23,
-              fontSize: 11.5, minWidth: 0 }}>
-              <span style={{ flex: 1, minWidth: 0, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.title}
-                {W >= 260 && <span style={{ color: "var(--muted)" }}> · {x.detail}</span>}</span>
-              <span style={{ fontWeight: 800, color: "#b45309", whiteSpace: "nowrap" }}>{x.value}</span></div>)}
-          </div>)}</div>;
+        const style = o.style || "chips";
+        // liste : une ligne par categorie ; haute, ses premieres alertes dessous
+        if (style === "list") {
+          const spare = H - cats.length * 27;
+          if (spare >= 40) {
+            const per = Math.max(0, Math.floor(spare / cats.length / 19));
+            return <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{cats.map(c => <div key={c.category}>
+              {listRow(c, false)}
+              {(c.alerts || []).slice(0, per).map(x => <div key={x.key} style={{ display: "flex", gap: 6, alignItems: "baseline", height: 19, paddingLeft: 23,
+                fontSize: 11.5, minWidth: 0 }}>
+                <span style={{ flex: 1, minWidth: 0, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.title}
+                  {W >= 260 && <span style={{ color: "var(--muted)" }}> · {x.detail}</span>}</span>
+                <span style={{ fontWeight: 800, color: "#b45309", whiteSpace: "nowrap" }}>{x.value}</span></div>)}
+            </div>)}</div>;
+          }
+          return <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+            {cats.slice(0, fitRows(H, 24, 3)).map(c => listRow(c, o.detail && W >= 300))}</div>;
         }
-        if (o.style === "list" || (o.style !== "icons" && H >= cats.length * 28)) return <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-          {cats.slice(0, fitRows(H, 24, 3)).map(c => listRow(c, o.detail && W >= 300))}</div>;
-        return <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignContent: "center", flex: 1 }}>
+        // icones : une grosse icone par categorie, le nombre en badge, rien d'ecrit
+        if (style === "icons") {
+          const g = fitGrid(cats.length, W, H, { gap: 10, max: 74 });
+          const s2 = Math.max(30, g.size);
+          return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${s2}px)`, gap: 10, justifyContent: "space-evenly", alignContent: "center" }}>
+            {cats.map(c => <span key={c.category} data-pk="" role="button" tabIndex={0} title={`${c.label} : ${c.total}`} onClick={() => setPick(c.category)}
+              style={{ position: "relative", width: s2, height: s2, borderRadius: s2 * 0.28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: s2 * 0.5, background: "linear-gradient(135deg, rgba(245,158,11,0.22), rgba(249,115,22,0.10))", boxShadow: "inset 0 0 0 1px rgba(245,158,11,0.35)" }}>
+              {c.icon}
+              <b style={{ position: "absolute", top: -6, right: -6, minWidth: 20, height: 20, padding: "0 5px", borderRadius: 10, boxSizing: "border-box",
+                fontSize: 11.5, lineHeight: "20px", textAlign: "center", color: "#fff", background: "#f59e0b", boxShadow: "0 2px 6px rgba(245,158,11,0.5)" }}>{c.total}</b>
+            </span>)}</div>;
+        }
+        // pastilles : des pilules colorees (icone, nom, nombre) qui grandissent avec la tuile ; etroite, une par
+        // ligne en pleine largeur, a la hauteur que laisse la tuile
+        const rowH = Math.floor((H - 6 * (cats.length - 1)) / cats.length);
+        if (W < 260 && rowH >= 26) {
+          const h = Math.min(46, rowH), f = Math.max(12, Math.min(15, h * 0.36));
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
+            {cats.map(c => <span key={c.category} data-pk="" role="button" tabIndex={0} title={c.label} onClick={() => setPick(c.category)}
+              style={{ display: "flex", alignItems: "center", gap: 8, height: h, padding: "0 10px", cursor: "pointer", borderRadius: h / 2, fontSize: f, fontWeight: 800,
+                background: "linear-gradient(135deg, rgba(245,158,11,0.18), rgba(249,115,22,0.08))", boxShadow: "inset 0 0 0 1px rgba(245,158,11,0.3)", minWidth: 0 }}>
+              <span style={{ fontSize: f + 3 }}>{c.icon}</span>
+              <span style={{ flex: 1, minWidth: 0, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
+              <b style={{ background: "#f59e0b", color: "#fff", borderRadius: 10, padding: "0 7px", fontSize: f - 1 }}>{c.total}</b></span>)}</div>;
+        }
+        const big = H >= cats.length * 34 + 10 && W >= 220;
+        const fs = big ? 13.5 : 12;
+        return <div style={{ display: "flex", flexWrap: "wrap", gap: big ? 8 : 6, alignContent: "center", flex: 1 }}>
           {cats.map(c => <span key={c.category} data-pk="" role="button" tabIndex={0} title={c.label}
             onClick={() => setPick(c.category)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 9px", cursor: "pointer",
-              borderRadius: 20, fontSize: 12, fontWeight: 800, background: "rgba(245,158,11,0.12)", color: "#b45309" }}>
-            {c.icon}{o.style !== "icons" && W >= 200 && ` ${c.label}`} <b>{c.total}</b></span>)}</div>;
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: big ? "7px 13px" : "4px 10px", cursor: "pointer",
+              borderRadius: 20, fontSize: fs, fontWeight: 800, color: "#b45309",
+              background: "linear-gradient(135deg, rgba(245,158,11,0.18), rgba(249,115,22,0.08))", boxShadow: "inset 0 0 0 1px rgba(245,158,11,0.3)" }}>
+            <span style={{ fontSize: fs + 2 }}>{c.icon}</span>{W >= 200 && <span style={{ color: "var(--text)" }}>{c.label}</span>}
+            <b style={{ background: "#f59e0b", color: "#fff", borderRadius: 10, padding: "0 7px", fontSize: fs - 1 }}>{c.total}</b></span>)}</div>;
       }}
     </Tile>
   );
@@ -3205,7 +3238,7 @@ export const TILES = {
   podium: { label: "Classement des copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Podium p={d.podium} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "list", [["list", "liste"], ["podium", "podium"]]), B("bars", "Barres de score", true), SCROLL(false)] },
   alerts: { label: "Alertes en bref", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Alerts a={d.attention} o={o} sz={sz(it)}/>,
-    options: [C("style", "Affichage", "chips", [["chips", "pastilles"], ["icons", "icônes"], ["list", "liste"]], { hint: "Les pastilles deviennent une liste quand la place le permet." }),
+    options: [C("style", "Affichage", "chips", [["chips", "pastilles"], ["icons", "icônes"], ["list", "liste"]], { hint: "Pastilles : une pilule par catégorie. Icônes : une grosse icône, le nombre en badge. Liste : une ligne par catégorie, et ses alertes dessous quand la tuile est haute." }),
       B("detail", "Exemples (quand la tuile est large)", true)] },
   countdown: { label: "Fin d'impression", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Countdown status={st} o={o} sz={sz(it)}/>,
     options: [B("fin", "Heure de fin", true), B("layer", "Couche", true)] },
