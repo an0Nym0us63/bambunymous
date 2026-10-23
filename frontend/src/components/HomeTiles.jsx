@@ -1370,7 +1370,7 @@ const tempRows = (status, o) => {
   const bed = { k: "bed", ico: IcoBed, l: "Plateau", v: status.bed_temp, t: status.target_bed_temp, max: 120, c: "#ef4444" };
   return [
     ...nz.map(n => ({ k: `n${n.id}`, ico: IcoNozzle, l: nz.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", v: n.temp, t: n.target, max: 300, c: "#f97316",
-      active: nz.length > 1 && !!n.active })),
+      active: nz.length > 1 && !!n.active, s: nz.length > 1 ? (n.id === 1 ? "G" : "D") : null })),
     ...(!nz.length && status.nozzle_temp != null ? [{ k: "n", ico: IcoNozzle, l: "Buse", v: status.nozzle_temp, t: status.target_nozzle_temp, max: 300, c: "#f97316" }] : []),
     bed,
     ...(o.chamber && status.chamber_temp > 0 ? [{ k: "ch", ico: IcoChamber, l: "Chambre", v: status.chamber_temp, t: status.target_chamber_temp, max: 70, c: "#eab308" }] : []),
@@ -1407,12 +1407,14 @@ function ThermoCell({ r, w, h, targets }) {
   const card = { width: w, height: h, boxSizing: "border-box", borderRadius: 16, padding: "8px 10px", minWidth: 0, overflow: "hidden", position: "relative",
     background: `radial-gradient(circle at 18% 100%, ${glow(hot ? 0.32 : 0.14)}, transparent 62%), linear-gradient(160deg, ${glow(0.12)}, transparent 70%), var(--surface2)`,
     border: r.active ? `2px solid ${c}` : "1px solid transparent", boxShadow: r.active ? `0 6px 22px ${glow(0.35)}` : "none" };
-  const activeChip = r.active && <span style={{ position: "absolute", top: 8, right: 8, fontSize: 9.5, fontWeight: 900, color: "#fff", background: c,
-    padding: "1px 7px", borderRadius: 10, letterSpacing: ".03em" }}>active</span>;
+  const activeChip = r.active && (w >= 190 ? <span style={{ flexShrink: 0, fontSize: 9.5, fontWeight: 900, color: "#fff", background: c,
+    padding: "1px 7px", borderRadius: 10, letterSpacing: ".03em", lineHeight: 1.4 }}>active</span>
+    : <span title="buse active" style={{ flexShrink: 0, width: 8, height: 8, borderRadius: "50%", background: c, boxShadow: `0 0 8px ${c}`,
+      animation: "livePulse 2s infinite" }}/>);
   // haute : un thermometre (tube et bulbe) a gauche, le reste a droite
   if (h >= 150 && w >= 96) {
     const tubeH = h - 46, bulb = 22, fill = frac(v);
-    return <div title={`${r.l} : ${st}`} style={{ ...card, display: "flex", gap: 10, padding: "10px 12px" }}>{activeChip}
+    return <div title={`${r.l} : ${st}`} style={{ ...card, display: "flex", gap: 10, padding: "10px 12px" }}>
       <div style={{ position: "relative", width: bulb, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
         <div style={{ width: 12, height: tubeH, borderRadius: 6, background: "var(--surface)", border: "1px solid var(--border)", position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${fill * 100}%`, background: `linear-gradient(to top, ${heat(20)}, ${c})`,
@@ -1425,7 +1427,8 @@ function ThermoCell({ r, w, h, targets }) {
       </div>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>{icon(24)}
-          <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.l}</span></div>
+          <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{r.l}</span>
+          {activeChip}</div>
         <div>{val(Math.min(34, (w - 44) * 0.26), false)}</div>
         <span style={{ fontSize: 11.5, fontWeight: 800, color: sc }}>{ic} {st}</span>
       </div>
@@ -1437,7 +1440,7 @@ function ThermoCell({ r, w, h, targets }) {
     <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
       {w >= 84 && icon(big ? 22 : 18)}
       <span style={{ fontSize: w < 84 ? 10.5 : 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>{r.l}</span>
-      {ic && w >= 100 && <span style={{ fontSize: 10, fontWeight: 900, color: sc }}>{ic}</span>}</div>
+      {activeChip || (ic && w >= 100 && <span style={{ fontSize: 10, fontWeight: 900, color: sc }}>{ic}</span>)}</div>
     {val(Math.max(15, Math.min(big ? 28 : 21, w * 0.19)), targets && w >= 84)}
     <div style={{ position: "relative", height: 6, borderRadius: 4, background: "var(--surface)", border: "1px solid var(--border)" }}>
       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${frac(v) * 100}%`, borderRadius: 4,
@@ -1460,7 +1463,7 @@ function thermoGrid(n, W, H, gap = 8) {
 export function TempPanel({ status, chamber = true, cardH = 190 }) {
   const [ref, box] = useMeasure();
   const rows = status?.connected ? tempRows(status, { chamber }) : [];
-  const cols = box.W >= 520 ? Math.min(4, rows.length) : 2;
+  const cols = box.W >= 640 ? Math.min(4, rows.length) : 2;
   const w = box.W ? Math.floor((box.W - 10 * (cols - 1)) / cols) : 0;
   return <div ref={ref} style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
     {w > 0 && rows.map(r => <ThermoCell key={r.k} r={r} w={w} h={cardH} targets/>)}</div>;
@@ -1490,7 +1493,7 @@ function Temps({ status, o, sz }) {
     const g = fitGrid(rows.length, W, H, { ar: 0.42, gap: 6, max: 200 });
     return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, 1fr)`, gap: 6, alignContent: "center" }}>
       {rows.map(r => <div key={r.k} title={r.l} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 0,
-        color: hot(r) ? r.c : "var(--muted)" }}><r.ico s={14}/>
+        color: hot(r) ? r.c : "var(--muted)" }}><r.ico s={14}/>{r.s && <span style={{ fontSize: 10.5, fontWeight: 900, marginLeft: -3 }}>{r.s}</span>}
         <span data-pk="" style={{ fontSize: 16, fontWeight: 900, color: hot(r) ? r.c : "var(--text)" }}>{Math.round(r.v || 0)}°</span></div>)}</div>;
   };
   return (
@@ -1498,7 +1501,7 @@ function Temps({ status, o, sz }) {
       return <TempPanel status={status} chamber={o.chamber} cardH={Math.max(170, Math.min(360, Math.floor((H - 10 * (r - 1)) / r)))}/>; }}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 10, fontSize: 13.5 }}>{rows.map(r =>
         <span key={r.k} title={r.l} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: hot(r) ? r.c : "var(--text)" }}>
-          <r.ico s={13}/>{Math.round(r.v || 0)}°</span>)}</span>}>
+          <r.ico s={13}/>{r.s && <span style={{ fontSize: 10, fontWeight: 900 }}>{r.s}</span>}{Math.round(r.v || 0)}°</span>)}</span>}>
       {({ W, H }) => {
         // des cartes thermometre si elles tiennent, sinon les jauges (style « jauges »), sinon des lignes
         if (!o.style || o.style === "thermo") { const th = thermo(W, H); if (th) return th; }

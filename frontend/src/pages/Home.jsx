@@ -658,10 +658,23 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
   const tab = !big && dry && <span title={`Séchage${a.dry_filament ? ` ${a.dry_filament}` : ""}`} style={{ position: "absolute", top: -6, left: "50%", transform: "translateX(-50%)", zIndex: 2,
     padding: "0 7px", height: 13, lineHeight: "13px", borderRadius: 7, fontSize: 9, fontWeight: 900, color: "#fff", background: "#f97316",
     whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(249,115,22,0.35)" }}>🔥 {a.dry_filament ? `${a.dry_filament} · ` : ""}{dryLeft(a.dry_time)}</span>;
-  const badges = big && <span style={{ display: "flex", gap: 4, flexWrap: "wrap", height: 14, overflow: "hidden", flexShrink: 0 }}>
-    {dry && chip(`🔥 ${a.dry_temperature > 0 ? `${a.dry_temperature}° · ` : ""}${dryLeft(a.dry_time)}`, "#fff", "#f97316")}
-    {route && chip(route, "#8b5cf6", "rgba(139,92,246,0.14)")}
-    {climate && a.humidity > 0 && chip(`💧${a.humidity}%`, a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#d97706" : "#0ea5e9", "rgba(14,165,233,0.12)")}</span>;
+  let broom = uw - 22;
+  const bfit = w => (broom -= w + 4) >= 0;
+  const dryFull = `🔥 ${a.dry_temperature > 0 ? `${a.dry_temperature}° · ` : ""}${dryLeft(a.dry_time)}`, dryShort = `🔥 ${dryLeft(a.dry_time)}`;
+  const dryTxt = dry ? (bfit(dryFull.length * 5.4 + 8) ? dryFull : (broom = uw - 18, bfit(dryShort.length * 5.4 + 6) ? dryShort : "🔥")) : null;
+  // la buse et l'humidite apres le sechage ; ce qui ne tient pas passe sur une deuxieme ligne
+  const hasHum = climate && a.humidity > 0;
+  const bRoute = route && bfit(30), bHum = hasHum && bfit(40);
+  const line2 = (route && !bRoute) || (hasHum && !bHum);
+  const routeChip = route && chip(route, "#8b5cf6", "rgba(139,92,246,0.14)");
+  const humChip = hasHum && chip(`💧${a.humidity}%`, a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#d97706" : "#0ea5e9", "rgba(14,165,233,0.12)");
+  const badges = big && <span style={{ display: "flex", flexDirection: "column", gap: 3, flexShrink: 0 }}>
+    <span style={{ display: "flex", gap: 4, height: 14, overflow: "hidden" }}>{dryTxt && chip(dryTxt, "#fff", "#f97316")}{bRoute && routeChip}{bHum && humChip}</span>
+    {line2 && <span style={{ display: "flex", gap: 4, height: 14, overflow: "hidden" }}>{!bHum && humChip}
+      {!bRoute && (uw - 22 - (!bHum && hasHum ? 44 : 0)) >= 30 && routeChip}</span>}</span>;
+  // sous chaque pastille, ce qui reste : sans « % » quand la colonne est trop etroite pour lui
+  const cellW = (uw - (big ? 20 : 12) - (big ? 6 : 3) * Math.max(0, trays.length - 1)) / Math.max(1, trays.length);
+  const pctFs = Math.max(8.5, Math.min(big ? 11.5 : 9.5, cellW / 3.1)), pctSign = cellW >= 30;
   return (
     <div style={{ position: "relative", height: h, minWidth: 0 }}>{tab}
     <button type="button" onClick={click} style={{ ...box, display: "flex", flexDirection: "column", gap: big ? 6 : 3, padding: big ? "8px 10px 10px" : "4px 6px 6px" }}>
@@ -675,12 +688,12 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
       </span>
       {badges}
       <span style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 3 }}>
-        <span style={{ height: Math.max(10, Math.min(big ? 56 : h >= 120 ? 46 : 32, h - head - (big ? 22 : 0) - (h >= 62 ? 26 : 12))), display: "grid",
+        <span style={{ height: Math.max(10, Math.min(big ? 56 : h >= 120 ? 46 : 32, h - head - (big ? (line2 ? 39 : 22) : 0) - (h >= 62 ? 26 : 12))), display: "grid",
           gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: big ? 6 : 3 }}>
           {trays.map(t => <HubSwatch key={`${t.id}${act && t.id === actTray ? "a" : ""}`} t={t} active={act && t.id === actTray} h="100%" radius={big ? 9 : 6}/>)}</span>
         {h >= 62 && <span style={{ display: "grid", gridTemplateColumns: `repeat(${trays.length || 1}, minmax(0, 1fr))`, gap: big ? 6 : 3 }}>
-          {trays.map(t => <span key={t.id} style={{ fontSize: big ? 11 : 9.5, fontWeight: 800, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
-            color: act && t.id === actTray ? "#3b82f6" : "var(--muted)" }}>{trayHex(t) ? (trayPct(t) != null ? `${trayPct(t)}%` : t.filament_type || "") : "—"}</span>)}</span>}
+          {trays.map(t => <span key={t.id} style={{ fontSize: pctFs, fontWeight: 800, textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
+            color: act && t.id === actTray ? "#3b82f6" : "var(--muted)" }}>{trayHex(t) ? (trayPct(t) != null ? `${trayPct(t)}${pctSign ? "%" : ""}` : t.filament_type || "") : "—"}</span>)}</span>}
       </span>
     </button></div>
   );
@@ -790,10 +803,11 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
           {[["Bobines chargées", list.flatMap(a => a.trays || []).filter(t => trayHex(t)).length],
             ["En cours", actT ? slotLabel(act, actTray) : "—", "#3b82f6"],
             ["Humidité moyenne", (() => { const h = list.filter(a => a.humidity > 0); return h.length ? `${Math.round(h.reduce((t, a) => t + a.humidity, 0) / h.length)} %` : "—"; })()],
-            ["En séchage", dryN ? list.filter(isDrying).map(a => amsName(a.id)).join(", ") : "aucun", dryN ? "#ea580c" : undefined]].map(([l, v, c]) =>
+            ["En séchage", dryN || "aucun", dryN ? "#ea580c" : undefined, dryN ? list.filter(isDrying).map(a => amsName(a.id)).join(" · ") : null]].map(([l, v, c, d]) =>
             <div key={l} className="card-sm" style={{ padding: "9px 11px", minWidth: 0 }}>
               <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{l}</div>
-              <div style={{ fontSize: 16, fontWeight: 900, color: c || "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v}</div></div>)}
+              <div style={{ fontSize: 16, fontWeight: 900, color: c || "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{v}</div>
+              {d && <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", lineHeight: 1.3 }}>{d}</div>}</div>)}
         </div>
         {sel && <div style={{ borderRadius: 20, padding: 14, display: "flex", flexDirection: "column", gap: 12,
           background: `linear-gradient(135deg, ${isDrying(sel) ? "rgba(249,115,22,0.12)" : sel.id === act ? "rgba(59,130,246,0.10)" : "rgba(139,92,246,0.08)"}, transparent 60%), var(--surface2)` }}>
@@ -1278,7 +1292,7 @@ function PrinterPopup({ status, img, name, onClose }) {
 
         {status?.connected && <>
           {section("Températures")}
-          <TempPanel status={status} cardH={150}/>
+          <TempPanel status={status} cardH={104}/>
         </>}
 
         {tray && !tray.empty ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
