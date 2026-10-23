@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets, Coins, Star, Users, Trophy,
          Dices, ChevronRight, Camera, Video, Thermometer, CalendarDays, ShoppingBag, Rss, Images, Zap, Medal as MedalIcon,
-         BellRing, Split, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck } from "lucide-react";
+         BellRing, Split, Fan, TrendingUp, TrendingDown, Key, Ticket, X, ArrowUpRight, Timer, Palette, Target, Disc3, CalendarCheck } from "lucide-react";
 import client, { apiUrl } from "../api/client";
 import { mwImg } from "./MwImg";
 import LiveCamera from "./LiveCamera";
@@ -918,6 +918,11 @@ function StockZoom({ list, low, kg }) {
   </>;
 }
 // le sechage : un anneau par AMS qui seche, sinon ce qui est a secher
+// la ventilation d'un sechage : un ventilateur qui tourne, en badge sur l'anneau (seulement si l'AMS le dit)
+const FanBadge = ({ a, size = 16 }) => (a.dry_fan1 || a.dry_fan2) ? <span title={`Ventilation${a.dry_fan1 && a.dry_fan2 ? " (2 ventilateurs)" : ""}${a.dry_sub_status === 2 ? " · déshumidification" : a.dry_sub_status === 1 ? " · chauffe" : ""}`}
+  style={{ position: "absolute", top: -3, right: -3, width: size, height: size, borderRadius: "50%", background: "var(--surface)", color: "#0ea5e9",
+    display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 1.5px rgba(14,165,233,0.45)", zIndex: 1 }}>
+  <Fan size={Math.round(size * 0.72)} style={{ animation: "spin 1.4s linear infinite" }}/></span> : null;
 const amsLab = a => a.id >= 128 ? `HT-${String.fromCharCode(65 + a.id - 128)}` : `AMS-${String.fromCharCode(65 + a.id)}`;
 function Dry({ v, status, o, sz }) {
   const drying = (status?.ams_list || []).filter(a => a.is_drying && a.dry_time > 0);
@@ -933,6 +938,7 @@ function Dry({ v, status, o, sz }) {
     <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
       <span style={{ position: "relative", flexShrink: 0, display: "inline-flex" }}>
         <Ring value={prog(a)} size={ring} color="#f97316">{a.dry_temperature ? `${a.dry_temperature}°` : ""}</Ring>
+        <FanBadge a={a} size={Math.max(14, Math.round(ring * 0.3))}/>
         <span aria-hidden="true" style={{ position: "absolute", inset: -3, borderRadius: "50%", boxShadow: "0 0 14px rgba(249,115,22,0.45)",
           animation: "dryPulse 2.5s ease-in-out infinite", pointerEvents: "none" }}/></span>
       <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 2 }}>
@@ -985,6 +991,7 @@ function Dry({ v, status, o, sz }) {
           </div>;
           const big = <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
             <Ring value={prog(a)} size={ring} color="#f97316">{Math.round(prog(a) * 100)}%</Ring>
+            <FanBadge a={a} size={Math.max(18, Math.min(30, Math.round(ring * 0.2)))}/>
             <span aria-hidden="true" style={{ position: "absolute", inset: -4, borderRadius: "50%", boxShadow: "0 0 22px rgba(249,115,22,0.45)",
               animation: "dryPulse 2.5s ease-in-out infinite", pointerEvents: "none" }}/></span>;
           return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 14 }}>
@@ -1005,6 +1012,7 @@ function Dry({ v, status, o, sz }) {
                 style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, minWidth: 0, maxWidth: "100%" }}>
                 <span style={{ position: "relative", display: "inline-flex" }}>
                   <Ring value={prog(a)} size={g.size} color="#f97316">{a.dry_temperature ? `${a.dry_temperature}°` : `${Math.round(prog(a) * 100)}%`}</Ring>
+                  <FanBadge a={a} size={Math.max(14, Math.round(g.size * 0.32))}/>
                   <span aria-hidden="true" style={{ position: "absolute", inset: -2, borderRadius: "50%", boxShadow: "0 0 10px rgba(249,115,22,0.4)",
                     animation: "dryPulse 2.5s ease-in-out infinite", pointerEvents: "none" }}/></span>
                 <span style={{ fontSize: 11, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", lineHeight: "13px" }}>
