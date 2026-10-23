@@ -490,7 +490,7 @@ function PageBar({ names, cur, onGo, renaming, setRenaming, onRename, onAdd, onD
 }
 
 export default function HomeGrid({ status, blocks, top = null }) {
-  const data = useTilesData();
+  const data = useTilesData(status);
   const wide = useWide();
   const defs = useMemo(() => ({ ...blocks, ...TILES }), [blocks]);
   const [lay, setLay] = useState(() => defaults(defs));

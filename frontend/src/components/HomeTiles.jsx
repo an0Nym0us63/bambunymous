@@ -563,8 +563,21 @@ const IcoChamber = ({ s = 12 }) => <svg width={s} height={s} viewBox="0 0 24 24"
   strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v18M12 8h5M12 12h5"/></svg>;
 
 // ── Donnees ──────────────────────────────────────────────────────────────────
-export function useTilesData() {
+export function useTilesData(status = null) {
   const [d, setD] = useState({});
+  const loadRef = useRef(null);
+  // un evenement franc de l'imprimante (lancement, preparation, pause, fin, echec, nouveau travail) :
+  // tout est relu tout de suite, puis 15 s apres (la fin d'une impression se confirme en 10 s cote serveur)
+  const phase = `${String(status?.status || "").toUpperCase()}|${status?.job_id || ""}`;
+  const lastPhase = useRef(null);
+  useEffect(() => {
+    if (!status?.status) return undefined;
+    const before = lastPhase.current;
+    lastPhase.current = phase;
+    if (before == null || before === phase || !loadRef.current) return undefined;
+    const a = setTimeout(() => loadRef.current?.(), 2000), b = setTimeout(() => loadRef.current?.(), 15000);
+    return () => { clearTimeout(a); clearTimeout(b); };
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     let dead = false;
     const put = (k, p) => p.then(r => { if (!dead) setD(x => ({ ...x, [k]: r })); }).catch(() => { if (!dead) setD(x => ({ ...x, [k]: null })); });
@@ -596,8 +609,9 @@ export function useTilesData() {
     load();
     put("mw", get("/makerworld/creator"));
     put("podium", get("/achievements/podium"));
+    loadRef.current = load;
     const iv = setInterval(load, 120000);
-    return () => { dead = true; clearInterval(iv); };
+    return () => { dead = true; clearInterval(iv); loadRef.current = null; };
   }, []);
   return d;
 }
