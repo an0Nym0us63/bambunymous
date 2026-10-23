@@ -5,17 +5,25 @@ import { currentFriend } from "./store/friend";
 // Petits gestes caches dans l'appli : la page les signale au serveur, qui en
 // fait une medaille secrete (sous-section des Secrets). Rien ne part chez un
 // copain, et un geste deja signale ne l'est plus.
-const KEY = "bn-eggs";
+// ce que cet appareil retient, par compte (deux comptes sur le meme appareil ne se melangent pas) ;
+// la premiere fois, le compte reprend ce que l'appareil retenait avant (24/10/2026)
+const who = () => { try { return JSON.parse(localStorage.getItem("auth-store") || "{}").state?.username || ""; } catch { return ""; } };
+function perUser(base) {
+  const u = who(), k = u ? `${base}:${u}` : base;
+  try { if (u && localStorage.getItem(k) == null && localStorage.getItem(base)) localStorage.setItem(k, localStorage.getItem(base)); } catch { /* rien */ }
+  return k;
+}
+const KEY_ = () => perUser("bn-eggs");
 
-const NC_KEY = "bn-eggs-nc";       // trouves par un compte qui ne compte pas : bandeau deja montre
+const NC_ = () => perUser("bn-eggs-nc");       // trouves par un compte qui ne compte pas : bandeau deja montre
 function seen(key) {
   try { return new Set(JSON.parse(localStorage.getItem(key) || "[]")); } catch { return new Set(); }
 }
-function done() { return seen(KEY); }
+function done() { return seen(KEY_()); }
 
 // Les secrets deja trouves, pour que les objets caches disparaissent une fois trouves (24/10/2026) :
 // ce que cet appareil sait, complete au lancement par le serveur (trouve sur un autre appareil).
-export const useEggsFound = create(() => ({ found: new Set([...seen(KEY), ...seen("bn-eggs-nc")]) }));
+export const useEggsFound = create(() => ({ found: new Set([...seen(KEY_()), ...seen(NC_())]) }));
 function noteFound(name) {
   const f = useEggsFound.getState().found;
   if (!f.has(name)) useEggsFound.setState({ found: new Set([...f, name]) });
@@ -40,26 +48,28 @@ export async function egg(name) {
       return;
     }
     if (data?.already) {
-      // deja trouve par la maison : rien a feter, et on ne redemande plus
+      // deja trouve dans la maison : ce compte l'a trouve lui aussi ; on le lui dit une fois (ca ne compte
+      // pas), puis on ne redemande plus et l'objet s'efface pour lui
       d.add(name);
       noteFound(name);
-      try { localStorage.setItem(KEY, JSON.stringify([...d])); } catch { /* stockage indisponible */ }
+      if (data.name) queued(done => celebrate(data, name, "Déjà trouvé dans la maison : ne compte pas", null, done));
+      try { localStorage.setItem(KEY_(), JSON.stringify([...d])); } catch { /* stockage indisponible */ }
       return;
     }
     if (data?.uncounted) {
       // compte qui ne fait pas avancer les succes : on le felicite (une fois), sans rien enregistrer ;
       // s'il est coche plus tard, le prochain passage comptera pour de bon
-      const nc = seen(NC_KEY);
+      const nc = seen(NC_());
       if (!nc.has(name)) {
         nc.add(name);
-        try { localStorage.setItem(NC_KEY, JSON.stringify([...nc])); } catch { /* stockage indisponible */ }
+        try { localStorage.setItem(NC_(), JSON.stringify([...nc])); } catch { /* stockage indisponible */ }
         queued(done => celebrate(data, name, true, null, done));
         noteFound(name);
       }
       return;
     }
     d.add(name);
-    try { localStorage.setItem(KEY, JSON.stringify([...d])); } catch { /* stockage indisponible */ }
+    try { localStorage.setItem(KEY_(), JSON.stringify([...d])); } catch { /* stockage indisponible */ }
     noteFound(name);
     if (data?.new) queued(done => celebrate(data, name, false, null, done));
   } catch { /* hors connexion, ou pas connecte : on retentera */ }
@@ -112,7 +122,7 @@ function celebrate(e, name = "", uncounted = false, kind = null, onGone = null) 
   txt.append(a, b, c);
   if (uncounted) {
     const nc = document.createElement("span");
-    nc.textContent = "Non comptabilisé : ce compte ne fait pas avancer les succès";
+    nc.textContent = typeof uncounted === "string" ? uncounted : "Non comptabilisé : ce compte ne fait pas avancer les succès";
     nc.style.cssText = "font-size:11px;font-weight:700;color:#F59E0B;margin-top:2px";
     txt.append(nc);
   }

@@ -59,9 +59,10 @@ async def achievements_passage_open(acc=Depends(require_own_account)):
 
 @router.get("/eggs-found")
 async def achievements_eggs_found(acc=Depends(require_own_account)):
-    """Les secrets deja trouves par la maison : la page efface les objets caches deja trouves."""
+    """Ce que CE compte a deja trouve : la page efface pour lui les objets caches qu'il a trouves
+    (les autres comptes de la maison les voient toujours, jusqu'a les trouver eux-memes)."""
     from ....services import achievements as A
-    return {"found": sorted(await A.eggs_found())}
+    return {"found": sorted(await A.eggs_seen_by(acc[0]))}
 
 
 @router.get("/news")
@@ -158,9 +159,11 @@ async def achievements_egg(name: str, acc=Depends(require_own_account)):
     from ....services import achievements as A
     found = await A.eggs_found()
     if name in A.EGGS and name in found:
-        # deja trouve par la maison (le compte principal, ou un autre) : plus rien a feter,
-        # pour personne -- un compte qui ne compte pas le revoyait a chaque fois (23/10/2026)
-        return {"new": False, "already": True, "id": f"egg_{name}"}
+        # deja trouve par la maison : rien de plus pour la maison ; ce compte, lui, l'a trouve (une fois)
+        # et la page le lui dit (« ne compte pas »), puis efface l'objet pour lui seul (24/10/2026)
+        e = A.EGGS[name]
+        await A.egg_seen(acc[0], name)
+        return {"new": False, "already": True, "id": f"egg_{name}", "emoji": e[0], "name": e[1], "lore": e[4]}
     if name in A.EGGS:
         why = await A.egg_lock(acc[0], name)
         if why:
@@ -172,12 +175,14 @@ async def achievements_egg(name: str, acc=Depends(require_own_account)):
         e = A.EGGS.get(name)
         if not e:
             raise HTTPException(404, "Œuf inconnu")
+        await A.egg_seen(acc[0], name)
         return {"new": False, "uncounted": True, "id": f"egg_{name}", "emoji": e[0], "name": e[1], "lore": e[4]}
     try:
         r = await A.find_egg(name)
     except ValueError as e:
         raise HTTPException(404, str(e))
     await A.egg_lock(acc[0], name, consume=True)      # l'autorisation de la surprise est utilisee
+    await A.egg_seen(acc[0], name)
     return r
 
 

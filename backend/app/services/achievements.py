@@ -5276,6 +5276,35 @@ async def prank_replay_ok(slug: str) -> bool:
     return slug in FETE_SLUGS and slug in fetes_of(_today_paris(), await first_print_day())
 
 
+async def eggs_seen_by(username: str) -> list:
+    """Ce que CE compte a trouve lui-meme (24/10/2026), compte ou pas : les objets caches
+    ne s'effacent que pour lui, les autres comptes de la maison les voient toujours."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        try:
+            d = json.loads(await get_setting(db, KEY + "_EGGS_BY", "") or "{}")
+        except ValueError:
+            d = {}
+    return list((d if isinstance(d, dict) else {}).get(username) or [])
+
+
+async def egg_seen(username: str, name: str) -> None:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    async with AsyncSessionLocal() as db:
+        try:
+            d = json.loads(await get_setting(db, KEY + "_EGGS_BY", "") or "{}")
+        except ValueError:
+            d = {}
+        d = d if isinstance(d, dict) else {}
+        mine = d.get(username) or []
+        if name in mine:
+            return
+        d[username] = (mine + [name])[-2000:]
+        await set_setting(db, KEY + "_EGGS_BY", json.dumps(d))
+
+
 async def eggs_found() -> dict:
     """Les easter eggs trouves : {nom: date}."""
     from ..db.session import AsyncSessionLocal
