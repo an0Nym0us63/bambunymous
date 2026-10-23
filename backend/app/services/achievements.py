@@ -2354,6 +2354,17 @@ for _x in CATALOG:
         _x["hint"] = HINTS.get(_x["id"]) or _x.get("hint")
         _x["cat"] = "secret"
         _x["sub"] = SUB_OF.get(_x["id"], "counts")
+        # farces et fetes (24/10/2026) : elles ne se cherchent pas, elles tombent (au hasard, ou le jour J).
+        # L'indice le dit d'abord ; le descriptif ne renvoie plus a une adresse qui ne marche qu'apres coup.
+        _k = _x["id"][4:] if _x["id"].startswith("egg_") else ""
+        if _k in PRANK_EGGS or _k in FETE_EGGS:
+            _fete = _k in FETE_EGGS
+            _x["hint"] = (("Celle-là ne tombe qu'un jour précis, à la première ouverture de l'appli ce jour-là. Lequel ? "
+                           if _fete else "Ne la cherche pas : elle te tombe dessus par hasard, à l'ouverture de l'appli, et devient "
+                           "plus probable à chaque ouverture sans surprise. Un avant-goût : ") + f"« {_x['hint']} »") if _x.get("hint") else None
+            _d = re.sub(r"^Ouvrir /[a-z0-9-]+[ ,]*(?:et |puis )?", "", _x["desc"])
+            _x["desc"] = ("Le jour de sa fête, quand elle tombe à l'ouverture de l'appli : " if _fete
+                          else "Quand elle tombe par surprise à l'ouverture de l'appli : ") + _d[:1].lower() + _d[1:]
     else:
         _x.pop("hidden", None)
 # Collections de medailles (secrets) : toute une section au moins a un palier.
