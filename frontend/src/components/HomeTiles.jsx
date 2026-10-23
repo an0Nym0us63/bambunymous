@@ -1894,90 +1894,94 @@ function switchModel(status) {
   const liveColor = tray?.color ? hexCss(tray.color) : "#22c55e";
   const port = p => ({ p, units: ams.filter(x => x.switch_port === p), slot: slot(fs[`in_${p.toLowerCase()}`]), out: fs[`out_${p.toLowerCase()}`] ?? null,
     live: live === p });
-  return { fs, ports: [port("A"), port("B")], nz, liveColor, temp: id => nz.find(n => n.id === id) };
+  return { fs, ports: [port("A"), port("B")], nz, liveColor, hl: "#22c55e", temp: id => nz.find(n => n.id === id) };
 }
 function SwitchArt({ m, W, H }) {
   const [A, B] = m.ports;
-  const VW = 340, VH = 180;
+  const VW = 380, VH = 180, HL = m.hl;
   const inY = { A: 42, B: 138 }, pY = { A: 72, B: 108 }, oY = { G: 72, D: 108 }, nY = { G: 42, D: 138 };
+  const cut = (t, n) => t.length > n ? `${t.slice(0, n - 1)}…` : t;
   const units = u => u.length ? (u.length <= 2 ? u.map(amsLab).join(" · ") : `${amsLab(u[0])} +${u.length - 1}`) : "aucun AMS";
-  const path = x => { const s = SIDE(x.out);
-    return s ? `M100 ${inY[x.p]} C122 ${inY[x.p]} 120 ${pY[x.p]} 140 ${pY[x.p]} C166 ${pY[x.p]} 174 ${oY[s]} 200 ${oY[s]} C220 ${oY[s]} 218 ${nY[s]} 240 ${nY[s]}`
-      : `M100 ${inY[x.p]} C122 ${inY[x.p]} 120 ${pY[x.p]} 140 ${pY[x.p]} L158 ${pY[x.p]}`; };
+  const path = x => { const s = SIDE(x.out), y = inY[x.p], p = pY[x.p];
+    return s ? `M122 ${y} C142 ${y} 140 ${p} 160 ${p} C186 ${p} 194 ${oY[s]} 220 ${oY[s]} C240 ${oY[s]} 238 ${nY[s]} 258 ${nY[s]}`
+      : `M122 ${y} C142 ${y} 140 ${p} 160 ${p} L178 ${p}`; };
   const servedBy = side => m.ports.find(x => SIDE(x.out) === side);
-  const box = (x, y, on, c) => <rect x={x} y={y} width="96" height="60" rx="14" fill="var(--surface2)" stroke={on ? c : "var(--border)"} strokeWidth={on ? 2.5 : 1}/>;
+  const box = (x, y, w, on) => <rect x={x} y={y} width={w} height="62" rx="14" fill="var(--surface2)" stroke={on ? HL : "var(--border)"} strokeWidth={on ? 2.5 : 1}/>;
   return (
     <svg viewBox={`0 0 ${VW} ${VH}`} width={W} height={H} style={{ display: "block", overflow: "visible" }} aria-label="Aiguillage">
-      {/* les chemins, l'inactif dessous */}
+      {/* les chemins : l'inactif en pointilles ; celui qui imprime en vert, et le filament qui avance dedans a sa couleur */}
       {[A, B].sort((a, b) => a.live - b.live).map(x => <g key={x.p}>
-        <path d={path(x)} fill="none" stroke={x.live ? m.liveColor : "var(--border)"} strokeWidth={x.live ? 5 : 3} strokeLinecap="round"
-          strokeDasharray={x.live ? "none" : "4 6"} opacity={x.live ? 0.35 : 1}/>
-        {x.live && <path d={path(x)} fill="none" stroke={m.liveColor} strokeWidth="5" strokeLinecap="round" strokeDasharray="9 7"
-          style={{ animation: "bn-dash .8s linear infinite", filter: `drop-shadow(0 0 4px ${m.liveColor})` }}/>}
+        {x.live ? <>
+          <path d={path(x)} fill="none" stroke={HL} strokeWidth="8" strokeLinecap="round" style={{ filter: `drop-shadow(0 0 5px ${HL}88)` }}/>
+          <path d={path(x)} fill="none" stroke={m.liveColor} strokeWidth="4" strokeLinecap="round" strokeDasharray="10 8"
+            style={{ animation: "bn-dash .8s linear infinite" }}/>
+        </> : <path d={path(x)} fill="none" stroke="var(--muted)" strokeOpacity="0.45" strokeWidth="3" strokeLinecap="round" strokeDasharray="4 6"/>}
       </g>)}
       {/* le corps de l'aiguillage */}
-      <rect x="140" y="50" width="60" height="80" rx="14" fill="#111827" stroke="rgba(255,255,255,0.12)"/>
-      <path d="M156 78 L184 102 M156 102 L184 78" stroke="rgba(255,255,255,0.35)" strokeWidth="3" strokeLinecap="round"/>
-      {[["A", 72], ["B", 108]].map(([p, y]) => <circle key={p} cx="140" cy={y} r="4" fill={m.ports.find(x => x.p === p).live ? m.liveColor : "#4b5563"}/>)}
-      {[["G", 72], ["D", 108]].map(([s, y]) => <circle key={s} cx="200" cy={y} r="4" fill={servedBy(s)?.live ? m.liveColor : "#4b5563"}/>)}
-      {m.fs.calibrating && <text x="170" y="146" textAnchor="middle" fontSize="10" fontWeight="800" fill="#f59e0b">calibration</text>}
+      <rect x="160" y="50" width="60" height="80" rx="14" fill="#111827" stroke="rgba(255,255,255,0.12)"/>
+      <path d="M176 78 L204 102 M176 102 L204 78" stroke="rgba(255,255,255,0.35)" strokeWidth="3" strokeLinecap="round"/>
+      {[["A", 72], ["B", 108]].map(([p, y]) => <circle key={p} cx="160" cy={y} r="5" fill={m.ports.find(x => x.p === p).live ? HL : "#4b5563"}/>)}
+      {[["G", 72], ["D", 108]].map(([sd, y]) => <circle key={sd} cx="220" cy={y} r="5" fill={servedBy(sd)?.live ? HL : "#4b5563"}/>)}
+      {m.fs.calibrating && <text x="190" y="148" textAnchor="middle" fontSize="11" fontWeight="800" fill="#f59e0b">calibration</text>}
       {/* les entrees */}
-      {[A, B].map(x => { const y = inY[x.p] - 30;
-        return <g key={x.p}>{box(4, y, x.live, m.liveColor)}
-          <text x="16" y={y + 19} fontSize="13" fontWeight="900" fill="#8b5cf6">Entrée {x.p}</text>
+      {[A, B].map(x => { const y = inY[x.p] - 31;
+        return <g key={x.p}>{box(4, y, 118, x.live)}
+          <text x="16" y={y + 19} fontSize="13.5" fontWeight="900" fill="#8b5cf6">Entrée {x.p}</text>
+          {x.live && <text x="110" y={y + 19} textAnchor="end" fontSize="11" fontWeight="900" fill={HL}>●</text>}
           {x.slot ? <>
-            <rect x="16" y={y + 27} width="13" height="13" rx="4" fill={x.slot.color || "transparent"} stroke={x.slot.color ? "rgba(0,0,0,0.25)" : "var(--muted)"}
+            <rect x="16" y={y + 27} width="14" height="14" rx="4" fill={x.slot.color || "transparent"} stroke="var(--muted)" strokeOpacity="0.6"
               strokeDasharray={x.slot.color ? "none" : "2 2"}/>
-            <text x="34" y={y + 38} fontSize="11.5" fontWeight="800" fill="var(--text)">{x.slot.label}{x.slot.type ? ` · ${x.slot.type}` : ""}</text></>
-            : <text x="16" y={y + 38} fontSize="11" fontWeight="700" fill="var(--muted)">rien d'engagé</text>}
-          <text x="16" y={y + 52} fontSize="9.5" fontWeight="700" fill="var(--muted)">{units(x.units)}</text></g>; })}
+            <text x="35" y={y + 39} fontSize="12" fontWeight="800" fill="var(--text)">{cut(`${x.slot.label}${x.slot.type ? ` · ${x.slot.type}` : ""}`, 13)}</text></>
+            : <text x="16" y={y + 39} fontSize="12" fontWeight="700" fill="var(--muted)">rien d'engagé</text>}
+          <text x="16" y={y + 54} fontSize="10.5" fontWeight="700" fill="var(--muted)">{units(x.units)}</text></g>; })}
       {/* les buses */}
-      {[["G", 1], ["D", 0]].map(([s, id]) => { const y = nY[s] - 30, by = servedBy(s), n = m.temp(id), on = !!by?.live;
-        return <g key={s}>{box(240, y, on, m.liveColor)}
-          <text x="252" y={y + 19} fontSize="13" fontWeight="900" fill="var(--text)">{s === "G" ? "Gauche" : "Droite"}</text>
-          <text x="252" y={y + 40} fontSize="17" fontWeight="900" fill={n && n.temp > 40 ? "#f97316" : "var(--text2)"}>{n ? `${Math.round(n.temp)}°` : "—"}</text>
-          {n?.target > 0 && <text x="292" y={y + 40} fontSize="10" fontWeight="700" fill="var(--muted)">/{Math.round(n.target)}°</text>}
-          <text x="252" y={y + 52} fontSize="9.5" fontWeight="700" fill={on ? m.liveColor : "var(--muted)"}>{by ? `${on ? "● " : ""}depuis ${by.p}` : "libre"}</text></g>; })}
+      {[["G", 1], ["D", 0]].map(([sd, id]) => { const y = nY[sd] - 31, by = servedBy(sd), n = m.temp(id), on = !!by?.live;
+        return <g key={sd}>{box(258, y, 118, on)}
+          <text x="270" y={y + 19} fontSize="13.5" fontWeight="900" fill="var(--text)">{sd === "G" ? "Gauche" : "Droite"}</text>
+          <text x="270" y={y + 40}>
+            <tspan fontSize="18" fontWeight="900" fill={n && n.temp > 40 ? "#f97316" : "var(--text2)"}>{n ? `${Math.round(n.temp)}°` : "—"}</tspan>
+            {n?.target > 0 && <tspan dx="4" fontSize="11" fontWeight="700" fill="var(--muted)">/{Math.round(n.target)}°</tspan>}</text>
+          <text x="270" y={y + 55} fontSize="11" fontWeight="800" fill={on ? HL : "var(--muted)"}>{by ? `${on ? "● " : ""}depuis ${by.p}` : "libre"}</text></g>; })}
     </svg>
   );
 }
 function FilaSwitch({ status, o, sz }) {
   if (!status?.fila_switch?.installed) return null;
   const m = switchModel(status);
-  const arrow = x => <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: x.live ? m.liveColor : "var(--text2)", fontWeight: 900 }}>
+  const arrow = x => <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: x.live ? m.hl : "var(--text2)", fontWeight: 900 }}>
     {x.p}<span style={{ fontSize: 11 }}>→</span>{SIDE(x.out) || "—"}</span>;
   // bas : une ligne par entree, le chemin en cours en couleur
   const rows = W => <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
     {m.ports.map(x => <div key={x.p} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, padding: "3px 8px", borderRadius: 10,
-      background: x.live ? `${m.liveColor}22` : "transparent", border: `1px solid ${x.live ? `${m.liveColor}88` : "transparent"}` }}>
+      background: x.live ? `${m.hl}22` : "transparent", border: `1px solid ${x.live ? `${m.hl}88` : "transparent"}` }}>
       <span style={{ fontSize: 12, fontWeight: 900, color: "#8b5cf6", width: 16 }}>{x.p}</span>
       <span style={{ width: 12, height: 12, borderRadius: 4, flexShrink: 0, background: x.slot?.color || "transparent",
         border: x.slot?.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
       {W >= 215 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
         {x.slot ? x.slot.label : "vide"}</span>}
-      <span style={{ flex: 1, minWidth: 12, height: 0, borderTop: `2px ${x.live ? "solid" : "dashed"} ${x.live ? m.liveColor : "var(--border)"}` }}/>
-      <span style={{ fontSize: 12, fontWeight: 900, color: x.live ? m.liveColor : "var(--text)", whiteSpace: "nowrap" }}>{SIDE_L(x.out)}</span>
+      <span style={{ flex: 1, minWidth: 12, height: 0, borderTop: `2px ${x.live ? "solid" : "dashed"} ${x.live ? m.hl : "var(--border)"}` }}/>
+      <span style={{ fontSize: 12, fontWeight: 900, color: x.live ? m.hl : "var(--text)", whiteSpace: "nowrap" }}>{SIDE_L(x.out)}</span>
     </div>)}</div>;
   return (
     <Tile icon={<Split size={15}/>} color="#8B5CF6" label="Aiguillage"
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 12, fontSize: 13.5 }}>{m.ports.map(x => <React.Fragment key={x.p}>{arrow(x)}</React.Fragment>)}</span>}
       zoom={({ W }) => <>
-        <div style={{ display: "flex", justifyContent: "center" }}><SwitchArt m={m} W={Math.min(W, 640)} H={Math.min(W, 640) * 180 / 340}/></div>
+        <div style={{ display: "flex", justifyContent: "center" }}><SwitchArt m={m} W={Math.min(W, 680)} H={Math.min(W, 680) * 180 / 380}/></div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 10 }}>
           {m.ports.map(x => <div key={x.p} style={{ padding: "11px 13px", borderRadius: 16, display: "flex", flexDirection: "column", gap: 8,
-            background: `linear-gradient(135deg, ${x.live ? m.liveColor : "#8b5cf6"}1c, transparent 65%), var(--surface2)`,
-            border: `1px solid ${x.live ? `${m.liveColor}88` : "var(--border)"}` }}>
+            background: `linear-gradient(135deg, ${x.live ? m.hl : "#8b5cf6"}1c, transparent 65%), var(--surface2)`,
+            border: `1px solid ${x.live ? `${m.hl}88` : "var(--border)"}` }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
               <span style={{ fontSize: 15, fontWeight: 900, color: "#8b5cf6" }}>Entrée {x.p}</span>
-              <span style={{ fontSize: 12.5, fontWeight: 800, color: x.live ? m.liveColor : "var(--text2)" }}>→ buse {SIDE_L(x.out).toLowerCase()}</span>
-              {x.live && <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: m.liveColor }}>● imprime</span>}</div>
+              <span style={{ fontSize: 12.5, fontWeight: 800, color: x.live ? m.hl : "var(--text2)" }}>→ buse {SIDE_L(x.out).toLowerCase()}</span>
+              {x.live && <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: m.hl }}>● imprime</span>}</div>
             <Muted size={12}>Bobine engagée : <b style={{ color: "var(--text)" }}>{x.slot ? `${x.slot.label}${x.slot.type ? ` · ${x.slot.type}` : ""}` : "aucune"}</b></Muted>
             {x.units.length ? x.units.map(a => <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", width: 50 }}>{amsLab(a)}</span>
               <span style={{ display: "inline-flex", gap: 4 }}>{(a.trays || []).map(t => <span key={t.id} title={t.filament_type}
                 style={{ width: 18, height: 18, borderRadius: 6, background: !t.empty && t.color ? hexCss(t.color) : "transparent",
                   border: !t.empty && t.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)",
-                  boxShadow: a.id === status.active_ams_id && t.id === status.active_tray_id ? `0 0 0 2px var(--surface), 0 0 0 4px ${m.liveColor}` : "none" }}/>)}</span>
+                  boxShadow: a.id === status.active_ams_id && t.id === status.active_tray_id ? `0 0 0 2px var(--surface), 0 0 0 4px ${m.hl}` : "none" }}/>)}</span>
               {a.humidity > 0 && <Muted size={11.5} style={{ marginLeft: "auto" }}>💧 {a.humidity} %</Muted>}</div>)
               : <Muted size={12}>Aucun AMS branché sur cette entrée</Muted>}
           </div>)}</div>
@@ -1986,26 +1990,28 @@ function FilaSwitch({ status, o, sz }) {
           {m.fs.filament != null && <span>{m.fs.filament ? "filament engagé dans l'aiguillage" : "aiguillage vide"}</span>}</div>
       </>}>
       {({ W, H }) => {
-        const h = Math.min(H, W * 180 / 340);
-        // etroite et haute : une carte par entree, de haut en bas (entree, bobine, fleche, buse)
-        if (h < 96 && W < 215 && H >= 150) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>
+        const h = Math.min(H, W * 180 / 380);
+        // le schema seulement si son texte reste lisible (pas plus petit qu'aux 9/10e) ;
+        // sinon, haute : une carte par entree (entree, bobine, fleche, buse) ; basse : une ligne par entree
+        const big = h >= 162;
+        if (!big && H >= 150) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>
           {m.ports.map(x => { const n = m.temp(x.out);
             return <div key={x.p} style={{ padding: "8px 10px", borderRadius: 14, display: "flex", flexDirection: "column", gap: 4,
-              background: x.live ? `${m.liveColor}1f` : "var(--surface2)", border: `1.5px solid ${x.live ? m.liveColor : "transparent"}` }}>
+              background: x.live ? `${m.hl}1f` : "var(--surface2)", border: `1.5px solid ${x.live ? m.hl : "transparent"}` }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <span style={{ fontSize: 12.5, fontWeight: 900, color: "#8b5cf6" }}>Entrée {x.p}</span>
                 <span style={{ width: 12, height: 12, borderRadius: 4, background: x.slot?.color || "transparent",
                   border: x.slot?.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
                 <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text2)" }}>{x.slot?.label || "vide"}</span></div>
               <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-                <span style={{ fontSize: 14, color: x.live ? m.liveColor : "var(--muted)", fontWeight: 900 }}>→</span>
-                <span style={{ fontSize: 14, fontWeight: 900, color: x.live ? m.liveColor : "var(--text)" }}>{SIDE_L(x.out)}</span>
+                <span style={{ fontSize: 14, color: x.live ? m.hl : "var(--muted)", fontWeight: 900 }}>→</span>
+                <span style={{ fontSize: 14, fontWeight: 900, color: x.live ? m.hl : "var(--text)" }}>{SIDE_L(x.out)}</span>
                 {n && <span style={{ marginLeft: "auto", fontSize: 13, fontWeight: 900, color: n.temp > 40 ? "#f97316" : "var(--text2)" }}>{Math.round(n.temp)}°</span>}</div>
               {H >= 230 && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {x.units.map(amsLab).join(" · ") || "aucun AMS"}</span>}
             </div>; })}</div>;
-        if (h < 96) return rows(W);
-        return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}><SwitchArt m={m} W={h * 340 / 180} H={h}/></div>;
+        if (!big) return rows(W);
+        return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center" }}><SwitchArt m={m} W={h * 380 / 180} H={h}/></div>;
       }}
     </Tile>
   );
