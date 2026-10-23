@@ -55,6 +55,9 @@ async def guide_read(body: dict = Body(...), _acc=Depends(require_own_account)):
     """Ce que la page a vu lire, pour les succes : temps passe (onglet visible et
     lecteur actif), sections lues, ouvertures, recherches."""
     from ....services import home_stats
+    from ....services.achievements import counted_users
+    if _acc[0] not in await counted_users():     # un compte qui ne fait pas avancer les succes : rien n'est compte
+        return {"ok": True, "counted": False}
     b = body or {}
     try:
         sec = max(0.0, min(600.0, float(b.get("seconds") or 0)))
