@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X, Palette, Copy } from "lucide-react";
+import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Check, GripVertical, Columns, Monitor, Smartphone, Settings2, X, Palette, Copy, Heading } from "lucide-react";
 import client from "../api/client";
 import { currentFriend, useFriend } from "../store/friend";
 import { toast } from "../store/toast";
@@ -658,6 +658,21 @@ export default function HomeGrid({ status, blocks, top = null }) {
             {wide ? "Touche une tuile pour ses réglages, ou glisse-la pour la déplacer. " : "Touche une tuile pour la déplacer ou la régler. "}
             L'engrenage règle sa largeur, sa hauteur et ses options. Chaque nombre de colonnes a sa disposition ; celle à une colonne
             est aussi celle du téléphone. Une disposition « automatique » se déduit des autres tant qu'on ne la règle pas.</div>
+          {/* les titres de toutes les tuiles, d'un coup (toutes les dispositions) ; chaque tuile garde son reglage ensuite */}
+          {(() => {
+            const all = Object.values(lay.layouts).flat(2).filter(Boolean);
+            const shown = all.filter(x => x.o?._title !== false).length;
+            const setAll = v => setLay(l => ({ ...l, layouts: Object.fromEntries(Object.entries(l.layouts).map(([k, cols]) =>
+              [k, cols.map(c => c.map(x => ({ ...x, o: { ...(x.o || {}), _title: v } })))])) }));
+            const btn = (on, label, v) => <button onClick={() => setAll(v)} style={{ height: 30, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800,
+              fontSize: 12.5, border: "1px solid var(--border)", background: on ? "#3b82f6" : "var(--surface2)", color: on ? "#fff" : "var(--text2)" }}>{label}</button>;
+            return <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <Heading size={15} style={{ color: "var(--muted)" }}/>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Titres des tuiles</span>
+              {btn(shown === all.length, "tous affichés", true)}{btn(shown === 0, "tous masqués", false)}
+              {shown > 0 && shown < all.length && <span style={{ fontSize: 12, color: "var(--muted)" }}>· {shown} sur {all.length} affichés</span>}
+            </div>;
+          })()}
           <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             <Palette size={15} style={{ color: "var(--muted)" }}/>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)", minWidth: 150 }}>Fonds des tuiles</span>
