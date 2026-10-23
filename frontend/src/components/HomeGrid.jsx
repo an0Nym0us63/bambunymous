@@ -187,6 +187,8 @@ function ownsSwipe(t, stop, dir = 0) {
 // Les ecrans cote a cote : celui qu'on voit dans le flux (il donne la hauteur), ses voisins poses a
 // gauche et a droite, prets a glisser. Le geste se decide au bout de quelques pixels : plutot vertical,
 // la page defile comme d'habitude ; plutot horizontal, l'ecran suit le doigt.
+// ce qui defile : la zone de page de l'appli (main), sinon la fenetre
+const scrollerOf = el => { for (let n = el?.parentElement; n; n = n.parentElement) if (/auto|scroll/.test(getComputedStyle(n).overflowY)) return n; return null; };
 function Pager({ count, cur, onGo, children }) {
   const box = useRef(null);
   // jusqu'en bas de l'ecran (au-dessus de la barre du bas) : un ecran peu rempli se glisse partout
@@ -194,6 +196,10 @@ function Pager({ count, cur, onGo, children }) {
   useLayoutEffect(() => {
     const f = () => { const el = box.current; if (!el) return;
       const nav = document.querySelector("nav.show-mobile"), navH = nav && nav.offsetWidth ? nav.getBoundingClientRect().height : 0;
+      const sc = scrollerOf(el);
+      // dans la zone qui defile : sa hauteur, moins ce qui precede l'ecran et sa marge du bas (qui laisse la barre)
+      if (sc) { const r = sc.getBoundingClientRect(), top = el.getBoundingClientRect().top - r.top + sc.scrollTop;
+        setMinH(Math.max(0, Math.floor(sc.clientHeight - top - parseFloat(getComputedStyle(sc).paddingBottom || 0)))); return; }
       setMinH(Math.max(0, Math.round(window.innerHeight - (el.getBoundingClientRect().top + window.scrollY) - navH - 12))); };
     f(); window.addEventListener("resize", f);
     return () => window.removeEventListener("resize", f);
@@ -201,6 +207,15 @@ function Pager({ count, cur, onGo, children }) {
   const [drag, setDrag] = useState(0);
   const [anim, setAnim] = useState(false);
   const g = useRef(null);
+  // un autre ecran : on repart de son haut (sinon on arrivait au milieu, a la hauteur du precedent)
+  const prev = useRef(cur);
+  useEffect(() => {
+    if (prev.current === cur) return;
+    prev.current = cur;
+    const sc = scrollerOf(box.current);
+    if (sc) sc.scrollTo({ top: 0, behavior: "auto" });
+    if (window.scrollY > 0) window.scrollTo({ top: 0, behavior: "auto" });
+  }, [cur]);
   const st = useRef({ count, cur, onGo });
   st.current = { count, cur, onGo };
   useEffect(() => {
@@ -250,7 +265,9 @@ function Pager({ count, cur, onGo, children }) {
     return null;
   };
   const tr = anim ? "transform .23s cubic-bezier(.2,.7,.3,1)" : "none";
-  return <div ref={box} style={{ position: "relative", overflowX: "clip", touchAction: "pan-y", minHeight: count > 1 ? minH : undefined }}>
+  // rogne dans les deux sens : un voisin plus long que l'ecran vu allongeait la page (on defilait dans le
+  // vide, ou le geste ne prenait plus) ; la marge garde les ombres des tuiles
+  return <div ref={box} style={{ position: "relative", overflow: "clip", overflowClipMargin: 14, touchAction: "pan-y", minHeight: count > 1 ? minH : undefined }}>
     {[...Array(count).keys()].map(i => { const k = at(i);
       return <div key={i} aria-hidden={i !== cur} style={i === cur ? { position: "relative", transform: `translateX(${drag}px)`, transition: tr }
         : { position: "absolute", top: 0, left: 0, width: "100%", visibility: k == null ? "hidden" : "visible", pointerEvents: "none",
