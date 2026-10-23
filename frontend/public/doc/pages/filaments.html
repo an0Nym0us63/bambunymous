@@ -1,0 +1,581 @@
+<h1>Filaments</h1>
+<p class="lead">La page <span class="ui">Filaments</span> tient ton stock : chaque bobine, son poids restant, son prix, sa place, son dernier séchage, et le catalogue des références de filament que tu possèdes. Elle s'ouvre depuis la barre du bas (téléphone) ou le menu de gauche (ordinateur). Ses réglages sont dans <span class="ui">Paramètres → 🧵 Filaments</span>.</p>
+
+<section id="filaments-vocabulaire">
+  <h2>Filament, bobine : le vocabulaire</h2>
+  <p>L'appli sépare deux choses qu'on confond souvent :</p>
+  <dl class="opts">
+    <dt>Filament</dt><dd>une <b>référence</b> : marque + sous-type + couleur, par exemple « Bambu Lab · PLA Basic · Blanc de jade ». Elle porte le prix catalogue, le poids d'une bobine neuve, le poids du support vide, les codes Bambu, et trois états : <i>Échantillon</i>, <i>Étiquette imprimée</i>, <i>À commander</i>.</dd>
+    <dt>Bobine</dt><dd>un <b>objet physique</b> de ce filament. Elle porte le poids restant, son prix d'achat, son emplacement, son tag NFC, ses dates de première et dernière utilisation, et la date de son dernier séchage. Un même filament peut avoir plusieurs bobines.</dd>
+    <dt>Matière (famille)</dt><dd>PLA, PETG, ABS, ASA, PA, PC, TPU, PVA… </dd>
+    <dt>Sous-type</dt><dd>la variante précise : PLA Basic, PLA Matte, PETG HF, PLA Silk+…</dd>
+    <dt>Échantillon</dt><dd>la petite plaquette imprimée de ton nuancier physique, sur laquelle tu colles l'étiquette QR du filament (voir <a href="#filaments-etiquettes">Étiquettes et scan</a>).</dd>
+    <dt>Support vide (tare)</dt><dd>le poids de la bobine vide, en plastique ou en carton. Il sert quand tu pèses une bobine sur une balance.</dd>
+  </dl>
+  <div class="note"><p><b>L'emplacement d'une bobine ne se saisit jamais à la main.</b> C'est l'appli qui l'écrit : « AMS-A slot 2 », « AMS HT-A », « Externe slot 1 » quand l'AMS la voit, « Tiroir » quand elle en sort, « Archives » quand tu l'archives.</p></div>
+
+  <section id="filaments-droits">
+    <h3>Qui peut faire quoi</h3>
+    <p>Tout ce qui modifie le stock (ajouter, éditer, peser, archiver, supprimer, attribuer une bobine à l'AMS, marquer un séchage) est réservé aux <span class="admin">admin</span>. Un compte en lecture seule voit les mêmes écrans sans les boutons d'action (pas de <span class="ui">+ Bobine</span>, pas de crayons, pas d'<span class="ui">Archiver</span>…).</p>
+    <ul>
+      <li>Le rôle <b>lecture seule</b> simple ne voit pas les montants : prix d'achat, valeur du stock et prix dans la comparaison sont remplacés par « — ». Le rôle <b>lecture seule avec prix</b> les voit.</li>
+      <li>Quand tu visites le BambuNymous d'un copain, ses filaments s'affichent en lecture seule, et les boutons de scan disparaissent (ses bobines ne sont pas chez toi).</li>
+      <li>Les réglages <span class="ui">Paramètres → 🧵 Filaments</span> sont réservés aux admin.</li>
+    </ul>
+  </section>
+</section>
+
+<section id="filaments-page">
+  <h2>La page Filaments</h2>
+  <p>En haut, quatre onglets : <span class="ui">Stock</span> · <span class="ui">Archivées</span> · <span class="ui">Filaments</span> · <span class="ui">Galerie</span>. L'onglet actif est en bleu.</p>
+  <p>À droite du titre (dans l'en-tête sur téléphone) se trouvent des boutons ronds :</p>
+  <dl class="opts">
+    <dt>Scanner (cadre bleu)</dt><dd><span class="ui">Scanner un échantillon</span> : lit le QR code collé sur une plaquette du nuancier et ouvre la fiche du filament (voir <a href="#filaments-scanner">Scanner un échantillon</a>).</dd>
+    <dt>NFC</dt><dd><span class="ui">Scan RFID</span> en continu : <b>seulement dans l'appli Android</b>, pour lire la puce d'une bobine Bambu Lab (voir <a href="#filaments-nfc">NFC / RFID</a>).</dd>
+  </dl>
+  <figure><img src="img/filaments-stock-bureau.webp" alt="Page Filaments sur ordinateur, onglet Stock : pastilles de résumé, recherche, grille de bobines"><figcaption>Sur ordinateur, la grille montre beaucoup de bobines à la fois.</figcaption></figure>
+
+  <section id="filaments-stock">
+    <h3>Onglet Stock</h3>
+    <p>C'est l'onglet par défaut : toutes tes bobines <b>actives</b> (non archivées).</p>
+    <figure class="phone"><img src="img/filaments-stock.webp" alt="Onglet Stock sur téléphone"><figcaption>Le stock sur téléphone : trois bobines par ligne.</figcaption></figure>
+    <h4>Les pastilles de résumé</h4>
+    <ul>
+      <li><b>N bobines</b> (bleu), <b>N marques</b> (violet), <b>X kg en stock</b> (orange : la somme des poids restants ; une bobine dont le poids est inconnu compte comme pleine), <b>N € valeur</b> (vert : la somme des prix d'achat).</li>
+      <li>Elles suivent la recherche et les filtres en cours : tape « PETG » et tu vois combien de PETG il te reste.</li>
+      <li>Une pastille sans valeur n'est pas affichée (par exemple la valeur quand aucun prix n'est saisi).</li>
+    </ul>
+    <h4>La recherche</h4>
+    <p>Le champ <span class="ui">Rechercher : nom, marque, type (silk…), couleur, code…</span> cherche mot à mot : tous les mots doivent apparaître, dans n'importe quel ordre (« silk rouge » trouve un PLA Silk rouge). Il fouille le nom (français et officiel), la marque, la matière, le sous-type, la couleur hexadécimale, le code couleur Bambu, l'emplacement, le tag NFC, le commentaire et le numéro de bobine (« #12 » ou « 12 » trouve la bobine 12).</p>
+    <h4>Les tuiles de bobine</h4>
+    <p>Chaque tuile montre, de haut en bas :</p>
+    <ul>
+      <li>un bandeau à la couleur du filament (en dégradé ou en segments pour un multicolore) ;</li>
+      <li>le sous-type en petites capitales (« PLA BASIC ») ;</li>
+      <li>le dessin d'une bobine à la couleur du filament (damier derrière si le filament est translucide) ;</li>
+      <li>une jauge du restant : verte au-dessus de 60 %, orange, orange foncé, puis rouge sous 15 % avec une pastille « 9% » au bout ;</li>
+      <li>« 760 g / 1000 g » (ou « — » si le poids est inconnu) ;</li>
+      <li>le nom, la marque, et l'emplacement en pastille quand il est connu.</li>
+    </ul>
+    <p>Touche une tuile pour ouvrir la <a href="#filaments-fiche-bobine">fiche de la bobine</a>.</p>
+    <p>Quand le stock est vide, la page affiche simplement « 0 bobines » et une grille vide.</p>
+  </section>
+
+  <section id="filaments-menu-bobine">
+    <h3>Le menu rapide d'une bobine</h3>
+    <p><b>Appui long</b> sur une tuile (téléphone) ou <b>clic droit</b> (ordinateur) : un menu s'ouvre avec le nom de la bobine, son numéro et son poids.</p>
+    <figure class="phone"><img src="img/filaments-menu-bobine.webp" alt="Menu rapide d'une bobine"><figcaption>Le menu rapide d'une bobine.</figcaption></figure>
+    <dl class="opts">
+      <dt>📄 Ouvrir la bobine</dt><dd>ouvre sa fiche.</dd>
+      <dt>🧵 Voir le filament</dt><dd>ouvre la fiche de la référence.</dd>
+      <dt>＋ Ajouter une bobine de ce filament</dt><dd><span class="admin">admin</span> ouvre <span class="ui">Nouvelle bobine</span> avec ce filament déjà choisi : pratique quand tu rachètes la même couleur.</dd>
+      <dt>📦 Archiver…</dt><dd><span class="admin">admin</span> « Quantité remise à 0, sort du stock » (voir <a href="#filaments-archiver">Archiver</a>).</dd>
+      <dt>🗑 Supprimer définitivement…</dt><dd><span class="admin">admin</span> efface la bobine, après confirmation.</dd>
+    </dl>
+  </section>
+
+  <section id="filaments-filtres">
+    <h3>Filtres et tri</h3>
+    <p>Le bouton <span class="ui">Filtres</span> ouvre la feuille <span class="ui">Filtres &amp; tri</span>. Quand des filtres sont actifs, le bouton devient bleu et affiche leur nombre : <span class="ui">Filtres (2)</span>.</p>
+    <figure class="phone"><img src="img/filaments-filtres.webp" alt="Feuille Filtres et tri"><figcaption>Tri en haut, filtres en dessous, chaque valeur avec son nombre de bobines.</figcaption></figure>
+    <h4>Trier par</h4>
+    <dl class="opts">
+      <dt>Plus récent</dt><dd>(par défaut dans Stock) la bobine utilisée le plus récemment d'abord ; celles jamais utilisées à la fin.</dd>
+      <dt>Teinte</dt><dd>en arc-en-ciel (rouge, orange, jaune, vert, bleu, violet, rose), du clair au foncé à teinte égale ; les blancs, gris et noirs à la fin.</dd>
+      <dt>Nom</dt><dd>ordre alphabétique.</dd>
+      <dt>Marque</dt><dd>regroupe par marque.</dd>
+      <dt>Poids restant ↓ / ↑</dt><dd>la plus pleine d'abord, ou la plus vide d'abord (pratique pour finir les fonds de bobine).</dd>
+      <dt>Séchage le plus ancien / le plus récent</dt><dd>les bobines jamais séchées en tête avec « le plus ancien ».</dd>
+    </dl>
+    <h4>Filtrer</h4>
+    <ul>
+      <li><b>Matière</b>, <b>Sous-type</b> et <b>Marque</b> : des pastilles à cocher, chacune suivie de son nombre, les plus fréquentes d'abord. Au-delà de 8, une pastille <span class="ui">+3</span> déplie le reste. La liste des sous-types n'apparaît que s'il y en a plusieurs, et se limite aux matières cochées.</li>
+      <li>Plusieurs valeurs cochées dans un même groupe s'additionnent (PLA <i>ou</i> PETG) ; des groupes différents se combinent (PLA <i>et</i> Bambu Lab).</li>
+      <li>Trois boutons de stock : <span class="ui">Tous</span>, <span class="ui">En stock</span> (il reste du filament), <span class="ui">Non disponible</span> (bobine vide ou poids inconnu).</li>
+    </ul>
+    <p>Touche <span class="ui">Appliquer</span> pour valider. Le lien <span class="ui">Effacer filtres</span> remet tout à zéro.</p>
+  </section>
+
+  <section id="filaments-archivees">
+    <h3>Onglet Archivées</h3>
+    <p>Les bobines terminées ou sorties du stock. Même grille, même recherche, mêmes filtres que <span class="ui">Stock</span>, sans bouton <span class="ui">+ Bobine</span>. Les pastilles indiquent le nombre d'archivées et leur valeur d'achat. Une bobine archivée garde tout son historique d'utilisation : c'est ce qui permet aux statistiques de continuer à compter ce qu'elle a imprimé.</p>
+    <figure class="phone"><img src="img/filaments-archivees.webp" alt="Onglet Archivées"><figcaption>Les bobines archivées sont à 0 g.</figcaption></figure>
+  </section>
+</section>
+
+<section id="filaments-bobines">
+  <h2>Les bobines</h2>
+
+  <section id="filaments-ajouter-bobine">
+    <h3>Ajouter une bobine</h3>
+    <p><span class="admin">admin</span> Trois chemins mènent à la fenêtre <span class="ui">Nouvelle bobine</span> :</p>
+    <ul>
+      <li>le bouton bleu <span class="ui">+ Bobine</span> de l'onglet <span class="ui">Stock</span> ;</li>
+      <li><span class="ui">+ Créer une bobine</span> dans la fiche d'un filament (le filament est alors déjà choisi) ;</li>
+      <li><span class="ui">Ajouter une bobine…</span> dans le menu rapide d'une bobine ou d'un filament.</li>
+    </ul>
+    <figure class="phone"><img src="img/filaments-nouvelle-bobine.webp" alt="Fenêtre Nouvelle bobine"><figcaption>Choisis le filament, puis complète le reste si tu veux.</figcaption></figure>
+    <ol>
+      <li><b>FILAMENT *</b> (obligatoire) : tape quelques lettres dans <span class="ui">Rechercher : nom, marque, matière, teinte…</span>. La liste est groupée par matière (« PLA (12) ») ; touche la bonne ligne. Si le filament est déjà choisi, il s'affiche en pastille bleue avec un ✕ pour en changer. Si ta couleur n'existe pas encore, crée d'abord le filament (voir <a href="#filaments-nouveau-filament">Créer un filament</a>).</li>
+      <li><b>RESTE (G)</b> : le poids de filament restant. Laisse vide pour une bobine neuve : elle sera considérée pleine.</li>
+      <li><b>PRIX (€)</b> : ce que tu as payé cette bobine. Vide, l'appli utilise le prix catalogue du filament pour calculer le coût des impressions.</li>
+      <li><b>TAG NFC</b> : l'identifiant de la puce de la bobine (bobines Bambu Lab). Inutile de le recopier : un scan avec l'appli Android ou l'AMS le renseigne tout seul.</li>
+      <li><b>COMMENTAIRE</b> : ce que tu veux (lot, magasin, « déjà ouverte »…).</li>
+      <li>Touche <span class="ui">Enregistrer</span> (grisé tant qu'aucun filament n'est choisi).</li>
+    </ol>
+    <p>La nouvelle bobine arrive dans « Tiroir ». Elle est notée <b>séchée aujourd'hui</b> : une bobine neuve sort de son sachet sous vide. Si tu saisis un tag NFC et que ce filament était « À commander », il ne l'est plus.</p>
+    <div class="tip"><p>Pour une bobine Bambu Lab, le plus simple est de la poser dans l'AMS ou de la scanner avec l'appli Android : l'appli crée le filament et la bobine pour toi (voir <a href="#filaments-correspondances">AMS ↔ bobines</a> et <a href="#filaments-nfc">NFC / RFID</a>).</p></div>
+  </section>
+
+  <section id="filaments-fiche-bobine">
+    <h3>La fiche d'une bobine</h3>
+    <p>Touche une tuile du stock pour l'ouvrir. On y arrive aussi depuis l'accueil (emplacement de l'AMS), les points d'attention, les statistiques de séchage, l'historique d'une impression, ou un lien direct <code>/filaments?spool=26</code>.</p>
+    <figure class="pair">
+      <img src="img/filaments-fiche-bobine.webp" alt="Haut de la fiche d'une bobine">
+      <img src="img/filaments-fiche-bobine-bas.webp" alt="Bas de la fiche d'une bobine avec les boutons">
+      <figcaption>La fiche d'une bobine : la bobine en haut, son filament en dessous, les actions en bas.</figcaption>
+    </figure>
+    <h4>En-tête</h4>
+    <p>La couleur, le nom, « Marque · Sous-type », et des badges :</p>
+    <ul>
+      <li><span class="ui">Archivée</span> (gris) si la bobine est archivée ;</li>
+      <li><span class="ui">Échantillon</span> (vert) si la plaquette du nuancier existe, sinon <span class="ui">Sans échantillon</span> (gris) ;</li>
+      <li>un badge de séchage quand il le faut : <span class="ui">Séchage nécessaire</span> (bleu ciel, jamais séchée ou délai dépassé), <span class="ui">Séchage dans 12 j</span> (orange, délai atteint dans moins de 30 jours) ou <span class="ui">Séchage aujourd'hui</span>. Pour un admin, ce badge porte un petit soleil : le toucher ouvre <a href="#filaments-sechee">Séchée aujourd'hui</a>.</li>
+    </ul>
+    <p>Sous l'en-tête, <b>Filament restant</b> : « 760g / 1000g (76%) » et une jauge (bleue, puis orange sous 30 %, rouge sous 15 %).</p>
+    <h4>Section BOBINE #26</h4>
+    <dl class="opts">
+      <dt>Emplacement</dt><dd>où se trouve la bobine (mis à jour par l'appli).</dd>
+      <dt>Poids restant</dt><dd>le crayon <span class="admin">admin</span> ouvre l'<a href="#filaments-poids">éditeur de poids</a>.</dd>
+      <dt>Prix d'achat</dt><dd>en vert : prix propre à cette bobine ; en orange : c'est le prix catalogue du filament, faute de mieux ; « non défini » sinon. Le crayon ouvre un champ en € : <span class="ui">OK</span> ou Entrée pour valider, ✕ ou Échap pour annuler. Changer un prix recalcule le coût des impressions faites avec la bobine.</dd>
+      <dt>Tag NFC</dt><dd>l'identifiant de la puce, ou « aucun ». Le crayon ouvre un champ <span class="ui">UID — vide = détacher</span> : vider le champ détache le tag, utile si une bobine a été associée à la mauvaise puce.</dd>
+      <dt>Tray AMS</dt><dd>l'emplacement de l'AMS où elle a été vue (A1, B3…).</dd>
+      <dt>Première util. / Dernière util.</dt><dd>dates de la première et de la dernière impression avec cette bobine.</dd>
+      <dt>Dernier séchage</dt><dd>la date, ou « jamais », suivie de « · à sécher » en bleu si elle doit passer au séchoir. Pour un admin : le <b>soleil orange</b> (« Je viens de la sécher ») ouvre <a href="#filaments-sechee">Séchée aujourd'hui</a> ; le <b>crayon</b> ouvre un sélecteur de date (pas dans le futur) avec <span class="ui">OK</span>, <span class="ui">Effacer</span> (remet à « jamais séchée ») et ✕.</dd>
+      <dt>Commentaire</dt><dd>affiché s'il existe.</dd>
+    </dl>
+    <h4>Section FILAMENT #18</h4>
+    <p>À côté du titre, une pastille résume le reste du stock de ce filament : <span class="ui">+2 en stock · 2000g</span> (les autres bobines actives) ou <span class="ui">seule bobine</span>. Le bouton carré à la goutte ouvre la <a href="#filaments-fiche-filament">fiche du filament</a> par-dessus.</p>
+    <p>Lignes : Nom, Nom EN (si différent), Marque, Matière, Sous-type, Échantillon (Oui / Non), Couleur (#hex), Code Bambu (le profil, ex. GFA00), Code couleur Bambu (ex. 10100), Stock du filament (toutes bobines), Poids total, Prix catalogue.</p>
+    <h4>En bas</h4>
+    <ul>
+      <li><span class="ui">📋 Voir l'historique d'utilisation</span> : voir ci-dessous.</li>
+      <li><span class="ui">Archiver</span> et <span class="ui">🗑 Supprimer</span> <span class="admin">admin</span>, puis le bouton bleu <span class="ui">✕</span> pour fermer.</li>
+    </ul>
+  </section>
+
+  <section id="filaments-historique">
+    <h3>Historique d'utilisation d'une bobine</h3>
+    <p>Le bouton <span class="ui">📋 Voir l'historique d'utilisation</span> ouvre <span class="ui">📋 Historique bobine #1</span> : une ligne par impression qui a consommé cette bobine, avec la vignette du plateau, le nom, la date, ✅ (réussie) ou ❌ (échouée), et à droite les grammes consommés en rouge et leur coût.</p>
+    <figure class="phone"><img src="img/filaments-historique-bobine.webp" alt="Historique d'utilisation d'une bobine"><figcaption>Chaque impression a retiré des grammes de la bobine.</figcaption></figure>
+    <p>Sans aucune impression : « Aucune utilisation enregistrée ». <span class="ui">Fermer</span> revient à la fiche.</p>
+  </section>
+
+  <section id="filaments-poids">
+    <h3>Corriger le poids restant</h3>
+    <p><span class="admin">admin</span> L'appli décompte toute seule le filament consommé à chaque impression. Pour recaler le poids (après une pesée, un bourrage, une bobine entamée à la main…), touche le crayon de <b>Poids restant</b>. Quatre modes :</p>
+    <figure class="pair">
+      <img src="img/filaments-poids.webp" alt="Éditeur de poids, mode Restant">
+      <img src="img/filaments-pesee.webp" alt="Éditeur de poids, mode Pesée">
+      <figcaption>À gauche le mode Restant et ses raccourcis ; à droite la pesée sur balance.</figcaption>
+    </figure>
+    <dl class="opts">
+      <dt>Restant</dt><dd>« Poids restant de filament » : tu tapes directement le nouveau poids. Raccourcis <span class="ui">Vide</span> · <span class="ui">¼</span> · <span class="ui">½</span> · <span class="ui">¾</span> · <span class="ui">Pleine</span> (fractions du poids d'une bobine neuve).</dd>
+      <dt>Retirer</dt><dd>« Grammes à retirer » : par exemple 50 g perdus dans une impression ratée.</dd>
+      <dt>Ajouter</dt><dd>« Grammes à ajouter ».</dd>
+      <dt>Pesée</dt><dd>« Poids sur la balance, support compris » : pose la bobine sur une balance et tape le poids lu. L'appli retire le poids du <b>Support vide</b>, choisi dans la liste des modèles (voir <a href="#filaments-reglages-supports">Supports vides</a>). Si le filament n'a pas encore de support connu, l'appli en propose un dont le nom ressemble à la marque (mention orange), ou te demande de le choisir.</dd>
+    </dl>
+    <p>Un aperçu montre le résultat : « 760 g → <b>692 g</b> », avec « (plafonné à 0) » en rouge si le calcul passe sous zéro, ou « (plus que la bobine neuve : 1000 g) » en orange. Touche <span class="ui">Enregistrer</span> (ou Entrée).</p>
+    <p>Une fenêtre <span class="ui">Valider le nouveau poids ?</span> récapitule le calcul (« Balance : X g », « Support vide : − Y g »…), l'ancien et le nouveau poids, et les avertissements éventuels. Touche <span class="ui">Valider</span>.</p>
+    <p>En mode Pesée, le bouton <span class="ui">Changer</span> de cette fenêtre permet de corriger le support vide : choisis le bon modèle puis <span class="ui">Appliquer</span>. Ce support est enregistré <b>sur le filament</b>, donc il vaudra aussi pour ses autres bobines.</p>
+  </section>
+
+  <section id="filaments-archiver">
+    <h3>Archiver une bobine</h3>
+    <p><span class="admin">admin</span> Quand une bobine est finie (ou donnée, ou jetée), archive-la plutôt que de la supprimer : <span class="ui">Archiver</span> dans sa fiche, ou <span class="ui">📦 Archiver…</span> dans le menu rapide. Une confirmation rappelle qu'elle « passera en Archives avec une quantité remise à 0 et sortira du stock ».</p>
+    <p>La bobine passe à 0 g, à l'emplacement « Archives », dans l'onglet <span class="ui">Archivées</span>. Son historique reste intact. Une bobine archivée n'est plus jamais reconnue dans l'AMS et ne compte plus dans les séchages.</p>
+  </section>
+
+  <section id="filaments-supprimer-bobine">
+    <h3>Supprimer une bobine</h3>
+    <p><span class="admin">admin</span> <span class="ui">🗑 Supprimer</span> efface la bobine pour de bon (pour une bobine saisie par erreur, par exemple).</p>
+    <ul>
+      <li>Si elle n'a jamais servi, elle est supprimée directement (depuis le menu rapide, après « Supprimer définitivement la bobine #26 ? »).</li>
+      <li>Si elle a servi à des impressions, un encadré rouge prévient : supprimer la bobine <b>délie</b> ces impressions (elles restent, seul le lien vers la bobine est effacé). Touche <span class="ui">Confirmer la suppression</span> ou <span class="ui">Annuler</span>.</li>
+    </ul>
+    <div class="warn"><p>La suppression est définitive. Pour une bobine simplement terminée, préfère <a href="#filaments-archiver">Archiver</a>.</p></div>
+  </section>
+</section>
+
+<section id="filaments-references">
+  <h2>Les filaments (références)</h2>
+
+  <section id="filaments-onglet-filaments">
+    <h3>Onglet Filaments</h3>
+    <p>Le catalogue de tes références, une carte par filament, triées par nom.</p>
+    <figure class="phone"><img src="img/filaments-references.webp" alt="Onglet Filaments : cartes de références"><figcaption>Chaque carte prend la couleur du filament.</figcaption></figure>
+    <ul>
+      <li>Pastilles : <b>N références</b>, <b>N marques</b>, <b>N types</b> (sous-types différents), <b>N en stock</b> (filaments qui ont au moins une bobine active) et, s'il y en a, <b>N à commander</b> en orange.</li>
+      <li>Recherche <span class="ui">Nom, marque, code couleur…</span> (mot à mot, comme dans le stock), bouton <span class="ui">Filtres</span> (même feuille, tri par nom par défaut) et bouton <span class="ui">+ Filament</span> <span class="admin">admin</span>.</li>
+      <li>Chaque carte : la couleur (dégradé ou segments si multicolore, damier si translucide), le nom, la marque, le sous-type, et en bas « 2 bobines · 1,64 kg » ou « 0 bobine ».</li>
+      <li>Touche une carte pour ouvrir sa fiche. Appui long ou clic droit : <span class="ui">📄 Ouvrir</span> et <span class="ui">＋ Ajouter une bobine</span> <span class="admin">admin</span>.</li>
+    </ul>
+    <p>Pendant le chargement : « Chargement… » ; sans aucun filament : « Aucun filament ».</p>
+  </section>
+
+  <section id="filaments-fiche-filament">
+    <h3>La fiche d'un filament</h3>
+    <figure class="phone"><img src="img/filaments-fiche-filament.webp" alt="Fiche d'un filament"><figcaption>La fiche d'une référence, avec ses bobines actives.</figcaption></figure>
+    <p>En-tête : la couleur, le nom (le nom officiel en petit s'il diffère), « Marque · Sous-type », et deux badges : <span class="ui">Échantillon</span> / <span class="ui">Sans échantillon</span>, <span class="ui">Étiquette</span> / <span class="ui">Sans étiquette</span> (l'info-bulle donne la date d'impression de l'étiquette).</p>
+    <p>Section <b>FILAMENT #12</b> : Marque, Matière, Couleur (deux couleurs pour un multicolore), Profile ID, Code couleur Bambu, Poids bobine, Poids support, Prix, Multicolor (gradient ou coaxial).</p>
+    <p>Section <b>BOBINES</b> : « 1 active · 180 g restants » et le bouton vert <span class="ui">+ Créer une bobine</span> <span class="admin">admin</span>.</p>
+    <p>En bas : <span class="ui">🗑 Supprimer</span> <span class="admin">admin</span> et <span class="ui">✕</span>.</p>
+  </section>
+
+  <section id="filaments-editer">
+    <h3>Éditer un filament</h3>
+    <p><span class="admin">admin</span> Le bouton <span class="ui">✏️ Éditer</span> de la fiche passe en formulaire (il devient <span class="ui">Annuler</span>).</p>
+    <figure class="phone"><img src="img/filaments-edition-filament.webp" alt="Formulaire d'édition d'un filament"><figcaption>Tous les champs d'une référence.</figcaption></figure>
+    <dl class="opts">
+      <dt>Nom (anglais / officiel) *</dt><dd>le nom de la couleur chez le fabricant, obligatoire.</dd>
+      <dt>Nom traduit (français)</dt><dd>le nom affiché partout dans l'appli s'il est rempli.</dd>
+      <dt>Marque</dt><dd>Bambu Lab, Sunlu, eSun, Polymaker…</dd>
+      <dt>Sous-type (ex: PLA Basic)</dt><dd>la matière (PLA, PETG…) en est déduite automatiquement.</dd>
+      <dt>Couleur(s)</dt><dd>en hexadécimal, sans # (« 0047bb »). Pour un multicolore, plusieurs couleurs séparées par une virgule (« 0047bb, bb22a3 »). Un aperçu s'affiche en direct (« Monochrome » ou « 2 couleurs → coaxial »). Avec 8 caractères (RRGGBBAA), la couleur est translucide.</dd>
+      <dt>Type multicolore</dt><dd>dès deux couleurs : <span class="ui">Gradient (dégradé)</span> ou <span class="ui">Coaxial (segments)</span> (par défaut).</dd>
+      <dt>Profile ID Bambu (ex: GFA00)</dt><dd>le code du profil de filament chez Bambu Lab. <b>C'est lui, avec la couleur, qui permet à l'appli de reconnaître la bobine dans l'AMS</b> (voir <a href="#filaments-correspondances">AMS ↔ bobines</a>).</dd>
+      <dt>Code couleur Bambu (ex: 10600)</dt><dd>le code de la teinte dans le nuancier Bambu.</dd>
+      <dt>Poids total (g)</dt><dd>le poids de filament d'une bobine neuve (1000 par défaut).</dd>
+      <dt>Poids support vide</dt><dd>le poids de la bobine vide, choisi dans la liste des <a href="#filaments-reglages-supports">supports</a> ou en saisie libre avec <span class="ui">Autre…</span>.</dd>
+      <dt>Prix (€)</dt><dd>le prix catalogue d'une bobine. Le changer recalcule, en arrière-plan, le coût de toutes les impressions faites avec ce filament.</dd>
+      <dt>Commentaire</dt><dd>libre.</dd>
+      <dt>Échantillon</dt><dd>coche si la plaquette du nuancier existe.</dd>
+      <dt>Étiquette imprimée</dt><dd>cocher pose la date du jour ; décocher l'efface.</dd>
+      <dt>À commander</dt><dd>voir <a href="#filaments-commander">Commander</a>.</dd>
+    </dl>
+    <p>Touche <span class="ui">Enregistrer</span>.</p>
+  </section>
+
+  <section id="filaments-nouveau-filament">
+    <h3>Créer un filament</h3>
+    <p><span class="admin">admin</span> Dans l'onglet <span class="ui">Filaments</span>, touche <span class="ui">+ Filament</span>. La fenêtre <span class="ui">Nouveau filament</span> propose deux chemins.</p>
+    <figure class="phone"><img src="img/filaments-nouveau-filament.webp" alt="Nouveau filament : choix entre catalogue Bambu et saisie libre"><figcaption>Catalogue Bambu ou saisie libre.</figcaption></figure>
+    <h4>Depuis le catalogue Bambu</h4>
+    <p>Pour un filament Bambu Lab, c'est le plus sûr : tous les codes sont justes, donc l'AMS le reconnaîtra.</p>
+    <ol>
+      <li>Touche <span class="ui">📦 Importer depuis le catalogue Bambu</span>.</li>
+      <li>Choisis éventuellement une famille (<span class="ui">Toutes familles</span>) puis un type (<span class="ui">Tous types</span>) ; la liste des types suit la famille.</li>
+      <li>Cherche la couleur dans <span class="ui">Rechercher une couleur (Jade White, Orange…)</span> : nom anglais, nom français ou code couleur.</li>
+      <li>Touche la bonne ligne (pastille de couleur, nom officiel, badge <span class="ui">GRADIENT</span> ou <span class="ui">COAXIAL</span> pour un multicolore, sous-type et code).</li>
+      <li>Le formulaire s'ouvre pré-rempli, avec le bandeau « 📦 Pré-rempli depuis le catalogue Bambu ». Vérifie, puis touche <span class="ui">Créer le filament</span>.</li>
+    </ol>
+    <figure class="pair">
+      <img src="img/filaments-catalogue-bambu.webp" alt="Recherche dans le catalogue Bambu">
+      <img src="img/filaments-nouveau-filament-prerempli.webp" alt="Formulaire pré-rempli depuis le catalogue">
+      <figcaption>Choisir une couleur du catalogue, puis valider le formulaire pré-rempli.</figcaption>
+    </figure>
+    <p>Le catalogue est le nuancier officiel de Bambu Lab, téléchargé par le serveur au démarrage puis vérifié chaque jour. Juste après un démarrage, il peut afficher « Catalogue non disponible (démarrage en cours…) » : réessaie un peu plus tard.</p>
+    <h4>Saisie libre</h4>
+    <p>Pour toute autre marque : <span class="ui">✏️ Saisie libre</span>, puis remplis <b>Nom de la couleur *</b>, <b>Nom traduit</b>, <b>Marque</b>, <b>Sous-type filament</b>, <b>Couleur(s)</b> (+ <b>Type multicolore</b>), <b>Profile ID Bambu</b>, <b>Code couleur Bambu</b> et <b>Poids total (g)</b>. Touche <span class="ui">Créer le filament</span>.</p>
+    <p>Le prix, le support vide, l'échantillon et le commentaire se renseignent ensuite avec <span class="ui">✏️ Éditer</span>.</p>
+    <div class="note"><p>Si un filament avec le même profil et la même couleur existe déjà, l'appli refuse le doublon : « ⚠ Filament identique déjà en base » avec le numéro et le nom de celui qui existe.</p></div>
+  </section>
+
+  <section id="filaments-supprimer-filament">
+    <h3>Supprimer un filament</h3>
+    <p><span class="admin">admin</span> <span class="ui">🗑 Supprimer</span> dans la fiche, après « Supprimer le filament "…" ? ». Deux garde-fous :</p>
+    <ul>
+      <li>Si le filament a encore des bobines (même archivées), la suppression est refusée : supprime d'abord ses bobines.</li>
+      <li>S'il a un échantillon, l'appli rappelle que la plaquette du nuancier porte un QR qui pointe cette fiche : décoche <b>Échantillon</b> d'abord si la plaquette a été jetée.</li>
+    </ul>
+  </section>
+
+  <section id="filaments-commander">
+    <h3>Commander (liste « À commander »)</h3>
+    <p>Quand une couleur arrive à sa fin, coche <b>À commander</b> dans l'édition du filament. Il apparaît alors dans la pastille orange <b>N à commander</b> de l'onglet <span class="ui">Filaments</span>, et une notification « filament à commander » part sur tes canaux (voir <a href="#notifications">Notifications</a>).</p>
+    <p>La case se décoche toute seule quand la nouvelle bobine arrive avec sa puce : à la création d'une bobine avec un tag NFC, au scan RFID, ou quand l'AMS reconnaît la bobine et que tu l'associes.</p>
+  </section>
+</section>
+
+<section id="filaments-galerie">
+  <h2>Galerie et nuancier</h2>
+  <p>L'onglet <span class="ui">Galerie</span> montre tes filaments en grand, avec une recherche <span class="ui">Nom, marque, matériau…</span> et le bouton <span class="ui">Filtres</span> (tri par <b>Teinte</b> par défaut ; ici <span class="ui">En stock</span> garde les filaments qui ont au moins une bobine active). Deux affichages : <span class="ui">Photos</span> et <span class="ui">Nuancier</span>.</p>
+
+  <section id="filaments-galerie-photos">
+    <h3>Photos : ce que tu as imprimé avec chaque filament</h3>
+    <p>Une carte par filament, avec en bas « 12 impressions ». Touche une carte pour ouvrir la <b>galerie des impressions</b> de ce filament.</p>
+    <figure class="pair">
+      <img src="img/filaments-galerie-photos.webp" alt="Galerie, affichage Photos">
+      <img src="img/filaments-galerie-impressions.webp" alt="Galerie des impressions d'un filament">
+      <figcaption>Une carte par filament ; en la touchant, toutes les impressions faites avec.</figcaption>
+    </figure>
+    <ul>
+      <li>En-tête : couleur, nom, « Marque · Sous-type — N impressions ».</li>
+      <li>Chaque vignette : ta photo de l'impression si tu en as pris une, sinon celle du groupe, sinon l'image du plateau ; un badge de statut (réussie, échouée, annulée, en cours), le nombre de photos « 2 📷 », le nom et « date · grammes ».</li>
+      <li>Plusieurs impressions d'un même groupe tiennent dans une seule vignette « Groupe · 3 prints ».</li>
+      <li>Si des copains ont partagé des impressions faites avec ce filament, deux onglets apparaissent : <span class="ui">Mes impressions</span> et <span class="ui">👀 Chez les copains</span>.</li>
+      <li>Touche une vignette pour ouvrir la <a href="#impressions-fiche">fiche de l'impression</a> (ou du groupe).</li>
+    </ul>
+    <p>Un appui long sur une carte passe en <b>Nuancier</b> avec ce filament déjà sélectionné pour une comparaison.</p>
+  </section>
+
+  <section id="filaments-nuancier">
+    <h3>Nuancier et comparaison</h3>
+    <p>Le <span class="ui">Nuancier</span> affiche de grandes pastilles pleines de la couleur, avec le nom et « Marque · Sous-type ». Touche-en une pour ouvrir la fiche du filament.</p>
+    <figure class="phone"><img src="img/filaments-nuancier.webp" alt="Nuancier"><figcaption>Le nuancier, trié par teinte.</figcaption></figure>
+    <p>Pour comparer des filaments côte à côte (deux blancs, deux noirs, deux marques…) :</p>
+    <ol>
+      <li>Touche <span class="ui">Sélectionner</span> (ou fais un appui long sur une pastille).</li>
+      <li>Coche jusqu'à 6 filaments. Une barre en bas montre les couleurs choisies et « 3/6 ».</li>
+      <li>Touche <span class="ui">Comparer</span> (à partir de 2). <span class="ui">Vider</span> efface la sélection ; <span class="ui">Annuler</span> quitte le mode.</li>
+    </ol>
+    <figure class="pair">
+      <img src="img/filaments-selection-nuancier.webp" alt="Sélection de filaments dans le nuancier">
+      <img src="img/filaments-comparer.webp" alt="Fenêtre Comparer">
+      <figcaption>Choisir, puis comparer : matière, marque, couleur, poids, prix et bobines.</figcaption>
+    </figure>
+    <p>La fenêtre <span class="ui">Comparer (3)</span> aligne une colonne par filament : la couleur en grand, Matière, Marque, Couleur, Poids, Prix (« — » pour un compte en lecture seule sans prix) et Bobines (« 1 active/2 »).</p>
+  </section>
+</section>
+
+<section id="filaments-correspondances">
+  <h2>AMS ↔ bobines : les correspondances</h2>
+  <p>Quand tu poses une bobine dans l'AMS, l'imprimante dit ce qu'elle voit : la matière, la couleur, et pour une bobine Bambu Lab sa puce RFID et son profil. BambuNymous cherche alors <b>quelle bobine de ton stock</b> est en place. C'est ce lien qui permet de décompter les grammes de la bonne bobine à chaque impression, de mettre son emplacement à jour, et de signaler qu'elle est à sécher ou qu'il manque son échantillon.</p>
+
+  <section id="filaments-reconnaissance">
+    <h3>Comment l'appli reconnaît une bobine</h3>
+    <p>À chaque nouvelle bobine insérée, l'appli essaie, dans cet ordre :</p>
+    <ol>
+      <li><b>Une attribution manuelle</b> faite pour cet emplacement, si le même filament (même profil, même couleur) y est toujours.</li>
+      <li><b>La puce RFID</b> (bobines Bambu Lab) : elle cherche la bobine dont le <b>Tag NFC</b> est celui lu par l'AMS. Si aucune bobine n'a ce tag, l'emplacement est marqué « introuvable » : l'appli ne devine pas à la couleur quand il y a une puce.</li>
+      <li><b>Le profil et la couleur</b> (pas de puce, mais un profil Bambu connu, ex. GFA00) : parmi les bobines actives des filaments qui ont ce <b>Profile ID</b>, une seule → c'est elle ; plusieurs → celle dont la couleur est la plus proche.</li>
+      <li>Sinon (bobine d'une autre marque sans information) : « Non identifié ».</li>
+    </ol>
+    <p>La bobine reconnue prend l'emplacement « AMS-A slot 2 » ; quand elle sort de l'AMS, elle repasse en « Tiroir ». Les bobines archivées ne sont jamais reconnues.</p>
+    <h4>Les symboles sur la tuile AMS de l'accueil</h4>
+    <table>
+      <tr><th>Symbole</th><th>Couleur</th><th>Sens</th></tr>
+      <tr><td>⬡</td><td>vert</td><td>Reconnu par RFID Bambu</td></tr>
+      <tr><td>◈</td><td>orange</td><td>Reconnu automatiquement (profil + couleur)</td></tr>
+      <tr><td>◆</td><td>violet</td><td>Attribuée à la main</td></tr>
+      <tr><td>⚠</td><td>rouge</td><td>Filament identifié par l'imprimante mais introuvable en base</td></tr>
+      <tr><td>◇</td><td>gris</td><td>Non identifié</td></tr>
+    </table>
+    <p>D'autres pastilles peuvent apparaître sur un emplacement : une <b>palette orange</b> « Échantillon à faire » (le filament n'a pas d'échantillon : il est en place, c'est le moment de l'imprimer) et une <b>goutte bleue</b> « À sécher » (la bobine est dans l'AMS, c'est le moment de la sécher).</p>
+    <div class="tip"><p>Pour que la reconnaissance marche sans toi : renseigne le <b>Profile ID</b> et la <b>couleur</b> de chaque filament (le plus simple est de le créer depuis le catalogue Bambu), et laisse l'appli poser le tag NFC des bobines Bambu Lab.</p></div>
+  </section>
+
+  <section id="filaments-attribuer">
+    <h3>Attribuer une bobine à un emplacement à la main</h3>
+    <p><span class="admin">admin</span> Quand un emplacement est « introuvable », « non identifié » ou mal reconnu, corrige-le depuis l'accueil. L'écran de l'AMS est décrit dans <a href="#imprimante-ams">Imprimante et AMS</a> ; voici les étapes :</p>
+    <ol>
+      <li>Sur l'accueil, dans la tuile AMS, touche l'emplacement concerné. Sa fiche s'ouvre : restant estimé, badge de détection, données lues par l'imprimante, bobine liée et son filament, températures de séchage recommandées.</li>
+      <li>Touche le bouton bleu <span class="ui">Mapper / Créer</span> (aucune bobine reconnue) ou <span class="ui">Attribuer</span> (une bobine est reconnue, mais pas par sa puce). Il n'apparaît pas quand la bobine est reconnue par RFID : c'est déjà certain.</li>
+      <li>La fenêtre <span class="ui">Associer une bobine à cet emplacement</span> (ou <span class="ui">Attribuer une bobine à cet emplacement</span>) rappelle ce que voit l'AMS (matière, couleur, profil, tag).</li>
+      <li>Choisis <span class="ui">Choisir une bobine existante</span> ou <span class="ui">Créer</span>.</li>
+    </ol>
+    <h4>Choisir une bobine existante</h4>
+    <p>La liste montre tes bobines actives <b>sans tag RFID</b>, la couleur la plus proche en premier (pour un emplacement avec puce, seulement des bobines Bambu Lab ; sans puce, les autres marques). Chaque ligne : couleur, nom, « Marque · Matière · 742g » et <span class="ui">Associer →</span>. Si rien ne convient : « Aucune bobine sans tag RFID trouvée », passe en <span class="ui">Créer</span>.</p>
+    <ul>
+      <li><b>Emplacement avec puce</b> (bobine Bambu Lab) : l'association est définitive. Le tag est écrit sur la bobine, le profil et la couleur sont ajoutés au filament s'ils manquaient, et le filament sort de la liste « À commander ». Le résultat <span class="ui">Filament mappé</span> liste ce qui a changé. La prochaine fois, la puce suffit.</li>
+      <li><b>Emplacement sans puce</b> (autre marque) : rien n'est modifié sur la bobine. L'attribution vaut <b>pour cet emplacement seulement, tant que ce filament y reste</b> ; elle s'oublie dès qu'on le retire ou le remplace. Résultat : <span class="ui">Bobine attribuée</span>. Pour que l'appli la reconnaisse seule la prochaine fois, renseigne le profil et la couleur du filament.</li>
+    </ul>
+    <h4>Créer</h4>
+    <p>Pour une bobine qui n'est pas encore dans ton stock. Si le catalogue Bambu reconnaît la référence, choisis <span class="ui">📦 Depuis le catalogue</span> (tout est rempli) ; sinon <span class="ui">✏️ Création libre</span> : <b>Nom de la couleur</b>, <b>Matière</b> (proposée d'après l'AMS), <b>Marque</b> (« Bambu Lab » si la bobine a une puce). Indique le <b>Poids total (g)</b> (1000) et touche <span class="ui">Importer depuis le catalogue</span> ou <span class="ui">Créer le filament et la bobine</span>.</p>
+    <p>L'appli réutilise un filament existant de même profil et même couleur, sinon elle le crée ; puis elle crée la bobine (pleine, avec le tag lu, notée séchée aujourd'hui). Le résultat <span class="ui">Bobine créée</span> dit ce qui a été créé ou réutilisé.</p>
+  </section>
+</section>
+
+<section id="filaments-sechage">
+  <h2>Séchage et humidité</h2>
+  <p>Le filament prend l'humidité de l'air ; trop humide, il imprime mal (fils, bulles, surface rugueuse). BambuNymous retient la date du dernier séchage de chaque bobine et te dit lesquelles passer au séchoir.</p>
+
+  <section id="filaments-sechage-regle">
+    <h3>La règle « à sécher »</h3>
+    <p>Une bobine active est <b>à sécher</b> si elle n'a jamais été séchée, ou si son dernier séchage est plus vieux que le délai de son filament :</p>
+    <ul>
+      <li>le délai de son <b>sous-type</b> s'il est déclaré (ex. PLA Silk+) ;</li>
+      <li>sinon celui de sa <b>matière</b> (ex. PETG) ;</li>
+      <li>sinon le délai <b>par défaut : 6 mois</b>.</li>
+    </ul>
+    <p>Elle est « bientôt à sécher » quand le délai tombe dans les 30 jours. Ces délais se règlent dans <a href="#filaments-reglages-sechage">Délais de séchage</a>. La même règle sert partout : fiche de bobine, tuile AMS, alertes et statistiques.</p>
+    <p>La date du dernier séchage se pose de trois façons :</p>
+    <ul>
+      <li><b>automatiquement</b> quand un AMS lance un cycle de séchage : toutes les bobines reconnues dans cet AMS, et celles posées dans ses emplacements vides, sont datées du jour ;</li>
+      <li>à la <b>création</b> d'une bobine (une bobine neuve est sèche) ;</li>
+      <li><b>à la main</b> : soleil « Je viens de la sécher », crayon de la date, ou badge de séchage de la fiche.</li>
+    </ul>
+    <figure class="phone"><img src="img/filaments-sechage-necessaire.webp" alt="Fiche d'une bobine avec le badge Séchage nécessaire"><figcaption>Délai dépassé : badge « Séchage nécessaire » et date en bleu « · à sécher ».</figcaption></figure>
+  </section>
+
+  <section id="filaments-sechee">
+    <h3>Sécher maintenant : « Séchée aujourd'hui »</h3>
+    <p><span class="admin">admin</span> Tu viens de sécher une bobine (au four, dans un dessiccateur, dans l'AMS…) :</p>
+    <ol>
+      <li>Ouvre sa fiche et touche le <b>soleil</b> de la ligne <b>Dernier séchage</b> (ou le badge <span class="ui">Séchage nécessaire</span>).</li>
+      <li>La fenêtre <span class="ui">☀ Séchée aujourd'hui</span> demande « Où sèche-t-elle ? ».</li>
+      <li>Laisse <span class="ui">Ailleurs</span> (« four, dessiccateur… — la date suffit »), ou touche un <b>emplacement vide</b> d'un AMS dans la grille « OU POSÉE DANS UN AMS » (les emplacements occupés sont grisés ; le choix se borde d'orange avec un soleil).</li>
+      <li>Touche <span class="ui">Séchée</span>.</li>
+    </ol>
+    <figure class="phone"><img src="img/filaments-sechee-aujourdhui.webp" alt="Fenêtre Séchée aujourd'hui"><figcaption>Ici aucun emplacement d'AMS n'est libre : seule l'option « Ailleurs » est proposée.</figcaption></figure>
+    <p>La date du jour est enregistrée. Si tu as choisi un emplacement, la bobine y est « posée » : l'accueil la montre en couleur atténuée et hachurée avec un soleil (« ☀ Nom ») tant que l'emplacement reste vide, et quand cet AMS lance un séchage, la bobine est datée elle aussi. Dès qu'un filament est inséré à cet endroit, la pose est oubliée. Une bobine n'est posée qu'à un seul endroit ; la fiche de l'emplacement a un bouton <span class="ui">Retirer de l'emplacement</span>.</p>
+  </section>
+
+  <section id="filaments-sechage-suivi">
+    <h3>Suivre les séchages</h3>
+    <p>Le tableau de bord complet (bobines à sécher, jamais séchées, bientôt, ancienneté, où elles sont, délais appliqués, liste « À sécher maintenant ») est dans <span class="ui">Stats → Séchage</span> : voir <a href="#stats-sechage">Statistiques de séchage</a>. Touche une bobine de ses listes pour ouvrir sa fiche.</p>
+    <p>Sur l'accueil, deux tuiles y mènent aussi : <span class="ui">Séchage</span> (« N à sécher », combien bientôt, au sec, dans l'AMS, et l'avancement d'un séchage en cours) et <span class="ui">Humidité des AMS</span> (voir <a href="#tuiles">Les tuiles de l'accueil</a>).</p>
+  </section>
+
+  <section id="filaments-humidite">
+    <h3>L'humidité des AMS</h3>
+    <p>Chaque unité AMS indique son humidité (« 💧 23 % ») et sa température sur la tuile AMS de l'accueil (pas le support externe). La tuile <span class="ui">Humidité des AMS</span> les montre en gouttes ou en barres, colorées selon des seuils (stricts 20/30 %, normaux 30/40 % par défaut, souples 40/55 %), avec la moyenne et l'unité la plus humide.</p>
+    <p>Quand un AMS sèche, son cadre pulse en orange et un bandeau « Séchage en cours » donne température, durée, temps restant et filament ; le détail du cycle est décrit dans <a href="#imprimante-ams">Imprimante et AMS</a>.</p>
+  </section>
+</section>
+
+<section id="filaments-etiquettes">
+  <h2>Étiquettes et scan des échantillons</h2>
+  <p>Le principe : tu imprimes une petite plaquette de chaque filament (ton nuancier physique), tu y colles une étiquette avec un QR code, et il suffit de scanner la plaquette pour ouvrir la fiche du filament.</p>
+
+  <section id="filaments-etiquettes-generer">
+    <h3>Générer les étiquettes</h3>
+    <p><span class="admin">admin</span> Dans <span class="ui">Paramètres → 🧵 Filaments</span>, carte <b>Étiquettes filaments</b>, touche <span class="ui">Générer les étiquettes…</span>. Tout se fait ensuite dans la fenêtre <span class="ui">Étiquettes — 7 / 28</span> (cochés / total). Le détail est dans <a href="#filaments-reglages-etiquettes">Réglages → Étiquettes filaments</a>.</p>
+  </section>
+
+  <section id="filaments-scanner">
+    <h3>Scanner un échantillon</h3>
+    <ol>
+      <li>Sur la page Filaments, touche le bouton bleu <b>Scanner</b> (cadre).</li>
+      <li>La fenêtre <span class="ui">Scanner un échantillon</span> ouvre la caméra arrière (« Démarrage de la caméra… » puis « Vise le QR code… »). Si ton téléphone a plusieurs objectifs, des pastilles permettent d'en changer ; un curseur <span class="ui">Zoom</span> apparaît si la caméra le permet.</li>
+      <li>Vise le QR de la plaquette : la fiche du filament s'ouvre aussitôt.</li>
+    </ol>
+    <figure class="phone"><img src="img/filaments-scanner.webp" alt="Fenêtre Scanner un échantillon"><figcaption>Vise le QR dans le cadre bleu, ou tape le numéro imprimé dessous.</figcaption></figure>
+    <p>Scanner une plaquette prouve qu'elle existe : l'appli coche au passage <b>Échantillon</b> et <b>Étiquette imprimée</b> sur le filament.</p>
+    <p>Sans caméra : tape le numéro imprimé sous le QR dans <span class="ui">…ou saisis l'ID imprimé sous le QR</span> puis <span class="ui">Ouvrir</span> (« 106 » ou « #106 »). Si la caméra est refusée, l'appli le dit : autorise-la dans le navigateur. Sans HTTPS, les navigateurs bloquent la caméra : saisis alors le numéro à la main.</p>
+  </section>
+</section>
+
+<section id="filaments-nfc">
+  <h2>NFC / RFID : lire une bobine Bambu Lab</h2>
+  <p>Les bobines Bambu Lab ont une puce (RFID, lisible en NFC) qui décrit exactement le filament : profil, variante de couleur, poids. L'<b>appli Android BambuNymous</b> sait la lire avec le NFC du téléphone, et l'envoyer à ton serveur. L'appli se télécharge depuis <span class="ui">Paramètres → 📱 Appli Android</span> (voir <a href="#premiers-pas-android">l'appli Android</a>).</p>
+  <div class="note"><p>Le NFC ne fonctionne que dans l'appli Android : un navigateur ne peut pas lire les puces. L'AMS, lui, lit la puce de son côté quand tu y poses la bobine (voir <a href="#filaments-reconnaissance">la reconnaissance</a>).</p></div>
+
+  <section id="filaments-nfc-lecture">
+    <h3>Lire une bobine (scan RFID)</h3>
+    <ol>
+      <li>Dans l'appli Android, ouvre la page <span class="ui">Filaments</span> et touche le bouton rond <b>NFC</b> (info-bulle <span class="ui">Scan RFID</span>). Il passe au vert : le scan est actif.</li>
+      <li>Approche le dos du téléphone de la puce de la bobine (sur le flanc de la bobine).</li>
+      <li>L'appli ouvre directement le bon écran :
+        <ul>
+          <li><b>bobine connue</b> (une de tes bobines porte déjà ce tag) : sa <a href="#filaments-fiche-bobine">fiche</a> s'ouvre, et tu vois tout de suite si elle est à sécher ;</li>
+          <li><b>bobine inconnue</b> : la feuille <span class="ui">📡 Bobine inconnue</span> s'ouvre pour l'ajouter (ci-dessous).</li>
+        </ul>
+      </li>
+    </ol>
+    <p>Le mode reste actif sur toutes les pages, et l'écran ne se met pas en veille tant qu'il l'est : tu peux enchaîner les bobines d'un carton. Ailleurs que sur Filaments, une pastille verte <span class="ui">Scan RFID actif</span> (« Scan » sur téléphone) avec un ✕ permet de l'arrêter. Si une lecture échoue, un court message « Lecture RFID : … » s'affiche : réessaie en tenant le téléphone immobile.</p>
+  </section>
+
+  <section id="filaments-nfc-inconnue">
+    <h3>Ajouter une bobine inconnue (écriture du lien)</h3>
+    <p>La feuille <span class="ui">📡 Bobine inconnue</span> montre ce que dit la puce : la couleur, le nom trouvé dans le catalogue Bambu (ou le sous-type), et l'origine :</p>
+    <ul>
+      <li>« Référence reconnue dans le catalogue Bambu » : le filament sera créé avec le nom officiel, les codes et la couleur exacts ;</li>
+      <li>« ⚠ Référence absente du catalogue » : il sera créé avec les seules informations de la puce.</li>
+    </ul>
+    <figure class="phone"><img src="img/filaments-bobine-inconnue.webp" alt="Feuille Bobine inconnue après un scan RFID"><figcaption>Une bobine jamais vue : le filament puis la bobine seront créés.</figcaption></figure>
+    <p>Ensuite, selon ton stock :</p>
+    <dl class="opts">
+      <dt>Le filament n'existe pas</dt><dd>bandeau bleu « Le filament sera créé, puis la bobine. » Indique le <b>Prix du filament (€ / kg) — nouvelle référence</b> et le <b>Prix de cette bobine (€)</b>, puis <span class="ui">Créer le filament et la bobine</span>.</dd>
+      <dt>Le filament existe déjà</dt><dd>bandeau vert « Le filament existe déjà (#12) ». S'il a des bobines sans tag (par exemple saisies avant d'avoir le téléphone), choisis :
+        <span class="ui">🔗 Compléter une bobine existante</span> (proposé en premier) : coche la bobine « Bobine #26 · 742 g · Tiroir », ajuste son prix, puis <span class="ui">Compléter la bobine #26</span> — le tag est écrit sur cette bobine ;
+        ou <span class="ui">➕ Créer une nouvelle bobine</span> puis <span class="ui">Créer une nouvelle bobine</span>.</dd>
+    </dl>
+    <p>À la création, le filament reçoit la marque Bambu Lab, ses noms, son sous-type, sa ou ses couleurs, son profil et son code couleur ; un filament existant voit ses champs <b>vides</b> complétés. La bobine reçoit le tag, son prix, un poids plein (celui indiqué par la puce), l'emplacement « Tiroir » et la date de séchage du jour. Scanner deux fois la même bobine ne crée pas de doublon. La fiche de la bobine s'ouvre ensuite.</p>
+    <div class="tip"><p>Le lien est ensuite permanent : quand tu poseras cette bobine dans l'AMS, elle sera reconnue par sa puce (symbole ⬡ vert).</p></div>
+  </section>
+
+  <section id="filaments-nfc-reglages">
+    <h3>Réglages de l'appli Android</h3>
+    <p>L'appli Android garde l'adresse de ton BambuNymous et un <b>jeton RFID</b> partagé avec le serveur, qui l'autorise à envoyer les scans. Dans l'appli, <span class="ui">Paramètres → 📱 Appli Android</span> affiche l'adresse, « Jeton RFID : défini ✓ » ou « non défini », la version installée, et le bouton <span class="ui">⚙️ Ouvrir les réglages de l'appli</span> pour les modifier. Le jeton doit être le même côté serveur et côté appli.</p>
+    <p>Pour un admin, <span class="ui">Paramètres → 🛠️ Outils</span> contient aussi, dans l'appli Android, une carte <b>Débug RFID</b> (<span class="ui">Voir le dernier scan</span> : le contenu brut de la dernière puce lue, le profil reconnu et la bobine liée), et une carte <b>Enrichissement catalogue Bambu</b> (<span class="ui">🔍 Enrichir depuis le catalogue Bambu</span> : complète le nom, le code couleur et le type multicolore de tous tes filaments Bambu Lab qui ont un Profile ID). Voir <a href="#parametres-outils">Paramètres → Outils</a>.</p>
+  </section>
+</section>
+
+<section id="filaments-reglages">
+  <h2>Réglages : Paramètres → 🧵 Filaments</h2>
+  <p><span class="admin">admin</span> L'onglet <span class="ui">🧵 Filaments</span> des paramètres regroupe quatre cartes. Il n'apparaît pas pour un compte non admin.</p>
+
+  <section id="filaments-reglages-sechage">
+    <h3>Délais de séchage</h3>
+    <p>« Au-delà, une bobine passe « à sécher ». Les cas déclarés s'appliquent ; tout le reste prend la valeur par défaut. Une sous-famille l'emporte sur sa famille. »</p>
+    <figure class="phone"><img src="img/filaments-reglages-cas.webp" alt="Cartes Délais de séchage et Supports vides avec une ligne ajoutée"><figcaption>Un cas en cours d'ajout (3 mois) et un support vide.</figcaption></figure>
+    <dl class="opts">
+      <dt>Par défaut</dt><dd>le délai pour tout ce qui n'est pas déclaré, en mois (6 par défaut ; les décimales sont acceptées, « 1,5 »).</dd>
+      <dt>Une ligne par cas</dt><dd>choisis dans la liste <span class="ui">— Choisir —</span> une <b>Famille</b> (PLA, PETG…) ou une <b>Sous-famille</b> (PLA Silk+, PETG HF…) parmi celles de ton stock, puis le délai en mois. Une valeur déjà utilisée est grisée. Le ✕ rouge retire le cas.</dd>
+      <dt>+ Ajouter un cas</dt><dd>ajoute une ligne (3 mois proposés).</dd>
+      <dt>Enregistrer</dt><dd>applique tout de suite les nouveaux délais partout (« Enregistré ✓ »).</dd>
+    </dl>
+    <div class="tip"><p>Exemple : PETG à 3 mois, PLA Silk+ à 4 mois, le reste à 6 mois. Un PLA Silk+ suit alors 4 mois, même si tu déclares aussi le PLA.</p></div>
+  </section>
+
+  <section id="filaments-reglages-supports">
+    <h3>Supports vides</h3>
+    <p>« Poids d'une bobine vide par marque ou modèle. » Ces modèles sont proposés en liste lors d'une <a href="#filaments-poids">pesée</a> et dans le champ <b>Poids support vide</b> de la fiche filament, avec <span class="ui">Autre…</span> pour un poids libre.</p>
+    <ul>
+      <li>Chaque ligne : un nom (« Bambu Lab », 60 caractères au plus), un poids en grammes (0 à 5000), et la corbeille pour supprimer.</li>
+      <li><span class="ui">+ Ajouter un support</span> ajoute une ligne ; <span class="ui">Enregistrer</span> valide. Deux modèles ne peuvent pas porter le même nom (100 modèles au plus).</li>
+      <li>Un filament lié à un modèle suit ses changements : changer le poids d'un modèle met à jour ses filaments (« N filaments mis à jour avec le nouveau poids »), le renommer garde le lien. Le restant des bobines déjà pesées n'est pas recalculé.</li>
+      <li>Supprimer un modèle retire le lien, mais le poids reste noté sur les filaments.</li>
+    </ul>
+    <p>Sans aucun modèle, les champs de support sont de simples cases « g ».</p>
+  </section>
+
+  <section id="filaments-reglages-etiquettes">
+    <h3>Étiquettes filaments</h3>
+    <p>« Planche d'étiquettes à coller sur les échantillons : un QR code de 9 × 9 mm encodant l'ID du filament, et l'ID en clair juste en dessous pour pouvoir le saisir à la main. C'est ce QR que lit le bouton Scanner. »</p>
+    <figure class="phone"><img src="img/filaments-etiquettes.webp" alt="Fenêtre de choix des étiquettes à générer"><figcaption>Les filaments sont rangés par état d'étiquette.</figcaption></figure>
+    <ol>
+      <li>Touche <span class="ui">Générer les étiquettes…</span>.</li>
+      <li>Les filaments sont rangés en sections, chacune avec son compteur et un lien <span class="ui">Cocher la section</span> / <span class="ui">Décocher la section</span> :
+        <ul>
+          <li><b>Échantillon sans étiquette</b> (bleu) : la plaquette existe, il lui manque l'étiquette ;</li>
+          <li><b>Sans échantillon</b> (orange) ;</li>
+          <li><b>Sans échantillon, ignorés</b> (gris) : ceux dont tu as ignoré l'alerte « sans échantillon » dans les points d'attention ;</li>
+          <li><b>Étiquette déjà imprimée</b> (gris).</li>
+        </ul>
+        Dans chaque section, ceux dont une bobine est dans l'AMS passent en premier, avec un badge orange <span class="ui">Dans l'AMS</span> : leur échantillon peut s'imprimer tout de suite.</li>
+      <li>Par défaut, tout ce qui n'a pas d'étiquette est coché (sauf les ignorés). Ajuste avec les cases, <span class="ui">Tout cocher</span>, <span class="ui">Tout décocher</span> ou le filtre <span class="ui">Filtrer : nom, marque, matière, teinte…</span>.</li>
+      <li>Touche <span class="ui">Générer (7)</span>.</li>
+    </ol>
+    <p>Tu obtiens un PDF A4 <code>etiquettes-filaments.pdf</code> : des étiquettes de 12 × 18,75 mm avec repères de découpe ; sur chacune, le numéro en gras et la marque, le sous-type, le QR code, et le nom en dessous. Dans l'appli Android, le PDF est enregistré dans Téléchargements puis ouvert.</p>
+    <p>Générer marque les filaments choisis comme <b>Étiquette imprimée</b> (date du jour ; ceux déjà marqués gardent leur date).</p>
+  </section>
+
+  <section id="filaments-reglages-prix">
+    <h3>Révision des prix</h3>
+    <p>Le coût de chaque impression se calcule avec le prix de la bobine utilisée, à défaut le prix catalogue du filament, à défaut 20 €/kg. Cette carte sert à repérer les prix manquants et les écarts : elle compare le tarif catalogue de chaque filament au prix d'achat de ses bobines, <b>archivées comprises</b>, et permet de corriger sur place.</p>
+    <figure class="phone"><img src="img/filaments-revision-prix.webp" alt="Révision des prix, un filament déplié"><figcaption>Un filament déplié : ses trois bobines n'ont pas de prix propre (« — € »).</figcaption></figure>
+    <ol>
+      <li>Touche <span class="ui">Ouvrir la révision</span> : un écran plein s'ouvre (<span class="ui">Fermer</span> en haut à droite).</li>
+      <li>Filtre par texte (<span class="ui">Filtrer : nom, marque, sous-type…</span>) ou avec les pastilles <span class="ui">Tout</span>, <span class="ui">Sans prix</span>, <span class="ui">Écarts &gt; 25 %</span>.</li>
+      <li>Chaque carte montre le filament, son nombre de bobines, un badge « ≠ » en cas d'écart, et son prix catalogue (« — € » en orange s'il manque). Touche la carte pour la déplier : une ligne par bobine (numéro, emplacement ou « archivée », poids, écart « +32 % » en rouge ou « −30 % » en vert, prix).</li>
+      <li>Touche un prix pour le modifier, puis ✓ (ou ✕ pour annuler). Un champ vidé <b>efface</b> le prix (ce n'est pas la même chose que 0 €).</li>
+    </ol>
+  </section>
+</section>
+
+<section id="filaments-liens">
+  <h2>Liens directs</h2>
+  <p>Chaque vue de la page a son adresse, utile en favori ou dans un message :</p>
+  <table>
+    <tr><th>Adresse</th><th>Ce qui s'ouvre</th></tr>
+    <tr><td><code>/filaments</code></td><td>l'onglet Stock</td></tr>
+    <tr><td><code>/filaments?tab=archived</code>, <code>?tab=catalog</code>, <code>?tab=gallery</code></td><td>les onglets Archivées, Filaments, Galerie</td></tr>
+    <tr><td><code>/filaments?id=12</code></td><td>la fiche du filament n° 12 (« Aucun filament #12. » s'il n'existe pas)</td></tr>
+    <tr><td><code>/filaments?spool=26</code></td><td>la fiche de la bobine n° 26 (même archivée)</td></tr>
+    <tr><td><code>/settings?tab=filament</code></td><td>les réglages des filaments</td></tr>
+    <tr><td><code>/stats?tab=drying</code></td><td>les statistiques de séchage</td></tr>
+  </table>
+  <p>Fermer une fiche ouverte par un lien nettoie l'adresse ; le bouton Retour du téléphone la referme aussi.</p>
+</section>

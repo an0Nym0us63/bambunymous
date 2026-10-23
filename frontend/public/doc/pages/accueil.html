@@ -1,0 +1,249 @@
+<h1>L'accueil</h1>
+<p class="lead">La première page de l'appli (<span class="ui">Accueil</span> dans le menu) : un bandeau qui te salue et résume l'état de l'imprimante, puis une grille de tuiles que tu composes toi-même. Ce chapitre explique le bandeau, la grille et tout ce qu'on peut y régler. Les blocs qui montrent l'imprimante sont décrits dans <a href="#imprimante">L'imprimante sur l'accueil</a>, et chaque tuile dans <a href="#tuiles">Les tuiles</a>.</p>
+
+<figure class="pair">
+  <img src="img/accueil-telephone.webp" alt="Accueil sur téléphone : bandeau, bloc Imprimante, bloc AMS, tuiles Aujourd'hui et 7 derniers jours">
+  <img src="img/accueil-bureau.webp" alt="Accueil sur ordinateur : bandeau en haut, blocs Imprimante et AMS à gauche, tuiles sur deux demi-colonnes à droite">
+  <figcaption>L'accueil par défaut, sur téléphone (une colonne) et sur ordinateur (deux colonnes).</figcaption>
+</figure>
+
+<section id="accueil-apercu">
+  <h2>Ce qu'on y trouve</h2>
+  <p>De haut en bas :</p>
+  <ol>
+    <li>le <a href="#accueil-bandeau">bandeau d'accueil</a>, toujours en haut ;</li>
+    <li>la <a href="#accueil-grille">grille</a>, qui mélange quatre <strong>blocs</strong> propres à l'accueil (<span class="ui">Imprimante</span>, <span class="ui">AMS</span>, <span class="ui">Rack Vortek</span>, <span class="ui">Points d'attention</span>) et les <strong>tuiles</strong> du catalogue (<span class="ui">Aujourd'hui</span>, <span class="ui">Stock</span>, <span class="ui">Séchage</span>…).</li>
+  </ol>
+  <p>L'accueil se tient à jour tout seul : l'état de l'imprimante est relu toutes les 3 secondes, les tuiles toutes les 2 minutes et, en plus, dès que l'imprimante change d'état (lancement, pause, fin, échec, nouvelle impression).</p>
+  <p>Sur téléphone, la page tient dans la largeur de l'écran ; sur un grand écran (à partir de 1024 px de large), elle prend toute la largeur et les tuiles se répartissent en plusieurs colonnes.</p>
+  <div class="note"><p>La disposition de l'accueil est <strong>propre à chaque compte</strong> et gardée sur le serveur : tu la retrouves sur tous tes appareils. Tant qu'un compte n'a rien réglé, il voit celle du compte principal (le premier administrateur qui en a une). Quand tu visites un copain, tu vois son accueil tel qu'il l'a composé, sans pouvoir le modifier (voir <a href="#copains">Les copains</a>).</p></div>
+</section>
+
+<section id="accueil-bandeau">
+  <h2>Le bandeau d'accueil</h2>
+  <p>La carte colorée tout en haut. Elle te salue et dit en une phrase où en est l'imprimante.</p>
+  <figure class="phone"><img src="img/accueil-bandeau-soir.webp" alt="Bandeau du soir, violet et rose, avec la lune, « Bonsoir Camille » et les pastilles d'avancement, d'heure de fin et d'impressions du jour"><figcaption>Le soir, le bandeau passe au violet et la lune remplace le soleil.</figcaption></figure>
+
+  <section id="accueil-bandeau-contenu">
+    <h3>Ce qu'il affiche</h3>
+    <ul>
+      <li><strong>Les couleurs suivent l'heure</strong> : doré vers rose le matin (5 h – 12 h), bleu ciel vers indigo l'après-midi (12 h – 18 h), violet vers rose le soir (18 h – 22 h), bleu nuit la nuit. Tu peux aussi choisir une ambiance fixe (voir les réglages plus bas).</li>
+      <li>Un <strong>soleil</strong> le jour, une <strong>lune</strong> de 18 h à 5 h.</li>
+      <li>La <strong>date</strong> en petites capitales (« VENDREDI 23 OCTOBRE »).</li>
+      <li>La <strong>salutation</strong> : « Bonjour » ou « Bonsoir » suivi de ton prénom (ton identifiant, avec une majuscule).</li>
+      <li>Une <strong>ligne d'état</strong> selon l'imprimante :
+        <ul>
+          <li>« {nom de l'impression} est en cours d'impression. » ;</li>
+          <li>« {nom de l'impression} est en pause. » ;</li>
+          <li>« L'imprimante est au repos, prête à imprimer. » ;</li>
+          <li>« L'imprimante ne répond pas pour l'instant. » quand elle est injoignable.</li>
+        </ul></li>
+      <li>Si tu l'as activé : ton message personnel (en italique) et l'astuce du jour (« 💡 … », une différente chaque jour).</li>
+    </ul>
+  </section>
+
+  <section id="accueil-bandeau-pastilles">
+    <h3>Les pastilles</h3>
+    <p>À droite sur ordinateur, sous la salutation sur téléphone. Chacune s'affiche ou non selon les réglages du bandeau :</p>
+    <dl class="opts">
+      <dt>Avancement</dt><dd>une petite barre et le pourcentage de l'impression en cours (« 42 % »). Affichée par défaut.</dd>
+      <dt>Heure de fin</dt><dd>« 🕒 fin 14:35 », avec un petit ⁺¹ en exposant si elle finit le lendemain. Affichée par défaut.</dd>
+      <dt>Impressions du jour</dt><dd>« 3 aujourd'hui ». Affichée par défaut.</dd>
+      <dt>Prochaine impression de « À faire »</dt><dd>« ⏭️ » suivi du premier modèle de ta liste <a href="#impressions-a-faire">À faire</a>.</dd>
+      <dt>Copains qui impriment</dt><dd>« 👥 2 copains impriment » ou « copains au repos ».</dd>
+      <dt>Ton grade de maker</dt><dd>« 🎓 » suivi de ton grade (voir <a href="#succes">Les succès</a>).</dd>
+      <dt>Tours de roue disponibles</dt><dd>« 🎰 3 tours de roue ».</dd>
+    </dl>
+    <p>Les pastilles liées à l'impression (avancement, heure de fin) disparaissent quand rien n'imprime.</p>
+  </section>
+
+  <section id="accueil-bandeau-bouton">
+    <h3>Le bouton « Personnaliser l'accueil »</h3>
+    <p>Le petit bouton carré à quatre cases (en haut à droite sur téléphone, au bout des pastilles sur ordinateur) ouvre le <a href="#accueil-personnaliser">mode personnalisation</a>. Il n'apparaît pas chez un copain. Si tu ne veux plus le voir sur un appareil, tu peux le masquer dans <span class="ui">Paramètres</span> → onglet <span class="ui">🎨 Affichage</span>, carte « Accueil », interrupteur <span class="ui">Bouton « Personnaliser » dans le bandeau</span> (voir <a href="#parametres">Les paramètres</a>). La personnalisation reste alors accessible par le bouton <span class="ui">Personnaliser l'accueil</span> de cette même carte.</p>
+  </section>
+
+  <section id="accueil-bandeau-reglages">
+    <h3>Les réglages du bandeau</h3>
+    <p>En mode personnalisation, le bandeau est entouré de pointillés et porte en bas à gauche un bouton rond à curseurs, <span class="ui">Réglages du bandeau</span>. Il ouvre la fenêtre <span class="ui">Bandeau d'accueil</span>. Ces réglages valent pour toutes tes dispositions (téléphone comme ordinateur).</p>
+    <figure class="phone"><img src="img/accueil-reglages-bandeau.webp" alt="Fenêtre Bandeau d'accueil : Ambiance, Taille, Décor, Couleurs qui ondulent, Soleil ou lune, Salutation, Ton prénom, La date, Où en est l'imprimante, Un message à toi, L'astuce du jour"><figcaption>Les réglages du bandeau (la liste des pastilles suit plus bas dans la fenêtre).</figcaption></figure>
+    <h4>Allure</h4>
+    <dl class="opts">
+      <dt>Ambiance</dt><dd><span class="ui">selon l'heure</span> (par défaut), ou une teinte fixe : <span class="ui">océan</span>, <span class="ui">aurore</span>, <span class="ui">couchant</span>, <span class="ui">forêt</span>, <span class="ui">raisin</span>, <span class="ui">carbone</span>.</dd>
+      <dt>Taille</dt><dd><span class="ui">normale</span> (par défaut), <span class="ui">compacte</span>, ou <span class="ui">mini</span> : tout tient sur une ligne (pas de date, la ligne d'état à côté du bonjour, ni message ni astuce).</dd>
+      <dt>Décor</dt><dd>la lueur de l'astre et le semis de points. Activé par défaut.</dd>
+      <dt>Couleurs qui ondulent</dt><dd>le dégradé glisse doucement. Désactivé par défaut.</dd>
+      <dt>Soleil ou lune</dt><dd>l'icône à gauche. Activé par défaut.</dd>
+    </dl>
+    <h4>Texte</h4>
+    <dl class="opts">
+      <dt>Salutation</dt><dd><span class="ui">Bonjour / Bonsoir</span> (par défaut, selon l'heure), <span class="ui">Salut</span>, <span class="ui">Hello</span>, <span class="ui">Coucou</span>, <span class="ui">Yo</span>.</dd>
+      <dt>Ton prénom</dt><dd>activé par défaut.</dd>
+      <dt>La date</dt><dd>activé par défaut.</dd>
+      <dt>Où en est l'imprimante</dt><dd>la ligne d'état. Activé par défaut.</dd>
+      <dt>Un message à toi</dt><dd>une phrase sous le bonjour, 90 caractères au plus (laisse vide pour rien).</dd>
+      <dt>L'astuce du jour</dt><dd>un conseil d'impression, différent chaque jour. Désactivé par défaut.</dd>
+    </dl>
+    <h4>Pastilles</h4>
+    <p>Un interrupteur par pastille, dans l'ordre de la liste ci-dessus : <span class="ui">Avancement de l'impression</span>, <span class="ui">Heure de fin</span>, <span class="ui">Impressions du jour</span> (actives par défaut), <span class="ui">Prochaine impression de « À faire »</span>, <span class="ui">Copains qui impriment</span>, <span class="ui">Ton grade de maker</span>, <span class="ui">Tours de roue disponibles</span> (inactives par défaut).</p>
+  </section>
+</section>
+
+<section id="accueil-grille">
+  <h2>La grille de tuiles</h2>
+  <p>Sous le bandeau, les blocs et les tuiles sont rangés en colonnes.</p>
+  <ul>
+    <li><strong>Colonnes</strong> : sur téléphone, toujours une seule. Sur ordinateur, autant qu'il en tient à l'écran (une colonne fait au moins 400 px), sans dépasser le maximum que tu as choisi (2 par défaut).</li>
+    <li><strong>Largeur</strong> : chaque colonne est coupée en deux. Une tuile occupe soit une <strong>demi-colonne</strong>, soit <strong>toute la colonne</strong>. Deux tuiles en demi-colonne se placent côte à côte, même sur téléphone.</li>
+    <li><strong>Hauteur</strong> : une tuile a une hauteur fixe en <strong>rangées</strong> (1, 2 ou 3), ou, pour certains blocs, <strong>selon le contenu</strong>. À hauteur fixe, le contenu s'adapte à la place : chaque tuile se réagence (en ligne, en colonne, en grille, ou en liste qu'on fait défiler).</li>
+    <li>Les tuiles se tassent : une petite tuile vient combler un trou laissé plus haut.</li>
+    <li>Une tuile qui n'a rien à montrer (par exemple <span class="ui">Copains</span> si tu n'as pas de copain) disparaît de l'accueil ; elle réapparaît dès qu'elle a du contenu.</li>
+  </ul>
+  <p><strong>Toucher une tuile</strong> ouvre sa vue en grand (une fenêtre détaillée, qui monte du bas sur téléphone) ou mène à sa page. Le détail de chaque tuile est dans <a href="#tuiles">Les tuiles</a> ; les blocs Imprimante, AMS, Rack Vortek et Points d'attention dans <a href="#imprimante">L'imprimante sur l'accueil</a>.</p>
+
+  <section id="accueil-hauteurs">
+    <h3>Tailles possibles</h3>
+    <table>
+      <tr><th>Élément</th><th>Largeurs</th><th>Hauteurs</th></tr>
+      <tr><td>Tuiles du catalogue (<a href="#tuiles">Les tuiles</a>)</td><td>demi-colonne ou toute la colonne (selon la tuile)</td><td>1, 2 ou 3 rangées</td></tr>
+      <tr><td>Bloc <span class="ui">Imprimante</span></td><td>toute la colonne (par défaut) ou demi-colonne</td><td>selon le contenu (par défaut), 1, 2 ou 3 rangées ; en demi-colonne : 2 (par défaut), 3 ou 1</td></tr>
+      <tr><td>Bloc <span class="ui">AMS</span></td><td>toute la colonne</td><td>2 (par défaut), 1 ou 3 rangées</td></tr>
+      <tr><td>Bloc <span class="ui">Rack Vortek</span></td><td>toute la colonne (par défaut) ou demi-colonne</td><td>2 (par défaut), 1 ou 3 rangées</td></tr>
+      <tr><td>Bloc <span class="ui">Points d'attention</span></td><td>toute la colonne</td><td>selon le contenu (par défaut), 1, 2 ou 3 rangées</td></tr>
+    </table>
+    <p>La taille par défaut de chaque tuile du catalogue est indiquée dans sa fiche (<a href="#tuiles">Les tuiles</a>).</p>
+  </section>
+
+  <section id="accueil-defaut">
+    <h3>La disposition par défaut</h3>
+    <ul>
+      <li><strong>Sur téléphone (une colonne)</strong> : Imprimante, AMS, puis Aujourd'hui, Derniers jours, À faire, Dernières impressions, Stock, Séchage, Humidité des AMS, Copains, MakerWorld, À évaluer, Roue et clés, Succès, Points d'attention.</li>
+      <li><strong>Sur ordinateur (deux colonnes)</strong> : Imprimante et AMS dans la première colonne, toutes les autres tuiles dans la seconde.</li>
+    </ul>
+    <p>Le bloc Rack Vortek et seize autres tuiles (Caméra, Températures, Ce mois-ci, Galerie…) ne sont pas posés d'office : tu les ajoutes depuis la liste <span class="ui">Ajouter</span> du mode personnalisation.</p>
+  </section>
+</section>
+
+<section id="accueil-personnaliser">
+  <h2>Personnaliser l'accueil</h2>
+  <p>Tout se règle depuis le <strong>mode personnalisation</strong>, sur l'accueil lui-même : tu vois le résultat au fur et à mesure.</p>
+  <ol>
+    <li>Touche le bouton à quatre cases du bandeau (<span class="ui">Personnaliser l'accueil</span>), ou, s'il est masqué, le bouton <span class="ui">Personnaliser l'accueil</span> de <span class="ui">Paramètres</span> → <span class="ui">🎨 Affichage</span>.</li>
+    <li>Le panneau <span class="ui">Personnaliser l'accueil</span> apparaît sous le bandeau, et chaque tuile est entourée de pointillés bleus avec son nom en étiquette.</li>
+    <li>Fais tes changements : ils s'appliquent aussitôt à l'écran.</li>
+    <li>Touche <span class="ui">Terminé</span> : la disposition est enregistrée (message « Disposition enregistrée »). Si tu n'as rien changé, rien n'est enregistré.</li>
+  </ol>
+  <div class="warn"><p>Les changements ne sont gardés qu'à <span class="ui">Terminé</span>. Si tu quittes la page sans y toucher, ils sont perdus.</p></div>
+  <figure class="pair">
+    <img src="img/accueil-edition-telephone.webp" alt="Panneau Personnaliser l'accueil sur téléphone : réglée, Repasser en automatique, Tout par défaut, Terminé, Titres des tuiles, Fonds des tuiles, Ajouter">
+    <img src="img/accueil-edition-bureau.webp" alt="Panneau Personnaliser l'accueil sur ordinateur, fonds colorés doux : Couleurs, Style, Disposition à régler, Reprendre la disposition de, Au plus sur grand écran, Ajouter">
+    <figcaption>Le panneau de personnalisation sur téléphone et sur ordinateur (où s'ajoutent les réglages de colonnes).</figcaption>
+  </figure>
+
+  <section id="accueil-personnaliser-panneau">
+    <h3>Le panneau « Personnaliser l'accueil »</h3>
+    <p>Son titre dit quelle disposition tu règles : « une colonne (téléphone) » ou « 2 colonnes », « 3 colonnes »… À côté, une pastille <span class="ui">réglée</span> (verte) ou <span class="ui">automatique</span> (grise), voir <a href="#accueil-colonnes">plus bas</a>.</p>
+    <dl class="opts">
+      <dt>Repasser en automatique</dt><dd>présent si la disposition affichée est réglée et qu'il en existe une autre réglée : elle redevient automatique (déduite des autres).</dd>
+      <dt>Tout par défaut</dt><dd>remet l'accueil entier par défaut (toutes les dispositions, les fonds, le bandeau) et l'enregistre tout de suite (« Accueil remis par défaut »).</dd>
+      <dt>Terminé</dt><dd>quitte le mode et enregistre.</dd>
+      <dt>Titres des tuiles</dt><dd><span class="ui">tous affichés</span> ou <span class="ui">tous masqués</span>, sur toutes les dispositions d'un coup. Ensuite chaque tuile garde son propre réglage (si c'est mélangé, le panneau affiche par exemple « · 12 sur 15 affichés »). Une tuile sans titre gagne de la place ; les infos de droite de son en-tête restent.</dd>
+      <dt>Fonds des tuiles</dt><dd>voir <a href="#accueil-fonds">Fonds colorés</a>.</dd>
+      <dt>Ajouter :</dt><dd>une pastille « + nom » par tuile qui n'est pas posée. La toucher pose la tuile dans la colonne la moins chargée (ou sur l'écran du téléphone affiché).</dd>
+    </dl>
+    <p>Sur ordinateur s'ajoutent les lignes <span class="ui">Disposition à régler</span>, <span class="ui">Reprendre la disposition de</span> et <span class="ui">Au plus sur grand écran</span>, décrites dans <a href="#accueil-colonnes">Nombre de colonnes</a>.</p>
+  </section>
+
+  <section id="accueil-tuile-actions">
+    <h3>Déplacer, masquer, régler une tuile</h3>
+    <p><strong>Touche une tuile</strong> en mode personnalisation : elle s'entoure de bleu et une barre d'actions sombre apparaît sur elle.</p>
+    <figure class="phone"><img src="img/accueil-tuile-selectionnee.webp" alt="Tuile Derniers jours sélectionnée, avec les boutons Monter, Descendre, Masquer et Réglages"><figcaption>La barre d'actions d'une tuile sélectionnée.</figcaption></figure>
+    <dl class="opts">
+      <dt>← / →</dt><dd>sur une disposition à plusieurs colonnes : vers la colonne de gauche ou de droite.</dd>
+      <dt>Écran</dt><dd>sur le téléphone à plusieurs écrans : envoie la tuile sur un autre écran (voir <a href="#accueil-ecrans">Les écrans du téléphone</a>).</dd>
+      <dt>↑ / ↓</dt><dd><span class="ui">Monter</span> et <span class="ui">Descendre</span> dans la colonne.</dd>
+      <dt>Œil barré</dt><dd><span class="ui">Masquer la tuile</span> : elle quitte la grille et repasse dans la liste <span class="ui">Ajouter</span>. Le bloc <span class="ui">Imprimante</span> n'a pas ce bouton : il est toujours présent.</dd>
+      <dt>Curseurs</dt><dd><span class="ui">Réglages de la tuile</span> (taille et options), voir ci-dessous.</dd>
+    </dl>
+    <p><strong>Sur ordinateur</strong>, tu peux aussi <strong>glisser-déposer</strong> une tuile (poignée ⋮⋮ à côté de son nom) : déposée sur une autre tuile, elle se place juste avant ; déposée dans la case « + » en bas d'une colonne, elle va à la fin de cette colonne.</p>
+    <p>En bas de chaque colonne, une case en pointillés <span class="ui">Ajouter une tuile</span> (« Toutes les tuiles sont en place » s'il n'en reste aucune) déplie la liste des tuiles non posées pour en mettre une <strong>dans cette colonne</strong>.</p>
+  </section>
+
+  <section id="accueil-tuile-reglages">
+    <h3>Les réglages d'une tuile</h3>
+    <p>Le bouton à curseurs d'une tuile ouvre sa fenêtre de réglages. Les changements s'appliquent aussitôt ; <span class="ui">OK</span>, la croix, Échap ou un clic à côté ferment la fenêtre.</p>
+    <figure class="phone"><img src="img/accueil-reglages-tuile.webp" alt="Réglages de la tuile Derniers jours : Largeur, Hauteur, Titre de la tuile, Fond coloré, Période, Compter, Moyenne par jour, OK"><figcaption>Les réglages de la tuile « Derniers jours ».</figcaption></figure>
+    <dl class="opts">
+      <dt>Disposition</dt><dd><span class="ui">Largeur</span> (<span class="ui">demi-colonne</span> / <span class="ui">toute la colonne</span>) et <span class="ui">Hauteur</span> (<span class="ui">1 rangée</span>, <span class="ui">2 rangées</span>, <span class="ui">3 rangées</span>, et <span class="ui">selon le contenu</span> pour les blocs qui le permettent). Seules les tailles permises pour cette tuile sont proposées.</dd>
+      <dt>Général</dt><dd><span class="ui">Titre de la tuile</span> (masqué, la tuile gagne de la place ; les infos de l'en-tête restent) et <span class="ui">Fond coloré</span> (pour exclure cette tuile quand les fonds colorés sont activés). Les deux sont activés par défaut.</dd>
+      <dt>Contenu</dt><dd>les options propres à la tuile (ce qu'elle montre, sa présentation…). Seules celles qui ont un sens à la taille choisie apparaissent. Elles sont détaillées dans la fiche de chaque tuile (<a href="#tuiles">Les tuiles</a>).</dd>
+    </dl>
+    <div class="note"><p>Taille et options sont <strong>propres à chaque disposition</strong> : une même tuile peut être grande avec toutes ses options sur ordinateur, et petite et sobre sur téléphone.</p></div>
+  </section>
+
+  <section id="accueil-colonnes">
+    <h3>Nombre de colonnes et dispositions</h3>
+    <p>L'accueil garde <strong>une disposition par nombre de colonnes</strong> (1, 2, 3 ou 4). Celle à <strong>une colonne est aussi celle du téléphone</strong>. Ainsi ton ordinateur et ton téléphone peuvent avoir des accueils très différents.</p>
+    <p>Une disposition que tu n'as jamais réglée est <strong>automatique</strong> : elle se déduit de la plus proche que tu as réglée (les tuiles sont réparties sur le bon nombre de colonnes). Dès que tu la modifies, elle devient <strong>réglée</strong>.</p>
+    <p>Ces lignes n'apparaissent que sur grand écran :</p>
+    <dl class="opts">
+      <dt>Disposition à régler</dt><dd>boutons 1 (icône de téléphone), 2, 3, 4. Choisis celle que tu modifies ; un point vert marque une disposition réglée, un rond vide une automatique. Régler celle à une colonne depuis l'ordinateur l'affiche centrée, à la largeur d'un téléphone.</dd>
+      <dt>Reprendre la disposition de</dt><dd>un bouton par autre disposition réglée : la disposition affichée est remplacée par celle-ci, tailles et options comprises, répartie sur le bon nombre de colonnes (une confirmation est demandée, bouton <span class="ui">Reprendre</span>). Reprise vers le téléphone, chaque colonne devient un écran (quatre au plus).</dd>
+      <dt>Au plus sur grand écran</dt><dd>le nombre maximal de colonnes affichées (2 par défaut). L'appli en affiche autant que l'écran en tient, sans dépasser ce maximum ; le panneau indique « ici, 2 colonnes s'affichent » et, si l'écran est trop étroit, « (l'écran n'en tient que 2) ».</dd>
+    </dl>
+    <div class="tip"><p>Pour composer ton accueil de téléphone confortablement, règle-le depuis l'ordinateur : <span class="ui">Disposition à régler</span> → 1.</p></div>
+  </section>
+
+  <section id="accueil-ecrans">
+    <h3>Les écrans du téléphone</h3>
+    <p>Sur téléphone, l'accueil peut être découpé en <strong>jusqu'à quatre écrans</strong> qu'on fait glisser au doigt, comme les pages d'un téléphone : par exemple un écran « Machine » (imprimante, AMS, séchage), un écran « Stats », un écran « Copains ».</p>
+    <figure class="phone"><img src="img/accueil-ecrans.webp" alt="Premier écran du téléphone, avec trois traits en bas au-dessus de la barre de navigation, le premier plus long et bleu"><figcaption>Trois écrans : l'indicateur est posé juste au-dessus de la barre du bas.</figcaption></figure>
+    <h4>Utiliser les écrans</h4>
+    <ul>
+      <li><strong>Glisse horizontalement</strong> n'importe où, même dans le vide sous les tuiles, pour passer à l'écran suivant ou précédent. Après le dernier revient le premier, et inversement.</li>
+      <li>Un geste plutôt vertical fait défiler la page normalement. Un élément d'une tuile qui défile lui-même de côté garde le geste tant qu'il peut encore défiler dans ce sens.</li>
+      <li>L'<strong>indicateur</strong> est un fin trait par écran, juste au-dessus de la barre du bas ; celui de l'écran affiché est plus long et bleu. Touche un trait pour aller sur cet écran.</li>
+      <li>À chaque changement, le nom de l'écran s'affiche un instant.</li>
+      <li>Le téléphone retient le dernier écran vu et y revient à la prochaine ouverture.</li>
+      <li>Le bandeau d'accueil s'affiche sur <strong>tous les écrans</strong>, sauf si tu choisis de ne le garder que sur le premier.</li>
+    </ul>
+    <h4>Régler les écrans</h4>
+    <p>En mode personnalisation de la disposition à une colonne (sur le téléphone, ou sur ordinateur avec <span class="ui">Disposition à régler</span> → 1), une carte en pointillés présente les écrans :</p>
+    <figure class="phone"><img src="img/accueil-ecrans-reglage.webp" alt="Barre des écrans : onglets Machine (avec crayon), Stats, Copains, bouton + Écran, corbeille, et Bandeau d'accueil sur le premier écran ou sur tous les écrans"><figcaption>Les onglets des écrans, en mode personnalisation.</figcaption></figure>
+    <dl class="opts">
+      <dt>Les onglets</dt><dd>un par écran. Touche un autre onglet pour aller sur cet écran. Touche l'onglet de l'écran affiché (il porte un crayon) pour le <strong>renommer</strong> : 16 caractères au plus, Entrée pour valider, Échap pour annuler. Sans nom, un écran s'appelle « Écran 1 », « Écran 2 »…</dd>
+      <dt>+ Écran</dt><dd>ajoute un écran (quatre au plus) et propose aussitôt de le nommer.</dd>
+      <dt>Corbeille</dt><dd><span class="ui">Supprimer cet écran</span> : s'il contient des tuiles, une confirmation te prévient qu'elles passent sur l'écran voisin.</dd>
+      <dt>Bandeau d'accueil</dt><dd><span class="ui">sur tous les écrans</span> (par défaut) ou <span class="ui">sur le premier écran</span> seulement (visible quand il y a plusieurs écrans).</dd>
+    </dl>
+    <p>Pour <strong>déplacer une tuile vers un autre écran</strong> : touche-la, puis touche <span class="ui">Écran</span> dans sa barre d'actions et choisis l'écran dans la liste. Elle se place en bas de cet écran.</p>
+    <figure class="phone"><img src="img/accueil-ecran-envoyer.webp" alt="Tuile Séchage sélectionnée, bouton Écran ouvert sur la liste → Stats et → Copains"><figcaption>Envoyer une tuile sur un autre écran.</figcaption></figure>
+    <div class="tip"><p>Sur ordinateur, <span class="ui">Reprendre la disposition de</span> 2, 3 ou 4 colonnes vers celle du téléphone fait <strong>un écran par colonne</strong> : un moyen rapide de démarrer.</p></div>
+  </section>
+
+  <section id="accueil-fonds">
+    <h3>Fonds colorés</h3>
+    <p>Par défaut les tuiles ont un fond neutre. La ligne <span class="ui">Fonds des tuiles</span> propose :</p>
+    <dl class="opts">
+      <dt>neutres</dt><dd>fond sombre ou clair selon le thème (par défaut).</dd>
+      <dt>colorés doux</dt><dd>une teinte légère par tuile.</dd>
+      <dt>colorés vifs</dt><dd>un dégradé saturé, texte en blanc.</dd>
+      <dt>comme le bandeau</dt><dd>toutes les tuiles prennent exactement les couleurs du bandeau du moment, texte en blanc.</dd>
+    </dl>
+    <p>Avec <span class="ui">colorés doux</span> ou <span class="ui">colorés vifs</span>, deux lignes s'ajoutent :</p>
+    <dl class="opts">
+      <dt>Couleurs</dt><dd><span class="ui">variées</span> : chaque tuile a sa teinte, choisie pour que deux voisines (bandeau compris) ne se ressemblent pas ; <span class="ui">une seule</span> : toutes la même teinte, à choisir parmi une pastille « comme le bandeau » et neuf couleurs (bleu, violet, orange, vert, rose, sarcelle, indigo, rouge, ambre).</dd>
+      <dt>Style</dt><dd><span class="ui">dégradé</span>, <span class="ui">lueur</span> (par défaut), <span class="ui">bulles</span> ou <span class="ui">verre</span>.</dd>
+    </dl>
+    <p>Une tuile dont le réglage <span class="ui">Fond coloré</span> est désactivé garde un fond neutre.</p>
+    <figure><img src="img/accueil-fonds-vifs.webp" alt="Accueil sur ordinateur avec des fonds colorés vifs : chaque tuile a son dégradé de couleur"><figcaption>Fonds « colorés vifs », couleurs variées.</figcaption></figure>
+  </section>
+
+  <section id="accueil-reinitialiser">
+    <h3>Revenir en arrière</h3>
+    <ul>
+      <li><strong>Annuler des changements non enregistrés</strong> : quitte la page sans toucher <span class="ui">Terminé</span> (en rechargeant l'accueil, par exemple).</li>
+      <li><strong>Une disposition</strong> : <span class="ui">Repasser en automatique</span> la fait de nouveau déduire des autres.</li>
+      <li><strong>Tout l'accueil</strong> : <span class="ui">Tout par défaut</span> remet la disposition d'origine (et l'enregistre aussitôt).</li>
+    </ul>
+  </section>
+</section>

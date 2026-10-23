@@ -1,0 +1,191 @@
+<h1>Premiers pas</h1>
+<p class="lead">Ce qu'est BambuNymous, comment s'y connecter, qui peut faire quoi, et comment se déplacer dans l'appli, sur ordinateur comme sur téléphone.</p>
+
+<section id="premiers-pas-presentation">
+  <h2>BambuNymous en quelques mots</h2>
+  <p>BambuNymous est une appli web qui suit ton imprimante 3D Bambu Lab et tout ce qui gravite autour :</p>
+  <ul>
+    <li><b>l'imprimante et ses AMS</b> en direct : impression en cours, températures, caméra, bobines chargées, humidité, séchage ;</li>
+    <li><b>l'historique des impressions</b>, avec durée, poids de filament, coût (filament et électricité), photos et lien MakerWorld ;</li>
+    <li><b>le stock de filaments</b> : chaque référence, ses bobines, leur poids restant, leur prix, le séchage, les étiquettes et le scan NFC ;</li>
+    <li><b>les objets</b> que tu fabriques et vends, et les accessoires qu'ils utilisent ;</li>
+    <li><b>les statistiques</b>, ton compte <b>MakerWorld</b> (points, collections, modèles à imprimer ou à évaluer), les <b>copains</b> dont tu peux parcourir le BambuNymous, et des <b>succès</b> à débloquer ;</li>
+    <li>des <b>notifications</b> sur ton téléphone (ntfy, Telegram ou l'appli Android).</li>
+  </ul>
+  <p>L'appli tourne sur ton propre serveur (par exemple dans Docker) et s'ouvre dans n'importe quel navigateur. Une <a href="#premiers-pas-android">appli Android</a> ajoute les notifications natives et la lecture des puces NFC des bobines.</p>
+</section>
+
+<section id="premiers-pas-connexion">
+  <h2>Se connecter</h2>
+  <p>Toute page de l'appli demande d'être connecté : sans session, tu arrives sur l'écran de connexion.</p>
+  <figure class="phone"><img src="img/premiers-pas-connexion.webp" alt="Écran de connexion avec les champs Utilisateur et Mot de passe"><figcaption>L'écran de connexion.</figcaption></figure>
+  <ol>
+    <li>Saisis ton nom dans <span class="ui">Utilisateur</span>.</li>
+    <li>Saisis ton <span class="ui">Mot de passe</span>. L'œil à droite du champ affiche ou masque ce que tu tapes.</li>
+    <li>Touche <span class="ui">Se connecter</span> (ou Entrée). Le bouton affiche <span class="ui">Connexion…</span> pendant l'envoi, puis tu arrives sur l'accueil.</li>
+  </ol>
+  <p>Si le nom ou le mot de passe est faux, ou si le compte a été désactivé, le message <b>« Identifiants invalides »</b> s'affiche en rouge.</p>
+  <div class="note"><p><b>Tout premier démarrage</b> : tant qu'aucun compte n'existe, l'appli accepte <code>admin</code> / <code>admin</code>. Crée tout de suite ton vrai compte administrateur dans <a href="#parametres-accounts">Paramètres → Comptes</a> : dès qu'un compte existe, cet accès de secours est coupé.</p></div>
+
+  <section id="premiers-pas-2fa">
+    <h3>Avec la double authentification</h3>
+    <p>Si tu as activé la double authentification sur ton compte (voir <a href="#parametres-accounts-2fa">Paramètres → Comptes</a>), un troisième champ apparaît une fois le mot de passe accepté : <span class="ui">Code de vérification</span>.</p>
+    <figure class="phone"><img src="img/premiers-pas-2fa.webp" alt="Écran de connexion avec le champ Code de vérification"><figcaption>Le code est demandé seulement quand le mot de passe est bon.</figcaption></figure>
+    <ul>
+      <li>Tape le code à 6 chiffres affiché par ton application d'authentification (Google Authenticator, Aegis, 2FAS, Bitwarden…), puis <span class="ui">Se connecter</span>.</li>
+      <li>Si tu n'as plus ton téléphone, tape à la place un de tes <b>codes de secours</b> : chacun ne sert qu'une fois.</li>
+      <li>Un code faux affiche « Code de vérification invalide ». Vérifie que l'heure de ton téléphone est juste (une tolérance de 30 secondes est admise). Un code déjà utilisé ne repasse pas.</li>
+    </ul>
+  </section>
+
+  <section id="premiers-pas-sessions">
+    <h3>Sessions et sécurité</h3>
+    <ul>
+      <li>Quand ta session expire ou que ton compte est désactivé, l'appli te ramène d'elle-même à l'écran de connexion.</li>
+      <li>Changer un mot de passe, changer le rôle d'un compte ou le désactiver <b>déconnecte toutes ses sessions</b>, sur tous les appareils. Exception : quand tu changes <b>ton</b> mot de passe, l'appareil sur lequel tu le fais reste connecté.</li>
+      <li>L'appli peut te prévenir d'une connexion depuis un appareil jamais vu, ou de plusieurs échecs de connexion d'affilée : voir les <a href="#notifications-evenements-system">notifications BambuNymous</a>.</li>
+      <li>Une adresse qui n'existe pas affiche « Page introuvable » avec un lien <span class="ui">Retour à l'accueil</span>.</li>
+    </ul>
+  </section>
+</section>
+
+<section id="premiers-pas-roles">
+  <h2>Comptes et rôles</h2>
+  <p>Chaque personne a son propre compte. Un compte a l'un de ces trois rôles :</p>
+  <table>
+    <tr><th>Rôle</th><th>Ce qu'il peut faire</th></tr>
+    <tr><td><b>Administrateur</b> (badge « Admin »)</td><td>Tout : consulter, ajouter, modifier, supprimer, régler l'appli.</td></tr>
+    <tr><td><b>Lecture seule (avec prix)</b> (badge « Lecture seule + prix »)</td><td>Tout consulter, montants compris (prix, coûts), sans rien pouvoir modifier.</td></tr>
+    <tr><td><b>Lecture seule</b> (badge « Lecture seule »)</td><td>Tout consulter, sans rien modifier ; <b>les montants lui sont masqués</b>.</td></tr>
+  </table>
+  <p>Dans ce guide, ce qui est réservé aux administrateurs est marqué <span class="admin">admin</span>. Un compte en lecture seule ne voit pas les boutons de modification ; s'il tente quand même une action, le serveur la refuse (« Compte en lecture seule : action non autorisee »).</p>
+  <p>Un compte en lecture seule garde quand même la main sur ce qui le concerne lui :</p>
+  <ul>
+    <li>changer <b>son</b> mot de passe et activer ou couper <b>sa</b> double authentification ;</li>
+    <li>inscrire <b>ses</b> téléphones et choisir <b>ses</b> notifications de l'appli Android ;</li>
+    <li>certains réglages de l'accueil ;</li>
+    <li>les actions MakerWorld (j'aime, collections, boosts, évaluations, « À faire ») si un administrateur lui a donné le droit <b>« Actions MakerWorld »</b>. Un administrateur a ce droit d'office.</li>
+  </ul>
+  <p>Les comptes se créent et se gèrent dans <a href="#parametres-accounts-users">Paramètres → Comptes → Utilisateurs</a>. Un administrateur y est le <b>compte principal</b> : il ne peut être ni supprimé, ni désactivé, ni rétrogradé.</p>
+  <div class="tip"><p><b>Les copains</b> : un administrateur peut aussi offrir à un ami un accès en lecture seule à son BambuNymous, par une <b>invitation copain</b>. L'ami parcourt alors ton appli depuis la sienne, sans jamais pouvoir rien modifier. Tout est expliqué dans le chapitre <a href="#copains">Copains</a>.</p></div>
+</section>
+
+<section id="premiers-pas-navigation">
+  <h2>Se déplacer dans l'appli</h2>
+  <p>Six entrées principales, dans le même ordre partout :</p>
+  <dl class="opts">
+    <dt>Accueil</dt><dd>Le tableau de bord : imprimante, AMS, tuiles, points d'attention. Voir <a href="#accueil">Accueil</a>.</dd>
+    <dt>Impressions</dt><dd>L'historique et la fiche de chaque impression. Voir <a href="#impressions">Impressions</a>.</dd>
+    <dt>Filaments</dt><dd>Le stock de filaments et de bobines. Voir <a href="#filaments">Filaments</a>.</dd>
+    <dt>Objets</dt><dd>Les objets fabriqués, vendus, et les accessoires. Voir <a href="#objets">Objets et ventes</a>.</dd>
+    <dt>Stats</dt><dd>Statistiques, séchage, succès. Voir <a href="#stats">Statistiques</a>.</dd>
+    <dt>Paramètres</dt><dd>Tous les réglages. Voir <a href="#parametres">Paramètres</a>.</dd>
+  </dl>
+  <p>L'entrée de la page où tu te trouves est en bleu.</p>
+
+  <section id="premiers-pas-navigation-ordinateur">
+    <h3>Sur ordinateur</h3>
+    <p>Sur un écran large, la navigation est une <b>barre latérale à gauche</b> :</p>
+    <ul>
+      <li>en haut, le logo <b>BambuNymous</b> : un clic ramène à l'accueil ;</li>
+      <li>puis les six entrées ;</li>
+      <li>tout en bas, ton <b>menu du compte</b> (rond violet avec ton initiale et ton nom) et, à droite, la <b>cloche</b> des notifications.</li>
+    </ul>
+    <p>Chaque page affiche son titre en haut, avec ses boutons à droite.</p>
+    <figure><img src="img/premiers-pas-ordinateur.webp" alt="L'accueil sur ordinateur avec la barre latérale"><figcaption>Sur ordinateur : barre latérale à gauche, compte et cloche en bas.</figcaption></figure>
+  </section>
+
+  <section id="premiers-pas-navigation-telephone">
+    <h3>Sur téléphone</h3>
+    <ul>
+      <li>En haut, un <b>en-tête fixe</b> : le logo, puis le titre de la page (sur l'accueil : « BambuNymous »). À droite, les boutons propres à la page (par exemple <span class="ui">📋 Journal</span> dans les Paramètres, ou le scanner dans Filaments), la <b>cloche</b> et ton <b>rond de compte</b>.</li>
+      <li>En bas, une <b>barre de navigation fixe</b> avec les six entrées (icône et nom).</li>
+    </ul>
+    <figure class="phone"><img src="img/premiers-pas-telephone.webp" alt="L'accueil sur téléphone avec l'en-tête et la barre du bas"><figcaption>Sur téléphone : en-tête en haut, navigation en bas.</figcaption></figure>
+    <p>Sur iPhone (appli ajoutée à l'écran d'accueil) comme dans l'appli Android, les marges de la barre d'état et des coins arrondis s'ajustent toutes seules.</p>
+  </section>
+
+  <section id="premiers-pas-menu-compte">
+    <h3>Le menu du compte</h3>
+    <p>Touche ton rond de compte pour ouvrir le menu (il s'ouvre au-dessus sur ordinateur, en dessous sur téléphone ; il se referme si tu touches ailleurs ou fais défiler).</p>
+    <figure class="phone"><img src="img/premiers-pas-menu-compte.webp" alt="Le menu du compte ouvert"><figcaption>Le menu du compte, avec le bloc « Chez qui ? ».</figcaption></figure>
+    <dl class="opts">
+      <dt>En-tête</dt><dd>Ton nom d'utilisateur et ton rôle (« Administrateur », « Lecture seule », « Lecture seule (avec prix) »).</dd>
+      <dt>Chez qui ?</dt><dd>Seulement si tu as des copains : <span class="ui">🏠 Chez moi</span> et une ligne par copain. Le voyant de chaque ligne dit où en est son imprimante : vert qui pulse = imprime (avec le pourcentage), orange = allumée au repos, rouge = éteinte ou hors réseau, gris = son BambuNymous ne répond pas. Toucher une ligne t'emmène chez ce copain. Voir <a href="#copains">Copains</a>.</dd>
+      <dt>🏆 Succès</dt><dd>Ouvre la page des succès. Voir <a href="#succes">Succès</a>.</dd>
+      <dt>Guide d'utilisation</dt><dd>Ouvre ce guide.</dd>
+      <dt>Déconnexion</dt><dd>Ferme ta session sur cet appareil et revient à l'écran de connexion.</dd>
+    </dl>
+    <p>Un petit point vert sur ton rond de compte (avec un nombre s'ils sont plusieurs) signale que des copains sont en train d'imprimer.</p>
+  </section>
+
+  <section id="premiers-pas-cloche">
+    <h3>La cloche</h3>
+    <figure class="small"><img src="img/premiers-pas-cloche.webp" alt="La cloche avec une pastille rouge 2, à côté du rond de compte"><figcaption>Deux notifications non vues.</figcaption></figure>
+    <p>La cloche ouvre la page <a href="#notifications">Notifications</a>. Sa pastille rouge compte tes notifications <b>pas encore vues</b> (« 99+ » au-delà de 99). Elle se met à jour toute seule chaque minute et retombe à zéro quand tu ouvres la page. Elle est masquée pendant une visite chez un copain.</p>
+  </section>
+</section>
+
+<section id="premiers-pas-android">
+  <h2>L'appli Android</h2>
+  <p>BambuNymous marche très bien dans le navigateur d'un téléphone. L'appli Android, elle, ajoute trois choses :</p>
+  <ul>
+    <li>des <b>notifications natives</b> (icône BambuNymous, une catégorie Android par section, la bonne page s'ouvre au toucher) ;</li>
+    <li>la <b>lecture NFC</b> des puces des bobines Bambu Lab, pour retrouver ou créer une bobine en l'approchant du téléphone ;</li>
+    <li>l'<b>appareil photo</b> et l'enregistrement des fichiers (planches d'étiquettes PDF…) dans Téléchargements.</li>
+  </ul>
+
+  <section id="premiers-pas-android-installer">
+    <h3>Installer l'appli</h3>
+    <ol>
+      <li>Sur le téléphone, ouvre BambuNymous dans le navigateur, puis <b>Paramètres → onglet « 📱 Appli Android »</b>.</li>
+      <li>Touche <span class="ui">Télécharger</span> : le fichier <code>BambuNymous.apk</code> est servi par ton propre serveur. La carte indique la version, sa date et sa taille.</li>
+      <li>Ouvre le fichier téléchargé. Android te demande d'autoriser l'installation d'applis depuis ton navigateur : accepte pour cette installation.</li>
+      <li>Dans l'appli, renseigne l'adresse de ton BambuNymous (celle que tu tapes dans le navigateur) et, pour le scan NFC, le jeton RFID que t'a donné l'administrateur ; puis connecte-toi comme d'habitude. Ces deux réglages restent modifiables ensuite (<a href="#parametres-android">Paramètres → Appli Android</a> → <span class="ui">⚙️ Ouvrir les réglages de l'appli</span>).</li>
+    </ol>
+    <figure><img src="img/parametres-android.webp" alt="Onglet Appli Android des paramètres avec le bouton Télécharger"><figcaption>Paramètres → 📱 Appli Android, vu depuis un navigateur.</figcaption></figure>
+    <p>Dans l'appli, le même onglet te dit « ✓ Ton appli est à jour » ou « Une mise à jour est disponible » (bouton <span class="ui">Mettre à jour</span>). Détails dans <a href="#parametres-android">Paramètres → Appli Android</a>.</p>
+  </section>
+
+  <section id="premiers-pas-android-notifications">
+    <h3>Recevoir les notifications sur le téléphone</h3>
+    <p>L'appli reçoit ses notifications par l'intermédiaire de l'appli gratuite <b>ntfy</b> (qui sert de relais, technique « UnifiedPush ») : installe-la aussi depuis le Play Store ou F-Droid.</p>
+    <ol>
+      <li>Un administrateur active le canal <b>Appli Android</b> (<a href="#notifications-canaux-appli">voir les canaux</a>).</li>
+      <li>Dans l'appli BambuNymous, va dans <b>Paramètres → 🔔 Notifs</b> et touche <span class="ui">Activer sur ce téléphone</span>. Si Android te demande quelle appli utiliser, choisis <b>ntfy</b>.</li>
+      <li>Coche les notifications que tu veux recevoir : voir <a href="#notifications-mes-choix">Mes notifications</a>.</li>
+    </ol>
+  </section>
+
+  <section id="premiers-pas-android-nfc">
+    <h3>Scanner les bobines (NFC)</h3>
+    <p>Les bobines Bambu Lab portent une puce. Avec l'appli Android, approche le téléphone de la bobine : si elle est connue, sa fiche s'ouvre ; sinon BambuNymous propose de la créer avec la bonne référence. Le mode de scan s'active depuis la page Filaments. Tout est expliqué dans <a href="#filaments-nfc">Filaments → NFC</a>.</p>
+  </section>
+</section>
+
+<section id="premiers-pas-guide">
+  <h2>Ce guide</h2>
+  <p>Tu peux rouvrir ce guide à tout moment :</p>
+  <ul>
+    <li>depuis le <b>menu du compte</b> : entrée <span class="ui">Guide d'utilisation</span> (icône livre), sous « Succès » ;</li>
+    <li>depuis les <b>Paramètres</b> : bouton <span class="ui">📖 Guide d'utilisation</span> en haut à droite sur ordinateur, ou simple icône <span class="ui">📖</span> dans l'en-tête sur téléphone (visible par tous les comptes) ;</li>
+    <li>ou directement à l'adresse de ton BambuNymous suivie de <code>/doc/</code>.</li>
+  </ul>
+  <p>Le sommaire à gauche (bouton menu sur téléphone) liste les chapitres et leurs parties ; le champ de recherche cherche dans tout le texte. Le bouton en haut à droite bascule entre thème clair et sombre, et <span class="ui">Ouvrir l'appli</span> te ramène à BambuNymous. Touche une capture pour l'agrandir.</p>
+  <p>Les chapitres :</p>
+  <div class="toc-cards">
+    <a href="#premiers-pas"><b>Premiers pas</b><span>Connexion, rôles, navigation, appli Android.</span></a>
+    <a href="#accueil"><b>Accueil</b><span>Le tableau de bord et sa personnalisation.</span></a>
+    <a href="#tuiles"><b>Les tuiles de l'accueil</b><span>Chaque tuile et ses réglages.</span></a>
+    <a href="#imprimante"><b>Imprimante et AMS</b><span>État en direct, caméra, AMS, séchage.</span></a>
+    <a href="#impressions"><b>Impressions</b><span>Historique, fiches, à faire, à évaluer.</span></a>
+    <a href="#filaments"><b>Filaments</b><span>Stock, bobines, séchage, étiquettes, NFC.</span></a>
+    <a href="#objets"><b>Objets et ventes</b><span>Objets fabriqués, ventes, accessoires.</span></a>
+    <a href="#stats"><b>Statistiques</b><span>Chiffres, courbes, séchage.</span></a>
+    <a href="#makerworld"><b>MakerWorld</b><span>Compte, collections, points, boosts.</span></a>
+    <a href="#notifications"><b>Notifications</b><span>Historique, cloche, canaux, événements.</span></a>
+    <a href="#copains"><b>Copains</b><span>Visiter le BambuNymous d'un ami.</span></a>
+    <a href="#succes"><b>Succès</b><span>Médailles, clés et roue.</span></a>
+    <a href="#parametres"><b>Paramètres</b><span>Tous les réglages, outils et journal.</span></a>
+  </div>
+</section>

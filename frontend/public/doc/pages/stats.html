@@ -1,0 +1,206 @@
+<h1>Statistiques</h1>
+<p class="lead">La page <span class="ui">Stats</span> fait le bilan de ton activité : combien tu imprimes, ce que ça coûte, quel filament part le plus, où en est le séchage de tes bobines et ce que rapportent tes objets. On l'ouvre par <span class="ui">Stats</span> dans la barre de navigation.</p>
+
+<section id="stats-organisation">
+  <h2>Organisation de la page</h2>
+  <p>La page a cinq onglets, qui tiennent sur une ligne même sur un petit téléphone :</p>
+  <dl class="opts">
+    <dt>Prints</dt><dd>Tes impressions : volume, réussite, temps, coûts, habitudes, évolution et classements. Onglet par défaut. Voir <a href="#stats-prints">Onglet Prints</a>.</dd>
+    <dt>Filaments</dt><dd>Ton stock de bobines et ta consommation. Voir <a href="#stats-filaments">Onglet Filaments</a>.</dd>
+    <dt>Séchage</dt><dd>L'état de séchage de tes bobines. Voir <a href="#stats-sechage">Onglet Séchage</a>.</dd>
+    <dt>Objets</dt><dd>Ton inventaire d'objets, tes ventes, tes marges et tes accessoires. Voir <a href="#stats-objets">Onglet Objets</a>.</dd>
+    <dt>Succès</dt><dd>Tes succès et la roue. Ils sont décrits dans le chapitre <a href="#succes">Succès</a>.</dd>
+  </dl>
+  <p>L'onglet choisi s'inscrit dans l'adresse de la page (<code>/stats?tab=filaments</code>, <code>?tab=drying</code>, <code>?tab=objects</code>, <code>?tab=achievements</code>) : tu peux mettre un onglet en favori.</p>
+  <figure class="phone"><img src="img/stats-telephone.webp" alt="Page Statistiques sur téléphone, onglet Prints"><figcaption>Sur téléphone, le bouton de période (« Tout ») est dans l'en-tête, à côté du titre.</figcaption></figure>
+  <p>Les chiffres sont présentés en <b>cartes</b> (un libellé, une valeur, parfois une précision en dessous) et en graphiques (barres, anneaux). Les durées s'écrivent « 3h 12min », les poids « 1.23 kg » ou « 97.4 g », les montants « 12.34 € ». Un tiret « — » signifie qu'il n'y a pas de valeur.</p>
+  <p>Certaines sections portent un petit badge <span class="ui">GLOBAL</span> : elles ne dépendent pas de la période choisie (le survol du badge le rappelle).</p>
+  <div class="note"><p>Pour un compte en <b>lecture seule</b> (sans prix), tous les montants sont remplacés par « — », la courbe « Coût » de l'évolution disparaît, et le classement « Les plus chers » n'est pas affiché. Un compte « Lecture seule + prix » voit tout.</p></div>
+</section>
+
+<section id="stats-periode">
+  <h2>Choisir la période</h2>
+  <p>Le bouton avec l'entonnoir affiche la période courante (<span class="ui">Tout</span> par défaut). Sur ordinateur il est à droite du titre « Statistiques » ; sur téléphone, dans l'en-tête en haut de l'écran. Touche-le pour ouvrir la feuille <span class="ui">Période</span>.</p>
+  <figure class="phone"><img src="img/stats-periode.webp" alt="Feuille Période avec dix préréglages et une plage personnalisée"><figcaption>Dix périodes toutes faites, ou une plage de dates libre.</figcaption></figure>
+  <dl class="opts">
+    <dt>Tout</dt><dd>Toute ton histoire.</dd>
+    <dt>Cette semaine</dt><dd>Depuis lundi.</dd>
+    <dt>Ce mois / Cette année</dt><dd>Depuis le 1er du mois / le 1er janvier.</dd>
+    <dt>Mois dernier / Année dernière</dt><dd>Le mois civil / l'année civile précédents en entier.</dd>
+    <dt>7 jours, 30 jours, 90 jours, 12 mois</dt><dd>Fenêtres glissantes jusqu'à aujourd'hui.</dd>
+    <dt>Plage personnalisée</dt><dd>Choisis une date de <b>Début</b> et/ou de <b>Fin</b>, puis <span class="ui">Appliquer la plage</span>. Les deux jours sont inclus en entier. Le bouton affiche alors « 2026-09-01 → 2026-09-30 », « Depuis 2026-09-01 » ou « Jusqu'au 2026-09-30 ». Deux dates vides reviennent à « Tout ».</dd>
+  </dl>
+  <p>La période choisie est en bleu. Le ✕ ferme la feuille.</p>
+  <h4>Ce que la période change</h4>
+  <ul>
+    <li><b>Prints</b> : tout l'onglet.</li>
+    <li><b>Filaments</b> : tout sauf « Stock actuel » (ton stock est celui d'aujourd'hui).</li>
+    <li><b>Séchage</b> : rien, c'est un état présent.</li>
+    <li><b>Objets</b> : seulement les ventes et ce qui en découle (chiffre d'affaires, marges, ratios), selon la date de vente.</li>
+  </ul>
+  <div class="tip"><p>La période n'est pas mémorisée : en rechargeant la page, elle revient à « Tout ».</p></div>
+</section>
+
+<section id="stats-prints">
+  <h2>Onglet Prints</h2>
+  <p>Il porte sur les impressions <b>terminées</b> : réussies, échouées, partielles et à refaire. Les impressions en cours et les impressions annulées ne comptent pas. S'il n'y en a aucune sur la période : « Aucune impression terminée sur cette période. »</p>
+  <figure><img src="img/stats-prints-haut.webp" alt="Onglet Prints sur ordinateur : impressions, moyennes, habitudes"><figcaption>Le haut de l'onglet Prints sur ordinateur.</figcaption></figure>
+  <section id="stats-prints-impressions">
+    <h3>Impressions et moyennes</h3>
+    <dl class="opts">
+      <dt>Terminées</dt><dd>Nombre d'impressions terminées ; en dessous, le nombre d'échecs.</dd>
+      <dt>Taux de réussite</dt><dd>Part des impressions réussies ; en dessous, leur nombre.</dd>
+      <dt>Temps total</dt><dd>Durée cumulée ; en dessous, la moyenne par impression.</dd>
+      <dt>Filament</dt><dd>Poids total consommé ; en dessous, le poids moyen.</dd>
+      <dt>Coût total</dt><dd>Filament + électricité ; en dessous, le coût moyen.</dd>
+    </dl>
+    <p>La section <b>Moyennes par impression</b> reprend <b>Coût moyen</b>, <b>Durée moyenne</b>, <b>Poids moyen</b>, et ajoute <b>Coût / kg</b> (ce que te coûte un kilo imprimé) et <b>Coût / heure</b> (ce que coûte une heure d'imprimante).</p>
+  </section>
+  <section id="stats-prints-habitudes">
+    <h3>Habitudes d'impression</h3>
+    <dl class="opts">
+      <dt>Heure de pointe</dt><dd>L'heure à laquelle tu lances le plus souvent (« 21h »).</dd>
+      <dt>Meilleure journée</dt><dd>Le jour où tu as terminé le plus d'impressions, avec sa date.</dd>
+      <dt>Taux de réussite</dt><dd>Le même qu'au-dessus, pour l'avoir sous les yeux.</dd>
+      <dt>Par jour de la semaine</dt><dd>Barres du lundi au dimanche ; le jour le plus chargé est en couleur pleine.</dd>
+      <dt>Par heure de lancement</dt><dd>Barres de 00 à 23 h ; le survol donne « 21h — N ».</dd>
+      <dt>Répartition par statut</dt><dd>Anneau Réussies (vert), Partiel (orange), À refaire (violet), Échecs (rouge), avec les pourcentages.</dd>
+    </dl>
+  </section>
+  <section id="stats-prints-echecs">
+    <h3>Perdu sur les échecs et évolution</h3>
+    <figure><img src="img/stats-prints-evolution.webp" alt="Cartes Perdu sur les échecs et histogramme Évolution dans le temps"><figcaption>Ce que t'ont coûté les échecs, puis l'évolution semaine par semaine.</figcaption></figure>
+    <p><b>Perdu sur les échecs</b> (affiché seulement s'il y a des échecs) chiffre le gâchis : nombre d'<b>Échecs</b>, <b>Filament</b>, <b>Coût</b> et <b>Temps</b> perdus.</p>
+    <p><b>Évolution dans le temps</b> est un histogramme. Les boutons au-dessus choisissent la mesure : <span class="ui">Impressions</span> (nombre), <span class="ui">Coût</span>, <span class="ui">Filament</span> (kg) ou <span class="ui">Durée</span>. Le découpage s'adapte à la période :</p>
+    <ul>
+      <li>jusqu'à 45 jours : une barre par jour (« 12/10 ») ;</li>
+      <li>jusqu'à 120 jours : une barre par semaine (« S42 ») ;</li>
+      <li>au-delà : une barre par mois (« 10/26 »), 18 mois au plus.</li>
+    </ul>
+    <p>En mode Impressions, le bas de chaque barre montre en couleur les échecs (rouge), les impressions à refaire (violet) et les partielles (orange) ; le survol détaille, par exemple « 07/26 — 12 prints (2 échecs, 1 partiel) ».</p>
+  </section>
+  <section id="stats-prints-classements">
+    <h3>Classements</h3>
+    <figure><img src="img/stats-prints-classements.webp" alt="Quatre classements : les plus longs, les plus chers, les plus lourds, le plus de couleurs"><figcaption>Les dix premiers de chaque classement, avec médailles pour le podium.</figcaption></figure>
+    <p>Quatre top 10, avec 🥇🥈🥉 pour les trois premiers :</p>
+    <dl class="opts">
+      <dt>⏱ Les plus longs</dt><dd>Par durée.</dd>
+      <dt>💰 Les plus chers</dt><dd>Par coût (masqué pour un compte sans prix).</dd>
+      <dt>⚖ Les plus lourds</dt><dd>Par poids de filament.</dd>
+      <dt>🎨 Le plus de couleurs</dt><dd>Par nombre de teintes réellement utilisées (au moins deux).</dd>
+    </dl>
+    <p>Chaque classement a une bascule <span class="ui">Prints</span> / <span class="ui">Groupes</span> : en mode Groupes, ce sont tes <a href="#impressions">groupes d'impressions</a> qui sont classés (le préfixe « ×N » donne leur nombre d'impressions). « Groupes » est grisé si tu n'en as pas. Seules les impressions <b>réussies</b> entrent dans les classements. Touche une ligne pour ouvrir la fiche de l'impression ou du groupe.</p>
+  </section>
+</section>
+
+<section id="stats-filaments">
+  <h2>Onglet Filaments</h2>
+  <figure><img src="img/stats-filaments-stock.webp" alt="Stock actuel et consommation sur la période"><figcaption>Le stock du moment (GLOBAL) et la consommation de la période.</figcaption></figure>
+  <section id="stats-filaments-stock">
+    <h3>Stock actuel <span class="ui">GLOBAL</span></h3>
+    <dl class="opts">
+      <dt>Références</dt><dd>Nombre de filaments dans ton catalogue.</dd>
+      <dt>Bobines actives</dt><dd>Bobines non archivées.</dd>
+      <dt>Poids en stock</dt><dd>Filament restant sur ces bobines.</dd>
+      <dt>Valeur du stock</dt><dd>Ce que vaut ce qui reste : prix de la bobine (sinon prix catalogue du filament) au prorata du poids restant.</dd>
+      <dt>Valeur / bobine, Poids / bobine</dt><dd>Les moyennes par bobine active.</dd>
+    </dl>
+  </section>
+  <section id="stats-filaments-conso">
+    <h3>Consommé sur la période et répartition</h3>
+    <p><b>Filament utilisé</b>, <b>Coût filament</b>, <b>Coût moyen / kg</b> et <b>Matériaux utilisés</b> (nombre de matières différentes).</p>
+    <figure><img src="img/stats-filaments-repartition.webp" alt="Répartition par matériau, par type, par marque et filaments les plus utilisés"><figcaption>Où part ton filament.</figcaption></figure>
+    <dl class="opts">
+      <dt>Par matériau</dt><dd>Anneau par famille (PLA, PETG, TPU…).</dd>
+      <dt>Par teinte</dt><dd>Anneau par couleur dominante, avec les vraies couleurs (si tes filaments ont des teintes renseignées).</dd>
+      <dt>Par type</dt><dd>Barres par variante (« PLA Basic », « PLA Matte »…), en kg.</dd>
+      <dt>Par marque</dt><dd>Barres par fabricant, en kg.</dd>
+      <dt>Filaments les plus utilisés</dt><dd>Top 10 avec la pastille de couleur et les grammes consommés.</dd>
+    </dl>
+    <p>Les anneaux montrent au plus dix parts. Pour le détail d'une bobine, voir le chapitre <a href="#filaments">Filaments</a>.</p>
+  </section>
+</section>
+
+<section id="stats-sechage">
+  <h2>Onglet Séchage</h2>
+  <p>Un filament prend l'humidité avec le temps. L'onglet Séchage montre, pour toutes tes bobines actives (non archivées), lesquelles doivent passer au séchage. Il ne dépend pas de la période.</p>
+  <p>Une bobine est <b>à sécher</b> si elle n'a jamais été séchée, ou si son dernier séchage date de plus que son <b>délai</b>. Le délai se règle par famille ou sous-famille de filament dans <span class="ui">Paramètres</span> → onglet Filaments → « Délais de séchage » (6 mois par défaut). <b>Bientôt</b> veut dire que le délai sera atteint dans les 30 jours. Comment dater un séchage : voir <a href="#filaments-sechage">Séchage des bobines</a>.</p>
+  <figure><img src="img/stats-sechage.webp" alt="Onglet Séchage : cartes, anneaux, barres sur 12 mois, liste à sécher et par famille"><figcaption>Ici une seule bobine est à sécher, avec 2,5 mois de retard.</figcaption></figure>
+  <section id="stats-sechage-chiffres">
+    <h3>Les chiffres</h3>
+    <dl class="opts">
+      <dt>À sécher</dt><dd>Nombre de bobines à sécher ; en dessous « dont N dans l'AMS » ou « sur N bobines ».</dd>
+      <dt>Jamais séchées</dt><dd>Bobines sans aucune date de séchage.</dd>
+      <dt>Bientôt (30 j)</dt><dd>Bobines dont le délai arrive dans le mois.</dd>
+      <dt>À jour</dt><dd>Bobines tranquilles.</dd>
+      <dt>Âge moyen</dt><dd>Temps moyen depuis le dernier séchage ; en dessous, le plus ancien.</dd>
+      <dt>Filament à sécher</dt><dd>Poids restant sur les bobines à sécher.</dd>
+    </dl>
+  </section>
+  <section id="stats-sechage-graphiques">
+    <h3>Les graphiques</h3>
+    <dl class="opts">
+      <dt>État des bobines</dt><dd>À sécher, Jamais séchées, Bientôt, À jour.</dd>
+      <dt>Ancienneté du dernier séchage</dt><dd>Moins d'un mois, 1–3 mois, 3–6 mois, 6–12 mois, plus de 12 mois, Jamais.</dd>
+      <dt>Séchages sur 12 mois</dt><dd>Barres par mois du dernier séchage de chaque bobine.</dd>
+      <dt>À sécher : où sont-elles ?</dt><dd>Dans l'AMS ou rangées, avec « à sécher / total » pour chaque endroit.</dd>
+      <dt>Délais appliqués</dt><dd>Combien de bobines suivent chaque délai (« 6 mois (défaut) », « 3 mois »…).</dd>
+    </dl>
+  </section>
+  <section id="stats-sechage-listes">
+    <h3>Les listes</h3>
+    <p><b>À sécher maintenant</b> et <b>Bientôt — dans les 30 jours</b> listent les bobines concernées : pastille de couleur, nom, « marque · type · #numéro · emplacement ». À droite, le retard (« +2,5 mois de retard »), l'échéance (« dans 12 j ») ou « jamais séchée », et dessous « séchée il y a X · délai Y ». Touche une ligne pour ouvrir la bobine.</p>
+    <p><b>Par famille</b> donne, pour chaque matière, « a/n à sécher · âge moyen X » avec une barre bleue s'il y a des bobines à sécher, verte sinon.</p>
+    <p>Si les données ne se chargent pas : « Impossible de charger l'état du séchage. »</p>
+  </section>
+</section>
+
+<section id="stats-objets">
+  <h2>Onglet Objets</h2>
+  <p>Le tableau de bord de tes <a href="#objets">objets</a> et de tes ventes. Sans aucun objet : « Aucun objet pour le moment. »</p>
+  <figure><img src="img/stats-objets-haut.webp" alt="Onglet Objets : inventaire, par état, origine, ventes et ratios"><figcaption>Inventaire (GLOBAL), ventes et ratios.</figcaption></figure>
+  <section id="stats-objets-inventaire">
+    <h3>Inventaire <span class="ui">GLOBAL</span></h3>
+    <dl class="opts">
+      <dt>Objets</dt><dd>Nombre total d'objets.</dd>
+      <dt>À vendre, Vendus</dt><dd>Nombre d'objets dans chaque état (les ventes de toujours).</dd>
+      <dt>Offerts, Perso, Indisponibles</dt><dd>Affichés s'il y en a ; pour Offerts et Perso, la précision donne « X € de production ».</dd>
+      <dt>Coût du stock</dt><dd>Ce qu'ont coûté les objets à vendre ; en dessous, « désiré X € », la somme de leurs prix désirés.</dd>
+      <dt>Coût moyen / objet</dt><dd>Coût total moyen d'un objet.</dd>
+      <dt>Par état</dt><dd>Anneau aux couleurs des états.</dd>
+      <dt>Origine</dt><dd>Objets créés depuis une impression ou depuis un groupe d'impressions.</dd>
+    </dl>
+  </section>
+  <section id="stats-objets-ventes">
+    <h3>Ventes et ratios (selon la période)</h3>
+    <dl class="opts">
+      <dt>Chiffre d'affaires</dt><dd>Somme des prix de vente des objets vendus sur la période.</dd>
+      <dt>Coût des vendus</dt><dd>Ce qu'ils t'avaient coûté.</dd>
+      <dt>Marge</dt><dd>Chiffre d'affaires − coût, en vert si positive, en rouge sinon ; en dessous, la marge en pourcentage du coût.</dd>
+      <dt>Taux de vente</dt><dd>Vendus ÷ (à vendre + vendus) ; en dessous « N vendus / M proposés ». Les objets offerts et perso ne comptent pas.</dd>
+      <dt>Panier moyen</dt><dd>Prix de vente moyen.</dd>
+      <dt>Marge moyenne</dt><dd>Marge moyenne par objet vendu.</dd>
+    </dl>
+  </section>
+  <section id="stats-objets-marges">
+    <h3>Meilleures marges et accessoires</h3>
+    <figure><img src="img/stats-objets-marges.webp" alt="Meilleures marges en valeur et en pourcentage, indicateurs des accessoires"><figcaption>Les objets qui rapportent le plus, puis l'état du stock d'accessoires.</figcaption></figure>
+    <p><b>Meilleures marges</b> : deux top 5, <b>En valeur</b> (marge en euros) et <b>En pourcentage</b> (marge rapportée au coût, pour les objets dont le coût est connu). Touche un nom pour ouvrir l'objet.</p>
+    <p><b>Accessoires</b> (<span class="ui">GLOBAL</span>, affiché si tu as des accessoires) :</p>
+    <dl class="opts">
+      <dt>Références</dt><dd>Nombre d'accessoires ; en dessous, les unités en stock.</dd>
+      <dt>Valeur du stock</dt><dd>Ce que vaut ton étagère, et le nombre d'unités.</dd>
+      <dt>Engagé dans les objets</dt><dd>Valeur des accessoires montés sur tes objets, au prix du moment où tu les as liés.</dd>
+      <dt>Total acheté</dt><dd>Stock + engagé ; en dessous, le nombre d'objets équipés.</dd>
+      <dt>En rupture</dt><dd>Affiché s'il y a des accessoires à zéro que tu utilises ; en dessous, leurs noms.</dd>
+      <dt>Stock le plus immobilisant</dt><dd>Les 5 accessoires qui représentent le plus d'argent en stock (« X € · N u. »).</dd>
+      <dt>Les plus utilisés</dt><dd>Les 5 accessoires les plus montés sur des objets (« N posées »).</dd>
+    </dl>
+    <p>Touche un accessoire pour ouvrir sa fiche.</p>
+  </section>
+</section>
+
+<section id="stats-autres">
+  <h2>Succès et MakerWorld</h2>
+  <p>L'onglet <span class="ui">Succès</span> rassemble tes succès, leurs paliers et la roue : tout est expliqué dans le chapitre <a href="#succes">Succès</a>. Les statistiques de créateur MakerWorld (points, téléchargements, impressions de tes modèles) sont dans le chapitre <a href="#makerworld">MakerWorld</a>.</p>
+</section>

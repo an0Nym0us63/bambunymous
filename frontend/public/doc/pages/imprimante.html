@@ -1,0 +1,268 @@
+<h1>L'imprimante sur l'accueil</h1>
+<p class="lead">Les blocs de l'<a href="#accueil">accueil</a> qui montrent ta machine en direct : l'impression en cours, les températures, les AMS et leurs bobines, l'aiguillage, la tête et le rack de buses, les alertes et la caméra. Ce chapitre décrit chaque écran et chaque bouton.</p>
+
+<section id="imprimante-bloc">
+  <h2>Le bloc « Imprimante »</h2>
+  <p>Toujours présent sur l'accueil (on ne peut pas le masquer), il montre l'impression en cours ou le dernier état de la machine. Sa présentation change avec la taille que tu lui donnes en <a href="#accueil-tuile-reglages">personnalisant l'accueil</a>.</p>
+  <div class="note"><p>L'état de l'imprimante est relu toutes les 3 secondes. Si elle ne répond pas, l'icône Wi-Fi passe au rouge barré et le bandeau d'accueil dit « L'imprimante ne répond pas pour l'instant. »</p></div>
+
+  <section id="imprimante-carte">
+    <h3>Toute la colonne : la carte détaillée</h3>
+    <p>C'est la présentation par défaut (toute la colonne, hauteur « selon le contenu », 2 ou 3 rangées).</p>
+    <ul>
+      <li><strong>En-tête du bloc</strong> : à droite du titre, les températures en pictogrammes (buse active, plateau, chambre ; le doigt ou la souris dessus donne la consigne).</li>
+      <li><strong>Première ligne</strong> : un point d'état (qui pulse pendant une impression), le nom de l'impression, puis éventuellement un triangle rouge (un filament détecté par l'imprimante est introuvable dans ta base, voir <a href="#imprimante-ams-associer">Associer une bobine</a>), un triangle orange (alertes de la machine) et l'icône Wi-Fi (verte = connectée).</li>
+      <li><strong>Deuxième ligne</strong> : la vignette du plateau, l'<strong>étape</strong> en cours (« Chauffe de la buse », « Nivellement du plateau »…) ou l'état (« En cours », « En pause », « Terminé », « Erreur », « En veille », « Préparation »), la barre de progression, le temps restant (« 🕒 1h 15min »), les couches (« 120/300 »), l'heure de fin (« 📅 14:35 », avec +1 si c'est demain) et le pourcentage en grand.</li>
+    </ul>
+    <p><strong>Touche le bloc</strong> pour ouvrir la <a href="#imprimante-fenetre">fenêtre « Imprimante »</a> : températures détaillées, filament en cours, rack, aiguillage et alertes y sont rassemblés. La caméra, elle, a sa propre <a href="#tuiles-camera">tuile</a>.</p>
+    <figure class="phone"><img src="img/imprimante-bloc.webp" alt="Bloc Imprimante en toute la colonne : nom de l'impression, vignette, étape, barre de progression, temps restant, couches, heure de fin et pourcentage"><figcaption>Le bloc Imprimante sur toute la colonne.</figcaption></figure>
+    <p>Option du bloc à cette taille (bouton à curseurs, en personnalisation) :</p>
+    <dl class="opts">
+      <dt>Températures dans l'en-tête</dt><dd>les pictogrammes à droite du titre. Activé par défaut.</dd>
+    </dl>
+  </section>
+
+  <section id="imprimante-bandeau">
+    <h3>Une rangée : le bandeau</h3>
+    <p>En pleine largeur sur une seule rangée, le bloc devient un bandeau compact : vignette (touche-la pour voir l'image du plateau en grand), nom, pastille <span class="ui">Impression</span> (ou l'étape, l'état), le pourcentage en grand, le temps restant, l'heure de fin et la couche (selon les options), une barre. Sur un écran assez large, s'y ajoutent le filament en cours (couleur, matière, emplacement « A3 ») et toutes les températures avec leur consigne.</p>
+    <p>Hors impression, il rappelle la dernière (« il y a 2 h · 3h 10min · 120 g ») ou affiche « Prête à imprimer ».</p>
+    <figure><img src="img/imprimante-bandeau-bureau.webp" alt="Accueil sur ordinateur avec le bloc Imprimante en bandeau d'une rangée, le bloc Rack Vortek, les tuiles Tête d'impression et Aiguillage et le bloc AMS"><figcaption>Le bloc Imprimante en bandeau (en haut à gauche), avec le rack Vortek, la tête d'impression, l'aiguillage et les AMS.</figcaption></figure>
+  </section>
+
+  <section id="imprimante-compacte">
+    <h3>Demi-colonne : la carte compacte</h3>
+    <p>En demi-colonne, le bloc devient une carte. L'option <span class="ui">Vignette</span> choisit sa forme : <span class="ui">grande</span> (par défaut : image au-dessus, pourcentage posé dessus), <span class="ui">moyenne</span> (image plus large que haute) ou <span class="ui">compacte</span> (petite vignette à gauche, nom, pourcentage et temps restant). Sur une rangée, la carte est toujours compacte. Options : <span class="ui">Heure de fin</span> et <span class="ui">Couches</span> (activées par défaut). Hors impression : « Dernière impression » ou « Prête à imprimer ».</p>
+  </section>
+
+  <section id="imprimante-fenetre">
+    <h3>La fenêtre « Imprimante »</h3>
+    <p>Quelle que soit sa présentation, <strong>touche le bloc</strong> (ailleurs que sur la vignette) pour ouvrir la fenêtre <span class="ui">Imprimante</span>, qui rassemble tout l'état de la machine. La croix ou Échap la ferment.</p>
+    <figure class="pair">
+      <img src="img/imprimante-fenetre.webp" alt="Fenêtre Imprimante : état En cours, carte avec l'avancement 42 %, cases Reste, Fin, Couche, dessin de la tête et cartes de température">
+      <img src="img/imprimante-fenetre-bas.webp" alt="Suite de la fenêtre : cartes Buse G, Buse D, Plateau, Chambre, Filament en cours, Rack Vortek avec six buses, Aiguillage avec deux entrées et deux sorties">
+      <figcaption>La fenêtre « Imprimante », en haut et en bas.</figcaption>
+    </figure>
+    <ul>
+      <li><strong>En-tête</strong> : l'état en couleur (« En cours », « En pause », l'étape, « Terminée », « Échouée », « Au repos », « Injoignable ») et la version du micrologiciel.</li>
+      <li><strong>Carte principale</strong> : la vignette (touche-la pour l'agrandir), le nom (« Rien en cours » sinon), « encore 1h 15min · fin 18:58 », un anneau d'avancement et une barre.</li>
+      <li><strong>Trois cases</strong> : <span class="ui">Reste</span>, <span class="ui">Fin</span>, <span class="ui">Couche</span> (avec une barre des couches).</li>
+      <li><strong>TEMPÉRATURES</strong> : sur une machine à deux buses, le dessin de la tête (voir <a href="#imprimante-tete">La tête et les buses</a>), puis un thermomètre en verre par source (<span class="ui">Buse G</span>, <span class="ui">Buse D</span>, <span class="ui">Plateau</span>, <span class="ui">Chambre</span>) : le liquide monte du froid vers la chaleur, la consigne est marquée d'un repère fléché, et dessous on lit le chiffre, la source (avec son pictogramme), « consigne 220° » et l'état : « ✓ à température », « chauffe », « ▼ refroidit » ou « au repos ». La buse qui imprime brille et porte l'étiquette <span class="ui">active</span>. C'est le même style que la vue en grand de la tuile <a href="#tuiles-temps">Températures</a>.</li>
+      <li><strong>Filament en cours</strong> : la bobine dessinée, son nom, sa matière et son poids restant, avec l'emplacement (« · A3 »).</li>
+      <li><strong>RACK VORTEK</strong> (si ta machine en a un) : l'état du rack et les six buses (couleur, numéro, type et diamètre, « sur la tête », case hachurée si vide, petit point orange en cas d'anomalie). Voir <a href="#imprimante-vortek">Le rack Vortek</a>.</li>
+      <li><strong>AIGUILLAGE</strong> (si installé) : une ligne par entrée, « Entrée A » avec la bobine engagée → « Sortie A » et la buse servie ; la flèche est verte et animée pour le chemin qui imprime. Voir <a href="#imprimante-aiguillage">L'aiguillage</a>.</li>
+      <li><strong>ALERTES DE LA MACHINE</strong> : les alertes HMS, voir ci-dessous.</li>
+    </ul>
+  </section>
+
+  <section id="imprimante-hms">
+    <h3>Les alertes de la machine (HMS)</h3>
+    <p>Quand l'imprimante signale un problème (système « HMS » de Bambu Lab), un triangle orange apparaît dans le bloc et un encadré « 2 alertes imprimante » s'ajoute à la fenêtre <span class="ui">Imprimante</span>. Sa couleur suit l'alerte la plus grave. Pour chaque alerte :</p>
+    <ul>
+      <li>la gravité : <span class="ui">FATAL</span> (rouge), <span class="ui">SÉRIEUX</span> (orange), <span class="ui">COURANT</span> (ambre), <span class="ui">INFO</span> (bleu) ;</li>
+      <li>le code (ex. « 0300_0100_0003_0007 ») ;</li>
+      <li>le libellé en français, ou « Code non répertorié — appuyez pour ouvrir le wiki » ;</li>
+      <li>un lien ↗ vers la page du wiki Bambu Lab qui explique le code et la marche à suivre.</li>
+    </ul>
+    <p>Les alertes disparaissent d'elles-mêmes quand l'imprimante ne les signale plus. À ne pas confondre avec les <a href="#imprimante-attention">points d'attention</a>, qui concernent ton stock et tes fiches.</p>
+  </section>
+</section>
+
+<section id="imprimante-ams">
+  <h2>Le bloc « AMS »</h2>
+  <p>Il montre en un coup d'œil toutes tes unités AMS et ce qu'elles contiennent. Il occupe toute la colonne, sur 2 rangées par défaut (1 ou 3 possibles).</p>
+  <figure class="phone"><img src="img/imprimante-ams-bloc.webp" alt="Bloc AMS : emplacement actif A3 Blanc de jade, 5 sèchent, bouton Rack · buse 1, grille de cinq unités et de l'externe avec leurs couleurs et pourcentages"><figcaption>Le bloc AMS : quatre AMS, un AMS HT et l'emplacement externe.</figcaption></figure>
+
+  <section id="imprimante-ams-lecture">
+    <h3>Lire le bloc</h3>
+    <ul>
+      <li><strong>En haut</strong> : l'emplacement qui imprime (« A3 »), la couleur et le nom de sa bobine avec « matière · marque » (ou, au repos, « 5 unités · 17 bobines ») ; « · 5 sèchent » s'il y a des séchages ; et, si tu as un rack Vortek, le bouton <span class="ui">Rack · buse 1 ⇄</span> (voir plus bas).</li>
+      <li><strong>Une carte par unité</strong> (AMS-A à D, HT-A…, « Externe »), rangées selon <a href="#imprimante-ams-grille">ta grille</a> :
+        <ul>
+          <li>son nom, un point bleu si elle imprime ;</li>
+          <li>une pastille violette « ⇄ D » ou « ⇄ G » : l'entrée de l'aiguillage où elle est branchée et la buse qu'elle alimente (droite, gauche) ;</li>
+          <li>l'humidité « 💧 26% » (ambre à partir de 30 %, rouge à partir de 40 %) ;</li>
+          <li>un carré de couleur par emplacement, avec le pourcentage restant dessous ; le haut du carré s'assombrit à mesure que la bobine se vide ; des hachures = emplacement vide ; l'emplacement qui imprime est cerclé de bleu ;</li>
+          <li>une unité qui <strong>sèche</strong> est bordée d'orange avec un onglet « 🔥 PLA · 2h10 » (matière et temps restant).</li>
+        </ul></li>
+      <li>Sur une seule rangée : une ligne par unité (lettre, pastilles de couleur, point orange si elle sèche).</li>
+      <li>Sans AMS ni rack : « Aucun AMS détecté ».</li>
+    </ul>
+    <p>Options du bloc : <span class="ui">Ma grille</span> (voir plus bas) et <span class="ui">Humidité de chaque unité</span> (activée par défaut).</p>
+  </section>
+
+  <section id="imprimante-ams-fenetre">
+    <h3>La fenêtre « Mes AMS »</h3>
+    <p><strong>Touche le bloc AMS</strong> pour ouvrir la fenêtre <span class="ui">Mes AMS</span> (panneau qui monte du bas sur téléphone). Le bouton <span class="ui">Ouvrir ↗</span> mène à la page <a href="#filaments">Filaments</a> ; la croix ferme.</p>
+    <figure class="phone"><img src="img/imprimante-mes-ams.webp" alt="Fenêtre Mes AMS : onglets AMS et Rack Vortek, grille des unités avec séchage et humidité, cases Bobines chargées 17, En cours A3, Humidité moyenne 27 %, En séchage 5, carte de l'unité AMS-A"><figcaption>La fenêtre « Mes AMS ».</figcaption></figure>
+    <ul>
+      <li>Si tu as un rack Vortek : deux onglets, <span class="ui">AMS</span> et <span class="ui">Rack Vortek · buse 1</span>.</li>
+      <li>La <strong>grille en grand</strong> : touche une unité pour la choisir (elle s'entoure de violet). Chaque carte rappelle la consigne et le temps de séchage (« 🔥 55° · 2h10 »), l'humidité et l'entrée d'aiguillage.</li>
+      <li>Quatre cases : <span class="ui">Bobines chargées</span>, <span class="ui">En cours</span> (l'emplacement qui imprime), <span class="ui">Humidité moyenne</span>, <span class="ui">En séchage</span> (« aucun », ou le nombre et les noms).</li>
+      <li>La <strong>carte de l'unité choisie</strong> : son nom, « ● imprime · A3 » si c'est elle, « ⇄ entrée B de l'aiguillage → buse droite », l'humidité, la température intérieure ; puis son <a href="#imprimante-sechage">panneau de séchage</a> si elle sèche, et enfin ses <a href="#imprimante-ams-emplacements">emplacements</a>.</li>
+    </ul>
+  </section>
+
+  <section id="imprimante-ams-emplacements">
+    <h3>Les emplacements</h3>
+    <p>En bas de la carte de l'unité, chaque emplacement est dessiné comme une bobine :</p>
+    <figure class="phone"><img src="img/imprimante-emplacements.webp" alt="Panneau de séchage de AMS-A puis les quatre emplacements A1 à A4 : PLA, PLA, PLA Basic, PLA, bobines dessinées, poids ≈ 200 g, ≈ 400 g, 906 g Blanc de jade, ≈ 800 g"><figcaption>Le séchage de l'unité, puis ses quatre emplacements.</figcaption></figure>
+    <ul>
+      <li>en haut, la matière (« PLA Basic », « PETG-HF »…) et une barre de niveau à la couleur du filament ;</li>
+      <li>la bobine dessinée (multicolore si besoin), avec l'étiquette de l'emplacement (« A1 », « HT-A », « E1 ») — bleue pour celui qui imprime ;</li>
+      <li>en coin, comment le filament a été reconnu : <span class="ui">⬡</span> vert = puce RFID Bambu, <span class="ui">◈</span> orange = reconnu automatiquement (profil + couleur), <span class="ui">⚠</span> rouge = identifié par l'imprimante mais introuvable dans ta base, <span class="ui">◇</span> gris = non identifié, <span class="ui">◆</span> violet = attribué à la main ;</li>
+      <li>le poids restant (« 906 g ») ; « ≈ 400 g » quand la bobine n'est pas associée et que le poids est estimé d'après le pourcentage de l'AMS ;</li>
+      <li>le nom de la bobine, ou « Vide » ;</li>
+      <li>des pastilles de rappel : <span class="ui">🎨 Échantillon à faire</span> (ce filament n'a pas encore d'échantillon : il est en place, c'est le moment de l'imprimer) et <span class="ui">💧 À sécher</span> (bobine jamais séchée ou pas depuis plus de 6 mois) ;</li>
+      <li>une bobine <strong>posée pour séchage</strong> dans un emplacement vide (sans être insérée) apparaît atténuée et hachurée, son nom précédé d'un ☀ orange. Voir <a href="#filaments-sechage">le séchage des bobines</a>.</li>
+    </ul>
+    <p><strong>Touche un emplacement</strong> pour ouvrir sa fiche.</p>
+  </section>
+
+  <section id="imprimante-ams-fiche">
+    <h3>La fiche d'un emplacement</h3>
+    <p>Un panneau monte du bas avec tout ce que l'imprimante et ta base savent de cet emplacement.</p>
+    <figure class="phone"><img src="img/imprimante-emplacement.webp" alt="Fiche de l'emplacement A3 : Blanc de jade, AMS-A · Slot 3, Restant estimé 91 % · 906 g, Données imprimante, Bobine #3, Filament"><figcaption>La fiche d'un emplacement reconnu.</figcaption></figure>
+    <ul>
+      <li><strong>En-tête</strong> : un grand carré à la couleur du filament, le nom de la bobine (« Slot vide » sinon), « AMS-A · Slot 3 · {code Bambu} », et l'identifiant RFID s'il y en a un.</li>
+      <li><strong>Restant estimé</strong> : pourcentage et poids, avec une barre (rouge sous 20 %, orange sous 40 %, verte au-delà).</li>
+      <li><strong>Encadré de détection</strong> (si le filament n'est pas reconnu par sa puce RFID) : « Auto », « Introuvable », « Manuel » ou « Attribuée à la main », avec le bouton <span class="ui">Attribuer</span> ou <span class="ui">Mapper / Créer</span> <span class="admin">admin</span> (voir ci-dessous).</li>
+      <li><strong>DONNÉES IMPRIMANTE (TEMPS RÉEL)</strong> : <span class="ui">Type</span>, <span class="ui">Couleur</span> (code hexadécimal), <span class="ui">Profile ID</span>, <span class="ui">Tag UID</span>, <span class="ui">Restant selon l'AMS</span>, <span class="ui">UUID tray (RFID)</span>.</li>
+      <li><strong>BOBINE #n</strong> : le bouton paquet <span class="ui">Ouvrir la fiche de la bobine</span> mène à sa fiche complète (voir <a href="#filaments-bobines">Les bobines</a>) ; dessous, ce que ta base sait d'elle : emplacement, poids restant, stock total du filament, prix d'achat, tag NFC, dates de première et dernière utilisation, dernier séchage (« · à sécher » en bleu s'il est temps), commentaire…</li>
+      <li><strong>FILAMENT</strong> : nom, nom anglais, marque, matière, sous-type, échantillon, profil, multicolore, poids de la bobine, poids du support, prix catalogue.</li>
+      <li>Sans bobine associée : « Aucune bobine mappée — matching en attente ».</li>
+      <li><strong>🌡 SÉCHAGE</strong> : le réglage de séchage que Bambu associe à ce filament (« 55°C · 8h »).</li>
+    </ul>
+    <p>Pour un <strong>emplacement vide</strong> : « Slot vide », ou « Emplacement vide — bobine posée pour séchage » avec le nom de la bobine posée et le bouton <span class="ui">Retirer de l'emplacement</span> <span class="admin">admin</span>.</p>
+  </section>
+
+  <section id="imprimante-ams-associer">
+    <h3>Associer une bobine à un emplacement</h3>
+    <p>Quand l'AMS contient un filament que l'appli ne relie à aucune bobine de ta base (pas de puce RFID, ou référence inconnue), la fiche de l'emplacement l'indique (« Introuvable », triangle rouge dans le bloc Imprimante) et propose de corriger. Le principe de la reconnaissance est expliqué dans <a href="#filaments-correspondances">Les correspondances</a>.</p>
+    <figure class="phone"><img src="img/imprimante-emplacement-introuvable.webp" alt="Fiche de l'emplacement A1 : PLA, encadré rouge Introuvable avec le bouton Mapper / Créer, Aucune bobine mappée — matching en attente"><figcaption>Un emplacement dont le filament est introuvable dans la base.</figcaption></figure>
+    <ol>
+      <li>Ouvre la fiche de l'emplacement et touche <span class="ui">Mapper / Créer</span> (ou <span class="ui">Attribuer</span> si une bobine y est déjà liée) <span class="admin">admin</span>.</li>
+      <li>La fenêtre <span class="ui">Associer une bobine à cet emplacement</span> s'ouvre, avec en sous-titre ce que l'imprimante voit (matière, couleur, profil).</li>
+      <li><strong>Choisir une bobine existante</strong> : l'appli propose les bobines de ta base qui correspondent (couleur, nom, marque · matière · poids). Touche <span class="ui">Associer →</span> sur la bonne.</li>
+      <li>Ou <strong>Créer</strong> : si le catalogue Bambu connaît la référence, choisis <span class="ui">📦 Depuis le catalogue</span> puis <span class="ui">Importer depuis le catalogue</span> ; sinon <span class="ui">✏️ Création libre</span> : renseigne <span class="ui">Nom de la couleur</span>, <span class="ui">Matière (PLA, PETG, ABS…)</span>, <span class="ui">Marque</span> et <span class="ui">Poids total (g)</span> (1000 par défaut), puis <span class="ui">Créer le filament et la bobine</span>.</li>
+      <li>Une coche verte confirme (« Bobine attribuée », « Filament mappé » ou « Bobine créée ») et liste ce qui a changé.</li>
+    </ol>
+    <figure class="pair">
+      <img src="img/imprimante-associer.webp" alt="Fenêtre Associer une bobine à cet emplacement, mode Choisir une bobine existante : liste de bobines avec Associer →">
+      <img src="img/imprimante-associer-creer.webp" alt="Même fenêtre en mode Créer : champs Nom de la couleur, Matière, Marque, Poids total et bouton Créer le filament et la bobine">
+      <figcaption>Choisir une bobine existante, ou en créer une.</figcaption>
+    </figure>
+    <div class="note"><p>Sans puce RFID, l'attribution ne vaut que pour <strong>cet emplacement</strong>, tant que le même filament (même profil et même couleur) y reste. Pour une reconnaissance automatique fiable, mieux vaut renseigner le profil et la couleur du filament dans sa fiche. Une puce RFID Bambu reste toujours prioritaire.</p></div>
+  </section>
+
+  <section id="imprimante-sechage">
+    <h3>Le séchage dans l'AMS</h3>
+    <p>Quand une unité sèche (séchage lancé depuis l'imprimante ou l'appli Bambu), son panneau de séchage s'affiche dans <span class="ui">Mes AMS</span> (et dans la vue en grand de la tuile <a href="#tuiles-dry">Séchage</a>) :</p>
+    <figure class="phone"><img src="img/imprimante-sechage.webp" alt="Carte AMS-A : imprime A3, entrée B de l'aiguillage vers buse droite, 26 %, 26,7 °C, anneau 46 % à 55 °C, Reste 2 h 10, fin à 19:36, barre 1 h 50 écoulées sur 4 h 00, Mode PLA, Séchage · déshumidification, ventilateurs 1 et 2, cases Mode, Consigne, Durée réglée, Dans l'AMS, Humidité"><figcaption>Le panneau de séchage d'une unité.</figcaption></figure>
+    <ul>
+      <li>un grand anneau d'avancement avec la consigne (« 55°C »), le temps qui reste (« 2 h 10 ») et l'heure de fin ;</li>
+      <li>une barre « 1 h 50 écoulées » / « sur 4 h 00 » ;</li>
+      <li>des pastilles : le mode (« Mode PLA »), la phase (« ● Vérification », « ● Séchage », « ● Refroidissement », « ● Arrêt en cours », « ● Erreur »…) suivie de « · chauffe » ou « · déshumidification », et les ventilateurs en marche ;</li>
+      <li>des cases : <span class="ui">Mode</span>, <span class="ui">Consigne</span>, <span class="ui">Durée réglée</span>, <span class="ui">Dans l'AMS</span> (température intérieure), <span class="ui">Humidité</span>.</li>
+    </ul>
+    <p>Si l'AMS refuse de sécher, un encadré ambre « Séchage impossible pour l'instant : » en donne la raison (une impression est en cours, alimentation insuffisante, l'AMS est occupé, du filament est engagé à la sortie de l'AMS…).</p>
+    <p>Le suivi des séchages dans le temps est dans <a href="#stats-sechage">Statistiques → Séchage</a> ; le séchage des bobines hors AMS (four, dessiccateur) dans <a href="#filaments-sechage">Filaments</a>.</p>
+  </section>
+
+  <section id="imprimante-humidite">
+    <h3>L'humidité</h3>
+    <p>Chaque unité affiche son humidité en pastille « 💧 » : sans couleur particulière sous 30 %, ambre de 30 à 40 %, rouge au-delà. La fenêtre <span class="ui">Mes AMS</span> donne l'humidité moyenne et, pour l'unité choisie, l'humidité et la température. Pour suivre toutes les unités d'un coup, ajoute la tuile <a href="#tuiles-humidity">Humidité des AMS</a>.</p>
+  </section>
+
+  <section id="imprimante-ams-grille">
+    <h3>Ranger les AMS : « Ma grille »</h3>
+    <p>Tu peux ranger les unités comme elles sont posées chez toi (qui est au-dessus de qui). Ce rangement vaut pour tout l'accueil : le bloc AMS, la tuile Humidité, et le choix d'un emplacement pour une bobine à sécher.</p>
+    <ol>
+      <li>Passe en <a href="#accueil-personnaliser">mode personnalisation</a>, touche le bloc AMS puis son bouton à curseurs (ou, dans <span class="ui">Paramètres</span> → <span class="ui">🎨 Affichage</span>, le bouton <span class="ui">Régler la tuile AMS</span>).</li>
+      <li>Dans la section <span class="ui">DISPOSITION DES AMS</span>, choisis le nombre de <span class="ui">LIGNES</span> (1 à 4) et de <span class="ui">COLONNES</span> (1 à 8). L'appli indique « 6 cases pour 6 unités. », ou en rouge s'il manque des cases.</li>
+      <li>Glisse chaque unité dans sa case (« Ligne 1 · Colonne 2 »), ou touche l'unité puis la case. Poser une unité sur une case occupée échange les deux ; la croix d'une case la vide.</li>
+      <li>Les unités pas encore rangées sont listées sous la grille ; sur l'accueil elles s'affichent à la suite.</li>
+      <li>Touche <span class="ui">Sauvegarder la disposition</span> (« Sauvegardé ✓ »). L'enregistrement est immédiat, indépendant du <span class="ui">Terminé</span> de la personnalisation.</li>
+    </ol>
+    <figure class="phone"><img src="img/imprimante-ma-grille.webp" alt="Réglages du bloc AMS : Hauteur, Titre de la tuile, Fond coloré, puis Disposition des AMS, Ma grille avec les listes Lignes 2 et Colonnes 3 et six cases"><figcaption>Les réglages du bloc AMS et l'éditeur « Ma grille ».</figcaption></figure>
+    <p>Sans réglage, les unités tiennent sur une rangée jusqu'à quatre, sur deux lignes au-delà. Le rack Vortek n'occupe pas de case : il a son propre bouton sur le bloc.</p>
+  </section>
+</section>
+
+<section id="imprimante-vortek">
+  <h2>Le rack Vortek</h2>
+  <p>Sur une H2C équipée du rack de buses Vortek, l'appli montre les six buses rangées et celle qui est montée sur la tête. Trois façons de le voir :</p>
+  <ul>
+    <li>dans le bloc AMS, le bouton <span class="ui">Rack · buse 1 ⇄</span> affiche le rack à la place des AMS (le bouton <span class="ui">AMS ⇄</span> revient aux AMS ; le choix est retenu sur l'appareil) ;</li>
+    <li>dans la fenêtre <span class="ui">Mes AMS</span>, l'onglet <span class="ui">Rack Vortek · buse 1</span> ;</li>
+    <li>le bloc <span class="ui">Rack Vortek</span>, à ajouter depuis la liste <span class="ui">Ajouter</span> de la personnalisation (toute la colonne ou demi-colonne ; 2 rangées par défaut). Le toucher ouvre la fenêtre <span class="ui">Rack Vortek</span>.</li>
+  </ul>
+  <figure class="phone"><img src="img/imprimante-rack.webp" alt="Onglet Rack Vortek : Dépose de la buse vers la 4, Côté A en haut, Tête d'outil buse 1 0,4 mm Standard, rack de six cases, Rang A et Rang B, fiche Slot 1 Sur la tête, HS01 0.4mm, Débit standard acier trempé, En bon état"><figcaption>Le rack Vortek et la fiche de la buse choisie.</figcaption></figure>
+  <ul>
+    <li><strong>L'état du rack</strong> en pastilles : le mouvement en cours en bleu (« Dépose de la buse · vers la 4 », « Prise de la buse », « Centrage de la buse »…), « Lecture des buses » en violet, la position (« Côté A en haut », « Côté B en haut », « Au centre »), et « Rack à calibrer » en orange s'il le faut.</li>
+    <li><strong>La tête d'outil</strong> à gauche : la buse montée, dessinée à la couleur du filament, son numéro, son diamètre et son type de débit.</li>
+    <li><strong>Le rack</strong> : rang A en haut (1, 3, 5), rang B en bas (2, 4, 6). Chaque case montre son numéro, la buse (grisée si vide), le diamètre et le type (« Standard », « Haut débit », « TPU HF », « E3D HF »), un point orange en cas d'anomalie, ou « sur la tête » / « Vide ».</li>
+    <li>À droite, <span class="ui">Rang A</span> et <span class="ui">Rang B</span> avec une flèche sur le rang levé, et une maison (verte quand le rack est au centre).</li>
+  </ul>
+  <p><strong>Touche une case</strong> pour voir la fiche de cette buse (par défaut, celle montée sur la tête) : numéro (« Slot 1 »), « Sur la tête », « Sans filament » ou « Vide », référence et diamètre (« HS01 · 0.4mm »), type de débit et matériau (« Débit standard · acier trempé »), santé (« ● En bon état », « Anomalie signalée », « État inconnu », « Infos à confirmer »), le filament qu'elle a servi (nom ou identifiant) et son temps d'utilisation cumulé.</p>
+</section>
+
+<section id="imprimante-tete">
+  <h2>La tête et les buses</h2>
+  <p>Sur une machine à deux buses (H2C, H2D), l'appli dessine la tête d'impression comme l'appli Bambu : deux tubes à la couleur du filament chargé de chaque côté, la buse gauche qui descend quand elle est active, la buse qui chauffe qui rougeoie, et un cadre vert autour de celle qui imprime. Pour chaque buse : sa température et le filament chargé, avec son état (« ● imprime », « levée », la préparation, la chauffe, le nettoyage, ou la raison d'une pause ; « aucun filament » si rien n'est chargé).</p>
+  <p>On le trouve dans la fenêtre <span class="ui">Imprimante</span> (section <span class="ui">TEMPÉRATURES</span>) et dans la tuile <a href="#tuiles-head">Tête d'impression</a>, à ajouter à l'accueil. Les températures seules sont aussi dans la tuile <a href="#tuiles-temps">Températures</a>.</p>
+</section>
+
+<section id="imprimante-aiguillage">
+  <h2>L'aiguillage (Filament Track Switch)</h2>
+  <p>Si un aiguillage est installé, deux entrées (A et B) reçoivent chacune un ou plusieurs AMS et envoient le filament vers la buse gauche ou droite. L'appli le montre :</p>
+  <ul>
+    <li>dans le bloc AMS : la pastille violette « ⇄ G » / « ⇄ D » de chaque unité ;</li>
+    <li>dans la fenêtre <span class="ui">Mes AMS</span> : « ⇄ entrée B de l'aiguillage → buse droite » sur la carte de l'unité ;</li>
+    <li>dans la fenêtre <span class="ui">Imprimante</span>, section <span class="ui">AIGUILLAGE</span> : pour chaque entrée, la bobine engagée (« A3 · PETG », ou « vide ») et la sortie qu'elle sert ; le chemin qui imprime est vert et animé ; « ● calibration en cours » pendant une calibration ;</li>
+    <li>dans la tuile <a href="#tuiles-switch">Aiguillage</a>, un schéma complet à ajouter à l'accueil.</li>
+  </ul>
+</section>
+
+<section id="imprimante-attention">
+  <h2>Les points d'attention</h2>
+  <p>Le bloc <span class="ui">Points d'attention</span> (en bas de l'accueil par défaut) liste ce qui mérite ton attention dans ton stock et tes fiches : bobines presque vides, filaments en fin de stock, impressions sans bobine associée, bobines à sécher, filaments sans prix… Les alertes sont recalculées à chaque ouverture : quand le problème est réglé, l'alerte disparaît.</p>
+  <figure class="phone"><img src="img/imprimante-attention.webp" alt="Bloc Points d'attention déplié : Replier, 162, catégories Bobines à finir (sous 15 %), Filaments en fin de stock (sous 25 %), Impressions sans métadonnées, avec leurs alertes"><figcaption>Les points d'attention, dépliés.</figcaption></figure>
+
+  <section id="imprimante-attention-bloc">
+    <h3>Dans le bloc</h3>
+    <ul>
+      <li>La ligne <span class="ui">▸ Déplier</span> / <span class="ui">▾ Replier</span> ouvre ou ferme la liste, avec le nombre total d'alertes. Repliée par défaut, elle reste comme tu l'as laissée sur cet appareil ; l'option du bloc <span class="ui">À l'arrivée sur l'accueil</span> peut l'imposer (<span class="ui">comme je l'ai laissée</span>, <span class="ui">dépliée</span>, <span class="ui">repliée</span>).</li>
+      <li>Dépliée : par catégorie (icône, nom, « 5 / 7 » = montrées / total), quelques alertes. Chacune montre la couleur du filament ou la vignette de l'impression, le titre, la marque et la matière, un détail (« Bobine #13 ») et à droite la valeur clé (« 85 g · 8 % », une date…).</li>
+      <li><strong>Touche une alerte</strong> pour ouvrir la fiche concernée (filament, bobine ou impression) par-dessus l'accueil.</li>
+      <li><strong>Appui long</strong> (ou clic droit, ou le bouton <span class="ui">⋯</span>) : un menu propose <span class="ui">Voir</span>, <span class="ui">Ignorer 7 jours</span> et <span class="ui">Ne plus jamais afficher</span> <span class="admin">admin</span>, et <span class="ui">Annuler</span>. Une alerte ignorée disparaît aussitôt.</li>
+      <li>L'icône liste <span class="ui">Voir toutes les alertes</span> ouvre la fenêtre complète.</li>
+      <li>Rien à signaler : « ✅ Rien à signaler. »</li>
+    </ul>
+  </section>
+
+  <section id="imprimante-attention-toutes">
+    <h3>Toutes les alertes</h3>
+    <figure class="phone"><img src="img/imprimante-alertes.webp" alt="Fenêtre Points d'attention : onglets Toutes (192) et Ignorées (0), champ Filtrer, liste Toutes les catégories, alertes avec valeur, bouton 7j et croix rouge"><figcaption>La fenêtre de toutes les alertes.</figcaption></figure>
+    <ul>
+      <li>Deux onglets : <span class="ui">Toutes (n)</span> et <span class="ui">Ignorées (n)</span>.</li>
+      <li>Le champ <span class="ui">Filtrer : nom, marque, matière…</span> (le compteur « x / y » apparaît dans le champ) et la liste <span class="ui">Toutes les catégories</span> pour n'en voir qu'une.</li>
+      <li>Onglet <span class="ui">Toutes</span> : à droite de chaque alerte, <span class="ui">7j</span> (ignorer 7 jours) et la croix rouge (ne plus jamais afficher) <span class="admin">admin</span>.</li>
+      <li>Onglet <span class="ui">Ignorées</span> : « Définitivement », « Encore n j » ou « Expiré », et <span class="ui">↩</span> pour remettre l'alerte en circulation <span class="admin">admin</span> ; en bas, <span class="ui">Tout remettre en circulation</span> (ou seulement celles filtrées).</li>
+      <li>Touche une ligne pour ouvrir sa fiche.</li>
+    </ul>
+    <p>L'ordre des catégories et celles qui s'affichent se règlent dans les <a href="#parametres">Paramètres</a>. Pour un résumé compact, ajoute la tuile <a href="#tuiles-alerts">Alertes en bref</a>.</p>
+  </section>
+</section>
+
+<section id="imprimante-camera">
+  <h2>La caméra</h2>
+  <p>L'image de la caméra de l'imprimante s'affiche dans la tuile <a href="#tuiles-camera">Caméra</a>.</p>
+  <ul>
+    <li>Un petit point rouge pulsé en haut à gauche signale le <strong>direct</strong> (flux vidéo continu).</li>
+    <li>Si le direct ne démarre pas ou se fige, l'appli passe toute seule à une <strong>image toutes les 2 secondes</strong>, puis retente le direct une minute plus tard. La tuile Caméra permet d'imposer l'un ou l'autre.</li>
+    <li>Chez un copain, ce sont toujours des images toutes les 2 secondes.</li>
+    <li>Rien ne se télécharge quand l'appli est en arrière-plan.</li>
+    <li>Si la caméra ne répond pas : « Caméra injoignable pour l'instant ».</li>
+  </ul>
+  <p><strong>Touche l'image</strong> pour la voir en <strong>plein écran</strong>, sur fond noir. Touche n'importe où, la croix ou Échap pour revenir.</p>
+</section>

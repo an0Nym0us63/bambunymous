@@ -12,6 +12,8 @@ import mimetypes
 # L'appli Android servie par le site (frontend/public/android) : sans ce type,
 # certains navigateurs la prennent pour un fichier quelconque.
 mimetypes.add_type("application/vnd.android.package-archive", ".apk")
+# les captures du guide (/doc/img) : sans ca, certaines machines les servent en text/plain
+mimetypes.add_type("image/webp", ".webp")
 import time
 import os
 
@@ -629,7 +631,17 @@ if STATIC_DIR.exists():
                     return FileResponse(str(candidate), filename=candidate.name,
                                         media_type="application/vnd.android.package-archive",
                                         headers={"Cache-Control": "no-cache"})
+                if full_path.startswith("doc/"):
+                    # le guide change a chaque version : revalider plutot que garder un vieux chapitre
+                    return FileResponse(str(candidate), headers={"Cache-Control": "no-cache"})
                 return FileResponse(str(candidate))
+            # un dossier statique qui a sa page (le guide : /doc/) : on la sert,
+            # en ajoutant d'abord le / final pour que ses liens relatifs marchent
+            if candidate and candidate.is_dir() and (candidate / "index.html").is_file():
+                if not full_path.endswith("/"):
+                    from fastapi.responses import RedirectResponse
+                    return RedirectResponse(f"/{full_path}/", status_code=301)
+                return FileResponse(str(candidate / "index.html"), headers={"Cache-Control": "no-cache"})
 
         index = STATIC_DIR / "index.html"
         if index.exists():

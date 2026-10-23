@@ -1,0 +1,312 @@
+<h1>Notifications</h1>
+<p class="lead">BambuNymous peut te prévenir de ce qui se passe : impression terminée, bobine bientôt vide, AMS trop humide, points MakerWorld… Les notifications partent sur ton téléphone (ntfy, Telegram ou l'appli Android) et sont gardées 15 jours dans la page Notifications, ouverte par la cloche.</p>
+
+<section id="notifications-page">
+  <h2>La page Notifications</h2>
+  <p>Touche la <b>cloche</b> (en bas de la barre latérale sur ordinateur, en haut à droite sur téléphone) pour ouvrir l'historique de <b>tes</b> notifications des <b>15 derniers jours</b>. Chaque compte a le sien.</p>
+  <figure class="phone"><img src="img/notifications-page.webp" alt="La page Notifications sur téléphone"><figcaption>La page Notifications sur téléphone.</figcaption></figure>
+
+  <section id="notifications-page-contenu">
+    <h3>Ce que tu y trouves</h3>
+    <ul>
+      <li>Un <b>administrateur</b> y voit les notifications que le canal <a href="#notifications-canaux-journal">Journal</a> garde.</li>
+      <li><b>Chaque compte</b>, administrateur ou non, y voit aussi ce qui arrive sur <b>son</b> téléphone par l'appli Android.</li>
+    </ul>
+    <p>Les notifications sont rangées <b>par jour</b> (« Aujourd'hui », « Hier », puis la date : « jeudi 16 octobre »). Sur ordinateur, celles d'un même jour se rangent en colonnes.</p>
+    <figure><img src="img/notifications-bureau.webp" alt="La page Notifications sur ordinateur, en colonnes"><figcaption>Sur ordinateur, les notifications d'un jour se rangent en colonnes.</figcaption></figure>
+  </section>
+
+  <section id="notifications-page-carte">
+    <h3>Une notification</h3>
+    <p>Chaque carte reprend la présentation d'une notification Android :</p>
+    <ul>
+      <li>en haut : l'icône BambuNymous, le nom de la catégorie et l'heure ;</li>
+      <li>le titre en gras, puis le texte (jusqu'à 5 lignes) ;</li>
+      <li>à droite, une vignette : la photo jointe (caméra, couverture MakerWorld, plateau de l'impression), une bobine dessinée aux couleurs du filament, ou à défaut l'emoji de la catégorie sur un rond de sa couleur.</li>
+    </ul>
+    <p>Touche une carte pour ouvrir ce qu'elle concerne : la fiche de l'impression, la bobine, la page MakerWorld (dans un nouvel onglet)… Une carte sans lien ne fait rien.</p>
+  </section>
+
+  <section id="notifications-page-vues">
+    <h3>Vues et non vues</h3>
+    <ul>
+      <li>Une notification <b>nouvelle</b> a un liseré violet, un léger dégradé et un point violet à droite.</li>
+      <li><b>Ouvrir la page marque tout comme vu</b> : la pastille de la cloche retombe à zéro. Les points « nouveau » restent affichés pendant ta visite, pour que tu voies ce qui est arrivé.</li>
+      <li>Une notification que tu as touchée ou balayée sur ton téléphone compte aussi comme vue.</li>
+      <li>Une notification déjà reçue sur ntfy ou Telegram arrive ici directement « déjà vue ».</li>
+    </ul>
+    <p>En bas, <span class="ui">Plus anciennes</span> charge la suite (par paquets de 40). Le pied de page rappelle « Gardées 15 jours. »</p>
+  </section>
+
+  <section id="notifications-page-filtres">
+    <h3>Filtrer par catégorie et par type</h3>
+    <figure class="phone"><img src="img/notifications-filtres.webp" alt="Notifications filtrées sur la catégorie MakerWorld, avec la deuxième ligne de types"><figcaption>Catégorie MakerWorld choisie : la deuxième ligne propose ses types.</figcaption></figure>
+    <ul>
+      <li>La première ligne de pastilles (elle défile à l'horizontale) propose <span class="ui">Tout</span> puis chaque catégorie qui a des notifications, avec son nombre. Un petit point violet signale une catégorie qui avait des nouveautés.</li>
+      <li>Choisis une catégorie : la pastille prend sa couleur. Touche-la de nouveau pour revenir à « Tout ».</li>
+      <li>Si la catégorie contient plusieurs types, une deuxième ligne apparaît : <span class="ui">Tous</span> puis un onglet par type (« Nouveau modèle d'un créateur suivi », « Points MakerWorld reçus »…), du plus fréquent au moins fréquent.</li>
+      <li>Ton choix est gardé dans l'adresse de la page : tu peux la mettre en favori.</li>
+    </ul>
+    <p>Le bouton <span class="ui">Choisir</span> en haut à droite mène aux réglages des notifications (<a href="#parametres-notify">Paramètres → 🔔 Notifs</a>).</p>
+    <p><b>Page vide</b> : « Aucune notification ces 15 derniers jours. Choisis celles que tu veux recevoir dans Paramètres › Notifs : elles s'afficheront ici. » ; avec une catégorie choisie : « Rien dans cette catégorie ces 15 derniers jours. »</p>
+  </section>
+</section>
+
+<section id="notifications-cloche">
+  <h2>La cloche</h2>
+  <p>La cloche est toujours visible (sauf pendant une visite chez un copain). Sa <b>pastille rouge</b> compte tes notifications pas encore vues, « 99+ » au-delà de 99. Le compteur se met à jour chaque minute, quand tu reviens sur l'onglet, quand tu ouvres la page Notifications (il retombe à 0) et quand tu lis des notifications sur ton téléphone. Voir aussi <a href="#premiers-pas-cloche">Premiers pas → La cloche</a>.</p>
+</section>
+
+<section id="notifications-canaux">
+  <h2>Les canaux d'envoi <span class="admin">admin</span></h2>
+  <p>Les réglages se trouvent dans <b>Paramètres → 🔔 Notifs</b>. Un administrateur y voit quatre onglets de canaux, chacun précédé d'un point vert si le canal est activé (gris sinon) : <span class="ui">Journal</span>, <span class="ui">Appli Android</span>, <span class="ui">ntfy</span>, <span class="ui">Telegram</span>. L'onglet choisi est retenu sur ce navigateur.</p>
+  <p>Chaque canal est une carte avec son nom, son état « activé » / « désactivé » et un interrupteur ; ses réglages n'apparaissent que s'il est activé.</p>
+  <table>
+    <tr><th>Canal</th><th>Où arrivent les notifications</th><th>Qui choisit ce qui part</th></tr>
+    <tr><td>Journal</td><td>La cloche et la page Notifications (administrateurs)</td><td>L'administrateur, dans l'onglet Journal</td></tr>
+    <tr><td>Appli Android</td><td>Le téléphone de chaque compte inscrit</td><td>Chaque compte, pour son téléphone</td></tr>
+    <tr><td>ntfy</td><td>Tes sujets ntfy (appli ntfy du téléphone)</td><td>L'administrateur, dans « Ce qui part sur ntfy et Telegram »</td></tr>
+    <tr><td>Telegram</td><td>Les discussions de ton bot Telegram</td><td>L'administrateur, même liste que ntfy</td></tr>
+  </table>
+  <div class="note"><p><b>Par défaut, rien ne part</b> : tous les types de notification sont désactivés tant que tu ne les as pas choisis. Un canal en panne n'empêche pas les autres de recevoir.</p></div>
+
+  <section id="notifications-canaux-journal">
+    <h3>Journal</h3>
+    <p>Le journal, c'est la cloche et la page Notifications des administrateurs. Il est activé par défaut. Ce qui t'arrive aussi sur ntfy ou Telegram y entre déjà lu ; le reste reste non lu jusqu'à ce que tu ouvres la page ou que tu touches la notification sur ton téléphone.</p>
+    <figure><img src="img/notifications-journal.webp" alt="Onglet Journal : choix des types journalisés et carte Réglages des notifications"><figcaption>Onglet Journal : à gauche ce qui est gardé, à droite les réglages communs à tous les canaux.</figcaption></figure>
+    <dl class="opts">
+      <dt>Tout journaliser</dt><dd>Garde chaque notification, même celles coupées sur ntfy et Telegram.</dd>
+      <dt>Par catégorie</dt><dd>Si « Tout journaliser » est coupé : une ligne par catégorie avec son compteur (« 6/11 ») et un interrupteur pour toute la catégorie, puis une pastille par type. Pastille violette = gardée dans le journal ; touche-la pour basculer. Survole-la pour lire sa description. Un type jamais réglé suit son état sur ntfy/Telegram.</dd>
+    </dl>
+    <p>Sous les onglets Journal et Appli Android se trouve aussi la carte <a href="#notifications-reglages">Réglages des notifications</a>.</p>
+  </section>
+
+  <section id="notifications-canaux-appli">
+    <h3>Appli Android</h3>
+    <p>Les notifications arrivent dans l'appli BambuNymous elle-même : son icône, son nom, une catégorie Android par section (son et vibration réglables dans Android), et la bonne page s'ouvre quand tu la touches. Il faut l'appli <b>ntfy</b> sur le téléphone : c'est elle qui les achemine. Voir <a href="#premiers-pas-android">l'appli Android</a>.</p>
+    <figure><img src="img/notifications-appli.webp" alt="Canal Appli Android avec la liste des téléphones inscrits et la carte Mon téléphone"><figcaption>Le canal Appli Android : tous les téléphones inscrits, et à droite tes propres choix.</figcaption></figure>
+    <ul>
+      <li><b>Ce téléphone</b> : dans l'appli Android, l'état de l'appareil (« inscrit », « installe l'appli ntfy d'abord », « pas encore inscrit ») et le bouton <span class="ui">Activer sur ce téléphone</span> (ou <span class="ui">Réinscrire</span>). Dans un navigateur : « Pour inscrire un téléphone, ouvre cette page dans l'appli Android BambuNymous. »</li>
+      <li><b>Les téléphones inscrits</b>, de tous les comptes : « 📱 nom · 👤 compte », la date du dernier envoi réussi ou l'erreur en rouge, <span class="ui">Tester</span> (envoie une notification d'essai sur ce téléphone) et <span class="ui">✕</span> (le retirer). 20 téléphones au plus.</li>
+      <li>Ce que reçoit chaque téléphone se choisit compte par compte : la carte <b>Mon téléphone</b> à droite est la tienne (voir <a href="#notifications-mes-choix">Mes notifications</a>).</li>
+    </ul>
+  </section>
+
+  <section id="notifications-canaux-ntfy">
+    <h3>ntfy</h3>
+    <p><b>ntfy</b> est un service gratuit de notifications : tu publies sur un « sujet » (un nom), et l'appli ntfy de ton téléphone, abonnée au même sujet, affiche le message. Tu peux utiliser le serveur public ntfy.sh ou le tien.</p>
+    <figure><img src="img/notifications-ntfy.webp" alt="Canal ntfy avec deux sujets et la liste de ce qui part"><figcaption>Le canal ntfy : serveur, sujets, adresse de l'appli, puis ce qui part.</figcaption></figure>
+    <h4>Mise en place</h4>
+    <ol>
+      <li>Active l'interrupteur du canal.</li>
+      <li><span class="ui">Serveur</span> : laisse <code>https://ntfy.sh</code> ou mets l'adresse de ton serveur ntfy.</li>
+      <li><span class="ui">Sujets</span> : donne un nom de sujet difficile à deviner (lettres, chiffres, <code>-</code> et <code>_</code>, 64 caractères au plus). Tu peux lui donner un <b>nom</b> lisible et une <b>icône</b> (adresse d'une image) qui accompagnera ses notifications sur Android.</li>
+      <li>Touche <span class="ui">Enregistrer</span>, puis <span class="ui">Tester</span> à côté du sujet.</li>
+      <li>Dans l'appli ntfy du téléphone, abonne-toi au même sujet, sur le même serveur.</li>
+    </ol>
+    <dl class="opts">
+      <dt>+ Ajouter un sujet</dt><dd>Plusieurs sujets (20 au plus) permettent d'envoyer chaque catégorie sur le sien (par exemple « Atelier » et « MakerWorld »). Le premier est le sujet <b>par défaut</b> ; <span class="ui">★</span> fait d'un autre le sujet par défaut. <span class="ui">Tester</span> ne marche qu'une fois le sujet enregistré. <span class="ui">✕</span> le retire.</dd>
+      <dt>Adresse de BambuNymous vue du téléphone</dt><dd>Par exemple <code>https://bambu.mon-domaine.fr</code>. Elle permet qu'en touchant une notification, la bonne page s'ouvre (impression, bobine…). Vide : pas de lien vers l'appli.</dd>
+      <dt>Jeton d'accès</dt><dd>Facultatif, pour un serveur ntfy protégé (<code>tk_…</code>). <span class="ui">Ajouter</span> / <span class="ui">Changer</span>, <span class="ui">Retirer</span>. Il n'est jamais réaffiché.</dd>
+      <dt>Enregistrer</dt><dd>Enregistre le canal.</dd>
+      <dt>Tester tous les canaux</dt><dd>Envoie un message d'essai sur chaque canal activé et prêt ; la réponse liste les canaux visés (« Envoyé : regarde ntfy, Telegram et l'appli Android. »).</dd>
+    </dl>
+    <p>Erreurs possibles : un nom de sujet invalide, une adresse de serveur qui ne commence pas par http:// ou https://, ou « Serveur ntfy injoignable ».</p>
+  </section>
+
+  <section id="notifications-telegram">
+    <h3>Telegram (bot)</h3>
+    <p>Les notifications peuvent aussi partir dans Telegram, envoyées par <b>ton propre bot</b>. (À ne pas confondre avec le <a href="#parametres-share">partage Telegram</a>, qui publie en ton nom.)</p>
+    <figure><img src="img/notifications-telegram.webp" alt="Canal Telegram avec le bot et deux discussions"><figcaption>Le bot Telegram et ses discussions.</figcaption></figure>
+    <ol>
+      <li>Dans Telegram, écris à <b>@BotFather</b> la commande <code>/newbot</code> et suis ses questions : il te donne un <b>jeton</b> (de la forme <code>123456789:AA…</code>).</li>
+      <li>Dans BambuNymous, ligne <span class="ui">Bot</span>, touche <span class="ui">Ajouter</span>, colle le jeton et valide. BambuNymous le vérifie auprès de Telegram et affiche le nom du bot (<b>@…</b>).</li>
+      <li>Écris <code>/start</code> à ton bot, ou ajoute-le à un ou plusieurs <b>groupes</b> et écris-y un message.</li>
+      <li>Touche <span class="ui">Chercher les discussions</span> : les discussions vues sont ajoutées (« N discussion(s) vue(s) »). Si rien n'arrive : « Aucun message reçu : écris « /start » … puis réessaie ».</li>
+      <li>Donne un nom à chaque discussion (« Impressions »…), puis <span class="ui">Enregistrer</span>.</li>
+    </ol>
+    <dl class="opts">
+      <dt>Discussions</dt><dd>Une ligne par discussion : nom, identifiant, « par défaut » pour la première ou <span class="ui">★</span> pour en faire celle par défaut, <span class="ui">Tester</span>, <span class="ui">✕</span>.</dd>
+      <dt>Saisir à la main</dt><dd>Ajoute une discussion par son identifiant ou un <code>@canal</code>.</dd>
+      <dt>Changer / Retirer</dt><dd>Remplace le jeton du bot, ou le retire (les discussions sont retirées avec lui).</dd>
+    </dl>
+    <div class="tip"><p>Un groupe par sujet (Impressions, MakerWorld…) donne à chaque thème son nom et sa photo, les mêmes sur tous tes appareils.</p></div>
+  </section>
+
+  <section id="notifications-ce-qui-part">
+    <h3>Ce qui part sur ntfy et Telegram</h3>
+    <p>Sous les onglets ntfy et Telegram, la partie <b>« Ce qui part sur ntfy et Telegram »</b> liste les catégories. Chaque carte montre ses destinations (« ntfy · Atelier · Telegram · Impressions · Appli Android · Journal ») et le nombre de types actifs (« 6/11 actives »). Touche-la pour la déplier.</p>
+    <figure class="phone"><img src="img/notifications-types.webp" alt="Catégorie Impressions dépliée : Envoyer sur, interrupteurs et options de chaque type"><figcaption>Une catégorie dépliée : destination, puis chaque type avec son interrupteur.</figcaption></figure>
+    <ul>
+      <li><b>Envoyer sur</b> (si tu as plusieurs sujets ou discussions) : choisis le sujet ntfy et la discussion Telegram de cette catégorie.</li>
+      <li>Une ligne par type : son nom, sa description et un <b>interrupteur</b> (vert = envoyé sur ntfy et Telegram). Activé, il montre ses options (voir le <a href="#notifications-evenements">catalogue</a>).</li>
+      <li><span class="ui">Envoyer test</span> envoie l'exemple du type, préfixé « [Test] », même si le type est coupé.</li>
+    </ul>
+    <figure class="phone"><img src="img/notifications-createurs.webp" alt="Catégorie MakerWorld dépliée, avec le bouton Choisir les créateurs"><figcaption>MakerWorld : sujet et discussion propres, choix des créateurs suivis.</figcaption></figure>
+    <p>Pour « Nouveau modèle d'un créateur suivi », touche <span class="ui">👤 Choisir les créateurs</span> : une fenêtre liste les créateurs que tu suis sur MakerWorld ; coche ceux qui t'intéressent puis <span class="ui">Me notifier pour N créateur(s)</span>. Les créateurs choisis s'affichent en étiquettes (avec ✕ pour les retirer). Tant qu'aucun n'est choisi : « Aucun créateur choisi : rien ne sera envoyé. »</p>
+  </section>
+
+  <section id="notifications-reglages">
+    <h3>Réglages des notifications</h3>
+    <p>Sous les onglets Journal et Appli Android, la carte <b>Réglages des notifications</b> regroupe les seuils, délais et créateurs suivis : ils valent pour <b>tous les canaux</b>. Les nombres s'enregistrent quand tu quittes le champ (ou avec Entrée), les listes dès que tu choisis. Chaque option est décrite dans le <a href="#notifications-evenements">catalogue ci-dessous</a>.</p>
+  </section>
+
+  <section id="notifications-regles">
+    <h3>Qui reçoit quoi</h3>
+    <ul>
+      <li><b>ntfy et Telegram</b> : un type part si son interrupteur est activé dans « Ce qui part sur ntfy et Telegram » et que le canal est activé.</li>
+      <li><b>Appli Android</b> : un type part sur le téléphone de chaque compte qui l'a choisi pour lui-même, si l'administrateur a activé le canal.</li>
+      <li><b>Journal</b> : selon le réglage du canal Journal (administrateurs), plus ce que chacun reçoit sur son téléphone.</li>
+    </ul>
+  </section>
+</section>
+
+<section id="notifications-mes-choix">
+  <h2>Mes notifications (chaque compte)</h2>
+  <p>Chaque compte, même en lecture seule, choisit ce qu'il reçoit sur <b>son</b> téléphone par l'appli Android. Un compte non administrateur trouve ces choix dans <b>Paramètres → 🔔 Notifs</b> ; un administrateur, dans la carte <b>Mon téléphone</b> du canal Appli Android.</p>
+  <figure class="phone"><img src="img/notifications-mes-choix.webp" alt="Mes notifications d'un compte en lecture seule, avec son téléphone et les catégories"><figcaption>« Mes notifications » d'un compte non administrateur.</figcaption></figure>
+  <ul>
+    <li>En tête, l'état de ce téléphone et <span class="ui">Activer sur ce téléphone</span> (dans l'appli Android). Si l'administrateur n'a pas activé le canal, un message orange le dit : « rien ne partira sur le téléphone pour l'instant ».</li>
+    <li>La liste de <b>tes</b> téléphones, avec <span class="ui">Tester</span> (« Envoyé sur « … ». ») et <span class="ui">✕</span>.</li>
+    <li>Une carte par catégorie : le compteur (« 3/11 », vert dès qu'un type est choisi) et un interrupteur pour toute la catégorie (plein = tout, demi-teinte = une partie). Touche <span class="ui">▶</span> pour la déplier et choisir type par type. Les catégories dépliées sont retenues sur ce navigateur.</li>
+  </ul>
+  <p>Tant que tu n'as rien changé, ton téléphone reçoit exactement les types que l'administrateur a activés sur ntfy/Telegram. Au premier changement, ce point de départ devient le tien et tu le modifies librement. Ce que tu reçois sur ton téléphone apparaît aussi dans ta cloche.</p>
+</section>
+
+<section id="notifications-evenements">
+  <h2>Le catalogue des notifications</h2>
+  <p>Voici tous les types, rangés par catégorie, avec leurs options (valeur par défaut entre parenthèses). Tous sont <b>désactivés par défaut</b>.</p>
+  <ul>
+    <li>Les notifications d'impression joignent une image : photo de la caméra, sinon couverture MakerWorld, sinon aperçu du plateau. Elles ont un bouton <span class="ui">Ouvrir BambuNymous</span> (si l'adresse vue du téléphone est renseignée) et <span class="ui">Fiche MakerWorld</span> quand le modèle est connu.</li>
+    <li>Les vérifications périodiques tournent toutes les 15 minutes. Leur tout premier passage, après une installation ou un redémarrage, mémorise l'existant sans rien envoyer : pas d'avalanche de messages.</li>
+    <li>Un changement d'état de l'imprimante doit durer quelques secondes avant d'être signalé : pas de doublon sur un aller-retour bref.</li>
+  </ul>
+
+  <section id="notifications-evenements-prints">
+    <h3>🖨️ Impressions</h3>
+    <table>
+      <tr><th>Type</th><th>Ce qu'il signale</th><th>Options</th></tr>
+      <tr><td>Impression démarrée</td><td>Nom, aperçu du plateau, durée estimée et bobines utilisées.</td><td>Seulement si l'impression dure plus de N min (0 = toutes)</td></tr>
+      <tr><td>Première couche terminée</td><td>Photo de la caméra après la 1re couche : le moment de vérifier l'adhérence.</td><td>Durée minimale (0)</td></tr>
+      <tr><td>Avancement de l'impression</td><td>Un message à chaque palier.</td><td>Paliers : à mi-parcours, tous les 25 % (défaut), 20 % ou 10 % ; durée minimale</td></tr>
+      <tr><td>Bientôt terminée</td><td>Prévient quelques minutes avant la fin, pour aller la récupérer.</td><td>Prévenir N min avant la fin (10 ; 1 à 120)</td></tr>
+      <tr><td>Impression en retard</td><td>L'impression prendra nettement plus longtemps que prévu (pauses, sous-extrusion…).</td><td>Au-delà de N % (20 ; 5 à 200)</td></tr>
+      <tr><td>Impression terminée</td><td>Photo finale, durée réelle, filament consommé et coût.</td><td>Durée minimale (0)</td></tr>
+      <tr><td>Impression en échec ou annulée</td><td>Photo au moment de l'arrêt et avancement atteint.</td><td>—</td></tr>
+      <tr><td>Impression en pause</td><td>Pause demandée ou imposée (fin de filament, bourrage…), avec la raison si connue.</td><td>—</td></tr>
+      <tr><td>Impression reprise</td><td>Après une pause, avec la durée de la pause.</td><td>—</td></tr>
+      <tr><td>Vitesse modifiée</td><td>Silencieux, Standard, Sport ou Ludique, changé pendant une impression.</td><td>—</td></tr>
+      <tr><td>Résumé de la semaine</td><td>Impressions réussies et ratées, heures, grammes, coût, points MakerWorld.</td><td>Le lundi, vendredi, samedi ou dimanche (dimanche) ; à N h (19)</td></tr>
+    </table>
+  </section>
+
+  <section id="notifications-evenements-printer">
+    <h3>📡 Imprimante</h3>
+    <table>
+      <tr><th>Type</th><th>Ce qu'il signale</th><th>Options</th></tr>
+      <tr><td>Alerte de l'imprimante (HMS)</td><td>Le message d'erreur de l'imprimante en français, avec un bouton vers le wiki Bambu.</td><td>Alertes : graves seulement (défaut), graves et courantes, toutes</td></tr>
+      <tr><td>Imprimante injoignable</td><td>Plus de nouvelles depuis 3 minutes (éteinte, Wi-Fi…).</td><td>Au retour : prévenir aussi (défaut) ou ne rien dire</td></tr>
+      <tr><td>Plateau refroidi</td><td>Après une impression, le plateau est assez froid pour décoller la pièce.</td><td>Sous N °C (35 ; 20 à 70)</td></tr>
+      <tr><td>Firmware mis à jour</td><td>La version du firmware a changé.</td><td>—</td></tr>
+      <tr><td>Imprimante au repos</td><td>Aucune impression depuis un moment (un rappel par période de repos).</td><td>Après N jours (7 ; 1 à 60)</td></tr>
+    </table>
+  </section>
+
+  <section id="notifications-evenements-dry">
+    <h3>💧 Séchage</h3>
+    <table>
+      <tr><th>Type</th><th>Ce qu'il signale</th><th>Options</th></tr>
+      <tr><td>Séchage démarré</td><td>Unité, température, durée et bobines concernées.</td><td>—</td></tr>
+      <tr><td>Séchage terminé</td><td>Une unité AMS termine son cycle de séchage.</td><td>—</td></tr>
+      <tr><td>Bobine à sécher dans l'AMS</td><td>Une bobine chargée n'a jamais été séchée, ou plus depuis son délai (une fois par bobine). Voir <a href="#filaments-sechage">le séchage</a>.</td><td>—</td></tr>
+      <tr><td>Bobine oubliée après le séchage</td><td>Le séchage est fini mais une bobine posée pour sécher est toujours dans l'AMS.</td><td>Après N h (6 ; 1 à 48)</td></tr>
+    </table>
+  </section>
+
+  <section id="notifications-evenements-spools">
+    <h3>🧵 Bobines et AMS</h3>
+    <table>
+      <tr><th>Type</th><th>Ce qu'il signale</th><th>Options</th></tr>
+      <tr><td>Bobine chargée</td><td>Une bobine arrive dans un emplacement de l'AMS : laquelle, reconnue ou non.</td><td>Prévenir pour : toutes les bobines (défaut) ou seulement les non reconnues</td></tr>
+      <tr><td>Bobine retirée</td><td>Un emplacement de l'AMS se vide.</td><td>—</td></tr>
+      <tr><td>AMS trop humide</td><td>L'humidité d'une unité dépasse le seuil pendant 10 minutes.</td><td>Au-dessus de N % (40 ; 10 à 90)</td></tr>
+      <tr><td>Bobine bientôt vide</td><td>Une bobine passe sous 15 % après une impression.</td><td>—</td></tr>
+      <tr><td>Pas assez de filament</td><td>Au démarrage, une bobine a moins que ce qu'il faut.</td><td>—</td></tr>
+      <tr><td>Fin de stock</td><td>La dernière bobine d'un filament passe sous 25 % : il est temps de racheter.</td><td>—</td></tr>
+      <tr><td>Ajout au panier</td><td>Un filament est marqué « à commander ».</td><td>—</td></tr>
+    </table>
+  </section>
+
+  <section id="notifications-evenements-mw">
+    <h3>🌐 MakerWorld</h3>
+    <p>Ces notifications demandent un compte MakerWorld relié (<a href="#makerworld-compte">voir MakerWorld</a>).</p>
+    <table>
+      <tr><th>Type</th><th>Ce qu'il signale</th><th>Options</th></tr>
+      <tr><td>Modèle de « À faire » imprimable</td><td>Un modèle de ta file « À faire » a désormais tout son filament en stock (relevé toutes les heures).</td><td>—</td></tr>
+      <tr><td>Nouveau modèle d'un créateur suivi</td><td>Un créateur choisi publie un modèle (toutes les heures).</td><td>Choix des créateurs</td></tr>
+      <tr><td>Modèle ajouté à une collection</td><td>Sur makerworld.com, Bambu Handy ou l'appli (toutes les 10 min).</td><td>Prévenir pour : ce qui est fait sur MakerWorld ou Bambu Handy (défaut), ou tout, y compris depuis BambuNymous</td></tr>
+      <tr><td>Collection créée, renommée ou supprimée</td><td>Tes collections MakerWorld (toutes les 10 min).</td><td>Idem</td></tr>
+      <tr><td>Points MakerWorld reçus</td><td>Le détail de chaque versement (par modèle et profil), avec le solde.</td><td>—</td></tr>
+      <tr><td>Boost reçu</td><td>Quelqu'un a boosté un de tes modèles.</td><td>—</td></tr>
+      <tr><td>Nouveaux abonnés</td><td>Ton nombre d'abonnés augmente.</td><td>—</td></tr>
+      <tr><td>Palier de points : récompense à portée</td><td>Tu as assez de points pour une récompense (500 pts = 40 € de réduction, 524 pts = carte cadeau de 40 €, et combinaisons).</td><td>Récompenses : réductions et cartes cadeaux (défaut), réductions seules, cartes cadeaux seules</td></tr>
+      <tr><td>Palier franchi par un de mes modèles</td><td>50, 100, 250, 500, 1 000, 2 500… téléchargements ou impressions.</td><td>Compter : téléchargements et impressions (défaut), téléchargements, impressions</td></tr>
+      <tr><td>Impressions à évaluer</td><td>De nouveaux modèles imprimés attendent ton avis (toutes les 6 h). Voir <a href="#impressions-a-evaluer">À évaluer</a>.</td><td>—</td></tr>
+      <tr><td>Jeton boost obtenu</td><td>Un nouveau jeton pour booster des modèles (toutes les 3 h).</td><td>—</td></tr>
+      <tr><td>Jeton boost bientôt expiré</td><td>Rappel chaque jour (dès 9 h) tant qu'ils ne sont pas utilisés.</td><td>Moins de N jours (5 ; 1 à 30)</td></tr>
+      <tr><td>Nouveau commentaire sur un de mes modèles</td><td>Relevé toutes les 30 minutes.</td><td>—</td></tr>
+      <tr><td>Connexion MakerWorld perdue</td><td>MakerWorld refuse la connexion : points, collections et « À faire » ne se mettent plus à jour. Le lien mène à Paramètres → 🔗 Connexions.</td><td>—</td></tr>
+    </table>
+  </section>
+
+  <section id="notifications-evenements-friends">
+    <h3>👥 Copains</h3>
+    <table>
+      <tr><th>Type</th><th>Ce qu'il signale</th><th>Options</th></tr>
+      <tr><td>Un copain lance une impression</td><td>Relevé toutes les 5 minutes chez chaque copain.</td><td>—</td></tr>
+      <tr><td>L'impression d'un copain se termine</td><td>Son imprimante a fini (ou s'est arrêtée).</td><td>—</td></tr>
+      <tr><td>Un copain gagne un succès</td><td>Un succès gagné par un copain, avec où tu en es.</td><td>—</td></tr>
+      <tr><td>Un copain imprime un de mes modèles</td><td>Il lance l'impression d'un modèle que tu as publié sur MakerWorld.</td><td>—</td></tr>
+    </table>
+  </section>
+
+  <section id="notifications-evenements-objects">
+    <h3>📦 Objets et accessoires</h3>
+    <table>
+      <tr><th>Type</th><th>Ce qu'il signale</th><th>Options</th></tr>
+      <tr><td>Accessoire bientôt épuisé</td><td>Le stock d'un accessoire passe sous le seuil (une fois, jusqu'au réassort).</td><td>Sous N pièces (3 ; 1 à 100)</td></tr>
+      <tr><td>Accessoire épuisé</td><td>Plus aucun en stock alors qu'il sert sur des objets.</td><td>—</td></tr>
+      <tr><td>Objets à vendre depuis longtemps</td><td>Des objets en vente depuis plus de N jours (un rappel par objet).</td><td>Après N jours (90 ; 7 à 730)</td></tr>
+    </table>
+  </section>
+
+  <section id="notifications-evenements-attention">
+    <h3>⚠️ Points d'attention</h3>
+    <table>
+      <tr><th>Type</th><th>Ce qu'il signale</th><th>Options</th></tr>
+      <tr><td>Nouveaux points d'attention</td><td>Ce qui apparaît dans les points d'attention de l'accueil (bobine presque vide, impression sans fichier 3MF…).</td><td>Quand : un résumé par jour (défaut) ou dès qu'il y en a ; résumé à N h (9)</td></tr>
+    </table>
+  </section>
+
+  <section id="notifications-evenements-achievements">
+    <h3>🏅 Succès</h3>
+    <table>
+      <tr><th>Type</th><th>Ce qu'il signale</th><th>Options</th></tr>
+      <tr><td>Succès débloqué</td><td>Une médaille gagnée.</td><td>—</td></tr>
+      <tr><td>Clés gagnées</td><td>Des clés gagnées.</td><td>—</td></tr>
+      <tr><td>Tour de roue gagné</td><td>Des tours de roue offerts, à jouer sur la page Succès.</td><td>—</td></tr>
+    </table>
+    <p>Voir le chapitre <a href="#succes">Succès</a>.</p>
+  </section>
+
+  <section id="notifications-evenements-system">
+    <h3>🖥️ BambuNymous</h3>
+    <table>
+      <tr><th>Type</th><th>Ce qu'il signale</th><th>Options</th></tr>
+      <tr><td>Mise à jour de BambuNymous disponible</td><td>Une nouvelle version est publiée (vérifié toutes les 6 h), avec ce qui change.</td><td>—</td></tr>
+      <tr><td>BambuNymous redémarré</td><td>L'appli vient de (re)démarrer : mise à jour, redémarrage du serveur… Envoyée sans bruit.</td><td>—</td></tr>
+      <tr><td>Connexion depuis un nouvel appareil</td><td>Un compte se connecte depuis un appareil ou un navigateur jamais vu pour lui (« Android · Chrome », « Appli Android »…). Le tout premier appareil d'un compte est retenu sans alerte.</td><td>—</td></tr>
+      <tr><td>Échecs de connexion répétés</td><td>Au moins 3 mots de passe ou codes faux en 15 minutes pour un même compte ou une même adresse.</td><td>—</td></tr>
+    </table>
+  </section>
+</section>

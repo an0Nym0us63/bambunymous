@@ -1,0 +1,166 @@
+<h1>Copains</h1>
+<p class="lead">Un « copain », c'est le BambuNymous d'un ami, installé chez lui sur son propre serveur. Une fois relié, tu peux le parcourir en lecture seule depuis ta propre appli, voir ce qu'il imprime et comparer vos succès. Tout se règle dans <span class="ui">Paramètres</span>.</p>
+
+<section id="copains-principe">
+  <h2>À quoi ça sert</h2>
+  <p>Avec un copain relié, tu peux :</p>
+  <ul>
+    <li><strong>visiter son appli</strong> : son accueil, ses impressions, sa galerie, ses filaments, ses objets, ses statistiques, ses collections MakerWorld et sa page de succès, sans jamais rien pouvoir modifier chez lui ;</li>
+    <li><strong>voir, sans y aller</strong>, ce qu'il a imprimé avec le même filament ou le même modèle que toi, et si son imprimante tourne en ce moment ;</li>
+    <li><strong>comparer vos succès</strong> : podium, classement par section, qui est devant sur chaque succès (voir <a href="#succes-copains">Succès → podium et comparaison</a>) ;</li>
+    <li>être <strong>prévenu</strong> quand un copain lance ou termine une impression, gagne un succès ou imprime un de tes modèles MakerWorld (voir <a href="#notifications">Notifications</a>).</li>
+  </ul>
+  <section id="copains-principe-securite">
+    <h3>Comment c'est protégé</h3>
+    <ul>
+      <li><strong>Aucun mot de passe n'est échangé.</strong> Ton ami crée chez lui un compte en lecture seule pour toi et te donne une <strong>invitation copain</strong> : un texte qui commence par <code>bnym1.</code>. Elle contient l'adresse de son BambuNymous et une clé d'accès propre à ce compte, qu'il peut révoquer à tout moment.</li>
+      <li>Une fois l'invitation collée, <strong>ton navigateur ne parle qu'à ton propre serveur</strong>, qui va lire les données chez ton ami. La clé ne quitte jamais ton serveur.</li>
+      <li>Tu as chez lui les droits du compte qu'il t'a créé, <strong>jamais ceux d'un administrateur</strong> : son serveur refuse toute écriture venant d'un copain. Un copain ne peut pas non plus lancer d'actions MakerWorld avec son compte, ni toucher à ses réglages.</li>
+      <li><strong>Le lien est à sens unique.</strong> Si tu as ajouté Léo, tu vois chez Léo, mais Léo ne voit rien chez toi. Pour qu'il te voie, crée-lui à ton tour une invitation.</li>
+    </ul>
+  </section>
+</section>
+
+<section id="copains-inviter">
+  <h2>Inviter un copain (ouvrir ta maison)</h2>
+  <p>C'est toi qui donnes l'accès : tu crées un compte pour ton ami, puis une invitation liée à ce compte. <span class="admin">admin</span></p>
+  <figure class="phone"><img src="img/copains-invitation.webp" alt="Ligne du compte « sam » dans Paramètres, onglet Comptes, avec l'encadré turquoise de l'invitation copain, la zone de texte de l'invitation et les boutons Copier et Fermer"><figcaption>L'invitation s'affiche une seule fois, juste sous le compte.</figcaption></figure>
+  <ol>
+    <li>Va dans <span class="ui">Paramètres</span> → onglet <span class="ui">👤 Comptes</span>, carte <span class="ui">Utilisateurs</span>.</li>
+    <li>Crée un compte pour ton ami avec <span class="ui">+ Nouvel utilisateur</span>, en rôle <span class="ui">Lecture seule</span> (il ne verra aucun montant) ou <span class="ui">Lecture seule (avec prix)</span> (il verra les prix et les ventes). Un compte existant en lecture seule convient aussi.</li>
+    <li>Sur la ligne de ce compte, touche <span class="ui">🔑 Invitation copain</span>.</li>
+    <li>Un encadré turquoise affiche l'invitation. Touche <span class="ui">📋 Copier</span> (message « Invitation copiée. ») et envoie le texte à ton ami par le moyen de ton choix. Puis <span class="ui">Fermer</span>.</li>
+  </ol>
+  <div class="warn">L'invitation n'est montrée <strong>qu'une seule fois</strong> : ton serveur n'en garde qu'une empreinte. Si elle est perdue, crée-en une nouvelle.</div>
+  <div class="tip">L'invitation contient l'adresse avec laquelle tu consultes l'appli <strong>au moment où tu la crées</strong> (elle est rappelée en gras dans l'encadré). Crée-la donc depuis l'adresse publique de ton BambuNymous, celle que ton ami peut joindre de chez lui, et pas depuis une adresse locale de ton réseau.</div>
+  <p>Le bouton n'apparaît que sur les comptes <strong>actifs</strong> et <strong>non administrateurs</strong> : une invitation liée à un compte administrateur est refusée (« choisis un compte en lecture seule (avec ou sans prix) »).</p>
+
+  <section id="copains-inviter-gerer">
+    <h3>Recréer ou révoquer une invitation</h3>
+    <dl class="opts">
+      <dt><span class="ui">🔑 Nouvelle invitation copain</span></dt>
+      <dd>Remplace le bouton quand une invitation existe déjà. Après confirmation (<span class="ui">Recréer</span>), l'ancienne invitation cesse de marcher : ton ami devra coller la nouvelle.</dd>
+      <dt><span class="ui">Révoquer l'invitation</span></dt>
+      <dd>Coupe l'accès. Après confirmation (<span class="ui">Révoquer</span>), l'appli de ton ami ne peut plus te parcourir ; elle affiche « Accès refusé par le BambuNymous du copain (invitation révoquée ?) ».</dd>
+      <dt><span class="ui">Désactiver</span> le compte</dt>
+      <dd>Coupe aussi l'accès du copain qui en dépend.</dd>
+    </dl>
+  </section>
+
+  <section id="copains-inviter-options">
+    <h3>Ce que ton copain voit chez toi</h3>
+    <ul>
+      <li><strong>Tout, en lecture seule</strong>, avec ou sans les prix selon le rôle du compte.</li>
+      <li>Case <span class="ui">Voit mes succès secrets</span> (sur la ligne du compte) : sans elle, ton copain voit tes médailles secrètes, leur titre et leur date, mais pas ce qui les a valu (sauf pour celles qu'il a lui aussi). Cochée, il voit tout. Elle vaut pour le compte et pour l'invitation copain qui en dépend.</li>
+      <li>La case <span class="ui">Actions MakerWorld</span> ne vaut <strong>jamais</strong> pour un copain : il ne peut pas agir avec ton compte MakerWorld.</li>
+      <li>Tes clés, ta roue et tes tickets de palier ne sont <strong>jamais</strong> montrés à un copain.</li>
+    </ul>
+    <p>Ses visites chez toi sont notées dans ton journal d'activité, et la « dernière visite » de son compte se met à jour comme s'il était là.</p>
+  </section>
+</section>
+
+<section id="copains-ajouter">
+  <h2>Ajouter un copain (accepter une invitation)</h2>
+  <p>Ton ami t'a envoyé une invitation : colle-la dans ton appli. <span class="admin">admin</span></p>
+  <figure class="phone"><img src="img/copains-ajouter.webp" alt="Carte « Copains » des Paramètres, onglet Connexions : texte d'explication, liste de trois copains Léo, Maya et Zoé avec leurs boutons Visiter et croix, zone pour coller l'invitation, champ Nom et bouton Ajouter"><figcaption>La carte <span class="ui">👀 Copains</span>, dans Paramètres → onglet Connexions.</figcaption></figure>
+  <ol>
+    <li>Va dans <span class="ui">Paramètres</span> → onglet <span class="ui">🔗 Connexions</span>, carte <span class="ui">👀 Copains</span>.</li>
+    <li>Colle le texte reçu dans la zone <span class="ui">Coller l'invitation (bnym1.…)</span>.</li>
+    <li>Donne-lui un nom dans <span class="ui">Nom (ex. Léo)</span> (40 caractères au plus). Laissé vide, l'appli prend le nom de son adresse.</li>
+    <li>Touche <span class="ui">Ajouter</span>. Ton serveur vérifie l'invitation auprès de celui de ton ami avant de l'enregistrer.</li>
+  </ol>
+  <div class="note">Le texte de la carte parle de « Paramètres → Comptes » pour l'endroit où ton ami crée l'invitation : c'est bien l'onglet <span class="ui">👤 Comptes</span> chez lui. Chez toi, l'ajout se fait dans l'onglet <span class="ui">🔗 Connexions</span>, réservé aux administrateurs.</div>
+  <p>Si quelque chose ne va pas, un message s'affiche au-dessus de la liste :</p>
+  <table>
+    <tr><th>Message</th><th>Que faire</th></tr>
+    <tr><td>Invitation illisible : colle-la en entier (elle commence par bnym1.)</td><td>Le texte a été coupé : recopie-le en entier.</td></tr>
+    <tr><td>Invitation incomplète</td><td>Demande une nouvelle invitation.</td></tr>
+    <tr><td>Invitation refusée par le BambuNymous du copain (révoquée ou compte désactivé)</td><td>Ton ami a révoqué l'invitation ou désactivé le compte : demande-lui une nouvelle invitation.</td></tr>
+    <tr><td>BambuNymous du copain injoignable (…)</td><td>Son appli est éteinte, ou l'adresse incluse n'est pas joignable de chez toi (invitation créée depuis une adresse locale ?).</td></tr>
+    <tr><td>Réponse inattendue du BambuNymous du copain (HTTP …)</td><td>Son serveur a répondu de façon anormale : réessaie plus tard ou vérifie qu'il est à jour.</td></tr>
+  </table>
+  <p>Recoller une invitation du même ami <strong>remplace</strong> l'entrée existante, sans créer de doublon.</p>
+  <section id="copains-liste">
+    <h3>La liste de tes copains</h3>
+    <p>Chaque ligne montre le nom du copain en gras et, dessous, son adresse, le compte que tu utilises chez lui et son rôle (lecture seule, avec ou sans prix). Le rôle se met à jour tout seul si ton ami change les droits de ton compte chez lui.</p>
+    <dl class="opts">
+      <dt><span class="ui">Visiter</span></dt><dd>Ouvre son appli (voir ci-dessous).</dd>
+      <dt><span class="ui">✕</span></dt><dd>Retire ce copain (voir <a href="#copains-retirer">Retirer un copain</a>).</dd>
+      <dt>Appui long ou clic droit sur la ligne</dt><dd>Menu avec <span class="ui">👀 Visiter</span> et <span class="ui">🗑 Retirer de mes copains…</span>.</dd>
+    </dl>
+  </section>
+</section>
+
+<section id="copains-visiter">
+  <h2>Visiter l'appli d'un copain</h2>
+  <figure class="pair">
+    <img src="img/copains-chez-qui.webp" alt="Menu du compte ouvert : bloc « Chez qui ? » avec Chez moi, Léo, Maya et Zoé, chacun avec un voyant coloré, puis Succès, Guide d'utilisation et Déconnexion">
+    <img src="img/copains-visite.webp" alt="Page Statistiques vue chez Léo : pastille orange « Léo » avec une maison dans l'en-tête, cloche de notifications masquée">
+    <figcaption>À gauche : le bloc « Chez qui ? » du menu du compte. À droite : en visite, la pastille orange rappelle chez qui tu es.</figcaption>
+  </figure>
+  <section id="copains-visiter-entrer">
+    <h3>Y aller</h3>
+    <ul>
+      <li><strong>Menu du compte</strong> (ton avatar, en haut à droite sur téléphone, en bas du menu latéral sur ordinateur) → bloc <span class="ui">Chez qui ?</span> : <span class="ui">🏠 Chez moi</span> puis une ligne <span class="ui">👀 Nom</span> par copain. La ligne où tu te trouves est surlignée. Ce bloc n'apparaît que si tu as au moins un copain.</li>
+      <li><span class="ui">Paramètres</span> → <span class="ui">🔗 Connexions</span> → carte Copains → <span class="ui">Visiter</span>.</li>
+      <li>La tuile d'accueil <a href="#tuiles-friends">Copains</a>, en vue agrandie : bouton <span class="ui">Aller chez … ↗</span>.</li>
+      <li>Une notification « un copain imprime » : la toucher ouvre directement son appli.</li>
+    </ul>
+    <p>Sur chaque ligne du bloc <span class="ui">Chez qui ?</span>, un <strong>voyant</strong> indique l'état de l'imprimante :</p>
+    <table>
+      <tr><th>Voyant</th><th>Signification</th></tr>
+      <tr><td>vert, qui pulse (avec le pourcentage)</td><td>Imprime en ce moment</td></tr>
+      <tr><td>orange</td><td>Allumée, au repos</td></tr>
+      <tr><td>rouge</td><td>Imprimante éteinte (ou hors réseau)</td></tr>
+      <tr><td>gris</td><td>BambuNymous injoignable</td></tr>
+    </table>
+  </section>
+  <section id="copains-visiter-dedans">
+    <h3>Pendant la visite</h3>
+    <ul>
+      <li>L'appli se recharge <strong>sur la même page</strong> (et le même onglet), mais avec les données de ton copain. Si tu regardais une fiche précise, elle est refermée : elle n'existe pas chez lui.</li>
+      <li>Une <strong>pastille orange <span class="ui">👀 Nom 🏠</span></strong> reste affichée : dans l'en-tête sur téléphone, en haut du menu latéral sur ordinateur. <strong>La toucher te ramène chez toi.</strong> Tu peux aussi choisir <span class="ui">🏠 Chez moi</span> dans le menu du compte.</li>
+      <li>Tu vois tout son BambuNymous avec les droits de ton compte chez lui : accueil (le bandeau d'état de son imprimante est marqué « 👀 Nom » et bordé de violet, la caméra se rafraîchit en images), impressions, galerie, filaments, objets, statistiques, collections MakerWorld, page Succès. Les prix ne s'affichent que si ton compte chez lui est « avec prix ».</li>
+      <li>La cloche des notifications est masquée, et les gestes qui écrivent ou qui servent au matériel disparaissent : scan RFID ou d'échantillon, correction des plateaux, association à une impression, « à évaluer », personnalisation de l'accueil, actions MakerWorld sur ses données.</li>
+    </ul>
+    <p>Restent <strong>chez toi</strong>, même en visite : ton compte et tes réglages, la fiche MakerWorld d'un modèle (complétée par <strong>tes</strong> impressions et <strong>ton</strong> stock), tes évaluations MakerWorld. La seule action possible chez lui est l'étoile <span class="ui">☆</span> <span class="ui">Ranger dans mes collections…</span>, qui range le modèle dans <strong>tes</strong> collections MakerWorld (réservé à l'administrateur de ta maison).</p>
+    <p>Sur les modèles MakerWorld vus chez lui, un badge <span class="ui">🏠</span> te dit si tu l'as déjà : en violet « 🏠 imprimé N× · 📁 tes collections · ❤ » si tu l'as, en pointillés « 🏠 pas chez moi » sinon.</p>
+    <div class="note">Ta visite est transmise au serveur de ton ami : elle apparaît dans son journal d'activité. Elle compte aussi pour vos succès de la section Copains.</div>
+    <p>Si ton ami a révoqué l'invitation, la page affiche « Accès refusé par le BambuNymous du copain (invitation révoquée ?) » ; s'il est éteint, un message « injoignable ». Tu n'es pas déconnecté pour autant : reviens chez toi avec la pastille.</p>
+  </section>
+</section>
+
+<section id="copains-partage">
+  <h2>Ce qui est partagé sans visiter</h2>
+  <p>Chez toi, dès que tu as au moins un copain, l'appli va lire chez chacun ce qui te concerne et l'affiche à côté de tes propres données. Ces lectures sont gardées 5 minutes. Seuls les copains qui ont quelque chose sont listés ; un copain injoignable est signalé.</p>
+  <figure class="phone"><img src="img/copains-chez-les-copains.webp" alt="Fenêtre d'un filament ABS Blanc, onglet « Chez les copains (3) » : deux impressions de Léo et une de Zoé, en vignettes carrées avec nom, date, poids et filaments"><figcaption>Le même filament chez tes copains, depuis la galerie des filaments.</figcaption></figure>
+  <dl class="opts">
+    <dt>Un filament</dt>
+    <dd>Dans <span class="ui">Filaments</span> → onglet <span class="ui">Galerie</span> → <span class="ui">Photos</span>, touche un filament : la fenêtre a deux onglets, <span class="ui">Mes impressions (N)</span> et <span class="ui">👀 Chez les copains (N)</span>. On y voit ce que tes copains ont imprimé avec <strong>exactement le même filament</strong> : même référence et même couleur pour un filament Bambu Lab ; même marque, couleur, matière et sous-type pour une autre marque. Un filament trop peu renseigné affiche « Filament trop peu renseigné (marque, matière ou couleur). »</dd>
+    <dt>Un modèle</dt>
+    <dd>Dans la <a href="#impressions-fiche">fiche d'une impression</a>, un volet repliable <span class="ui">👀 Chez les copains (N) ▾</span> montre les impressions du même modèle MakerWorld chez eux.</dd>
+    <dt>La galerie</dt>
+    <dd>Dans <span class="ui">Impressions</span> → <span class="ui">Galerie</span>, la bascule <span class="ui">Ma galerie (N)</span> / <span class="ui">👀 Chez les copains (N)</span> réunit les photos de tous tes copains, de la plus récente à la plus ancienne. Chaque vignette porte « 👀 Nom · date ». La recherche fonctionne aussi sur le nom du copain. Vide : « Aucune photo chez tes copains ».</dd>
+  </dl>
+  <section id="copains-vignettes">
+    <h3>Les vignettes « Chez les copains »</h3>
+    <p>Pour un filament ou un modèle, les impressions sont groupées par copain (« 👀 Nom · N impressions »), en vignettes carrées : la photo (avec « N 📷 » s'il y en a plusieurs), le nom, puis la date, le poids et les filaments. Toucher une vignette ouvre les photos en grand. Pendant la lecture : « Je demande à tes copains… » ; si personne n'a rien : « Rien chez eux pour l'instant. ».</p>
+  </section>
+  <section id="copains-activite">
+    <h3>Qui imprime en ce moment</h3>
+    <ul>
+      <li>Un <strong>point vert</strong> qui pulse sur ton avatar signale qu'un copain imprime (avec leur nombre s'ils sont plusieurs ; l'infobulle dit « N copains en train d'imprimer »). C'est relu toutes les 2 minutes et à chaque retour sur l'appli.</li>
+      <li>Sur l'accueil, la tuile <a href="#tuiles-friends">Copains</a> montre leurs impressions en cours et l'état de leurs imprimantes, et une pastille d'en-tête facultative « 👥 N copains impriment » peut s'ajouter (voir <a href="#accueil-personnaliser">Personnaliser l'accueil</a>).</li>
+      <li>La tuile <span class="ui">Classement des copains</span> compare vos scores de succès (voir <a href="#succes-copains">Succès</a>).</li>
+    </ul>
+  </section>
+</section>
+
+<section id="copains-retirer">
+  <h2>Retirer un copain</h2>
+  <ol>
+    <li>Dans <span class="ui">Paramètres</span> → <span class="ui">🔗 Connexions</span> → carte <span class="ui">👀 Copains</span>, touche <span class="ui">✕</span> sur sa ligne (ou appui long → <span class="ui">🗑 Retirer de mes copains…</span>).</li>
+    <li>Confirme avec <span class="ui">Retirer</span>.</li>
+  </ol>
+  <p>Seule ton entrée disparaît : « Son BambuNymous n'est pas touché. » Pour qu'il ne puisse plus te voir, lui, révoque de ton côté l'invitation que tu lui avais donnée (voir <a href="#copains-inviter-gerer">Recréer ou révoquer</a>).</p>
+</section>

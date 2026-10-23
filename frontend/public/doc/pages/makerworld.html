@@ -1,0 +1,438 @@
+<h1>MakerWorld</h1>
+<p class="lead">BambuNymous se branche sur MakerWorld, le site de modèles de Bambu Lab : tes collections, tes j'aime, les créateurs que tu suis, les concours et ton activité de créateur, chaque modèle croisé avec ton historique (« déjà imprimé » ou pas). Tout se trouve dans l'onglet <span class="ui">MakerWorld</span> de la page <span class="ui">Impressions</span>.</p>
+
+<section id="makerworld-principe">
+  <h2>Ce que fait (et ne fait pas) BambuNymous avec MakerWorld</h2>
+  <p>MakerWorld n'a pas d'API publique : BambuNymous lit son <b>API interne, non officielle</b>. Si MakerWorld la change ou la ferme, l'appli continue de marcher normalement ; les fiches retombent simplement sur le lien vers le site.</p>
+  <ul>
+    <li><b>Sans compte</b>, tu as déjà : la fiche de chaque modèle, la recherche, les fils « Découvrir », les concours, la page d'un créateur, les modèles similaires et les commentaires.</li>
+    <li><b>Avec un compte lié</b> (voir <a href="#makerworld-compte">Lier ton compte</a>), tu as en plus : tes collections, tes j'aime, les créateurs que tu suis, ta page de créateur (points, téléchargements…), les boosts, les évaluations et l'ouverture d'un modèle dans Bambu Studio.</li>
+    <li><b>Partout</b>, chaque modèle est comparé à ton historique : ruban vert <span class="ui">✓ IMPRIMÉ</span> s'il a déjà été imprimé (impressions réussies ou partielles), ruban orange <span class="ui">EN COURS</span> s'il est sur le plateau en ce moment, sinon « jamais imprimé ».</li>
+    <li>Titres, descriptifs, profils et commentaires sont affichés <b>en français</b> (traduction fournie par MakerWorld). Quand le texte d'origine diffère, un lien <span class="ui">Afficher l'original</span> / <span class="ui">Afficher la traduction</span> permet de basculer.</li>
+    <li>Les images sont réduites à la taille affichée (chargement rapide, même sur téléphone). Les GIF sont figés dans les vignettes et animés dans la galerie d'une fiche ; les vidéos tournent en boucle, sans le son.</li>
+  </ul>
+  <div class="note"><p>BambuNymous ne publie rien de lui-même sur MakerWorld. Ce qui s'y écrit (un j'aime, un rangement dans une collection, un boost, une évaluation) part toujours d'un geste de ta part, avec ton compte.</p></div>
+
+  <section id="makerworld-ou">
+    <h3>Où trouver MakerWorld dans l'appli</h3>
+    <table>
+      <tr><th>Endroit</th><th>Ce que tu y fais</th></tr>
+      <tr><td><b>Impressions → onglet <span class="ui">MakerWorld</span></b></td><td>La vue principale : collections, j'aime, suivis, découvrir, créateur (détaillée ci-dessous).</td></tr>
+      <tr><td><b>Paramètres → onglet <span class="ui">🔗 Connexions</span></b></td><td>Lier le compte, relire les fiches, retrouver les modèles des vieux prints, messages d'évaluation tout faits (voir <a href="#makerworld-reglages">Réglages MakerWorld</a>).</td></tr>
+      <tr><td><b>Paramètres → onglet <span class="ui">👤 Comptes</span></b></td><td>Donner à un compte le droit <span class="ui">Actions MakerWorld</span> (voir <a href="#makerworld-droits">Qui peut faire quoi</a>).</td></tr>
+      <tr><td><b>Fiche d'une impression ou d'un groupe</b></td><td>Une carte MakerWorld du modèle imprimé, et l'entrée <span class="ui">🌐 Modèle MakerWorld</span> du menu (appui long ou clic droit) qui ouvre <a href="#makerworld-fiche">la fiche du modèle</a>. Voir <a href="#impressions-fiche">la fiche d'une impression</a>.</td></tr>
+      <tr><td><b>Impressions → onglet <span class="ui">À faire</span></b></td><td>La file d'attente des modèles à imprimer : voir <a href="#impressions-a-faire">À faire</a>.</td></tr>
+      <tr><td><b>Accueil</b></td><td>La tuile MakerWorld (solde de points, gains, courbe) : voir <a href="#tuiles-mw">la tuile MakerWorld</a>.</td></tr>
+      <tr><td><b>Paramètres → onglet <span class="ui">🔔 Notifs</span></b></td><td>Les notifications MakerWorld (points reçus, boosts, nouveaux modèles des créateurs suivis…) : voir <a href="#makerworld-notifications">plus bas</a>.</td></tr>
+    </table>
+  </section>
+</section>
+
+<section id="makerworld-compte">
+  <h2>Lier ton compte MakerWorld <span class="admin">admin</span></h2>
+  <p>Le compte MakerWorld se lie dans <b>Paramètres → onglet <span class="ui">🔗 Connexions</span></b>, carte <span class="ui">MakerWorld</span>, bloc « Compte — collections et j'aime ». C'est le compte <b>de la maison</b> : un seul compte MakerWorld pour tout le BambuNymous. Seul un administrateur peut le lier ou le délier.</p>
+  <div class="tip"><p>Tant qu'aucun compte n'est lié, les onglets Collections, J'aime et Suivis affichent « Connecte ton compte MakerWorld dans Paramètres… » : le bon chemin est bien <b>Paramètres → 🔗 Connexions</b>.</p></div>
+  <figure class="phone"><img src="img/makerworld-reglages-connexion.webp" alt="Carte MakerWorld des paramètres, compte non connecté : e-mail, mot de passe, bouton Se connecter"><figcaption>Compte pas encore lié : e-mail et mot de passe Bambu, ou un jeton.</figcaption></figure>
+
+  <section id="makerworld-compte-connexion">
+    <h3>Se connecter avec l'e-mail et le mot de passe</h3>
+    <ol>
+      <li>Ouvre <b>Paramètres</b>, onglet <span class="ui">🔗 Connexions</span>.</li>
+      <li>Dans la carte <span class="ui">MakerWorld</span>, remplis <span class="ui">E-mail du compte Bambu</span> et <span class="ui">Mot de passe (jamais enregistré)</span>.</li>
+      <li>Touche <span class="ui">Se connecter</span>.</li>
+      <li>Si Bambu envoie un code par e-mail, l'appli affiche « Bambu a envoyé un code par e-mail : saisis-le. » : tape-le dans <span class="ui">Code reçu par e-mail</span> puis touche <span class="ui">Valider le code</span> (<span class="ui">Annuler</span> pour revenir).</li>
+      <li>Une fois connecté, la carte montre l'avatar, le nom et le <code>@pseudo</code> du compte, avec un bouton <span class="ui">Déconnecter</span>.</li>
+    </ol>
+    <div class="note"><p>Le mot de passe sert une seule fois et n'est <b>jamais gardé</b>. BambuNymous ne conserve qu'un jeton de connexion, qui n'est jamais renvoyé au navigateur ni réaffiché.</p></div>
+  </section>
+
+  <section id="makerworld-compte-jeton">
+    <h3>Se connecter avec un jeton (double authentification)</h3>
+    <p>Si ton compte Bambu a la double authentification, sa validation n'est pas possible depuis un serveur : l'appli le dit et passe d'elle-même à l'étape « jeton ». Tu peux aussi y aller directement avec le lien discret <span class="ui">Coller un jeton plutôt</span>.</p>
+    <ol>
+      <li>Sur makerworld.com, connecté à ton compte, ouvre les outils du navigateur (<kbd>F12</kbd>) → <b>Application</b> → <b>Cookies</b>.</li>
+      <li>Copie la valeur du cookie <code>token</code>.</li>
+      <li>Colle-la dans le champ <span class="ui">Jeton</span> de BambuNymous et touche <span class="ui">Enregistrer</span> (<span class="ui">Retour</span> pour revenir au formulaire e-mail).</li>
+    </ol>
+    <p>Un jeton dure environ 3 mois. Quand il expire, l'appli affiche « Jeton refusé ou expiré » : recommence l'opération.</p>
+  </section>
+
+  <section id="makerworld-compte-deconnecter">
+    <h3>Délier le compte</h3>
+    <p>Touche <span class="ui">Déconnecter</span> dans la carte. Le jeton est effacé ; les fiches publiques continuent de fonctionner, mais collections, j'aime, suivis et onglet Créateur disparaissent jusqu'à la prochaine connexion.</p>
+  </section>
+</section>
+
+<section id="makerworld-droits">
+  <h2>Qui peut faire quoi</h2>
+  <p>Tout utilisateur connecté à BambuNymous peut <b>regarder</b> : listes, fiches, concours, pages de créateurs. Les gestes qui <b>écrivent</b> sur MakerWorld avec le compte de la maison demandent un droit.</p>
+  <table>
+    <tr><th>Geste</th><th>Qui</th></tr>
+    <tr><td>Lier / délier le compte, <span class="ui">⟳ Relire maintenant</span>, historique cloud, diagnostic, import de l'historique créateur</td><td><span class="admin">admin</span></td></tr>
+    <tr><td>J'aime, ranger dans des collections, créer / renommer / supprimer une collection, booster, évaluer, oublier une évaluation, retenir un profil pour « À faire », lire les filaments exacts d'un 3MF, ouvrir dans Bambu Studio</td><td>admin, ou compte ayant le droit <span class="ui">Actions MakerWorld</span></td></tr>
+    <tr><td><span class="ui">🔗 Associer à un print</span></td><td><span class="admin">admin</span></td></tr>
+    <tr><td>Regarder les listes et les fiches</td><td>tout le monde</td></tr>
+  </table>
+
+  <section id="makerworld-droit-actions">
+    <h3>Le droit « Actions MakerWorld » <span class="admin">admin</span></h3>
+    <p>Un administrateur a ce droit d'office. Pour l'accorder à un compte en lecture seule :</p>
+    <ol>
+      <li>Ouvre <b>Paramètres</b>, onglet <span class="ui">👤 Comptes</span>.</li>
+      <li>Dans la liste des utilisateurs, coche <span class="ui">Actions MakerWorld</span> sur la carte du compte (l'infobulle rappelle : « J'aime, collections, boosts, évaluations et « À faire » avec le compte MakerWorld de la maison »).</li>
+    </ol>
+    <p>La case n'apparaît pas sur les comptes administrateurs (ils l'ont déjà). Décocher la case retire le droit aussitôt.</p>
+    <figure class="phone"><img src="img/makerworld-droit.webp" alt="Carte d'un utilisateur en lecture seule avec la case Actions MakerWorld"><figcaption>La case <span class="ui">Actions MakerWorld</span> sur la carte d'un compte en lecture seule.</figcaption></figure>
+    <p>Sans ce droit, les boutons d'écriture (<span class="ui">♡ J'aime</span>, <span class="ui">☆ Collections</span>, <span class="ui">⚡ Booster</span>, <span class="ui">＋</span>…) sont simplement absents ; l'évaluation se limite au lien vers MakerWorld.</p>
+  </section>
+
+  <section id="makerworld-droits-copain">
+    <h3>Chez un copain</h3>
+    <p>Quand tu parcours le BambuNymous d'un copain (voir <a href="#copains">Copains</a>), l'onglet MakerWorld montre <b>ses</b> collections et j'aime. Une pastille indique si un modèle est « déjà chez moi ». <span class="ui">☆ Collections</span> range alors le modèle dans <b>tes</b> collections. Rien n'est écrit sur le compte du copain, et la tuile <span class="ui">À évaluer</span> n'apparaît pas.</p>
+  </section>
+</section>
+
+<section id="makerworld-vue">
+  <h2>L'onglet MakerWorld</h2>
+  <p>Ouvre <b>Impressions</b> puis l'onglet <span class="ui">MakerWorld</span> (à côté de <span class="ui">Liste</span>, <span class="ui">Galerie</span> et <span class="ui">À faire</span>). Une rangée de pilules donne les sous-onglets : <span class="ui">Collections</span> (par défaut), <span class="ui">J'aime</span>, <span class="ui">Suivis</span>, <span class="ui">Découvrir</span> et <span class="ui">Créateur</span> (visible seulement quand un compte est lié).</p>
+  <figure class="phone"><img src="img/makerworld-collections.webp" alt="Onglet MakerWorld, sous-onglet Collections : tuile À évaluer puis les collections en mosaïque"><figcaption>Le sous-onglet <span class="ui">Collections</span>, avec la tuile <span class="ui">À évaluer</span> en tête.</figcaption></figure>
+
+  <section id="makerworld-vue-barre">
+    <h3>La barre d'actions</h3>
+    <dl class="opts">
+      <dt>⟳</dt><dd>« Interroger MakerWorld maintenant » : relit la liste sans passer par le cache. Visible quand un compte est lié, et dans Découvrir.</dd>
+      <dt>＋</dt><dd>« Nouvelle collection » (onglet Collections, droit MakerWorld) : voir <a href="#makerworld-collections-gerer">Gérer les collections</a>.</dd>
+      <dt>Filtre <span class="ui">Tous (N)</span></dt><dd>Sur les listes de modèles : <span class="ui">Tous</span>, <span class="ui">Déjà imprimés</span> ou <span class="ui">Jamais imprimés</span>, avec le nombre de chaque. Pratique pour repérer ce qui reste à imprimer dans une collection.</dd>
+    </dl>
+    <p>Les listes se chargent avec un squelette de tuiles grisées, puis se complètent en défilant (défilement infini, ou bouton <span class="ui">Plus de modèles (n / total)</span>). Ce qui a déjà été vu reste en mémoire le temps de la session : revenir sur un onglet est instantané, la mise à jour se fait en fond. Si quelques fiches manquent encore, la ligne « N modèles en cours de lecture… » l'indique et la liste se recharge seule quelques secondes plus tard.</p>
+    <p>Si MakerWorld répond mal, un message orange l'indique : « MakerWorld ne répond pas comme prévu : … ». Rien d'autre n'est touché.</p>
+  </section>
+
+  <section id="makerworld-tuile">
+    <h3>La tuile d'un modèle</h3>
+    <ul>
+      <li><b>Couverture</b> carrée, avec le ruban <span class="ui">✓ IMPRIMÉ</span> (et bordure verte) ou <span class="ui">EN COURS</span>.</li>
+      <li><b>Titre</b>, puis « par <i>créateur</i> » : touche le nom (souligné en pointillé) pour ouvrir <a href="#makerworld-page-createur">la page du créateur</a>. Dans Suivis, la date de publication suit (« aujourd'hui », « hier », « il y a 3 j »…).</li>
+      <li><b>En bas</b> : <span class="ui">✓ Imprimé</span>, <span class="ui">✓ Imprimé · 5 impressions</span> ou <span class="ui">✓ Imprimé · 3 plateaux · 5 impressions</span> (touche-le pour voir ces impressions dans la Liste de l'historique) ; ou « ⏳ en cours d'impression » ; ou « jamais imprimé ».</li>
+      <li><span class="ui">☆ Collections</span> : range le modèle dans tes collections (droit MakerWorld) — voir <a href="#makerworld-ranger">Ranger dans mes collections</a>.</li>
+    </ul>
+    <p>Touche la tuile pour ouvrir <a href="#makerworld-fiche">la fiche du modèle</a>. Un <b>appui long</b> (ou un clic droit sur ordinateur) ouvre un menu :</p>
+    <figure class="phone"><img src="img/makerworld-menu-modele.webp" alt="Menu d'appui long d'une tuile de modèle"><figcaption>Le menu d'une tuile (ici en administrateur).</figcaption></figure>
+    <dl class="opts">
+      <dt>📄 Ouvrir la fiche</dt><dd>Comme un toucher simple.</dd>
+      <dt>🌐 Voir sur MakerWorld</dt><dd>Ouvre la page du modèle sur le site, dans un nouvel onglet.</dd>
+      <dt>🖨️ Voir mes impressions</dt><dd>Seulement si le modèle a été imprimé : la Liste de l'historique filtrée sur ce modèle.</dd>
+      <dt>☆ Ranger dans mes collections…</dt><dd>Droit MakerWorld.</dd>
+      <dt>🔗 Associer à un print</dt><dd><span class="admin">admin</span> « Choisir les impressions de ce modèle » : voir <a href="#makerworld-associer">Associer à un print</a>.</dd>
+    </dl>
+  </section>
+</section>
+
+<section id="makerworld-collections">
+  <h2>Collections</h2>
+  <p>Le sous-onglet par défaut montre tes collections MakerWorld en grille : une mosaïque des quatre premières couvertures, le nom et le nombre de modèles. État vide : « Aucune collection. »</p>
+  <p>En tête de grille, la tuile <span class="ui">⭐ À évaluer</span> (« N modèles imprimés ») apparaît quand tu as imprimé des modèles MakerWorld que tu n'as pas encore évalués. Elle ouvre l'écran décrit dans <a href="#impressions-a-evaluer">À évaluer</a>.</p>
+
+  <section id="makerworld-collection-ouverte">
+    <h3>Ouvrir une collection</h3>
+    <p>Touche une collection : ses modèles s'affichent en tuiles. Une ligne « ‹ <i>nom</i> » reste collée en haut pendant le défilement ; <span class="ui">‹</span>, le geste Retour du téléphone ou le bouton Retour du navigateur referment la collection (sans quitter la page).</p>
+    <figure class="phone"><img src="img/makerworld-collection-ouverte.webp" alt="Collection À imprimer ouverte : tuiles de modèles avec rubans IMPRIMÉ et EN COURS"><figcaption>Une collection ouverte : ✎ pour renommer, 🗑 pour supprimer, le filtre à droite.</figcaption></figure>
+  </section>
+
+  <section id="makerworld-collections-gerer">
+    <h3>Créer, renommer, supprimer une collection</h3>
+    <p>Ces gestes demandent le droit MakerWorld et agissent <b>sur MakerWorld</b>.</p>
+    <ul>
+      <li><b>Créer</b> : touche <span class="ui">＋</span>, tape un nom (60 caractères au plus) dans « Nom de la nouvelle collection », puis <span class="ui">Créer</span> (ou Entrée ; ✕ ou Échap pour annuler).</li>
+      <li><b>Renommer</b> : dans une collection ouverte, touche <span class="ui">✎</span> ; ou appui long sur la collection → <span class="ui">✎ Renommer</span>. Tape le nouveau nom puis <span class="ui">Renommer</span>.</li>
+      <li><b>Supprimer</b> : dans une collection ouverte, touche <span class="ui">🗑</span> ; ou appui long → <span class="ui">🗑 Supprimer…</span>. L'appli demande « Supprimer la collection « X » sur MakerWorld ? Les modèles, eux, restent. » ; confirme avec <span class="ui">Supprimer</span>.</li>
+    </ul>
+    <p>L'appui long sur une collection propose aussi <span class="ui">📂 Ouvrir</span>.</p>
+  </section>
+
+  <section id="makerworld-ranger">
+    <h3>Ranger un modèle dans mes collections</h3>
+    <p>Touche <span class="ui">☆ Collections</span> sur une tuile ou dans une fiche. La fenêtre « Ranger dans mes collections » liste tes collections avec une case à cocher et leur effectif ; celles qui contiennent déjà le modèle sont cochées.</p>
+    <figure class="phone"><img src="img/makerworld-ranger.webp" alt="Fenêtre Ranger dans mes collections avec les cases à cocher"><figcaption>Coche ou décoche, puis <span class="ui">Enregistrer</span>.</figcaption></figure>
+    <ol>
+      <li>Coche les collections où le modèle doit être, décoche celles d'où il doit sortir. Au-delà de 8 collections, un champ <span class="ui">Chercher une collection…</span> aide à trouver.</li>
+      <li>Pour une nouvelle collection : <span class="ui">+ Nouvelle collection</span>, tape le nom, <span class="ui">Créer</span> ; elle arrive déjà cochée.</li>
+      <li>Touche <span class="ui">Enregistrer</span> (actif seulement si quelque chose a changé).</li>
+    </ol>
+    <div class="warn"><p>MakerWorld remplace à chaque enregistrement la liste complète des collections du modèle. Si l'appli n'arrive pas à lire où il se trouve déjà, elle bloque l'enregistrement plutôt que de risquer de le retirer des autres collections, et le dit.</p></div>
+  </section>
+</section>
+
+<section id="makerworld-jaime">
+  <h2>J'aime</h2>
+  <p>Le sous-onglet <span class="ui">J'aime</span> liste les modèles que tu as aimés sur MakerWorld, du plus récent au plus ancien, avec les mêmes tuiles, le même filtre et le même menu que les collections. Quand tu retires un j'aime depuis une fiche, le modèle quitte aussitôt la liste.</p>
+</section>
+
+<section id="makerworld-suivis">
+  <h2>Suivis : les créateurs que tu suis</h2>
+  <p>Le sous-onglet <span class="ui">Suivis</span> rassemble les modèles récents des créateurs que ton compte MakerWorld suit, tous mélangés du plus récent au plus ancien, avec la date de publication sur chaque tuile. Avec beaucoup de créateurs, ils arrivent par lots : « Chargement 20 / 250 créateurs… ».</p>
+  <figure class="pair">
+    <img src="img/makerworld-suivis.webp" alt="Sous-onglet Suivis : bouton Tous les créateurs et tuiles des derniers modèles">
+    <img src="img/makerworld-suivis-choix.webp" alt="Fenêtre Créateurs suivis avec recherche et cases à cocher">
+    <figcaption>À gauche, les nouveautés de tous les créateurs suivis ; à droite, le choix des créateurs.</figcaption>
+  </figure>
+  <section id="makerworld-suivis-choisir">
+    <h3>Ne voir que certains créateurs</h3>
+    <ol>
+      <li>Touche <span class="ui">👤 Tous les créateurs (N)</span>.</li>
+      <li>Dans « Créateurs suivis », cherche un nom ou un pseudo (<span class="ui">Chercher un créateur…</span>, les accents ne comptent pas) et coche ceux qui t'intéressent. <span class="ui">Voir ses modèles ›</span> ouvre directement la page d'un créateur.</li>
+      <li>Touche <span class="ui">Voir K créateurs</span>. Le bouton devient <span class="ui">👤 K créateurs</span> ; le <span class="ui">✕</span> à côté revient à tous. <span class="ui">Tous</span>, dans la fenêtre, décoche tout.</li>
+    </ol>
+    <p>Avec 5 créateurs ou moins, l'appli montre jusqu'à 40 modèles par créateur ; au-delà, les 10 derniers de chacun.</p>
+    <div class="tip"><p>Pour être prévenu des nouveaux modèles de certains créateurs, utilise la notification « Nouveau modèle d'un créateur suivi » (voir <a href="#makerworld-notifications">Notifications MakerWorld</a>).</p></div>
+  </section>
+</section>
+
+<section id="makerworld-decouvrir">
+  <h2>Découvrir et rechercher</h2>
+  <p>Le sous-onglet <span class="ui">Découvrir</span> fonctionne même sans compte. Il reprend les fils de la page d'accueil de MakerWorld.</p>
+  <figure class="phone"><img src="img/makerworld-decouvrir.webp" alt="Sous-onglet Découvrir : champ de recherche, pilules des fils, grille des catégories dépliée"><figcaption>Recherche, fils et catégories dépliées.</figcaption></figure>
+  <dl class="opts">
+    <dt>Chercher sur MakerWorld…</dt><dd>Tape des mots puis <span class="ui">Chercher</span> : les résultats remplacent le fil (24 par page). <span class="ui">✕</span> revient au fil. Aucun résultat : « Aucun résultat. »</dd>
+    <dt>✨ Pour vous</dt><dd>Le fil personnalisé de ton compte ; c'est le fil par défaut quand un compte est lié.</dd>
+    <dt>🔥 Tendance</dt><dd>Les modèles du moment ; fil par défaut sans compte.</dd>
+    <dt>Fils d'événement</dt><dd>Les thèmes mis en avant par MakerWorld (fêtes, saisons…), quand il y en a.</dd>
+    <dt>🏆 Concours</dt><dd>Les concours MakerWorld : voir <a href="#makerworld-concours">Concours</a>.</dd>
+    <dt>📂 Catégories ▾</dt><dd>Déplie la grille des catégories ; la pilule affiche ensuite la catégorie choisie.</dd>
+  </dl>
+  <p>Un fil vide affiche « Rien dans ce fil pour l'instant. »</p>
+</section>
+
+<section id="makerworld-concours">
+  <h2>Concours</h2>
+  <p>Dans <span class="ui">Découvrir</span>, touche <span class="ui">🏆 Concours</span>. Des puces filtrent la liste : <span class="ui">En cours</span> (par défaut), <span class="ui">Délibération</span>, <span class="ui">Terminés</span> et <span class="ui">Tous</span>, chacune avec son nombre.</p>
+  <figure class="phone"><img src="img/makerworld-concours.webp" alt="Carte d'un concours en cours avec récompenses dépliées et modèles en vue"><figcaption>Un concours en cours, récompenses dépliées.</figcaption></figure>
+  <p>Chaque carte de concours montre :</p>
+  <ul>
+    <li>la bannière et une pastille d'état : <span class="ui">En cours</span> (vert), <span class="ui">Délibération</span> (orange), <span class="ui">Terminé</span> (gris) ou <span class="ui">À venir</span> (bleu) ;</li>
+    <li>l'échéance : « jusqu'au 01/11 · encore 9 jours », « dernier jour », « résultats le … », « à partir du … » ou « terminé le … » ;</li>
+    <li>le nom, la description et « N modèles · N participants · N vues » ;</li>
+    <li><span class="ui">🎁 Récompenses ▾</span> : la liste des lots par rang (🥇🥈🥉, « ×3 » quand plusieurs gagnants partagent un rang) ;</li>
+    <li>deux lignes de vignettes : <b>EN VUE</b> (les modèles populaires d'un concours en cours) ou <b>PRIMÉS</b> (les gagnants d'un concours terminé, avec leur médaille) ; un ✓ marque ceux que tu as imprimés ;</li>
+    <li><span class="ui">Voir les N modèles du concours ›</span> et le lien <span class="ui">Voir le concours sur MakerWorld ↗</span>.</li>
+  </ul>
+  <figure class="phone"><img src="img/makerworld-concours-modeles.webp" alt="Fenêtre des modèles d'un concours avec bascule Populaires / Récents"><figcaption>Tous les modèles d'un concours, par popularité ou par date.</figcaption></figure>
+  <p>La fenêtre des modèles d'un concours propose la bascule <span class="ui">🔥 Populaires</span> / <span class="ui">🆕 Récents</span>, 20 modèles par page et <span class="ui">Plus de modèles (n / total)</span>. Touche un modèle pour ouvrir sa fiche.</p>
+</section>
+
+<section id="makerworld-createur">
+  <h2>Créateur : ton activité sur MakerWorld</h2>
+  <p>Si tu publies tes propres modèles, le sous-onglet <span class="ui">Créateur</span> (visible quand un compte est lié) résume ton activité : points, abonnés, téléchargements, impressions, boosts et j'aime.</p>
+  <figure class="phone"><img src="img/makerworld-createur.webp" alt="Sous-onglet Créateur : profil, solde de points, vignettes points gagnés, téléchargements, impressions, boosts reçus, j'aime"><figcaption>La carte de créateur : solde, pastilles et vignettes.</figcaption></figure>
+
+  <section id="makerworld-createur-carte">
+    <h3>La carte de créateur</h3>
+    <ul>
+      <li><b>En-tête</b> : avatar, nom, <code>@pseudo</code> et niveau ; à droite le solde <b>🪙 points</b>, avec le détail « X normaux · Y exclusifs » (les points exclusifs viennent des modèles publiés en exclusivité sur MakerWorld).</li>
+      <li><b>Pastilles</b> : nombre d'abonnés, nombre de modèles publiés, et « N boosts à donner » (les boosts que tu peux offrir à d'autres créateurs).</li>
+      <li><b>POINTS GAGNÉS</b> (pleine largeur) : le total gagné depuis toujours, et les gains sur <b>7 j</b>, <b>30 j</b> et <b>1 an</b>.</li>
+      <li><b>TÉLÉCHARGEMENTS</b>, <b>IMPRESSIONS</b>, <b>BOOSTS REÇUS</b>, <b>J'AIME</b> : le total de ton compte, et la progression sur 7 j, 30 j et 1 an. Un « ≥ » signale que l'appli n'a pas de relevés sur toute la période (le chiffre réel est au moins celui-là) ; « — » qu'il est inconnu.</li>
+    </ul>
+    <p>Sous la carte, deux pilules : <span class="ui">Mes modèles (N)</span> et <span class="ui">Historique des points</span>.</p>
+    <div class="note"><p>Les graphiques jour par jour (points, gains, compteurs) sont dans la tuile <a href="#tuiles-mw">MakerWorld de l'accueil</a>, en grand format.</p></div>
+  </section>
+
+  <section id="makerworld-createur-modeles">
+    <h3>Mes modèles : le classement</h3>
+    <p>Tes modèles, classés du plus au moins performant selon deux menus :</p>
+    <dl class="opts">
+      <dt>Type</dt><dd><span class="ui">Points</span> (par défaut), <span class="ui">Téléchargements</span>, <span class="ui">Impressions</span>, <span class="ui">Boosts</span>, <span class="ui">J'aime</span>.</dd>
+      <dt>Période</dt><dd><span class="ui">7 jours</span>, <span class="ui">30 jours</span> (par défaut), <span class="ui">90 jours</span>, <span class="ui">1 an</span>, <span class="ui">Depuis le début</span>.</dd>
+    </dl>
+    <figure class="phone"><img src="img/makerworld-createur-modeles.webp" alt="Liste Mes modèles classée par points sur 30 jours, avec la provenance des points"><figcaption>Le classement par points sur 30 jours, avec la provenance (modèle, profil, boosts).</figcaption></figure>
+    <p>Chaque ligne montre la couverture, le titre (« · exclusif » le cas échéant), les compteurs « ⬇️ téléchargements · 🖨️ impressions · ⚡ boosts · ❤ j'aime », et à droite le gain sur la période. En mode Points, une ligne précise d'où viennent les points : <b>modèle</b>, <b>profil</b> (profils d'impression publiés) et <b>⚡ boosts</b>. Touche une ligne pour ouvrir la fiche du modèle.</p>
+    <p>Pour les types autres que les points, une ligne « Tout le compte, 30 jours : ⬇️ +N 🖨️ +N ⚡ +N ❤ +N » donne la progression de tout le compte.</p>
+    <div class="note">
+      <p><b>Pourquoi certains chiffres sont partiels.</b> MakerWorld ne donne que des totaux pour les téléchargements, impressions, boosts et j'aime. BambuNymous relève donc ces compteurs chaque jour (et garde 400 jours de relevés). Si la période choisie remonte avant le premier relevé, une note orange l'explique : ces compteurs ne sont comptés que depuis cette date. Les points, eux, sont toujours complets.</p>
+    </div>
+    <h4>Importer l'historique <span class="admin">admin</span></h4>
+    <p>Pour avoir des totaux complets dès le départ, un administrateur peut importer une seule fois l'historique de son compte :</p>
+    <ol>
+      <li>Touche <span class="ui">Copier le script de console</span>.</li>
+      <li>Sur makerworld.com, connecté, ouvre la console du navigateur (<kbd>F12</kbd>) et colle le script : il lit la vue d'ensemble de ton compte et de chacun de tes modèles, puis télécharge le fichier <code>mw-historique.json</code>. Le script ne fait que lire, avec ta propre session ; rien n'est envoyé ailleurs.</li>
+      <li>Dans BambuNymous, touche <span class="ui">Importer l'historique (fichier)</span> et choisis ce fichier.</li>
+    </ol>
+    <p>L'appli confirme « Historique importé : N jours, du … au …, et M modèles un par un. » Le lien disparaît ensuite (ou devient <span class="ui">Réimporter l'historique</span> si seuls les totaux du compte ont été importés).</p>
+  </section>
+
+  <section id="makerworld-createur-points">
+    <h3>Historique des points</h3>
+    <p>La pilule <span class="ui">Historique des points</span> liste tes versements de points, regroupés par jour (« lun. 20 oct. ») avec le total du jour en vert (ou en rouge s'il est négatif). Chaque ligne indique l'origine (<b>Modèle</b>, <b>Profil</b>, <b>Boost</b>…), le titre du modèle (et du profil), une mention <b>excl.</b> pour un bonus de points exclusifs, et le nombre de points. Touche une ligne pour ouvrir la fiche du modèle ; <span class="ui">Plus anciens (n / total)</span> charge la suite.</p>
+    <figure class="phone"><img src="img/makerworld-createur-points.webp" alt="Historique des points regroupé par jour"><figcaption>Les points reçus, jour par jour.</figcaption></figure>
+  </section>
+</section>
+
+<section id="makerworld-fiche">
+  <h2>La fiche d'un modèle</h2>
+  <p>Touche n'importe quelle tuile MakerWorld (collection, j'aime, découvrir, concours, page créateur, carte MakerWorld d'une impression…) : la fiche s'ouvre en grand panneau, titré <b>MAKERWORLD</b>, avec <span class="ui">✕</span> pour la fermer. Elle s'affiche tout de suite avec la couverture et le titre, puis se complète.</p>
+  <figure class="phone"><img src="img/makerworld-fiche.webp" alt="Fiche d'un modèle : galerie, titre, créateur, compteurs, bandeau Imprimé et boutons"><figcaption>Le haut de la fiche : galerie, compteurs, état et boutons.</figcaption></figure>
+
+  <section id="makerworld-fiche-haut">
+    <h3>Galerie, titre et compteurs</h3>
+    <ul>
+      <li><b>Galerie</b> horizontale : les images du créateur et les photos d'impressions réelles (30 au plus). Touche une image pour la voir en plein écran.</li>
+      <li><b>Titre</b> en français, et le titre d'origine en gris s'il diffère.</li>
+      <li>« par <i>créateur</i> » (touche le nom pour <a href="#makerworld-page-createur">sa page</a>) et la date de publication.</li>
+      <li><b>Compteurs</b> : ❤ j'aime, ⬇ téléchargements, 🖨 impressions, ⭐ collections, 💬 commentaires (« 1.2k » = 1 200).</li>
+      <li><b>Bandeau d'état</b> : « ✓ Imprimé · N impressions » (vert) avec le lien <span class="ui">voir mes prints</span>, ou « ⏳ En cours d'impression » (orange).</li>
+    </ul>
+  </section>
+
+  <section id="makerworld-fiche-boutons">
+    <h3>Les boutons</h3>
+    <dl class="opts">
+      <dt>Ouvrir sur MakerWorld ↗</dt><dd>La page du modèle sur le site.</dd>
+      <dt>🖥️ Ouvrir dans Studio</dt><dd>Sur ordinateur (droit MakerWorld) : ouvre Bambu Studio sur le fichier 3MF du profil retenu (ou choisi automatiquement, voir <a href="#makerworld-fiche-profils">Profils</a>). Compte comme un téléchargement sur MakerWorld.</dd>
+      <dt>📱 Ouvrir dans Handy</dt><dd>Sur téléphone ou tablette, à la place du précédent : ouvre le modèle dans l'appli Bambu Handy.</dd>
+      <dt>♡ J'aime / ❤ Aimé</dt><dd>Compte lié et droit MakerWorld : aime le modèle (ou retire le j'aime). Le bouton change tout de suite, la liste J'aime suit.</dd>
+      <dt>⚡ Booster · N dispo</dt><dd>Droit MakerWorld : offre un de tes boosts au créateur pour ce modèle. L'appli demande « Booster « X » ? Ça utilise un de tes boosts (il t'en reste N). » → <span class="ui">⚡ Booster</span>. Le bouton devient <span class="ui">⚡ Boosté</span>. Il affiche <span class="ui">⚡ Booster encore</span> si tu l'as déjà boosté et que MakerWorld permet d'en remettre. L'infobulle rappelle tes boosts disponibles et combien tu en as donné à ce créateur cette année.</dd>
+      <dt>⚡ (raison en pointillés)</dt><dd>Quand le boost n'est pas possible, la règle de MakerWorld s'affiche à la place : « Plus aucun boost disponible », « Déjà boosté (m/max pour ce modèle) » ou « Limite par créateur atteinte (c/max cette année) ».</dd>
+      <dt>⭐ Évaluer</dt><dd>Orange, seulement si le modèle attend ton évaluation : voir <a href="#makerworld-notation">Noter un modèle</a>.</dd>
+      <dt>🔗 Associer à un print</dt><dd><span class="admin">admin</span> Relier ce modèle à des impressions de ton historique : voir <a href="#makerworld-associer">ci-dessous</a>.</dd>
+      <dt>☆ Collections</dt><dd>Droit MakerWorld : <a href="#makerworld-ranger">ranger le modèle dans tes collections</a>.</dd>
+    </dl>
+    <p>Viennent ensuite les <b>catégories</b> (puces) et la <b>licence</b>, puis le <b>DESCRIPTIF</b>, replié sur 7 lignes (<span class="ui">Lire la suite</span> / <span class="ui">Réduire</span>, <span class="ui">Afficher l'original</span> / <span class="ui">Afficher la traduction</span>).</p>
+  </section>
+
+  <section id="makerworld-fiche-profils">
+    <h3>Profils d'impression et plateaux</h3>
+    <p>La section <b>PROFILS (N)</b> liste les profils d'impression du modèle, chacun replié. Les 4 premiers s'affichent, puis <span class="ui">Voir les N autres profils</span>. Le profil retenu pour « À faire » vient toujours en premier.</p>
+    <figure class="phone"><img src="img/makerworld-fiche-profils.webp" alt="Profil déplié : badges, boutons Retenir pour À faire, correspondance avec le stock et grille des plateaux"><figcaption>Un profil déplié : boutons, filaments du stock et plateaux.</figcaption></figure>
+    <p>Sur chaque profil replié :</p>
+    <ul>
+      <li>le titre (★ si c'est le profil par défaut du créateur) et « ✓ k/n » si tu as déjà imprimé k plateaux sur n ;</li>
+      <li>une ligne de détails : imprimante, nombre de plateaux, poids, durée, hauteur de couche, remplissage, nombre d'impressions sur MakerWorld ;</li>
+      <li>des badges : <span class="ui">Retenu</span> (le profil choisi automatiquement), <span class="ui">🖨️ pour ta H2D</span> (fait pour ton imprimante), <span class="ui">🖨️ compatible H2D</span> ou <span class="ui">pas pour ta H2D</span>, <span class="ui">✏️ du créateur</span> ou « par <i>auteur</i> », la note « ⭐ 4,8 (120 avis) » ;</li>
+      <li>un résumé du stock : « 🧵 3 filaments · tous en stock », « 2 en stock » ou « rien d'approchant en stock ».</li>
+    </ul>
+    <p>Le choix automatique privilégie, dans l'ordre : un profil imprimable sur ton imprimante, publié par le créateur, fait pour ton modèle d'imprimante, le mieux noté, puis le profil par défaut. Ton imprimante est celle réglée dans <a href="#parametres">Paramètres → Imprimante</a> (champ <span class="ui">Modèle</span>), sinon elle est déduite du numéro de série, sinon de ton historique.</p>
+    <h4>Profil déplié</h4>
+    <dl class="opts">
+      <dt>📌 Retenir pour « À faire »</dt><dd>Droit MakerWorld : la file <a href="#impressions-a-faire">À faire</a> utilisera ce profil, ces plateaux et ces filaments. Le bouton confirme « ✓ Retenu ». Ensuite il devient <span class="ui">📌 Retenu pour « À faire » · mettre à jour</span> (« ✓ Mis à jour ») ; le <span class="ui">✕</span> à côté oublie ce choix.</dd>
+      <dt>🖥️ Ouvrir ce profil dans Bambu Studio</dt><dd>Sur ordinateur, droit MakerWorld. Sur téléphone : <span class="ui">📱 Ouvrir ce profil dans Bambu Handy</span>.</dd>
+      <dt>🔎 Filaments exacts (finition, référence) — lire le 3MF</dt><dd>Droit MakerWorld. Par défaut, l'appli ne connaît que la matière et la couleur de chaque filament. Ce bouton télécharge une seule fois le fichier 3MF du profil pour lire la finition, la marque et la référence exactes. L'appli prévient avant : ça compte comme un téléchargement sur MakerWorld.</dd>
+    </dl>
+    <p><b>Correspondance avec ton stock.</b> Pour chaque filament du profil, l'appli propose la bobine de ton stock de même matière à la couleur la plus proche, avec un niveau (« identique », « très proche », « proche », « approchant », « couleur différente ») et la quantité restante ou manquante. <span class="ui">changer ▸</span> permet de choisir une autre bobine (onglets <span class="ui">Dans l'AMS</span> et <span class="ui">Autre matière</span>, ou <span class="ui">chercher dans mon stock ▸</span>).</p>
+    <p><b>Plusieurs plateaux.</b> Le besoin en filament est calculé pour tous les plateaux ; touche un plateau pour l'enlever du calcul (<span class="ui">Tous</span> pour tout reprendre). L'appli résume : « ▶ À lancer maintenant avec l'AMS : plateaux 1, 3 » et « ↻ Déjà imprimés, relançables avec l'AMS : plateau 2 ».</p>
+    <p><b>Plateaux retenus.</b> Au-dessus de « À lancer », la ligne « Plateaux retenus : … » dit où tu en es, série par série (« 2/4 faits », « 2e série : 2/4 faits », « 4/4 faits ×2 ») ; voir <a href="#impressions-a-faire">À faire</a>.</p>
+    <p><b>Grille des plateaux.</b> Chaque plateau montre sa vignette recolorée avec les couleurs choisies, son nom, son poids et sa durée, et des badges : <span class="ui">⏳ EN COURS</span>, <span class="ui">✓ FAIT 2×</span> (bordure verte : déjà imprimé, avec le nombre de fois), <span class="ui">↻ 1× avant</span> (imprimé lors d'une série précédente, à refaire pour la série en cours), <span class="ui">▶ PRÊT (AMS)</span> (bordure bleue : tous ses filaments sont dans l'AMS en quantité suffisante) ou <span class="ui">à charger</span>. Les pastilles de couleur sous un plateau permettent un choix propre à ce plateau (🎨).</p>
+  </section>
+
+  <section id="makerworld-fiche-bas">
+    <h3>Commentaires, modèles similaires et tags</h3>
+    <figure class="phone"><img src="img/makerworld-fiche-bas.webp" alt="Commentaires dépliés et modèles similaires"><figcaption>Les commentaires dépliés, puis les modèles similaires.</figcaption></figure>
+    <ul>
+      <li><b>COMMENTAIRES (N)</b>, repliés par défaut (<span class="ui">Déplier ▾</span> / <span class="ui">Replier ▴</span>) : auteur, date, étoiles, texte (traduit, avec l'original à la demande), photos, « ♥ N · R réponses ». 10 par page, puis <span class="ui">Plus de commentaires (n / total)</span>.</li>
+      <li><b>MODÈLES SIMILAIRES</b> : une rangée de 12 modèles proches (avec <span class="ui">✓ IMPRIMÉ</span>) ; en toucher un remplace la fiche.</li>
+      <li>Les <b>tags</b> (#mot) terminent la fiche.</li>
+    </ul>
+  </section>
+
+  <section id="makerworld-associer">
+    <h3>Associer un modèle à des impressions <span class="admin">admin</span></h3>
+    <p>Quand une impression a été lancée depuis Bambu Studio ou une carte SD, l'appli ne sait pas toujours de quel modèle MakerWorld elle vient. <span class="ui">🔗 Associer à un print</span> (fiche ou menu d'une tuile) répare ça :</p>
+    <ol>
+      <li>La fenêtre « 🔗 Associer ce modèle à des impressions » s'ouvre au-dessus de ton historique.</li>
+      <li>Cherche avec <span class="ui">Chercher une impression (nom, fichier, filament…)</span>. La case <span class="ui">Seulement les impressions sans modèle MakerWorld</span>, cochée par défaut, ne montre que celles qui n'ont pas encore de lien ; décoche-la pour tout voir.</li>
+      <li>Touche les impressions concernées, puis <span class="ui">Associer</span>. Si certaines avaient déjà un autre modèle, l'appli prévient qu'il sera remplacé.</li>
+    </ol>
+    <figure class="phone"><img src="img/makerworld-associer.webp" alt="Fenêtre Associer ce modèle à des impressions, liste des impressions sans modèle"><figcaption>Choisir les impressions à relier au modèle.</figcaption></figure>
+    <p>Pour rattraper d'un coup les vieux prints, voir aussi <a href="#makerworld-reglages-historique">Historique cloud Bambu</a>.</p>
+  </section>
+</section>
+
+<section id="makerworld-page-createur">
+  <h2>La page d'un créateur</h2>
+  <p>Touche le nom d'un créateur (« par <i>nom</i> ») sur une tuile ou une fiche, ou <span class="ui">Voir ses modèles ›</span> dans le choix des créateurs suivis. Un panneau s'ouvre :</p>
+  <figure class="phone"><img src="img/makerworld-page-createur.webp" alt="Page d'un créateur : en-tête, compteurs et grille de ses modèles"><figcaption>La page d'un créateur et tous ses modèles publiés.</figcaption></figure>
+  <ul>
+    <li><b>En-tête</b> : avatar, nom, « @pseudo · N abonnés · N modèles », lien <span class="ui">MakerWorld ↗</span> et <span class="ui">✕</span> (ou Échap).</li>
+    <li><b>Compteurs</b> : ⬇ téléchargements, 🖨️ impressions, ❤ j'aime, ⚡ boosts et 🏆 concours gagnés (s'il en a).</li>
+    <li><b>Grille de tous ses modèles</b> (24 par page, <span class="ui">Plus de modèles (n / total)</span>) avec <span class="ui">✓ IMPRIMÉ</span> sur ceux que tu as déjà imprimés et « ❤ N · 🖨️ N ». Touche un modèle pour ouvrir sa fiche.</li>
+  </ul>
+</section>
+
+<section id="makerworld-notation">
+  <h2>Noter les modèles imprimés</h2>
+  <p>MakerWorld demande d'évaluer les modèles que tu imprimes. BambuNymous liste ceux qui attendent ton avis, avec tes photos de l'impression prêtes à joindre, et publie l'évaluation pour toi (droit MakerWorld).</p>
+  <ul>
+    <li>La tuile <span class="ui">⭐ À évaluer</span> en tête des <a href="#makerworld-collections">Collections</a> ouvre la liste complète.</li>
+    <li>Le bouton orange <span class="ui">⭐ Évaluer</span> apparaît dans la fiche d'un modèle qui attend ton évaluation.</li>
+    <li>La fiche d'un groupe d'impressions propose d'évaluer tous ses modèles d'un coup.</li>
+  </ul>
+  <p>L'écran « À évaluer » (étoiles, messages tout faits, photos, <span class="ui">Publier l'évaluation</span>, <span class="ui">Oublier sans évaluer</span>) est décrit en détail dans <a href="#impressions-a-evaluer">À évaluer</a>. Les modèles retenus pour être imprimés plus tard se gèrent dans la file <a href="#impressions-a-faire">À faire</a>.</p>
+  <p>Les messages tout faits proposés à 5 étoiles se règlent dans <a href="#makerworld-reglages-messages">Paramètres → 🔗 Connexions → ⭐ Messages d'évaluation</a>.</p>
+</section>
+
+<section id="makerworld-reglages">
+  <h2>Réglages MakerWorld (Paramètres)</h2>
+  <p>Les réglages MakerWorld sont dans <b>Paramètres → onglet <span class="ui">🔗 Connexions</span></b>. Cet onglet est réservé aux administrateurs ; la carte des messages d'évaluation y est aussi visible pour un compte ayant le droit <span class="ui">Actions MakerWorld</span>.</p>
+  <figure class="phone"><img src="img/makerworld-reglages-compte.webp" alt="Carte MakerWorld des paramètres, compte connecté : état des fiches, compte, historique cloud"><figcaption>La carte <span class="ui">MakerWorld</span> avec un compte lié.</figcaption></figure>
+
+  <section id="makerworld-reglages-fiches">
+    <h3>Fiches des modèles imprimés <span class="admin">admin</span></h3>
+    <p>BambuNymous garde en mémoire la fiche MakerWorld (titre traduit, couverture, créateur, catégories, compteurs, profils) de chaque modèle que tu as imprimé : c'est ce qui affiche la carte MakerWorld dans la fiche d'une impression et permet de chercher dans l'historique par titre, tags ou catégories.</p>
+    <p>La ligne d'état indique « N fiches sur M modèles imprimés », puis éventuellement « · K introuvables » (modèles retirés de MakerWorld), « · E à réessayer » et « · relecture en cours… ».</p>
+    <dl class="opts">
+      <dt>⟳ Relire maintenant</dt><dd>Relit en arrière-plan les fiches manquantes, en erreur ou anciennes (« Relecture lancée en arrière-plan (1,5 s par modèle). », ou « Une relecture tourne déjà. »). Sans rien faire, l'appli s'en charge toute seule toutes les 6 heures, et relit une fiche quand elle a plus de 30 jours.</dd>
+    </dl>
+  </section>
+
+  <section id="makerworld-reglages-compte">
+    <h3>Compte <span class="admin">admin</span></h3>
+    <p>Le bloc « Compte — collections et j'aime, avec « déjà imprimé » » : connexion par e-mail, code, jeton et déconnexion, décrits dans <a href="#makerworld-compte">Lier ton compte MakerWorld</a>.</p>
+  </section>
+
+  <section id="makerworld-reglages-historique">
+    <h3>Historique cloud Bambu <span class="admin">admin</span></h3>
+    <p>Visible quand un compte est lié. Il retrouve le modèle MakerWorld (et son profil) des impressions qui n'en ont pas, d'après tes impressions enregistrées dans le cloud Bambu : par numéro de tâche, sinon par heure de début (à 10 minutes près, et seulement si une seule impression correspond). Il ne remplit que les liens vides et <b>n'écrase jamais</b> un lien existant.</p>
+    <ol>
+      <li>Touche <span class="ui">Analyser</span>. Le bilan s'affiche : « T impressions cloud avec modèle · M retrouvées dans l'appli · N liens à ajouter (x par tâche, y par heure) · P profils », avec quelques exemples « impression → modèle ».</li>
+      <li>Si le bilan te convient, touche <span class="ui">Appliquer (N liens, P profils)</span>. L'appli confirme « ✓ Appliqué : … ».</li>
+    </ol>
+  </section>
+
+  <section id="makerworld-reglages-diagnostic">
+    <h3>Diagnostic de l'API <span class="admin">admin</span></h3>
+    <p>Un repli <span class="ui">Diagnostic de l'API</span> (compte lié) propose des boutons qui interrogent MakerWorld et affichent sa réponse brute, avec <span class="ui">📋 Copier</span>. C'est un outil technique, utile seulement pour signaler un problème quand MakerWorld a changé quelque chose.</p>
+  </section>
+
+  <section id="makerworld-reglages-messages">
+    <h3>⭐ Messages d'évaluation</h3>
+    <p>Quand tu évalues un modèle à 5 étoiles, l'appli peut proposer un message tout fait, tiré au hasard dans une <b>famille</b> de messages, que tu modifies avant de publier. Cette carte gère ces familles (administrateur ou droit <span class="ui">Actions MakerWorld</span>).</p>
+    <figure class="phone"><img src="img/makerworld-reglages-messages.webp" alt="Carte Messages d'évaluation avec une famille dépliée"><figcaption>Une famille dépliée : son nom, ses messages et les boutons.</figcaption></figure>
+    <ul>
+      <li>Touche une famille pour la déplier : son nom (<span class="ui">Nom de la famille</span>) et ses messages, chacun modifiable, avec <span class="ui">✕</span> pour en retirer un.</li>
+      <li><span class="ui">+ Message</span> ajoute un message ; <span class="ui">+ Famille</span> une nouvelle famille ; <span class="ui">Supprimer la famille</span> l'efface après confirmation.</li>
+      <li>La première famille est proposée d'office (mention « par défaut ») ; <span class="ui">⭐ Mettre par défaut</span> fait passer une autre famille en tête.</li>
+      <li>Dans les messages, <code>{modèle}</code> et <code>{créateur}</code> sont remplacés automatiquement par le titre du modèle et le nom du créateur.</li>
+      <li>Touche <span class="ui">Enregistrer</span> (actif seulement quand quelque chose a changé). L'appli affiche « Enregistré ».</li>
+    </ul>
+  </section>
+
+  <section id="makerworld-reglages-imprimante">
+    <h3>Le modèle de ton imprimante</h3>
+    <p>Dans <a href="#parametres">Paramètres → 🖨️ Imprimante</a>, le champ <span class="ui">Modèle</span> (par défaut « Automatique », d'après le numéro de série) sert à MakerWorld : profil fait pour ton imprimante, badges de compatibilité, fichier ouvert dans Studio.</p>
+  </section>
+</section>
+
+<section id="makerworld-notifications">
+  <h2>Notifications MakerWorld</h2>
+  <p>Dans <b>Paramètres → 🔔 Notifs</b>, la section MakerWorld regroupe les événements suivants (réglage des canaux et du reste : voir <a href="#notifications">Notifications</a>). Au premier passage, l'appli mémorise l'état actuel sans rien envoyer : tu ne reçois que les nouveautés.</p>
+  <dl class="opts">
+    <dt>Points MakerWorld reçus</dt><dd>« 💰 +18,5 points MakerWorld », avec le solde et le détail par modèle.</dd>
+    <dt>Boost reçu, Nouveaux abonnés</dt><dd>Quand un autre membre booste un de tes modèles ou s'abonne à toi.</dd>
+    <dt>Palier de points : récompense à portée</dt><dd>Quand ton solde permet d'obtenir une récompense MakerWorld (bons de réduction, cartes cadeaux) ; option « Récompenses » pour choisir lesquelles surveiller.</dd>
+    <dt>Palier franchi par un de mes modèles</dt><dd>50, 100, 250, 500, 1 000… téléchargements ou impressions (option « Compter »).</dd>
+    <dt>Nouveau commentaire sur un de mes modèles</dt><dd></dd>
+    <dt>Jeton boost obtenu, Jeton boost bientôt expiré</dt><dd>Pour ne pas laisser perdre un boost (option « Moins de N jours », 5 par défaut).</dd>
+    <dt>Impressions à évaluer</dt><dd>Rappel des modèles imprimés pas encore évalués.</dd>
+    <dt>Nouveau modèle d'un créateur suivi</dt><dd>Touche <span class="ui">👤 Choisir les créateurs</span> pour cocher ceux à surveiller (même fenêtre que dans <a href="#makerworld-suivis">Suivis</a>) ; sans créateur choisi, rien n'est envoyé. Vérifié toutes les heures ; la notification propose « Voir le modèle » et « Profil du créateur ».</dd>
+    <dt>Modèle ajouté à une collection ; Collection créée, renommée ou supprimée</dt><dd>Option « Prévenir pour » : seulement ce qui est fait sur MakerWorld ou Bambu Handy (par défaut), ou tout, y compris depuis BambuNymous.</dd>
+  </dl>
+</section>

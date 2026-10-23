@@ -1,0 +1,267 @@
+<h1>Objets et accessoires</h1>
+<p class="lead">La page <span class="ui">Objets</span> suit ce que tu as fabriqué : ce que tu vends, ce que tu as vendu, offert ou gardé, ce que chaque pièce t'a coûté et ce qu'elle t'a rapporté. Elle gère aussi le petit stock d'accessoires (aimants, anneaux, ampoules, sachets…) que tu ajoutes à tes impressions.</p>
+
+<section id="objets-principe">
+  <h2>Le principe : une impression, des objets</h2>
+  <p>Une <a href="#impressions">impression</a> est un passage sur l'imprimante. Un <b>objet</b>, c'est une pièce que tu gardes, vends ou offres. Une impression peut donner plusieurs objets (un plateau de 6 porte-clés donne 6 objets). Un objet garde un lien vers l'impression (ou le groupe d'impressions) dont il vient, et en reprend la photo et le coût.</p>
+  <p>On ouvre la page par <span class="ui">Objets</span> dans la barre de navigation (en bas sur téléphone, à gauche sur ordinateur). Son titre est <span class="ui">Objets &amp; Accessoires</span>. Elle a deux onglets : <span class="ui">Objets</span> (par défaut) et <span class="ui">Accessoires</span>. Changer d'onglet vide la recherche.</p>
+  <figure><img src="img/objets-bureau.webp" alt="Page Objets sur ordinateur, section Vendu ouverte"><figcaption>La page sur ordinateur : une section par état, ici « Vendu » ouverte.</figcaption></figure>
+  <div class="note"><p>Les objets ne se créent pas depuis cette page : on les crée depuis la fiche d'une impression ou d'un groupe d'impressions. Voir <a href="#objets-creer">Créer des objets</a>.</p></div>
+</section>
+
+<section id="objets-creer">
+  <h2>Créer des objets <span class="admin">admin</span></h2>
+  <p>Chaque impression (et chaque groupe d'impressions) déclare un <b>nombre d'objets</b>, 1 par défaut. C'est ton <b>quota</b> : tu ne peux pas créer plus d'objets que ce nombre. Pour en créer davantage, augmente d'abord le nombre d'éléments de l'impression (bouton <span class="ui">Modifier</span> à côté de « 1 élément » dans le bloc Coûts de la fiche).</p>
+  <ol>
+    <li>Va dans <span class="ui">Impressions</span> et ouvre la <a href="#impressions-fiche">fiche de l'impression</a> (ou d'un groupe).</li>
+    <li>En bas de la fiche, touche le bouton vert <span class="ui">📦 Créer des objets depuis ce print</span> (ou <span class="ui">📦 Créer des objets depuis ce groupe</span>). La pastille indique « objets déjà créés / total ».</li>
+    <li>Dans la feuille <span class="ui">Créer des objets</span>, vérifie le nom, choisis la quantité, puis touche <span class="ui">Créer N objets</span>.</li>
+  </ol>
+  <figure class="pair">
+    <img src="img/objets-bouton-creer.webp" alt="Bouton Créer des objets depuis ce print en bas de la fiche d'une impression">
+    <img src="img/objets-creer.webp" alt="Feuille Créer des objets avec quantité et mode Regroupés">
+    <figcaption>À gauche, le bouton en bas de la fiche d'une impression (2 objets créés sur 6). À droite, la feuille de création : 4 objets restants, créés en lot.</figcaption>
+  </figure>
+  <dl class="opts">
+    <dt>Ligne de quota</dt><dd>« N objets déjà créés sur T. Il en reste R à créer. » ou, en rouge, « Aucun restant. ».</dd>
+    <dt>Nom de l'objet</dt><dd>Pré-rempli avec le nom de l'impression (ou du groupe). Laissé vide, l'objet s'appelle « Sans nom ».</dd>
+    <dt>Combien en créer</dt><dd>Boutons − et +, de 1 jusqu'au nombre restant. <span class="ui">Tout</span> met directement le maximum.</dd>
+    <dt>Comment les enregistrer</dt><dd>Apparaît dès que tu en crées plus d'un. <span class="ui">Objets individuels</span> : « Chacun se vend et se suit à part ». <span class="ui">Regroupés</span> : « Un lot, suivi comme un ensemble » ; un champ en dessous donne le nom du <a href="#objets-groupes">groupe d'objets</a> (par défaut le nom de l'objet).</dd>
+  </dl>
+  <p>Quand tous les objets sont créés, le bouton devient gris : <span class="ui">📦 Tous les objets sont créés</span>.</p>
+  <h4>Le coût d'un objet à sa création</h4>
+  <ul>
+    <li>Depuis une impression : coût de fabrication = coût total de l'impression (filament + électricité).</li>
+    <li>Depuis un groupe : coût total du groupe divisé par son nombre d'objets.</li>
+    <li>Coût des accessoires : 0 (tu les ajoutes ensuite).</li>
+  </ul>
+  <p>Si le coût de l'impression est recalculé plus tard (prix d'une bobine corrigé, par exemple), le coût de fabrication des objets qui en viennent suit automatiquement. Le coût de leurs accessoires est conservé.</p>
+  <div class="tip"><p>Un objet tout juste créé est rangé en <b>Perso</b>. C'est voulu : tu décides ensuite de le mettre <b>À vendre</b> depuis sa fiche (<span class="ui">✏️ Modifier</span>).</p></div>
+</section>
+
+<section id="objets-etats">
+  <h2>Les états d'un objet</h2>
+  <p>Chaque objet a un seul état, avec sa couleur, que l'on retrouve partout (badges, sections, statistiques).</p>
+  <table>
+    <tr><th>État</th><th>Couleur</th><th>Signification</th></tr>
+    <tr><td><span class="ui">À vendre</span></td><td>bleu</td><td>Proposé à la vente, avec éventuellement un prix désiré.</td></tr>
+    <tr><td><span class="ui">Vendu</span></td><td>vert</td><td>Vendu à un prix et à une date. On n'y arrive qu'en saisissant un prix de vente.</td></tr>
+    <tr><td><span class="ui">Offert</span></td><td>orange</td><td>Donné : il ne rapporte rien, son coût est compté « de production ».</td></tr>
+    <tr><td><span class="ui">Perso</span></td><td>violet</td><td>Gardé pour toi. État par défaut d'un nouvel objet.</td></tr>
+    <tr><td><span class="ui">Indisponible</span></td><td>gris</td><td>Ni à vendre ni gardé (abîmé, réservé, perdu…).</td></tr>
+  </table>
+</section>
+
+<section id="objets-liste">
+  <h2>La liste des objets</h2>
+  <p>L'onglet <span class="ui">Objets</span> range tes objets en sections repliables, toujours dans le même ordre : À vendre, Vendu, Offert, Perso, Indisponible. Une section vide n'est pas affichée.</p>
+  <figure class="pair">
+    <img src="img/objets-sections.webp" alt="Sections À vendre, Vendu, Offert, Perso fermées">
+    <img src="img/objets-section-a-vendre.webp" alt="Section À vendre ouverte avec quatre tuiles">
+    <figcaption>Toutes les sections sont fermées à l'ouverture de la page. Toucher un en-tête l'ouvre (et ferme les autres).</figcaption>
+  </figure>
+  <section id="objets-liste-sections">
+    <h3>Les en-têtes de section</h3>
+    <p>Chaque en-tête montre un liseré de couleur, le nom de l'état, une pastille avec le nombre d'objets et une ligne de résumé « N objets · montant » :</p>
+    <dl class="opts">
+      <dt>Vendu</dt><dd>« X € encaissés » : la somme des prix de vente.</dd>
+      <dt>À vendre</dt><dd>« X € espérés » : la somme des prix désirés (ou « X € de production » si aucun prix désiré n'est saisi).</dd>
+      <dt>Offert, Perso, Indisponible</dt><dd>« X € de production » : ce que ces objets t'ont coûté.</dd>
+    </dl>
+    <p>Les sections fonctionnent en accordéon : en ouvrir une referme les autres et fait défiler la page jusqu'à elle.</p>
+  </section>
+  <section id="objets-liste-tuiles">
+    <h3>Les tuiles</h3>
+    <p>Une tuile montre la photo de l'objet, son badge d'état en haut à gauche, son nom, son coût total à gauche et son prix désiré en vert à droite (s'il y en a un). Pour un objet vendu, le prix de vente s'affiche en haut à droite sur la photo.</p>
+    <figure class="phone"><img src="img/objets-section-vendu.webp" alt="Section Vendu avec prix de vente sur les tuiles et une tuile de groupe"><figcaption>Section « Vendu » : prix de vente en haut à droite ; la tuile violette « 📁 1 / 3 » est un groupe dont un objet sur trois est vendu.</figcaption></figure>
+    <p>Les tuiles <b>violettes</b> marquées <span class="ui">📁</span> sont des <a href="#objets-groupes">groupes d'objets</a>.</p>
+    <p>Toucher une tuile ouvre la <a href="#objets-fiche">fiche de l'objet</a>. Un <b>appui long</b> (téléphone) ou un <b>clic droit</b> (ordinateur) ouvre un petit menu : <span class="ui">📄 Ouvrir</span> et <span class="ui">☑ Sélectionner</span> (« Pour ajouter plusieurs objets à un groupe »).</p>
+  </section>
+  <section id="objets-liste-photos">
+    <h3>Les photos</h3>
+    <p>Un objet n'a pas de photo à lui : il reprend celle de l'impression d'où il vient (la photo que tu as ajoutée à sa fiche, sinon la vignette du plateau). Pour un objet issu d'un groupe d'impressions, c'est la photo de couverture du groupe, sinon celle de son impression la plus récente. Pour changer la photo d'un objet, change donc celle de son impression (<a href="#impressions-fiche">fiche de l'impression</a>, bloc <span class="ui">Photos</span>).</p>
+  </section>
+  <section id="objets-liste-recherche">
+    <h3>Rechercher et trier</h3>
+    <p>Le champ <span class="ui">Rechercher…</span> filtre les objets par leur nom d'origine (celui donné à la création). Le menu à côté trie les objets <b>à l'intérieur de chaque section</b> :</p>
+    <dl class="opts">
+      <dt>Nom (A→Z)</dt><dd>Par défaut. Ordre alphabétique (« Pièce 2 » avant « Pièce 10 »).</dd>
+      <dt>Plus récents</dt><dd>Les derniers créés d'abord.</dd>
+      <dt>Coût décroissant</dt><dd>Les plus coûteux à fabriquer d'abord.</dd>
+      <dt>Valeur décroissante</dt><dd>Selon le prix de vente, sinon le prix désiré.</dd>
+    </dl>
+    <p>Les états vides : « Chargement… » pendant la lecture, « Aucun objet » s'il n'y a rien (ou rien qui corresponde à la recherche).</p>
+  </section>
+</section>
+
+<section id="objets-fiche">
+  <h2>La fiche d'un objet</h2>
+  <p>Elle s'ouvre en touchant une tuile. On y lit tout ce que l'objet a coûté et rapporté.</p>
+  <figure class="phone"><img src="img/objets-fiche.webp" alt="Fiche de l'objet Lampe lune, vendue 35 €, avec un accessoire"><figcaption>Fiche d'un objet vendu : coûts, prix désiré, prix de vente et marge, accessoire lié.</figcaption></figure>
+  <dl class="opts">
+    <dt>En-tête</dt><dd>Photo, nom, badge « Vendu X € » si l'objet est vendu, badge d'état.</dd>
+    <dt>↗ Voir l'impression</dt><dd>Ouvre par-dessus la fiche de l'impression d'origine (ou <span class="ui">Voir le groupe</span> pour un groupe d'impressions).</dd>
+    <dt>Groupe</dt><dd>Si l'objet fait partie d'un groupe d'objets : son nom et <span class="ui">Retirer du groupe</span>.</dd>
+    <dt>Coûts</dt><dd><b>Fabrication</b> (avec, entre parenthèses, ce qu'elle aurait coûté au prix catalogue du filament), <b>Accessoires</b> (en violet), <b>Total</b>, <b>Prix désiré</b> s'il y en a un, et <b>Vendu</b> en vert : prix de vente suivi de la marge en pourcentage.</dd>
+    <dt>Accessoires</dt><dd>Les accessoires montés sur l'objet : nom, quantité « ×1 », coût, et ✕ pour le retirer. Toucher une ligne ouvre la fiche de l'accessoire. Vide : « Aucun accessoire ».</dd>
+    <dt>Commentaire</dt><dd>En italique, s'il y en a un.</dd>
+    <dt>Boutons</dt><dd><span class="ui">✏️ Modifier</span> et <span class="ui">🗑 Supprimer</span> <span class="admin">admin</span>, ✕ pour fermer.</dd>
+  </dl>
+  <section id="objets-marges">
+    <h3>Comment se calculent coûts et marges</h3>
+    <ul>
+      <li><b>Coût total</b> = coût de fabrication + coût des accessoires.</li>
+      <li><b>Marge</b> = prix de vente − coût total. Le pourcentage affiché est la marge rapportée au coût : (prix de vente ÷ coût − 1) × 100. Une lampe qui coûte 4,74 € et se vend 35 € affiche ainsi 638 %.</li>
+      <li>Le coût d'un accessoire est figé au prix unitaire du moment où tu l'as lié : si son prix change ensuite, les objets déjà équipés ne bougent pas.</li>
+    </ul>
+  </section>
+</section>
+
+<section id="objets-modifier">
+  <h2>Modifier un objet : état et prix souhaité <span class="admin">admin</span></h2>
+  <p>Dans la fiche, touche <span class="ui">✏️ Modifier</span>. La feuille <span class="ui">Modifier l'objet</span> s'ouvre :</p>
+  <figure class="phone"><img src="img/objets-modifier.webp" alt="Feuille Modifier l'objet : nom, commentaire, état, prix désiré, vente"><figcaption>Nom, commentaire, état (4 boutons), prix désiré et bloc Vente.</figcaption></figure>
+  <dl class="opts">
+    <dt>Nom</dt><dd>Le nom affiché de l'objet.</dd>
+    <dt>Commentaire</dt><dd>Texte libre (acheteur, couleur, défaut…).</dd>
+    <dt>État</dt><dd>Quatre boutons : <span class="ui">À vendre</span>, <span class="ui">Perso</span>, <span class="ui">Offert</span>, <span class="ui">Indisponible</span>. L'état actif porte un ✓. « Vendu » n'est pas un bouton : on vend en saisissant un prix (ci-dessous).</dd>
+    <dt>Prix désiré (€)</dt><dd>Le prix que tu espères en tirer. Il s'affiche en vert sur la tuile et alimente les « € espérés ». Vider le champ efface le prix.</dd>
+  </dl>
+  <p>Touche <span class="ui">Enregistrer</span> pour valider, <span class="ui">Annuler</span> pour abandonner.</p>
+</section>
+
+<section id="objets-vendre">
+  <h2>Vendre un objet</h2>
+  <ol>
+    <li>Ouvre la fiche de l'objet et touche <span class="ui">✏️ Modifier</span>.</li>
+    <li>Dans la partie <span class="ui">Vente</span>, saisis le <b>prix de vente</b>. La date est facultative : sans date, la vente est datée d'aujourd'hui.</li>
+    <li>Touche <span class="ui">Enregistrer</span>.</li>
+  </ol>
+  <p>L'objet passe dans la section <b>Vendu</b>, son prix apparaît sur la tuile et la marge est calculée dans la fiche. La date de vente sert aux <a href="#stats-objets">statistiques de ventes</a> par période.</p>
+  <figure class="phone"><img src="img/objets-annuler-vente.webp" alt="Feuille Modifier l'objet d'un objet vendu avec le bouton Annuler la vente"><figcaption>Un objet vendu : prix et date de vente remplis, bouton rouge pour annuler la vente.</figcaption></figure>
+  <p>Pour <b>annuler une vente</b> : dans la même feuille, touche <span class="ui">Annuler la vente (remettre disponible)</span>. Le prix et la date sont effacés et l'objet revient À vendre. Choisir un autre état pour un objet vendu efface aussi sa vente (la feuille le rappelle : « Objet vendu. Efface le prix de vente pour le remettre en circulation. »).</p>
+  <div class="tip"><p>Dans un lot, chaque objet se vend à part, avec son propre prix : ouvre le groupe, touche l'objet vendu, puis <span class="ui">✏️ Modifier</span>.</p></div>
+</section>
+
+<section id="objets-accessoires-objet">
+  <h2>Ajouter des accessoires à un objet <span class="admin">admin</span></h2>
+  <p>Un porte-clés a besoin d'un anneau, une lampe d'une ampoule. Lier un accessoire à un objet ajoute son coût à celui de l'objet et <b>le retire de ton stock</b>.</p>
+  <ol>
+    <li>Dans la fiche de l'objet, bloc Accessoires, touche <span class="ui">+ Ajouter</span>.</li>
+    <li>Choisis l'accessoire dans la liste (champ <span class="ui">Rechercher un accessoire…</span>). Chaque ligne montre « Stock : N · X €/u ».</li>
+    <li>Règle la <b>Quantité</b> avec − et + (elle ne peut pas dépasser le stock disponible). L'aperçu indique ce qu'il restera en stock et le coût ajouté.</li>
+    <li>Touche <span class="ui">Ajouter</span>.</li>
+  </ol>
+  <figure class="phone"><img src="img/objets-ajouter-accessoire.webp" alt="Feuille Ajouter un accessoire, Sachet kraft choisi, quantité 1"><figcaption>« Après ajout, il restera 49 en stock · coût 0.15 €. »</figcaption></figure>
+  <p>Ajouter de nouveau le même accessoire additionne les quantités. Le ✕ d'une ligne retire l'accessoire de l'objet : la quantité <b>revient en stock</b> et le coût de l'objet est recalculé.</p>
+</section>
+
+<section id="objets-supprimer">
+  <h2>Supprimer un objet <span class="admin">admin</span></h2>
+  <p>Dans la fiche, touche <span class="ui">🗑 Supprimer</span>. Une confirmation « Supprimer « nom » ? » s'ouvre.</p>
+  <ul>
+    <li>Sans accessoire : « Cette action est définitive. »</li>
+    <li>Avec accessoires : tu choisis ce qui retourne en stock. Chaque accessoire est coché par défaut, avec la quantité à restituer (de 0 à la quantité montée, « sur N »). Ce qui n'est pas coché part avec l'objet. <span class="ui">Tout décocher</span> / <span class="ui">Tout cocher</span> agit sur toutes les lignes.</li>
+  </ul>
+  <figure class="phone"><img src="img/objets-supprimer.webp" alt="Confirmation de suppression avec restitution de l'ampoule au stock"><figcaption>L'ampoule montée sur la lampe sera remise en stock.</figcaption></figure>
+  <p>Supprimer un objet libère une place dans le quota de son impression : tu pourras en recréer un.</p>
+</section>
+
+<section id="objets-groupes">
+  <h2>Les groupes d'objets</h2>
+  <p>Un groupe d'objets réunit des objets qui vont ensemble : un lot de porte-clés, un jeu d'échecs, une série vendue en marché. On le crée soit à la création (mode <span class="ui">Regroupés</span>), soit après coup par sélection.</p>
+  <section id="objets-groupes-tuile">
+    <h3>La tuile de groupe</h3>
+    <p>Un groupe s'affiche comme une tuile violette : photo du premier objet, badge <span class="ui">📁 N</span> (nombre d'objets), badge coloré de l'état (« 2 à vendre », « 1 vendu »…), nom du groupe en violet et prix désiré en vert.</p>
+    <p>Un groupe apparaît dans <b>chaque section</b> où il a des objets, avec seulement ceux de cet état. Le badge passe alors à « 📁 2 / 3 » : 2 objets ici, 3 dans le groupe entier.</p>
+  </section>
+  <section id="objets-groupes-fiche">
+    <h3>La fiche du groupe</h3>
+    <p>Touche la tuile pour l'ouvrir : nom, « N objets · coût » (et « · K vendus »), puis la grille des objets. Touche un objet pour ouvrir sa fiche.</p>
+    <p>Si tu l'as ouverte depuis une section et que le groupe a d'autres objets ailleurs, le bouton <span class="ui">Voir tout le groupe (N)</span> les montre tous ; <span class="ui">Voir seulement : état (n)</span> revient au filtre.</p>
+    <figure class="pair">
+      <img src="img/objets-groupe-fiche.webp" alt="Fiche du groupe Porte-clés tortue">
+      <img src="img/objets-groupe-actions.webp" alt="Panneau Actions sur tout le groupe déplié">
+      <figcaption>La fiche d'un groupe et son panneau d'actions déplié.</figcaption>
+    </figure>
+  </section>
+  <section id="objets-groupes-actions">
+    <h3>Agir sur tout le groupe <span class="admin">admin</span></h3>
+    <p>Le panneau <span class="ui">Actions sur tout le groupe (N)</span> (▼ pour le déplier) applique un changement à tous les objets d'un coup :</p>
+    <dl class="opts">
+      <dt>Statut de tous les objets</dt><dd><span class="ui">À vendre</span>, <span class="ui">Offert</span>, <span class="ui">Perso</span>, <span class="ui">Indisponible</span>. « Vendu » reste objet par objet (chacun son prix).</dd>
+      <dt>Prix désiré de tous les objets</dt><dd>Saisis un prix puis <span class="ui">Appliquer</span>. Champ vide + Appliquer = efface le prix désiré.</dd>
+      <dt>Ajouter un accessoire à tout le groupe</dt><dd><span class="ui">+ Choisir un accessoire</span>. La quantité choisie est posée sur <b>chaque</b> objet : le stock baisse de quantité × nombre d'objets. Si le stock ne suffit pas, l'appli indique le maximum possible par objet.</dd>
+      <dt>Accessoires du groupe</dt><dd>Chaque accessoire monté, avec son total (« 3 sur 3 objets ») et <span class="ui">Retirer</span>, qui le rend au stock pour tous les objets.</dd>
+    </dl>
+  </section>
+  <section id="objets-groupes-selection">
+    <h3>Regrouper des objets existants</h3>
+    <ol>
+      <li>Appui long (ou clic droit) sur une tuile, puis <span class="ui">☑ Sélectionner</span>.</li>
+      <li>Touche les autres objets à réunir : un rond coché et un contour bleu les marquent.</li>
+      <li>En bas, touche <span class="ui">Ajouter ces N objets à un groupe</span> (<span class="ui">Annuler</span> quitte la sélection).</li>
+      <li>Choisis un groupe existant dans la liste « 📁 nom », ou tape un nom dans <span class="ui">Rechercher ou créer un groupe…</span> puis <span class="ui">+ Créer un nouveau groupe « nom »</span>.</li>
+    </ol>
+    <figure class="pair">
+      <img src="img/objets-menu.webp" alt="Menu d'appui long : Ouvrir, Sélectionner">
+      <img src="img/objets-selection.webp" alt="Deux objets sélectionnés, barre Ajouter ces 2 objets à un groupe">
+      <figcaption>Le menu de l'appui long, puis la sélection en cours.</figcaption>
+    </figure>
+    <figure class="phone"><img src="img/objets-ajout-groupe.webp" alt="Feuille Ajouter 2 objets à un groupe avec création d'un nouveau groupe"><figcaption>Créer un nouveau groupe en tapant son nom.</figcaption></figure>
+    <p>Si le nom tapé existe déjà, l'appli le signale (« Un groupe porte déjà ce nom — tu peux le rejoindre ci-dessous. ») : choisis-le dans la liste. Pour sortir un objet d'un groupe, utilise <span class="ui">Retirer du groupe</span> dans sa fiche.</p>
+  </section>
+</section>
+
+<section id="objets-accessoires">
+  <h2>Les accessoires et leur stock</h2>
+  <p>L'onglet <span class="ui">Accessoires</span> tient l'inventaire de tout ce qui n'est pas imprimé : aimants, vis, anneaux, ampoules, emballages… Chaque accessoire a un stock (ce qui reste sur l'étagère) et un prix unitaire.</p>
+  <figure class="phone"><img src="img/objets-accessoires.webp" alt="Onglet Accessoires avec les regroupements Électricité, Emballage, Quincaillerie"><figcaption>Les accessoires rangés par regroupement, ici « Quincaillerie » ouvert.</figcaption></figure>
+  <section id="objets-accessoires-liste">
+    <h3>Regroupements et tuiles</h3>
+    <p>Les accessoires sont rangés en sections par <b>regroupement</b> (une catégorie libre que tu choisis), par ordre alphabétique ; ceux qui n'en ont pas sont en dernier sous « Sans regroupement ». Comme pour les objets, toutes les sections sont fermées au départ et s'ouvrent en accordéon.</p>
+    <p>L'en-tête indique « N unités · X € » (valeur du stock) et, en rouge, « · K en rupture » si des accessoires sont à zéro. La tuile montre la photo (ou une icône de paquet), le nom, « Stock : N » (vert, ou rouge à zéro) et le prix « X €/u ». Un accessoire en rupture a toute sa tuile teintée de rouge.</p>
+    <p>Pour changer le regroupement de plusieurs accessoires : appui long (ou clic droit) sur une tuile, <span class="ui">☑ Sélectionner</span>, touche les autres, puis <span class="ui">Regrouper ces N accessoires</span>. Choisis un regroupement existant, crée-en un, ou touche <span class="ui">Retirer de tout regroupement</span>, puis <span class="ui">Appliquer</span>.</p>
+    <p>Le champ <span class="ui">Rechercher…</span> filtre par nom. Liste vide : « Aucun accessoire ».</p>
+  </section>
+  <section id="objets-accessoires-nouveau">
+    <h3>Ajouter un accessoire <span class="admin">admin</span></h3>
+    <ol>
+      <li>Touche <span class="ui">+ Accessoire</span> à côté de la recherche.</li>
+      <li>Donne un <b>Nom</b> (unique), le <b>Stock initial</b> (0 par défaut).</li>
+      <li>Choisis comment saisir le prix : <span class="ui">Prix / unité</span> (par défaut) ou <span class="ui">Coût total</span> pour tout le lot ; dans ce cas l'appli calcule « Soit X € / unité ».</li>
+      <li>Touche <span class="ui">Créer</span>. La fiche du nouvel accessoire s'ouvre : tu peux y ajouter sa photo et son regroupement.</li>
+    </ol>
+    <figure class="phone"><img src="img/objets-accessoire-nouveau.webp" alt="Feuille Nouvel accessoire"><figcaption>La feuille « Nouvel accessoire ».</figcaption></figure>
+    <p>Si la création échoue (« Création impossible (nom déjà utilisé ?) »), un accessoire porte déjà ce nom.</p>
+  </section>
+  <section id="objets-accessoires-fiche">
+    <h3>La fiche d'un accessoire</h3>
+    <figure class="phone"><img src="img/objets-accessoire-fiche.webp" alt="Fiche de l'accessoire Ampoule LED E14"><figcaption>Stock, prix unitaire, valeur, et les objets qui l'utilisent.</figcaption></figure>
+    <dl class="opts">
+      <dt>En-tête</dt><dd>Photo, nom, badge « Stock : N » et, s'il est monté sur des objets, « Utilisé × U ».</dd>
+      <dt>Ajouter / Changer la photo</dt><dd><span class="admin">admin</span> Une seule photo par accessoire ; la nouvelle remplace l'ancienne.</dd>
+      <dt>Regroupement</dt><dd><span class="admin">admin</span> Se modifie directement : tape pour filtrer, choisis, ou <span class="ui">+ Créer « nom »</span>. Le ✕ retire du regroupement. Un regroupement qui n'a plus aucun accessoire disparaît tout seul.</dd>
+      <dt>Stock, Prix unitaire, Valeur</dt><dd>La valeur vaut stock × prix unitaire.</dd>
+      <dt>Utilisé dans N objets</dt><dd>Les objets équipés et la quantité montée. Toucher une ligne ouvre l'objet.</dd>
+      <dt>Boutons</dt><dd><span class="admin">admin</span> <span class="ui">✏️ Modifier</span> (nom, stock, prix unitaire), <span class="ui">Stock</span> (voir ci-dessous), <span class="ui">🗑</span> (un second appui, « Confirmer ? », supprime). Un accessoire monté sur des objets ne peut pas être supprimé.</dd>
+    </dl>
+  </section>
+  <section id="objets-accessoires-stock">
+    <h3>Gérer le stock <span class="admin">admin</span></h3>
+    <p>Le bouton <span class="ui">Stock</span> de la fiche propose trois modes :</p>
+    <figure class="phone"><img src="img/objets-accessoire-stock.webp" alt="Mode Ajouter du stock d'un accessoire"><figcaption>Réception d'un lot : quantité reçue et coût du lot.</figcaption></figure>
+    <dl class="opts">
+      <dt>Ajouter</dt><dd>Pour une réception. Saisis la <b>Quantité reçue</b> et, au choix, le <span class="ui">Coût du lot</span> (par défaut) ou le <span class="ui">Prix / unité</span>. Le prix unitaire devient une <b>moyenne pondérée</b> de l'ancien stock et du nouveau lot ; l'aperçu affiche « Nouveau stock : N · prix moyen X €/u ». Laisse le coût vide pour ajouter du stock sans changer le prix. Bouton <span class="ui">Ajouter au stock</span>.</dd>
+      <dt>Retirer</dt><dd>« Perte, casse ou utilisé ailleurs. » La quantité baisse, le prix ne change pas. Bouton <span class="ui">Retirer</span>.</dd>
+      <dt>Définir</dt><dd>« Correction d'inventaire » : tu donnes le nouveau stock exact. Le prix unitaire reste inchangé. Bouton <span class="ui">Définir</span>.</dd>
+    </dl>
+    <div class="note"><p>Le stock, c'est ce qui reste sur l'étagère. Monter un accessoire sur un objet le retire ; le retirer de l'objet, ou supprimer l'objet en le restituant, le remet.</p></div>
+  </section>
+</section>
+
+<section id="objets-droits">
+  <h2>Ce que voit un compte en lecture seule</h2>
+  <p>Un compte en lecture seule voit les objets, les groupes et les accessoires, mais ne voit pas les boutons de création, de modification, de suppression ni de gestion du stock : seul l'administrateur modifie. Un compte « Lecture seule » (sans prix) voit tous les montants remplacés par « — » ; un compte « Lecture seule + prix » voit les montants.</p>
+  <p>Pour un tableau de bord de tes ventes (chiffre d'affaires, marges, taux de vente, accessoires), voir l'onglet <a href="#stats-objets">Objets des statistiques</a>.</p>
+</section>

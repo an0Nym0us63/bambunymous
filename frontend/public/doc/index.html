@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Guide de BambuNymous</title>
+<meta name="description" content="Documentation utilisateur de BambuNymous : chaque écran, chaque tuile, chaque réglage.">
+<link rel="icon" href="../favicon.png">
+<link rel="stylesheet" href="doc.css">
+</head>
+<body>
+<!--
+  Guide utilisateur de BambuNymous.
+  Organisation (pour le tenir à jour) :
+  - un fichier par chapitre dans pages/ (liste et ordre dans doc.js, constante CHAPTERS) ;
+  - dans un chapitre, chaque fonctionnalité est une <section id="..."> avec un <h2> ou un <h3> :
+    l'id sert d'ancre (#id) et le menu se construit tout seul à partir des titres ;
+  - les captures vont dans img/, nommées <chapitre>-<sujet>.webp (ex. tuiles-stock.webp), en WebP pour rester léger.
+  Quand une fonctionnalité change, on modifie sa section (et sa capture) dans le même commit.
+-->
+<header class="top" id="top">
+  <button class="burger" id="burger" aria-label="Ouvrir le menu" aria-expanded="false">
+    <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+  </button>
+  <a class="brand" href="#top"><img src="../icon-192.png" alt="" width="28" height="28"><span>Guide de BambuNymous</span></a>
+  <div class="top-actions">
+    <a class="back" href="/" title="Retour à l'appli">Ouvrir l'appli</a>
+    <button class="theme" id="theme" aria-label="Changer de thème" title="Thème clair / sombre">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" fill="currentColor"/></svg>
+    </button>
+  </div>
+</header>
+<div class="wrap">
+  <nav class="side" id="side" aria-label="Sommaire">
+    <div class="search">
+      <svg viewBox="0 0 24 24" width="16" height="16"><circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2" fill="none"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      <input id="q" type="search" placeholder="Rechercher dans le guide…" autocomplete="off" aria-label="Rechercher dans le guide">
+    </div>
+    <div class="tree-tools"><button id="expand">Tout déplier</button><button id="collapse">Tout replier</button></div>
+    <ul class="tree" id="tree"></ul>
+  </nav>
+  <div class="veil" id="veil"></div>
+  <main id="main">
+    <div id="results" class="results" hidden></div>
+    <div id="content"><p class="loading">Chargement du guide…</p></div>
+  </main>
+</div>
+<div class="zoom" id="zoom" hidden><img alt=""><p></p></div>
+<script src="doc.js"></script>
+</body>
+</html>

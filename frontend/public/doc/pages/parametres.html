@@ -1,0 +1,335 @@
+<h1>Paramètres</h1>
+<p class="lead">Tous les réglages de BambuNymous : imprimante, filaments, affichage, comptes, connexions, notifications, partage, appli Android et outils de maintenance. Entrée « Paramètres » de la navigation.</p>
+
+<section id="parametres-structure">
+  <h2>Organisation de la page</h2>
+  <p>Les réglages sont rangés en <b>onglets</b> (une ligne sur ordinateur, plusieurs sur téléphone ; l'onglet ouvert est en bleu). Sur ordinateur, les cartes de chaque onglet se rangent sur deux colonnes.</p>
+  <table>
+    <tr><th>Onglet</th><th>Contenu</th><th>Qui le voit</th></tr>
+    <tr><td><a href="#parametres-printer">🖨️ Imprimante</a></td><td>Connexion à l'imprimante, tarif électrique</td><td><span class="admin">admin</span></td></tr>
+    <tr><td><a href="#parametres-filament">🧵 Filaments</a></td><td>Délais de séchage, supports vides, étiquettes, révision des prix</td><td><span class="admin">admin</span></td></tr>
+    <tr><td><a href="#parametres-display">🎨 Affichage</a></td><td>Thème, accueil, points d'attention</td><td>tous</td></tr>
+    <tr><td><a href="#parametres-accounts">👤 Comptes</a></td><td>Mot de passe, double authentification, utilisateurs, activité</td><td>tous (contenu selon le rôle)</td></tr>
+    <tr><td><a href="#parametres-links">🔗 Connexions</a></td><td>MakerWorld, messages d'évaluation, copains</td><td><span class="admin">admin</span></td></tr>
+    <tr><td><a href="#parametres-notify">🔔 Notifs</a></td><td>Notifications</td><td>tous (contenu selon le rôle)</td></tr>
+    <tr><td><a href="#parametres-share">📤 Partage</a></td><td>Partage Telegram en ton nom</td><td><span class="admin">admin</span></td></tr>
+    <tr><td><a href="#parametres-android">📱 Appli Android</a></td><td>Téléchargement et réglages de l'appli</td><td>tous</td></tr>
+    <tr><td><a href="#parametres-tools">🛠️ Outils</a></td><td>Maintenance, export de diagnostic</td><td><span class="admin">admin</span></td></tr>
+  </table>
+  <ul>
+    <li>Un compte non administrateur ne voit que quatre onglets : Affichage, Comptes, Notifs et Appli Android.</li>
+    <li>L'onglet s'ouvre d'après l'adresse (<code>/settings?tab=…</code>), sinon le dernier ouvert sur ce navigateur, sinon « Imprimante » (administrateur) ou « Affichage » (autres comptes). Le bouton Retour du navigateur revient à l'onglet précédent.</li>
+    <li>En haut à droite : <span class="ui">📖 Guide d'utilisation</span> (ouvre ce guide, pour tous) et <span class="ui">📋 Journal</span> (<a href="#parametres-logs">journal du serveur</a>, <span class="admin">admin</span>). Sur téléphone, ces boutons sont dans l'en-tête ; le guide y est une simple icône <span class="ui">📖</span>.</li>
+    <li>Au pied de chaque onglet, la <a href="#parametres-version">ligne de version</a>.</li>
+  </ul>
+</section>
+
+<section id="parametres-printer">
+  <h2>🖨️ Imprimante <span class="admin">admin</span></h2>
+  <p>Ce qui permet à BambuNymous de parler à ton imprimante, en réseau local.</p>
+  <figure class="phone"><img src="img/parametres-imprimante.webp" alt="Onglet Imprimante avec adresse IP, numéro de série, code d'accès, modèle, nom et tarif"><figcaption>L'onglet Imprimante.</figcaption></figure>
+  <h4>Carte « Imprimante »</h4>
+  <dl class="opts">
+    <dt>Adresse IP</dt><dd>L'adresse de l'imprimante sur ton réseau (par exemple <code>192.168.1.42</code>), visible dans les réglages réseau de l'imprimante.</dd>
+    <dt>Numéro de série</dt><dd>Le numéro de série de l'imprimante (réglages de l'imprimante ou Bambu Studio).</dd>
+    <dt>Code d'accès</dt><dd>Le code LAN affiché par l'imprimante. Une fois enregistré, il n'est plus jamais réaffiché : le champ montre « Laisser vide pour conserver » et « ✓ Code configuré » en vert. Laisse-le vide pour garder l'ancien.</dd>
+    <dt>Modèle</dt><dd><span class="ui">Automatique</span> (déduit du numéro de série, le modèle trouvé est indiqué entre parenthèses) ou un modèle précis. Il sert à MakerWorld : profil fait pour ton imprimante, compatibilité, fichier ouvert dans Studio.</dd>
+    <dt>Nom affiché</dt><dd>Le nom de ton imprimante dans l'appli.</dd>
+  </dl>
+  <h4>Carte « Électricité »</h4>
+  <dl class="opts">
+    <dt>Tarif (€/h)</dt><dd>Ce que coûte une heure d'impression en électricité (par défaut 0). La virgule (« 0,20 »), le symbole € et les espaces sont acceptés. Il entre dans le coût de chaque impression.</dd>
+  </dl>
+  <p>Touche <span class="ui">Sauvegarder</span> : le bouton affiche <span class="ui">Sauvegardé ✓</span> quelques secondes.</p>
+  <ul>
+    <li>Changer l'adresse, le numéro de série ou le code relance la connexion à l'imprimante (dès que les trois sont renseignés).</li>
+    <li>Changer le tarif relance en arrière-plan le calcul du coût de toutes les impressions réussies.</li>
+    <li>Les comptes et mots de passe ne se règlent pas ici mais dans <a href="#parametres-accounts">Comptes</a>.</li>
+  </ul>
+</section>
+
+<section id="parametres-filament">
+  <h2>🧵 Filaments <span class="admin">admin</span></h2>
+  <p>Quatre cartes de réglages liés au stock de filaments. Le détail de leur usage est dans le chapitre <a href="#filaments">Filaments</a>.</p>
+  <figure><img src="img/parametres-filaments.webp" alt="Onglet Filaments : délais de séchage, supports vides, étiquettes, révision des prix"><figcaption>L'onglet Filaments, avec un cas de séchage PETG et un support vide en cours d'ajout.</figcaption></figure>
+
+  <section id="parametres-filament-sechage">
+    <h3>Délais de séchage</h3>
+    <p>Au-delà de ce délai depuis son dernier séchage, une bobine passe « à sécher ». Voir <a href="#filaments-sechage">le séchage des bobines</a>.</p>
+    <ul>
+      <li><b>Par défaut</b> : le délai pour tout ce qui n'a pas de cas particulier, en mois (<b>6 mois</b> par défaut ; décimales acceptées, 1 mois = 30 jours).</li>
+      <li><span class="ui">+ Ajouter un cas</span> : une ligne avec une liste (« Famille » : PLA, PETG… ; « Sous-famille » : PLA Matte…), un délai en mois (3 au départ) et <span class="ui">✕</span> pour le retirer. Une famille déjà utilisée est grisée dans la liste. Une sous-famille l'emporte sur sa famille.</li>
+      <li><span class="ui">Enregistrer</span> → « Enregistré ✓ ».</li>
+    </ul>
+  </section>
+
+  <section id="parametres-filament-supports">
+    <h3>Supports vides</h3>
+    <p>Le poids d'une bobine vide par marque ou modèle. Ces poids sont proposés en liste à la pesée et sur la fiche filament (avec « Autre » pour un poids libre), pour calculer le filament restant.</p>
+    <ul>
+      <li><span class="ui">+ Ajouter un support</span> : un nom (60 caractères au plus) et un poids en grammes (0 à 5 000). L'icône corbeille le supprime.</li>
+      <li><span class="ui">Enregistrer</span>. Un message dit combien de filaments ont été mis à jour avec le nouveau poids.</li>
+      <li>Un filament lié à un support suit ses changements de nom et de poids ; le restant des bobines déjà pesées n'est pas recalculé. Supprimer un support détache les filaments, qui gardent leur poids.</li>
+      <li>Pas de doublon (« « X » est en double »), 100 supports au plus.</li>
+    </ul>
+  </section>
+
+  <section id="parametres-filament-etiquettes">
+    <h3>Étiquettes filaments</h3>
+    <p>Imprime une planche d'étiquettes à coller sur tes échantillons : un QR code de 9 × 9 mm qui contient le numéro du filament, et ce numéro en clair juste en dessous. C'est ce QR que lit le bouton Scanner de la page Filaments.</p>
+    <figure><img src="img/parametres-etiquettes.webp" alt="Fenêtre Étiquettes avec les sections et les cases à cocher"><figcaption>La fenêtre de choix des étiquettes.</figcaption></figure>
+    <ol>
+      <li>Touche <span class="ui">Générer les étiquettes…</span>.</li>
+      <li>Coche les filaments voulus. Ils sont rangés en sections : « Échantillon sans étiquette », « Sans échantillon », « Sans échantillon, ignorés », « Étiquette déjà imprimée » (une section vide est masquée). Chaque section a <span class="ui">Cocher la section</span> / <span class="ui">Décocher la section</span> ; en haut, <span class="ui">Tout cocher</span> et <span class="ui">Tout décocher</span>.</li>
+      <li>Le champ « Filtrer » cherche dans le nom, la marque, la matière, la teinte (plusieurs mots = tous requis).</li>
+      <li>Touche <span class="ui">Générer (N)</span> : le PDF <code>etiquettes-filaments.pdf</code> se télécharge (dans l'appli Android, il est enregistré dans Téléchargements et ouvert).</li>
+    </ol>
+    <p>Chaque ligne montre la couleur, le numéro, le nom, la marque, la matière et le nombre de bobines ; un badge orange <b>« Dans l'AMS »</b> signale une bobine chargée (l'échantillon peut s'imprimer tout de suite). Ces filaments sont listés en premier. Sont cochés d'office ceux qui n'ont pas encore d'étiquette.</p>
+  </section>
+
+  <section id="parametres-filament-prix">
+    <h3>Révision des prix</h3>
+    <p>Compare le prix catalogue de chaque filament au prix d'achat de ses bobines (archivées comprises) et permet de corriger sur place. Utile pour repérer les prix manquants : sans prix, le calcul des coûts compte 20 €/kg par défaut.</p>
+    <figure class="phone"><img src="img/parametres-prix.webp" alt="Écran Révision des prix avec les filtres et la liste des filaments"><figcaption>La révision des prix.</figcaption></figure>
+    <ul>
+      <li><span class="ui">Ouvrir la révision</span> ouvre l'écran ; <span class="ui">Fermer</span> le referme.</li>
+      <li>Filtres : champ de recherche (nom, marque, sous-type) et pastilles <span class="ui">Tout</span>, <span class="ui">Sans prix</span>, <span class="ui">Écarts &gt; 25 %</span>.</li>
+      <li>Chaque filament : couleur, nom, marque, sous-type, nombre de bobines, badge orange <b>≠</b> en cas d'écart. Touche le prix pour le modifier (« — € » orange s'il manque).</li>
+      <li>La flèche à droite déplie les bobines : numéro, emplacement ou « archivée », poids restant, écart en % (rouge si plus cher, vert si moins cher, au-delà de 25 %) et prix modifiable.</li>
+    </ul>
+  </section>
+</section>
+
+<section id="parametres-display">
+  <h2>🎨 Affichage</h2>
+  <figure><img src="img/parametres-affichage.webp" alt="Onglet Affichage : apparence, accueil, disposition AMS, points d'attention"><figcaption>L'onglet Affichage d'un administrateur.</figcaption></figure>
+  <dl class="opts">
+    <dt>Apparence → Thème</dt><dd>Le bouton bascule entre <span class="ui">🌙 Sombre</span> (par défaut) et <span class="ui">☀ Clair</span>. Le choix est retenu sur ce navigateur, pas sur ton compte.</dd>
+    <dt>Accueil → Bouton « Personnaliser » dans le bandeau</dt><dd>Activé par défaut. Une fois ton accueil réglé, tu peux masquer ce bouton ; la personnalisation reste accessible ici par <span class="ui">Personnaliser l'accueil</span>. Retenu sur cet appareil. Voir <a href="#accueil-personnaliser">personnaliser l'accueil</a>.</dd>
+    <dt>Disposition AMS sur l'accueil <span class="admin">admin</span></dt><dd>L'organisation des AMS se règle dans la tuile AMS de l'accueil. <span class="ui">Régler la tuile AMS</span> ouvre directement l'accueil en personnalisation sur cette tuile. Voir <a href="#tuiles">les tuiles</a>.</dd>
+    <dt>Points d'attention <span class="admin">admin</span></dt><dd><span class="ui">Organiser les catégories…</span> : choisis l'ordre des catégories de points d'attention sur l'accueil et masque celles qui ne t'intéressent pas.</dd>
+  </dl>
+  <figure class="phone"><img src="img/parametres-categories.webp" alt="Fenêtre Catégories de l'accueil avec poignées, flèches et yeux"><figcaption>Une catégorie masquée apparaît estompée, avec 🚫.</figcaption></figure>
+  <p>Dans la fenêtre <b>Catégories de l'accueil</b> : fais glisser la poignée <span class="ui">⠿</span> (au doigt ou à la souris) ou utilise les flèches <span class="ui">▲</span> <span class="ui">▼</span> pour réordonner ; l'œil <span class="ui">👁</span> masque la catégorie de l'accueil (elle devient <span class="ui">🚫</span>), mais elle reste consultable dans la liste complète des alertes. <span class="ui">Enregistrer</span> n'est actif qu'après un changement.</p>
+</section>
+
+<section id="parametres-accounts">
+  <h2>👤 Comptes</h2>
+  <p>Tout le monde y trouve <b>Mon compte</b> et <b>Double authentification</b>. Les administrateurs y gèrent en plus les utilisateurs et consultent l'activité. Les rôles sont expliqués dans <a href="#premiers-pas-roles">Premiers pas → Comptes et rôles</a>.</p>
+
+  <section id="parametres-accounts-password">
+    <h3>Mon compte</h3>
+    <figure><img src="img/parametres-mon-compte.webp" alt="Cartes Mon compte et Double authentification"><figcaption>Mon compte et double authentification.</figcaption></figure>
+    <p>Sous le titre : ton nom et ton rôle. Pour changer ton mot de passe :</p>
+    <ol>
+      <li>Saisis le <span class="ui">Mot de passe actuel</span>.</li>
+      <li>Saisis le <span class="ui">Nouveau mot de passe</span> (4 caractères au moins) et recopie-le dans <span class="ui">Confirmer</span>.</li>
+      <li>Touche <span class="ui">Changer le mot de passe</span> → « Mot de passe modifié. »</li>
+    </ol>
+    <p>Tes autres appareils sont déconnectés ; celui-ci reste connecté. Messages possibles : « Mot de passe trop court (4 caractères minimum) », « La confirmation ne correspond pas », « Mot de passe actuel incorrect ».</p>
+  </section>
+
+  <section id="parametres-accounts-2fa">
+    <h3>Double authentification</h3>
+    <p>En plus du mot de passe, un code à 6 chiffres de ton application d'authentification est demandé à chaque connexion. Chacun l'active pour son propre compte, même en lecture seule.</p>
+    <ol>
+      <li>Touche <span class="ui">Activer la double authentification</span>.</li>
+      <li>Scanne le QR code avec ton application (Google Authenticator, Aegis, 2FAS, Bitwarden…), ou saisis la clé affichée à la main.</li>
+      <li>Saisis le code à 6 chiffres affiché par l'application et touche <span class="ui">Activer</span> (ou <span class="ui">Annuler</span>). Si le code est refusé : « Code invalide : vérifie l'heure du téléphone et réessaie ».</li>
+      <li><b>Note les 8 codes de secours</b> affichés : ils ne seront plus montrés. Chacun permet une connexion, une seule fois, si tu n'as plus ton téléphone. <span class="ui">Copier</span> les copie, <span class="ui">C'est noté</span> ferme l'encadré.</li>
+    </ol>
+    <figure class="phone"><img src="img/parametres-2fa.webp" alt="Mise en place de la double authentification : QR code, clé et champ du code"><figcaption>Mise en place : QR code, clé à saisir à la main, code de vérification.</figcaption></figure>
+    <p>Une fois activée, la carte porte un badge vert « Active » et indique le nombre de codes de secours restants. Pour la couper : <span class="ui">Désactiver…</span>, saisis ton mot de passe, puis <span class="ui">Désactiver</span>.</p>
+    <div class="tip"><p>Téléphone perdu et plus de codes de secours ? Un administrateur peut retirer ta double authentification (bouton <span class="ui">Retirer la 2FA</span> dans la liste des utilisateurs) ; tu la réactiveras ensuite toi-même.</p></div>
+  </section>
+
+  <section id="parametres-accounts-users">
+    <h3>Utilisateurs <span class="admin">admin</span></h3>
+    <figure class="phone"><img src="img/parametres-utilisateurs.webp" alt="Carte Utilisateurs avec trois comptes et le formulaire de création"><figcaption>La liste des comptes, et le formulaire « Nouvel utilisateur » ouvert.</figcaption></figure>
+    <p>Les comptes sont triés par dernière activité. Chacun affiche :</p>
+    <ul>
+      <li>son nom (« (vous) » pour le tien), son rôle et les badges <b>Principal</b> (orange), <b>Désactivé</b> (rouge), <b>2FA</b> (vert : double authentification active) ;</li>
+      <li>sa dernière activité réelle (« Vu il y a 5 min · 18/10 21:24 », « hier », « il y a 3 j »…) ou « Jamais utilisé ». Une fenêtre oubliée ouverte ne compte pas : seule une présence réelle est prise en compte ;</li>
+      <li>ses boutons d'action.</li>
+    </ul>
+    <h4>Les actions sur un compte</h4>
+    <dl class="opts">
+      <dt>★ Rendre principal</dt><dd>Sur un autre administrateur actif : il devient le compte principal (qui ne peut être ni supprimé, ni désactivé, ni rétrogradé) ; l'ancien principal redevient un administrateur ordinaire. Confirmation demandée.</dd>
+      <dt>→ Administrateur, → Lecture seule, → Lecture seule (avec prix)</dt><dd>Change le rôle du compte. Ses sessions ouvertes sont fermées.</dd>
+      <dt>Actions MakerWorld</dt><dd>Case (comptes non administrateurs) : autorise les j'aime, collections, boosts, évaluations et « À faire » avec le compte MakerWorld de la maison.</dd>
+      <dt>Retirer la 2FA</dt><dd>Si la double authentification est active : la retire (téléphone perdu sans code de secours). Confirmation demandée.</dd>
+      <dt>Désactiver / Réactiver</dt><dd>Un compte désactivé ne peut plus se connecter, et perd l'accès immédiatement.</dd>
+      <dt>Corbeille</dt><dd>Supprime le compte : un premier appui arme le bouton (« Confirmer ? » en rouge), un second supprime.</dd>
+      <dt>Mot de passe</dt><dd>Pour tous les comptes, le tien et le principal compris : saisis un nouveau mot de passe (4 caractères au moins) puis <span class="ui">OK</span>. Ses sessions sont fermées.</dd>
+      <dt>🔑 Invitation copain</dt><dd>Pour un compte actif non administrateur : crée la clé (commençant par <code>bnym1.</code>) qu'un ami colle dans son BambuNymous pour parcourir le tien en lecture seule, avec les droits de ce compte. Elle s'affiche une seule fois, avec <span class="ui">📋 Copier</span>. S'il en existe déjà une : <span class="ui">🔑 Nouvelle invitation copain</span> (l'ancienne cesse de marcher) et <span class="ui">Révoquer l'invitation</span>. Voir <a href="#copains-inviter">inviter un copain</a>.</dd>
+    </dl>
+    <p>Pour ton propre compte et le compte principal, seul <span class="ui">Mot de passe</span> est proposé : on ne peut ni changer son propre rôle, ni se désactiver, ni se supprimer, ni retirer le dernier administrateur actif.</p>
+    <h4>Créer un compte</h4>
+    <ol>
+      <li>Touche <span class="ui">+ Nouvel utilisateur</span>.</li>
+      <li>Saisis le <span class="ui">Nom d'utilisateur</span> et un <span class="ui">Mot de passe</span> (4 caractères au moins).</li>
+      <li>Choisis le rôle : <span class="ui">Administrateur</span>, <span class="ui">Lecture seule</span> (par défaut) ou <span class="ui">Lecture seule (avec prix)</span>.</li>
+      <li>Touche <span class="ui">Créer</span>. Un nom déjà pris est refusé.</li>
+    </ol>
+  </section>
+
+  <section id="parametres-accounts-succes">
+    <h3>Comptes qui font avancer les succès <span class="admin">admin</span></h3>
+    <p>Une case par compte : seuls les comptes cochés font progresser les <a href="#succes">succès</a> par leurs visites, fiches consultées et actions. Les autres voient leurs succès marqués « non comptabilisé ». À droite, chaque ligne indique « compte » (vert) ou « ne compte pas ».</p>
+  </section>
+
+  <section id="parametres-accounts-activite">
+    <h3>Activité <span class="admin">admin</span></h3>
+    <p>Le journal de ce que font les comptes dans l'appli, gardé 30 jours.</p>
+    <figure class="phone"><img src="img/parametres-activite.webp" alt="Carte Activité avec les filtres et les lignes PAGE et VUE"><figcaption>Le journal d'activité.</figcaption></figure>
+    <dl class="opts">
+      <dt>Type</dt><dd><span class="ui">Tout</span> (défaut), <span class="ui">Actions</span> (créations, modifications, suppressions), <span class="ui">Pages</span> (arrivée sur une page), <span class="ui">Détails</span> (onglet ouvert ou fiche consultée).</dd>
+      <dt>Période</dt><dd><span class="ui">24 h</span>, <span class="ui">7 jours</span> (défaut), <span class="ui">30 jours</span>.</dd>
+      <dt>Recherche</dt><dd>« Rechercher un libellé… » cherche dans les libellés et les chemins.</dd>
+      <dt>Compte</dt><dd><span class="ui">Tous les comptes</span> ou un seul.</dd>
+    </dl>
+    <p>Chaque ligne a une étiquette de couleur : la méthode pour une action (<b>POST</b> vert, <b>PUT</b>/<b>PATCH</b> bleu, <b>DELETE</b> rouge, avec « échec » si l'action a été refusée), <b>PAGE</b> (violet) pour une visite, <b>VUE</b> (cyan) pour un détail ; puis le libellé, le compte et la date. Les vues ne sont notées qu'au changement, jamais en continu. En bas : « N sur Total » et <span class="ui">Charger plus</span> (par 50).</p>
+    <p><span class="ui">Vider</span> (dans le titre) efface le journal : un premier appui affiche « Confirmer ? », un second vide. Le journal garde une première ligne disant qui l'a vidé.</p>
+  </section>
+</section>
+
+<section id="parametres-links">
+  <h2>🔗 Connexions <span class="admin">admin</span></h2>
+  <p>Les liens de BambuNymous avec l'extérieur : MakerWorld, messages d'évaluation, copains.</p>
+  <figure><img src="img/parametres-connexions.webp" alt="Onglet Connexions : MakerWorld, messages d'évaluation, copains"><figcaption>L'onglet Connexions.</figcaption></figure>
+
+  <section id="parametres-links-makerworld">
+    <h3>MakerWorld</h3>
+    <p>BambuNymous lit la fiche MakerWorld (couverture, créateur, catégories, compteurs) de chaque modèle imprimé, et permet de chercher par titre, tags et catégories. Ces informations viennent d'une API interne de MakerWorld, non officielle : si elle change, l'appli continue de marcher et les fiches retombent sur un simple lien.</p>
+    <ul>
+      <li>Ligne d'état : « N fiches sur M modèles imprimés », plus les introuvables et ceux à réessayer. <span class="ui">⟳ Relire maintenant</span> relit toutes les fiches en arrière-plan (environ 1,5 s par modèle).</li>
+      <li><b>Compte</b> : relie ton compte MakerWorld (collections, j'aime, « déjà imprimé ») avec ton e-mail et ton mot de passe Bambu (jamais enregistré), un code reçu par e-mail si Bambu en envoie un, ou un jeton collé à la main. <span class="ui">Déconnecter</span> le délie. Pas à pas dans <a href="#makerworld-compte">MakerWorld → compte</a>.</li>
+      <li><b>Historique cloud Bambu</b> (compte relié) : retrouve le modèle MakerWorld des impressions qui n'en ont pas, d'après ton historique cloud. <span class="ui">Analyser</span> montre ce qui serait ajouté, <span class="ui">Appliquer</span> le fait. Seuls les liens vides sont remplis, rien n'est écrasé.</li>
+      <li><b>Diagnostic de l'API</b> (repliable) : boutons techniques qui affichent la réponse brute de MakerWorld, pour un dépannage avancé.</li>
+    </ul>
+  </section>
+
+  <section id="parametres-links-evaluations">
+    <h3>⭐ Messages d'évaluation</h3>
+    <p>Les messages proposés quand tu évalues un modèle à 5 étoiles sur MakerWorld. Ils sont rangés par <b>familles</b> : en évaluant, tu choisis la famille et un message est tiré au hasard, modifiable avant de publier. <code>{modèle}</code> et <code>{créateur}</code> sont remplacés automatiquement. Cette carte est aussi accessible aux comptes qui ont le droit « Actions MakerWorld ».</p>
+    <ul>
+      <li>Touche une famille pour la déplier : son nom, un champ par message (<span class="ui">✕</span> pour retirer), <span class="ui">+ Message</span>, <span class="ui">⭐ Mettre par défaut</span>, <span class="ui">Supprimer la famille</span>. La première famille, marquée « par défaut », est proposée d'office ; ▲/▼ changent l'ordre.</li>
+      <li><span class="ui">+ Famille</span> en ajoute une ; <span class="ui">Enregistrer</span> (bleu dès qu'il y a un changement).</li>
+    </ul>
+    <p>Voir <a href="#impressions-a-evaluer">les impressions à évaluer</a>.</p>
+  </section>
+
+  <section id="parametres-links-copains">
+    <h3>👀 Copains</h3>
+    <p>Ici, tu ajoutes le BambuNymous d'un ami pour le parcourir en lecture seule.</p>
+    <ol>
+      <li>Ton ami crée pour toi une <b>invitation copain</b> dans <b>ses</b> Paramètres → 👤 Comptes, et te l'envoie.</li>
+      <li>Colle-la dans « Coller l'invitation (bnym1.…) », donne un nom (« Léo ») et touche <span class="ui">Ajouter</span>.</li>
+      <li><span class="ui">Visiter</span> t'emmène chez lui ; <span class="ui">✕</span> le retire de tes copains (son BambuNymous n'est pas touché). Un appui long ou un clic droit sur la ligne propose les mêmes choix.</li>
+    </ol>
+    <p>Tout le fonctionnement est dans le chapitre <a href="#copains">Copains</a>.</p>
+  </section>
+</section>
+
+<section id="parametres-notify">
+  <h2>🔔 Notifs</h2>
+  <p>Le contenu dépend du rôle :</p>
+  <ul>
+    <li>un <b>administrateur</b> règle les canaux (Journal, Appli Android, ntfy, Telegram), ce qui part et les seuils ;</li>
+    <li>un <b>autre compte</b> choisit ce qu'il reçoit sur son téléphone (« Mes notifications »).</li>
+  </ul>
+  <p>Tout est détaillé dans le chapitre <a href="#notifications-canaux">Notifications → les canaux</a>, avec le <a href="#notifications-evenements">catalogue de tous les types</a>.</p>
+</section>
+
+<section id="parametres-share">
+  <h2>📤 Partage <span class="admin">admin</span></h2>
+  <p>La carte <b>Partage Telegram</b> relie <b>ton propre compte Telegram</b> pour publier une impression ou un groupe (photos, statistiques, lien MakerWorld) dans tes discussions, <b>en ton nom</b>. C'est différent du <a href="#notifications-telegram">bot de notifications</a>.</p>
+  <figure class="pair"><img src="img/parametres-partage.webp" alt="Partage Telegram, étape 1 : api_id, api_hash et numéro"><img src="img/parametres-partage-relie.webp" alt="Partage Telegram relié, avec deux destinations"><figcaption>À gauche, la mise en place ; à droite, un compte relié et ses destinations.</figcaption></figure>
+  <h4>Relier ton compte</h4>
+  <ol>
+    <li>Sur <b>my.telegram.org/apps</b>, crée une application (nom libre) et recopie son <b>api_id</b> et son <b>api_hash</b>.</li>
+    <li>Saisis-les, avec ton <span class="ui">Numéro (format international)</span> (« +33 6… »), puis touche <span class="ui">Recevoir le code</span>.</li>
+    <li>Saisis le <span class="ui">Code reçu dans Telegram</span> et <span class="ui">Valider</span>.</li>
+    <li>Si ton compte Telegram a la validation en deux étapes, saisis aussi ce mot de passe, puis <span class="ui">Valider</span>.</li>
+  </ol>
+  <p>Relié, la carte affiche « ● Connecté » avec ton nom, et « Un partage est en cours d'envoi… » pendant un envoi. <span class="ui">Déconnecter</span> révoque la session côté Telegram (confirmation demandée). Si Telegram ne répond pas, un message orange et <span class="ui">Réessayer</span> s'affichent.</p>
+  <h4>Destinations</h4>
+  <p>Les discussions proposées quand tu partages. <span class="ui">+ Ajouter une destination</span> : choisis la <span class="ui">Discussion</span>, le <span class="ui">Sujet</span> si c'est un groupe à sujets (« Général » par défaut), et éventuellement le <span class="ui">Nom affiché dans le menu</span> ; puis <span class="ui">Ajouter</span>. Le <span class="ui">✕</span> rouge retire une destination.</p>
+</section>
+
+<section id="parametres-android">
+  <h2>📱 Appli Android</h2>
+  <p>Visible par tous les comptes.</p>
+  <figure><img src="img/parametres-android.webp" alt="Carte de téléchargement de l'appli Android"><figcaption>Dans un navigateur : la carte de téléchargement.</figcaption></figure>
+  <ul>
+    <li><b>Appli Android BambuNymous</b> : la version disponible, sa date et sa taille. Dans un navigateur, le bouton <span class="ui">Télécharger</span> récupère <code>BambuNymous.apk</code> sur ton serveur. Dans l'appli : « ✓ Ton appli est à jour » (bouton <span class="ui">Réinstaller</span>) ou « Une mise à jour est disponible » (bouton <span class="ui">Mettre à jour</span>).</li>
+    <li><b>Réglages de l'appli</b> (seulement dans l'appli Android) : l'adresse de BambuNymous et le jeton RFID gardés par l'appli, la version installée, et <span class="ui">⚙️ Ouvrir les réglages de l'appli</span> pour les modifier.</li>
+  </ul>
+  <p>Installation et usage : <a href="#premiers-pas-android">Premiers pas → l'appli Android</a>.</p>
+</section>
+
+<section id="parametres-tools">
+  <h2>🛠️ Outils <span class="admin">admin</span></h2>
+  <section id="parametres-outils">
+    <h3>Les cartes de maintenance</h3>
+    <figure><img src="img/parametres-outils.webp" alt="Onglet Outils : catalogue Bambu, recalcul des coûts, export de diagnostic, traduction, succès"><figcaption>L'onglet Outils.</figcaption></figure>
+
+    <h4>Enrichissement catalogue Bambu</h4>
+    <p>Pour tous les filaments Bambu Lab en base qui ont un identifiant de profil, cherche leur fiche officielle dans le catalogue Bambu et met à jour nom, code couleur, type multicolore, couleurs… Touche <span class="ui">🔍 Enrichir depuis le catalogue Bambu</span>. Le bilan liste les filaments mis à jour (avec ce qui a changé), ceux introuvables dans le catalogue, ceux ignorés faute de couleur, et ceux sans identifiant de profil (non enrichissables).</p>
+
+    <h4>Recalculer les coûts</h4>
+    <p>Recalcule le coût filament et électricité de toutes les impressions, utile après un changement de prix ou un import. Les groupes suivent automatiquement. <span class="ui">⟳ Recalculer tous les prints</span> → « ✓ Recalcul lancé ».</p>
+
+    <h4 id="parametres-outils-diagnostic">Exporter pour diagnostic</h4>
+    <p>Télécharge les impressions des derniers jours telles qu'enregistrées (dates, durées, pauses, statut, poids, coût) et le calcul jour par jour des tuiles de l'accueil. <b>Aucune bobine, aucun compte, aucun réglage</b> n'y figure : tu peux l'envoyer sans crainte pour faire analyser un chiffre qui te paraît faux.</p>
+    <ol>
+      <li>Choisis la période : 7, 14 (par défaut), 30 ou 60 derniers jours.</li>
+      <li>Touche <span class="ui">⤓ Télécharger le fichier</span> : tu obtiens <code>bambunymous-diagnostic-AAAA-MM-JJ.json</code>.</li>
+    </ol>
+
+    <h4>Traduire les noms de prints</h4>
+    <p>Les impressions arrivent souvent nommées en anglais ou en chinois. Cet outil leur ajoute un nom français, utilisé <b>uniquement pour la recherche</b> : le nom d'origine reste affiché, et un nom saisi à la main n'est jamais écrasé. Les nouvelles impressions sont traduites automatiquement ; celles qu'un service saturé n'a pas pu traduire sont reprises toutes les 6 heures.</p>
+    <dl class="opts">
+      <dt>Clé Google Cloud Translation</dt><dd>Facultative, essayée en premier. 500 000 caractères gratuits par mois ; pose un plafond par jour dans la console Google pour ne jamais payer. <span class="ui">Ajouter</span> / <span class="ui">Changer</span> / <span class="ui">Retirer</span>.</dd>
+      <dt>Clé DeepL</dt><dd>Facultative, essayée après Google. Son crédit gratuit ne se renouvelle pas : une fois épuisé, MyMemory prend le relais.</dd>
+      <dt>Ordre des services</dt><dd>Google Cloud (avec clé), Google public, DeepL (avec clé), MyMemory.</dd>
+      <dt>Reprendre aussi les noms restés identiques</dt><dd>Retente les noms restés tels quels faute de quota.</dd>
+    </dl>
+    <p><span class="ui">⟳ Traduire les noms manquants</span> lance le rattrapage (« Traduction en cours… », bouton <span class="ui">Arrêter</span>). Il tourne sur le serveur : tu peux quitter la page. Ensuite : « Dernier passage : N traduits, M déjà en français, K en attente ».</p>
+
+    <h4>Débug RFID</h4>
+    <p>Seulement dans l'appli Android : <span class="ui">Voir le dernier scan</span> affiche le détail brut du dernier tag NFC lu (identifiant, références, profil, filament, catalogue, bobine liée, données brutes). Pratique si une bobine n'est pas reconnue. Sans scan récent : « Aucun scan en mémoire. Scannez un tag d'abord… ». Voir <a href="#filaments-nfc">NFC</a>.</p>
+
+    <h4>🏅 Succès : paliers et progression</h4>
+    <p>Exporte tous les succès à paliers : ce qui compte, ta valeur actuelle, le palier atteint, le prochain seuil et les seuils de chaque palier. <span class="ui">⬇️ Télécharger (CSV)</span> donne <code>succes-paliers-AAAA-MM-JJ.csv</code> ; <span class="ui">📋 Copier</span> le copie dans le presse-papiers.</p>
+  </section>
+</section>
+
+<section id="parametres-version">
+  <h2>La ligne de version</h2>
+  <p>Au pied de chaque onglet, en petits caractères : la version installée (« v » suivi d'un code de 8 caractères) et sa date.</p>
+  <figure class="small"><img src="img/parametres-version.webp" alt="Ligne de version avec 3 nouveautés disponibles"><figcaption>Une version plus récente est publiée.</figcaption></figure>
+  <ul>
+    <li>« ✓ à jour » (vert) : tu as la dernière version.</li>
+    <li><span class="ui">⬆ N nouveautés disponibles ▾</span> (orange) : touche-le pour voir la liste des changements. Pour en profiter, mets à jour l'image Docker (Portainer, <code>docker compose pull</code>).</li>
+    <li>Rien de plus si la vérification n'a pas pu se faire.</li>
+  </ul>
+</section>
+
+<section id="parametres-logs">
+  <h2>Le journal du serveur <span class="admin">admin</span></h2>
+  <p>Le bouton <span class="ui">📋 Journal</span> des Paramètres ouvre le journal technique du serveur : utile pour comprendre un problème (imprimante injoignable, notification qui ne part pas…).</p>
+  <figure><img src="img/parametres-journal.webp" alt="Page Journal avec la barre de filtres et des lignes INFO, WARNING, ERROR"><figcaption>Le journal du serveur.</figcaption></figure>
+  <dl class="opts">
+    <dt>En-tête</dt><dd>Le nombre d'entrées affichées, la taille du fichier et ce qui a été lu ; un voyant vert « Live » quand le direct est actif.</dd>
+    <dt>Actualiser</dt><dd>Relit le journal.</dd>
+    <dt>Live / Stop</dt><dd>Relit le journal toutes les 3 secondes, jusqu'à <span class="ui">Stop</span>.</dd>
+    <dt>Vider</dt><dd>Vide le fichier <b>immédiatement, sans confirmation</b>.</dd>
+    <dt>Rechercher dans tout le fichier…</dt><dd>Cherche dans les messages et les noms de module (majuscules indifférentes), en remontant le fichier. Le terme trouvé est surligné en orange.</dd>
+    <dt>DEBUG, INFO, WARNING, ERROR</dt><dd>Le niveau minimum affiché (INFO par défaut).</dd>
+    <dt>⚠ partielle</dt><dd>La recherche s'est arrêtée avant le début du fichier : utilise <span class="ui">↑ Lire plus loin dans le journal</span>.</dd>
+    <dt>Auto-scroll</dt><dd>Coché par défaut : la vue reste en bas, sur les dernières lignes.</dd>
+  </dl>
+  <p>Chaque ligne : heure, niveau en couleur (DEBUG gris, INFO bleu, WARNING orange, ERROR rouge), module et message. Les avertissements ont un fond orange pâle, les erreurs un fond rouge pâle. La page charge les 500 dernières entrées ; <span class="ui">↑ Lire plus loin dans le journal</span> remonte plus loin.</p>
+  <div class="note"><p>Le fichier se purge tout seul : au-delà de 40 Mo, il est ramené à ses 10 derniers Mo (vérifié chaque heure).</p></div>
+</section>

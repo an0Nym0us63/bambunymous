@@ -1,7 +1,7 @@
 import React from "react";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
-import { LogOut, Trophy } from "lucide-react";
+import { LogOut, Trophy, BookOpen } from "lucide-react";
 import { useAuth, ROLE_LABEL, ROLE_ADMIN } from "../store/auth";
 import client from "../api/client";
 import { FriendPicker, useFriendsPrinting } from "./Friends";
@@ -153,6 +153,13 @@ export default function UserMenu({ placement = "bottom", showName = false, size 
                 cursor:"pointer", color:"var(--text)", fontSize:13, fontWeight:600, textAlign:"left" }}>
               <Trophy size={16} color="#F59E0B"/> Succès
             </button>
+            {/* le guide d'utilisation : un site statique servi a /doc/ (frontend/public/doc) */}
+            <a href="/doc/index.html" onClick={() => setRect(null)}
+              style={{ width:"100%", display:"flex", alignItems:"center", gap:10, boxSizing:"border-box",
+                padding:"12px 14px", borderBottom:"1px solid var(--border)", textDecoration:"none",
+                color:"var(--text)", fontSize:13, fontWeight:600 }}>
+              <BookOpen size={16} color="#3B82F6"/> Guide d'utilisation
+            </a>
             {!opened ? null : door ? (
               <form onSubmit={go} style={{ display:"flex", alignItems:"center", gap:6, padding:"9px 10px 9px 14px",
                 borderBottom:"1px solid var(--border)" }}>

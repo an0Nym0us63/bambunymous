@@ -1,0 +1,463 @@
+<h1>Impressions</h1>
+<p class="lead">L'historique de tout ce que ton imprimante a produit : chaque print, ses photos, ses coûts, ses filaments, rangés en groupes si tu veux. C'est aussi là que vivent ta liste « À faire » MakerWorld et les modèles à évaluer. Menu <span class="ui">Impressions</span> (barre du bas sur téléphone, colonne de gauche sur ordinateur).</p>
+
+<section id="impressions-onglets">
+  <h2>Les quatre onglets</h2>
+  <p>En haut de la page, une barre d'onglets :</p>
+  <dl class="opts">
+    <dt><span class="ui">Liste</span></dt><dd>L'historique complet, avec compteurs, recherche, filtres et groupes. C'est l'onglet ouvert par défaut.</dd>
+    <dt><span class="ui">Galerie</span></dt><dd>Seulement les prints et groupes qui ont des photos, en grandes tuiles, avec un mode comparaison.</dd>
+    <dt><span class="ui">MakerWorld</span></dt><dd>Tes collections, j'aime et découvertes MakerWorld (détaillé dans le chapitre <a href="#makerworld">MakerWorld</a>), avec en tête la tuile <a href="#impressions-a-evaluer">À évaluer</a>.</dd>
+    <dt><span class="ui">À faire</span></dt><dd>Ta file d'attente : les modèles MakerWorld que tu veux imprimer, avec ce qui est faisable tout de suite avec ton stock. Voir <a href="#impressions-a-faire">À faire</a>.</dd>
+  </dl>
+  <div class="tip"><p>L'onglet choisi s'écrit dans l'adresse (<code>/prints?tab=gallery</code>, <code>?tab=makerworld</code>, <code>?tab=queue</code>) et il est gardé quand tu passes d'une page à l'autre. Une adresse <code>/prints?id=123</code> ouvre directement la fiche du print 123, <code>/prints?group=4</code> celle du groupe 4 : pratique pour partager un lien.</p></div>
+  <figure class="phone"><img src="img/impressions-liste.webp" alt="Page Impressions sur téléphone, onglet Liste : compteurs, recherche et cartes de prints"><figcaption>L'onglet Liste sur téléphone : les compteurs, la barre de recherche et les cartes.</figcaption></figure>
+</section>
+
+<section id="impressions-historique">
+  <h2>L'historique (onglet Liste)</h2>
+  <p>Chaque impression lancée sur l'imprimante apparaît ici <b>toute seule</b> : l'appli la crée au démarrage du travail, la complète avec le fichier (nom, vignette du plateau, durée estimée, filaments et grammes), prend des photos caméra aux étapes clés et pose le statut à la fin. Tu n'as rien à saisir.</p>
+  <figure><img src="img/impressions-liste-bureau.webp" alt="Historique des impressions sur ordinateur, six cartes par ligne, avec trois tuiles de groupes"><figcaption>Sur ordinateur, la grille montre plus de cartes par ligne. Les tuiles à mosaïque violette sont des groupes.</figcaption></figure>
+
+  <section id="impressions-compteurs">
+    <h3>Les compteurs</h3>
+    <p>Quatre pastilles résument <b>tout l'historique affiché</b> (elles suivent la recherche et les filtres) :</p>
+    <dl class="opts">
+      <dt>« 90 prints » (bleu)</dt><dd>Le nombre de prints.</dd>
+      <dt>Durée (violet)</dt><dd>Le temps d'impression cumulé, en heures et minutes, arrondi à l'heure au-delà de 100 h (« 222 h »).</dd>
+      <dt>Poids (orange)</dt><dd>Le filament consommé (« 8,40 kg »).</dd>
+      <dt>Coût (vert)</dt><dd>Filament + électricité (« 197 € »).</dd>
+    </dl>
+    <p>Les prints encore en cours ne sont pas comptés. Une pastille à zéro est masquée.</p>
+  </section>
+
+  <section id="impressions-recherche">
+    <h3>Rechercher</h3>
+    <p>Tape dans <span class="ui">Rechercher un print…</span> : la liste se met à jour une fraction de seconde après ta dernière frappe. Chaque mot doit se retrouver quelque part, et la recherche fouille large :</p>
+    <ul>
+      <li>le nom affiché, le nom d'origine du fichier, le <b>nom de recherche en français</b> (voir <a href="#impressions-fiche">la fiche</a>) ;</li>
+      <li>les filaments utilisés (nom, marque, matériau, type) ;</li>
+      <li>la fiche MakerWorld du modèle (titre, créateur, catégories, mots-clés) ;</li>
+      <li>le nom du groupe ;</li>
+      <li>une couleur, si tu tapes un code hexadécimal comme <code>#ff0000</code>.</li>
+    </ul>
+    <p>Exemple : « dragon petg » trouve les dragons imprimés en PETG.</p>
+  </section>
+
+  <section id="impressions-filtres">
+    <h3>Filtres et tri</h3>
+    <p>Le bouton <span class="ui">Filtres</span> ouvre le panneau <b>Filtres &amp; tri</b>. Quand des critères sont actifs, il devient <span class="ui">Filtres (2)</span> et passe en bleu.</p>
+    <figure class="phone"><img src="img/impressions-filtres.webp" alt="Panneau Filtres et tri : période, statut, tri, matériau, type de filament, filament exact"><figcaption>Le panneau Filtres &amp; tri.</figcaption></figure>
+    <dl class="opts">
+      <dt>Période</dt><dd><span class="ui">Tout</span> (par défaut) ou deux dates <b>Début</b> et <b>Fin</b> (la date de fin est incluse).</dd>
+      <dt>Statut</dt><dd><span class="ui">Tous</span>, <span class="ui">En cours</span>, <span class="ui">Réussis</span>, <span class="ui">Partiels</span>, <span class="ui">À refaire</span>, <span class="ui">Échoués</span>.</dd>
+      <dt>Trier par</dt><dd><span class="ui">Plus récent</span> (par défaut), <span class="ui">Plus ancien</span>, <span class="ui">Coût ↓</span>, <span class="ui">Poids ↓</span>, <span class="ui">Durée ↓</span>. Un groupe est classé sur ses totaux (coût, poids et durée additionnés) et sur la date de son print le plus récent.</dd>
+      <dt>Matériau</dt><dd>Un bouton par matériau présent dans ton stock (PLA, PETG…). Touche-le de nouveau pour le retirer.</dd>
+      <dt>Type de filament</dt><dd>Les variantes (PLA Basic, PLA Matte, PETG HF…), limitées au matériau choisi.</dd>
+      <dt>Teinte</dt><dd>Garde les prints qui utilisent un filament de cette couleur (rouge, bleu, blanc…). Seules les teintes réellement utilisées sont proposées, avec leur nombre.</dd>
+      <dt>Filament exact</dt><dd>Un champ de recherche et la liste de tes filaments, rangés par matériau. Choisis-en un pour ne voir que les prints qui l'ont utilisé ; <span class="ui">✕ Effacer filament sélectionné</span> le retire.</dd>
+    </dl>
+    <p><span class="ui">Effacer filtres</span> remet tout à zéro ; <span class="ui">Appliquer</span> ferme le panneau.</p>
+  </section>
+
+  <section id="impressions-cartes">
+    <h3>Lire une carte</h3>
+    <p>Chaque print est une carte :</p>
+    <ul>
+      <li>la <b>vignette</b> du plateau tirée du fichier ;</li>
+      <li>en haut à gauche, un <b>badge de statut</b>, seulement si le print n'est pas réussi : <b>En cours</b>, <b>Partiel</b>, <b>À refaire</b>, <b>Échoué</b>, <b>Annulé</b> ;</li>
+      <li>en haut à droite, <b>×3</b> si le print a produit plusieurs pièces ;</li>
+      <li>en bas à gauche, les <b>pastilles de couleur</b> des filaments utilisés ;</li>
+      <li>en bas à droite, une <b>⭐</b> si le modèle MakerWorld est imprimé avec succès mais <a href="#impressions-a-evaluer">pas encore évalué</a> ;</li>
+      <li>dessous : le nom, la date et l'heure, la durée (réelle si elle est connue, sinon estimée).</li>
+    </ul>
+    <p>Touche une carte pour ouvrir <a href="#impressions-fiche">la fiche du print</a>.</p>
+    <p>Un <b>groupe</b> occupe une seule tuile, placée à la date de son print le plus récent : une mosaïque des vignettes de ses prints sous un voile violet, le badge <b>📁 12 prints</b>, son nom en violet et sa durée totale. Elle affiche <b>⭐ À évaluer</b> si des modèles du groupe attendent une évaluation, et <b>En cours</b> si un de ses prints est en train d'imprimer.</p>
+    <div class="note"><p><b>La mosaïque d'un groupe</b> : une photo prend toute la tuile, deux se partagent la largeur, trois mettent la photo principale à gauche et deux petites à droite, quatre et plus forment une grille 2×2. Au-delà de quatre photos, une case change de temps en temps (sauf si ton téléphone demande de réduire les animations).</p></div>
+    <p>L'historique se charge au fil du défilement. Si le chargement automatique s'arrête, un bouton <span class="ui">Charger plus</span> apparaît en bas. Quand il n'y a encore rien : « Aucune impression — les prochains prints apparaîtront automatiquement. »</p>
+  </section>
+
+  <section id="impressions-menu-carte">
+    <h3>Le menu d'une carte</h3>
+    <p>Clic droit sur une carte (ordinateur) ou appui long (téléphone) :</p>
+    <figure><img src="img/impressions-menu.webp" alt="Menu contextuel d'une carte : Ouvrir, Sélectionner, Modèle MakerWorld, Modifier, Supprimer"><figcaption>Le menu d'une carte, ouvert d'un clic droit sur ordinateur.</figcaption></figure>
+    <dl class="opts">
+      <dt><span class="ui">📄 Ouvrir</span></dt><dd>Ouvre la fiche.</dd>
+      <dt><span class="ui">☑ Sélectionner</span></dt><dd>Passe en <a href="#impressions-selection">sélection multiple</a> avec ce print déjà coché.</dd>
+      <dt><span class="ui">🌐 Modèle MakerWorld</span></dt><dd>Ouvre la fiche du modèle, si le print en a un.</dd>
+      <dt><span class="ui">✏️ Modifier</span> <span class="admin">admin</span></dt><dd>Ouvre directement l'<a href="#impressions-fiche-editer">édition</a>.</dd>
+      <dt><span class="ui">🗑 Supprimer…</span> <span class="admin">admin</span></dt><dd>Ouvre la <a href="#impressions-fiche-supprimer">confirmation de suppression</a>.</dd>
+    </dl>
+    <p>Sur la tuile d'un groupe, le menu propose <span class="ui">📄 Ouvrir le groupe</span>, <span class="ui">☑ Sélectionner</span> (pour fusionner ou supprimer des groupes), <span class="ui">🌐 Modèle MakerWorld</span> si tout le groupe vient du même modèle et, pour l'admin, <span class="ui">⛓ Dégrouper…</span> (les prints restent).</p>
+    <p>Sur téléphone, l'appui long sur une carte passe directement en sélection.</p>
+  </section>
+
+  <section id="impressions-selection">
+    <h3>Sélection multiple et actions de masse <span class="admin">admin</span></h3>
+    <p>Le bouton <span class="ui">✓</span> à droite des filtres (ou un appui long sur une carte) passe en mode sélection : une case apparaît sur chaque carte, et toucher une carte la coche. Une barre flottante en bas indique « 3 prints sélectionnés » et propose les actions. Touche <span class="ui">Annuler</span> (ou de nouveau <span class="ui">✓</span>) pour en sortir.</p>
+    <figure class="phone"><img src="img/impressions-selection.webp" alt="Trois cartes cochées et la barre du bas avec Grouper et Supprimer"><figcaption>Trois prints cochés : <span class="ui">Grouper</span> ou <span class="ui">Supprimer</span>.</figcaption></figure>
+    <dl class="opts">
+      <dt><span class="ui">Grouper</span></dt><dd>Range les prints cochés dans un groupe (nouveau ou existant). Voir <a href="#impressions-groupes-creer">Créer un groupe</a>.</dd>
+      <dt><span class="ui">Supprimer</span></dt><dd>En deux temps : le bouton devient <span class="ui">Confirmer ?</span>, touche-le une seconde fois. Les grammes ne sont <b>pas</b> rendus aux bobines dans ce cas : pour un print raté dont tu veux récupérer le filament, passe par <a href="#impressions-fiche-supprimer">la fiche</a>.</dd>
+      <dt><span class="ui">🔗 Fusionner N groupes</span></dt><dd>Quand tu as coché des groupes (au moins deux). Voir <a href="#impressions-groupes-fusionner">Fusionner</a>.</dd>
+    </dl>
+    <p>On sélectionne soit des prints (pour les grouper), soit des groupes (pour les fusionner) : si tu mélanges les deux, la barre te le rappelle et n'offre pas d'action.</p>
+  </section>
+
+  <section id="impressions-importer">
+    <h3>Importer un fichier .3mf <span class="admin">admin</span></h3>
+    <p>Le bouton à flèche montante (<span class="ui">Importer .3mf</span>) ajoute à l'historique un print fait hors de la surveillance de l'appli (sur une autre imprimante, avant l'installation…). Choisis le fichier .3mf : l'appli en lit le nom, la vignette, la durée estimée et les filaments, et crée un print <b>Réussi</b>.</p>
+    <div class="note"><p>Un print importé n'est relié à aucune bobine et ne retire rien du stock. Associe ses filaments à tes bobines depuis <a href="#impressions-fiche-filaments">la fiche</a> si tu veux des coûts justes.</p></div>
+  </section>
+</section>
+
+<section id="impressions-fiche">
+  <h2>La fiche d'une impression</h2>
+  <p>Touche une carte (ou un print dans un groupe, ou le bouton <span class="ui">Fiche</span> de la galerie) : la fiche s'ouvre en panneau par-dessus la liste. Ferme-la avec <span class="ui">✕</span>, en la faisant glisser vers le bas ou en touchant à côté.</p>
+  <figure class="pair">
+    <img src="img/impressions-fiche-haut.webp" alt="Haut de la fiche : vignette, nom, nom de recherche, statut, date, durée, poids, coûts, photos">
+    <img src="img/impressions-fiche-bas.webp" alt="Bas de la fiche : carte MakerWorld, création d'objets, filaments, identifiants, boutons Éditer, Partager, Supprimer">
+    <figcaption>La fiche d'un print, du haut (à gauche) au bas (à droite).</figcaption>
+  </figure>
+
+  <section id="impressions-fiche-entete">
+    <h3>En-tête : nom, statut, date, durée, poids</h3>
+    <ul>
+      <li><b>La grande image</b> : la vignette du plateau tirée du fichier.</li>
+      <li><b>Le nom affiché</b>, et le crayon <span class="admin">admin</span> qui ouvre l'<a href="#impressions-fiche-editer">édition</a>. Si le nom d'origine du fichier est différent, il s'affiche en gris dessous. L'appli nettoie le nom de la tâche (extension retirée, « _ » remplacés par des espaces, suffixes v1 ou final retirés) ; un plateau autre que le premier donne « Titre — Plateau 3 ».</li>
+      <li><b>🔎 Nom de recherche</b> : la traduction française du nom, faite automatiquement, qui sert <b>uniquement</b> à la recherche (« Dragon » se retrouve en tapant « dragon » même si le fichier s'appelait « Dragon_articulated »). Elle ne remplace jamais le titre. <span class="admin">admin</span> : touche la pastille pour la corriger ou <span class="ui">🔎 Ajouter un nom de recherche</span>, puis <span class="ui">OK</span>. Une infobulle dit d'où vient la traduction (service de traduction, « Saisi à la main »…).</li>
+      <li><b>Le statut</b> et, si le print est dans un groupe, le badge <b>📁 Nom du groupe</b>. <span class="admin">admin</span> : sa petite croix retire le print du groupe (après confirmation).</li>
+      <li>Trois badges : <b>📅 date et heure</b> de début, <b>⏱ durée</b>, <b>⚖ poids</b> de filament.</li>
+    </ul>
+    <h4>Les statuts</h4>
+    <dl class="opts">
+      <dt>En cours</dt><dd>L'impression tourne.</dd>
+      <dt>Réussi</dt><dd>Posé automatiquement quand l'imprimante annonce la fin normale.</dd>
+      <dt>Échoué</dt><dd>Posé automatiquement si le travail s'arrête autrement (erreur, annulation sur l'imprimante).</dd>
+      <dt>Partiel, À refaire</dt><dd>À poser toi-même pour garder une trace (pièce utilisable mais imparfaite, pièce à relancer).</dd>
+      <dt>Annulé</dt><dd>Statut d'affichage, utilisé par certains prints.</dd>
+    </dl>
+    <h4>Durée estimée et durée réelle</h4>
+    <p>La durée affichée partout est la <b>durée réelle</b> quand elle est connue : de la fin moins le début, <b>pauses retirées</b> (bobine vide, erreur, pause manuelle). Si elle paraît aberrante ou n'a pas pu être mesurée, l'appli prend l'<b>estimation</b> du fichier (et, pour un échec, l'estimation multipliée par le pourcentage atteint). Tu peux la corriger dans l'<a href="#impressions-fiche-editer">édition</a>.</p>
+  </section>
+
+  <section id="impressions-fiche-couts">
+    <h3>Coûts</h3>
+    <p>Le bloc <b>Coûts</b> détaille ce que le print t'a coûté :</p>
+    <dl class="opts">
+      <dt>Filament</dt><dd>Le coût du filament réellement utilisé, au prix de <b>la bobine</b> (si tu as saisi un prix sur la bobine), sinon au prix du filament, sinon 20 €/kg. Entre parenthèses, « sans bobine » : le même calcul au prix catalogue du filament, pour comparer (une bobine offerte, saisie à 0 €, compte vraiment 0).</dd>
+      <dt>Électricité</dt><dd>La durée en heures multipliée par le coût horaire réglé dans les <a href="#parametres">Paramètres</a>.</dd>
+      <dt>Total</dt><dd>Filament + électricité, et entre parenthèses le total au prix catalogue.</dd>
+      <dt>N éléments</dt><dd>Le nombre de pièces produites par ce print. Au-delà d'une, le coût <b>par pièce</b> s'affiche (« · 0.68€/u »). <span class="admin">admin</span> : <span class="ui">Modifier</span> pour le changer, puis ✓.</dd>
+    </dl>
+    <p>Les coûts se recalculent tout seuls quand tu associes une bobine ou rends des grammes. Après un changement de prix, tu peux tout recalculer depuis <a href="#parametres-outils">Paramètres → Outils</a>.</p>
+  </section>
+
+  <section id="impressions-fiche-photos">
+    <h3>Photos</h3>
+    <p>Deux bandes défilantes :</p>
+    <dl class="opts">
+      <dt>Photos (N)</dt><dd>Les photos et vidéos que tu as ajoutées. <span class="admin">admin</span> : le bouton bleu <span class="ui">+</span> en ajoute, plusieurs à la fois (l'ordre est gardé). Les photos sont réduites, une vidéo devient une petite animation muette en boucle (30 s au plus).</dd>
+      <dt>Milestones (N)</dt><dd>Les captures automatiques de la caméra de l'imprimante, si elle est configurée : <b>Couche 1</b>, <b>Couche 2</b>, <b>50%</b>, <b>99%</b>, <b>100%</b>, et une capture au moment d'un échec.</dd>
+    </dl>
+    <p>Sur chaque photo ajoutée <span class="admin">admin</span> : l'étoile en haut à gauche en fait la <b>photo principale</b> (étoile dorée), celle qu'on voit dans la galerie et dans la mosaïque d'un groupe ; la corbeille en haut à droite la supprime, en deux temps (« Supprimer ? »). Les captures caméra peuvent aussi être supprimées.</p>
+    <p>Touche une photo pour la voir en plein écran : flèches pour passer à la suivante, compteur « 3 / 7 », touche à côté pour fermer.</p>
+  </section>
+
+  <section id="impressions-fiche-makerworld">
+    <h3>Le modèle MakerWorld</h3>
+    <p>Si le print vient d'un modèle MakerWorld (l'imprimante le signale, ou tu as saisi son numéro), une carte le présente : couverture, titre, créateur, catégories et compteurs (❤ j'aime, ⬇ téléchargements, 🖨 impressions, ⭐ mises en collection). Touche la carte pour ouvrir <a href="#makerworld">la fiche du modèle</a> dans l'appli, le lien <span class="ui">MAKERWORLD ↗</span> pour le site.</p>
+    <ul>
+      <li><b>État de l'évaluation</b> : « ⭐ Déjà évalué sur MakerWorld (5/5) », « ⭐ MakerWorld attend ton évaluation », « Ton modèle : pas d'évaluation à faire »… Si une évaluation est attendue, un bouton orange <span class="ui">⭐ Évaluer</span> ouvre le <a href="#impressions-a-evaluer-noter">formulaire</a>.</li>
+      <li><b>Plateaux · 2/5 imprimés</b> : pour un modèle à plusieurs plateaux, les vignettes de chaque plateau. Vert ✓ = imprimé, orange ⏳ = en cours, pointillé bleu « ? » = probablement imprimé (reconnu à l'image), gris = pas encore. <span class="admin">admin</span> : touche un plateau pour dire quel print l'a imprimé, ou valide d'un coup les plateaux reconnus avec <span class="ui">💡 Valider N plateau(x) reconnu(s)</span>. Une reconnaissance n'est jamais comptée sans ta validation.</li>
+      <li><span class="ui">☆ Ranger dans mes collections</span> : ajoute le modèle à une collection MakerWorld (par exemple celle qui alimente <a href="#impressions-a-faire">À faire</a>).</li>
+      <li><span class="ui">Modèles similaires</span> : charge à la demande une bande de modèles proches ; ceux que tu as déjà imprimés portent « ✓ IMPRIMÉ ».</li>
+      <li><span class="ui">👀 Chez les copains</span> : les mêmes modèles imprimés par tes <a href="#copains">copains</a>, s'il y en a.</li>
+    </ul>
+    <p>Pour lier ou délier un modèle à la main, saisis son numéro dans l'<a href="#impressions-fiche-editer">édition</a> (champ « ID MakerWorld »). Pour lier un modèle à plusieurs prints d'un coup, passe par <span class="ui">🔗 Associer à un print</span> sur la fiche du modèle (voir le chapitre <a href="#makerworld">MakerWorld</a>).</p>
+  </section>
+
+  <section id="impressions-fiche-filaments">
+    <h3>Filaments et bobines</h3>
+    <p>Sous la carte MakerWorld, le bouton <span class="ui">📦 Créer des objets depuis ce print</span> <span class="admin">admin</span> transforme le print en objets à vendre ou à donner (voir <a href="#objets">Objets</a>) ; le compteur « 0 / 1 » dit combien d'objets ont déjà été créés sur le nombre d'éléments.</p>
+    <p>L'accordéon <b>FILAMENTS (N)</b>, fermé par défaut, montre les pastilles des couleurs utilisées ; un point orange signale un filament qui n'est relié à aucune bobine. Touche-le pour le déplier :</p>
+    <figure class="phone"><img src="img/impressions-filaments.webp" alt="Accordéon Filaments déplié : deux filaments liés à des bobines, avec grammes et coût"><figcaption>Chaque ligne : filament, bobine liée (✓#1), marque, type, grammes et coût.</figcaption></figure>
+    <ul>
+      <li>un <b>anneau vert</b> autour de la pastille et <b>✓#12</b> : le filament est relié à la bobine n° 12, qui a été décomptée ;</li>
+      <li><span class="ui">▸ Mapper</span> (orange) <span class="admin">admin</span> : aucune bobine reliée ; touche la ligne pour en choisir une ;</li>
+      <li>à droite, le coût de ce filament et, entre parenthèses, son coût au prix catalogue.</li>
+    </ul>
+    <h4>Associer une bobine <span class="admin">admin</span></h4>
+    <ol>
+      <li>Touche une ligne marquée <span class="ui">▸ Mapper</span>.</li>
+      <li>Dans <b>Associer une bobine</b>, choisis l'onglet <span class="ui">Actives</span> ou <span class="ui">Archivées</span> ; la recherche en bas est préremplie avec le type du filament (tu peux taper nom, marque, matériau ou « #12 »).</li>
+      <li>Touche la bobine. L'appli propose alors « Décompter les grammes ? » : <span class="ui">Oui, déduire</span> retire les grammes du print du poids restant de la bobine, <span class="ui">Non</span> relie sans toucher au stock.</li>
+    </ol>
+    <p>Les coûts du print se recalculent aussitôt.</p>
+    <h4>Démapper <span class="admin">admin</span></h4>
+    <p>Appui long ou clic droit sur une ligne reliée : <b>Démapper</b> défait le lien et propose de rendre tout ou partie des grammes à la bobine (<span class="ui">Non</span>, <span class="ui">25%</span>… <span class="ui">100%</span>, 100 % par défaut).</p>
+    <p>Un simple toucher sur une ligne reliée ouvre la fiche du filament et de sa bobine (voir <a href="#filaments-bobines">Filaments</a>).</p>
+    <h4>Restituer des grammes <span class="admin">admin</span></h4>
+    <p>L'appli décompte le filament <b>dès le démarrage</b> d'un print. Si le print échoue à 30 %, ta bobine a donc été débitée de trop. Le bouton vert <span class="ui">⚖ Restituer</span> de l'en-tête de l'accordéon ouvre la fenêtre de restitution (la même qu'à la <a href="#impressions-fiche-supprimer">suppression</a>) : choisis pour chaque filament la part à rendre, puis <span class="ui">✓ Restituer</span>. Poids et coûts du print sont recalculés.</p>
+  </section>
+
+  <section id="impressions-fiche-bas">
+    <h3>Commentaire, identifiants et boutons</h3>
+    <ul>
+      <li><b>💬 Commentaire</b> : la note de statut saisie dans l'édition (« Décollement du plateau à 37 % »), affichée en violet.</li>
+      <li><b>Identifiants</b> (replié) : les numéros de tâche et de modèle, utiles en cas de souci.</li>
+      <li>Les boutons <span class="admin">admin</span> : <span class="ui">✏️ Éditer</span>, <span class="ui">📣 Partager</span>, <span class="ui">🗑 Supprimer</span>.</li>
+    </ul>
+    <p>Un compte en lecture seule voit la fiche entière mais aucun bouton d'action ; en rôle « Lecture seule » (sans « + prix »), les montants s'affichent « — ». Voir <a href="#premiers-pas-roles">les rôles</a>.</p>
+  </section>
+
+  <section id="impressions-fiche-editer">
+    <h3>Éditer (et renommer) un print <span class="admin">admin</span></h3>
+    <p><span class="ui">✏️ Éditer</span> (ou le crayon à côté du titre) ouvre <b>Éditer le print</b> :</p>
+    <figure class="phone"><img src="img/impressions-editer.webp" alt="Fenêtre Éditer le print : nom affiché, nom original, date, durée, statut, note, ID MakerWorld"><figcaption>La fenêtre d'édition.</figcaption></figure>
+    <dl class="opts">
+      <dt>Nom affiché</dt><dd>Le nom que tu veux voir partout : c'est ici qu'on <b>renomme</b> un print.</dd>
+      <dt>Nom original</dt><dd>Le nom brut du fichier, en lecture seule.</dd>
+      <dt>Date et heure</dt><dd>Le début du print.</dd>
+      <dt>Durée (minutes)</dt><dd>Préremplie avec la durée réelle (sinon l'estimation). Corrige-la si besoin ; les coûts d'électricité suivent.</dd>
+      <dt>Statut</dt><dd>Réussi, Partiel, À refaire, Échoué, En cours.</dd>
+      <dt>Note de statut</dt><dd>Un texte libre, affiché en « 💬 Commentaire » sur la fiche.</dd>
+      <dt>ID MakerWorld (design_id)</dt><dd>Le numéro du modèle MakerWorld (celui de son adresse). Saisis-le pour lier le print à un modèle, vide-le pour le délier.</dd>
+    </dl>
+    <p><span class="ui">💾 Enregistrer</span> valide, <span class="ui">Annuler</span> ferme sans rien changer.</p>
+  </section>
+
+  <section id="impressions-fiche-supprimer">
+    <h3>Supprimer un print et rendre le filament <span class="admin">admin</span></h3>
+    <p><span class="ui">🗑 Supprimer</span> ouvre <b>Supprimer ce print ?</b>. Si ses filaments sont reliés à des bobines, la fenêtre te demande d'abord combien de filament <b>rendre</b> aux bobines :</p>
+    <figure class="phone"><img src="img/impressions-supprimer.webp" alt="Supprimer ce print : choix de restitution par filament, Non, 25, 50, 75, 100 pour cent ou grammes précis"><figcaption>Pour un print échoué, rends aux bobines ce qui n'a pas été consommé.</figcaption></figure>
+    <ul>
+      <li>la ligne <b>Tous :</b> applique la même part à tous les filaments ;</li>
+      <li>chaque filament a ses boutons <span class="ui">Non</span> <span class="ui">25%</span> <span class="ui">50%</span> <span class="ui">75%</span> <span class="ui">100%</span> (100 % par défaut) ou un champ « ou … g » pour une valeur précise ;</li>
+      <li>le total en vert (« Total : +87.7g restitués ») récapitule.</li>
+    </ul>
+    <p>Choisis <span class="ui">Non</span> partout si le filament a vraiment été consommé, puis <span class="ui">Supprimer</span>. La suppression efface aussi les photos et fichiers du print. Elle est définitive.</p>
+  </section>
+
+  <section id="impressions-partage">
+    <h3>Partager sur Telegram <span class="admin">admin</span></h3>
+    <p><span class="ui">📣 Partager</span> (sur un print ou un groupe) envoie une petite carte sur Telegram : titre, durée, poids, date, filaments, lien MakerWorld et photos.</p>
+    <figure class="phone"><img src="img/impressions-partage.webp" alt="Fenêtre Partager sur Telegram : destinations, message, photos qui partiront, aperçu"><figcaption>Choisis les discussions, ajoute un mot, vérifie l'aperçu.</figcaption></figure>
+    <ol>
+      <li>Coche une ou plusieurs <b>Destinations</b> (l'appli se souvient de ton dernier choix).</li>
+      <li>Ajoute si tu veux un <b>Message</b> : l'aperçu se met à jour en direct.</li>
+      <li>Sous <b>Ce qui partira</b>, touche les vignettes pour ajouter ou retirer des photos (10 au plus). Si la caméra est disponible, une tuile 📷 ajoute une photo en direct prise au moment de l'envoi.</li>
+      <li>Touche <span class="ui">Envoyer</span> (ou « Envoyer à 2 destinations ») : l'envoi part en arrière-plan, une pastille en haut de l'écran en suit l'avancement.</li>
+    </ol>
+    <p>Sans destination, la fenêtre l'indique : relie ton compte Telegram et ajoute des discussions dans <a href="#notifications-telegram">Paramètres → Notifs → Partage Telegram</a>.</p>
+  </section>
+</section>
+
+<section id="impressions-groupes">
+  <h2>Les groupes</h2>
+  <p>Un groupe rassemble plusieurs prints qui forment un tout : les pièces d'un jeu d'échecs, les éléments d'un bureau, une série de cadeaux. Dans la liste il n'occupe qu'une tuile, et sa fiche additionne durées, poids et coûts. Un print n'appartient qu'à un groupe à la fois.</p>
+
+  <section id="impressions-groupes-creer">
+    <h3>Créer un groupe ou y ajouter des prints <span class="admin">admin</span></h3>
+    <ol>
+      <li>Passe en <a href="#impressions-selection">sélection</a> et coche les prints.</li>
+      <li>Touche <span class="ui">Grouper</span> : la fenêtre <b>Ajouter à un groupe</b> s'ouvre.</li>
+      <li>Touche un groupe existant pour y ajouter les prints, <b>ou</b> tape un nom dans <span class="ui">Rechercher ou créer un groupe…</span> puis <span class="ui">Créer un nouveau groupe « … »</span>.</li>
+    </ol>
+    <figure class="phone"><img src="img/impressions-grouper.webp" alt="Fenêtre Ajouter à un groupe avec la liste des groupes existants"><figcaption>Chaque groupe affiche la date de son dernier print et son nombre de prints.</figcaption></figure>
+    <p>Deux groupes peuvent porter le même nom : si tu tapes un nom déjà pris, l'appli te le signale et te laisse choisir entre rejoindre l'existant et en créer un nouveau.</p>
+  </section>
+
+  <section id="impressions-groupes-fiche">
+    <h3>La fiche d'un groupe</h3>
+    <p>Touche la tuile d'un groupe :</p>
+    <figure class="pair">
+      <img src="img/impressions-groupe-1.webp" alt="Haut de la fiche du groupe Bureau de Camille : totaux, coût, photos de groupe, carte MakerWorld, filaments">
+      <img src="img/impressions-groupe-3.webp" alt="Bas de la fiche de groupe : tuiles des prints avec étoile et croix, boutons Éditer, Dégrouper, Partager, Supprimer">
+      <figcaption>La fiche du groupe « Bureau de Camille » : totaux et photos en haut, prints et actions en bas.</figcaption>
+    </figure>
+    <ul>
+      <li><b>Totaux</b> : ⏱ durée, ⚖ poids et 💰 coût de tous les prints, puis le bloc <b>Coût total</b> avec, entre parenthèses, le total au prix catalogue.</li>
+      <li><b>N éléments</b> : le nombre de pièces que représente le groupe (par exemple 24 pour un calendrier de l'Avent en 6 prints) ; le coût par pièce s'affiche dès qu'il y en a plus d'une. <span class="admin">admin</span> : <span class="ui">Modifier</span>.</li>
+      <li><b>Photos</b> : les photos propres au groupe (une photo de l'ensemble fini, par exemple). Voir ci-dessous.</li>
+      <li>Si des modèles du groupe attendent une évaluation, un bloc orange <b>⭐ N modèles à évaluer dans ce groupe</b> propose un bouton par modèle et, s'il y en a plusieurs, <span class="ui">⭐ Tout évaluer</span> pour donner la même évaluation à tous.</li>
+      <li>Une <b>carte MakerWorld</b> par modèle présent dans le groupe, le plus imprimé d'abord ; « 4 prints sur 12 de ce modèle » quand le groupe mêle plusieurs modèles.</li>
+      <li><b>Filaments</b> : les filaments de tous les prints additionnés.</li>
+      <li><span class="ui">📦 Créer des objets depuis ce groupe</span> <span class="admin">admin</span> : le coût de chaque objet est le coût total divisé par le nombre d'éléments.</li>
+      <li><b>Prints (N)</b> : une tuile par print (vignette, statut, nom, date) ; touche-la pour ouvrir sa fiche. <span class="admin">admin</span> : la croix en haut à droite retire le print du groupe, l'étoile en haut à gauche en fait la <b>référence visuelle</b> du groupe (étoile orange), celle qui passe en tête de la mosaïque.</li>
+    </ul>
+    <p>Les boutons <span class="admin">admin</span> en bas :</p>
+    <dl class="opts">
+      <dt><span class="ui">✏️ Éditer</span></dt><dd>Renomme le groupe (champ « Nom du groupe »).</dd>
+      <dt><span class="ui">📤 Dégrouper</span></dt><dd>Supprime le groupe et ses photos propres ; <b>les prints restent</b> dans l'historique, simplement sans groupe.</dd>
+      <dt><span class="ui">📣 Partager</span></dt><dd>Comme pour un print, voir <a href="#impressions-partage">Partager sur Telegram</a>.</dd>
+      <dt><span class="ui">🗑 Supprimer</span></dt><dd>Supprime le groupe <b>et tous ses prints</b> (« Supprimer le groupe … et ses 12 prints ? »). Définitif.</dd>
+    </dl>
+  </section>
+
+  <section id="impressions-groupes-photos">
+    <h3>Photos de groupe <span class="admin">admin</span></h3>
+    <p>Le <span class="ui">+</span> à côté de <b>Photos</b> ajoute des photos ou vidéos au groupe lui-même (pas à un print). Sur chaque photo : l'étoile la choisit comme <b>vignette de la galerie</b> pour ce groupe, la corbeille la supprime (en deux temps). Touche une photo pour l'agrandir ; en plein écran, glisse ou utilise les flèches (← → et Échap au clavier).</p>
+    <p>La mosaïque du groupe, dans la liste et la galerie, mélange les photos du groupe et celles de ses prints.</p>
+  </section>
+
+  <section id="impressions-groupes-fusionner">
+    <h3>Fusionner des groupes <span class="admin">admin</span></h3>
+    <ol>
+      <li>Passe en sélection et coche au moins deux tuiles de groupe.</li>
+      <li>Touche <span class="ui">🔗 Fusionner N groupes</span> dans la barre du bas.</li>
+      <li>Choisis le groupe <b>qui reste</b> (il garde son nom et sa vignette) ; le premier coché est proposé.</li>
+      <li>Vérifie le <b>nombre d'éléments</b> du groupe fusionné, prérempli avec la somme (« 1 + 1 = 2 »).</li>
+      <li>Touche <span class="ui">Fusionner dans « … »</span>.</li>
+    </ol>
+    <figure><img src="img/impressions-fusion.webp" alt="Fenêtre Fusionner 2 groupes : choix du groupe gardé et nombre d'éléments"><figcaption>Les prints, photos et objets des autres groupes passent dans celui que tu gardes.</figcaption></figure>
+  </section>
+</section>
+
+<section id="impressions-galerie">
+  <h2>La galerie</h2>
+  <p>L'onglet <span class="ui">Galerie</span> ne montre que les prints et groupes qui ont des <b>photos ajoutées</b> (les captures automatiques de la caméra n'y figurent pas). Chaque tuile carrée est une mosaïque de ses photos, avec le nom et la date (ou « 📁 12 prints » pour un groupe), et « 2 📷 » quand il y a plusieurs photos.</p>
+  <figure class="phone"><img src="img/impressions-galerie.webp" alt="Galerie : tuiles de photos de prints et de groupes"><figcaption>La galerie, avec la bascule « Ma galerie » / « Chez les copains ».</figcaption></figure>
+  <ul>
+    <li>La <b>recherche</b> et le <b>tri</b> du panneau <span class="ui">Filtres</span> s'appliquent aussi ici.</li>
+    <li>Touche une tuile : ses photos défilent en plein écran (flèches, vignettes en bas, compteur « 1 / 2 »). Le bouton <span class="ui">Fiche</span> ouvre la fiche du print ou du groupe.</li>
+    <li>Si tu as des <a href="#copains">copains</a>, la bascule <span class="ui">👀 Chez les copains</span> montre leurs photos (en lecture seule), avec le nom du copain sur chaque tuile.</li>
+  </ul>
+  <figure class="phone"><img src="img/impressions-carrousel.webp" alt="Photo en plein écran avec flèches, vignettes et bouton Fiche"><figcaption>Le défilement plein écran d'une tuile.</figcaption></figure>
+
+  <section id="impressions-galerie-comparer">
+    <h3>Comparer des prints</h3>
+    <ol>
+      <li>Appuie une demi-seconde sur une tuile : des cases apparaissent.</li>
+      <li>Coche d'autres tuiles (6 au plus). Leurs miniatures s'alignent dans un plateau en bas, avec « 2/6 ».</li>
+      <li>Touche <span class="ui">Comparer</span> : les éléments s'affichent côte à côte avec leur <b>coût</b>, leur <b>durée</b> et leur <b>poids</b>. <span class="ui">Vider</span> efface la sélection.</li>
+    </ol>
+    <figure class="phone"><img src="img/impressions-comparer-fen.webp" alt="Fenêtre Comparer (2) : deux prints côte à côte avec coût, durée et poids"><figcaption>Deux prints comparés.</figcaption></figure>
+  </section>
+</section>
+
+<section id="impressions-a-faire">
+  <h2>À faire : ta file MakerWorld</h2>
+  <p>L'onglet <span class="ui">À faire</span> transforme une ou plusieurs <b>collections MakerWorld</b> (par exemple une collection que tu as appelée « À imprimer ») en liste de travail. Pour chaque modèle, l'appli choisit un profil, ses plateaux et, pour chaque couleur, le filament de ton stock le plus proche ; puis elle te dit ce qui est <b>imprimable tout de suite</b> avec ce qui est chargé dans l'AMS, ce qui l'est avec ton stock, et ce qui manque.</p>
+  <div class="note"><p>Il faut un compte MakerWorld relié (voir <a href="#makerworld-compte">le compte MakerWorld</a>). Choisir les collections, l'ordre, les quantités et les plans demande d'être admin ou d'avoir le droit MakerWorld ; les autres comptes voient la liste en lecture seule.</p></div>
+  <figure class="phone"><img src="img/impressions-afaire.webp" alt="Onglet À faire : collection choisie, tuiles de totaux, filtres et premier modèle"><figcaption>L'onglet À faire : les totaux puis la liste des modèles.</figcaption></figure>
+
+  <section id="impressions-a-faire-ajouter">
+    <h3>Choisir les collections et ajouter des modèles</h3>
+    <ol>
+      <li>Touche <span class="ui">⚙ Choisir</span> à côté de « Collections : ».</li>
+      <li>Coche une ou plusieurs collections de ton compte MakerWorld (le nombre de modèles est indiqué à droite).</li>
+      <li>Touche <span class="ui">Utiliser N collection(s)</span>.</li>
+    </ol>
+    <figure class="phone"><img src="img/impressions-afaire-coll.webp" alt="Fenêtre Collections À faire avec cases à cocher"><figcaption>Les modèles des collections cochées forment la liste, sans doublon.</figcaption></figure>
+    <p>Pour <b>ajouter un modèle</b> à la file, range-le simplement dans une de ces collections : depuis la fiche d'un modèle dans l'appli (<span class="ui">☆ Collections</span> ou <span class="ui">☆ Ranger dans mes collections</span>) ou sur le site MakerWorld. Un modèle qui arrive sans place définie se met en haut avec l'étiquette <b>Nouveau</b>. Le bouton <span class="ui">⟳</span> relit la liste tout de suite (la première lecture peut être longue : chaque fiche est lue sur MakerWorld).</p>
+  </section>
+
+  <section id="impressions-a-faire-totaux">
+    <h3>Les totaux</h3>
+    <p>Une grille de petites tuiles résume la liste : nombre de <b>modèles</b>, <b>temps total</b>, <b>filament</b> en grammes, <b>coût estimé</b> (au prix de tes filaments, « — » si un prix manque), puis le nombre de modèles <b>prêts (AMS)</b>, <b>en partie (AMS)</b>, <b>stock OK</b>, <b>à compléter</b> et <b>déjà imprimés</b>.</p>
+    <p>Le sous-onglet <span class="ui">🧵 Filaments pour tout imprimer</span> fait la liste de courses : pour chaque filament retenu, le besoin face au stock (« 320 g / 1 000 g ») et ce qu'il restera, ou ce qu'il manque en rouge. Les couleurs sans aucun équivalent en stock sont listées à part. Si tout est couvert : « Aucun filament à prévoir. »</p>
+  </section>
+
+  <section id="impressions-a-faire-ligne">
+    <h3>Lire une ligne : faisable maintenant ?</h3>
+    <figure class="phone"><img src="img/impressions-afaire-lignes.webp" alt="Lignes de modèles avec plateaux, filaments, état et quantité"><figcaption>Trois modèles : un prêt, un faisable en partie, un auquel il manque un filament.</figcaption></figure>
+    <ul>
+      <li><b>Étiquettes</b> : <b>📌 Retenu</b> si tu as fixé un plan (profil, plateaux, filaments) depuis la fiche du modèle ; <b>Par défaut</b> sinon (profil par défaut, tous les plateaux, filament le plus proche) ; <b>🖨️ En cours · 42 %</b> si le modèle est en train d'imprimer (il remonte alors en tête).</li>
+      <li><b>Sous-ligne</b> : profil, nombre de plateaux retenus, durée, grammes, coût, nombre de fois déjà imprimé.</li>
+      <li><b>Plateaux</b> : un carré numéroté par plateau. Vert = faisable maintenant avec l'AMS ; vert pâle avec coche = déjà imprimé ; gris = un filament manque dans l'AMS ; orange ⏳ = en cours. Suivi de « à lancer : 2, 4 ».</li>
+      <li><b>Où tu en es</b> : à côté des carrés, le compte des plateaux retenus déjà faits, <b>série par série</b> : « 2/4 faits », « 4/4 faits ×2 » quand le modèle a été imprimé en entier deux fois. Un modèle que tu refais des mois plus tard repart d'une nouvelle série (« 2e série : 2/4 faits ») : un plateau compte comme fait s'il a été imprimé plus souvent que le moins imprimé des plateaux retenus. La coche et « à lancer » suivent la série en cours.</li>
+      <li><b>▶ faisable maintenant</b> : ce que tu peux lancer tout de suite (nombre de plateaux, durée, grammes).</li>
+      <li><b>Pastilles des filaments</b> : la couleur du filament retenu ; contour vert = assez dans l'AMS, orange = assez en stock mais pas chargé, rouge = manque.</li>
+    </ul>
+    <p>À droite, l'état du modèle :</p>
+    <dl class="opts">
+      <dt>✅ Prêt (AMS)</dt><dd>Tous les filaments choisis sont chargés dans l'AMS, en quantité suffisante.</dd>
+      <dt>🟩 2/4 plateaux prêts</dt><dd>Une partie est faisable tout de suite avec l'AMS (des plateaux ou des exemplaires) ; « reste : stock OK » ou « reste : manque » pour le reste.</dd>
+      <dt>🟡 Stock OK</dt><dd>Assez en stock, mais pas tout dans l'AMS : charge les bobines avant.</dd>
+      <dt>🔴 Manque</dt><dd>Un filament manque ou n'a pas d'équivalent dans ton stock.</dd>
+      <dt>— Inconnu</dt><dd>La fiche ou le profil n'ont pas pu être lus.</dd>
+    </dl>
+    <p><b>Quantité</b> : les boutons <span class="ui">–</span> <span class="ui">×1</span> <span class="ui">+</span> règlent le nombre d'exemplaires voulus (1 à 99) ; besoins et « prêt » en tiennent compte.</p>
+    <p>Touche une ligne pour ouvrir la fiche du modèle. C'est là que tu choisis un profil, retires des plateaux, changes le filament retenu pour une couleur (la correspondance avec le stock compare les couleurs comme l'œil, du « identique » au « couleur différente », et privilégie la même référence et la même finition), puis touches <span class="ui">📌 Retenir pour « À faire »</span>. Le détail est dans le chapitre <a href="#makerworld">MakerWorld</a>.</p>
+  </section>
+
+  <section id="impressions-a-faire-tri">
+    <h3>Filtrer, trier, limiter les comptes</h3>
+    <dl class="opts">
+      <dt>Filtres</dt><dd><span class="ui">Tous</span>, <span class="ui">Prêts (AMS)</span>, <span class="ui">En partie</span>, <span class="ui">Stock OK</span>, <span class="ui">Manque</span>, avec leur nombre.</dd>
+      <dt>Trier</dt><dd><b>par priorité</b> (ton ordre, par défaut), <b>le plus de plateaux faisables maintenant</b>, <b>le plus d'heures faisables maintenant</b>, <b>le plus de grammes faisables maintenant</b>, <b>la plus grande part prête</b>. Pratique pour remplir une soirée avec ce qui est déjà chargé.</dd>
+      <dt><span class="ui">✂ Jusqu'ici</span></dt><dd>Touche ensuite le dernier modèle à compter : totaux et liste de filaments ne portent plus que sur le début de la liste (un trait « ✂ jusqu'ici » marque la limite, les suivants sont grisés). Utile pour préparer « les cinq prochains ».</dd>
+      <dt><span class="ui">☑ Choisir</span></dt><dd>Coche les modèles à compter ; totaux et filaments se limitent à eux.</dd>
+      <dt><span class="ui">↕ Réorganiser</span></dt><dd>Fixe l'ordre de priorité avec quatre boutons par ligne (en haut, monter, descendre, en bas), puis <span class="ui">✓ Terminé</span>.</dd>
+    </dl>
+    <p>Ces deux modes de limitation sont mémorisés sur l'appareil ; une bulle en bas propose <span class="ui">Changer</span> ou <span class="ui">Annuler</span>.</p>
+  </section>
+
+  <section id="impressions-a-faire-menu">
+    <h3>Le menu d'un modèle</h3>
+    <p>Appui long ou clic droit sur une ligne :</p>
+    <figure class="phone"><img src="img/impressions-afaire-menu.webp" alt="Menu d'un modèle de la file : ouvrir, compter jusqu'ici, déplacer, exemplaires, oublier le plan"><figcaption>Toutes les actions d'un modèle de la file.</figcaption></figure>
+    <ul>
+      <li><span class="ui">📄 Ouvrir la fiche</span>, <span class="ui">🌐 Voir sur MakerWorld</span> ;</li>
+      <li><span class="ui">✂ Compter jusqu'ici</span> (ou <span class="ui">↺ Revenir à toute la liste</span>) ;</li>
+      <li>pour déplacer : <span class="ui">⤒ Mettre en tête</span>, <span class="ui">↑ Monter d'un cran</span>, <span class="ui">↓ Descendre d'un cran</span>, <span class="ui">⤓ Mettre en bas</span>, <span class="ui"># Mettre à la position…</span> (tape le numéro voulu), <span class="ui">↕ Réorganiser toute la liste</span> ;</li>
+      <li><span class="ui">＋ Un exemplaire de plus</span> / <span class="ui">－ Un de moins</span> ;</li>
+      <li><span class="ui">📌 Oublier le plan retenu</span> : revient au profil et aux filaments par défaut.</li>
+    </ul>
+  </section>
+</section>
+
+<section id="impressions-a-evaluer">
+  <h2>À évaluer</h2>
+  <p>MakerWorld attend une évaluation pour chaque modèle (et chaque profil) que tu as imprimé. L'appli tient la liste des modèles <b>imprimés avec succès et pas encore évalués</b>, avec tes photos prêtes à joindre, pour que tu notes en quelques secondes.</p>
+  <p>Où la trouver : la tuile <b>À évaluer</b> en tête de l'onglet <span class="ui">MakerWorld</span> (mosaïque de photos et grande ⭐, « 3 modèles imprimés »). On la croise aussi dans la liste (⭐ sur les cartes et tuiles), sur la carte MakerWorld d'une fiche et dans la fiche d'un groupe.</p>
+  <figure class="pair">
+    <img src="img/impressions-mw.webp" alt="Onglet MakerWorld avec la tuile À évaluer en tête des collections">
+    <img src="img/impressions-aevaluer.webp" alt="Fenêtre À évaluer : un modèle par carte avec photos et boutons">
+    <figcaption>La tuile À évaluer (à gauche) ouvre la liste des modèles à noter (à droite).</figcaption>
+  </figure>
+  <p>Chaque carte montre le modèle, son créateur, combien de fois et quand tu l'as imprimé, « ⏳ Attendu par MakerWorld » avec le profil concerné, tes photos (celles du print, sinon celles du groupe), et les boutons :</p>
+  <dl class="opts">
+    <dt><span class="ui">⭐ Évaluer ici</span></dt><dd>Ouvre le formulaire dans l'appli (quand MakerWorld attend l'évaluation et que tu as le droit MakerWorld).</dd>
+    <dt><span class="ui">Oublier</span></dt><dd>Ne plus te demander d'évaluer ce modèle dans l'appli.</dd>
+    <dt><span class="ui">MakerWorld ↗</span> ou <span class="ui">⭐ Évaluer sur MakerWorld ↗</span></dt><dd>Ouvre le modèle sur le site, quand l'évaluation ne peut pas se faire dans l'appli.</dd>
+    <dt><span class="ui">Fiche</span></dt><dd>La fiche du modèle dans l'appli.</dd>
+  </dl>
+  <p>Quand tout est fait : « Rien à évaluer 🎉 ». Les modèles que tu as toi-même publiés ne sont jamais listés. En visite chez un copain, la liste est vide.</p>
+
+  <section id="impressions-a-evaluer-noter">
+    <h3>Noter un modèle</h3>
+    <figure class="phone"><img src="img/impressions-noter.webp" alt="Formulaire d'évaluation : cinq étoiles, famille de messages, texte, photos jointes, Publier"><figcaption>Le formulaire : 5 étoiles, un message tiré de la famille « Générique », une photo jointe.</figcaption></figure>
+    <ol>
+      <li>Choisis la note : <b>5 étoiles</b> par défaut.</li>
+      <li>À 5 étoiles, un message est proposé, tiré au hasard dans une <b>famille</b> de messages (liste déroulante) ; <span class="ui">🔀</span> en tire un autre. {créateur} et {modèle} y sont remplacés par les vrais noms. Tu peux le modifier librement.</li>
+      <li>Sous 4 étoiles, le texte devient obligatoire (10 caractères au moins) : « Qu'est-ce qui n'a pas marché ? ».</li>
+      <li><b>Photos jointes</b> : tes photos sont cochées d'office (contour orange, 8 au plus) ; touche-en une pour la retirer, <span class="ui">+</span> pour en ajouter une qui n'est pas dans l'appli. On peut aussi publier sans photo.</li>
+      <li>Touche <span class="ui">Publier l'évaluation</span> puis confirme <span class="ui">Publier</span>.</li>
+    </ol>
+    <p>La publication part en arrière-plan (une pastille en suit l'état) et le modèle quitte la liste tout de suite ; il y revient si MakerWorld refuse. Si tu as imprimé plusieurs profils du même modèle, une note est publiée pour chacun.</p>
+    <p><span class="ui">Oublier sans évaluer</span> supprime la demande d'évaluation chez MakerWorld : il ne te la reposera plus. C'est définitif.</p>
+  </section>
+
+  <section id="impressions-a-evaluer-modeles">
+    <h3>Les modèles de messages</h3>
+    <p>Les messages proposés à 5 étoiles se règlent dans <b>Paramètres → onglet « 🔗 Connexions » → ⭐ Messages d'évaluation</b> (admin ou droit MakerWorld ; voir <a href="#parametres">Paramètres</a>). Ils sont rangés par <b>familles</b> (une famille « Générique » de cinq messages est fournie) :</p>
+    <ul>
+      <li><span class="ui">+ Famille</span> en crée une ; déplie-la pour la renommer (« Nom de la famille ») et écrire ses messages (<span class="ui">+ Message</span>, ✕ pour en retirer un) ;</li>
+      <li><span class="ui">⭐ Mettre par défaut</span> : la famille proposée d'office (la première de la liste) ;</li>
+      <li><span class="ui">Supprimer la famille</span> l'efface avec ses messages, après confirmation ;</li>
+      <li>écris <code>{créateur}</code> et <code>{modèle}</code> dans un message : ils seront remplacés automatiquement ;</li>
+      <li><span class="ui">Enregistrer</span> valide les changements.</li>
+    </ul>
+  </section>
+</section>
+
+<section id="impressions-diagnostic">
+  <h2>Export de diagnostic et recalcul des coûts</h2>
+  <p>Deux outils qui touchent aux impressions vivent dans <a href="#parametres-outils">Paramètres → 🛠️ Outils</a> <span class="admin">admin</span> :</p>
+  <ul>
+    <li><b>Recalculer les coûts</b> de tous les prints, après un changement de prix d'électricité ou de filament ;</li>
+    <li><b>Exporter pour diagnostic</b> : un fichier des impressions des derniers jours (dates, durées, pauses, statut, poids, coût), sans bobine, compte ni réglage, à joindre quand tu signales un souci de compteurs.</li>
+  </ul>
+</section>
