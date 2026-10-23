@@ -2353,9 +2353,13 @@ function headModel(st) {
     let a = n.slot_ams >= 0 ? n.slot_ams : null, t = n.slot_tray >= 0 ? n.slot_tray : null;
     if (a == null && n.active && st.active_ams_id >= 0) { a = st.active_ams_id; t = st.active_tray_id; }
     if (a == null && routes) { const p = routes.out_a === id ? routes.in_a : routes.out_b === id ? routes.in_b : null; if (p) { a = p.ams; t = p.tray; } }
+    // 254 / 255 : la bobine externe (rangee par l'appli sous l'unite 255 : E1, E2)
+    if (a === 254) a = 255;
     const tr = a != null ? tray(a, t) : null;
-    return { n, slot: a != null ? slotLabel(a, t) : null, color: trayCol(tr), type: tr?.spool_info?.fila_type || tr?.filament_type || "",
-      name: tr?.spool_info?.translated_name || tr?.spool_info?.name || "", brand: tr?.spool_info?.brand || "" };
+    // un emplacement vide (ou que l'AMS ne decrit pas) : aucun filament, et pas de numero qui ne veut rien dire
+    const loaded = tr && !tr.empty && (trayCol(tr) || tr.filament_type);
+    return { n, slot: loaded ? slotLabel(a, t) : null, color: loaded ? trayCol(tr) : null, type: loaded ? (tr?.spool_info?.fila_type || tr?.filament_type || "") : "",
+      name: loaded ? (tr?.spool_info?.translated_name || tr?.spool_info?.name || "") : "", brand: loaded ? (tr?.spool_info?.brand || "") : "" };
   };
   return { L: side(1), R: side(0), dual: nz.length > 1 };
 }
@@ -2416,7 +2420,7 @@ function HeadSide({ s, label, big = false }) {
       <span style={{ width: big ? 13 : 10, height: big ? 13 : 10, borderRadius: 4, flexShrink: 0, background: s.color || "transparent",
         border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
       <span style={{ fontSize: big ? 12 : 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {s.slot ? [s.slot, big ? (s.name || s.type) : s.type].filter(Boolean).join(" · ") : "rien de chargé"}</span></div>
+        {s.slot ? [s.slot, big ? (s.name || s.type) : s.type].filter(Boolean).join(" · ") : "aucun filament"}</span></div>
     {big && s.slot && (s.type || s.brand) && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{[s.name && s.type, s.brand].filter(Boolean).join(" · ")}</span>}
   </div>;
 }
@@ -2441,7 +2445,7 @@ function Toolhead({ status, sz }) {
             {/* le filament : son nom, et dessous l'etat, l'emplacement, la matiere et la marque */}
             {(W >= 230 || (H >= 150 && W >= 140)) && <span style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
               <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {s.name || s.type || (s.slot ? "filament inconnu" : "rien de chargé")}</span>
+                {s.name || s.type || "aucun filament"}</span>
               <span style={{ fontSize: 10.5, fontWeight: 700, color: s.n.active ? "#16a34a" : "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {[s.n.active ? "● imprime" : k === "G" ? "levée" : "au repos", s.slot, s.name && s.type, s.brand].filter(Boolean).join(" · ")}</span></span>}
           </div>)}</div>;
