@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useFriend } from "../store/friend";
+import { relayed } from "./Friends";
 import { stageLabel } from "../utils/printStage";
 import { QUEUE_SORTS, sortQueue } from "../utils/queueSort";
 import { createPortal } from "react-dom";
@@ -1197,20 +1198,21 @@ function Humidity({ status, o, sz }) {
   if (!list.length) return null;
   const [lo, hi] = o.thr === "strict" ? [20, 30] : o.thr === "loose" ? [40, 55] : [30, 40];
   const col = h => h < lo ? "#22c55e" : h < hi ? "#f59e0b" : "#ef4444";
-  // la taille des gouttes rangees comme sur la tuile AMS (colonnes x lignes de cette grille)
+  // la hauteur des gouttes rangees comme sur la tuile AMS (colonnes x lignes de cette grille) ; une goutte
+  // fait 0,75 de sa hauteur en largeur, et porte dessous son nom (et sa temperature)
   const gridSize = (W, H) => { const ex = DROP_EXTRA - (o.temp ? 0 : 14), nc = lay.cols.length, nr = lay.rows;
-    return nr > 1 ? Math.floor(Math.min((W - 8 * (nc - 1)) / nc, ((H - 8 * (nr - 1)) / nr - ex) / DROP_AR, 150)) : 0; };
+    return nr > 1 ? Math.floor(Math.min((W - 8 * (nc - 1)) / nc / 0.75, (H - 6 * (nr - 1)) / nr - ex, 170)) : 0; };
   const drops = (W, H, grow = true) => {
     // la grille de la tuile AMS, si les gouttes y tiennent assez grandes (une case vide garde sa place)
     const nc = lay.cols.length, nr = lay.rows, gs = gridSize(W, H);
-    if (nr > 1 && gs >= 46) return <div style={{ flex: grow ? 1 : undefined, display: "grid", gridTemplateColumns: `repeat(${nc}, auto)`, gridAutoFlow: "row",
-      justifyContent: "space-evenly", alignContent: "center", gap: 8 }}>
+    if (nr > 1 && gs >= 56) return <div style={{ flex: grow ? 1 : undefined, display: "grid", gridTemplateColumns: `repeat(${nc}, auto)`, gridAutoFlow: "row",
+      justifyContent: "space-evenly", alignContent: "center", columnGap: 8, rowGap: 6 }}>
       {[...Array(nr).keys()].flatMap(r => lay.cols.map((c, ci) => c[r]
         ? <DropGauge key={c[r].id} value={c[r].humidity} color={col(c[r].humidity)} size={gs} label={amsLab(c[r])} sub={o.temp && c[r].temp ? `${Math.round(c[r].temp)}°` : null}/>
         : <span key={`v${r}-${ci}`}/>))}</div>;
     const g = fitGrid(list.length, W, H, { ar: DROP_AR, extra: DROP_EXTRA - (o.temp ? 0 : 14), max: 150, gap: 8 });
     return <div style={{ flex: grow ? 1 : undefined, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "center", gap: 8 }}>
-      {list.map(a => <DropGauge key={a.id} value={a.humidity} color={col(a.humidity)} size={Math.max(40, g.size)} label={amsLab(a)}
+      {list.map(a => <DropGauge key={a.id} value={a.humidity} color={col(a.humidity)} size={Math.round(Math.max(40, g.size) * DROP_AR)} label={amsLab(a)}
         sub={o.temp && a.temp ? `${Math.round(a.temp)}°` : null}/>)}</div>;
   };
   const bars = H => <div style={{ display: "flex", flexDirection: "column", justifyContent: "space-evenly", flex: 1, gap: 4 }}>
@@ -1243,9 +1245,9 @@ function Humidity({ status, o, sz }) {
         const g0 = fitGrid(list.length, W, H, { ar: DROP_AR, extra: DROP_EXTRA - (o.temp ? 0 : 14), max: 150, gap: 8 });
         // la grille de la tuile AMS d'abord : avec la ligne du bas si elle tient, sinon seule
         const gsS = gridSize(W, H - 34), gsF = gridSize(W, H);
-        const used = gsS >= 46 ? 0 : g0.rows * (g0.size * DROP_AR + DROP_EXTRA) + 8 * (g0.rows - 1);
-        if (gsS < 46 && gsF >= 46) return drops(W, H);
-        if ((gsS >= 46 || g0.size >= 46) && H - used >= 44) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 10 }}>
+        const used = gsS >= 56 ? 0 : g0.rows * (g0.size * DROP_AR + DROP_EXTRA) + 8 * (g0.rows - 1);
+        if (gsS < 56 && gsF >= 56) return drops(W, H);
+        if ((gsS >= 56 || g0.size >= 46) && H - used >= 44) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 10 }}>
           {drops(W, H - 34, false)}
           <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
             <span>moyenne <b style={{ color: col(avg) }}>{avg} %</b></span>
@@ -1263,16 +1265,21 @@ const frEnd = x => (x.remaining_minutes > 0 ? finAt(x.remaining_minutes) : null)
 // l'initiale du copain, quand son impression n'a pas de vignette
 const FrAvatar = ({ name, size }) => <span style={{ width: size, height: size, borderRadius: "50%", background: FR_C, color: "#fff", fontSize: size * 0.42,
   fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{(name || "?").slice(0, 1).toUpperCase()}</span>;
+// la vignette d'un copain (par mon relais, avec le jeton) ; introuvable, ce qu'on montre a la place
+function FrImg({ src, style, fallback = null }) {
+  const [bad, setBad] = useState(false);
+  useEffect(() => setBad(false), [src]);
+  return bad || !src ? fallback : <img data-pk="" src={relayed(src)} alt="" onError={() => setBad(true)} style={style}/>;
+}
 // une affiche par copain qui imprime : son plateau en grand, son nom, l'avancement et l'heure de fin
 // par-dessus, un liseré d'avancement en bas
 function FrPoster({ x, thumbs, h }) {
   const small = h < 110, img = thumbs && x.print?.image, end = frEnd(x);
   return <div title={x.print?.name || x.print_name} style={{ position: "relative", height: h, borderRadius: 14, overflow: "hidden", minWidth: 0,
     background: `radial-gradient(circle at 50% 38%, ${FR_C}2e, transparent 70%), var(--surface2)`, border: "1px solid var(--border)" }}>
-    {img ? <img data-pk="" src={x.print.image} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
-      style={{ position: "absolute", inset: "6% 8% 30%", width: "84%", height: "64%", objectFit: "contain" }}/>
-      : <div style={{ position: "absolute", inset: "0 0 28%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <FrAvatar name={x.name} size={Math.min(56, h * 0.36)}/></div>}
+    <FrImg src={img ? x.print.image : null} style={{ position: "absolute", inset: "6% 8% 30%", width: "84%", height: "64%", objectFit: "contain" }}
+      fallback={<div style={{ position: "absolute", inset: "0 0 28%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <FrAvatar name={x.name} size={Math.min(56, h * 0.36)}/></div>}/>
     {end && !small && <span data-pk="" style={{ position: "absolute", top: 6, right: 6, fontSize: 10.5, fontWeight: 800, color: "#fff", padding: "1px 7px",
       borderRadius: 10, background: "rgba(15,23,42,0.55)", backdropFilter: "blur(4px)" }}>fin {end}</span>}
     <div style={{ position: "absolute", left: 0, right: 0, bottom: 4, padding: small ? "10px 8px 3px" : "18px 10px 5px", display: "flex", alignItems: "flex-end", gap: 6,
@@ -1310,8 +1317,7 @@ function FriendsZoom({ p, states, thumbs }) {
           background: `linear-gradient(135deg, ${FR_C}1c, transparent 60%), var(--surface2)`, border: `1px solid ${FR_C}40` }}>
           <div style={{ width: 104, height: 104, borderRadius: 12, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
             background: `radial-gradient(circle, ${FR_C}2e, transparent 70%), var(--surface)` }}>
-            {thumbs && x.print?.image ? <img src={x.print.image} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
-              style={{ width: "88%", height: "88%", objectFit: "contain" }}/> : <FrAvatar name={x.name} size={52}/>}</div>
+            <FrImg src={thumbs ? x.print?.image : null} style={{ width: "88%", height: "88%", objectFit: "contain" }} fallback={<FrAvatar name={x.name} size={52}/>}/></div>
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
               <b style={{ flex: 1, minWidth: 0, fontSize: 15, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.name}</b>
@@ -1336,8 +1342,8 @@ function Friends({ f, o, sz }) {
   // tres petit : une ligne par copain (vignette, nom, avancement)
   const row = x => (
     <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 8, height: 36 }}>
-      {o.thumbs && x.print?.image ? <img data-pk="" src={x.print.image} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
-        style={{ width: 32, height: 32, borderRadius: 8, objectFit: "contain", flexShrink: 0, background: "var(--surface2)" }}/> : <FrAvatar name={x.name} size={28}/>}
+      <FrImg src={o.thumbs ? x.print?.image : null} style={{ width: 32, height: 32, borderRadius: 8, objectFit: "contain", flexShrink: 0, background: "var(--surface2)" }}
+        fallback={<FrAvatar name={x.name} size={28}/>}/>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
           <b data-pk="" style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{x.name}</b>
@@ -1371,8 +1377,8 @@ function Friends({ f, o, sz }) {
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${r.cols}, minmax(0, 1fr))`, gap: 10, justifyItems: "center" }}>
             {p.map(x => <div key={x.id} title={x.print?.name || x.print_name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 0, maxWidth: "100%" }}>
               <Ring value={frPct(x) / 100} size={r.size} color={FR_C}>
-                {o.thumbs && x.print?.image ? <img data-pk="" src={x.print.image} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
-                  style={{ width: r.size * 0.6, height: r.size * 0.6, objectFit: "contain", display: "block" }}/> : `${frPct(x)}%`}</Ring>
+                <FrImg src={o.thumbs ? x.print?.image : null} style={{ width: r.size * 0.6, height: r.size * 0.6, objectFit: "contain", display: "block" }}
+                  fallback={`${frPct(x)}%`}/></Ring>
               <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {x.name}</span>
               {o.thumbs && x.print?.image && <span style={{ fontSize: 11, fontWeight: 900, color: FR_C, lineHeight: 1 }}>{frPct(x)}%</span>}</div>)}</div>
