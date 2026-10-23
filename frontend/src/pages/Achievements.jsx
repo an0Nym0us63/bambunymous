@@ -1624,8 +1624,9 @@ function Rules({ data, onClose }) {
             {k.steps.map((st, i) => <span key={st.id}>{i + 1}. {st.label.charAt(0).toUpperCase() + st.label.slice(1)} — {st.cost} 🔑</span>)}
           </div>
           <P><b>Dépense automatique</b> (⚡ sous tes clés) : tu choisis combien en dépenser, l'appli choisit où. Elle vise le plus
-            d'indices possible. Les secrets liés à une date (calendrier, fêtes) passent en premier, pour que tu puisses les
-            anticiper ; les tours qui ne tombent que par hasard sont laissés de côté (un indice n'y changerait rien). Ensuite, les secrets les moins chers à mener jusqu'à leur indice (ceux qu'un copain a gagnés, ceux
+            d'indices possible. Les secrets liés à une date (calendrier, fêtes, cachettes de saison) passent en premier, pour que tu
+            puisses les anticiper ; les tours qui ne tombent que par hasard sont laissés de côté (un indice n'y changerait rien), et les
+            secrets de l'appli Android aussi, tant qu'aucun n'a été trouvé (sans l'appli, ils sont introuvables). Ensuite, les secrets les moins chers à mener jusqu'à leur indice (ceux qu'un copain a gagnés, ceux
             déjà entamés), puis elle avance les suivants étape par étape ; les descriptifs ne passent qu'une fois tous les indices
             pris. Tu vois ce qui sera révélé avant de valider.</P>
         </>}

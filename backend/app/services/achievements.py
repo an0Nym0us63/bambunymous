@@ -2197,6 +2197,9 @@ HIDDEN_EGGS = {"anonymous", "teapot"} | {k for k in EGGS if k.startswith("h_")}
 ONLY_WON = {"egg_merci_don"}
 # les petites choses cachees dans les pages (certaines seulement a certains moments) : leur propre section
 CACHETTE_EGGS = {"micro_benchy", "astronome", "chrono", "score_tap", "calme_plat", "snail", "rubber_duck", "lost_key", "lost_sock", "clover", "ladybug", "egg_in_egg", "small_world", "ant", "owl", "snowman", "c_pumpkin", "c_xmas_tree", "c_easter_chick", "c_valentine_heart", "c_dead_leaf", "c_snowflake", "c_sakura", "c_watermelon", "c_april_fish", "c_black_cat", "c_sunflower", "c_pencil", "c_morning_coffee", "c_lunch", "c_snack", "c_sunset", "c_bat", "c_rooster", "c_sleepy", "c_new_year_toast", "c_brunch", "c_moon", "c_calendar", "c_gift", "c_broom", "c_turtle", "c_star", "c_wolf", "c_spider", "c_finish_flag", "c_sloth", "c_pause", "c_lizard", "c_frog"}
+# celles qui n'apparaissent qu'a une periode de l'annee : la depense automatique de cles les sert en premier
+DATED_CACHETTES = {"c_pumpkin", "c_xmas_tree", "c_easter_chick", "c_valentine_heart", "c_dead_leaf", "c_snowflake", "c_sakura",
+                   "c_watermelon", "c_april_fish", "c_black_cat", "c_sunflower", "c_pencil", "c_new_year_toast"}
 # ce que seule l'appli Android voit (capteurs, reglages, etat du telephone) : leur propre section
 ANDROID_EGGS = {"brightness_max", "brightness_min", "proximity", "dark_room", "sunlight", "airplane", "headphones", "power_save", "volume_dj", "magnet", "altitude", "spin_phone", "hot_phone", "silence", "do_not_disturb", "network_switch", "screen_recording", "sos_torch", "big_font", "hardware_keyboard", "cold_phone", "storm", "north", "level", "humid_air", "wireless_charge", "timezone", "time_travel", "four_sides", "from_notif", "fresh_apk", "tablet", "pocket", "volume_max", "fast_charge", "just_booted", "uptime_30", "storage_full", "old_android", "new_android", "elevator", "vibrate_mode", "rotation_lock", "bold_text", "display_zoom", "nod", "nope", "knock_knock", "roaming", "hotspot", "vpn"}
 for _x in CATALOG:
@@ -5954,9 +5957,12 @@ def _auto_plan(st: dict, budget: int) -> list:
     hint_lvl = next(i for i, r in enumerate(REVEALS) if r[0] == "hint") + 1
     # ni les farces tirees au hasard (elles ne se gagnent que si elles tombent par surprise : un indice
     # n'y peut rien) ; et d'abord les secrets dates (calendrier, fetes), pour pouvoir les anticiper
+    # la section Android : seulement si l'appli Android sert dans la maison (un de ses secrets deja trouve)
+    won = st.get("unlocked") or {}
+    android = any(won.get(f"egg_{k}") for k in ANDROID_EGGS)
     todo = [a["id"] for a in CATALOG if len(a["tiers"]) == 1 and a.get("hidden") and not a.get("set") and not a.get("only_won")
-            and a["id"][4:] not in PRANK_EGGS and not (st.get("unlocked") or {}).get(a["id"])]
-    dated = lambda aid: SUB_OF.get(aid) in ("calendar", "fetes")      # noqa: E731
+            and a["id"][4:] not in PRANK_EGGS and (android or a["id"][4:] not in ANDROID_EGGS) and not won.get(a["id"])]
+    dated = lambda aid: SUB_OF.get(aid) in ("calendar", "fetes") or aid[4:] in DATED_CACHETTES      # noqa: E731
     lvl = {aid: _reveal_level(st, aid) for aid in todo}
     to_hint = lambda aid: sum(REVEALS[i][2] for i in range(lvl[aid], hint_lvl))
     order = sorted((aid for aid in todo if lvl[aid] < hint_lvl),
