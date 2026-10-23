@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { stageLabel } from "../utils/printStage";
 import { QUEUE_SORTS, sortQueue } from "../utils/queueSort";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
@@ -2393,7 +2394,10 @@ function headModel(st) {
   for (const [x, left] of [[L, true], [R, false]]) if (x) {
     const on = live && x.n.active;
     x.printing = on && !prep && !paused && !!x.slot;
-    x.state = x.printing ? "● imprime" : on && paused ? "en pause" : on && prep ? "préparation" : x.n.active ? (left ? "baissée" : "sélectionnée") : left ? "levée" : "au repos";
+    // en preparation ou en pause : l'etape que l'imprimante annonce, si elle la dit
+    const what = stageLabel(st);
+    const lc = what ? what[0].toLowerCase() + what.slice(1) : null;
+    x.state = x.printing ? "● imprime" : on && paused ? (lc || "en pause") : on && prep ? (lc || "préparation") : x.n.active ? (left ? "baissée" : "sélectionnée") : left ? "levée" : "au repos";
   }
   return { L, R, dual: nz.length > 1, live };
 }

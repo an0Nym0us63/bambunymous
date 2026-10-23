@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
+import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
 import { usePrinter } from "../store/printer";
 import { Wifi, WifiOff, Clock, Pause, Layers, Thermometer, Wind, Droplets, Sun, Moon, LayoutGrid, Printer, Disc3, AlertTriangle, ExternalLink, Calendar, ArrowLeftRight } from "lucide-react";
@@ -216,7 +217,7 @@ function StatusBanner({ status, friend = null, switcher = null, defaultExpanded 
             )}
           </div>
           <div style={{ flex:1, minWidth:0, textAlign:"left" }}>
-            <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 6px" }}>{cfg.label}</p>
+            <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 6px" }}>{stageLabel(status) || cfg.label}</p>
             {/* Barre de progression */}
             {isRunning && pct > 0 && (
               <div style={{ marginBottom:6 }}>
@@ -1304,8 +1305,10 @@ function stateOf(status) {
   const st = String(status?.status || "").toUpperCase();
   if (!status) return { label: "…", color: "#94a3b8" };
   if (!status.connected) return { label: "Injoignable", color: "#ef4444" };
-  if (st === "PAUSE" || st === "PAUSED") return { label: "En pause", color: "#f59e0b" };
-  if (LIVE_ST.includes(st)) return { label: "En cours", color: "#22c55e" };
+  // l'etape que l'imprimante annonce (chauffe, calibration, nettoyage, raison d'une pause…)
+  const stage = stageLabel(status);
+  if (st === "PAUSE" || st === "PAUSED" || stageIsPause(status)) return { label: stage || "En pause", color: "#f59e0b", live: true };
+  if (LIVE_ST.includes(st)) return { label: stage || "En cours", color: stage ? "#f59e0b" : "#22c55e", live: true, plain: !stage };
   if (st === "FINISH") return { label: "Terminée", color: "#3b82f6" };
   if (st === "FAILED") return { label: "Échouée", color: "#ef4444" };
   return { label: "Au repos", color: "#94a3b8" };
@@ -1318,7 +1321,7 @@ const IcoBed = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none"
 const IcoChamber = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
   strokeLinejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 3v18M12 8h5M12 12h5"/></svg>;
 // a droite du titre : l'etat (« Injoignable » dit aussi la connexion), et les temperatures en pictogrammes
-function PrinterHead({ status, temps = true }) {
+function PrinterHead({ status, temps = true, state = true }) {
   const s = stateOf(status);
   const nz = (status?.nozzles || []).find(n => n.active) || (status?.nozzles || [])[0];
   const hot = (v, t) => v > 40 ? t : "var(--text2)";
@@ -1326,7 +1329,7 @@ function PrinterHead({ status, temps = true }) {
     borderRadius: 20, whiteSpace: "nowrap", background: "var(--surface2)", color: "var(--text2)", fontVariantNumeric: "tabular-nums" };
   const on = temps && status?.connected;
   return <>
-    {s.label !== "En cours" && <span data-pk="" style={{ ...chip, color: s.color, background: `${s.color}1f` }}>
+    {state && !s.plain && <span data-pk="" style={{ ...chip, color: s.color, background: `${s.color}1f` }}>
       <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
     {on && nz && <span data-pk="" title={`Buse : ${Math.round(nz.temp || 0)}°${nz.target > 0 ? ` (consigne ${Math.round(nz.target)}°)` : ""}`}
       style={{ ...chip, color: hot(nz.temp, "#ea580c") }}><IcoNozzle/>{Math.round(nz.temp || 0)}°</span>}
@@ -1671,7 +1674,7 @@ function PrinterStrip({ status, showFin = true, showLayer = true }) {
           <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
             <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden",
               textOverflow: "ellipsis", lineHeight: 1.2 }}><Words text={info?.file_name || status?.print_name || "Imprimante"}/></span>
-            {(!live || paused) && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
+            {(!live || paused || !s.plain) && <span data-pk="" style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 800, padding: "2px 8px",
               borderRadius: 20, whiteSpace: "nowrap", color: s.color, background: `${s.color}1f` }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}</span>}
           </div>
@@ -2030,7 +2033,9 @@ export default function Home() {
           // sur une rangee, le bandeau et la version compacte disent deja l'etat : pas de doublon
           if (item.h === 1) return null;
           const temps = o.headTemps && item.w !== 1 && item.h !== 1;
-          return stateOf(st).label === "En cours" && !temps ? null : <PrinterHead status={st} temps={temps}/>;
+          // en grand, le corps dit deja l'etat d'une impression en cours (et son etape)
+          const said = stateOf(st).plain || (item.w !== 1 && stateOf(st).live && !["PAUSE", "PAUSED"].includes(String(st?.status || "").toUpperCase()));
+          return said && !temps ? null : <PrinterHead status={st} temps={temps} state={!said}/>;
         } },
       render: (d, st, o, item) => item?.w !== 1 && item?.h === 1 ? <PrinterStrip status={st} showFin={o.fin} showLayer={o.layer}/>
         : item?.w === 1 || item?.h === 1 ? <PrinterCompact status={st} size={item.w !== 1 || item.h <= 1 ? "small" : o.half} showFin={o.fin} showLayer={o.layer}/>
