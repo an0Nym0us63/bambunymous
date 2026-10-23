@@ -624,7 +624,7 @@ function DryBadge({ status }) {
 // part : "overview" (les AMS ou le rack), "detail" (la fiche de l'AMS ou de la buse
 // choisie), ou rien (les deux, l'un sous l'autre)
 export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId, part = null,
-  org = "grid", climate = true, selector = true, names = true, fitH = null, dual = false }) {
+  org = "grid", climate = true, selector = true, names = true, fitH = null, dual = false, fs = null }) {
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
   const headId  = rack?.head_id ?? -1;
@@ -737,7 +737,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
       <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
         isSelected={detailKind === "ams" && selectedAms?.id === ams.id}
         onClick={() => setSelAms(ams.id)}
-        spoolLookup={spoolLookup} climate={climate} pillH={pillH} dual={dual}
+        spoolLookup={spoolLookup} climate={climate} pillH={pillH} dual={dual} fs={fs}
         slotsWidth={`${(slotCount(ams) / columnWeight(col)) * 100}%`}/>
     </div>
   ))).filter(Boolean);
@@ -747,7 +747,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
     <div key={ams.id} style={{ flex: `${slotCount(ams)} 1 ${slotCount(ams) * 26 + 14}px`, minWidth: 0 }}>
       <AMSBox ams={ams} activeAmsId={activeAmsId} activeTrayId={activeTrayId}
         isSelected={detailKind === "ams" && selectedAms?.id === ams.id}
-        onClick={() => setSelAms(ams.id)} spoolLookup={spoolLookup} climate={climate} pillH={pillH} dual={dual}/>
+        onClick={() => setSelAms(ams.id)} spoolLookup={spoolLookup} climate={climate} pillH={pillH} dual={dual} fs={fs}/>
     </div>
   ));
   // le detail porte son propre choix d'unite : des onglets avec les couleurs de chaque unite
@@ -1566,7 +1566,7 @@ export default function Home() {
   const fitOf = item => typeof item?.h === "number" ? item.h * 128 - 30 - (item.o?._title === false ? 0 : 28) : null;
   const devices = (st, part, o = {}, item) => (st?.status === "RUNNING" || st?.status === "PAUSED" || (st?.ams_list?.length > 0)) ? <DeviceGrid
     key={`${visKey}-${part}`} part={part} org={o.org} climate={o.climate !== false} selector={o.selector !== false} names={o.names !== false}
-    fitH={fitOf(item)} dual={(st?.nozzles?.length || 0) > 1 || !!st?.fila_switch?.installed}
+    fitH={fitOf(item)} dual={(st?.nozzles?.length || 0) > 1 || !!st?.fila_switch?.installed} fs={st?.fila_switch}
     amsList={st?.ams_list ?? []}
     activeAmsId={isRunning ? (st?.active_ams_id ?? -1) : -1}
     activeTrayId={isRunning ? (st?.active_tray_id ?? -1) : -1}

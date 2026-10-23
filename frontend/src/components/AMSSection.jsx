@@ -200,13 +200,18 @@ function MatchIcon({ mode, size = 10 }) {
 
 // ── Boîtier AMS compact ─────────────────────────────────────────────────────
 // la buse qu'un AMS alimente (« G », « D ») ou, par l'aiguillage, son entree (« ⇄ A ») ; null si sans objet
-export function amsRoute(ams, dual) {
-  if (ams?.switch_port) return { txt: `⇄ ${ams.switch_port}`, title: `Branché sur l'entrée ${ams.switch_port} de l'aiguillage`, color: "#8b5cf6" };
+export function amsRoute(ams, dual, fs) {
+  if (ams?.switch_port) {
+    const out = fs?.[`out_${ams.switch_port.toLowerCase()}`];
+    const side = out == null ? null : out === 1 ? "G" : "D";
+    return { txt: `⇄ ${side || ams.switch_port}`, color: "#8b5cf6",
+      title: `Branché sur l'entrée ${ams.switch_port} de l'aiguillage${side ? `, qui va en ce moment vers la buse ${side === "G" ? "gauche" : "droite"}` : ""}` };
+  }
   if (dual && ams?.extruder_id >= 0) return { txt: ams.extruder_id === 1 ? "G" : "D", title: `Alimente la buse ${ams.extruder_id === 1 ? "gauche" : "droite"}`, color: "#0ea5e9" };
   return null;
 }
-function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup, slotsWidth, climate = true, pillH = null, dual = false }) {
-  const route = amsRoute(ams, dual);
+function AMSBox({ ams, activeAmsId, activeTrayId, isSelected, onClick, spoolLookup, slotsWidth, climate = true, pillH = null, dual = false, fs = null }) {
+  const route = amsRoute(ams, dual, fs);
   const dense = pillH != null;
   const isActive = ams.id === activeAmsId;
   const isDrying = ams.is_drying || ams.dry_time > 0;
