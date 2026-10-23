@@ -53,7 +53,13 @@ export default function Achievements({ embedded = false }) {
   const [usage, setUsage] = useState(null);             // releve des depenses : "tickets" | "keys"
   const atFriend = !!currentFriend();             // chez un copain : pas de podium (ce sont ses copains a lui)
   const isAdmin = useIsAdmin();
-  const load = () => client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
+  // la surprise de chaque compte (chez un copain : les siens) ; absente d'un serveur plus ancien
+  const [odds, setOdds] = useState(null);
+  const [oddsOpen, setOddsOpen] = useState(false);
+  const load = () => {
+    client.get("/achievements/surprise/odds").then(r => setOdds(r.data?.accounts?.length ? r.data : null)).catch(() => setOdds(null));
+    return client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
+  };
   // cles : reveler l'etape suivante d'un secret, puis relire la page
   const [keyErr, setKeyErr] = useState(null);
   const spend = async aid => {
@@ -291,6 +297,25 @@ export default function Achievements({ embedded = false }) {
                       ses médailles comparées aux tiennes.</span>}
                   </div>
                 )}
+                {/* la prochaine surprise du compte principal ; un clic : tous les comptes. De quoi voir si,
+                    chez quelqu'un, elle ne tombe jamais */}
+                {c.id === "secret" && odds && (() => {
+                  const m = odds.accounts.find(x => x.main) || odds.accounts[0];
+                  return (
+                    <button type="button" onClick={() => setOddsOpen(true)} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
+                      borderRadius:12, fontSize:12, lineHeight:1.4, color:"var(--text2)", textAlign:"left", cursor:"pointer", width:"100%",
+                      background:"linear-gradient(135deg, rgba(139,92,246,0.14), rgba(99,102,241,0.06))", border:"1px solid rgba(139,92,246,0.3)" }}>
+                      <span style={{ fontSize:22 }}>🎲</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:13, fontWeight:800, color:"var(--text)" }}>
+                          {m.pending ? "Une surprise est tirée : elle attend la prochaine ouverture"
+                            : <>Prochaine surprise : <b style={{ color:"#8B5CF6" }}>{oddsPct(m.next)} %</b> à la prochaine ouverture</>}</div>
+                        <div>{m.username}{m.main ? " (compte principal)" : ""} · {m.n} ouverture{m.n > 1 ? "s" : ""} sans surprise · {m.shown} reçue{m.shown > 1 ? "s" : ""}</div>
+                      </div>
+                      <span style={{ fontSize:11.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap" }}>Comptes ›</span>
+                    </button>
+                  );
+                })()}
                 {/* Secrets : rangés en sous-sections (calendrier, heures, couleurs…) */}
                 {/* Secrets : les gagnes (et ceux dont une cle a revele la categorie) dans
                     leur sous-section ; les autres « a decouvrir ». Les en-tetes ne disent
@@ -373,6 +398,7 @@ export default function Achievements({ embedded = false }) {
 
       {rules && createPortal(<Rules data={data} onClose={() => setRules(false)}/>, document.body)}
       {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
+      {oddsOpen && odds && <OddsSheet odds={odds} onClose={() => setOddsOpen(false)}/>}
       {ceremony && <TicketCeremony {...ceremony} onClose={() => setCeremony(null)}/>}
       {usage && createPortal(<UsageSheet data={data} kind={usage} onKind={setUsage} onOpen={id => setDetail(id)}
         onClose={() => setUsage(null)}/>, document.body)}
@@ -672,6 +698,52 @@ const PLACE_OF = id => id === "egg_anonymous" ? ["/anonymous", "page"] : id === 
   : id.startsWith("egg_h_") ? ["/" + id.slice(6).replace(/_/g, "-"), "page"]
   : id.startsWith("egg_p_") ? ["/" + id.slice(6).replace(/_/g, "-"), "farce"]
   : id === "egg_merci_don" ? ["/don", "farce"] : null;
+
+const oddsPct = p => (p * 100).toLocaleString("fr-FR", { maximumFractionDigits: 1 });
+const oddsWhen = s => { if (!s) return "jamais"; const d = new Date(/Z|[+-]\d\d:\d\d$/.test(s) ? s : s + "Z");
+  return `${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`; };
+// la surprise de chaque compte : chance a la prochaine ouverture, ouvertures sans, surprises recues
+function OddsSheet({ odds, onClose }) {
+  useEffect(() => { const k = e => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
+  return createPortal(
+    <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4000, background:"rgba(2,6,23,0.6)", backdropFilter:"blur(4px)",
+      display:"flex", alignItems:"center", justifyContent:"center", padding:14 }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width:"min(520px, 100%)", maxHeight:"86vh", overflowY:"auto", padding:16,
+        display:"flex", flexDirection:"column", gap:12, background:"var(--sheet-bg)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <span style={{ fontSize:24 }}>🎲</span>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:16, fontWeight:900, color:"var(--text)" }}>Les surprises, compte par compte</div>
+            <div style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>Chance d'une surprise à la prochaine ouverture de l'appli. Elle monte à chaque
+              ouverture sans surprise (une ouverture compte au plus toutes les {odds.gap_min} min) et repart de zéro quand une surprise s'affiche.</div>
+          </div>
+          <button onClick={onClose} aria-label="Fermer" style={{ width:32, height:32, borderRadius:10, border:"1px solid var(--border)",
+            background:"var(--surface2)", color:"var(--text2)", cursor:"pointer", flexShrink:0 }}>✕</button>
+        </div>
+        {odds.accounts.map(a => (
+          <div key={a.username} className="card-sm" style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px",
+            border: a.main ? "1.5px solid #8B5CF6" : undefined }}>
+            <div style={{ width:58, height:58, borderRadius:16, flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+              background: a.pending ? "linear-gradient(135deg,#F59E0B,#EC4899)" : "linear-gradient(135deg,#8B5CF6,#6366F1)", color:"#fff" }}>
+              <span style={{ fontSize: a.pending ? 22 : 17, fontWeight:900, lineHeight:1 }}>{a.pending ? "🎁" : `${oddsPct(a.next)} %`}</span>
+              {!a.pending && <span style={{ fontSize:9.5, fontWeight:700, opacity:.85 }}>prochaine</span>}
+            </div>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
+                <span style={{ fontSize:14.5, fontWeight:900, color:"var(--text)" }}>{a.username}</span>
+                {a.main && <span style={{ fontSize:10.5, fontWeight:800, color:"#8B5CF6", border:"1px solid currentColor", borderRadius:20, padding:"0 7px" }}>principal</span>}
+                {a.role === "admin" && !a.main && <span style={{ fontSize:10.5, fontWeight:800, color:"var(--muted)" }}>admin</span>}
+              </div>
+              <div style={{ fontSize:12, color:"var(--text2)", lineHeight:1.45 }}>
+                {a.pending ? "Une surprise est tirée : elle tombe à la prochaine ouverture" : `${a.n} ouverture${a.n > 1 ? "s" : ""} sans surprise`}
+                {" · "}<b>{a.shown}</b> surprise{a.shown > 1 ? "s" : ""} reçue{a.shown > 1 ? "s" : ""}</div>
+              <div style={{ fontSize:11, color:"var(--muted)" }}>Dernière ouverture comptée : {oddsWhen(a.last)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>, document.body);
+}
 
 function SecretPlace({ it }) {
   const nav = useNavigate();
@@ -1519,7 +1591,8 @@ function Rules({ data, onClose }) {
           une mise à jour : il suffit de le décrocher pour les retrouver.</P>
         <P>Certains secrets se cachent derrière une adresse, d'autres derrière un geste. Et de temps en temps, en ouvrant
           l'appli, l'accueil te joue un tour : plus il se fait attendre, plus il devient probable. Ces tours-là ne se gagnent
-          que s'ils te tombent dessus par surprise, et ceux des jours de fête, seulement le jour même. Un tour déjà vécu peut se rejouer ; les autres, personne ne peut les provoquer.</P>
+          que s'ils te tombent dessus par surprise, et ceux des jours de fête, seulement le jour même. Un tour déjà vécu peut se rejouer ; les autres, personne ne peut les provoquer.
+          En tête des Secrets, 🎲 dit ta chance à la prochaine ouverture ; touche-le pour voir celle de chaque compte et combien de surprises chacun a déjà eues.</P>
 
         <H>🎓 Grades</H>
         <P>Chaque section te donne un titre selon la part de ses points que tu as gagnés ({GRADE_AT.map(x => `${Math.round(x * 100)} %`).join(", ")}) :

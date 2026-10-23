@@ -57,6 +57,21 @@ async def achievements_passage_open(acc=Depends(require_own_account)):
     return {"open": True, "new": await A.open_passage(acc[0])}
 
 
+@router.get("/surprise/odds")
+async def achievements_surprise_odds(_u: str = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """La surprise de chaque compte de la maison (chance a la prochaine ouverture, surprises recues),
+    le compte principal en tete. Lisible aussi par un copain qui regarde : de quoi voir si ca bloque."""
+    from ....services import achievements as A
+    from .users import _root_admin_id
+    main_id = await _root_admin_id(db)
+    users = (await db.execute(select(User).where(User.active.is_(True)).order_by(User.id))).scalars().all()
+    users = sorted(users, key=lambda x: (x.id != main_id, x.role != ROLE_ADMIN, x.id))
+    rows = await A.surprise_odds([x.username for x in users])
+    for r, x in zip(rows, users):
+        r.update(role=x.role, main=x.id == main_id)
+    return {"accounts": rows, "gap_min": int(A.SURPRISE_GAP.total_seconds() // 60)}
+
+
 @router.post("/surprise")
 async def achievements_surprise(acc=Depends(require_own_account)):
     """Une ouverture de l'appli sur l'accueil : surprise ou pas (compteur par compte).

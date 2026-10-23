@@ -4409,6 +4409,28 @@ async def roll_surprise(username: str, rnd=None, now=None) -> dict:
     return {"hit": hit, "n": n, "p": round(p, 4)}
 
 
+async def surprise_odds(usernames: list) -> list:
+    """Ou en est la surprise de chaque compte : ouvertures comptees sans surprise, chance a la
+    prochaine, tirage gagnant en attente, derniere ouverture comptee, surprises deja recues.
+    De quoi voir si, chez quelqu'un, ca bloque."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        d = await _surprise_counts(db)
+        at, pending = await _surprise_state(db)
+        try:
+            seen = json.loads(await get_setting(db, KEY + "_SURPRISE_SEEN", "") or "{}")
+        except ValueError:
+            seen = {}
+    seen = seen if isinstance(seen, dict) else {}
+    out = []
+    for u in usernames:
+        n = int(d.get(u) or 0)
+        out.append({"username": u, "n": n, "next": 1.0 if pending.get(u) else round(surprise_p(n + 1), 4),
+                    "pending": bool(pending.get(u)), "last": at.get(u), "shown": int(seen.get(u) or 0)})
+    return out
+
+
 PRANK_GRANT_TTL = timedelta(minutes=30)
 
 
