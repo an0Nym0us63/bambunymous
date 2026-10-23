@@ -633,6 +633,56 @@ function RackState({ rack, compact = false }) {
   return <div style={{ display: "flex", gap: 6, flexWrap: compact ? "nowrap" : "wrap", overflow: "hidden", minWidth: 0 }}>{items}</div>;
 }
 
+// le rack en une bande : son etat, puis ses six buses (couleur, numero, type), celle sur la tete en bleu
+function RackStrip({ rack }) {
+  const slots = [1, 2, 3, 4, 5, 6].map(num => ({ num, slot: rack.hotends.find(h => h.id === num + 15), head: rack.head_id === num + 15 }));
+  const headSlot = rack.hotends.find(h => h.id === 0) || null;
+  return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <RackState rack={rack}/>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 6 }}>
+      {slots.map(({ num, slot, head }) => {
+        const src = head && headSlot ? headSlot : slot;
+        const c = src && !src.empty && src.color ? `#${String(src.color).replace("#", "").slice(0, 6)}` : null;
+        const h = nozzleHealth(src?.stat);
+        return <div key={num} title={[nozzleKind(src?.nozzle_type), src?.diameter && `${src.diameter} mm`, h?.[0]].filter(Boolean).join(" · ")}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "8px 4px", borderRadius: 12, minWidth: 0,
+            background: head ? "rgba(59,130,246,0.10)" : "var(--surface2)", border: `1.5px solid ${head ? "#3b82f6" : "transparent"}` }}>
+          <span style={{ width: "70%", aspectRatio: "1", borderRadius: 9, background: c || "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)",
+            border: c ? "1px solid rgba(0,0,0,0.18)" : "1px dashed rgba(148,163,184,0.6)", position: "relative" }}>
+            {h && h[0] !== "En bon état" && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: h[1],
+              boxShadow: "0 0 0 2px var(--surface)" }}/>}</span>
+          <span style={{ fontSize: 12, fontWeight: 900, color: head ? "#3b82f6" : "var(--text2)" }}>{num}</span>
+          <span style={{ fontSize: 9.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
+            {head ? "sur la tête" : src?.nozzle_type ? `${src.nozzle_type} · ${src.diameter}` : "vide"}</span>
+        </div>;
+      })}
+    </div>
+  </div>;
+}
+// la tuile Vortek : toujours le rack ; un clic l'ouvre en grand (le rack et la fiche de la buse touchee)
+function VortekTile({ st, tile, full, low = false }) {
+  const [open, setOpen] = useState(false);
+  const has = (st?.hotend_rack?.hotends || []).some(h => !h.empty && h.filament_id);
+  if (!has) return <div style={{ padding: 16, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>Pas de rack Vortek</div>;
+  const r = st.hotend_rack, headSlot = r.hotends.find(h => h.id === 0);
+  // une rangee : l'etat, puis six pastilles (le numero dedans), celle sur la tete cerclee de bleu
+  const row = low && <div style={{ height: "100%", display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, minWidth: 0 }}>
+    <RackState rack={r} compact/>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 6, padding: "0 4px" }}>
+      {[1, 2, 3, 4, 5, 6].map(num => { const head = r.head_id === num + 15, src = head && headSlot ? headSlot : r.hotends.find(h => h.id === num + 15);
+        const c = src && !src.empty && src.color ? `#${String(src.color).replace("#", "").slice(0, 6)}` : null;
+        const light = c && (parseInt(c.slice(1, 3), 16) * 0.299 + parseInt(c.slice(3, 5), 16) * 0.587 + parseInt(c.slice(5, 7), 16) * 0.114) > 170;
+        return <span key={num} style={{ height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 900,
+          color: c ? (light ? "#0f172a" : "#fff") : "var(--muted)", background: c || "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)",
+          border: c ? "1px solid rgba(0,0,0,0.18)" : "1px dashed rgba(148,163,184,0.6)", outline: head ? "2px solid #3b82f6" : "none", outlineOffset: 1.5 }}>{num}</span>; })}
+    </div></div>;
+  return <div onClick={() => setOpen(true)} style={{ cursor: "pointer", height: "100%", minWidth: 0 }}>
+    {low ? row : tile}
+    {open && <Zoom icon={<Layers size={15}/>} color="#0EA5E9" label="Rack Vortek" onClose={() => setOpen(false)}>
+      <div onClick={e => e.stopPropagation()}>{full}</div></Zoom>}
+  </div>;
+}
+
 // Vue retenue de la tuile AMS/rack, par appareil.
 const VIEW_KEY = "home.deviceView";
 // Duree du clignotement du bouton de bascule quand l'unite active change sur
@@ -900,7 +950,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
 // part : "overview" (les AMS ou le rack), "detail" (la fiche de l'AMS ou de la buse
 // choisie), ou rien (les deux, l'un sous l'autre)
 export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLookup, activeNozzleId, part = null,
-  org = "grid", climate = true, selector = true, names = true, fitH = null, dual = false, fs = null }) {
+  org = "grid", climate = true, selector = true, names = true, fitH = null, dual = false, fs = null, forceView = null }) {
   const uniqueAmsList = amsList ? [...new Map(amsList.map(a=>[a.id,a])).values()] : [];
   const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
   const headId  = rack?.head_id ?? -1;
@@ -937,7 +987,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
     setBlink(false);
     try { localStorage.setItem(VIEW_KEY, v); } catch {}
   };
-  const showRack = hasRack && view === "rack";
+  const showRack = hasRack && (forceView ? forceView === "rack" : view === "rack");
 
   // Si l'AMS/tray actif change pendant qu'on est sur l'accueil, suivre automatiquement
   // (comme si on avait cliqué dessus) plutôt que de rester figé sur une vieille sélection.
@@ -1049,7 +1099,7 @@ export function DeviceGrid({ amsList, activeAmsId, activeTrayId, rack, spoolLook
   // Bouton de bascule : il annonce l'essentiel de la vue CACHEE, pour qu'on
   // n'ait pas a basculer juste pour savoir. Vue AMS → buse montee sur la tete
   // et sa couleur ; vue rack → emplacement AMS actif et sa couleur.
-  const toggle = hasRack && (() => {
+  const toggle = hasRack && !forceView && (() => {
     const toRack = !showRack;
     const label = toRack
       ? (headEntry ? `Rack · buse ${headEntry.num}` : "Rack")
@@ -1362,6 +1412,11 @@ function PrinterPopup({ status, img, name, onClose }) {
             </div>
           </div>}
         </div> : null}
+
+        {(status?.hotend_rack?.hotends || []).some(h => !h.empty && h.filament_id) && <>
+          {section("Rack Vortek")}
+          <RackStrip rack={status.hotend_rack} activeNozzleId={(status.nozzles || []).find(n => n.active)?.id}/>
+        </>}
 
         {status?.fila_switch?.installed && <>
           {section("Aiguillage")}
@@ -1840,7 +1895,7 @@ export default function Home() {
   const fitOf = item => typeof item?.h === "number" ? item.h * 128 - 30 - (item.o?._title === false ? 0 : 28) : null;
   const devices = (st, part, o = {}, item) => (st?.status === "RUNNING" || st?.status === "PAUSED" || (st?.ams_list?.length > 0)) ? <DeviceGrid
     key={`${visKey}-${part}`} part={part} org={o.org} climate={o.climate !== false} selector={o.selector !== false} names={o.names !== false}
-    fitH={fitOf(item)} dual={(st?.nozzles?.length || 0) > 1 || !!st?.fila_switch?.installed} fs={switchRoutes(st)}
+    fitH={fitOf(item)} dual={(st?.nozzles?.length || 0) > 1 || !!st?.fila_switch?.installed} fs={switchRoutes(st)} forceView={o.forceView || null}
     amsList={st?.ams_list ?? []}
     activeAmsId={isRunning ? (st?.active_ams_id ?? -1) : -1}
     activeTrayId={isRunning ? (st?.active_tray_id ?? -1) : -1}
@@ -1881,6 +1936,12 @@ export default function Home() {
         { when: it => it.w !== 1, key: "cam", label: "Caméra dans le volet", def: true },
         { when: it => it.w !== 1, key: "temps", label: "Températures dans le volet", def: true }] },
     // l'AMS tout en un (23/10/2026) : remplace l'ancien apercu et la tuile « Detail de l'AMS »
+    vortek: { label: "Rack Vortek", w: [2], h: [2, 1, 3], frame: { icon: <Layers size={15}/>, color: "#0EA5E9" },
+      summary: (d, st) => { const r = st?.hotend_rack; const n = (r?.hotends || []).filter(h => h.id >= 16 && !h.empty && h.filament_id).length;
+        return r ? <span style={{ fontSize: 13 }}>{n}/6{r.head_id >= 16 ? ` · buse ${r.head_id - 15} sur la tête` : ""}</span> : null; },
+      render: (d, st, o, item) => <VortekTile st={st} low={item?.h === 1}
+        tile={devices(st, "overview", { ...o, forceView: "rack" }, typeof item?.h === "number" ? { ...item, h: item.h - (item.h === 1 ? 0.3 : 0.15) } : item)}
+        full={devices(st, null, { ...o, forceView: "rack" })}/> },
     ams: { label: "AMS", w: [2], h: [2, 1, 3], summary: (d, st) => amsSummary(st), frame: { icon: <Disc3 size={15}/>, color: "#8B5CF6" },
       render: (d, st, o, item) => <AmsHub st={st} spoolLookup={spoolLookup} fitH={fitOf(item)} o={o}
         rackTile={devices(st, "overview", o, typeof item?.h === "number" ? { ...item, h: item.h - 0.15 } : item)} rackFull={devices(st, null, o)}/>,
