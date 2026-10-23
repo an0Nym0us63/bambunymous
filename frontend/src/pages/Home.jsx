@@ -1399,7 +1399,10 @@ function PrinterPopup({ status, img, name, onClose }) {
           <span style={{ width: 36, height: 36, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center",
             background: `${s.color}22`, color: s.color }}><Printer size={18}/></span>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>Imprimante</div>
+            <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>Imprimante
+              {/* la nuit, un hibou veille sur l'imprimante (presque invisible) */}
+              {(h => h >= 22 || h < 5)(new Date().getHours()) && <span data-egg="owl" aria-hidden="true" style={{ fontSize: 9, opacity: 0.18,
+                marginLeft: 6, verticalAlign: "middle", cursor: "default", userSelect: "none" }}>🦉</span>}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: s.color }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}
               {status?.fw_version && <span style={{ color: "var(--muted)", fontWeight: 600 }}>· micrologiciel {status.fw_version}</span>}</div>
@@ -1456,6 +1459,9 @@ function PrinterPopup({ status, img, name, onClose }) {
         {status?.connected && <>
           {section("Températures", Thermometer, "#f97316")}
           <TempStrip status={status}/>
+          {/* atelier glacial : un bonhomme de neige se cache sous les temperatures */}
+          {status.chamber_temp > 0 && status.chamber_temp < 15 && <div aria-hidden="true" style={{ textAlign: "right", marginTop: -10, lineHeight: 1 }}>
+            <span data-egg="snowman" style={{ fontSize: 9, opacity: 0.2, cursor: "default", userSelect: "none" }}>⛄</span></div>}
         </>}
 
         {amsList.length > 0 && <>
@@ -1870,6 +1876,25 @@ const GREETING_OPTIONS = [
   { group: "Pastilles", key: "pWheel", label: "Tours de roue disponibles", hint: "En icône seule : 🎰 et le nombre.", def: false, choices: PILL_MODES },
 ];
 
+// Une fourmi traverse parfois le bas de l'accueil (24/10/2026) : une chance sur six par lancement,
+// apres quelques secondes. L'attraper est un secret.
+let antRolled = false;
+function Ant() {
+  const [go, setGo] = useState(false);
+  useEffect(() => {
+    if (antRolled) return undefined;
+    antRolled = true;
+    if (Math.random() > 1 / 6) return undefined;
+    const t = setTimeout(() => setGo(true), 6000 + Math.random() * 20000);
+    return () => clearTimeout(t);
+  }, []);
+  if (!go) return null;
+  return createPortal(<span data-egg="ant" aria-hidden="true" onAnimationEnd={() => setGo(false)}
+    style={{ position: "fixed", left: 0, bottom: "calc(84px + env(safe-area-inset-bottom, 0px))", zIndex: 40, fontSize: 15, cursor: "pointer",
+      padding: 6, userSelect: "none", animation: "bn-ant-walk 14s linear forwards" }}>
+    <style>{"@keyframes bn-ant-walk { from { transform: translateX(-30px) scaleX(-1) } to { transform: translateX(calc(100vw + 30px)) scaleX(-1) } }"}</style>🐜</span>, document.body);
+}
+
 export default function Home() {
   const { status, startPolling, stopPolling } = usePrinter();
   const [spoolLookup, setSpoolLookup] = useState({});
@@ -1976,6 +2001,7 @@ export default function Home() {
   };
   return (
     <div className="home-grid">
+      <Ant/>
       <style>{`
         .home-grid { display:flex; flex-direction:column; gap:12px; max-width:640px; width:100%; margin:0 auto; }
         @media (min-width: 1024px) { .home-grid { max-width:none; } }

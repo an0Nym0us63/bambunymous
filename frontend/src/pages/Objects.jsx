@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import HiddenMark from "../components/HiddenMark";
 import { useUrlTab } from "../utils/useUrlTab";
 import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
 import client, { apiUrl } from "../api/client";
@@ -2141,6 +2142,7 @@ export default function Objects() {
         <AccessoryCreateSheet onClose={()=>setCreatingAcc(false)}
           onCreated={(id)=>{ setCreatingAcc(false); loadAccessories(); if (id) setSelectedAcc(id); }}/>
       )}
+      <HiddenMark egg="lost_key" e="🗝️" side="left"/>
     </div>
   );
 }

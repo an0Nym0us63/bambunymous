@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import HiddenMark from "./HiddenMark";
 import { useTrackDetail } from "../utils/track";
 import { useUrlTab } from "../utils/useUrlTab";
 import { createPortal } from "react-dom";
@@ -556,6 +557,7 @@ export default function MakerWorldView({ onSearch }) {
               )}
             </>)}
         </div>
+        <HiddenMark egg="small_world" e="🌍" side="right"/>
       </div>
   );
 }

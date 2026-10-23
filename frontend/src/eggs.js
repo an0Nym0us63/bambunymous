@@ -396,7 +396,22 @@ export function installEggs() {
 }
 
 // ── Lot du 23/10/2026 ───────────────────────────────────────────────────────
+// Ce que seule l'appli Android voit (24/10/2026) : la vraie lampe torche, une capture d'ecran, la luminosite,
+// les capteurs, le mode avion… Elle appelle window.__bnEgg(nom) ; seuls ces noms-la sont acceptes.
+const NATIVE = new Set([
+  "airplane", "altitude", "big_font", "bold_text", "brightness_max", "brightness_min", "cold_phone", "dark_room",
+  "display_zoom", "do_not_disturb", "elevator", "fast_charge", "four_sides", "fresh_apk", "from_notif", "hardware_keyboard",
+  "headphones", "hot_phone", "hotspot", "humid_air", "just_booted", "knock_knock", "level", "magnet",
+  "network_switch", "new_android", "nod", "nope", "north", "old_android", "pocket", "power_save",
+  "print_screen", "proximity", "roaming", "rotation_lock", "screen_recording", "silence", "sos_torch", "spin_phone",
+  "split_screen", "storage_full", "storm", "sunlight", "tablet", "time_travel", "timezone", "torch",
+  "uptime_30", "vibrate_mode", "volume_dj", "volume_max", "vpn", "wireless_charge",
+]);
 function installEggs2() {
+  window.__bnEgg = name => { if (NATIVE.has(name)) egg(name); };
+  // ce que l'appli a annonce avant que la page soit prete
+  (window.__bnEggQ || []).forEach(n => window.__bnEgg(n));
+  window.__bnEggQ = [];
   // le chargeur branche pendant qu'on est la
   try {
     navigator.getBattery?.().then(b => { b.addEventListener("chargingchange", () => { if (b.charging) egg("plugged"); }); }).catch(() => {});

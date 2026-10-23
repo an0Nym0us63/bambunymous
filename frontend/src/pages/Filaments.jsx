@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import HiddenMark from "../components/HiddenMark";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { useUrlTab, keepTabs } from "../utils/useUrlTab";
@@ -3091,6 +3092,7 @@ export default function Filaments() {
             color:"#ef4444", cursor:"pointer", fontWeight:700 }}>Fermer</button>
         </div>
       )}
+      <HiddenMark egg="snail" e="🐌" side="left"/>
     </div>
   );
 }

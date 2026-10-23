@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import HiddenMark from "../components/HiddenMark";
 import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { currentFriend } from "../store/friend";
@@ -419,6 +420,7 @@ export default function Achievements({ embedded = false }) {
           </div>
         </div>, document.body
       )}
+      <HiddenMark egg="egg_in_egg" e="🥚" side="left"/>
     </div>
   );
 }
@@ -2082,7 +2084,7 @@ const feltBg = (c, c2 = c) => [
 const feltCard = (c, c2) => ({ background: feltBg(c, c2), border:`1px solid ${rgba(c, 0.35)}`,
   boxShadow:`0 6px 18px -10px ${rgba(c, 0.55)}, inset 0 1px 0 rgba(255,255,255,0.10)` });
 // Tiroirs des secrets : une couleur chacun
-const SUB_COLOR = { calendar:"#F97316", clock:"#6366F1", measures:"#0EA5E9", colors:"#EC4899", counts:"#14B8A6",
+const SUB_COLOR = { android:"#3DDC84", calendar:"#F97316", clock:"#6366F1", measures:"#0EA5E9", colors:"#EC4899", counts:"#14B8A6",
   ups:"#EF4444", trade:"#F59E0B", mw:"#22C55E", social:"#06B6D4", app:"#8B5CF6", eggs:"#EAB308", game:"#DC2626",
   sets:"#D4A017", jokers:"#D4A017" };
 const pill = (c, dark = false) => ({ fontSize:11, fontWeight:800, whiteSpace:"nowrap", padding:"3px 9px", borderRadius:20,

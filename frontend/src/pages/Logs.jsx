@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import HiddenMark from "../components/HiddenMark";
 import { RefreshCw, Trash2, Play, Square, Filter, Search } from "lucide-react";
 import client from "../api/client";
 
@@ -212,6 +213,7 @@ export default function Logs({ embedded = false }) {
         }
         <div ref={bottomRef}/>
       </div>
+      <HiddenMark egg="ladybug" e="🐞" side="right"/>
     </div>
   );
 }
