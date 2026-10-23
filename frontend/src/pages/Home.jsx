@@ -14,9 +14,9 @@ import SpoolSVG from "../components/SpoolSVG";
 import Lightbox from "../components/Lightbox";
 import AmsOrderEditor from "../components/AmsOrderEditor";
 import { relayed } from "../components/Friends";
-import { AMSBox, AMSDetail, TrayBottomSheet, DryPopup, DryCard } from "../components/AMSSection";
+import { AMSBox, AMSDetail, TrayBottomSheet, DryPopup, DryCard, amsRoute } from "../components/AMSSection";
 import { Zoom } from "../components/HomeTiles";
-import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName } from "../utils/ams";
+import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName, switchRoutes } from "../utils/ams";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function hexCss(hex) {
@@ -645,8 +645,9 @@ function HubSwatch({ t, active, h, radius = 6 }) {
   );
 }
 // une unite : son nom, ses badges (entree de l'aiguillage, sechage), ses emplacements
-function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = false, uw = 200 }) {
+function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = false, uw = 200, fs = null }) {
   const dry = isDrying(a), trays = a.trays || [];
+  const route = a.switch_port ? amsRoute(a, true, fs).txt.replace(" ", "") : null;
   const compact = h < 38 && !big;
   const ring = sel ? "#8b5cf6" : act ? "#3b82f6" : dry ? "rgba(249,115,22,0.6)" : "var(--border)";
   const chip = (txt, c, bg) => <span style={{ fontSize: 9, fontWeight: 900, lineHeight: "13px", padding: "0 5px", borderRadius: 6, color: c, background: bg, whiteSpace: "nowrap" }}>{txt}</span>;
@@ -668,14 +669,14 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
   const head = big ? 20 : 15;
   const badges = big && <span style={{ display: "flex", gap: 4, flexWrap: "wrap", height: 14, overflow: "hidden", flexShrink: 0 }}>
     {dry && chip(`🔥 ${a.dry_temperature > 0 ? `${a.dry_temperature}° · ` : ""}${dryLeft(a.dry_time)}`, "#fff", "#f97316")}
-    {a.switch_port && chip(`⇄${a.switch_port}`, "#8b5cf6", "rgba(139,92,246,0.14)")}
+    {route && chip(route, "#8b5cf6", "rgba(139,92,246,0.14)")}
     {climate && a.humidity > 0 && chip(`💧${a.humidity}%`, a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#d97706" : "#0ea5e9", "rgba(14,165,233,0.12)")}</span>;
   return (
     <button type="button" onClick={click} style={{ ...box, display: "flex", flexDirection: "column", gap: big ? 6 : 3, padding: big ? "8px 10px 10px" : "4px 6px 6px" }}>
       <span style={{ display: "flex", alignItems: "center", gap: 4, height: head, minWidth: 0, overflow: "hidden", flexShrink: 0 }}>
         <span style={{ fontSize: big ? 13.5 : 10.5, fontWeight: 900, color: act ? "#3b82f6" : sel ? "#8b5cf6" : "var(--text2)", whiteSpace: "nowrap" }}>{amsName(a.id)}</span>
         {act && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite", flexShrink: 0 }}/>}
-        {!big && a.switch_port && !dry && uw >= 150 && chip(`⇄${a.switch_port}`, "#8b5cf6", "rgba(139,92,246,0.14)")}
+        {!big && route && !dry && uw >= 150 && chip(route, "#8b5cf6", "rgba(139,92,246,0.14)")}
         {!big && dry && chip(`🔥${dryLeft(a.dry_time)}`, "#fff", "#f97316")}
         <span style={{ flex: 1 }}/>
         {!big && climate && a.humidity > 0 && uw >= 104 && <span style={{ fontSize: big ? 11.5 : 9.5, fontWeight: 800, color: a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#f59e0b" : "var(--muted)",
@@ -694,7 +695,7 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
   );
 }
 // la grille des unites, comme ma disposition ; h : la hauteur dont elle dispose
-function HubGrid({ list, order, act, actTray, H, climate, onPick, big = false, sel = null }) {
+function HubGrid({ list, order, act, actTray, H, climate, onPick, big = false, sel = null, fs = null }) {
   const ref = useRef(null);
   const [GW, setGW] = useState(0);
   useEffect(() => {
@@ -713,7 +714,7 @@ function HubGrid({ list, order, act, actTray, H, climate, onPick, big = false, s
       {cols.flatMap((col, ci) => col.map((a, ri) => a && (
         <div key={a.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth: 0, display: "flex", justifyContent: "center" }}>
           <div style={{ width: `${Math.max(0.78, slotCount(a) / columnWeight(col)) * 100}%`, minWidth: 0 }}>
-            <HubUnit a={a} act={a.id === act} actTray={actTray} h={uh} climate={climate} onClick={onPick} big={big} sel={sel === a.id}
+            <HubUnit a={a} act={a.id === act} actTray={actTray} h={uh} climate={climate} onClick={onPick} big={big} sel={sel === a.id} fs={fs}
               uw={GW ? (GW - gap * (cols.length - 1)) * columnWeight(col) / cols.reduce((t, c) => t + columnWeight(c), 0) * Math.max(0.78, slotCount(a) / columnWeight(col)) : 200}/></div>
         </div>
       ))).filter(Boolean)}
@@ -741,6 +742,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
   const hasRack = (rack?.hotends ?? []).some(h => !h.empty && h.filament_id);
   const headNum = rack?.head_id >= 16 && rack.head_id <= 21 ? rack.head_id - 15 : null;
   const climate = o?.climate !== false;
+  const routes = switchRoutes(st);
   const go = v => { setView(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* indisponible */ } };
   if (!list.length && !hasRack) return <div style={{ padding: 16, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>Aucun AMS détecté</div>;
   const H = fitH ?? 230;
@@ -775,7 +777,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
       {tab === "rack" ? rackFull : <>
         {/* la grille en grand : on y choisit l'unite */}
         <HubGrid list={list} order={order} act={act} actTray={actTray} H={Math.min(300, (cols => (cols[0]?.length || 1) * 128)(grilleAccueil(list, lireDisposition(order))))}
-          climate big sel={sel?.id} onPick={id => setOpen(id)}/>
+          climate big sel={sel?.id} fs={routes} onPick={id => setOpen(id)}/>
         <div style={{ display: "grid", gridTemplateColumns: `repeat(${W >= 520 ? 4 : 2}, minmax(0, 1fr))`, gap: 8 }}>
           {[["Bobines chargées", list.flatMap(a => a.trays || []).filter(t => trayHex(t)).length],
             ["En cours", actT ? slotLabel(act, actTray) : "—", "#3b82f6"],
@@ -790,7 +792,8 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
             <span style={{ fontSize: 20, fontWeight: 900, color: "var(--text)" }}>{amsName(sel.id)}</span>
             {sel.id === act && <span style={{ fontSize: 12, fontWeight: 800, color: "#3b82f6" }}>● imprime{actT ? ` · ${slotLabel(act, actTray)}` : ""}</span>}
-            {sel.switch_port && <span style={{ fontSize: 12, fontWeight: 800, color: "#8b5cf6" }}>⇄ entrée {sel.switch_port} de l'aiguillage</span>}
+            {sel.switch_port && <span style={{ fontSize: 12, fontWeight: 800, color: "#8b5cf6" }}>⇄ entrée {sel.switch_port} de l'aiguillage
+              {(o => o == null ? "" : ` → buse ${o === 1 ? "gauche" : "droite"}`)(routes?.[`out_${sel.switch_port.toLowerCase()}`])}</span>}
             <span style={{ flex: 1 }}/>
             {sel.humidity > 0 && <span style={{ fontSize: 13, fontWeight: 800, color: "#0ea5e9" }}>💧 {sel.humidity} %</span>}
             {sel.temp > 0 && <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text2)" }}>🌡 {Number(sel.temp).toFixed(1).replace(".", ",")} °C</span>}
@@ -807,7 +810,7 @@ function AmsHub({ st, spoolLookup, fitH, o, rackTile, rackFull }) {
     <div onClick={() => setOpen("all")} style={{ display: "flex", flexDirection: "column", gap: 6, cursor: "pointer", height: fitH ?? undefined, minWidth: 0, overflow: "hidden" }}>
       {!(view === "rack" && hasRack && !low) && head}
       {view === "rack" && hasRack && !low ? <div onClick={e => e.stopPropagation()} style={{ flex: 1, minHeight: 0 }}>{rackTile}</div>
-        : <HubGrid list={list} order={order} act={act} actTray={actTray} H={H - (low ? 0 : 28)} climate={climate} onPick={id => setOpen(id)}/>}
+        : <HubGrid list={list} order={order} act={act} actTray={actTray} H={H - (low ? 0 : 28)} climate={climate} fs={routes} onPick={id => setOpen(id)}/>}
       {popup}
     </div>
   );
@@ -1763,7 +1766,7 @@ export default function Home() {
   const fitOf = item => typeof item?.h === "number" ? item.h * 128 - 30 - (item.o?._title === false ? 0 : 28) : null;
   const devices = (st, part, o = {}, item) => (st?.status === "RUNNING" || st?.status === "PAUSED" || (st?.ams_list?.length > 0)) ? <DeviceGrid
     key={`${visKey}-${part}`} part={part} org={o.org} climate={o.climate !== false} selector={o.selector !== false} names={o.names !== false}
-    fitH={fitOf(item)} dual={(st?.nozzles?.length || 0) > 1 || !!st?.fila_switch?.installed} fs={st?.fila_switch}
+    fitH={fitOf(item)} dual={(st?.nozzles?.length || 0) > 1 || !!st?.fila_switch?.installed} fs={switchRoutes(st)}
     amsList={st?.ams_list ?? []}
     activeAmsId={isRunning ? (st?.active_ams_id ?? -1) : -1}
     activeTrayId={isRunning ? (st?.active_tray_id ?? -1) : -1}

@@ -10,6 +10,7 @@ import LiveCamera from "./LiveCamera";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "../pages/Achievements";
 import { DryCard } from "./AMSSection";
 import SpoolSVG from "./SpoolSVG";
+import { switchRoutes } from "../utils/ams";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
 // Les tuiles de l'accueil (22/10/2026, refaites le meme jour). Chaque tuile :
@@ -1962,7 +1963,7 @@ function Spool({ status, o, sz }) {
 const SIDE = id => id == null ? null : id === 1 ? "G" : "D";
 const SIDE_L = id => id == null ? "—" : id === 1 ? "Gauche" : "Droite";
 function switchModel(status) {
-  const fs = status?.fila_switch || {};
+  const fs = switchRoutes(status) || {};
   const ams = status?.ams_list || [];
   const nz = status?.nozzles || [];
   const slot = s => { if (!s) return null; const a = ams.find(x => x.id === s.ams); const t = a?.trays?.find(x => x.id === s.tray);
@@ -2073,7 +2074,7 @@ function FilaSwitch({ status, o, sz }) {
           {m.fs.filament != null && <span>{m.fs.filament ? "filament engagé dans l'aiguillage" : "aiguillage vide"}</span>}</div>
         {/* ce que l'imprimante envoie, tel quel : pour verifier le sens des sorties */}
         <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "ui-monospace, monospace", lineHeight: 1.5 }}>
-          brut · in_a {JSON.stringify(m.fs.in_a ?? null)} · in_b {JSON.stringify(m.fs.in_b ?? null)} · out_a {String(m.fs.out_a ?? "—")} · out_b {String(m.fs.out_b ?? "—")}
+          brut · in_a {JSON.stringify(status.fila_switch.in_a ?? null)} · in_b {JSON.stringify(status.fila_switch.in_b ?? null)} · out_a {String(status.fila_switch.out_a ?? "—")} · out_b {String(status.fila_switch.out_b ?? "—")}
           {" · "}buse active {String(m.nz.find(n => n.active)?.id ?? "—")}</div>
       </>}>
       {({ W, H }) => {

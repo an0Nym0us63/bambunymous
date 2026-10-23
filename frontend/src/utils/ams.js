@@ -30,6 +30,27 @@ export function slotLabel(amsId, trayId) {
   return `${amsId}.${trayId + 1}`;
 }
 
+// L'aiguillage (Filament Track Switch) : la buse ou va chaque entree, telle qu'on peut s'y fier.
+// L'imprimante envoie pour chaque sortie un numero de buse (out_a, out_b ; 1 = gauche, 0 = droite).
+// Releve sur une H2C le 23/10/2026 : celle de l'entree qui imprime suit le vrai chemin (A passe a 1
+// quand la buse gauche imprime depuis A) ; celle de l'entree au repos garde parfois la meme buse
+// que l'autre (A et B a 0), ce qui ne veut rien dire : l'entree au repos va forcement sur l'autre
+// buse. Quand les deux sorties se confondent, l'entree qui imprime garde la sienne et l'autre prend
+// l'autre buse ; sans impression, on ne sait pas laquelle croire : aucune.
+export function switchRoutes(status) {
+  const fs = status?.fila_switch;
+  if (!fs?.installed) return fs || null;
+  const live = ["RUNNING", "PAUSE", "PAUSED", "PREPARE"].includes(String(status?.status || "").toUpperCase());
+  const port = live ? (status?.ams_list || []).find(a => a.id === status?.active_ams_id)?.switch_port || null : null;
+  let { out_a, out_b } = fs;
+  if (out_a != null && out_a === out_b) {
+    if (port === "A") out_b = out_a === 1 ? 0 : 1;
+    else if (port === "B") out_a = out_b === 1 ? 0 : 1;
+    else { out_a = null; out_b = null; }
+  }
+  return { ...fs, out_a: out_a ?? null, out_b: out_b ?? null };
+}
+
 // Nombre de slots qu'une unite occupe en largeur sur l'accueil. On le deduit
 // de ses bacs reels quand on les a, sinon de sa nature.
 export function slotCount(ams) {
