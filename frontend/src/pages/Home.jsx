@@ -15,7 +15,7 @@ import Lightbox from "../components/Lightbox";
 import AmsOrderEditor from "../components/AmsOrderEditor";
 import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet, DryCard, amsRoute } from "../components/AMSSection";
-import { Zoom } from "../components/HomeTiles";
+import { Zoom, TempPanel } from "../components/HomeTiles";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName, switchRoutes, trayPct } from "../utils/ams";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -1212,7 +1212,6 @@ function PrinterPopup({ status, img, name, onClose }) {
   const ams = (status?.ams_list || []).find(a => a.id === status?.active_ams_id);
   const tray = ams?.trays?.find(t => t.id === status?.active_tray_id);
   const spool = tray?.spool_info;
-  const sp = SPEEDS[status?.speed_level];
   const R = 70, C = 2 * Math.PI * R;
   const section = t => <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)" }}>{t}</div>;
   return createPortal(
@@ -1279,15 +1278,10 @@ function PrinterPopup({ status, img, name, onClose }) {
 
         {status?.connected && <>
           {section("Températures")}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(112px, 1fr))", gap: 8 }}>
-            {nozzles.map(n => <ArcGauge key={n.id} value={n.temp} target={n.target} max={300} color="#f97316"
-              label={nozzles.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse"} active={nozzles.length > 1 && n.active}/>)}
-            <ArcGauge value={status.bed_temp} target={status.target_bed_temp} max={120} color="#ef4444" label="Plateau"/>
-            {status.chamber_temp > 0 && <ArcGauge value={status.chamber_temp} target={status.target_chamber_temp} max={70} color="#eab308" label="Chambre"/>}
-          </div>
+          <TempPanel status={status} cardH={150}/>
         </>}
 
-        {(tray && !tray.empty) || sp ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
+        {tray && !tray.empty ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
           {tray && !tray.empty && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, background: "var(--surface2)" }}>
             <span style={{ flexShrink: 0, display: "inline-flex" }}><SpoolSVG colors={[trayHex(tray) || "#888888"]} size={52} active={live}/></span>
             <div style={{ minWidth: 0 }}>
@@ -1297,12 +1291,6 @@ function PrinterPopup({ status, img, name, onClose }) {
               <div style={{ fontSize: 12, color: "var(--muted)", fontWeight: 700 }}>
                 {[spool?.fila_type || tray.filament_type, spool?.remaining_weight_g != null ? `${Math.round(spool.remaining_weight_g)} g` : tray.remain != null ? `${tray.remain} %` : null].filter(Boolean).join(" · ")}</div>
             </div>
-          </div>}
-          {sp && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: 10, borderRadius: 14, background: "var(--surface2)" }}>
-            <span style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-              background: `${sp[1]}22`, color: sp[1], fontSize: 18 }}>⚡</span>
-            <div><div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>Vitesse</div>
-              <div style={{ fontSize: 14.5, fontWeight: 900, color: sp[1] }}>{sp[0]}{status.speed_mag ? <span style={{ color: "var(--muted)", fontWeight: 700 }}> · {status.speed_mag} %</span> : null}</div></div>
           </div>}
         </div> : null}
 

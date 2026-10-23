@@ -1369,7 +1369,8 @@ const tempRows = (status, o) => {
   const nz = [...(status.nozzles || [])].sort((a, b) => b.id - a.id);   // gauche (1) puis droite (0)
   const bed = { k: "bed", ico: IcoBed, l: "Plateau", v: status.bed_temp, t: status.target_bed_temp, max: 120, c: "#ef4444" };
   return [
-    ...nz.map(n => ({ k: `n${n.id}`, ico: IcoNozzle, l: nz.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", v: n.temp, t: n.target, max: 300, c: "#f97316" })),
+    ...nz.map(n => ({ k: `n${n.id}`, ico: IcoNozzle, l: nz.length > 1 ? `Buse ${n.id === 1 ? "G" : "D"}` : "Buse", v: n.temp, t: n.target, max: 300, c: "#f97316",
+      active: nz.length > 1 && !!n.active })),
     ...(!nz.length && status.nozzle_temp != null ? [{ k: "n", ico: IcoNozzle, l: "Buse", v: status.nozzle_temp, t: status.target_nozzle_temp, max: 300, c: "#f97316" }] : []),
     bed,
     ...(o.chamber && status.chamber_temp > 0 ? [{ k: "ch", ico: IcoChamber, l: "Chambre", v: status.chamber_temp, t: status.target_chamber_temp, max: 70, c: "#eab308" }] : []),
@@ -1402,24 +1403,30 @@ function ThermoCell({ r, w, h, targets }) {
   const val = (fs, tgt = targets) => <span style={{ display: "inline-flex", alignItems: "baseline", gap: 3, whiteSpace: "nowrap" }}>
     <span data-pk="" style={{ fontSize: fs, fontWeight: 900, color: hot ? c : "var(--text)", lineHeight: 1 }}>{Math.round(v)}°</span>
     {tgt && t > 0 && <span style={{ fontSize: Math.max(10, fs * 0.42), fontWeight: 800, color: "var(--muted)" }}>/{Math.round(t)}°</span>}</span>;
-  const card = { width: w, height: h, boxSizing: "border-box", borderRadius: 14, padding: "8px 10px", minWidth: 0, overflow: "hidden", position: "relative",
-    background: `linear-gradient(160deg, ${c.replace("rgb", "rgba").replace(")", ",0.16)")}, transparent 70%), var(--surface2)` };
+  const glow = a => c.replace("rgb", "rgba").replace(")", `,${a})`);
+  const card = { width: w, height: h, boxSizing: "border-box", borderRadius: 16, padding: "8px 10px", minWidth: 0, overflow: "hidden", position: "relative",
+    background: `radial-gradient(circle at 18% 100%, ${glow(hot ? 0.32 : 0.14)}, transparent 62%), linear-gradient(160deg, ${glow(0.12)}, transparent 70%), var(--surface2)`,
+    border: r.active ? `2px solid ${c}` : "1px solid transparent", boxShadow: r.active ? `0 6px 22px ${glow(0.35)}` : "none" };
+  const activeChip = r.active && <span style={{ position: "absolute", top: 8, right: 8, fontSize: 9.5, fontWeight: 900, color: "#fff", background: c,
+    padding: "1px 7px", borderRadius: 10, letterSpacing: ".03em" }}>active</span>;
   // haute : un thermometre (tube et bulbe) a gauche, le reste a droite
   if (h >= 150 && w >= 96) {
     const tubeH = h - 46, bulb = 22, fill = frac(v);
-    return <div title={`${r.l} : ${st}`} style={{ ...card, display: "flex", gap: 10, padding: "10px 12px" }}>
+    return <div title={`${r.l} : ${st}`} style={{ ...card, display: "flex", gap: 10, padding: "10px 12px" }}>{activeChip}
       <div style={{ position: "relative", width: bulb, flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center" }}>
         <div style={{ width: 12, height: tubeH, borderRadius: 6, background: "var(--surface)", border: "1px solid var(--border)", position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: `${fill * 100}%`, background: `linear-gradient(to top, ${heat(20)}, ${c})`,
             transition: "height .8s" }}/>
           {targets && t > 0 && <div style={{ position: "absolute", left: -2, right: -2, bottom: `${frac(t) * 100}%`, height: 2, background: "var(--text)" }}/>}
         </div>
+        {targets && t > 0 && <span style={{ position: "absolute", left: 17, bottom: `calc(${bulb + 5}px + ${frac(t)} * ${tubeH}px - 6px)`, fontSize: 9, fontWeight: 900,
+          color: "var(--muted)", whiteSpace: "nowrap" }}>◂ {Math.round(t)}°</span>}
         <div style={{ width: bulb, height: bulb, borderRadius: "50%", marginTop: -5, background: c, boxShadow: `0 0 14px ${c}`, border: "2px solid var(--surface)" }}/>
       </div>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>{icon(24)}
           <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.l}</span></div>
-        <div>{val(Math.min(30, (w - 44) * 0.24))}</div>
+        <div>{val(Math.min(34, (w - 44) * 0.26), false)}</div>
         <span style={{ fontSize: 11.5, fontWeight: 800, color: sc }}>{ic} {st}</span>
       </div>
     </div>;
@@ -1450,6 +1457,14 @@ function thermoGrid(n, W, H, gap = 8) {
   }
   return best;
 }
+export function TempPanel({ status, chamber = true, cardH = 190 }) {
+  const [ref, box] = useMeasure();
+  const rows = status?.connected ? tempRows(status, { chamber }) : [];
+  const cols = box.W >= 520 ? Math.min(4, rows.length) : 2;
+  const w = box.W ? Math.floor((box.W - 10 * (cols - 1)) / cols) : 0;
+  return <div ref={ref} style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
+    {w > 0 && rows.map(r => <ThermoCell key={r.k} r={r} w={w} h={cardH} targets/>)}</div>;
+}
 function Temps({ status, o, sz }) {
   if (!status?.connected) return null;
   const rows = tempRows(status, o);
@@ -1479,23 +1494,8 @@ function Temps({ status, o, sz }) {
         <span data-pk="" style={{ fontSize: 16, fontWeight: 900, color: hot(r) ? r.c : "var(--text)" }}>{Math.round(r.v || 0)}°</span></div>)}</div>;
   };
   return (
-    <Tile icon={<Thermometer size={15}/>} color="#F97316" label="Températures" zoom={({ W }) => <>
-      <div style={{ display: "flex", minHeight: 330 }}>{thermo(W, 330)}</div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 10 }}>
-        {rows.map(r => { const v = r.v || 0, t = r.t || 0;
-          const st = t > 0 ? (Math.abs(v - t) <= 3 ? ["à température", "#16a34a"] : v < t ? ["chauffe", r.c] : ["redescend", "#0ea5e9"])
-            : v > 40 ? ["refroidit", "#0ea5e9"] : ["au repos", "var(--muted)"];
-          return <div key={r.k} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 13px", borderRadius: 16,
-            background: `linear-gradient(135deg, ${hot(r) ? r.c : "#94a3b8"}1c, transparent 65%), var(--surface2)` }}>
-            <span style={{ width: 40, height: 40, borderRadius: 13, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-              background: `${hot(r) ? r.c : "#94a3b8"}26`, color: hot(r) ? r.c : "var(--muted)" }}><r.ico s={20}/></span>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)" }}>{r.l}</div>
-              <div style={{ fontSize: 11.5, fontWeight: 800, color: st[1], whiteSpace: "nowrap" }}>● {st[0]}</div></div>
-            <div style={{ textAlign: "right" }}>
-              <div style={{ fontSize: 22, fontWeight: 900, color: hot(r) ? r.c : "var(--text)", lineHeight: 1 }}>{Math.round(v)}°</div>
-              {t > 0 && <Muted size={11}>consigne {Math.round(t)}°</Muted>}</div>
-          </div>; })}</div></>}
+    <Tile icon={<Thermometer size={15}/>} color="#F97316" label="Températures" zoom={({ W, H }) => { const n = tempRows(status, o).length, r = W >= 520 ? 1 : Math.ceil(n / 2);
+      return <TempPanel status={status} chamber={o.chamber} cardH={Math.max(170, Math.min(360, Math.floor((H - 10 * (r - 1)) / r)))}/>; }}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 10, fontSize: 13.5 }}>{rows.map(r =>
         <span key={r.k} title={r.l} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: hot(r) ? r.c : "var(--text)" }}>
           <r.ico s={13}/>{Math.round(r.v || 0)}°</span>)}</span>}>
@@ -1819,7 +1819,6 @@ function Countdown({ status, o, sz }) {
   const hero = <Hero visual={s => <Ring value={pct / 100} size={s} color={color}>{pct}%</Ring>}
     value={live ? (left ? fmtDur(left * 60) : "bientôt") : "—"} unit={live ? (paused ? "en pause" : "restantes") : "rien en cours"}
     sub={live && [left && o.fin && `fin à ${finAt(left)}`, o.layer && status.total_layers > 0 && `couche ${status.layer} / ${status.total_layers}`].filter(Boolean).join(" · ")}/>;
-  const pace = { 1: "silencieux", 2: "standard", 3: "sport", 4: "ludicrous" }[status?.speed_level];
   // ce qui est deja passe, estime d'apres l'avancement
   const total = live && left && pct > 0 && pct < 100 ? left / (1 - pct / 100) : null;
   const since = total ? new Date(Date.now() - (total - left) * 60000) : null;
@@ -1831,7 +1830,7 @@ function Countdown({ status, o, sz }) {
       <span>couche <b style={{ color: "var(--text)" }}>{status.layer}</b> / {status.total_layers}</span><span>{Math.round(100 * status.layer / status.total_layers)} %</span></div>
     <div style={{ height: 8, borderRadius: 5, background: "var(--surface2)", overflow: "hidden" }}>
       <div style={{ height: "100%", width: `${100 * status.layer / status.total_layers}%`, borderRadius: 5, background: `linear-gradient(90deg, ${color}99, ${color})` }}/></div></div>;
-  const facts = [since && ["Commencée", hm(since)], total && ["Durée totale", `≈ ${fmtDur(total * 60)}`], pace && ["Vitesse", pace]].filter(Boolean);
+  const facts = [since && ["Commencée", hm(since)], total && ["Durée totale", `≈ ${fmtDur(total * 60)}`]].filter(Boolean);
   return (
     <Tile icon={<Timer size={15}/>} color={color} label="Fin d'impression" zoom={live ? <>
       <BoxCtx.Provider value={{ W: 600, H: 180, zoom: true }}>{hero}</BoxCtx.Provider>
