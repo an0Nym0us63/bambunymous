@@ -984,8 +984,25 @@ function Dry({ v, status, o, sz }) {
             {below}</div>;
         }
         if (drying.length) {
-          // une unite : grande si la place le permet ; plusieurs : une ligne chacune
           const each = (H - 8 * (drying.length - 1)) / drying.length;
+          // pas la place d'un anneau par unite : des lignes compactes (nom, mode, temperature, temps restant),
+          // la progression en fond de ligne ; ce qui ne tient pas se compte en « +n »
+          if (each < 40) {
+            const fit = Math.max(1, Math.floor((H + 4) / 24));
+            const shown = drying.length > fit ? drying.slice(0, fit - 1) : drying;
+            return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, minWidth: 0 }}>
+              {shown.map(a => <div key={a.id} style={{ position: "relative", height: 20, borderRadius: 7, overflow: "hidden", display: "flex", alignItems: "center",
+                gap: 6, padding: "0 7px", background: "rgba(249,115,22,0.08)", minWidth: 0 }}>
+                <span aria-hidden="true" style={{ position: "absolute", inset: 0, width: `${prog(a) * 100}%`, background: "linear-gradient(90deg, rgba(249,115,22,0.10), rgba(249,115,22,0.28))" }}/>
+                <span style={{ position: "relative", width: 6, height: 6, borderRadius: "50%", background: "#f97316", flexShrink: 0, animation: "dryPulse 2.5s ease-in-out infinite" }}/>
+                <span style={{ position: "relative", fontSize: 12, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap" }}>{amsLab(a)}</span>
+                {a.dry_filament && W >= 190 && <span style={{ position: "relative", fontSize: 10.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>{a.dry_filament}</span>}
+                <span style={{ position: "relative", marginLeft: "auto", fontSize: 11.5, fontWeight: 900, color: "#ea580c", whiteSpace: "nowrap" }}>
+                  {W >= 230 && a.dry_temperature ? `${a.dry_temperature}° · ` : ""}{fmtDur((a.dry_time || 0) * 60)}</span>
+              </div>)}
+              {drying.length > shown.length && <span style={{ fontSize: 11, fontWeight: 800, color: "#ea580c", paddingLeft: 7 }}>+{drying.length - shown.length} autre{drying.length - shown.length > 1 ? "s" : ""}</span>}
+            </div>;
+          }
           const ring = Math.max(34, Math.min(each, W < 215 ? 64 : 84, W * 0.42));
           return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>{drying.map(a => dryRow(a, Math.floor(ring), W))}</div>;
         }
@@ -1430,7 +1447,8 @@ function ThermoCell({ r, w, h, targets }) {
           <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{r.l}</span>
           {activeChip}</div>
         <div>{val(Math.min(34, (w - 44) * 0.26), false)}</div>
-        <span style={{ fontSize: 11.5, fontWeight: 800, color: sc }}>{ic} {st}</span>
+        <span style={{ fontSize: Math.max(9.5, Math.min(11.5, (w - 44) / 9)), fontWeight: 800, color: sc, whiteSpace: "nowrap", overflow: "hidden",
+          textOverflow: "ellipsis" }}>{ic} {st}</span>
       </div>
     </div>;
   }
@@ -1440,7 +1458,10 @@ function ThermoCell({ r, w, h, targets }) {
     <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
       {w >= 84 && icon(big ? 22 : 18)}
       <span style={{ fontSize: w < 84 ? 10.5 : 11.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", flex: 1, minWidth: 0 }}>{r.l}</span>
-      {activeChip || (ic && w >= 100 && <span style={{ fontSize: 10, fontWeight: 900, color: sc }}>{ic}</span>)}</div>
+      {/* l'etat reste lisible, meme sur la buse active : en toutes lettres s'il y a la place */}
+      {(ic || w >= 200) && w >= 100 && <span style={{ fontSize: w >= 200 ? 10.5 : 10, fontWeight: 900, color: sc, whiteSpace: "nowrap" }}>
+        {w >= 200 ? `${ic ? `${ic} ` : ""}${st}` : ic}</span>}
+      {activeChip}</div>
     {val(Math.max(15, Math.min(big ? 28 : 21, w * 0.19)), targets && w >= 84)}
     <div style={{ position: "relative", height: 6, borderRadius: 4, background: "var(--surface)", border: "1px solid var(--border)" }}>
       <div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${frac(v) * 100}%`, borderRadius: 4,
