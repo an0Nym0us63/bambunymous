@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { plateRound, plateDoneInRound } from "../utils/queueSort";
 import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import client from "../api/client";
@@ -490,10 +491,16 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                         const sel = plateSel[p.instance_id];
                         const can = p.plates.filter(pl => (!sel || sel.includes(pl.index))
                           && plateInAms(m.stock?.[p.instance_id], pl, `${id}|${p.instance_id}`));
-                        const todo = can.filter(pl => !plateDone(p, pl.index)).map(pl => pl.index);
-                        const again = can.filter(pl => plateDone(p, pl.index)).map(pl => `${pl.index} (${plateTimes(p, pl.index) || 1}×)`);
-                        return (todo.length > 0 || again.length > 0) && (
+                        // en series : les plateaux retenus, ou j'en suis (un modele refait des mois plus tard repart d'une serie)
+                        const kept = p.plates.filter(pl => !sel || sel.includes(pl.index));
+                        const round = plateRound(kept.map(pl => plateTimes(p, pl.index)));
+                        const doneNow = pl => plateDoneInRound(plateTimes(p, pl.index), round);
+                        const todo = can.filter(pl => !doneNow(pl)).map(pl => pl.index);
+                        const again = can.filter(pl => doneNow(pl)).map(pl => `${pl.index} (${plateTimes(p, pl.index) || 1}×)`);
+                        return (todo.length > 0 || again.length > 0 || (round && (round.faits || round.serie > 1))) && (
                           <div style={{ padding:"0 10px 8px", fontSize:12, fontWeight:700, display:"flex", flexDirection:"column", gap:2 }}>
+                            {round && (round.faits > 0 || round.serie > 1) && <span style={{ color: round.complete ? "#16a34a" : "var(--text)", fontWeight:800 }}>
+                              Plateaux retenus : {round.label}</span>}
                             {todo.length > 0 && <span style={{ color:"#16a34a" }}>
                               ▶ À lancer maintenant avec l'AMS : plateau{todo.length > 1 ? "x" : ""} {todo.join(", ")}</span>}
                             {again.length > 0 && <span style={{ color:"var(--text2)", fontWeight:600 }}>
@@ -503,8 +510,12 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                       })()}
                       {isOpen && (
                         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(130px,1fr))", gap:8, padding:"0 10px 10px" }}>
-                          {p.plates.map(pl => {
-                            const ok = plateDone(p, pl.index);
+                          {p.plates.map((pl, _i, all) => {
+                            // fait POUR LA SERIE EN COURS (sur les plateaux retenus) ; imprime avant, mais a refaire : en gris
+                            const _sel = plateSel[p.instance_id];
+                            const _round = plateRound(all.filter(x => !_sel || _sel.includes(x.index)).map(x => plateTimes(p, x.index)));
+                            const ok = plateDoneInRound(plateTimes(p, pl.index), _round);
+                            const before = !ok && plateTimes(p, pl.index) > 0;
                             const live = platePrinting(p, pl.index);
                             const sel0 = plateSel[p.instance_id];
                             // un plateau ecarte ne dit pas s'il est pret : il ne sera pas lance
@@ -546,6 +557,9 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                                       color:"white", background:"#f59e0b", padding:"1px 6px", borderRadius:20 }}>⏳ EN COURS</span>}
                                     {ok && <span title={`Déjà imprimé ${plateTimes(p, pl.index) || 1} fois`} style={{ fontSize:9.5, fontWeight:800, color:"white",
                                       background:"#22c55e", padding:"1px 6px", borderRadius:20 }}>✓ FAIT {plateTimes(p, pl.index) || 1}×</span>}
+                                    {before && <span title="Imprimé lors d'une série précédente, à refaire pour celle-ci" style={{ fontSize:9.5, fontWeight:800,
+                                      color:"var(--text2)", background:"var(--surface2)", border:"1px solid var(--border)", padding:"1px 6px", borderRadius:20 }}>
+                                      ↻ {plateTimes(p, pl.index)}× avant</span>}
                                     {ready ? <span title={ok ? "Déjà imprimé, et tous ses filaments sont dans l'AMS : tu peux le relancer"
                                         : "Tous ses filaments sont dans l'AMS, en quantité suffisante"}
                                         style={{ fontSize:9.5, fontWeight:800, color:"white",

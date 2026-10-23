@@ -2,7 +2,7 @@ import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, 
 import { useFriend } from "../store/friend";
 import { relayed } from "./Friends";
 import { stageLabel } from "../utils/printStage";
-import { QUEUE_SORTS, sortQueue } from "../utils/queueSort";
+import { QUEUE_SORTS, sortQueue, plateRound, plateDoneInRound } from "../utils/queueSort";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router-dom";
 import { CalendarClock, BarChart3, ListChecks, History, Package, Flame, Droplets, Coins, Star, Users, Trophy,
@@ -821,7 +821,9 @@ const QSTATE = {
 const qState = m => QSTATE[m.status] || QSTATE.unknown;
 const canGo = m => m.status === "ams" || m.status === "partial";
 const queueSub = (m, o) => { const [l, c, ic] = qState(m);
+  const r = m.plates?.length > 1 ? plateRound(m.plates.map(p => p.printed)) : null;
   return <><span style={{ color: c, fontWeight: 800 }}>{ic} {m.printing ? `en cours${m.progress != null ? ` · ${m.progress} %` : ""}` : l}</span>
+    {r && (r.faits || r.serie > 1) ? <span style={{ fontWeight: 800, color: r.complete ? "#16a34a" : "var(--text2)" }}> · {r.label.replace(" faits", "")}</span> : ""}
     {m.seconds ? ` · ${fmtDur(m.seconds)}` : ""}{o.weight && m.weight_g ? ` · ${fmtG(m.weight_g)}` : ""}</>; };
 // les filaments d'un modele : une pastille par couleur, cerclee selon ce qu'on a (vert AMS, orange stock, rouge rien)
 const FilaDots = ({ list, size = 14 }) => <span style={{ display: "inline-flex", gap: 3, flexWrap: "wrap" }}>
@@ -882,6 +884,16 @@ function Next({ q, o, sz }) {
         <div style={{ fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
           {[m.profile?.title, m.profile && m.profile.plates_total > 1 && `${m.profile.plates}/${m.profile.plates_total} plateaux`, m.seconds && fmtDur(m.seconds),
             m.weight_g && fmtG(m.weight_g), m.cost != null && fmtEur(m.cost)].filter(Boolean).join(" · ")}</div>
+        {/* les plateaux retenus : combien sont faits, et un carre par plateau (vert faisable, coche fait, orange en cours) */}
+        {m.plates?.length > 1 && (r => <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 11.5, fontWeight: 800, color: r.complete ? "#16a34a" : "var(--text2)", marginRight: 3 }}>Plateaux {r.label}</span>
+          {m.plates.map(p => { const done = plateDoneInRound(p.printed, r);
+            return <span key={p.index} title={`Plateau ${p.index} : ${p.printed > 0 ? `imprimé ${p.printed}×` : "jamais imprimé"}${done ? " (fait pour cette série)" : ""}${p.ready ? " · faisable maintenant" : ""}`}
+            style={{ minWidth: 16, height: 16, padding: "0 3px", borderRadius: 5, fontSize: 9.5, fontWeight: 900, display: "inline-flex", alignItems: "center", justifyContent: "center",
+              color: p.printing || p.ready ? "#fff" : done ? "#16a34a" : "var(--muted)",
+              background: p.printing ? "#f59e0b" : p.ready ? (done ? "rgba(34,197,94,0.55)" : "#22c55e") : "var(--surface)",
+              border: `1px solid ${p.printing ? "#f59e0b" : p.ready || done ? "#22c55e" : "var(--border)"}` }}>{done ? "✓" : p.index}</span>; })}
+        </div>)(plateRound(m.plates.map(p => p.printed)))}
         {m.ready_now?.plates > 0 && <div style={{ fontSize: 11.5, fontWeight: 800, color: "#16a34a" }}>
           ▶ faisable maintenant : {m.ready_now.plates} plateau{m.ready_now.plates > 1 ? "x" : ""}
           {m.ready_now.seconds ? ` · ${fmtDur(m.ready_now.seconds)}` : ""}{m.ready_now.weight_g ? ` · ${fmtG(m.ready_now.weight_g)}` : ""}</div>}

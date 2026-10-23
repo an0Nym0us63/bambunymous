@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { plateRound, plateDoneInRound } from "../utils/queueSort";
 import { QUEUE_SORTS, sortQueue } from "../utils/queueSort";
 import { useTrackDetail } from "../utils/track";
 import { useUrlTab } from "../utils/useUrlTab";
@@ -41,12 +42,16 @@ function statusText(r) {
 // l'AMS ; coche = deja imprime par moi ; gris = il manque un filament dans l'AMS ;
 // orange avec sablier = en cours d'impression.
 function PlateChips({ plates }) {
-  const todo = plates.filter(p => p.ready && !p.printed && !p.printing);   // faisables, ni faits ni en cours
+  // ou j'en suis, en series (un modele refait des mois plus tard repart d'une nouvelle serie)
+  const round = plateRound(plates.map(p => p.printed));
+  const todo = plates.filter(p => p.ready && !plateDoneInRound(p.printed, round) && !p.printing);   // faisables, ni faits (cette serie) ni en cours
   return (
     <span style={{ display:"flex", gap:5, marginTop:5, flexWrap:"wrap", alignItems:"center" }}>
-      <span style={{ fontSize:10, color:"var(--muted)", marginRight:1 }}>Plateaux</span>
+      <span style={{ fontSize:10, color:"var(--muted)", marginRight:1 }}>Plateaux
+        {/* combien des plateaux retenus sont deja faits */}
+        <b style={{ marginLeft:4, color: round?.complete ? "#16a34a" : "var(--text2)" }}>{round?.label}</b></span>
       {plates.map(p => {
-        const done = p.printed > 0;
+        const done = plateDoneInRound(p.printed, round);
         const tip = `Plateau ${p.index}${p.name ? ` · ${p.name}` : ""} : `
           + (p.ready ? "faisable maintenant avec l'AMS" : "un filament manque dans l'AMS")
           + (done ? ` · déjà imprimé${p.printed > 1 ? ` ${p.printed}×` : ""}` : " · pas encore imprimé")
