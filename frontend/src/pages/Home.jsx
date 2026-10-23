@@ -9,7 +9,7 @@ import { create } from "zustand";
 import client, { apiUrl } from "../api/client";
 import HomeGrid from "../components/HomeGrid";
 import { gradeOf } from "./Achievements";
-import { egg } from "../eggs";
+import { egg, useEggsFound } from "../eggs";
 import Cachettes from "../components/Cachettes";
 import LiveCamera from "../components/LiveCamera";
 import SpoolSVG from "../components/SpoolSVG";
@@ -1372,6 +1372,7 @@ function PrinterPopup({ status, img, name, onClose }) {
   const s = stateOf(status);
   const st = String(status?.status || "").toUpperCase();
   const live = LIVE_ST.includes(st), paused = st === "PAUSE" || st === "PAUSED";
+  const found = useEggsFound(x => x.found);             // objets caches deja trouves : ils s'effacent
   // regarder la fin d'une impression en direct, fenetre ouverte
   const wasLive = useRef(live);
   useEffect(() => { if (wasLive.current && st === "FINISH") egg("front_row"); wasLive.current = live; }, [st]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1407,14 +1408,14 @@ function PrinterPopup({ status, img, name, onClose }) {
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 17, fontWeight: 900, color: "var(--text)" }}>Imprimante
               {/* la nuit, un hibou veille sur l'imprimante (presque invisible) */}
-              {(h => h >= 22 || h < 5)(new Date().getHours()) && <span data-egg="owl" aria-hidden="true" style={{ fontSize: 9, opacity: 0.18,
+              {!found.has("owl") && (h => h >= 22 || h < 5)(new Date().getHours()) && <span data-egg="owl" aria-hidden="true" style={{ fontSize: 9, opacity: 0.18,
                 marginLeft: 6, verticalAlign: "middle", cursor: "default", userSelect: "none" }}>🦉</span>}
               {/* ce que l'etat du moment fait apparaitre, presque invisible */}
               {[["c_wolf", "🐺", (h => (h >= 21 || h < 5) && fullMoon())(new Date().getHours())],
                 ["c_spider", "🕸️", !status?.connected],
                 ["c_finish_flag", "🏁", live && pct >= 99],
                 ["c_sloth", "🦥", live && status?.remaining_minutes > 720],
-                ["c_pause", "🧘", paused]].filter(x => x[2]).map(([k, e]) => <span key={k} data-egg={k} aria-hidden="true" style={{ fontSize: 9,
+                ["c_pause", "🧘", paused]].filter(x => x[2] && !found.has(x[0])).map(([k, e]) => <span key={k} data-egg={k} aria-hidden="true" style={{ fontSize: 9,
                   opacity: 0.18, marginLeft: 6, verticalAlign: "middle", cursor: "default", userSelect: "none" }}>{e}</span>)}</div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 800, color: s.color }}>
               <span style={{ width: 7, height: 7, borderRadius: "50%", background: s.color }}/>{s.label}
@@ -1473,10 +1474,10 @@ function PrinterPopup({ status, img, name, onClose }) {
           {section("Températures", Thermometer, "#f97316")}
           <TempStrip status={status}/>
           {/* atelier etouffant : un lezard prend le soleil sous les temperatures */}
-          {status.chamber_temp >= 45 && <div aria-hidden="true" style={{ textAlign: "left", marginTop: -10, lineHeight: 1 }}>
+          {status.chamber_temp >= 45 && !found.has("c_lizard") && <div aria-hidden="true" style={{ textAlign: "left", marginTop: -10, lineHeight: 1 }}>
             <span data-egg="c_lizard" style={{ fontSize: 9, opacity: 0.2, cursor: "default", userSelect: "none" }}>🦎</span></div>}
           {/* atelier glacial : un bonhomme de neige se cache sous les temperatures */}
-          {status.chamber_temp > 0 && status.chamber_temp < 15 && <div aria-hidden="true" style={{ textAlign: "right", marginTop: -10, lineHeight: 1 }}>
+          {status.chamber_temp > 0 && status.chamber_temp < 15 && !found.has("snowman") && <div aria-hidden="true" style={{ textAlign: "right", marginTop: -10, lineHeight: 1 }}>
             <span data-egg="snowman" style={{ fontSize: 9, opacity: 0.2, cursor: "default", userSelect: "none" }}>⛄</span></div>}
         </>}
 
@@ -1484,7 +1485,7 @@ function PrinterPopup({ status, img, name, onClose }) {
           {section("AMS", Disc3, "#8B5CF6", act >= 0 ? `● ${slotLabel(act, actTray)}` : `${amsList.filter(a => a.id !== 255).length} unité${amsList.length > 1 ? "s" : ""}`)}
           <HubGrid list={amsList} order={order} act={act} actTray={actTray} H={Math.min(300, amsRows * (narrowPop ? 100 : 116))} climate big={!narrowPop} fs={switchRoutes(status)}/>
           {/* un AMS trop humide : une grenouille s'y plait */}
-          {amsList.some(a => a.humidity >= 60) && <div aria-hidden="true" style={{ textAlign: "right", marginTop: -10, lineHeight: 1 }}>
+          {amsList.some(a => a.humidity >= 60) && !found.has("c_frog") && <div aria-hidden="true" style={{ textAlign: "right", marginTop: -10, lineHeight: 1 }}>
             <span data-egg="c_frog" style={{ fontSize: 9, opacity: 0.2, cursor: "default", userSelect: "none" }}>🐸</span></div>}
         </>}
 
@@ -1900,6 +1901,7 @@ const GREETING_OPTIONS = [
 let antRolled = false;
 function Ant() {
   const [go, setGo] = useState(false);
+  const found = useEggsFound(st => st.found.has("ant"));
   useEffect(() => {
     if (antRolled) return undefined;
     antRolled = true;
@@ -1907,7 +1909,7 @@ function Ant() {
     const t = setTimeout(() => setGo(true), 6000 + Math.random() * 20000);
     return () => clearTimeout(t);
   }, []);
-  if (!go) return null;
+  if (!go || found) return null;
   return createPortal(<span data-egg="ant" aria-hidden="true" onAnimationEnd={() => setGo(false)}
     style={{ position: "fixed", left: 0, bottom: "calc(84px + env(safe-area-inset-bottom, 0px))", zIndex: 40, fontSize: 15, cursor: "pointer",
       padding: 6, userSelect: "none", animation: "bn-ant-walk 14s linear forwards" }}>

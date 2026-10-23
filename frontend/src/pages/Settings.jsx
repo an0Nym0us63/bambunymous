@@ -23,7 +23,7 @@ import MyAppNotifications from "../components/MyAppNotifications";
 import AndroidApp from "../components/AndroidApp";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
-import { egg, tapper } from "../eggs";
+import { egg, tapper, useEggFound } from "../eggs";
 
 const inp = {
   width:"100%", background:"var(--surface2)", border:"1px solid var(--border)",
@@ -1926,12 +1926,13 @@ function VersionLine({ version }) {
   const [chk, setChk] = React.useState(null);
   const devTap = React.useMemo(() => tapper(5, 3000, () => egg("developer")), []);
   const [open, setOpen] = React.useState(false);
+  const microFound = useEggFound("micro_benchy");   // le petit bateau, une fois trouve, s'en va
   React.useEffect(() => { client.get("/version/check").then(({ data }) => setChk(data)).catch(() => {}); }, []);
   const n = chk?.behind || 0;
   return (
     <div style={{ textAlign:"center", marginTop:8, position:"relative" }}>
       {/* un tout petit bateau, presque invisible, au bout de la page */}
-      <span data-egg="micro_benchy" aria-hidden="true" style={{ position:"absolute", right:4, bottom:-2, fontSize:9, opacity:.16, cursor:"default", userSelect:"none" }}>⛵</span>
+      {!microFound && <span data-egg="micro_benchy" aria-hidden="true" style={{ position:"absolute", right:4, bottom:-2, fontSize:9, opacity:.16, cursor:"default", userSelect:"none" }}>⛵</span>}
       <Cachettes spot="settings" side="left"/>
       <p style={{ fontSize:11, color:"var(--muted)", fontFamily:"monospace", margin:0 }}>
         <span onClick={devTap} style={{ cursor:"default", userSelect:"none" }}>v{version.commit?.slice(0,8) || "dev"}</span> · {version.build_date?.slice(0,10) || "?"}

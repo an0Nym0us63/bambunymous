@@ -1,4 +1,5 @@
 import React from "react";
+import { useEggsFound } from "../eggs";
 
 // Des petites choses cachees qui n'apparaissent qu'a certains moments (24/10/2026) : un jour de
 // l'annee, une saison, une heure. Chacune a sa place (spot) ; presque invisible, il suffit de la
@@ -51,7 +52,8 @@ export const CACHETTES = [
 /** Les cachettes de cet endroit dont le moment est venu (lu a l'affichage). */
 export default function Cachettes({ spot, side = "center" }) {
   const now = new Date();
-  const here = CACHETTES.filter(c => c.spot === spot && c.when(now));
+  const found = useEggsFound(st => st.found);           // deja trouvees : elles disparaissent
+  const here = CACHETTES.filter(c => c.spot === spot && c.when(now) && !found.has(c.egg));
   if (!here.length) return null;
   return (
     <div aria-hidden="true" style={{ textAlign: side, lineHeight: 1, padding: "4px", pointerEvents: "none" }}>

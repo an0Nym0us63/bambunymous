@@ -1,4 +1,5 @@
 import client from "./api/client";
+import { create } from "zustand";
 import { currentFriend } from "./store/friend";
 
 // Petits gestes caches dans l'appli : la page les signale au serveur, qui en
@@ -11,6 +12,16 @@ function seen(key) {
   try { return new Set(JSON.parse(localStorage.getItem(key) || "[]")); } catch { return new Set(); }
 }
 function done() { return seen(KEY); }
+
+// Les secrets deja trouves, pour que les objets caches disparaissent une fois trouves (24/10/2026) :
+// ce que cet appareil sait, complete au lancement par le serveur (trouve sur un autre appareil).
+export const useEggsFound = create(() => ({ found: new Set([...seen(KEY), ...seen("bn-eggs-nc")]) }));
+function noteFound(name) {
+  const f = useEggsFound.getState().found;
+  if (!f.has(name)) useEggsFound.setState({ found: new Set([...f, name]) });
+}
+/** Ce secret est-il deja trouve ? (un objet cache s'efface alors) */
+export const useEggFound = name => useEggsFound(st => st.found.has(name));
 
 export async function egg(name) {
   try { if (currentFriend()) return; } catch { /* pas de copain */ }
@@ -31,6 +42,7 @@ export async function egg(name) {
     if (data?.already) {
       // deja trouve par la maison : rien a feter, et on ne redemande plus
       d.add(name);
+      noteFound(name);
       try { localStorage.setItem(KEY, JSON.stringify([...d])); } catch { /* stockage indisponible */ }
       return;
     }
@@ -42,11 +54,13 @@ export async function egg(name) {
         nc.add(name);
         try { localStorage.setItem(NC_KEY, JSON.stringify([...nc])); } catch { /* stockage indisponible */ }
         queued(done => celebrate(data, name, true, null, done));
+        noteFound(name);
       }
       return;
     }
     d.add(name);
     try { localStorage.setItem(KEY, JSON.stringify([...d])); } catch { /* stockage indisponible */ }
+    noteFound(name);
     if (data?.new) queued(done => celebrate(data, name, false, null, done));
   } catch { /* hors connexion, ou pas connecte : on retentera */ }
 }
@@ -408,6 +422,11 @@ const NATIVE = new Set([
   "uptime_30", "vibrate_mode", "volume_dj", "volume_max", "vpn", "wireless_charge",
 ]);
 function installEggs2() {
+  // ce que la maison a deja trouve (sur n'importe quel appareil) : les objets caches s'effacent
+  if (!currentFriend()) client.get("/achievements/eggs-found", { home: true }).then(({ data }) => {
+    const add = (data?.found || []).filter(n => !useEggsFound.getState().found.has(n));
+    if (add.length) useEggsFound.setState({ found: new Set([...useEggsFound.getState().found, ...add]) });
+  }).catch(() => {});
   window.__bnEgg = name => { if (NATIVE.has(name)) egg(name); };
   // ce que l'appli a annonce avant que la page soit prete
   (window.__bnEggQ || []).forEach(n => window.__bnEgg(n));

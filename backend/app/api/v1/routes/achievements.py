@@ -57,6 +57,13 @@ async def achievements_passage_open(acc=Depends(require_own_account)):
     return {"open": True, "new": await A.open_passage(acc[0])}
 
 
+@router.get("/eggs-found")
+async def achievements_eggs_found(acc=Depends(require_own_account)):
+    """Les secrets deja trouves par la maison : la page efface les objets caches deja trouves."""
+    from ....services import achievements as A
+    return {"found": sorted(await A.eggs_found())}
+
+
 @router.get("/news")
 async def achievements_news(acc=Depends(require_own_account)):
     """Les paliers debloques depuis mon dernier passage : a annoncer a l'ecran."""
