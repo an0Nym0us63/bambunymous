@@ -2164,6 +2164,19 @@ function switchModel(status) {
     live: live === p });
   return { fs, ports: [port("A"), port("B")], nz, liveColor, hl: "#22c55e", temp: id => nz.find(n => n.id === id) };
 }
+// les rails souples de l'aiguillage : chaque entree a son tube jusqu'a sa buse (droit ou croise),
+// le filament continu dedans a la couleur de sa bobine ; celui qui imprime en vert, par-dessus, qui avance
+function SwitchRail({ d, live, color, hl, w = 10 }) {
+  return <g>
+    <path d={d} fill="none" stroke={live ? hl : "#374151"} strokeWidth={w} strokeLinecap="round"
+      style={{ transition: "d .8s cubic-bezier(.5,1.3,.5,1)", ...(live ? { filter: `drop-shadow(0 0 5px ${hl}88)` } : {}) }}/>
+    <path d={d} fill="none" stroke={live ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.06)"} strokeWidth={w * 0.55} strokeLinecap="round"
+      style={{ transition: "d .8s cubic-bezier(.5,1.3,.5,1)" }}/>
+    {color && <path d={d} fill="none" stroke={color} strokeWidth={Math.max(2.5, w * 0.36)} strokeLinecap="round"
+      strokeDasharray={live ? "10 7" : "none"} opacity={live ? 1 : 0.7}
+      style={{ transition: "d .8s cubic-bezier(.5,1.3,.5,1)", ...(live ? { animation: "bn-dash .8s linear infinite" } : {}) }}/>}
+  </g>;
+}
 function SwitchArt({ m, W, H }) {
   const [A, B] = m.ports;
   const VW = 380, VH = 180, HL = m.hl;
@@ -2171,25 +2184,17 @@ function SwitchArt({ m, W, H }) {
   const cut = (t, n) => t.length > n ? `${t.slice(0, n - 1)}…` : t;
   const units = unitsLabel;
   const path = x => { const s = SIDE(x.out), y = inY[x.p], p = pY[x.p];
-    return s ? `M122 ${y} C142 ${y} 140 ${p} 160 ${p} C186 ${p} 194 ${oY[s]} 220 ${oY[s]} C240 ${oY[s]} 238 ${nY[s]} 258 ${nY[s]}`
-      : `M122 ${y} C142 ${y} 140 ${p} 160 ${p} L178 ${p}`; };
+    return s ? `M122 ${y} C138 ${y} 136 ${p} 150 ${p} C190 ${p} 190 ${oY[s]} 230 ${oY[s]} C246 ${oY[s]} 244 ${nY[s]} 258 ${nY[s]}`
+      : `M122 ${y} C138 ${y} 136 ${p} 150 ${p} L170 ${p}`; };
   const servedBy = side => m.ports.find(x => SIDE(x.out) === side);
   const box = (x, y, w, on) => <rect x={x} y={y} width={w} height="62" rx="14" fill="var(--surface2)" stroke={on ? HL : "var(--border)"} strokeWidth={on ? 2.5 : 1}/>;
   return (
     <svg viewBox={`0 0 ${VW} ${VH}`} width={W} height={H} style={{ display: "block", overflow: "visible" }} aria-label="Aiguillage">
-      {/* les chemins : l'inactif en pointilles ; celui qui imprime en vert, et le filament qui avance dedans a sa couleur */}
-      {[A, B].sort((a, b) => a.live - b.live).map(x => <g key={x.p}>
-        {x.live ? <>
-          <path d={path(x)} fill="none" stroke={HL} strokeWidth="8" strokeLinecap="round" style={{ filter: `drop-shadow(0 0 5px ${HL}88)` }}/>
-          <path d={path(x)} fill="none" stroke={m.liveColor} strokeWidth="4" strokeLinecap="round" strokeDasharray="10 8"
-            style={{ animation: "bn-dash .8s linear infinite" }}/>
-        </> : <path d={path(x)} fill="none" stroke="var(--muted)" strokeOpacity="0.45" strokeWidth="3" strokeLinecap="round" strokeDasharray="4 6"/>}
-      </g>)}
-      {/* le corps de l'aiguillage */}
-      <rect x="160" y="50" width="60" height="80" rx="14" fill="#111827" stroke="rgba(255,255,255,0.12)"/>
-      <path d="M176 78 L204 102 M176 102 L204 78" stroke="rgba(255,255,255,0.35)" strokeWidth="3" strokeLinecap="round"/>
-      {[["A", 72], ["B", 108]].map(([p, y]) => <circle key={p} cx="160" cy={y} r="5" fill={m.ports.find(x => x.p === p).live ? HL : "#4b5563"}/>)}
-      {[["G", 72], ["D", 108]].map(([sd, y]) => <circle key={sd} cx="220" cy={y} r="5" fill={servedBy(sd)?.live ? HL : "#4b5563"}/>)}
+      {/* le corps de l'aiguillage, dessous : les rails le traversent */}
+      <rect x="150" y="46" width="80" height="88" rx="16" fill="#111827" stroke="rgba(255,255,255,0.12)"/>
+      {[A, B].sort((a, b) => a.live - b.live).map(x => <SwitchRail key={x.p} d={path(x)} live={x.live} color={x.slot?.color} hl={HL} w={11}/>)}
+      {[["A", 72], ["B", 108]].map(([p, y]) => <circle key={p} cx="150" cy={y} r="4.5" fill={m.ports.find(x => x.p === p).live ? HL : "#4b5563"}/>)}
+      {[["G", 72], ["D", 108]].map(([sd, y]) => <circle key={sd} cx="230" cy={y} r="4.5" fill={servedBy(sd)?.live ? HL : "#4b5563"}/>)}
       {m.fs.calibrating && <text x="190" y="148" textAnchor="middle" fontSize="11" fontWeight="800" fill="#f59e0b">calibration</text>}
       {/* les entrees */}
       {[A, B].map(x => { const y = inY[x.p] - 31;
@@ -2219,18 +2224,14 @@ function SwitchMini({ m, W, H }) {
   const VW = 170, VH = 120;
   const s = Math.min(W / VW, H / VH);
   const inY = { A: 32, B: 88 }, oY = { G: 32, D: 88 };
-  const path = x => { const sd = SIDE(x.out);
-    return sd ? `M38 ${inY[x.p]} C62 ${inY[x.p]} 62 60 85 60 C108 60 108 ${oY[sd]} 132 ${oY[sd]}` : `M38 ${inY[x.p]} C62 ${inY[x.p]} 62 60 80 60`; };
+  const pin = { A: 46, B: 74 }, pout = { G: 46, D: 74 };
+  const path = x => { const sd = SIDE(x.out), y = inY[x.p], q = pin[x.p];
+    return sd ? `M38 ${y} C52 ${y} 50 ${q} 62 ${q} C85 ${q} 85 ${pout[sd]} 108 ${pout[sd]} C120 ${pout[sd]} 118 ${oY[sd]} 132 ${oY[sd]}`
+      : `M38 ${y} C52 ${y} 50 ${q} 62 ${q} L74 ${q}`; };
   const served = sd => m.ports.find(x => SIDE(x.out) === sd);
   return <svg viewBox={`0 0 ${VW} ${VH}`} width={VW * s} height={VH * s} style={{ display: "block", overflow: "visible" }} aria-label="Aiguillage">
-    {[...m.ports].sort((a, b) => a.live - b.live).map(x => <g key={x.p}>
-      {x.live ? <>
-        <path d={path(x)} fill="none" stroke={m.hl} strokeWidth="8" strokeLinecap="round" style={{ filter: `drop-shadow(0 0 4px ${m.hl}88)` }}/>
-        <path d={path(x)} fill="none" stroke={m.liveColor} strokeWidth="3.5" strokeLinecap="round" strokeDasharray="8 6" style={{ animation: "bn-dash .8s linear infinite" }}/>
-      </> : <path d={path(x)} fill="none" stroke="var(--muted)" strokeOpacity=".45" strokeWidth="3" strokeLinecap="round" strokeDasharray="4 5"/>}
-    </g>)}
-    <rect x="70" y="40" width="30" height="40" rx="9" fill="#111827" stroke="rgba(255,255,255,0.12)"/>
-    <path d="M78 52 L92 68 M78 68 L92 52" stroke="rgba(255,255,255,0.35)" strokeWidth="2.5" strokeLinecap="round"/>
+    <rect x="62" y="34" width="46" height="52" rx="11" fill="#111827" stroke="rgba(255,255,255,0.12)"/>
+    {[...m.ports].sort((a, b) => a.live - b.live).map(x => <SwitchRail key={x.p} d={path(x)} live={x.live} color={x.slot?.color} hl={m.hl} w={8}/>)}
     {m.ports.map(x => { const c = x.slot?.color, y = inY[x.p];
       return <g key={x.p}>
         <circle cx="22" cy={y} r="17" fill={c || "var(--surface2)"} stroke={x.live ? m.hl : c ? "rgba(0,0,0,0.25)" : "var(--muted)"} strokeWidth={x.live ? 3 : 1.5}
