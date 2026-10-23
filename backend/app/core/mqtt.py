@@ -603,7 +603,10 @@ class MQTTManager:
                     ams.dry_filament    = dry_setting.get("dry_filament", "")
                 for tr in ams_raw.get("tray", []):
                     t = AMSTray(id=int(tr.get("id", 0)))
-                    t.color = (tr.get("tray_color") or "").rstrip("FF") or tr.get("tray_color", "")
+                    # RRGGBBAA : on garde RRGGBB. Surtout pas rstrip("FF"), qui mange aussi les F de la
+                    # couleur (C12E1FFF devenait C12E1, illisible : un rouge affiche en gris).
+                    _c = (tr.get("tray_color") or "").strip()
+                    t.color = _c[:6] if len(_c) == 8 else _c
                     t.filament_type = (tr.get("tray_sub_brands") or "").strip() or (tr.get("tray_type") or "").strip()
                     t.tray_id_name = tr.get("tray_id_name", "")
                     t.remain = max(0, int(tr.get("remain", 0)))

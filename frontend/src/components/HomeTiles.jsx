@@ -36,8 +36,7 @@ const ago = iso => {
 const noEmoji = t => String(t || "").replace(/^\p{Extended_Pictographic}️?\s*/u, "");
 const utc = iso => { const s = String(iso || "").trim().replace(" ", "T"); return new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s}Z`); };
 const printImg = id => apiUrl(`/prints/${id}/image`);
-// la couleur d'un emplacement d'AMS, comme la tuile AMS : celle de la bobine associee d'abord
-// (l'AMS remonte parfois autre chose : un gris pour une bobine rouge), puis celle de l'AMS
+// la couleur d'un emplacement d'AMS, comme la tuile AMS : celle de la bobine associee d'abord, puis celle de l'AMS
 const trayCol = t => { const c = t && !t.empty && (t.spool_info?.color || t.spool_info?.filament_color || t.color); return c ? hexCss(c) : null; };
 const LIVE = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"];
 const isLive = st => LIVE.includes(String(st?.status || "").toUpperCase());
@@ -1952,12 +1951,12 @@ function FilaSwitch({ status, o, sz }) {
   if (!status?.fila_switch?.installed) return null;
   const m = switchModel(status);
   const arrow = x => <span style={{ display: "inline-flex", alignItems: "center", gap: 4, color: x.live ? m.hl : "var(--text2)", fontWeight: 900 }}>
-    {x.p}<span style={{ fontSize: 11 }}>→</span>{SIDE(x.out) || "—"}</span>;
+    IN-{x.p}<span style={{ fontSize: 11 }}>→</span>{SIDE(x.out) || "—"}</span>;
   // bas : une ligne par entree, le chemin en cours en couleur
   const rows = W => <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
     {m.ports.map(x => <div key={x.p} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, padding: "3px 8px", borderRadius: 10,
       background: x.live ? `${m.hl}22` : "transparent", border: `1px solid ${x.live ? `${m.hl}88` : "transparent"}` }}>
-      <span style={{ fontSize: 12, fontWeight: 900, color: "#8b5cf6", width: 16 }}>{x.p}</span>
+      <span style={{ fontSize: 12, fontWeight: 900, color: "#8b5cf6", whiteSpace: "nowrap" }}>IN-{x.p}</span>
       <span style={{ width: 12, height: 12, borderRadius: 4, flexShrink: 0, background: x.slot?.color || "transparent",
         border: x.slot?.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
       {W >= 215 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>
@@ -1991,6 +1990,10 @@ function FilaSwitch({ status, o, sz }) {
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>
           {m.fs.calibrating && <span style={{ color: "#f59e0b" }}>● calibration en cours</span>}
           {m.fs.filament != null && <span>{m.fs.filament ? "filament engagé dans l'aiguillage" : "aiguillage vide"}</span>}</div>
+        {/* ce que l'imprimante envoie, tel quel : pour verifier le sens des sorties */}
+        <div style={{ fontSize: 11, color: "var(--muted)", fontFamily: "ui-monospace, monospace", lineHeight: 1.5 }}>
+          brut · in_a {JSON.stringify(m.fs.in_a ?? null)} · in_b {JSON.stringify(m.fs.in_b ?? null)} · out_a {String(m.fs.out_a ?? "—")} · out_b {String(m.fs.out_b ?? "—")}
+          {" · "}buse active {String(m.nz.find(n => n.active)?.id ?? "—")}</div>
       </>}>
       {({ W, H }) => {
         const h = Math.min(H, W * 180 / 380);
