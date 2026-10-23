@@ -129,7 +129,7 @@ function Tile({ icon, color, label, to, zoom, onClick, badge, children, mini = f
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
           {badge}{!zoom && act && <ChevronRight size={14} style={{ color: "var(--muted)" }}/>}</span>
       </div>
-      <div ref={ref} style={{ position: "relative", minWidth: 0, flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
+      <div ref={ref} style={{ position: "relative", minWidth: 0, flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center" }}>
         {box.W > 0 && <BoxCtx.Provider value={box}>{kids(children, box)}</BoxCtx.Provider>}
       </div>
       {big}
@@ -209,7 +209,7 @@ function Hero({ visual, value, unit, delta, sub, color = "var(--text)", reserve 
     <div style={{ display: "flex", flexDirection: stack ? "column" : "row", alignItems: "center", justifyContent: "center", gap: stack ? 6 : 12,
       textAlign: stack ? "center" : "left", minWidth: 0, ...(fill && !zoom ? { flex: 1, minHeight: 0 } : {}) }}>
       {visual && vs >= 24 && visual(Math.floor(vs))}
-      <div style={{ minWidth: 0, flex: stack ? undefined : 1, display: "flex", flexDirection: "column", alignItems: stack ? "center" : "flex-start", gap: 2 }}>
+      <div style={{ minWidth: 0, flex: stack ? undefined : "0 1 auto", display: "flex", flexDirection: "column", alignItems: stack ? "center" : "flex-start", gap: 2 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "0 6px", flexWrap: "wrap", justifyContent: stack ? "center" : "flex-start", minWidth: 0 }}>
           <span data-pk="" style={{ fontSize: fs, fontWeight: 900, lineHeight: 1.05, color, letterSpacing: "-.01em", whiteSpace: "nowrap" }}>{value}</span>
           {unit && <span style={{ fontSize: zoom ? 15 : 12.5, fontWeight: 700, color: "var(--text2)" }}>{unit}</span>}
@@ -874,7 +874,7 @@ function Stock({ s, o, sz }) {
         const labels = lg.size >= 34;
         let g = labels ? lg : fitGrid(low.length, W, rest, { gap: 6, max: 56 });
         if (g.size < 26) { const f = fillGrid(W, rest, 26, 6); g = { cols: f.cols, size: Math.min(f.size, Math.max(20, rest - 2)), n: f.n }; }
-        return <>{head}<div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: 6, flex: 1, alignContent: "center",
+        return <>{head}<div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: 6, alignContent: "center",
           justifyContent: "space-evenly", marginTop: 4 }}>
           {low.slice(0, g.n || low.length).map(x => <span key={x.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
             <SpoolDot color={x.filament_color} pct={spoolPct(x)} size={g.size} title={`${spoolName(x)} · ${Math.round(x.remaining_weight_g)} g`}/>
@@ -1006,7 +1006,7 @@ function Dry({ v, status, o, sz }) {
             // un anneau par unite qui seche (progression, consigne au centre), le nom et le temps restant dessous ;
             // ils se partagent la largeur (une rangee) ou passent en grille quand c'est haut
             const g = fitGrid(drying.length, W, H, { gap: 8, extra: 27, max: 96 });
-            if (g.size >= 30) return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, minmax(0, 1fr))`, gap: 8,
+            if (g.size >= 30) return <div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, minmax(0, 1fr))`, gap: 8,
               alignContent: "center", justifyItems: "center", minWidth: 0 }}>
               {drying.map(a => <div key={a.id} title={`${amsLab(a)}${a.dry_filament ? ` · ${a.dry_filament}` : ""} · encore ${fmtDur((a.dry_time || 0) * 60)}`}
                 style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, minWidth: 0, maxWidth: "100%" }}>
@@ -1252,7 +1252,7 @@ function ToRate({ r, o, sz }) {
         const titled = lg.size >= 76;
         let g = titled ? lg : fitGrid(items.length, W, rest, { gap: 6, max: 110 });
         if (g.size < 28) { const f = fillGrid(W, rest, 28, 6); g = { cols: f.cols, size: Math.min(f.size, Math.max(22, rest - 2)), n: f.n }; }
-        return <>{head}<div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: titled ? 8 : 6, flex: 1, alignContent: "center",
+        return <>{head}<div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: titled ? 8 : 6, alignContent: "center",
           justifyContent: "space-evenly", marginTop: 4 }}>
           {items.slice(0, g.n || items.length).map(x => titled ? <div key={x.design_id} style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
             {thumb(x, g.size)}<span style={{ fontSize: 11, fontWeight: 700, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
@@ -2380,6 +2380,6 @@ export const TILES = {
         { hint: "En heures, en impressions ou en grammes selon la mesure." })] },
 };
 // chaque tuile se pose sur 1/2, 1, 2, 3 ou 4 rangees ; sa hauteur par defaut reste en tete
-export const HEIGHTS = [1, 2, 3, 4];
+export const HEIGHTS = [1, 2, 3];   // trois rangees au plus (23/10/2026)
 export { Zoom };
 for (const t of Object.values(TILES)) { const d = t.h[0] === 0.5 ? 1 : t.h[0]; t.h = [d, ...HEIGHTS.filter(x => x !== d)]; }

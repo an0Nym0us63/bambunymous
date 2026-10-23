@@ -54,7 +54,8 @@ const fixer = defs => x => {
   const d = defs[x?.id];
   if (!d) return null;
   const w = d.w.includes(x.w) ? x.w : d.w[0], hs = heightsOf(d, w);
-  const h = x.h === 0.5 && hs.includes(1) ? 1 : x.h;
+  // une demi-rangee devient une rangee ; quatre rangees (retirees le 23/10/2026) deviennent trois
+  const h = x.h === 0.5 && hs.includes(1) ? 1 : x.h === 4 && hs.includes(3) ? 3 : x.h;
   return { id: x.id, w, h: hs.includes(h) ? h : hs[0], ...(x.o && typeof x.o === "object" ? { o: x.o } : {}) };
 };
 // les options d'une tuile : celles de son type (avec leur valeur par defaut), et ce que la disposition en a fait

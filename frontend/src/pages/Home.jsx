@@ -1810,7 +1810,7 @@ export default function Home() {
   };
   // les blocs de l'accueil, tuiles de la grille comme les autres (l'imprimante ne se masque pas)
   const blocks = {
-    printer: { label: "Imprimante", w: [2, 1], h: ["auto", 1, 2, 3, 4], h1: [2, 3, 4, 1], required: true,
+    printer: { label: "Imprimante", w: [2, 1], h: ["auto", 1, 2, 3], h1: [2, 3, 1], required: true,
       mini: (d, st) => <PrinterLine status={st}/>,
       summary: (d, st) => ["RUNNING", "PAUSE", "PAUSED"].includes(String(st?.status || "").toUpperCase())
         ? <span data-pk="" style={{ fontSize: 14 }}>{Math.round(st.progress || 0)} %</span> : null,
@@ -1841,7 +1841,7 @@ export default function Home() {
         { key: "_amsGrid", label: "Ma grille", group: "Disposition des AMS", hint: "La place de chaque unité : qui est au-dessus de qui. Commune à tout l'accueil.",
           render: () => <AmsOrderEditor/> },
         { key: "climate", label: "Humidité de chaque unité", def: true }] },
-    attention: { label: "Points d'attention", w: [2], h: ["auto", 1, 2, 3, 4], summary: d => {
+    attention: { label: "Points d'attention", w: [2], h: ["auto", 1, 2, 3], summary: d => {
         const cats = (d.attention?.categories || []).filter(c => c.total);
         return <span style={{ display: "inline-flex", gap: 6, fontSize: 13 }}>{cats.length ? cats.map(c => <span key={c.category} title={c.label}>
           {c.icon}<b style={{ color: "#b45309" }}>{c.total}</b></span>) : "rien à signaler"}</span>;
