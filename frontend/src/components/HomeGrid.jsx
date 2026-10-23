@@ -744,8 +744,8 @@ export default function HomeGrid({ status, blocks, top = null }) {
   // le bandeau : un jeu d'options pour l'ordinateur, un pour le telephone (l'accueil a une colonne), qui reprend
   // celui de l'ordinateur tant qu'on ne l'a pas regle
   const topSet = dev => (dev === "phone" ? lay.topPhone || lay.top : lay.top) || {};
-  const optsOf = set => top ? Object.fromEntries((top.options || []).map(op => [op.key, set[op.key] ?? op.def])) : {};
-  const topOpts = optsOf(topSet(paged ? "phone" : "pc"));
+  const topOptsOf = set => top ? Object.fromEntries((top.options || []).map(op => [op.key, set[op.key] ?? op.def])) : {};
+  const topOpts = topOptsOf(topSet(paged ? "phone" : "pc"));
   const [topFor, setTopFor] = useState("pc");
   const setTopOpt = (k, v) => setLay(l => topFor === "phone"
     ? { ...l, topPhone: { ...(l.topPhone || l.top || {}), [k]: v } } : { ...l, top: { ...(l.top || {}), [k]: v } });
@@ -766,7 +766,7 @@ export default function HomeGrid({ status, blocks, top = null }) {
             <Settings2 size={15}/></button>}
         </div>
       )}
-      {optFor === "top" && top && <OptionsSheet title={top.label} options={top.options} values={optsOf(topSet(topFor))}
+      {optFor === "top" && top && <OptionsSheet title={top.label} options={top.options} values={topOptsOf(topSet(topFor))}
         onChange={setTopOpt} onClose={() => setOptFor(null)} head={(() => {
           const chip = on => ({ flex: 1, padding: "7px 11px", borderRadius: 20, cursor: "pointer", fontSize: 12.5, fontWeight: 800,
             border: `1px solid ${on ? "#3b82f6" : "var(--border)"}`, background: on ? "rgba(59,130,246,0.12)" : "var(--surface2)", color: on ? "#3b82f6" : "var(--text2)" });
