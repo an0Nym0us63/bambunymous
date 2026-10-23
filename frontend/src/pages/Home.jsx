@@ -15,7 +15,7 @@ import Lightbox from "../components/Lightbox";
 import AmsOrderEditor from "../components/AmsOrderEditor";
 import { relayed } from "../components/Friends";
 import { AMSBox, AMSDetail, TrayBottomSheet, DryCard, amsRoute } from "../components/AMSSection";
-import { Zoom, TempPanel, HeadArt } from "../components/HomeTiles";
+import { Zoom, TempStrip, SwitchArt, switchModel } from "../components/HomeTiles";
 import { grilleAccueil, lireDisposition, columnWeight, slotCount, slotLabel, amsName, switchRoutes, trayPct } from "../utils/ams";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -560,32 +560,6 @@ function RackState({ rack, compact = false }) {
   return <div style={{ display: "flex", gap: 6, flexWrap: compact ? "nowrap" : "wrap", overflow: "hidden", minWidth: 0 }}>{items}</div>;
 }
 
-// le rack en une bande : son etat, puis ses six buses (couleur, numero, type), celle sur la tete en bleu
-function RackStrip({ rack }) {
-  const slots = [1, 2, 3, 4, 5, 6].map(num => ({ num, slot: rack.hotends.find(h => h.id === num + 15), head: rack.head_id === num + 15 }));
-  const headSlot = rack.hotends.find(h => h.id === 0) || null;
-  return <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-    <RackState rack={rack}/>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(6, minmax(0, 1fr))", gap: 6 }}>
-      {slots.map(({ num, slot, head }) => {
-        const src = head && headSlot ? headSlot : slot;
-        const c = src && !src.empty && src.color ? `#${String(src.color).replace("#", "").slice(0, 6)}` : null;
-        const h = nozzleHealth(src?.stat);
-        return <div key={num} title={[nozzleKind(src?.nozzle_type), src?.diameter && `${src.diameter} mm`, h?.[0]].filter(Boolean).join(" · ")}
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, padding: "8px 4px", borderRadius: 12, minWidth: 0,
-            background: head ? "rgba(59,130,246,0.10)" : "var(--surface2)", border: `1.5px solid ${head ? "#3b82f6" : "transparent"}` }}>
-          <span style={{ width: "70%", aspectRatio: "1", borderRadius: 9, background: c || "repeating-linear-gradient(-45deg, rgba(148,163,184,0.25) 0 2px, transparent 2px 6px)",
-            border: c ? "1px solid rgba(0,0,0,0.18)" : "1px dashed rgba(148,163,184,0.6)", position: "relative" }}>
-            {h && h[0] !== "En bon état" && <span style={{ position: "absolute", top: -3, right: -3, width: 9, height: 9, borderRadius: "50%", background: h[1],
-              boxShadow: "0 0 0 2px var(--surface)" }}/>}</span>
-          <span style={{ fontSize: 12, fontWeight: 900, color: head ? "#3b82f6" : "var(--text2)" }}>{num}</span>
-          <span style={{ fontSize: 9.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>
-            {head ? "sur la tête" : src?.nozzle_type ? `${src.nozzle_type} · ${src.diameter}` : "vide"}</span>
-        </div>;
-      })}
-    </div>
-  </div>;
-}
 // ── Le rack Vortek en dessin (comme Bambu Studio) : la tete d'outil a gauche, le rack en 3 x 2
 // (rang A en haut : 1 3 5, rang B en bas : 2 4 6), les rangs a droite, fleche sur celui qui est leve ──
 const FLOW_SHORT = { S: "Standard", A: "Standard", X: "Standard", H: "Haut débit", E: "Haut débit", U: "TPU HF", B: "E3D HF" };
@@ -1397,8 +1371,21 @@ function PrinterPopup({ status, img, name, onClose }) {
   const ams = (status?.ams_list || []).find(a => a.id === status?.active_ams_id);
   const tray = ams?.trays?.find(t => t.id === status?.active_tray_id);
   const spool = tray?.spool_info;
-  const R = 70, C = 2 * Math.PI * R;
-  const section = t => <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: ".08em", textTransform: "uppercase", color: "var(--muted)" }}>{t}</div>;
+  // les AMS comme la tuile : leur disposition, l'unite et le bac qui impriment
+  const [order, setOrder] = useState(null);
+  useEffect(() => { client.get("/settings/ams-order").then(({ data }) => setOrder(data.order ?? null)).catch(() => setOrder(null)); }, []);
+  const amsList = [...new Map((status?.ams_list || []).map(a => [a.id, a])).values()];
+  const run = HUB_LIVE.includes(st);
+  const act = run ? status?.active_ams_id ?? -1 : -1, actTray = run ? status?.active_tray_id ?? -1 : -1;
+  const amsRows = amsList.length ? grilleAccueil(amsList, lireDisposition(order))[0]?.length || 1 : 0;
+  const rack = status?.hotend_rack;
+  const hasRack = (rack?.hotends || []).some(h => !h.empty && h.filament_id);
+  // un titre de section : sa pastille de couleur, son nom, un filet, et a droite un mot de resume
+  const section = (t, Icon, c, extra) => <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: -4 }}>
+    <span style={{ width: 24, height: 24, borderRadius: 8, display: "inline-flex", alignItems: "center", justifyContent: "center", background: `${c}22`, color: c }}><Icon size={14}/></span>
+    <span style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text2)" }}>{t}</span>
+    <span style={{ flex: 1, height: 1, background: `linear-gradient(90deg, ${c}55, transparent)` }}/>
+    {extra && <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>{extra}</span>}</div>;
   return createPortal(
     <div data-no-pull="" onClick={e => { e.stopPropagation(); onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 950, padding: 14,
       background: "rgba(2,6,23,0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", cursor: "default" }}>
@@ -1463,9 +1450,13 @@ function PrinterPopup({ status, img, name, onClose }) {
         </div>}
 
         {status?.connected && <>
-          {section("Températures")}
-          {(status.nozzles || []).length > 1 && <div style={{ display: "flex", justifyContent: "center" }}><HeadArt st={status} h={150}/></div>}
-          <TempPanel status={status} cardH={104}/>
+          {section("Températures", Thermometer, "#f97316")}
+          <TempStrip status={status}/>
+        </>}
+
+        {amsList.length > 0 && <>
+          {section("AMS", Disc3, "#8B5CF6", act >= 0 ? `● ${slotLabel(act, actTray)}` : `${amsList.filter(a => a.id !== 255).length} unité${amsList.length > 1 ? "s" : ""}`)}
+          <HubGrid list={amsList} order={order} act={act} actTray={actTray} H={Math.min(300, amsRows * (narrowPop ? 100 : 116))} climate big={!narrowPop} fs={switchRoutes(status)}/>
         </>}
 
         {tray && !tray.empty ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
@@ -1481,18 +1472,18 @@ function PrinterPopup({ status, img, name, onClose }) {
           </div>}
         </div> : null}
 
-        {(status?.hotend_rack?.hotends || []).some(h => !h.empty && h.filament_id) && <>
-          {section("Rack Vortek")}
-          <RackStrip rack={status.hotend_rack} activeNozzleId={(status.nozzles || []).find(n => n.active)?.id}/>
+        {hasRack && <>
+          {section("Rack Vortek", Layers, "#0ea5e9", rack.head_id >= 16 && rack.head_id <= 21 ? `buse ${rack.head_id - 15} sur la tête` : null)}
+          <VortekPanel rack={rack}/>
         </>}
 
         {status?.fila_switch?.installed && <>
-          {section("Aiguillage")}
-          <SwitchDiagram fs={switchRoutes(status)} status={status}/>
+          {section("Aiguillage", ArrowLeftRight, "#22c55e", switchRoutes(status)?.calibrating ? "calibration" : null)}
+          <div style={{ display: "flex", justifyContent: "center" }}><div style={{ width: "100%", maxWidth: 520 }}><SwitchArt m={switchModel(status)} W="100%" H="auto"/></div></div>
         </>}
 
         {status?.hms_decoded?.length > 0 && <>
-          {section("Alertes de la machine")}
+          {section("Alertes de la machine", AlertTriangle, "#ef4444", status.hms_decoded.length)}
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
             {status.hms_decoded.map((h, i) => { const sc = HMS_SEV[h.severity] || HMS_SEV.info; return (
               <a key={i} href={h.wiki} target="_blank" rel="noreferrer" style={{ display: "flex", gap: 10, alignItems: "flex-start", textDecoration: "none",
@@ -1511,55 +1502,6 @@ function PrinterPopup({ status, img, name, onClose }) {
 function trayHex(t) {
   const c = t && !t.empty && (t.spool_info?.color || t.spool_info?.filament_color || t.color);
   return c ? `#${String(c).replace("#", "").slice(0, 6)}` : null;
-}
-// Le Filament Track Switch : ce qui entre en A et en B (l'AMS et son bac, sa couleur),
-// et la buse que sert chaque sortie. Format releve dans Bambu Studio (DevFilaSwitch).
-function SwitchDiagram({ fs, status }) {
-  const tray = slot => {
-    if (!slot) return null;
-    const a = (status?.ams_list || []).find(x => x.id === slot.ams);
-    return { label: slotLabel(slot.ams, slot.tray), t: a?.trays?.find(t => t.id === slot.tray) };
-  };
-  const nozzle = id => id == null ? "—" : (status?.nozzles?.length > 1 ? (id === 1 ? "Buse gauche" : "Buse droite") : "Buse");
-  const activeNz = (status?.nozzles || []).find(n => n.active)?.id;
-  const line = (port, slot, out) => {
-    const x = tray(slot);
-    const col = trayHex(x?.t);
-    const live = out != null && out === activeNz;
-    return (
-      <div key={port} style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) 34px minmax(0,1fr)", alignItems: "center", gap: 6 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 12, background: "var(--surface2)", minWidth: 0 }}>
-          <span style={{ width: 26, height: 26, borderRadius: 8, flexShrink: 0, background: col || "transparent",
-            border: col ? "1px solid rgba(0,0,0,0.15)" : "1.5px dashed var(--border)" }}/>
-          <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: 10.5, fontWeight: 800, color: "#8b5cf6" }}>Entrée {port}</div>
-            <div style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {x ? `${x.label}${x.t?.filament_type ? ` · ${x.t.filament_type}` : ""}` : "rien"}</div>
-          </div>
-        </div>
-        <svg width="34" height="20" viewBox="0 0 34 20" aria-hidden="true">
-          <path d="M2 10 H28" stroke={live ? "#22c55e" : "var(--border)"} strokeWidth="2.5" strokeDasharray={live ? "5 3" : "none"}
-            style={live ? { animation: "bn-dash 1s linear infinite" } : undefined}/>
-          <path d="M24 5 L31 10 L24 15" fill="none" stroke={live ? "#22c55e" : "var(--border)"} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
-        </svg>
-        <div style={{ padding: "8px 10px", borderRadius: 12, minWidth: 0, background: live ? "rgba(34,197,94,0.1)" : "var(--surface2)",
-          border: `1px solid ${live ? "rgba(34,197,94,0.45)" : "transparent"}` }}>
-          <div style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)" }}>Sortie {port}</div>
-          <div style={{ fontSize: 13, fontWeight: 900, color: live ? "#16a34a" : "var(--text)" }}>{nozzle(out)}</div>
-        </div>
-      </div>
-    );
-  };
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {line("A", fs.in_a, fs.out_a)}
-      {line("B", fs.in_b, fs.out_b)}
-      {/* la presence du filament (info bit 0) n'est pas fiable : Bambu Studio la lit pareil pour A et B */}
-      {fs.calibrating && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
-        {fs.calibrating && <span style={{ color: "#f59e0b" }}>● calibration en cours</span>}
-      </div>}
-    </div>
-  );
 }
 // toute la largeur sur une rangee : un bandeau. La vignette (un clic l'ouvre en grand),
 // le nom, le pourcentage en grand, le temps restant, l'heure de fin, la couche, la barre ;

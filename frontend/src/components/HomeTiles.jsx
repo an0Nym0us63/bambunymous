@@ -2021,6 +2021,25 @@ function thermoGrid(n, W, H, gap = 8) {
 }
 // en grand (fenetre de la tuile, fenetre de l'imprimante) : les memes thermometres en verre, et pour chacun
 // son nom, sa consigne et ce qu'il fait
+// les temperatures en bande, pour la fenetre de l'imprimante : un petit thermometre, le chiffre en degrade,
+// le pictogramme, la consigne (ou l'etat) ; une case par source, toutes sur une rangee quand la place le permet
+export function TempStrip({ status }) {
+  const [ref, box] = useMeasure();
+  const rows = status?.connected ? tempRows(status, { chamber: true }) : [];
+  const cols = Math.max(1, box.W >= 440 ? rows.length : Math.min(2, rows.length));
+  return <div ref={ref} style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 8 }}>
+    {box.W > 0 && rows.map(r => { const c = heat(r.v), [ic, st, sc] = tempState(r.v || 0, r.t || 0);
+      return <div key={r.k} title={`${r.l} : ${st}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "8px 8px", borderRadius: 14,
+        minWidth: 0, background: `linear-gradient(135deg, color-mix(in srgb, ${c} 16%, transparent), transparent 70%), var(--surface2)`,
+        boxShadow: r.active ? `inset 0 0 0 1.5px ${c}` : "none" }}>
+        <ThermoGauge bare v={r.v} t={r.t} max={r.max} size={52} c={c} active={r.active}/>
+        <div style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
+          <span style={{ fontSize: 22, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${c} 72%, #000000)`, c) }}>{Math.round(r.v || 0)}°</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 800, color: r.active ? c : "var(--text2)", whiteSpace: "nowrap" }}>
+            <r.ico s={13}/>{r.l}</span>
+          <span style={{ fontSize: 11, fontWeight: 800, color: sc, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.t > 0 ? `${ic} ${Math.round(r.t)}°` : st}</span>
+        </div></div>; })}</div>;
+}
 export function TempPanel({ status, chamber = true, cardH = 190 }) {
   const [ref, box] = useMeasure();
   const rows = status?.connected ? tempRows(status, { chamber }) : [];
@@ -2812,7 +2831,7 @@ const unitsLabel = u => {
 };
 const SIDE = id => id == null ? null : id === 1 ? "G" : "D";
 const SIDE_L = id => id == null ? "—" : id === 1 ? "Gauche" : "Droite";
-function switchModel(status) {
+export function switchModel(status) {
   const fs = switchRoutes(status) || {};
   const ams = status?.ams_list || [];
   const nz = status?.nozzles || [];
@@ -2844,7 +2863,7 @@ function SwitchRail({ d, live, color, hl, w = 10 }) {
       style={{ transition: "d .8s cubic-bezier(.5,1.3,.5,1)", ...(live ? { animation: "bn-dash .8s linear infinite" } : {}) }}/>}
   </g>;
 }
-function SwitchArt({ m, W, H }) {
+export function SwitchArt({ m, W, H }) {
   const [A, B] = m.ports;
   const VW = 380, VH = 180, HL = m.hl;
   const inY = { A: 42, B: 138 }, pY = { A: 72, B: 108 }, oY = { G: 72, D: 108 }, nY = { G: 42, D: 138 };
