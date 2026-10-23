@@ -807,13 +807,20 @@ const PhotoHint = () => useBox().W >= 215 ? <Chip color="#0EA5E9" title="Pas enc
 const okOf = x => x.status === "SUCCESS" || x.status === "PARTIAL";
 function Last({ p, o, sz }) {
   const nav = useNavigate();
+  const narrowL = useRef(false);   // etroite : le bouton « fiche » passe en coin de la vignette
   const list = p || [];
   if (!list.length) return null;
   const sub = x => [o.when && x.print_date && ago(x.print_date), x.duration_seconds && fmtDur(x.duration_seconds), x.total_weight_g && fmtG(x.total_weight_g),
     o.cost && x.total_cost && fmtEur(x.total_cost)].filter(Boolean).join(" · ");
-  const row = (x, size, card) => <Item key={x.id} img={printImg(x.id)} dot={okOf(x) ? "#22c55e" : "#ef4444"} size={size} card={card}
-    title={x.file_name || x.translated_name || `Impression #${x.id}`} sub={sub(x)} onClick={() => nav(`/prints?id=${x.id}`)}
-    right={o.photo && !x.cover_photo && (size >= 44 || card) && <PhotoHint/>}/>;
+  // un clic sur la tuile ouvre la fenetre ; le petit bouton de chaque impression ouvre sa fiche
+  const go = (x, s = 26) => <button type="button" aria-label="Ouvrir la fiche" title="Ouvrir la fiche de l'impression"
+    onClick={e => { e.stopPropagation(); nav(`/prints?id=${x.id}`); }} style={{ width: s, height: s, borderRadius: s / 3.2, border: "1px solid var(--border)",
+      flexShrink: 0, background: "var(--surface)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+    <ArrowUpRight size={s >= 26 ? 14 : 12}/></button>;
+  const row = (x, size, card, inZoom) => <Item key={x.id} img={printImg(x.id)} dot={okOf(x) ? "#22c55e" : "#ef4444"} size={size} card={card}
+    title={x.file_name || x.translated_name || `Impression #${x.id}`} sub={sub(x)} onClick={inZoom ? () => nav(`/prints?id=${x.id}`) : undefined}
+    right={<>{o.photo && !x.cover_photo && (size >= 44 || card) && <PhotoHint/>}{!inZoom && (card || (!narrowL.current && size >= 30)) && go(x)}</>}
+    corner={!inZoom && !card && narrowL.current ? go(x, 20) : null}/>;
   return (
     <Tile icon={<History size={15}/>} color="#0EA5E9" label="Dernières impressions" to="/prints"
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -821,8 +828,9 @@ function Last({ p, o, sz }) {
       zoom={<>
         <Stats items={[["Réussies", `${list.filter(okOf).length} / ${list.length}`, "#16a34a"], ["Durée", fmtH(list.reduce((t, x) => t + (x.duration_seconds || 0), 0))],
           ["Poids", fmtG(list.reduce((t, x) => t + (x.total_weight_g || 0), 0))]]}/>
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{list.map(x => row(x, 56))}</div></>}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>{list.map(x => row(x, 56, false, true))}</div></>}>
       {({ W, H }) => {
+        narrowL.current = W < 215;
         if (o.scroll) return <Scroller>{list.map((x, i) => row(x, i ? 34 : Math.min(52, H)))}</Scroller>;
         return fitList(list, row, W, H);
       }}
