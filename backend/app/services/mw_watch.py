@@ -180,6 +180,9 @@ async def check_collections() -> int:
                 head = head[:max(0, c["count"] - o["count"])]
             new = [x for x in head if x["design_id"] not in before and x["design_id"] not in gone
                    and (with_app("mw_coll_added") or not _is_own("add", c["id"], x["design_id"]))]
+            # rangé depuis BambuNymous : on sait par qui (mw_added) ; ailleurs, on ne le sait pas
+            from . import mw_added
+            marks = await mw_added.of_collection(str(c["id"])) if new else {}
             for x in new[:5]:
                 url = f"https://makerworld.com/fr/models/{x['design_id']}"
                 printed = x.get("printed") or 0
@@ -188,6 +191,9 @@ async def check_collections() -> int:
                     lines.append(f"👤 {x['creator_name']}")
                 lines.append(f"🖨️ déjà imprimé {printed} fois" if printed else "🖨️ jamais imprimé")
                 lines.append(f"📁 « {c['title']} »" + (f" · {c['count']} modèles" if c.get("count") else ""))
+                who = (marks.get(str(x["design_id"])) or {}).get("by")
+                if who:
+                    lines.append(f"🙋 ajouté depuis BambuNymous par {who}")
                 await N.notify("mw_coll_added", f"➕ Ajouté à « {c['title']} »", "\n".join(lines),
                                click=url, attach=_cover(x.get("cover_url")), priority=2,
                                actions=[("Voir le modèle", url)] + acts_app)
