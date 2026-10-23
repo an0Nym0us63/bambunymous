@@ -100,6 +100,12 @@ def _print_to_out(p: Print) -> dict:
     d["group_name"] = p.group.name if p.group else None
     d["group_cover_print_id"] = p.group.cover_print_id if p.group else None
     d["group_number_of_items"] = p.group.number_of_items if p.group else 1
+    # des photos au niveau du groupe (choisie, ou deposees dans son dossier) : l'accueil ne relance pas
+    # « pas encore de photo » pour une impression dont le groupe en a deja
+    d["group_cover_photo"] = p.group.cover_photo if p.group else None
+    gd = _group_dir(p.group_id) if p.group_id else None
+    d["group_has_photos"] = bool(gd and any(f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v")
+                                            for f in gd.iterdir()))
     return d
 
 

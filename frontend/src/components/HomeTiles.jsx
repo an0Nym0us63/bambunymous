@@ -832,21 +832,48 @@ function Next({ q, o, sz }) {
 const PhotoHint = () => useBox().W >= 215 ? <Chip color="#0EA5E9" title="Pas encore de photo"><Camera size={12}/></Chip> : null;
 // les dernieres impressions : la derniere en grand, puis la liste
 const okOf = x => x.status === "SUCCESS" || x.status === "PARTIAL";
+// a-t-elle une photo : la sienne (prise a la main, ou choisie), ou celle de son groupe
+const hasPhoto = x => !!(x.cover_photo || (x.snapshots || []).some(s => s.trigger === "manual") || x.group_cover_photo || x.group_has_photos);
+// les membres d'un groupe en une seule carte (a la place du plus recent) : le nom du groupe, les totaux
+function groupCards(prints) {
+  const out = [], at = {};
+  for (const x of prints || []) {
+    if (!x.group_id) { out.push(x); continue; }
+    const k = x.group_id;
+    if (at[k] == null) {
+      at[k] = out.length;
+      out.push({ ...x, file_name: x.group_name || x.file_name, members: [x] });
+    } else {
+      const g = out[at[k]];
+      g.members.push(x);
+      g.duration_seconds = (g.duration_seconds || 0) + (x.duration_seconds || 0);
+      g.total_weight_g = (g.total_weight_g || 0) + (x.total_weight_g || 0);
+      g.total_cost = (g.total_cost || 0) + (x.total_cost || 0);
+    }
+  }
+  return out.map(x => {
+    if (!x.members) return x;
+    const ok = x.members.filter(okOf).length;
+    const cover = x.members.find(m => m.id === x.group_cover_print_id) || x.members[0];
+    return { ...x, id: cover.id, status: ok === x.members.length ? "SUCCESS" : ok ? "PARTIAL" : "FAILED", partial: ok > 0 && ok < x.members.length,
+      snapshots: x.members.flatMap(m => m.snapshots || []), cover_photo: x.members.find(m => m.cover_photo)?.cover_photo || null };
+  });
+}
 function Last({ p, o, sz }) {
   const nav = useNavigate();
   const narrowL = useRef(false);   // etroite : le bouton « fiche » passe en coin de la vignette
-  const list = p || [];
+  const list = groupCards(p);
   if (!list.length) return null;
-  const sub = x => [o.when && x.print_date && ago(x.print_date), x.duration_seconds && fmtDur(x.duration_seconds), x.total_weight_g && fmtG(x.total_weight_g),
+  const sub = x => [x.members && `${x.members.length} impressions`, o.when && x.print_date && ago(x.print_date), x.duration_seconds && fmtDur(x.duration_seconds), x.total_weight_g && fmtG(x.total_weight_g),
     o.cost && x.total_cost && fmtEur(x.total_cost)].filter(Boolean).join(" · ");
   // un clic sur la tuile ouvre la fenetre ; le petit bouton de chaque impression ouvre sa fiche
   const go = (x, s = 26) => <button type="button" aria-label="Ouvrir la fiche" title="Ouvrir la fiche de l'impression"
     onClick={e => { e.stopPropagation(); nav(`/prints?id=${x.id}`); }} style={{ width: s, height: s, borderRadius: s / 3.2, border: "1px solid var(--border)",
       flexShrink: 0, background: "var(--surface)", color: "var(--text2)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
     <ArrowUpRight size={s >= 26 ? 14 : 12}/></button>;
-  const row = (x, size, card, inZoom) => <Item key={x.id} img={printImg(x.id)} dot={okOf(x) ? "#22c55e" : "#ef4444"} size={size} card={card}
+  const row = (x, size, card, inZoom) => <Item key={x.id} img={printImg(x.id)} dot={x.partial ? "#f59e0b" : okOf(x) ? "#22c55e" : "#ef4444"} size={size} card={card}
     title={x.file_name || x.translated_name || `Impression #${x.id}`} sub={sub(x)} onClick={inZoom ? () => nav(`/prints?id=${x.id}`) : undefined}
-    right={<>{o.photo && !x.cover_photo && (size >= 44 || card) && <PhotoHint/>}{!inZoom && (card || (!narrowL.current && size >= 30)) && go(x)}</>}
+    right={<>{o.photo && !hasPhoto(x) && (size >= 44 || card) && <PhotoHint/>}{!inZoom && (card || (!narrowL.current && size >= 30)) && go(x)}</>}
     corner={!inZoom && !card && narrowL.current ? go(x, 20) : null}/>;
   return (
     <Tile icon={<History size={15}/>} color="#0EA5E9" label="Dernières impressions" to="/prints"
