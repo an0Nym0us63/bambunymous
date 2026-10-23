@@ -371,7 +371,7 @@ function ThermoGauge({ v, t, max, size = 90, c, label, sub, active = false, targ
       <svg width={w} height={size} viewBox="0 0 40 80" aria-hidden="true" style={{ overflow: "visible",
         filter: active ? `drop-shadow(0 0 7px ${c})` : v > 40 ? `drop-shadow(0 2px 6px ${c}66)` : "none" }}>
         <defs><clipPath id={id}><path d={THERMO}/></clipPath>
-          <linearGradient id={`${id}g`} x1="0" y1="1" x2="0" y2="0"><stop offset="0" stopColor={heat(20)}/><stop offset="1" stopColor={c}/></linearGradient></defs>
+          <linearGradient id={`${id}g`} x1="0" y1="1" x2="0" y2="0"><stop offset="0" style={{ stopColor: `color-mix(in srgb, ${c} 62%, ${heat(20)})` }}/><stop offset="1" stopColor={c}/></linearGradient></defs>
         <path d={THERMO} fill="var(--surface2)"/>
         <g clipPath={`url(#${id})`}>
           <path d={`M-40 ${top} q5 -2.5 10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0 t10 0 V82 H-40 Z`} fill={`url(#${id}g)`}
@@ -384,7 +384,7 @@ function ThermoGauge({ v, t, max, size = 90, c, label, sub, active = false, targ
         {targets && t > 0 && <g><line x1="9" x2="31" y1={ty} y2={ty} stroke="var(--text)" strokeWidth="1.6" strokeLinecap="round"/>
           <path d={`M31 ${ty} l5 -3.5 v7 Z`} fill="var(--text)"/></g>}
       </svg>
-      {!bare && <span style={{ fontSize: size > 110 ? 18 : 15, fontWeight: 900, lineHeight: 1.1, marginTop: 2, whiteSpace: "nowrap",
+      {!bare && <span style={{ fontSize: size > 160 ? 30 : size > 110 ? 20 : 15, fontWeight: 900, lineHeight: 1.1, marginTop: 2, whiteSpace: "nowrap",
         ...gradText(`color-mix(in srgb, ${c} 72%, #000000)`, c) }}>{label}</span>}
       {!bare && sub && <span style={{ fontSize: size > 110 ? 12 : 10.5, color: active ? c : "var(--muted)", fontWeight: 800, whiteSpace: "nowrap" }}>{sub}</span>}
     </div>
@@ -2016,13 +2016,23 @@ function thermoGrid(n, W, H, gap = 8) {
   }
   return best;
 }
+// en grand (fenetre de la tuile, fenetre de l'imprimante) : les memes thermometres en verre, et pour chacun
+// son nom, sa consigne et ce qu'il fait
 export function TempPanel({ status, chamber = true, cardH = 190 }) {
   const [ref, box] = useMeasure();
   const rows = status?.connected ? tempRows(status, { chamber }) : [];
-  const cols = box.W >= 640 ? Math.min(4, rows.length) : 2;
-  const w = box.W ? Math.floor((box.W - 10 * (cols - 1)) / cols) : 0;
-  return <div ref={ref} style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 10 }}>
-    {w > 0 && rows.map(r => <ThermoCell key={r.k} r={r} w={w} h={cardH} targets/>)}</div>;
+  const cols = box.W >= 560 ? Math.min(4, rows.length) : 2;
+  const colW = box.W ? Math.floor((box.W - 16 * (cols - 1)) / cols) : 0;
+  const size = Math.max(110, Math.min(cardH - 60, colW * 1.6, 240));
+  return <div ref={ref} style={{ display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 16, justifyItems: "center", padding: "6px 0" }}>
+    {colW > 0 && rows.map(r => { const c = heat(r.v), [ic, st, sc] = tempState(r.v || 0, r.t || 0);
+      return <div key={r.k} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 0 }}>
+        <ThermoGauge v={r.v} t={r.t} max={r.max} size={size} c={c} active={r.active} label={`${Math.round(r.v || 0)}°`}/>
+        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 13, fontWeight: 800, color: r.active ? c : "var(--text2)" }}>
+          <r.ico s={14}/>{r.l}{r.active && <span style={{ fontSize: 9.5, fontWeight: 900, color: "#fff", background: c, padding: "1px 6px", borderRadius: 10 }}>active</span>}</span>
+        {r.t > 0 && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>consigne {Math.round(r.t)}°</span>}
+        <span style={{ fontSize: 12, fontWeight: 900, color: sc }}>{ic ? `${ic} ` : ""}{st}</span>
+      </div>; })}</div>;
 }
 function Temps({ status, o, sz }) {
   if (!status?.connected) return null;
@@ -2038,13 +2048,18 @@ function Temps({ status, o, sz }) {
     if (g.size < 34 && H >= 44) {
       const cols = Math.max(1, Math.min(rows.length, Math.floor((W + 8) / 84))), nr = Math.ceil(rows.length / cols);
       const th = Math.min(96, Math.floor((H - 8 * (nr - 1)) / nr) - 2);
+      // le chiffre a la taille que laisse la colonne (thermometre compris), jamais coupe
+      const colW = (W - 8 * (cols - 1)) / cols, textW = colW - th * 0.5 - 8;
+      const fs = Math.max(13, Math.min(th >= 70 ? 24 : 21, textW / 2.6));
       if (th >= 26) return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gap: 8, alignContent: "center" }}>
         {rows.map(r => { const c = heat(r.v), [ic, st, sc] = tempState(r.v || 0, r.t || 0);
           return <div key={r.k} title={`${r.l} : ${st}`} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, minWidth: 0 }}>
             <ThermoGauge bare v={r.v} t={r.t} max={r.max} size={th} c={c} active={r.active} targets={o.targets}/>
             <div style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
-              <span data-pk="" style={{ fontSize: th >= 70 ? 22 : th >= 44 ? 18 : 15, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${c} 72%, #000000)`, c) }}>{Math.round(r.v || 0)}°</span>
-              <span style={{ fontSize: th >= 44 ? 10.5 : 9.5, fontWeight: 800, color: r.active ? c : "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.l}</span>
+              <span data-pk="" style={{ fontSize: fs, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${c} 72%, #000000)`, c) }}>{Math.round(r.v || 0)}°</span>
+              {/* le pictogramme (comme l'en-tete de l'imprimante) plutot que le nom : buse G / D, plateau, chambre */}
+              <span title={r.l} style={{ display: "inline-flex", alignItems: "center", gap: 2, color: r.active ? c : "var(--muted)", marginTop: 1 }}>
+                <r.ico s={13}/>{r.s && <span style={{ fontSize: 10.5, fontWeight: 900 }}>{r.s}</span>}</span>
               {th >= 56 && <span style={{ fontSize: 10, fontWeight: 800, color: sc, whiteSpace: "nowrap" }}>{o.targets && r.t > 0 ? `${ic ? `${ic} ` : ""}${Math.round(r.t)}°` : ic ? `${ic} ${st}` : st}</span>}
             </div></div>; })}</div>;
     }
