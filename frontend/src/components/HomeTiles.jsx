@@ -43,7 +43,9 @@ const LIVE = ["RUNNING", "PAUSE", "PAUSED", "PREPARE", "SLICING"];
 const isLive = st => LIVE.includes(String(st?.status || "").toUpperCase());
 
 function W({ text }) {
-  return String(text ?? "").split(/(\s+)/).map((p, i) => /\s/.test(p) || !p ? p : <span key={i} data-pk="">{p}</span>);
+  // un seul bloc en ligne : dans un parent en flex, des espaces laisses seuls entre les mots disparaissent
+  // (« Personnen'imprimeencemoment »)
+  return <span>{String(text ?? "").split(/(\s+)/).map((p, i) => /\s/.test(p) || !p ? p : <span key={i} data-pk="">{p}</span>)}</span>;
 }
 
 // ── La place d'une tuile ─────────────────────────────────────────────────────
@@ -1564,17 +1566,17 @@ function ThermoCell({ r, w, h, targets }) {
             transition: "height .8s" }}/>
           {targets && t > 0 && <div style={{ position: "absolute", left: -2, right: -2, bottom: `${frac(t) * 100}%`, height: 2, background: "var(--text)" }}/>}
         </div>
-        {targets && t > 0 && <span style={{ position: "absolute", left: 17, bottom: `calc(${bulb + 5}px + ${frac(t)} * ${tubeH}px - 6px)`, fontSize: 9, fontWeight: 900,
+        {targets && t > 0 && w >= 160 && <span style={{ position: "absolute", left: 17, bottom: `calc(${bulb + 5}px + ${frac(t)} * ${tubeH}px - 6px)`, fontSize: 9, fontWeight: 900,
           color: "var(--muted)", whiteSpace: "nowrap" }}>◂ {Math.round(t)}°</span>}
         <div style={{ width: bulb, height: bulb, borderRadius: "50%", marginTop: -5, background: c, boxShadow: `0 0 14px ${c}`, border: "2px solid var(--surface)" }}/>
       </div>
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>{icon(24)}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>{w >= 150 && icon(24)}
           <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{r.l}</span>
           {activeChip}</div>
         <div>{val(Math.min(34, (w - 44) * 0.26), false)}</div>
         <span style={{ fontSize: Math.max(9.5, Math.min(11.5, (w - 44) / 9)), fontWeight: 800, color: sc, whiteSpace: "nowrap", overflow: "hidden",
-          textOverflow: "ellipsis" }}>{ic} {st}</span>
+          textOverflow: "ellipsis" }}>{w < 150 && ic ? ic : `${ic ? `${ic} ` : ""}${st}`}</span>
       </div>
     </div>;
   }

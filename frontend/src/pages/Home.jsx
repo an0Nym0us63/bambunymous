@@ -1792,7 +1792,7 @@ function PrinterCompact({ status, size = "big", showFin = true, showLayer = true
 // ── Page Home ──────────────────────────────────────────────────────────────
 // Un texte decoupe en mots : chacun peut bouger seul (effets de l'accueil)
 function Words({ text }) {
-  return String(text ?? "").split(/(\s+)/).map((p, i) => /\s/.test(p) || !p ? p : <span key={i} data-pk="">{p}</span>);
+  return <span>{String(text ?? "").split(/(\s+)/).map((p, i) => /\s/.test(p) || !p ? p : <span key={i} data-pk="">{p}</span>)}</span>;
 }
 
 // Le bonjour : un bandeau aux couleurs du moment de la journee (matin dore,
