@@ -111,7 +111,12 @@ async def achievements_surprise_shown(body: dict | None = Body(None), acc=Depend
 async def achievements_egg(name: str, acc=Depends(require_own_account)):
     """Un easter egg trouve dans l'appli (jamais par une cle de copain)."""
     from ....services import achievements as A
-    if name in A.EGGS and name not in await A.eggs_found():
+    found = await A.eggs_found()
+    if name in A.EGGS and name in found:
+        # deja trouve par la maison (le compte principal, ou un autre) : plus rien a feter,
+        # pour personne -- un compte qui ne compte pas le revoyait a chaque fois (23/10/2026)
+        return {"new": False, "already": True, "id": f"egg_{name}"}
+    if name in A.EGGS:
         why = await A.egg_lock(acc[0], name)
         if why:
             # fete hors de son jour, farce venue par son adresse : jouee, pas gagnee

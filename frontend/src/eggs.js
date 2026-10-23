@@ -28,6 +28,12 @@ export async function egg(name) {
           : "Cette farce ne se gagne que si elle te tombe dessus par surprise, à l'ouverture de l'appli.");
       return;
     }
+    if (data?.already) {
+      // deja trouve par la maison : rien a feter, et on ne redemande plus
+      d.add(name);
+      try { localStorage.setItem(KEY, JSON.stringify([...d])); } catch { /* stockage indisponible */ }
+      return;
+    }
     if (data?.uncounted) {
       // compte qui ne fait pas avancer les succes : on le felicite (une fois), sans rien enregistrer ;
       // s'il est coche plus tard, le prochain passage comptera pour de bon
