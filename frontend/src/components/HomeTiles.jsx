@@ -621,7 +621,7 @@ const Scroller = ({ children, gap = 6 }) => <div onWheel={e => e.stopPropagation
 const SCROLL = def => B("scroll", "Défiler dans la tuile", def, { hint: "Toute la liste dans la tuile, qu'on fait défiler au doigt ou à la molette." });
 const rateColor = r => r == null ? "#94a3b8" : r >= 0.9 ? "#22c55e" : r >= 0.7 ? "#f59e0b" : "#ef4444";
 // Aujourd'hui : un anneau de reussite, le compte, l'ecart avec hier ; en grand, face a hier
-function Today({ v, p, o, sz }) {
+function Today({ v, p, o, sz, st }) {
   const nav = useNavigate();
   const t0 = ymd(new Date());
   const mine = (p || []).filter(x => x.print_date && ymd(utc(x.print_date)) === t0);
@@ -645,12 +645,39 @@ function Today({ v, p, o, sz }) {
           {mine.map(x => <Item key={x.id} img={printImg(x.id)} dot={okOf(x) ? "#22c55e" : "#ef4444"} size={52} title={x.file_name || `Impression #${x.id}`}
             sub={[x.print_date && utc(x.print_date).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }), x.duration_seconds && fmtDur(x.duration_seconds),
               x.total_weight_g && fmtG(x.total_weight_g)].filter(Boolean).join(" · ")} onClick={() => nav(`/prints?id=${x.id}`)}/>)}</div></>}</>}>
-      {({ W }) => <Stack min={W < 240 ? 150 : 96} head={hero(0)} blocks={[versus && { h: W < 240 ? 150 : 104, node: versus },
+      {({ W, H }) => v && v.count === 0 ? <TodayEmpty st={st} y={v.yesterday} W={W} H={H}/> : <Stack min={W < 240 ? 150 : 96} head={hero(0)} blocks={[versus && { h: W < 240 ? 150 : 104, node: versus },
         v && { opt: true, h: w => statsH(3, w), node: <Stats items={[["Réussies", v.ok ?? "—", "#16a34a"], ["Ratées", v.count - (v.ok || 0), v.count - (v.ok || 0) ? "#dc2626" : undefined],
           ["Coût", fmtEur(v.cost)]]}/> },
         strip && { opt: true, h: 76, node: strip }]}/>}
     </Tile>
   );
+}
+// aujourd'hui, rien encore : la premiere du jour en cours (son anneau, sa fin), ou l'imprimante qui dort
+function TodayEmpty({ st, y, W, H }) {
+  const live = isLive(st);
+  const pct = Math.round(st?.progress || 0), left = st?.remaining_minutes || 0;
+  const narrow = W < 215, s = Math.max(40, Math.min(H - 6, narrow ? 64 : 88, W * 0.36));
+  const yest = y?.count ? `Hier : ${y.count} impression${y.count > 1 ? "s" : ""} · ${fmtH(y.duration)}` : "Hier : rien non plus";
+  const visual = live
+    ? <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}><Ring value={pct / 100} size={s} color="#3B82F6">{pct}%</Ring>
+      <span aria-hidden="true" style={{ position: "absolute", inset: -3, borderRadius: "50%", boxShadow: "0 0 16px rgba(59,130,246,0.45)",
+        animation: "dryPulse 2.5s ease-in-out infinite" }}/></span>
+    : <span aria-hidden="true" style={{ position: "relative", width: s, height: s, flexShrink: 0, borderRadius: "50%", display: "flex", alignItems: "center",
+      justifyContent: "center", background: "radial-gradient(circle at 35% 30%, rgba(59,130,246,0.22), rgba(59,130,246,0.06))", color: "#3B82F6" }}>
+      <CalendarClock size={Math.round(s * 0.42)}/>
+      {["z", "z", "Z"].map((c, i) => <span key={i} style={{ position: "absolute", right: -2 - i * 5, top: 2 - i * 9, fontSize: s * (0.16 + i * 0.05), fontWeight: 900,
+        color: "#93c5fd", animation: `bn-zz 2.4s ease-in-out ${i * 0.4}s infinite`, opacity: 0 }}>{c}</span>)}</span>;
+  return <div style={{ flex: 1, display: "flex", flexDirection: narrow && H >= 150 ? "column" : "row", alignItems: "center", justifyContent: "center",
+    gap: narrow ? 8 : 14, textAlign: narrow && H >= 150 ? "center" : "left", minWidth: 0 }}>
+    {H >= 44 && visual}
+    <div style={{ minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+      <span style={{ fontSize: narrow ? 14 : 16, fontWeight: 900, color: "var(--text)", lineHeight: 1.2 }}>
+        {live ? "La première du jour arrive" : "Pas encore d'impression aujourd'hui"}</span>
+      {live && <span style={{ fontSize: 12, fontWeight: 800, color: "#3B82F6", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+        {st.print_name ? `${st.print_name} · ` : ""}{left ? `fin à ${finAt(left)}` : "bientôt finie"}</span>}
+      {H >= 70 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>{live ? yest : `${yest} · l'imprimante se repose`}</span>}
+    </div>
+  </div>;
 }
 // les n derniers jours en barres : heures, impressions ou grammes ; en grand, on change de periode et de mesure
 const METRICS = { h: ["les heures", x => x.duration || 0, fmtH], n: ["les impressions", x => x.count || 0, x => `${x}`], g: ["les grammes", x => x.weight_g || 0, fmtG] };
@@ -2307,7 +2334,7 @@ const sz = it => ({ w: it?.w || 1, h: typeof it?.h === "number" ? it.h : 1 });  
 const B = (key, label, def, extra = {}) => ({ key, label, def, ...extra });
 const C = (key, label, def, choices, extra = {}) => ({ key, label, def, choices, ...extra });
 export const TILES = {
-  today: { label: "Aujourd'hui", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Today v={d.today} p={d.prints} o={o} sz={sz(it)}/>,
+  today: { label: "Aujourd'hui", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Today v={d.today} p={d.prints} o={o} sz={sz(it)} st={st}/>,
     options: [B("ring", "Anneau de réussite", true, { hint: "La part des impressions réussies du jour." }), B("yesterday", "Écart avec hier", true),
       B("weight", "Poids imprimé", true), B("hours", "Heures de machine", true), B("cost", "Coût du jour", false)] },
   week: { label: "Derniers jours", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Week o={o} sz={sz(it)}/>,
