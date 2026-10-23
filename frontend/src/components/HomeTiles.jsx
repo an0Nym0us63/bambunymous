@@ -996,6 +996,21 @@ function Dry({ v, status, o, sz }) {
           // pas la place d'un anneau par unite : des lignes compactes (nom, mode, temperature, temps restant),
           // la progression en fond de ligne ; ce qui ne tient pas se compte en « +n »
           if (each < 40) {
+            // un anneau par unite qui seche (progression, consigne au centre), le nom et le temps restant dessous ;
+            // ils se partagent la largeur (une rangee) ou passent en grille quand c'est haut
+            const g = fitGrid(drying.length, W, H, { gap: 8, extra: 27, max: 96 });
+            if (g.size >= 30) return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, minmax(0, 1fr))`, gap: 8,
+              alignContent: "center", justifyItems: "center", minWidth: 0 }}>
+              {drying.map(a => <div key={a.id} title={`${amsLab(a)}${a.dry_filament ? ` · ${a.dry_filament}` : ""} · encore ${fmtDur((a.dry_time || 0) * 60)}`}
+                style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, minWidth: 0, maxWidth: "100%" }}>
+                <span style={{ position: "relative", display: "inline-flex" }}>
+                  <Ring value={prog(a)} size={g.size} color="#f97316">{a.dry_temperature ? `${a.dry_temperature}°` : `${Math.round(prog(a) * 100)}%`}</Ring>
+                  <span aria-hidden="true" style={{ position: "absolute", inset: -2, borderRadius: "50%", boxShadow: "0 0 10px rgba(249,115,22,0.4)",
+                    animation: "dryPulse 2.5s ease-in-out infinite", pointerEvents: "none" }}/></span>
+                <span style={{ fontSize: 11, fontWeight: 900, color: "var(--text)", whiteSpace: "nowrap", lineHeight: "13px" }}>
+                  {g.size >= 46 ? amsLab(a) : amsLab(a).replace("AMS-", "")}{a.dry_filament && g.size >= 60 ? <span style={{ color: "var(--muted)", fontWeight: 800 }}> {a.dry_filament}</span> : null}</span>
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: "#ea580c", whiteSpace: "nowrap", lineHeight: "13px" }}>{fmtDur((a.dry_time || 0) * 60)}</span>
+              </div>)}</div>;
             const fit = Math.max(1, Math.floor((H + 4) / 24));
             const shown = drying.length > fit ? drying.slice(0, fit - 1) : drying;
             return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4, minWidth: 0 }}>
