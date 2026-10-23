@@ -81,6 +81,9 @@ export default function MwQueue() {
   const [busy, setBusy] = useState(false);
   const [pick, setPick] = useState(false);
   const [filter, setFilter] = useState("all");
+  // le tri au sein d'un filtre (l'ordre de priorite par defaut) ; garde dans ce navigateur
+  const [sortBy, setSortByState] = useState(() => { try { return localStorage.getItem("mwQueueSort") || "prio"; } catch { return "prio"; } });
+  const setSortBy = v => { setSortByState(v); try { localStorage.setItem("mwQueueSort", v); } catch { /* stockage indisponible */ } };
   const [model, setModel] = useState(null);
   const [tab, setTab] = useUrlTab("afaire", "models", ["models", "filaments"]);
   useTrackDetail(`À faire · ${tab === "filaments" ? "Filaments pour tout imprimer" : "Modèles"}`);
@@ -186,7 +189,15 @@ export default function MwQueue() {
   if (err) return <p style={msg}>{err}</p>;
   if (!q) return <p style={msg}>Lecture de la liste… (la première fois, chaque fiche est lue sur MakerWorld)</p>;
   const t = q.totals;
-  const rows = q.models.filter(r => sorting || cutting || choosing || filter === "all" || r.status === filter);
+  // « le plus pret » : pret AMS, puis en partie (la part des plateaux prets), puis stock OK, puis ce qui manque
+  const readiness = r => ({ ams: 3, partial: 2, stock: 1, short: 0 }[r.status] ?? -1)
+    + (r.status === "partial" && r.plates_count ? (r.plates_ready?.length || 0) / r.plates_count : 0);
+  const platesOf = r => r.profile?.plates || r.plates_count || r.plates?.length || 1;
+  const SORTS = { ready: (a, b) => readiness(b) - readiness(a), weight: (a, b) => (a.weight_g || 0) - (b.weight_g || 0),
+    time: (a, b) => (a.seconds || 0) - (b.seconds || 0), plates: (a, b) => platesOf(a) - platesOf(b),
+    cost: (a, b) => (a.cost || 0) - (b.cost || 0) };
+  const filtered = q.models.filter(r => sorting || cutting || choosing || filter === "all" || r.status === filter);
+  const rows = sorting || cutting || !SORTS[sortBy] ? filtered : [...filtered].sort(SORTS[sortBy]);
   const cutAt = q.until ? q.models.findIndex(r => r.design_id === q.until.design_id) : -1;
   const picked = q.picked ? new Set(q.picked.ids) : null;
   const marks = choosing || picked;                // cases a cocher visibles
@@ -295,6 +306,20 @@ export default function MwQueue() {
               {l} ({k === "all" ? t.models : t[k] ?? 0})</button>
           ))}
           {sorting && <span style={{ fontSize:12, color:"var(--muted)" }}>Ordre de priorité : ⤒ en haut, ↑ ↓, ⤓ en bas.</span>}
+          {!sorting && !cutting && (
+            <label style={{ display:"inline-flex", alignItems:"center", gap:6, fontSize:12, fontWeight:700, color:"var(--muted)" }}>
+              Trier
+              <select value={sortBy} onChange={e => setSortBy(e.target.value)} style={{ height:30, borderRadius:9, border:"1px solid var(--border)",
+                background:"var(--surface2)", color:"var(--text)", fontWeight:700, fontSize:12.5, padding:"0 8px" }}>
+                <option value="prio">par priorité</option>
+                <option value="ready">le plus prêt d'abord</option>
+                <option value="time">le plus court d'abord</option>
+                <option value="weight">le plus léger d'abord</option>
+                <option value="plates">le moins de plateaux d'abord</option>
+                <option value="cost">le moins cher d'abord</option>
+              </select>
+            </label>
+          )}
           {!sorting && <button onClick={() => { setChoosing(false); setCutting(v => !v); }} title="Stats limitées aux premiers modèles de la liste"
             style={{ ...pill(cutting || (!!cutRow && !picked)), marginLeft:"auto" }}>✂ Jusqu'ici</button>}
           {!sorting && <button onClick={() => { setCutting(false); setChoosing(v => !v); }} title="Stats sur les modèles que tu coches"
@@ -303,7 +328,7 @@ export default function MwQueue() {
             {sorting ? "✓ Terminé" : "↕ Réorganiser"}</button></AdminOnly>
         </div>
 
-        <div className="wide-list">
+        <div className="wide-list" style={{ alignItems: "stretch" }}>
           {rows.map(r => {
             const [label, color, help] = STATUS[r.status] || STATUS.unknown;
             const isPicked = choosing ? chosen.includes(r.design_id) : !!picked?.has(r.design_id);
@@ -314,7 +339,7 @@ export default function MwQueue() {
                 onClick={() => choosing ? toggleChosen(r.design_id) : cutting ? (setChosen([]), setUntil(r.design_id), setCutting(false))
                   : setModel({ design_id: r.design_id, title: r.title, title_fr: r.title_fr, cover_url: r.cover_url })}
                 onPointerDown={() => prefetchModel(r.design_id)}
-                style={{ display:"flex", alignItems:"center", gap:10, padding:8, borderRadius:12, cursor:"pointer", textAlign:"left",
+                style={{ display:"flex", alignItems:"center", gap:10, padding:8, borderRadius:12, cursor:"pointer", textAlign:"left", height:"100%", boxSizing:"border-box",
                   background:"var(--surface2)", color:"var(--text)", opacity: out ? 0.45 : 1,
                   border: cutting || choosing ? "1px dashed #3b82f6" : r.printing ? "1.5px solid #3b82f6" : "1px solid var(--border)" }}>
                 {marks && <span style={{ width:20, height:20, borderRadius:6, flexShrink:0, display:"flex", alignItems:"center",
