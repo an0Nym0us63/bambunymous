@@ -13,7 +13,7 @@ import LiveCamera from "./LiveCamera";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "../pages/Achievements";
 import { DryCard } from "./AMSSection";
 import SpoolSVG from "./SpoolSVG";
-import { switchRoutes, slotLabel } from "../utils/ams";
+import { switchRoutes, slotLabel, grilleAccueil, lireDisposition } from "../utils/ams";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
 // Les tuiles de l'accueil (22/10/2026, refaites le meme jour). Chaque tuile :
@@ -1167,13 +1167,47 @@ function Dry({ v, status, o, sz }) {
     </Tile>
   );
 }
+// la disposition reglee pour la tuile AMS (Parametres) : lue une fois, partagee par les tuiles
+let _amsOrd = { v: undefined, at: 0, p: null };
+function useAmsOrder() {
+  const [v, setV] = useState(_amsOrd.v);
+  useEffect(() => {
+    if (_amsOrd.v !== undefined && Date.now() - _amsOrd.at < 600000) { setV(_amsOrd.v); return; }
+    _amsOrd.p = _amsOrd.p || client.get("/settings/ams-order").then(({ data }) => data?.order ?? null).catch(() => null)
+      .then(x => { _amsOrd = { v: x, at: Date.now(), p: null }; return x; });
+    _amsOrd.p.then(setV);
+  }, []);
+  return v;
+}
+// les unites rangees comme sur la tuile AMS : la grille (colonnes de cases, null = case vide)
+// et l'ordre de lecture (ligne par ligne)
+function amsArranged(list, order) {
+  const cols = grilleAccueil(list, lireDisposition(order));
+  const rows = cols[0]?.length || 0;
+  const flat = [];
+  for (let r = 0; r < rows; r++) for (const c of cols) if (c[r]) flat.push(c[r]);
+  return { cols, rows, flat: flat.length === list.length ? flat : list };
+}
 // l'humidite : des jauges (qui remplissent la case) ou des barres, avec ses seuils
 function Humidity({ status, o, sz }) {
-  const list = (status?.ams_list || []).filter(a => a.humidity > 0 && a.id !== 255 && a.id !== 254);
+  const order = useAmsOrder();
+  const raw = (status?.ams_list || []).filter(a => a.humidity > 0 && a.id !== 255 && a.id !== 254);
+  const lay = amsArranged(raw, order);
+  const list = lay.flat;
   if (!list.length) return null;
   const [lo, hi] = o.thr === "strict" ? [20, 30] : o.thr === "loose" ? [40, 55] : [30, 40];
   const col = h => h < lo ? "#22c55e" : h < hi ? "#f59e0b" : "#ef4444";
+  // la taille des gouttes rangees comme sur la tuile AMS (colonnes x lignes de cette grille)
+  const gridSize = (W, H) => { const ex = DROP_EXTRA - (o.temp ? 0 : 14), nc = lay.cols.length, nr = lay.rows;
+    return nr > 1 ? Math.floor(Math.min((W - 8 * (nc - 1)) / nc, ((H - 8 * (nr - 1)) / nr - ex) / DROP_AR, 150)) : 0; };
   const drops = (W, H, grow = true) => {
+    // la grille de la tuile AMS, si les gouttes y tiennent assez grandes (une case vide garde sa place)
+    const nc = lay.cols.length, nr = lay.rows, gs = gridSize(W, H);
+    if (nr > 1 && gs >= 46) return <div style={{ flex: grow ? 1 : undefined, display: "grid", gridTemplateColumns: `repeat(${nc}, auto)`, gridAutoFlow: "row",
+      justifyContent: "space-evenly", alignContent: "center", gap: 8 }}>
+      {[...Array(nr).keys()].flatMap(r => lay.cols.map((c, ci) => c[r]
+        ? <DropGauge key={c[r].id} value={c[r].humidity} color={col(c[r].humidity)} size={gs} label={amsLab(c[r])} sub={o.temp && c[r].temp ? `${Math.round(c[r].temp)}°` : null}/>
+        : <span key={`v${r}-${ci}`}/>))}</div>;
     const g = fitGrid(list.length, W, H, { ar: DROP_AR, extra: DROP_EXTRA - (o.temp ? 0 : 14), max: 150, gap: 8 });
     return <div style={{ flex: grow ? 1 : undefined, display: "grid", gridTemplateColumns: `repeat(${g.cols}, auto)`, justifyContent: "space-evenly", alignContent: "center", gap: 8 }}>
       {list.map(a => <DropGauge key={a.id} value={a.humidity} color={col(a.humidity)} size={Math.max(40, g.size)} label={amsLab(a)}
@@ -1207,8 +1241,11 @@ function Humidity({ status, o, sz }) {
         const wet = list.reduce((b, a) => a.humidity > b.humidity ? a : b, list[0]);
         const avg = Math.round(list.reduce((t, a) => t + a.humidity, 0) / list.length);
         const g0 = fitGrid(list.length, W, H, { ar: DROP_AR, extra: DROP_EXTRA - (o.temp ? 0 : 14), max: 150, gap: 8 });
-        const used = g0.rows * (g0.size * DROP_AR + DROP_EXTRA) + 8 * (g0.rows - 1);
-        if (g0.size >= 46 && H - used >= 44) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 10 }}>
+        // la grille de la tuile AMS d'abord : avec la ligne du bas si elle tient, sinon seule
+        const gsS = gridSize(W, H - 34), gsF = gridSize(W, H);
+        const used = gsS >= 46 ? 0 : g0.rows * (g0.size * DROP_AR + DROP_EXTRA) + 8 * (g0.rows - 1);
+        if (gsS < 46 && gsF >= 46) return drops(W, H);
+        if ((gsS >= 46 || g0.size >= 46) && H - used >= 44) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 10 }}>
           {drops(W, H - 34, false)}
           <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
             <span>moyenne <b style={{ color: col(avg) }}>{avg} %</b></span>
@@ -1329,7 +1366,7 @@ function Friends({ f, o, sz }) {
             {strip > 0 && <FrIdle list={others}/>}</div>;
         }
         // bas : un anneau d'avancement par copain, son plateau au centre, son nom et son pourcentage dessous
-        const r = fitGrid(p.length, bw, room, { gap: 10, extra: 18, max: 96 });
+        const r = fitGrid(p.length, bw, room, { gap: 10, extra: o.thumbs ? 30 : 18, max: 96 });
         if (!o.scroll && r.size >= 40) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, minHeight: 0 }}>
           <div style={{ display: "grid", gridTemplateColumns: `repeat(${r.cols}, minmax(0, 1fr))`, gap: 10, justifyItems: "center" }}>
             {p.map(x => <div key={x.id} title={x.print?.name || x.print_name} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, minWidth: 0, maxWidth: "100%" }}>
@@ -1337,7 +1374,8 @@ function Friends({ f, o, sz }) {
                 {o.thumbs && x.print?.image ? <img data-pk="" src={x.print.image} alt="" onError={e => { e.currentTarget.style.display = "none"; }}
                   style={{ width: r.size * 0.6, height: r.size * 0.6, objectFit: "contain", display: "block" }}/> : `${frPct(x)}%`}</Ring>
               <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {x.name}{o.thumbs && x.print?.image && <span style={{ color: FR_C }}> · {frPct(x)}%</span>}</span></div>)}</div>
+                {x.name}</span>
+              {o.thumbs && x.print?.image && <span style={{ fontSize: 11, fontWeight: 900, color: FR_C, lineHeight: 1 }}>{frPct(x)}%</span>}</div>)}</div>
           {strip > 0 && <FrIdle list={others}/>}</div>;
         return o.scroll ? <><Scroller gap={4}>{p.map(row)}</Scroller>{strip > 0 && <FrIdle list={others}/>}</> : <>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>{p.slice(0, fitRows(room, 36, 4)).map(row)}</div>
@@ -2240,7 +2278,8 @@ function switchModel(status) {
   const fs = switchRoutes(status) || {};
   const ams = status?.ams_list || [];
   const nz = status?.nozzles || [];
-  const slot = s => { if (!s) return null; const a = ams.find(x => x.id === s.ams); const t = a?.trays?.find(x => x.id === s.tray);
+  // rien d'engage (ams / bac negatifs) : pas d'emplacement, pas de « @0 »
+  const slot = s => { if (!s || s.ams == null || s.ams < 0 || s.tray < 0) return null; const a = ams.find(x => x.id === s.ams); const t = a?.trays?.find(x => x.id === s.tray);
     return { label: s.ams >= 128 ? amsLab({ id: s.ams }) : `${String.fromCharCode(65 + s.ams)}${s.tray + 1}`, color: trayCol(t),
       type: t?.filament_type || "" }; };
   const activeAms = ams.find(x => x.id === status?.active_ams_id);
@@ -2324,10 +2363,12 @@ function SwitchMini({ m, W, H }) {
     {[...m.ports].sort((a, b) => a.live - b.live).map(x => <SwitchRail key={x.p} d={path(x)} live={x.live} color={x.slot?.color} hl={m.hl} w={8}/>)}
     {m.ports.map(x => { const c = x.slot?.color, y = inY[x.p];
       return <g key={x.p}>
-        <circle cx="22" cy={y} r="17" fill={c || "var(--surface2)"} stroke={x.live ? m.hl : c ? "rgba(0,0,0,0.25)" : "var(--muted)"} strokeWidth={x.live ? 3 : 1.5}
-          strokeDasharray={c ? "none" : "3 3"}/>
+        {/* une entree vide : le cercle en creux, sa lettre lisible (en couleur de texte, pas en blanc), « vide » dessous */}
+        <circle cx="22" cy={y} r="17" fill={c || "var(--surface2)"} stroke={x.live ? m.hl : c ? "rgba(0,0,0,0.25)" : "var(--text2)"} strokeWidth={x.live ? 3 : c ? 1.5 : 2}
+          strokeDasharray={c ? "none" : "4 3"}/>
         <text x="22" y={y + 5} textAnchor="middle" fontSize="14" fontWeight="900"
-          fill={c && (parseInt(c.slice(1, 3), 16) * 0.299 + parseInt(c.slice(3, 5), 16) * 0.587 + parseInt(c.slice(5, 7), 16) * 0.114) > 160 ? "#0f172a" : "#fff"}>{x.p}</text>
+          fill={!c ? "var(--text2)" : (parseInt(c.slice(1, 3), 16) * 0.299 + parseInt(c.slice(3, 5), 16) * 0.587 + parseInt(c.slice(5, 7), 16) * 0.114) > 160 ? "#0f172a" : "#fff"}>{x.p}</text>
+        {!c && <text x="22" y={y + 29} textAnchor="middle" fontSize="9.5" fontWeight="800" fill="var(--muted)">vide</text>}
       </g>; })}
     {[["G", 1], ["D", 0]].map(([sd, id]) => { const by = served(sd), on = !!by?.live, n = m.temp(id), y = oY[sd];
       return <g key={sd}>
@@ -2543,11 +2584,13 @@ function Toolhead({ status, sz }) {
       </>}>
       {({ W, H }) => {
         // une ligne par buse : son cote (vert si elle imprime), le filament, la temperature, son etat si la place le permet
-        const lines = <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 5 }}>
-          {[["G", m.L], ["D", m.R]].map(([k, s]) => s && <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, fontWeight: 800, minWidth: 0 }}>
-            <span style={{ width: 11, flexShrink: 0, color: s.printing ? "#16a34a" : "var(--muted)" }}>{k}</span>
-            <span style={{ width: 11, height: 11, borderRadius: 3, flexShrink: 0, background: s.color || "transparent", border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1px dashed var(--muted)" }}/>
-            <span style={{ width: 34, flexShrink: 0, color: s.n.temp > 40 ? heat(s.n.temp) : "var(--text)" }}>{Math.round(s.n.temp)}°</span>
+        // le texte grandit avec la tuile (12,5 a 17 px) : une tuile basse et etroite n'a plus des lignes minuscules
+        const fs = Math.max(12.5, Math.min(17, H / 7.5)), sq = Math.round(fs * 0.85);
+        const lines = <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: fs * 0.45 }}>
+          {[["G", m.L], ["D", m.R]].map(([k, s]) => s && <div key={k} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: fs, fontWeight: 800, minWidth: 0 }}>
+            <span style={{ width: fs * 0.9, flexShrink: 0, color: s.printing ? "#16a34a" : "var(--muted)" }}>{k}</span>
+            <span style={{ width: sq, height: sq, borderRadius: 3, flexShrink: 0, background: s.color || "transparent", border: s.color ? "1px solid rgba(0,0,0,0.2)" : "1.5px dashed var(--text2)" }}/>
+            <span style={{ width: fs * 2.7, flexShrink: 0, color: s.n.temp > 40 ? heat(s.n.temp) : "var(--text)" }}>{Math.round(s.n.temp)}°</span>
             {/* le filament : son nom, et dessous l'etat, l'emplacement, la matiere et la marque */}
             {(W >= 230 || (H >= 150 && W >= 140)) && <span style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.2 }}>
               <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -2557,7 +2600,7 @@ function Toolhead({ status, sz }) {
           </div>)}</div>;
         // bas : le dessin a gauche, les buses a cote ; haut : le dessin centre, les buses dessous (en cartes si la place le permet)
         if (H < 150 && (W >= 215 || H < 120)) return <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
-          <HeadArt st={status} h={Math.max(50, Math.min(H - 4, 120, W * 0.3 * 170 / 200))}/>{lines}</div>;
+          <HeadArt st={status} h={Math.max(50, Math.min(H - 4, 150, (W >= 300 ? W * 0.32 : W * 0.48) * 170 / 200))}/>{lines}</div>;
         const cards = W >= 200 && H >= 230;
         return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
           <div style={{ display: "flex", justifyContent: "center" }}><HeadArt st={status} h={Math.max(50, Math.min(H - (cards ? 96 : 50), 200, (W - 8) * 170 / 200))}/></div>

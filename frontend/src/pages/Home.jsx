@@ -728,7 +728,9 @@ function VortekRack({ rack, H = 240, sel = null, onPick }) {
     {/* les rangs ; au centre, la maison (etroit : le cote leve est deja dit en tete) */}
     {!narrow && <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
       {rank("A")}
-      <span title={centre ? "Rack au centre" : "Position de repos"} style={{ fontSize: 15, color: centre ? "#16a34a" : "var(--muted)", opacity: centre ? 1 : 0.45 }}>⌂</span>
+      <span title={centre ? "Rack au centre" : "Position de repos"} style={{ display: "flex", color: centre ? "#16a34a" : "var(--muted)", opacity: centre ? 1 : 0.45, margin: "4px 0" }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20h14V9.5"/><path d="M10 20v-5h4v5"/></svg></span>
       {rank("B")}
     </div>}
   </div>;
@@ -907,9 +909,12 @@ function HubGrid({ list, order, act, actTray, H, climate, onPick, big = false, s
   const cols = grilleAccueil(list, lireDisposition(order));
   const nR = cols[0]?.length || 1;
   const gap = big ? 10 : 6;
-  const uh = Math.max(20, Math.floor((H - gap * (nR - 1)) / nR));
+  // l'onglet de sechage deborde au-dessus de son unite : en premiere rangee, une marge pour qu'il ne soit
+  // pas coupe par le haut de la tuile (rien d'affiche au-dessus quand rien n'est en cours, chez un copain)
+  const pad = !big && cols.some(c => c[0] && isDrying(c[0])) ? 8 : 0;
+  const uh = Math.max(20, Math.floor((H - pad - gap * (nR - 1)) / nR));
   return (
-    <div ref={ref} style={{ display: "grid", gridTemplateColumns: cols.map(c => `${columnWeight(c)}fr`).join(" "), gridTemplateRows: `repeat(${nR}, ${uh}px)`, gap }}>
+    <div ref={ref} style={{ display: "grid", paddingTop: pad, gridTemplateColumns: cols.map(c => `${columnWeight(c)}fr`).join(" "), gridTemplateRows: `repeat(${nR}, ${uh}px)`, gap }}>
       {cols.flatMap((col, ci) => col.map((a, ri) => a && (
         <div key={a.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth: 0, display: "flex", justifyContent: "center" }}>
           <div style={{ width: `${Math.max(0.78, slotCount(a) / columnWeight(col)) * 100}%`, minWidth: 0 }}>
