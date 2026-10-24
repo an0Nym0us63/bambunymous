@@ -251,7 +251,7 @@
       <dt><span class="ui">Seulement les réussies</span> (non)</dt><dd>Cache les impressions ratées.</dd>
       <dt><span class="ui">Vignettes rondes</span> (non)</dt><dd>Des vignettes rondes au lieu de carrées.</dd>
     </dl>
-    <p><b>Au toucher</b> (hors vignette) : une grande grille de vignettes avec leur nom. <span class="ui">Ouvrir</span> mène à la <a href="#impressions-galerie">galerie des impressions</a>.</p>
+    <p><b>Au toucher</b> (hors vignette) : les chiffres (impressions, réussies, ratées, poids, machine), un filtre <span class="ui">Toutes</span> / <span class="ui">Réussies</span> / <span class="ui">Ratées</span>, puis chaque impression en grande carte : l'image, « réussie » ou « ratée », le nom, la date, la durée et le poids. <span class="ui">Ouvrir</span> mène à la <a href="#impressions-galerie">galerie des impressions</a>.</p>
   </section>
 
   <section id="tuiles-streak">
@@ -387,7 +387,7 @@
   <section id="tuiles-friends">
     <h3>Copains</h3>
     <p>La tuile n'apparaît que si tu as des <a href="#copains">copains</a>. Le badge de l'en-tête (« 3/5 ») compte ceux qui impriment sur le total.</p>
-    <p><b>Ce qu'elle montre</b> : les copains qui impriment, présentés selon la place :</p>
+    <p><b>Ce qu'elle montre</b> : les copains qui impriment, présentés selon la place : Quand personne n'imprime, chaque copain s'affiche en avatar, cerclé de la couleur de son état (au repos, éteinte, injoignable), son nom et son état dessous.</p>
     <ul>
       <li><b>des affiches</b> quand la tuile est haute : une par copain, avec la vignette de son plateau (ou son initiale), son nom, le nom de l'impression, le pourcentage en grand, « fin 18:59 » en haut à droite et un liseré d'avancement en bas ;</li>
       <li><b>des anneaux d'avancement</b> quand elle est plus basse : un par copain, la vignette du plateau au centre, son nom et son pourcentage dessous ;</li>
@@ -409,7 +409,7 @@
   <section id="tuiles-podium">
     <h3>Classement des copains</h3>
     <p>La tuile n'apparaît que s'il y a au moins deux personnes classées.</p>
-    <p><b>Ce qu'elle montre</b> : le classement des scores de <a href="#succes">succès</a> entre toi et tes copains. En liste : une médaille de rang (or, argent, bronze pour les trois premiers), l'avatar à l'initiale (★ pour toi), le nom (« Toi ») et le grade quand il y a la place, le score en dégradé, une barre, et l'écart avec celui de devant (« −1 504 ») ; ta ligne est surlignée, et si tu n'as pas la place d'y être, la dernière ligne est la tienne. En podium : les trois premiers sur des marches dorée, argentée et cuivrée (2<sup>e</sup>, 1<sup>er</sup> couronné, 3<sup>e</sup>), avec leur avatar et leur score ; quand une marche est trop basse, son score passe à côté du rang. Sur une tuile d'une seule ligne, les marches laissent place à une rangée : l'avatar cerclé de sa médaille, « 1. Léo » et le score en couleur, pour les trois premiers. Réduite à son résumé, la tuile podium donne les trois scores (🥇 🥈 🥉).</p>
+    <p><b>Ce qu'elle montre</b> : le classement des scores de <a href="#succes">succès</a> entre toi et tes copains. En liste : une médaille de rang (or, argent, bronze pour les trois premiers), l'avatar à l'initiale (★ pour toi), le nom (« Toi ») et le grade quand il y a la place, le score en dégradé, une barre, et l'écart avec celui de devant (« −1 504 ») ; ta ligne est surlignée, et si tu n'as pas la place d'y être, la dernière ligne est la tienne. En podium : les trois premiers sur des marches dorée, argentée et cuivrée (2<sup>e</sup>, 1<sup>er</sup> couronné, 3<sup>e</sup>), avec leur avatar et leur score ; quand une marche est trop basse, son score passe à côté du rang. Sur une tuile d'une seule ligne, les marches laissent place à une rangée : l'avatar cerclé de sa médaille, « 1. Léo » et le score en couleur, pour les trois premiers. Réduite à son résumé, la tuile podium donne les trois scores (🥇 🥈 🥉). En demi-colonne, l'avatar s'efface et le score passe sur la ligne de la barre : le nom garde toute la largeur.</p>
     <figure><img src="img/tuiles-podium.webp" alt="Tuile Classement des copains en liste"><figcaption>En liste, demi-colonne et toute la colonne.</figcaption></figure>
     <dl class="opts">
       <dt><span class="ui">Affichage</span> : <span class="ui">liste</span> (défaut) / <span class="ui">podium</span></dt><dd>Le classement en lignes, ou les trois premiers sur un podium.</dd>
@@ -480,7 +480,7 @@
 
   <section id="tuiles-feed">
     <h3>Le fil du jour</h3>
-    <p><b>Ce qu'elle montre</b> : tes dernières <a href="#notifications">notifications</a>, une par ligne : l'heure, une pastille (l'emoji de la rubrique, ou un carré de la couleur du filament), le titre (en gras avec un point bleu s'il n'est pas lu) et, sur une tuile large, la première ligne du message. Le badge bleu de l'en-tête compte les non lues. Toucher une ligne suit le lien de la notification (la fiche de l'impression, la bobine…). Rien : <span class="ui">Rien de neuf.</span></p>
+    <p><b>Ce qu'elle montre</b> : tes dernières <a href="#notifications">notifications</a>, une par ligne : l'heure, une pastille (l'emoji de la rubrique, ou un carré de la couleur du filament), le titre (en gras avec un point bleu s'il n'est pas lu) et, sur une tuile large, la première ligne du message. Le badge bleu de l'en-tête compte les non lues. Toucher une ligne suit le lien de la notification (la fiche de l'impression, la bobine…). Rien : <span class="ui">Rien de neuf.</span> Avec de la hauteur, « 12 aujourd'hui · 5 non lus » en tête ; les lignes non lues sont teintées de la couleur de leur rubrique, et grandissent (le détail dessous) quand il y en a peu ; ce qui ne tient pas se compte en « +7 plus tôt ».</p>
     <p><b>Tailles</b> : par défaut toute la colonne sur 2 rangées.</p>
     <figure><img src="img/tuiles-feed.webp" alt="Tuile Le fil du jour"><figcaption>Demi-colonne sur 2 rangées, et toute la colonne sur 3 rangées avec le détail des messages.</figcaption></figure>
     <dl class="opts">
@@ -490,7 +490,7 @@
       <dt><span class="ui">Détail (quand la tuile est large)</span> (oui)</dt><dd>La première ligne du message sous le titre.</dd>
       <dt><span class="ui">Défiler dans la tuile</span> (<b>oui</b> ici)</dt><dd>Toutes les notifications dans la tuile, à faire défiler.</dd>
     </dl>
-    <p><b>Au toucher</b> : des cases <span class="ui">Aujourd'hui</span> et <span class="ui">Non lus</span>, puis la liste complète avec le détail. <span class="ui">Ouvrir</span> mène à la page <a href="#notifications-page">Notifications</a>.</p>
+    <p><b>Au toucher</b> : les chiffres du jour (aujourd'hui, non lus, et par rubrique), une pastille par rubrique pour filtrer (<span class="ui">Tout</span>, <span class="ui">Impressions</span>, <span class="ui">Bobines et séchage</span>, <span class="ui">MakerWorld</span>, <span class="ui">Copains</span>), puis la journée rangée par moment (cette nuit, ce matin, cet après-midi, ce soir), chaque notification avec son détail. <span class="ui">Ouvrir</span> mène à la page des notifications.</p>
   </section>
 
   <section id="tuiles-alerts">

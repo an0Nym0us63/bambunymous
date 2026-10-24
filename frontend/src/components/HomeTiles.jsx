@@ -1536,8 +1536,25 @@ function Friends({ f, o, sz }) {
       {({ W: bw, H }) => {
         const strip = o.idle && others.length > 0 && H >= 96 ? 26 : 0;
         const room = H - strip;
-        if (!p.length) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8 }}>
-          <Empty>Personne n'imprime en ce moment</Empty>{o.idle && others.length > 0 && <FrIdle list={others} wrap={H >= 90}/>}</div>;
+        // personne n'imprime : chaque copain en avatar, l'anneau de la couleur de son etat, son nom et son etat dessous
+        if (!p.length) {
+          const list = o.idle ? others : [];
+          if (!list.length) return <Empty>Personne n'imprime en ce moment</Empty>;
+          const g = fitGrid(list.length, bw, H - 22, { gap: 10, max: 64, extra: bw < 215 ? 28 : 30 });
+          const s2 = Math.max(30, g.size);
+          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8, minHeight: 0 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", textAlign: "center" }}>Personne n'imprime en ce moment</span>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, minmax(0, 1fr))`, gap: 10, justifyItems: "center" }}>
+              {list.map(([id, s]) => { const [l, c] = FR_STATE[s.state] || FR_STATE.off;
+                return <span key={id} data-tip={`${s.name || "Copain"}
+${l}`} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0, maxWidth: "100%" }}>
+                  <span style={{ position: "relative", borderRadius: "50%", padding: 3, background: `conic-gradient(${c}, ${c}66, ${c})` }}>
+                    <span style={{ display: "flex", borderRadius: "50%", background: "var(--surface)", padding: 2 }}><FrAvatar name={s.name} size={s2 - 10}/></span>
+                    <span style={{ position: "absolute", right: 1, bottom: 1, width: Math.max(10, s2 * 0.22), height: Math.max(10, s2 * 0.22), borderRadius: "50%",
+                      background: c, boxShadow: "0 0 0 2px var(--surface)" }}/></span>
+                  <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: "100%" }}>{s.name || "Copain"}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, color: c, whiteSpace: "nowrap", marginTop: -3 }}>{l}</span></span>; })}</div></div>;
+        }
         // les affiches, autant que la place en tient (une grille qui remplit la tuile)
         const g = fitGrid(p.length, bw, room, { gap: 8, ar: 0.95, max: 260 });
         if (!o.scroll && g.size >= 80) {
@@ -2455,32 +2472,35 @@ function SalesZoom({ v, hero }) {
 }
 // le fil : autant de lignes que la hauteur en tient ; en grand, tout le fil du jour
 const FEED_SECTIONS = { all: null, prints: ["prints", "printer"], spools: ["spools", "dry"], mw: ["mw"], friends: ["friends"] };
+const FEED_CHIPS = [["all", "Tout", "#0EA5E9"], ["prints", "Impressions", "#3B82F6"], ["spools", "Bobines et séchage", "#F59E0B"], ["mw", "MakerWorld", "#14B8A6"], ["friends", "Copains", "#8B5CF6"]];
+// une ligne du fil : l'heure, l'icone dans un carre de la couleur de sa rubrique, le titre (et son detail), le point « non lu »
+function FeedRow({ x, h = 40, detail, narrow, time = true, nav, big = false }) {
+  const sw = String(x.image || "").startsWith("color:") ? x.image.slice(6).split(",")[0] : null;
+  const col = x.section_color || "#64748B";
+  const t = new Date(x.time).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const sq = Math.max(22, Math.min(big ? 38 : 32, h - 10));
+  const msg = String(x.message || "").split("\n")[0];
+  return <div data-tip={`${noEmoji(x.title)}${msg ? `\n${msg}` : ""}\n${t}`} onClick={e => { if (x.link) { e.stopPropagation(); nav(x.link); } }}
+    style={{ display: "flex", gap: 9, alignItems: "center", minHeight: h, padding: "0 8px 0 4px", borderRadius: 12, cursor: x.link ? "pointer" : undefined,
+      background: x.seen ? "transparent" : `linear-gradient(90deg, ${col}1c, transparent 75%)` }}>
+    {time && !narrow && <span data-pk="" style={{ width: 38, flexShrink: 0, fontSize: 11, fontWeight: 700, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{t}</span>}
+    <span data-pk="" style={{ width: sq, height: sq, borderRadius: sq * 0.3, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: sq * 0.5, background: sw ? hexCss(sw) : `${col}26`, boxShadow: sw ? "inset 0 0 0 1px rgba(0,0,0,0.15)" : `inset 0 0 0 1px ${col}55` }}>{sw ? "" : x.section_emoji}</span>
+    <span style={{ flex: 1, minWidth: 0 }}>
+      <span style={{ display: "block", fontSize: big ? 13.5 : 12.5, color: "var(--text)", fontWeight: x.seen ? 700 : 900,
+        ...(narrow ? { ...clamp(2), lineHeight: 1.2 } : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}><W text={noEmoji(x.title)}/></span>
+      {narrow && time && <span style={{ display: "block", fontSize: 10.5, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{t}</span>}
+      {detail && msg && <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{msg}</span>}
+    </span>
+    {!x.seen && <span style={{ width: 8, height: 8, borderRadius: "50%", background: "#3b82f6", flexShrink: 0, boxShadow: "0 0 0 3px rgba(59,130,246,0.2)" }}/>}
+  </div>;
+}
 function Feed({ f, o, sz }) {
   const nav = useNavigate();
   if (!f) return null;
   const want = FEED_SECTIONS[o.section || "all"];
   const all = (f.items || []).filter(x => !want || want.includes(x.section));
   const fresh = all.filter(x => !x.seen).length;
-  const row = (x, i, detail, narrow) => {
-    const sw = String(x.image || "").startsWith("color:") ? x.image.slice(6).split(",")[0] : null;
-    const time = new Date(x.time).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
-    return (
-      <div key={x.id} onClick={e => { if (x.link) { e.stopPropagation(); nav(x.link); } }}
-        style={{ display: "flex", gap: 8, alignItems: "center", padding: "5px 0", borderTop: i ? "1px solid var(--border)" : "none", cursor: x.link ? "pointer" : undefined }}>
-        {o.time && !narrow && <span data-pk="" style={{ width: 38, flexShrink: 0, fontSize: 11, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{time}</span>}
-        <span data-pk="" style={{ width: 22, height: 22, borderRadius: 7, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 12, background: sw ? hexCss(sw) : `${x.section_color || "#64748B"}22` }}>{sw ? "" : x.section_emoji}</span>
-        <span style={{ flex: 1, minWidth: 0 }}>
-          <span style={{ display: "block", fontSize: 12.5, color: "var(--text)", fontWeight: x.seen ? 600 : 800,
-            ...(narrow ? { ...clamp(2), lineHeight: 1.2 } : { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }) }}><W text={noEmoji(x.title)}/></span>
-          {narrow && o.time && <span style={{ display: "block", fontSize: 10.5, color: "var(--muted)", fontVariantNumeric: "tabular-nums" }}>{time}</span>}
-          {detail && <span style={{ display: "block", fontSize: 11.5, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {String(x.message || "").split("\n")[0]}</span>}
-        </span>
-        {!x.seen && <span style={{ width: 7, height: 7, borderRadius: "50%", background: "#3b82f6", flexShrink: 0 }}/>}
-      </div>
-    );
-  };
   return (
     <Tile icon={<Rss size={15}/>} color="#0EA5E9" label="Le fil du jour" to="/notifications"
       badge={fresh ? <span style={{ fontSize: 11, fontWeight: 900, color: "#fff", background: "#3b82f6", borderRadius: 20, padding: "1px 7px" }}>{fresh}</span> : null}
@@ -2488,19 +2508,58 @@ function Feed({ f, o, sz }) {
         : <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 12.5, minWidth: 0 }}>
           {fresh > 0 && <span style={{ fontSize: 11, fontWeight: 900, color: "#fff", background: "#3b82f6", borderRadius: 20, padding: "1px 7px" }}>{fresh}</span>}
           <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{noEmoji(all[0].title)}</span></span>}
-      zoom={all.length ? <><Stats items={[["Aujourd'hui", all.length], ["Non lus", fresh, "#3b82f6"]]}/>
-        <div>{all.map((x, i) => row(x, i, true, false))}</div></> : null}>
+      zoom={<FeedZoom f={f} section={o.section || "all"}/>}>
       {({ W, H }) => {
-        if (!all.length) return <Empty>Rien de neuf.</Empty>;
-        const detail = o.detail && W >= 300 && H >= 100;
+        if (!all.length) return <Empty>Rien de neuf aujourd'hui.</Empty>;
         const narrow = W < 215;
-        const rowH = detail || narrow ? 52 : 33;
         const cap = o.count === "auto" || !o.count ? 99 : o.count;
-        if (o.scroll) return <Scroller gap={0}>{all.slice(0, cap).map((x, i) => row(x, i, detail, narrow))}</Scroller>;
-        return <div>{all.slice(0, Math.min(cap, fitRows(H + 1, rowH, 0))).map((x, i) => row(x, i, detail, narrow))}</div>;
+        // l'en-tete quand il y a la hauteur : combien aujourd'hui, combien de non lus
+        const hh = H >= 150 ? 32 : 0;
+        const minH = narrow ? 46 : 34;
+        let room = H - hh;
+        let n = Math.min(cap, all.length, Math.max(1, Math.floor((room + 4) / (minH + 4))));
+        // ce qui ne tient pas se compte en « +n plus tot » : sa ligne prend sa place
+        if (n < all.length) { room -= 22; n = Math.max(1, Math.min(n, Math.floor((room + 4) / (minH + 4)))); }
+        // peu de lignes pour la place : elles grandissent, et le detail s'ecrit dessous
+        const h = Math.max(minH, Math.min(narrow ? 60 : 56, Math.floor((room - 4 * (n - 1)) / n)));
+        const detail = o.detail !== false && !narrow && W >= 280 && h >= 46;
+        return <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6, minHeight: 0 }}>
+          {hh > 0 && <div style={{ display: "flex", alignItems: "baseline", gap: 6, whiteSpace: "nowrap", overflow: "hidden", height: 26, flexShrink: 0 }}>
+            <span data-pk="" style={{ fontSize: 22, fontWeight: 900, lineHeight: 1.05, ...gradText("#0284C7", "#22D3EE") }}>{all.length}</span>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>aujourd'hui</span>
+            {fresh > 0 && <span style={{ fontSize: 11.5, fontWeight: 800, color: "#3b82f6" }}>· {fresh}{narrow ? "" : ` non lu${fresh > 1 ? "s" : ""}`}</span>}</div>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, minHeight: 0 }}>
+            {all.slice(0, n).map(x => <FeedRow key={x.id} x={x} h={h} detail={detail} narrow={narrow} time={o.time} nav={nav}/>)}
+            {all.length > n && <span style={{ fontSize: 11, fontWeight: 800, color: "#0284c7", paddingLeft: 8, height: 14, lineHeight: "14px" }}>+{all.length - n} plus tôt</span>}
+          </div>
+        </div>;
       }}
     </Tile>
   );
+}
+// la fenetre du fil : les chiffres, une pastille par rubrique pour filtrer, puis la journee heure par heure
+function FeedZoom({ f, section }) {
+  const nav = useNavigate();
+  const [sec, setSec] = useState(section);
+  const items = f.items || [];
+  const want = FEED_SECTIONS[sec];
+  const list = items.filter(x => !want || want.includes(x.section));
+  const count = k => items.filter(x => !FEED_SECTIONS[k] || FEED_SECTIONS[k].includes(x.section)).length;
+  const chip = (on, c) => ({ height: 28, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12, border: "1px solid var(--border)",
+    background: on ? c : "var(--surface2)", color: on ? "#fff" : "var(--text2)", whiteSpace: "nowrap" });
+  // par tranche horaire : matin, apres-midi, soir, nuit
+  const slot = x => { const h = new Date(x.time).getHours(); return h < 6 ? "Cette nuit" : h < 12 ? "Ce matin" : h < 18 ? "Cet après-midi" : "Ce soir"; };
+  const groups = list.reduce((m, x) => { const k = slot(x); (m[k] = m[k] || []).push(x); return m; }, {});
+  if (!items.length) return <Muted>Rien de neuf aujourd'hui.</Muted>;
+  return <>
+    <Stats items={[["Aujourd'hui", items.length, "#0284C7"], ["Non lus", items.filter(x => !x.seen).length, "#3b82f6"],
+      ...FEED_CHIPS.slice(1).map(([k, l, c]) => count(k) ? [l, count(k), c] : null)].filter(Boolean)}/>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {FEED_CHIPS.filter(([k]) => k === "all" || count(k)).map(([k, l, c]) => <button key={k} type="button" style={chip(sec === k, c)} onClick={() => setSec(k)}>
+        {l} ({count(k)})</button>)}</div>
+    {!list.length ? <Muted>Rien dans cette rubrique aujourd'hui.</Muted> : Object.entries(groups).map(([k, xs]) => <div key={k} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+      <H2>{k}</H2>{xs.map(x => <FeedRow key={x.id} x={x} h={48} detail narrow={false} nav={nav} big/>)}</div>)}
+  </>;
 }
 // la galerie : des vignettes qui remplissent exactement la case
 // une mosaique qui remplit une case : la grille (colonnes x rangees) aux cases les plus grandes et les plus
@@ -2516,6 +2575,39 @@ function mosaic(n, W, H, gap = 6) {
     if (!best || score > best.score) best = { c, r: r0, big, score, cell: Math.min(cw, ch) };
   }
   return best || { c: Math.max(1, Math.floor((W + gap) / 40)), r: 1, big: false, cell: 34 };
+}
+// la fenetre de la galerie : les chiffres, un filtre (toutes, reussies, ratees), puis chaque impression en carte
+function GalleryZoom({ all, nav }) {
+  const [only, setOnly] = useState("all");
+  const ok = all.filter(okOf).length;
+  const list = all.filter(p => only === "all" || (only === "ok") === okOf(p));
+  const chip = (on, c) => ({ height: 28, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12, border: "1px solid var(--border)",
+    background: on ? c : "var(--surface2)", color: on ? "#fff" : "var(--text2)", whiteSpace: "nowrap" });
+  const kg = all.reduce((t, p) => t + (p.total_weight_g || 0), 0), sec = all.reduce((t, p) => t + (p.duration_seconds || 0), 0);
+  return <>
+    <Stats items={[["Impressions", all.length, "#14B8A6"], ["Réussies", ok, "#16a34a"], all.length - ok ? ["Ratées", all.length - ok, "#dc2626"] : null,
+      kg ? ["Poids", fmtG(kg), "#F59E0B"] : null, sec ? ["Machine", fmtH(sec), "#8B5CF6"] : null].filter(Boolean)}/>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      <button type="button" style={chip(only === "all", "#14B8A6")} onClick={() => setOnly("all")}>Toutes ({all.length})</button>
+      <button type="button" style={chip(only === "ok", "#16a34a")} onClick={() => setOnly("ok")}>Réussies ({ok})</button>
+      {all.length - ok > 0 && <button type="button" style={chip(only === "ko", "#dc2626")} onClick={() => setOnly("ko")}>Ratées ({all.length - ok})</button>}
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10 }}>
+      {list.map(p => { const good = okOf(p), name = p.file_name || p.translated_name || `Impression #${p.id}`;
+        return <div key={p.id} onClick={() => nav(`/prints?id=${p.id}`)} style={{ position: "relative", aspectRatio: "1", borderRadius: 16, overflow: "hidden", cursor: "pointer",
+          background: "linear-gradient(135deg, rgba(20,184,166,0.12), var(--surface2))", boxShadow: good ? "inset 0 0 0 1px var(--border)" : "inset 0 0 0 2px rgba(239,68,68,0.6)" }}>
+          <img src={printImg(p.id)} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
+            style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}/>
+          <span style={{ position: "absolute", top: 8, right: 8, fontSize: 10.5, fontWeight: 900, color: "#fff", padding: "1px 7px", borderRadius: 9,
+            background: good ? "#16a34a" : "#dc2626" }}>{good ? "réussie" : "ratée"}</span>
+          <span style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "22px 10px 8px", background: "linear-gradient(to top, rgba(0,0,0,0.72), transparent)",
+            display: "flex", flexDirection: "column", gap: 1 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 800, color: "#fff", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{name}</span>
+            <span style={{ fontSize: 10.5, fontWeight: 700, color: "rgba(255,255,255,0.8)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {[p.print_date && utc(p.print_date).toLocaleDateString("fr-FR", { day: "numeric", month: "short" }), p.duration_seconds && fmtDur(p.duration_seconds),
+                p.total_weight_g && fmtG(p.total_weight_g)].filter(Boolean).join(" · ")}</span></span>
+        </div>; })}</div>
+  </>;
 }
 function Gallery({ g, o, sz }) {
   const nav = useNavigate();
@@ -2534,12 +2626,7 @@ function Gallery({ g, o, sz }) {
   );
   return (
     <Tile icon={<Images size={15}/>} color="#14B8A6" label="Galerie" to="/prints?tab=gallery"
-      zoom={<div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 10 }}>
-        {all.map(p => <div key={p.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          <img src={printImg(p.id)} alt="" onClick={() => nav(`/prints?id=${p.id}`)} style={{ width: "100%", aspectRatio: "1", objectFit: "cover",
-            borderRadius: 12, background: "var(--surface2)", cursor: "pointer", outline: okOf(p) ? "none" : "2px solid rgba(239,68,68,0.6)" }}/>
-          <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {p.file_name || p.translated_name}</span></div>)}</div>}>
+      zoom={<GalleryZoom all={all} nav={nav}/>}>
       {({ W, H }) => {
         // une mosaique qui remplit toute la tuile : la grille (colonnes x rangees) dont les cases sont les plus
         // grandes et les plus carrees ; avec de la place, la derniere impression en grand (2 x 2)
@@ -2653,29 +2740,31 @@ function Podium({ p, a, o, sz }) {
       <span key={x.id || x.name}>{["🥇", "🥈", "🥉"][r]} {podName(x)} <b style={{ ...gradText(`color-mix(in srgb, ${POD[r]} 75%, #000000)`, POD[r]) }}>{fmtN(x.score)}</b></span>)}</span>
     : <span style={{ fontSize: 13 }}>🥇 {podName(people[0])} · {fmtN(people[0].score)}</span>;
   // une ligne : rang (medaille), avatar, nom et grade, score en degrade, barre, ecart avec celui de devant
-  const row = (x, r, h) => { const g = podGrade(x), ahead = r > 0 ? (people[r - 1].score || 0) - (x.score || 0) : null, c = POD[r] || "#A855F7";
+  // etroite : pas d'avatar (la medaille du rang suffit), le score passe sur la ligne de la barre : le nom a toute la largeur
+  const row = (x, r, h, narrow = false) => { const g = podGrade(x), ahead = r > 0 ? (people[r - 1].score || 0) - (x.score || 0) : null, c = POD[r] || "#A855F7";
+    const score = <span data-pk="" style={{ fontSize: narrow ? 12 : 13.5, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${c} 75%, #000000)`, c) }}>{fmtN(x.score)}</span>;
     return <div key={x.id || x.name} style={{ display: "flex", alignItems: "center", gap: 8, height: h, padding: "0 6px", borderRadius: 12, minWidth: 0,
       background: x.me ? "linear-gradient(90deg, rgba(168,85,247,0.14), transparent)" : "transparent" }}>
       <span data-pk="" style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
         fontSize: 11.5, fontWeight: 900, color: r < 3 ? "#fff" : "var(--muted)", background: r < 3 ? `linear-gradient(135deg, ${POD_HI[r]}, ${POD[r]})` : "var(--surface2)" }}>{r + 1}</span>
-      {h >= 34 && <PodAvatar x={x} size={Math.min(30, h - 8)}/>}
+      {h >= 34 && !narrow && <PodAvatar x={x} size={Math.min(30, h - 8)}/>}
       <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
           <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: x.me ? 900 : 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {podName(x)}{h >= 40 && g.name && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}> · {g.name}</span>}</span>
-          <span data-pk="" style={{ fontSize: 13.5, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${c} 75%, #000000)`, c) }}>{fmtN(x.score)}</span></div>
-        {o.bars && <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            {podName(x)}{h >= 40 && !narrow && g.name && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}> · {g.name}</span>}</span>
+          {!narrow && score}</div>
+        {(o.bars || narrow) && <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <div style={{ flex: 1, height: 5, borderRadius: 5, background: "var(--surface2)", overflow: "hidden" }}>
             <div data-pk="" style={{ height: "100%", width: `${Math.round(100 * (x.score || 0) / max)}%`, borderRadius: 5,
               background: x.me ? "linear-gradient(90deg, #A855F7, #EC4899)" : `linear-gradient(90deg, ${c}, ${r < 3 ? POD_HI[r] : "#C4B5FD"})` }}/></div>
-          {ahead != null && h >= 34 && <span style={{ fontSize: 9.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>−{fmtN(ahead)}</span>}</div>}
+          {narrow ? score : ahead != null && h >= 34 && <span style={{ fontSize: 9.5, fontWeight: 800, color: "var(--muted)", whiteSpace: "nowrap" }}>−{fmtN(ahead)}</span>}</div>}
       </div>
     </div>; };
   return (
     <Tile icon={<MedalIcon size={15}/>} color="#A855F7" label="Classement des copains" to="/stats?tab=achievements"
       mini={sz.h === 0.5} summary={top}
       zoom={<PodiumZoom people={people} a={a} meI={meI}/>}>
-      {({ H }) => {
+      {({ W, H }) => {
         // trop bas pour des marches (tuile d'une ligne) : les trois en rangee, avatar cercle de sa medaille, nom, score
         if (o.style === "podium" && H < 96) { const av = Math.max(20, Math.min(30, H - 6));
           return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "space-evenly", gap: 6, minWidth: 0 }}>
@@ -2692,7 +2781,7 @@ function Podium({ p, a, o, sz }) {
         const shown = people.slice(0, n);
         if (meI >= n && n > 1) shown[n - 1] = people[meI];
         return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4 }}>
-          {shown.map(x => row(x, people.indexOf(x), h))}</div>;
+          {shown.map(x => row(x, people.indexOf(x), h, W < 215))}</div>;
       }}
     </Tile>
   );
@@ -3725,7 +3814,7 @@ export const TILES = {
   feed: { label: "Le fil du jour", w: [2, 1], h: [2, 3, 1], render: (d, st, o, it) => <Feed f={d.feed} o={o} sz={sz(it)}/>,
     options: [C("count", "Lignes", "auto", [["auto", "selon la hauteur"], [4, "4 au plus"], [6, "6 au plus"], [10, "10 au plus"]]),
       C("section", "Montrer", "all", [["all", "tout"], ["prints", "impressions"], ["spools", "bobines et séchage"], ["mw", "MakerWorld"], ["friends", "copains"]]),
-      B("time", "Heure", true), B("detail", "Détail (quand la tuile est large)", true), SCROLL(true)] },
+      B("time", "Heure", true), B("detail", "Détail (quand la tuile est large)", true), SCROLL(false)] },
   gallery: { label: "Galerie", w: [2, 1], h: [1, 2], render: (d, st, o, it) => <Gallery g={d.prints} o={o} sz={sz(it)}/>,
     options: [C("count", "Vignettes au plus", 8, [[4, "4"], [8, "8"], [12, "12"], [16, "16"]]), B("okOnly", "Seulement les réussies", false),
       B("round", "Vignettes rondes", false)] },
