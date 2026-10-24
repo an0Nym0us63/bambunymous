@@ -560,6 +560,17 @@ async def mw_source_stop(_: str = Depends(require_mw)):
 
 @router.get("/source3mf/status")
 async def mw_source_status(_: str = Depends(require_mw)):
-    """Ou en est le rattrapage (lisible meme apres avoir quitte la page)."""
+    """Ou en est le rattrapage (lisible meme apres avoir quitte la page), et son quota par 24 h."""
     from ....services import mw_source as S
-    return {**S.status(), "summary": await S.summary()}
+    return {**S.status(), "summary": await S.summary(), "quota": {"cap": await S.budget(), "used": len(S._downloads())}}
+
+
+@router.post("/source3mf/budget")
+async def mw_source_budget(body: dict = Body({}), _: str = Depends(require_mw)):
+    """Le quota du rattrapage par 24 h (0 : sans limite) : de la marge pour lancer des impressions."""
+    from ....services import mw_source as S
+    try:
+        n = await S.set_budget(int(body.get("n", S.BUDGET_DEFAULT)))
+    except (TypeError, ValueError):
+        raise HTTPException(400, "Quota invalide")
+    return {"cap": n, "used": len(S._downloads())}

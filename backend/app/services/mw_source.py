@@ -82,6 +82,66 @@ def rate_limited(e) -> bool:
     return "HTTP 418" in m or "HTTP 429" in m or "robot" in m.lower()
 
 
+# MakerWorld limite aussi les telechargements par jour (HTTP 400 « You've reached your daily download limit »,
+# 24/10/2026, vers 55 fichiers) : rien a faire qu'attendre ; le rattrapage reprend seul 24 h plus tard
+DAILY_S = 24 * 3600
+
+
+# La limite de MakerWorld vaut pour tout le compte : epuisee par le rattrapage, elle empeche de lancer une
+# impression depuis MakerWorld jusqu'au lendemain. Le rattrapage a donc son propre quota (par 24 h glissantes),
+# reglable dans la carte ; les 3MF pris au lancement des impressions n'y sont pas soumis.
+BUDGET_KEY = "MW_SOURCE_DAILY_BUDGET"
+BUDGET_DEFAULT = 15
+
+
+def _log_path() -> Path:
+    return _dir() / "downloads.json"
+
+
+def _downloads() -> list:
+    """Heures des telechargements du rattrapage dans les dernieres 24 h."""
+    try:
+        v = json.loads(_log_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    now = time.time()
+    return sorted(t for t in v if isinstance(t, (int, float)) and now - t < DAILY_S)
+
+
+def _note_download() -> None:
+    v = _downloads() + [time.time()]
+    try:
+        _log_path().write_text(json.dumps(v), encoding="utf-8")
+    except OSError:
+        pass
+
+
+async def budget() -> int:
+    """Le quota par 24 h du rattrapage (0 : sans limite)."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting
+    async with AsyncSessionLocal() as db:
+        v = await get_setting(db, BUDGET_KEY, str(BUDGET_DEFAULT))
+    try:
+        return max(0, int(v))
+    except (TypeError, ValueError):
+        return BUDGET_DEFAULT
+
+
+async def set_budget(n: int) -> int:
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import set_setting
+    n = max(0, min(500, int(n)))
+    async with AsyncSessionLocal() as db:
+        await set_setting(db, BUDGET_KEY, str(n))
+    return n
+
+
+def daily_limited(e) -> bool:
+    m = str(e).lower()
+    return "daily download limit" in m or ("daily" in m and "limit" in m)
+
+
 async def resolve(design_id: str, profile_id: str, guess: bool = False) -> str | None:
     """Profil (ou instance : l'imprimante donne parfois l'une pour l'autre) -> instance a telecharger,
     d'apres la fiche du modele (en cache). guess : sans profil (ou s'il n'existe plus), le seul profil du
@@ -243,8 +303,9 @@ async def backfill() -> None:
     JOB.clear()
     JOB.update(running=True, started=time.time(), finished=None, total=len(pairs), done=0, ok=0, already=0,
                skipped=0, failed=0, current=None, errors=[], stopped=None, bytes=0, paused_until=None, guessed=0,
-               blocks=blocks, resumed=resumed, resume_at=None, captcha=False)
+               blocks=blocks, resumed=resumed, resume_at=None, captcha=False, daily=False, budget=False)
     _job_save()
+    cap = await budget()
     async def nap(sec) -> bool:
         """Attend sec secondes par petits bouts (« Arreter » repond tout de suite) ; False si arrete."""
         end = time.time() + sec
@@ -270,6 +331,14 @@ async def backfill() -> None:
                 if not iid:
                     JOB["skipped"] += 1
                 else:
+                    log = _downloads()
+                    if cap and not path_of(iid).is_file() and len(log) >= cap:
+                        # le quota de l'appli est pris : on garde le reste pour les impressions ; reprise quand la plus
+                        # ancienne recuperation a plus de 24 h (ce modele sera repris)
+                        JOB.update(daily=True, budget=True, resume_at=log[0] + DAILY_S + 30,
+                                   stopped=f"Quota de l'appli atteint ({cap} par 24 h)")
+                        _job_save()
+                        break
                     try:
                         was = path_of(iid).is_file()
                         p = await fetch(iid)
@@ -279,10 +348,18 @@ async def backfill() -> None:
                         else:
                             JOB["ok"] += 1
                             JOB["bytes"] += p.stat().st_size
+                            _note_download()
                             _job_save()
                             if not await nap(PAUSE_S + random.uniform(0, PAUSE_S)):
                                 JOB["stopped"] = "Arrêté"
                     except ExactError as e:
+                        if daily_limited(e):
+                            # la limite du jour : suspendu, reprise toute seule demain (ce modele sera repris)
+                            at = time.time() + DAILY_S
+                            JOB["blocks"] = (JOB.get("blocks", []) + [{"at": time.time(), "ok": JOB["ok"], "daily": True}])[-10:]
+                            JOB.update(daily=True, resume_at=at, stopped="Limite quotidienne de téléchargements MakerWorld atteinte")
+                            _job_save()
+                            break
                         if rate_limited(e):
                             # MakerWorld veut un captcha : on suspend (ce modele n'est pas compte, il sera repris)
                             JOB["blocks"] = (JOB.get("blocks", []) + [{"at": time.time(), "ok": JOB["ok"]}])[-10:]
@@ -304,6 +381,8 @@ async def backfill() -> None:
     finally:
         JOB.update(running=False, finished=time.time(), current=None)
         _job_save()
+    if JOB.get("daily") and JOB.get("resume_at"):
+        asyncio.get_running_loop().create_task(_resume_at(float(JOB["resume_at"])))
 
 
 def start_backfill() -> bool:
@@ -323,11 +402,17 @@ def stop_backfill() -> None:
 
 
 async def resume_after_restart() -> None:
-    """Au demarrage : un rattrapage qui tournait a l'arret reprend tout seul (apres une minute, ou a la fin
-    de la pause demandee par MakerWorld). Ce qui etait deja recupere compte en « deja la »."""
+    """Au demarrage : un rattrapage qui tournait a l'arret reprend tout seul apres une minute ; un rattrapage
+    suspendu par la limite du jour reprend a l'heure prevue. Ce qui etait deja recupere compte en « deja la »."""
     try:
         d = json.loads((_dir() / "backfill.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
+        return
+    if d.get("daily") and d.get("resume_at"):
+        JOB.clear()
+        JOB.update(d)
+        JOB.update(running=False, current=None, resumed=True)
+        await _resume_at(float(d["resume_at"]))
         return
     if not d.get("running"):
         return
@@ -340,6 +425,12 @@ async def resume_after_restart() -> None:
                stopped=None, finished=time.time())
     _job_save()
     logger.info(f"[MW-3MF] rattrapage interrompu par l'arret : reprise dans {int(at - time.time())} s")
+    await _resume_at(at)
+
+
+async def _resume_at(at: float) -> None:
+    """Attend l'heure prevue puis relance le rattrapage, sauf s'il a ete annule ou relance a la main."""
+    JOB["resumed"] = True
     while time.time() < at:
         if not JOB.get("resume_at") or JOB.get("running"):
             return                            # annulee, ou relancee a la main entre-temps

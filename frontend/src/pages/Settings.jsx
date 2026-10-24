@@ -1087,7 +1087,7 @@ function SourceBackfillSection() {
   React.useEffect(() => { load(); }, []);
   React.useEffect(() => {
     if (!st?.running && !st?.resume_at) return undefined;
-    const t = setInterval(load, 2000);
+    const t = setInterval(load, st?.running ? 2000 : 30000);   // une reprise prevue : toutes les 30 s suffisent
     return () => clearInterval(t);
   }, [st?.running, st?.resume_at]); // eslint-disable-line react-hooks/exhaustive-deps
   const start = () => client.post("/makerworld/source3mf/backfill").then(r => setSt(r.data)).catch(e => showAlert(e.response?.data?.detail || e.message));
@@ -1139,9 +1139,18 @@ function SourceBackfillSection() {
           {/* les blocages de MakerWorld : quand, et apres combien de fichiers recuperes (de quoi juger le rythme) */}
           <div style={{ fontSize:11.5, fontWeight:700, color: st.blocks?.length ? "#d97706" : "#16a34a" }}>
             {st.blocks?.length
-              ? `🛑 Bloqué ${st.blocks.length} fois par MakerWorld : ${st.blocks.map(b => `à ${hm(b.at)} (après ${b.ok} fichier${b.ok > 1 ? "s" : ""})`).join(", ")}`
+              ? `🛑 Bloqué ${st.blocks.length} fois par MakerWorld : ${st.blocks.map(b => `à ${hm(b.at)} (après ${b.ok} fichier${b.ok > 1 ? "s" : ""}${b.daily ? ", limite du jour" : ""})`).join(", ")}`
               : st.ok > 0 ? "✓ Aucun blocage de MakerWorld pendant ce passage" : null}</div>
-          {!run && st.resume_at && <div style={{ fontSize:12, fontWeight:700, color:"#6366F1" }}>
+          {!run && st.resume_at && st.daily && (
+            <div style={{ display:"flex", flexDirection:"column", gap:6, padding:"10px 12px", borderRadius:10, background:"rgba(99,102,241,.10)",
+              border:"1px solid rgba(99,102,241,.40)" }}>
+              <div style={{ fontSize:12.5, fontWeight:800, color:"#6366F1" }}>{st.budget ? `📅 Quota du jour pris (${st.quota?.cap} par 24 h)` : "📅 Limite du jour atteinte sur MakerWorld"}</div>
+              <div style={{ fontSize:12, color:"var(--text2)" }}>{st.budget
+                ? "Le reste de la limite MakerWorld est gardé pour lancer tes impressions. Le rattrapage reprend tout seul"
+                : "MakerWorld limite les téléchargements par jour. Le rattrapage reprend tout seul"}
+                {" "}{new Date(st.resume_at * 1000).toLocaleDateString("fr-FR", { weekday:"long" })} vers {hm(st.resume_at)} ; tu peux aussi relancer à la main plus tôt.</div>
+            </div>)}
+          {!run && st.resume_at && !st.daily && <div style={{ fontSize:12, fontWeight:700, color:"#6366F1" }}>
             ↻ Le serveur a redémarré pendant le rattrapage : il reprend tout seul vers {hm(st.resume_at)}.</div>}
           {!run && !st.resume_at && st.captcha && (
             <div style={{ display:"flex", flexDirection:"column", gap:8, padding:"10px 12px", borderRadius:10, background:"rgba(245,158,11,.12)",
@@ -1152,12 +1161,21 @@ function SourceBackfillSection() {
               <a href="https://makerworld.com/fr" target="_blank" rel="noopener noreferrer" style={{ alignSelf:"flex-start", padding:"6px 12px",
                 borderRadius:9, fontSize:12.5, fontWeight:800, color:"#fff", background:"#d97706", textDecoration:"none" }}>Ouvrir makerworld.com ↗</a>
             </div>)}
-          {!run && !st.resume_at && !st.captcha && st.stopped && <div style={{ fontSize:12, fontWeight:700, color:"#d97706" }}>{st.stopped}</div>}
+          {!run && !st.resume_at && !st.captcha && !st.daily && st.stopped && <div style={{ fontSize:12, fontWeight:700, color:"#d97706" }}>{st.stopped}</div>}
           {st.errors?.length > 0 && <details style={{ fontSize:11.5, color:"var(--muted)" }}>
             <summary style={{ cursor:"pointer", fontWeight:700 }}>Dernières erreurs</summary>
             {st.errors.map((e, i) => <div key={i}>• {txt(e)}</div>)}</details>}
         </div>
       )}
+      {/* le quota du rattrapage : la limite MakerWorld vaut pour tout le compte, il en faut pour imprimer */}
+      {st?.quota && <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", fontSize:12, color:"var(--muted)", marginBottom:10 }}>
+        <span>Au plus</span>
+        <select value={st.quota.cap} onChange={e => client.post("/makerworld/source3mf/budget", { n: +e.target.value }).then(load).catch(() => {})}
+          style={{ height:30, borderRadius:9, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontWeight:700, fontSize:12.5, padding:"0 6px" }}>
+          {[5, 10, 15, 20, 30, 0].map(n => <option key={n} value={n}>{n ? `${n} fichiers` : "sans limite"}</option>)}
+        </select>
+        <span>par 24 h, pour garder de quoi imprimer depuis MakerWorld · {st.quota.used} pris ces dernières 24 h</span>
+      </div>}
       {!run && st?.resume_at && <button onClick={stop} style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer",
         border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", marginRight:8 }}>Annuler la reprise</button>}
       {run
