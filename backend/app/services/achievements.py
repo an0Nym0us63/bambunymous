@@ -5638,6 +5638,27 @@ async def use_loupe(username: str, aid: str) -> dict:
     return {"ok": True, "hint": hint_of(BY_ID[aid]), "loupes": me["n"]}
 
 
+async def family_board(main: str, family_names: list) -> dict:
+    """Le classement de la famille, sur les seuls secrets a chercher (easter eggs, cachettes, Android, farces,
+    fetes, pages cachees) : le compte principal (ce que la maison a) et chaque compte de la famille (les siens)."""
+    by = await _eggs_by()
+    house = await eggs_found()
+    subs = [(i, e, n) for i, e, n, _ids in SECRET_SUBS if i in FAMILY_SUBS]
+    def row(name, found: dict, is_main: bool):
+        ids = [f"egg_{k}" for k in found if f"egg_{k}" in FAMILY_IDS]
+        per = {i: 0 for i, _e, _n in subs}
+        for aid in ids:
+            sb = SUB_OF.get(aid)
+            if sb in per:
+                per[sb] += 1
+        dates = [str(found[k]) for k in found if found[k] and f"egg_{k}" in FAMILY_IDS]
+        return {"username": name, "main": is_main, "count": len(ids), "subs": per, "last": max(dates) if dates else None}
+    people = [row(main, house, True)] + [row(u, by.get(u) or {}, False) for u in family_names if u != main]
+    people.sort(key=lambda x: (-x["count"], not x["main"], x["username"]))
+    return {"people": people, "total": len(FAMILY_IDS),
+            "subs": [{"id": i, "emoji": e, "name": n, "total": sum(1 for a in FAMILY_IDS if SUB_OF.get(a) == i)} for i, e, n in subs]}
+
+
 def family_finds_view(v: dict, by: dict, family_names: list) -> dict:
     """Chez le compte principal : ce que la famille a trouve et la maison pas encore, « a portee » comme un
     secret de copain (son initiale, et categorie, vignette et titre offerts)."""

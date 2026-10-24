@@ -270,6 +270,17 @@ async def achievements_egg(name: str, acc=Depends(require_own_account)):
     return r
 
 
+@router.get("/family-board")
+async def achievements_family_board(acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+    """Le classement de la famille (secrets a chercher seulement) : pour le compte principal et la famille."""
+    from ....services import achievements as A
+    me = await _me(acc[0], db)
+    fam = await A.family()
+    if not (me["main"] or me["family"]) or not me["house"] or not fam["secrets"]:
+        raise HTTPException(404, "Pas de famille")
+    return {**await A.family_board(me["house"], fam["secrets"]), "me": acc[0]}
+
+
 @router.post("/loupe/{aid}")
 async def achievements_loupe(aid: str, acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
     """Un compte de la famille revele l'indice d'un secret que la maison a deja (deux loupes par jour)."""

@@ -664,6 +664,7 @@ export function useTilesData(status = null) {
     load();
     put("mw", get("/makerworld/creator"));
     put("podium", get("/achievements/podium"));
+    put("family", get("/achievements/family-board"));
     loadRef.current = load;
     const iv = setInterval(load, 120000);
     const again = () => load();
@@ -3759,6 +3760,80 @@ function GoalZoom({ o, all }) {
   </>;
 }
 
+// le classement de la famille (24/10/2026) : sur les seuls secrets a chercher, le compte principal et chaque
+// compte de la famille ; une rangee chacun (rang, avatar, nom, nombre de secrets en degrade, barre)
+const FAM_C = "#EC4899";
+const FamAv = ({ name, size }) => <span style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center",
+  justifyContent: "center", fontSize: size * 0.44, fontWeight: 900, color: "#fff", background: avColor(name) }}>{(name || "?").slice(0, 1).toUpperCase()}</span>;
+function famRow(b, x, r, h, narrow, max) {
+  const c = POD[r] || FAM_C, me = x.username === b.me;
+  const count = <span data-pk="" style={{ fontSize: narrow ? 12.5 : 14, fontWeight: 900, whiteSpace: "nowrap", ...gradText("#DB2777", "#A855F7") }}>{x.count}</span>;
+  return <div key={x.username} data-tip={`${x.username}${x.main ? " (la maison)" : ""}\n${x.count} secret${x.count > 1 ? "s" : ""} sur ${b.total}`}
+    style={{ display: "flex", alignItems: "center", gap: 8, height: h, padding: "0 6px", borderRadius: 12, minWidth: 0,
+      background: me ? "linear-gradient(90deg, rgba(236,72,153,0.14), transparent)" : "transparent" }}>
+    <span data-pk="" style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+      fontSize: 11.5, fontWeight: 900, color: r < 3 ? "#fff" : "var(--muted)", background: r < 3 ? `linear-gradient(135deg, ${POD_HI[r]}, ${c})` : "var(--surface2)" }}>{r + 1}</span>
+    {h >= 34 && !narrow && <FamAv name={x.username} size={Math.min(30, h - 8)}/>}
+    <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 2 }}>
+      <div style={{ display: "flex", alignItems: "baseline", gap: 6, minWidth: 0 }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: me ? 900 : 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {x.username}{x.main && h >= 40 && !narrow && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}> · la maison</span>}</span>
+        {!narrow && count}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ flex: 1, height: 5, borderRadius: 5, background: "var(--surface2)", overflow: "hidden" }}>
+          <div data-pk="" style={{ height: "100%", width: `${Math.round(100 * x.count / max)}%`, borderRadius: 5,
+            background: me ? "linear-gradient(90deg, #EC4899, #A855F7)" : `linear-gradient(90deg, ${c}, ${r < 3 ? POD_HI[r] : "#F9A8D4"})` }}/></div>
+        {narrow && count}</div>
+    </div>
+  </div>;
+}
+function FamilyBoard({ b, o, sz }) {
+  if (!b) return null;                       // pas de famille (ou un compte hors de la famille)
+  const people = b.people || [];
+  if (people.length < 2) return null;
+  const max = Math.max(1, ...people.map(x => x.count));
+  return (
+    <Tile icon={<Trophy size={15}/>} color={FAM_C} label="Classement de la famille" to="/stats?tab=achievements"
+      mini={sz.h === 0.5} summary={<span style={{ fontSize: 13 }}>🥇 {people[0].username} · <b style={{ ...gradText("#DB2777", "#A855F7") }}>{people[0].count}</b></span>}
+      zoom={<FamilyBoardZoom b={b}/>}>
+      {({ W, H }) => {
+        const n = Math.min(people.length, fitRows(H, 30, 4) || 1), h = Math.max(26, Math.min(48, Math.floor((H - 4 * (n - 1)) / n)));
+        const meI = people.findIndex(x => x.username === b.me);
+        const shown = people.slice(0, n);
+        if (meI >= n && n > 1) shown[n - 1] = people[meI];
+        return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 4 }}>
+          {shown.map(x => famRow(b, x, people.indexOf(x), h, W < 215, max))}</div>;
+      }}
+    </Tile>
+  );
+}
+// la fenetre : les chiffres, le classement en grand, et section par section qui en a trouve combien
+function FamilyBoardZoom({ b }) {
+  const people = b.people || [];
+  const max = Math.max(1, ...people.map(x => x.count));
+  return <>
+    <Stats items={[["Secrets à chercher", b.total, FAM_C], ["En tête", people[0] ? `${people[0].username} · ${people[0].count}` : "—", "#D4A017"],
+      ["Membres", people.length, "#A855F7"]]}/>
+    <Muted>Seuls comptent les secrets qui se cherchent : easter eggs, cachettes, appli Android, farces, fêtes et pages cachées. Chacun les siens ;
+      ceux de la maison sont ceux du compte principal.</Muted>
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{people.map((x, r) => famRow(b, x, r, 48, false, max))}</div>
+    <H2>Section par section</H2>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 8 }}>
+      {(b.subs || []).map(sb => { const ranked = [...people].sort((x, y) => (y.subs?.[sb.id] || 0) - (x.subs?.[sb.id] || 0));
+        const cmax = Math.max(1, ...people.map(x => x.subs?.[sb.id] || 0));
+        return <div key={sb.id} className="card-sm" style={{ padding: "8px 10px", display: "flex", flexDirection: "column", gap: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, fontWeight: 900, fontSize: 13, color: "var(--text)" }}>{sb.emoji} {sb.name}
+            <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--muted)" }}>{sb.total}</span></div>
+          {ranked.map(x => <div key={x.username} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11.5 }}>
+            <span style={{ width: 64, flexShrink: 0, fontWeight: x.username === b.me ? 900 : 700, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.username}</span>
+            <div style={{ flex: 1, height: 6, borderRadius: 6, background: "var(--surface2)", overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${Math.round(100 * (x.subs?.[sb.id] || 0) / cmax)}%`, background: x.username === b.me ? FAM_C : avColor(x.username) }}/></div>
+            <span style={{ width: 28, textAlign: "right", fontWeight: 800, color: "var(--muted)" }}>{x.subs?.[sb.id] || 0}</span></div>)}
+        </div>; })}</div>
+  </>;
+}
+export { FamilyBoardZoom };
+
 // ── Le catalogue ─────────────────────────────────────────────────────────────
 // Chaque tuile : ses largeurs (1 = moitie, 2 = toute la colonne) et hauteurs
 // (rangees ; la premiere valeur est celle par defaut), ses options (une valeur
@@ -3825,6 +3900,7 @@ export const TILES = {
   shortcuts: { label: "Raccourcis", w: [2, 1], h: [1, 0.5], render: (d, st, o, it) => <Shortcuts o={o} sz={sz(it)}/>,
     options: [B("iconsOnly", "Icônes seules", false, { hint: "Sinon le nom s'affiche quand il tient." }),
       ...SHORTCUTS.map(([k, l], i) => B(`s_${k}`, l, i < 6, { group: "Raccourcis affichés" }))] },
+  family: { label: "Classement de la famille", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <FamilyBoard b={d.family} o={o} sz={sz(it)}/> },
   podium: { label: "Classement des copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Podium p={d.podium} a={d.ach} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "list", [["list", "liste"], ["podium", "podium"]]), B("bars", "Barres de score", true), SCROLL(false)] },
   alerts: { label: "Alertes en bref", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Alerts a={d.attention} o={o} sz={sz(it)}/>,
@@ -3868,6 +3944,7 @@ const WAIT = {
   feed: ["feed", "Ce qui s'est passé aujourd'hui, au fil des heures."],
   gallery: ["prints", "Les photos de tes dernières impressions."],
   podium: ["podium", "Ton classement face à tes copains."],
+  family: ["family", "Qui de la famille a trouvé le plus de secrets."],
   alerts: ["attention", "Ce qui mérite ton attention dans le stock et les fiches."],
   countdown: ["status", "Le temps qu'il reste à l'impression en cours."],
   spool: ["status", "La bobine qui imprime en ce moment."],

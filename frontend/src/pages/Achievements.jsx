@@ -11,6 +11,7 @@ import { egg, tapper, rulesOpened } from "../eggs";
 import { useTrackDetail } from "../utils/track";
 import SlotMachine from "../components/SlotMachine";
 import TicketCeremony from "../components/TicketCeremony";
+import { Zoom, FamilyBoardZoom } from "../components/HomeTiles";
 
 // Succes : medailles gagnees sur l'historique (impressions, filaments, objets,
 // MakerWorld, copains, secrets). Chaque succes a jusqu'a neuf paliers (bronze,
@@ -58,6 +59,9 @@ export default function Achievements({ embedded = false }) {
   // la surprise de chaque compte (chez un copain : les siens) ; absente d'un serveur plus ancien
   const [odds, setOdds] = useState(null);
   const [oddsOpen, setOddsOpen] = useState(false);
+  // le classement de la famille (compte principal et famille) : lu a l'ouverture
+  const [famBoard, setFamBoard] = useState(null);
+  const openFamBoard = () => client.get("/achievements/family-board").then(r => setFamBoard(r.data)).catch(() => {});
   const load = () => {
     client.get("/achievements/surprise/odds").then(r => setOdds(r.data?.accounts?.length ? r.data : null)).catch(() => setOdds(null));
     return client.get("/achievements").then(r => setData(r.data)).catch(e => setErr(e.response?.data?.detail || e.message));
@@ -319,6 +323,18 @@ export default function Achievements({ embedded = false }) {
                 )}
                 {/* la prochaine surprise du compte principal ; un clic : tous les comptes. De quoi voir si,
                     chez quelqu'un, elle ne tombe jamais */}
+                {c.id === "secret" && !atFriend && (data.me?.main || data.family) && (
+                  <button type="button" onClick={openFamBoard} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px", borderRadius:12,
+                    fontSize:12, lineHeight:1.4, color:"var(--text2)", textAlign:"left", cursor:"pointer", width:"100%",
+                    background:"linear-gradient(135deg, rgba(236,72,153,0.14), rgba(168,85,247,0.06))", border:"1px solid rgba(236,72,153,0.3)" }}>
+                    <span style={{ fontSize:22 }}>🏠</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:800, color:"var(--text)" }}>Classement de la famille</div>
+                      <div>Qui a trouvé le plus de secrets à chercher : easter eggs, cachettes, farces, fêtes, pages cachées, Android.</div>
+                    </div>
+                    <span style={{ fontSize:11.5, fontWeight:800, color:"#EC4899", whiteSpace:"nowrap" }}>Voir ›</span>
+                  </button>
+                )}
                 {c.id === "secret" && odds && (() => {
                   const m = odds.accounts.find(x => x.main) || odds.accounts[0];
                   return (
@@ -421,6 +437,8 @@ export default function Achievements({ embedded = false }) {
 
       {rules && createPortal(<Rules data={data} onClose={() => setRules(false)}/>, document.body)}
       {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
+      {famBoard && <Zoom icon={<span style={{ fontSize:20 }}>🏠</span>} color="#EC4899" label="Classement de la famille" onClose={() => setFamBoard(null)}>
+        <FamilyBoardZoom b={famBoard}/></Zoom>}
       {oddsOpen && odds && <OddsSheet odds={odds} admin={!atFriend && !!data.me?.main} uniq={data.tiers.find(t => t.id === "unique")} onClose={() => setOddsOpen(false)}/>}
       {ceremony && <TicketCeremony {...ceremony} onClose={() => setCeremony(null)}/>}
       {usage && createPortal(<UsageSheet data={data} kind={usage} onKind={setUsage} onOpen={id => setDetail(id)}
