@@ -31,10 +31,12 @@ function noteFound(name) {
 /** Ce secret est-il deja trouve ? (un objet cache s'efface alors) */
 export const useEggFound = name => useEggsFound(st => st.found.has(name));
 
-export async function egg(name) {
+// force : envoyer meme si cet appareil le croit deja trouve (une farce du jour J : le serveur, qui fait
+// foi, repond « deja a toi » sans rien rejouer ; une memoire locale perimee ne doit pas la perdre)
+export async function egg(name, force = false) {
   try { if (currentFriend()) return; } catch { /* pas de copain */ }
   const d = done();
-  if (d.has(name)) return;
+  if (d.has(name) && !force) return;
   try {
     const { data } = await client.post(`/achievements/egg/${name}`);
     if (data?.locked) {

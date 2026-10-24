@@ -271,6 +271,13 @@ async def _egg(name: str, acc):
             # fete hors de son jour, farce venue par son adresse : jouee, pas gagnee
             e = A.EGGS[name]
             return {"new": False, "locked": why, "id": f"egg_{name}", "emoji": e[0], "name": e[1]}
+    if f"egg_{name}" in A.FAMILY_IDS and acc[0] in (await A.family())["secrets"] and not await _main():
+        # un compte de la famille : le secret est a lui, pas a la maison (meme s'il « compte » pour le reste ;
+        # sinon sa trouvaille passait a la maison et le compte principal ne la gagnait plus, 25/10/2026)
+        e = A.EGGS[name]
+        await A.egg_lock(acc[0], name, consume=True)
+        await A.egg_seen(acc[0], name)
+        return {"new": True, "family": True, "id": f"egg_{name}", "emoji": e[0], "name": e[1], "lore": e[4]}
     if acc[0] not in await A.counted_users():      # compte qui ne fait pas avancer les succes
         # il a trouve, on le lui dit, mais rien n'est enregistre
         e = A.EGGS.get(name)

@@ -199,7 +199,7 @@ export function PrankHost() {
       try { localStorage.setItem(MAISON.seenKey, "1"); } catch { /* rien */ }
       client.post(`/achievements/prank/${MAISON.slug}/vu`).catch(() => {});
     }
-    egg(slug === MAISON.slug ? MAISON.egg : "p_" + slug.replace(/-/g, "_"));
+    egg(slug === MAISON.slug ? MAISON.egg : "p_" + slug.replace(/-/g, "_"), true);
     setTimeout(() => { if (usePrank.getState().slug === slug) stop(); }, 1500);
   };
   return <Suspense fallback={null}><Effect key={slug} done={done}/></Suspense>;

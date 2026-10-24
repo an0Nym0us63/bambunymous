@@ -4896,12 +4896,15 @@ async def counted_users() -> list:
             chosen = json.loads(raw) if raw else None
         except ValueError:
             chosen = None
-        if isinstance(chosen, list):
-            return [str(x) for x in chosen]
-        # par defaut : le compte principal seul (avant le 24/10/2026 : tous les administrateurs)
         from ..api.v1.routes.users import _root_admin_id
         mid = await _root_admin_id(db)
         main = await db.get(User, mid) if mid else None
+        if isinstance(chosen, list):
+            # le compte principal compte toujours : c'est la maison (un reglage enregistre sans lui
+            # le faisait passer pour « ne compte pas », 25/10/2026)
+            out = [str(x) for x in chosen]
+            return out + [main.username] if main is not None and main.username not in out else out
+        # par defaut : le compte principal seul (avant le 24/10/2026 : tous les administrateurs)
         if main is not None:
             return [main.username]
         rows = (await db.execute(select(User.username, User.role).where(User.active.is_(True)))).all()
@@ -5084,8 +5087,25 @@ async def first_print_day():
     return day
 
 
+async def fete_acquired(username: str, slug: str) -> bool:
+    """Ce compte a-t-il vraiment le secret de cette fete ? Le compte principal : la maison l'a ;
+    un autre compte : il est note a son nom (sa trouvaille, ou « deja a la maison » vu par lui)."""
+    from ..db.session import AsyncSessionLocal
+    from ..models.user import User
+    from ..api.v1.routes.users import _root_admin_id
+    egg = "p_" + slug.replace("-", "_")
+    async with AsyncSessionLocal() as db:
+        mid = await _root_admin_id(db)
+        main = await db.get(User, mid) if mid else None
+    if main is not None and main.username == username:
+        return egg in await eggs_found()
+    return egg in ((await _eggs_by()).get(username) or {})
+
+
 async def fete_pending(username: str, today=None) -> str | None:
-    """La fete du jour pas encore montree a ce compte aujourd'hui (ou None)."""
+    """La fete du jour pas encore montree a ce compte aujourd'hui (ou None). Une fete n'a qu'un jour :
+    montree mais pas acquise (un bug, le reseau, un compte mal compte), elle se rejoue a l'ouverture
+    suivante tant que c'est le jour (25/10/2026)."""
     from ..db.session import AsyncSessionLocal
     today = today or _today_paris()
     todo = fetes_of(today, await first_print_day())
@@ -5093,8 +5113,11 @@ async def fete_pending(username: str, today=None) -> str | None:
         return None
     async with AsyncSessionLocal() as db:
         seen = (await _fetes_seen(db)).get(username) or {}
-    done = (seen.get("shown") or []) if seen.get("date") == today.isoformat() else []
-    return next((s for s in todo if s not in done), None)
+    shown = (seen.get("shown") or []) if seen.get("date") == today.isoformat() else []
+    for s_ in todo:
+        if s_ not in shown or not await fete_acquired(username, s_):
+            return s_
+    return None
 
 
 async def fete_extra(slug: str, today=None) -> dict:
