@@ -306,7 +306,15 @@ export default function Achievements({ embedded = false }) {
         const mineRecent = mineAll.slice(0, 12);
         return <>
           {strip("Mes derniers secrets", mineRecent, mineAll)}
-          {strip(mineRecent.length ? `Derniers succès de la maison` : "Derniers succès", data.recent, data.recent_all || data.recent)}
+          {(() => {
+            // succes obtenus (premier cran), puis paliers montes : deux rangees, chacune son « voir tout »
+            const all = data.recent_all || data.recent || [];
+            const firsts = all.filter(r => r.tier === 0), ups = all.filter(r => r.tier > 0);
+            return <>
+              {strip(mineRecent.length ? `Derniers succès de la maison` : "Derniers succès", firsts.slice(0, 8), firsts)}
+              {strip(mineRecent.length ? `Derniers paliers de la maison` : "Derniers paliers", ups.slice(0, 8), ups)}
+            </>;
+          })()}
         </>;
       })()}
 

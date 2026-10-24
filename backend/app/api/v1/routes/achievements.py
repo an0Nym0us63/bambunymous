@@ -140,13 +140,22 @@ def _dev(dev: str) -> str:
 
 
 @router.get("/news")
-async def achievements_news(dev: str = "", acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+async def achievements_news(dev: str = "", ack: int = 0, acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
     """Les paliers debloques depuis mon dernier passage sur cet appareil : a annoncer a l'ecran.
     Ce sont les succes du proprietaire : seulement pour le compte principal."""
     from ....services import achievements as A
     if not (await _me(acc[0], db))["main"]:
         return {"news": []}
-    return {"news": await A.tier_news(acc[0], _dev(dev))}
+    return {"news": await A.tier_news(acc[0], _dev(dev), acks=bool(ack))}
+
+
+@router.post("/news/ack")
+async def achievements_news_ack(body: dict = Body(...), acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+    """Les paliers que cet appareil vient d'afficher : ils ne reviennent plus."""
+    from ....services import achievements as A
+    if (await _me(acc[0], db))["main"]:
+        await A.tier_news_ack(acc[0], _dev(str(body.get("dev") or "")), body.get("keys") or [])
+    return {"ok": True}
 
 
 @router.get("/surprise/odds")

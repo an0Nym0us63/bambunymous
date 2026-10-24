@@ -168,8 +168,9 @@ function queued(show) {
   cheers.push(show);
   if (!cheering) nextCheer();
 }
+// onShown(vu) : appele quand la carte s'affiche, vu = l'ecran etait devant quelqu'un
 export function cheer(c) {
-  queued(done => celebrate({ emoji: c.emoji, name: c.name, lore: c.text }, "", false, [c.head, c.color], done));
+  queued(done => { celebrate({ emoji: c.emoji, name: c.name, lore: c.text }, "", false, [c.head, c.color], done); c.onShown?.(!document.hidden); });
 }
 
 function ensureStyle() {

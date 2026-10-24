@@ -5335,14 +5335,18 @@ async def card_fx(username: str, dev: str = "") -> list:
 _NEWS_TICK = {"at": -1e9}
 
 
-async def tier_news(username: str, dev: str = "") -> list:
+async def tier_news(username: str, dev: str = "", acks: bool = False) -> list:
     """Les paliers debloques depuis le dernier passage de ce compte, pour les annoncer a
     l'ecran pendant qu'on utilise l'appli. Compare l'ensemble des paliers debloques a ce
     que le compte a deja vu (pas des dates : un palier peut etre date d'avant son calcul).
     Le premier appel ne fait que noter l'existant. Ni les easter eggs (deja annonces sur
     l'appareil qui les trouve), ni les cartes (leur propre fete a l'ouverture).
     Quelqu'un est devant l'appli : un passage en fond, au plus toutes les 3 min (la boucle n'en
-    fait qu'un par quart d'heure) ; ce qu'il debloque s'annonce a la demande suivante."""
+    fait qu'un par quart d'heure) ; ce qu'il debloque s'annonce a la demande suivante.
+    Un palier n'est « vu » que quand l'appareil l'a AFFICHE (tier_news_ack, 25/10/2026) : avant,
+    le donner suffisait, et ce qui attendait son tour dans la file de l'ecran (ou arrivait au moment
+    ou le telephone passait en veille) etait perdu. Ce qui n'est jamais annonce (easter eggs,
+    cartes) est marque vu tout de suite."""
     import time as _time
     if _time.monotonic() - _NEWS_TICK["at"] > 180:
         _NEWS_TICK["at"] = _time.monotonic()
@@ -5365,21 +5369,55 @@ async def tier_news(username: str, dev: str = "") -> list:
         # a vu en dernier (sur n'importe quel appareil), pour ne pas tout rejouer
         key = f"{username}|{dev}" if dev else username
         mine = seen.get(key, seen.get(username))
-        seen[key] = seen[username] = sorted(now)
-        await set_setting(db, KEY + "_NEWS", json.dumps(seen))
-    if mine is None:
-        return []
-    out = []
-    for k in sorted(set(now) - set(mine), key=lambda k: str(now[k])):
-        aid, i = k.rsplit(":", 1)
-        a = BY_ID.get(aid)
-        if not a or aid.startswith("egg_") or a.get("card_tier") or not str(i).isdigit() or int(i) >= len(a["tiers"]):
-            continue
-        t = tiers_of(a)[int(i)]
-        out.append({"id": aid, "name": a["name"], "emoji": a["emoji"], "secret": bool(a.get("hidden")),
-                    "tier": {x: t[x] for x in ("id", "label", "emoji", "color") if x in t},
-                    "desc": describe(a, a["tiers"][int(i)]), "unique": len(a["tiers"]) == 1})
+        if mine is None:
+            seen[key] = seen[username] = sorted(now)
+            await set_setting(db, KEY + "_NEWS", json.dumps(seen))
+            return []
+        if key not in seen:
+            # appareil nouveau : sa propre liste, partie de ce que le compte avait vu ; ensuite
+            # ce qu'un autre appareil acquitte ne la touche plus
+            seen[key] = list(mine)
+            await set_setting(db, KEY + "_NEWS", json.dumps(seen))
+        out, skip = [], []
+        for k in sorted(set(now) - set(mine), key=lambda k: str(now[k])):
+            aid, i = k.rsplit(":", 1)
+            a = BY_ID.get(aid)
+            if not a or aid.startswith("egg_") or a.get("card_tier") or not str(i).isdigit() or int(i) >= len(a["tiers"]):
+                skip.append(k)
+                continue
+            t = tiers_of(a)[int(i)]
+            out.append({"key": k, "id": aid, "name": a["name"], "emoji": a["emoji"], "secret": bool(a.get("hidden")),
+                        "tier": {x: t[x] for x in ("id", "label", "emoji", "color") if x in t},
+                        "desc": describe(a, a["tiers"][int(i)]), "unique": len(a["tiers"]) == 1})
+        # une page d'avant l'acquittement (encore ouverte, pas rechargee) : vu des qu'on le donne,
+        # sinon elle le reverrait a chaque minute
+        done = skip + ([x["key"] for x in out] if not acks else [])
+        if done:
+            seen[key] = sorted(set(mine) | set(done))
+            if not acks:
+                seen[username] = seen[key]
+            await set_setting(db, KEY + "_NEWS", json.dumps(seen))
     return out[:12]
+
+
+async def tier_news_ack(username: str, dev: str, keys: list) -> None:
+    """Ces paliers ont ete affiches sur cet appareil : ils ne s'y annoncent plus (ni sur un
+    appareil qui arriverait ensuite, qui part de ce que le compte a vu en dernier)."""
+    from ..db.session import AsyncSessionLocal
+    from .settings_service import get_setting, set_setting
+    keys = [str(k) for k in (keys or []) if isinstance(k, str) and ":" in k][:200]
+    if not keys:
+        return
+    async with AsyncSessionLocal() as db:
+        try:
+            seen = json.loads(await get_setting(db, KEY + "_NEWS", "") or "{}")
+        except ValueError:
+            seen = {}
+        seen = seen if isinstance(seen, dict) else {}
+        key = f"{username}|{dev}" if dev else username
+        for k in {key, username}:
+            seen[k] = sorted(set(seen.get(k) or []) | set(keys))
+        await set_setting(db, KEY + "_NEWS", json.dumps(seen))
 
 
 async def card_fx_seen(username: str, dev: str = "") -> None:
