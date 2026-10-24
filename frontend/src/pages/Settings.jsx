@@ -1128,10 +1128,7 @@ function SourceBackfillSection() {
           <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, fontWeight:800, color:"var(--text2)" }}>
             {run ? "⏳ En cours" : `Dernier passage${st.finished ? ` · ${hm(st.finished)}` : ""}`}
             <span style={{ marginLeft:"auto", color:"var(--muted)" }}>{st.done} / {st.total}</span></div>
-          {run && st.paused_until && <div style={{ fontSize:12, fontWeight:700, color:"#d97706" }}>
-            ☕ MakerWorld demande une pause : reprise vers {hm(st.paused_until)}, toute seule. Pour aller plus vite, résous le
-            captcha une fois sur makerworld.com depuis le même réseau.</div>}
-          {run && !st.paused_until && st.current && <div style={{ fontSize:12, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{txt(st.current)}</div>}
+          {run && st.current && <div style={{ fontSize:12, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{txt(st.current)}</div>}
           <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
             {chip(st.ok, `récupéré${st.ok > 1 ? "s" : ""} (${mo(st.bytes)})`, "#16a34a")}
             {st.already > 0 && chip(st.already, "déjà là", "#64748B")}
@@ -1146,7 +1143,16 @@ function SourceBackfillSection() {
               : st.ok > 0 ? "✓ Aucun blocage de MakerWorld pendant ce passage" : null}</div>
           {!run && st.resume_at && <div style={{ fontSize:12, fontWeight:700, color:"#6366F1" }}>
             ↻ Le serveur a redémarré pendant le rattrapage : il reprend tout seul vers {hm(st.resume_at)}.</div>}
-          {!run && !st.resume_at && st.stopped && <div style={{ fontSize:12, fontWeight:700, color:"#d97706" }}>{st.stopped}</div>}
+          {!run && !st.resume_at && st.captcha && (
+            <div style={{ display:"flex", flexDirection:"column", gap:8, padding:"10px 12px", borderRadius:10, background:"rgba(245,158,11,.12)",
+              border:"1px solid rgba(245,158,11,.45)" }}>
+              <div style={{ fontSize:12.5, fontWeight:800, color:"#d97706" }}>🤖 MakerWorld demande de vérifier que tu n'es pas un robot</div>
+              <div style={{ fontSize:12, color:"var(--text2)" }}>Ouvre makerworld.com (même réseau, même compte), fais le captcha, puis reviens appuyer sur « Reprendre » :
+                il repart d'où il en était.</div>
+              <a href="https://makerworld.com/fr" target="_blank" rel="noopener noreferrer" style={{ alignSelf:"flex-start", padding:"6px 12px",
+                borderRadius:9, fontSize:12.5, fontWeight:800, color:"#fff", background:"#d97706", textDecoration:"none" }}>Ouvrir makerworld.com ↗</a>
+            </div>)}
+          {!run && !st.resume_at && !st.captcha && st.stopped && <div style={{ fontSize:12, fontWeight:700, color:"#d97706" }}>{st.stopped}</div>}
           {st.errors?.length > 0 && <details style={{ fontSize:11.5, color:"var(--muted)" }}>
             <summary style={{ cursor:"pointer", fontWeight:700 }}>Dernières erreurs</summary>
             {st.errors.map((e, i) => <div key={i}>• {txt(e)}</div>)}</details>}

@@ -23,12 +23,10 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-PAUSE_S = 45                     # entre deux telechargements du rattrapage (plus un hasard de 0 a 45 s)
-# MakerWorld finit par demander « es-tu un robot ? » (HTTP 418) quand on enchaine : le rattrapage se met
-# alors en pause, de plus en plus longue, et reprend seul le meme modele (24/10/2026, bloque vers 50 fichiers
-# a 8-14 s d'ecart). Le blocage semble tenir a l'adresse ou au compte (captcha aussi dans le navigateur) :
-# des pauses courtes ne servaient a rien, d'ou un rythme lent et des pauses longues.
-BACKOFF_S = (1800, 7200, 21600)
+PAUSE_S = 3                      # entre deux telechargements du rattrapage (plus un hasard de 0 a 3 s)
+# MakerWorld finit par demander « es-tu un robot ? » (HTTP 418) quand on enchaine. Le blocage tient au
+# reseau ou au compte (captcha aussi dans le navigateur) et les pauses ne le levaient pas : le rattrapage se
+# suspend tout de suite, dit d'aller faire le captcha sur le site, et « Reprendre » repart d'ou il en etait.
 _LOCK = threading.Lock()
 _BUSY: set = set()               # instances en cours de telechargement
 JOB: dict = {}                   # le rattrapage en cours (aussi sur disque : backfill.json)
@@ -245,7 +243,7 @@ async def backfill() -> None:
     JOB.clear()
     JOB.update(running=True, started=time.time(), finished=None, total=len(pairs), done=0, ok=0, already=0,
                skipped=0, failed=0, current=None, errors=[], stopped=None, bytes=0, paused_until=None, guessed=0,
-               blocks=blocks, resumed=resumed, resume_at=None)
+               blocks=blocks, resumed=resumed, resume_at=None, captcha=False)
     _job_save()
     async def nap(sec) -> bool:
         """Attend sec secondes par petits bouts (« Arreter » repond tout de suite) ; False si arrete."""
@@ -272,43 +270,30 @@ async def backfill() -> None:
                 if not iid:
                     JOB["skipped"] += 1
                 else:
-                    tries = 0
-                    while True:
-                        try:
-                            was = path_of(iid).is_file()
-                            p = await fetch(iid)
-                            _index_put(key, iid)
-                            if was:
-                                JOB["already"] += 1
-                            else:
-                                JOB["ok"] += 1
-                                JOB["bytes"] += p.stat().st_size
-                                _job_save()
-                                if not await nap(PAUSE_S + random.uniform(0, PAUSE_S)):
-                                    JOB["stopped"] = "Arrêté"
+                    try:
+                        was = path_of(iid).is_file()
+                        p = await fetch(iid)
+                        _index_put(key, iid)
+                        if was:
+                            JOB["already"] += 1
+                        else:
+                            JOB["ok"] += 1
+                            JOB["bytes"] += p.stat().st_size
+                            _job_save()
+                            if not await nap(PAUSE_S + random.uniform(0, PAUSE_S)):
+                                JOB["stopped"] = "Arrêté"
+                    except ExactError as e:
+                        if rate_limited(e):
+                            # MakerWorld veut un captcha : on suspend (ce modele n'est pas compte, il sera repris)
+                            JOB["blocks"] = (JOB.get("blocks", []) + [{"at": time.time(), "ok": JOB["ok"]}])[-10:]
+                            JOB.update(captcha=True, stopped="MakerWorld demande de vérifier que tu n'es pas un robot. Fais le captcha "
+                                                              "sur makerworld.com (même réseau, même compte), puis « Reprendre ».")
+                            _job_save()
                             break
-                        except ExactError as e:
-                            if rate_limited(e) and tries < len(BACKOFF_S):
-                                # MakerWorld veut souffler : une pause, puis le meme modele ; on note quand (et apres
-                                # combien de fichiers), de quoi regler le rythme
-                                JOB["blocks"] = (JOB.get("blocks", []) + [{"at": time.time(), "ok": JOB["ok"]}])[-10:]
-                                JOB["paused_until"] = time.time() + BACKOFF_S[tries]
-                                _job_save()
-                                ok = await nap(BACKOFF_S[tries])
-                                JOB["paused_until"] = None
-                                tries += 1
-                                if not ok:
-                                    JOB["stopped"] = "Arrêté"
-                                    break
-                                continue
-                            JOB["failed"] += 1
-                            JOB["errors"] = (JOB["errors"] + [f"{name or did} : {e}"])[-5:]
-                            if rate_limited(e):
-                                JOB["stopped"] = ("MakerWorld bloque encore après plusieurs heures de pause. Résous le captcha une fois sur "
-                                                  "makerworld.com (même réseau, même compte), puis relance.")
-                            elif "Jeton" in str(e) or "non connecté" in str(e):
-                                JOB["stopped"] = str(e)
-                            break
+                        JOB["failed"] += 1
+                        JOB["errors"] = (JOB["errors"] + [f"{name or did} : {e}"])[-5:]
+                        if "Jeton" in str(e) or "non connecté" in str(e):
+                            JOB["stopped"] = str(e)
             JOB["done"] += 1
             _job_save()
             if JOB.get("stopped"):
@@ -346,7 +331,9 @@ async def resume_after_restart() -> None:
         return
     if not d.get("running"):
         return
-    at = max(time.time() + 60, float(d.get("paused_until") or 0))
+    if d.get("captcha"):
+        return                                # suspendu pour un captcha : c'est a toi de reprendre
+    at = time.time() + 60
     JOB.clear()
     JOB.update(d)
     JOB.update(running=False, current=None, paused_until=None, resume_at=at, resumed=True,
