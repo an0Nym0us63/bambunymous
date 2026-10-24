@@ -486,6 +486,12 @@ function Tile({ it, onOpen, others, shared, rivals }) {
       border:`1px ${near ? "dashed" : "solid"} ${it.scoop ? "#EC4899" : got ? top.color + "55" : near ? "#F59E0B" : "var(--border)"}` }}>
       <span style={{ borderRadius:"50%", padding:2, boxShadow: near ? "0 0 0 2px #F59E0B, 0 0 12px rgba(245,158,11,0.55)" : "none" }}>
         <Medal tier={top} emoji={it.emoji} size={46} locked={!got}/></span>
+      {it.family_all?.length > 0 && (
+        <span data-tip={`${it.family_all.filter(x => x.has).map(x => x.name).join(", ") || "Personne d'autre"} ${it.family_all.filter(x => x.has).length > 1 ? "l'ont" : "l'a"}`}
+          style={{ display:"flex", justifyContent:"center", marginTop:-1 }}>
+          {it.family_all.map((x, i) => <Avatar key={x.name} name={x.name} size={14}
+            style={{ marginLeft: i ? -3 : 0, fontSize:8, background: x.has ? "#EC4899" : "#64748B", opacity: x.has ? 1 : 0.45 }}/>)}</span>
+      )}
       {/* compte de la famille : trouve avant la maison */}
       {it.scoop && (
         <span style={{ position:"absolute", top:-9, left:"50%", transform:"translateX(-50%)", maxWidth:"calc(100% + 6px)", overflow:"hidden", textOverflow:"ellipsis",
@@ -1727,6 +1733,7 @@ function Card({ it, focus, sheet = false, others, shared, keys, onSpend, keyErr,
       })()}
       {sheet && keyErr && !unique && <p style={{ margin:0, fontSize:12, color:"#ef4444" }}>{keyErr}</p>}
       {rivals?.length > 0 && (got || !it.secret) && (unique ? got && <PalsUnique rivals={rivals}/> : <Versus it={it} rivals={rivals}/>)}
+      {it.family_all?.length > 0 && <FamilyRoll list={it.family_all}/>}
       {open && !unique && (got || !it.secret) && (
         <div style={{ display:"flex", flexDirection:"column", gap:4, borderTop:"1px solid var(--border)", paddingTop:8 }}>
           {it.tiers.map(t => (
@@ -1953,6 +1960,22 @@ function Versus({ it, rivals }) {
           );
         })}
       </div>
+    </div>
+  );
+}
+
+// Un secret de la famille : toute la famille, qui l'a (en couleur) et qui ne l'a pas encore (en gris)
+function FamilyRoll({ list }) {
+  const yes = list.filter(x => x.has), no = list.filter(x => !x.has);
+  const who = x => <span key={x.name} style={{ display:"inline-flex", alignItems:"center", gap:4, opacity: x.has ? 1 : 0.6 }}>
+    <Avatar name={x.name} style={x.has ? { background:"#EC4899" } : { background:"#64748B" }}/>{x.name}{x.main ? " 🏠" : ""}</span>;
+  return (
+    <div onClick={e => e.stopPropagation()} style={{ display:"flex", flexDirection:"column", gap:5, fontSize:12.5, borderTop:"1px solid var(--border)", paddingTop:8, cursor:"default" }}>
+      <span style={{ fontWeight:800, color:"var(--text2)" }}>🏠 La famille</span>
+      {yes.length > 0 && <span style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", color:"var(--text)", fontWeight:700 }}>
+        <span style={{ color:"#EC4899" }}>✓ L'{yes.length > 1 ? "ont" : "a"} :</span>{yes.map(who)}</span>}
+      {no.length > 0 && <span style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", color:"var(--muted)", fontWeight:700 }}>
+        <span>Pas encore :</span>{no.map(who)}</span>}
     </div>
   );
 }

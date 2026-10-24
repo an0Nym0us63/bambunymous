@@ -5686,6 +5686,23 @@ def family_finds_view(v: dict, by: dict, family_names: list) -> dict:
     return {**v, "items": items}
 
 
+def family_roster(v: dict, by: dict, names: list, house: str | None = None, house_ids=None) -> dict:
+    """Sur chaque secret de la famille, toute la famille sauf soi (24/10/2026) : qui l'a, qui ne l'a pas.
+    names : les comptes de la famille a lister ; house / house_ids : le compte principal et ses secrets
+    (vus depuis un compte de la famille)."""
+    people = ([(house, True)] if house else []) + [(u, False) for u in names if u != house]
+    if not people:
+        return v
+    items = []
+    for it in v["items"]:
+        aid = it["id"]
+        if aid in FAMILY_IDS:
+            it = {**it, "family_all": [{"name": u, "main": m,
+                                        "has": (aid in (house_ids or ())) if m else aid[4:] in (by.get(u) or {})} for u, m in people]}
+        items.append(it)
+    return {**v, "items": items}
+
+
 async def eggs_found() -> dict:
     """Les easter eggs trouves : {nom: date}."""
     from ..db.session import AsyncSessionLocal

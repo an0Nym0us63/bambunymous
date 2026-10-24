@@ -393,15 +393,22 @@ async def achievements_view(request: Request, fresh: bool = False, token: str = 
         if me["main"]:                            # le principal : tout, et les trouvailles de la famille « a portee »
             fam = await A.family()
             if fam["secrets"]:
-                v = A.family_finds_view(v, await A._eggs_by(), [x for x in fam["secrets"] if x != username])
+                by = await A._eggs_by()
+                others = [x for x in fam["secrets"] if x != username]
+                v = A.family_roster(A.family_finds_view(v, by, others), by, others)
             return _json({**v, "me": me})
         u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+        house_ids = {it["id"] for it in v["items"] if it["level"] >= 0 and it["id"] in A.FAMILY_IDS}
         if not (u is not None and u.secrets_visible):
             v = {**A.mask_secrets(v), "keys": v["keys"] if me["wheel"] else None}   # la roue permise : son tresor reste visible
         if me["family"]:                          # un compte de la famille : ses secrets a lui
             mine = (await A._eggs_by()).get(username) or {}
             v = A.family_view(v, mine, me["house"] or "La maison", await A.loupes(username))
             v["family"]["subs"] = list(A.FAMILY_SUBS)
+            # toute la famille sur chaque secret : la maison, puis les autres membres
+            fam = await A.family()
+            v = A.family_roster(v, await A._eggs_by(), [x for x in fam["secrets"] if x != username],
+                                house=me["house"] or "La maison", house_ids=house_ids)
         return _json({**v, "me": me})
     u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
     if u is not None and u.secrets_visible:
