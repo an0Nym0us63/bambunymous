@@ -425,17 +425,25 @@ function HumZoom({ list, col, o, lo, hi }) {
   </>;
 }
 // des barres (une par valeur), « hi » en plein ; labels et valeurs si la place le permet
-function Bars({ values, labels, color, height = 40, hi = -1, showValues = false, fmt = v => v, titles, onPick, picked = -1 }) {
-  const max = Math.max(1, ...values);
+// goal : un rythme a tenir par barre (ligne en pointilles) ; au-dessus, la couleur pleine, en dessous, gris
+function Bars({ values, labels, color, height = 40, hi = -1, showValues = false, fmt = v => v, titles, onPick, picked = -1, goal = null, goalLabel = null }) {
+  const max = Math.max(1, ...values, goal || 0);
   const gap = values.length > 20 ? 2 : 4;
+  const base = labels ? 15 : 0;
+  const tint = (v, i) => goal ? (v >= goal ? (i === hi ? color : `${color}cc`) : (i === hi ? "#94a3b8" : "#94a3b866"))
+    : i === hi || i === picked ? color : `${color}59`;
   return (
-    <div style={{ display: "flex", gap, alignItems: "flex-end", height: height + (labels ? 15 : 0) + (showValues ? 14 : 0) }}>
+    <div style={{ display: "flex", gap, alignItems: "flex-end", height: height + base + (showValues ? 14 : 0), position: "relative" }}>
+      {goal > 0 && <span aria-hidden="true" style={{ position: "absolute", left: 0, right: 0, bottom: base + Math.round(height * goal / max),
+        borderTop: "1.5px dashed var(--muted)", pointerEvents: "none", zIndex: 1 }}>
+        {goalLabel && <span style={{ position: "absolute", left: 0, bottom: 3, fontSize: 9.5, fontWeight: 800, color: "var(--text)",
+          background: "var(--surface)", border: "1px solid var(--border)", padding: "0 5px", borderRadius: 6, whiteSpace: "nowrap" }}>{goalLabel}</span>}</span>}
       {values.map((v, i) => (
         <div key={i} title={titles?.[i]} onClick={onPick ? e => { e.stopPropagation(); onPick(i); } : undefined}
           style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", alignItems: "center", gap: 2, cursor: onPick ? "pointer" : undefined }}>
           {showValues && <span style={{ fontSize: 9.5, color: "var(--muted)", fontWeight: 700, whiteSpace: "nowrap" }}>{v ? fmt(v) : ""}</span>}
           <span data-pk="" style={{ width: "100%", maxWidth: 30, borderRadius: values.length > 20 ? 3 : 5, minHeight: 3,
-            height: `${Math.max(3, Math.round(height * v / max))}px`, background: i === hi || i === picked ? color : `${color}59`,
+            height: `${Math.max(3, Math.round(height * v / max))}px`, background: tint(v, i),
             outline: i === picked ? `2px solid ${color}` : "none", outlineOffset: 2 }}/>
           {labels && <span style={{ fontSize: 10, height: 13, color: i === hi ? "var(--text)" : "var(--muted)", fontWeight: i === hi ? 800 : 600,
             whiteSpace: "nowrap" }}>{labels[i]}</span>}
@@ -3320,32 +3328,109 @@ function Streak({ o, sz }) {
   );
 }
 // un objectif : des heures, des impressions ou des grammes, sur la semaine ou le mois
-function Goal({ d, o, sz }) {
-  const week = useDays(o.period === "week" ? 7 : 0);
-  const [, val, fmt] = METRICS[o.metric] || METRICS.h;
-  const target = Number(o.target) || 1;
-  const scale = o.metric === "h" ? 3600 : 1;
-  const now = o.period === "week" ? (week ? week.reduce((a, x) => a + val(x), 0) : null) : (d.month ? val(d.month) : null);
-  const done = now == null ? 0 : Math.min(1, now / (target * scale));
-  const color = done >= 1 ? "#22c55e" : "#3B82F6";
-  const tf = o.metric === "h" ? `${target} h` : o.metric === "g" ? fmtG(target) : `${target}`;
-  const hero = <Hero visual={s => <Ring value={done} size={s} color={color}>{Math.round(done * 100)}%</Ring>}
-    value={now == null ? "…" : fmt(now)} unit={`sur ${tf}`} sub={o.period === "week" ? "ces 7 derniers jours" : "ce mois-ci"}/>;
+// l'objectif choisi, ou « selon ma moyenne » : la moyenne par jour des 30 derniers jours (sans aujourd'hui)
+// + 10 %, sur la periode, arrondie (5 h, 50 g, une impression). En heures, impressions ou grammes.
+function goalTarget(o, days, nDays, metric = o.metric) {
+  const [, val] = METRICS[metric] || METRICS.h;
+  if (o.target === "custom") return Math.max(0, Number(String(o.custom || "").replace(",", ".")) || 0) || null;
+  if (o.target !== "auto" && o.target != null) return Number(o.target) || null;
+  if (!days?.length) return null;
+  const past = days.slice(0, -1), scale = metric === "h" ? 3600 : 1;
+  const avg = past.reduce((a, x) => a + val(x), 0) / Math.max(1, past.length) / scale;
+  const raw = avg * nDays * 1.1, step = metric === "h" ? 5 : metric === "g" ? 50 : 1;
+  return raw > 0 ? Math.max(step, Math.round(raw / step) * step) : null;
+}
+// tout ce que la tuile et sa fenetre affichent, pour une periode et une mesure
+function goalModel(o, all, period, metric) {
+  const [, val, fmt] = METRICS[metric] || METRICS.h;
+  const t = new Date(), monthDays = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate(), nd = t.getDate();
+  const nDays = period === "week" ? 7 : monthDays;
+  const days = all ? all.slice(-(period === "week" ? 7 : nd)) : null;
+  const scale = metric === "h" ? 3600 : 1;
+  // mesure ou periode changee dans la fenetre : l'objectif suit la moyenne (un chiffre fixe n'y a plus de sens)
+  const same = metric === (o.metric || "h") && period === (o.period || "week");
+  const target = goalTarget(same ? o : { target: "auto" }, all, nDays, metric);
+  const auto = !same || (o.target ?? "auto") === "auto";
+  const now = days ? days.reduce((a, x) => a + val(x), 0) : null;
+  const done = now == null || !target ? 0 : now / (target * scale);
+  const pace = target ? target * scale / nDays : null;
+  const elapsed = days ? days.length : 0;
+  const avg = elapsed ? now / elapsed : null;
+  const above = days ? days.filter(x => pace && val(x) >= pace).length : 0;
+  const tf = !target ? "…" : metric === "h" ? `${target} h` : metric === "g" ? fmtG(target) : `${target}`;
+  // le mois : ou il finira a ce rythme
+  const proj = period === "month" && avg != null ? avg * nDays : null;
+  const ok = done >= 1;
+  return { val, fmt, days, nDays, target, auto, now, done, pace, avg, above, tf, proj, ok, scale,
+    rest: now == null || !target ? null : Math.max(0, target * scale - now),
+    color: ok ? "#22c55e" : "#3B82F6", accent: ok ? ["#16A34A", "#4ADE80"] : ["#2563EB", "#60A5FA"],
+    label: period === "week" ? "ces 7 derniers jours" : "ce mois-ci" };
+}
+const goalDays = (m, period) => m.days && m.days.map(x => period === "week" ? x.day.toLocaleDateString("fr-FR", { weekday: "narrow" }) : String(x.day.getDate()));
+function Goal({ o, sz }) {
+  const all = useDays(31);
+  const period = o.period || "week", metric = o.metric || "h";
+  const m = goalModel(o, all, period, metric);
+  const pct = Math.round(m.done * 100);
+  const hero = <Hero visual={s => <Ring value={Math.min(1, m.done)} size={s} color={m.color} cap={m.ok ? "atteint" : "fait"}>{pct}%</Ring>}
+    value={m.now == null ? "…" : m.fmt(m.now)} unit={`sur ${m.tf}`} accent={m.accent}
+    sub={`${m.label}${m.auto ? " · objectif selon ta moyenne" : ""}`}/>;
+  const stats = [["Reste", m.rest == null ? "…" : m.ok ? "atteint 🎉" : m.fmt(m.rest), m.ok ? "#16a34a" : "#3B82F6"],
+    ["Rythme visé", m.pace ? `${m.fmt(m.pace)} / j` : "…", "#8B5CF6"],
+    period === "month" ? ["À ce rythme", m.proj == null ? "…" : m.fmt(m.proj), m.target && m.proj >= m.target * m.scale ? "#16a34a" : "#F59E0B"]
+      : ["Ta moyenne", m.avg == null ? "…" : `${m.fmt(m.avg)} / j`, m.pace && m.avg >= m.pace ? "#16a34a" : "#F59E0B"]];
+  const bars = h => m.days && <Bars values={m.days.map(m.val)} labels={h >= 50 ? goalDays(m, period).map((l, k) => period === "week" || (k + 1) % 5 === 0 || k === 0 ? l : "") : null}
+    color="#22c55e" height={h} hi={m.days.length - 1} goal={m.pace} goalLabel={h >= 50 && m.pace ? `${m.fmt(m.pace)} / j` : null}/>;
   return (
-    <Tile icon={<Target size={15}/>} color={color} label="Objectif" zoom={<>
-      <BoxCtx.Provider value={{ W: 600, H: 180, zoom: true }}>{hero}</BoxCtx.Provider>
-      <Stats items={[["Fait", now == null ? "…" : fmt(now), color], ["Objectif", tf],
-        ["Reste", now == null ? "…" : done >= 1 ? "atteint 🎉" : fmt(Math.max(0, target * scale - now))]]}/>
-      {o.period === "week" && week && <><H2>Les 7 derniers jours</H2><Bars values={week.map(val)} labels={week.map(x => x.day.toLocaleDateString("fr-FR", { weekday: "narrow" }))}
-        color={color} height={120} hi={6} showValues fmt={fmt}/></>}</>}
-      mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{Math.round(done * 100)} %<Muted>{now == null ? "" : `${fmt(now)} / ${tf}`}</Muted></span>}>
-      {({ W }) => <Stack min={W < 215 ? 150 : 90} head={hero} blocks={[
-        { h: statsH(2, W), node: <Stats items={[["Reste", now == null ? "…" : done >= 1 ? "atteint 🎉" : fmt(Math.max(0, target * scale - now)), done >= 1 ? "#16a34a" : undefined],
-          ["Par jour", now == null ? "…" : fmt(now / (o.period === "week" ? 7 : new Date().getDate()))]]}/> },
-        o.period === "week" && week && { h: 92, node: <Bars values={week.map(val)} labels={week.map(x => x.day.toLocaleDateString("fr-FR", { weekday: "narrow" }))}
-          color={color} height={74} hi={6}/> }]}/>}
+    <Tile icon={<Target size={15}/>} color={m.color} label="Objectif" zoom={<GoalZoom o={o} all={all}/>}
+      mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        <span style={{ ...gradText(m.accent[0], m.accent[1]) }}>{pct} %</span><Muted>{m.now == null ? "" : `${m.fmt(m.now)} / ${m.tf}`}</Muted></span>}>
+      {({ W, H }) => {
+        // petite : l'anneau et le chiffre ; plus haute, les cases ; plus haute encore, les jours face au rythme
+        const sh = H >= 170 ? statsH(3, W) : 0;
+        const ch = H >= 250 ? Math.min(150, H - 90 - sh - 16) : 0;
+        return <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8, minHeight: 0 }}>
+          <BoxCtx.Provider value={{ W, H: Math.max(48, H - (sh ? sh + 8 : 0) - (ch >= 40 ? ch + 8 : 0)) }}>{hero}</BoxCtx.Provider>
+          {sh > 0 && <Stats items={stats}/>}
+          {ch >= 40 && <div style={{ marginTop: "auto" }}>{bars(ch)}</div>}
+        </div>;
+      }}
     </Tile>
   );
+}
+// la fenetre : la periode et la mesure au choix, les chiffres, les jours face au rythme, le detail d'un jour
+function GoalZoom({ o, all }) {
+  const [period, setPeriod] = useState(o.period || "week");
+  const [metric, setMetric] = useState(o.metric || "h");
+  const [pick, setPick] = useState(null);
+  const { W } = useBox();
+  const m = goalModel(o, all, period, metric);
+  const chip = (on, c) => ({ height: 28, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12, border: "1px solid var(--border)",
+    background: on ? c : "var(--surface2)", color: on ? "#fff" : "var(--text2)", whiteSpace: "nowrap" });
+  const pct = Math.round(m.done * 100);
+  return <>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      {[["week", "7 derniers jours"], ["month", "Ce mois-ci"]].map(([k, l]) => <button key={k} type="button" style={chip(period === k, "#22c55e")} onClick={() => setPeriod(k)}>{l}</button>)}
+      <span style={{ width: 8 }}/>
+      {[["h", "Heures"], ["n", "Impressions"], ["g", "Grammes"]].map(([k, l]) => <button key={k} type="button" style={chip(metric === k, "#3B82F6")} onClick={() => setMetric(k)}>{l}</button>)}
+    </div>
+    <Hero fill={false} visual={s => <Ring value={Math.min(1, m.done)} size={s} color={m.color} cap={m.ok ? "atteint" : "fait"}>{pct}%</Ring>}
+      value={m.now == null ? "…" : m.fmt(m.now)} unit={`sur ${m.tf}`} accent={m.accent}
+      sub={`${m.label}${m.auto ? " · objectif selon ta moyenne des 30 derniers jours, plus 10 %" : ""}`}/>
+    <Stats items={[["Fait", m.now == null ? "…" : m.fmt(m.now), m.color], ["Objectif", m.auto ? `${m.tf} (auto)` : m.tf, "#3B82F6"],
+      ["Reste", m.rest == null ? "…" : m.ok ? "atteint 🎉" : m.fmt(m.rest), m.ok ? "#16a34a" : "#F59E0B"],
+      ["Rythme visé", m.pace ? `${m.fmt(m.pace)} / j` : "…", "#8B5CF6"],
+      ["Ta moyenne", m.avg == null ? "…" : `${m.fmt(m.avg)} / j`, m.pace && m.avg >= m.pace ? "#16a34a" : "#F59E0B"],
+      m.days && ["Jours au-dessus", `${m.above} / ${m.days.length}`, "#16a34a"],
+      period === "month" && m.proj != null && ["À ce rythme, fin du mois", m.fmt(m.proj), m.target && m.proj >= m.target * m.scale ? "#16a34a" : "#F59E0B"]].filter(Boolean)}/>
+    <H2>{period === "week" ? "Les 7 derniers jours" : "Les jours du mois"} face au rythme</H2>
+    {m.days ? <Bars values={m.days.map(m.val)} labels={goalDays(m, period)} color="#22c55e" height={zoomChartH(W)} hi={m.days.length - 1}
+      showValues={W / m.days.length >= 30} fmt={m.fmt} goal={m.pace} goalLabel={m.pace ? `${m.fmt(m.pace)} / j` : null}
+      onPick={k => setPick(m.days[k]?.date)} picked={m.days.findIndex(x => x.date === pick)}
+      titles={m.days.map(x => `${x.day.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })} : ${m.fmt(m.val(x))}`)}/> : <Muted>…</Muted>}
+    <Muted>En vert, les jours au-dessus du rythme visé ; en gris, ceux en dessous. Touche un jour pour son détail.</Muted>
+    {m.days && <DayDetail date={pick || m.days[m.days.length - 1]?.date}/>}
+  </>;
 }
 
 // ── Le catalogue ─────────────────────────────────────────────────────────────
@@ -3430,8 +3515,11 @@ export const TILES = {
   goal: { label: "Objectif", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Goal d={d} o={o} sz={sz(it)}/>,
     options: [C("metric", "Mesure", "h", [["h", "heures"], ["n", "impressions"], ["g", "grammes"]]),
       C("period", "Sur", "week", [["week", "7 jours"], ["month", "le mois"]]),
-      C("target", "Objectif", 20, [[5, "5"], [10, "10"], [20, "20"], [50, "50"], [100, "100"], [500, "500"], [1000, "1000"]],
-        { hint: "En heures, en impressions ou en grammes selon la mesure." })] },
+      C("target", "Objectif", "auto", [["auto", "selon ma moyenne"], [5, "5"], [10, "10"], [20, "20"], [30, "30"], [50, "50"], [75, "75"], [100, "100"],
+        [150, "150"], [200, "200"], [300, "300"], [500, "500"], [1000, "1000"], [2000, "2000"], ["custom", "à moi…"]],
+        { hint: "En heures, en impressions ou en grammes selon la mesure. « Selon ma moyenne » : ta moyenne des 30 derniers jours, plus 10 %." }),
+      { key: "custom", label: "Mon objectif", type: "text", def: "", placeholder: "par exemple 80", max: 7,
+        when: (it, o) => o.target === "custom", hint: "Un nombre, dans l'unité de la mesure." }] },
 };
 // En attendant ses donnees, une tuile tient deja sa place (les autres ne bougent pas a l'arrivee) :
 // son nom, ce qu'elle montre, « chargement… ». needs : la cle de useTilesData, ou "status" (l'imprimante).

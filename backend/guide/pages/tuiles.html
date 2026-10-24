@@ -74,7 +74,7 @@
       <tr><td><a href="#tuiles-last">Dernières impressions</a></td><td>La liste des dernières impressions</td><td>demi · 1</td></tr>
       <tr><td><a href="#tuiles-gallery">Galerie</a></td><td>Les vignettes des dernières impressions</td><td>toute · 1</td></tr>
       <tr><td><a href="#tuiles-streak">Série</a></td><td>Les jours d'affilée avec au moins une impression</td><td>demi · 1</td></tr>
-      <tr><td><a href="#tuiles-goal">Objectif</a></td><td>Un objectif d'heures, d'impressions ou de grammes</td><td>demi · 1</td></tr>
+      <tr><td><a href="#tuiles-goal">Objectif</a></td><td>Un objectif d'heures, d'impressions ou de grammes, fixe ou selon ta moyenne</td><td>demi · 1</td></tr>
       <tr><td><a href="#tuiles-stock">Stock</a></td><td>Le nombre de bobines, le poids, les plus basses</td><td>demi · 1</td></tr>
       <tr><td><a href="#tuiles-dry">Séchage</a></td><td>Les séchages en cours, ou les bobines à sécher</td><td>demi · 1</td></tr>
       <tr><td><a href="#tuiles-humidity">Humidité des AMS</a></td><td>Une goutte d'eau par AMS, remplie à son humidité</td><td>demi · 1</td></tr>
@@ -266,14 +266,14 @@
 
   <section id="tuiles-goal">
     <h3>Objectif</h3>
-    <p><b>Ce qu'elle montre</b> : un objectif que tu te fixes, et où tu en es : un anneau du pourcentage atteint (bleu, vert une fois atteint), « 8,0 h sur 20 h » et la période (« ces 7 derniers jours » ou « ce mois-ci »). Avec de la place, des cases <span class="ui">Reste</span> (« atteint 🎉 » quand c'est fait) et <span class="ui">Par jour</span>, et sur 7 jours, des barres par jour.</p>
+    <p><b>Ce qu'elle montre</b> : un objectif que tu te fixes, et où tu en es : un anneau du pourcentage atteint (bleu, vert une fois atteint), le chiffre en couleur (« 37 h sur 30 h ») et la période (« ces 7 derniers jours » ou « ce mois-ci »). Plus haute, des cases <span class="ui">Reste</span> (« atteint 🎉 » quand c'est fait), <span class="ui">Rythme visé</span> (ce qu'il faut faire par jour) et <span class="ui">Ta moyenne</span> (sur le mois : <span class="ui">À ce rythme</span>, où le mois finira). Plus haute encore, les jours en barres face au rythme visé, une ligne en pointillés : en vert les jours au-dessus, en gris ceux en dessous.</p>
     <figure><img src="img/tuiles-goal.webp" alt="Tuile Objectif"><figcaption>Objectif de 20 heures sur 7 jours, atteint à 40 %.</figcaption></figure>
     <dl class="opts">
       <dt><span class="ui">Mesure</span> : <span class="ui">heures</span> (défaut) / <span class="ui">impressions</span> / <span class="ui">grammes</span></dt><dd>Ce que tu comptes.</dd>
       <dt><span class="ui">Sur</span> : <span class="ui">7 jours</span> (défaut) / <span class="ui">le mois</span></dt><dd>Les 7 derniers jours glissants, ou le mois en cours.</dd>
-      <dt><span class="ui">Objectif</span> : 5 / 10 / 20 (défaut) / 50 / 100 / 500 / 1000</dt><dd>La cible, en heures, en impressions ou en grammes selon la mesure.</dd>
+      <dt><span class="ui">Objectif</span> : <span class="ui">selon ma moyenne</span> (défaut) / 5 à 2000 / <span class="ui">à moi…</span></dt><dd>« Selon ma moyenne » : ta moyenne par jour des 30 derniers jours, plus 10 %, sur la période (arrondie à 5 h, 50 g ou une impression) ; l'objectif suit ton rythme. Un chiffre de la liste, ou « à moi… » pour taper le tien (case <span class="ui">Mon objectif</span>), dans l'unité de la mesure.</dd>
     </dl>
-    <p><b>Au toucher</b> : <span class="ui">Fait</span>, <span class="ui">Objectif</span>, <span class="ui">Reste</span>, et <span class="ui">LES 7 DERNIERS JOURS</span> en barres. Pas de bouton <span class="ui">Ouvrir</span>.</p>
+    <p><b>Au toucher</b> : la période (<span class="ui">7 derniers jours</span>, <span class="ui">Ce mois-ci</span>) et la mesure (<span class="ui">Heures</span>, <span class="ui">Impressions</span>, <span class="ui">Grammes</span>) à changer pour voir ; <span class="ui">Fait</span>, <span class="ui">Objectif</span> (« (auto) » quand il suit ta moyenne), <span class="ui">Reste</span>, <span class="ui">Rythme visé</span>, <span class="ui">Ta moyenne</span>, <span class="ui">Jours au-dessus</span>, et sur le mois <span class="ui">À ce rythme, fin du mois</span> ; puis les jours face au rythme. Touche un jour : ses impressions et leur durée s'affichent dessous.</p>
   </section>
 </section>
 
