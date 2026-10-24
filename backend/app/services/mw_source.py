@@ -242,7 +242,8 @@ async def backfill() -> None:
     _STOP["flag"] = False
     JOB.clear()
     JOB.update(running=True, started=time.time(), finished=None, total=len(pairs), done=0, ok=0, already=0,
-               skipped=0, failed=0, current=None, errors=[], stopped=None, bytes=0, paused_until=None, guessed=0)
+               skipped=0, failed=0, current=None, errors=[], stopped=None, bytes=0, paused_until=None, guessed=0,
+               blocks=[])
     _job_save()
     async def nap(sec) -> bool:
         """Attend sec secondes par petits bouts (« Arreter » repond tout de suite) ; False si arrete."""
@@ -286,7 +287,9 @@ async def backfill() -> None:
                             break
                         except ExactError as e:
                             if rate_limited(e) and tries < len(BACKOFF_S):
-                                # MakerWorld veut souffler : une pause, puis le meme modele
+                                # MakerWorld veut souffler : une pause, puis le meme modele ; on note quand (et apres
+                                # combien de fichiers), de quoi regler le rythme
+                                JOB["blocks"] = (JOB.get("blocks", []) + [{"at": time.time(), "ok": JOB["ok"]}])[-10:]
                                 JOB["paused_until"] = time.time() + BACKOFF_S[tries]
                                 _job_save()
                                 ok = await nap(BACKOFF_S[tries])

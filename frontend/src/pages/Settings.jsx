@@ -1139,6 +1139,11 @@ function SourceBackfillSection() {
             {st.skipped > 0 && chip(st.skipped, "introuvable" + (st.skipped > 1 ? "s" : "") + " sur MakerWorld", "#d97706")}
             {st.failed > 0 && chip(st.failed, "en échec", "#dc2626")}
           </div>
+          {/* les blocages de MakerWorld : quand, et apres combien de fichiers recuperes (de quoi juger le rythme) */}
+          <div style={{ fontSize:11.5, fontWeight:700, color: st.blocks?.length ? "#d97706" : "#16a34a" }}>
+            {st.blocks?.length
+              ? `🛑 Bloqué ${st.blocks.length} fois par MakerWorld : ${st.blocks.map(b => `à ${hm(b.at)} (après ${b.ok} fichier${b.ok > 1 ? "s" : ""})`).join(", ")}`
+              : st.ok > 0 ? "✓ Aucun blocage de MakerWorld pendant ce passage" : null}</div>
           {!run && st.stopped && <div style={{ fontSize:12, fontWeight:700, color:"#d97706" }}>{st.stopped}</div>}
           {st.errors?.length > 0 && <details style={{ fontSize:11.5, color:"var(--muted)" }}>
             <summary style={{ cursor:"pointer", fontWeight:700 }}>Dernières erreurs</summary>
