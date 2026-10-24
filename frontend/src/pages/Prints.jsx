@@ -1158,13 +1158,13 @@ const v2grad = (a, b) => ({ backgroundImage: `linear-gradient(135deg, ${a}, ${b}
 // qu'avant (ouvrir, associer, dissocier) ; « Restituer » dans le titre. Cout reel puis normal entre parentheses.
 function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap }) {
   const isAdmin = useIsAdmin();
-  const [open0, setOpen0] = useState(() => { try { return localStorage.getItem("bn-fiche-fils") === "1"; } catch { return false; } });
-  const toggle = () => setOpen0(o => { try { localStorage.setItem("bn-fiche-fils", o ? "0" : "1"); } catch { /* rien */ } return !o; });
+  const [open0, setOpen0] = useState(false);   // replie a chaque ouverture
+  const toggle = () => setOpen0(o => !o);
   const total = filaments.reduce((t, f) => t + (f.grams_used || 0), 0);
   const hex = f => f.color_hex ? (String(f.color_hex).startsWith("#") ? f.color_hex : `#${f.color_hex}`).slice(0, 7) : "#94a3b8";
   const open = f => {
     if (f.spool_id) onSpoolClick?.({ filId: f.bam_filament_id || null, spoolId: f.spool_id, hex: f.color_hex || null });
-    else if (isAdmin) onSpoolPick?.({ usageId: f.id, colorHex: f.color_hex, colorsArray: f.filament_colors_array, multicolorType: f.filament_multicolor_type,
+    else if (isAdmin && onSpoolPick) onSpoolPick({ usageId: f.id, colorHex: f.color_hex, colorsArray: f.filament_colors_array, multicolorType: f.filament_multicolor_type,
       filamentType: f.filament_fila_type || f.filament_type });
   };
   const menu = (e, f) => openMenu(e, {
@@ -1172,7 +1172,7 @@ function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap 
     subtitle: [f.filament_brand, `${(f.grams_used || 0).toFixed(1).replace(".", ",")} g`].filter(Boolean).join(" · "),
     items: [
       f.spool_id && { icon: "🧵", label: `Ouvrir la bobine #${f.spool_id}`, onClick: () => open(f) },
-      !f.spool_id && isAdmin && { icon: "▸", label: "Associer une bobine", onClick: () => open(f) },
+      !f.spool_id && isAdmin && onSpoolPick && { icon: "▸", label: "Associer une bobine", onClick: () => open(f) },
       f.spool_id && isAdmin && { icon: "⛓", label: "Dissocier la bobine", hint: "Le poids lui est rendu", onClick: () => onUnmap?.(f) },
     ],
   });
@@ -1187,7 +1187,7 @@ function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap 
           style={{ fontSize: 11.5, fontWeight: 800, padding: "3px 10px", borderRadius: 20, cursor: "pointer", background: "rgba(34,197,94,0.14)",
             color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)" }}>⚖ Restituer</button>}
         {/* les bobines manquantes se voient meme replie */}
-        {!open0 && filaments.some(f => !f.spool_id) && <span style={{ fontSize: 11, fontWeight: 800, color: "#d97706" }}>▸ {filaments.filter(f => !f.spool_id).length} à associer</span>}
+        {!open0 && onSpoolPick && filaments.some(f => !f.spool_id) && <span style={{ fontSize: 11, fontWeight: 800, color: "#d97706" }}>▸ {filaments.filter(f => !f.spool_id).length} à associer</span>}
         <span style={{ fontSize: 11, color: "var(--muted)", transform: open0 ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>
       </div>
       {/* la repartition du poids */}
@@ -1210,7 +1210,7 @@ function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap 
                 {f.filament_translated_name || f.filament_fila_type || f.filament_name || "Inconnu"}</div>
               <div style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {f.spool_id ? <span data-tip="Bobine associée" style={{ color: "#16a34a", fontWeight: 800 }}>✓ · </span>
-                  : isAdmin ? <span style={{ color: "#d97706", fontWeight: 800 }}>▸ Associer · </span> : null}
+                  : isAdmin && onSpoolPick ? <span style={{ color: "#d97706", fontWeight: 800 }}>▸ Associer · </span> : null}
                 {/* la marque, et le type s'il n'est pas deja le titre */}
                 {[f.filament_brand, (t => t !== (f.filament_translated_name || f.filament_fila_type || f.filament_name) ? t : null)(f.filament_fila_type || f.filament_type)]
                   .filter(Boolean).join(" · ")}</div>
@@ -1261,8 +1261,7 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
     client.get("/objects/objects/quota", { params: { parent_type: "print", parent_id: pProp.id } }).then(r => setObjQ(r.data)).catch(() => setObjQ(null));
   }, [pProp.id, refreshKey, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
   const [idsOpen, setIdsOpen] = useState(false);
-  const [costOpen, setCostOpen0] = useState(() => { try { return localStorage.getItem("bn-fiche-cost") === "1"; } catch { return false; } });
-  const setCostOpen = f => setCostOpen0(o => { const v = typeof f === "function" ? f(o) : f; try { localStorage.setItem("bn-fiche-cost", v ? "1" : "0"); } catch { /* rien */ } return v; });
+  const [costOpen, setCostOpen] = useState(false);   // replie a chaque ouverture
   const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
   const [nbVal, setNbVal] = useState(String(pProp.number_of_items || 1));
   useEffect(() => { setLocalNb(p.number_of_items || 1); setNbVal(String(p.number_of_items || 1)); }, [p.number_of_items]);
@@ -1924,7 +1923,319 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
   );
 }
 
-export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
+// ── La fiche d'un groupe : deux versions le temps de valider (25/10/2026), comme la fiche d'une impression ──
+export function GroupBottomSheet(props) {
+  return useFicheV2() ? <GroupSheetV2 {...props}/> : <GroupBottomSheetV1 {...props}/>;
+}
+
+// les photos du groupe (nouvelle fiche) : une bande qui defile ; ⭐ la vignette, 🗑 en deux temps, visionneuse
+function GroupPhotosV2({ groupId, onUpdated }) {
+  const [photos, setPhotos] = useState([]);
+  const [cover, setCover] = useState(null);
+  const [armed, setArmed] = useState(null);
+  const [lb, setLb] = useState(-1);
+  const load = () => client.get(`/prints/groups/${groupId}/photos`).then(r => { setPhotos(r.data?.files || []); setCover(r.data?.cover_photo || null); }).catch(() => {});
+  useEffect(() => { if (groupId) load(); }, [groupId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const upload = async file => { const fd = new FormData(); fd.append("file", file);
+    await client.post(`/prints/groups/${groupId}/photos/upload`, fd, { headers: { "Content-Type": "multipart/form-data" } }); load(); };
+  const setCoverPhoto = async name => { try { await client.post(`/prints/groups/${groupId}/photo/${name}/cover`); setCover(name); onUpdated?.(); } catch (e) { showAlert(e.response?.data?.detail || e.message); } };
+  const del = async name => { try { await client.delete(`/prints/groups/${groupId}/photo/${name}`); setArmed(null); load(); } catch (e) { showAlert(e.response?.data?.detail || e.message); } };
+  const imgs = photos.filter(x => !isVideoUrl(x.url));
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {lb >= 0 && <Lightbox images={imgs.map(x => x.url)} index={lb} onClose={() => setLb(-1)}/>}
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>📷 Photos</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{photos.length}</span>
+        <PhotoAddButton onPick={f => upload(f)}/>
+      </div>
+      {photos.length > 0 && <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, touchAction: "pan-x", overscrollBehaviorX: "contain" }}>
+        {photos.map((ph, i) => { const isCover = cover === ph.name, arm = armed === ph.name;
+          return (
+            <div key={i} style={{ position: "relative", flexShrink: 0, borderRadius: 14, overflow: "hidden",
+              boxShadow: isCover ? "0 0 0 2px #22c55e" : "0 0 0 1px var(--border)" }}>
+              {isVideoUrl(ph.url)
+                ? <video src={ph.url} muted loop autoPlay playsInline preload="metadata" style={{ height: 110, width: 110, objectFit: "cover", display: "block" }}/>
+                : <img src={ph.url} alt="" onClick={() => setLb(imgs.findIndex(x => x.url === ph.url))}
+                  style={{ height: 110, width: 110, objectFit: "cover", display: "block", cursor: "zoom-in" }}/>}
+              <AdminOnly>
+                <button onClick={() => !isCover && setCoverPhoto(ph.name)} data-tip={isCover ? "Vignette de la galerie" : "Définir comme vignette"}
+                  style={{ position: "absolute", top: 5, left: 5, width: 24, height: 24, borderRadius: "50%", border: "none", cursor: isCover ? "default" : "pointer",
+                    background: "rgba(0,0,0,0.55)", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center",
+                    filter: isCover ? "none" : "grayscale(1)", opacity: isCover ? 1 : 0.8 }}>⭐</button>
+                <button onClick={() => arm ? del(ph.name) : setArmed(ph.name)} onBlur={() => setArmed(null)} data-tip={arm ? "Confirmer la suppression" : "Supprimer"}
+                  style={{ position: "absolute", top: 5, right: 5, height: 24, width: arm ? "auto" : 24, padding: arm ? "0 8px" : 0, borderRadius: 12, border: "none",
+                    cursor: "pointer", background: arm ? "#ef4444" : "rgba(0,0,0,0.55)", color: "white", fontSize: arm ? 10.5 : 12, fontWeight: 700,
+                    display: "flex", alignItems: "center", justifyContent: "center" }}>{arm ? "Supprimer ?" : "🗑"}</button>
+              </AdminOnly>
+            </div>); })}
+      </div>}
+    </div>);
+}
+
+function GroupSheetV2({ groupId, name, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onDelete, onUngroup, onUpdated }) {
+  useTrackDetail(`Fiche groupe · ${name || "#" + groupId}`);
+  const isAdmin = useIsAdmin();
+  const groupVisiting = useFriend(s => s.friend);
+  const [prints, setPrints] = useState([]);
+  const [sharing, setSharing] = useState(false);
+  const [nbItems, setNbItems] = useState(nbItemsProp || 1);
+  const [editNb, setEditNb] = useState(false);
+  const [nbVal, setNbVal] = useState(String(nbItemsProp || 1));
+  const [selectedPrint, setSelectedPrint] = useState(null);
+  const [selSpool, setSelSpool] = useState(null);
+  const [unmapping, setUnmapping] = useState(null);
+  const [coverPrintId, setCoverPrintId] = useState(coverPrintIdProp || null);
+  const [objCreate, setObjCreate] = useState(false);
+  const [objRefresh, setObjRefresh] = useState(0);
+  const [objQ, setObjQ] = useState(null);
+  const [editGroup, setEditGroup] = useState(false);
+  const [costOpen, setCostOpen] = useState(false);     // replie a chaque ouverture
+  const [grid, setGrid] = useState(false);              // les impressions en rangees, ou en grille
+  const wide = typeof window !== "undefined" && window.innerWidth >= 900;
+  const loadPrints = () => client.get("/prints", { params: { group_id: groupId, limit: 200 } }).then(r => {
+    const d = r.data; setPrints(Array.isArray(d) ? d : Array.isArray(d?.prints) ? d.prints : []); }).catch(() => {});
+  useEffect(() => { if (groupId) loadPrints(); }, [groupId]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!isAdmin) return;
+    client.get("/objects/objects/quota", { params: { parent_type: "group", parent_id: groupId } }).then(r => setObjQ(r.data)).catch(() => setObjQ(null));
+  }, [groupId, objRefresh, isAdmin]);
+  const title = prints.find(x => x.group_name)?.group_name || name || "Groupe sans nom";
+  const totalDur = prints.reduce((s, x) => s + (x.duration_seconds || x.estimated_seconds || 0), 0);
+  const totalW = prints.reduce((s, x) => s + (x.total_weight_g || 0), 0);
+  // le prix reel (total_cost) et, entre parentheses, le prix normal (filament au tarif catalogue + electricite)
+  const totalCost = prints.reduce((s, x) => s + (x.total_cost || 0), 0);
+  const totalNormal = prints.reduce((s, x) => s + (x.total_cost_filament_normal || 0) + (x.electric_cost || 0), 0);
+  const filsMap = {};
+  prints.forEach(x => (x.filament_usage || []).forEach(f => {
+    const key = f.spool_id || f.color_hex || f.filament_name || "?";
+    if (!filsMap[key]) filsMap[key] = { ...f, print_id: x.id, grams_used: 0, cost: 0, normal_cost: 0 };
+    filsMap[key].grams_used += f.grams_used || 0; filsMap[key].cost += f.cost || 0; filsMap[key].normal_cost += f.normal_cost || 0;
+  }));
+  const filaments = Object.values(filsMap).sort((a, b) => (b.grams_used || 0) - (a.grams_used || 0));
+  const counts = prints.reduce((m, x) => { m[x.status] = (m[x.status] || 0) + 1; return m; }, {});
+  const latest = prints.reduce((d, x) => { const t = utcDate(x.print_date); return t && (!d || t > d) ? t : d; }, null);
+  const [lDay, lHour] = whenFr(latest);
+  const designs = (() => { const cpt = {}; prints.forEach(x => { const d = String(x.design_id || "").trim(); if (d && d !== "0") cpt[d] = (cpt[d] || 0) + 1; });
+    return Object.keys(cpt).sort((a, b) => cpt[b] - cpt[a]).map(d => [d, cpt[d]]); })();
+  const saveNb = async () => {
+    const n = parseInt(nbVal);
+    if (!isNaN(n) && n >= 1) { try { await client.patch(`/prints/groups/${groupId}`, { number_of_items: n }); setNbItems(n); onUpdated?.(); } catch { /* garde l'ancien */ } }
+    setEditNb(false);
+  };
+  const handleDelete = async () => {
+    if (!(await showConfirm(`Supprimer le groupe "${title}" et ses ${prints.length} prints ?`, { danger: true, confirmLabel: "Supprimer" }))) return;
+    try { await Promise.all(prints.map(x => client.delete("/prints/" + x.id))); onDelete?.(); onClose(); }
+    catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
+  };
+  const handleUngroup = async () => {
+    if (!(await showConfirm(`Dégrouper "${title}" (les prints resteront) ?`, { confirmLabel: "Dégrouper" }))) return;
+    try { await client.delete("/prints/groups/" + groupId); onUngroup?.(); onClose(); }
+    catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
+  };
+  const setCoverPrint = async x => { try { await client.patch("/prints/groups/" + groupId, { cover_print_id: x.id }); setCoverPrintId(x.id); onUpdated?.(); } catch { /* rien */ } };
+  const removeFromGroup = async x => {
+    if (!(await showConfirm(`Retirer "${x.file_name || "ce print"}" du groupe ?`))) return;
+    try { await client.post("/prints/" + x.id + "/group", {}); setPrints(ps => ps.filter(y => y.id !== x.id)); onUpdated?.(); } catch { /* rien */ }
+  };
+  const more = e => openMenu(e, {
+    title, subtitle: `${prints.length} impression${prints.length > 1 ? "s" : ""}`, color: "#A78BFA",
+    items: [
+      { icon: "✏️", label: "Éditer", hint: "Le nom du groupe", tone: "#3B82F6", onClick: () => setEditGroup(true) },
+      { icon: "📣", label: "Partager", hint: "Telegram", tone: "#229ED9", onClick: () => setSharing(true) },
+      objQ && { icon: "📦", label: objQ.remaining > 0 ? "Créer des objets" : "Objets : tous créés", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
+        onClick: () => setObjCreate(true) },
+      { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },
+      "-",
+      { icon: "🗑", label: "Supprimer…", hint: "Le groupe et ses impressions", danger: true, onClick: handleDelete },
+      "-",
+      { icon: "↩", label: "Revenir à l'ancienne fiche", tone: "#6366F1", onClick: () => setFicheV2(false) },
+    ],
+  });
+  const printMenu = (e, x) => openMenu(e, {
+    title: x.file_name || "Sans nom", subtitle: fmtDate(x.print_date), img: apiUrl("/prints/" + x.id + "/image"),
+    items: [
+      { icon: "📄", label: "Ouvrir la fiche", tone: "#3B82F6", onClick: () => setSelectedPrint(x) },
+      isAdmin && { icon: "★", label: coverPrintId === x.id ? "Vignette du groupe" : "En faire la vignette du groupe", tone: "#F59E0B",
+        disabled: coverPrintId === x.id, onClick: () => setCoverPrint(x) },
+      isAdmin && "-",
+      isAdmin && { icon: "⛓", label: "Retirer du groupe", danger: true, onClick: () => removeFromGroup(x) },
+    ],
+  });
+  const tile = (label, value, sub, c1, c2, onClick, tip) => (
+    <button onClick={onClick} disabled={!onClick} data-tip={tip} style={{ minWidth: 0, padding: "9px 8px", borderRadius: 16, border: `1px solid color-mix(in srgb, ${c1} 22%, var(--border))`,
+      background: `radial-gradient(90% 70% at 100% 0%, ${c1}22, transparent 70%), var(--surface2)`, cursor: onClick ? "pointer" : "default", textAlign: "left",
+      font: "inherit", color: "inherit", display: "flex", flexDirection: "column", gap: 1, boxShadow: `0 6px 18px -12px ${c1}` }}>
+      <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)", display: "flex", justifyContent: "space-between" }}>{label}</span>
+      <span style={{ fontSize: 16, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...v2grad(c1, c2) }}>{value}</span>
+      {sub && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
+    </button>);
+  // l'en-tete : une mosaique des plateaux sur leur image floutee
+  const cover = prints.find(x => x.id === coverPrintId) || prints[0];
+  const mosaic = [cover, ...prints.filter(x => x !== cover)].filter(Boolean).slice(0, 4);
+  const hero = (
+    <div style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden", background: "var(--surface2)" }}>
+      {cover && <img src={apiUrl("/prints/" + cover.id + "/image")} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+        objectFit: "cover", filter: "blur(26px) saturate(1.6)", opacity: 0.4, transform: "scale(1.3)" }}/>}
+      <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: "radial-gradient(60% 70% at 50% 38%, #A78BFA33, transparent 72%)" }}/>
+      <div style={{ position: "absolute", inset: "8% 6% 34%", display: "grid", gap: 8,
+        gridTemplateColumns: `repeat(${Math.min(mosaic.length, 4) || 1}, minmax(0, 1fr))` }}>
+        {mosaic.map((x, i) => <div key={x.id} style={{ position: "relative", borderRadius: 14, overflow: "hidden", background: "color-mix(in srgb, var(--surface) 55%, transparent)",
+          boxShadow: "0 10px 24px rgba(0,0,0,.25)", transform: `rotate(${[-3, 2, -1.5, 3][i]}deg)` }}>
+          <img src={apiUrl("/prints/" + x.id + "/image")} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+        </div>)}
+      </div>
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 16px 12px",
+        background: "linear-gradient(transparent, color-mix(in srgb, var(--sheet-bg) 92%, transparent) 55%)" }}>
+        <h2 style={{ margin: 0, fontSize: 19, fontWeight: 900, color: "var(--text)", letterSpacing: "-.01em", lineHeight: 1.2, overflow: "hidden",
+          display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>📁 {title}</h2>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 900, color: "#fff",
+            background: "linear-gradient(135deg, #A78BFA, #C4B5FD)", boxShadow: "0 4px 14px #A78BFA55" }}>{prints.length} impression{prints.length > 1 ? "s" : ""}</span>
+          {Object.entries(counts).map(([st, n]) => { const [l, c, ic] = V2_STATUS[st] || [st, "#94a3b8", "•"];
+            return <span key={st} style={{ display: "inline-flex", alignItems: "center", gap: 3, padding: "2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800,
+              color: c, background: `color-mix(in srgb, ${c} 14%, transparent)` }}>{ic} {n} {l.toLowerCase()}{n > 1 && /e$/.test(l) ? "s" : ""}</span>; })}
+        </div>
+      </div>
+    </div>);
+  const figures = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6 }}>
+        {tile("📅 Dernière", lDay, lHour, "#3B82F6", "#60A5FA", null, latest ? fmtDate(latest.toISOString()) : null)}
+        {tile("⏱ Durée", totalDur > 0 ? durFr(totalDur) : "—", null, "#8B5CF6", "#C084FC")}
+        {tile("⚖ Poids", totalW > 0 ? gFr(totalW) : "—", null, "#F59E0B", "#FBBF24")}
+        {tile(<>💶 Coût<span>{costOpen ? "▴" : "▾"}</span></>, eur2(totalCost), `(${eur2(totalNormal)})`, "#16A34A", "#4ADE80", () => setCostOpen(o => !o),
+          "Le prix réel, puis le prix normal entre parenthèses ; touche pour le détail")}
+      </div>
+      {costOpen && (
+        <div style={{ padding: "10px 12px", borderRadius: 14, background: "var(--surface2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+            <span style={{ flex: 1, fontWeight: 900, color: "var(--text)" }}>Total</span>
+            <span style={{ fontWeight: 900, color: "var(--text)" }}>{eur2(totalCost)}</span>
+            <span style={{ fontSize: 11.5, color: "var(--muted)", minWidth: 58 }}>({eur2(totalNormal)})</span></div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 7 }}>
+            <span style={{ fontWeight: 800, color: "#16a34a" }}>{nbItems} élément{nbItems > 1 ? "s" : ""}</span>
+            {nbItems > 1 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#16a34a" }}>· {eur2(totalCost / nbItems)}/u ({eur2(totalNormal / nbItems)}/u)</span>}
+            <span style={{ marginLeft: "auto" }}/>
+            {!editNb ? <AdminOnly><button onClick={() => { setNbVal(String(nbItems)); setEditNb(true); }} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 7,
+              border: "1px solid rgba(34,197,94,0.35)", background: "none", color: "#16a34a", cursor: "pointer", fontWeight: 700 }}>Modifier</button></AdminOnly>
+              : <span style={{ display: "flex", gap: 5 }}>
+                <input type="number" min="1" value={nbVal} onChange={e => setNbVal(e.target.value)} autoFocus style={{ width: 58, padding: "3px 6px", borderRadius: 7,
+                  border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 12.5 }}/>
+                <button onClick={saveNb} style={{ padding: "3px 10px", borderRadius: 7, border: "none", background: "#22c55e", color: "white", cursor: "pointer" }}>✓</button>
+                <button onClick={() => setEditNb(false)} style={{ padding: "3px 8px", borderRadius: 7, border: "none", background: "var(--surface)", color: "var(--muted)", cursor: "pointer" }}>✕</button>
+              </span>}
+          </div>
+        </div>)}
+    </div>);
+  // les impressions : des rangees (ou une grille) ; toucher ouvre la fiche, ⋯ : vignette du groupe, retirer
+  const row = x => { const [l, c, ic] = V2_STATUS[x.status] || [x.status || "", "#94a3b8", "•"], d = utcDate(x.print_date), [dy, hr] = whenFr(d);
+    return (
+      <div key={x.id} onClick={() => setSelectedPrint(x)} onContextMenu={e => { e.preventDefault(); printMenu(e, x); }}
+        style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 6px 6px 6px", borderRadius: 14, cursor: "pointer",
+          background: `linear-gradient(90deg, color-mix(in srgb, ${c} 9%, transparent), transparent 70%), var(--surface2)`, border: "1px solid var(--border)" }}>
+        <span style={{ position: "relative", flexShrink: 0 }}>
+          <img src={apiUrl("/prints/" + x.id + "/image")} alt="" style={{ width: 52, height: 52, borderRadius: 11, objectFit: "cover", background: "var(--surface)", display: "block" }}
+            onError={e => { e.currentTarget.style.visibility = "hidden"; }}/>
+          {coverPrintId === x.id && <span data-tip="Vignette du groupe" style={{ position: "absolute", left: -4, top: -4, width: 18, height: 18, borderRadius: "50%",
+            background: "#F59E0B", color: "#fff", fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", border: "2px solid var(--sheet-bg)" }}>★</span>}
+          <span style={{ position: "absolute", right: -3, bottom: -3, width: 14, height: 14, borderRadius: "50%", background: c, border: "2px solid var(--sheet-bg)" }}/>
+        </span>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.file_name || "Sans nom"}</span>
+          <span style={{ display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <span style={{ color: c }}>{ic} {l}</span> · {dy} {hr.split(" · ")[0]}</span>
+        </span>
+        <span style={{ textAlign: "right", flexShrink: 0 }}>
+          <span style={{ display: "block", fontSize: 12, fontWeight: 900, color: "var(--text)" }}>{(x.duration_seconds || x.estimated_seconds) ? durFr(x.duration_seconds || x.estimated_seconds) : "—"}</span>
+          <span style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)" }}>{x.total_weight_g ? gFr(x.total_weight_g) : ""}</span>
+        </span>
+        <button onClick={e => { e.stopPropagation(); printMenu(e, x); }} aria-label="Actions de l'impression"
+          style={{ width: 28, height: 28, flexShrink: 0, borderRadius: 9, border: "none", background: "transparent", color: "var(--muted)", cursor: "pointer", fontSize: 15 }}>⋯</button>
+      </div>); };
+  const card = x => { const [, c] = V2_STATUS[x.status] || ["", "#94a3b8"];
+    return (
+      <div key={x.id} onClick={() => setSelectedPrint(x)} style={{ position: "relative", borderRadius: 14, overflow: "hidden", cursor: "pointer", background: "var(--surface2)",
+        border: "1px solid var(--border)" }}>
+        <div style={{ position: "relative", paddingTop: "78%" }}>
+          <img src={apiUrl("/prints/" + x.id + "/image")} alt="" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
+            onError={e => { e.currentTarget.style.display = "none"; }}/>
+          {coverPrintId === x.id && <span style={{ position: "absolute", left: 6, top: 6, width: 20, height: 20, borderRadius: "50%", background: "#F59E0B", color: "#fff",
+            fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center" }}>★</span>}
+          <span style={{ position: "absolute", right: 6, bottom: 6, width: 12, height: 12, borderRadius: "50%", background: c, border: "2px solid var(--sheet-bg)" }}/>
+          <button onClick={e => { e.stopPropagation(); printMenu(e, x); }} aria-label="Actions de l'impression" style={{ position: "absolute", right: 6, top: 6, width: 26, height: 26,
+            borderRadius: "50%", border: "none", background: "rgba(0,0,0,0.5)", color: "#fff", cursor: "pointer", fontSize: 13 }}>⋯</button>
+        </div>
+        <div style={{ padding: "6px 8px" }}>
+          <div style={{ fontSize: 11.5, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.file_name || "Sans nom"}</div>
+          <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{fmtDate(x.print_date)}</div>
+        </div>
+      </div>); };
+  const printsBlock = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>🖨️ Impressions</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{prints.length}</span>
+        <span style={{ marginLeft: "auto", display: "flex", borderRadius: 10, overflow: "hidden", border: "1px solid var(--border)" }}>
+          {[[false, "☰", "En rangées"], [true, "▦", "En grille"]].map(([g, ic, tip]) => <button key={tip} onClick={() => setGrid(g)} data-tip={tip}
+            style={{ width: 34, height: 28, border: "none", cursor: "pointer", fontSize: 13, background: grid === g ? "#A78BFA" : "var(--surface2)",
+              color: grid === g ? "#fff" : "var(--muted)" }}>{ic}</button>)}
+        </span>
+      </div>
+      {grid ? <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(130px, 1fr))", gap: 8 }}>{prints.map(card)}</div>
+        : <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>{prints.map(row)}</div>}
+    </div>);
+  const sections = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <GroupPhotosV2 groupId={groupId} onUpdated={onUpdated}/>
+      <GroupToRate name={title} enabled={!groupVisiting}
+        designs={prints.filter(x => x.status === "SUCCESS" || x.status === "PARTIAL").map(x => String(x.design_id || "").trim()).filter(Boolean)}/>
+      {printsBlock}
+      {filaments.length > 0 && <FilamentsV2 filaments={filaments} onSpoolClick={setSelSpool} onUnmap={setUnmapping}/>}
+      {designs.map(([d, n]) => <MakerWorldCard key={d} designId={d} prints={prints.filter(x => String(x.design_id || "").trim() === d)}
+        note={designs.length > 1 || n < prints.length ? `${n} print${n > 1 ? "s" : ""} sur ${prints.length} de ce modèle` : null}/>)}
+    </div>);
+  return (
+    <>
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: wide ? "center" : "flex-end",
+        justifyContent: "center", padding: wide ? 20 : 0 }} onClick={onClose}>
+        <div onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background: "var(--sheet-bg)", borderRadius: wide ? 24 : "22px 22px 0 0",
+          width: "100%", maxWidth: wide ? 980 : 640, maxHeight: wide ? "90dvh" : "94dvh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", position: "relative" }}>
+            <div style={{ position: "sticky", top: 0, zIndex: 10, height: 0 }}>
+              {!wide && <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", width: 38, height: 4, borderRadius: 2, background: "rgba(148,163,184,.6)" }}/>}
+              <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 8 }}>
+                {isAdmin && <button onClick={more} aria-label="Plus d'actions" style={v2Round}>⋯</button>}
+                <button onClick={onClose} aria-label="Fermer" style={v2Round}>✕</button>
+              </div>
+            </div>
+            {wide ? (
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.15fr)", gap: 18, padding: 18 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{hero}{figures}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 34 }}>{sections}</div>
+              </div>
+            ) : <>{hero}<div style={{ padding: "12px 14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>{figures}{sections}</div></>}
+          </div>
+          {isAdmin && <div style={{ flexShrink: 0, display: "flex", gap: 8, padding: "10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",
+            borderTop: "1px solid var(--border)", background: "color-mix(in srgb, var(--sheet-bg) 94%, transparent)", backdropFilter: "blur(8px)" }}>
+            <button onClick={() => setEditGroup(true)} style={{ ...v2Btn, flex: 1 }}>✏️ Éditer</button>
+            <button onClick={() => setSharing(true)} style={{ ...v2Btn, flex: 1, color: "#229ED9", borderColor: "rgba(34,158,217,0.35)", background: "rgba(34,158,217,0.08)" }}>📣 Partager</button>
+            <button onClick={more} aria-label="Plus d'actions" style={{ ...v2Btn, width: 48, flex: "0 0 auto" }}>⋯</button>
+          </div>}
+        </div>
+      </div>
+      {objCreate && <ObjectCreateSheet parentType="group" parentId={groupId} defaultName={title} costFabrication={totalCost / nbItems}
+        onDone={() => { setObjRefresh(k => k + 1); onUpdated?.(); }} onClose={() => setObjCreate(false)}/>}
+      {sharing && <ShareSheet kind="group" id={groupId} onClose={() => setSharing(false)}/>}
+      {unmapping && <UnmapFilamentConfirm f={unmapping} printId={unmapping.print_id} onClose={() => setUnmapping(null)} onDone={() => { setUnmapping(null); loadPrints(); onUpdated?.(); }}/>}
+      {editGroup && <GroupEditSheet groupId={groupId} name={title} onClose={() => setEditGroup(false)} onSaved={() => { setEditGroup(false); loadPrints(); onUpdated?.(); }}/>}
+      {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={() => setSelSpool(null)} zIndex={2000}/>}
+      {selectedPrint && <PrintDetail p={selectedPrint} onClose={() => setSelectedPrint(null)}
+        onDelete={() => { setSelectedPrint(null); setPrints(ps => ps.filter(x => x.id !== selectedPrint.id)); }} onChanged={() => loadPrints()}/>}
+    </>);
+}
+
+function GroupBottomSheetV1({ groupId, name, prints: printsProp, latestDate, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
   useTrackDetail(`Fiche groupe · ${name || "#" + groupId}`);
   const [localPrints, setLocalPrints] = useState([]);
   const groupVisiting = useFriend((s) => s.friend);
@@ -2307,6 +2618,8 @@ export function GroupBottomSheet({ groupId, name, prints: printsProp, latestDate
             </button>
             </AdminOnly>
           </div>
+          <button onClick={() => setFicheV2(true)} style={{ display:"block", margin:"14px auto 0", background:"none", border:"none", cursor:"pointer",
+            fontSize:12, fontWeight:700, color:"#6366F1" }}>✨ Essayer la nouvelle fiche</button>
         </div>
       </div>
     </div>
