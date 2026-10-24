@@ -1506,8 +1506,12 @@ export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, 
       <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: "radial-gradient(60% 70% at 50% 38%, #A78BFA33, transparent 72%)" }}/>
       <div style={{ position: "absolute", inset: "8% 6% 34%", display: "grid", gap: 8,
         gridTemplateColumns: `repeat(${Math.min(mosaic.length, 4) || 1}, minmax(0, 1fr))` }}>
-        {mosaic.map((x, i) => <div key={x.id} style={{ position: "relative", borderRadius: 14, overflow: "hidden", background: "color-mix(in srgb, var(--surface) 55%, transparent)",
-          boxShadow: "0 10px 24px rgba(0,0,0,.25)", transform: `rotate(${[-3, 2, -1.5, 3][i]}deg)` }}>
+        {mosaic.map((x, i) => <div key={x.id} style={{ position: "relative", borderRadius: 14, overflow: "hidden", transform: `rotate(${[-3, 2, -1.5, 3][i]}deg)`,
+          // en sombre, des cartes grises faisaient des dalles : un verre lavande, bord clair (le clair reste tel quel)
+          ...(document.documentElement.getAttribute("data-theme") === "light"
+            ? { background: "color-mix(in srgb, var(--surface) 55%, transparent)", boxShadow: "0 10px 24px rgba(0,0,0,.25)" }
+            : { background: "linear-gradient(160deg, rgba(167,139,250,0.22), rgba(167,139,250,0.05))", border: "1px solid rgba(255,255,255,0.10)",
+                boxShadow: "0 10px 24px rgba(0,0,0,.35)", backdropFilter: "blur(6px)", WebkitBackdropFilter: "blur(6px)" }) }}>
           <img src={apiUrl("/prints/" + x.id + "/image")} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
         </div>)}
       </div>
@@ -1901,6 +1905,15 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
   const handleClick = guard(() => { if (selectMode) onToggleSelect(p.id); else onClick(); });
 
   const [stL, stC, stI] = V2_STATUS[p.status] || [statusCfg.label, "#94a3b8", "•"];
+  // la teinte de la vignette : le premier filament franc (pas blanc ni tres clair), sinon le lavande des groupes
+  const tint = (() => {
+    for (const f of p.filament_usage || []) {
+      const m = /^#?([0-9a-f]{6})/i.exec(f.color_hex || ""); if (!m) continue;
+      const n = parseInt(m[1], 16);
+      if ((0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.8) return `#${m[1]}`;
+    }
+    return "#A78BFA";
+  })();
   const [day, hour] = whenFr(utcDate(p.print_date));
   const dur = p.duration_seconds || p.estimated_seconds;
   const rateMe = p.status === "SUCCESS" && p.design_id && toRate.has(String(p.design_id));
@@ -1941,7 +1954,8 @@ function PrintCard({ p, onClick, onDelete, onChanged, selectMode, selected, onTo
     <div onClick={handleClick} {...press} style={{ ...frame, overflow:"hidden", display:"flex", flexDirection:"column", borderRadius:18,
       border:"1px solid var(--border)", background:"var(--surface2)", boxShadow:"0 8px 22px -16px rgba(0,0,0,.45)" }}>
       {/* la vignette, l'etat en pastille, ×N, ⭐ a evaluer, les filaments */}
-      <div style={{ position:"relative", paddingTop:"78%", background:`radial-gradient(70% 70% at 50% 40%, ${stC}1f, transparent 70%), var(--surface)`, overflow:"hidden" }}>
+      <div style={{ position:"relative", paddingTop:"78%", overflow:"hidden",
+        background:`radial-gradient(75% 70% at 50% 45%, ${tint}2e, transparent 75%), linear-gradient(180deg, ${tint}1a, transparent 55%), var(--surface2)` }}>
         <img src={apiUrl("/prints/" + p.id + "/image")} alt="" draggable={false}
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", WebkitTouchCallout:"none", WebkitUserDrag:"none" }}
           onError={e => { e.currentTarget.style.display="none"; }}/>
