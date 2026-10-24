@@ -26,6 +26,46 @@ const fmt = (n, unit) => {
     : Number(n).toLocaleString("fr-FR");
   return unit ? `${v} ${unit}` : v;
 };
+// Tous les succes obtenus, du plus recent au plus ancien, par mois ; charges au fil du defilement.
+function AllRecent({ list, byId, onOpen }) {
+  const STEP = 30;
+  const [n, setN] = useState(STEP);
+  const end = useRef(null);
+  useEffect(() => {
+    const el = end.current;
+    if (!el || n >= list.length) return undefined;
+    const io = new IntersectionObserver(es => { if (es[0].isIntersecting) setN(x => Math.min(list.length, x + STEP)); }, { rootMargin: "400px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [n, list.length]);
+  const month = iso => new Date(iso + (iso.endsWith("Z") || iso.includes("+") ? "" : "Z")).toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+  const shown = list.slice(0, n);
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+      <div style={{ fontSize:12, fontWeight:700, color:"var(--muted)" }}>{list.length} obtenu{list.length > 1 ? "s" : ""}, du plus récent au plus ancien</div>
+      {shown.map((r, i) => {
+        const it = byId[r.id]; if (!it) return null;
+        const t = it.tiers[r.tier] || it.tiers[0];
+        const m = month(r.at), head = i === 0 || month(shown[i - 1].at) !== m;
+        return (
+          <React.Fragment key={r.id + "-" + r.tier}>
+            {head && <div style={{ fontSize:11, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#8B5CF6", margin:"8px 0 2px" }}>{m}</div>}
+            <button onClick={() => onOpen(r.id)} className="card" style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 12px 8px 8px",
+              cursor:"pointer", textAlign:"left", width:"100%", ...feltCard(t.color || "#8B5CF6") }}>
+              <Medal tier={t} emoji={it.emoji} size={40}/>
+              <span style={{ display:"flex", flexDirection:"column", minWidth:0, flex:1 }}>
+                <span style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{it.name}</span>
+                <span style={{ fontSize:11.5, color:"var(--muted)", whiteSpace:"nowrap" }}>{t.label} · {dateFr(r.at)}</span>
+              </span>
+            </button>
+          </React.Fragment>
+        );
+      })}
+      {n < list.length && <div ref={end} style={{ textAlign:"center", padding:"12px 0", fontSize:12, color:"var(--muted)" }}>Chargement…</div>}
+    </div>
+  );
+}
+
 const dateFr = iso => iso ? new Date(iso + (iso.endsWith("Z") || iso.includes("+") ? "" : "Z"))
   .toLocaleDateString("fr-FR", { day:"numeric", month:"long", year:"numeric" }) : "";
 
@@ -62,6 +102,7 @@ export default function Achievements({ embedded = false }) {
   // le classement de la famille (compte principal et famille) : lu a l'ouverture
   const [famBoard, setFamBoard] = useState(null);
   const [famOpen, setFamOpen] = useState(false);
+  const [allOf, setAllOf] = useState(null);          // « voir tout » d'une rangee de derniers succes
   useEffect(() => {
     if (!data || atFriend || !(data.me?.main || data.family)) return;
     client.get("/achievements/family-board").then(r => setFamBoard(r.data)).catch(() => setFamBoard(null));
@@ -223,7 +264,7 @@ export default function Achievements({ embedded = false }) {
 
       {/* Derniers succes ; un compte de la famille voit d'abord les siens (ses secrets a lui), puis ceux de la maison */}
       {(() => {
-        const strip = (title, list) => list.length > 0 && (
+        const strip = (title, list, full = list) => list.length > 0 && (
           <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
             <div style={sectionTitle}>{title}</div>
             <div className="no-scrollbar" style={{ display:"flex", gap:8, overflowX:"auto", padding:"2px 0" }}>
@@ -242,16 +283,30 @@ export default function Achievements({ embedded = false }) {
                   </button>
                 );
               })}
+              {/* au bout du defilement : tout voir, du plus recent au plus ancien */}
+              {full.length > list.length && (
+                <button onClick={() => setAllOf({ title, list: full })} className="card"
+                  style={{ flexShrink:0, display:"flex", alignItems:"center", gap:8, padding:"8px 14px", cursor:"pointer", textAlign:"left",
+                    ...feltCard("#3B82F6", "#8B5CF6") }}>
+                  <span style={{ width:40, height:40, borderRadius:"50%", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:13, fontWeight:900, color:"#fff", background:"linear-gradient(135deg, #3B82F6, #8B5CF6)" }}>+{full.length - list.length}</span>
+                  <span style={{ display:"flex", flexDirection:"column" }}>
+                    <span style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap" }}>Voir tout ›</span>
+                    <span style={{ fontSize:11, color:"var(--muted)", whiteSpace:"nowrap" }}>{full.length} obtenus</span>
+                  </span>
+                </button>
+              )}
             </div>
           </div>
         );
-        const mineRecent = data.family && !atFriend ? data.items
+        const mineAll = data.family && !atFriend ? data.items
           .filter(x => x.family_all && x.level >= 0 && x.tiers[0]?.at)
           .map(x => ({ id: x.id, tier: 0, at: x.tiers[0].at }))
-          .sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 12) : [];
+          .sort((a, b) => String(b.at).localeCompare(String(a.at))) : [];
+        const mineRecent = mineAll.slice(0, 12);
         return <>
-          {strip("Mes derniers secrets", mineRecent)}
-          {strip(mineRecent.length ? `Derniers succès de la maison` : "Derniers succès", data.recent)}
+          {strip("Mes derniers secrets", mineRecent, mineAll)}
+          {strip(mineRecent.length ? `Derniers succès de la maison` : "Derniers succès", data.recent, data.recent_all || data.recent)}
         </>;
       })()}
 
@@ -445,6 +500,9 @@ export default function Achievements({ embedded = false }) {
 
       {rules && createPortal(<Rules data={data} onClose={() => setRules(false)}/>, document.body)}
       {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
+      {allOf && <Zoom icon={<span style={{ fontSize:20 }}>🏅</span>} color="#8B5CF6" label={allOf.title} onClose={() => setAllOf(null)}>
+        <AllRecent list={allOf.list} byId={byId} onOpen={id => setDetail(id)}/>
+      </Zoom>}
       {famOpen && famBoard && <Zoom icon={<span style={{ fontSize:20 }}>🏠</span>} color="#EC4899" label="Classement de la famille" onClose={() => setFamOpen(false)}>
         <FamilyBoardZoom b={famBoard}/></Zoom>}
       {oddsOpen && odds && <OddsSheet odds={odds} admin={!atFriend && !!data.me?.main} uniq={data.tiers.find(t => t.id === "unique")} onClose={() => setOddsOpen(false)}/>}

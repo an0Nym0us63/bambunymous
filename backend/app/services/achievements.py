@@ -7142,12 +7142,15 @@ async def view(fresh: bool = False) -> dict:
     # present constates au premier calcul (ils n'ont pas de vraie date)
     since = (st or {}).get("since") or ""
     first_day = since[:10]
-    top = {}
+    top, every = {}, []
     for it in items:
         for j, t in enumerate(it["tiers"]):
             if t["at"] and not (BY_ID[it["id"]].get("live") and t["at"][:10] <= first_day):
                 top[it["id"]] = (t["at"], it["id"], j)
+                every.append((t["at"], it["id"], j))
     recent = sorted(top.values(), reverse=True)[:6]
+    # tout ce qui a ete obtenu, chaque cran, du plus recent au plus ancien (« voir plus », 25/10/2026)
+    every.sort(reverse=True)
     k = st.get("keys") if isinstance(st.get("keys"), dict) else None
     ok_since = await _ok_since(k.get("since")) if k else 0
     keys = None if k is None else {
@@ -7161,7 +7164,7 @@ async def view(fresh: bool = False) -> dict:
            "categories": [{"id": c, "emoji": e, "name": n} for c, e, n in CATEGORIES],
            "subs": [{"id": i, "emoji": e, "name": n} for i, e, n, _ids in SECRET_SUBS],
            "card_groups": [{"id": i, "emoji": e, "name": n} for i, e, n in CARD_GROUPS],
-           "tiers": ALL_TIERS, "recent": [{"id": i, "tier": j, "at": at} for at, i, j in recent],
+           "tiers": ALL_TIERS, "recent": [{"id": i, "tier": j, "at": at} for at, i, j in recent], "recent_all": [{"id": i, "tier": j, "at": at} for at, i, j in every],
            "since": (st or {}).get("since"), "sig": CATALOG_SIG,
            "tickets_used": sum(tickets_paid(st, k) for k in ((st or {}).get("ticket_tiers") or {})),
            "keys_spent": int((((st or {}).get("keys") or {}).get("spent_total")) or 0)}
