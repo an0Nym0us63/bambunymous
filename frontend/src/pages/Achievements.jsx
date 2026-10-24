@@ -116,10 +116,7 @@ export default function Achievements({ embedded = false }) {
     const add = (ids, name) => (ids || []).forEach(id => { (out[id] = out[id] || []).push(name); });
     if (atFriend) add(mine?.uniques, "Toi");
     else for (const p of pod?.people || []) if (!p.me && p.status === "ok") add(p.uniques, p.name);
-    // compte de la famille : ce que la maison a deja trouve et lui pas encore
-    if (!atFriend) for (const it of data?.items || []) if (it.house && it.level < 0 && !(out[it.id] || []).includes(it.house)) add([it.id], it.house);
-    // compte principal : ce que la famille a trouve et la maison pas encore
-    if (!atFriend) for (const it of data?.items || []) if (it.level < 0) for (const n of it.family_has || []) if (!(out[it.id] || []).includes(n)) add([it.id], n);
+    // la famille n'y est plus (24/10/2026) : elle a sa rangee d'initiales sous la medaille
     return out;
   }, [pod, mine, atFriend, data]);
   // En visite : parmi ses medailles uniques, celles que j'ai aussi (ou pas)
@@ -487,9 +484,9 @@ function Tile({ it, onOpen, others, shared, rivals }) {
   // succes a paliers : les copains qui sont devant moi
   const ahead = it.tiers.length > 1 ? (rivals || []).filter(r => r.level > it.level) : [];
   // secret pas encore gagne ici, mais deja par quelqu'un de la bande : cercle
-  const near = !got && others?.length;
+  const near = !got && (others?.length || it.family_all?.some(x => x.has));
   return (
-    <button onClick={onOpen} title={near ? `${it.name} · ${others.join(", ")} l'${others.length > 1 ? "ont" : "a"}` : it.name}
+    <button onClick={onOpen} title={near && others?.length ? `${it.name} · ${others.join(", ")} l'${others.length > 1 ? "ont" : "a"}` : it.name}
       style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:5,
       padding:"10px 4px 8px", borderRadius:12, cursor:"pointer", minWidth:0, position:"relative",
       background: it.scoop ? `linear-gradient(160deg, rgba(236,72,153,0.16), ${top.color}14 60%)` : got ? `${top.color}14` : near ? "rgba(245,158,11,0.08)" : "transparent",
@@ -499,8 +496,8 @@ function Tile({ it, onOpen, others, shared, rivals }) {
       {it.family_all?.length > 0 && (
         <span data-tip={`${it.family_all.filter(x => x.has).map(x => x.name).join(", ") || "Personne d'autre"} ${it.family_all.filter(x => x.has).length > 1 ? "l'ont" : "l'a"}`}
           style={{ display:"flex", justifyContent:"center", marginTop:-1 }}>
-          {it.family_all.map((x, i) => <Avatar key={x.name} name={x.name} size={14}
-            style={{ marginLeft: i ? -3 : 0, fontSize:8, background: x.has ? "#EC4899" : "#64748B", opacity: x.has ? 1 : 0.45 }}/>)}</span>
+          {it.family_all.map((x, i) => <Avatar key={x.name} name={x.name} size={15}
+            style={{ marginLeft: i ? 3 : 0, fontSize:8.5, border:"none", background: x.has ? "#EC4899" : "#94A3B8", opacity: x.has ? 1 : 0.5 }}/>)}</span>
       )}
       {/* compte de la famille : trouve avant la maison */}
       {it.scoop && (
@@ -524,7 +521,7 @@ function Tile({ it, onOpen, others, shared, rivals }) {
           {ahead.length > 2 && <span style={{ fontSize:9, fontWeight:800, color:"#8B5CF6" }}>+{ahead.length - 2}</span>}
         </span>
       )}
-      {near && (
+      {near && others?.length > 0 && (
         <span style={{ position:"absolute", top:4, right:4, display:"flex" }}>
           {others.slice(0, 2).map((n, i) => (
             <span key={n} style={{ width:18, height:18, borderRadius:"50%", marginLeft: i ? -6 : 0, display:"flex",

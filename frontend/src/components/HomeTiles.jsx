@@ -226,7 +226,7 @@ function Hero({ visual, value, unit, delta, sub, color = "var(--text)", reserve 
       <div style={{ minWidth: 0, flex: stack ? undefined : "0 1 auto", display: "flex", flexDirection: "column", alignItems: stack ? "center" : "flex-start", gap: 2 }}>
         <div style={{ display: "flex", alignItems: "baseline", gap: "0 6px", flexWrap: "wrap", justifyContent: stack ? "center" : "flex-start", minWidth: 0 }}>
           <span data-pk="" style={{ fontSize: fs, fontWeight: 900, lineHeight: 1.05, color, letterSpacing: "-.01em", whiteSpace: "nowrap",
-            ...(accent ? gradText(accent[0], accent[1]) : {}) }}>{value}</span>
+            ...(accent ? gradText(accent[0], accent[1]) : color === "var(--text)" ? gradText("#475569", "#94A3B8") : {}) }}>{value}</span>
           {unit && <span style={{ fontSize: zoom ? 15 : 12.5, fontWeight: 700, color: "var(--text2)" }}>{unit}</span>}
         </div>
         {delta}
@@ -1409,7 +1409,7 @@ function Dry({ v, status, o, sz }) {
     </div>
   );
   const hero = <Hero visual={o.ring && k?.active ? s => <Ring value={(k.ok || 0) / k.active} size={s} color="#22c55e">{Math.round(100 * (k.ok || 0) / k.active)}%</Ring> : null}
-    value={v ? k?.to_dry ?? 0 : "…"} unit="à sécher" color={k?.to_dry ? "#dc2626" : "var(--text)"}
+    value={v ? k?.to_dry ?? 0 : "…"} unit="à sécher" accent={k?.to_dry ? ["#DC2626", "#F97316"] : ["#16A34A", "#4ADE80"]}
     sub={k && `${k.soon ? `${k.soon} bientôt · ` : ""}${k.ok || 0} au sec${o.inams && k.to_dry_in_ams ? ` · ${k.to_dry_in_ams} dans l'AMS` : ""}`}/>;
   return (
     <Tile icon={<Flame size={15}/>} color="#F97316" label="Séchage" to="/stats?tab=drying"
@@ -2207,7 +2207,7 @@ function LiveCam({ status, o, sz = { h: 2 } }) {
         const imgH = Math.round(W * 9 / 16);
         if (H - imgH >= 90) return <>
           <div style={{ borderRadius: 10, overflow: "hidden", height: imgH, flexShrink: 0, background: "#111" }}><LiveCamera mode={o.mode} style={{ height: "100%" }}/></div>
-          <BoxCtx.Provider value={{ W, H: H - imgH - 6 }}>{live ? <Hero visual={s => <Ring value={pct / 100} size={s} color="#22c55e">{pct}%</Ring>}
+          <BoxCtx.Provider value={{ W, H: H - imgH - 6 }}>{live ? <Hero visual={s => <Ring value={pct / 100} size={s} color="#22c55e">{pct}%</Ring>} accent={["#16A34A", "#4ADE80"]}
             value={status.remaining_minutes ? fmtDur(status.remaining_minutes * 60) : "bientôt"} unit="restantes"
             sub={[status.remaining_minutes && `fin à ${finAt(status.remaining_minutes)}`, status.total_layers > 0 && `couche ${status.layer} / ${status.total_layers}`].filter(Boolean).join(" · ")}/>
             : <Empty>Au repos</Empty>}</BoxCtx.Provider></>;
@@ -2238,6 +2238,9 @@ const tempRows = (status, o) => {
 };
 // la couleur d'une temperature : bleu froid, ambre tiede, orange chaud, rouge brulant
 const HEAT = [[20, [96, 165, 250]], [45, [251, 191, 36]], [120, [249, 115, 22]], [240, [239, 68, 68]]];
+// le chiffre d'une temperature : chaude, un degrade de sa couleur vers sa teinte claire ; tiede ou froide
+// (40° et moins), un bleu ciel doux, lisible en clair comme en sombre (jamais en noir)
+const tempGrad = r => (r.v || 0) > 40 ? gradText(r.c, `color-mix(in srgb, ${r.c} 55%, #ffffff)`) : gradText("#0284C7", "#38BDF8");
 function heat(v) {
   const x = Math.max(HEAT[0][0], Math.min(HEAT[HEAT.length - 1][0], v || 0));
   for (let i = 1; i < HEAT.length; i++) if (x <= HEAT[i][0]) {
@@ -2445,7 +2448,7 @@ function Temps({ status, o, sz }) {
       <div key={r.k} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12 }}>
         <span style={{ color: hot(r) ? r.c : "var(--muted)", display: "inline-flex" }}><r.ico s={14}/></span>
         <span style={{ flex: 1, minWidth: 0, color: "var(--text2)", fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.l}</span>
-        <span data-pk="" style={{ fontSize: 16, fontWeight: 900, color: hot(r) ? r.c : "var(--text)" }}>{Math.round(r.v || 0)}°</span>
+        <span data-pk="" style={{ fontSize: 16, fontWeight: 900, ...tempGrad(r) }}>{Math.round(r.v || 0)}°</span>
         {o.targets && r.t > 0 && <sup style={{ color: "var(--muted)", fontWeight: 700, fontSize: 10.5, lineHeight: 0 }}>/{Math.round(r.t)}°</sup>}
       </div>))}</div>;
   const cells = (W, H) => {
@@ -2453,14 +2456,14 @@ function Temps({ status, o, sz }) {
     return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, 1fr)`, gap: 6, alignContent: "center" }}>
       {rows.map(r => <div key={r.k} title={r.l} style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 5, minWidth: 0,
         color: hot(r) ? r.c : "var(--muted)" }}><r.ico s={14}/>{r.s && <span style={{ fontSize: 10.5, fontWeight: 900, marginLeft: -3 }}>{r.s}</span>}
-        <span data-pk="" style={{ fontSize: 16, fontWeight: 900, color: hot(r) ? r.c : "var(--text)" }}>{Math.round(r.v || 0)}°</span></div>)}</div>;
+        <span data-pk="" style={{ fontSize: 16, fontWeight: 900, ...tempGrad(r) }}>{Math.round(r.v || 0)}°</span></div>)}</div>;
   };
   return (
     <Tile icon={<Thermometer size={15}/>} color="#F97316" label="Températures" zoom={({ W, H }) => { const n = tempRows(status, o).length, r = W >= 520 ? 1 : Math.ceil(n / 2);
       return <TempPanel status={status} chamber={o.chamber} cardH={Math.max(170, Math.min(360, Math.floor((H - 10 * (r - 1)) / r)))}/>; }}
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 10, fontSize: 13.5 }}>{rows.map(r =>
-        <span key={r.k} title={r.l} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: hot(r) ? r.c : "var(--text)" }}>
-          <r.ico s={13}/>{r.s && <span style={{ fontSize: 10, fontWeight: 900 }}>{r.s}</span>}{Math.round(r.v || 0)}°</span>)}</span>}>
+        <span key={r.k} title={r.l} style={{ display: "inline-flex", alignItems: "center", gap: 3, color: hot(r) ? r.c : "var(--muted)" }}>
+          <r.ico s={13}/>{r.s && <span style={{ fontSize: 10, fontWeight: 900 }}>{r.s}</span>}<span style={tempGrad(r)}>{Math.round(r.v || 0)}°</span></span>)}</span>}>
       {({ W, H }) => {
         // des thermometres en verre (par defaut), des cadrans en cartes, des jauges, sinon des lignes
         if (!o.style || o.style === "glass") { const gl = glass(W, H); if (gl) return gl; }
@@ -3120,7 +3123,7 @@ function Countdown({ status, o, sz }) {
   const left = status?.remaining_minutes || 0;
   const paused = /PAUSE/.test(String(status?.status || "").toUpperCase());
   const color = paused ? "#f59e0b" : "#22c55e";
-  const hero = <Hero visual={s => <Ring value={pct / 100} size={s} color={color}>{pct}%</Ring>}
+  const hero = <Hero visual={s => <Ring value={pct / 100} size={s} color={color}>{pct}%</Ring>} accent={live ? (paused ? ["#D97706", "#FBBF24"] : ["#16A34A", "#4ADE80"]) : null}
     value={live ? (left ? fmtDur(left * 60) : "bientôt") : "—"} unit={live ? (paused ? "en pause" : "restantes") : "rien en cours"}
     sub={live && [left && o.fin && `fin à ${finAt(left)}`, o.layer && status.total_layers > 0 && `couche ${status.layer} / ${status.total_layers}`].filter(Boolean).join(" · ")}/>;
   // ce qui est deja passe, estime d'apres l'avancement
