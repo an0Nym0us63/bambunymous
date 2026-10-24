@@ -3829,8 +3829,23 @@ function FamilyBoard({ b, o, sz }) {
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 13 }}>🥇 {people[0].username} · <b style={{ ...gradText("#DB2777", "#A855F7") }}>{people[0].count}</b></span>}
       zoom={<FamilyBoardZoom b={b}/>}>
       {({ W, H }) => {
-        if (o.style === "podium" && H >= 96) return <PodiumSteps H={H} places={4}
-          people={people.map(x => ({ id: x.username, name: x.username, me: x.username === b.me, score: x.count }))}/>;
+        const pod = people.map(x => ({ id: x.username, name: x.username, me: x.username === b.me, score: x.count }));
+        // le podium comme celui des copains : des marches des qu'il y a un peu de hauteur ; tres bas (une rangee
+        // avec titre), les places en rangee : avatar cercle de sa medaille, rang et nom, score
+        if (o.style === "podium" && H >= 84) return <PodiumSteps H={H} places={4} people={pod}/>;
+        if (o.style === "podium") { const av = Math.max(20, Math.min(28, H - 6)), C4 = [...POD, "#8B5CF6"], HI4 = [...POD_HI, "#C4B5FD"];
+          return <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "space-evenly", gap: 6, minWidth: 0 }}>
+            {W < 230 ? pod.slice(0, 3).map((x, r) => <div key={x.id} data-tip={`${r + 1}. ${podName(x)}
+${x.score}`} style={{ display: "flex", flexDirection: "column",
+              alignItems: "center", gap: 2, minWidth: 0 }}>
+              <PodAvatar x={x} size={Math.min(av, H - 22)} ring={C4[r]}/>
+              <span data-pk="" style={{ fontSize: 12.5, fontWeight: 900, lineHeight: 1, ...gradText(`color-mix(in srgb, ${C4[r]} 75%, #000000)`, HI4[r]) }}>{x.score}</span></div>)
+            : pod.slice(0, W < 300 ? 3 : 4).map((x, r) => <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              <PodAvatar x={x} size={av} ring={C4[r]}/>
+              <div style={{ minWidth: 0, display: "flex", flexDirection: "column", lineHeight: 1.1 }}>
+                <span style={{ fontSize: 11, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r + 1}. {podName(x)}</span>
+                <span data-pk="" style={{ fontSize: 14, fontWeight: 900, whiteSpace: "nowrap", ...gradText(`color-mix(in srgb, ${C4[r]} 75%, #000000)`, HI4[r]) }}>{x.score}</span>
+              </div></div>)}</div>; }
         const n = Math.min(people.length, fitRows(H, 30, 4) || 1), h = Math.max(26, Math.min(48, Math.floor((H - 4 * (n - 1)) / n)));
         const meI = people.findIndex(x => x.username === b.me);
         const shown = people.slice(0, n);
