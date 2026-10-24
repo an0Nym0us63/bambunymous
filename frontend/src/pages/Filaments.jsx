@@ -1015,7 +1015,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
       </>}>
       <FHero colors={colorsList} type={spool.filament_multicolor_type} color={main} name={name}
         chips={[fChip(`#${spool.id}`, "#64748B"), spool.archived && fChip("Archivée", "#94a3b8"),
-          spool.ams_tray && fChip(`AMS ${spool.ams_tray}`, "#3B82F6"), spool.location && fChip(`📍 ${spool.location}`, "#8B5CF6"),
+          spool.location && fChip(`📍 ${spool.location}`, "#8B5CF6"),
           dryChip, fChip(<><Palette size={11}/>{spool.filament_swatch ? "Échantillon" : "Sans échantillon"}</>, spool.filament_swatch ? "#22c55e" : "#94a3b8")]}
         sub={<>
           {spool.filament_translated_name && spool.filament_name && spool.filament_name !== spool.filament_translated_name &&
@@ -1061,7 +1061,6 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
             <FRow l="Ce qu'il en reste" v={worth != null ? eur(worth) : null} vc="#16a34a"/>
             <TagEditRow spoolId={spool.id} current={spool.tag_number} onUpdated={onClose}/>
             <FRow l="Emplacement" v={spool.location}/>
-            <FRow l="Tray AMS" v={spool.ams_tray} vc="#3B82F6"/>
           </FCard>
           <FCard t="Son histoire" i="🗓️" c="#3B82F6">
             <FRow l="Première utilisation" v={dayFr(spool.first_used_at) || "jamais"} d={agoFr(spool.first_used_at)}/>
@@ -1287,15 +1286,13 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         background:`radial-gradient(120% 60% at 50% 0%, ${main}2e, transparent 70%), var(--surface)`,
         boxShadow:`0 10px 22px -16px ${main}` }}>
 
-      {/* Sous-type, comme sur l'accueil ; l'emplacement AMS et « a secher » en pastilles de coin */}
+      {/* Sous-type, comme sur l'accueil ; « a secher » en coin (l'emplacement est en bas, en pastille 📍) */}
       <p style={{ fontSize:9, fontWeight:800, color:"var(--muted)", textAlign:"center",
         letterSpacing:"0.05em", textTransform:"uppercase", margin:"8px 24px 0",
         height:12, lineHeight:"12px", overflow:"hidden", whiteSpace:"nowrap",
         textOverflow:"ellipsis" }}>
         {sub || " "}
       </p>
-      {s.ams_tray && <span data-tip={`Dans l'AMS · ${s.ams_tray}`} style={{ position:"absolute", top:6, left:6, fontSize:8.5, fontWeight:900, padding:"1px 5px",
-        borderRadius:20, color:"#fff", background:"linear-gradient(135deg, #3B82F6, #6366F1)" }}>{s.ams_tray}</span>}
       {s.needs_drying && <span data-tip="À sécher" style={{ position:"absolute", top:5, right:6, fontSize:10 }}>💧</span>}
 
       {/* La bobine, meme dessin qu'au slot AMS de l'accueil */}

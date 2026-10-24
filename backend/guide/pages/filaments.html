@@ -51,7 +51,7 @@
     <p>Chaque tuile montre, de haut en bas :</p>
     <ul>
       <li>une carte teintée de la couleur du filament (grise pour un filament blanc ou très clair, pour qu'il reste visible) ;</li>
-      <li>le sous-type en petites capitales (« PLA BASIC »), et dans les coins l'emplacement de l'AMS (« A1 ») et 💧 si la bobine est à sécher ;</li>
+      <li>le sous-type en petites capitales (« PLA BASIC »), et 💧 dans le coin si la bobine est à sécher ;</li>
       <li>le dessin d'une bobine à la couleur du filament (damier derrière si le filament est translucide) ;</li>
       <li>le poids restant en couleur (« 760 g », ou « — » s'il est inconnu) et son pourcentage en pastille, puis une jauge : verte au-dessus de 60 %, orange, orange foncé, puis rouge sous 15 % ; dessous « sur 1000 g » ;</li>
       <li>le nom, la marque, et l'emplacement en pastille « 📍 Étagère B » quand il est connu.</li>
@@ -137,7 +137,7 @@
     <h4>En haut : la bobine en vedette</h4>
     <p>Le dessin de la bobine sur un fond de sa couleur, puis des pastilles :</p>
     <ul>
-      <li>son numéro (<span class="ui">#26</span>), <span class="ui">Archivée</span> si elle l'est, l'emplacement de l'AMS (<span class="ui">AMS A1</span>) et l'emplacement de rangement (<span class="ui">📍 Étagère B</span>) ;</li>
+      <li>son numéro (<span class="ui">#26</span>), <span class="ui">Archivée</span> si elle l'est, et l'emplacement (<span class="ui">📍 AMS-B slot 1</span> ou <span class="ui">📍 Étagère B</span>) ;</li>
       <li>un badge de séchage quand il le faut : <span class="ui">Séchage nécessaire</span> (bleu ciel, jamais séchée ou délai dépassé), <span class="ui">Séchage dans 12 j</span> (orange, délai atteint dans moins de 30 jours) ou <span class="ui">Séchage aujourd'hui</span>. Pour un admin, ce badge porte un petit soleil : le toucher ouvre <a href="#filaments-sechee">Séchée aujourd'hui</a> ;</li>
       <li><span class="ui">Échantillon</span> (vert) si la plaquette du nuancier existe, sinon <span class="ui">Sans échantillon</span> (gris).</li>
     </ul>
@@ -155,8 +155,7 @@
       <dt>Prix d'achat</dt><dd>en vert : prix propre à cette bobine ; en orange : c'est le prix catalogue du filament, faute de mieux ; « non défini » sinon. Le crayon ouvre un champ en € : <span class="ui">OK</span> ou Entrée pour valider, ✕ ou Échap pour annuler. Changer un prix recalcule le coût des impressions faites avec la bobine.</dd>
       <dt>Ce qu'il en reste</dt><dd>la valeur du filament restant, à ce prix.</dd>
       <dt>Tag NFC</dt><dd>l'identifiant de la puce, ou « aucun ». Le crayon ouvre un champ <span class="ui">UID — vide = détacher</span> : vider le champ détache le tag, utile si une bobine a été associée à la mauvaise puce.</dd>
-      <dt>Emplacement</dt><dd>où se trouve la bobine (mis à jour par l'appli).</dd>
-      <dt>Tray AMS</dt><dd>l'emplacement de l'AMS où elle a été vue (A1, B3…).</dd>
+      <dt>Emplacement</dt><dd>où se trouve la bobine (« AMS-B slot 1 », « Tiroir »…), mis à jour par l'appli.</dd>
     </dl>
     <h4>Carte « Son histoire »</h4>
     <dl class="opts">

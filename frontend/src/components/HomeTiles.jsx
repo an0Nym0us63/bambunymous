@@ -1275,7 +1275,7 @@ const spoolShort = x => { const ft = (x.filament_fila_type || "").trim(), mat = 
   const rest = mat && ft.toUpperCase().startsWith(mat.toUpperCase()) ? ft.slice(mat.length).trim() : "";
   return rest ? `${mat} ${rest}` : ft || mat || "?"; };
 const spoolTip = x => { const pc = spoolPct(x);
-  return `${spoolName(x)}\n${[x.filament_manufacturer, spoolKind(x)].filter(Boolean).join(" · ")}\n${fmtG(x.remaining_weight_g)} restants${pc != null ? ` (${Math.round(pc * 100)} %)` : ""}${x.ams_tray ? ` · dans l'AMS ${x.ams_tray}` : ""}`; };
+  return `${spoolName(x)}\n${[x.filament_manufacturer, spoolKind(x)].filter(Boolean).join(" · ")}\n${fmtG(x.remaining_weight_g)} restants${pc != null ? ` (${Math.round(pc * 100)} %)` : ""}${x.ams_tray ? ` · ${x.location || "dans l'AMS"}` : ""}`; };
 const pctColor = pc => pc == null ? "#94a3b8" : pc < 0.15 ? "#ef4444" : pc < 0.35 ? "#f59e0b" : "#22c55e";
 function Stock({ s, o, sz }) {
   const list = Array.isArray(s) ? s : [];
@@ -1390,7 +1390,8 @@ function StockZoom({ list, kg }) {
               {x.filament_manufacturer && pill(x.filament_manufacturer, "#8B5CF6")}
               {x.filament_material && pill(x.filament_material, "#F59E0B")}
               {spoolKind(x) && spoolKind(x) !== x.filament_material && pill(spoolKind(x), "#0EA5E9")}
-              {x.ams_tray && pill(`AMS ${x.ams_tray}`, "#3B82F6")}
+              {/* ams_tray est un identifiant interne : on montre l'emplacement lisible (« AMS-B slot 1 ») */}
+              {x.ams_tray && pill(`📍 ${x.location || "AMS"}`, "#3B82F6")}
             </div>
             <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ flex: 1, height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
