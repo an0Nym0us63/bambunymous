@@ -100,12 +100,18 @@ export function whisper(emoji, title, text) {
   queued(done => celebrate({ emoji, name: title, lore: text }, "w_", false, null, done));
 }
 
-// Le bandeau dit ce qu'on vient de trouver : page cachee, farce, ou easter egg
-const KIND = n => n === "w_" ? ["🔮 Psst…", "#7C3AED"] : n.startsWith("h_") ? ["🗺️ Page cachée réussie !", "#22C55E"]
-  : n.startsWith("p_") ? ["🌀 Farce découverte !", "#8B5CF6"] : ["🥚 Easter egg trouvé !", "#EC4899"];
+// Le bandeau dit ce qu'on vient de trouver, d'apres sa section (le serveur la donne : sub) ; sinon d'apres
+// le nom (h_ page cachee, p_ farce), et a defaut easter egg
+const SUB_KIND = {
+  cachettes: ["🔎 Cachette dénichée !", "#0EA5E9"], hidden: ["🗺️ Page cachée réussie !", "#22C55E"],
+  pranks: ["🌀 Farce découverte !", "#8B5CF6"], fetes: ["🎉 Fête trouvée !", "#F59E0B"],
+  android: ["🤖 Secret Android trouvé !", "#16A34A"], eggs: ["🥚 Easter egg trouvé !", "#EC4899"],
+};
+const KIND = (n, sub) => n === "w_" ? ["🔮 Psst…", "#7C3AED"] : SUB_KIND[sub] || (n.startsWith("h_") ? SUB_KIND.hidden
+  : n.startsWith("p_") ? SUB_KIND.pranks : SUB_KIND.eggs);
 
 function celebrate(e, name = "", uncounted = false, kind = null, onGone = null) {
-  const [head, col] = kind || KIND(name);
+  const [head, col] = kind || KIND(name, e?.sub);
   const box = document.createElement("div");
   box.setAttribute("role", "status");
   box.style.cssText = "position:fixed;left:50%;bottom:calc(96px + env(safe-area-inset-bottom,0px));z-index:9600;" +

@@ -227,7 +227,14 @@ async def achievements_surprise_shown(body: dict | None = Body(None), acc=Depend
 
 @router.post("/egg/{name}")
 async def achievements_egg(name: str, acc=Depends(require_own_account)):
-    """Un easter egg trouve dans l'appli (jamais par une cle de copain)."""
+    """Un easter egg trouve dans l'appli (jamais par une cle de copain). La reponse dit aussi sa section
+    (sub) : le bandeau de l'appli annonce une cachette, une page cachee, une farce… et non « easter egg »."""
+    from ....services import achievements as A
+    r = await _egg(name, acc)
+    return {**r, "sub": A.SUB_OF.get(f"egg_{name}")} if isinstance(r, dict) else r
+
+
+async def _egg(name: str, acc):
     from ....services import achievements as A
     # deja vu par CE compte (sur n'importe quel appareil) : rien a rejouer
     if name in A.EGGS and name in await A.eggs_seen_by(acc[0]):
