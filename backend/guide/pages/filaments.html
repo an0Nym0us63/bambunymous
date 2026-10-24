@@ -111,7 +111,7 @@
     <p><span class="admin">admin</span> Trois chemins mènent à la fenêtre <span class="ui">Nouvelle bobine</span> :</p>
     <ul>
       <li>le bouton bleu <span class="ui">+ Bobine</span> de l'onglet <span class="ui">Stock</span> ;</li>
-      <li><span class="ui">+ Créer une bobine</span> dans la fiche d'un filament (le filament est alors déjà choisi) ;</li>
+      <li><span class="ui">+ Bobine</span> dans la fiche d'un filament, ou <span class="ui">＋ Ajouter une bobine de ce filament</span> dans le menu d'une bobine (le filament est alors déjà choisi) ;</li>
       <li><span class="ui">Ajouter une bobine…</span> dans le menu rapide d'une bobine ou d'un filament.</li>
     </ul>
     <figure class="phone"><img src="img/filaments-nouvelle-bobine.webp" alt="Fenêtre Nouvelle bobine"><figcaption>Choisis le filament, puis complète le reste si tu veux.</figcaption></figure>
@@ -133,47 +133,63 @@
     <figure class="pair">
       <img src="img/filaments-fiche-bobine.webp" alt="Haut de la fiche d'une bobine">
       <img src="img/filaments-fiche-bobine-bas.webp" alt="Bas de la fiche d'une bobine avec les boutons">
-      <figcaption>La fiche d'une bobine : la bobine en haut, son filament en dessous, les actions en bas.</figcaption>
+      <figcaption>La fiche d'une bobine : la bobine en vedette, ses chiffres et ses cartes ; à droite, la carte du filament dépliée.</figcaption>
     </figure>
-    <h4>En-tête</h4>
-    <p>La couleur, le nom, « Marque · Sous-type », et des badges :</p>
+    <h4>En haut : la bobine en vedette</h4>
+    <p>Le dessin de la bobine sur un fond de sa couleur, puis des pastilles :</p>
     <ul>
-      <li><span class="ui">Archivée</span> (gris) si la bobine est archivée ;</li>
-      <li><span class="ui">Échantillon</span> (vert) si la plaquette du nuancier existe, sinon <span class="ui">Sans échantillon</span> (gris) ;</li>
-      <li>un badge de séchage quand il le faut : <span class="ui">Séchage nécessaire</span> (bleu ciel, jamais séchée ou délai dépassé), <span class="ui">Séchage dans 12 j</span> (orange, délai atteint dans moins de 30 jours) ou <span class="ui">Séchage aujourd'hui</span>. Pour un admin, ce badge porte un petit soleil : le toucher ouvre <a href="#filaments-sechee">Séchée aujourd'hui</a>.</li>
+      <li>son numéro (<span class="ui">#26</span>), <span class="ui">Archivée</span> si elle l'est, l'emplacement de l'AMS (<span class="ui">AMS A1</span>) et l'emplacement de rangement (<span class="ui">📍 Étagère B</span>) ;</li>
+      <li>un badge de séchage quand il le faut : <span class="ui">Séchage nécessaire</span> (bleu ciel, jamais séchée ou délai dépassé), <span class="ui">Séchage dans 12 j</span> (orange, délai atteint dans moins de 30 jours) ou <span class="ui">Séchage aujourd'hui</span>. Pour un admin, ce badge porte un petit soleil : le toucher ouvre <a href="#filaments-sechee">Séchée aujourd'hui</a> ;</li>
+      <li><span class="ui">Échantillon</span> (vert) si la plaquette du nuancier existe, sinon <span class="ui">Sans échantillon</span> (gris).</li>
     </ul>
-    <p>Sous l'en-tête, <b>Filament restant</b> : « 760g / 1000g (76%) » et une jauge (bleue, puis orange sous 30 %, rouge sous 15 %).</p>
-    <h4>Section BOBINE #26</h4>
+    <p>Dessous : le nom (le nom officiel en petit s'il diffère), « Marque · Sous-type », le poids restant en grand avec son pourcentage en pastille (« 760 g · 76 % sur 1000 g ») et la jauge (à la couleur de la bobine, orange sous 35 %, rouge sous 15 %).</p>
+    <h4>Les quatre tuiles</h4>
     <dl class="opts">
-      <dt>Emplacement</dt><dd>où se trouve la bobine (mis à jour par l'appli).</dd>
+      <dt>⚖ Restant</dt><dd>les grammes et le pourcentage. <span class="admin">admin</span> La toucher ouvre l'<a href="#filaments-poids">ajustement du poids</a>.</dd>
+      <dt>💶 Valeur</dt><dd>ce que vaut ce qui reste, au prix de la bobine (« sur 19,90 € »), ou « prix non défini ».</dd>
+      <dt>💧 Séchage</dt><dd>depuis combien de jours elle a séché (« jamais » sinon), et « à sécher », « dans 12 j » ou « à jour ». <span class="admin">admin</span> La toucher ouvre <a href="#filaments-sechee">Séchée aujourd'hui</a>.</dd>
+      <dt>🧵 Stock</dt><dd>le stock de ce filament, toutes bobines, et « +2 bobines » ou « seule bobine ». La toucher ouvre la <a href="#filaments-fiche-filament">fiche du filament</a>.</dd>
+    </dl>
+    <h4>Carte « La bobine »</h4>
+    <dl class="opts">
       <dt>Poids restant</dt><dd>le crayon <span class="admin">admin</span> ouvre l'<a href="#filaments-poids">éditeur de poids</a>.</dd>
       <dt>Prix d'achat</dt><dd>en vert : prix propre à cette bobine ; en orange : c'est le prix catalogue du filament, faute de mieux ; « non défini » sinon. Le crayon ouvre un champ en € : <span class="ui">OK</span> ou Entrée pour valider, ✕ ou Échap pour annuler. Changer un prix recalcule le coût des impressions faites avec la bobine.</dd>
+      <dt>Ce qu'il en reste</dt><dd>la valeur du filament restant, à ce prix.</dd>
       <dt>Tag NFC</dt><dd>l'identifiant de la puce, ou « aucun ». Le crayon ouvre un champ <span class="ui">UID — vide = détacher</span> : vider le champ détache le tag, utile si une bobine a été associée à la mauvaise puce.</dd>
+      <dt>Emplacement</dt><dd>où se trouve la bobine (mis à jour par l'appli).</dd>
       <dt>Tray AMS</dt><dd>l'emplacement de l'AMS où elle a été vue (A1, B3…).</dd>
-      <dt>Première util. / Dernière util.</dt><dd>dates de la première et de la dernière impression avec cette bobine.</dd>
-      <dt>Dernier séchage</dt><dd>la date, ou « jamais », suivie de « · à sécher » en bleu si elle doit passer au séchoir. Pour un admin : le <b>soleil orange</b> (« Je viens de la sécher ») ouvre <a href="#filaments-sechee">Séchée aujourd'hui</a> ; le <b>crayon</b> ouvre un sélecteur de date (pas dans le futur) avec <span class="ui">OK</span>, <span class="ui">Effacer</span> (remet à « jamais séchée ») et ✕.</dd>
-      <dt>Commentaire</dt><dd>affiché s'il existe.</dd>
     </dl>
-    <h4>Section FILAMENT #18</h4>
-    <p>À côté du titre, une pastille résume le reste du stock de ce filament : <span class="ui">+2 en stock · 2000g</span> (les autres bobines actives) ou <span class="ui">seule bobine</span>. Le bouton carré à la goutte ouvre la <a href="#filaments-fiche-filament">fiche du filament</a> par-dessus.</p>
-    <p>Lignes : Nom, Nom EN (si différent), Marque, Matière, Sous-type, Échantillon (Oui / Non), Couleur (#hex), Code Bambu (le profil, ex. GFA00), Code couleur Bambu (ex. 10100), Stock du filament (toutes bobines), Poids total, Prix catalogue.</p>
-    <h4>En bas</h4>
+    <h4>Carte « Son histoire »</h4>
+    <dl class="opts">
+      <dt>Première / Dernière utilisation</dt><dd>dates de la première et de la dernière impression avec cette bobine, avec « il y a 2 mois ».</dd>
+      <dt>Dernier séchage</dt><dd>la date, ou « jamais », suivie de « · à sécher » en bleu si elle doit passer au séchoir. Pour un admin : le <b>soleil orange</b> (« Je viens de la sécher ») ouvre <a href="#filaments-sechee">Séchée aujourd'hui</a> ; le <b>crayon</b> ouvre un sélecteur de date (pas dans le futur) avec <span class="ui">OK</span>, <span class="ui">Effacer</span> (remet à « jamais séchée ») et ✕.</dd>
+      <dt>Utilisation</dt><dd><span class="ui">📋 Voir l'historique</span> : voir <a href="#filaments-historique">plus bas</a>.</dd>
+    </dl>
+    <h4>Carte « Le filament #18 »</h4>
+    <p>Repliée à chaque ouverture : elle montre la couleur, la matière, le code couleur et le prix catalogue. À côté du titre, une pastille résume le reste du stock de ce filament : <span class="ui">+2 en stock · 2000 g</span> (les autres bobines actives) ou <span class="ui">seule bobine</span> ; le bouton <span class="ui">↗</span> ouvre la <a href="#filaments-fiche-filament">fiche du filament</a> par-dessus. Touche le titre pour la déplier : Nom, Nom EN (si différent), Marque, Matière, Sous-type, Échantillon (fait / à faire), Couleur (#hex), Code Bambu (le profil, ex. GFA00), Code couleur Bambu (ex. 10100), Stock du filament (toutes bobines), Poids total, Prix catalogue.</p>
+    <p>Le commentaire de la bobine, s'il existe, s'affiche en citation tout en bas.</p>
+    <h4>Les actions</h4>
+    <p>En bas, toujours à portée du pouce : <span class="ui">⚖ Ajuster le poids</span> <span class="admin">admin</span>, <span class="ui">📋 Historique</span> et <span class="ui">⋯</span> (sans droits d'admin : <span class="ui">🧵 Filament</span> à la place de l'ajustement). Le même <span class="ui">⋯</span> est en haut à côté du ✕. Il ouvre le menu de la bobine :</p>
     <ul>
-      <li><span class="ui">📋 Voir l'historique d'utilisation</span> : voir ci-dessous.</li>
-      <li><span class="ui">Archiver</span> et <span class="ui">🗑 Supprimer</span> <span class="admin">admin</span>, puis le bouton bleu <span class="ui">✕</span> pour fermer.</li>
+      <li><span class="ui">⚖ Ajuster le poids</span> <span class="admin">admin</span> ;</li>
+      <li><span class="ui">☀ Je viens de la sécher</span> <span class="admin">admin</span> (avec la date du dernier séchage) ;</li>
+      <li><span class="ui">📋 Historique d'utilisation</span> ;</li>
+      <li><span class="ui">🧵 Voir le filament</span> ;</li>
+      <li><span class="ui">＋ Ajouter une bobine de ce filament</span> <span class="admin">admin</span> ;</li>
+      <li><span class="ui">📦 Archiver…</span> et <span class="ui">🗑 Supprimer définitivement…</span> <span class="admin">admin</span>.</li>
     </ul>
   </section>
 
   <section id="filaments-historique">
     <h3>Historique d'utilisation d'une bobine</h3>
-    <p>Le bouton <span class="ui">📋 Voir l'historique d'utilisation</span> ouvre <span class="ui">📋 Historique bobine #1</span> : une ligne par impression qui a consommé cette bobine, avec la vignette du plateau, le nom, la date, ✅ (réussie) ou ❌ (échouée), et à droite les grammes consommés en rouge et leur coût.</p>
+    <p>Le bouton <span class="ui">📋 Historique</span> (ou <span class="ui">📋 Voir l'historique</span> dans la carte « Son histoire ») ouvre l'historique de la bobine : en tête, la bobine, le nombre d'impressions et les grammes consommés en tout ; puis une ligne par impression qui l'a consommée, avec la vignette du plateau, le nom, la date, <span class="ui">● Réussie</span> ou <span class="ui">● Échouée</span>, et à droite les grammes consommés et leur coût. Touche une ligne pour ouvrir la fiche de l'impression.</p>
     <figure class="phone"><img src="img/filaments-historique-bobine.webp" alt="Historique d'utilisation d'une bobine"><figcaption>Chaque impression a retiré des grammes de la bobine.</figcaption></figure>
-    <p>Sans aucune impression : « Aucune utilisation enregistrée ». <span class="ui">Fermer</span> revient à la fiche.</p>
+    <p>Sans aucune impression : « Aucune utilisation enregistrée ». Le ✕ revient à la fiche.</p>
   </section>
 
   <section id="filaments-poids">
     <h3>Corriger le poids restant</h3>
-    <p><span class="admin">admin</span> L'appli décompte toute seule le filament consommé à chaque impression. Pour recaler le poids (après une pesée, un bourrage, une bobine entamée à la main…), touche le crayon de <b>Poids restant</b>. Quatre modes :</p>
+    <p><span class="admin">admin</span> L'appli décompte toute seule le filament consommé à chaque impression. Pour recaler le poids (après une pesée, un bourrage, une bobine entamée à la main…), touche <span class="ui">⚖ Ajuster le poids</span> en bas de la fiche, la tuile <b>Restant</b> ou le crayon de <b>Poids restant</b>. L'éditeur s'ouvre dans la carte « La bobine ». Quatre modes :</p>
     <figure class="pair">
       <img src="img/filaments-poids.webp" alt="Éditeur de poids, mode Restant">
       <img src="img/filaments-pesee.webp" alt="Éditeur de poids, mode Pesée">
@@ -192,16 +208,16 @@
 
   <section id="filaments-archiver">
     <h3>Archiver une bobine</h3>
-    <p><span class="admin">admin</span> Quand une bobine est finie (ou donnée, ou jetée), archive-la plutôt que de la supprimer : <span class="ui">Archiver</span> dans sa fiche, ou <span class="ui">📦 Archiver…</span> dans le menu rapide. Une confirmation rappelle qu'elle « passera en Archives avec une quantité remise à 0 et sortira du stock ».</p>
+    <p><span class="admin">admin</span> Quand une bobine est finie (ou donnée, ou jetée), archive-la plutôt que de la supprimer : <span class="ui">📦 Archiver…</span> dans le menu <span class="ui">⋯</span> de sa fiche ou dans le menu rapide. Une confirmation rappelle qu'elle « passera en Archives avec une quantité remise à 0 et sortira du stock ».</p>
     <p>La bobine passe à 0 g, à l'emplacement « Archives », dans l'onglet <span class="ui">Archivées</span>. Son historique reste intact. Une bobine archivée n'est plus jamais reconnue dans l'AMS et ne compte plus dans les séchages.</p>
   </section>
 
   <section id="filaments-supprimer-bobine">
     <h3>Supprimer une bobine</h3>
-    <p><span class="admin">admin</span> <span class="ui">🗑 Supprimer</span> efface la bobine pour de bon (pour une bobine saisie par erreur, par exemple).</p>
+    <p><span class="admin">admin</span> <span class="ui">🗑 Supprimer définitivement…</span> (menu <span class="ui">⋯</span> de la fiche, ou menu rapide) efface la bobine pour de bon (pour une bobine saisie par erreur, par exemple), après « Supprimer définitivement la bobine #26 ? ».</p>
     <ul>
-      <li>Si elle n'a jamais servi, elle est supprimée directement (depuis le menu rapide, après « Supprimer définitivement la bobine #26 ? »).</li>
-      <li>Si elle a servi à des impressions, un encadré rouge prévient : supprimer la bobine <b>délie</b> ces impressions (elles restent, seul le lien vers la bobine est effacé). Touche <span class="ui">Confirmer la suppression</span> ou <span class="ui">Annuler</span>.</li>
+      <li>Si elle n'a jamais servi, elle est supprimée directement.</li>
+      <li>Si elle a servi à des impressions, une seconde confirmation prévient : supprimer la bobine <b>délie</b> ces impressions (elles restent, seul le lien vers la bobine est effacé).</li>
     </ul>
     <div class="warn"><p>La suppression est définitive. Pour une bobine simplement terminée, préfère <a href="#filaments-archiver">Archiver</a>.</p></div>
   </section>
@@ -225,16 +241,16 @@
 
   <section id="filaments-fiche-filament">
     <h3>La fiche d'un filament</h3>
-    <figure class="phone"><img src="img/filaments-fiche-filament.webp" alt="Fiche d'un filament"><figcaption>La fiche d'une référence, avec ses bobines actives.</figcaption></figure>
-    <p>En-tête : la couleur, le nom (le nom officiel en petit s'il diffère), « Marque · Sous-type », et deux badges : <span class="ui">Échantillon</span> / <span class="ui">Sans échantillon</span>, <span class="ui">Étiquette</span> / <span class="ui">Sans étiquette</span> (l'info-bulle donne la date d'impression de l'étiquette).</p>
-    <p>Section <b>FILAMENT #12</b> : Marque, Matière, Couleur (deux couleurs pour un multicolore), Profile ID, Code couleur Bambu, Poids bobine, Poids support, Prix, Multicolor (gradient ou coaxial).</p>
-    <p>Section <b>BOBINES</b> : « 1 active · 180 g restants » et le bouton vert <span class="ui">+ Créer une bobine</span> <span class="admin">admin</span>.</p>
-    <p>En bas : <span class="ui">🗑 Supprimer</span> <span class="admin">admin</span> et <span class="ui">✕</span>.</p>
+    <figure class="phone"><img src="img/filaments-fiche-filament.webp" alt="Fiche d'un filament"><figcaption>La fiche d'une référence : sa bobine en vedette, ses chiffres, ses cartes.</figcaption></figure>
+    <p>En haut, la bobine sur un fond de sa couleur, avec des pastilles : le numéro, <span class="ui">Échantillon</span> / <span class="ui">Sans échantillon</span>, <span class="ui">Étiquette</span> / <span class="ui">Sans étiquette</span> (l'info-bulle donne la date d'impression de l'étiquette) et <span class="ui">🛒 À commander</span> s'il est sur la liste. Puis le nom (le nom officiel en petit s'il diffère), « Marque · Sous-type », et le stock en grand : « 790 g en stock · 2 bobines actives ».</p>
+    <p>Quatre tuiles : <b>Stock</b> (et le nombre de bobines actives ; <span class="admin">admin</span> la toucher crée une bobine), <b>Prix</b> (et le prix au kilo), <b>Bobine</b> (le poids de filament d'une bobine neuve), <b>Support</b> (le poids du support vide et son modèle).</p>
+    <p>Carte <b>Le filament</b> : Marque, Matière, Sous-type, Couleur (deux couleurs pour un multicolore), Multicolor (gradient ou coaxial). Carte <b>Côté Bambu</b> : Profile ID, Code couleur Bambu, Échantillon (fait / à faire), Étiquette (imprimée, avec sa date, ou à imprimer), À commander. Le commentaire s'affiche en citation s'il existe.</p>
+    <p>En bas <span class="admin">admin</span> : <span class="ui">✏️ Éditer</span>, <span class="ui">+ Bobine</span> (crée une bobine de ce filament) et <span class="ui">⋯</span> (Éditer, Créer une bobine, Supprimer…).</p>
   </section>
 
   <section id="filaments-editer">
     <h3>Éditer un filament</h3>
-    <p><span class="admin">admin</span> Le bouton <span class="ui">✏️ Éditer</span> de la fiche passe en formulaire (il devient <span class="ui">Annuler</span>).</p>
+    <p><span class="admin">admin</span> Le bouton <span class="ui">✏️ Éditer</span> de la fiche passe en formulaire ; en bas, <span class="ui">Annuler</span> et <span class="ui">Enregistrer</span>.</p>
     <figure class="phone"><img src="img/filaments-edition-filament.webp" alt="Formulaire d'édition d'un filament"><figcaption>Tous les champs d'une référence.</figcaption></figure>
     <dl class="opts">
       <dt>Nom (anglais / officiel) *</dt><dd>le nom de la couleur chez le fabricant, obligatoire.</dd>
@@ -283,7 +299,7 @@
 
   <section id="filaments-supprimer-filament">
     <h3>Supprimer un filament</h3>
-    <p><span class="admin">admin</span> <span class="ui">🗑 Supprimer</span> dans la fiche, après « Supprimer le filament "…" ? ». Deux garde-fous :</p>
+    <p><span class="admin">admin</span> <span class="ui">🗑 Supprimer…</span> dans le menu <span class="ui">⋯</span> de la fiche, après « Supprimer le filament "…" ? ». Deux garde-fous :</p>
     <ul>
       <li>Si le filament a encore des bobines (même archivées), la suppression est refusée : supprime d'abord ses bobines.</li>
       <li>S'il a un échantillon, l'appli rappelle que la plaquette du nuancier porte un QR qui pointe cette fiche : décoche <b>Échantillon</b> d'abord si la plaquette a été jetée.</li>

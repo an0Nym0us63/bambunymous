@@ -19,7 +19,7 @@ import AdminOnly from "../components/AdminOnly";
 import { useTrackDetail } from "../utils/track";
 import Select from "../components/Select";
 import { useIsAdmin } from "../store/auth";
-import { Pressable } from "../components/ContextMenu";
+import { Pressable, openMenu } from "../components/ContextMenu";
 import { colorBg, parseColorsList } from "../utils/colors";
 import SpoolSVG from "../components/SpoolSVG";
 import GalleryCompare from "../components/GalleryCompare";
@@ -333,7 +333,7 @@ const WEIGHT_MODES = [
   ["scale", "Pesée",   "Poids sur la balance, support compris"],
 ];
 
-function WeightEditRow({ spoolId, filamentId, brand, current, total, tare, tareName, onUpdated }) {
+function WeightEditRow({ spoolId, filamentId, brand, current, total, tare, tareName, onUpdated, openKey = 0 }) {
   const tares = useSpoolTares();
   const [editing, setEditing] = useState(false);
   const [mode, setMode] = useState("set");
@@ -373,6 +373,8 @@ function WeightEditRow({ spoolId, filamentId, brand, current, total, tare, tareN
   };
 
   const save = () => { if (valide) { setTareEdit(null); setAsking(true); } };
+  // ouvert depuis la barre d'actions ou la tuile du poids de la fiche
+  useEffect(() => { if (openKey) open(); }, [openKey]);
 
   // Nouveau support vide : enregistre sur le FILAMENT (vaut pour ses autres
   // bobines), applique au calcul, et la validation se repropose avec le
@@ -477,13 +479,12 @@ function WeightEditRow({ spoolId, filamentId, brand, current, total, tare, tareN
     outline:"none", textAlign:"right", fontFamily:"JetBrains Mono,monospace", boxSizing:"border-box" };
 
   return (
-    <div style={{ padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+    <div style={{ padding:"8px 0", borderTop:"1px dashed var(--border)" }}>
     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>Poids restant</span>
+      <span style={FLAB}>Poids restant</span>
       {(
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-          <span style={{ fontSize:13, fontWeight:600, fontFamily:"JetBrains Mono,monospace",
-            color:"var(--text)" }}>
+          <span style={FVAL}>
             {current != null ? `${Math.round(current)} g` : <span style={{color:"var(--muted)",fontWeight:400}}>—</span>}
           </span>
           <AdminOnly><button onClick={() => editing ? setEditing(false) : open()}
@@ -590,9 +591,8 @@ function DryEditRow({ spoolId, spoolName, current, aSecher, onUpdated }) {
 
   const small = { padding:"4px 10px", borderRadius:7, fontSize:12, fontWeight:700, cursor:"pointer" };
   return (
-    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
-      padding:"8px 0", borderBottom:"1px solid var(--border)", gap:8, flexWrap:"wrap" }}>
-      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>Dernier séchage</span>
+    <div style={{ ...FROW, gap:8, flexWrap:"wrap" }}>
+      <span style={FLAB}>Dernier séchage</span>
       {editing ? (
         <div style={{ display:"flex", gap:6, alignItems:"center", flexWrap:"wrap", justifyContent:"flex-end" }}>
           <input type="date" value={val} max={today()} autoFocus onChange={e => setVal(e.target.value)}
@@ -611,20 +611,20 @@ function DryEditRow({ spoolId, spoolName, current, aSecher, onUpdated }) {
         </div>
       ) : (
         <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-          <span style={{ fontSize:13, fontWeight:600, color: aSecher ? "#0EA5E9" : "var(--text)" }}>
-            {current ? current.slice(0, 10) : "jamais"}{aSecher ? " · à sécher" : ""}
+          <span style={{ ...FVAL, color: aSecher ? "#0EA5E9" : "var(--text)" }}>
+            {current ? dayFr(current) : "jamais"}{aSecher ? " · à sécher" : ""}
           </span>
           <AdminOnly>
             {/* Le cas courant : « je viens de la secher ». Icone de sechage (la
                 meme que le bandeau de l'AMS) et confirmation : un libelle
                 « Aujourd'hui » se lisait comme une date, pas comme une action. */}
-            <button disabled={saving} title="Je viens de la sécher"
+            <button disabled={saving} data-tip="Je viens de la sécher"
               onClick={() => setDryOpen(true)}
               style={{ background:"none", border:"none", cursor:"pointer", color:"#f59e0b", padding:2, display:"flex" }}>
               <Sun size={14}/>
             </button>
             <button onClick={() => { setVal(current?.slice(0, 10) || today()); setEditing(true); }}
-              title="Modifier la date de séchage"
+              data-tip="Modifier la date de séchage"
               style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)", padding:2, display:"flex" }}
               onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
               onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
@@ -656,9 +656,8 @@ function TagEditRow({ spoolId, current, onUpdated }) {
   };
 
   return (
-    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
-      padding:"8px 0", borderBottom:"1px solid var(--border)", gap:8 }}>
-      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>Tag NFC</span>
+    <div style={{ ...FROW, gap:8 }}>
+      <span style={FLAB}>Tag NFC</span>
       {editing ? (
         <div style={{ display:"flex", gap:6, alignItems:"center", flex:1, justifyContent:"flex-end" }}>
           {/* Le placeholder dit ce que le champ vide provoque : sans lui, rien
@@ -683,8 +682,8 @@ function TagEditRow({ spoolId, current, onUpdated }) {
       ) : (
         <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
           {current ? (
-            <span style={{ fontSize:13, fontWeight:600, fontFamily:"JetBrains Mono,monospace",
-              color:"var(--text)", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            <span style={{ ...FVAL, fontSize:13, fontFamily:"JetBrains Mono,monospace",
+              overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
               {current}
             </span>
           ) : (
@@ -692,7 +691,7 @@ function TagEditRow({ spoolId, current, onUpdated }) {
           )}
           <AdminOnly>
             <button onClick={() => { setVal(current || ""); setEditing(true); }}
-              title="Modifier le tag NFC"
+              data-tip="Modifier le tag NFC"
               style={{ background:"none", border:"none", cursor:"pointer", color:"var(--muted)",
                 padding:2, display:"flex" }}
               onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
@@ -724,9 +723,8 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
   };
 
   return (
-    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
-      padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
-      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>Prix d'achat</span>
+    <div style={FROW}>
+      <span style={FLAB}>Prix d'achat</span>
       {editing ? (
         <div style={{ display:"flex", gap:6, alignItems:"center" }}>
           <input type="number" min="0" step="0.01" value={val} autoFocus
@@ -749,12 +747,12 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
       ) : (
         <div style={{ display:"flex", alignItems:"center", gap:8 }}>
           {current != null ? (
-            <span style={{ fontSize:13, fontWeight:600, fontFamily:"JetBrains Mono,monospace", color:"#22c55e" }}>
+            <span style={{ ...FVAL, color:"#16a34a" }}>
               {moneyVal(Number(current), 2)} €
             </span>
           ) : filamentPrice != null ? (
-            <span style={{ fontSize:13, fontWeight:600, fontFamily:"JetBrains Mono,monospace", color:"#f59e0b" }}
-              title="Prix du filament (non personnalisé)">
+            <span style={{ ...FVAL, color:"#d97706" }}
+              data-tip="Prix du filament (non personnalisé)">
               {moneyVal(Number(filamentPrice), 2)} €
             </span>
           ) : (
@@ -772,12 +770,113 @@ function PriceEditRow({ spoolId, current, filamentPrice, onUpdated }) {
   );
 }
 
+// ── Fiches bobine et filament (25/10/2026) : le langage du popup de la tuile « Filament en cours »
+// (la bobine en vedette sur un fond de sa couleur, des cartes de faits), les actions en bas a portee du pouce.
+const fRound = { width:34, height:34, borderRadius:"50%", border:"1px solid var(--border)", background:"color-mix(in srgb, var(--sheet-bg) 80%, transparent)",
+  backdropFilter:"blur(6px)", color:"var(--text2)", cursor:"pointer", fontSize:15, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center" };
+const fBtn = { padding:"11px 12px", borderRadius:12, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontSize:13.5,
+  fontWeight:800, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 };
+const fGrad = (a, b) => ({ backgroundImage:`linear-gradient(135deg, ${a}, ${b})`, WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" });
+// une couleur tres claire (blanc, jade…) se perd sur le fond : elle garde un contour et un texte sombre
+const isLight = c => { const m = /^#?([0-9a-f]{6})/i.exec(c || ""); if (!m) return false; const n = parseInt(m[1], 16);
+  return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.72; };
+const fChip = (txt, c, extra = {}) => <span style={{ display:"inline-flex", alignItems:"center", gap:4, padding:"3px 9px", borderRadius:20, fontSize:11, fontWeight:800,
+  whiteSpace:"nowrap", color:c, background:`${c}1f`, border:`1px solid ${c}33`, ...extra }}>{txt}</span>;
+const dayFr = iso => iso ? new Date(String(iso).length <= 10 ? `${iso}T12:00:00` : iso).toLocaleDateString("fr-FR", { day:"numeric", month:"long", year:"numeric" }) : null;
+const agoFr = iso => { if (!iso) return null; const d = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  return d <= 0 ? "aujourd'hui" : d === 1 ? "hier" : d < 60 ? `il y a ${d} j` : `il y a ${Math.round(d / 30)} mois`; };
+
+// la coque : fond assombri, feuille (en bas au telephone, centree a l'ordinateur), barre du haut et barre d'actions
+function FSheet({ onClose, top = null, bottom = null, children, z = 1000 }) {
+  const wide = typeof window !== "undefined" && window.innerWidth >= 900;
+  return (
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:z, display:"flex",
+      alignItems: wide ? "center" : "flex-end", justifyContent:"center", padding: wide ? 20 : 0 }}>
+      <div onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius: wide ? 24 : "22px 22px 0 0",
+        width:"100%", maxWidth: wide ? 760 : 600, maxHeight: wide ? "90dvh" : "94dvh", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+        <div style={{ flex:1, minHeight:0, overflowY:"auto", position:"relative" }}>
+          <div style={{ position:"sticky", top:0, zIndex:10, height:0 }}>
+            {!wide && <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", width:38, height:4, borderRadius:2, background:"rgba(148,163,184,.6)" }}/>}
+            <div style={{ position:"absolute", top:10, right:12, display:"flex", gap:8 }}>
+              {top}
+              <button onClick={onClose} aria-label="Fermer" style={fRound}>✕</button>
+            </div>
+          </div>
+          {children}
+        </div>
+        {bottom && <div style={{ flexShrink:0, display:"flex", gap:8, padding:"10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",
+          borderTop:"1px solid var(--border)", background:"color-mix(in srgb, var(--sheet-bg) 94%, transparent)", backdropFilter:"blur(8px)" }}>{bottom}</div>}
+      </div>
+    </div>);
+}
+// la bobine en vedette : son dessin sur un fond de sa couleur, les pastilles, le nom, puis ce qu'on veut mettre dessous
+function FHero({ colors, type, color, chips, name, sub, children }) {
+  return (
+    <div style={{ position:"relative", overflow:"hidden", padding:"52px 18px 18px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
+      background:`radial-gradient(circle at 18% 45%, ${color}55, transparent 60%), linear-gradient(135deg, ${color}26, transparent 70%), var(--surface2)` }}>
+      <span style={{ display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 8px 18px ${color}66)` }}>
+        <SpoolSVG colors={colors} size={118} type={type}/></span>
+      <div style={{ flex:"1 1 190px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
+        {chips.filter(Boolean).length > 0 && <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
+          {chips.filter(Boolean).map((c, k) => <React.Fragment key={k}>{c}</React.Fragment>)}</div>}
+        <div style={{ fontSize:24, fontWeight:900, color:"var(--text)", lineHeight:1.12, overflowWrap:"anywhere" }}>{name}</div>
+        {sub}
+        {children}
+      </div>
+    </div>);
+}
+// une tuile de chiffre (meme dessin que celles de la fiche impression)
+function FTile({ label, value, sub, c1, c2, onClick, tip }) {
+  return (
+    <button onClick={onClick} disabled={!onClick} data-tip={tip} style={{ minWidth:0, padding:"9px 8px", borderRadius:16, border:`1px solid color-mix(in srgb, ${c1} 22%, var(--border))`,
+      background:`radial-gradient(90% 70% at 100% 0%, ${c1}22, transparent 70%), var(--surface2)`, cursor: onClick ? "pointer" : "default", textAlign:"left",
+      font:"inherit", color:"inherit", display:"flex", flexDirection:"column", gap:1, boxShadow:`0 6px 18px -12px ${c1}` }}>
+      <span style={{ fontSize:10, fontWeight:800, letterSpacing:".05em", textTransform:"uppercase", color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{label}</span>
+      <span style={{ fontSize:16, fontWeight:900, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", ...fGrad(c1, c2) }}>{value}</span>
+      {sub && <span style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{sub}</span>}
+    </button>);
+}
+// une carte de faits ; repliable (fold) : le resume reste visible, le detail se deplie
+function FCard({ t, i, c, aside = null, fold = false, open = true, onToggle, summary = null, children }) {
+  const shut = fold && !open;
+  return (
+    <div style={{ borderRadius:18, padding:"12px 14px", background:`linear-gradient(160deg, ${c}1a, transparent 55%), var(--surface2)`,
+      border:`1px solid ${c}33`, display:"flex", flexDirection:"column", minWidth:0 }}>
+      <div onClick={fold ? onToggle : undefined} style={{ display:"flex", alignItems:"center", gap:8, marginBottom: shut ? 0 : 4, cursor: fold ? "pointer" : "default" }}>
+        <span style={{ width:28, height:28, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15, background:`${c}26`, flexShrink:0 }}>{i}</span>
+        <span style={{ fontSize:13.5, fontWeight:900, color:"var(--text)", flex:1, minWidth:0 }}>{t}</span>
+        {aside}
+        {fold && <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>}
+      </div>
+      {shut ? summary : children}
+    </div>);
+}
+// une ligne de carte : l'intitule a gauche, la valeur a droite (en gras, en couleur si vc)
+const FROW = { display:"flex", justifyContent:"space-between", alignItems:"center", gap:10, padding:"8px 0", borderTop:"1px dashed var(--border)" };
+const FLAB = { fontSize:12.5, fontWeight:700, color:"var(--muted)", flexShrink:0 };
+const FVAL = { fontSize:14, fontWeight:900, color:"var(--text)", textAlign:"right", minWidth:0, overflowWrap:"anywhere" };
+function FRow({ l, v, d, vc, pre, mono }) {
+  if (v == null || v === "") return null;
+  return (
+    <div style={FROW}>
+      <span style={FLAB}>{l}</span>
+      <span style={{ textAlign:"right", minWidth:0 }}>
+        <span style={{ ...FVAL, display:"inline-flex", alignItems:"center", gap:6, color: vc || "var(--text)",
+          fontFamily: mono ? "JetBrains Mono,monospace" : "inherit", fontSize: mono ? 13 : 14 }}>{pre}{v}</span>
+        {d && <span style={{ display:"block", fontSize:11, fontWeight:600, color:"var(--muted)" }}>{d}</span>}
+      </span>
+    </div>);
+}
+
 export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
   useTrackDetail(spool ? `Fiche bobine · ${spool.filament_translated_name || spool.filament_name || "#" + spool.id}` : null);
-  const [confirmDelete, setConfirmDelete] = React.useState(null);
   const [filSheet, setFilSheet] = React.useState(null);   // fiche filament ouverte par-dessus
   const isAdmin = useIsAdmin();
   const [dryOpen, setDryOpen] = useState(false);   // fenetre « sechee aujourd'hui »
+  const [filOpen, setFilOpen] = useState(false);   // la carte du filament, repliee a chaque ouverture
+  const [weighKey, setWeighKey] = useState(0);     // ouvre l'ajustement du poids depuis la barre ou la tuile
+  const [addOpen, setAddOpen] = useState(false);   // une autre bobine de ce filament
+  const [detail, setDetail] = useState(null);      // une impression de l'historique, ouverte en fiche
   const openFilament = async () => {
     try {
       const r = await client.get(`/filaments/filaments/${spool.filament_id}`);
@@ -793,33 +892,47 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
     setLoadingUsage(true);
     try {
       const r = await client.get(`/filaments/spools/${spool.id}/usage`);
-      // Calculer poids avant/après chaque print (chronologique)
       setUsageHistory(r.data || []);
       setShowUsage(true);
     } catch(e) { showAlert('Erreur: ' + e.message); }
     setLoadingUsage(false);
   };
 
-  const handleDelete = async (force = false) => {
+  // Suppression definitive : le serveur demande une seconde confirmation si la bobine a servi.
+  const handleDelete = async () => {
+    if (!(await showConfirm(`Supprimer définitivement la bobine #${spool.id} ?`, { danger: true, confirmLabel: "Supprimer" }))) return;
     setDeleting(true);
     try {
-      const r = await client.delete(`/filaments/spools/${spool.id}/permanent`, { params: { force } });
+      const r = await client.delete(`/filaments/spools/${spool.id}/permanent`, { params: { force: false } });
       if (r.data.confirm_required) {
-        setConfirmDelete({ usage_count: r.data.usage_count, message: r.data.message });
-        return;
+        if (!(await showConfirm(r.data.message || `Bobine utilisée par ${r.data.usage_count} impression(s). Supprimer quand même ?`,
+          { danger: true, confirmLabel: "Supprimer" }))) return;
+        await client.delete(`/filaments/spools/${spool.id}/permanent`, { params: { force: true } });
       }
       onDelete?.();
       onClose();
     } catch(e) { showAlert(e.response?.data?.detail || e.message); }
     finally { setDeleting(false); }
   };
+  const archive = async () => {
+    if (!(await showConfirm(
+      `Archiver la bobine #${spool.id} ? Elle passera en Archives avec une quantité remise à 0 et sortira du stock.`,
+      { confirmLabel: "Archiver" }
+    ))) return;
+    await onArchive(spool.id); onClose();
+  };
+  const openDetail = id => client.get(`/prints/${id}`).then(r => setDetail(r.data))
+    .catch(e => showAlert(e.response?.data?.detail || "Impression introuvable"));
   if (!spool) return null;
+  const name = spool.filament_translated_name || spool.filament_name || `Bobine #${spool.id}`;
   const color = hexDisplay(spool.filament_color);
   const colorsList = parseColorsList(spool.filament_color, spool.filament_colors_array);
+  const main = hexToCss(spool.filament_color) || "#8B5CF6";
   const total = spool.filament_weight_g || 1000;
   const remaining = spool.remaining_weight_g ?? total;
   const pct = Math.max(0, Math.min(100, Math.round((remaining / total) * 100)));
-  const barColor = pct > 30 ? "#3b82f6" : pct > 15 ? "#f59e0b" : "#ef4444";
+  const barColor = pct < 15 ? "#ef4444" : pct < 35 ? "#f59e0b" : main;
+  const light = isLight(barColor);
 
   // Stock du filament : cette bobine (si active) + les autres actives.
   const stockFil = spool.sibling_weight_g != null
@@ -832,309 +945,189 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
     ? Math.floor((Date.now() - new Date(spool.last_dried_at).getTime()) / 86400000) : null;
   const resteSechage = ageSechage == null ? null : (spool.dry_days || 180) - ageSechage;
   const secherBientot = !aSecher && resteSechage != null && resteSechage <= 30;
-  // Raccourci depuis le badge (meme action que le soleil de la ligne « Dernier sechage »).
-  // Meme fenetre que le soleil de la ligne : date + ou elle seche (ailleurs,
-  // ou posee dans un emplacement AMS vide). Etat declare en tete du composant.
-  const marquerSeche = () => setDryOpen(true);
+  // Le prix reel de la bobine (le sien, sinon celui du filament) et ce qu'il en reste.
+  const price = spool.price_override ?? spool.filament_price;
+  const worth = price != null && total ? price * remaining / total : null;
+  const eur = v => `${moneyVal(Number(v), 2)} €`;
+  const weigh = () => { setWeighKey(k => k + 1); setTimeout(() => document.getElementById(`weigh-${spool.id}`)?.scrollIntoView({ behavior:"smooth", block:"center" }), 60); };
 
-  const Row = ({ label, value, mono, accent }) => (value == null || value === "") ? null : (
-    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
-      padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
-      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>{label}</span>
-      <span style={{ fontSize:13, fontWeight:600,
-        color: accent || "var(--text)",
-        fontFamily: mono ? "JetBrains Mono,monospace" : "inherit",
-        textAlign:"right", marginLeft:12 }}>{value}</span>
-    </div>
-  );
+  const dryChip = (aSecher || secherBientot) && (
+    <span key="dry" role={isAdmin ? "button" : undefined} onClick={isAdmin ? () => setDryOpen(true) : undefined}
+      data-tip={(aSecher
+        ? `Jamais séchée, ou pas depuis plus de ${Math.round((spool.dry_days || 180) / 30 * 10) / 10} mois`
+        : `Délai de séchage atteint dans ${resteSechage} j`) + (isAdmin ? " — toucher pour la marquer séchée" : "")}
+      style={{ cursor: isAdmin ? "pointer" : "default" }}>
+      {fChip(<><Droplets size={11}/>{aSecher ? "Séchage nécessaire" : resteSechage <= 0 ? "Séchage aujourd'hui" : `Séchage dans ${resteSechage} j`}
+        {isAdmin && <Sun size={11} style={{ marginLeft:2 }}/>}</>, aSecher ? "#0EA5E9" : "#f59e0b")}</span>);
+
+  const menu = e => openMenu(e, {
+    title: name, subtitle: `Bobine #${spool.id} · ${Math.round(remaining)} g`, color: main,
+    items: [
+      isAdmin && { icon: "⚖", label: "Ajuster le poids", hint: "Restant, retirer, ajouter, pesée", tone: "#F59E0B", onClick: weigh },
+      isAdmin && { icon: "☀", label: "Je viens de la sécher", hint: spool.last_dried_at ? `Dernier séchage ${agoFr(spool.last_dried_at)}` : "Jamais séchée", tone: "#0EA5E9",
+        onClick: () => setDryOpen(true) },
+      { icon: "📋", label: "Historique d'utilisation", hint: "Les impressions qui l'ont consommée", tone: "#8B5CF6", onClick: loadUsage },
+      spool.filament_id && { icon: "🧵", label: "Voir le filament", hint: `Filament #${spool.filament_id}`, tone: "#EC4899", onClick: openFilament },
+      isAdmin && spool.filament_id && { icon: "＋", label: "Ajouter une bobine de ce filament", tone: "#22C55E", onClick: () => setAddOpen(true) },
+      isAdmin && "-",
+      isAdmin && !spool.archived && { icon: "📦", label: "Archiver…", hint: "Quantité remise à 0, sort du stock", tone: "#64748B", onClick: archive },
+      isAdmin && { icon: "🗑", label: "Supprimer définitivement…", danger: true, disabled: deleting, onClick: handleDelete },
+    ],
+  });
 
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
-      zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e=>e.stopPropagation()}
-        className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-          width:"100%", maxWidth:540, maxHeight:"90dvh", overflowY:"auto",
-          paddingBottom:"env(safe-area-inset-bottom,20px)" }}>
+    <FSheet onClose={onClose} top={<button onClick={menu} aria-label="Plus d'actions" style={fRound}>⋯</button>}
+      bottom={<>
+        {isAdmin && <button onClick={weigh} style={{ ...fBtn, flex:1, color:"#d97706", borderColor:"rgba(245,158,11,0.4)", background:"rgba(245,158,11,0.1)" }}>⚖ Ajuster le poids</button>}
+        <button onClick={loadUsage} disabled={loadingUsage} style={{ ...fBtn, flex:1 }}>📋 {loadingUsage ? "…" : "Historique"}</button>
+        {!isAdmin && spool.filament_id && <button onClick={openFilament} style={{ ...fBtn, flex:1 }}>🧵 Filament</button>}
+        <button onClick={menu} aria-label="Plus d'actions" style={{ ...fBtn, width:48, flex:"0 0 auto" }}>⋯</button>
+      </>}>
+      <FHero colors={colorsList} type={spool.filament_multicolor_type} color={main} name={name}
+        chips={[fChip(`#${spool.id}`, "#64748B"), spool.archived && fChip("Archivée", "#94a3b8"),
+          spool.ams_tray && fChip(`AMS ${spool.ams_tray}`, "#3B82F6"), spool.location && fChip(`📍 ${spool.location}`, "#8B5CF6"),
+          dryChip, fChip(<><Palette size={11}/>{spool.filament_swatch ? "Échantillon" : "Sans échantillon"}</>, spool.filament_swatch ? "#22c55e" : "#94a3b8")]}
+        sub={<>
+          {spool.filament_translated_name && spool.filament_name && spool.filament_name !== spool.filament_translated_name &&
+            <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:-3 }}>{spool.filament_name}</div>}
+          {/* Marque en tete puis sous-type : meme ordre que la fiche filament. */}
+          <div style={{ fontSize:14, fontWeight:700, color:"var(--text2)" }}>
+            {[spool.filament_manufacturer, spool.filament_fila_type || spool.filament_material].filter(Boolean).join(" · ")}</div></>}>
+        <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap", marginTop:2 }}>
+          <span style={{ fontSize:30, fontWeight:900, lineHeight:1, ...(light ? { color:"var(--text)" } : fGrad(barColor, `${barColor}bb`)) }}>{Math.round(remaining)} g</span>
+          <span style={{ padding:"1px 8px", borderRadius:20, fontSize:14, fontWeight:900, color: light ? "#0f172a" : "#fff",
+            background: light ? `linear-gradient(135deg, ${barColor}, #e2e8f0)` : `linear-gradient(135deg, ${barColor}, ${barColor}cc)`,
+            border: light ? "1px solid rgba(0,0,0,0.18)" : "none", boxShadow:`0 3px 10px ${light ? "rgba(0,0,0,0.12)" : `${barColor}55`}` }}>{pct} %</span>
+          <span style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>sur {Math.round(total)} g</span>
+        </div>
+        <div style={{ height:10, borderRadius:10, background:"var(--surface)", overflow:"hidden", boxShadow:"inset 0 0 0 1px var(--border)" }}>
+          <div style={{ height:"100%", width:`${pct}%`, borderRadius:10, background:barColor, transition:"width .5s",
+            boxShadow: light ? "inset 0 0 0 1px rgba(0,0,0,0.28)" : `0 0 8px ${barColor}66` }}/></div>
+      </FHero>
 
-        {/* Handle */}
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+      <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+        {/* les chiffres qu'on cherche d'un coup d'oeil ; chacun mene a son action */}
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:6 }}>
+          <FTile label="⚖ Restant" value={`${Math.round(remaining)} g`} sub={`${pct} %`} c1="#F59E0B" c2="#FBBF24"
+            onClick={isAdmin ? weigh : undefined} tip={isAdmin ? "Ajuster le poids" : undefined}/>
+          <FTile label="💶 Valeur" value={worth != null ? eur(worth) : "—"} sub={price != null ? `sur ${eur(price)}` : "prix non défini"} c1="#16A34A" c2="#4ADE80"
+            tip="Ce qu'il reste de la bobine, à son prix"/>
+          <FTile label="💧 Séchage" value={ageSechage == null ? "jamais" : ageSechage <= 0 ? "auj." : `${ageSechage} j`}
+            sub={aSecher ? "à sécher" : secherBientot ? `dans ${Math.max(0, resteSechage)} j` : "à jour"}
+            c1={aSecher ? "#0EA5E9" : "#06B6D4"} c2={aSecher ? "#38BDF8" : "#67E8F9"}
+            onClick={isAdmin ? () => setDryOpen(true) : undefined} tip={isAdmin ? "Je viens de la sécher" : undefined}/>
+          <FTile label="🧵 Stock" value={stockFil != null ? fmtStock(stockFil) : "—"}
+            sub={spool.sibling_count == null ? "du filament" : spool.sibling_count > 0 ? `+${spool.sibling_count} bobine${spool.sibling_count > 1 ? "s" : ""}` : "seule bobine"}
+            c1="#EC4899" c2="#F472B6" onClick={spool.filament_id ? openFilament : undefined} tip={spool.filament_id ? "Ouvrir la fiche du filament" : undefined}/>
         </div>
 
-        <div style={{ padding:"16px 20px 28px" }}>
-          {/* En-tête */}
-          <div style={{ display:"flex", alignItems:"center", gap:16, marginBottom:24 }}>
-            <div style={{ width:64, height:64, borderRadius:16, flexShrink:0,
-              overflow:"hidden", boxShadow:"0 2px 14px rgba(0,0,0,0.25), inset 0 0 0 2px var(--border)", ...colorBg(colorsList, spool.filament_multicolor_type) }}/>
-            <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ fontSize:20, fontWeight:800, color:"var(--text)", margin:0,
-                letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                {spool.filament_translated_name || spool.filament_name}
-              </p>
-              {/* Marque en tete puis sous-type : meme ordre que la fiche
-                  filament, les deux se lisent desormais pareil. */}
-              <p style={{ fontSize:13, color:"var(--muted)", margin:"4px 0 0" }}>
-                {[spool.filament_manufacturer,
-                  spool.filament_fila_type || spool.filament_material]
-                  .filter(Boolean).join(" · ")}
-              </p>
-              <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginTop:4 }}>
-                {spool.archived && (
-                  <span style={{ fontSize:10, background:"rgba(148,163,184,0.15)",
-                    color:"#94a3b8", padding:"2px 8px", borderRadius:20,
-                    fontWeight:600, display:"inline-block" }}>Archivée</span>
-                )}
-                {/* Indicateur echantillon (nuancier) du filament. */}
-                <span style={{ display:"inline-flex", alignItems:"center", gap:4,
-                  fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
-                  background: spool.filament_swatch ? "rgba(34,197,94,0.12)" : "var(--surface2)",
-                  color:      spool.filament_swatch ? "#22c55e" : "var(--muted)",
-                  border: "1px solid " + (spool.filament_swatch ? "rgba(34,197,94,0.3)" : "var(--border)") }}>
-                  <Palette size={10}/>
-                  {spool.filament_swatch ? "Échantillon" : "Sans échantillon"}
-                </span>
-                {/* Bien visible en haut : au scan RFID d'une bobine, on voit
-                    tout de suite s'il faut la secher avant de la charger. */}
-                {(aSecher || secherBientot) && (
-                  <span role={isAdmin ? "button" : undefined}
-                    onClick={isAdmin ? marquerSeche : undefined}
-                    title={(aSecher
-                      ? `Jamais séchée, ou pas depuis plus de ${Math.round((spool.dry_days || 180) / 30 * 10) / 10} mois`
-                      : `Délai de séchage atteint dans ${resteSechage} j`)
-                      + (isAdmin ? " — appuyer pour la marquer séchée aujourd'hui" : "")}
-                    style={{ display:"inline-flex", alignItems:"center", gap:4,
-                    fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
-                    cursor: isAdmin ? "pointer" : "default",
-                    background: aSecher ? "rgba(14,165,233,0.14)" : "rgba(245,158,11,0.14)",
-                    color:      aSecher ? "#0EA5E9" : "#f59e0b",
-                    border: `1px solid ${aSecher ? "rgba(14,165,233,0.4)" : "rgba(245,158,11,0.4)"}` }}>
-                    <Droplets size={10}/>
-                    {aSecher ? "Séchage nécessaire" : resteSechage <= 0 ? "Séchage aujourd'hui" : `Séchage dans ${resteSechage} j`}
-                    {isAdmin && <Sun size={10} style={{ marginLeft:2 }}/>}
-                  </span>
-                )}
-                {dryOpen && <DryNowDialog spoolId={spool.id}
-                  spoolName={spool.filament_translated_name || spool.filament_name}
-                  onClose={() => setDryOpen(false)} onDone={() => { setDryOpen(false); onClose?.(); }}/>}
-              </div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(250px, 1fr))", gap:12 }}>
+          <FCard t="La bobine" i="🧵" c="#8B5CF6">
+            <div id={`weigh-${spool.id}`}>
+              <WeightEditRow spoolId={spool.id} filamentId={spool.filament_id} brand={spool.filament_manufacturer}
+                current={remaining} total={total} openKey={weighKey}
+                tare={spool.filament_spool_weight_g} tareName={spool.filament_spool_tare_name} onUpdated={onClose}/></div>
+            <PriceEditRow spoolId={spool.id} current={spool.price_override} filamentPrice={spool.filament_price} onUpdated={onClose}/>
+            <FRow l="Ce qu'il en reste" v={worth != null ? eur(worth) : null} vc="#16a34a"/>
+            <TagEditRow spoolId={spool.id} current={spool.tag_number} onUpdated={onClose}/>
+            <FRow l="Emplacement" v={spool.location}/>
+            <FRow l="Tray AMS" v={spool.ams_tray} vc="#3B82F6"/>
+          </FCard>
+          <FCard t="Son histoire" i="🗓️" c="#3B82F6">
+            <FRow l="Première utilisation" v={dayFr(spool.first_used_at) || "jamais"} d={agoFr(spool.first_used_at)}/>
+            <FRow l="Dernière utilisation" v={dayFr(spool.last_used_at) || "jamais"} d={agoFr(spool.last_used_at)}/>
+            <DryEditRow spoolId={spool.id} spoolName={name} current={spool.last_dried_at} aSecher={aSecher} onUpdated={onClose}/>
+            <div style={FROW}>
+              <span style={FLAB}>Utilisation</span>
+              <button onClick={loadUsage} disabled={loadingUsage} style={{ padding:"4px 11px", borderRadius:9, fontSize:12, fontWeight:800, cursor:"pointer",
+                border:"1px solid rgba(139,92,246,0.35)", background:"rgba(139,92,246,0.1)", color:"#8B5CF6" }}>
+                📋 {loadingUsage ? "Chargement…" : "Voir l'historique"}</button>
+            </div>
+          </FCard>
+        </div>
+
+        {/* Le filament : replie, son resume suffit ; deplie, toute sa fiche */}
+        <FCard t={`Le filament${spool.filament_id ? ` #${spool.filament_id}` : ""}`} i="🎨" c={main} fold open={filOpen} onToggle={() => setFilOpen(o => !o)}
+          aside={<>
+            {/* Autres bobines du meme filament : savoir qu'il en reste evite d'en racheter. */}
+            {spool.sibling_count != null && fChip(spool.sibling_count > 0
+              ? `+${spool.sibling_count} en stock${spool.sibling_weight_g ? ` · ${Math.round(spool.sibling_weight_g)} g` : ""}` : "seule bobine",
+              spool.sibling_count > 0 ? "#22c55e" : "#94a3b8")}
+            {spool.filament_id && <button onClick={e => { e.stopPropagation(); openFilament(); }} aria-label="Ouvrir la fiche du filament" data-tip="Ouvrir la fiche du filament"
+              style={{ width:30, height:30, borderRadius:10, border:"1px solid var(--border)", background:"var(--surface)", color:"#EC4899", cursor:"pointer",
+                fontSize:14, fontWeight:900, flexShrink:0 }}>↗</button>}</>}
+          summary={<div style={{ display:"flex", alignItems:"center", gap:8, marginTop:8, fontSize:12.5, fontWeight:700, color:"var(--muted)", minWidth:0 }}>
+            <ColorSwatch color={spool.filament_color} colorsArray={spool.filament_colors_array} multicolorType={spool.filament_multicolor_type} size={18} radius={5}/>
+            <span style={{ whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+              {[spool.filament_material, color, spool.filament_price != null ? `${moneyVal(Number(spool.filament_price), 2)} € au catalogue` : null].filter(Boolean).join(" · ")}</span></div>}>
+          <FRow l="Nom" v={name}/>
+          {spool.filament_translated_name && spool.filament_name !== spool.filament_translated_name && <FRow l="Nom EN" v={spool.filament_name}/>}
+          <FRow l="Marque" v={spool.filament_manufacturer}/>
+          <FRow l="Matière" v={spool.filament_material}/>
+          <FRow l="Sous-type" v={spool.filament_fila_type}/>
+          <FRow l="Échantillon" v={spool.filament_swatch ? "fait" : "à faire"} vc={spool.filament_swatch ? "#16a34a" : "#d97706"}/>
+          <FRow l="Couleur" v={color} mono pre={<ColorSwatch color={spool.filament_color} colorsArray={spool.filament_colors_array}
+            multicolorType={spool.filament_multicolor_type} size={16} radius={4}/>}/>
+          <FRow l="Code Bambu" v={spool.filament_profile_id} mono/>
+          <FRow l="Code couleur Bambu" v={spool.filament_fila_color_code} mono/>
+          <FRow l="Stock du filament" v={stockFil != null ? fmtStock(stockFil) : null} d="toutes bobines"/>
+          <FRow l="Poids total" v={spool.filament_weight_g ? `${spool.filament_weight_g} g` : null}/>
+          <FRow l="Prix catalogue" v={spool.filament_price ? `${moneyVal(Number(spool.filament_price), 2)} €` : null}/>
+        </FCard>
+
+        {spool.comment && <div style={{ position:"relative", padding:"12px 14px 12px 18px", borderRadius:16, overflow:"hidden",
+          background:"linear-gradient(135deg, color-mix(in srgb, #A855F7 12%, transparent), transparent 70%), var(--surface2)", border:"1px solid var(--border)" }}>
+          <span aria-hidden="true" style={{ position:"absolute", left:0, top:10, bottom:10, width:4, borderRadius:4, background:"linear-gradient(#A855F7, #EC4899)" }}/>
+          <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#A855F7", marginBottom:4 }}>💬 Commentaire</div>
+          <p style={{ fontSize:13.5, color:"var(--text)", margin:0, lineHeight:1.5, fontStyle:"italic" }}>« {spool.comment} »</p></div>}
+      </div>
+
+      {dryOpen && <DryNowDialog spoolId={spool.id} spoolName={name}
+        onClose={() => setDryOpen(false)} onDone={() => { setDryOpen(false); onClose?.(); }}/>}
+      {addOpen && <AddSpoolModal preselect={spool.filament_id} onClose={() => setAddOpen(false)}
+        onSave={() => { setAddOpen(false); onDelete?.(); }}/>}
+      {showUsage && createPortal(
+        <FSheet onClose={() => setShowUsage(false)} z={9999}>
+          <div style={{ padding:"40px 16px 14px", display:"flex", alignItems:"center", gap:12,
+            background:`radial-gradient(circle at 12% 50%, ${main}40, transparent 60%), var(--surface2)` }}>
+            <SpoolSVG colors={colorsList} size={52} type={spool.filament_multicolor_type}/>
+            <div style={{ minWidth:0, flex:1 }}>
+              <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#8B5CF6" }}>📋 Historique · bobine #{spool.id}</div>
+              <div style={{ fontSize:17, fontWeight:900, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{name}</div>
+              <div style={{ fontSize:12, fontWeight:700, color:"var(--muted)" }}>
+                {usageHistory.length} impression{usageHistory.length !== 1 ? "s" : ""}
+                {usageHistory.length > 0 && ` · ${Math.round(usageHistory.reduce((t, u) => t + (u.grams_used || 0), 0))} g consommés`}</div>
             </div>
           </div>
-
-          {/* Jauge restant */}
-          <div style={{ marginBottom:24 }}>
-            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
-              <span style={{ fontSize:12, color:"var(--muted)" }}>Filament restant</span>
-              <span style={{ fontSize:15, fontWeight:700, fontFamily:"monospace",
-                color: barColor }}>
-                {remaining.toFixed(0)}g
-                <span style={{ fontSize:11, color:"var(--muted)", fontWeight:400, marginLeft:4 }}>
-                  / {total}g ({pct}%)
-                </span>
-              </span>
-            </div>
-            <div style={{ height:12, borderRadius:6, background:"var(--border)", overflow:"hidden" }}>
-              <div style={{ height:"100%", width:`${pct}%`, borderRadius:6,
-                background: barColor, transition:"width 0.5s" }}/>
-            </div>
-          </div>
-
-          {/* ── Bobine physique ── */}
-          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:"0.08em", marginBottom:4 }}>Bobine #{spool.id}</p>
-          <Row label="Emplacement"    value={spool.location}/>
-          <WeightEditRow spoolId={spool.id} filamentId={spool.filament_id} brand={spool.filament_manufacturer}
-            current={remaining} total={total}
-            tare={spool.filament_spool_weight_g} tareName={spool.filament_spool_tare_name} onUpdated={onClose}/>
-          <PriceEditRow spoolId={spool.id} current={spool.price_override} filamentPrice={spool.filament_price} onUpdated={onClose}/>
-          <TagEditRow spoolId={spool.id} current={spool.tag_number} onUpdated={onClose}/>
-          <Row label="Tray AMS"       value={spool.ams_tray}/>
-          <Row label="Première util." value={spool.first_used_at?.slice(0,10)}/>
-          <Row label="Dernière util." value={spool.last_used_at?.slice(0,10)}/>
-          <DryEditRow spoolId={spool.id} spoolName={spool.filament_translated_name || spool.filament_name}
-            current={spool.last_dried_at} aSecher={aSecher} onUpdated={onClose}/>
-          <Row label="Commentaire"    value={spool.comment}/>
-
-          {/* ── Filament ── */}
-          <div style={{ display:"flex", alignItems:"center", gap:8, margin:"16px 0 4px" }}>
-            {/* Meme forme que "Bobine #26" juste au-dessus : le numero identifie
-                la fiche et rend les deux sections symetriques. "(catalogue)"
-                disparait, l'icone a cote suffit a dire ou l'on va. */}
-            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-              letterSpacing:"0.08em", margin:0 }}>
-              Filament{spool.filament_id ? ` #${spool.filament_id}` : ""}
-            </p>
-            {/* Autres bobines du meme filament : savoir qu'il en reste evite
-                d'en racheter, et savoir qu'il n'en reste plus est le moment ou
-                on veut le savoir -- d'ou les deux etats plutot qu'un badge
-                affiche seulement quand il y a du stock. */}
-            {spool.sibling_count != null && (
-              <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px",
-                borderRadius:20, whiteSpace:"nowrap",
-                background: spool.sibling_count > 0 ? "rgba(34,197,94,0.15)" : "rgba(148,163,184,0.15)",
-                color: spool.sibling_count > 0 ? "#22c55e" : "var(--muted)" }}>
-                {spool.sibling_count > 0
-                  ? `+${spool.sibling_count} en stock${spool.sibling_weight_g ? ` · ${Math.round(spool.sibling_weight_g)}g` : ""}`
-                  : "seule bobine"}
-              </span>
-            )}
-            {spool.filament_id && (
-              <button
-                onClick={openFilament}
-                title="Ouvrir la fiche du filament"
-                style={{ display:"inline-flex", alignItems:"center", justifyContent:"center",
-                  width:22, height:22, borderRadius:6, cursor:"pointer",
-                  background:"var(--surface2)", border:"1px solid var(--border)",
-                  color:"var(--accent, #6366f1)", padding:0, flexShrink:0 }}>
-                <Droplets size={13}/>
-              </button>
-            )}
-          </div>
-          <Row label="Nom"            value={spool.filament_translated_name || spool.filament_name}/>
-          {spool.filament_translated_name && spool.filament_name !== spool.filament_translated_name &&
-            <Row label="Nom EN"       value={spool.filament_name}/>}
-          <Row label="Marque"         value={spool.filament_manufacturer}/>
-          <Row label="Matière"        value={spool.filament_material}/>
-          <Row label="Sous-type"      value={spool.filament_fila_type}/>
-          <Row label="Échantillon"    value={spool.filament_swatch ? "Oui" : "Non"}
-            accent={spool.filament_swatch ? "#22c55e" : "var(--muted)"}/>
-          <Row label="Couleur"        value={color} mono/>
-          {spool.filament_profile_id && <Row label="Code Bambu" value={spool.filament_profile_id} mono/>}
-          {spool.filament_fila_color_code && <Row label="Code couleur Bambu" value={spool.filament_fila_color_code} mono/>}
-          <Row label="Stock du filament" value={stockFil != null ? `${fmtStock(stockFil)} (toutes bobines)` : null}/>
-          <Row label="Poids total"    value={spool.filament_weight_g ? `${spool.filament_weight_g}g` : null}/>
-          <Row label="Prix catalogue" value={spool.filament_price ? `${moneyVal(Number(spool.filament_price), 2)}€` : null}/>
-
-
-          {/* Historique utilisation */}
-          <button onClick={loadUsage} disabled={loadingUsage}
-            style={{ width:"100%", marginTop:16, padding:"10px", background:"var(--surface2)",
-              border:"1px solid var(--border)", borderRadius:10, cursor:"pointer",
-              color:"var(--text)", fontSize:13, fontWeight:600,
-              display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
-            📋 {loadingUsage ? "Chargement…" : "Voir l'historique d'utilisation"}
-          </button>
-
-          {/* Actions */}
-          <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap" }}>
-            <AdminOnly>
-            {!spool.archived && (
-              <button onClick={async()=>{
-                  if (!(await showConfirm(
-                    `Archiver la bobine #${spool.id} ? Elle passera en Archives avec une quantité remise à 0 et sortira du stock.`,
-                    { confirmLabel: "Archiver" }
-                  ))) return;
-                  await onArchive(spool.id); onClose();
-                }}
-                style={{ flex:1, padding:"10px", background:"var(--surface2)",
-                  border:"1px solid var(--border)", borderRadius:10, cursor:"pointer",
-                  color:"var(--muted)", fontSize:13, display:"flex",
-                  alignItems:"center", justifyContent:"center", gap:6 }}>
-                <Archive size={14}/> Archiver
-              </button>
-            )}
-            <button onClick={() => handleDelete(false)} disabled={deleting}
-              style={{ flex:1, padding:"10px", background:"rgba(239,68,68,0.08)",
-                border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, cursor:"pointer",
-                color:"#ef4444", fontSize:13, display:"flex",
-                alignItems:"center", justifyContent:"center", gap:6 }}>
-              🗑 Supprimer
-            </button>
-            </AdminOnly>
-            <button onClick={onClose}
-              style={{ flex:1, padding:"10px", background:"#3b82f6",
-                border:"none", borderRadius:10, cursor:"pointer",
-                color:"white", fontSize:13, fontWeight:600 }}>
-              ✕</button>
-          </div>
-          {showUsage && createPortal(
-        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)", zIndex:9999,
-          display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={()=>setShowUsage(false)}>
-          <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-            style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
-              maxWidth:640, maxHeight:"80dvh", overflowY:"auto", padding:"0 16px 24px" }}>
-            <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 10px" }}>
-              <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-            </div>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-              <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0 }}>
-                📋 Historique bobine #{spool.id}
-              </h3>
-              <span style={{ fontSize:12, color:"var(--muted)" }}>
-                {usageHistory.length} print{usageHistory.length!==1?"s":""}
-              </span>
-            </div>
-            {usageHistory.length === 0 && (
-              <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"24px 0" }}>
-                Aucune utilisation enregistrée
-              </p>
-            )}
-            <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-              {usageHistory.map((u,i) => (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:10,
-                  padding:"8px 10px", background:"var(--surface2)",
-                  borderRadius:10, border:"1px solid var(--border)" }}>
-                  {/* Vignette */}
-                  <img src={apiUrl(`/prints/${u.print_id}/image`)} alt=""
-                    style={{ width:44, height:44, objectFit:"cover", borderRadius:6, flexShrink:0 }}
-                    onError={e=>e.currentTarget.style.display="none"}/>
-                  {/* Infos */}
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
-                      overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                      {u.file_name || "Print #"+u.print_id}
-                    </p>
-                    <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
-                      {u.print_date ? new Date(u.print_date).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit",year:"numeric"}) : ""}
-                      {u.status==="SUCCESS"?" · ✅":u.status==="FAILED"?" · ❌":""}
-                    </p>
-
-                  </div>
-                  <div style={{ textAlign:"right", flexShrink:0 }}>
-                    <p style={{ fontSize:13, fontWeight:700, color:"#ef4444", margin:0, fontFamily:"monospace" }}>
-                      -{u.grams_used?.toFixed(1)}g
-                    </p>
-                    {u.cost > 0 && (
-                      <p style={{ fontSize:10, color:"var(--muted)", margin:0, fontFamily:"monospace" }}>
-                        {moneyVal(u.cost, 2)}€
-                      </p>
-                    )}
-                  </div>
+          <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:6 }}>
+            {usageHistory.length === 0 && <p style={{ color:"var(--muted)", fontSize:13, textAlign:"center", padding:"24px 0" }}>Aucune utilisation enregistrée</p>}
+            {usageHistory.map((u, i) => {
+              const st = u.status === "SUCCESS" ? ["Réussie", "#22c55e"] : u.status === "FAILED" ? ["Échouée", "#ef4444"] : null;
+              return <button key={i} onClick={() => openDetail(u.print_id)} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px", borderRadius:14,
+                border:"1px solid var(--border)", cursor:"pointer", textAlign:"left", font:"inherit", color:"inherit",
+                background:`linear-gradient(135deg, ${main}14, transparent 55%), var(--surface2)` }}>
+                <img src={apiUrl(`/prints/${u.print_id}/image`)} alt="" style={{ width:46, height:46, objectFit:"cover", borderRadius:10, flexShrink:0, background:"var(--surface)" }}
+                  onError={e => e.currentTarget.style.visibility = "hidden"}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{u.file_name || "Print #" + u.print_id}</div>
+                  <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:2 }}>
+                    {u.print_date && <span>{new Date(u.print_date).toLocaleDateString("fr-FR", { day:"2-digit", month:"2-digit", year:"numeric" })}</span>}
+                    {st && <span style={{ color:st[1] }}>● {st[0]}</span>}</div>
                 </div>
-              ))}
-            </div>
-            <button onClick={()=>setShowUsage(false)} style={{ width:"100%", marginTop:16,
-              padding:"11px", borderRadius:12, border:"none", background:"#3b82f6",
-              color:"white", fontSize:13, fontWeight:700, cursor:"pointer" }}>Fermer</button>
+                <div style={{ textAlign:"right", flexShrink:0 }}>
+                  <div style={{ fontSize:14, fontWeight:900, ...fGrad("#ef4444", "#f97316") }}>−{u.grams_used?.toFixed(1)} g</div>
+                  {u.cost > 0 && <div style={{ fontSize:11, fontWeight:700, color:"#16a34a" }}>{moneyVal(u.cost, 2)} €</div>}
+                </div>
+              </button>; })}
           </div>
-        </div>
-        , document.body)}
+        </FSheet>, document.body)}
+      {detail && createPortal(<div onClick={e => e.stopPropagation()} style={{ position:"relative", zIndex:10000 }}>
+        <PrintDetail p={detail} onClose={() => setDetail(null)} onDelete={() => { setDetail(null); loadUsage(); }}/></div>, document.body)}
       {filSheet && createPortal(
         <FilamentSheet f={filSheet} onClose={() => setFilSheet(null)}/>,
         document.body
       )}
-      {confirmDelete && (
-            <div style={{ marginTop:12, background:"rgba(239,68,68,0.06)", border:"1px solid rgba(239,68,68,0.25)",
-              borderRadius:10, padding:"12px 14px" }}>
-              <p style={{ fontSize:12, color:"#ef4444", margin:"0 0 10px" }}>{confirmDelete.message}</p>
-              <div style={{ display:"flex", gap:8 }}>
-                <button onClick={() => handleDelete(true)} disabled={deleting}
-                  style={{ flex:1, padding:"8px", background:"#ef4444", border:"none", borderRadius:8,
-                    color:"white", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-                  Confirmer la suppression
-                </button>
-                <button onClick={() => setConfirmDelete(null)}
-                  style={{ flex:1, padding:"8px", background:"var(--surface2)", border:"1px solid var(--border)",
-                    borderRadius:8, color:"var(--muted)", fontSize:12, cursor:"pointer" }}>
-                  Annuler
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
+    </FSheet>
   );
 }
 
@@ -1736,85 +1729,57 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
     </div>
   );
 
-  const Row = ({ label, value, mono }) => (!value && value !== 0) ? null : (
-    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline",
-      padding:"7px 0", borderBottom:"1px solid var(--border)" }}>
-      <span style={{ fontSize:12, color:"var(--muted)", flexShrink:0 }}>{label}</span>
-      <span style={{ fontSize:13, fontWeight:600, color:"var(--text)", marginLeft:12,
-        fontFamily: mono ? "JetBrains Mono,monospace" : "inherit", textAlign:"right" }}>
-        {value}
-      </span>
-    </div>
-  );
+  const isAdmin = useIsAdmin();
+  const name = f.translated_name || f.name;
+  const main = hexToCss(f.color) || "#8B5CF6";
+  const labelDay = f.label_printed && f.label_printed_at
+    ? new Date(f.label_printed_at + (String(f.label_printed_at).endsWith("Z") ? "" : "Z")).toLocaleDateString("fr-FR") : null;
+  const stock = f.remaining_weight_total_g || 0;
+  const nAct = f.active_spool_count || 0;
+  const colorTxt = colorsList?.length > 1
+    ? (f.colors_array || "").split(",").map(c => hexDisplay(c.trim())).filter(Boolean).join(" / ") : color;
+  const menu = e => openMenu(e, {
+    title: name, subtitle: `Filament #${f.id}`, color: main,
+    items: [
+      { icon: "✏️", label: "Éditer", hint: "Nom, couleurs, poids, prix…", tone: "#3B82F6", onClick: () => setEditing(true) },
+      { icon: "＋", label: "Créer une bobine", hint: "de ce filament", tone: "#22C55E", onClick: () => setAddSpool(true) },
+      "-",
+      { icon: "🗑", label: "Supprimer…", danger: true, disabled: deleting, onClick: handleDelete },
+    ],
+  });
 
   return (
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)",
-      zIndex:1000, display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e=>e.stopPropagation()}
-        className="sheet-inner" className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-          width:"100%", maxWidth:540, maxHeight:"92dvh", overflowY:"auto",
-          paddingBottom:"env(safe-area-inset-bottom,20px)" }}>
-
-        <div style={{ display:"flex", justifyContent:"center", padding:"12px 0 0" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
-          <button onClick={onClose} style={{ position:"absolute", top:12, right:12, width:28, height:28, borderRadius:"50%", background:"var(--surface2)", border:"none", cursor:"pointer", color:"var(--muted)", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+    <FSheet onClose={onClose} top={isAdmin && !editing && <button onClick={menu} aria-label="Plus d'actions" style={fRound}>⋯</button>}
+      bottom={isAdmin && (editing ? <>
+        <button onClick={() => setEditing(false)} style={{ ...fBtn, flex:1, color:"var(--muted)" }}>Annuler</button>
+        <button onClick={handleSave} disabled={saving} style={{ ...fBtn, flex:2, border:"none", color:"#fff",
+          background: saving ? "var(--border)" : "linear-gradient(135deg, #3B82F6, #6366F1)" }}>{saving ? "Enregistrement…" : "Enregistrer"}</button>
+      </> : <>
+        <button onClick={() => setEditing(true)} style={{ ...fBtn, flex:1 }}>✏️ Éditer</button>
+        <button onClick={() => setAddSpool(true)} style={{ ...fBtn, flex:1, color:"#16a34a", borderColor:"rgba(34,197,94,0.35)", background:"rgba(34,197,94,0.1)" }}>
+          <Plus size={15}/> Bobine</button>
+        <button onClick={menu} aria-label="Plus d'actions" style={{ ...fBtn, width:48, flex:"0 0 auto" }}>⋯</button>
+      </>)}>
+      <FHero colors={colorsList} type={f.multicolor_type} color={main} name={name}
+        chips={[fChip(`#${f.id}`, "#64748B"),
+          fChip(<><Palette size={11}/>{f.swatch ? "Échantillon" : "Sans échantillon"}</>, f.swatch ? "#22c55e" : "#94a3b8"),
+          <span key="lbl" data-tip={labelDay ? `Étiquette imprimée le ${labelDay}` : undefined}>
+            {fChip(<><Tag size={11}/>{f.label_printed ? "Étiquette" : "Sans étiquette"}</>, f.label_printed ? "#3b82f6" : "#94a3b8")}</span>,
+          f.to_order && fChip("🛒 À commander", "#f97316")]}
+        sub={<>
+          {f.translated_name && f.translated_name !== f.name && <div style={{ fontSize:11.5, fontWeight:700, color:"var(--muted)", marginTop:-3 }}>{f.name}</div>}
+          {/* Marque puis SOUS-TYPE (PLA Basic), repli sur la matiere : comme la fiche bobine. */}
+          <div style={{ fontSize:14, fontWeight:700, color:"var(--text2)" }}>{[f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}</div></>}>
+        <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap", marginTop:2 }}>
+          <span style={{ fontSize:28, fontWeight:900, lineHeight:1, ...(nAct ? fGrad("#16A34A", "#4ADE80") : { color:"var(--muted)" }) }}>{nAct ? fmtStock(stock) : "0 g"}</span>
+          <span style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>en stock · {nAct} bobine{nAct !== 1 ? "s" : ""} active{nAct !== 1 ? "s" : ""}</span>
         </div>
+      </FHero>
 
-        <div style={{ padding:"16px 20px 24px" }}>
-          {/* En-tête */}
-          <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
-            <div style={{ width:56, height:56, borderRadius:14, flexShrink:0,
-              overflow:"hidden", boxShadow:"0 2px 12px rgba(0,0,0,0.2), inset 0 0 0 2px var(--border)", ...colorBg(colorsList, f.multicolor_type) }}/>
-            <div style={{ flex:1, minWidth:0 }}>
-              <p style={{ fontSize:20, fontWeight:800, color:"var(--text)", margin:0,
-                letterSpacing:"-0.01em", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                {f.translated_name || f.name}
-              </p>
-              {f.translated_name && f.translated_name !== f.name && (
-                <p style={{ fontSize:11, color:"var(--muted)", margin:"2px 0 0" }}>{f.name}</p>
-              )}
-              {/* Marque puis SOUS-TYPE, comme sur la fiche bobine. On affichait
-                  ici la matiere (PLA), c'est-a-dire la famille : le sous-type
-                  (PLA Basic) est l'information utile, et il implique deja la
-                  matiere. Repli sur la matiere quand aucun sous-type n'est
-                  renseigne. */}
-              <p style={{ fontSize:13, color:"var(--muted)", margin:"4px 0 0" }}>
-                {[f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
-              </p>
-              {/* Indicateur echantillon (nuancier) imprime ou non. */}
-              <span style={{ display:"inline-flex", alignItems:"center", gap:4, marginTop:6,
-                padding:"3px 9px", borderRadius:20, fontSize:10, fontWeight:700,
-                background: f.swatch ? "rgba(34,197,94,0.12)" : "var(--surface2)",
-                color:      f.swatch ? "#22c55e" : "var(--muted)",
-                border: "1px solid " + (f.swatch ? "rgba(34,197,94,0.3)" : "var(--border)") }}>
-                <Palette size={11}/>
-                {f.swatch ? "Échantillon" : "Sans échantillon"}
-              </span>
-              {/* Etiquette QR imprimee ou non (planche des etiquettes). */}
-              <span title={f.label_printed && f.label_printed_at
-                  ? `Étiquette imprimée le ${new Date(f.label_printed_at + (String(f.label_printed_at).endsWith("Z") ? "" : "Z")).toLocaleDateString("fr-FR")}`
-                  : undefined}
-                style={{ display:"inline-flex", alignItems:"center", gap:4, marginTop:6, marginLeft:6,
-                padding:"3px 9px", borderRadius:20, fontSize:10, fontWeight:700,
-                background: f.label_printed ? "rgba(59,130,246,0.12)" : "var(--surface2)",
-                color:      f.label_printed ? "#3b82f6" : "var(--muted)",
-                border: "1px solid " + (f.label_printed ? "rgba(59,130,246,0.3)" : "var(--border)") }}>
-                <Tag size={11}/>
-                {f.label_printed ? "Étiquette" : "Sans étiquette"}
-              </span>
-            </div>
-            <AdminOnly><button onClick={() => setEditing(e=>!e)}
-              style={{ padding:"6px 12px", borderRadius:8, fontSize:12, fontWeight:700,
-                background: editing ? "var(--surface2)" : "#3b82f6",
-                color: editing ? "var(--muted)" : "white",
-                border:"1px solid var(--border)", cursor:"pointer", flexShrink:0 }}>
-              {editing ? "Annuler" : "✏️ Éditer"}
-            </button></AdminOnly>
-          </div>
-
-          {editing ? (
-            <div>
+      <div style={{ padding:"12px 14px 18px", display:"flex", flexDirection:"column", gap:12 }}>
+        {editing ? (
+          <FCard t="Modifier le filament" i="✏️" c="#3B82F6">
+            <div style={{ paddingTop:6 }}>
               {F("Nom (anglais / officiel) *","name")}
               {F("Nom traduit (français)","translated_name")}
               {F("Marque","manufacturer")}
@@ -1862,89 +1827,57 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
               </div>
               {F("Prix (€)","price","number")}
               {F("Commentaire","comment")}
-              <div style={{ display:"flex", gap:10, marginBottom:14, flexWrap:"wrap" }}>
+              <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
                 {[["swatch","Échantillon"],["label_printed","Étiquette imprimée"],["to_order","À commander"]].map(([k,l])=>(
-                  <label key={k} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, cursor:"pointer" }}>
+                  <label key={k} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12.5, fontWeight:700, cursor:"pointer", padding:"6px 10px",
+                    borderRadius:10, border:"1px solid var(--border)", background: form[k] ? "rgba(59,130,246,0.12)" : "var(--surface)", color: form[k] ? "#3b82f6" : "var(--text2)" }}>
                     <input type="checkbox" checked={!!form[k]}
                       onChange={e => setForm(f=>({...f,[k]:e.target.checked}))}/>
                     {l}
                   </label>
                 ))}
               </div>
-              <button onClick={handleSave} disabled={saving}
-                style={{ width:"100%", padding:"11px", borderRadius:10, fontSize:13, fontWeight:700,
-                  background: saving ? "var(--border)" : "#3b82f6",
-                  color:"white", border:"none", cursor: saving?"default":"pointer" }}>
-                {saving ? "Enregistrement…" : "Enregistrer"}
-              </button>
             </div>
-          ) : (
-            <>
-              {/* Infos */}
-              <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.08em", marginBottom:4 }}>Filament #{f.id}</p>
-              <Row label="Marque"           value={f.manufacturer}/>
-              <Row label="Matière"          value={f.material}/>
-              <Row label="Couleur"          value={colorsList?.length > 1 ? (f?.colors_array||spool?.filament_colors_array||"").split(",").map(c=>hexDisplay(c)).filter(Boolean).join(" / ") : color} mono/>
-              <Row label="Profile ID"       value={f.profile_id} mono/>
-              <Row label="Code couleur Bambu" value={f.fila_color_code} mono/>
-              <Row label="Poids bobine"     value={f.filament_weight_g ? f.filament_weight_g+"g" : null}/>
-              <Row label="Poids support"    value={f.spool_weight_g ? f.spool_weight_g+"g" : null}/>
-              <Row label="Prix"             value={f.price ? f.price+"€" : null}/>
-              <Row label="Multicolor"       value={f.multicolor_type !== "monochrome" ? f.multicolor_type : null}/>
-
-              {/* Bobines */}
-              <div style={{ marginTop:16, display:"flex", alignItems:"center", gap:8 }}>
-                <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.08em" }}>
-                  Bobines
-                </span>
-                <span style={{ fontSize:12, fontWeight:700,
-                  color: f.active_spool_count > 0 ? "#22c55e" : "var(--muted)" }}>
-                  {f.active_spool_count || 0} active{f.active_spool_count !== 1 ? "s" : ""}
-                </span>
-                {f.active_spool_count > 0 && f.remaining_weight_total_g > 0 && (
-                  <span style={{ fontSize:12, fontWeight:700, fontFamily:"JetBrains Mono,monospace",
-                    color:"var(--text)" }}>
-                    · {f.remaining_weight_total_g >= 1000
-                        ? `${(f.remaining_weight_total_g/1000).toFixed(2)} kg`
-                        : `${Math.round(f.remaining_weight_total_g)} g`} restants
-                  </span>
-                )}
-                <AdminOnly><button onClick={() => setAddSpool(true)}
-                  style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:5,
-                    padding:"5px 12px", borderRadius:20, border:"none", cursor:"pointer",
-                    background:"rgba(34,197,94,0.12)", color:"#22c55e",
-                    fontSize:11, fontWeight:700 }}>
-                  <Plus size={13}/> Créer une bobine
-                </button></AdminOnly>
-              </div>
-
-              {addSpool && (
-                <AddSpoolModal preselect={f.id}
-                  onClose={() => setAddSpool(false)}
-                  onSave={() => { setAddSpool(false); onUpdated?.(); }}/>
-              )}
-
-              <div style={{ display:"flex", gap:8, marginTop:20 }}>
-                <AdminOnly><button onClick={handleDelete} disabled={deleting}
-                  style={{ flex:1, padding:"10px", background:"rgba(239,68,68,0.08)",
-                    border:"1px solid rgba(239,68,68,0.3)", borderRadius:10, cursor:"pointer",
-                    color:"#ef4444", fontSize:13, display:"flex",
-                    alignItems:"center", justifyContent:"center", gap:6 }}>
-                  🗑 Supprimer
-                </button></AdminOnly>
-            <button onClick={onClose}
-              style={{ flex:2, padding:"10px", background:"#3b82f6",
-                border:"none", borderRadius:10, cursor:"pointer",
-                color:"white", fontSize:13, fontWeight:600 }}>
-              ✕</button>
+          </FCard>
+        ) : <>
+          {/* les chiffres du filament */}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4, minmax(0, 1fr))", gap:6 }}>
+            <FTile label="🧵 Stock" value={nAct ? fmtStock(stock) : "—"} sub={`${nAct} active${nAct !== 1 ? "s" : ""}`} c1="#16A34A" c2="#4ADE80"
+              onClick={isAdmin ? () => setAddSpool(true) : undefined} tip={isAdmin ? "Créer une bobine" : undefined}/>
+            <FTile label="💶 Prix" value={f.price != null && f.price !== "" ? `${moneyVal(Number(f.price), 2)} €` : "—"}
+              sub={f.price && f.filament_weight_g ? `${moneyVal(Number(f.price) * 1000 / f.filament_weight_g, 2)} €/kg` : null} c1="#F59E0B" c2="#FBBF24"/>
+            <FTile label="⚖ Bobine" value={f.filament_weight_g ? `${f.filament_weight_g} g` : "—"} sub="de filament" c1="#8B5CF6" c2="#C084FC"/>
+            <FTile label="◎ Support" value={f.spool_weight_g ? `${f.spool_weight_g} g` : "—"} sub={f.spool_tare_name || "vide"} c1="#64748B" c2="#94A3B8"/>
           </div>
-            </>
-          )}
-        </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit, minmax(250px, 1fr))", gap:12 }}>
+            <FCard t="Le filament" i="🎨" c={main}>
+              <FRow l="Marque" v={f.manufacturer}/>
+              <FRow l="Matière" v={f.material}/>
+              <FRow l="Sous-type" v={f.fila_type}/>
+              <FRow l="Couleur" v={colorTxt} mono pre={<ColorSwatch color={f.color} colorsArray={f.colors_array} multicolorType={f.multicolor_type} size={16} radius={4}/>}/>
+              <FRow l="Multicolor" v={f.multicolor_type && f.multicolor_type !== "monochrome" ? f.multicolor_type : null}/>
+            </FCard>
+            <FCard t="Côté Bambu" i="🏷️" c="#0EA5E9">
+              <FRow l="Profile ID" v={f.profile_id} mono/>
+              <FRow l="Code couleur Bambu" v={f.fila_color_code} mono/>
+              <FRow l="Échantillon" v={f.swatch ? "fait" : "à faire"} vc={f.swatch ? "#16a34a" : "#d97706"}/>
+              <FRow l="Étiquette" v={f.label_printed ? "imprimée" : "à imprimer"} d={labelDay ? `le ${labelDay}` : null} vc={f.label_printed ? "#3b82f6" : "#d97706"}/>
+              <FRow l="À commander" v={f.to_order ? "oui" : null} vc="#f97316"/>
+            </FCard>
+          </div>
+          {f.comment && <div style={{ position:"relative", padding:"12px 14px 12px 18px", borderRadius:16, overflow:"hidden",
+            background:"linear-gradient(135deg, color-mix(in srgb, #A855F7 12%, transparent), transparent 70%), var(--surface2)", border:"1px solid var(--border)" }}>
+            <span aria-hidden="true" style={{ position:"absolute", left:0, top:10, bottom:10, width:4, borderRadius:4, background:"linear-gradient(#A855F7, #EC4899)" }}/>
+            <div style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", textTransform:"uppercase", color:"#A855F7", marginBottom:4 }}>💬 Commentaire</div>
+            <p style={{ fontSize:13.5, color:"var(--text)", margin:0, lineHeight:1.5, fontStyle:"italic" }}>« {f.comment} »</p></div>}
+        </>}
       </div>
-
-    </div>
+      {addSpool && (
+        <AddSpoolModal preselect={f.id}
+          onClose={() => setAddSpool(false)}
+          onSave={() => { setAddSpool(false); onUpdated?.(); }}/>
+      )}
+    </FSheet>
   );
 }
 
@@ -2734,6 +2667,8 @@ function SwatchView({ filaments: allFilaments, sort, selectMode, onSelectModeCha
 
 export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, onClose }) {
   const [spool, setSpool] = React.useState(null);
+  // bobine introuvable : la fiche de son filament (setFil n'existait pas, rien ne s'ouvrait)
+  const [fil, setFil] = React.useState(null);
   React.useEffect(() => {
     const load = async () => {
       try {
@@ -2768,7 +2703,7 @@ export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, 
     };
     load();
   }, [spoolId, filamentColorHex]);
-  if (!spool) return null;
+  if (!spool) return fil ? <FilamentSheet f={fil} onClose={onClose}/> : null;
   return <SpoolBottomSheet spool={spool} onClose={onClose} onArchive={onClose} onDelete={onClose}/>;
 }
 
