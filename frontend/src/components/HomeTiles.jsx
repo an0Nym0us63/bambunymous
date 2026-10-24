@@ -2698,6 +2698,7 @@ function Shortcuts({ o, sz = { h: 1 } }) {
 // le classement des copains : rangs, grades, scores, ecarts ; en grand, le podium, le detail, les sections, les medailles
 const POD = ["#D4A017", "#94A3B8", "#B45309"];
 const POD_HI = ["#FDE68A", "#E2E8F0", "#FDBA74"];
+const POD3 = POD, POD_HI3 = POD_HI;
 const AV_COLORS = ["#8B5CF6", "#0EA5E9", "#14B8A6", "#F97316", "#EC4899", "#6366F1", "#22C55E"];
 const avColor = name => AV_COLORS[[...(name || "?")].reduce((t, c) => t + c.charCodeAt(0), 0) % AV_COLORS.length];
 const PodAvatar = ({ x, size = 30, ring = null }) => <span style={{ width: size, height: size, borderRadius: "50%", flexShrink: 0, display: "inline-flex",
@@ -2708,18 +2709,21 @@ const podName = x => (x.me ? "Toi" : x.name);
 const podGrade = x => gradeOf(null, x.score_max ? (x.score || 0) / x.score_max : 0);
 const fmtN = n => Math.round(n || 0).toLocaleString("fr-FR");
 // les marches : 2e, 1er, 3e ; chacun avec son avatar, son grade, son score
-function PodiumSteps({ people, H, big = false }) {
-  const list = people.slice(0, 3), order = [list[1], list[0], list[2]].filter(Boolean), hs = { 0: 1, 1: 0.7, 2: 0.48 };
-  const av = big ? 48 : Math.max(22, Math.min(34, H * 0.2));
+// places : 3, ou 4 (une 4e marche, violette, a droite du 3e)
+function PodiumSteps({ people, H, big = false, places = 3 }) {
+  const list = people.slice(0, places), order = [list[1], list[0], list[2], list[3]].filter(Boolean), hs = { 0: 1, 1: 0.7, 2: 0.48, 3: 0.32 };
+  const POD = [...POD3, "#8B5CF6"], POD_HI = [...POD_HI3, "#C4B5FD"];
+  const four = order.length > 3;
+  const av = big ? 48 : Math.max(20, Math.min(four ? 28 : 34, H * 0.2));
   const step = Math.max(26, H - av - (big ? 64 : 30));
-  return <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: big ? 12 : 6, flex: 1 }}>
+  return <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: big ? 12 : four ? 4 : 6, flex: 1 }}>
     {order.map(x => { const r = list.indexOf(x), g = podGrade(x);
       return <div key={x.id || x.name} style={{ flex: 1, maxWidth: big ? 150 : 110, display: "flex", flexDirection: "column", alignItems: "center", gap: 3, minWidth: 0 }}>
         <span style={{ position: "relative", display: "inline-flex" }}>
           <PodAvatar x={x} size={av} ring={POD[r]}/>
           {r === 0 && <span style={{ position: "absolute", top: -av * 0.42, left: "50%", transform: "translateX(-50%)", fontSize: av * 0.5 }}>👑</span>}
         </span>
-        <span style={{ fontSize: big ? 14 : 11.5, fontWeight: 900, color: "var(--text)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{podName(x)}</span>
+        <span style={{ fontSize: big ? 14 : four ? 10.5 : 11.5, fontWeight: 900, color: "var(--text)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{podName(x)}</span>
         {big && g.name && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11.5, fontWeight: 700, color: "var(--muted)" }}>
           <GradeEmblem i={Math.max(0, g.i)} size={16}/>{g.name}</span>}
         <div data-pk="" style={{ width: "100%", height: Math.round(hs[r] * step), borderRadius: "10px 10px 0 0", position: "relative", overflow: "hidden",
@@ -3797,7 +3801,8 @@ function FamilyBoard({ b, o, sz }) {
       mini={sz.h === 0.5} summary={<span style={{ fontSize: 13 }}>🥇 {people[0].username} · <b style={{ ...gradText("#DB2777", "#A855F7") }}>{people[0].count}</b></span>}
       zoom={<FamilyBoardZoom b={b}/>}>
       {({ W, H }) => {
-        if (o.style === "podium" && H >= 96) return <FamSteps b={b} people={people} W={W} H={H}/>;
+        if (o.style === "podium" && H >= 96) return <PodiumSteps H={H} places={4}
+          people={people.map(x => ({ id: x.username, name: x.username, me: x.username === b.me, score: x.count }))}/>;
         const n = Math.min(people.length, fitRows(H, 30, 4) || 1), h = Math.max(26, Math.min(48, Math.floor((H - 4 * (n - 1)) / n)));
         const meI = people.findIndex(x => x.username === b.me);
         const shown = people.slice(0, n);
@@ -3807,26 +3812,6 @@ function FamilyBoard({ b, o, sz }) {
       }}
     </Tile>
   );
-}
-// le podium de la famille, jusqu'a quatre marches (2e, 1er, 3e, 4e) : avatar et nom au-dessus, le nombre dans la marche
-function FamSteps({ b, people, W, H }) {
-  const top = people.slice(0, 4);
-  const order = top.length >= 3 ? [top[1], top[0], top[2], ...top.slice(3)] : top.length === 2 ? [top[1], top[0]] : top;
-  const head = H >= 150 ? 46 : 34, av = head >= 46 ? 26 : 20;
-  const room = H - head - 4, hs = [1, 0.74, 0.54, 0.38].map(f => Math.max(18, Math.round(room * f)));
-  const cols = ["#F5B700", "#B8C2CC", "#CD7F32", "#8B5CF6"];
-  return <div style={{ flex: 1, display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 6, minWidth: 0 }}>
-    {order.map(x => { const r = top.indexOf(x), me = x.username === b.me;
-      return <div key={x.username} data-tip={`${x.username}
-${x.count} secret${x.count > 1 ? "s" : ""}`} style={{ flex: "1 1 0", maxWidth: 110, minWidth: 0,
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
-        <FamAv name={x.username} size={av}/>
-        <span style={{ fontSize: 11, fontWeight: me ? 900 : 800, color: me ? FAM_C : "var(--text2)", maxWidth: "100%", whiteSpace: "nowrap", overflow: "hidden",
-          textOverflow: "ellipsis" }}>{x.username}</span>
-        <div style={{ width: "100%", height: hs[r], borderRadius: "10px 10px 4px 4px", display: "flex", alignItems: "flex-start", justifyContent: "center",
-          paddingTop: 4, boxSizing: "border-box", fontSize: 14, fontWeight: 900, color: "#fff", background: `linear-gradient(180deg, ${cols[r]}, ${cols[r]}bb)`,
-          boxShadow: me ? `0 0 0 2px ${FAM_C}` : "none" }}>{x.count}</div>
-      </div>; })}</div>;
 }
 // la fenetre : les chiffres, le classement en grand, et section par section qui en a trouve combien
 function FamilyBoardZoom({ b }) {

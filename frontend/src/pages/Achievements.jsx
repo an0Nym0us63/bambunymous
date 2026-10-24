@@ -4,7 +4,7 @@ import Cachettes from "../components/Cachettes";
 import { createPortal } from "react-dom";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { currentFriend } from "../store/friend";
-import { useIsAdmin } from "../store/auth";
+import { useIsAdmin, useAuth } from "../store/auth";
 import client from "../api/client";
 import { isMoneyHidden } from "../utils/money";
 import { egg, tapper, rulesOpened } from "../eggs";
@@ -745,19 +745,26 @@ const oddsWhen = s => { if (!s) return "jamais"; const d = new Date(/Z|[+-]\d\d:
 // la surprise de chaque compte : chance a la prochaine ouverture, ouvertures sans, surprises recues
 // la prochaine surprise du compte principal ; un clic : tous les comptes (de quoi voir si, chez quelqu'un, elle ne tombe jamais)
 function OddsBanner({ odds, onOpen }) {
-  const m = odds.accounts.find(x => x.main) || odds.accounts[0];
+  // la surprise du compte connecte (le detail de tous les comptes au toucher)
+  const me = useAuth(st => st.username);
+  const m = odds.accounts.find(x => x.username === me) || odds.accounts.find(x => x.main) || odds.accounts[0];
+  // dans le style des cases du tresor : un fond lumineux, le de qui flotte, le pourcentage en grand
   return (
-    <button type="button" onClick={onOpen} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
-      borderRadius:12, fontSize:12, lineHeight:1.4, color:"var(--text2)", textAlign:"left", cursor:"pointer", width:"100%",
-      background:"linear-gradient(135deg, rgba(139,92,246,0.14), rgba(99,102,241,0.06))", border:"1px solid rgba(139,92,246,0.3)" }}>
-      <span style={{ fontSize:22 }}>🎲</span>
-      <div style={{ flex:1, minWidth:0 }}>
-        <div style={{ fontSize:13, fontWeight:800, color:"var(--text)" }}>
-          {m.pending ? "Une surprise est tirée : elle attend la prochaine ouverture"
-            : <>Prochaine surprise : <b style={{ color:"#8B5CF6" }}>{oddsPct(m.next)} %</b> à la prochaine ouverture</>}</div>
-        <div>{m.username}{m.main ? " (compte principal)" : ""} · {m.n} ouverture{m.n > 1 ? "s" : ""} sans surprise · {m.shown} reçue{m.shown > 1 ? "s" : ""}</div>
-      </div>
-      <span style={{ fontSize:11.5, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap" }}>Comptes ›</span>
+    <button type="button" onClick={onOpen} title="La surprise de chaque compte" style={{ position:"relative", overflow:"hidden", display:"flex", alignItems:"center",
+      gap:12, padding:"10px 14px", borderRadius:14, cursor:"pointer", width:"100%", textAlign:"left", font:"inherit", color:"inherit",
+      background:"radial-gradient(circle at 8% 50%, rgba(139,92,246,.35), transparent 55%), var(--surface2)", border:"1px solid rgba(139,92,246,.45)" }}>
+      <span style={{ fontSize:26, lineHeight:1, animation:"bn-float 3.8s ease-in-out infinite" }}>🎲</span>
+      {m.pending
+        ? <span style={{ fontSize:22, lineHeight:1 }}>🎁</span>
+        : <span style={{ fontSize:24, fontWeight:900, lineHeight:1, whiteSpace:"nowrap", background:"linear-gradient(180deg,#c084fc,#7c3aed)",
+            WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{oddsPct(m.next)} %</span>}
+      <span style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:1 }}>
+        <span style={{ fontSize:12, fontWeight:800, color:"var(--text)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+          {m.pending ? "Une surprise t'attend" : "Prochaine surprise"}</span>
+        <span style={{ fontSize:10.5, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+          {m.n} ouverture{m.n > 1 ? "s" : ""} sans · {m.shown} reçue{m.shown > 1 ? "s" : ""}</span>
+      </span>
+      <span style={{ fontSize:11, fontWeight:800, color:"#8B5CF6", whiteSpace:"nowrap" }}>Comptes ›</span>
     </button>
   );
 }
