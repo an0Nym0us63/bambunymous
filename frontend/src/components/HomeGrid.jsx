@@ -4,7 +4,7 @@ import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, EyeOff, Plus, RotateCcw, Che
 import client from "../api/client";
 import { currentFriend, useFriend } from "../store/friend";
 import { toast } from "../store/toast";
-import { TILES, useTilesData } from "./HomeTiles";
+import { TILES, useTilesData, tileWaiting, TileWaiting } from "./HomeTiles";
 import { showConfirm } from "../utils/dialog";
 import { useIsAdmin } from "../store/auth";
 
@@ -801,7 +801,8 @@ export default function HomeGrid({ status, blocks, top = null }) {
       <Cell key={item.id} item={item} def={def} edit={edit} actions={actions} options={options} drag={edit ? drag : null}
         tint={lay.tint && o._bg !== false ? tintOf(item.id) : null} tintMode={lay.tint === "banner" ? "vivid" : lay.tint} tintStyle={lay.tint === "banner" ? "banner" : lay.tint ? lay.tintStyle || "glow" : null}
         selected={sel === item.id} onSelect={() => setSel(s => s === item.id ? null : item.id)}>
-        {item.h === 0.5 && def.mini ? def.mini(data, status, o, item)
+        {TILES[item.id] && tileWaiting(item.id, data, status) ? <TileWaiting id={item.id} label={def.label} mini={item.h === 0.5}/>
+          : item.h === 0.5 && def.mini ? def.mini(data, status, o, item)
           : def.frame ? <Frame def={def} item={item} summary={def.summary?.(data, status, o)} extra={def.frame.extra?.(status, item, o)}
             badge={def.frame.badge?.(status, item, o)}>{def.render(data, status, o, item)}</Frame>
           : def.render(data, status, o, item)}

@@ -2944,9 +2944,6 @@ export function SwitchArt({ m, W, H }) {
       {/* le corps de l'aiguillage, dessous : les rails le traversent */}
       <rect x="150" y="46" width="80" height="88" rx="16" fill="#111827" stroke="rgba(255,255,255,0.12)"/>
       {[A, B].sort((a, b) => a.live - b.live).map(x => <SwitchRail key={x.p} d={path(x)} live={x.live} color={x.slot?.color} hl={HL} w={11} idle={m.rest}/>)}
-      {/* au repos, pas de ports : leurs ronds se melaient aux pointilles */}
-      {!m.rest && [["A", 72], ["B", 108]].map(([p, y]) => <circle key={p} cx="150" cy={y} r="4.5" fill={m.ports.find(x => x.p === p).live ? HL : "#4b5563"}/>)}
-      {!m.rest && [["G", 72], ["D", 108]].map(([sd, y]) => <circle key={sd} cx="230" cy={y} r="4.5" fill={servedBy(sd)?.live ? HL : "#4b5563"}/>)}
       {m.fs.calibrating && <text x="190" y="148" textAnchor="middle" fontSize="11" fontWeight="800" fill="#f59e0b">calibration</text>}
       {m.idle && <text x="190" y="148" textAnchor="middle" fontSize="11" fontWeight="800" fill="var(--muted)">au repos</text>}
       {/* les entrees */}
@@ -3436,6 +3433,57 @@ export const TILES = {
       C("target", "Objectif", 20, [[5, "5"], [10, "10"], [20, "20"], [50, "50"], [100, "100"], [500, "500"], [1000, "1000"]],
         { hint: "En heures, en impressions ou en grammes selon la mesure." })] },
 };
+// En attendant ses donnees, une tuile tient deja sa place (les autres ne bougent pas a l'arrivee) :
+// son nom, ce qu'elle montre, « chargement… ». needs : la cle de useTilesData, ou "status" (l'imprimante).
+const WAIT = {
+  today: ["today", "Les impressions du jour, leur réussite et l'écart avec hier."],
+  next: ["queue", "Ce qui attend d'être imprimé, et ce qui est prêt tout de suite."],
+  last: ["prints", "Tes dernières impressions, réussies ou non."],
+  stock: ["spools", "Ce qui reste en bobines, et les plus basses."],
+  dry: ["dry", "Les bobines au sec et celles à sécher."],
+  humidity: ["status", "L'humidité dans chaque AMS."],
+  friends: ["friends", "Ce que tes copains impriment en ce moment."],
+  mw: ["mw", "Tes points et compteurs MakerWorld."],
+  rate: ["rate", "Les impressions qui attendent ton avis sur MakerWorld."],
+  wheel: ["ach", "Tes tours de roue, tes clés et tes tickets."],
+  ach: ["ach", "Ton grade, ton score et tes dernières médailles."],
+  camera: ["status", "L'image de la caméra de l'imprimante."],
+  temps: ["status", "Les températures de la buse, du plateau et de la chambre."],
+  month: ["month", "Le bilan du mois, comparé au mois dernier."],
+  sales: ["sales", "Tes objets, ce qui est vendu et ce que ça rapporte."],
+  feed: ["feed", "Ce qui s'est passé aujourd'hui, au fil des heures."],
+  gallery: ["prints", "Les photos de tes dernières impressions."],
+  podium: ["podium", "Ton classement face à tes copains."],
+  alerts: ["attention", "Ce qui mérite ton attention dans le stock et les fiches."],
+  countdown: ["status", "Le temps qu'il reste à l'impression en cours."],
+  spool: ["status", "La bobine qui imprime en ce moment."],
+  head: ["status", "Les buses de la tête d'impression."],
+  switch: ["status", "Le chemin du filament dans l'aiguillage."],
+  colors: ["status", "Les couleurs chargées dans les AMS."],
+};
+export function tileWaiting(id, data, status) {
+  const w = WAIT[id];
+  if (!w) return false;
+  return w[0] === "status" ? status == null : data?.[w[0]] === undefined;
+}
+export function TileWaiting({ id, label, mini = false }) {
+  const what = WAIT[id]?.[1];
+  const dots = <span className="bn-wait-dots" aria-hidden="true"><i/><i/><i/></span>;
+  return (
+    <div className="card" aria-busy="true" style={{ height: "100%", boxSizing: "border-box", minWidth: 0, overflow: "hidden", display: "flex",
+      flexDirection: mini ? "row" : "column", alignItems: mini ? "center" : "stretch", gap: mini ? 8 : 6, padding: mini ? "0 12px" : "10px 12px" }}>
+      <style>{`.bn-wait-dots{display:inline-flex;gap:3px;align-items:center}.bn-wait-dots i{width:5px;height:5px;border-radius:50%;background:var(--muted);
+        opacity:.35;animation:bn-wait 1.2s infinite ease-in-out}.bn-wait-dots i:nth-child(2){animation-delay:.2s}.bn-wait-dots i:nth-child(3){animation-delay:.4s}
+        @keyframes bn-wait{0%,80%,100%{opacity:.25}40%{opacity:.9}}`}</style>
+      <span className="tile-head" style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden",
+        textOverflow: "ellipsis", minWidth: 0 }}>{label}</span>
+      {mini ? <span style={{ marginLeft: "auto" }}>{dots}</span> : <>
+        {what && <span style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4, overflow: "hidden" }}>{what}</span>}
+        <span style={{ marginTop: "auto", display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 700, color: "var(--muted)" }}>
+          {dots}chargement</span></>}
+    </div>
+  );
+}
 // chaque tuile se pose sur 1/2, 1, 2, 3 ou 4 rangees ; sa hauteur par defaut reste en tete
 export const HEIGHTS = [1, 2, 3];   // trois rangees au plus (23/10/2026)
 export { Zoom };
