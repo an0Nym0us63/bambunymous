@@ -480,7 +480,9 @@ EVENTS["friend_prints_mine"] = {
 }
 EVENTS["mw_queue_ready"] = {
     "section": "mw", "label": "Modèle de « À faire » imprimable",
-    "description": "Un modèle de ta file « À faire » a désormais tout son filament en stock (relevé toutes les heures).",
+    "description": "Un modèle de ta file « À faire » devient faisable : tout son filament en stock, tout chargé dans l'AMS, "
+                   "ou certains plateaux prêts avec ce qui est chargé. Selon ce que tu as retenu (profil, plateaux, filaments) ; "
+                   "un filament arrivé en stock ou chargé après l'ajout du modèle compte (relevé toutes les heures, et dès que l'AMS change).",
     "options": [],
     "sample": {"title": "✅ Prêt à imprimer : Lampe lune", "priority": 2, "attach": _SAMPLE_COVER, "link": "/prints?tab=queue",
                "message": "🧵 Tout le filament est en stock (2 couleurs, 184 g).\n✨ Déjà dans l'AMS."},

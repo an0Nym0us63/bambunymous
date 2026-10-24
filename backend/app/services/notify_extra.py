@@ -204,42 +204,86 @@ async def idle_tick(cfg) -> int:
 QUEUE_EVERY_S = 3600
 
 
+def _ams_sig() -> str:
+    """Ce qui est charge dans l'AMS (emplacement, bobine, couleur, reste) : un changement relance le calcul."""
+    out = []
+    for a in _ams_list() or []:
+        for t in getattr(a, "trays", None) or []:
+            info = getattr(t, "_spool_info_cache", None) or {}
+            out.append(f"{getattr(a, 'id', '')}/{getattr(t, 'id', '')}:{getattr(t, 'spool_id', '')}:{getattr(t, 'color', '')}"
+                       f":{round((info.get('remaining_weight_g') or 0) / 25)}")
+    return "|".join(out)
+
+
 async def queue_ready_tick(cfg) -> int:
-    """Un modele de la file a desormais tout son filament en stock."""
+    """Un modele de « A faire » devient faisable (24/10/2026) : tout son filament en stock, tout charge dans
+    l'AMS, ou certains de ses plateaux prets avec ce qui est charge. Selon ce qui est RETENU (profil,
+    plateaux, filament choisi pour chaque couleur) quand c'est fait. Un filament arrive en stock ou est charge
+    apres l'ajout du modele : c'est justement ce qu'on guette (le calcul est relance des que l'AMS change)."""
     import time
     from . import mw_queue as Q
     if not (await Q._load())["collections"]:
         return 0
-    if Q._CACHE[1] is None or time.time() - Q._CACHE[0] >= QUEUE_EVERY_S:
+    sig = _ams_sig()
+    if Q._CACHE[1] is None or time.time() - Q._CACHE[0] >= QUEUE_EVERY_S or sig != _QSIG.get("ams"):
         await Q._recompute()
+        _QSIG["ams"] = sig
     models = Q._CACHE[1].get("models") or []
     prev = await _get(K_QREADY, None)
     if not models and prev:
         return 0                               # file vide d'un coup : reponse douteuse, rien a conclure
-    ready = {r["design_id"]: r for r in models if r.get("stock_ok")}
-    await _put(K_QREADY, list(ready))
-    if not isinstance(prev, list):                  # premier passage : on memorise
+    # l'etat de chaque modele : tout en stock, tout dans l'AMS, plateaux prets (pas encore imprimes)
+    now = {}
+    for r in models:
+        plates = [p["index"] for p in (r.get("plates") or []) if p.get("ready") and not p.get("printed")]
+        now[r["design_id"]] = {"stock": bool(r.get("stock_ok")), "ams": r.get("status") == "ams", "plates": plates}
+    await _put(K_QREADY, now)
+    if not isinstance(prev, (list, dict)):          # premier passage : on memorise
         return 0
-    new = [r for d, r in ready.items() if d not in set(prev)]
-    if not new:
-        return 0
+    if isinstance(prev, list):                      # ancienne forme (le stock seul) : l'AMS part de l'etat present
+        prev = {d: {"stock": True, "ams": now.get(d, {}).get("ams", False), "plates": now.get(d, {}).get("plates", [])} for d in prev}
+    by = {r["design_id"]: r for r in models}
     name = lambda r: r.get("title_fr") or r.get("title") or r["design_id"]
-    if len(new) == 1:
-        r = new[0]
-        cols = len(r.get("filaments") or [])
-        title = f"✅ Prêt à imprimer : {name(r)}"
-        lines = [f"🧵 Tout le filament est en stock ({cols} couleur{'s' if cols > 1 else ''}, "
-                 f"{_fr(r.get('weight_g') or 0, 0)} g)."]
-        if r.get("status") == "ams":
-            lines.append("✨ Déjà dans l'AMS.")
+    news = []                                       # (modele, ce qui vient d'arriver)
+    for d, st in now.items():
+        was = prev.get(d) or {"stock": False, "ams": False, "plates": []}
+        if st["ams"] and not was.get("ams"):
+            news.append((by[d], "ams", []))
+        elif st["stock"] and not was.get("stock"):
+            news.append((by[d], "stock", []))
+        if not st["ams"]:
+            fresh = [p for p in st["plates"] if p not in (was.get("plates") or [])]
+            if fresh:
+                news.append((by[d], "plates", fresh))
+    if not news:
+        return 0
+    def line(r, what, pl):
+        if what == "ams":
+            return f"✨ {name(r)} : tout est dans l'AMS, il n'y a plus qu'à lancer"
+        if what == "stock":
+            cols = len(r.get("filaments") or [])
+            return f"🧵 {name(r)} : tout le filament est en stock ({cols} couleur{'s' if cols > 1 else ''}, {_fr(r.get('weight_g') or 0, 0)} g)"
+        return f"▶ {name(r)} : plateau{'x' if len(pl) > 1 else ''} {', '.join(map(str, pl))} prêt{'s' if len(pl) > 1 else ''} dans l'AMS"
+    if len(news) == 1:
+        r, what, pl = news[0]
+        title = {"ams": f"✨ Prêt à lancer : {name(r)}", "stock": f"✅ Prêt à imprimer : {name(r)}",
+                 "plates": f"▶ Plateau{'x' if len(pl) > 1 else ''} prêt{'s' if len(pl) > 1 else ''} : {name(r)}"}[what]
+        one = line(r, what, pl).split(" : ", 1)[1]
+        lines = [one[:1].upper() + one[1:]]
+        if what == "stock" and r.get("status") == "partial":
+            lines.append("Une partie est déjà chargée dans l'AMS.")
+        if r.get("planned"):
+            lines.append("📌 Selon ce que tu as retenu.")
     else:
-        title = f"✅ {len(new)} modèles de « À faire » prêts à imprimer"
-        lines = [f"   • {name(r)}" + (" ✨" if r.get("status") == "ams" else "") for r in new[:6]] + \
-                ([f"   • … et {len(new) - 6} autre(s)"] if len(new) > 6 else [])
-    cover = next((r.get("cover_url") for r in new if r.get("cover_url")), None)
+        title = f"✅ « À faire » : {len(news)} nouveauté{'s' if len(news) > 1 else ''} à imprimer"
+        lines = [line(*x) for x in news[:6]] + ([f"… et {len(news) - 6} autre(s)"] if len(news) > 6 else [])
+    cover = next((r.get("cover_url") for r, _w, _p in news if r.get("cover_url")), None)
     await N.notify("mw_queue_ready", title, "\n".join(lines), click=N.app_link(cfg, "/prints?tab=queue"),
-                   attach=cover, priority=2)
+                   attach=cover, priority=3 if any(w == "ams" for _r, w, _p in news) else 2)
     return 1
+
+
+_QSIG = {"ams": None}
 
 
 # ── Sechage : bobine a secher chargee, bobine oubliee apres le sechage ───────
