@@ -115,20 +115,27 @@
   <h2>La fiche d'une impression</h2>
   <p>Touche une carte (ou un print dans un groupe, ou le bouton <span class="ui">Fiche</span> de la galerie) : la fiche s'ouvre en panneau par-dessus la liste. Ferme-la avec <span class="ui">✕</span>, en la faisant glisser vers le bas ou en touchant à côté.</p>
   <figure class="pair">
-    <img src="img/impressions-fiche-haut.webp" alt="Haut de la fiche : vignette, nom, nom de recherche, statut, date, durée, poids, coûts, photos">
-    <img src="img/impressions-fiche-bas.webp" alt="Bas de la fiche : carte MakerWorld, création d'objets, filaments, identifiants, boutons Éditer, Partager, Supprimer">
+    <img src="img/impressions-fiche-haut.webp" alt="Haut de la fiche : plateau, nom, état, nom de recherche, cases Quand, Durée, Poids, Coût et son détail">
+    <img src="img/impressions-fiche-bas.webp" alt="Suite de la fiche : filaments, carte MakerWorld, commentaire, boutons Éditer, Partager et ⋯">
     <figcaption>La fiche d'un print, du haut (à gauche) au bas (à droite).</figcaption>
   </figure>
 
   <section id="impressions-fiche-entete">
-    <h3>En-tête : nom, statut, date, durée, poids</h3>
+    <h3>En-tête : le plateau, le nom, l'état</h3>
     <ul>
-      <li><b>La grande image</b> : la vignette du plateau tirée du fichier.</li>
-      <li><b>Le nom affiché</b>, et le crayon <span class="admin">admin</span> qui ouvre l'<a href="#impressions-fiche-editer">édition</a>. Si le nom d'origine du fichier est différent, il s'affiche en gris dessous. L'appli nettoie le nom de la tâche (extension retirée, « _ » remplacés par des espaces, suffixes v1 ou final retirés) ; un plateau autre que le premier donne « Titre — Plateau 3 ».</li>
-      <li><b>🔎 Nom de recherche</b> : la traduction française du nom, faite automatiquement, qui sert <b>uniquement</b> à la recherche (« Dragon » se retrouve en tapant « dragon » même si le fichier s'appelait « Dragon_articulated »). Elle ne remplace jamais le titre. <span class="admin">admin</span> : touche la pastille pour la corriger ou <span class="ui">🔎 Ajouter un nom de recherche</span>, puis <span class="ui">OK</span>. Une infobulle dit d'où vient la traduction (service de traduction, « Saisi à la main »…).</li>
-      <li><b>Le statut</b> et, si le print est dans un groupe, le badge <b>📁 Nom du groupe</b>. <span class="admin">admin</span> : sa petite croix retire le print du groupe (après confirmation).</li>
-      <li>Trois badges : <b>📅 date et heure</b> de début, <b>⏱ durée</b>, <b>⚖ poids</b> de filament.</li>
+      <li><b>Le plateau en grand</b>, sur un fond tiré de son image, avec une lueur de la couleur de l'état.</li>
+      <li><b>Le nom affiché</b> et, s'il diffère, le nom d'origine du fichier en gris. L'appli nettoie le nom de la tâche (extension, plateau…).</li>
+      <li><b>L'état</b> (<span class="ui">✓ Réussie</span>, <span class="ui">✕ Échouée</span>, <span class="ui">◐ En partie</span>…) et, si le print est dans un groupe, le badge <b>📁 Nom du groupe</b> ; <span class="admin">admin</span> : sa petite croix retire le print du groupe (après confirmation).</li>
+      <li><b>🔎 Nom de recherche</b> <span class="admin">admin</span> : la traduction française du nom, faite automatiquement, qui sert <b>uniquement</b> à la recherche (« Dragon » se retrouve en tapant « dragon » même si le fichier s'appelait « Dragon_articulated »). Touche-la pour la corriger ou mettre ton propre nom (« la tirelire de Matteo »).</li>
+      <li><b>⋯</b> et <b>✕</b> en haut, toujours visibles.</li>
     </ul>
+    <h4>Les quatre cases</h4>
+    <dl class="opts">
+      <dt>📅 Quand</dt><dd>Le jour (« Auj. », « Hier », « Mar. », puis la date) et dessous l'heure et la date.</dd>
+      <dt>⏱ Durée</dt><dd>La durée réelle, ou l'estimation (« estimée ») si elle n'a pas été mesurée.</dd>
+      <dt>⚖ Poids</dt><dd>Le filament utilisé.</dd>
+      <dt>💶 Coût</dt><dd>Le prix réel, puis le prix normal entre parenthèses. Touche la case pour le <a href="#impressions-fiche-couts">détail</a>.</dd>
+    </dl>
     <h4>Les statuts</h4>
     <dl class="opts">
       <dt>En cours</dt><dd>L'impression tourne.</dd>
@@ -143,30 +150,50 @@
 
   <section id="impressions-fiche-couts">
     <h3>Coûts</h3>
-    <p>Le bloc <b>Coûts</b> détaille ce que le print t'a coûté :</p>
+    <p>La case <span class="ui">💶 Coût</span> se déplie (repliée à chaque ouverture) ; chaque ligne donne le prix réel en couleur, puis le prix normal entre parenthèses :</p>
     <dl class="opts">
-      <dt>Filament</dt><dd>Le coût du filament réellement utilisé, au prix de <b>la bobine</b> (si tu as saisi un prix sur la bobine), sinon au prix du filament, sinon 20 €/kg. Entre parenthèses, « sans bobine » : le même calcul au prix catalogue du filament, pour comparer (une bobine offerte, saisie à 0 €, compte vraiment 0).</dd>
-      <dt>Électricité</dt><dd>La durée en heures multipliée par le coût horaire réglé dans les <a href="#parametres">Paramètres</a>.</dd>
-      <dt>Total</dt><dd>Filament + électricité, et entre parenthèses le total au prix catalogue.</dd>
-      <dt>N éléments</dt><dd>Le nombre de pièces produites par ce print. Au-delà d'une, le coût <b>par pièce</b> s'affiche (« · 0.68€/u »). <span class="admin">admin</span> : <span class="ui">Modifier</span> pour le changer, puis ✓.</dd>
+      <dt>🧵 Filament</dt><dd>Le coût du filament réellement utilisé, au prix de <b>la bobine</b> (si tu as saisi un prix sur la bobine), sinon au prix du filament, sinon 20 €/kg. Entre parenthèses, le prix normal : le même calcul au prix catalogue du filament.</dd>
+      <dt>⚡ Électricité</dt><dd>La durée en heures multipliée par le coût horaire réglé dans les <a href="#parametres">Paramètres</a>.</dd>
+      <dt>💶 Total</dt><dd>Filament + électricité, et entre parenthèses le total au prix normal.</dd>
+      <dt>N éléments</dt><dd>Le nombre de pièces produites par ce print. Au-delà d'une, le coût <b>par pièce</b> s'affiche (« · 0,68 €/u (0,61 €/u) »). <span class="admin">admin</span> : <span class="ui">Modifier</span> pour le changer, puis ✓.</dd>
     </dl>
     <p>Les coûts se recalculent tout seuls quand tu associes une bobine ou rends des grammes. Après un changement de prix, tu peux tout recalculer depuis <a href="#parametres-outils">Paramètres → Outils</a>.</p>
   </section>
 
   <section id="impressions-fiche-photos">
     <h3>Photos</h3>
-    <p>Deux bandes défilantes :</p>
     <dl class="opts">
-      <dt>Photos (N)</dt><dd>Les photos et vidéos que tu as ajoutées. <span class="admin">admin</span> : le bouton bleu <span class="ui">+</span> en ajoute, plusieurs à la fois (l'ordre est gardé). Les photos sont réduites, une vidéo devient une petite animation muette en boucle (30 s au plus).</dd>
-      <dt>Milestones (N)</dt><dd>Les captures automatiques de la caméra de l'imprimante, si elle est configurée : <b>Couche 1</b>, <b>Couche 2</b>, <b>50%</b>, <b>99%</b>, <b>100%</b>, et une capture au moment d'un échec.</dd>
+      <dt>Photos (N)</dt><dd>Les photos et vidéos que tu as ajoutées. <span class="admin">admin</span> : le bouton bleu <span class="ui">+</span> en ajoute, plusieurs à la fois (l'ordre est gardé). Les photos sont réduites, une vidéo devient une petite animation.</dd>
+      <dt>Les captures automatiques</dt><dd>Celles de la caméra de l'imprimante, si elle est configurée : <b>Couche 1</b>, <b>Couche 2</b>, <b>50%</b>, <b>99%</b>, <b>100%</b>, et une capture au moment d'un échec.</dd>
     </dl>
-    <p>Sur chaque photo ajoutée <span class="admin">admin</span> : l'étoile en haut à gauche en fait la <b>photo principale</b> (étoile dorée), celle qu'on voit dans la galerie et dans la mosaïque d'un groupe ; la corbeille en haut à droite la supprime, en deux temps (« Supprimer ? »). Les captures caméra peuvent aussi être supprimées.</p>
-    <p>Touche une photo pour la voir en plein écran : flèches pour passer à la suivante, compteur « 3 / 7 », touche à côté pour fermer.</p>
+    <p>Sur chaque photo ajoutée <span class="admin">admin</span> : l'étoile en haut à gauche en fait la <b>photo principale</b> (étoile dorée), celle qu'on voit dans la galerie et dans la mosaïque d'un groupe ; la corbeille en haut à droite la supprime, en deux temps. Touche une photo pour la voir en plein écran : flèches pour passer à la suivante, compteur « 3 / 7 », touche à côté pour fermer.</p>
+  </section>
+
+  <section id="impressions-fiche-filaments">
+    <h3>Filaments et bobines</h3>
+    <p>Le bloc <b>🧵 Filaments</b> (replié à chaque ouverture) montre leur nombre, le poids total, <span class="ui">⚖ Restituer</span> <span class="admin">admin</span> et une barre de couleurs : la part de chaque filament dans le poids (un filament blanc garde un fin contour). « ▸ N à associer » signale des filaments reliés à aucune bobine. Touche le titre pour déplier une rangée par filament, teintée de sa couleur :</p>
+    <figure class="phone"><img src="img/impressions-filaments.webp" alt="Bloc Filaments déplié : barre de couleurs et une rangée par filament, avec grammes et prix"><figcaption>Chaque rangée : la pastille (cerclée de vert si une bobine est associée), le nom, « ✓ · Bambu Lab · PLA Matte », les grammes et le prix réel (prix normal).</figcaption></figure>
+    <ul>
+      <li><b>✓</b> et un anneau vert : le filament est relié à une bobine, qui a été décomptée ; toucher la rangée ouvre la fiche du filament et de sa bobine (voir <a href="#filaments-bobines">Filaments</a>) ;</li>
+      <li><span class="ui">▸ Associer</span> (orange) <span class="admin">admin</span> : aucune bobine reliée ; touche la rangée pour en choisir une ;</li>
+      <li>le <span class="ui">⋯</span> de la rangée, ou l'appui long : <span class="ui">Ouvrir la bobine</span>, <span class="ui">Associer une bobine</span>, <span class="ui">Dissocier la bobine</span> <span class="admin">admin</span>.</li>
+    </ul>
+    <h4>Associer une bobine <span class="admin">admin</span></h4>
+    <ol>
+      <li>Touche une rangée marquée <span class="ui">▸ Associer</span> (ou son <span class="ui">⋯</span> → <span class="ui">Associer une bobine</span>).</li>
+      <li>Dans <b>Associer une bobine</b>, choisis l'onglet <span class="ui">Actives</span> ou <span class="ui">Archivées</span> ; la recherche en bas est préremplie avec le type du filament (tu peux taper nom, marque, matériau ou « #12 »).</li>
+      <li>Touche la bobine. L'appli propose alors « Décompter les grammes ? » : <span class="ui">Oui, déduire</span> retire les grammes du print du poids restant de la bobine, <span class="ui">Non</span> relie sans toucher au stock.</li>
+    </ol>
+    <p>Les coûts du print se recalculent aussitôt.</p>
+    <h4>Dissocier <span class="admin">admin</span></h4>
+    <p><span class="ui">⋯</span> → <span class="ui">Dissocier la bobine</span> (ou l'appui long) défait le lien et propose de rendre tout ou partie des grammes à la bobine (<span class="ui">Non</span>, <span class="ui">25%</span>… <span class="ui">100%</span>, 100 % par défaut).</p>
+    <h4>Restituer des grammes <span class="admin">admin</span></h4>
+    <p>L'appli décompte le filament <b>dès le démarrage</b> d'un print. Si le print échoue à 30 %, ta bobine a donc été débitée de trop. Le bouton vert <span class="ui">⚖ Restituer</span> du titre <b>Filaments</b> ouvre la fenêtre de restitution (la même qu'à la <a href="#impressions-fiche-supprimer">suppression</a>) : choisis pour chaque filament la part à rendre, puis <span class="ui">✓ Restituer</span>. Poids et coûts du print sont recalculés.</p>
   </section>
 
   <section id="impressions-fiche-makerworld">
     <h3>Le modèle MakerWorld</h3>
-    <p>Si le print vient d'un modèle MakerWorld (l'imprimante le signale, ou tu as saisi son numéro), une carte le présente : couverture, titre, créateur, catégories et compteurs (❤ j'aime, ⬇ téléchargements, 🖨 impressions, ⭐ mises en collection). Touche la carte pour ouvrir <a href="#makerworld">la fiche du modèle</a> dans l'appli, le lien <span class="ui">MAKERWORLD ↗</span> pour le site.</p>
+    <p>Si le print vient d'un modèle MakerWorld (l'imprimante le signale, ou tu as saisi son numéro), une carte <b>🌐 MAKERWORLD</b> le résume : couverture, titre, créateur, ❤ j'aime et ⬇ téléchargements, et « ⭐ à évaluer » si une évaluation est attendue. <span class="ui">↗</span> ouvre la fiche du modèle ; toucher la carte la déplie (repliée à chaque ouverture) sur le détail : titre traduit, catégories, tous les compteurs (🖨 impressions, ⭐ mises en collection), puis :</p>
     <ul>
       <li><b>État de l'évaluation</b> : « ⭐ Déjà évalué sur MakerWorld (5/5) », « ⭐ MakerWorld attend ton évaluation », « Ton modèle : pas d'évaluation à faire »… Si une évaluation est attendue, un bouton orange <span class="ui">⭐ Évaluer</span> ouvre le <a href="#impressions-a-evaluer-noter">formulaire</a>.</li>
       <li><b>Plateaux · 2/5 imprimés</b> : pour un modèle à plusieurs plateaux, les vignettes de chaque plateau. Vert ✓ = imprimé, orange ⏳ = en cours, pointillé bleu « ? » = probablement imprimé (reconnu à l'image), gris = pas encore. <span class="admin">admin</span> : touche un plateau pour dire quel print l'a imprimé, ou valide d'un coup les plateaux reconnus avec <span class="ui">💡 Valider N plateau(x) reconnu(s)</span>. Une reconnaissance n'est jamais comptée sans ta validation. Ce que tu indiques ici (un print qui a fait plusieurs plateaux regroupés, un plateau renuméroté) vaut aussi dans <a href="#impressions-a-faire">À faire</a> : plateaux faits, en cours et à lancer.</li>
@@ -175,43 +202,23 @@
       <li><span class="ui">👀 Chez les copains</span> : les mêmes modèles imprimés par tes <a href="#copains">copains</a>, s'il y en a.</li>
     </ul>
     <p>Pour lier ou délier un modèle à la main, saisis son numéro dans l'<a href="#impressions-fiche-editer">édition</a> (champ « ID MakerWorld »). Pour lier un modèle à plusieurs prints d'un coup, passe par <span class="ui">🔗 Associer à un print</span> sur la fiche du modèle (voir le chapitre <a href="#makerworld">MakerWorld</a>).</p>
-  </section>
-
-  <section id="impressions-fiche-filaments">
-    <h3>Filaments et bobines</h3>
-    <div class="note" id="impressions-fiche-v2"><p><b>Nouvelle fiche, à l'essai.</b> Au bas de la fiche, <span class="ui">✨ Essayer la nouvelle fiche</span> l'affiche sur cet appareil : le plateau en grand avec le titre, l'état, le groupe et le nom de recherche posés dessus ; quatre cases <span class="ui">Quand</span> (jour, heure et date), <span class="ui">Durée</span>, <span class="ui">Poids</span> et <span class="ui">Coût</span> : le prix réel, puis le prix normal entre parenthèses (touche la case pour le détail : filament, électricité, total, éléments et prix à l'unité, <span class="ui">Modifier</span>). Puis les photos ; les <b>filaments</b> : leur répartition en une barre de couleurs (touche le titre pour déplier ou replier ; replié par défaut, « ▸ N à associer » s'il en manque), une rangée par filament (poids, prix réel et normal entre parenthèses, « ✓ » quand une bobine est associée, ou « ▸ Associer »), toucher ouvre la bobine ou l'association, <span class="ui">⋯</span> ou l'appui long : ouvrir, associer, dissocier, et <span class="ui">⚖ Restituer</span> dans le titre ; MakerWorld et le commentaire. Les actions restent en bas : <span class="ui">Éditer</span>, <span class="ui">Partager</span> et <span class="ui">⋯</span> (aussi en haut) pour <span class="ui">📦 Créer des objets</span> (avec « N / T déjà créés »), <span class="ui">Retirer du groupe</span>, <span class="ui">Télécharger le 3MF d'origine</span> (ou <span class="ui">Récupérer le 3MF d'origine</span>), <span class="ui">Télécharger le 3MF tranché</span>, <span class="ui">Identifiants</span> (travail, modèle et profil MakerWorld, numéro de l'impression, chacun à copier), <span class="ui">Supprimer…</span> et <span class="ui">Revenir à l'ancienne fiche</span>. Sur ordinateur, deux colonnes. Les filaments et le détail du coût sont repliés à chaque ouverture. Rien de l'ancienne fiche ne disparaît.</p>
-<p>La <b>fiche d'un groupe</b> suit le même modèle (même réglage d'essai) : en tête, ses plateaux en mosaïque, son nom, le nombre d'impressions et combien sont réussies ou échouées ; les cases <span class="ui">Dernière</span>, <span class="ui">Durée</span>, <span class="ui">Poids</span> et <span class="ui">Coût</span> cumulés (détail : total, éléments, prix à l'unité, <span class="ui">Modifier</span>) ; les photos du groupe (⭐ vignette de la galerie, 🗑 en deux temps) ; les impressions en rangées (vignette, état, date, durée, poids ; ★ marque la vignette du groupe) ou en grille, au choix : toucher en ouvre la fiche, <span class="ui">⋯</span> ou l'appui long : <span class="ui">En faire la vignette du groupe</span>, <span class="ui">Retirer du groupe</span> ; les filaments cumulés ; le ou les modèles MakerWorld. En bas : <span class="ui">Éditer</span>, <span class="ui">Partager</span> et <span class="ui">⋯</span> (<span class="ui">Créer des objets</span>, <span class="ui">Dégrouper</span>, <span class="ui">Supprimer…</span>, <span class="ui">Revenir à l'ancienne fiche</span>).</p></div>
-    <p id="impressions-3mf">Sous la carte MakerWorld, la carte <span class="ui">📦 FICHIERS 3MF</span> donne les fichiers de l'impression : <span class="ui">3MF tranché</span> (celui envoyé à ton imprimante, gardé au lancement) et <span class="ui">3MF d'origine</span> (le projet du profil MakerWorld imprimé, à retrancher pour une autre imprimante, et qui reste là même si le modèle disparaît de MakerWorld). Le 3MF d'origine est récupéré dès le lancement de l'impression (et de nouveau à la fin si ça avait échoué), une seule fois par profil ; s'il manque, <span class="ui">Récupérer le 3MF d'origine</span> <span class="admin">admin</span> le demande tout de suite. Il faut le compte MakerWorld connecté, et chaque récupération compte comme un téléchargement sur MakerWorld. Sans profil connu (ou si le profil imprimé a été retiré), c'est celui du modèle le plus proche de ton imprimante. Une impression lancée hors MakerWorld (ton propre projet) n'a que le 3MF tranché.</p>
-    <p>Sous la carte MakerWorld, le bouton <span class="ui">📦 Créer des objets depuis ce print</span> <span class="admin">admin</span> transforme le print en objets à vendre ou à donner (voir <a href="#objets">Objets</a>) ; le compteur « 0 / 1 » dit combien d'objets ont déjà été créés sur le nombre d'éléments.</p>
-    <p>L'accordéon <b>FILAMENTS (N)</b>, fermé par défaut, montre les pastilles des couleurs utilisées ; un point orange signale un filament qui n'est relié à aucune bobine. Touche-le pour le déplier :</p>
-    <figure class="phone"><img src="img/impressions-filaments.webp" alt="Accordéon Filaments déplié : deux filaments liés à des bobines, avec grammes et coût"><figcaption>Chaque ligne : filament, bobine liée (✓#1), marque, type, grammes et coût.</figcaption></figure>
-    <ul>
-      <li>un <b>anneau vert</b> autour de la pastille et <b>✓#12</b> : le filament est relié à la bobine n° 12, qui a été décomptée ;</li>
-      <li><span class="ui">▸ Mapper</span> (orange) <span class="admin">admin</span> : aucune bobine reliée ; touche la ligne pour en choisir une ;</li>
-      <li>à droite, le coût de ce filament et, entre parenthèses, son coût au prix catalogue.</li>
-    </ul>
-    <h4>Associer une bobine <span class="admin">admin</span></h4>
-    <ol>
-      <li>Touche une ligne marquée <span class="ui">▸ Mapper</span>.</li>
-      <li>Dans <b>Associer une bobine</b>, choisis l'onglet <span class="ui">Actives</span> ou <span class="ui">Archivées</span> ; la recherche en bas est préremplie avec le type du filament (tu peux taper nom, marque, matériau ou « #12 »).</li>
-      <li>Touche la bobine. L'appli propose alors « Décompter les grammes ? » : <span class="ui">Oui, déduire</span> retire les grammes du print du poids restant de la bobine, <span class="ui">Non</span> relie sans toucher au stock.</li>
-    </ol>
-    <p>Les coûts du print se recalculent aussitôt.</p>
-    <h4>Démapper <span class="admin">admin</span></h4>
-    <p>Appui long ou clic droit sur une ligne reliée : <b>Démapper</b> défait le lien et propose de rendre tout ou partie des grammes à la bobine (<span class="ui">Non</span>, <span class="ui">25%</span>… <span class="ui">100%</span>, 100 % par défaut).</p>
-    <p>Un simple toucher sur une ligne reliée ouvre la fiche du filament et de sa bobine (voir <a href="#filaments-bobines">Filaments</a>).</p>
-    <h4>Restituer des grammes <span class="admin">admin</span></h4>
-    <p>L'appli décompte le filament <b>dès le démarrage</b> d'un print. Si le print échoue à 30 %, ta bobine a donc été débitée de trop. Le bouton vert <span class="ui">⚖ Restituer</span> de l'en-tête de l'accordéon ouvre la fenêtre de restitution (la même qu'à la <a href="#impressions-fiche-supprimer">suppression</a>) : choisis pour chaque filament la part à rendre, puis <span class="ui">✓ Restituer</span>. Poids et coûts du print sont recalculés.</p>
+    <p>Pour lier ou délier un modèle à la main, saisis son numéro dans l'<a href="#impressions-fiche-editer">édition</a> (champ « ID MakerWorld »).</p>
   </section>
 
   <section id="impressions-fiche-bas">
-    <h3>Commentaire, identifiants et boutons</h3>
+    <h3>Commentaire, actions et menu</h3>
     <ul>
-      <li><b>💬 Commentaire</b> : la note de statut saisie dans l'édition (« Décollement du plateau à 37 % »), affichée en violet.</li>
-      <li><b>Identifiants</b> (replié) : les numéros de tâche et de modèle, utiles en cas de souci.</li>
-      <li>Les boutons <span class="admin">admin</span> : <span class="ui">✏️ Éditer</span>, <span class="ui">📣 Partager</span>, <span class="ui">🗑 Supprimer</span>.</li>
+      <li><b>💬 Commentaire</b> : la note de statut saisie dans l'édition (« Décollement du plateau à 37 % »), en citation.</li>
+      <li><b>En bas de l'écran</b>, toujours à portée du pouce <span class="admin">admin</span> : <span class="ui">✏️ Éditer</span>, <span class="ui">📣 Partager</span> (Telegram) et <span class="ui">⋯</span>.</li>
+      <li><b>Le menu ⋯</b> (en bas et en haut) : <span class="ui">Éditer</span>, <span class="ui">Partager</span>, <span class="ui">📦 Créer des objets</span> (avec « N / T déjà créés », voir <a href="#objets">Objets</a>), <span class="ui">Retirer du groupe</span>, <span class="ui" id="impressions-3mf">Télécharger le 3MF d'origine</span> (le projet du profil MakerWorld, à retrancher ; ou <span class="ui">Récupérer le 3MF d'origine</span> s'il manque), <span class="ui">Télécharger le 3MF tranché</span> (celui envoyé à ton imprimante), <span class="ui">Identifiants</span> (travail, modèle et profil MakerWorld, numéro de l'impression, chacun à copier) et <span class="ui">Supprimer…</span>.</li>
     </ul>
-    <p>Un compte en lecture seule voit la fiche entière mais aucun bouton d'action ; en rôle « Lecture seule » (sans « + prix »), les montants s'affichent « — ». Voir <a href="#premiers-pas-roles">les rôles</a>.</p>
+    <p>Le 3MF d'origine est récupéré dès le lancement de l'impression (et de nouveau à la fin si besoin), une seule fois par profil ; sans profil connu, c'est celui du modèle le plus proche de ton imprimante. Il faut le compte MakerWorld connecté, et chaque récupération compte comme un téléchargement sur MakerWorld. Une impression lancée hors MakerWorld n'a que le 3MF tranché.</p>
+    <p>Sur ordinateur, la fiche s'ouvre en deux colonnes. Un compte en lecture seule voit la fiche entière mais aucune action ; en rôle « Lecture seule » (sans « + prix »), les montants s'affichent « — ». Voir <a href="#premiers-pas-roles">les rôles</a>.</p>
+  </section>
+
+  <section id="impressions-fiche-groupe">
+    <h3>La fiche d'un groupe</h3>
+    <p>Même modèle : en tête, ses plateaux en mosaïque, son nom, le nombre d'impressions et combien sont réussies ou échouées ; les cases <span class="ui">Dernière</span>, <span class="ui">Durée</span>, <span class="ui">Poids</span> et <span class="ui">Coût</span> cumulés (détail : total, éléments, prix à l'unité, <span class="ui">Modifier</span>) ; les photos du groupe (⭐ vignette de la galerie, 🗑 en deux temps) ; les impressions en rangées (vignette, état, date, durée, poids ; ★ marque la vignette du groupe) ou en grille (☰ / ▦) : toucher en ouvre la fiche, <span class="ui">⋯</span> ou l'appui long : <span class="ui">En faire la vignette du groupe</span>, <span class="ui">Retirer du groupe</span> ; les filaments cumulés ; le ou les modèles MakerWorld. En bas : <span class="ui">Éditer</span>, <span class="ui">Partager</span> et <span class="ui">⋯</span> (<span class="ui">Créer des objets</span>, <span class="ui">Dégrouper</span>, <span class="ui">Supprimer…</span>).</p>
   </section>
 
   <section id="impressions-fiche-editer">

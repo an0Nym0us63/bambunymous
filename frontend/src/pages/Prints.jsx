@@ -30,7 +30,6 @@ import { useKeyboardInset } from "../utils/keyboard";
 import PhotoAddButton from "../components/PhotoAddButton";
 import GroupMosaic from "../components/GroupMosaic";
 import ObjectCreateSheet from "../components/ObjectCreateSheet";
-import ObjectQuotaButton from "../components/ObjectQuotaButton";
 import Select from "../components/Select";
 import { useLongPress, openMenu } from "../components/ContextMenu";
 
@@ -120,22 +119,6 @@ function FilamentDots({ filaments }) {
   );
 }
 
-function StatusBadge({ status }) {
-  // Repli NEUTRE et non SUCCESS : un statut inconnu ne doit pas se deguiser en
-  // reussite. Il s'affiche tel quel, ce qui le rend reperable.
-  const cfg = STATUS_CFG[status] || { label: status || "?", color:"#94a3b8",
-    bg:"rgba(148,163,184,0.75)", icon:AlertTriangle };
-  const Icon = cfg.icon;
-  return (
-    <span style={{ display:"inline-flex", alignItems:"center", gap:4,
-      fontSize:10, fontWeight:700, color:cfg.color,
-      background:`${cfg.color}18`, padding:"2px 8px", borderRadius:20 }}>
-      <Icon size={9}/> {cfg.label}
-    </span>
-  );
-}
-
-// ── Tuile groupe collapsible ────────────────────────────────────────────────
 function SpoolMapPicker({ usageId, printId, colorHex, colorsArray, multicolorType, filamentType, onClose, onMapped }) {
   const [spools, setSpools] = useState([]);
   const [search, setSearch] = useState(filamentType || "");
@@ -376,68 +359,6 @@ function DeletePrintConfirm({ p, onCancel, onConfirm, restoreOnly = false }) {
   );
 }
 
-function DissociateDialog({ usage, printId, onClose, onDone }) {
-  useTrackDetail("Dissocier");
-  const [restore, setRestore] = useState(true);
-  const [loading, setLoading] = useState(false);
-
-  const confirm = async () => {
-    setLoading(true);
-    try {
-      if (restore && usage.grams_used > 0 && usage.spool_id) {
-        await client.post(`/filaments/spools/${usage.spool_id}/weight`,
-          { mode: "add", value: usage.grams_used }).catch(()=>{});
-      }
-      await client.patch(`/prints/${printId}/filament-usage/${usage.id}`, { spool_id: null });
-      await client.post(`/prints/${printId}/recalc-costs`).catch(()=>{});
-      onDone?.();
-    } catch(e) { showAlert("Erreur: " + e.message); }
-    setLoading(false);
-  };
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.6)", zIndex:4000,
-      display:"flex", alignItems:"center", justifyContent:"center", padding:20 }} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:16,
-        width:"100%", maxWidth:360, padding:20, border:"1px solid var(--border)" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
-          <ColorDot hex={usage.color_hex} colors={usage.filament_colors_array}
-            multicolor={usage.filament_multicolor_type} size={18}/>
-          <p style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:0 }}>Dissocier la bobine</p>
-        </div>
-        <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
-          {usage.filament_translated_name||usage.filament_fila_type||usage.filament_type} · {usage.grams_used?.toFixed(1)}g · bobine #{usage.spool_id}
-        </p>
-        {usage.grams_used > 0 && (
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16,
-            padding:"10px 12px", borderRadius:10,
-            background:"rgba(34,197,94,0.08)", border:"1px solid rgba(34,197,94,0.2)", cursor:"pointer" }}
-            onClick={()=>setRestore(r=>!r)}>
-            <div style={{ width:20, height:20, borderRadius:4, border:"2px solid #22c55e",
-              background:restore?"#22c55e":"transparent", flexShrink:0,
-              display:"flex", alignItems:"center", justifyContent:"center" }}>
-              {restore && <span style={{ color:"white", fontSize:13 }}>✓</span>}
-            </div>
-            <span style={{ fontSize:12, color:"var(--text)" }}>
-              Remettre <b>{usage.grams_used?.toFixed(1)}g</b> dans la bobine
-            </span>
-          </div>
-        )}
-        <div style={{ display:"flex", gap:8 }}>
-          <button onClick={onClose} style={{ flex:1, padding:"10px", borderRadius:10,
-            border:"1px solid var(--border)", background:"var(--surface2)",
-            color:"var(--muted)", fontSize:13, cursor:"pointer" }}>Annuler</button>
-          <button onClick={confirm} disabled={loading} style={{ flex:2, padding:"10px",
-            borderRadius:10, border:"none", background:"#ef4444", color:"white",
-            fontSize:13, fontWeight:700, cursor:"pointer", opacity:loading?0.7:1 }}>
-            {loading?"…":"Dissocier"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function UnmapFilamentConfirm({ f, printId, onClose, onDone }) {
   const [fraction, setFraction] = useState(1.0);
   const OPTS = [0, 0.25, 0.5, 0.75, 1.0];
@@ -495,93 +416,6 @@ function UnmapFilamentConfirm({ f, printId, onClose, onDone }) {
         </div>
       </div>
     </div>
-  );
-}
-
-function FilamentAccordion({ filaments, onSpoolClick, onSpoolPick, printId, onRestore, onUnmapped, onUnmap }) {
-  const isAdmin = useIsAdmin();
-  const [open, setOpen] = useState(false);
-  const [dissociate, setDissociate] = useState(null); // filament usage à dissocier
-  return (
-    <>
-    <div style={{ marginBottom:14, border:"1px solid var(--border)", borderRadius:10 }}>
-      {/* Header cliquable */}
-      <button onClick={()=>setOpen(o=>!o)}
-        style={{ width:"100%", display:"flex", alignItems:"center", gap:8, padding:"8px 12px",
-          background:"var(--surface2)", border:"none", cursor:"pointer", textAlign:"left" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:6, flex:1, minWidth:0 }}>
-          <span style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:"0.06em", whiteSpace:"nowrap" }}>Filaments ({filaments.length})</span>
-          {isAdmin && onRestore && filaments.some(f=>f.spool_id) && (
-            <span onClick={e=>{e.stopPropagation();onRestore();}}
-              style={{ fontSize:10, fontWeight:700, cursor:"pointer",
-                padding:"2px 8px", borderRadius:20, whiteSpace:"nowrap",
-                background:"rgba(34,197,94,0.15)", color:"#22c55e",
-                border:"1px solid rgba(34,197,94,0.3)" }}>⚖ Restituer</span>
-          )}
-        </div>
-        {/* Pastilles de couleur */}
-        <div style={{ display:"flex", gap:4, flexWrap:"wrap", justifyContent:"flex-end" }}>
-          {filaments.map((f,i) => (
-            <div key={i} style={{ position:"relative", flexShrink:0 }}>
-              <ColorDot hex={f.color_hex} colors={f.filament_colors_array}
-                multicolor={f.filament_multicolor_type} size={16}/>
-              {!f.spool_id && <span style={{ position:"absolute", top:-3, right:-3,
-                width:8, height:8, borderRadius:"50%", background:"#f59e0b",
-                border:"1px solid var(--bg)" }}/>}
-            </div>
-          ))}
-        </div>
-        <span style={{ color:"var(--muted)", fontSize:12 }}>{open?"▲":"▼"}</span>
-      </button>
-      {/* Détail déplié */}
-      {open && (
-        <div style={{ display:"flex", flexDirection:"column", gap:1 }}>
-          {filaments.map((f,i) => (
-            <div key={i}
-              onClick={e=>{e.stopPropagation(); if(f.spool_id){onSpoolClick&&onSpoolClick({filId:f.bam_filament_id||null,spoolId:f.spool_id,hex:f.color_hex||null});}else if(isAdmin){onSpoolPick&&onSpoolPick({usageId:f.id,colorHex:f.color_hex,colorsArray:f.filament_colors_array,multicolorType:f.filament_multicolor_type,filamentType:f.filament_fila_type||f.filament_type});}}}
-              onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(isAdmin&&f.spool_id)onUnmap&&onUnmap(f);}}
-              onPointerDown={e=>{ if(!isAdmin||!f.spool_id) return; const t=setTimeout(()=>{navigator.vibrate&&navigator.vibrate(20); onUnmap&&onUnmap(f);},600); e.currentTarget._lpt=t; }}
-              onPointerUp={e=>clearTimeout(e.currentTarget._lpt)}
-              onPointerLeave={e=>clearTimeout(e.currentTarget._lpt)}
-              onPointerCancel={e=>clearTimeout(e.currentTarget._lpt)}
-              style={{ display:"flex", alignItems:"center", gap:10,
-              padding:"8px 12px", background:"var(--bg)",
-              borderTop:"1px solid var(--border)",
-              cursor: (f.spool_id || isAdmin) ? "pointer" : "default",
-              opacity: f.spool_id ? 1 : 0.85 }}>
-              <ColorDot hex={f.color_hex} colors={f.filament_colors_array}
-                multicolor={f.filament_multicolor_type} size={20}
-                ring={f.spool_id ? "mapped" : "default"}/>
-              <div style={{ flex:1, minWidth:0 }}>
-                <p style={{ fontSize:12, fontWeight:600, color:"var(--text)", margin:0,
-                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                  {f.filament_translated_name || f.filament_fila_type || f.filament_name || "Inconnu"}
-                  {f.spool_id && <span style={{ fontSize:9, color:"#22c55e", marginLeft:5 }}>✓#{f.spool_id}</span>}
-                  {!f.spool_id && isAdmin && <span style={{ fontSize:9, color:"#f59e0b", marginLeft:5,
-                    background:"rgba(245,158,11,0.12)", padding:"1px 5px", borderRadius:6 }}>▸ Mapper</span>}
-                </p>
-                <p style={{ fontSize:10, color:"var(--muted)", margin:"1px 0 0" }}>
-                  {[f.filament_brand, f.filament_fila_type || f.filament_type, f.grams_used?.toFixed(1)+"g"].filter(Boolean).join(" · ")}
-                </p>
-              </div>
-              <div style={{ textAlign:"right", flexShrink:0 }}>
-                {/* Le cout principal est TOUJOURS affiche, meme a 0 (bobine
-                    gratuite : c'est une info, pas une absence). f.cost peut
-                    valoir 0 legitimement -> on ne bascule PAS sur normal_cost. */}
-                <span style={{ fontSize:12, fontWeight:700, color:"var(--text)", fontFamily:"monospace" }}>
-                  {moneyVal((f.cost || 0), 2)}€
-                </span>
-                {/* Toujours les DEUX couts, meme identiques : la parenthese
-                    confirme le cout catalogue, son absence laisserait un doute. */}
-                <p style={{ fontSize:9, color:"var(--muted)", margin:0 }}>({moneyVal((f.normal_cost || 0), 2)}€)</p>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-    </>
   );
 }
 
@@ -733,6 +567,7 @@ function RateStatusLine({ designId }) {
   return txt ? <div style={{ fontSize:11, fontWeight:700, color: st.state === "rated" && st.noscore ? "#d97706" : "var(--muted)", padding:"0 10px 8px" }}>{txt}</div> : null;
 }
 function MakerWorldCard({ designId, note, prints = [] }) {
+  const [open, setOpen] = useState(false);       // replie a chaque ouverture : le resume suffit
   const mineOf = useMine([designId]);            // chez un copain : l'ai-je deja ?
   const visiting = useFriend((s) => s.friend);
   const toRate = useToRateSet(!visiting);
@@ -758,7 +593,7 @@ function MakerWorldCard({ designId, note, prints = [] }) {
   if (!mw) return (
     <a href={url} target="_blank" rel="noopener noreferrer"
       style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:6,
-        width:"100%", padding:"8px", borderRadius:10, marginBottom:14,
+        width:"100%", padding:"10px", borderRadius:14, boxSizing:"border-box",
         border:"1px solid rgba(59,130,246,0.3)", background:"rgba(59,130,246,0.06)",
         color:"#3b82f6", fontSize:12, fontWeight:700, textDecoration:"none" }}>
       🌐 Voir sur MakerWorld
@@ -767,19 +602,33 @@ function MakerWorldCard({ designId, note, prints = [] }) {
   const stats = [["❤", mw.like_count, "j'aime"], ["⬇", mw.download_count, "téléchargements"],
     ["🖨", mw.print_count, "impressions"], ["⭐", mw.collection_count, "mises en collection"]]
     .filter(([, n]) => n != null);
+  const rated = !toRate.has(String(designId));
   return (
-    <div style={{ marginBottom:14, borderRadius:12, border:"1px solid var(--border)",
-      background:"var(--surface2)", overflow:"hidden" }}>
-      <a href={url} onClick={e => { e.preventDefault(); setSheet(designId); }} onPointerDown={() => prefetchModel(designId)}
-        style={{ display:"flex", gap:10, padding:10, textDecoration:"none", color:"var(--text)", cursor:"pointer" }}>
-        {mw.cover_url && (
-          <MwImg src={mw.cover_url} w={64}
-            style={{ width:64, height:64, borderRadius:8, objectFit:"cover", flexShrink:0, background:"var(--surface)" }}/>
-        )}
+    <div style={{ borderRadius:18, border:"1px solid color-mix(in srgb, #3B82F6 25%, var(--border))", overflow:"hidden",
+      background:"linear-gradient(160deg, color-mix(in srgb, #3B82F6 10%, transparent), transparent 60%), var(--surface2)" }}>
+      {/* le resume : toucher deplie le detail ; la fleche ↗ ouvre la fiche du modele */}
+      <div onClick={() => setOpen(o => !o)} style={{ display:"flex", gap:12, padding:12, cursor:"pointer", alignItems:"center" }}>
+        {mw.cover_url && <MwImg src={mw.cover_url} w={64} style={{ width:58, height:58, borderRadius:14, objectFit:"cover", flexShrink:0,
+          background:"var(--surface)", boxShadow:"0 6px 16px rgba(0,0,0,.18)" }}/>}
         <div style={{ minWidth:0, flex:1 }}>
-          <div style={{ fontSize:10, fontWeight:700, color:"#3b82f6", letterSpacing:0.3, marginBottom:2 }}>
-            MAKERWORLD ↗
+          <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:10.5, fontWeight:900, color:"#3b82f6", letterSpacing:".05em" }}>
+            🌐 MAKERWORLD
+            {!rated && <span style={{ fontSize:10.5, fontWeight:800, color:"#f59e0b", letterSpacing:0 }}>· ⭐ à évaluer</span>}</div>
+          <div style={{ fontSize:13.5, fontWeight:800, color:"var(--text)", lineHeight:1.3, overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>{mw.title}</div>
+          <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:11, fontWeight:700, color:"var(--muted)", marginTop:2, whiteSpace:"nowrap", overflow:"hidden" }}>
+            {mw.creator_name && <span style={{ overflow:"hidden", textOverflow:"ellipsis" }}>par {mw.creator_name}</span>}
+            {stats.slice(0, 2).map(([ico, n, lbl]) => <span key={lbl}>{ico} {fmtK(n)}</span>)}
           </div>
+        </div>
+        <button onClick={e => { e.stopPropagation(); setSheet(designId); }} onPointerDown={() => prefetchModel(designId)} aria-label="Fiche du modèle"
+          data-tip="Fiche du modèle" style={{ width:32, height:32, borderRadius:10, border:"1px solid var(--border)", background:"var(--surface)",
+            color:"#3b82f6", cursor:"pointer", flexShrink:0, fontSize:14, fontWeight:900 }}>↗</button>
+        <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s", flexShrink:0 }}>▶</span>
+      </div>
+      {open && <>
+      <a href={url} onClick={e => { e.preventDefault(); setSheet(designId); }} onPointerDown={() => prefetchModel(designId)}
+        style={{ display:"flex", gap:10, padding:"0 12px 10px", textDecoration:"none", color:"var(--text)", cursor:"pointer" }}>
+        <div style={{ minWidth:0, flex:1 }}>
           <div style={{ fontSize:13, fontWeight:700, lineHeight:1.3, overflow:"hidden",
             display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{mw.title}</div>
           {mw.title_fr && mw.title_fr !== mw.title && (
@@ -834,6 +683,7 @@ function MakerWorldCard({ designId, note, prints = [] }) {
         {showFr && <div style={{ padding:"4px 10px 10px" }}><FriendsPrints data={shared}/></div>}
       </>)}
       <MakerWorldSimilar designId={designId} onOpen={setSheet}/>
+      </>}
       {sheet && <MakerWorldModelSheet designId={sheet} onClose={() => setSheet(null)}/>}
     </div>
   );
@@ -1070,69 +920,6 @@ function MakerWorldSimilar({ designId, onOpen }) {
   );
 }
 
-// Les deux 3MF d'une impression : le tranche (garde au lancement) et celui d'origine MakerWorld (le projet du
-// profil, garde des le lancement ; a defaut, un bouton le recupere). Le telechargement passe par l'API (jeton).
-async function download3mf(pid, kind) {
-  try {
-    const r = await client.get(`/prints/${pid}/3mf`, { params: { kind }, responseType: "blob" });
-    const cd = r.headers?.["content-disposition"] || "";
-    const m = /filename\*=UTF-8''([^;]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
-    const url = URL.createObjectURL(r.data);
-    const a = document.createElement("a");
-    a.href = url; a.download = m ? decodeURIComponent(m[1]) : `impression-${pid}.3mf`;
-    a.dispatchEvent(new MouseEvent("click"));
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
-  } catch (e) { showAlert(e.response?.status === 404 ? "Ce 3MF n'est pas sur le serveur." : (e.message || "Téléchargement impossible")); }
-}
-function Files3mf({ p, onGot }) {
-  const [busy, setBusy] = useState(null);
-  const save = async kind => { setBusy(kind); try { await download3mf(p.id, kind); } finally { setBusy(null); } };
-  const fetchSrc = async () => {
-    setBusy("get");
-    try { await client.post(`/makerworld/source3mf/print/${p.id}`); onGot(); }
-    catch (e) { showAlert(e.response?.data?.detail || e.message); }
-    finally { setBusy(null); }
-  };
-  const btn = (label, sub, color, on, kind) => (
-    <button onClick={on} disabled={!!busy} style={{ flex: "1 1 200px", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12,
-      border: `1px solid ${color}55`, background: `linear-gradient(135deg, ${color}1f, transparent 70%), var(--surface2)`, cursor: busy ? "wait" : "pointer",
-      textAlign: "left", font: "inherit", color: "inherit", minWidth: 0 }}>
-      <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
-        background: color, color: "#fff", fontSize: 16 }}>{busy === kind ? "…" : kind === "get" ? "⇣" : "⤓"}</span>
-      <span style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
-        <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)" }}>{label}</span>
-        <span style={{ fontSize: 11, color: "var(--muted)" }}>{sub}</span></span>
-    </button>);
-  return (
-    <div className="card" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
-      <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text2)" }}>📦 Fichiers 3MF</div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {p.source_3mf ? btn("3MF d'origine", "MakerWorld · à retrancher", "#F97316", () => save("source"), "source")
-          : p.design_id && p.mw_profile_id ? <AdminOnly>{btn("Récupérer le 3MF d'origine", "depuis MakerWorld (compte connecté)", "#F97316", fetchSrc, "get")}</AdminOnly> : null}
-        {p.model_3mf && btn("3MF tranché", "pour mon imprimante", "#F59E0B", () => save("sliced"), "sliced")}
-      </div>
-    </div>
-  );
-}
-
-// ── La fiche d'une impression : deux versions le temps de valider (24/10/2026) ─────────────────────────
-// La nouvelle (V2) se choisit sur chaque appareil (« Essayer la nouvelle fiche » / « Revenir à l'ancienne
-// fiche ») ; l'ancienne reste intacte tant que la nouvelle n'est pas validee : un retour arriere = un clic.
-const FICHE_KEY = "bn-fiche-v2";
-const ficheV2On = () => { try { return localStorage.getItem(FICHE_KEY) === "1"; } catch { return false; } };
-export function setFicheV2(on) {
-  try { on ? localStorage.setItem(FICHE_KEY, "1") : localStorage.removeItem(FICHE_KEY); } catch { /* indisponible */ }
-  window.dispatchEvent(new Event("bn-fiche-v2"));
-}
-function useFicheV2() {
-  const [on, setOn] = useState(ficheV2On);
-  useEffect(() => { const f = () => setOn(ficheV2On()); window.addEventListener("bn-fiche-v2", f); return () => window.removeEventListener("bn-fiche-v2", f); }, []);
-  return on;
-}
-export function PrintDetail(props) {
-  return useFicheV2() ? <PrintDetailV2 {...props}/> : <PrintDetailV1 {...props}/>;
-}
-
 // les nombres a la francaise : « 0,63 € », « 20 g », « 1 h 05 »
 const eur2 = v => `${String(moneyVal(v, 2)).replace(".", ",")} €`;
 const gFr = g => (g || 0) >= 1000 ? `${((g || 0) / 1000).toFixed(2).replace(".", ",")} kg` : (g || 0) >= 100 ? `${Math.round(g)} g` : `${(g || 0).toFixed(1).replace(".", ",")} g`;
@@ -1227,7 +1014,21 @@ function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap 
     </div>);
 }
 
-function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
+// telecharger un 3MF d'une impression (« source » : d'origine MakerWorld, « sliced » : tranche)
+async function download3mf(pid, kind) {
+  try {
+    const r = await client.get(`/prints/${pid}/3mf`, { params: { kind }, responseType: "blob" });
+    const cd = r.headers?.["content-disposition"] || "";
+    const m = /filename\*=UTF-8''([^;]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
+    const url = URL.createObjectURL(r.data);
+    const a = document.createElement("a");
+    a.href = url; a.download = m ? decodeURIComponent(m[1]) : `impression-${pid}.3mf`;
+    a.dispatchEvent(new MouseEvent("click"));
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (e) { showAlert(e.response?.status === 404 ? "Ce 3MF n'est pas sur le serveur." : (e.message || "Téléchargement impossible")); }
+}
+
+export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [sharing, setSharing] = useState(false);
   const [ungrouped, setUngrouped] = useState(false);
   const [editMode, setEditMode] = useState(false);
@@ -1305,8 +1106,6 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
       (p.job_id || p.design_id) && { icon: "#", label: "Identifiants", hint: "Travail, modèle MakerWorld", tone: "#64748B", onClick: () => setIdsOpen(true) },
       "-",
       { icon: "🗑", label: "Supprimer…", danger: true, onClick: () => setShowDeleteConfirm(true) },
-      "-",
-      { icon: "↩", label: "Revenir à l'ancienne fiche", tone: "#6366F1", onClick: () => setFicheV2(false) },
     ],
   });
   const tile = (label, value, sub, c1, c2, onClick, tip) => (
@@ -1378,15 +1177,18 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
           "Le prix réel, puis le prix normal entre parenthèses ; touche pour le détail")}
       </div>
       {costOpen && (
-        <div style={{ padding: "10px 12px", borderRadius: 14, background: "var(--surface2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5 }}>
-          {/* le prix reel, puis le prix normal entre parentheses (la philosophie de l'ancienne fiche) */}
-          {[["Filament", eur2(costFil), eur2(costNormal)], ["Électricité", eur2(costElec), null],
-            ["Total", eur2(totalBobine), eur2(totalNormal)]].map(([l, v, s]) => (
-            <div key={l} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-              <span style={{ flex: 1, fontWeight: l === "Total" ? 900 : 700, color: l === "Total" ? "var(--text)" : "var(--text2)" }}>{l}</span>
-              <span style={{ fontWeight: 900, color: "var(--text)" }}>{v}</span>
-              {s && <span style={{ fontSize: 11.5, color: "var(--muted)", minWidth: 58 }}>({s})</span>}
-              {!s && <span style={{ minWidth: 58 }}/>}</div>))}
+        <div style={{ padding: "10px 12px", borderRadius: 16, border: "1px solid color-mix(in srgb, #16A34A 22%, var(--border))", display: "flex",
+          flexDirection: "column", gap: 7, fontSize: 12.5, background: "radial-gradient(80% 60% at 100% 0%, #16A34A18, transparent 70%), var(--surface2)" }}>
+          {/* le prix reel en couleur, puis le prix normal entre parentheses */}
+          {[["🧵", "Filament", eur2(costFil), eur2(costNormal), "#F97316", "#FDBA74"], ["⚡", "Électricité", eur2(costElec), null, "#EAB308", "#FDE047"],
+            ["💶", "Total", eur2(totalBobine), eur2(totalNormal), "#16A34A", "#4ADE80"]].map(([ic, l, v, s, c1, c2]) => (
+            <div key={l} style={{ display: "flex", alignItems: "center", gap: 8, padding: l === "Total" ? "6px 0 0" : 0,
+              borderTop: l === "Total" ? "1px dashed var(--border)" : "none" }}>
+              <span style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13,
+                background: `color-mix(in srgb, ${c1} 16%, transparent)`, flexShrink: 0 }}>{ic}</span>
+              <span style={{ flex: 1, fontWeight: 800, color: "var(--muted)", fontSize: 12 }}>{l}</span>
+              <span style={{ fontWeight: 900, fontSize: l === "Total" ? 15 : 13.5, ...v2grad(c1, c2) }}>{v}</span>
+              {s ? <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", minWidth: 60 }}>({s})</span> : <span style={{ minWidth: 60 }}/>}</div>))}
           <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 7 }}>
             <span style={{ fontWeight: 800, color: "#16a34a" }}>{localNb} élément{localNb > 1 ? "s" : ""}</span>
             {localNb > 1 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#16a34a" }}>· {eur2(totalBobine / localNb)}/u ({eur2(totalNormal / localNb)}/u)</span>}
@@ -1494,389 +1296,6 @@ const v2Round = { width: 34, height: 34, borderRadius: "50%", border: "1px solid
 const v2Btn = { padding: "11px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 13.5,
   fontWeight: 800, cursor: "pointer" };
 
-function PrintDetailV1({ p: pProp, onClose, onDelete, onChanged }) {
-  const [snaps, setSnaps] = useState([]);
-  const [sharing, setSharing] = useState(false);   // partage Telegram
-  const [ungrouped, setUngrouped] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [userPhotos, setUserPhotos] = useState([]);
-  const loadUserPhotos = () => client.get(`/prints/${pProp.id}/photos`).then(r=>setUserPhotos(Array.isArray(r.data)?r.data:[])).catch(()=>{});
-  useEffect(() => { loadUserPhotos(); }, [pProp.id]);
-  const uploadPhoto = async (file) => { const fd = new FormData(); fd.append("file", file); await client.post(`/prints/${pProp.id}/photos/upload`, fd, { headers:{"Content-Type":"multipart/form-data"} }); loadUserPhotos(); };
-  const [p, setP] = useState(pProp);
-  const [editFr, setEditFr] = useState(false);
-  const [frVal, setFrVal]   = useState("");
-  // file_name et non name : un Print n'a pas de champ "name" -- la fiche elle
-  // meme affiche file_name. Le libelle tombait donc systematiquement sur le
-  // repli "#id", et le journal ne montrait que des numeros.
-  useTrackDetail(`Fiche print · ${p?.file_name || pProp?.file_name || "#" + pProp.id}`);
-
-  useEffect(() => {
-    if (pProp.total_cost_filament == null) {
-      client.get("/prints/" + pProp.id).then(r => setP(r.data)).catch(() => setP(pProp));
-    } else { setP(pProp); }
-  }, [pProp.id]);
-
-  const groupe = ungrouped ? null : p.group_name;
-  const [editNb, setEditNb]   = useState(false);
-  const [spoolPicker, setSpoolPicker] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [objCreate, setObjCreate] = useState(null);   // feuille de creation d'objets
-  const [unmapping, setUnmapping] = useState(null);
-  const [photoCount, setPhotoCount] = useState(0);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [selSpool, setSelSpool] = useState(null);
-  const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
-  const [nbVal, setNbVal]     = useState(String(pProp.number_of_items || 1));
-  useEffect(() => { setLocalNb(p.number_of_items || 1); setNbVal(String(p.number_of_items || 1)); }, [p.number_of_items]);
-
-  const saveNb = async () => {
-    const n = parseInt(nbVal);
-    if (!isNaN(n) && n >= 1) {
-      try {
-        await client.patch(`/prints/${p.id}`, { number_of_items: n });
-        setLocalNb(n); onChanged?.({...p, number_of_items: n});
-      } catch {}
-    }
-    setEditNb(false);
-  };
-
-  const SNAP_LABELS = {
-    "snapshot-layer1":"Couche 1","snapshot-layer2":"Couche 2",
-    "pct50":"50%","snapshot-pct50":"50%","pct99":"99%","snapshot-pct99":"99%",
-    "pct100":"100%","snapshot-pct100":"100%","fail":"Échec","manual":"Manuel",
-  };
-
-  const handleUngroup = async () => {
-    if (!(await showConfirm("Retirer ce print de son groupe ?"))) return;
-    try { await client.post("/prints/" + p.id + "/group", {}); setUngrouped(true); onChanged?.(); }
-    catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
-  };
-
-  // Les deux coûts viennent du backend, qui applique deja la cascade (bobine ->
-  // filament -> 20 €/kg pour le principal ; filament -> 20 €/kg pour l'autre).
-  // Le front ne refait PLUS de fallback : il ne faisait que dupliquer -- et
-  // desormais contredire -- cette logique.
-  const costFil     = p.total_cost_filament || 0;          // coût principal
-  const costNormal  = p.total_cost_filament_normal || 0;   // coût entre parenthèses
-  const costElec    = p.electric_cost || 0;
-  const totalBobine = costFil + costElec;
-  const totalNormal = costNormal + costElec;
-  const nb          = p.number_of_items || 1;
-
-  return (
-    <>
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000,
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
-          maxWidth:640, maxHeight:"92dvh", overflowY:"auto",
-          paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
-
-        {/* Handle + ✕ — sticky pour rester au-dessus du visuel */}
-        <div style={{ position:"sticky", top:0, zIndex:10, background:"var(--sheet-bg)",
-          display:"flex", justifyContent:"center", padding:"12px 0 8px" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:10, right:12, width:28, height:28,
-            borderRadius:"50%", background:"var(--surface2)", border:"1px solid var(--border)",
-            cursor:"pointer", color:"var(--muted)", fontSize:15,
-            display:"flex", alignItems:"center", justifyContent:"center", zIndex:11 }}>✕</button>
-        </div>
-
-        {/* Image vignette */}
-        <div style={{ width:"100%", background:"var(--surface2)", position:"relative",
-          minHeight:160, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          <img src={apiUrl("/prints/" + p.id + "/image")} alt=""
-            style={{ width:"100%", maxHeight:280, objectFit:"contain" }}
-            onError={e => { e.currentTarget.parentElement.style.minHeight=0; e.currentTarget.style.display="none"; }}/>
-        </div>
-
-
-
-
-        <div style={{ padding:"0 16px 16px" }}>
-          {/* Titre — le bouton Éditer existait, mais tout en bas de la fiche,
-              apres les photos et les filaments : introuvable en pratique. On le
-              remet aussi ici, comme sur la fiche filament. */}
-          <div style={{ display:"flex", alignItems:"flex-start", gap:8 }}>
-            <h2 style={{ flex:1, minWidth:0, fontSize:17, fontWeight:800, color:"var(--text)",
-              margin:"0 0 4px", letterSpacing:"-0.01em" }}>
-              {p.file_name || "Sans nom"}
-            </h2>
-            <AdminOnly><button onClick={()=>setEditMode(true)} aria-label="Éditer"
-              style={{ flexShrink:0, background:"none", border:"none", cursor:"pointer",
-                color:"var(--muted)", padding:4, display:"flex" }}
-              onMouseEnter={e=>e.currentTarget.style.color="#3b82f6"}
-              onMouseLeave={e=>e.currentTarget.style.color="var(--muted)"}>
-              <Pencil size={16}/>
-            </button></AdminOnly>
-          </div>
-          {p.original_name && p.original_name !== p.file_name && (
-            <p style={{ fontSize:11, color:"var(--muted)", margin:"0 0 6px" }}>{p.original_name}</p>
-          )}
-          {/* Nom francais : sert uniquement a la recherche, il ne remplace
-              jamais le titre. Modifiable, car une traduction automatique se
-              trompe parfois -- et surtout parce que le nom sous lequel on
-              cherche un print est souvent personnel ("la tirelire de Matteo")
-              et qu'aucun traducteur ne peut le deviner. */}
-          <div style={{ display:"flex", alignItems:"center", gap:6, margin:"0 0 8px" }}>
-            {editFr ? (
-              <>
-                <input value={frVal} onChange={e=>setFrVal(e.target.value)} autoFocus
-                  placeholder="Nom en français (recherche)"
-                  style={{ flex:1, minWidth:0, fontSize:12, padding:"4px 8px", borderRadius:7,
-                    background:"var(--surface2)", border:"1px solid var(--border)",
-                    color:"var(--text)", outline:"none" }}/>
-                <button onClick={async()=>{
-                    const v = frVal.trim();
-                    try {
-                      await client.patch(`/prints/${p.id}`, { translated_name: v });
-                      setP(prev => ({ ...prev, translated_name: v, translated_by: v ? "manuel" : null }));
-                      onChanged && onChanged();
-                    } catch(e) { showAlert(e.response?.data?.detail || e.message); }
-                    setEditFr(false);
-                  }}
-                  style={{ fontSize:11, padding:"4px 10px", borderRadius:7, cursor:"pointer",
-                    border:"none", background:"#3b82f6", color:"white", fontWeight:600 }}>OK</button>
-                <button onClick={()=>setEditFr(false)}
-                  style={{ fontSize:11, padding:"4px 8px", borderRadius:7, cursor:"pointer",
-                    border:"1px solid var(--border)", background:"transparent",
-                    color:"var(--muted)" }}>✕</button>
-              </>
-            ) : (
-              <AdminOnly>
-                <button onClick={()=>{ setFrVal(p.translated_name || ""); setEditFr(true); }}
-                  title={p.translated_name ? (TRAD_BY[p.translated_by] || "Origine inconnue (traduit avant le suivi du service)") : undefined}
-                  style={{ display:"flex", alignItems:"center", gap:5, fontSize:11,
-                    padding:"2px 9px", borderRadius:20, cursor:"pointer",
-                    border:"1px solid var(--border)", background:"transparent",
-                    color:"var(--muted)", maxWidth:"100%" }}>
-                  <span style={{ overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                    🔎 {p.translated_name || "Ajouter un nom de recherche"}
-                  </span>
-                  <Pencil size={11} style={{ flexShrink:0 }}/>
-                </button>
-              </AdminOnly>
-            )}
-          </div>
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:16, flexWrap:"wrap" }}>
-            <StatusBadge status={p.status}/>
-            {groupe && (
-              <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:10,
-                background:"rgba(167,139,250,0.15)", color:"#a78bfa",
-                padding:"2px 6px 2px 8px", borderRadius:20, fontWeight:700 }}>
-                📁 {groupe}
-                <AdminOnly><button onClick={handleUngroup} style={{ background:"none", border:"none",
-                  color:"#a78bfa", cursor:"pointer", padding:0, display:"flex" }}>
-                  <X size={11}/>
-                </button></AdminOnly>
-              </span>
-            )}
-          </div>
-
-          {/* Date + Durée + Poids — badges colorés */}
-          <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:14 }}>
-            {[
-              fmtDate(p.print_date) && ["📅", fmtDate(p.print_date), "#3b82f6"],
-              (p.duration_seconds||p.estimated_seconds)>0 && ["⏱", fmtDur(p.duration_seconds||p.estimated_seconds), "#8b5cf6"],
-              p.total_weight_g>0 && ["⚖", p.total_weight_g.toFixed(1)+"g", "#f59e0b"],
-            ].filter(Boolean).map(([ic,val,color])=>(
-              <div key={ic} style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 10px",
-                borderRadius:20, background:`${color}18`, border:`1px solid ${color}30` }}>
-                <span style={{ fontSize:11 }}>{ic}</span>
-                <span style={{ fontSize:11, fontWeight:700, color, fontFamily:"monospace" }}>{val}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Coûts — bloc principal */}
-          <div style={{ background:"linear-gradient(135deg,rgba(59,130,246,0.06),rgba(139,92,246,0.06))",
-            border:"1px solid rgba(59,130,246,0.15)", borderRadius:14, padding:"14px 16px", marginBottom:12 }}>
-            <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-              letterSpacing:"0.06em", margin:"0 0 10px" }}>Coûts</p>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
-              {/* Filament */}
-              <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
-                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>Filament</p>
-                <p style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"monospace" }}>
-                  {moneyVal(costFil, 2)}€
-                </p>
-                <p style={{ fontSize:10, color:"var(--muted)", margin:"2px 0 0" }}>
-                  ({moneyVal(costNormal, 2)}€ sans bobine)
-                </p>
-              </div>
-              {/* Électricité */}
-              <div style={{ background:"var(--surface2)", borderRadius:10, padding:"8px 10px" }}>
-                <p style={{ fontSize:9, color:"var(--muted)", margin:"0 0 3px" }}>Électricité</p>
-                <p style={{ fontSize:15, fontWeight:800, color:"#f59e0b", margin:0, fontFamily:"monospace" }}>
-                  {moneyVal(costElec, 2)}€
-                </p>
-              </div>
-            </div>
-            {/* Total + éléments intégrés */}
-            <div style={{ marginTop:8, padding:"10px 12px", borderRadius:10,
-              background:"rgba(59,130,246,0.1)", border:"1px solid rgba(59,130,246,0.2)" }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                <p style={{ fontSize:10, color:"#60a5fa", fontWeight:700,
-                  textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>Total</p>
-                <div style={{ textAlign:"right" }}>
-                  <span style={{ fontSize:20, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
-                    {moneyVal(totalBobine, 2)}€
-                  </span>
-                  <span style={{ fontSize:11, color:"var(--muted)", marginLeft:8 }}>
-                    ({moneyVal(totalNormal, 2)}€)
-                  </span>
-                </div>
-              </div>
-              {/* Éléments — intégré dans le bloc total */}
-              <div style={{ marginTop:8, paddingTop:8, borderTop:"1px solid rgba(59,130,246,0.15)",
-                display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:12, fontWeight:700, color:"#22c55e" }}>
-                    {localNb} élément{localNb>1?"s":""}
-                  </span>
-                  {localNb > 1 && (
-                    <span style={{ fontSize:12, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
-                      · {moneyVal((totalBobine/localNb), 2)}€/u
-                      {` (${moneyVal((totalNormal/localNb), 2)}€/u)`}
-                    </span>
-                  )}
-                </div>
-                {!editNb ? (
-                  <AdminOnly><button onClick={()=>{setNbVal(String(localNb));setEditNb(true);}}
-                    style={{ fontSize:10, padding:"2px 8px", borderRadius:6,
-                      border:"1px solid rgba(34,197,94,0.3)", background:"none",
-                      color:"#22c55e", cursor:"pointer" }}>Modifier</button></AdminOnly>
-                ) : (
-                  <div style={{ display:"flex", gap:5, alignItems:"center" }}>
-                    <input type="number" min="1" value={nbVal} onChange={e=>setNbVal(e.target.value)}
-                      style={{ width:55, padding:"3px 6px", borderRadius:6,
-                        border:"1px solid var(--border)", background:"var(--surface2)",
-                        color:"var(--text)", fontSize:12, fontFamily:"monospace" }} autoFocus/>
-                    <button onClick={saveNb}
-                      style={{ padding:"3px 10px", borderRadius:6, border:"none",
-                        background:"#22c55e", color:"white", fontSize:11, cursor:"pointer" }}>✓</button>
-                    <button onClick={()=>setEditNb(false)}
-                      style={{ padding:"3px 8px", borderRadius:6, border:"none",
-                        background:"var(--surface2)", color:"var(--muted)", fontSize:11, cursor:"pointer" }}>✕</button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Section Photos */}
-          <SnapshotGallery snaps={snaps.map(s=>({...s,
-            label: SNAP_LABELS[s.trigger] || SNAP_LABELS[s.filename?.replace(/\.(jpg|png|webp)$/,"")] || s.trigger || s.filename
-          }))} printId={p.id} userPhotos={userPhotos}
-            onDelete={sid => setSnaps(ss=>ss.filter(s=>s.id!==sid))}
-            onUpload={async(f)=>{ await uploadPhoto(f); }}
-            onDeleteUpload={async(filename)=>{ await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}
-            onCountChange={setPhotoCount}
-            coverPhoto={p.cover_photo}
-            onCoverChange={(name)=>{ setP(prev=>({ ...prev, cover_photo:name })); onChanged?.(); }}/>
-
-          {/* Fiche MakerWorld du modele (titre, createur, categories, compteurs),
-              ou a defaut le simple lien. */}
-          {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]}/>}
-
-          {/* Les 3MF : celui tranche pour mon imprimante, et celui d'origine MakerWorld (a retrancher) */}
-          {(p.model_3mf || p.source_3mf || (p.design_id && p.mw_profile_id)) && <Files3mf p={p} onGot={() => setP(prev => ({ ...prev, source_3mf: true }))}/>}
-
-          {/* Creation d'objets : le bouton porte le quota et se desactive
-              quand tout est cree, plutot que de laisser tenter puis echouer. */}
-          <AdminOnly>
-            <ObjectQuotaButton parentType="print" parentId={p.id}
-              label="depuis ce print" refreshKey={refreshKey}
-              onOpen={() => setObjCreate({ name: p.file_name || "Sans nom",
-                cost: totalBobine })}/>
-          </AdminOnly>
-          {objCreate && (
-            <ObjectCreateSheet parentType="print" parentId={p.id}
-              defaultName={objCreate.name} costFabrication={objCreate.cost}
-              onDone={() => { setRefreshKey(k=>k+1); onChanged?.(); }}
-              onClose={() => setObjCreate(null)}/>
-          )}
-
-          {/* Filaments — accordéon */}
-          {p.filament_usage?.length > 0 && <FilamentAccordion filaments={p.filament_usage} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id} onRestore={()=>setShowDeleteConfirm('restore')} onUnmap={setUnmapping} onUnmapped={()=>{ client.get('/prints/'+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }}/>}
-
-          {/* Commentaire */}
-          {p.status_note && (
-            <div style={{ marginBottom:14, padding:"10px 14px", borderRadius:10,
-              background:"rgba(168,85,247,0.06)", border:"1px solid rgba(168,85,247,0.2)" }}>
-              <p style={{ fontSize:9, color:"#a78bfa", textTransform:"uppercase",
-                letterSpacing:"0.06em", margin:"0 0 6px", fontWeight:700 }}>💬 Commentaire</p>
-              <p style={{ fontSize:13, color:"var(--text)", margin:0, lineHeight:1.5 }}>{p.status_note}</p>
-            </div>
-          )}
-
-          {/* Identifiants (sans printer_model) */}
-          {(p.job_id || p.design_id) && (
-            <details style={{ marginBottom:12 }}>
-              <summary style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-                letterSpacing:"0.06em", cursor:"pointer", userSelect:"none" }}>
-                Identifiants
-              </summary>
-              <div style={{ marginTop:8, display:"flex", flexDirection:"column", gap:4 }}>
-                {p.job_id && <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", margin:0 }}>Job: {p.job_id}</p>}
-                {p.design_id && <p style={{ fontSize:10, fontFamily:"monospace", color:"var(--muted)", margin:0 }}>Design: {p.design_id}</p>}
-              </div>
-            </details>
-          )}
-
-          {/* Actions */}
-          <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginTop:8 }}>
-            <AdminOnly>
-            <button onClick={()=>setEditMode(true)}
-              style={{ flex:"1 1 0", minWidth:96, padding:"11px", borderRadius:12, border:"1px solid var(--border)",
-                background:"var(--surface2)", color:"var(--text)", fontSize:13, fontWeight:700, cursor:"pointer" }}>
-              ✏️ Éditer
-            </button>
-
-            <button onClick={() => setSharing(true)} title="Partager sur Telegram"
-              style={{ flex:"1 1 0", minWidth:96, padding:"11px", borderRadius:12,
-                border:"1px solid rgba(34,158,217,0.35)", background:"rgba(34,158,217,0.08)",
-                color:"#229ED9", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-              📣 Partager
-            </button>
-            {/* Supprimer en dernier ; plus de bouton ✕ ici, celui du haut suffit. */}
-            <button onClick={() => {
-              setShowDeleteConfirm(true);
-            }} style={{ flex:"1 1 0", minWidth:96, padding:"11px", borderRadius:12, border:"1px solid rgba(239,68,68,0.3)",
-              background:"rgba(239,68,68,0.06)", color:"#ef4444", fontSize:13, fontWeight:700,
-              cursor:"pointer" }}>🗑 Supprimer</button>
-            </AdminOnly>
-          </div>
-          <button onClick={() => setFicheV2(true)} style={{ display:"block", margin:"14px auto 0", background:"none", border:"none", cursor:"pointer",
-            fontSize:12, fontWeight:700, color:"#6366F1" }}>✨ Essayer la nouvelle fiche</button>
-        </div>
-      </div>
-    </div>
-    {sharing && <ShareSheet kind="print" id={p.id} onClose={() => setSharing(false)}/>}
-    {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} colorsArray={spoolPicker.colorsArray} multicolorType={spoolPicker.multicolorType} filamentType={spoolPicker.filamentType} onClose={()=>setSpoolPicker(null)} onMapped={()=>{
-      // Rechargeait toute l'application (bundle re-telecharge, etat perdu).
-      setSpoolPicker(null);
-      client.get("/prints/" + p.id).then(r => { setP(r.data); setRefreshKey(k => k + 1); }).catch(()=>{});
-      onChanged?.();
-    }}/> }
-    {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={()=>setSelSpool(null)} zIndex={2000}/>}
-    {editMode && <PrintEditSheet p={p} onClose={()=>setEditMode(false)} onSaved={updated=>{ setP(prev=>({...prev,...updated})); setEditMode(false); onChanged?.(); }}/>}
-    {unmapping && <UnmapFilamentConfirm f={unmapping} printId={p.id} onClose={()=>setUnmapping(null)} onDone={()=>{ setUnmapping(null); client.get('/prints/'+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }}/>}
-    {showDeleteConfirm && <DeletePrintConfirm
-      p={p}
-      restoreOnly={showDeleteConfirm==="restore"}
-      onCancel={()=>setShowDeleteConfirm(false)}
-      onConfirm={async(fracs)=>{
-        // fracs = {usageId: fraction, ...}
-        const hasRestore = Object.values(fracs).some(v=>v>0);
-        if (hasRestore) await client.post("/prints/"+p.id+"/restore-weights", {fracs}).catch(()=>{});
-        if (showDeleteConfirm !== "restore") { client.delete("/prints/"+p.id).then(()=>{ onDelete?.(p.id); onClose(); }).catch(()=>showAlert("Erreur")); }
-        else { setShowDeleteConfirm(false); client.get("/prints/"+p.id).then(r=>{ setP(r.data); setRefreshKey(k=>k+1); }).catch(()=>{}); onChanged?.(); }
-      }}/>}
-  </>);
-}
-
 
 function GroupEditSheet({ groupId, name, onClose, onSaved }) {
   useTrackDetail("Historique · Modifier un groupe");
@@ -1921,11 +1340,6 @@ function GroupEditSheet({ groupId, name, onClose, onSaved }) {
       </div>
     </div>
   );
-}
-
-// ── La fiche d'un groupe : deux versions le temps de valider (25/10/2026), comme la fiche d'une impression ──
-export function GroupBottomSheet(props) {
-  return useFicheV2() ? <GroupSheetV2 {...props}/> : <GroupBottomSheetV1 {...props}/>;
 }
 
 // les photos du groupe (nouvelle fiche) : une bande qui defile ; ⭐ la vignette, 🗑 en deux temps, visionneuse
@@ -1973,7 +1387,7 @@ function GroupPhotosV2({ groupId, onUpdated }) {
     </div>);
 }
 
-function GroupSheetV2({ groupId, name, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onDelete, onUngroup, onUpdated }) {
+export function GroupBottomSheet({ groupId, name, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onDelete, onUngroup, onUpdated }) {
   useTrackDetail(`Fiche groupe · ${name || "#" + groupId}`);
   const isAdmin = useIsAdmin();
   const groupVisiting = useFriend(s => s.friend);
@@ -2048,8 +1462,6 @@ function GroupSheetV2({ groupId, name, number_of_items: nbItemsProp, cover_print
       { icon: "📤", label: "Dégrouper", hint: "Les impressions restent", tone: "#A78BFA", onClick: handleUngroup },
       "-",
       { icon: "🗑", label: "Supprimer…", hint: "Le groupe et ses impressions", danger: true, onClick: handleDelete },
-      "-",
-      { icon: "↩", label: "Revenir à l'ancienne fiche", tone: "#6366F1", onClick: () => setFicheV2(false) },
     ],
   });
   const printMenu = (e, x) => openMenu(e, {
@@ -2108,11 +1520,14 @@ function GroupSheetV2({ groupId, name, number_of_items: nbItemsProp, cover_print
           "Le prix réel, puis le prix normal entre parenthèses ; touche pour le détail")}
       </div>
       {costOpen && (
-        <div style={{ padding: "10px 12px", borderRadius: 14, background: "var(--surface2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
-            <span style={{ flex: 1, fontWeight: 900, color: "var(--text)" }}>Total</span>
-            <span style={{ fontWeight: 900, color: "var(--text)" }}>{eur2(totalCost)}</span>
-            <span style={{ fontSize: 11.5, color: "var(--muted)", minWidth: 58 }}>({eur2(totalNormal)})</span></div>
+        <div style={{ padding: "10px 12px", borderRadius: 16, border: "1px solid color-mix(in srgb, #16A34A 22%, var(--border))", display: "flex",
+          flexDirection: "column", gap: 7, fontSize: 12.5, background: "radial-gradient(80% 60% at 100% 0%, #16A34A18, transparent 70%), var(--surface2)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13,
+              background: "color-mix(in srgb, #16A34A 16%, transparent)", flexShrink: 0 }}>💶</span>
+            <span style={{ flex: 1, fontWeight: 800, color: "var(--muted)", fontSize: 12 }}>Total</span>
+            <span style={{ fontWeight: 900, fontSize: 15, ...v2grad("#16A34A", "#4ADE80") }}>{eur2(totalCost)}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--muted)", minWidth: 60 }}>({eur2(totalNormal)})</span></div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 7 }}>
             <span style={{ fontWeight: 800, color: "#16a34a" }}>{nbItems} élément{nbItems > 1 ? "s" : ""}</span>
             {nbItems > 1 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#16a34a" }}>· {eur2(totalCost / nbItems)}/u ({eur2(totalNormal / nbItems)}/u)</span>}
@@ -2235,412 +1650,6 @@ function GroupSheetV2({ groupId, name, number_of_items: nbItemsProp, cover_print
     </>);
 }
 
-function GroupBottomSheetV1({ groupId, name, prints: printsProp, latestDate, number_of_items: nbItemsProp, cover_print_id: coverPrintIdProp, onClose, onSelectPrint, onDelete, onUngroup, onUpdated }) {
-  useTrackDetail(`Fiche groupe · ${name || "#" + groupId}`);
-  const [localPrints, setLocalPrints] = useState([]);
-  const groupVisiting = useFriend((s) => s.friend);
-  const [sharing, setSharing] = useState(false);   // partage Telegram
-  const [nbItems, setNbItems]         = useState(nbItemsProp || 1);
-  const [editNb, setEditNb]           = useState(false);
-  const [nbVal, setNbVal]             = useState(String(nbItemsProp || 1));
-  const [selectedPrint, setSelectedPrint] = useState(null);
-  const [selSpoolG, setSelSpoolG] = useState(null);
-  const [coverPrintId, setCoverPrintId] = useState(coverPrintIdProp||null);
-  // Boutons visibles plutot qu'appui long : sur une bande qui defile, le
-  // scroll natif capte le geste avant React et le menu s'ouvrait en plein
-  // defilement.
-  const [groupPhotoToDelete, setGroupPhotoToDelete] = useState(null);  // nom arme
-  const [objCreate, setObjCreate] = useState(false);   // feuille de creation d'objets
-  const [objRefresh, setObjRefresh] = useState(0);     // relecture du quota apres creation
-  const setGroupCoverPhoto = async (name) => {
-    try {
-      await client.post(`/prints/groups/${groupId}/photo/${name}/cover`);
-      setGroupCover(name); onUpdated?.();
-    } catch(e){ showAlert(e.response?.data?.detail || e.message); }
-  };
-  const delGroupPhoto = async (name) => {
-    try {
-      await client.delete(`/prints/groups/${groupId}/photo/${name}`);
-      setGroupPhotoToDelete(null); loadGroupPhotos();
-    } catch(e){ showAlert(e.response?.data?.detail || e.message); }
-  };
-  const [unmappingG, setUnmappingG] = useState(null);
-  const [editGroup, setEditGroup] = useState(false);
-  const [groupPhotos, setGroupPhotos] = useState([]);
-  const [groupLb, setGroupLb] = useState(-1);          // photo du groupe en grand (visionneuse par-dessus)
-  const [groupCover, setGroupCover] = useState(null);
-
-  const loadGroupPhotos = () => client.get(`/prints/groups/${groupId}/photos`).then(r=>{ setGroupPhotos(r.data?.files||[]); setGroupCover(r.data?.cover_photo||null); }).catch(()=>{});
-  useEffect(() => { if(groupId) loadGroupPhotos(); }, [groupId]);
-  const uploadGroupPhoto = async (file) => {
-    const fd = new FormData(); fd.append('file', file);
-    await client.post(`/prints/groups/${groupId}/photos/upload`, fd, {headers:{'Content-Type':'multipart/form-data'}});
-    loadGroupPhotos();
-  };
-
-  useEffect(() => {
-    if (!groupId) return;
-    client.get("/prints", { params:{ group_id:groupId, limit:200 } })
-      .then(r => {
-        const d = r.data;
-        const arr = Array.isArray(d) ? d : Array.isArray(d?.prints) ? d.prints : [];
-        setLocalPrints(arr);
-      }).catch(() => {});
-  }, [groupId]);
-
-  const totalDur  = localPrints.reduce((s,p) => s + (p.duration_seconds || p.estimated_seconds || 0), 0);
-  const totalW    = localPrints.reduce((s,p) => s + (p.total_weight_g || 0), 0);
-  // Deux coûts, comme pour un print : le principal (total_cost) et celui entre
-  // parenthèses (filament au tarif catalogue + électricité). On somme les prints.
-  const totalCost   = localPrints.reduce((s,p) => s + (p.total_cost || 0), 0);
-  const totalNormal = localPrints.reduce((s,p) =>
-    s + (p.total_cost_filament_normal || 0) + (p.electric_cost || 0), 0);
-
-  // Agrégation filaments
-  const filsMap = {};
-  localPrints.forEach(p => {
-    (p.filament_usage || []).forEach(f => {
-      const key = f.spool_id || f.color_hex || f.filament_name || "?";
-      if (!filsMap[key]) filsMap[key] = { ...f, grams_used:0, cost:0, normal_cost:0 };
-      filsMap[key].grams_used  += f.grams_used || 0;
-      filsMap[key].cost        += f.cost || 0;
-      filsMap[key].normal_cost += f.normal_cost || 0;
-    });
-  });
-  const filaments = Object.values(filsMap).sort((a,b) => (b.grams_used||0)-(a.grams_used||0));
-
-  const saveNbItems = async () => {
-    const n = parseInt(nbVal);
-    if (!isNaN(n) && n >= 1) {
-      try {
-        await client.patch(`/prints/groups/${groupId}`, { number_of_items: n });
-        setNbItems(n); onUpdated?.();
-      } catch(e) {}
-    }
-    setEditNb(false);
-  };
-
-  const handleDelete = async () => {
-    if (!(await showConfirm(`Supprimer le groupe "${name}" et ses ${localPrints.length} prints ?`, { danger: true, confirmLabel: "Supprimer" }))) return;
-    try {
-      await Promise.all(localPrints.map(p => client.delete("/prints/" + p.id)));
-      onDelete?.(); onClose();
-    } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
-  };
-
-  const handleUngroup = async () => {
-    if (!(await showConfirm(`Dégrouper "${name}" (les prints resteront) ?`, { confirmLabel: "Dégrouper" }))) return;
-    try {
-      await client.delete("/prints/groups/" + groupId);
-      onUngroup?.(); onClose();
-    } catch(err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
-  };
-
-  return (
-    <>
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:1000,
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} className="sheet-inner"
-        style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0", width:"100%",
-          maxWidth:640, maxHeight:"92dvh", overflowY:"auto",
-          paddingBottom:"env(safe-area-inset-bottom,16px)" }}>
-
-        {/* Handle + ✕ — sticky */}
-        <div style={{ position:"sticky", top:0, zIndex:10, background:"var(--sheet-bg)",
-          display:"flex", justifyContent:"center", padding:"12px 0 8px" }}>
-          <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)" }}/>
-          <button onClick={onClose} style={{ position:"absolute", top:10, right:12, width:28, height:28,
-            borderRadius:"50%", background:"var(--surface2)", border:"1px solid var(--border)",
-            cursor:"pointer", color:"var(--muted)", fontSize:15,
-            display:"flex", alignItems:"center", justifyContent:"center", zIndex:11 }}>✕</button>
-        </div>
-
-        <div style={{ padding:"14px 16px 16px" }}>
-          {/* Titre */}
-          <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:14 }}>
-            <span style={{ fontSize:22 }}>📁</span>
-            <div>
-              <h2 style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:"0 0 2px" }}>
-                {name || "Groupe sans nom"}
-              </h2>
-              <p style={{ fontSize:11, color:"var(--muted)", margin:0 }}>
-                {localPrints.length} print{localPrints.length>1?"s":""}
-              </p>
-            </div>
-          </div>
-
-          {/* KPIs — badges */}
-          <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:12 }}>
-            {[
-              totalDur>0 && ["⏱", fmtDur(totalDur), "#8b5cf6"],
-              totalW>0   && ["⚖", totalW.toFixed(0)+"g", "#f59e0b"],
-              totalCost>0 && ["💰", totalCost.toFixed(2)+"€", "#22c55e"],
-            ].filter(Boolean).map(([ic,val,color])=>(
-              <div key={ic} style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 10px",
-                borderRadius:20, background:`${color}18`, border:`1px solid ${color}30` }}>
-                <span style={{ fontSize:11 }}>{ic}</span>
-                <span style={{ fontSize:11, fontWeight:700, color, fontFamily:"monospace" }}>{val}</span>
-              </div>
-            ))}
-          </div>
-
-          {/* Bloc coût + éléments */}
-          {totalCost > 0 && (
-            <div style={{ background:"linear-gradient(135deg,rgba(59,130,246,0.06),rgba(139,92,246,0.06))",
-              border:"1px solid rgba(59,130,246,0.15)", borderRadius:14, padding:"12px 14px", marginBottom:14 }}>
-              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
-                <p style={{ fontSize:10, color:"#60a5fa", fontWeight:700, textTransform:"uppercase",
-                  letterSpacing:"0.06em", margin:0 }}>Coût total</p>
-                <span style={{ fontSize:22, fontWeight:900, color:"var(--text)", fontFamily:"monospace" }}>
-                  {moneyVal(totalCost, 2)}€
-                  <span style={{ fontSize:13, fontWeight:700, color:"var(--muted)", marginLeft:6 }}>
-                    ({moneyVal(totalNormal, 2)}€)
-                  </span>
-                </span>
-              </div>
-              {/* Éléments — même style que PrintDetail */}
-              <div style={{ marginTop:8, paddingTop:8, borderTop:"1px solid rgba(59,130,246,0.15)",
-                display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-                  <span style={{ fontSize:12, fontWeight:700, color:"#22c55e" }}>
-                    {nbItems} élément{nbItems>1?"s":""}
-                  </span>
-                  {nbItems > 1 && (
-                    <span style={{ fontSize:12, color:"#22c55e", fontFamily:"monospace", fontWeight:700 }}>
-                      · {moneyVal((totalCost/nbItems), 2)}€/u
-                      {` (${moneyVal((totalNormal/nbItems), 2)}€/u)`}
-                    </span>
-                  )}
-                </div>
-                {editNb ? (
-                  <div style={{ display:"flex", gap:5, alignItems:"center" }}>
-                    <input type="number" min="1" value={nbVal} onChange={e=>setNbVal(e.target.value)}
-                      style={{ width:55, padding:"3px 6px", borderRadius:6,
-                        border:"1px solid var(--border)", background:"var(--surface2)",
-                        color:"var(--text)", fontSize:12, fontFamily:"monospace" }} autoFocus/>
-                    <button onClick={saveNbItems}
-                      style={{ padding:"3px 10px", borderRadius:6, border:"none",
-                        background:"#22c55e", color:"white", fontSize:11, cursor:"pointer" }}>✓</button>
-                    <button onClick={()=>setEditNb(false)}
-                      style={{ padding:"3px 8px", borderRadius:6, border:"none",
-                        background:"var(--surface2)", color:"var(--muted)", fontSize:11, cursor:"pointer" }}>✕</button>
-                  </div>
-                ) : (
-                  <AdminOnly><button onClick={()=>{setNbVal(String(nbItems));setEditNb(true);}}
-                    style={{ fontSize:10, padding:"2px 8px", borderRadius:6,
-                      border:"1px solid rgba(34,197,94,0.3)", background:"none",
-                      color:"#22c55e", cursor:"pointer" }}>Modifier</button></AdminOnly>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Photos du groupe */}
-          {groupLb >= 0 && <Lightbox images={groupPhotos.filter(x => !isVideoUrl(x.url)).map(x => x.url)} index={groupLb}
-            onClose={() => setGroupLb(-1)}/>}
-          {(groupPhotos.length > 0 || true) && (
-            <div style={{ marginBottom:14 }}>
-              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8 }}>
-                <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>
-                  Photos ({groupPhotos.length})
-                </p>
-                <PhotoAddButton onPick={(f)=>uploadGroupPhoto(f)}/>
-              </div>
-              {groupPhotos.length > 0 && (
-                <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4,
-                  touchAction:"pan-x", overscrollBehaviorX:"contain" }}>
-                  {groupPhotos.map((ph,i)=>{
-                    const isCover = groupCover === ph.name;
-                    const armed   = groupPhotoToDelete === ph.name;
-                    return (
-                    <div key={i} style={{ position:"relative", flexShrink:0, borderRadius:8,
-                        border: isCover ? "2px solid #22c55e" : "1px solid var(--border)" }}>
-                      {/* Aucun handler tactile : le defilement reste natif. */}
-                      {isVideoUrl(ph.url) ? (
-                        <video src={ph.url} muted loop autoPlay playsInline preload="metadata"
-                          style={{ height:80, width:80, objectFit:"cover", display:"block", borderRadius:6 }}/>
-                      ) : (
-                        <img src={ph.url} alt="" onClick={() => setGroupLb(groupPhotos.filter(x => !isVideoUrl(x.url)).findIndex(x => x.url === ph.url))}
-                          style={{ height:80, width:80, objectFit:"cover", display:"block", borderRadius:6, cursor:"zoom-in" }}/>
-                      )}
-                      <AdminOnly>
-                        {/* Etoile a gauche, doree sur la vignette actuelle et
-                            grise sur les autres : l'etat se lit sans chercher. */}
-                        <button onClick={()=> !isCover && setGroupCoverPhoto(ph.name)}
-                          title={isCover ? "Vignette de la galerie" : "Définir comme vignette"}
-                          style={{ position:"absolute", top:2, left:2,
-                            width:20, height:20, borderRadius:"50%", border:"none",
-                            cursor: isCover ? "default" : "pointer",
-                            background:"rgba(0,0,0,0.6)", fontSize:10, lineHeight:1,
-                            display:"flex", alignItems:"center", justifyContent:"center",
-                            filter: isCover ? "none" : "grayscale(1)", opacity: isCover ? 1 : 0.75 }}>⭐</button>
-                      </AdminOnly>
-                      <AdminOnly>
-                        <div style={{ position:"absolute", top:2, right:2 }}>
-                          <button onClick={()=> armed ? delGroupPhoto(ph.name) : setGroupPhotoToDelete(ph.name)}
-                            onBlur={()=>setGroupPhotoToDelete(null)}
-                            title={armed ? "Confirmer la suppression" : "Supprimer"}
-                            style={{ height:20, width: armed ? "auto" : 20, padding: armed ? "0 6px" : 0,
-                              borderRadius: armed ? 10 : "50%", border:"none", cursor:"pointer",
-                              background: armed ? "#ef4444" : "rgba(0,0,0,0.6)", color:"white",
-                              fontSize: armed ? 9 : 10, fontWeight:600, lineHeight:1,
-                              display:"flex", alignItems:"center", justifyContent:"center" }}>
-                            {armed ? "Supprimer ?" : "🗑"}</button>
-                        </div>
-                      </AdminOnly>
-                    </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          <GroupToRate name={name} enabled={!groupVisiting}
-            designs={localPrints.filter(pr => pr.status === "SUCCESS" || pr.status === "PARTIAL").map(pr => String(pr.design_id || "").trim()).filter(Boolean)}/>
-
-          {/* Modele(s) MakerWorld du groupe : normalement un seul, ses prints
-              etant des plateaux du meme modele ; s'il y en a plusieurs, le
-              plus imprime d'abord. */}
-          {(() => {
-            const cpt = {};
-            localPrints.forEach(pr => { const d = String(pr.design_id || "").trim();
-              if (d && d !== "0") cpt[d] = (cpt[d] || 0) + 1; });
-            const ds = Object.keys(cpt).sort((a, b) => cpt[b] - cpt[a]);
-            return ds.map(d => (
-              <MakerWorldCard key={d} designId={d}
-                prints={localPrints.filter(pr => String(pr.design_id || "").trim() === d)}
-                note={ds.length > 1 || cpt[d] < localPrints.length
-                  ? `${cpt[d]} print${cpt[d] > 1 ? "s" : ""} sur ${localPrints.length} de ce modèle` : null}/>
-            ));
-          })()}
-
-          {/* Filaments agrégés — accordéon */}
-          {filaments.length > 0 && <FilamentAccordion filaments={filaments} onSpoolClick={setSelSpoolG} onUnmap={setUnmappingG}/>}
-
-          {/* Prints en tuiles */}
-          <AdminOnly>
-            <ObjectQuotaButton parentType="group" parentId={groupId}
-              label="depuis ce groupe" refreshKey={objRefresh}
-              onOpen={() => setObjCreate(true)}/>
-          </AdminOnly>
-          {objCreate && (
-            <ObjectCreateSheet parentType="group" parentId={groupId}
-              defaultName={name} costFabrication={totalCost / nbItems}
-              onDone={() => { setObjRefresh(k=>k+1); onUpdated?.(); }}
-              onClose={() => setObjCreate(false)}/>
-          )}
-
-          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-            letterSpacing:"0.06em", margin:"0 0 8px" }}>
-            Prints ({localPrints.length})
-          </p>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:8, marginBottom:16 }}>
-            {localPrints.map(p => (
-              <div key={p.id} style={{
-                borderRadius:10, overflow:"hidden", position:"relative",
-                background:"var(--surface2)", border:"1px solid var(--border)" }}>
-                {/* Bouton retirer du groupe */}
-                <AdminOnly><button onClick={async e=>{ e.stopPropagation();
-                  if(!(await showConfirm(`Retirer "${p.file_name||"ce print"}" du groupe ?`))) return;
-                  try { await client.post("/prints/"+p.id+"/group", {}); setLocalPrints(ps=>ps.filter(x=>x.id!==p.id)); } catch{}
-                }} style={{ position:"absolute", top:4, right:4, zIndex:2, width:20, height:20,
-                  borderRadius:"50%", background:"rgba(0,0,0,0.55)", border:"none",
-                  cursor:"pointer", color:"white", fontSize:11,
-                  display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button></AdminOnly>
-                {/* Bouton étoile = définir comme référence visuelle */}
-                <AdminOnly fallback={coverPrintId===p.id ? (
-                  <span title="Référence visuelle" style={{ position:"absolute", top:4, left:4, zIndex:2,
-                    width:20, height:20, borderRadius:"50%", background:"#f59e0b", color:"white",
-                    fontSize:11, display:"flex", alignItems:"center", justifyContent:"center" }}>★</span>
-                ) : null}>
-                <button onClick={async e=>{ e.stopPropagation();
-                  try {
-                    await client.patch("/prints/groups/"+groupId, { cover_print_id: p.id });
-                    setCoverPrintId(p.id);
-                    onUpdated?.();
-                  } catch{}
-                }} title="Définir comme référence visuelle"
-                  style={{ position:"absolute", top:4, left:4, zIndex:2, width:20, height:20,
-                  borderRadius:"50%", background: coverPrintId===p.id ? "#f59e0b" : "rgba(0,0,0,0.5)",
-                  border:"none", cursor:"pointer", color:"white", fontSize:11,
-                  display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  ★
-                </button></AdminOnly>
-                <div onClick={()=>setSelectedPrint(p)} style={{ cursor:"pointer" }}>
-                <div style={{ position:"relative", paddingTop:"75%", background:"var(--surface2)" }}>
-                  <img src={apiUrl("/prints/"+p.id+"/image")} alt="" style={{
-                    position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
-                    onError={e=>{e.currentTarget.style.display="none"}}/>
-                  <StatusBadge status={p.status} style={{ position:"absolute", bottom:4, right:4 }}/>
-                </div>
-                <div style={{ padding:"6px 8px" }}>
-                  <p style={{ fontSize:10, fontWeight:600, color:"var(--text)", margin:0,
-                    overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                    {p.file_name || "Sans nom"}
-                  </p>
-                  <p style={{ fontSize:9, color:"var(--muted)", margin:"1px 0 0" }}>
-                    {fmtDate(p.print_date)}
-                  </p>
-                </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Actions : une rangee sur ordinateur, deux de deux sur telephone
-              (minWidth 140). Supprimer en dernier ; plus de bouton ✕ ici, celui
-              du haut suffit. */}
-          <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
-            <AdminOnly>
-            <button onClick={()=>setEditGroup(true)}
-              style={{ flex:"1 1 0", minWidth:140, padding:"10px", borderRadius:12, border:"1px solid var(--border)",
-                background:"var(--surface2)", color:"var(--text)", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-              ✏️ Éditer
-            </button>
-            <button onClick={handleUngroup}
-              style={{ flex:"1 1 0", minWidth:140, padding:"10px", borderRadius:12,
-                border:"1px solid rgba(167,139,250,0.3)", background:"rgba(167,139,250,0.06)",
-                color:"#a78bfa", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-              📤 Dégrouper
-            </button>
-            <button onClick={() => setSharing(true)} title="Partager sur Telegram"
-              style={{ flex:"1 1 0", minWidth:140, padding:"10px", borderRadius:12,
-                border:"1px solid rgba(34,158,217,0.35)", background:"rgba(34,158,217,0.08)",
-                color:"#229ED9", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-              📣 Partager
-            </button>
-            <button onClick={handleDelete}
-              style={{ flex:"1 1 0", minWidth:140, padding:"10px", borderRadius:12,
-                border:"1px solid rgba(239,68,68,0.3)", background:"rgba(239,68,68,0.06)",
-                color:"#ef4444", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-              🗑 Supprimer
-            </button>
-            </AdminOnly>
-          </div>
-          <button onClick={() => setFicheV2(true)} style={{ display:"block", margin:"14px auto 0", background:"none", border:"none", cursor:"pointer",
-            fontSize:12, fontWeight:700, color:"#6366F1" }}>✨ Essayer la nouvelle fiche</button>
-        </div>
-      </div>
-    </div>
-    {sharing && <ShareSheet kind="group" id={groupId} onClose={() => setSharing(false)}/>}
-    {unmappingG && <UnmapFilamentConfirm f={unmappingG} printId={unmappingG.print_id} onClose={()=>setUnmappingG(null)} onDone={()=>{ setUnmappingG(null); onUpdated?.(); }}/>}
-    {/* Ancien PhotoDeleteConfirm retire : il coexistait avec la confirmation en
-        deux temps sur la pastille (plus haut) et se declenchait en meme temps.
-        Il lisait groupPhotoToDelete.name en attendant un objet, alors que la
-        pastille y stocke une chaine (ph.name) -> .name valait undefined ->
-        DELETE .../photo/undefined -> 404 silencieux. C'est ce qui faisait que
-        la popup confirmait mais que rien n'etait supprime. */}
-    {editGroup && <GroupEditSheet groupId={groupId} name={name} onClose={()=>setEditGroup(false)} onSaved={()=>{ setEditGroup(false); onUpdated?.(); }}/>}
-    {selSpoolG && <FilamentSheetFromSpool filamentId={selSpoolG.filId} spoolId={selSpoolG.spoolId} filamentColorHex={selSpoolG.hex} onClose={()=>setSelSpoolG(null)} zIndex={2000}/>}
-    {selectedPrint && (
-      <PrintDetail p={selectedPrint} onClose={()=>setSelectedPrint(null)}
-        onDelete={()=>{ setSelectedPrint(null); setLocalPrints(ps=>ps.filter(p=>p.id!==selectedPrint.id)); }}
-        onChanged={()=>{}}/>
-    )}
-    </>
-  );
-}
 
 function GroupTile({ groupId, name, prints, latestDate, number_of_items, duration_seconds, cover_print_id, onSelectPrint, onDelete, onUngroup,
                     selectMode, selected, onToggleSelect, onLongPress }) {
