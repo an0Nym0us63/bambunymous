@@ -1116,7 +1116,289 @@ function Files3mf({ p, onGot }) {
   );
 }
 
-export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
+// ── La fiche d'une impression : deux versions le temps de valider (24/10/2026) ─────────────────────────
+// La nouvelle (V2) se choisit sur chaque appareil (« Essayer la nouvelle fiche » / « Revenir à l'ancienne
+// fiche ») ; l'ancienne reste intacte tant que la nouvelle n'est pas validee : un retour arriere = un clic.
+const FICHE_KEY = "bn-fiche-v2";
+const ficheV2On = () => { try { return localStorage.getItem(FICHE_KEY) === "1"; } catch { return false; } };
+export function setFicheV2(on) {
+  try { on ? localStorage.setItem(FICHE_KEY, "1") : localStorage.removeItem(FICHE_KEY); } catch { /* indisponible */ }
+  window.dispatchEvent(new Event("bn-fiche-v2"));
+}
+function useFicheV2() {
+  const [on, setOn] = useState(ficheV2On);
+  useEffect(() => { const f = () => setOn(ficheV2On()); window.addEventListener("bn-fiche-v2", f); return () => window.removeEventListener("bn-fiche-v2", f); }, []);
+  return on;
+}
+export function PrintDetail(props) {
+  return useFicheV2() ? <PrintDetailV2 {...props}/> : <PrintDetailV1 {...props}/>;
+}
+
+// les nombres a la francaise : « 0,63 € », « 20 g », « 1 h 05 »
+const eur2 = v => `${String(moneyVal(v, 2)).replace(".", ",")} €`;
+const gFr = g => (g || 0) >= 1000 ? `${((g || 0) / 1000).toFixed(2).replace(".", ",")} kg` : (g || 0) >= 100 ? `${Math.round(g)} g` : `${(g || 0).toFixed(1).replace(".", ",")} g`;
+const durFr = s => { const m = Math.round((s || 0) / 60); return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `${m} min`; };
+const utcDate = d => { if (!d) return null; const s = typeof d === "string" && !d.includes("Z") && !d.includes("+") ? d.replace(" ", "T") + "Z" : d; const x = new Date(s); return isNaN(x) ? null : x; };
+const whenFr = d => {
+  if (!d) return ["—", ""];
+  const t = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  const a = new Date(d.getFullYear(), d.getMonth(), d.getDate()), n0 = new Date(), b = new Date(n0.getFullYear(), n0.getMonth(), n0.getDate());
+  const n = Math.round((b - a) / 86400000);
+  // court : la case est etroite sur telephone (la date entiere est dans l'infobulle)
+  const day = n <= 0 ? "Auj." : n === 1 ? "Hier" : n < 7 ? d.toLocaleDateString("fr-FR", { weekday: "short" }) : d.toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: n > 300 ? "2-digit" : undefined });
+  // dessous : l'heure et la date (l'annee quand ce n'est pas celle-ci) -- rien de l'ancienne fiche ne se perd
+  const full = d.toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit", year: d.getFullYear() !== n0.getFullYear() ? "2-digit" : undefined });
+  return [day.charAt(0).toUpperCase() + day.slice(1), `${t} · ${full}`];
+};
+const V2_STATUS = { SUCCESS: ["Réussie", "#22c55e", "✓"], PARTIAL: ["En partie", "#f59e0b", "◐"], FAILED: ["Échouée", "#ef4444", "✕"],
+  IN_PROGRESS: ["En cours", "#3b82f6", "●"], CANCELLED: ["Annulée", "#94a3b8", "■"] };
+const v2grad = (a, b) => ({ backgroundImage: `linear-gradient(135deg, ${a}, ${b})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" });
+
+// une section repliable : pictogramme, titre, resume a droite, chevron
+function FicheSection({ icon, title, summary, open: open0 = true, children, tone = "#64748B" }) {
+  const [open, setOpen] = useState(open0);
+  return (
+    <div style={{ borderRadius: 16, background: "var(--surface2)", border: "1px solid var(--border)", overflow: "hidden" }}>
+      <button onClick={() => setOpen(o => !o)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "none",
+        border: "none", cursor: "pointer", font: "inherit", color: "inherit", textAlign: "left" }}>
+        <span style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+          background: `${tone}22`, fontSize: 14 }}>{icon}</span>
+        <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>{title}</span>
+        <span style={{ marginLeft: "auto", minWidth: 0, display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "var(--muted)",
+          whiteSpace: "nowrap", overflow: "hidden" }}>{summary}</span>
+        <span style={{ fontSize: 11, color: "var(--muted)", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s", flexShrink: 0 }}>▶</span>
+      </button>
+      {open && <div style={{ padding: "0 14px 14px" }}>{children}</div>}
+    </div>
+  );
+}
+
+function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
+  const [sharing, setSharing] = useState(false);
+  const [ungrouped, setUngrouped] = useState(false);
+  const [editMode, setEditMode] = useState(false);
+  const [userPhotos, setUserPhotos] = useState([]);
+  const loadUserPhotos = () => client.get(`/prints/${pProp.id}/photos`).then(r => setUserPhotos(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+  useEffect(() => { loadUserPhotos(); }, [pProp.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const uploadPhoto = async (file) => { const fd = new FormData(); fd.append("file", file); await client.post(`/prints/${pProp.id}/photos/upload`, fd, { headers: { "Content-Type": "multipart/form-data" } }); loadUserPhotos(); };
+  const [p, setP] = useState(pProp);
+  const [editFr, setEditFr] = useState(false);
+  const [frVal, setFrVal] = useState("");
+  useTrackDetail(`Fiche print · ${p?.file_name || pProp?.file_name || "#" + pProp.id}`);
+  useEffect(() => {
+    if (pProp.total_cost_filament == null) client.get("/prints/" + pProp.id).then(r => setP(r.data)).catch(() => setP(pProp));
+    else setP(pProp);
+  }, [pProp.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const isAdmin = useIsAdmin();
+  const groupe = ungrouped ? null : p.group_name;
+  const [editNb, setEditNb] = useState(false);
+  const [spoolPicker, setSpoolPicker] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [objCreate, setObjCreate] = useState(null);
+  const [unmapping, setUnmapping] = useState(null);
+  const [, setPhotoCount] = useState(0);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [selSpool, setSelSpool] = useState(null);
+  // le detail du cout : ouvert par defaut (comme l'ancien bloc) ; l'appareil retient le choix
+  const [costOpen, setCostOpen0] = useState(() => { try { return localStorage.getItem("bn-fiche-cost") !== "0"; } catch { return true; } });
+  const setCostOpen = f => setCostOpen0(o => { const v = typeof f === "function" ? f(o) : f; try { localStorage.setItem("bn-fiche-cost", v ? "1" : "0"); } catch { /* rien */ } return v; });
+  const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
+  const [nbVal, setNbVal] = useState(String(pProp.number_of_items || 1));
+  useEffect(() => { setLocalNb(p.number_of_items || 1); setNbVal(String(p.number_of_items || 1)); }, [p.number_of_items]);
+  const wide = typeof window !== "undefined" && window.innerWidth >= 900;
+  const saveNb = async () => {
+    const n = parseInt(nbVal);
+    if (!isNaN(n) && n >= 1) {
+      try { await client.patch(`/prints/${p.id}`, { number_of_items: n }); setLocalNb(n); onChanged?.({ ...p, number_of_items: n }); } catch { /* garde l'ancien */ }
+    }
+    setEditNb(false);
+  };
+  const SNAP_LABELS = { "snapshot-layer1": "Couche 1", "snapshot-layer2": "Couche 2", "pct50": "50%", "snapshot-pct50": "50%", "pct99": "99%",
+    "snapshot-pct99": "99%", "pct100": "100%", "snapshot-pct100": "100%", "fail": "Échec", "manual": "Manuel" };
+  const handleUngroup = async () => {
+    if (!(await showConfirm("Retirer ce print de son groupe ?"))) return;
+    try { await client.post("/prints/" + p.id + "/group", {}); setUngrouped(true); onChanged?.(); }
+    catch (err) { showAlert("Erreur: " + (err.response?.data?.detail || err.message)); }
+  };
+  const reload = () => client.get("/prints/" + p.id).then(r => { setP(r.data); setRefreshKey(k => k + 1); }).catch(() => {});
+  const costFil = p.total_cost_filament || 0, costNormal = p.total_cost_filament_normal || 0, costElec = p.electric_cost || 0;
+  const totalBobine = costFil + costElec, totalNormal = costNormal + costElec;
+  const [stL, stC, stI] = V2_STATUS[p.status] || [p.status || "—", "#94a3b8", "•"];
+  const [day, hour] = whenFr(utcDate(p.print_date));
+  const dur = p.duration_seconds || p.estimated_seconds;
+  const fils = p.filament_usage || [];
+  const more = e => openMenu(e, {
+    title: p.file_name || "Sans nom",
+    items: [
+      { icon: "✏️", label: "Éditer", onClick: () => setEditMode(true) },
+      { icon: "📣", label: "Partager", hint: "Telegram", onClick: () => setSharing(true) },
+      groupe && { icon: "⛓", label: "Retirer du groupe", hint: groupe, onClick: handleUngroup },
+      "-",
+      { icon: "🗑", label: "Supprimer…", danger: true, onClick: () => setShowDeleteConfirm(true) },
+      "-",
+      { icon: "↩", label: "Revenir à l'ancienne fiche", onClick: () => setFicheV2(false) },
+    ],
+  });
+  const tile = (label, value, sub, c1, c2, onClick, tip) => (
+    <button onClick={onClick} disabled={!onClick} data-tip={tip} style={{ minWidth: 0, padding: "9px 8px", borderRadius: 14, border: "1px solid var(--border)",
+      background: `linear-gradient(160deg, ${c1}14, transparent 70%), var(--surface2)`, cursor: onClick ? "pointer" : "default", textAlign: "left",
+      font: "inherit", color: "inherit", display: "flex", flexDirection: "column", gap: 1 }}>
+      <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)", display: "flex", justifyContent: "space-between" }}>{label}</span>
+      <span style={{ fontSize: 16, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...v2grad(c1, c2) }}>{value}</span>
+      {sub && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
+    </button>);
+  // l'en-tete : le plateau en grand, le titre et l'etat poses dessus
+  const hero = (
+    <div style={{ position: "relative", height: wide ? 300 : "min(34vh, 270px)", minHeight: 190, borderRadius: wide ? 18 : 0, overflow: "hidden",
+      background: `radial-gradient(70% 80% at 50% 35%, ${stC}26, transparent 70%), var(--surface2)` }}>
+      <img src={apiUrl("/prints/" + p.id + "/image")} alt="" style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%", objectFit: "contain" }}
+        onError={e => { e.currentTarget.style.display = "none"; }}/>
+      <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 16px 12px",
+        background: "linear-gradient(transparent, color-mix(in srgb, var(--sheet-bg) 92%, transparent) 55%)" }}>
+        <div style={{ display: "flex", alignItems: "flex-end", gap: 8 }}>
+          <h2 style={{ flex: 1, minWidth: 0, margin: 0, fontSize: 19, fontWeight: 900, color: "var(--text)", letterSpacing: "-.01em", lineHeight: 1.2,
+            overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>{p.file_name || "Sans nom"}</h2>
+        </div>
+        {p.original_name && p.original_name !== p.file_name && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.original_name}</div>}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800,
+            color: "#fff", background: stC }}>{stI} {stL}</span>
+          {groupe && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 6px 2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800,
+            color: "#a78bfa", background: "rgba(167,139,250,0.16)" }}>📁 {groupe}
+            <AdminOnly><button onClick={handleUngroup} aria-label="Retirer du groupe" data-tip="Retirer du groupe" style={{ background: "none", border: "none",
+              color: "#a78bfa", cursor: "pointer", padding: 0, display: "flex" }}><X size={12}/></button></AdminOnly></span>}
+          {/* le nom de recherche (ne remplace jamais le titre) */}
+          {editFr ? null : <AdminOnly>
+            <button onClick={() => { setFrVal(p.translated_name || ""); setEditFr(true); }}
+              data-tip={p.translated_name ? (TRAD_BY[p.translated_by] || "Origine inconnue (traduit avant le suivi du service)") : "Le nom sous lequel tu la cherches"}
+              style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 700,
+                border: "1px solid var(--border)", background: "color-mix(in srgb, var(--surface) 70%, transparent)", color: "var(--muted)", cursor: "pointer",
+                maxWidth: "100%", overflow: "hidden" }}>
+              <span style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>🔎 {p.translated_name || "Nom de recherche"}</span><Pencil size={10}/></button>
+          </AdminOnly>}
+        </div>
+        {editFr && <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+          <input value={frVal} onChange={e => setFrVal(e.target.value)} autoFocus placeholder="Nom en français (recherche)"
+            style={{ flex: 1, minWidth: 0, fontSize: 13, padding: "6px 10px", borderRadius: 9, background: "var(--surface2)", border: "1px solid var(--border)",
+              color: "var(--text)", outline: "none" }}/>
+          <button onClick={async () => {
+            const v = frVal.trim();
+            try { await client.patch(`/prints/${p.id}`, { translated_name: v }); setP(prev => ({ ...prev, translated_name: v, translated_by: v ? "manuel" : null })); onChanged && onChanged(); }
+            catch (e) { showAlert(e.response?.data?.detail || e.message); }
+            setEditFr(false);
+          }} style={{ fontSize: 12, padding: "6px 12px", borderRadius: 9, cursor: "pointer", border: "none", background: "#3b82f6", color: "white", fontWeight: 700 }}>OK</button>
+          <button onClick={() => setEditFr(false)} style={{ fontSize: 12, padding: "6px 10px", borderRadius: 9, cursor: "pointer", border: "1px solid var(--border)",
+            background: "transparent", color: "var(--muted)" }}>✕</button>
+        </div>}
+      </div>
+    </div>);
+  // les chiffres : quand, duree, poids, cout (le cout se deplie)
+  const figures = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6 }}>
+        {tile("Quand", day, hour, "#3B82F6", "#60A5FA", null, fmtDate(p.print_date))}
+        {tile("Durée", dur > 0 ? durFr(dur) : "—", p.duration_seconds ? null : dur > 0 ? "estimée" : null, "#8B5CF6", "#C084FC")}
+        {tile("Poids", p.total_weight_g > 0 ? gFr(p.total_weight_g) : "—", null, "#F59E0B", "#FBBF24")}
+        {tile(<>Coût<span>{costOpen ? "▴" : "▾"}</span></>, eur2(totalBobine), localNb > 1 ? `${eur2(totalBobine / localNb)}/u` : "détail", "#16A34A", "#4ADE80", () => setCostOpen(o => !o), "Le détail du coût")}
+      </div>
+      {costOpen && (
+        <div style={{ padding: "10px 12px", borderRadius: 14, background: "var(--surface2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5 }}>
+          {[["Filament", eur2(costFil), `${eur2(costNormal)} sans bobine`], ["Électricité", eur2(costElec), null],
+            ["Total", eur2(totalBobine), `${eur2(totalNormal)} sans bobine`]].map(([l, v, s]) => (
+            <div key={l} style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+              <span style={{ flex: 1, fontWeight: l === "Total" ? 900 : 700, color: l === "Total" ? "var(--text)" : "var(--text2)" }}>{l}</span>
+              {s && <span style={{ fontSize: 11, color: "var(--muted)" }}>({s})</span>}
+              <span style={{ fontWeight: 900, color: "var(--text)" }}>{v}</span></div>))}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 7 }}>
+            <span style={{ fontWeight: 800, color: "#16a34a" }}>{localNb} élément{localNb > 1 ? "s" : ""}</span>
+            {localNb > 1 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#16a34a" }}>· {eur2(totalBobine / localNb)}/u ({eur2(totalNormal / localNb)}/u)</span>}
+            <span style={{ marginLeft: "auto" }}/>
+            {!editNb ? <AdminOnly><button onClick={() => { setNbVal(String(localNb)); setEditNb(true); }} style={{ fontSize: 11, padding: "3px 9px", borderRadius: 7,
+              border: "1px solid rgba(34,197,94,0.35)", background: "none", color: "#16a34a", cursor: "pointer", fontWeight: 700 }}>Modifier</button></AdminOnly>
+              : <span style={{ display: "flex", gap: 5 }}>
+                <input type="number" min="1" value={nbVal} onChange={e => setNbVal(e.target.value)} autoFocus style={{ width: 58, padding: "3px 6px", borderRadius: 7,
+                  border: "1px solid var(--border)", background: "var(--surface)", color: "var(--text)", fontSize: 12.5 }}/>
+                <button onClick={saveNb} style={{ padding: "3px 10px", borderRadius: 7, border: "none", background: "#22c55e", color: "white", cursor: "pointer" }}>✓</button>
+                <button onClick={() => setEditNb(false)} style={{ padding: "3px 8px", borderRadius: 7, border: "none", background: "var(--surface)", color: "var(--muted)", cursor: "pointer" }}>✕</button>
+              </span>}
+          </div>
+        </div>)}
+    </div>);
+  const sections = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      <SnapshotGallery snaps={[]} printId={p.id} userPhotos={userPhotos}
+        onDelete={() => {}} onUpload={async f => { await uploadPhoto(f); }}
+        onDeleteUpload={async filename => { await client.delete(`/prints/${p.id}/upload/${filename}`); loadUserPhotos(); }}
+        onCountChange={setPhotoCount} coverPhoto={p.cover_photo}
+        onCoverChange={name => { setP(prev => ({ ...prev, cover_photo: name })); onChanged?.(); }}/>
+      {/* les filaments ont deja leur titre repliable (et « Restituer ») */}
+      {fils.length > 0 && <FilamentAccordion filaments={fils} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id}
+        onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping} onUnmapped={() => { reload(); onChanged?.(); }}/>}
+      {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]}/>}
+      {(p.model_3mf || p.source_3mf || (p.design_id && p.mw_profile_id)) && <Files3mf p={p} onGot={() => setP(prev => ({ ...prev, source_3mf: true }))}/>}
+      {isAdmin && <ObjectQuotaButton parentType="print" parentId={p.id} label="depuis ce print" refreshKey={refreshKey}
+        onOpen={() => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine })}/>}
+      {p.status_note && <FicheSection icon="💬" title="Commentaire" tone="#A855F7">
+        <p style={{ fontSize: 13, color: "var(--text)", margin: 0, lineHeight: 1.5 }}>{p.status_note}</p></FicheSection>}
+      {(p.job_id || p.design_id) && <FicheSection icon="#" title="Identifiants" open={false}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11.5, color: "var(--muted)" }}>
+          {p.job_id && <span>Travail : {p.job_id}</span>}{p.design_id && <span>Modèle MakerWorld : {p.design_id}</span>}</div></FicheSection>}
+    </div>);
+  return (
+    <>
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 1000, display: "flex", alignItems: wide ? "center" : "flex-end",
+        justifyContent: "center", padding: wide ? 20 : 0 }} onClick={onClose}>
+        <div onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background: "var(--sheet-bg)", borderRadius: wide ? 24 : "22px 22px 0 0",
+          width: "100%", maxWidth: wide ? 980 : 640, maxHeight: wide ? "90dvh" : "94dvh", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+          <div style={{ flex: 1, minHeight: 0, overflowY: "auto", position: "relative" }}>
+            {/* la barre du haut : poignee, ⋯ et ✕ par-dessus l'image */}
+            <div style={{ position: "sticky", top: 0, zIndex: 10, height: 0 }}>
+              {!wide && <div style={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", width: 38, height: 4, borderRadius: 2, background: "rgba(148,163,184,.6)" }}/>}
+              <div style={{ position: "absolute", top: 10, right: 12, display: "flex", gap: 8 }}>
+                {isAdmin && <button onClick={more} aria-label="Plus d'actions" style={v2Round}>⋯</button>}
+                <button onClick={onClose} aria-label="Fermer" style={v2Round}>✕</button>
+              </div>
+            </div>
+            {wide ? (
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1.15fr)", gap: 18, padding: 18 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>{hero}{figures}</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 34 }}>{sections}</div>
+              </div>
+            ) : <>{hero}<div style={{ padding: "12px 14px 18px", display: "flex", flexDirection: "column", gap: 12 }}>{figures}{sections}</div></>}
+          </div>
+          {/* les actions, toujours a portee du pouce */}
+          {isAdmin && <div style={{ flexShrink: 0, display: "flex", gap: 8, padding: "10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",
+            borderTop: "1px solid var(--border)", background: "color-mix(in srgb, var(--sheet-bg) 94%, transparent)", backdropFilter: "blur(8px)" }}>
+            <button onClick={() => setEditMode(true)} style={{ ...v2Btn, flex: 1 }}>✏️ Éditer</button>
+            <button onClick={() => setSharing(true)} style={{ ...v2Btn, flex: 1, color: "#229ED9", borderColor: "rgba(34,158,217,0.35)", background: "rgba(34,158,217,0.08)" }}>📣 Partager</button>
+            <button onClick={more} aria-label="Plus d'actions" style={{ ...v2Btn, width: 48, flex: "0 0 auto" }}>⋯</button>
+          </div>}
+        </div>
+      </div>
+      {objCreate && <ObjectCreateSheet parentType="print" parentId={p.id} defaultName={objCreate.name} costFabrication={objCreate.cost}
+        onDone={() => { setRefreshKey(k => k + 1); onChanged?.(); }} onClose={() => setObjCreate(null)}/>}
+      {sharing && <ShareSheet kind="print" id={p.id} onClose={() => setSharing(false)}/>}
+      {spoolPicker && <SpoolMapPicker usageId={spoolPicker.usageId} printId={p.id} colorHex={spoolPicker.colorHex} colorsArray={spoolPicker.colorsArray}
+        multicolorType={spoolPicker.multicolorType} filamentType={spoolPicker.filamentType} onClose={() => setSpoolPicker(null)}
+        onMapped={() => { setSpoolPicker(null); reload(); onChanged?.(); }}/>}
+      {selSpool && <FilamentSheetFromSpool filamentId={selSpool.filId} spoolId={selSpool.spoolId} filamentColorHex={selSpool.hex} onClose={() => setSelSpool(null)} zIndex={2000}/>}
+      {editMode && <PrintEditSheet p={p} onClose={() => setEditMode(false)} onSaved={updated => { setP(prev => ({ ...prev, ...updated })); setEditMode(false); onChanged?.(); }}/>}
+      {unmapping && <UnmapFilamentConfirm f={unmapping} printId={p.id} onClose={() => setUnmapping(null)} onDone={() => { setUnmapping(null); reload(); onChanged?.(); }}/>}
+      {showDeleteConfirm && <DeletePrintConfirm p={p} restoreOnly={showDeleteConfirm === "restore"} onCancel={() => setShowDeleteConfirm(false)}
+        onConfirm={async fracs => {
+          const hasRestore = Object.values(fracs).some(v => v > 0);
+          if (hasRestore) await client.post("/prints/" + p.id + "/restore-weights", { fracs }).catch(() => {});
+          if (showDeleteConfirm !== "restore") { client.delete("/prints/" + p.id).then(() => { onDelete?.(p.id); onClose(); }).catch(() => showAlert("Erreur")); }
+          else { setShowDeleteConfirm(false); reload(); onChanged?.(); }
+        }}/>}
+    </>);
+}
+const v2Round = { width: 34, height: 34, borderRadius: "50%", border: "1px solid var(--border)", background: "color-mix(in srgb, var(--sheet-bg) 80%, transparent)",
+  backdropFilter: "blur(6px)", color: "var(--text2)", cursor: "pointer", fontSize: 15, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center" };
+const v2Btn = { padding: "11px 12px", borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text)", fontSize: 13.5,
+  fontWeight: 800, cursor: "pointer" };
+
+function PrintDetailV1({ p: pProp, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
   const [sharing, setSharing] = useState(false);   // partage Telegram
   const [ungrouped, setUngrouped] = useState(false);
@@ -1470,6 +1752,8 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
               cursor:"pointer" }}>🗑 Supprimer</button>
             </AdminOnly>
           </div>
+          <button onClick={() => setFicheV2(true)} style={{ display:"block", margin:"14px auto 0", background:"none", border:"none", cursor:"pointer",
+            fontSize:12, fontWeight:700, color:"#6366F1" }}>✨ Essayer la nouvelle fiche</button>
         </div>
       </div>
     </div>
