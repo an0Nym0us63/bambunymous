@@ -352,5 +352,13 @@ async def storage_usage(fresh: bool = False, db: AsyncSession = Depends(get_db),
         rows = (await db.execute(select(Print.id, Print.file_name, Print.translated_name, Print.print_date)
                                  .where(Print.id.in_(ids)))).all()
         names = {r[0]: (r[2] or r[1] or f"Impression #{r[0]}", r[3].isoformat() if r[3] else None) for r in rows}
-    return {**v, "top_prints": [{**x, "name": names.get(x["id"], (f"Impression #{x['id']}", None))[0],
-                                 "date": names.get(x["id"], (None, None))[1]} for x in v["top_prints"]]}
+    # ce que couvrent les 3MF : combien d'impressions ont le leur (tranche, et d'origine MakerWorld parmi
+    # celles liees a un modele)
+    from ....services.mw_source import print_file
+    rows = (await db.execute(select(Print.design_id, Print.mw_profile_id, Print.mw_plates, Print.model_3mf))).all()
+    mw = [r for r in rows if r[0] and str(r[0]).isdigit()]
+    covers = {"tmf": {"prints": sum(1 for r in rows if r[3]), "of": len(rows)},
+              "mw_tmf": {"prints": sum(1 for r in mw if print_file(r[0], r[1], r[2])), "of": len(mw)}}
+    return {**v, "cats": [{**c, "covers": covers.get(c["key"])} for c in v["cats"]],
+            "top_prints": [{**x, "name": names.get(x["id"], (f"Impression #{x['id']}", None))[0],
+                            "date": names.get(x["id"], (None, None))[1]} for x in v["top_prints"]]}

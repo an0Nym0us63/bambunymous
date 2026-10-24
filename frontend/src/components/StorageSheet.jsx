@@ -108,6 +108,10 @@ export default function StorageSheet({ onClose }) {
                       <span style={{ width: 92, textAlign: "right", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>
                         {pctFr(c.bytes, v.total)} % · {c.files} fich.</span>
                     </div>
+                    {/* les 3MF : combien d'impressions ils couvrent */}
+                    {c.covers && <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", paddingLeft: 18 }}>
+                      couvre <b style={{ color: c.color }}>{c.covers.prints.toLocaleString("fr-FR")}</b> impression{c.covers.prints > 1 ? "s" : ""} sur {c.covers.of.toLocaleString("fr-FR")}
+                      {c.key === "mw_tmf" ? " liées à MakerWorld" : ""}</div>}
                   </div>
                 ))}
               </div>
