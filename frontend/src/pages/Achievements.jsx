@@ -185,7 +185,8 @@ export default function Achievements({ embedded = false }) {
             <MedalShelf tiers={shelfTiers(data.tiers)} medals={data.medals} onOpen={t => setVitrine(t)}/>
           </div>
         </div>
-        {data.keys && !atFriend && <Treasure keys={data.keys} onRules={() => setRules(true)} onSpent={canSpend ? load : null}
+        {data.family && !atFriend ? <LoupeTreasure fam={data.family} wheel={canSpin ? data.keys?.wheel : null} onWheel={canSpin ? () => setSlot(true) : null}/>
+          : data.keys && !atFriend && <Treasure keys={data.keys} onRules={() => setRules(true)} onSpent={canSpend ? load : null}
           onWheel={canSpin ? () => setSlot(true) : null}/>}
       </div>
 
@@ -258,7 +259,11 @@ export default function Achievements({ embedded = false }) {
                   <span style={{ display:"flex", alignItems:"center", flexWrap:"wrap", gap:"4px 8px", fontSize:15, fontWeight:800 }}>{c.name}
                     <GradeBadge g={gradeOf(c.id, sum.max ? sum.score / sum.max : 0)}/>
                     {/* mes cles, la ou on les depense */}
-                    {c.id === "secret" && data.keys && !atFriend && (
+                    {c.id === "secret" && data.family && !atFriend && (
+                      <span title="Tes loupes, pour révéler l'indice d'un secret que la maison a déjà" style={{ fontSize:12, fontWeight:900,
+                        padding:"2px 8px", borderRadius:20, background:"rgba(14,165,233,0.15)", color:"#0EA5E9" }}>🔍 {data.family.loupes}</span>
+                    )}
+                    {c.id === "secret" && data.keys && !atFriend && !data.family && (
                       <span title="Tes clés, pour révéler les secrets (touche un secret)" style={{ fontSize:12, fontWeight:900,
                         padding:"2px 8px", borderRadius:20, background:"rgba(245,158,11,0.15)", color:"#F59E0B" }}>
                         🔑 {data.keys.balance}</span>
@@ -1186,6 +1191,39 @@ function AutoSpend({ keys, onSpent }) {
       )}
       {done && !open && <div style={{ marginTop:6, fontSize:12, color:"#16a34a", fontWeight:700 }}>
         ✓ Révélé : {line(done)}. Va voir tes secrets !</div>}
+    </div>
+  );
+}
+
+// le tresor d'un compte de la famille : ses loupes (et la roue si le compte principal la lui a permise)
+function LoupeTreasure({ fam, wheel, onWheel }) {
+  const n = fam.loupes || 0, max = fam.loupes_max || 3, day = fam.loupes_day || 2;
+  return (
+    <div style={{ display:"grid", gridTemplateColumns: wheel ? "minmax(0, 2fr) minmax(0, 1fr)" : "1fr", gap:8 }}>
+      <div style={{ position:"relative", overflow:"hidden", borderRadius:16, padding:"12px 14px", display:"flex", alignItems:"center", gap:14,
+        background:"radial-gradient(circle at 12% 30%, rgba(14,165,233,0.35), transparent 60%), var(--surface2)", border:"1px solid rgba(14,165,233,0.4)" }}>
+        <span style={{ fontSize:34, lineHeight:1, animation:"bn-float 3.5s ease-in-out infinite" }}>🔍</span>
+        <div style={{ flex:1, minWidth:0, display:"flex", flexDirection:"column", gap:4 }}>
+          <div style={{ display:"flex", alignItems:"baseline", gap:6 }}>
+            <span style={{ fontSize:28, fontWeight:900, lineHeight:1, background:"linear-gradient(180deg,#38bdf8,#6366f1)",
+              WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{n}</span>
+            <span style={{ fontSize:13, fontWeight:800, color:"var(--text2)" }}>loupe{n > 1 ? "s" : ""}</span>
+            <span style={{ display:"inline-flex", gap:4, marginLeft:4 }}>{[...Array(max).keys()].map(i =>
+              <span key={i} style={{ width:9, height:9, borderRadius:"50%", background: i < n ? "#0EA5E9" : "var(--border)" }}/>)}</span>
+          </div>
+          <span style={{ fontSize:11.5, color:"var(--muted)", lineHeight:1.4 }}>Une loupe révèle l'indice d'un secret que {fam.house} a déjà.
+            {" "}{day} de plus chaque jour, {max} au plus{fam.loupes_used ? ` · ${fam.loupes_used} utilisée${fam.loupes_used > 1 ? "s" : ""}` : ""}.</span>
+        </div>
+      </div>
+      {wheel && (
+        <button type="button" onClick={onWheel || undefined} disabled={!onWheel} style={{ borderRadius:16, padding:"10px 8px", cursor: onWheel ? "pointer" : "default",
+          display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:3, font:"inherit", color:"inherit",
+          background:"radial-gradient(circle at 50% 0%, rgba(239,68,68,0.3), transparent 70%), var(--surface2)", border:"1px solid rgba(239,68,68,0.4)" }}>
+          <span style={{ fontSize:24 }}>🎰</span>
+          <span style={{ fontSize:20, fontWeight:900, lineHeight:1, color:"#ef4444" }}>{wheel.spins || 0}</span>
+          <span style={{ fontSize:10.5, fontWeight:700, color:"var(--muted)" }}>tour{(wheel.spins || 0) > 1 ? "s" : ""} de roue</span>
+        </button>
+      )}
     </div>
   );
 }

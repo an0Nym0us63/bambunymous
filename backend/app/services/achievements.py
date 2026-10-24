@@ -5580,7 +5580,8 @@ def family_view(v: dict, mine: dict, house: str, loupes: dict | None = None) -> 
     found = sum(1 for aid in FAMILY_IDS if aid[4:] in mine)
     return {**v, "items": items, "medals": medals, "score": score,
             "family": {"house": house, "found": found, "total": len(FAMILY_IDS),
-                       "loupes": (loupes or {}).get("n", 0), "loupes_day": LOUPES_DAY, "loupes_max": LOUPES_MAX}}
+                       "loupes": (loupes or {}).get("n", 0), "loupes_day": LOUPES_DAY, "loupes_max": LOUPES_MAX,
+                       "loupes_used": len((loupes or {}).get("used") or {})}}
 
 
 # Les loupes de la famille (24/10/2026) : sans cles ni tickets, un compte de la famille revele l'indice d'un
