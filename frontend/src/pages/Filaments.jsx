@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import HiddenMark from "../components/HiddenMark";
-import Cachettes from "../components/Cachettes";
+import Cachettes, { Hide } from "../components/Cachettes";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { useUrlTab, keepTabs } from "../utils/useUrlTab";
@@ -2063,7 +2063,7 @@ function FilamentPrintsSheet({ f, onClose }) {
               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{f.translated_name || f.name}</p>
             <p style={{ margin:0, fontSize:11, color:"var(--muted)" }}>
               {[f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}
-              {prints ? ` — ${prints.length} impression${prints.length > 1 ? "s" : ""}` : ""}
+              {prints ? ` — ${prints.length} impression${prints.length > 1 ? "s" : ""}` : ""}<Hide at="filament-prints" size={9}/>
             </p>
           </div>
           <button onClick={onClose} aria-label="Fermer" style={{ background:"none", border:"none",

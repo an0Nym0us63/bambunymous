@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import AllAlertsModal from "./AllAlertsModal";
+import { Hide } from "./Cachettes";
 import { useFriend } from "../store/friend";
 import { relayed } from "./Friends";
 import { stageLabel } from "../utils/printStage";
@@ -116,6 +117,7 @@ function Tile({ icon, color, label, to, zoom, onClick, badge, children, mini = f
         background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>
       <span className="tile-head" style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", overflow: "hidden", textOverflow: "ellipsis",
         whiteSpace: "nowrap", minWidth: 0, flexShrink: 1 }}><W text={label}/></span>
+      <Hide at={`tile:${label}`} size={9}/>
       <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, minWidth: 0, fontSize: 15, fontWeight: 900,
         color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden" }}>{summary}</span>
       {big}
@@ -133,6 +135,7 @@ function Tile({ icon, color, label, to, zoom, onClick, badge, children, mini = f
           background: `${color}22`, color, flexShrink: 0 }}>{icon}</span>
         <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text2)", letterSpacing: ".02em", overflow: "hidden", textOverflow: "ellipsis",
           whiteSpace: "nowrap", minWidth: 0 }}><W text={label}/></span>
+        <Hide at={`tile:${label}`}/>
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
           {badge}{!zoom && act && <ChevronRight size={14} style={{ color: "var(--muted)" }}/>}</span>
       </div>
@@ -176,6 +179,7 @@ function Zoom({ icon, color, label, to, onClose, children }) {
               background: `linear-gradient(135deg, ${color}, ${color}bb)`, color: "#fff", boxShadow: `0 8px 20px ${color}55` }}>{big}</span>
             <span style={{ flex: 1, minWidth: 0, fontSize: 19, fontWeight: 900, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis",
               whiteSpace: "nowrap", letterSpacing: "-.01em" }}>{label}</span>
+            <Hide at={`zoom:${label}`} size={12}/>
             {to && <button onClick={() => { onClose(); nav(to); }} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "8px 13px",
               borderRadius: 12, border: "none", cursor: "pointer", fontWeight: 800, fontSize: 12.5, color: "#fff", background: color,
               boxShadow: `0 6px 16px ${color}55` }}>Ouvrir<ArrowUpRight size={14}/></button>}

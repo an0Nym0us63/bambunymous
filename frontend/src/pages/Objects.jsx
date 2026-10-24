@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import HiddenMark from "../components/HiddenMark";
-import Cachettes from "../components/Cachettes";
+import Cachettes, { Hide } from "../components/Cachettes";
 import { useUrlTab } from "../utils/useUrlTab";
 import { Search, Package, ShoppingBag, ExternalLink, Image as ImageIcon, Plus } from "lucide-react";
 import client, { apiUrl } from "../api/client";
@@ -667,7 +667,7 @@ function ObjectEditSheet({ obj, onClose, onSaved }) {
         style={{ width:"100%", background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
           padding:"16px 16px 32px", maxHeight: kb > 0 ? `calc(92vh - ${kb}px)` : "85vh",
           marginBottom: kb, overflowY:"auto", transition:"margin-bottom 0.15s ease" }}>
-        <p style={{ fontWeight:700, fontSize:15, margin:"0 0 16px" }}>Modifier l'objet</p>
+        <p style={{ fontWeight:700, fontSize:15, margin:"0 0 16px" }}>Modifier l'objet <Hide at="object-edit"/></p>
 
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
           <div>

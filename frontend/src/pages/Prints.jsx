@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import HiddenMark from "../components/HiddenMark";
-import Cachettes from "../components/Cachettes";
+import Cachettes, { Hide } from "../components/Cachettes";
 import { createPortal } from "react-dom";
 import Lightbox from "../components/Lightbox";
 import { RefreshCw, Upload, Search, Filter, Clock, Package, CheckCircle, XCircle, Loader, Image as ImageIcon, List, Check, FolderPlus, X, FolderMinus, SlidersHorizontal, Pencil, Trash2, AlertTriangle, RotateCcw } from "lucide-react";
@@ -638,7 +638,7 @@ function PrintEditSheet({ p, onClose, onSaved }) {
         </div>
 
         <h3 style={{ fontSize:15, fontWeight:800, margin:"0 0 16px", color:"var(--text)" }}>
-          ✏️ Éditer le print
+          ✏️ Éditer le print <Hide at="print-edit"/>
         </h3>
 
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>

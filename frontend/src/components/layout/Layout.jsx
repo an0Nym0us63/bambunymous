@@ -16,6 +16,7 @@ import { PrankHost } from "../../hidden/prankHost";
 import MwAssignPicker from "../MwAssignPicker";
 import CardFx from "../CardFx";
 import AchNews from "../AchNews";
+import { Hide } from "../Cachettes";
 
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil"    },
@@ -178,6 +179,7 @@ export default function Layout() {
           <span style={{ fontWeight:700, fontSize:13, background:"linear-gradient(90deg,#3b82f6,#06b6d4)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent" }}>
             BambuNymous
           </span>
+          <Hide at="header"/>
         </div>
         {/* Chez un copain : rappel discret, retour en un geste. */}
         {friend && <div style={{ padding:"0 12px 8px" }}><FriendChip block/></div>}
@@ -208,6 +210,7 @@ export default function Layout() {
               </span>
             )}
           </div>
+          <Hide at="header"/>
           {title && (
             <h1 style={{ fontSize:15, fontWeight:700, color:"var(--text)", margin:0,
               overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
@@ -252,6 +255,7 @@ export default function Layout() {
               <Icon size={19} /><span>{label}</span>
             </NavLink>
           ))}
+          <span style={{ position:"absolute", top:1, left:"50%", transform:"translateX(-50%)" }}><Hide at="nav" size={9}/></span>
         </nav>
       </div>
 

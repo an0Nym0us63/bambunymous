@@ -233,8 +233,13 @@ async def achievements_egg(name: str, acc=Depends(require_own_account)):
     if name in A.EGGS and name in await A.eggs_seen_by(acc[0]):
         return {"new": False, "already": True, "mine": True, "id": f"egg_{name}"}
     found = await A.eggs_found()
-    if name in A.EGGS and name in found and acc[0] in await A.counted_users():
-        # un compte qui fait avancer la maison (le principal) : ce que la maison a, c'est le sien
+    async def _main() -> bool:
+        from ....db.session import AsyncSessionLocal
+        async with AsyncSessionLocal() as db:
+            return (await _me(acc[0], db))["main"]
+    if name in A.EGGS and name in found and await _main():
+        # le compte principal : ce que la maison a, c'est le sien (pas « un compte qui compte » : un autre
+        # administrateur compte parfois, et ses trouvailles partaient en silence, 24/10/2026)
         await A.egg_seen(acc[0], name)
         return {"new": False, "already": True, "mine": True, "id": f"egg_{name}"}
     if name in A.EGGS and name in found:

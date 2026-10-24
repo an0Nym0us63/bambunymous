@@ -1,3 +1,4 @@
+import { Hide } from "./Cachettes";
 import React, { useEffect, useRef, useState } from "react";
 import { plateRound, plateDoneInRound } from "../utils/queueSort";
 import { useTrackDetail } from "../utils/track";
@@ -238,7 +239,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
         width:"100%", maxWidth:640, height:"92dvh", display:"flex", flexDirection:"column",
         paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
         <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 16px 8px" }}>
-          <span style={{ flex:1, fontSize:11, fontWeight:700, color:"#3b82f6", letterSpacing:0.3 }}>MAKERWORLD</span>
+          <span style={{ flex:1, fontSize:11, fontWeight:700, color:"#3b82f6", letterSpacing:0.3 }}>MAKERWORLD <Hide at="mw-sheet"/></span>
           <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--muted)", fontSize:18, cursor:"pointer" }}>✕</button>
         </div>
         <div style={{ flex:1, overflowY:"auto", padding:"0 16px 20px" }}>
