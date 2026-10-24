@@ -352,12 +352,12 @@
   <h2>À faire : ta file MakerWorld</h2>
   <p>L'onglet <span class="ui">À faire</span> transforme une ou plusieurs <b>collections MakerWorld</b> (par exemple une collection que tu as appelée « À imprimer ») en liste de travail. Pour chaque modèle, l'appli choisit un profil, ses plateaux et, pour chaque couleur, le filament de ton stock le plus proche ; puis elle te dit ce qui est <b>imprimable tout de suite</b> avec ce qui est chargé dans l'AMS, ce qui l'est avec ton stock, et ce qui manque.</p>
   <div class="note"><p>Il faut un compte MakerWorld relié (voir <a href="#makerworld-compte">le compte MakerWorld</a>). Choisir les collections, l'ordre, les quantités et les plans demande d'être admin ou d'avoir le droit MakerWorld ; les autres comptes voient la liste en lecture seule.</p></div>
-  <figure class="phone"><img src="img/impressions-afaire.webp" alt="Onglet À faire : collection choisie, tuiles de totaux, filtres et premier modèle"><figcaption>L'onglet À faire : les totaux puis la liste des modèles.</figcaption></figure>
+  <figure class="phone"><img src="img/impressions-afaire.webp" alt="Onglet À faire : collection choisie, tuiles de totaux, barre Prêt à imprimer et premiers modèles"><figcaption>L'onglet À faire : les totaux, « Prêt à imprimer ? », puis la liste des modèles.</figcaption></figure>
 
   <section id="impressions-a-faire-ajouter">
     <h3>Choisir les collections et ajouter des modèles</h3>
     <ol>
-      <li>Touche <span class="ui">⚙ Choisir</span> à côté de « Collections : ».</li>
+      <li>Touche <span class="ui">⚙ Choisir</span>, à côté des collections déjà retenues (pastilles 📁 bleues en haut de l'onglet).</li>
       <li>Coche une ou plusieurs collections de ton compte MakerWorld (le nombre de modèles est indiqué à droite).</li>
       <li>Touche <span class="ui">Utiliser N collection(s)</span>.</li>
     </ol>
@@ -367,22 +367,24 @@
 
   <section id="impressions-a-faire-totaux">
     <h3>Les totaux</h3>
-    <p>Une grille de petites tuiles résume la liste : nombre de <b>modèles</b>, <b>temps total</b>, <b>filament</b> en grammes, <b>coût estimé</b> (au prix de tes filaments, « — » si un prix manque), puis le nombre de modèles <b>prêts (AMS)</b>, <b>en partie (AMS)</b>, <b>stock OK</b>, <b>à compléter</b> et <b>déjà imprimés</b>.</p>
-    <p>Le sous-onglet <span class="ui">🧵 Filaments pour tout imprimer</span> fait la liste de courses : pour chaque filament retenu, le besoin face au stock (« 320 g / 1 000 g ») et ce qu'il restera, ou ce qu'il manque en rouge. Les couleurs sans aucun équivalent en stock sont listées à part. Si tout est couvert : « Aucun filament à prévoir. »</p>
+    <p>Quatre tuiles résument la liste : nombre de <b>modèles</b>, <b>temps</b> total, <b>filament</b> en grammes, <b>coût</b> estimé (au prix de tes filaments, « — » si un prix manque).</p>
+    <p>Dessous, la carte <b>Prêt à imprimer ?</b> : une barre partagée en couleurs (vert : prêts avec l'AMS, vert clair : en partie, orange : stock OK, rouge : manque), le nombre de modèles <b>déjà imprimés</b>, et une pastille par état avec son nombre : <span class="ui">Tous</span>, <span class="ui">Prêts (AMS)</span>, <span class="ui">En partie</span>, <span class="ui">Stock OK</span>, <span class="ui">Manque</span>. Touche une pastille pour filtrer la liste (une seconde fois pour revenir à tout).</p>
+    <p>Le sous-onglet <span class="ui">🧵 Filaments pour tout imprimer</span> fait la liste de courses : pour chaque filament retenu, le besoin face au stock (« 320 g / 1 000 g », avec une jauge) et ce qu'il restera, ou ce qu'il manque en rouge. Les couleurs sans aucun équivalent en stock sont listées à part. Si tout est couvert : « Aucun filament à prévoir. »</p>
   </section>
 
   <section id="impressions-a-faire-ligne">
     <h3>Lire une ligne : faisable maintenant ?</h3>
     <figure class="phone"><img src="img/impressions-afaire-lignes.webp" alt="Lignes de modèles avec plateaux, filaments, état et quantité"><figcaption>Trois modèles : un prêt, un faisable en partie, un auquel il manque un filament.</figcaption></figure>
     <ul>
-      <li><b>Étiquettes</b> : <b>📌 Retenu</b> si tu as fixé un plan (profil, plateaux, filaments) depuis la fiche du modèle ; <b>Par défaut</b> sinon (profil par défaut, tous les plateaux, filament le plus proche) ; <b>🖨️ En cours · 42 %</b> si le modèle est en train d'imprimer (il remonte alors en tête).</li>
-      <li><b>Sous-ligne</b> : profil, nombre de plateaux retenus, durée, grammes, coût, nombre de fois déjà imprimé.</li>
+      <li><b>En haut à droite</b>, l'état du modèle (voir ci-dessous), aussi rappelé par le liseré de couleur à gauche de la carte.</li>
+      <li><b>Étiquettes</b> : <b>📌 Retenu</b> si tu as fixé un plan (profil, plateaux, filaments) depuis la fiche du modèle ; <b>Par défaut</b> sinon (profil par défaut, tous les plateaux, filament le plus proche) ; <b>🖨️ En cours · 42 %</b> si le modèle est en train d'imprimer (il remonte alors en tête) ; <b>✨ Nouveau</b> ; <b>✓ imprimé 2×</b> s'il a déjà été imprimé.</li>
+      <li><b>Sous-lignes</b> : le profil et le nombre de plateaux retenus, puis la durée, les grammes et le coût en couleur.</li>
       <li><b>Plateaux</b> : un carré numéroté par plateau. Vert = faisable maintenant avec l'AMS ; vert pâle avec coche = déjà imprimé ; gris = un filament manque dans l'AMS ; orange ⏳ = en cours. Suivi de « à lancer : 2, 4 ».</li>
       <li><b>Où tu en es</b> : à côté des carrés, le compte des plateaux retenus déjà faits, <b>série par série</b> : « 2/4 faits », « 4/4 faits ×2 » quand le modèle a été imprimé en entier deux fois. Un modèle que tu refais des mois plus tard repart d'une nouvelle série (« 2e série : 2/4 faits ») : un plateau compte comme fait s'il a été imprimé plus souvent que le moins imprimé des plateaux retenus. La coche et « à lancer » suivent la série en cours.</li>
       <li><b>▶ faisable maintenant</b> : ce que tu peux lancer tout de suite (nombre de plateaux, durée, grammes).</li>
       <li><b>Pastilles des filaments</b> : la couleur du filament retenu ; contour vert = assez dans l'AMS, orange = assez en stock mais pas chargé, rouge = manque.</li>
     </ul>
-    <p>À droite, l'état du modèle :</p>
+    <p>L'état du modèle :</p>
     <dl class="opts">
       <dt>✅ Prêt (AMS)</dt><dd>Tous les filaments choisis sont chargés dans l'AMS, en quantité suffisante.</dd>
       <dt>🟩 2/4 plateaux prêts</dt><dd>Une partie est faisable tout de suite avec l'AMS (des plateaux ou des exemplaires) ; « reste : stock OK » ou « reste : manque » pour le reste.</dd>
@@ -390,20 +392,21 @@
       <dt>🔴 Manque</dt><dd>Un filament manque ou n'a pas d'équivalent dans ton stock.</dd>
       <dt>— Inconnu</dt><dd>La fiche ou le profil n'ont pas pu être lus.</dd>
     </dl>
-    <p><b>Quantité</b> : les boutons <span class="ui">–</span> <span class="ui">×1</span> <span class="ui">+</span> règlent le nombre d'exemplaires voulus (1 à 99) ; besoins et « prêt » en tiennent compte.</p>
+    <p><b>Quantité</b> : en bas à droite, les boutons <span class="ui">–</span> <span class="ui">×1</span> <span class="ui">+</span> règlent le nombre d'exemplaires voulus (1 à 99) ; besoins et « prêt » en tiennent compte. Au-delà d'un exemplaire, une pastille violette « ×4 » s'affiche aussi sur la vignette.</p>
+    <p>En bas de la liste, <span class="ui">ⓘ Comment ça marche</span> déplie un rappel de ce mode d'emploi.</p>
     <p>Touche une ligne pour ouvrir la fiche du modèle. C'est là que tu choisis un profil, retires des plateaux, changes le filament retenu pour une couleur (la correspondance avec le stock compare les couleurs comme l'œil, du « identique » au « couleur différente », et privilégie la même référence et la même finition), puis touches <span class="ui">📌 Retenir pour « À faire »</span>. Le détail est dans le chapitre <a href="#makerworld">MakerWorld</a>.</p>
   </section>
 
   <section id="impressions-a-faire-tri">
     <h3>Filtrer, trier, limiter les comptes</h3>
     <dl class="opts">
-      <dt>Filtres</dt><dd><span class="ui">Tous</span>, <span class="ui">Prêts (AMS)</span>, <span class="ui">En partie</span>, <span class="ui">Stock OK</span>, <span class="ui">Manque</span>, avec leur nombre.</dd>
-      <dt>Trier</dt><dd><b>par priorité</b> (ton ordre, par défaut), <b>le plus de plateaux faisables maintenant</b>, <b>le plus d'heures faisables maintenant</b>, <b>le plus de grammes faisables maintenant</b>, <b>la plus grande part prête</b>. Pratique pour remplir une soirée avec ce qui est déjà chargé.</dd>
+      <dt>Filtres</dt><dd>les pastilles de la carte <b>Prêt à imprimer ?</b> : <span class="ui">Tous</span>, <span class="ui">Prêts (AMS)</span>, <span class="ui">En partie</span>, <span class="ui">Stock OK</span>, <span class="ui">Manque</span>, avec leur nombre. Elles sont grisées pendant les modes ci-dessous.</dd>
+      <dt>Trier (↕)</dt><dd>la liste déroulante sous les onglets : <b>par priorité</b> (ton ordre, par défaut), <b>le plus de plateaux faisables maintenant</b>, <b>le plus d'heures faisables maintenant</b>, <b>le plus de grammes faisables maintenant</b>, <b>la plus grande part prête</b>. Pratique pour remplir une soirée avec ce qui est déjà chargé.</dd>
       <dt><span class="ui">✂ Jusqu'ici</span></dt><dd>Touche ensuite le dernier modèle à compter : totaux et liste de filaments ne portent plus que sur le début de la liste (un trait « ✂ jusqu'ici » marque la limite, les suivants sont grisés). Utile pour préparer « les cinq prochains ».</dd>
       <dt><span class="ui">☑ Choisir</span></dt><dd>Coche les modèles à compter ; totaux et filaments se limitent à eux.</dd>
-      <dt><span class="ui">↕ Réorganiser</span></dt><dd>Fixe l'ordre de priorité avec quatre boutons par ligne (en haut, monter, descendre, en bas), puis <span class="ui">✓ Terminé</span>.</dd>
+      <dt><span class="ui">⇅ Réorganiser</span></dt><dd>Fixe l'ordre de priorité avec quatre boutons par ligne (en haut, monter, descendre, en bas), puis <span class="ui">✓ Terminé</span>.</dd>
     </dl>
-    <p>Ces deux modes de limitation sont mémorisés sur l'appareil ; une bulle en bas propose <span class="ui">Changer</span> ou <span class="ui">Annuler</span>.</p>
+    <p>Les trois modes sont des boutons côte à côte sous le tri. Les deux modes de limitation sont mémorisés sur l'appareil ; une bulle en bas propose <span class="ui">Changer</span> ou <span class="ui">Annuler</span>.</p>
   </section>
 
   <section id="impressions-a-faire-menu">
