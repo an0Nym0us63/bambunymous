@@ -1177,6 +1177,8 @@ function FicheSection({ icon, title, summary, open: open0 = true, children, tone
 // qu'avant (ouvrir, associer, dissocier) ; « Restituer » dans le titre. Cout reel puis normal entre parentheses.
 function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap }) {
   const isAdmin = useIsAdmin();
+  const [open0, setOpen0] = useState(() => { try { return localStorage.getItem("bn-fiche-fils") === "1"; } catch { return false; } });
+  const toggle = () => setOpen0(o => { try { localStorage.setItem("bn-fiche-fils", o ? "0" : "1"); } catch { /* rien */ } return !o; });
   const total = filaments.reduce((t, f) => t + (f.grams_used || 0), 0);
   const hex = f => f.color_hex ? (String(f.color_hex).startsWith("#") ? f.color_hex : `#${f.color_hex}`).slice(0, 7) : "#94a3b8";
   const open = f => {
@@ -1195,19 +1197,23 @@ function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap 
   });
   return (
     <div style={{ borderRadius: 16, background: "var(--surface2)", border: "1px solid var(--border)", padding: "11px 12px", display: "flex", flexDirection: "column", gap: 9 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <div onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
         <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>🧵 Filaments</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{filaments.length} · {gFr(total)}</span>
-        {isAdmin && onRestore && filaments.some(f => f.spool_id) && <button onClick={onRestore} data-tip="Rendre aux bobines une part du poids"
-          style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 800, padding: "3px 10px", borderRadius: 20, cursor: "pointer", background: "rgba(34,197,94,0.14)",
+        <span style={{ marginLeft: "auto" }}/>
+        {isAdmin && onRestore && filaments.some(f => f.spool_id) && <button onClick={e => { e.stopPropagation(); onRestore(); }} data-tip="Rendre aux bobines une part du poids"
+          style={{ fontSize: 11.5, fontWeight: 800, padding: "3px 10px", borderRadius: 20, cursor: "pointer", background: "rgba(34,197,94,0.14)",
             color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)" }}>⚖ Restituer</button>}
+        {/* les bobines manquantes se voient meme replie */}
+        {!open0 && filaments.some(f => !f.spool_id) && <span style={{ fontSize: 11, fontWeight: 800, color: "#d97706" }}>▸ {filaments.filter(f => !f.spool_id).length} à associer</span>}
+        <span style={{ fontSize: 11, color: "var(--muted)", transform: open0 ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>
       </div>
       {/* la repartition du poids */}
       {total > 0 && <div style={{ display: "flex", height: 8, borderRadius: 6, overflow: "hidden", gap: 2 }}>
         {filaments.map((f, i) => <span key={i} data-tip={`${f.filament_translated_name || f.filament_fila_type || f.filament_name || "Filament"} · ${Math.round(100 * (f.grams_used || 0) / total)} %`}
           style={{ flex: `${Math.max(0.02, (f.grams_used || 0) / total)} 1 0`, background: hex(f), boxShadow: "inset 0 0 0 1px rgba(0,0,0,.08)" }}/>)}
       </div>}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      {open0 && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {filaments.map((f, i) => (
           <div key={i} onClick={() => open(f)} onContextMenu={e => { e.preventDefault(); menu(e, f); }}
             onPointerDown={e => { const t = setTimeout(() => { navigator.vibrate && navigator.vibrate(20); menu(e, f); }, 600); e.currentTarget._lpt = t; }}
@@ -1233,7 +1239,7 @@ function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap 
             {isAdmin && <button onClick={e => { e.stopPropagation(); menu(e, f); }} aria-label="Actions du filament"
               style={{ width: 28, height: 28, flexShrink: 0, borderRadius: 9, border: "none", background: "transparent", color: "var(--muted)", cursor: "pointer", fontSize: 15 }}>⋯</button>}
           </div>))}
-      </div>
+      </div>}
     </div>);
 }
 
@@ -1264,6 +1270,12 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selSpool, setSelSpool] = useState(null);
   // le detail du cout : ouvert par defaut (comme l'ancien bloc) ; l'appareil retient le choix
+  // le compte des objets crees (pour l'entree du menu, comme le faisait le bouton)
+  const [objQ, setObjQ] = useState(null);
+  useEffect(() => {
+    if (!isAdmin) return;
+    client.get("/objects/objects/quota", { params: { parent_type: "print", parent_id: pProp.id } }).then(r => setObjQ(r.data)).catch(() => setObjQ(null));
+  }, [pProp.id, refreshKey, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
   const [costOpen, setCostOpen0] = useState(() => { try { return localStorage.getItem("bn-fiche-cost") === "1"; } catch { return false; } });
   const setCostOpen = f => setCostOpen0(o => { const v = typeof f === "function" ? f(o) : f; try { localStorage.setItem("bn-fiche-cost", v ? "1" : "0"); } catch { /* rien */ } return v; });
   const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
@@ -1296,6 +1308,9 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
     items: [
       { icon: "✏️", label: "Éditer", onClick: () => setEditMode(true) },
       { icon: "📣", label: "Partager", hint: "Telegram", onClick: () => setSharing(true) },
+      objQ && objQ.remaining > 0 ? { icon: "📦", label: "Créer des objets", hint: `${objQ.used} / ${objQ.total} déjà créés`,
+        onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine }) }
+        : objQ ? { icon: "📦", label: "Objets : tous créés", hint: `${objQ.used} / ${objQ.total}`, onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine }) } : null,
       groupe && { icon: "⛓", label: "Retirer du groupe", hint: groupe, onClick: handleUngroup },
       (p.source_3mf || p.model_3mf || (p.design_id && p.mw_profile_id)) && "-",
       p.source_3mf && { icon: "⤓", label: "Télécharger le 3MF d'origine", hint: "MakerWorld · à retrancher", onClick: () => download3mf(p.id, "source") },
@@ -1408,8 +1423,6 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
       {fils.length > 0 && <FilamentsV2 filaments={fils} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker}
         onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping}/>}
       {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]}/>}
-      {isAdmin && <ObjectQuotaButton parentType="print" parentId={p.id} label="depuis ce print" refreshKey={refreshKey}
-        onOpen={() => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine })}/>}
       {p.status_note && <FicheSection icon="💬" title="Commentaire" tone="#A855F7">
         <p style={{ fontSize: 13, color: "var(--text)", margin: 0, lineHeight: 1.5 }}>{p.status_note}</p></FicheSection>}
       {(p.job_id || p.design_id) && <FicheSection icon="#" title="Identifiants" open={false}>
