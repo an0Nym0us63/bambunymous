@@ -1132,19 +1132,107 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
 }
 
 // ── Vue Bobines ────────────────────────────────────────────────────────────
-// Pastilles compactes — meme langage visuel que les KPIs de l'Historique.
+// Les chiffres d'une liste, en tuiles (meme dessin que la page Impressions).
+const KPI_ICON = { bobines:"🧵", marques:"🏷️", "en stock":"⚖", valeur:"💶", archivées:"🗄", références:"🎨", types:"🧪", "à commander":"🛒" };
+const lighten = c => `color-mix(in srgb, ${c} 60%, #ffffff)`;
 function KpiBar({ kpis }) {
+  const list = kpis.filter(k => k && k.value !== "—" && k.value != null);
   return (
-    <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-      {kpis.filter(k => k && k.value !== "—" && k.value != null).map(({ label, value, accent }) => {
-        const color = accent || "#94a3b8";
+    <div style={{ display:"grid", gridTemplateColumns:`repeat(${Math.min(Math.max(list.length, 1), 4)}, minmax(0, 1fr))`, gap:6 }}>
+      {list.map(({ label, value, accent }) => {
+        const c = accent || "#94a3b8";
         return (
-          <div key={label} style={{ display:"flex", alignItems:"center", gap:4, padding:"3px 10px",
-            borderRadius:20, background:`${color}18`, border:`1px solid ${color}30` }}>
-            <span style={{ fontSize:12, fontWeight:700, color, fontFamily:"monospace" }}>{value}</span>
-            <span style={{ fontSize:11, color:"var(--muted)" }}>{label}</span>
+          <div key={label} style={{ minWidth:0, padding:"7px 8px", borderRadius:14, border:`1px solid color-mix(in srgb, ${c} 22%, var(--border))`,
+            background:`radial-gradient(90% 70% at 100% 0%, ${c}22, transparent 70%), var(--surface2)`, boxShadow:`0 6px 18px -12px ${c}` }}>
+            <div style={{ fontSize:9.5, fontWeight:800, letterSpacing:".05em", textTransform:"uppercase", color:"var(--muted)", whiteSpace:"nowrap",
+              overflow:"hidden", textOverflow:"ellipsis" }}>{KPI_ICON[label] ? `${KPI_ICON[label]} ` : ""}{label}</div>
+            <div style={{ fontSize:"clamp(13px, 3.9vw, 16px)", fontWeight:900, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+              backgroundImage:`linear-gradient(135deg, ${c}, ${lighten(c)})`, WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{value}</div>
           </div>
         );
+      })}
+    </div>
+  );
+}
+
+// Recherche en pilule, filtres en bouton rond (le nombre de filtres en pastille), ajout en degrade.
+function SearchRow({ q, setQ, placeholder, active = 0, onFilter, addLabel = null, onAdd = null }) {
+  return (
+    <div style={{ display:"flex", gap:6, alignItems:"center" }}>
+      <div style={{ position:"relative", flex:1, minWidth:0 }}>
+        <Search size={15} style={{ position:"absolute", left:14, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
+        <input value={q} onChange={e => setQ(e.target.value)} placeholder={placeholder}
+          style={{ width:"100%", height:40, padding:"0 34px 0 38px", boxSizing:"border-box", background:"var(--surface2)",
+            border:"1px solid var(--border)", borderRadius:20, fontSize:13, color:"var(--text)", outline:"none" }}/>
+        {q && <button onClick={() => setQ("")} aria-label="Effacer la recherche" style={{ position:"absolute", right:6, top:"50%", transform:"translateY(-50%)",
+          width:28, height:28, borderRadius:"50%", border:"none", background:"var(--surface)", color:"var(--muted)", cursor:"pointer" }}>✕</button>}
+      </div>
+      <button onClick={onFilter} aria-label="Filtres et tri" data-tip="Filtres et tri" style={{ position:"relative", width:40, height:40, borderRadius:14, flexShrink:0,
+        cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", border:"1px solid var(--border)",
+        background: active ? "rgba(59,130,246,0.14)" : "var(--surface2)", color: active ? "#3b82f6" : "var(--muted)" }}>
+        <SlidersHorizontal size={16}/>
+        {active > 0 && <span style={{ position:"absolute", top:-5, right:-5, minWidth:18, height:18, padding:"0 5px", borderRadius:9, boxSizing:"border-box",
+          fontSize:10.5, fontWeight:900, color:"#fff", background:"linear-gradient(135deg, #3B82F6, #6366F1)", display:"flex", alignItems:"center",
+          justifyContent:"center", boxShadow:"0 0 0 2px var(--bg)" }}>{active}</span>}
+      </button>
+      {addLabel && onAdd && (
+        <AdminOnly><button onClick={onAdd} style={{ height:40, padding:"0 14px", borderRadius:14, border:"none", flexShrink:0, cursor:"pointer",
+          display:"flex", alignItems:"center", gap:5, fontSize:13, fontWeight:800, color:"#fff",
+          background:"linear-gradient(135deg, #3B82F6, #6366F1)", boxShadow:"0 6px 16px -8px #3B82F6" }}>
+          <Plus size={15}/> {addLabel}</button></AdminOnly>
+      )}
+    </div>
+  );
+}
+
+// Les filtres actifs : une etiquette chacun, ✕ pour l'enlever (comme la page Impressions).
+const STOCK_L = { instock:"En stock", unavailable:"Non disponible" };
+function FilterChips({ filters, setFilters, sort, setSort, defSort }) {
+  const label = Object.fromEntries(SPOOL_SORTS);
+  const drop = (k, v) => setFilters(f => ({ ...f, [k]: (f[k] || []).filter(x => x !== v) }));
+  const chips = [
+    ...(filters.mat || []).map(v => ["🧪", v, () => drop("mat", v)]),
+    ...(filters.sub || []).map(v => ["🏷️", v, () => drop("sub", v)]),
+    ...(filters.brand || []).map(v => ["🏭", v, () => drop("brand", v)]),
+    filters.stock && filters.stock !== "all" && ["📦", STOCK_L[filters.stock] || filters.stock, () => setFilters(f => ({ ...f, stock:"all" }))],
+    sort && sort !== defSort && ["↕", label[sort] || sort, () => setSort(defSort)],
+  ].filter(Boolean);
+  if (!chips.length) return null;
+  return (
+    <div style={{ display:"flex", gap:6, flexWrap:"wrap", alignItems:"center" }}>
+      {chips.map(([ic, l, off], i) => (
+        <button key={i} onClick={off} data-tip="Retirer ce filtre" style={{ display:"inline-flex", alignItems:"center", gap:5, padding:"4px 6px 4px 10px",
+          borderRadius:20, fontSize:12, fontWeight:800, cursor:"pointer", color:"#3b82f6", background:"rgba(59,130,246,0.12)",
+          border:"1px solid rgba(59,130,246,0.3)" }}>
+          {ic} {l}<span style={{ width:18, height:18, borderRadius:"50%", background:"rgba(59,130,246,0.2)", display:"inline-flex", alignItems:"center",
+            justifyContent:"center", fontSize:10 }}>✕</span></button>))}
+      {chips.length > 1 && <button onClick={() => { setFilters({ brand:[], mat:[], sub:[], stock:"all" }); setSort(defSort); }}
+        style={{ padding:"4px 10px", borderRadius:20, fontSize:12, fontWeight:800, cursor:"pointer", border:"none", background:"none", color:"var(--muted)",
+          textDecoration:"underline" }}>Tout effacer</button>}
+    </div>
+  );
+}
+
+function EmptyCard({ icon, text }) {
+  return <div style={{ padding:"26px 16px", borderRadius:18, border:"1px dashed var(--border)", textAlign:"center",
+    background:"radial-gradient(80% 80% at 50% 0%, rgba(59,130,246,0.12), transparent 70%), var(--surface2)" }}>
+    <div style={{ fontSize:30, marginBottom:6 }}>{icon}</div>
+    <p style={{ color:"var(--muted)", fontSize:13, fontWeight:700, margin:0 }}>{text}</p></div>;
+}
+
+// Les onglets de la page, chacun sa couleur (comme Impressions).
+function PageTabs({ tabs, tab, setTab }) {
+  return (
+    <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:16, padding:4, border:"1px solid var(--border)" }}>
+      {tabs.map(t => {
+        const on = tab === t.id;
+        return (
+          <button key={t.id} onClick={() => setTab(t.id)} style={{ flex:"1 1 auto", minWidth:0, padding:"8px 4px", borderRadius:12, fontWeight:800, cursor:"pointer",
+            fontSize:"clamp(10.5px, 3.1vw, 12.5px)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", border:"none",
+            display:"flex", alignItems:"center", justifyContent:"center", gap:5, transition:"all 0.15s",
+            background: on ? `linear-gradient(135deg, ${t.c}, color-mix(in srgb, ${t.c} 70%, #ffffff))` : "transparent",
+            color: on ? "white" : "var(--muted)", boxShadow: on ? `0 6px 16px -6px ${t.c}` : "none" }}>
+            <span style={{ fontSize:"clamp(11px, 3.2vw, 13px)", filter: on ? "none" : "grayscale(.5)" }}>{t.ic}</span>{t.label}</button>);
       })}
     </div>
   );
@@ -1159,73 +1247,51 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
   const barColor = pct > 60 ? "#22c55e" : pct > 35 ? "#f59e0b"
                  : pct > 15 ? "#f97316" : "#ef4444";
   const sub = s.filament_fila_type || s.filament_material;
+  // une bobine blanche (ou tres claire) prend un liseré gris : sinon elle disparait sur le fond clair
+  const main = paleHex(s.filament_color) ? "#94a3b8" : (hexToCss(s.filament_color) || "#94a3b8");
 
   return (
     <Pressable onClick={onClick} menu={menu} className="card-sm"
-      style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative",
-        display:"flex", flexDirection:"column",
-        background:"var(--surface)", border:"1px solid var(--border)" }}>
+      style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative", borderRadius:18,
+        display:"flex", flexDirection:"column", border:`1px solid color-mix(in srgb, ${main} 30%, var(--border))`,
+        background:`radial-gradient(120% 60% at 50% 0%, ${main}2e, transparent 70%), var(--surface)`,
+        boxShadow:`0 10px 22px -16px ${main}` }}>
 
-      {/* Bandeau de couleur en tete : c'est le seul endroit ou la teinte du
-          filament est montree en aplat. Peindre toute la tuile, comme avant,
-          imposait du texte blanc sur des fonds parfois tres clairs et rendait
-          la grille bruyante -- ici la couleur sert d'intercalaire et le reste
-          de la carte respecte le theme. */}
-      <div style={{ height:6, flexShrink:0, ...colorBg(colorsList, s.filament_multicolor_type) }}/>
-
-      {/* Sous-type, comme sur l'accueil */}
-      <p style={{ fontSize:9, fontWeight:700, color:"var(--muted)", textAlign:"center",
-        letterSpacing:"0.04em", textTransform:"uppercase", margin:"7px 6px 0",
+      {/* Sous-type, comme sur l'accueil ; l'emplacement AMS et « a secher » en pastilles de coin */}
+      <p style={{ fontSize:9, fontWeight:800, color:"var(--muted)", textAlign:"center",
+        letterSpacing:"0.05em", textTransform:"uppercase", margin:"8px 24px 0",
         height:12, lineHeight:"12px", overflow:"hidden", whiteSpace:"nowrap",
         textOverflow:"ellipsis" }}>
-        {sub || "\u00A0"}
+        {sub || " "}
       </p>
+      {s.ams_tray && <span data-tip={`Dans l'AMS · ${s.ams_tray}`} style={{ position:"absolute", top:6, left:6, fontSize:8.5, fontWeight:900, padding:"1px 5px",
+        borderRadius:20, color:"#fff", background:"linear-gradient(135deg, #3B82F6, #6366F1)" }}>{s.ams_tray}</span>}
+      {s.needs_drying && <span data-tip="À sécher" style={{ position:"absolute", top:5, right:6, fontSize:10 }}>💧</span>}
 
       {/* La bobine, meme dessin qu'au slot AMS de l'accueil */}
-      <div style={{ display:"flex", justifyContent:"center", margin:"2px 0 0" }}>
-        <SpoolSVG colors={colorsList} empty={false} size={72}
+      <div style={{ display:"flex", justifyContent:"center", margin:"3px 0 0", filter:`drop-shadow(0 6px 10px ${main}55)` }}>
+        <SpoolSVG colors={colorsList} empty={false} size={70}
           type={s.filament_multicolor_type}/>
       </div>
 
-      <div style={{ padding:"0 9px 9px", display:"flex", flexDirection:"column", gap:5 }}>
-        {/* Jauge + poids chiffre : la barre pour l'oeil, le detail pour la
-            decision d'impression. */}
-        <div>
-          {/* Bobine vide ou presque : pastille au bout de la jauge (en haut a
-              droite elle chevauchait le sous-type, a cote du poids elle faisait
-              passer le « g » a la ligne) */}
-          <div style={{ display:"flex", alignItems:"center", gap:4 }}>
-            <div style={{ flex:1, height:5, borderRadius:3, background:"var(--surface2)",
-              overflow:"hidden", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.08)" }}>
-              <div style={{ width:`${pct}%`, height:"100%", background:barColor,
-                borderRadius:3, transition:"width 0.5s" }}/>
-            </div>
-            {rem != null && pct <= 15 && (
-              <span style={{ fontSize:8, fontWeight:800, padding:"1px 4px", borderRadius:20, lineHeight:1.3,
-                background:"#ef4444", color:"white", flexShrink:0 }}>
-                {pct}%
-              </span>
-            )}
-          </div>
-          <p style={{ fontSize:9.5, color:"var(--muted)", margin:"4px 0 0", textAlign:"center",
-            whiteSpace:"nowrap", fontFamily:"'JetBrains Mono',ui-monospace,monospace" }}>
-            <span style={{ color:"var(--text)", fontWeight:700 }}>
-              {rem != null ? `${Math.round(rem)} g` : "—"}
-            </span>
-            <span style={{ opacity:0.6 }}> / {total} g</span>
-          </p>
+      <div style={{ padding:"2px 9px 10px", display:"flex", flexDirection:"column", gap:5 }}>
+        {/* Le poids en couleur, le pourcentage en pastille, puis la jauge */}
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:4, whiteSpace:"nowrap" }}>
+          <span style={{ fontSize:13, fontWeight:900, backgroundImage:`linear-gradient(135deg, ${barColor}, ${lighten(barColor)})`,
+            WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" }}>{rem != null ? `${Math.round(rem)} g` : "—"}</span>
+          {rem != null && <span style={{ fontSize:8.5, fontWeight:900, padding:"1px 5px", borderRadius:20, color:"#fff", background:barColor }}>{pct}%</span>}
         </div>
+        <div style={{ height:5, borderRadius:5, background:"var(--surface2)", overflow:"hidden", boxShadow:"inset 0 0 0 1px var(--border)" }}>
+          <div style={{ width:`${pct}%`, height:"100%", borderRadius:5, transition:"width 0.5s",
+            background:`linear-gradient(90deg, ${barColor}, ${lighten(barColor)})` }}/>
+        </div>
+        <div style={{ fontSize:9, fontWeight:700, color:"var(--muted)", textAlign:"center", marginTop:-2 }}>sur {total} g</div>
 
         {/* Nom sur deux lignes fixes : sans hauteur imposee, les tuiles d'une
             meme rangee se decalent des qu'un nom passe a la ligne. */}
-        {/* Hauteur reservee sur le CONTENEUR, centrage dedans. Le tronquage a
-            deux lignes impose display:-webkit-box au paragraphe, qui aligne son
-            texte en haut : un nom d'une seule ligne laissait donc un blanc sous
-            lui. Le conteneur flex remet l'ensemble au milieu sans renoncer au
-            tronquage ni a la hauteur fixe qui aligne les tuiles entre elles. */}
         <div style={{ height:"2.6em", display:"flex", alignItems:"center",
           justifyContent:"center" }}>
-          <p style={{ fontWeight:700, fontSize:11.5, color:"var(--text)", margin:0,
+          <p style={{ fontWeight:800, fontSize:11.5, color:"var(--text)", margin:0,
             lineHeight:"1.3", maxHeight:"2.6em", overflow:"hidden", textAlign:"center",
             display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
             {s.filament_translated_name || s.filament_name}
@@ -1233,7 +1299,7 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         </div>
 
         {s.filament_manufacturer && (
-          <p style={{ fontSize:9.5, color:"var(--muted)", margin:"-2px 0 0",
+          <p style={{ fontSize:9.5, fontWeight:600, color:"var(--muted)", margin:"-3px 0 0",
             textAlign:"center", overflow:"hidden", whiteSpace:"nowrap",
             textOverflow:"ellipsis" }}>
             {s.filament_manufacturer}
@@ -1243,10 +1309,10 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         {/* Emplacement en pastille pleine largeur : c'est l'info qu'on cherche
             quand on veut aller chercher la bobine physiquement. */}
         {s.location && (
-          <span style={{ fontSize:9, fontWeight:600, padding:"3px 6px", borderRadius:6,
-            background:"var(--surface2)", color:"var(--muted)", textAlign:"center",
+          <span style={{ fontSize:9, fontWeight:800, padding:"3px 6px", borderRadius:20,
+            background:"rgba(139,92,246,0.14)", color:"#8B5CF6", textAlign:"center",
             overflow:"hidden", whiteSpace:"nowrap", textOverflow:"ellipsis" }}>
-            {s.location}
+            📍 {s.location}
           </span>
         )}
       </div>
@@ -1254,7 +1320,6 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
     </Pressable>
   );
 }
-
 
 const SPOOL_SORTS = [
   ["recent",    "Plus récent"],
@@ -1291,33 +1356,33 @@ function tally(items, get) {
  * triées par fréquence — les trois marques réellement utilisées remontent en
  * tête — et repliées au-delà de huit, sinon vingt sous-types faisaient un mur.
  */
-function ChipGroup({ label, options, selected, onToggle }) {
+function ChipGroup({ label, icon = null, c = "#3B82F6", options, selected, onToggle }) {
   const [expanded, setExpanded] = useState(false);
   if (!options.length) return null;
   const LIMIT = 8;
   const shown = expanded ? options : options.slice(0, LIMIT);
   const hidden = options.length - shown.length;
   return (
-    <div>
-      <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase",
-        letterSpacing:"0.06em", margin:"0 0 6px" }}>{label}</p>
-      <div style={{ display:"flex", flexWrap:"wrap", gap:5 }}>
+    <div style={{ padding:"11px 12px", borderRadius:16, border:`1px solid ${c}33`, background:`linear-gradient(160deg, ${c}14, transparent 55%), var(--surface2)` }}>
+      <p style={{ display:"flex", alignItems:"center", gap:7, fontSize:12.5, fontWeight:900, color:"var(--text)", margin:"0 0 8px" }}>
+        {icon && <span style={{ width:24, height:24, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, background:`${c}26` }}>{icon}</span>}
+        {label}{selected.length > 0 && <span style={{ fontSize:11, fontWeight:900, color:c }}>· {selected.length}</span>}</p>
+      <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
         {shown.map(([v, n]) => {
           const on = selected.includes(v);
           return (
             <button key={v} onClick={()=>onToggle(v)}
-              style={{ padding:"5px 10px", borderRadius:20, fontSize:11, fontWeight:600,
-                cursor:"pointer", whiteSpace:"nowrap",
-                border:"1px solid " + (on ? "#3b82f6" : "var(--border)"),
-                background: on ? "rgba(59,130,246,0.15)" : "transparent",
-                color: on ? "#60a5fa" : "var(--muted)" }}>
-              {v}<span style={{ opacity:0.55, marginLeft:5 }}>{n}</span>
+              style={{ padding:"6px 11px", borderRadius:20, fontSize:12, fontWeight:800,
+                cursor:"pointer", whiteSpace:"nowrap", border: on ? "1px solid transparent" : "1px solid var(--border)",
+                background: on ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "var(--surface)",
+                color: on ? "#fff" : "var(--text2)", boxShadow: on ? `0 6px 14px -8px ${c}` : "none" }}>
+              {v}<span style={{ opacity:0.7, marginLeft:5 }}>{n}</span>
             </button>
           );
         })}
         {hidden > 0 && (
           <button onClick={()=>setExpanded(true)}
-            style={{ padding:"5px 10px", borderRadius:20, fontSize:11, fontWeight:600,
+            style={{ padding:"6px 11px", borderRadius:20, fontSize:12, fontWeight:800,
               cursor:"pointer", border:"1px dashed var(--border)",
               background:"transparent", color:"var(--muted)" }}>
             +{hidden}
@@ -1357,64 +1422,78 @@ function FilterSortSheet({ allItems, getFamily, filters, sort, onApply, onClose 
     setFs(prev => prev.filter(v => ok.has(v)));
   }, [subs]);
 
-  const iStyle = { background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:8,
-    padding:"8px 10px", fontSize:12, color:"var(--text)", outline:"none", width:"100%" };
-
-  const activeCount = fb.length + fm.length + fs.length;
+  const activeCount = fb.length + fm.length + fs.length + (fst !== "all" ? 1 : 0);
+  const card = (c) => ({ padding:"11px 12px", borderRadius:16, border:`1px solid ${c}33`, background:`linear-gradient(160deg, ${c}14, transparent 55%), var(--surface2)` });
+  const head = (ic, l, c) => <p style={{ display:"flex", alignItems:"center", gap:7, fontSize:12.5, fontWeight:900, color:"var(--text)", margin:"0 0 8px" }}>
+    <span style={{ width:24, height:24, borderRadius:8, display:"flex", alignItems:"center", justifyContent:"center", fontSize:12, background:`${c}26` }}>{ic}</span>{l}</p>;
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.45)", zIndex:300, display:"flex", alignItems:"flex-end" }}
+    <div data-no-pull="" style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.55)", zIndex:300, display:"flex", alignItems:"flex-end", justifyContent:"center" }}
       onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", background:"var(--sheet-bg)",
-        borderRadius:"20px 20px 0 0", padding:"20px 16px 32px", display:"flex", flexDirection:"column", gap:14 }}>
-        <div style={{ width:36, height:4, borderRadius:2, background:"var(--border)", margin:"0 auto 4px" }}/>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <span style={{ fontWeight:700, fontSize:15, color:"var(--text)" }}>Filtres & tri</span>
-          {activeCount > 0 && <button onClick={()=>{setFb([]);setFm([]);setFs([]);}}
-            style={{ fontSize:11, color:"#60a5fa", background:"none", border:"none", cursor:"pointer" }}>
-            Effacer filtres
-          </button>}
+      <div onClick={e=>e.stopPropagation()} style={{ width:"100%", maxWidth:600, maxHeight:"88dvh", background:"var(--sheet-bg)", overflow:"hidden",
+        borderRadius:"22px 22px 0 0", display:"flex", flexDirection:"column" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10, padding:"16px 16px 12px", background:"linear-gradient(135deg, rgba(59,130,246,0.22), transparent 70%)" }}>
+          <span style={{ width:38, height:38, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", color:"#fff",
+            background:"linear-gradient(135deg, #3B82F6, #6366F1)" }}><SlidersHorizontal size={18}/></span>
+          <span style={{ flex:1, fontWeight:900, fontSize:16, color:"var(--text)" }}>Filtres & tri
+            {activeCount > 0 && <span style={{ marginLeft:8, fontSize:11.5, fontWeight:900, color:"#fff", padding:"1px 8px", borderRadius:20,
+              background:"linear-gradient(135deg, #3B82F6, #6366F1)" }}>{activeCount}</span>}</span>
+          <button onClick={onClose} aria-label="Fermer" style={{ width:34, height:34, borderRadius:"50%", border:"1px solid var(--border)",
+            background:"var(--surface2)", color:"var(--text2)", fontSize:15, cursor:"pointer" }}>✕</button>
         </div>
 
-        {/* Tri */}
-        <div>
-          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:"0 0 8px" }}>Trier par</p>
-          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-            {SPOOL_SORTS.map(([id,label]) => (
-              <button key={id} onClick={()=>setSo(id)}
-                style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer", border:"none",
-                  background:so===id?"#3b82f6":"var(--surface2)",
-                  color:so===id?"white":"var(--muted)" }}>
-                {label}
-              </button>
-            ))}
+        <div style={{ flex:1, overflowY:"auto", padding:"4px 14px 14px", display:"flex", flexDirection:"column", gap:10 }}>
+          {/* Tri */}
+          <div style={card("#8B5CF6")}>
+            {head("↕", "Trier par", "#8B5CF6")}
+            <div style={{ display:"grid", gridTemplateColumns:"repeat(2, minmax(0, 1fr))", gap:6 }}>
+              {SPOOL_SORTS.map(([id,label]) => (
+                <button key={id} onClick={()=>setSo(id)}
+                  style={{ padding:"8px 10px", borderRadius:12, fontSize:12, fontWeight:800, cursor:"pointer", textAlign:"left",
+                    border: so===id ? "1px solid transparent" : "1px solid var(--border)",
+                    background: so===id ? "linear-gradient(135deg, #8B5CF6, #A855F7)" : "var(--surface)",
+                    color: so===id ? "white" : "var(--text2)" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
 
-        {/* Filtres */}
-        <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
-          <p style={{ fontSize:10, color:"var(--muted)", textTransform:"uppercase", letterSpacing:"0.06em", margin:0 }}>Filtrer</p>
-          <ChipGroup label="Matière"   options={fams}   selected={fm} onToggle={toggle(setFm)}/>
+          {/* Disponibilite */}
+          <div style={card("#22C55E")}>
+            {head("📦", "Disponibilité", "#22C55E")}
+            <div style={{ display:"flex", gap:3, padding:3, borderRadius:14, background:"var(--surface)", border:"1px solid var(--border)" }}>
+              {[["all","Tous"],["instock","En stock"],["unavailable","Non disponible"]].map(([id,label])=>(
+                <button key={id} onClick={()=>setFst(id)}
+                  style={{ flex:1, padding:"7px 4px", borderRadius:11, fontSize:12, fontWeight:800, cursor:"pointer", border:"none",
+                    background: fst===id ? "linear-gradient(135deg, #22C55E, #16A34A)" : "transparent", color: fst===id ? "white" : "var(--muted)" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Filtres */}
+          <ChipGroup label="Matière" icon="🧪" c="#F59E0B" options={fams} selected={fm} onToggle={toggle(setFm)}/>
           {subs.length > 1 && (
-            <ChipGroup label="Sous-type" options={subs}  selected={fs} onToggle={toggle(setFs)}/>
+            <ChipGroup label="Sous-type" icon="🏷️" c="#EC4899" options={subs} selected={fs} onToggle={toggle(setFs)}/>
           )}
-          <ChipGroup label="Marque"    options={brands} selected={fb} onToggle={toggle(setFb)}/>
-          <div style={{ display:"flex", gap:6 }}>
-            {[["all","Tous"],["instock","En stock"],["unavailable","Non disponible"]].map(([id,label])=>(
-              <button key={id} onClick={()=>setFst(id)}
-                style={{ flex:1, padding:"7px", borderRadius:8, fontSize:11, fontWeight:600, cursor:"pointer", border:"none",
-                  background:fst===id?"#3b82f6":"var(--surface2)", color:fst===id?"white":"var(--muted)" }}>
-                {label}
-              </button>
-            ))}
-          </div>
+          <ChipGroup label="Marque" icon="🏭" c="#06B6D4" options={brands} selected={fb} onToggle={toggle(setFb)}/>
         </div>
 
-        <button onClick={()=>onApply({brand:fb,mat:fm,sub:fs,stock:fst},so)}
-          style={{ padding:"12px", borderRadius:12, fontSize:14, fontWeight:700,
-            background:"#3b82f6", color:"white", border:"none", cursor:"pointer" }}>
-          Appliquer
-        </button>
+        {/* le pied, toujours visible */}
+        <div style={{ display:"flex", gap:8, padding:"10px 14px calc(10px + env(safe-area-inset-bottom, 0px))", borderTop:"1px solid var(--border)" }}>
+          <button onClick={()=>{ setFb([]); setFm([]); setFs([]); setFst("all"); }} disabled={!activeCount}
+            style={{ flex:1, padding:"12px", borderRadius:12, fontSize:13.5, fontWeight:800, cursor:"pointer",
+              background:"var(--surface2)", border:"1px solid var(--border)", color: activeCount ? "var(--text)" : "var(--muted)" }}>
+            Tout effacer
+          </button>
+          <button onClick={()=>onApply({brand:fb,mat:fm,sub:fs,stock:fst},so)}
+            style={{ flex:2, padding:"12px", borderRadius:12, fontSize:13.5, fontWeight:800,
+              background:"linear-gradient(135deg, #3B82F6, #6366F1)", color:"white", border:"none", cursor:"pointer", boxShadow:"0 8px 18px -10px #3B82F6" }}>
+            Appliquer
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1429,12 +1508,13 @@ function SpoolsView({ filaments, showArchived }) {
     const name = s.filament_translated_name || s.filament_name || `Bobine #${s.id}`;
     return {
       title: name, subtitle: `#${s.id}${s.remaining_weight_g != null ? ` · ${Math.round(s.remaining_weight_g)} g` : ""}`,
+      color: paleHex(s.filament_color) ? "#94a3b8" : (hexToCss(s.filament_color) || "#3B82F6"),
       items: [
-        { icon: "📄", label: "Ouvrir la bobine", onClick: () => setSelected(s) },
-        fil && { icon: "🧵", label: "Voir le filament", onClick: () => setSelFil(fil) },
-        isAdmin && fil && { icon: "＋", label: "Ajouter une bobine de ce filament", onClick: () => setShowAdd(fil.id) },
+        { icon: "📄", label: "Ouvrir la bobine", tone: "#3B82F6", onClick: () => setSelected(s) },
+        fil && { icon: "🧵", label: "Voir le filament", tone: "#EC4899", onClick: () => setSelFil(fil) },
+        isAdmin && fil && { icon: "＋", label: "Ajouter une bobine de ce filament", tone: "#22C55E", onClick: () => setShowAdd(fil.id) },
         isAdmin && !s.archived && "-",
-        isAdmin && !s.archived && { icon: "📦", label: "Archiver…", hint: "Quantité remise à 0, sort du stock", onClick: async () => {
+        isAdmin && !s.archived && { icon: "📦", label: "Archiver…", hint: "Quantité remise à 0, sort du stock", tone: "#64748B", onClick: async () => {
           if (!(await showConfirm(`Archiver la bobine #${s.id} ? Elle passera en Archives avec une quantité remise à 0 et sortira du stock.`,
             { confirmLabel: "Archiver" }))) return;
           try { await client.delete(`/filaments/spools/${s.id}`); load(); }
@@ -1522,7 +1602,8 @@ function SpoolsView({ filaments, showArchived }) {
     return res;
   }, [allSpools, q, filters, sort]);
 
-  const activeFilters = (filters.brand?.length||0) + (filters.mat?.length||0) + (filters.sub?.length||0);
+  const activeFilters = (filters.brand?.length||0) + (filters.mat?.length||0) + (filters.sub?.length||0)
+    + (filters.stock && filters.stock !== "all" ? 1 : 0);
 
   // KPIs dynamiques (recalculés à chaque changement de spools filtrés)
   const kpis = useMemo(() => {
@@ -1547,29 +1628,12 @@ function SpoolsView({ filaments, showArchived }) {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
       <KpiBar kpis={kpis}/>
-      <div style={{ display:"flex", gap:8 }}>
-        <div style={{ position:"relative", flex:1 }}>
-          <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Rechercher : nom, marque, type (silk…), couleur, code…"
-            style={{ ...inp, paddingLeft:36 }} onFocus={inpFocus} onBlur={inpBlur}/>
-        </div>
-        <button onClick={()=>setFilterOpen(true)}
-          style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px",
-            background: activeFilters > 0 ? "#3b82f6" : "var(--surface2)",
-            color: activeFilters > 0 ? "white" : "var(--text)",
-            border:"1px solid var(--border)", borderRadius:8, fontSize:12, cursor:"pointer", flexShrink:0 }}>
-          <SlidersHorizontal size={14}/>
-          {activeFilters > 0 ? `Filtres (${activeFilters})` : "Filtres"}
-        </button>
-        {/* Masque dans l'onglet Archivees : on y consulte un historique, une
-            bobine neuve n'a aucune raison d'y naitre -- elle apparaitrait
-            aussitot dans l'onglet Stock, hors de la vue en cours. */}
-        {!showArchived && (
-          <AdminOnly><button onClick={()=>setShowAdd(true)} style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", background:"#3b82f6", color:"white", border:"none", borderRadius:8, fontSize:13, cursor:"pointer", flexShrink:0 }}>
-            <Plus size={14}/> Bobine
-          </button></AdminOnly>
-        )}
-      </div>
+      {/* Pas de « + Bobine » dans l'onglet Archivees : on y consulte un historique, une
+          bobine neuve n'a aucune raison d'y naitre -- elle apparaitrait
+          aussitot dans l'onglet Stock, hors de la vue en cours. */}
+      <SearchRow q={q} setQ={setQ} placeholder="Nom, marque, type (silk…), couleur, code…" active={activeFilters}
+        onFilter={() => setFilterOpen(true)} addLabel={showArchived ? null : "Bobine"} onAdd={() => setShowAdd(true)}/>
+      <FilterChips filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} defSort="recent"/>
       {filterOpen && (
         <FilterSortSheet
           allItems={allSpools}
@@ -1583,7 +1647,8 @@ function SpoolsView({ filaments, showArchived }) {
       {/* 104px mini : trois colonnes des 360px de large, donc sur les plus
           petits telephones aussi, et la grille s'elargit ensuite d'elle-meme
           sur tablette et bureau -- aucun point de rupture a maintenir. */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(104px,1fr))", gap:8 }}>
+      {!loading && !spools.length && <EmptyCard icon={showArchived ? "🗄" : "🧵"} text={allSpools.length ? "Aucune bobine ne correspond." : showArchived ? "Aucune bobine archivée." : "Aucune bobine en stock."}/>}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(108px,1fr))", gap:8 }}>
         {spools.map(s => {
           const colorsList = parseColorsList(s.filament_color, s.filament_colors_array);
           return (
@@ -1887,37 +1952,46 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
 // Stock lisible : grammes sous le kilo, kilos au-dela.
 const fmtStock = (g) => g >= 1000 ? `${(g / 1000).toFixed(2).replace(".", ",")} kg` : `${Math.round(g)} g`;
 
+// une teinte tres claire (blanc, ivoire…) se perd sur un fond clair : elle garde un liseré
+const paleHex = h => { const m = /^#?([0-9a-f]{6})/i.exec(h || ""); if (!m) return false; const n = parseInt(m[1], 16);
+  return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.8; };
+
 function FilamentCard({ f, onClick, extra = null, menu, onLong }) {
   const colorsList = parseColorsList(f.color, f.colors_array);
   const flt = "drop-shadow(0 1px 4px rgba(0,0,0,0.95)) drop-shadow(0 2px 10px rgba(0,0,0,0.6))";
+  const glass = { fontSize:9, fontWeight:800, padding:"2px 7px", borderRadius:20, whiteSpace:"nowrap", flexShrink:0,
+    background:"rgba(15,23,42,0.38)", color:"rgba(255,255,255,0.92)", backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)" };
+  const pale = paleHex(f.color);
   return (
     <Pressable onClick={onClick} menu={menu} onLong={onLong} className="card-sm"
-      style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative" }}>
-      {/* fond couleur (damier de transparence géré par colorBg) */}
+      style={{ overflow:"hidden", cursor:"pointer", padding:0, position:"relative", borderRadius:18, minHeight:96,
+        boxShadow:`0 10px 22px -14px ${hexToCss(f.color) || "#000"}`, border: pale ? "1px solid rgba(0,0,0,0.18)" : "1px solid transparent" }}>
+      {/* fond couleur (damier de transparence géré par colorBg), un reflet en haut */}
       <div style={{ position:"absolute", inset:0, ...colorBg(colorsList, f.multicolor_type) }}/>
-      <div style={{ position:"relative", padding:"8px 10px 28px", display:"flex", flexDirection:"column", gap:0 }}>
+      <div style={{ position:"absolute", inset:0, background:"linear-gradient(160deg, rgba(255,255,255,0.22), transparent 45%, rgba(0,0,0,0.25))" }}/>
+      {f.to_order && <span data-tip="À commander" style={{ ...glass, position:"absolute", top:7, right:7, background:"rgba(249,115,22,0.85)" }}>🛒</span>}
+      <div style={{ position:"relative", padding:"10px 11px 32px", display:"flex", flexDirection:"column", gap:0 }}>
         {/* Meme centrage que la grille des bobines : le tronquage
             alignait les noms d'une seule ligne en haut du bloc. */}
-        <div style={{ height:"2.7em", margin:"0 0 7px", display:"flex",
+        <div style={{ height:"2.7em", margin:"0 0 7px", display:"flex", paddingRight: f.to_order ? 22 : 0,
           alignItems:"center" }}>
-          <p style={{ fontWeight:600, fontSize:11, color:"white", margin:0,
+          <p style={{ fontWeight:800, fontSize:12.5, color:"white", margin:0,
             lineHeight:"1.35", maxHeight:"2.7em", overflow:"hidden",
             display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical",
-            fontFamily:"'Inter','DM Sans','Segoe UI',system-ui,sans-serif",
             letterSpacing:"0.01em", filter:flt }}>
             {f.translated_name || f.name}
           </p>
         </div>
-        <div style={{ display:"flex", gap:3, flexWrap:"nowrap", overflow:"hidden", height:16, alignItems:"center" }}>
-          {f.manufacturer && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", whiteSpace:"nowrap", flexShrink:0 }}>{f.manufacturer}</span>}
-          {(f.fila_type||f.material) && <span style={{ fontSize:8, fontWeight:500, padding:"1px 5px", borderRadius:3, background:"rgba(0,0,0,0.20)", color:"rgba(255,255,255,0.75)", whiteSpace:"nowrap", flexShrink:0 }}>{f.fila_type||f.material}</span>}
+        <div style={{ display:"flex", gap:4, flexWrap:"nowrap", overflow:"hidden", alignItems:"center" }}>
+          {f.manufacturer && <span style={glass}>{f.manufacturer}</span>}
+          {(f.fila_type||f.material) && <span style={{ ...glass, background:"rgba(15,23,42,0.28)" }}>{f.fila_type||f.material}</span>}
         </div>
       </div>
       {/* `extra` (galerie : nombre d'impressions) REMPLACE le stock : les deux
           cote a cote se chevauchaient, et la galerie n'a que faire des bobines. */}
-      <span style={{ position:"absolute", bottom:6, left:8, fontSize:8, fontWeight:500, background:"rgba(0,0,0,0.28)", color:"rgba(255,255,255,0.85)", padding:"1px 7px", borderRadius:20 }}>
+      <span style={{ ...glass, position:"absolute", bottom:8, left:10, fontSize:9.5 }}>
         {extra != null ? extra : (<>
-          {f.active_spool_count>0 ? `${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "0 bobine"}
+          {f.active_spool_count>0 ? `🧵 ${f.active_spool_count} bobine${f.active_spool_count>1?"s":""}` : "0 bobine"}
           {f.active_spool_count>0 && f.remaining_weight_total_g > 0 && ` · ${fmtStock(f.remaining_weight_total_g)}`}
         </>)}
       </span>
@@ -2118,9 +2192,10 @@ function FilamentsView() {
   const filMenu = f => ({
     title: f.translated_name || f.name || `Filament #${f.id}`,
     subtitle: [f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ") || null,
+    color: paleHex(f.color) ? "#94a3b8" : (hexToCss(f.color) || "#8B5CF6"),
     items: [
-      { icon: "📄", label: "Ouvrir", onClick: () => setSelectedFil(f) },
-      isAdmin && { icon: "＋", label: "Ajouter une bobine", onClick: () => setAddFor(f.id) },
+      { icon: "📄", label: "Ouvrir", tone: "#3B82F6", onClick: () => setSelectedFil(f) },
+      isAdmin && { icon: "＋", label: "Ajouter une bobine", tone: "#22C55E", onClick: () => setAddFor(f.id) },
     ],
   });
   const [allFilaments, setAllFilaments] = useState([]);
@@ -2171,7 +2246,8 @@ function FilamentsView() {
     });
   }, [allFilaments, q, filters, sort]);
 
-  const activeFilters = (filters.brand?.length||0) + (filters.mat?.length||0) + (filters.sub?.length||0);
+  const activeFilters = (filters.brand?.length||0) + (filters.mat?.length||0) + (filters.sub?.length||0)
+    + (filters.stock && filters.stock !== "all" ? 1 : 0);
 
   const kpis = useMemo(() => {
     const marques = new Set(filaments.map(f => f.manufacturer).filter(Boolean)).size;
@@ -2190,25 +2266,9 @@ function FilamentsView() {
   return (
     <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
       <KpiBar kpis={kpis}/>
-      <div style={{ display:"flex", gap:8 }}>
-        <div style={{ position:"relative", flex:1 }}>
-          <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Nom, marque, code couleur…"
-            style={{ ...inp, paddingLeft:36 }} onFocus={inpFocus} onBlur={inpBlur}/>
-        </div>
-        <button onClick={()=>setFilterOpen(true)}
-          style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px",
-            background:activeFilters>0?"#3b82f6":"var(--surface2)", color:activeFilters>0?"white":"var(--text)",
-            border:"1px solid var(--border)", borderRadius:8, fontSize:12, cursor:"pointer", flexShrink:0 }}>
-          <SlidersHorizontal size={14}/>{activeFilters>0?` Filtres (${activeFilters})`:" Filtres"}
-        </button>
-        <AdminOnly><button onClick={() => setCreateOpen(true)}
-          style={{ padding:"8px 14px", borderRadius:10, background:"#3b82f6", border:"none",
-            color:"white", fontSize:13, fontWeight:700, cursor:"pointer",
-            display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
-          <Plus size={14}/> Filament
-        </button></AdminOnly>
-      </div>
+      <SearchRow q={q} setQ={setQ} placeholder="Nom, marque, code couleur…" active={activeFilters}
+        onFilter={() => setFilterOpen(true)} addLabel="Filament" onAdd={() => setCreateOpen(true)}/>
+      <FilterChips filters={filters} setFilters={setFilters} sort={sort} setSort={setSort} defSort="name"/>
       {filterOpen && (
         <FilterSortSheet allItems={allFilaments} getFamily={getFamilyF} filters={filters} sort={sort}
           onApply={(f,s)=>{ setFilters(f); if(s) setSort(s); setFilterOpen(false); }}
@@ -2220,7 +2280,7 @@ function FilamentsView() {
       ) : (
         <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))", gap:10 }}>
           {filaments.map(f => <FilamentCard key={f.id} f={f} onClick={() => setSelectedFil(f)} menu={() => filMenu(f)}/>)}
-          {!filaments.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
+          {!filaments.length && <div style={{ gridColumn:"1/-1" }}><EmptyCard icon="🎨" text="Aucun filament"/></div>}
         </div>
       )}
       {selectedFil && <FilamentSheet f={selectedFil} onClose={() => setSelectedFil(null)}
@@ -2707,6 +2767,8 @@ export function FilamentSheetFromSpool({ filamentId, spoolId, filamentColorHex, 
   return <SpoolBottomSheet spool={spool} onClose={onClose} onArchive={onClose} onDelete={onClose}/>;
 }
 
+const GAL_DEF_SORT = "hue";     // la galerie se lit par teinte
+
 export default function Filaments() {
   const [tab, setTab] = useUrlTab("tab", "spools", ["spools", "archived", "catalog", "gallery"]);
   const [searchParams, setSearchParams] = useSearchParams();
@@ -2719,7 +2781,7 @@ export default function Filaments() {
   const [galQ, setGalQ] = useState("");
   const [galFilterOpen, setGalFilterOpen] = useState(false);
   const [galFilters, setGalFilters] = useState({ brand:[], mat:[], sub:[], stock:"all" });
-  const [galSort, setGalSort] = useState("hue");
+  const [galSort, setGalSort] = useState(GAL_DEF_SORT);
   const [galSelectMode, setGalSelectMode] = useState(false);
   const [galPreselect, setGalPreselect] = useState(null);   // filament coche en arrivant de la vue Photos
   const [galSelected, setGalSelected] = useState(null);
@@ -2851,13 +2913,14 @@ export default function Filaments() {
       .then(r => setPrintCounts(r.data || {})).catch(() => {});
   }, [tab]);
 
-  const galActiveFilters = (galFilters.brand?.length||0) + (galFilters.mat?.length||0) + (galFilters.sub?.length||0);
+  const galActiveFilters = (galFilters.brand?.length||0) + (galFilters.mat?.length||0) + (galFilters.sub?.length||0)
+    + (galFilters.stock && galFilters.stock !== "all" ? 1 : 0);
 
   const tabs = [
-    { id:"spools",   label:"Stock" },
-    { id:"archived", label:"Archivées" },
-    { id:"catalog",  label:"Filaments" },
-    { id:"gallery",  label:"Galerie" },
+    { id:"spools",   label:"Stock",     ic:"🧵", c:"#3B82F6" },
+    { id:"archived", label:"Archivées", ic:"🗄", c:"#64748B" },
+    { id:"catalog",  label:"Filaments", ic:"🎨", c:"#8B5CF6" },
+    { id:"gallery",  label:"Galerie",   ic:"🖼️", c:"#EC4899" },
   ];
 
   return (
@@ -2912,36 +2975,14 @@ export default function Filaments() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4, border:"1px solid var(--border)" }}>
-        {tabs.map(t => (
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{
-            flex:1, padding:"8px 12px", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer",
-            background: tab===t.id ? "#3b82f6" : "transparent",
-            color: tab===t.id ? "white" : "var(--muted)",
-            border:"none", transition:"all 0.15s",
-          }}>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <PageTabs tabs={tabs} tab={tab} setTab={setTab}/>
 
       {tab==="catalog" && <FilamentsView/>}
       {tab==="gallery" && (
         <>
           {/* Barre recherche + filtres partages Photos/Nuancier */}
-          <div style={{ display:"flex", gap:8 }}>
-            <div style={{ position:"relative", flex:1 }}>
-              <Search size={14} style={{ position:"absolute", left:12, top:"50%", transform:"translateY(-50%)", color:"var(--muted)", pointerEvents:"none" }}/>
-              <input value={galQ} onChange={e=>setGalQ(e.target.value)} placeholder="Nom, marque, matériau…"
-                style={{ ...inp, paddingLeft:36 }} onFocus={inpFocus} onBlur={inpBlur}/>
-            </div>
-            <button onClick={()=>setGalFilterOpen(true)}
-              style={{ display:"flex", alignItems:"center", gap:5, padding:"8px 14px",
-                background:galActiveFilters>0?"#3b82f6":"var(--surface2)", color:galActiveFilters>0?"white":"var(--text)",
-                border:"1px solid var(--border)", borderRadius:8, fontSize:12, cursor:"pointer", flexShrink:0 }}>
-              <SlidersHorizontal size={14}/>{galActiveFilters>0?` Filtres (${galActiveFilters})`:" Filtres"}
-            </button>
-          </div>
+          <SearchRow q={galQ} setQ={setGalQ} placeholder="Nom, marque, matériau…" active={galActiveFilters} onFilter={() => setGalFilterOpen(true)}/>
+          <FilterChips filters={galFilters} setFilters={setGalFilters} sort={galSort} setSort={setGalSort} defSort={GAL_DEF_SORT}/>
           {galFilterOpen && (
             <FilterSortSheet allItems={allFilaments} getFamily={getFamilyG} filters={galFilters} sort={galSort}
               onApply={(f,s)=>{ setGalFilters(f); if(s) setGalSort(s); setGalFilterOpen(false); }}
@@ -2949,28 +2990,29 @@ export default function Filaments() {
           )}
           {/* Switch Photos / Nuancier + bouton Sélectionner */}
           <div style={{ display:"flex", gap:6, alignItems:"center" }}>
-            {[["photos","Photos"],["swatch","Nuancier"]].map(([id,label]) => (
-              <button key={id} onClick={()=>{ setGalleryMode(id); setGalSelectMode(false); setGalPreselect(null); }} style={{
-                padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:600, cursor:"pointer",
-                background: galleryMode===id ? "#3b82f6" : "var(--surface2)",
-                color: galleryMode===id ? "white" : "var(--muted)",
-                border:"1px solid var(--border)",
-              }}>
-                {label}
-              </button>
-            ))}
+            <div style={{ display:"flex", gap:3, padding:3, borderRadius:14, background:"var(--surface2)", border:"1px solid var(--border)" }}>
+              {[["photos","📷 Photos","#EC4899"],["swatch","🎨 Nuancier","#F59E0B"]].map(([id,label,c]) => (
+                <button key={id} onClick={()=>{ setGalleryMode(id); setGalSelectMode(false); setGalPreselect(null); }} style={{
+                  padding:"6px 12px", borderRadius:11, fontSize:12, fontWeight:800, cursor:"pointer", border:"none", whiteSpace:"nowrap",
+                  background: galleryMode===id ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
+                  color: galleryMode===id ? "white" : "var(--muted)", boxShadow: galleryMode===id ? `0 6px 14px -6px ${c}` : "none",
+                }}>
+                  {label}
+                </button>
+              ))}
+            </div>
             <div style={{ marginLeft:"auto" }}>
               {galSelectMode ? (
                 <button onClick={()=>{ setGalSelectMode(false); setGalPreselect(null); }}
-                  style={{ padding:"5px 12px", borderRadius:20, fontSize:11, border:"1px solid var(--border)",
+                  style={{ height:34, padding:"0 13px", borderRadius:17, fontSize:12, fontWeight:800, border:"1px solid var(--border)",
                     background:"var(--surface2)", color:"var(--muted)", cursor:"pointer" }}>
                   Annuler
                 </button>
               ) : (
-                <button onClick={()=>{ setGalleryMode("swatch"); setGalSelectMode(true); }} title="Choisir des filaments à comparer"
-                  style={{ padding:"5px 12px", borderRadius:20, fontSize:11, border:"1px solid var(--border)",
-                    background:"var(--surface2)", color:"var(--text)", cursor:"pointer" }}>
-                  Sélectionner
+                <button onClick={()=>{ setGalleryMode("swatch"); setGalSelectMode(true); }} data-tip="Choisir des filaments à comparer"
+                  style={{ height:34, padding:"0 13px", borderRadius:17, fontSize:12, fontWeight:800, border:"1px solid rgba(59,130,246,0.35)",
+                    background:"rgba(59,130,246,0.12)", color:"#3b82f6", cursor:"pointer" }}>
+                  ☑ Comparer
                 </button>
               )}
             </div>
@@ -2985,8 +3027,7 @@ export default function Filaments() {
                   onLong={() => { setGalPreselect([f]); setGalleryMode("swatch"); setGalSelectMode(true); }}
                   extra={n ? `${n} impression${n > 1 ? "s" : ""}` : "0 impression"}/>;
               })}
-              {!filaments.length && <p style={{ gridColumn:"1/-1", textAlign:"center", color:"var(--muted)",
-                fontSize:13, padding:"32px 0" }}>Aucun filament</p>}
+              {!filaments.length && <div style={{ gridColumn:"1/-1" }}><EmptyCard icon="🖼️" text="Aucun filament"/></div>}
             </div>
           )}
           {galPrintsOf && <FilamentPrintsSheet f={galPrintsOf} onClose={() => setGalPrintsOf(null)}/>}

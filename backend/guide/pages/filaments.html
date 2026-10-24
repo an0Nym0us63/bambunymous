@@ -27,7 +27,7 @@
 
 <section id="filaments-page">
   <h2>La page Filaments</h2>
-  <p>En haut, quatre onglets : <span class="ui">Stock</span> · <span class="ui">Archivées</span> · <span class="ui">Filaments</span> · <span class="ui">Galerie</span>. L'onglet actif est en bleu.</p>
+  <p>En haut, quatre onglets : <span class="ui">Stock</span> · <span class="ui">Archivées</span> · <span class="ui">Filaments</span> · <span class="ui">Galerie</span>, chacun avec son pictogramme (🧵 🗄 🎨 🖼️) ; l'onglet actif est en couleur.</p>
   <p>À droite du titre (dans l'en-tête sur téléphone) se trouvent des boutons ronds :</p>
   <dl class="opts">
     <dt>Scanner (cadre bleu)</dt><dd><span class="ui">Scanner un échantillon</span> : lit le QR code collé sur une plaquette du nuancier et ouvre la fiche du filament (voir <a href="#filaments-scanner">Scanner un échantillon</a>).</dd>
@@ -39,26 +39,25 @@
     <h3>Onglet Stock</h3>
     <p>C'est l'onglet par défaut : toutes tes bobines <b>actives</b> (non archivées).</p>
     <figure class="phone"><img src="img/filaments-stock.webp" alt="Onglet Stock sur téléphone"><figcaption>Le stock sur téléphone : trois bobines par ligne.</figcaption></figure>
-    <h4>Les pastilles de résumé</h4>
+    <h4>Les tuiles de résumé</h4>
     <ul>
-      <li><b>N bobines</b> (bleu), <b>N marques</b> (violet), <b>X kg en stock</b> (orange : la somme des poids restants ; une bobine dont le poids est inconnu compte comme pleine), <b>N € valeur</b> (vert : la somme des prix d'achat).</li>
+      <li>En quatre tuiles de couleur : <b>🧵 Bobines</b> (bleu), <b>🏷️ Marques</b> (violet), <b>⚖ En stock</b> en kg (orange : la somme des poids restants ; une bobine dont le poids est inconnu compte comme pleine), <b>💶 Valeur</b> (vert : la somme des prix d'achat).</li>
       <li>Elles suivent la recherche et les filtres en cours : tape « PETG » et tu vois combien de PETG il te reste.</li>
-      <li>Une pastille sans valeur n'est pas affichée (par exemple la valeur quand aucun prix n'est saisi).</li>
+      <li>Une tuile sans valeur n'est pas affichée (par exemple la valeur quand aucun prix n'est saisi).</li>
     </ul>
     <h4>La recherche</h4>
-    <p>Le champ <span class="ui">Rechercher : nom, marque, type (silk…), couleur, code…</span> cherche mot à mot : tous les mots doivent apparaître, dans n'importe quel ordre (« silk rouge » trouve un PLA Silk rouge). Il fouille le nom (français et officiel), la marque, la matière, le sous-type, la couleur hexadécimale, le code couleur Bambu, l'emplacement, le tag NFC, le commentaire et le numéro de bobine (« #12 » ou « 12 » trouve la bobine 12).</p>
+    <p>Le champ <span class="ui">Nom, marque, type (silk…), couleur, code…</span> (le ✕ à droite l'efface) cherche mot à mot : tous les mots doivent apparaître, dans n'importe quel ordre (« silk rouge » trouve un PLA Silk rouge). Il fouille le nom (français et officiel), la marque, la matière, le sous-type, la couleur hexadécimale, le code couleur Bambu, l'emplacement, le tag NFC, le commentaire et le numéro de bobine (« #12 » ou « 12 » trouve la bobine 12).</p>
     <h4>Les tuiles de bobine</h4>
     <p>Chaque tuile montre, de haut en bas :</p>
     <ul>
-      <li>un bandeau à la couleur du filament (en dégradé ou en segments pour un multicolore) ;</li>
-      <li>le sous-type en petites capitales (« PLA BASIC ») ;</li>
+      <li>une carte teintée de la couleur du filament (grise pour un filament blanc ou très clair, pour qu'il reste visible) ;</li>
+      <li>le sous-type en petites capitales (« PLA BASIC »), et dans les coins l'emplacement de l'AMS (« A1 ») et 💧 si la bobine est à sécher ;</li>
       <li>le dessin d'une bobine à la couleur du filament (damier derrière si le filament est translucide) ;</li>
-      <li>une jauge du restant : verte au-dessus de 60 %, orange, orange foncé, puis rouge sous 15 % avec une pastille « 9% » au bout ;</li>
-      <li>« 760 g / 1000 g » (ou « — » si le poids est inconnu) ;</li>
-      <li>le nom, la marque, et l'emplacement en pastille quand il est connu.</li>
+      <li>le poids restant en couleur (« 760 g », ou « — » s'il est inconnu) et son pourcentage en pastille, puis une jauge : verte au-dessus de 60 %, orange, orange foncé, puis rouge sous 15 % ; dessous « sur 1000 g » ;</li>
+      <li>le nom, la marque, et l'emplacement en pastille « 📍 Étagère B » quand il est connu.</li>
     </ul>
     <p>Touche une tuile pour ouvrir la <a href="#filaments-fiche-bobine">fiche de la bobine</a>.</p>
-    <p>Quand le stock est vide, la page affiche simplement « 0 bobines » et une grille vide.</p>
+    <p>Quand le stock est vide : « Aucune bobine en stock. » ; quand la recherche ou les filtres ne trouvent rien : « Aucune bobine ne correspond. »</p>
   </section>
 
   <section id="filaments-menu-bobine">
@@ -76,8 +75,8 @@
 
   <section id="filaments-filtres">
     <h3>Filtres et tri</h3>
-    <p>Le bouton <span class="ui">Filtres</span> ouvre la feuille <span class="ui">Filtres &amp; tri</span>. Quand des filtres sont actifs, le bouton devient bleu et affiche leur nombre : <span class="ui">Filtres (2)</span>.</p>
-    <figure class="phone"><img src="img/filaments-filtres.webp" alt="Feuille Filtres et tri"><figcaption>Tri en haut, filtres en dessous, chaque valeur avec son nombre de bobines.</figcaption></figure>
+    <p>Le bouton rond à côté de la recherche ouvre la feuille <span class="ui">Filtres &amp; tri</span>. Quand des filtres sont actifs, il se teinte de bleu et porte leur nombre en pastille. Sous la recherche, une étiquette par filtre actif (et par tri autre que celui par défaut) : touche-la (✕) pour l'enlever, ou <span class="ui">Tout effacer</span> quand il y en a plusieurs.</p>
+    <figure class="phone"><img src="img/filaments-filtres.webp" alt="Feuille Filtres et tri"><figcaption>Une carte par critère, chaque valeur avec son nombre de bobines.</figcaption></figure>
     <h4>Trier par</h4>
     <dl class="opts">
       <dt>Plus récent</dt><dd>(par défaut dans Stock) la bobine utilisée le plus récemment d'abord ; celles jamais utilisées à la fin.</dd>
@@ -91,9 +90,9 @@
     <ul>
       <li><b>Matière</b>, <b>Sous-type</b> et <b>Marque</b> : des pastilles à cocher, chacune suivie de son nombre, les plus fréquentes d'abord. Au-delà de 8, une pastille <span class="ui">+3</span> déplie le reste. La liste des sous-types n'apparaît que s'il y en a plusieurs, et se limite aux matières cochées.</li>
       <li>Plusieurs valeurs cochées dans un même groupe s'additionnent (PLA <i>ou</i> PETG) ; des groupes différents se combinent (PLA <i>et</i> Bambu Lab).</li>
-      <li>Trois boutons de stock : <span class="ui">Tous</span>, <span class="ui">En stock</span> (il reste du filament), <span class="ui">Non disponible</span> (bobine vide ou poids inconnu).</li>
+      <li>La carte <b>Disponibilité</b> : <span class="ui">Tous</span>, <span class="ui">En stock</span> (il reste du filament), <span class="ui">Non disponible</span> (bobine vide ou poids inconnu).</li>
     </ul>
-    <p>Touche <span class="ui">Appliquer</span> pour valider. Le lien <span class="ui">Effacer filtres</span> remet tout à zéro.</p>
+    <p>En bas, toujours visibles : <span class="ui">Tout effacer</span> (remet les filtres à zéro) et <span class="ui">Appliquer</span> pour valider.</p>
   </section>
 
   <section id="filaments-archivees">
@@ -231,9 +230,9 @@
     <p>Le catalogue de tes références, une carte par filament, triées par nom.</p>
     <figure class="phone"><img src="img/filaments-references.webp" alt="Onglet Filaments : cartes de références"><figcaption>Chaque carte prend la couleur du filament.</figcaption></figure>
     <ul>
-      <li>Pastilles : <b>N références</b>, <b>N marques</b>, <b>N types</b> (sous-types différents), <b>N en stock</b> (filaments qui ont au moins une bobine active) et, s'il y en a, <b>N à commander</b> en orange.</li>
-      <li>Recherche <span class="ui">Nom, marque, code couleur…</span> (mot à mot, comme dans le stock), bouton <span class="ui">Filtres</span> (même feuille, tri par nom par défaut) et bouton <span class="ui">+ Filament</span> <span class="admin">admin</span>.</li>
-      <li>Chaque carte : la couleur (dégradé ou segments si multicolore, damier si translucide), le nom, la marque, le sous-type, et en bas « 2 bobines · 1,64 kg » ou « 0 bobine ».</li>
+      <li>Tuiles : <b>🎨 Références</b>, <b>🏷️ Marques</b>, <b>🧪 Types</b> (sous-types différents), <b>N en stock</b> (filaments qui ont au moins une bobine active) et, s'il y en a, <b>N à commander</b> en orange.</li>
+      <li>Recherche <span class="ui">Nom, marque, code couleur…</span> (mot à mot, comme dans le stock), bouton rond des filtres (même feuille, tri par nom par défaut) et bouton <span class="ui">+ Filament</span> <span class="admin">admin</span>.</li>
+      <li>Chaque carte : la couleur (dégradé ou segments si multicolore, damier si translucide), le nom, la marque, le sous-type, et en bas « 🧵 2 bobines · 1,64 kg » ou « 0 bobine » ; un 🛒 en haut à droite si le filament est à commander.</li>
       <li>Touche une carte pour ouvrir sa fiche. Appui long ou clic droit : <span class="ui">📄 Ouvrir</span> et <span class="ui">＋ Ajouter une bobine</span> <span class="admin">admin</span>.</li>
     </ul>
     <p>Pendant le chargement : « Chargement… » ; sans aucun filament : « Aucun filament ».</p>
@@ -315,7 +314,7 @@
 
 <section id="filaments-galerie">
   <h2>Galerie et nuancier</h2>
-  <p>L'onglet <span class="ui">Galerie</span> montre tes filaments en grand, avec une recherche <span class="ui">Nom, marque, matériau…</span> et le bouton <span class="ui">Filtres</span> (tri par <b>Teinte</b> par défaut ; ici <span class="ui">En stock</span> garde les filaments qui ont au moins une bobine active). Deux affichages : <span class="ui">Photos</span> et <span class="ui">Nuancier</span>.</p>
+  <p>L'onglet <span class="ui">Galerie</span> montre tes filaments en grand, avec une recherche <span class="ui">Nom, marque, matériau…</span> et le bouton rond des filtres (tri par <b>Teinte</b> par défaut ; ici <span class="ui">En stock</span> garde les filaments qui ont au moins une bobine active). Deux affichages, à basculer : <span class="ui">📷 Photos</span> et <span class="ui">🎨 Nuancier</span>.</p>
 
   <section id="filaments-galerie-photos">
     <h3>Photos : ce que tu as imprimé avec chaque filament</h3>
@@ -341,7 +340,7 @@
     <figure class="phone"><img src="img/filaments-nuancier.webp" alt="Nuancier"><figcaption>Le nuancier, trié par teinte.</figcaption></figure>
     <p>Pour comparer des filaments côte à côte (deux blancs, deux noirs, deux marques…) :</p>
     <ol>
-      <li>Touche <span class="ui">Sélectionner</span> (ou fais un appui long sur une pastille).</li>
+      <li>Touche <span class="ui">☑ Comparer</span> en haut à droite (ou fais un appui long sur une pastille).</li>
       <li>Coche jusqu'à 6 filaments. Une barre en bas montre les couleurs choisies et « 3/6 ».</li>
       <li>Touche <span class="ui">Comparer</span> (à partir de 2). <span class="ui">Vider</span> efface la sélection ; <span class="ui">Annuler</span> quitte le mode.</li>
     </ol>
