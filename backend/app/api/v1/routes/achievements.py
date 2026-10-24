@@ -104,7 +104,14 @@ async def achievements_eggs_found(acc=Depends(require_own_account)):
     """Ce que CE compte a deja trouve : la page efface pour lui les objets caches qu'il a trouves
     (les autres comptes de la maison les voient toujours, jusqu'a les trouver eux-memes)."""
     from ....services import achievements as A
-    return {"found": sorted(await A.eggs_seen_by(acc[0]))}
+    mine = set(await A.eggs_seen_by(acc[0]))
+    # le compte principal : ce que la maison a, c'est le sien (ses trouvailles d'avant le suivi par compte
+    # n'y etaient pas notees ; sans elles, ses objets caches reapparaitraient) (25/10/2026)
+    from ....db.session import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        if (await _me(acc[0], db))["main"]:
+            mine |= set(await A.eggs_found())
+    return {"found": sorted(mine)}
 
 
 @router.get("/secrets-by-account")
@@ -254,7 +261,10 @@ async def _egg(name: str, acc):
         # et la page le lui dit (« ne compte pas »), puis efface l'objet pour lui seul (24/10/2026)
         e = A.EGGS[name]
         await A.egg_seen(acc[0], name)
-        return {"new": False, "already": True, "id": f"egg_{name}", "emoji": e[0], "name": e[1], "lore": e[4]}
+        # un compte de la famille a ses propres secrets : pour lui, ca compte (25/10/2026)
+        fam = acc[0] in (await A.family())["secrets"] and f"egg_{name}" in A.FAMILY_IDS
+        return {"new": False, "already": True, "id": f"egg_{name}", "emoji": e[0], "name": e[1], "lore": e[4],
+                **({"family": True} if fam else {})}
     if name in A.EGGS:
         why = await A.egg_lock(acc[0], name)
         if why:

@@ -1024,7 +1024,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
           <div style={{ fontSize:14, fontWeight:700, color:"var(--text2)" }}>
             {[spool.filament_manufacturer, spool.filament_fila_type || spool.filament_material].filter(Boolean).join(" · ")}</div></>}>
         <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap", marginTop:2 }}>
-          <span style={{ fontSize:30, fontWeight:900, lineHeight:1, ...(light ? { color:"var(--text)" } : fGrad(barColor, `${barColor}bb`)) }}>{Math.round(remaining)} g</span>
+          <span style={{ fontSize:30, fontWeight:900, lineHeight:1.2, paddingBottom:2, ...(light ? { color:"var(--text)" } : fGrad(barColor, `${barColor}bb`)) }}>{Math.round(remaining)} g</span>
           <span style={{ padding:"1px 8px", borderRadius:20, fontSize:14, fontWeight:900, color: light ? "#0f172a" : "#fff",
             background: light ? `linear-gradient(135deg, ${barColor}, #e2e8f0)` : `linear-gradient(135deg, ${barColor}, ${barColor}cc)`,
             border: light ? "1px solid rgba(0,0,0,0.18)" : "none", boxShadow:`0 3px 10px ${light ? "rgba(0,0,0,0.12)" : `${barColor}55`}` }}>{pct} %</span>
@@ -1863,7 +1863,7 @@ export function FilamentSheet({ f, onClose, onDeleted, onUpdated }) {
           {/* Marque puis SOUS-TYPE (PLA Basic), repli sur la matiere : comme la fiche bobine. */}
           <div style={{ fontSize:14, fontWeight:700, color:"var(--text2)" }}>{[f.manufacturer, f.fila_type || f.material].filter(Boolean).join(" · ")}</div></>}>
         <div style={{ display:"flex", alignItems:"baseline", gap:8, flexWrap:"wrap", marginTop:2 }}>
-          <span style={{ fontSize:28, fontWeight:900, lineHeight:1, ...(nAct ? fGrad("#16A34A", "#4ADE80") : { color:"var(--muted)" }) }}>{nAct ? fmtStock(stock) : "0 g"}</span>
+          <span style={{ fontSize:28, fontWeight:900, lineHeight:1.2, paddingBottom:2, ...(nAct ? fGrad("#16A34A", "#4ADE80") : { color:"var(--muted)" }) }}>{nAct ? fmtStock(stock) : "0 g"}</span>
           <span style={{ fontSize:12.5, fontWeight:700, color:"var(--muted)" }}>en stock · {nAct} bobine{nAct !== 1 ? "s" : ""} active{nAct !== 1 ? "s" : ""}</span>
         </div>
       </FHero>

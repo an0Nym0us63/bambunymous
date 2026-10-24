@@ -59,7 +59,8 @@ export async function egg(name) {
       // pas), puis on ne redemande plus et l'objet s'efface pour lui
       d.add(name);
       noteFound(name);
-      if (data.name) queued(done => celebrate(data, name, "Déjà trouvé dans la maison : ne compte pas", null, done));
+      // un compte de la famille, lui, le gagne pour sa page (la maison l'avait deja)
+      if (data.name) queued(done => celebrate(data, name, data.family ? "Pour toi ! (La maison l'avait déjà.)" : "Déjà trouvé dans la maison : ne compte pas", null, done));
       try { localStorage.setItem(KEY_(), JSON.stringify([...d])); } catch { /* stockage indisponible */ }
       return;
     }
@@ -448,12 +449,13 @@ const NATIVE = new Set([
 function installEggs2() {
   // ce que la maison a deja trouve (sur n'importe quel appareil) : les objets caches s'effacent
   if (!currentFriend()) client.get("/achievements/eggs-found", { home: true }).then(({ data }) => {
-    const add = (data?.found || []).filter(n => !useEggsFound.getState().found.has(n));
-    if (add.length) useEggsFound.setState({ found: new Set([...useEggsFound.getState().found, ...add]) });
-    // et cet appareil le retient : ce que ce compte a deja trouve ne se rejoue pas ici non plus
-    const d = done(), before = d.size;
-    (data?.found || []).forEach(n => d.add(n));
-    if (d.size !== before) { try { localStorage.setItem(KEY_(), JSON.stringify([...d])); } catch { /* rien */ } }
+    if (!Array.isArray(data?.found)) return;
+    // le serveur fait foi : cet appareil retient exactement ce que ce compte a trouve. Un secret que
+    // l'appareil croyait fait sans que le serveur l'ait note au nom de ce compte (avant le suivi par
+    // compte, un secret deja a la maison n'etait pas note pour la famille) redevient faisable (25/10/2026)
+    const srv = new Set(data.found);
+    try { localStorage.setItem(KEY_(), JSON.stringify([...srv])); } catch { /* rien */ }
+    useEggsFound.setState({ found: new Set([...srv, ...seen(NC_())]) });
   }).catch(() => {});
   window.__bnEgg = name => { if (NATIVE.has(name)) egg(name); };
   // ce que l'appli a annonce avant que la page soit prete
