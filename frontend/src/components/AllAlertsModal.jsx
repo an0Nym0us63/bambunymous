@@ -34,8 +34,11 @@ function Dot({ a, size = 22 }) {
   }
   const cols = parseColorsList(a.color, a.colors_array);
   return (
-    <div style={box}>
+    <div style={{ ...box, boxShadow:"0 1px 3px rgba(0,0,0,0.18)" }}>
       <div style={{ position:"absolute", inset:0, ...colorBg(cols, a.multicolor_type) }}/>
+      {/* le liseré PAR-DESSUS la couleur : pose sur le conteneur, le calque de couleur le cachait
+          et un filament blanc disparaissait sur le fond clair */}
+      <div style={{ position:"absolute", inset:0, borderRadius:6, pointerEvents:"none", boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.25)" }}/>
     </div>
   );
 }
