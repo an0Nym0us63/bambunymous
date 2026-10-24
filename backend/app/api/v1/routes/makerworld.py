@@ -531,3 +531,35 @@ async def mw_history(apply: bool = False, _: str = Depends(require_admin)):
 @router.get("/debug/{name}")
 async def mw_debug(name: str, _: str = Depends(require_admin)):
     return await _call(acc.debug(name))
+
+
+# ── Le 3MF d'origine MakerWorld des impressions (24/10/2026) ──
+@router.post("/source3mf/print/{print_id}")
+async def mw_source_print(print_id: int, _: str = Depends(require_mw)):
+    """Recupere tout de suite le 3MF d'origine d'une impression (compte comme un telechargement)."""
+    from ....services.mw_source import for_print
+    r = await for_print(print_id)
+    if "skip" in r:
+        raise HTTPException(400, r["skip"])
+    return r
+
+
+@router.post("/source3mf/backfill")
+async def mw_source_backfill(_: str = Depends(require_mw)):
+    """Lance le rattrapage en arriere-plan (toutes les impressions liees a un profil)."""
+    from ....services import mw_source as S
+    return {"started": S.start_backfill(), **S.status()}
+
+
+@router.post("/source3mf/stop")
+async def mw_source_stop(_: str = Depends(require_mw)):
+    from ....services import mw_source as S
+    S.stop_backfill()
+    return S.status()
+
+
+@router.get("/source3mf/status")
+async def mw_source_status(_: str = Depends(require_mw)):
+    """Ou en est le rattrapage (lisible meme apres avoir quitte la page)."""
+    from ....services import mw_source as S
+    return S.status()

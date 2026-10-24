@@ -1070,6 +1070,52 @@ function MakerWorldSimilar({ designId, onOpen }) {
   );
 }
 
+// Les deux 3MF d'une impression : le tranche (garde au lancement) et celui d'origine MakerWorld (le projet du
+// profil, garde des le lancement ; a defaut, un bouton le recupere). Le telechargement passe par l'API (jeton).
+function Files3mf({ p, onGot }) {
+  const [busy, setBusy] = useState(null);
+  const save = async kind => {
+    setBusy(kind);
+    try {
+      const r = await client.get(`/prints/${p.id}/3mf`, { params: { kind }, responseType: "blob" });
+      const cd = r.headers?.["content-disposition"] || "";
+      const m = /filename\*=UTF-8''([^;]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement("a");
+      a.href = url; a.download = m ? decodeURIComponent(m[1]) : `impression-${p.id}.3mf`;
+      a.dispatchEvent(new MouseEvent("click"));
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch (e) { showAlert(e.response?.status === 404 ? "Ce 3MF n'est pas sur le serveur." : (e.message || "Téléchargement impossible")); }
+    finally { setBusy(null); }
+  };
+  const fetchSrc = async () => {
+    setBusy("get");
+    try { await client.post(`/makerworld/source3mf/print/${p.id}`); onGot(); }
+    catch (e) { showAlert(e.response?.data?.detail || e.message); }
+    finally { setBusy(null); }
+  };
+  const btn = (label, sub, color, on, kind) => (
+    <button onClick={on} disabled={!!busy} style={{ flex: "1 1 200px", display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 12,
+      border: `1px solid ${color}55`, background: `linear-gradient(135deg, ${color}1f, transparent 70%), var(--surface2)`, cursor: busy ? "wait" : "pointer",
+      textAlign: "left", font: "inherit", color: "inherit", minWidth: 0 }}>
+      <span style={{ width: 34, height: 34, borderRadius: 10, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+        background: color, color: "#fff", fontSize: 16 }}>{busy === kind ? "…" : kind === "get" ? "⇣" : "⤓"}</span>
+      <span style={{ minWidth: 0, display: "flex", flexDirection: "column" }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)" }}>{label}</span>
+        <span style={{ fontSize: 11, color: "var(--muted)" }}>{sub}</span></span>
+    </button>);
+  return (
+    <div className="card" style={{ padding: "12px 14px", display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ fontSize: 12, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--text2)" }}>📦 Fichiers 3MF</div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {p.source_3mf ? btn("3MF d'origine", "MakerWorld · à retrancher", "#F97316", () => save("source"), "source")
+          : p.design_id && p.mw_profile_id ? <AdminOnly>{btn("Récupérer le 3MF d'origine", "depuis MakerWorld (compte connecté)", "#F97316", fetchSrc, "get")}</AdminOnly> : null}
+        {p.model_3mf && btn("3MF tranché", "pour mon imprimante", "#F59E0B", () => save("sliced"), "sliced")}
+      </div>
+    </div>
+  );
+}
+
 export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
   const [snaps, setSnaps] = useState([]);
   const [sharing, setSharing] = useState(false);   // partage Telegram
@@ -1355,6 +1401,9 @@ export function PrintDetail({ p: pProp, onClose, onDelete, onChanged }) {
           {/* Fiche MakerWorld du modele (titre, createur, categories, compteurs),
               ou a defaut le simple lien. */}
           {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]}/>}
+
+          {/* Les 3MF : celui tranche pour mon imprimante, et celui d'origine MakerWorld (a retrancher) */}
+          {(p.model_3mf || p.source_3mf || (p.design_id && p.mw_profile_id)) && <Files3mf p={p} onGot={() => setP(prev => ({ ...prev, source_3mf: true }))}/>}
 
           {/* Creation d'objets : le bouton porte le quota et se desactive
               quand tout est cree, plutot que de laisser tenter puis echouer. */}

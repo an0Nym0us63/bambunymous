@@ -312,6 +312,12 @@ async def _create_print_locked(job_id: str, url: str, taskname: str,
         _mw_launch(_clean_design_id(design_id))
     except Exception:
         logger.exception("[MW] lancement impossible")
+    # le 3MF d'origine MakerWorld du profil imprime, des le lancement (le profil est deja connu)
+    try:
+        from .mw_source import for_print as _src
+        _bg(_src(pid))
+    except Exception:
+        logger.exception("[MW-3MF] lancement impossible")
     st = _job(job_id)
     with _LOCK:
         st["print_id"]    = pid
@@ -630,6 +636,12 @@ def on_finish(job_id: str, gcode_state: str):
         _err = 0
     _bg(_finalize(pid, job_id, final, st.get("start_time"), pct=int(st.get("last_pct", 0) or 0), print_error=_err,
                   t_end=t0, paused=paused, end_known=end_known))
+    # le 3MF d'origine, s'il manque encore (premier essai rate, profil appris en cours de route)
+    try:
+        from .mw_source import for_print as _src
+        _bg(_src(pid))
+    except Exception:
+        pass
 
 
 async def _spool_from_slot_or_match(slot: int, tray_info: str, color: str, job_id: str = ""):

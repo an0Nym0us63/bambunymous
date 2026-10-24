@@ -104,6 +104,12 @@ def _print_to_out(p: Print) -> dict:
     # « pas encore de photo » pour une impression dont le groupe en a deja
     d["group_cover_photo"] = p.group.cover_photo if p.group else None
     gd = _group_dir(p.group_id) if p.group_id else None
+    # le 3MF d'origine MakerWorld deja garde pour ce profil (le tranche, lui, est model_3mf)
+    try:
+        from ....services.mw_source import print_file as _src
+        d["source_3mf"] = bool(_src(p.design_id, p.mw_profile_id))
+    except Exception:
+        d["source_3mf"] = False
     d["group_has_photos"] = bool(gd and any(f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v")
                                             for f in gd.iterdir()))
     return d
@@ -2188,3 +2194,25 @@ async def recalc_print_costs(print_id: int, _: str = Depends(get_current_user)):
         await _propagate_from_print(db, print_id)   # repercuter sur les objets lies
         await db.commit()
     return {"ok": True}
+
+
+@router.get("/{print_id}/3mf")
+async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced|source)$"), _: str = Depends(get_current_user)):
+    """Le 3MF d'une impression : « sliced » celui tranche pour mon imprimante (garde au lancement),
+    « source » celui d'origine MakerWorld (le projet du profil, a retrancher)."""
+    import re as _re
+    from ....services.mw_source import print_file
+    async with AsyncSessionLocal() as db:
+        p = await db.get(Print, print_id)
+    if not p:
+        raise HTTPException(404, "Impression introuvable")
+    if kind == "source":
+        f = print_file(p.design_id, p.mw_profile_id)
+        suffix = " (MakerWorld)"
+    else:
+        f = DATA_DIR / p.model_3mf if p.model_3mf else None
+        suffix = " (tranché)"
+    if not f or not f.is_file():
+        raise HTTPException(404, "Pas de 3MF pour cette impression")
+    name = _re.sub(r'[\\/:*?"<>|]+', "_", (p.translated_name or p.file_name or f"impression-{print_id}").strip())[:120]
+    return FileResponse(str(f), media_type="application/vnd.ms-package.3dmanufacturing-3dmodel+xml", filename=f"{name}{suffix}.3mf")

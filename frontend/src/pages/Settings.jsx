@@ -1079,6 +1079,58 @@ function StorageSection() {
     </div>
   );
 }
+// Le rattrapage des 3MF d'origine MakerWorld : tourne sur le serveur ; la carte relit son avancement
+// (toutes les 2 s tant qu'il tourne), on peut quitter la page et revenir
+function SourceBackfillSection() {
+  const [st, setSt] = React.useState(null);
+  const load = () => client.get("/makerworld/source3mf/status").then(r => setSt(r.data)).catch(() => {});
+  React.useEffect(() => { load(); }, []);
+  React.useEffect(() => {
+    if (!st?.running) return undefined;
+    const t = setInterval(load, 2000);
+    return () => clearInterval(t);
+  }, [st?.running]); // eslint-disable-line react-hooks/exhaustive-deps
+  const start = () => client.post("/makerworld/source3mf/backfill").then(r => setSt(r.data)).catch(e => showAlert(e.response?.data?.detail || e.message));
+  const stop = () => client.post("/makerworld/source3mf/stop").then(r => setSt(r.data)).catch(() => {});
+  const run = !!st?.running, has = st && st.total != null;
+  const pctDone = has && st.total ? Math.round(100 * st.done / st.total) : 0;
+  const mo = b => `${((b || 0) / 1048576).toFixed(1).replace(".", ",")} Mo`;
+  const chip = (n, l, c) => <span style={{ fontSize:11.5, fontWeight:800, color:c, padding:"2px 8px", borderRadius:20, background:`${c}1a` }}>{n} {l}</span>;
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>3MF d'origine MakerWorld</h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        Pour chaque impression liée à un profil MakerWorld, garde le projet du profil (à retrancher, ou à garder si le modèle
+        disparaît). C'est fait dès le lancement d'une impression ; ce bouton rattrape les anciennes. Un fichier par profil, et
+        chaque récupération compte comme un téléchargement sur MakerWorld. Le compte MakerWorld doit être connecté.
+      </p>
+      {has && (
+        <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:12 }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+            <div style={{ flex:1, height:8, borderRadius:6, background:"var(--surface2)", overflow:"hidden" }}>
+              <div style={{ height:"100%", width:`${pctDone}%`, borderRadius:6, background:"linear-gradient(90deg, #F97316, #FBBF24)", transition:"width .4s" }}/></div>
+            <span style={{ fontSize:12, fontWeight:800, color:"var(--text2)", whiteSpace:"nowrap" }}>{st.done} / {st.total}</span>
+          </div>
+          {run && st.current && <div style={{ fontSize:12, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>⏳ {st.current}</div>}
+          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+            {chip(st.ok, `récupéré${st.ok > 1 ? "s" : ""} (${mo(st.bytes)})`, "#16a34a")}
+            {chip(st.already, "déjà là", "#64748B")}
+            {st.skipped > 0 && chip(st.skipped, "introuvable" + (st.skipped > 1 ? "s" : "") + " sur MakerWorld", "#d97706")}
+            {st.failed > 0 && chip(st.failed, "en échec", "#dc2626")}
+          </div>
+          {!run && st.stopped && <div style={{ fontSize:12, fontWeight:700, color:"#d97706" }}>{st.stopped}</div>}
+          {!run && !st.stopped && st.finished && <div style={{ fontSize:12, fontWeight:700, color:"#16a34a" }}>✓ Terminé</div>}
+          {st.errors?.length > 0 && <div style={{ fontSize:11.5, color:"var(--muted)" }}>{st.errors.map((e, i) => <div key={i}>• {e}</div>)}</div>}
+        </div>
+      )}
+      {run
+        ? <button onClick={stop} style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", border:"1px solid var(--border)",
+            background:"var(--surface2)", color:"var(--text)" }}>■ Arrêter</button>
+        : <button onClick={start} style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", border:"none",
+            background:"#F97316", color:"white" }}>⇣ Tout récupérer</button>}
+    </div>
+  );
+}
 function DiagExportSection() {
   const [days, setDays] = React.useState(14);
   const [loading, setLoading] = React.useState(false);
@@ -1918,6 +1970,7 @@ export default function Settings() {
       {tab === "tools" && (
       <AdminOnly><div className="wide-2">
         <StorageSection/>
+        <SourceBackfillSection/>
         <EnrichFromCatalogSection/>
         <RecalculateSection/>
         <DiagExportSection/>
