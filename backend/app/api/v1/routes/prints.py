@@ -107,7 +107,7 @@ def _print_to_out(p: Print) -> dict:
     # le 3MF d'origine MakerWorld deja garde pour ce profil (le tranche, lui, est model_3mf)
     try:
         from ....services.mw_source import print_file as _src
-        d["source_3mf"] = bool(_src(p.design_id, p.mw_profile_id))
+        d["source_3mf"] = bool(_src(p.design_id, p.mw_profile_id, p.mw_plates))
     except Exception:
         d["source_3mf"] = False
     d["group_has_photos"] = bool(gd and any(f.suffix.lower() in (".png", ".jpg", ".jpeg", ".webp", ".gif", ".mp4", ".webm", ".mov", ".m4v")
@@ -2207,7 +2207,7 @@ async def print_3mf(print_id: int, kind: str = Query("sliced", pattern="^(sliced
     if not p:
         raise HTTPException(404, "Impression introuvable")
     if kind == "source":
-        f = print_file(p.design_id, p.mw_profile_id)
+        f = print_file(p.design_id, p.mw_profile_id, p.mw_plates)
         suffix = " (MakerWorld)"
     else:
         f = DATA_DIR / p.model_3mf if p.model_3mf else None

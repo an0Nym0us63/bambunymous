@@ -548,18 +548,18 @@ async def mw_source_print(print_id: int, _: str = Depends(require_mw)):
 async def mw_source_backfill(_: str = Depends(require_mw)):
     """Lance le rattrapage en arriere-plan (toutes les impressions liees a un profil)."""
     from ....services import mw_source as S
-    return {"started": S.start_backfill(), **S.status()}
+    return {"started": S.start_backfill(), **S.status(), "summary": await S.summary()}
 
 
 @router.post("/source3mf/stop")
 async def mw_source_stop(_: str = Depends(require_mw)):
     from ....services import mw_source as S
     S.stop_backfill()
-    return S.status()
+    return {**S.status(), "summary": await S.summary()}
 
 
 @router.get("/source3mf/status")
 async def mw_source_status(_: str = Depends(require_mw)):
     """Ou en est le rattrapage (lisible meme apres avoir quitte la page)."""
     from ....services import mw_source as S
-    return S.status()
+    return {**S.status(), "summary": await S.summary()}

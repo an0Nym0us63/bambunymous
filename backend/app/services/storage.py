@@ -26,7 +26,7 @@ CATS = [
     ("accessories", "Photos d'accessoires", "#14B8A6"),
     ("filaments", "Photos de filaments", "#F97316"),
     ("db", "Base de données", "#6366F1"),
-    ("catalog", "Catalogue Bambu", "#A855F7"),
+    ("catalog", "Catalogue et données MakerWorld", "#A855F7"),
     ("tmp", "Fichiers temporaires", "#94A3B8"),
     ("other", "Autres", "#64748B"),
 ]
@@ -49,8 +49,11 @@ def _cat(parts: tuple, name: str) -> str:
         if low.startswith("plate"):
             return "plates"
         return "print_photos" if ext in IMG else "other"
-    if ext == ".3mf" or top == "mw_3mf":
-        return "mw_tmf" if top == "mw_3mf" else "tmf"
+    if top == "mw_3mf":
+        # les 3MF d'origine ; a cote, de petits fichiers (filaments exacts lus, index, etat du rattrapage)
+        return "mw_tmf" if ext == ".3mf" else "catalog"
+    if ext == ".3mf":
+        return "tmf"
     return {"groups": "groups", "objects": "objects", "accessories": "accessories", "filaments": "filaments",
             "bambu_catalog": "catalog", "tmp": "tmp", "uploads": "tmp"}.get(top, "other")
 
