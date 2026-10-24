@@ -5325,10 +5325,13 @@ async def egg_seen(username: str, name: str) -> None:
 async def secrets_by_account(usernames: list) -> list:
     """Pour l'administrateur : combien de secrets chaque compte a trouves lui-meme, lesquels et quand."""
     d = await _eggs_by()
+    house = await eggs_found()
     out = []
     for u in usernames:
         mine = d.get(u) or {}
-        items = sorted(({"id": k, "emoji": EGGS[k][0], "name": EGGS[k][1], "desc": EGGS[k][2], "at": at,
+        # comme entre copains : le descriptif seulement de ce que la maison a aussi
+        items = sorted(({"id": k, "emoji": EGGS[k][0], "name": EGGS[k][1], "at": at, "house": k in house,
+                         **({"desc": EGGS[k][2]} if k in house else {}),
                          "sub": SUB_OF.get(f"egg_{k}")} for k, at in mine.items() if k in EGGS),
                        key=lambda x: str(x["at"] or ""), reverse=True)
         out.append({"username": u, "count": len(items), "last": items[0]["at"] if items else None, "items": items})

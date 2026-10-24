@@ -411,7 +411,7 @@ export default function Achievements({ embedded = false }) {
 
       {rules && createPortal(<Rules data={data} onClose={() => setRules(false)}/>, document.body)}
       {slot && <SlotMachine wheel={data.keys?.wheel} onDone={load} onClose={() => setSlot(false)}/>}
-      {oddsOpen && odds && <OddsSheet odds={odds} admin={isAdmin && !atFriend} onClose={() => setOddsOpen(false)}/>}
+      {oddsOpen && odds && <OddsSheet odds={odds} admin={isAdmin && !atFriend} uniq={data.tiers.find(t => t.id === "unique")} onClose={() => setOddsOpen(false)}/>}
       {ceremony && <TicketCeremony {...ceremony} onClose={() => setCeremony(null)}/>}
       {usage && createPortal(<UsageSheet data={data} kind={usage} onKind={setUsage} onOpen={id => setDetail(id)}
         onClose={() => setUsage(null)}/>, document.body)}
@@ -718,7 +718,7 @@ const oddsPct = p => (p * 100).toLocaleString("fr-FR", { maximumFractionDigits: 
 const oddsWhen = s => { if (!s) return "jamais"; const d = new Date(/Z|[+-]\d\d:\d\d$/.test(s) ? s : s + "Z");
   return `${d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" })} à ${d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}`; };
 // la surprise de chaque compte : chance a la prochaine ouverture, ouvertures sans, surprises recues
-function OddsSheet({ odds, admin, onClose }) {
+function OddsSheet({ odds, admin, uniq, onClose }) {
   useEffect(() => { const k = e => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
   // pour l'administrateur : les secrets que chaque compte a trouves lui-meme (compte ou pas)
   const [secrets, setSecrets] = useState(null);
@@ -773,18 +773,20 @@ function OddsSheet({ odds, admin, onClose }) {
           </div>
         ))}
       </div>
-      {openU && secrets?.[openU] && <AccountSecrets acc={secrets[openU]} subs={subs} onClose={() => setOpenU(null)}/>}
+      {openU && secrets?.[openU] && <AccountSecrets acc={secrets[openU]} subs={subs} uniq={uniq} onClose={() => setOpenU(null)}/>}
     </div>, document.body);
 }
 
 // Les secrets qu'un compte de la maison a trouves lui-meme, rangés par tiroir comme sur sa page
 // (pour l'administrateur, depuis « Les surprises, compte par compte »)
-function AccountSecrets({ acc, subs, onClose }) {
+function AccountSecrets({ acc, subs, uniq, onClose }) {
   const [open, setOpen] = useState(() => new Set());
+  const [pick, setPick] = useState(null);           // la medaille touchee : son detail sous la grille
   useEffect(() => { const k = e => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
     window.addEventListener("keydown", k, true); return () => window.removeEventListener("keydown", k, true); }, [onClose]);
   const groups = subs.map(sb => ({ ...sb, items: acc.items.filter(x => x.sub === sb.id) }));
   const toggle = id => setOpen(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const both = acc.items.filter(x => x.house).length;
   return (
     <div onClick={e => { e.stopPropagation(); onClose(); }} style={{ position:"fixed", inset:0, zIndex:4010, background:"rgba(2,6,23,0.55)",
       display:"flex", alignItems:"center", justifyContent:"center", padding:14 }}>
@@ -796,14 +798,18 @@ function AccountSecrets({ acc, subs, onClose }) {
             <div style={{ fontSize:16, fontWeight:900, color:"var(--text)" }}>Les secrets de {acc.username}</div>
             <div style={{ fontSize:11.5, color:"var(--muted)" }}>{acc.count} trouvé{acc.count > 1 ? "s" : ""} lui-même
               {acc.last ? ` · le dernier ${oddsWhen(acc.last)}` : ""}</div>
+            <div style={{ fontSize:11.5, fontWeight:700, marginTop:1 }}>
+              <span style={{ color:"#22c55e" }}>✓ {both} que tu as aussi</span><span style={{ color:"var(--muted)" }}> · </span>
+              <span style={{ color:"#ef4444" }}>{acc.count - both} pas toi</span></div>
           </div>
           <button onClick={onClose} aria-label="Fermer" style={{ width:32, height:32, borderRadius:10, border:"1px solid var(--border)",
             background:"var(--surface2)", color:"var(--text2)", cursor:"pointer", flexShrink:0 }}>✕</button>
         </div>
         {groups.map(g => {
           const col = SUB_COLOR[g.id] || "#A855F7", isOpen = open.has(g.id), n = g.items.length;
+          const sel = g.items.find(x => x.id === pick);
           return (
-            <div key={g.id} style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            <div key={g.id} style={{ display:"flex", flexDirection:"column", gap:8 }}>
               <button onClick={() => n && toggle(g.id)} aria-expanded={isOpen} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px",
                 borderRadius:12, cursor: n ? "pointer" : "default", textAlign:"left", width:"100%", fontSize:13, fontWeight:800, color:"var(--text)",
                 ...feltCard(col), opacity: n ? 1 : 0.55 }}>
@@ -812,16 +818,36 @@ function AccountSecrets({ acc, subs, onClose }) {
                 <span style={pill(col)}>{n} / {g.total}</span>
                 {n > 0 && <span style={{ fontSize:10, color:"var(--muted)", transform: isOpen ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>}
               </button>
-              {isOpen && g.items.map(x => (
-                <div key={x.id} style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"6px 8px 6px 12px" }}>
-                  <span style={{ fontSize:20, lineHeight:1.2 }}>{x.emoji}</span>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:13, fontWeight:800, color:"var(--text)" }}>{x.name}</div>
-                    {x.desc && <div style={{ fontSize:11.5, color:"var(--text2)", lineHeight:1.4 }}>{x.desc}</div>}
-                    {x.at && <div style={{ fontSize:10.5, color:"var(--muted)" }}>trouvé {oddsWhen(x.at)}</div>}
-                  </div>
+              {isOpen && <>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(62px, 1fr))", gap:6, padding:"0 2px" }}>
+                  {g.items.map(x => (
+                    <button key={x.id} onClick={() => setPick(p => p === x.id ? null : x.id)} title={x.name}
+                      style={{ position:"relative", display:"flex", flexDirection:"column", alignItems:"center", gap:3, padding:"6px 2px 5px",
+                        borderRadius:10, cursor:"pointer", background: pick === x.id ? rgba(col, 0.18) : "var(--surface2)",
+                        border:`1.5px solid ${pick === x.id ? col : "transparent"}` }}>
+                      {uniq ? <Medal tier={uniq} emoji={x.emoji} size={34}/> : <span style={{ fontSize:24 }}>{x.emoji}</span>}
+                      {/* comme entre copains : toi aussi (vert) ou pas toi (rouge) */}
+                      <span style={{ position:"absolute", top:3, right:3, width:15, height:15, borderRadius:"50%", fontSize:9, fontWeight:900,
+                        display:"flex", alignItems:"center", justifyContent:"center", color:"#fff",
+                        background: x.house ? "#22c55e" : "#ef4444" }}>{x.house ? "✓" : "✕"}</span>
+                      <span style={{ fontSize:9.5, fontWeight:700, color:"var(--text2)", maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis",
+                        whiteSpace:"nowrap", padding:"0 3px" }}>{x.name}</span>
+                    </button>
+                  ))}
                 </div>
-              ))}
+                {sel && (
+                  <div style={{ display:"flex", gap:10, padding:"8px 10px", borderRadius:12, background:"var(--surface2)", border:`1px solid ${rgba(col, 0.4)}` }}>
+                    <span style={{ fontSize:24, lineHeight:1.1 }}>{sel.emoji}</span>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, fontWeight:800, color:"var(--text)" }}>{sel.name}</div>
+                      {sel.house
+                        ? <div style={{ fontSize:12, color:"var(--text2)", lineHeight:1.4 }}>{sel.desc}</div>
+                        : <div style={{ fontSize:12, fontWeight:700, color:"#ef4444", lineHeight:1.4 }}>Tu ne l'as pas encore : à toi de le trouver !</div>}
+                      {sel.at && <div style={{ fontSize:10.5, color:"var(--muted)", marginTop:2 }}>{acc.username} l'a trouvé {oddsWhen(sel.at)}</div>}
+                    </div>
+                  </div>
+                )}
+              </>}
             </div>
           );
         })}
