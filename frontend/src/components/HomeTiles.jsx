@@ -2676,82 +2676,82 @@ function PodiumZoom({ people, a, meI }) {
       </table></div></>}
   </>;
 }
+// une teinte par categorie (chaudes, distinctes), dans l'ordre ou elles viennent
+const ALERT_TINTS = ["#F59E0B", "#EF4444", "#F97316", "#EAB308", "#EC4899", "#8B5CF6", "#0EA5E9", "#14B8A6"];
 function Alerts({ a, o, sz }) {
   const cats = (a?.categories || []).filter(c => c.total);
   // la categorie touchee dans la tuile : la fenetre s'ouvre filtree dessus (le clic remonte a la tuile)
   const [pick, setPick] = useState("");
   if (!a) return null;
   const total = cats.reduce((n, c) => n + c.total, 0);
-  const listRow = (c, detail) => (
-    <div key={c.category} role="button" onClick={() => setPick(c.category)}
-      style={{ display: "flex", alignItems: "center", gap: 8, height: 24, cursor: "pointer" }}>
-      <span data-pk="" style={{ fontSize: 15 }}>{c.icon}</span>
-      <span style={{ flex: 1, minWidth: 0, fontSize: 12.5, fontWeight: 700, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}
-        {detail && <span style={{ fontWeight: 500, color: "var(--muted)" }}> · {(c.alerts || []).slice(0, 2).map(x => x.title).join(", ")}</span>}</span>
-      <span data-pk="" style={{ fontSize: 12, fontWeight: 900, color: "#b45309" }}>{c.total}</span>
-    </div>);
+  const top = Math.max(1, ...cats.map(c => c.total));
+  const tint = i => ALERT_TINTS[i % ALERT_TINTS.length];
+  const head = (W, big) => <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
+    <span data-pk="" style={{ fontSize: big ? 30 : 24, fontWeight: 900, lineHeight: 1.05, ...gradText("#D97706", "#EF4444") }}>{total}</span>
+    <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>à regarder</span>
+    {W >= 200 && <Muted size={11.5}>· {cats.length} catégorie{cats.length > 1 ? "s" : ""}</Muted>}</div>;
+  // une rangee : l'icone dans un carre teinte, le nom (et des exemples si la place), une barre, le nombre
+  const row = (c, i, h, W, ex) => { const col = tint(i), sq = Math.max(20, Math.min(W < 200 ? 24 : 34, h - 6));
+    const tip = `${c.label}\n${(c.alerts || []).slice(0, 4).map(x => `${x.title}${x.value ? ` · ${x.value}` : ""}`).join("\n")}`;
+    return <div key={c.category} role="button" data-tip={tip} onClick={() => setPick(c.category)}
+      style={{ display: "flex", alignItems: "center", gap: 8, height: h, minWidth: 0, cursor: "pointer", padding: "0 8px 0 4px", borderRadius: 12,
+        background: `linear-gradient(90deg, ${col}1f, transparent 70%)` }}>
+      <span data-pk="" style={{ width: sq, height: sq, borderRadius: sq * 0.3, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: sq * 0.55, background: `${col}26`, boxShadow: `inset 0 0 0 1px ${col}55` }}>{c.icon}</span>
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+        <span style={{ fontSize: h >= 40 ? 13 : 12, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
+        {ex && <span style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {(c.alerts || []).slice(0, 3).map(x => x.title).join(", ")}</span>}</span>
+      {W >= 260 && <span style={{ width: Math.min(80, W * 0.22), height: 6, borderRadius: 3, background: "var(--surface2)", overflow: "hidden", flexShrink: 0 }}>
+        <span style={{ display: "block", height: "100%", width: `${(100 * c.total) / top}%`, borderRadius: 3, background: col }}/></span>}
+      <b data-pk="" style={{ minWidth: 24, textAlign: "center", fontSize: 12, fontWeight: 900, color: "#fff", background: col, borderRadius: 10, padding: "1px 7px",
+        flexShrink: 0, boxShadow: `0 2px 6px ${col}55` }}>{c.total}</b>
+    </div>; };
   return (
     <Tile icon={<BellRing size={15}/>} color="#F59E0B" label="Alertes"
       mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 6, fontSize: 13 }}>{cats.length ? cats.map(c => <span key={c.category}
-        title={c.label}>{c.icon}<b style={{ color: "#b45309" }}>{c.total}</b></span>) : "rien à signaler"}</span>}
+        data-tip={c.label}>{c.icon}<b style={{ color: "#b45309" }}>{c.total}</b></span>) : "rien à signaler"}</span>}
       badge={total ? <span style={{ fontSize: 11, fontWeight: 900, color: "#fff", background: "#f59e0b", borderRadius: 20, padding: "1px 7px" }}>{total}</span> : null}
       zoom={<AllAlertsModal key={pick || "all"} inline initialCat={pick} onChanged={() => window.dispatchEvent(new Event("bn-tiles-reload"))}/>}>
       {({ W, H }) => {
         if (!cats.length) return <div data-egg="calme_plat" data-egg-n="5" style={{ flex: 1, display: "flex" }}><Empty>Rien à signaler.</Empty></div>;
-        const style = o.style || "chips";
-        // liste : une ligne par categorie ; haute, ses premieres alertes dessous
-        if (style === "list") {
-          const spare = H - cats.length * 27;
-          if (spare >= 40) {
-            const per = Math.max(0, Math.floor(spare / cats.length / 19));
-            return <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>{cats.map(c => <div key={c.category}>
-              {listRow(c, false)}
-              {(c.alerts || []).slice(0, per).map(x => <div key={x.key} style={{ display: "flex", gap: 6, alignItems: "baseline", height: 19, paddingLeft: 23,
-                fontSize: 11.5, minWidth: 0 }}>
-                <span style={{ flex: 1, minWidth: 0, color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.title}
-                  {W >= 260 && <span style={{ color: "var(--muted)" }}> · {x.detail}</span>}</span>
-                <span style={{ fontWeight: 800, color: "#b45309", whiteSpace: "nowrap" }}>{x.value}</span></div>)}
-            </div>)}</div>;
-          }
-          return <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-            {cats.slice(0, fitRows(H, 24, 3)).map(c => listRow(c, o.detail && W >= 300))}</div>;
-        }
         // icones : une grosse icone par categorie, le nombre en badge, rien d'ecrit
-        if (style === "icons") {
+        if (o.style === "icons") {
           const g = fitGrid(cats.length, W, H, { gap: 10, max: 74 });
           const s2 = Math.max(30, g.size);
           return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${s2}px)`, gap: 10, justifyContent: "space-evenly", alignContent: "center" }}>
-            {cats.map(c => <span key={c.category} data-pk="" role="button" tabIndex={0} title={`${c.label} : ${c.total}`} onClick={() => setPick(c.category)}
+            {cats.map((c, i) => <span key={c.category} data-pk="" role="button" tabIndex={0} data-tip={`${c.label} : ${c.total}`} onClick={() => setPick(c.category)}
               style={{ position: "relative", width: s2, height: s2, borderRadius: s2 * 0.28, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: s2 * 0.5, background: "linear-gradient(135deg, rgba(245,158,11,0.22), rgba(249,115,22,0.10))", boxShadow: "inset 0 0 0 1px rgba(245,158,11,0.35)" }}>
+                fontSize: s2 * 0.5, background: `linear-gradient(135deg, ${tint(i)}38, ${tint(i)}14)`, boxShadow: `inset 0 0 0 1px ${tint(i)}55` }}>
               {c.icon}
               <b style={{ position: "absolute", top: -6, right: -6, minWidth: 20, height: 20, padding: "0 5px", borderRadius: 10, boxSizing: "border-box",
-                fontSize: 11.5, lineHeight: "20px", textAlign: "center", color: "#fff", background: "#f59e0b", boxShadow: "0 2px 6px rgba(245,158,11,0.5)" }}>{c.total}</b>
+                fontSize: 11.5, lineHeight: "20px", textAlign: "center", color: "#fff", background: tint(i), boxShadow: `0 2px 6px ${tint(i)}80` }}>{c.total}</b>
             </span>)}</div>;
         }
-        // pastilles : des pilules colorees (icone, nom, nombre) qui grandissent avec la tuile ; etroite, une par
-        // ligne en pleine largeur, a la hauteur que laisse la tuile
-        const rowH = Math.floor((H - 6 * (cats.length - 1)) / cats.length);
-        if (W < 260 && rowH >= 26) {
-          const h = Math.min(46, rowH), f = Math.max(12, Math.min(15, h * 0.36));
-          return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6 }}>
-            {cats.map(c => <span key={c.category} data-pk="" role="button" tabIndex={0} title={c.label} onClick={() => setPick(c.category)}
-              style={{ display: "flex", alignItems: "center", gap: 8, height: h, padding: "0 10px", cursor: "pointer", borderRadius: h / 2, fontSize: f, fontWeight: 800,
-                background: "linear-gradient(135deg, rgba(245,158,11,0.18), rgba(249,115,22,0.08))", boxShadow: "inset 0 0 0 1px rgba(245,158,11,0.3)", minWidth: 0 }}>
-              <span style={{ fontSize: f + 3 }}>{c.icon}</span>
-              <span style={{ flex: 1, minWidth: 0, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.label}</span>
-              <b style={{ background: "#f59e0b", color: "#fff", borderRadius: 10, padding: "0 7px", fontSize: f - 1 }}>{c.total}</b></span>)}</div>;
-        }
-        const big = H >= cats.length * 34 + 10 && W >= 220;
-        const fs = big ? 13.5 : 12;
-        return <div style={{ display: "flex", flexWrap: "wrap", gap: big ? 8 : 6, alignContent: "center", flex: 1 }}>
-          {cats.map(c => <span key={c.category} data-pk="" role="button" tabIndex={0} title={c.label}
-            onClick={() => setPick(c.category)}
-            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: big ? "7px 13px" : "4px 10px", cursor: "pointer",
-              borderRadius: 20, fontSize: fs, fontWeight: 800, color: "#b45309",
-              background: "linear-gradient(135deg, rgba(245,158,11,0.18), rgba(249,115,22,0.08))", boxShadow: "inset 0 0 0 1px rgba(245,158,11,0.3)" }}>
-            <span style={{ fontSize: fs + 2 }}>{c.icon}</span>{W >= 200 && <span style={{ color: "var(--text)" }}>{c.label}</span>}
-            <b style={{ background: "#f59e0b", color: "#fff", borderRadius: 10, padding: "0 7px", fontSize: fs - 1 }}>{c.total}</b></span>)}</div>;
+        // rangees (par defaut) : l'en-tete puis une rangee par categorie qui se partagent la hauteur ;
+        // hautes et larges, des exemples sous le nom ; trop nombreuses, ce qui tient puis « +n »
+        const hh = H >= 110 ? (H >= 240 ? 42 : 34) : 0;
+        const room = H - hh - (hh ? 6 : 0);
+        const fit = Math.max(1, Math.floor((room + 4) / 28));
+        // basse : pas la place d'une rangee par categorie, des pastilles (icone et nombre) cote a cote
+        if (fit < cats.length && !hh) return <div style={{ flex: 1, display: "flex", flexWrap: "wrap", gap: 6, alignContent: "center", minWidth: 0 }}>
+          {cats.map((c, i) => <span key={c.category} data-pk="" role="button" data-tip={`${c.label} : ${c.total}`} onClick={() => setPick(c.category)}
+            style={{ display: "inline-flex", alignItems: "center", gap: 5, height: 28, padding: "0 4px 0 7px", borderRadius: 14, cursor: "pointer",
+              background: `${tint(i)}22`, boxShadow: `inset 0 0 0 1px ${tint(i)}55` }}>
+            <span style={{ fontSize: 15 }}>{c.icon}</span>
+            {W >= 300 && <span style={{ fontSize: 12, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap" }}>{c.label}</span>}
+            <b style={{ fontSize: 11.5, fontWeight: 900, color: "#fff", background: tint(i), borderRadius: 10, padding: "1px 7px" }}>{c.total}</b></span>)}</div>;
+        const shown = cats.length > fit ? cats.slice(0, fit - 1) : cats;
+        const rowH = Math.max(24, Math.min(o.style === "list" || o.detail ? 52 : 44, Math.floor((room - 4 * (shown.length - 1) - (shown.length < cats.length ? 18 : 0)) / shown.length)));
+        const ex = rowH >= 44 && W >= 230 && (o.style === "list" || o.detail !== false);
+        return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8, minHeight: 0 }}>
+          {hh > 0 && head(W, H >= 240)}
+          <div style={{ display: "flex", flexDirection: "column", gap: 4, minHeight: 0 }}>
+            {shown.map((c, i) => row(c, i, rowH, W, ex))}
+            {shown.length < cats.length && <span style={{ fontSize: 11, fontWeight: 800, color: "#b45309", paddingLeft: 8 }}>
+              +{cats.length - shown.length} autre{cats.length - shown.length > 1 ? "s" : ""}</span>}
+          </div>
+        </div>;
       }}
     </Tile>
   );
@@ -3595,7 +3595,7 @@ export const TILES = {
   podium: { label: "Classement des copains", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Podium p={d.podium} a={d.ach} o={o} sz={sz(it)}/>,
     options: [C("style", "Affichage", "list", [["list", "liste"], ["podium", "podium"]]), B("bars", "Barres de score", true), SCROLL(false)] },
   alerts: { label: "Alertes en bref", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Alerts a={d.attention} o={o} sz={sz(it)}/>,
-    options: [C("style", "Affichage", "chips", [["chips", "pastilles"], ["icons", "icônes"], ["list", "liste"]], { hint: "Pastilles : une pilule par catégorie. Icônes : une grosse icône, le nombre en badge. Liste : une ligne par catégorie, et ses alertes dessous quand la tuile est haute." }),
+    options: [C("style", "Affichage", "chips", [["chips", "rangées"], ["icons", "icônes"], ["list", "rangées et exemples"]], { hint: "Rangées : une par catégorie, sa couleur, une barre et le nombre. Icônes : une grosse icône, le nombre en badge. Rangées et exemples : les premières alertes sous chaque catégorie quand il y a la place." }),
       B("detail", "Exemples (quand la tuile est large)", true)] },
   countdown: { label: "Fin d'impression", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Countdown status={st} o={o} sz={sz(it)}/>,
     options: [B("fin", "Heure de fin", true), B("layer", "Couche", true)] },
