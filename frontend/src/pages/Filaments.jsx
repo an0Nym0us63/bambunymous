@@ -1016,7 +1016,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
       <FHero colors={colorsList} type={spool.filament_multicolor_type} color={main} name={name}
         chips={[fChip(`#${spool.id}`, "#64748B"), spool.archived && fChip("Archivée", "#94a3b8"),
           spool.location && fChip(`📍 ${spool.location}`, "#8B5CF6"),
-          spool.sibling_count > 0 && fChip(`🧵 +${spool.sibling_count} en stock${spool.sibling_weight_g ? ` · ${fmtStock(spool.sibling_weight_g)}` : ""}`, "#22C55E"),
+          !spool.archived && spool.sibling_count > 0 && fChip(`🧵 +${spool.sibling_count} en stock${spool.sibling_weight_g ? ` · ${fmtStock(spool.sibling_weight_g)}` : ""}`, "#22C55E"),
           dryChip, fChip(<><Palette size={11}/>{spool.filament_swatch ? "Échantillon" : "Sans échantillon"}</>, spool.filament_swatch ? "#22c55e" : "#94a3b8")]}
         sub={<>
           {spool.filament_translated_name && spool.filament_name && spool.filament_name !== spool.filament_translated_name &&
@@ -1279,6 +1279,7 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
   const sub = s.filament_fila_type || s.filament_material;
   // une bobine blanche (ou tres claire) prend un liseré gris : sinon elle disparait sur le fond clair
   const main = paleHex(s.filament_color) ? "#94a3b8" : (hexToCss(s.filament_color) || "#94a3b8");
+  const more = s.archived ? 0 : (s.sibling_count || 0);
 
   return (
     <Pressable onClick={onClick} menu={menu} className="card-sm"
@@ -1295,16 +1296,19 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
         {sub || " "}
       </p>
       {s.needs_drying && <span data-tip="À sécher" style={{ position:"absolute", top:5, right:6, fontSize:10 }}>💧</span>}
-      {/* d'autres bobines du meme filament en stock : combien, en coin */}
-      {s.sibling_count > 0 && <span data-tip={`${s.sibling_count} autre${s.sibling_count > 1 ? "s" : ""} bobine${s.sibling_count > 1 ? "s" : ""} de ce filament en stock`
-        + (s.sibling_weight_g ? ` (${fmtStock(s.sibling_weight_g)})` : "")}
-        style={{ position:"absolute", top:6, left:6, fontSize:9, fontWeight:900, padding:"1px 6px", borderRadius:20, color:"#fff",
-          background:"linear-gradient(135deg, #22C55E, #16A34A)", boxShadow:"0 2px 6px -2px #16A34A" }}>+{s.sibling_count}</span>}
+
 
       {/* La bobine, meme dessin qu'au slot AMS de l'accueil */}
-      <div style={{ display:"flex", justifyContent:"center", margin:"3px 0 0", filter:`drop-shadow(0 6px 10px ${main}55)` }}>
-        <SpoolSVG colors={colorsList} empty={false} size={70}
-          type={s.filament_multicolor_type}/>
+      <div style={{ position:"relative", display:"flex", justifyContent:"center", margin:"3px 0 0", filter:`drop-shadow(0 6px 10px ${main}55)` }}>
+        {/* d'autres bobines du meme filament en stock : une bobine estompee derriere, et leur nombre en discret
+            (pas dans les archives : elles ne sont plus en stock) */}
+        {more > 0 && <span aria-hidden="true" style={{ position:"absolute", top:4, left:"calc(50% - 22px)", opacity:0.35 }}>
+          <SpoolSVG colors={colorsList} empty={false} size={62} type={s.filament_multicolor_type}/></span>}
+        <span style={{ position:"relative" }}><SpoolSVG colors={colorsList} empty={false} size={70}
+          type={s.filament_multicolor_type}/></span>
+        {more > 0 && <span data-tip={`${more} autre${more > 1 ? "s" : ""} bobine${more > 1 ? "s" : ""} de ce filament en stock`
+          + (s.sibling_weight_g ? ` (${fmtStock(s.sibling_weight_g)})` : "")}
+          style={{ position:"absolute", right:"calc(50% - 50px)", bottom:2, fontSize:9.5, fontWeight:800, color:"var(--muted)" }}>+{more}</span>}
       </div>
 
       <div style={{ padding:"2px 9px 10px", display:"flex", flexDirection:"column", gap:5 }}>
