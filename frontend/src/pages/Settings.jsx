@@ -1086,10 +1086,10 @@ function SourceBackfillSection() {
   const load = () => client.get("/makerworld/source3mf/status").then(r => setSt(r.data)).catch(() => {});
   React.useEffect(() => { load(); }, []);
   React.useEffect(() => {
-    if (!st?.running) return undefined;
+    if (!st?.running && !st?.resume_at) return undefined;
     const t = setInterval(load, 2000);
     return () => clearInterval(t);
-  }, [st?.running]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [st?.running, st?.resume_at]); // eslint-disable-line react-hooks/exhaustive-deps
   const start = () => client.post("/makerworld/source3mf/backfill").then(r => setSt(r.data)).catch(e => showAlert(e.response?.data?.detail || e.message));
   const stop = () => client.post("/makerworld/source3mf/stop").then(r => setSt(r.data)).catch(() => {});
   const run = !!st?.running, sm = st?.summary, has = st && st.total != null;
@@ -1144,12 +1144,16 @@ function SourceBackfillSection() {
             {st.blocks?.length
               ? `🛑 Bloqué ${st.blocks.length} fois par MakerWorld : ${st.blocks.map(b => `à ${hm(b.at)} (après ${b.ok} fichier${b.ok > 1 ? "s" : ""})`).join(", ")}`
               : st.ok > 0 ? "✓ Aucun blocage de MakerWorld pendant ce passage" : null}</div>
-          {!run && st.stopped && <div style={{ fontSize:12, fontWeight:700, color:"#d97706" }}>{st.stopped}</div>}
+          {!run && st.resume_at && <div style={{ fontSize:12, fontWeight:700, color:"#6366F1" }}>
+            ↻ Le serveur a redémarré pendant le rattrapage : il reprend tout seul vers {hm(st.resume_at)}.</div>}
+          {!run && !st.resume_at && st.stopped && <div style={{ fontSize:12, fontWeight:700, color:"#d97706" }}>{st.stopped}</div>}
           {st.errors?.length > 0 && <details style={{ fontSize:11.5, color:"var(--muted)" }}>
             <summary style={{ cursor:"pointer", fontWeight:700 }}>Dernières erreurs</summary>
             {st.errors.map((e, i) => <div key={i}>• {txt(e)}</div>)}</details>}
         </div>
       )}
+      {!run && st?.resume_at && <button onClick={stop} style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer",
+        border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", marginRight:8 }}>Annuler la reprise</button>}
       {run
         ? <button onClick={stop} style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer", border:"1px solid var(--border)",
             background:"var(--surface2)", color:"var(--text)" }}>■ Arrêter</button>

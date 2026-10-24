@@ -211,7 +211,7 @@ def status() -> dict:
     if not JOB:
         try:
             JOB.update(json.loads((_dir() / "backfill.json").read_text(encoding="utf-8")))
-            if JOB.get("running"):            # l'appli a redemarre pendant le rattrapage
+            if JOB.get("running"):            # l'appli a redemarre pendant le rattrapage (sans reprise prevue)
                 JOB.update(running=False, stopped="Interrompu par un redémarrage")
         except (OSError, ValueError):
             pass
@@ -240,10 +240,12 @@ async def backfill() -> None:
     from .mw_3mf import ExactError
     pairs = await _pairs()
     _STOP["flag"] = False
+    blocks = list(JOB.get("blocks") or []) if JOB.get("resumed") else []   # une reprise garde l'historique des blocages
+    resumed = bool(JOB.get("resumed"))
     JOB.clear()
     JOB.update(running=True, started=time.time(), finished=None, total=len(pairs), done=0, ok=0, already=0,
                skipped=0, failed=0, current=None, errors=[], stopped=None, bytes=0, paused_until=None, guessed=0,
-               blocks=[])
+               blocks=blocks, resumed=resumed, resume_at=None)
     _job_save()
     async def nap(sec) -> bool:
         """Attend sec secondes par petits bouts (« Arreter » repond tout de suite) ; False si arrete."""
@@ -323,12 +325,41 @@ def start_backfill() -> bool:
     if JOB.get("running"):
         return False
     JOB["running"] = True                      # tout de suite : un second clic ne relance pas
+    JOB["resumed"] = False                     # lance a la main : un nouvel historique des blocages
     asyncio.get_running_loop().create_task(backfill())
     return True
 
 
 def stop_backfill() -> None:
     _STOP["flag"] = True
+    if JOB.get("resume_at"):                  # une reprise prevue apres un redemarrage : annulee
+        JOB.update(resume_at=None, stopped="Reprise automatique annulée")
+        _job_save()
+
+
+async def resume_after_restart() -> None:
+    """Au demarrage : un rattrapage qui tournait a l'arret reprend tout seul (apres une minute, ou a la fin
+    de la pause demandee par MakerWorld). Ce qui etait deja recupere compte en « deja la »."""
+    try:
+        d = json.loads((_dir() / "backfill.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return
+    if not d.get("running"):
+        return
+    at = max(time.time() + 60, float(d.get("paused_until") or 0))
+    JOB.clear()
+    JOB.update(d)
+    JOB.update(running=False, current=None, paused_until=None, resume_at=at, resumed=True,
+               stopped=None, finished=time.time())
+    _job_save()
+    logger.info(f"[MW-3MF] rattrapage interrompu par l'arret : reprise dans {int(at - time.time())} s")
+    while time.time() < at:
+        if not JOB.get("resume_at") or JOB.get("running"):
+            return                            # annulee, ou relancee a la main entre-temps
+        await asyncio.sleep(min(5, max(0.0, at - time.time())))
+    if JOB.get("resume_at") and not JOB.get("running"):
+        JOB["running"] = True
+        await backfill()
 
 
 
