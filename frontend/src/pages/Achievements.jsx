@@ -843,7 +843,7 @@ function OddsSheet({ odds, admin, uniq, onClose }) {
                 <button type="button" onClick={() => (sc.count || sc.loupes?.used?.length) && setOpenU(a.username)} disabled={!sc.count && !sc.loupes?.used?.length}
                   style={{ marginTop:4, padding:0, border:"none", background:"none", cursor: sc.count ? "pointer" : "default", fontSize:12, fontWeight:800,
                     color:"#EC4899", textAlign:"left" }}>
-                  🥚 {sc.count} secret{sc.count > 1 ? "s" : ""} trouvé{sc.count > 1 ? "s" : ""} lui-même{sc.count ? " ›" : ""}</button>
+                  🥚 {sc.count} secret{sc.count > 1 ? "s" : ""} trouvé{sc.count > 1 ? "s" : ""}{sc.count ? " ›" : ""}</button>
               ))(secrets[a.username])}
             </div>
           </div>
@@ -872,7 +872,7 @@ function AccountSecrets({ acc, subs, uniq, onClose }) {
           <Avatar name={acc.username} size={30}/>
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:16, fontWeight:900, color:"var(--text)" }}>Les secrets de {acc.username}</div>
-            <div style={{ fontSize:11.5, color:"var(--muted)" }}>{acc.count} trouvé{acc.count > 1 ? "s" : ""} lui-même
+            <div style={{ fontSize:11.5, color:"var(--muted)" }}>{acc.count} trouvé{acc.count > 1 ? "s" : ""}
               {acc.last ? ` · le dernier ${oddsWhen(acc.last)}` : ""}</div>
             <div style={{ fontSize:11.5, fontWeight:700, marginTop:1 }}>
               <span style={{ color:"#22c55e" }}>✓ {both} que tu as aussi</span><span style={{ color:"var(--muted)" }}> · </span>

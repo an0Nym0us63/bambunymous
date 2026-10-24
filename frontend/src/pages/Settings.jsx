@@ -21,6 +21,7 @@ import RateTemplatesSettings from "../components/RateTemplatesSettings";
 import NotificationsSettings from "../components/NotificationsSettings";
 import MyAppNotifications from "../components/MyAppNotifications";
 import AndroidApp from "../components/AndroidApp";
+import StorageSheet from "../components/StorageSheet";
 import TwoFactorCard from "../components/TwoFactorCard";
 import { useTrackDetail } from "../utils/track";
 import { egg, tapper, useEggFound } from "../eggs";
@@ -1062,6 +1063,22 @@ function RecalculateSection() {
 }
 // Export de diagnostic : les impressions recentes telles qu'en base (dates, durees, pauses, statut)
 // et le calcul jour par jour, dans un fichier a transmettre quand un chiffre parait faux.
+// L'espace de stockage : un bouton, et la fenetre (anneau par sorte de fichiers, disque, impressions lourdes)
+function StorageSection() {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="card" style={{ padding:"16px 20px" }}>
+      <h3 style={{ fontSize:14, fontWeight:700, color:"var(--text)", margin:"0 0 6px" }}>Espace de stockage</h3>
+      <p style={{ fontSize:12, color:"var(--muted)", margin:"0 0 14px" }}>
+        Ce que l'appli garde sur le serveur, par sorte : photos automatiques et ajoutées, vignettes, 3MF, vidéos, photos de
+        groupes, d'objets et d'accessoires, base de données… avec la place du disque et les impressions les plus lourdes.
+      </p>
+      <button onClick={() => setOpen(true)} style={{ padding:"8px 18px", borderRadius:10, fontSize:13, fontWeight:700, cursor:"pointer",
+        border:"none", background:"#6366F1", color:"white" }}>💾 Voir l'espace de stockage</button>
+      {open && <StorageSheet onClose={() => setOpen(false)}/>}
+    </div>
+  );
+}
 function DiagExportSection() {
   const [days, setDays] = React.useState(14);
   const [loading, setLoading] = React.useState(false);
@@ -1900,6 +1917,7 @@ export default function Settings() {
       {/* ── Outils (maintenance) ──────────────────────────────────── */}
       {tab === "tools" && (
       <AdminOnly><div className="wide-2">
+        <StorageSection/>
         <EnrichFromCatalogSection/>
         <RecalculateSection/>
         <DiagExportSection/>

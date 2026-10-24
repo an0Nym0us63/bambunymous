@@ -336,3 +336,21 @@ async def put_spool_tares(body: dict, db: AsyncSession = Depends(get_db), _: str
     await set_setting(db, SPOOL_TARES_KEY, json.dumps(clean))
     await set_setting(db, SPOOL_TARES_LINKED_KEY, "1")
     return {"tares": clean, "updated_filaments": updated}
+
+
+@router.get("/storage")
+async def storage_usage(fresh: bool = False, db: AsyncSession = Depends(get_db), _: str = Depends(require_admin)):
+    """L'espace de stockage (Parametres > Outils) : ce que l'appli garde, par sorte, la place du disque et
+    les impressions qui en prennent le plus (avec leur nom)."""
+    from sqlalchemy import select
+    from ....services import storage as S
+    from ....models.print_history import Print
+    v = await S.usage(fresh)
+    ids = [x["id"] for x in v["top_prints"]]
+    names = {}
+    if ids:
+        rows = (await db.execute(select(Print.id, Print.file_name, Print.translated_name, Print.print_date)
+                                 .where(Print.id.in_(ids)))).all()
+        names = {r[0]: (r[2] or r[1] or f"Impression #{r[0]}", r[3].isoformat() if r[3] else None) for r in rows}
+    return {**v, "top_prints": [{**x, "name": names.get(x["id"], (f"Impression #{x['id']}", None))[0],
+                                 "date": names.get(x["id"], (None, None))[1]} for x in v["top_prints"]]}
