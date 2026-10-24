@@ -1172,7 +1172,7 @@ function SourceBackfillSection() {
         <span>Au plus</span>
         <select value={st.quota.cap} onChange={e => client.post("/makerworld/source3mf/budget", { n: +e.target.value }).then(load).catch(() => {})}
           style={{ height:30, borderRadius:9, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontWeight:700, fontSize:12.5, padding:"0 6px" }}>
-          {[5, 10, 15, 20, 30, 0].map(n => <option key={n} value={n}>{n ? `${n} fichiers` : "sans limite"}</option>)}
+          {[5, 10, 15, 20, 30, 40, 50, 0].map(n => <option key={n} value={n}>{n ? `${n} fichiers` : "sans limite"}</option>)}
         </select>
         <span>par 24 h, pour garder de quoi imprimer depuis MakerWorld · {st.quota.used} pris ces dernières 24 h</span>
       </div>}

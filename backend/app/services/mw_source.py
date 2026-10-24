@@ -91,7 +91,7 @@ DAILY_S = 24 * 3600
 # impression depuis MakerWorld jusqu'au lendemain. Le rattrapage a donc son propre quota (par 24 h glissantes),
 # reglable dans la carte ; les 3MF pris au lancement des impressions n'y sont pas soumis.
 BUDGET_KEY = "MW_SOURCE_DAILY_BUDGET"
-BUDGET_DEFAULT = 15
+BUDGET_DEFAULT = 50
 
 
 def _log_path() -> Path:
