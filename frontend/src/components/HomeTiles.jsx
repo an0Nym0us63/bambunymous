@@ -15,7 +15,7 @@ import LiveCamera from "./LiveCamera";
 import { Medal, gradeOf, GradeEmblem, CARD_ORDER } from "../pages/Achievements";
 import { DryCard } from "./AMSSection";
 import SpoolSVG from "./SpoolSVG";
-import { switchRoutes, slotLabel, grilleAccueil, lireDisposition } from "../utils/ams";
+import { switchRoutes, slotLabel, grilleAccueil, lireDisposition, trayPct } from "../utils/ams";
 import MakerWorldModelSheet from "./MakerWorldModelSheet";
 
 // Les tuiles de l'accueil (22/10/2026, refaites le meme jour). Chaque tuile :
@@ -3342,38 +3342,107 @@ function Toolhead({ status, sz }) {
   );
 }
 // les couleurs chargees : toutes les bobines de l'AMS en pastilles, celle qui imprime cerclee
+// une bobine chargee : son nom, sa marque, sa matiere (sous-type), ce qui reste (suivi BambuNymous, sinon l'AMS)
+const trayName = t => t.spool_info?.translated_name || t.spool_info?.name || t.filament_type || "Bobine";
+const trayKind = t => { const si = t.spool_info || {}; const ft = (si.fila_type || "").trim(), mat = (si.material || t.filament_type || "").trim();
+  return ft && mat && !ft.toUpperCase().startsWith(mat.toUpperCase()) ? `${mat} ${ft}` : ft || mat; };
+const trayLeft = t => { const p = trayPct(t); return p == null ? null : p / 100; };
+const trayTip = t => { const si = t.spool_info || {}, p = trayPct(t);
+  return `${slotOf(t)} · ${trayName(t)}\n${[si.brand, trayKind(t)].filter(Boolean).join(" · ")}${p != null ? `\n${si.remaining_weight_g != null ? `${fmtG(si.remaining_weight_g)} · ` : ""}${p} % restants` : ""}`; };
+const lum = c => { const h = String(c || "").replace("#", ""); if (h.length < 6) return 200;
+  return parseInt(h.slice(0, 2), 16) * 0.299 + parseInt(h.slice(2, 4), 16) * 0.587 + parseInt(h.slice(4, 6), 16) * 0.114; };
+// la case d'une bobine : sa couleur, assombrie au-dessus de ce qui reste, l'emplacement ecrit dedans quand ca tient
+function TraySwatch({ t, s, on, label = true }) {
+  const c = trayCol(t), left = trayLeft(t), ink = lum(c) > 160 ? "rgba(15,23,42,0.75)" : "rgba(255,255,255,0.92)";
+  return <span data-pk="" data-tip={trayTip(t)} style={{ position: "relative", width: s, height: s, flexShrink: 0, borderRadius: Math.round(s / 3.4), display: "block",
+    background: left != null && s >= 22 ? `linear-gradient(to bottom, rgba(0,0,0,0.16) ${(1 - left) * 100}%, transparent ${(1 - left) * 100}%), ${c}` : c,
+    border: "1px solid rgba(0,0,0,0.15)", boxShadow: on ? "0 0 0 2.5px var(--surface), 0 0 0 4.5px #3b82f6, 0 4px 14px rgba(59,130,246,0.45)" : "0 2px 6px rgba(0,0,0,0.12)",
+    animation: on ? "bn-ring 2s ease-out infinite" : "none" }}>
+    {label && s >= 30 && <span style={{ position: "absolute", left: 0, right: 0, bottom: Math.max(2, s * 0.06), textAlign: "center", fontSize: Math.max(9, Math.min(12, s * 0.22)),
+      fontWeight: 900, color: ink, letterSpacing: ".02em" }}>{slotOf(t)}</span>}
+  </span>;
+}
 function Colors({ status, o, sz }) {
-  const trays = (status?.ams_list || []).filter(a => a.id !== 255 && a.id !== 254).flatMap(a => (a.trays || []).map(t => ({ ...t, ams: a })))
-    .filter(trayCol);
+  const units = (status?.ams_list || []).filter(a => a.id !== 255 && a.id !== 254)
+    .map(a => ({ a, trays: (a.trays || []).map(t => ({ ...t, ams: a })).filter(trayCol) })).filter(u => u.trays.length);
+  const trays = units.flatMap(u => u.trays);
   if (!trays.length) return null;
   const on = t => t.ams.id === status?.active_ams_id && t.id === status?.active_tray_id;
-  const dot = (t, s, label) => <span key={`${t.ams.id}-${t.id}`} title={`${amsLab(t.ams)} · ${t.filament_type || ""}`} style={{ display: "flex", flexDirection: "column",
-    alignItems: "center", gap: 3, minWidth: 0 }}>
-    <span data-pk="" style={{ width: s, height: s, borderRadius: Math.round(s / 3.2), background: trayCol(t), border: "1px solid rgba(0,0,0,0.15)",
-      boxShadow: on(t) ? "0 0 0 3px var(--surface), 0 0 0 5px #3b82f6" : "none", display: "block" }}/>
-    {label && <span style={{ fontSize: 10.5, fontWeight: 800, color: on(t) ? "#3b82f6" : "var(--muted)", whiteSpace: "nowrap", lineHeight: "13px",
-      maxWidth: s + 6, overflow: "hidden", textOverflow: "ellipsis" }}>
-      {s >= 56 ? `${slotOf(t)} · ${t.filament_type}` : slotOf(t)}</span>}</span>;
+  const cur = trays.find(on);
+  const mats = Object.entries(trays.reduce((m, t) => { const k = t.spool_info?.material || t.filament_type || "?"; m[k] = (m[k] || 0) + 1; return m; }, {})).sort((a, b) => b[1] - a[1]);
+  const head = W => <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap", minWidth: 0 }}>
+    <span data-pk="" style={{ fontSize: 24, fontWeight: 900, lineHeight: 1.05, ...gradText("#DB2777", "#A855F7") }}>{trays.length}</span>
+    <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>couleur{trays.length > 1 ? "s" : ""}</span>
+    {W >= 220 && <Muted size={11.5}>· {mats.slice(0, 3).map(([k, n]) => `${n} ${k}`).join(" · ")}</Muted>}
+    {cur && W >= 180 && <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: "#3b82f6", whiteSpace: "nowrap" }}>● {slotOf(cur)}</span>}</div>;
   return (
-    <Tile icon={<Palette size={15}/>} color="#EC4899" label="Couleurs chargées"
-      zoom={<>
-        <Stats items={[["Bobines chargées", trays.length], ...Object.entries(trays.reduce((m, t) => { const k = t.filament_type || "?"; m[k] = (m[k] || 0) + 1; return m; }, {}))
-          .sort((a, b) => b[1] - a[1]).slice(0, 3)]}/>
-        {[...new Map(trays.map(t => [t.ams.id, t.ams])).values()].map(a => <div key={a.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}><H2>{amsLab(a)}</H2>
-            {a.humidity > 0 && <Muted size={11.5}>💧 {a.humidity} %</Muted>}</div>
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>{trays.filter(t => t.ams.id === a.id).map(t => dot(t, 64, true))}</div></div>)}</>}
-      mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 3 }}>{trays.slice(0, 18).map(t => <span key={`${t.ams.id}-${t.id}`}
-        style={{ width: 13, height: 13, borderRadius: 4, background: trayCol(t), border: "1px solid rgba(0,0,0,0.2)" }}/>)}</span>}>
+    <Tile icon={<Palette size={15}/>} color="#EC4899" label="Couleurs chargées" zoom={<ColorsZoom units={units} on={on} mats={mats} cur={cur}/>}
+      mini={sz.h === 0.5} summary={<span style={{ display: "inline-flex", gap: 3 }}>{trays.slice(0, 18).map(t => <span key={`${t.ams.id}-${t.id}`} data-tip={trayTip(t)}
+        style={{ width: 13, height: 13, borderRadius: 4, background: trayCol(t), border: "1px solid rgba(0,0,0,0.2)", outline: on(t) ? "2px solid #3b82f6" : "none", outlineOffset: 1 }}/>)}</span>}>
       {({ W, H }) => {
-        const lg = fitGrid(trays.length, W - 6, H - 6, { gap: 6, max: 64, extra: 16 });
-        const labels = lg.size >= 40;
-        const g = labels ? lg : fitGrid(trays.length, W - 6, H - 6, { gap: 6, max: 70 });
-        return <div style={{ flex: 1, display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: 6, justifyContent: "space-evenly", alignContent: "center", padding: 3 }}>
-          {trays.map(t => dot(t, g.size, labels))}</div>;
+        const hh = H >= 120 ? 32 : 0;
+        const room = H - hh;
+        // une rangee par unite (son nom a gauche) quand chacune a au moins 28 px ; sinon toutes les cases en grille
+        const rowH = Math.floor((room - 6 * (units.length - 1)) / units.length);
+        const maxN = Math.max(...units.map(u => u.trays.length));
+        const lab = 32;
+        const s = Math.min(rowH, Math.floor((W - lab - 6 - 6 * (maxN - 1)) / maxN), 56);
+        if (s >= 24) return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8, minWidth: 0 }}>
+          {hh > 0 && head(W)}
+          <div style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "center", alignSelf: "center", maxWidth: "100%" }}>
+            {units.map(u => <div key={u.a.id} style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+              <span style={{ width: lab, flexShrink: 0, fontSize: 10.5, fontWeight: 900, textAlign: "center", whiteSpace: "nowrap",
+                color: u.a.id === status?.active_ams_id ? "#3b82f6" : "var(--muted)" }}>
+                {amsLab(u.a).replace("AMS-", "")}</span>
+              <span style={{ display: "flex", gap: 6, minWidth: 0 }}>{u.trays.map(t => <TraySwatch key={t.id} t={t} s={s} on={on(t)}/>)}</span>
+            </div>)}</div></div>;
+        const g = fitGrid(trays.length, W - 6, room - 6, { gap: 6, max: 64 });
+        return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8, minWidth: 0 }}>
+          {hh > 0 && head(W)}
+          <div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: 6, justifyContent: "space-evenly", alignContent: "center" }}>
+            {trays.map(t => <TraySwatch key={`${t.ams.id}-${t.id}`} t={t} s={g.size} on={on(t)}/>)}</div></div>;
       }}
     </Tile>
   );
+}
+// la fenetre : les chiffres, puis chaque unite et ses bobines, avec leur nom, marque, sous-type et ce qui reste
+function ColorsZoom({ units, on, mats, cur }) {
+  const n = units.reduce((t, u) => t + u.trays.length, 0);
+  const pill = (t, c) => <span style={{ fontSize: 10.5, fontWeight: 800, padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap", color: c,
+    background: `${c}1f`, border: `1px solid ${c}40` }}>{t}</span>;
+  return <>
+    <Stats items={[["Bobines chargées", n, "#EC4899"], ["Unités", units.length, "#A855F7"], ...mats.slice(0, 3).map(([k, x]) => [k, x, "#F59E0B"]),
+      cur && ["En cours", `${slotOf(cur)} · ${trayName(cur)}`, "#3B82F6"]].filter(Boolean)}/>
+    {units.map(({ a, trays }) => <div key={a.id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <H2>{amsLab(a)}</H2>
+        {a.humidity > 0 && pill(`💧 ${a.humidity} %`, a.humidity >= 40 ? "#ef4444" : a.humidity >= 30 ? "#d97706" : "#0ea5e9")}
+        {a.temp > 0 && pill(`${Math.round(a.temp)} °C`, "#64748b")}
+        {a.is_drying && a.dry_time > 0 && pill(`🔥 séchage · ${fmtDur(a.dry_time * 60)}`, "#f97316")}
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(230px, 1fr))", gap: 8 }}>
+        {trays.map(t => { const si = t.spool_info || {}, p = trayPct(t), c = p == null ? "#94a3b8" : p < 15 ? "#ef4444" : p < 35 ? "#f59e0b" : "#22c55e";
+          return <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 14, minWidth: 0,
+            background: `linear-gradient(135deg, ${trayCol(t)}26, transparent 55%), var(--surface2)`, border: `1px solid ${on(t) ? "#3b82f6" : "var(--border)"}` }}>
+            <TraySwatch t={t} s={44} on={on(t)}/>
+            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
+                <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{trayName(t)}</span>
+                {si.remaining_weight_g != null && <span style={{ fontSize: 13, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{fmtG(si.remaining_weight_g)}</span>}</div>
+              <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                {pill(slotOf(t), on(t) ? "#3b82f6" : "#64748b")}
+                {si.brand && pill(si.brand, "#8B5CF6")}
+                {trayKind(t) && pill(trayKind(t), "#0EA5E9")}
+                {on(t) && pill("● en cours", "#3b82f6")}
+                {!t.spool_info && pill("bobine non associée", "#94a3b8")}
+              </div>
+              {p != null && <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ flex: 1, height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
+                  <span style={{ display: "block", height: "100%", width: `${p}%`, background: c }}/></span>
+                <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)" }}>{p} %</span></span>}
+            </div></div>; })}</div>
+    </div>)}
+  </>;
 }
 // la serie : combien de jours d'affilee avec au moins une impression, et le calendrier des 30 derniers
 function Streak({ o, sz }) {
