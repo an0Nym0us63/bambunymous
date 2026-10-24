@@ -4744,8 +4744,14 @@ async def counted_users() -> list:
             chosen = None
         if isinstance(chosen, list):
             return [str(x) for x in chosen]
+        # par defaut : le compte principal seul (avant le 24/10/2026 : tous les administrateurs)
+        from ..api.v1.routes.users import _root_admin_id
+        mid = await _root_admin_id(db)
+        main = await db.get(User, mid) if mid else None
+        if main is not None:
+            return [main.username]
         rows = (await db.execute(select(User.username, User.role).where(User.active.is_(True)))).all()
-    return [u for u, r in rows if (r or "admin") == "admin"] or ["admin"]
+    return [u for u, r in rows if (r or "admin") == "admin"][:1] or ["admin"]
 
 
 async def set_counted_users(names: list) -> list:

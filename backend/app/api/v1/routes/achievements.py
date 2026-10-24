@@ -112,8 +112,8 @@ async def achievements_secrets_by_account(acc=Depends(require_own_account), db: 
     """Pour l'administrateur (un vrai compte de la maison, jamais une cle de copain) : les secrets
     trouves par chaque compte de la maison, compte ou pas."""
     from ....services import achievements as A
-    if acc[1] != ROLE_ADMIN:
-        raise HTTPException(403, "Réservé aux administrateurs")
+    if not (await _me(acc[0], db))["main"]:
+        raise HTTPException(403, "Réservé au compte principal")
     # ni le compte principal (ses secrets sont ceux de la maison), ni les invitations de copains
     main = await _main_name(db)
     users = (await db.execute(select(User).where(User.active.is_(True), User.friend_key_hash.is_(None))
@@ -133,9 +133,12 @@ def _dev(dev: str) -> str:
 
 
 @router.get("/news")
-async def achievements_news(dev: str = "", acc=Depends(require_own_account)):
-    """Les paliers debloques depuis mon dernier passage sur cet appareil : a annoncer a l'ecran."""
+async def achievements_news(dev: str = "", acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+    """Les paliers debloques depuis mon dernier passage sur cet appareil : a annoncer a l'ecran.
+    Ce sont les succes du proprietaire : seulement pour le compte principal."""
     from ....services import achievements as A
+    if not (await _me(acc[0], db))["main"]:
+        return {"news": []}
     return {"news": await A.tier_news(acc[0], _dev(dev))}
 
 
@@ -171,25 +174,25 @@ async def achievements_surprise(acc=Depends(require_own_account)):
 
 
 @router.get("/card-fx")
-async def achievements_card_fx(dev: str = "", acc=Depends(require_own_account)):
-    """Les cartes gagnees depuis ma derniere ouverture : a feter. Seulement le
-    compte principal (administrateur) : un autre compte ne la voit ni ne la consomme."""
+async def achievements_card_fx(dev: str = "", acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
+    """Les cartes gagnees depuis ma derniere ouverture : a feter. Seulement le compte principal
+    (avant le 24/10/2026 : tout administrateur, et un autre compte admin avait la fete)."""
     from ....services import achievements as A
-    if acc[1] != "admin":
+    if not (await _me(acc[0], db))["main"]:
         return {"cards": []}
     return {"cards": await A.card_fx(acc[0], _dev(dev))}
 
 
 @router.post("/card-fx/seen")
-async def achievements_card_fx_seen(dev: str = "", acc=Depends(require_own_account)):
+async def achievements_card_fx_seen(dev: str = "", acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
     from ....services import achievements as A
-    if acc[1] == "admin":
+    if (await _me(acc[0], db))["main"]:
         await A.card_fx_seen(acc[0], _dev(dev))
     return {"ok": True}
 
 
 @router.get("/prank/{slug}")
-async def achievements_prank_ok(slug: str, acc=Depends(require_own_account)):
+async def achievements_prank_ok(slug: str, acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
     """Cette farce peut-elle se jouer depuis son adresse ?"""
     from ....services import achievements as A
     if slug == "don":
@@ -197,16 +200,16 @@ async def achievements_prank_ok(slug: str, acc=Depends(require_own_account)):
         # compte secondaire, ni un copain ne la voient (ni ne la « consomment » avant lui). Pas « le premier
         # administrateur » : c'est souvent le compte « admin » cree a l'installation, que personne n'utilise.
         # « vu » : vue jusqu'au bout depuis la derniere remise a zero ; « ok » : rejouable a son adresse
-        return {"ok": await A.prank_replay_ok(slug), "maison": acc[1] == ROLE_ADMIN and await A.is_maison(),
+        return {"ok": await A.prank_replay_ok(slug), "maison": (await _me(acc[0], db))["main"] and await A.is_maison(),
                 "vu": await A.maison_vu()}
     return {"ok": await A.prank_replay_ok(slug)}
 
 
 @router.post("/prank/don/vu")
-async def achievements_don_vu(acc=Depends(require_own_account)):
+async def achievements_don_vu(acc=Depends(require_own_account), db: AsyncSession = Depends(get_db)):
     """La farce de la maison est allee jusqu'au bout (un administrateur) : elle ne retombe plus seule."""
     from ....services import achievements as A
-    if acc[1] == ROLE_ADMIN and await A.is_maison():
+    if (await _me(acc[0], db))["main"] and await A.is_maison():
         await A.maison_vu_set()
     return {"ok": True}
 
@@ -368,20 +371,22 @@ async def achievements_view(request: Request, fresh: bool = False, token: str = 
     v = await A.view(fresh)
     by_key = bool(token and token.startswith("fk_"))
     if not by_key:
+        # ce qui ne vaut que pour le proprietaire se regle sur le COMPTE PRINCIPAL, jamais sur le role
+        # administrateur (24/10/2026) : un autre administrateur voit les secrets masques, comme un copain
         me = await _me(username, db)
-        if me["family"]:                          # un compte de la famille : ses secrets a lui
-            mine = (await A._eggs_by()).get(username) or {}
-            if role != ROLE_ADMIN:               # la roue permise : son tresor reste visible
-                v = {**A.mask_secrets(v), "keys": v["keys"] if me["wheel"] else None}
-            v = A.family_view(v, mine, me["house"] or "La maison", await A.loupes(username))
-            v["family"]["subs"] = list(A.FAMILY_SUBS)
-        elif me["main"]:                          # le principal : les trouvailles de la famille, « a portee »
+        if me["main"]:                            # le principal : tout, et les trouvailles de la famille « a portee »
             fam = await A.family()
             if fam["secrets"]:
                 v = A.family_finds_view(v, await A._eggs_by(), [x for x in fam["secrets"] if x != username])
-        v = {**v, "me": me}
-        if role == ROLE_ADMIN or me["family"]:
-            return _json(v)
+            return _json({**v, "me": me})
+        u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
+        if not (u is not None and u.secrets_visible):
+            v = {**A.mask_secrets(v), "keys": v["keys"] if me["wheel"] else None}   # la roue permise : son tresor reste visible
+        if me["family"]:                          # un compte de la famille : ses secrets a lui
+            mine = (await A._eggs_by()).get(username) or {}
+            v = A.family_view(v, mine, me["house"] or "La maison", await A.loupes(username))
+            v["family"]["subs"] = list(A.FAMILY_SUBS)
+        return _json({**v, "me": me})
     u = (await db.execute(select(User).where(User.username == username))).scalar_one_or_none()
     if u is not None and u.secrets_visible:
         return _json(v)                           # droit « voit mes succes secrets » : tout, revelations comprises
