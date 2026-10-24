@@ -3818,7 +3818,7 @@ def _batch21(push, d, now) -> None:
     cumul("official", [_ts(f.created_at) or now for f in d.get("fil_more", [])
                        if (f.profile_id or "").strip() and (f.fila_color_code or "").strip()])
     cumul("auto_found", [_ts(s.created_at) or now for s in d.get("spool_modes", [])
-                         if (s.found_mode or "") in ("rfid", "profile", "color")])
+                         if (s.found_mode or "") in ("rfid", "auto", "profile", "color")])
     push("to_order", now, sum(1 for f in d.get("fil_more", []) if f.to_order))
     # objets
     cumul("good_seller", [_ts(o.sold_date) or now for o in d.get("obj_more", [])
@@ -5117,20 +5117,27 @@ async def egg_lock(username: str, name: str, consume: bool = False, now=None) ->
 CARD_LOG_MAX = 30
 
 
-async def card_fx(username: str) -> list:
+async def card_fx(username: str, dev: str = "") -> list:
+    """Les cartes gagnees depuis la derniere fete de CET appareil (un appareil nouveau part de
+    la derniere fete du compte, sur n'importe quel appareil)."""
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting, set_setting
     st = await _state_get() or {}
+    key = f"{username}|{dev}" if dev else username
     async with AsyncSessionLocal() as db:
         seen = json.loads(await get_setting(db, KEY + "_CARDFX", "{}") or "{}")
         if username not in seen:
             seen[username] = datetime.utcnow().isoformat()
             await set_setting(db, KEY + "_CARDFX", json.dumps(seen))
             return []
+        if key not in seen:                    # appareil nouveau : il part d'ici, puis suit son propre fil
+            seen[key] = seen[username]
+            await set_setting(db, KEY + "_CARDFX", json.dumps(seen))
+    since = seen[key]
     out, done = [], set()
     for e in st.get("card_log") or []:
         a = BY_ID.get(e.get("id"))
-        if not a or not a.get("card_tier") or str(e.get("at")) <= seen[username] or a["id"] in done:
+        if not a or not a.get("card_tier") or str(e.get("at")) <= since or a["id"] in done:
             continue
         done.add(a["id"])
         if not (st.get("unlocked") or {}).get(a["id"]):          # retournee depuis : plus de fete
@@ -5145,7 +5152,7 @@ async def card_fx(username: str) -> list:
 _NEWS_TICK = {"at": -1e9}
 
 
-async def tier_news(username: str) -> list:
+async def tier_news(username: str, dev: str = "") -> list:
     """Les paliers debloques depuis le dernier passage de ce compte, pour les annoncer a
     l'ecran pendant qu'on utilise l'appli. Compare l'ensemble des paliers debloques a ce
     que le compte a deja vu (pas des dates : un palier peut etre date d'avant son calcul).
@@ -5171,8 +5178,11 @@ async def tier_news(username: str) -> list:
         except ValueError:
             seen = {}
         seen = seen if isinstance(seen, dict) else {}
-        mine = seen.get(username)
-        seen[username] = sorted(now)
+        # par appareil : ce que celui-ci a deja annonce ; un appareil nouveau part de ce que le compte
+        # a vu en dernier (sur n'importe quel appareil), pour ne pas tout rejouer
+        key = f"{username}|{dev}" if dev else username
+        mine = seen.get(key, seen.get(username))
+        seen[key] = seen[username] = sorted(now)
         await set_setting(db, KEY + "_NEWS", json.dumps(seen))
     if mine is None:
         return []
@@ -5189,12 +5199,15 @@ async def tier_news(username: str) -> list:
     return out[:12]
 
 
-async def card_fx_seen(username: str) -> None:
+async def card_fx_seen(username: str, dev: str = "") -> None:
     from ..db.session import AsyncSessionLocal
     from .settings_service import get_setting, set_setting
     async with AsyncSessionLocal() as db:
         seen = json.loads(await get_setting(db, KEY + "_CARDFX", "{}") or "{}")
-        seen[username] = datetime.utcnow().isoformat()
+        now = datetime.utcnow().isoformat()
+        seen[username] = now
+        if dev:
+            seen[f"{username}|{dev}"] = now
         await set_setting(db, KEY + "_CARDFX", json.dumps(seen))
 
 
@@ -5315,7 +5328,8 @@ async def secrets_by_account(usernames: list) -> list:
     out = []
     for u in usernames:
         mine = d.get(u) or {}
-        items = sorted(({"id": k, "emoji": EGGS[k][0], "name": EGGS[k][1], "at": at} for k, at in mine.items() if k in EGGS),
+        items = sorted(({"id": k, "emoji": EGGS[k][0], "name": EGGS[k][1], "desc": EGGS[k][2], "at": at,
+                         "sub": SUB_OF.get(f"egg_{k}")} for k, at in mine.items() if k in EGGS),
                        key=lambda x: str(x["at"] or ""), reverse=True)
         out.append({"username": u, "count": len(items), "last": items[0]["at"] if items else None, "items": items})
     return out

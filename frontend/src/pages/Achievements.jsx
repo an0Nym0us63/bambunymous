@@ -371,6 +371,9 @@ export default function Achievements({ embedded = false }) {
                             <span style={{ position:"absolute", inset:0, display:"flex", alignItems:"center", justifyContent:"center", lineHeight:1, fontSize:14 }}>{sb.emoji}</span>
                           </span>
                           <span style={{ flex:1, minWidth:0 }}>{sb.name}
+                            {data.family?.subs?.includes(sb.id) && <span title="Dans ce tiroir, ce sont tes trouvailles à toi"
+                              style={{ marginLeft:6, fontSize:10.5, fontWeight:900, padding:"1px 7px", borderRadius:20, background:"#EC4899", color:"#fff",
+                                verticalAlign:"middle", whiteSpace:"nowrap", display:"inline-block" }}>à toi</span>}
                             {spentIn(sb.items).keys > 0 && <span title="Clés dépensées dans ce tiroir"
                               style={{ marginLeft:6, fontSize:11, fontWeight:800, color:"#F59E0B" }}>🔑 {spentIn(sb.items).keys}</span>}
                             {c.id === "secret" && <span style={{ display:"flex", marginTop:3 }}><Hand of={`s_${sb.id}`} size={18}/></span>}</span>
@@ -719,10 +722,12 @@ function OddsSheet({ odds, admin, onClose }) {
   useEffect(() => { const k = e => { if (e.key === "Escape") onClose(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onClose]);
   // pour l'administrateur : les secrets que chaque compte a trouves lui-meme (compte ou pas)
   const [secrets, setSecrets] = useState(null);
+  const [subs, setSubs] = useState([]);
   const [openU, setOpenU] = useState(null);
   useEffect(() => {
     if (!admin) return;
-    client.get("/achievements/secrets-by-account").then(r => setSecrets(Object.fromEntries((r.data?.accounts || []).map(a => [a.username, a])))).catch(() => {});
+    client.get("/achievements/secrets-by-account").then(r => { setSecrets(Object.fromEntries((r.data?.accounts || []).map(a => [a.username, a])));
+      setSubs(r.data?.subs || []); }).catch(() => {});
   }, [admin]);
   return createPortal(
     <div onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4000, background:"rgba(2,6,23,0.6)", backdropFilter:"blur(4px)",
@@ -757,20 +762,72 @@ function OddsSheet({ odds, admin, onClose }) {
                 {a.pending ? "Une surprise est tirée : elle tombe à la prochaine ouverture" : `${a.n} ouverture${a.n > 1 ? "s" : ""} sans surprise`}
                 {" · "}<b>{a.shown}</b> surprise{a.shown > 1 ? "s" : ""} reçue{a.shown > 1 ? "s" : ""}</div>
               <div style={{ fontSize:11, color:"var(--muted)" }}>Dernière ouverture comptée : {oddsWhen(a.last)}</div>
-              {secrets?.[a.username] && (sc => <>
-                <button type="button" onClick={() => setOpenU(u => u === a.username ? null : a.username)} disabled={!sc.count}
+              {/* ses propres trouvailles (pas le principal : les siennes sont celles de la maison) */}
+              {!a.main && secrets?.[a.username] && (sc => (
+                <button type="button" onClick={() => sc.count && setOpenU(a.username)} disabled={!sc.count}
                   style={{ marginTop:4, padding:0, border:"none", background:"none", cursor: sc.count ? "pointer" : "default", fontSize:12, fontWeight:800,
                     color:"#EC4899", textAlign:"left" }}>
-                  🥚 {sc.count} secret{sc.count > 1 ? "s" : ""} trouvé{sc.count > 1 ? "s" : ""} lui-même{sc.count ? (openU === a.username ? " ▴" : " ▾") : ""}</button>
-                {openU === a.username && <div style={{ marginTop:4, display:"flex", flexWrap:"wrap", gap:4 }}>
-                  {sc.items.map(x => <span key={x.id} title={x.at ? oddsWhen(x.at) : ""} style={{ fontSize:11, fontWeight:700, padding:"2px 7px", borderRadius:12,
-                    background:"var(--surface2)", color:"var(--text2)" }}>{x.emoji} {x.name}</span>)}</div>}
-              </>)(secrets[a.username])}
+                  🥚 {sc.count} secret{sc.count > 1 ? "s" : ""} trouvé{sc.count > 1 ? "s" : ""} lui-même{sc.count ? " ›" : ""}</button>
+              ))(secrets[a.username])}
             </div>
           </div>
         ))}
       </div>
+      {openU && secrets?.[openU] && <AccountSecrets acc={secrets[openU]} subs={subs} onClose={() => setOpenU(null)}/>}
     </div>, document.body);
+}
+
+// Les secrets qu'un compte de la maison a trouves lui-meme, rangés par tiroir comme sur sa page
+// (pour l'administrateur, depuis « Les surprises, compte par compte »)
+function AccountSecrets({ acc, subs, onClose }) {
+  const [open, setOpen] = useState(() => new Set());
+  useEffect(() => { const k = e => { if (e.key === "Escape") { e.stopPropagation(); onClose(); } };
+    window.addEventListener("keydown", k, true); return () => window.removeEventListener("keydown", k, true); }, [onClose]);
+  const groups = subs.map(sb => ({ ...sb, items: acc.items.filter(x => x.sub === sb.id) }));
+  const toggle = id => setOpen(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  return (
+    <div onClick={e => { e.stopPropagation(); onClose(); }} style={{ position:"fixed", inset:0, zIndex:4010, background:"rgba(2,6,23,0.55)",
+      display:"flex", alignItems:"center", justifyContent:"center", padding:14 }}>
+      <div onClick={e => e.stopPropagation()} className="card" style={{ width:"min(520px, 100%)", maxHeight:"86vh", overflowY:"auto", padding:16,
+        display:"flex", flexDirection:"column", gap:10, background:"var(--sheet-bg)" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <Avatar name={acc.username} size={30}/>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontSize:16, fontWeight:900, color:"var(--text)" }}>Les secrets de {acc.username}</div>
+            <div style={{ fontSize:11.5, color:"var(--muted)" }}>{acc.count} trouvé{acc.count > 1 ? "s" : ""} lui-même
+              {acc.last ? ` · le dernier ${oddsWhen(acc.last)}` : ""}</div>
+          </div>
+          <button onClick={onClose} aria-label="Fermer" style={{ width:32, height:32, borderRadius:10, border:"1px solid var(--border)",
+            background:"var(--surface2)", color:"var(--text2)", cursor:"pointer", flexShrink:0 }}>✕</button>
+        </div>
+        {groups.map(g => {
+          const col = SUB_COLOR[g.id] || "#A855F7", isOpen = open.has(g.id), n = g.items.length;
+          return (
+            <div key={g.id} style={{ display:"flex", flexDirection:"column", gap:6 }}>
+              <button onClick={() => n && toggle(g.id)} aria-expanded={isOpen} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 10px",
+                borderRadius:12, cursor: n ? "pointer" : "default", textAlign:"left", width:"100%", fontSize:13, fontWeight:800, color:"var(--text)",
+                ...feltCard(col), opacity: n ? 1 : 0.55 }}>
+                <span style={{ fontSize:17 }}>{g.emoji}</span>
+                <span style={{ flex:1, minWidth:0 }}>{g.name}</span>
+                <span style={pill(col)}>{n} / {g.total}</span>
+                {n > 0 && <span style={{ fontSize:10, color:"var(--muted)", transform: isOpen ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>}
+              </button>
+              {isOpen && g.items.map(x => (
+                <div key={x.id} style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"6px 8px 6px 12px" }}>
+                  <span style={{ fontSize:20, lineHeight:1.2 }}>{x.emoji}</span>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:800, color:"var(--text)" }}>{x.name}</div>
+                    {x.desc && <div style={{ fontSize:11.5, color:"var(--text2)", lineHeight:1.4 }}>{x.desc}</div>}
+                    {x.at && <div style={{ fontSize:10.5, color:"var(--muted)" }}>trouvé {oddsWhen(x.at)}</div>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
 }
 
 function SecretPlace({ it }) {

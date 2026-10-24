@@ -114,15 +114,29 @@ async def achievements_secrets_by_account(acc=Depends(require_own_account), db: 
     from ....services import achievements as A
     if acc[1] != ROLE_ADMIN:
         raise HTTPException(403, "Réservé aux administrateurs")
-    users = (await db.execute(select(User).where(User.active.is_(True)).order_by(User.id))).scalars().all()
-    return {"accounts": await A.secrets_by_account([u.username for u in users])}
+    # ni le compte principal (ses secrets sont ceux de la maison), ni les invitations de copains
+    main = await _main_name(db)
+    users = (await db.execute(select(User).where(User.active.is_(True), User.friend_key_hash.is_(None))
+                              .order_by(User.id))).scalars().all()
+    return {"accounts": await A.secrets_by_account([u.username for u in users if u.username != main]),
+            "subs": [{"id": i, "emoji": e, "name": n, "total": sum(1 for x in ids.split() if x in A.FAMILY_IDS)}
+                     for i, e, n, ids in A.SECRET_SUBS if i in A.FAMILY_SUBS]}
 
 
 @router.get("/news")
-async def achievements_news(acc=Depends(require_own_account)):
-    """Les paliers debloques depuis mon dernier passage : a annoncer a l'ecran."""
+def _dev(dev: str) -> str:
+    """L'appareil qui demande (identifiant tire au hasard par la page) : ce qu'un appareil a
+    annonce ne l'est plus pour lui seul, les autres l'annoncent encore (avant, le premier
+    appareil a demander « mangeait » l'annonce, et le telephone n'avait rien)."""
+    import re
+    return dev if re.fullmatch(r"[A-Za-z0-9]{6,40}", dev or "") else ""
+
+
+@router.get("/news")
+async def achievements_news(dev: str = "", acc=Depends(require_own_account)):
+    """Les paliers debloques depuis mon dernier passage sur cet appareil : a annoncer a l'ecran."""
     from ....services import achievements as A
-    return {"news": await A.tier_news(acc[0])}
+    return {"news": await A.tier_news(acc[0], _dev(dev))}
 
 
 @router.get("/surprise/odds")
@@ -132,7 +146,9 @@ async def achievements_surprise_odds(_u: str = Depends(get_current_user), db: As
     from ....services import achievements as A
     from .users import _root_admin_id
     main_id = await _root_admin_id(db)
-    users = (await db.execute(select(User).where(User.active.is_(True)).order_by(User.id))).scalars().all()
+    # les comptes de la maison seulement : pas les invitations de copains
+    users = (await db.execute(select(User).where(User.active.is_(True), User.friend_key_hash.is_(None))
+                              .order_by(User.id))).scalars().all()
     users = sorted(users, key=lambda x: (x.id != main_id, x.role != ROLE_ADMIN, x.id))
     rows = await A.surprise_odds([x.username for x in users])
     for r, x in zip(rows, users):
@@ -155,20 +171,20 @@ async def achievements_surprise(acc=Depends(require_own_account)):
 
 
 @router.get("/card-fx")
-async def achievements_card_fx(acc=Depends(require_own_account)):
+async def achievements_card_fx(dev: str = "", acc=Depends(require_own_account)):
     """Les cartes gagnees depuis ma derniere ouverture : a feter. Seulement le
     compte principal (administrateur) : un autre compte ne la voit ni ne la consomme."""
     from ....services import achievements as A
     if acc[1] != "admin":
         return {"cards": []}
-    return {"cards": await A.card_fx(acc[0])}
+    return {"cards": await A.card_fx(acc[0], _dev(dev))}
 
 
 @router.post("/card-fx/seen")
-async def achievements_card_fx_seen(acc=Depends(require_own_account)):
+async def achievements_card_fx_seen(dev: str = "", acc=Depends(require_own_account)):
     from ....services import achievements as A
     if acc[1] == "admin":
-        await A.card_fx_seen(acc[0])
+        await A.card_fx_seen(acc[0], _dev(dev))
     return {"ok": True}
 
 
@@ -214,6 +230,10 @@ async def achievements_egg(name: str, acc=Depends(require_own_account)):
     if name in A.EGGS and name in await A.eggs_seen_by(acc[0]):
         return {"new": False, "already": True, "mine": True, "id": f"egg_{name}"}
     found = await A.eggs_found()
+    if name in A.EGGS and name in found and acc[0] in await A.counted_users():
+        # un compte qui fait avancer la maison (le principal) : ce que la maison a, c'est le sien
+        await A.egg_seen(acc[0], name)
+        return {"new": False, "already": True, "mine": True, "id": f"egg_{name}"}
     if name in A.EGGS and name in found:
         # deja trouve par la maison : rien de plus pour la maison ; ce compte, lui, l'a trouve (une fois)
         # et la page le lui dit (« ne compte pas »), puis efface l'objet pour lui seul (24/10/2026)
@@ -342,6 +362,7 @@ async def achievements_view(request: Request, fresh: bool = False, token: str = 
             if role != ROLE_ADMIN:               # la roue permise : son tresor reste visible
                 v = {**A.mask_secrets(v), "keys": v["keys"] if me["wheel"] else None}
             v = A.family_view(v, mine, me["house"] or "La maison")
+            v["family"]["subs"] = list(A.FAMILY_SUBS)
         v = {**v, "me": me}
         if role == ROLE_ADMIN or me["family"]:
             return _json(v)

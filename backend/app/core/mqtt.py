@@ -760,6 +760,19 @@ class MQTTManager:
                                             await update_spool_location(spool_id, loc)
                                         except Exception as _le:
                                             logger.debug(f"[AMS] loc: {_le}")
+                                        # reconnue toute seule (RFID, ou profil et couleur) : notee une fois sur la
+                                        # bobine (le succes « Reconnu d'office » les compte ; rien ne l'ecrivait)
+                                        if mode in ("rfid", "auto"):
+                                            try:
+                                                from ..db.session import AsyncSessionLocal as _ASL3
+                                                from ..models.filament import Spool as _Sp3
+                                                async with _ASL3() as _db3:
+                                                    _sp3 = await _db3.get(_Sp3, spool_id)
+                                                    if _sp3 is not None and not (_sp3.found_mode or "").strip():
+                                                        _sp3.found_mode = mode
+                                                        await _db3.commit()
+                                            except Exception as _fe:
+                                                logger.debug(f"[AMS] found_mode: {_fe}")
                                     else:
                                         logger.debug(f"[AMS] {_ams_id}/{_tray_slot} no match ({mode})")
                                 try:    lp.run_until_complete(_go())

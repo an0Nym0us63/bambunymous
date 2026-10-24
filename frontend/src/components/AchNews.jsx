@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import client from "../api/client";
 import { cheer } from "../eggs";
 import { currentFriend, useFriend } from "../store/friend";
+import { deviceId } from "../utils/device";
 
 // Un palier de succes atteint pendant qu'on utilise l'appli (23/10/2026) : la meme carte en bas
 // d'ecran que les secrets. Le serveur dit ce qui est nouveau depuis mon dernier passage ; on lui
@@ -16,7 +17,7 @@ export default function AchNews() {
     const ask = () => {
       if (busy || document.hidden || currentFriend()) return;
       busy = true;
-      client.get("/achievements/news").then(({ data }) => {
+      client.get("/achievements/news", { params: { dev: deviceId() } }).then(({ data }) => {
         const news = data?.news || [];
         news.slice(0, MAX).forEach(n => cheer({
           emoji: n.emoji,
