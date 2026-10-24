@@ -962,7 +962,8 @@ function ListHero({ img, color, title, chips, meta, pct, foot, h, stacked, onOpe
     border: `1px solid color-mix(in srgb, ${color} 30%, transparent)` };
   const open = onOpen ? e => { e.stopPropagation(); onOpen(); } : undefined;
   if (stacked) {
-    const ih = Math.max(56, h - 78 - (pct != null ? 10 : 0) - (foot ? 18 : 0));
+    // le texte d'abord (titre sur 2 lignes, etiquettes, barre, ligne d'infos, marges), l'image prend le reste
+    const ih = Math.max(48, h - 96 - (pct != null ? 10 : 0) - (showFoot ? 18 : 0));
     return <div onClick={open} style={{ ...frame, display: "flex", flexDirection: "column" }}>
       <span style={{ position: "relative", height: ih, flexShrink: 0, display: "block" }}>
         {img ? <img data-pk="" src={img} alt="" onError={e => { e.currentTarget.style.visibility = "hidden"; }}
@@ -979,17 +980,24 @@ function ListHero({ img, color, title, chips, meta, pct, foot, h, stacked, onOpe
   </div>;
 }
 // la place : la hauteur du heros, s'il est en vignette pleine largeur, combien de rangees tiennent dessous
-function listPlan(W, H, n, extra = 0) {
+// fit(rh, place) -> [rangees, hauteur prise] : par defaut des rangees de rh espacees de 6 (les dernieres
+// impressions y ajoutent leurs intercalaires de jour). On cherche le plus de rangees : d'abord en hauteur
+// normale (38) avec un heros qui se tasse, puis en rangees fines (34) ; la place qui reste va au heros.
+const fitRowsOf = (rh, b, n) => { const k = b < rh ? 0 : Math.min(n, Math.floor((b + 6) / (rh + 6))); return [k, k ? k * (rh + 6) - 6 : 0]; };
+function listPlan(W, H, n, fit = null) {
   const narrow = W < 215;
-  if (n <= 1 || H < 100) return { heroH: Math.min(H, n <= 1 ? 120 : H), stacked: narrow && n <= 1 && H >= 150, rows: 0 };
+  if (n <= 1 || H < 100) return { heroH: Math.min(H, n <= 1 ? 120 : H), stacked: narrow && n <= 1 && H >= 150, rows: 0, rh: ROW_H };
   const stacked = narrow && H >= 230;
-  let heroH = stacked ? Math.min(176, Math.round(H * 0.5)) : H >= 200 ? 78 : 62;
-  let rows = Math.min(n - 1, fitRows(H - extra - heroH - 6, ROW_H, 6));
-  if (H - extra - heroH - 6 < ROW_H) rows = 0;
-  // peu de choses a montrer : le heros prend la place qui reste (sans devenir une affiche)
-  const left = H - extra - heroH - 6 - rows * (ROW_H + 6) + 6;
-  if (rows === n - 1 && left > 0) heroH = Math.min(stacked ? 200 : 104, heroH + left);
-  return { heroH, stacked, rows };
+  const f = fit || ((rh, b) => fitRowsOf(rh, b, n - 1));
+  const heros = stacked ? [Math.min(176, Math.round(H * 0.5)), 140, 120] : H >= 200 ? [78, 70, 64, 58] : [62, 56, 50];
+  let best = null;
+  for (const rh of [ROW_H, 34]) for (const hh of heros) {
+    const [rows, used] = f(rh, H - hh - 6);
+    if (!best || rows > best.rows) best = { heroH: hh, rows, rh, used };
+  }
+  // la place qui reste revient au heros (sans en faire une affiche)
+  const heroH = best.rows ? Math.min(stacked ? 200 : 104, Math.max(best.heroH, H - 6 - best.used)) : Math.min(H, 120);
+  return { heroH, stacked, rows: best.rows, rh: best.rh };
 }
 
 // « À faire » : l'etat de chaque modele, d'apres la page « À faire »
@@ -1032,8 +1040,8 @@ function Next({ q, o, sz }) {
   const meta = m => m.printing ? [m.progress != null && `${m.progress} %`, plateShort(m) && `plateaux ${plateShort(m)}`].filter(Boolean).join(" · ")
     : [m.ready_now?.plates > 0 && m.status === "partial" && `▶ ${m.ready_now.plates} plateau${m.ready_now.plates > 1 ? "x" : ""} prêt${m.ready_now.plates > 1 ? "s" : ""}`,
       m.seconds && fmtDur(m.seconds), o.weight && m.weight_g && fmtG(m.weight_g)].filter(Boolean).join(" · ");
-  const row = (m, W) => { const wide = W >= 250, ps = plateShort(m);
-    return <ListRow key={m.design_id} edge={qEdge(m)} thumb={o.thumbs} img={m.cover_url ? mwImg(m.cover_url, 120) : null} title={name(m)} onOpen={() => open(m)}
+  const row = (m, W, rh = ROW_H) => { const wide = W >= 250, ps = plateShort(m);
+    return <ListRow key={m.design_id} h={rh} edge={qEdge(m)} thumb={o.thumbs} img={m.cover_url ? mwImg(m.cover_url, 120) : null} title={name(m)} onOpen={() => open(m)}
       tip={`${name(m)}\n${m.printing ? "en cours" : qState(m)[0]}${ps ? ` · plateaux ${ps}` : ""}`}
       badge={(m.qty || 1) > 1 ? <span style={{ position: "absolute", right: -3, bottom: -3, fontSize: 9, fontWeight: 900, color: "#fff", background: "#334155",
         borderRadius: 6, padding: "0 4px", lineHeight: "13px", border: "1.5px solid var(--surface)" }}>×{m.qty}</span> : null}
@@ -1062,13 +1070,13 @@ function Next({ q, o, sz }) {
       {({ W, H }) => {
         if (!models.length) return <Empty>{q === undefined ? "…" : o.ready ? "Rien de prêt dans l'AMS" : "Rien dans « À faire »"}</Empty>;
         const head = H >= 150 ? 22 : 0;
-        const pl = o.scroll ? { heroH: Math.min(78, Math.max(56, H * 0.35)), stacked: false, rows: rest.length } : listPlan(W, H - head, models.length);
+        const pl = o.scroll ? { heroH: Math.min(78, Math.max(56, H * 0.35)), stacked: false, rows: rest.length, rh: ROW_H } : listPlan(W, H - head, models.length);
         const foot = !pl.stacked && W >= 215 && hero.plates?.length > 1 ? <PlateDots plates={hero.plates}/> : null;
         return <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 6 }}>
           {head > 0 && counts(W)}
           <ListHero img={hero.cover_url ? mwImg(hero.cover_url, 320) : null} color={qEdge(hero)} title={name(hero)} h={pl.heroH} stacked={pl.stacked}
             chips={chips(hero)} pct={hero.printing ? hero.progress ?? 0 : null} meta={meta(hero)} foot={foot} onOpen={() => open(hero)}/>
-          {pl.rows > 0 && (o.scroll ? <Scroller>{rest.map(m => row(m, W))}</Scroller> : rest.slice(0, pl.rows).map(m => row(m, W)))}
+          {pl.rows > 0 && (o.scroll ? <Scroller>{rest.map(m => row(m, W))}</Scroller> : rest.slice(0, pl.rows).map(m => row(m, W, pl.rh)))}
           {/* la fiche s'ouvre par-dessus ; ses clics et ses touches ne remontent pas jusqu'a la tuile */}
           {sheet && <span onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
             <MakerWorldModelSheet designId={sheet.design_id} preview={sheet} onClose={() => setSheet(null)}/></span>}
@@ -1143,6 +1151,8 @@ const printDay = d => { if (!d) return "Plus tôt";
   const n = Math.round((b - a) / 86400000);
   const s = n <= 0 ? "Aujourd'hui" : n === 1 ? "Hier" : n < 7 ? d.toLocaleDateString("fr-FR", { weekday: "long" }) : d.toLocaleDateString("fr-FR", { day: "numeric", month: "long" });
   return s.charAt(0).toUpperCase() + s.slice(1); };
+const dayHm = d => { const t = d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }), l = printDay(d);
+  return l === "Aujourd'hui" ? t : `${l.toLowerCase().replace(/^(lundi|mardi|mercredi|jeudi|vendredi|samedi|dimanche)$/, m => m.slice(0, 3) + ".")} ${t}`; };
 const DayHead = ({ children }) => <div style={{ display: "flex", alignItems: "center", gap: 6, height: 14, flexShrink: 0, fontSize: 10, fontWeight: 900,
   letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)" }}>{children}<span style={{ flex: 1, height: 1, background: "var(--border)" }}/></div>;
 const lastEdge = x => x.live ? "#3b82f6" : x.partial ? "#f59e0b" : okOf(x) ? "#22c55e" : "#ef4444";
@@ -1165,21 +1175,29 @@ function Last({ p, o, sz, st, lp }) {
     {o.photo && !x.live && !hasPhoto(x) && <span data-tip="Pas encore de photo" style={{ position: "absolute", right: -3, top: -3, width: 15, height: 15, borderRadius: "50%",
       background: "var(--surface)", color: "#0EA5E9", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 0 0 1px var(--border)" }}><Camera size={9}/></span>}
   </>;
-  const row = (x, W, days) => { const wide = W >= 250, d = when(x), [l, c] = lastState(x);
-    return <ListRow key={`${x.id}${x.live ? "l" : ""}`} edge={lastEdge(x)} img={printImg(x.id)} title={name(x)} onOpen={() => fiche(x)} badge={marks(x)}
+  const row = (x, W, days, rh = ROW_H) => { const wide = W >= 250, d = when(x), [l, c] = lastState(x);
+    return <ListRow key={`${x.id}${x.live ? "l" : ""}`} h={rh} edge={lastEdge(x)} img={printImg(x.id)} title={name(x)} onOpen={() => fiche(x)} badge={marks(x)}
       tip={`${name(x)}\n${l}${x.members ? ` · ${x.members.length} impressions` : ""}${d ? ` · ${d.toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" })}` : ""}`}
-      sub={<><span style={{ color: c }}>{l}</span>{d && (o.when || days) && <span>{days ? hm(d) : ago(d)}</span>}
+      sub={<><span style={{ color: c }}>{l}</span>{d && (o.when || days) && <span>{days ? hm(d) : dayHm(d)}</span>}
         {!wide && x.duration_seconds ? <span>{fmtDur(x.duration_seconds)}</span> : null}</>}
       right={wide ? <RightCol a={x.duration_seconds ? fmtDur(x.duration_seconds) : null}
         b={[x.total_weight_g && fmtG(x.total_weight_g), o.cost && x.total_cost && fmtEur(x.total_cost)].filter(Boolean).join(" · ") || null}/> : null}/>; };
   // les rangees, avec le jour en intercalaire quand il change (le heros compte pour le premier jour)
-  const rows = (items, W, H, prev, days) => { const out = []; let used = 0, last = prev;
+  // combien en tiennent dans H (hauteur rh, intercalaires compris) : [nombre, hauteur prise]
+  const fitDays = (items, prev, days) => (rh, H) => { let used = 0, k = 0, last = prev;
+    for (const x of items) {
+      const d = dayKey(when(x)), need = rh + 6 + (days && d !== last ? 20 : 0);
+      if (used + need > H + 6) break;
+      used += need; k++; last = d;
+    }
+    return [k, Math.max(0, used - 6)]; };
+  const rows = (items, W, H, prev, days, rh = ROW_H) => { const out = []; let used = 0, last = prev;
     for (const x of items) {
       const k = dayKey(when(x)), sep = days && k !== last;
-      const need = ROW_H + 6 + (sep ? 20 : 0);
+      const need = rh + 6 + (sep ? 20 : 0);
       if (H != null && used + need > H + 6) break;
       if (sep) out.push(<DayHead key={`d${k}${x.id}`}>{printDay(when(x))}</DayHead>);
-      out.push(row(x, W, days)); used += need; last = k;
+      out.push(row(x, W, days, rh)); used += need; last = k;
     }
     return out; };
   const heroOf = (x, h, stacked, W) => { const [l, c, ic] = lastState(x), d = when(x);
@@ -1198,12 +1216,16 @@ function Last({ p, o, sz, st, lp }) {
       zoom={<LastZoom list={list} done={done} heroOf={heroOf} rows={rows}/>}>
       {({ W, H }) => {
         const [hero, ...rest] = list;
-        const days = W >= 215 && H >= 200;
-        const pl = o.scroll ? { heroH: Math.min(78, Math.max(56, H * 0.35)), stacked: false, rows: rest.length } : listPlan(W, H, list.length, days ? 20 : 0);
+        // les intercalaires de jour seulement s'ils ne coutent aucune rangee (sinon « hier 09:44 » sur chacune)
+        const first = dayKey(when(hero));
+        const pD = W >= 215 ? listPlan(W, H, list.length, fitDays(rest, first, true)) : null;
+        const p0 = listPlan(W, H, list.length, fitDays(rest, first, false));
+        const days = !!pD && pD.rows >= p0.rows && pD.rows > 0;
+        const pl = o.scroll ? { heroH: Math.min(78, Math.max(56, H * 0.35)), stacked: false, rows: rest.length, rh: ROW_H } : days ? pD : p0;
         return <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 6 }}>
           {heroOf(hero, pl.heroH, pl.stacked, W)}
-          {pl.rows > 0 && (o.scroll ? <Scroller>{rows(rest, W, null, dayKey(when(hero)), days)}</Scroller>
-            : rows(rest, W, H - pl.heroH - 6, dayKey(when(hero)), days))}
+          {pl.rows > 0 && (o.scroll ? <Scroller>{rows(rest, W, null, first, days)}</Scroller>
+            : rows(rest, W, H - pl.heroH - 6, first, days, pl.rh))}
         </div>;
       }}
     </Tile>
