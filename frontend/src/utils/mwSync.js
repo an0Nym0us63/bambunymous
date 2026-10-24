@@ -23,6 +23,12 @@ export function mwCollections(designId, ids, item) {
   emit();
 }
 
+// Ce qu'on vient de poser sur ce modele (null si rien de recent) : les pastilles des tuiles.
+export function mwRecent(designId) {
+  const l = likes.get(String(designId)), c = member.get(String(designId));
+  return { liked: live(l) ? l.liked : null, colls: live(c) ? c.ids.size : null };
+}
+
 // Applique les changements recents a une liste en cache ou fraiche.
 export function mwPatch(key, data) {
   if (!data?.items || !key) return data;

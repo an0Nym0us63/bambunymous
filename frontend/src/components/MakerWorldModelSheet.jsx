@@ -19,6 +19,8 @@ import Lightbox from "./Lightbox";
 import { openCreator } from "./MwCreatorPage";
 import { useToRateSet, GroupToRate, RateButton } from "./MwToRate";
 import { showAlert, showConfirm } from "../utils/dialog";
+import { toast } from "../store/toast";
+import { Heart } from "lucide-react";
 
 // Prechargement : la fiche est demandee des qu'on touche une tuile ; a
 // l'ouverture, la reponse est souvent deja la.
@@ -101,6 +103,16 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const toRate = useToRateSet(!friend);           // imprime, pas encore evalue
   const [boost, setBoost] = useState(null);       // { can, available }
   const [boostBusy, setBoostBusy] = useState(false);
+  const [inColls, setInColls] = useState(null);     // mes collections qui contiennent ce modele
+  useEffect(() => {
+    if (!canHome) return undefined;
+    let alive = true;
+    setInColls(null);
+    client.get("/makerworld/mine", { params: { ids: String(id) } })
+      .then(r => alive && r.data.collections_known && setInColls(r.data.items?.[String(id)]?.collections || []))
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [id, canHome, pick]);
   useEffect(() => {
     let alive = true;
     setBoost(null);
@@ -111,12 +123,14 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   }, [id]);
   const doBoost = async () => {
     const n = boost?.available;
-    if (!await showConfirm(`Booster « ${m?.title_fr || m?.title || "ce modèle"} » ? Ça utilise un de tes boosts`
+    const was = boost?.boosted ? ` Tu l'as déjà boosté ${boost.boosted} fois.` : "";
+    if (!await showConfirm(`Booster « ${m?.title_fr || m?.title || "ce modèle"} » ?${was} Ça utilise un de tes boosts`
       + (n != null ? ` (il t'en reste ${n}).` : "."), { confirmLabel: "🚀 Booster" })) return;
     setBoostBusy(true);
     try {
       const { data } = await client.post(`/makerworld/model/${id}/boost`);
-      setBoost({ can: false, available: data.available, done: true });
+      setBoost(b => ({ ...b, can: false, available: data.available, boosted: (b?.boosted || 0) + 1, reason: "Boosté à l'instant" }));
+      client.get(`/makerworld/model/${id}/boost`).then(r => r.data.known && setBoost(r.data)).catch(() => {});
     } catch (e) { showAlert(e.response?.data?.detail || e.message); }
     setBoostBusy(false);
   };
@@ -251,12 +265,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
         onClick: () => { onSearch(m); onClose(); } },
       (like && canHome || boost && canHome || canHome) && "-",
       like && canHome && { icon: like.liked ? "❤" : "♡", label: like.liked ? "Aimé · retirer le j'aime" : "J'aime", tone: "#EF4444", disabled: likeBusy, onClick: toggleLike },
-      boost && canHome && (boost.can || boost.done) && { icon: "🚀", tone: "#6366F1", disabled: boostBusy || boost.done,
-        label: boost.done ? "Boosté" : boost.boosted ? "Booster encore" : "Booster",
-        hint: [boost.available != null && `${boost.available} boost(s) disponible(s)`,
+      boost && canHome && { icon: "🚀", tone: boost.can ? "#6366F1" : "#94A3B8", disabled: boostBusy || !boost.can,
+        label: boost.can ? (boost.boosted ? "Booster encore" : "Booster") : boost.boosted ? "Déjà boosté" : "Booster",
+        hint: [boost.boosted && `déjà boosté ${boost.boosted} fois`, !boost.can && boost.reason, boost.can && boost.available != null && `${boost.available} boost(s) disponible(s)`,
           boost.creator_max != null && `${boost.creator ?? 0}/${boost.creator_max} donnés à ce créateur cette année`].filter(Boolean).join(" · ") || null,
         onClick: doBoost },
-      boost && canHome && !boost.can && !boost.done && boost.reason && { icon: "🚀", label: "Booster", hint: boost.reason, tone: "#94A3B8", disabled: true },
       canHome && { icon: "🔖", label: "Ranger dans mes collections…", tone: "#14B8A6", onClick: () => setPick(true) },
       !friend && isAdmin && "-",
       !friend && isAdmin && { icon: "🔗", label: "Associer à un print", hint: "Choisir les impressions de ce modèle dans l'historique", tone: "#8B5CF6",
@@ -710,24 +723,37 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             {like && canHome && (
               <button onClick={toggleLike} disabled={likeBusy} aria-label={like.liked ? "Aimé" : "J'aime"} data-tip={like.liked ? "Aimé · retirer le j'aime" : "J'aime"}
                 style={{ ...sq, color:"#ef4444", ...(like.liked ? { background:"rgba(239,68,68,0.14)", borderColor:"rgba(239,68,68,0.45)" } : null) }}>
-                {like.liked ? "❤" : "♡"}</button>
+                <Heart size={20} strokeWidth={2.4} fill={like.liked ? "#ef4444" : "none"}/></button>
             )}
             {canHome && (() => {
-              // boost : actif s'il reste de quoi booster ce modele, sinon grise avec la raison
-              const live = boost && boost.can && !boost.done;
-              const tip = !boost ? "Booster : indisponible" : boost.done ? "Boosté" : !boost.can ? (boost.reason || "Booster : indisponible")
-                : [boost.boosted ? "Booster encore" : "Booster", boost.available != null && `${boost.available} disponible(s)`].filter(Boolean).join(" · ");
-              return <button onClick={live ? doBoost : undefined} disabled={!live || boostBusy} aria-label="Booster" data-tip={tip}
-                style={{ ...sq, ...(live ? { background:"rgba(99,102,241,0.14)", borderColor:"rgba(99,102,241,0.45)" } : off) }}>🚀</button>;
+              // boost : actif s'il reste de quoi booster ; sinon en retrait, et le toucher dit pourquoi.
+              // Deja booste par moi : une pastille avec le nombre (MakerWorld le donne par modele).
+              const live = boost && boost.can;
+              const mine = boost?.boosted || 0;
+              const why = !boost ? "Boost : état inconnu pour l'instant (MakerWorld n'a pas répondu)"
+                : boost.reason || "Boost impossible pour ce modèle";
+              const tip = live ? [mine ? `Déjà boosté ${mine} fois · booster encore` : "Booster", boost.available != null && `${boost.available} disponible(s)`]
+                .filter(Boolean).join(" · ") : (mine && !/^Déjà boosté/.test(why) ? `Déjà boosté ${mine} fois · ` : "") + why;
+              return <button onClick={live ? doBoost : () => toast("🚀 " + (mine && !/^Déjà boosté/.test(why) ? `Tu l'as déjà boosté ${mine} fois. ` : "") + why, "info", 3500)}
+                disabled={boostBusy} aria-label="Booster" data-tip={tip}
+                style={{ ...sq, position:"relative", ...(live ? { background:"rgba(99,102,241,0.14)", borderColor:"rgba(99,102,241,0.45)" } : dim("99,102,241")) }}>
+                <span style={live ? null : { opacity:.5 }}>🚀</span>
+                {mine > 0 && <span style={badge("#6366F1")}>{mine > 1 ? mine : "✓"}</span>}</button>;
             })()}
+            {canHome && (
+              <button onClick={() => setPick(true)} aria-label="Ranger dans mes collections"
+                data-tip={inColls?.length ? `Dans ${inColls.join(", ")} · ranger…` : "Ranger dans mes collections"}
+                style={{ ...sq, position:"relative", background:"rgba(20,184,166,0.12)", borderColor:"rgba(20,184,166,0.4)" }}>🔖
+                {inColls?.length > 0 && <span style={badge("#14B8A6")}>{inColls.length}</span>}</button>
+            )}
             {!friend && (rateHere
               ? <RateButton did={id} label="⭐" ext="" doneLabel="✓" style={{ ...sq, display:"flex", alignItems:"center", justifyContent:"center", textDecoration:"none",
                   color:"#fff", border:"none", background:"linear-gradient(135deg, #F59E0B, #FBBF24)", boxShadow:"0 8px 18px -10px #F59E0B" }}/>
-              : <button disabled aria-label="Évaluer" data-tip={m.printed > 0 ? "Déjà évalué" : "À évaluer une fois imprimé"} style={{ ...sq, ...off }}>⭐</button>)}
-            {canHome && (
-              <button onClick={() => setPick(true)} aria-label="Ranger dans mes collections" data-tip="Ranger dans mes collections"
-                style={{ ...sq, background:"rgba(20,184,166,0.12)", borderColor:"rgba(20,184,166,0.4)" }}>🔖</button>
-            )}
+              : (() => {
+                const why = m.printed > 0 ? "Déjà évalué (ou mis de côté sans évaluer)" : "Pas encore imprimé : l'évaluation vient après une impression";
+                return <button onClick={() => toast("⭐ " + why, "info", 3500)} aria-label="Évaluer" data-tip={why}
+                  style={{ ...sq, ...dim("245,158,11") }}><span style={{ opacity:.5 }}>⭐</span></button>;
+              })())}
             <button onClick={menu} aria-label="Plus d'actions" style={sq}>⋯</button>
           </div>
         )}
@@ -842,7 +868,10 @@ const roundTop = { width:34, height:34, borderRadius:"50%", border:"1px solid va
 const fBtn = { padding:"11px 12px", borderRadius:12, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontSize:13.5,
   fontWeight:800, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6, textDecoration:"none", boxSizing:"border-box" };
 const sq = { ...fBtn, width:44, flex:"0 0 auto", padding:"8px 0", fontSize:17, textAlign:"center" };
-const off = { opacity:.4, filter:"grayscale(1)", cursor:"default" };
+// un bouton en retrait garde sa couleur, en pointilles ; le toucher dit pourquoi
+const dim = rgb => ({ background:`rgba(${rgb},0.05)`, border:`1px dashed rgba(${rgb},0.45)` });
+const badge = c => ({ position:"absolute", top:-5, right:-5, minWidth:17, height:17, padding:"0 4px", borderRadius:9, boxSizing:"border-box",
+  background:c, color:"#fff", fontSize:10, fontWeight:900, lineHeight:"17px", textAlign:"center", boxShadow:"0 0 0 2px var(--sheet-bg, var(--surface))" });
 const primary = { border:"none", color:"#fff", background:"linear-gradient(135deg, #22C55E, #16A34A)", boxShadow:"0 8px 18px -10px #22C55E" };
 const grad = (a, b) => ({ backgroundImage:`linear-gradient(135deg, ${a}, ${b})`, WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" });
 const textBtn = { marginTop:6, fontSize:12, fontWeight:600, color:"#3b82f6", background:"none", border:"none",

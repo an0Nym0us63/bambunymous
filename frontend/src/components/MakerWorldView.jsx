@@ -14,7 +14,8 @@ import MwCreator from "./MwCreator";
 import MwContests from "./MwContests";
 import { openCreator } from "./MwCreatorPage";
 import { useToRate, ToRateTile, ToRateSheet } from "./MwToRate";
-import { mwPatch, onMwChange } from "../utils/mwSync";
+import { mwPatch, onMwChange, mwRecent } from "../utils/mwSync";
+import { Heart } from "lucide-react";
 import { useFriend } from "../store/friend";
 import { useMine, MineBadge } from "./Friends";
 import { Pressable } from "./ContextMenu";
@@ -43,6 +44,40 @@ const ago = iso => {
     : d < 365 ? `il y a ${Math.floor(d / 30)} mois` : `il y a ${Math.floor(d / 365)} an${d >= 730 ? "s" : ""}`;
 };
 const FILTERS = [["all", "Tous"], ["printed", "Déjà imprimés"], ["new", "Jamais imprimés"]];
+
+// Chez moi : pour chaque modele affiche, aime par moi et dans combien de mes collections
+// (index lu cote serveur, garde 30 min) ; ce que je viens de changer ici passe devant.
+const MY = new Map();
+function useMyMw(ids) {
+  const [, bump] = useState(0);
+  const key = (ids || []).join(",");
+  useEffect(() => onMwChange(() => bump(n => n + 1)), []);
+  useEffect(() => {
+    if (!ids?.length) return undefined;
+    const miss = ids.map(String).filter(i => !MY.has(i));
+    if (!miss.length) return undefined;
+    let alive = true;
+    for (let i = 0; i < miss.length; i += 100) {
+      client.get("/makerworld/mine", { params: { ids: miss.slice(i, i + 100).join(",") } })
+        .then(({ data }) => {
+          if (!data.collections_known) return;
+          Object.entries(data.items || {}).forEach(([k, v]) => MY.set(k, { liked: !!v.liked, colls: (v.collections || []).length }));
+          if (alive) bump(n => n + 1);
+        })
+        .catch(() => {});
+    }
+    return () => { alive = false; };
+  }, [key]);
+  if (!ids?.length) return null;
+  return id => {
+    const base = MY.get(String(id)), r = mwRecent(id);
+    if (!base && r.liked == null && r.colls == null) return null;
+    return { liked: r.liked ?? base?.liked, colls: r.colls ?? base?.colls };
+  };
+}
+
+const chipGlass = { width:30, height:30, borderRadius:"50%", border:"1px solid rgba(255,255,255,.25)", background:"rgba(15,23,42,0.55)",
+  backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)", display:"flex", alignItems:"center", justifyContent:"center", boxSizing:"border-box" };
 
 export default function MakerWorldView({ onSearch }) {
   const [tab, setTab] = useUrlTab("mw", "favorites", TABS.map(([k]) => k));
@@ -301,6 +336,7 @@ export default function MakerWorldView({ onSearch }) {
   const all = data?.items || [];
   const items = all.filter(x => pf === "all" || (pf === "new" ? !x.printed : x.printed > 0));
   const mineOf = useMine(showModels ? all.map(x => x.design_id) : []);   // chez un copain : « deja chez moi ? »
+  const myOf = useMyMw(showModels && !friend && status?.connected ? all.map(x => x.design_id) : []);   // chez moi : aime, dans mes collections
   const count = { all: all.length, printed: all.filter(x => x.printed > 0).length, new: all.filter(x => !x.printed).length };
 
   // les sous-onglets, chacun sa couleur (comme les onglets de la page)
@@ -529,15 +565,26 @@ export default function MakerWorldView({ onSearch }) {
                         {x.added?.by && <span data-tip={`Ajouté à la collection par ${x.added.by}${x.added.at ? ` le ${new Date(x.added.at + "Z").toLocaleDateString("fr-FR")}` : ""}`}
                           style={{ ...glass, left:6, bottom:6, maxWidth:"calc(100% - 12px)", overflow:"hidden", textOverflow:"ellipsis" }}>＋ {x.added.by}</span>}
                       </a>
-                      {/* ranger dans mes collections : le signet, sur la vignette */}
-                      {(status?.connected || friend) && (
-                        <AdminOnly home mw>
-                          <button onClick={() => setPickFor(x)} data-tip="Ranger dans mes collections" aria-label="Ranger dans mes collections"
-                            style={{ position:"absolute", top:6, right:6, width:30, height:30, borderRadius:"50%", border:"1px solid rgba(255,255,255,.25)",
-                              background:"rgba(15,23,42,0.55)", backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)", color:"#2DD4BF",
-                              cursor:"pointer", fontSize:15, display:"flex", alignItems:"center", justifyContent:"center" }}>🔖</button>
-                        </AdminOnly>
-                      )}
+                      {/* en haut a droite : aime par moi (sauf dans J'aime, ou tout l'est), puis le signet,
+                          plein et compte quand le modele est deja dans mes collections */}
+                      {(() => {
+                        const me = myOf?.(x.design_id);
+                        const n = me?.colls || 0;
+                        return <span style={{ position:"absolute", top:6, right:6, display:"flex", gap:5, alignItems:"center" }}>
+                          {me?.liked && tab !== "likes" && <span data-tip="Tu l'aimes" style={{ ...chipGlass, color:"#ef4444" }}>
+                            <Heart size={15} strokeWidth={2.4} fill="#ef4444"/></span>}
+                          {(status?.connected || friend) && (
+                            <AdminOnly home mw>
+                              <button onClick={() => setPickFor(x)} aria-label="Ranger dans mes collections"
+                                data-tip={n ? `Dans ${n} de tes collections · ranger…` : "Ranger dans mes collections"}
+                                style={{ ...chipGlass, cursor:"pointer", position:"relative", fontSize:15,
+                                  ...(n ? { background:"linear-gradient(135deg, #14B8A6, #2DD4BF)", border:"1px solid rgba(255,255,255,.5)" } : null) }}>🔖
+                                {n > 1 && <span style={{ position:"absolute", bottom:-4, right:-4, minWidth:15, height:15, borderRadius:8, padding:"0 3px",
+                                  boxSizing:"border-box", background:"#0f766e", color:"#fff", fontSize:9, fontWeight:900, lineHeight:"15px", textAlign:"center" }}>{n}</span>}
+                              </button>
+                            </AdminOnly>
+                          )}</span>;
+                      })()}
                     </div>
                     <div style={{ padding:"8px 9px 9px", display:"flex", flexDirection:"column", gap:4, flex:1 }}>
                       <a href={x.url} onClick={e => { e.preventDefault(); setModel(x); }} onPointerDown={() => prefetchModel(x.design_id)}
