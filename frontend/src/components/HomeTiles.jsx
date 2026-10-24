@@ -740,6 +740,10 @@ function TodayEmpty({ st, y, W, H, lp }) {
   const live = isLive(st);
   const pct = Math.round(st?.progress || 0), left = st?.remaining_minutes || 0;
   const narrow = W < 215, s = Math.max(40, Math.min(H - 6, narrow ? 64 : 88, W * 0.36));
+  // demi-colonne basse : l'anneau en petit, des phrases courtes sur une ligne (sinon le texte, serre a cote
+  // de l'anneau, s'etalait sur six lignes et debordait de la tuile)
+  const compact = narrow && H < 150;
+  const one = { whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 };
   const yest = y?.count ? `Hier : ${y.count} impression${y.count > 1 ? "s" : ""} · ${fmtH(y.duration)}` : "Hier : rien non plus";
   const visual = live
     ? <span style={{ position: "relative", display: "inline-flex", flexShrink: 0 }}><Ring value={pct / 100} size={s} color="#3B82F6">{pct}%</Ring>
@@ -750,6 +754,22 @@ function TodayEmpty({ st, y, W, H, lp }) {
       <CalendarClock size={Math.round(s * 0.42)}/>
       {["z", "z", "Z"].map((c, i) => <span key={i} style={{ position: "absolute", right: -2 - i * 5, top: 2 - i * 9, fontSize: s * (0.16 + i * 0.05), fontWeight: 900,
         color: "#93c5fd", animation: `bn-zz 2.4s ease-in-out ${i * 0.4}s infinite`, opacity: 0 }}>{c}</span>)}</span>;
+  if (compact) {
+    const cs = Math.max(34, Math.min(48, H - 50));
+    return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 6, minWidth: 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+        {live ? <Ring value={pct / 100} size={cs} color="#3B82F6">{pct}%</Ring>
+          : <span aria-hidden="true" style={{ width: cs, height: cs, borderRadius: "50%", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+            background: "rgba(59,130,246,0.14)", color: "#3B82F6" }}><CalendarClock size={Math.round(cs * 0.45)}/></span>}
+        <span style={{ display: "flex", flexDirection: "column", minWidth: 0, gap: 1 }}>
+          <span style={{ fontSize: 13, fontWeight: 900, color: "var(--text)", ...one }}>{live ? "1ʳᵉ du jour" : "Rien encore"}</span>
+          <span style={{ fontSize: 11.5, fontWeight: 800, color: live ? "#3B82F6" : "var(--muted)", ...one }}>
+            {live ? (left ? `fin à ${finAt(left)}` : "bientôt finie") : "l'imprimante se repose"}</span></span>
+      </div>
+      {live && liveName(lp, st) && <span style={{ fontSize: 12, fontWeight: 700, color: "var(--text2)", ...one }}>{liveName(lp, st)}</span>}
+      {H >= 110 && <span style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", ...one }}>{y?.count ? `Hier : ${y.count} · ${fmtH(y.duration)}` : "Hier : rien"}</span>}
+    </div>;
+  }
   return <div style={{ flex: 1, display: "flex", flexDirection: narrow && H >= 150 ? "column" : "row", alignItems: "center", justifyContent: "center",
     gap: narrow ? 8 : 14, textAlign: narrow && H >= 150 ? "center" : "left", minWidth: 0 }}>
     {H >= 44 && visual}

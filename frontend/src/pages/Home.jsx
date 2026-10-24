@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
 import { stageLabel, stageIsPause } from "../utils/printStage";
 import { createPortal } from "react-dom";
 import { usePrinter } from "../store/printer";
@@ -744,12 +744,22 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
   const route = a.switch_port ? amsRoute(a, true, fs).txt.replace(" ", "\u00A0") : null;
   // l'en-tete d'une unite : le nom, puis dans l'ordre ce qui tient — sechage, buse (aiguillage), humidite
   // si le sechage et la buse ne tiennent pas avec le nom entier, le nom se raccourcit (« A »)
+  // l'estimation d'abord, puis la mesure : le texte du telephone peut etre plus grand que prevu (taille de police
+  // du systeme), et ce qui depasse se coupait (« 💧13 » sans son %). Ce qui deborde s'en va, dans l'ordre :
+  // le nom se raccourcit, puis la buse, puis l'humidite.
+  const hdr = useRef(null);
+  const [cut, setCut] = useState(0);
+  useEffect(() => { setCut(0); }, [uw, h, route, a.humidity, act]);
+  useLayoutEffect(() => {
+    const el = hdr.current;
+    if (el && cut < 3 && el.scrollWidth > el.clientWidth + 1) setCut(c => c + 1);
+  });
   const want = (route ? 30 : 0) + (climate && a.humidity > 0 ? 38 : 0);
-  const short = !big && uw - 14 - (amsName(a.id).length * 7 + (act ? 10 : 0)) < want && a.id < 128;
+  const short = !big && (cut >= 1 || uw - 14 - (amsName(a.id).length * 7 + (act ? 10 : 0)) < want) && a.id < 128;
   const label = short ? amsName(a.id).replace("AMS-", "") : amsName(a.id);
   let room = uw - 14 - (label.length * 7 + (act ? 10 : 0));
   const fits = w => (room -= w + 4) >= 0;
-  const showHum = climate && a.humidity > 0 && fits(34), showRoute = !!route && fits(26);
+  const showHum = climate && a.humidity > 0 && fits(34) && cut < 3, showRoute = !!route && fits(26) && cut < 2;
   const compact = h < 38 && !big;
   const ring = sel ? "#8b5cf6" : act ? "#3b82f6" : dry ? "rgba(249,115,22,0.6)" : "var(--border)";
   const chip = (txt, c, bg) => <span style={{ fontSize: 9, fontWeight: 900, lineHeight: "13px", padding: "0 5px", borderRadius: 6, color: c, background: bg, whiteSpace: "nowrap" }}>{txt}</span>;
@@ -769,7 +779,7 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
     </button>
   );
   const head = big ? 20 : 15;
-  const tab = !big && dry && <span title={`Séchage${a.dry_filament ? ` ${a.dry_filament}` : ""}`} style={{ position: "absolute", top: -6, left: "50%", transform: "translateX(-50%)", zIndex: 2,
+  const tab = !big && dry && <span title={`Séchage${a.dry_filament ? ` ${a.dry_filament}` : ""}`} style={{ position: "absolute", top: -7, left: "50%", transform: "translateX(-50%)", zIndex: 2,
     padding: "0 7px", height: 13, lineHeight: "13px", borderRadius: 7, fontSize: 9, fontWeight: 900, color: "#fff", background: "#f97316",
     whiteSpace: "nowrap", boxShadow: "0 2px 6px rgba(249,115,22,0.35)" }}>🔥 {a.dry_filament ? `${a.dry_filament} · ` : ""}{dryLeft(a.dry_time)}</span>;
   let broom = uw - 22;
@@ -791,8 +801,9 @@ function HubUnit({ a, act, actTray, h, climate, onClick, big = false, sel = fals
   const pctFs = Math.max(8.5, Math.min(big ? 11.5 : 9.5, cellW / 3.1)), pctSign = cellW >= 30;
   return (
     <div style={{ position: "relative", height: h, minWidth: 0 }}>{tab}
-    <button type="button" onClick={click} style={{ ...box, display: "flex", flexDirection: "column", gap: big ? 6 : 3, padding: big ? "8px 10px 10px" : "4px 6px 6px" }}>
-      <span style={{ display: "flex", alignItems: "center", gap: 4, height: head, minWidth: 0, overflow: "hidden", flexShrink: 0 }}>
+    <button type="button" onClick={click} style={{ ...box, display: "flex", flexDirection: "column", gap: big ? 6 : 3,
+      padding: big ? "8px 10px 10px" : dry ? "10px 6px 6px" : "4px 6px 6px" }}>
+      <span ref={hdr} style={{ display: "flex", alignItems: "center", gap: 4, height: head, minWidth: 0, overflow: "hidden", flexShrink: 0 }}>
         <span style={{ fontSize: big ? 13.5 : 10.5, fontWeight: 900, color: act ? "#3b82f6" : sel ? "#8b5cf6" : "var(--text2)", whiteSpace: "nowrap" }}>{label}</span>
         {act && <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#3b82f6", animation: "livePulse 2s infinite", flexShrink: 0 }}/>}
         {!big && showRoute && chip(route, "#8b5cf6", "rgba(139,92,246,0.14)")}
@@ -828,10 +839,12 @@ function HubGrid({ list, order, act, actTray, H, climate, onPick, big = false, s
   const gap = big ? 10 : 6;
   // l'onglet de sechage deborde au-dessus de son unite : en premiere rangee, une marge pour qu'il ne soit
   // pas coupe par le haut de la tuile (rien d'affiche au-dessus quand rien n'est en cours, chez un copain)
-  const pad = !big && cols.some(c => c[0] && isDrying(c[0])) ? 8 : 0;
-  const uh = Math.max(20, Math.floor((H - pad - gap * (nR - 1)) / nR));
+  const pad = !big && cols.some(c => c[0] && isDrying(c[0])) ? 9 : 0;
+  // une unite qui seche sous une autre : son onglet a besoin d'air entre les deux rangees
+  const rowGap = gap + (!big && cols.some(c => c.slice(1).some(a => a && isDrying(a))) ? 6 : 0);
+  const uh = Math.max(20, Math.floor((H - pad - rowGap * (nR - 1)) / nR));
   return (
-    <div ref={ref} style={{ display: "grid", paddingTop: pad, gridTemplateColumns: cols.map(c => `${columnWeight(c)}fr`).join(" "), gridTemplateRows: `repeat(${nR}, ${uh}px)`, gap }}>
+    <div ref={ref} style={{ display: "grid", paddingTop: pad, gridTemplateColumns: cols.map(c => `${columnWeight(c)}fr`).join(" "), gridTemplateRows: `repeat(${nR}, ${uh}px)`, columnGap: gap, rowGap }}>
       {cols.flatMap((col, ci) => col.map((a, ri) => a && (
         <div key={a.id} style={{ gridColumn: ci + 1, gridRow: ri + 1, minWidth: 0, display: "flex", justifyContent: "center" }}>
           <div style={{ width: `${Math.max(0.78, slotCount(a) / columnWeight(col)) * 100}%`, minWidth: 0 }}>
