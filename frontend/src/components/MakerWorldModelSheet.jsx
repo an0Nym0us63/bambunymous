@@ -4,7 +4,8 @@ import { plateRound, plateDoneInRound } from "../utils/queueSort";
 import { useTrackDetail } from "../utils/track";
 import { createPortal } from "react-dom";
 import client from "../api/client";
-import { useCanMw } from "../store/auth";
+import { useCanMw, useCanMwHome, useIsAdmin } from "../store/auth";
+import { openMenu } from "./ContextMenu";
 import AdminOnly from "./AdminOnly";
 import MakerWorldCollectionsPicker from "./MakerWorldCollectionsPicker";
 import { mwLiked } from "../utils/mwSync";
@@ -16,7 +17,7 @@ import MwStockMatch, { stockSummary, setPicksFromPlan, picksOf, platePicksOf, pl
 import PlateRecolor from "./PlateRecolor";
 import Lightbox from "./Lightbox";
 import { openCreator } from "./MwCreatorPage";
-import { useToRateSet, RateButton } from "./MwToRate";
+import { useToRateSet, GroupToRate } from "./MwToRate";
 import { showAlert, showConfirm } from "../utils/dialog";
 
 // Prechargement : la fiche est demandee des qu'on touche une tuile ; a
@@ -87,6 +88,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const startAssign = useMwAssign((s) => s.start);
   const friend = useFriend((s) => s.friend); // profil dont le 3MF est en lecture
   const canPlan = useCanMw();                  // plan « A faire » : droit MakerWorld, jamais chez un copain
+  const canHome = useCanMwHome();             // j'aime, boost, collections, Studio : sur MON compte, meme chez un copain
+  const isAdmin = useIsAdmin();               // associer a un print
   const [plateSel, setPlateSel] = useState({});    // instance_id -> plateaux choisis (absent = tous)
   usePicksVersion();                                 // un filament change : les vignettes se repeignent
   const [showCom, setShowCom] = useState(false);   // commentaires replies (charges a l'ouverture)
@@ -232,139 +235,156 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
   const onNow = new Set(m?.printing_plates || []);
   const platePrinting = (prof, idx) => onNow.has(`${prof.profile_id}:${idx}`) || onNow.has(`:${idx}`);
 
+  // Actions de la fiche (barre du bas et menu ⋯) : memes droits que les boutons d'avant.
+  const ok = m && !m.error;
+  const kp = ok ? keptProfile() : null;
+  const kpTip = kp ? `Profil ${plan?.instance_id === kp.instance_id ? "retenu" : "choisi automatiquement"} : ${kp.title || kp.instance_id}` : "";
+  const mwUrl = m?.url || `https://makerworld.com/fr/models/${id}`;
+  const rateHere = ok && toRate.has(String(id));
+  const menu = e => openMenu(e, {
+    title: m?.title_fr || m?.title || preview?.title_fr || preview?.title || "Modèle", subtitle: m?.creator_name ? `par ${m.creator_name}` : null, color: "#06B6D4",
+    items: [
+      { icon: "🌐", label: "Ouvrir sur MakerWorld", hint: "dans un nouvel onglet", tone: "#06B6D4", onClick: () => window.open(mwUrl, "_blank", "noopener") },
+      kp && (IS_MOBILE ? { icon: "📱", label: "Ouvrir dans Handy", hint: kpTip, tone: "#22C55E", onClick: () => window.open(handyUrl(id, kp), "_blank", "noopener") }
+        : canHome && { icon: "🖥️", label: "Ouvrir dans Studio", hint: kpTip, tone: "#22C55E", onClick: () => openStudio(kp) }),
+      ok && m.printed > 0 && onSearch && { icon: "🖨️", label: "Voir mes prints", hint: `${m.printed} impression${m.printed > 1 ? "s" : ""}`, tone: "#16A34A",
+        onClick: () => { onSearch(m); onClose(); } },
+      (like && canHome || boost && canHome || canHome) && "-",
+      like && canHome && { icon: like.liked ? "❤" : "♡", label: like.liked ? "Aimé · retirer le j'aime" : "J'aime", tone: "#EF4444", disabled: likeBusy, onClick: toggleLike },
+      boost && canHome && (boost.can || boost.done) && { icon: "⚡", tone: "#F59E0B", disabled: boostBusy || boost.done,
+        label: boost.done ? "Boosté" : boost.boosted ? "Booster encore" : "Booster",
+        hint: [boost.available != null && `${boost.available} boost(s) disponible(s)`,
+          boost.creator_max != null && `${boost.creator ?? 0}/${boost.creator_max} donnés à ce créateur cette année`].filter(Boolean).join(" · ") || null,
+        onClick: doBoost },
+      boost && canHome && !boost.can && !boost.done && boost.reason && { icon: "⚡", label: "Booster", hint: boost.reason, tone: "#94A3B8", disabled: true },
+      canHome && { icon: "☆", label: "Ranger dans mes collections…", tone: "#F59E0B", onClick: () => setPick(true) },
+      !friend && isAdmin && "-",
+      !friend && isAdmin && { icon: "🔗", label: "Associer à un print", hint: "Choisir les impressions de ce modèle dans l'historique", tone: "#8B5CF6",
+        onClick: () => { startAssign(tile()); onClose(); } },
+    ],
+  });
+  const stats = ok ? [["❤", m.like_count, "J'aime", "#EF4444", "#F87171"], ["⬇", m.download_count, "Téléch.", "#3B82F6", "#60A5FA"],
+    ["🖨", m.print_count, "Impr.", "#8B5CF6", "#C084FC"], ["⭐", m.collection_count, "Collec.", "#F59E0B", "#FBBF24"],
+    ["💬", m.comment_count, "Avis", "#06B6D4", "#67E8F9"]].filter(([, n]) => n != null) : [];
+
   return createPortal(
-    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4200, background:"rgba(0,0,0,0.6)",
-      display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-      <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)", borderRadius:"20px 20px 0 0",
-        width:"100%", maxWidth:640, height:"92dvh", display:"flex", flexDirection:"column",
-        paddingBottom:"env(safe-area-inset-bottom,0px)" }}>
-        <div style={{ display:"flex", alignItems:"center", gap:8, padding:"12px 16px 8px" }}>
-          <span style={{ flex:1, fontSize:11, fontWeight:700, color:"#3b82f6", letterSpacing:0.3 }}>MAKERWORLD <Hide at="mw-sheet"/></span>
-          <button onClick={onClose} style={{ background:"none", border:"none", color:"var(--muted)", fontSize:18, cursor:"pointer" }}>✕</button>
-        </div>
-        <div style={{ flex:1, overflowY:"auto", padding:"0 16px 20px" }}>
+    <div data-no-pull="" onClick={onClose} style={{ position:"fixed", inset:0, zIndex:4200, background:"rgba(0,0,0,0.7)",
+      display:"flex", alignItems: WIDE ? "center" : "flex-end", justifyContent:"center", padding: WIDE ? 20 : 0 }}>
+      <div onClick={e => e.stopPropagation()} className="sheet-inner" style={{ background:"var(--sheet-bg)", borderRadius: WIDE ? 24 : "22px 22px 0 0",
+        width:"100%", maxWidth: WIDE ? 760 : 640, height: WIDE ? "90dvh" : "94dvh", display:"flex", flexDirection:"column", overflow:"hidden" }}>
+        <div style={{ flex:1, minHeight:0, overflowY:"auto", position:"relative" }}>
+          {/* la barre du haut : poignee, etoile (a evaluer), ⋯ et ✕, par-dessus la galerie */}
+          <div style={{ position:"sticky", top:0, zIndex:10, height:0 }}>
+            {!WIDE && <div style={{ position:"absolute", top:8, left:"50%", transform:"translateX(-50%)", width:38, height:4, borderRadius:2, background:"rgba(148,163,184,.6)" }}/>}
+            <div style={{ position:"absolute", top:10, right:12, display:"flex", gap:8 }}>
+              {rateHere && <button onClick={() => document.getElementById(`rate-m${id}`)?.scrollIntoView({ behavior:"smooth", block:"start" })}
+                aria-label="À évaluer sur MakerWorld" data-tip="À évaluer sur MakerWorld" style={{ ...roundTop, border:"none",
+                  background:"linear-gradient(135deg, #F59E0B, #FBBF24)", color:"#fff", boxShadow:"0 6px 16px rgba(245,158,11,.45)" }}>⭐</button>}
+              <button onClick={menu} aria-label="Plus d'actions" style={roundTop}>⋯</button>
+              <button onClick={onClose} aria-label="Fermer" style={roundTop}>✕</button>
+            </div>
+          </div>
+          <div style={{ padding:"0 16px 20px" }}>
           {m === null ? (
             // Ouverture immediate avec ce que la tuile savait deja.
-            <div>
+            <div style={{ paddingTop:52 }}>
               <div style={{ display:"flex", gap:8, margin:"0 -16px 12px", padding:"0 16px" }}>
                 {preview?.cover_url
                   ? <MwImg src={preview.cover_url} w={360} eager style={{ width:"78%", maxWidth:360, aspectRatio:"1",
-                      objectFit:"cover", borderRadius:12, background:"var(--surface2)" }}/>
-                  : <div className="mw-skel" style={{ width:"78%", maxWidth:360, aspectRatio:"1", borderRadius:12 }}/>}
+                      objectFit:"cover", borderRadius:18, background:"var(--surface2)" }}/>
+                  : <div className="mw-skel" style={{ width:"78%", maxWidth:360, aspectRatio:"1", borderRadius:18 }}/>}
               </div>
-              <h2 style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:"0 0 6px" }}>
+              <h2 style={{ fontSize:20, fontWeight:900, color:"var(--text)", margin:"0 0 6px" }}>
                 {preview?.title_fr || preview?.title || ""}</h2>
               {[90, 70, 80, 60].map((w, i) => <div key={i} className="mw-skel" style={{ height:12, width:`${w}%`, borderRadius:6, margin:"8px 0" }}/>)}
             </div>
           )
-            : m.error ? (<>
+            : m.error ? (<div style={{ paddingTop:52 }}>
               <p style={{ ...msg, color:"#f59e0b" }}>{m.error}</p>
-              <a href={m.url || `https://makerworld.com/fr/models/${id}`} target="_blank" rel="noopener noreferrer" style={linkBtn}>Ouvrir sur MakerWorld ↗</a>
-            </>) : (<>
-            {/* Galerie */}
-            {m.pictures?.length > 0 && (
-              <div style={{ display:"flex", gap:8, overflowX:"auto", scrollSnapType:"x mandatory", margin:"0 -16px 12px",
-                padding:"0 16px" }}>
+              <a href={mwUrl} target="_blank" rel="noopener noreferrer" style={linkBtn}>Ouvrir sur MakerWorld ↗</a>
+            </div>) : (<>
+            {/* Galerie : glisser de cote, toucher pour agrandir ; le defilement de la fiche reste libre */}
+            {m.pictures?.length > 0 ? (
+              <div style={{ display:"flex", gap:8, overflowX:"auto", scrollSnapType:"x mandatory", margin:"0 -16px 14px",
+                padding:"52px 16px 4px", touchAction:"pan-x pan-y",
+                background:"radial-gradient(70% 60% at 50% 0%, rgba(6,182,212,0.18), transparent 70%)" }}>
                 {m.pictures.map((u, i) => (
                   <a key={i} href={u} onClick={e => { e.preventDefault(); setZoom({ images: m.pictures, index: i }); }}
-                    style={{ flexShrink:0, width:"78%", maxWidth:360, scrollSnapAlign:"center", cursor:"zoom-in" }}>
+                    style={{ position:"relative", flexShrink:0, width:"78%", maxWidth:360, scrollSnapAlign:"center", cursor:"zoom-in" }}>
                     <MwImg src={u} w={360} eager={i < 2} animate
-                      style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:12, display:"block",
-                        background:"var(--surface2)" }}/>
+                      style={{ width:"100%", aspectRatio:"1", objectFit:"cover", borderRadius:18, display:"block",
+                        background:"var(--surface2)", boxShadow:"0 12px 28px -14px rgba(0,0,0,.6)" }}/>
+                    {m.pictures.length > 1 && <span style={{ position:"absolute", right:8, bottom:8, padding:"2px 8px", borderRadius:20, fontSize:10.5,
+                      fontWeight:800, color:"#fff", background:"rgba(15,23,42,0.6)", backdropFilter:"blur(6px)" }}>{i + 1} / {m.pictures.length}</span>}
                   </a>
                 ))}
               </div>
-            )}
+            ) : <div style={{ height:52 }}/>}
 
-            <h2 style={{ fontSize:17, fontWeight:800, color:"var(--text)", margin:"0 0 2px", lineHeight:1.3 }}>{m.title_fr || m.title}</h2>
-            {m.title_fr && m.title_fr !== m.title && <div style={{ fontSize:12, color:"var(--muted)" }}>{m.title}</div>}
-            <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:"var(--muted)", margin:"6px 0" }}>
-              {m.creator_avatar && <MwImg src={m.creator_avatar} w={36} style={{ width:18, height:18, borderRadius:"50%" }}/>}
-              <span>par {m.creator_uid
+            {/* titre, createur */}
+            <div style={{ display:"flex", alignItems:"center", gap:6, flexWrap:"wrap", marginBottom:4 }}>
+              <span style={{ fontSize:10.5, fontWeight:900, letterSpacing:".06em", color:"#06B6D4" }}>🌐 MAKERWORLD <Hide at="mw-sheet"/></span>
+              {m.license && <span style={{ ...chip, background:"var(--surface2)", color:"var(--muted)", border:"1px solid var(--border)" }}>{m.license}</span>}
+            </div>
+            <h2 style={{ fontSize:20, fontWeight:900, color:"var(--text)", margin:"0 0 2px", lineHeight:1.25 }}>{m.title_fr || m.title}</h2>
+            {m.title_fr && m.title_fr !== m.title && <div style={{ fontSize:12, fontWeight:600, color:"var(--muted)" }}>{m.title}</div>}
+            <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:12.5, fontWeight:600, color:"var(--muted)", margin:"8px 0 12px" }}>
+              {m.creator_avatar ? <MwImg src={m.creator_avatar} w={56} style={{ width:28, height:28, borderRadius:"50%", flexShrink:0,
+                boxShadow:"0 0 0 2px rgba(6,182,212,0.5)" }}/>
+                : <span style={{ width:28, height:28, borderRadius:"50%", background:"var(--surface2)", flexShrink:0 }}/>}
+              <span style={{ minWidth:0 }}>par {m.creator_uid
                 ? <button onClick={() => { onClose?.(); openCreator({ uid: m.creator_uid, name: m.creator_name }); }}
-                    title="Tous ses modèles" style={{ background:"none", border:"none", padding:0, cursor:"pointer",
-                      fontWeight:700, color:"#3b82f6", fontSize:"inherit" }}>{m.creator_name}</button>
+                    data-tip="Tous ses modèles" style={{ background:"none", border:"none", padding:0, cursor:"pointer",
+                      fontWeight:800, color:"#06B6D4", fontSize:"inherit" }}>{m.creator_name}</button>
                 : <b style={{ color:"var(--text2)" }}>{m.creator_name}</b>}{m.created ? ` · ${fmtDate(m.created)}` : ""}</span>
             </div>
-            <div style={{ display:"flex", flexWrap:"wrap", gap:10, fontSize:12, color:"var(--muted)", margin:"4px 0 10px" }}>
-              {[["❤", m.like_count, "j'aime"], ["⬇", m.download_count, "téléchargements"], ["🖨", m.print_count, "impressions"],
-                ["⭐", m.collection_count, "collections"], ["💬", m.comment_count, "commentaires"]]
-                .filter(([, n]) => n != null).map(([i, n, l]) => <span key={l} title={`${n} ${l}`}>{i} {fmtK(n)}</span>)}
-            </div>
 
-            {(m.printed > 0 || m.in_progress > 0) && (
-              <div style={{ padding:"8px 12px", borderRadius:10, marginBottom:10, fontSize:12.5, fontWeight:700,
-                background: m.printed ? "rgba(34,197,94,0.12)" : "rgba(245,158,11,0.12)",
-                color: m.printed ? "#22c55e" : "#f59e0b", border:`1px solid ${m.printed ? "#22c55e55" : "#f59e0b55"}` }}>
-                {m.printed ? `✓ Imprimé · ${m.printed} impression${m.printed > 1 ? "s" : ""}` : "⏳ En cours d'impression"}
-                {m.in_progress > 0 && m.printed > 0 ? " · une en cours" : ""}
-                {m.printed > 0 && onSearch && (
-                  <button onClick={() => { onSearch(m); onClose(); }} style={{ marginLeft:8, fontSize:11.5, fontWeight:600,
-                    color:"#22c55e", background:"none", border:"none", textDecoration:"underline", cursor:"pointer", padding:0 }}>
-                    voir mes prints</button>
-                )}
+            {/* les compteurs du modele sur MakerWorld */}
+            {stats.length > 0 && (
+              <div style={{ display:"grid", gridTemplateColumns:`repeat(${stats.length}, minmax(0, 1fr))`, gap:6, marginBottom:12 }}>
+                {stats.map(([ic, n, l, c1, c2]) => (
+                  <div key={l} data-tip={`${n} ${l.toLowerCase()}`} style={{ minWidth:0, padding:"7px 6px", borderRadius:14, textAlign:"center",
+                    border:`1px solid color-mix(in srgb, ${c1} 22%, var(--border))`, background:`radial-gradient(90% 70% at 50% 0%, ${c1}22, transparent 70%), var(--surface2)` }}>
+                    <div style={{ fontSize:15, fontWeight:900, whiteSpace:"nowrap", ...grad(c1, c2) }}>{fmtK(n)}</div>
+                    <div style={{ fontSize:9.5, fontWeight:800, color:"var(--muted)", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{ic} {l}</div>
+                  </div>))}
               </div>
             )}
 
-            <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:14 }}>
-              <a href={m.url} target="_blank" rel="noopener noreferrer" style={linkBtn}>Ouvrir sur MakerWorld ↗</a>
-              {/* Ouvrir le profil retenu (pour « A faire », sinon automatique) sans le chercher dans la liste. */}
-              {(() => {
-                const kp = keptProfile();
-                if (!kp) return null;
-                const tip = `Profil ${plan?.instance_id === kp.instance_id ? "retenu" : "choisi automatiquement"} : ${kp.title || kp.instance_id}`;
-                return IS_MOBILE ? (
-                  <a href={handyUrl(id, kp)} target="_blank" rel="noopener noreferrer" title={tip}
-                    style={{ ...linkBtn, color:"white", background:"#22c55e", borderColor:"#22c55e" }}>📱 Ouvrir dans Handy</a>
-                ) : (
-                  <AdminOnly home mw><button onClick={() => openStudio(kp)} disabled={studioBusy === kp.instance_id} title={tip}
-                    style={{ ...linkBtn, cursor:"pointer", color:"white", background:"#22c55e", borderColor:"#22c55e" }}>
-                    {studioBusy === kp.instance_id ? "…" : "🖥️ Ouvrir dans Studio"}</button></AdminOnly>
-                );
-              })()}
-              {like && (
-                <AdminOnly home mw><button onClick={toggleLike} disabled={likeBusy}
-                  style={{ ...linkBtn, cursor:"pointer", ...(like.liked ? { color:"#ef4444", background:"rgba(239,68,68,0.1)",
-                    borderColor:"rgba(239,68,68,0.35)" } : null) }}>
-                  {like.liked ? "❤ Aimé" : "♡ J'aime"}</button></AdminOnly>
-              )}
-              {boost && (boost.can || boost.done) && (
-                <AdminOnly home mw><button onClick={doBoost} disabled={boostBusy || boost.done}
-                  title={[boost.available != null && `${boost.available} boost(s) disponible(s)`,
-                    boost.creator_max != null && `${boost.creator ?? 0}/${boost.creator_max} donnés à ce créateur cette année`]
-                    .filter(Boolean).join(" · ") || undefined}
-                  style={{ ...linkBtn, cursor: boost.done ? "default" : "pointer", color:"#f59e0b", borderColor:"rgba(245,158,11,0.4)",
-                    background:"rgba(245,158,11,0.08)" }}>
-                  {boost.done ? "⚡ Boosté" : `⚡ ${boost.boosted ? "Booster encore" : "Booster"}${boost.available != null ? ` · ${boost.available} dispo` : ""}`}</button></AdminOnly>
-              )}
-              {toRate.has(String(id)) && (
-                <RateButton did={id} style={{ ...linkBtn, color:"white", background:"#f59e0b", borderColor:"#f59e0b" }}/>
-              )}
-              {/* Pas de boost possible : la raison, discrete (deja booste, limite par createur, plus de boost). */}
-              {boost && !boost.can && !boost.done && boost.reason && (
-                <AdminOnly home mw><span title="Règle de MakerWorld" style={{ ...linkBtn, color:"var(--muted)", cursor:"default",
-                  background:"none", borderStyle:"dashed" }}>⚡ {boost.reason}</span></AdminOnly>
-              )}
-              {!friend && (
-                <AdminOnly><button onClick={() => { startAssign(tile()); onClose(); }}
-                  title="Choisir les impressions de ce modèle dans l'historique" style={{ ...linkBtn, cursor:"pointer" }}>
-                  🔗 Associer à un print</button></AdminOnly>
-              )}
-              <AdminOnly home mw><button onClick={() => setPick(true)} style={{ ...linkBtn, cursor:"pointer" }}>☆ Collections</button></AdminOnly>
-            </div>
+            {(m.printed > 0 || m.in_progress > 0) && (() => {
+              const c = m.printed ? "#22C55E" : "#F59E0B";
+              return (
+                <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 12px", borderRadius:16, marginBottom:12,
+                  border:`1px solid ${c}55`, background:`linear-gradient(135deg, ${c}22, transparent 70%), var(--surface2)` }}>
+                  <span style={{ width:32, height:32, borderRadius:10, flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:15,
+                    color:"#fff", background:`linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` }}>{m.printed ? "✓" : "⏳"}</span>
+                  <span style={{ flex:1, minWidth:0, fontSize:13, fontWeight:800, color:c }}>
+                    {m.printed ? `Imprimé · ${m.printed} impression${m.printed > 1 ? "s" : ""}` : "En cours d'impression"}
+                    {m.in_progress > 0 && m.printed > 0 ? " · une en cours" : ""}</span>
+                  {m.printed > 0 && onSearch && (
+                    <button onClick={() => { onSearch(m); onClose(); }} style={{ padding:"5px 11px", borderRadius:20, fontSize:12, fontWeight:800,
+                      color:"#fff", background:`linear-gradient(135deg, ${c}, #16A34A)`, border:"none", cursor:"pointer", whiteSpace:"nowrap" }}>
+                      voir mes prints</button>
+                  )}
+                </div>);
+            })()}
+
+            {/* a evaluer : le bandeau, comme dans la fiche d'une impression (l'etoile du haut y mene) */}
+            {rateHere && <div style={{ marginBottom:12 }}>
+              <GroupToRate designs={[id]} name={m.title} enabled={!friend} label="Modèle à évaluer sur MakerWorld" anchor={`rate-m${id}`}/></div>}
+
             {zoom && <Lightbox images={zoom.images} index={zoom.index} onClose={() => setZoom(null)}/>}
             {pick && <MakerWorldCollectionsPicker designId={id} title={m.title} item={tile()} onClose={() => setPick(false)}/>}
 
             {m.categories?.length > 0 && (
               <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:12 }}>
                 {m.categories.map(c => <span key={c} style={chip}>{c}</span>)}
-                {m.license && <span style={{ ...chip, background:"var(--surface2)", color:"var(--muted)" }}>{m.license}</span>}
               </div>
             )}
 
             {/* Descriptif */}
             {m.description && (
-              <Section title="Descriptif">
+              <Section title="Descriptif" icon="📝" c="#8B5CF6">
                 <Folded lines={7} open={more} onOverflow={setDescLong}
                   style={{ fontSize:13, color:"var(--text2)", lineHeight:1.55, whiteSpace:"pre-wrap" }}>
                   {orig && m.description_original ? m.description_original : m.description}
@@ -383,7 +403,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
             {/* Profils et plateaux */}
             {m.profiles?.length > 0 && (
-              <Section title={`Profils (${m.profiles.length})`}>
+              <Section title={`Profils (${m.profiles.length})`} icon="🧩" c="#06B6D4" bare>
                 {/* Tous les profils listes, chacun replie : on voit d'un coup combien il y en a. */}
                 {(() => {
                   // Le profil retenu pour « A faire » d'abord, toujours ; puis l'ordre de l'appli.
@@ -397,17 +417,19 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                   const isOpen = open === p.instance_id;
                   const nDone = p.plates.filter(pl => plateDone(p, pl.index)).length;
                   return (
-                    <div key={p.instance_id} style={{ border:"1px solid var(--border)", borderRadius:10, marginBottom:8,
-                      background:"var(--surface2)", overflow:"hidden" }}>
+                    <div key={p.instance_id} style={{ borderRadius:16, marginBottom:8, overflow:"hidden",
+                      border: plan?.instance_id === p.instance_id ? "1.5px solid rgba(34,197,94,0.55)" : isOpen ? "1px solid rgba(6,182,212,0.45)" : "1px solid var(--border)",
+                      background: plan?.instance_id === p.instance_id ? "linear-gradient(160deg, rgba(34,197,94,0.12), transparent 45%), var(--surface2)"
+                        : isOpen ? "linear-gradient(160deg, rgba(6,182,212,0.10), transparent 45%), var(--surface2)" : "var(--surface2)" }}>
                       <button onClick={() => setOpen(isOpen ? null : p.instance_id)}
-                        style={{ width:"100%", textAlign:"left", padding:"9px 10px", background:"none", border:"none",
+                        style={{ width:"100%", textAlign:"left", padding:"11px 12px", background:"none", border:"none",
                           cursor:"pointer", color:"var(--text)" }}>
                         <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                          <span style={{ flex:1, fontSize:13, fontWeight:700 }} title={p.title_original || undefined}>
+                          <span style={{ flex:1, fontSize:13.5, fontWeight:800 }} data-tip={p.title_original || undefined}>
                             {p.title || "Profil"}{p.default ? " ★" : ""}</span>
-                          {nDone > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"white", background:"#22c55e",
+                          {nDone > 0 && <span style={{ fontSize:10.5, fontWeight:800, color:"white", background:"linear-gradient(135deg, #22C55E, #16A34A)",
                             padding:"1px 7px", borderRadius:20 }}>✓ {nDone}/{p.plates.length}</span>}
-                          <span style={{ color:"var(--muted)", fontSize:12 }}>{isOpen ? "▾" : "▸"}</span>
+                          <span style={{ color:"var(--muted)", fontSize:11, transform: isOpen ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>
                         </div>
                         <div style={{ fontSize:11, color:"var(--muted)", marginTop:2 }}>
                           {[p.printer, `${p.plates.length} plateau${p.plates.length > 1 ? "x" : ""}`,
@@ -417,7 +439,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                             p.print_count != null ? `${fmtK(p.print_count)} impressions` : null].filter(Boolean).join(" · ")}
                         </div>
                         <div style={{ display:"flex", flexWrap:"wrap", gap:4, marginTop:4 }}>
-                          {p.main && <span style={{ ...pBadge, background:"#3b82f6", border:"none", color:"white" }}>Retenu</span>}
+                          {p.main && <span style={{ ...pBadge, background:"linear-gradient(135deg, #3B82F6, #6366F1)", border:"none", color:"white" }}>Retenu</span>}
                           {p.fit === 2 ? <span style={{ ...pBadge, color:"#22c55e" }}>🖨️ pour ta {m.printer}</span>
                             : p.fit === 1 ? <span style={{ ...pBadge, color:"#84cc16" }}>🖨️ compatible {m.printer}</span>
                             : m.printer ? <span style={{ ...pBadge, color:"#f59e0b" }}>pas pour ta {m.printer}</span> : null}
@@ -438,8 +460,8 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                           {!friend && (
                             <AdminOnly mw>
                               <button onClick={() => pinPlan(p)} disabled={planBusy}
-                                title="La file d'attente utilisera ce profil, ces plateaux et ces filaments"
-                                style={{ ...linkBtn, padding:"5px 10px", fontSize:11.5, cursor:"pointer",
+                                data-tip="La file d'attente utilisera ce profil, ces plateaux et ces filaments"
+                                style={{ ...linkBtn, padding:"6px 11px", fontSize:12, cursor:"pointer", color:"#16a34a", background:"rgba(34,197,94,0.12)", borderColor:"rgba(34,197,94,0.4)",
                                   transition:"background .25s, color .25s, transform .15s",
                                   ...(plan?.instance_id === p.instance_id ? { color:"#22c55e", borderColor:"rgba(34,197,94,0.4)" } : null),
                                   ...(planDone && plan?.instance_id === p.instance_id
@@ -531,7 +553,7 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
                             return (
                               <div key={pl.index} onClick={p.plates.length > 1 && canPlan ? toggle : undefined}
                                 role={p.plates.length > 1 && canPlan ? "button" : undefined}
-                                aria-pressed={on} style={{ borderRadius:8, overflow:"hidden", background:"var(--surface)",
+                                aria-pressed={on} style={{ borderRadius:12, overflow:"hidden", background:"var(--surface)",
                                 cursor: p.plates.length > 1 && canPlan ? "pointer" : "default", opacity: on ? 1 : 0.4, transition:"opacity .15s",
                                 position:"relative", border: ok ? "2px solid #22c55e" : ready ? "2px solid #3b82f6" : "1px solid var(--border)" }}>
                                 {p.plates.length > 1 && canPlan && <span style={{ position:"absolute", top:4, right:4, zIndex:1, width:18, height:18,
@@ -600,11 +622,11 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
             )}
 
             {/* Commentaires */}
-            <Section title={`Commentaires${(m.comment_count ?? com?.total) ? ` (${m.comment_count ?? com?.total})` : ""}`}
+            <Section title={`Commentaires${(m.comment_count ?? com?.total) ? ` (${m.comment_count ?? com?.total})` : ""}`} icon="💬" c="#EC4899"
               open={showCom} onToggle={() => setShowCom(v => !v)}>
               {!showCom ? null : com === null ? <p style={msg}>…</p> : com.items.length === 0 ? <p style={msg}>Aucun commentaire.</p> : (<>
                 {com.items.map(c => (
-                  <div key={c.id} style={{ display:"flex", gap:8, padding:"8px 0", borderBottom:"1px solid var(--border)" }}>
+                  <div key={c.id} style={{ display:"flex", gap:9, padding:"9px 0", borderBottom:"1px dashed var(--border)" }}>
                     {c.avatar ? <MwImg src={c.avatar} w={52}
                       style={{ width:26, height:26, borderRadius:"50%", flexShrink:0 }}/>
                       : <span style={{ width:26, height:26, borderRadius:"50%", background:"var(--surface2)", flexShrink:0 }}/>}
@@ -642,17 +664,17 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
 
             {/* Similaires */}
             {sim?.length > 0 && (
-              <Section title="Modèles similaires">
-                <div style={{ display:"flex", gap:8, overflowX:"auto" }}>
+              <Section title="Modèles similaires" icon="✨" c="#F59E0B" bare>
+                <div style={{ display:"flex", gap:8, overflowX:"auto", touchAction:"pan-x pan-y" }}>
                   {sim.map(x => (
                     <button key={x.design_id} onClick={() => setId(x.design_id)} onPointerDown={() => prefetchModel(x.design_id)}
                       style={{ flexShrink:0, width:100, padding:0, background:"none", border:"none", textAlign:"left",
                         cursor:"pointer", color:"var(--text)" }}>
-                      <div style={{ position:"relative", width:100, height:100, borderRadius:8, overflow:"hidden", background:"var(--surface2)" }}>
+                      <div style={{ position:"relative", width:100, height:100, borderRadius:14, overflow:"hidden", background:"var(--surface2)" }}>
                         {x.cover_url && <MwImg src={x.cover_url} w={100}
                           style={{ width:"100%", height:"100%", objectFit:"cover" }}/>}
                         {x.printed > 0 && <span style={{ position:"absolute", left:4, bottom:4, fontSize:9, fontWeight:800,
-                          padding:"1px 5px", borderRadius:20, background:"#22c55e", color:"white" }}>✓ IMPRIMÉ</span>}
+                          padding:"1px 5px", borderRadius:20, background:"linear-gradient(135deg, #22C55E, #16A34A)", color:"white" }}>✓ IMPRIMÉ</span>}
                       </div>
                       <div style={{ fontSize:10.5, marginTop:3, lineHeight:1.25, overflow:"hidden", display:"-webkit-box",
                         WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>{x.title_fr || x.title}</div>
@@ -668,7 +690,33 @@ export default function MakerWorldModelSheet({ designId, preview, onClose, onSea
               </div>
             )}
           </>)}
+          </div>
         </div>
+        {/* les actions, toujours a portee du pouce */}
+        {ok && (
+          <div style={{ flexShrink:0, display:"flex", gap:8, padding:"10px 14px calc(10px + env(safe-area-inset-bottom, 0px))",
+            borderTop:"1px solid var(--border)", background:"color-mix(in srgb, var(--sheet-bg) 94%, transparent)", backdropFilter:"blur(8px)" }}>
+            {kp && IS_MOBILE ? (
+              <a href={handyUrl(id, kp)} target="_blank" rel="noopener noreferrer" data-tip={kpTip} style={{ ...fBtn, ...primary, flex:1 }}>📱 Ouvrir dans Handy</a>
+            ) : kp && canHome ? (
+              <button onClick={() => openStudio(kp)} disabled={studioBusy === kp.instance_id} data-tip={kpTip} style={{ ...fBtn, ...primary, flex:1 }}>
+                {studioBusy === kp.instance_id ? "…" : "🖥️ Ouvrir dans Studio"}</button>
+            ) : (
+              <a href={mwUrl} target="_blank" rel="noopener noreferrer" style={{ ...fBtn, flex:1, color:"#06B6D4", borderColor:"rgba(6,182,212,0.4)",
+                background:"rgba(6,182,212,0.1)" }}>🌐 MakerWorld ↗</a>
+            )}
+            {like && canHome && (
+              <button onClick={toggleLike} disabled={likeBusy} aria-label={like.liked ? "Aimé" : "J'aime"} data-tip={like.liked ? "Aimé · retirer le j'aime" : "J'aime"}
+                style={{ ...fBtn, width:48, flex:"0 0 auto", ...(like.liked ? { color:"#ef4444", background:"rgba(239,68,68,0.12)", borderColor:"rgba(239,68,68,0.4)" } : null) }}>
+                {like.liked ? "❤" : "♡"}</button>
+            )}
+            {canHome && (
+              <button onClick={() => setPick(true)} aria-label="Ranger dans mes collections" data-tip="Ranger dans mes collections"
+                style={{ ...fBtn, width:48, flex:"0 0 auto", color:"#F59E0B" }}>☆</button>
+            )}
+            <button onClick={menu} aria-label="Plus d'actions" style={{ ...fBtn, width:48, flex:"0 0 auto" }}>⋯</button>
+          </div>
+        )}
       </div>
     </div>,
     document.body
@@ -750,27 +798,38 @@ function ProfileSummary({ p }) {
   );
 }
 
-function Section({ title, children, open, onToggle }) {
-  const head = { fontSize:12, fontWeight:800, color:"var(--text)", textTransform:"uppercase", letterSpacing:0.4 };
+// bare : pas de carte autour (profils, similaires : deja des cartes)
+function Section({ title, children, open, onToggle, icon = null, c = "#3B82F6", bare = false }) {
+  const shut = onToggle && !open;
+  const ico = icon && <span style={{ width:28, height:28, borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", fontSize:14,
+    background:`${c}26`, flexShrink:0 }}>{icon}</span>;
+  const head = { display:"flex", alignItems:"center", gap:8, fontSize:13.5, fontWeight:900, color:"var(--text)" };
   return (
-    <div style={{ marginBottom:16 }}>
+    <div style={{ marginBottom:14, ...(bare ? null : { padding:"12px 14px", borderRadius:18, border:`1px solid ${c}33`,
+      background:`linear-gradient(160deg, ${c}14, transparent 50%), var(--surface2)` }) }}>
       {onToggle ? (
-        <button onClick={onToggle} style={{ ...head, display:"flex", alignItems:"center", gap:6, width:"100%",
-          background:"none", border:"none", padding:"0 0 8px", cursor:"pointer", textAlign:"left" }}>
-          <span style={{ flex:1 }}>{title}</span>
-          <span style={{ fontSize:11, fontWeight:600, color:"#3b82f6", textTransform:"none", letterSpacing:0 }}>
-            {open ? "Replier ▴" : "Déplier ▾"}</span>
+        <button onClick={onToggle} style={{ ...head, width:"100%", background:"none", border:"none", padding:0, margin: shut ? 0 : "0 0 8px",
+          cursor:"pointer", textAlign:"left" }}>
+          {ico}<span style={{ flex:1 }}>{title}</span>
+          <span style={{ fontSize:11, color:"var(--muted)", transform: open ? "rotate(90deg)" : "none", transition:"transform .15s" }}>▶</span>
         </button>
-      ) : <div style={{ ...head, margin:"0 0 8px" }}>{title}</div>}
+      ) : <div style={{ ...head, margin:"0 0 8px" }}>{ico}{title}</div>}
       {children}
     </div>
   );
 }
 
 const msg = { fontSize:13, color:"var(--muted)", padding:"12px 0", margin:0 };
-const linkBtn = { padding:"7px 12px", borderRadius:10, fontSize:12, fontWeight:700, textDecoration:"none",
-  color:"#3b82f6", background:"rgba(59,130,246,0.08)", border:"1px solid rgba(59,130,246,0.3)" };
+const linkBtn = { padding:"7px 12px", borderRadius:12, fontSize:12, fontWeight:800, textDecoration:"none",
+  color:"#3b82f6", background:"rgba(59,130,246,0.1)", border:"1px solid rgba(59,130,246,0.3)" };
+const WIDE = typeof window !== "undefined" && window.innerWidth >= 900;
+const roundTop = { width:34, height:34, borderRadius:"50%", border:"1px solid var(--border)", background:"color-mix(in srgb, var(--sheet-bg) 80%, transparent)",
+  backdropFilter:"blur(6px)", color:"var(--text2)", cursor:"pointer", fontSize:15, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center" };
+const fBtn = { padding:"11px 12px", borderRadius:12, border:"1px solid var(--border)", background:"var(--surface2)", color:"var(--text)", fontSize:13.5,
+  fontWeight:800, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6, textDecoration:"none", boxSizing:"border-box" };
+const primary = { border:"none", color:"#fff", background:"linear-gradient(135deg, #22C55E, #16A34A)", boxShadow:"0 8px 18px -10px #22C55E" };
+const grad = (a, b) => ({ backgroundImage:`linear-gradient(135deg, ${a}, ${b})`, WebkitBackgroundClip:"text", backgroundClip:"text", color:"transparent" });
 const textBtn = { marginTop:6, fontSize:12, fontWeight:600, color:"#3b82f6", background:"none", border:"none",
   padding:0, cursor:"pointer" };
 const pBadge = { fontSize:10, fontWeight:700, padding:"1px 7px", borderRadius:20, background:"var(--surface)", border:"1px solid var(--border)", color:"var(--text2)" };
-const chip = { fontSize:10.5, padding:"2px 8px", borderRadius:20, background:"rgba(59,130,246,0.1)", color:"#60a5fa", fontWeight:600 };
+const chip = { fontSize:11, padding:"3px 10px", borderRadius:20, background:"rgba(6,182,212,0.12)", color:"#06B6D4", fontWeight:800 };

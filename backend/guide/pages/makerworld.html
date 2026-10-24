@@ -270,39 +270,48 @@
 
 <section id="makerworld-fiche">
   <h2>La fiche d'un modèle</h2>
-  <p>Touche n'importe quelle tuile MakerWorld (collection, j'aime, découvrir, concours, page créateur, carte MakerWorld d'une impression…) : la fiche s'ouvre en grand panneau, titré <b>MAKERWORLD</b>, avec <span class="ui">✕</span> pour la fermer. Elle s'affiche tout de suite avec la couverture et le titre, puis se complète.</p>
-  <figure class="phone"><img src="img/makerworld-fiche.webp" alt="Fiche d'un modèle : galerie, titre, créateur, compteurs, bandeau Imprimé et boutons"><figcaption>Le haut de la fiche : galerie, compteurs, état et boutons.</figcaption></figure>
+  <p>Touche n'importe quelle tuile MakerWorld (collection, j'aime, découvrir, concours, page créateur, carte MakerWorld d'une impression…) : la fiche s'ouvre en grand panneau (centré sur ordinateur). En haut à droite, par-dessus la galerie : <span class="ui">⭐</span> si le modèle attend ton évaluation (il mène au bandeau « à évaluer »), <span class="ui">⋯</span> pour le menu des actions et <span class="ui">✕</span> pour la fermer. Elle s'affiche tout de suite avec la couverture et le titre, puis se complète.</p>
+  <figure class="phone"><img src="img/makerworld-fiche.webp" alt="Fiche d'un modèle : galerie, titre, créateur, compteurs, bandeau Imprimé et boutons"><figcaption>Le haut de la fiche : galerie, titre, compteurs en tuiles, état, et les actions en bas.</figcaption></figure>
 
   <section id="makerworld-fiche-haut">
     <h3>Galerie, titre et compteurs</h3>
     <ul>
-      <li><b>Galerie</b> horizontale : les images du créateur et les photos d'impressions réelles (30 au plus). Touche une image pour la voir en plein écran.</li>
-      <li><b>Titre</b> en français, et le titre d'origine en gris s'il diffère.</li>
-      <li>« par <i>créateur</i> » (touche le nom pour <a href="#makerworld-page-createur">sa page</a>) et la date de publication.</li>
-      <li><b>Compteurs</b> : ❤ j'aime, ⬇ téléchargements, 🖨 impressions, ⭐ collections, 💬 commentaires (« 1.2k » = 1 200).</li>
-      <li><b>Bandeau d'état</b> : « ✓ Imprimé · N impressions » (vert) avec le lien <span class="ui">voir mes prints</span>, ou « ⏳ En cours d'impression » (orange).</li>
+      <li><b>Galerie</b> horizontale : les images du créateur et les photos d'impressions réelles (30 au plus), avec « 1 / 3 » sur chacune. Glisse de côté ; touche une image pour la voir en plein écran.</li>
+      <li>La ligne <b>🌐 MAKERWORLD</b> et la <b>licence</b> (BY-NC…), le <b>titre</b> en français, et le titre d'origine en gris s'il diffère.</li>
+      <li>« par <i>créateur</i> », avec son avatar (touche le nom pour <a href="#makerworld-page-createur">sa page</a>), et la date de publication.</li>
+      <li><b>Compteurs</b>, en tuiles de couleur : ❤ j'aime, ⬇ téléchargements, 🖨 impressions, ⭐ collections, 💬 avis (« 1.2k » = 1 200).</li>
+      <li><b>Bandeau d'état</b> : « ✓ Imprimé · N impressions » (vert) avec le bouton <span class="ui">voir mes prints</span>, ou « ⏳ En cours d'impression » (orange).</li>
+      <li><b>Modèle à évaluer sur MakerWorld</b> : un bandeau orange avec <span class="ui">⭐ Évaluer</span>, seulement si le modèle attend ton évaluation (voir <a href="#makerworld-notation">Noter un modèle</a>).</li>
+      <li>Les <b>catégories</b>, en puces.</li>
     </ul>
   </section>
 
   <section id="makerworld-fiche-boutons">
-    <h3>Les boutons</h3>
+    <h3>Les actions</h3>
+    <p>En bas, toujours à portée du pouce :</p>
     <dl class="opts">
-      <dt>Ouvrir sur MakerWorld ↗</dt><dd>La page du modèle sur le site.</dd>
-      <dt>🖥️ Ouvrir dans Studio</dt><dd>Sur ordinateur (droit MakerWorld) : ouvre Bambu Studio sur le fichier 3MF du profil retenu (ou choisi automatiquement, voir <a href="#makerworld-fiche-profils">Profils</a>). Compte comme un téléchargement sur MakerWorld.</dd>
+      <dt>🖥️ Ouvrir dans Studio</dt><dd>Le grand bouton vert, sur ordinateur (droit MakerWorld) : ouvre Bambu Studio sur le fichier 3MF du profil retenu (ou choisi automatiquement, voir <a href="#makerworld-fiche-profils">Profils</a>). Compte comme un téléchargement sur MakerWorld. Sans ce droit, ou sans profil, le bouton devient <span class="ui">🌐 MakerWorld ↗</span>.</dd>
       <dt>📱 Ouvrir dans Handy</dt><dd>Sur téléphone ou tablette, à la place du précédent : ouvre le modèle dans l'appli Bambu Handy.</dd>
-      <dt>♡ J'aime / ❤ Aimé</dt><dd>Compte lié et droit MakerWorld : aime le modèle (ou retire le j'aime). Le bouton change tout de suite, la liste J'aime suit.</dd>
-      <dt>⚡ Booster · N dispo</dt><dd>Droit MakerWorld : offre un de tes boosts au créateur pour ce modèle. L'appli demande « Booster « X » ? Ça utilise un de tes boosts (il t'en reste N). » → <span class="ui">⚡ Booster</span>. Le bouton devient <span class="ui">⚡ Boosté</span>. Il affiche <span class="ui">⚡ Booster encore</span> si tu l'as déjà boosté et que MakerWorld permet d'en remettre. L'infobulle rappelle tes boosts disponibles et combien tu en as donné à ce créateur cette année.</dd>
-      <dt>⚡ (raison en pointillés)</dt><dd>Quand le boost n'est pas possible, la règle de MakerWorld s'affiche à la place : « Plus aucun boost disponible », « Déjà boosté (m/max pour ce modèle) » ou « Limite par créateur atteinte (c/max cette année) ».</dd>
-      <dt>⭐ Évaluer</dt><dd>Orange, seulement si le modèle attend ton évaluation : voir <a href="#makerworld-notation">Noter un modèle</a>.</dd>
-      <dt>🔗 Associer à un print</dt><dd><span class="admin">admin</span> Relier ce modèle à des impressions de ton historique : voir <a href="#makerworld-associer">ci-dessous</a>.</dd>
-      <dt>☆ Collections</dt><dd>Droit MakerWorld : <a href="#makerworld-ranger">ranger le modèle dans tes collections</a>.</dd>
+      <dt>♡ / ❤</dt><dd>Compte lié et droit MakerWorld : aime le modèle (ou retire le j'aime). Le bouton change tout de suite, la liste J'aime suit.</dd>
+      <dt>☆</dt><dd>Droit MakerWorld : <a href="#makerworld-ranger">ranger le modèle dans tes collections</a>.</dd>
+      <dt>⋯</dt><dd>Le menu de la fiche (le même qu'en haut).</dd>
     </dl>
-    <p>Viennent ensuite les <b>catégories</b> (puces) et la <b>licence</b>, puis le <b>DESCRIPTIF</b>, replié sur 7 lignes (<span class="ui">Lire la suite</span> / <span class="ui">Réduire</span>, <span class="ui">Afficher l'original</span> / <span class="ui">Afficher la traduction</span>).</p>
+    <p>Le menu <span class="ui">⋯</span> reprend tout, en couleurs :</p>
+    <dl class="opts">
+      <dt>🌐 Ouvrir sur MakerWorld</dt><dd>La page du modèle sur le site, dans un nouvel onglet.</dd>
+      <dt>🖥️ Ouvrir dans Studio / 📱 Ouvrir dans Handy</dt><dd>Comme le bouton du bas ; la ligne dit quel profil sera ouvert (« retenu » ou « choisi automatiquement »).</dd>
+      <dt>🖨️ Voir mes prints</dt><dd>Si le modèle a été imprimé : la Liste de l'historique filtrée sur ce modèle.</dd>
+      <dt>❤ Aimé · retirer le j'aime / ♡ J'aime</dt><dd>Comme le bouton du bas.</dd>
+      <dt>⚡ Booster</dt><dd>Droit MakerWorld : offre un de tes boosts au créateur pour ce modèle. La ligne rappelle tes boosts disponibles et combien tu en as donné à ce créateur cette année. L'appli demande « Booster « X » ? Ça utilise un de tes boosts (il t'en reste N). » → <span class="ui">⚡ Booster</span>. Ensuite la ligne devient <span class="ui">⚡ Boosté</span> (grisée), ou <span class="ui">⚡ Booster encore</span> si MakerWorld permet d'en remettre. Quand le boost n'est pas possible, la ligne est grisée et donne la règle de MakerWorld : « Plus aucun boost disponible », « Déjà boosté (m/max pour ce modèle) » ou « Limite par créateur atteinte (c/max cette année) ».</dd>
+      <dt>☆ Ranger dans mes collections…</dt><dd>Droit MakerWorld.</dd>
+      <dt>🔗 Associer à un print</dt><dd><span class="admin">admin</span> Relier ce modèle à des impressions de ton historique : voir <a href="#makerworld-associer">ci-dessous</a>.</dd>
+    </dl>
+    <p>Puis la carte <b>📝 Descriptif</b>, repliée sur 7 lignes (<span class="ui">Lire la suite</span> / <span class="ui">Réduire</span>, <span class="ui">Afficher l'original</span> / <span class="ui">Afficher la traduction</span>).</p>
   </section>
 
   <section id="makerworld-fiche-profils">
     <h3>Profils d'impression et plateaux</h3>
-    <p>La section <b>PROFILS (N)</b> liste les profils d'impression du modèle, chacun replié. Les 4 premiers s'affichent, puis <span class="ui">Voir les N autres profils</span>. Le profil retenu pour « À faire » vient toujours en premier.</p>
+    <p>La section <b>🧩 Profils (N)</b> liste les profils d'impression du modèle, chacun replié. Les 4 premiers s'affichent, puis <span class="ui">Voir les N autres profils</span>. Le profil retenu pour « À faire » vient toujours en premier, sur une carte teintée de vert ; le profil déplié est teinté de bleu.</p>
     <figure class="phone"><img src="img/makerworld-fiche-profils.webp" alt="Profil déplié : badges, boutons Retenir pour À faire, correspondance avec le stock et grille des plateaux"><figcaption>Un profil déplié : boutons, filaments du stock et plateaux.</figcaption></figure>
     <p>Sur chaque profil replié :</p>
     <ul>
@@ -328,8 +337,8 @@
     <h3>Commentaires, modèles similaires et tags</h3>
     <figure class="phone"><img src="img/makerworld-fiche-bas.webp" alt="Commentaires dépliés et modèles similaires"><figcaption>Les commentaires dépliés, puis les modèles similaires.</figcaption></figure>
     <ul>
-      <li><b>COMMENTAIRES (N)</b>, repliés par défaut (<span class="ui">Déplier ▾</span> / <span class="ui">Replier ▴</span>) : auteur, date, étoiles, texte (traduit, avec l'original à la demande), photos, « ♥ N · R réponses ». 10 par page, puis <span class="ui">Plus de commentaires (n / total)</span>.</li>
-      <li><b>MODÈLES SIMILAIRES</b> : une rangée de 12 modèles proches (avec <span class="ui">✓ IMPRIMÉ</span>) ; en toucher un remplace la fiche.</li>
+      <li><b>💬 Commentaires (N)</b>, une carte repliée par défaut (touche son titre pour la déplier ou la replier) : auteur, date, étoiles, texte (traduit, avec l'original à la demande), photos, « ♥ N · R réponses ». 10 par page, puis <span class="ui">Plus de commentaires (n / total)</span>.</li>
+      <li><b>✨ Modèles similaires</b> : une rangée de 12 modèles proches (avec <span class="ui">✓ IMPRIMÉ</span>) ; en toucher un remplace la fiche.</li>
       <li>Les <b>tags</b> (#mot) terminent la fiche.</li>
     </ul>
   </section>
