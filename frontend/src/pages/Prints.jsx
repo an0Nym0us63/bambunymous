@@ -1375,7 +1375,7 @@ function GroupPhotosV2({ groupId, onUpdated }) {
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{photos.length}</span>
         <PhotoAddButton onPick={f => upload(f)}/>
       </div>
-      {photos.length > 0 && <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, touchAction: "pan-x", overscrollBehaviorX: "contain" }}>
+      {photos.length > 0 && <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4, touchAction: "pan-x pan-y", overscrollBehaviorX: "contain" }}>
         {photos.map((ph, i) => { const isCover = cover === ph.name, arm = armed === ph.name;
           return (
             <div key={i} style={{ position: "relative", flexShrink: 0, borderRadius: 14, overflow: "hidden",
@@ -2106,7 +2106,7 @@ function SnapshotGallery({ snaps, printId, onDelete, onUpload, userPhotos = [], 
             horizontal, le composant vertical du geste n'est plus consomme ici
             et ne declenche donc plus le tirer-pour-rafraichir. */}
         <div ref={scrollRef} style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:6,
-          scrollbarWidth:"none", touchAction:"pan-x", overscrollBehaviorX:"contain" }}>
+          scrollbarWidth:"none", touchAction:"pan-x pan-y", overscrollBehaviorX:"contain" }}>
           {items.map((item, i) => {
             const isCover = item.name && item.name === coverPhoto;
             const armed   = confirmDelPhoto === item.url;
