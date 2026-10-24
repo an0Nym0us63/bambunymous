@@ -1072,22 +1072,21 @@ function MakerWorldSimilar({ designId, onOpen }) {
 
 // Les deux 3MF d'une impression : le tranche (garde au lancement) et celui d'origine MakerWorld (le projet du
 // profil, garde des le lancement ; a defaut, un bouton le recupere). Le telechargement passe par l'API (jeton).
+async function download3mf(pid, kind) {
+  try {
+    const r = await client.get(`/prints/${pid}/3mf`, { params: { kind }, responseType: "blob" });
+    const cd = r.headers?.["content-disposition"] || "";
+    const m = /filename\*=UTF-8''([^;]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
+    const url = URL.createObjectURL(r.data);
+    const a = document.createElement("a");
+    a.href = url; a.download = m ? decodeURIComponent(m[1]) : `impression-${pid}.3mf`;
+    a.dispatchEvent(new MouseEvent("click"));
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+  } catch (e) { showAlert(e.response?.status === 404 ? "Ce 3MF n'est pas sur le serveur." : (e.message || "Téléchargement impossible")); }
+}
 function Files3mf({ p, onGot }) {
   const [busy, setBusy] = useState(null);
-  const save = async kind => {
-    setBusy(kind);
-    try {
-      const r = await client.get(`/prints/${p.id}/3mf`, { params: { kind }, responseType: "blob" });
-      const cd = r.headers?.["content-disposition"] || "";
-      const m = /filename\*=UTF-8''([^;]+)/i.exec(cd) || /filename="?([^";]+)"?/i.exec(cd);
-      const url = URL.createObjectURL(r.data);
-      const a = document.createElement("a");
-      a.href = url; a.download = m ? decodeURIComponent(m[1]) : `impression-${p.id}.3mf`;
-      a.dispatchEvent(new MouseEvent("click"));
-      setTimeout(() => URL.revokeObjectURL(url), 5000);
-    } catch (e) { showAlert(e.response?.status === 404 ? "Ce 3MF n'est pas sur le serveur." : (e.message || "Téléchargement impossible")); }
-    finally { setBusy(null); }
-  };
+  const save = async kind => { setBusy(kind); try { await download3mf(p.id, kind); } finally { setBusy(null); } };
   const fetchSrc = async () => {
     setBusy("get");
     try { await client.post(`/makerworld/source3mf/print/${p.id}`); onGot(); }
@@ -1173,6 +1172,71 @@ function FicheSection({ icon, title, summary, open: open0 = true, children, tone
   );
 }
 
+// Les filaments (nouvelle fiche) : la repartition du poids en une barre de couleurs, puis une rangee par
+// filament, toujours visible. Toucher : la bobine (ou l'associer) ; ⋯ et appui long : les memes actions
+// qu'avant (ouvrir, associer, dissocier) ; « Restituer » dans le titre. Cout reel puis normal entre parentheses.
+function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap }) {
+  const isAdmin = useIsAdmin();
+  const total = filaments.reduce((t, f) => t + (f.grams_used || 0), 0);
+  const hex = f => f.color_hex ? (String(f.color_hex).startsWith("#") ? f.color_hex : `#${f.color_hex}`).slice(0, 7) : "#94a3b8";
+  const open = f => {
+    if (f.spool_id) onSpoolClick?.({ filId: f.bam_filament_id || null, spoolId: f.spool_id, hex: f.color_hex || null });
+    else if (isAdmin) onSpoolPick?.({ usageId: f.id, colorHex: f.color_hex, colorsArray: f.filament_colors_array, multicolorType: f.filament_multicolor_type,
+      filamentType: f.filament_fila_type || f.filament_type });
+  };
+  const menu = (e, f) => openMenu(e, {
+    title: f.filament_translated_name || f.filament_fila_type || f.filament_name || "Filament",
+    subtitle: [f.filament_brand, `${(f.grams_used || 0).toFixed(1).replace(".", ",")} g`].filter(Boolean).join(" · "),
+    items: [
+      f.spool_id && { icon: "🧵", label: `Ouvrir la bobine #${f.spool_id}`, onClick: () => open(f) },
+      !f.spool_id && isAdmin && { icon: "▸", label: "Associer une bobine", onClick: () => open(f) },
+      f.spool_id && isAdmin && { icon: "⛓", label: "Dissocier la bobine", hint: "Le poids lui est rendu", onClick: () => onUnmap?.(f) },
+    ],
+  });
+  return (
+    <div style={{ borderRadius: 16, background: "var(--surface2)", border: "1px solid var(--border)", padding: "11px 12px", display: "flex", flexDirection: "column", gap: 9 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>🧵 Filaments</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{filaments.length} · {gFr(total)}</span>
+        {isAdmin && onRestore && filaments.some(f => f.spool_id) && <button onClick={onRestore} data-tip="Rendre aux bobines une part du poids"
+          style={{ marginLeft: "auto", fontSize: 11.5, fontWeight: 800, padding: "3px 10px", borderRadius: 20, cursor: "pointer", background: "rgba(34,197,94,0.14)",
+            color: "#16a34a", border: "1px solid rgba(34,197,94,0.3)" }}>⚖ Restituer</button>}
+      </div>
+      {/* la repartition du poids */}
+      {total > 0 && <div style={{ display: "flex", height: 8, borderRadius: 6, overflow: "hidden", gap: 2 }}>
+        {filaments.map((f, i) => <span key={i} data-tip={`${f.filament_translated_name || f.filament_fila_type || f.filament_name || "Filament"} · ${Math.round(100 * (f.grams_used || 0) / total)} %`}
+          style={{ flex: `${Math.max(0.02, (f.grams_used || 0) / total)} 1 0`, background: hex(f), boxShadow: "inset 0 0 0 1px rgba(0,0,0,.08)" }}/>)}
+      </div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {filaments.map((f, i) => (
+          <div key={i} onClick={() => open(f)} onContextMenu={e => { e.preventDefault(); menu(e, f); }}
+            onPointerDown={e => { const t = setTimeout(() => { navigator.vibrate && navigator.vibrate(20); menu(e, f); }, 600); e.currentTarget._lpt = t; }}
+            onPointerUp={e => clearTimeout(e.currentTarget._lpt)} onPointerLeave={e => clearTimeout(e.currentTarget._lpt)} onPointerCancel={e => clearTimeout(e.currentTarget._lpt)}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 6px 7px 8px", borderRadius: 12, background: "var(--surface)",
+              cursor: f.spool_id || isAdmin ? "pointer" : "default" }}>
+            <ColorDot hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={24} ring={f.spool_id ? "mapped" : "default"}/>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {f.filament_translated_name || f.filament_fila_type || f.filament_name || "Inconnu"}</div>
+              <div style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {f.spool_id ? <span data-tip={`Bobine #${f.spool_id}`} style={{ color: "#16a34a", fontWeight: 800 }}>✓ #{f.spool_id} · </span>
+                  : isAdmin ? <span style={{ color: "#d97706", fontWeight: 800 }}>▸ Associer · </span> : null}
+                {/* la marque, et le type s'il n'est pas deja le titre */}
+                {[f.filament_brand, (t => t !== (f.filament_translated_name || f.filament_fila_type || f.filament_name) ? t : null)(f.filament_fila_type || f.filament_type)]
+                  .filter(Boolean).join(" · ")}</div>
+            </div>
+            <div style={{ textAlign: "right", flexShrink: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 900, color: "var(--text)" }}>{(f.grams_used || 0).toFixed(1).replace(".", ",")} g</div>
+              {/* le cout reel, puis le cout normal entre parentheses (toujours les deux) */}
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap" }}>{eur2(f.cost || 0)} ({eur2(f.normal_cost || 0)})</div>
+            </div>
+            {isAdmin && <button onClick={e => { e.stopPropagation(); menu(e, f); }} aria-label="Actions du filament"
+              style={{ width: 28, height: 28, flexShrink: 0, borderRadius: 9, border: "none", background: "transparent", color: "var(--muted)", cursor: "pointer", fontSize: 15 }}>⋯</button>}
+          </div>))}
+      </div>
+    </div>);
+}
+
 function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
   const [sharing, setSharing] = useState(false);
   const [ungrouped, setUngrouped] = useState(false);
@@ -1200,7 +1264,7 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [selSpool, setSelSpool] = useState(null);
   // le detail du cout : ouvert par defaut (comme l'ancien bloc) ; l'appareil retient le choix
-  const [costOpen, setCostOpen0] = useState(() => { try { return localStorage.getItem("bn-fiche-cost") !== "0"; } catch { return true; } });
+  const [costOpen, setCostOpen0] = useState(() => { try { return localStorage.getItem("bn-fiche-cost") === "1"; } catch { return false; } });
   const setCostOpen = f => setCostOpen0(o => { const v = typeof f === "function" ? f(o) : f; try { localStorage.setItem("bn-fiche-cost", v ? "1" : "0"); } catch { /* rien */ } return v; });
   const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
   const [nbVal, setNbVal] = useState(String(pProp.number_of_items || 1));
@@ -1233,6 +1297,12 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
       { icon: "✏️", label: "Éditer", onClick: () => setEditMode(true) },
       { icon: "📣", label: "Partager", hint: "Telegram", onClick: () => setSharing(true) },
       groupe && { icon: "⛓", label: "Retirer du groupe", hint: groupe, onClick: handleUngroup },
+      (p.source_3mf || p.model_3mf || (p.design_id && p.mw_profile_id)) && "-",
+      p.source_3mf && { icon: "⤓", label: "Télécharger le 3MF d'origine", hint: "MakerWorld · à retrancher", onClick: () => download3mf(p.id, "source") },
+      !p.source_3mf && p.design_id && p.mw_profile_id && { icon: "⇣", label: "Récupérer le 3MF d'origine", hint: "depuis MakerWorld",
+        onClick: async () => { try { await client.post(`/makerworld/source3mf/print/${p.id}`); setP(prev => ({ ...prev, source_3mf: true })); toast("3MF d'origine récupéré"); }
+          catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
+      p.model_3mf && { icon: "⤓", label: "Télécharger le 3MF tranché", hint: "pour mon imprimante", onClick: () => download3mf(p.id, "sliced") },
       "-",
       { icon: "🗑", label: "Supprimer…", danger: true, onClick: () => setShowDeleteConfirm(true) },
       "-",
@@ -1299,16 +1369,19 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
         {tile("Quand", day, hour, "#3B82F6", "#60A5FA", null, fmtDate(p.print_date))}
         {tile("Durée", dur > 0 ? durFr(dur) : "—", p.duration_seconds ? null : dur > 0 ? "estimée" : null, "#8B5CF6", "#C084FC")}
         {tile("Poids", p.total_weight_g > 0 ? gFr(p.total_weight_g) : "—", null, "#F59E0B", "#FBBF24")}
-        {tile(<>Coût<span>{costOpen ? "▴" : "▾"}</span></>, eur2(totalBobine), localNb > 1 ? `${eur2(totalBobine / localNb)}/u` : "détail", "#16A34A", "#4ADE80", () => setCostOpen(o => !o), "Le détail du coût")}
+        {tile(<>Coût<span>{costOpen ? "▴" : "▾"}</span></>, eur2(totalBobine), `(${eur2(totalNormal)})`, "#16A34A", "#4ADE80", () => setCostOpen(o => !o),
+          "Le prix réel, puis le prix normal entre parenthèses ; touche pour le détail")}
       </div>
       {costOpen && (
         <div style={{ padding: "10px 12px", borderRadius: 14, background: "var(--surface2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 6, fontSize: 12.5 }}>
-          {[["Filament", eur2(costFil), `${eur2(costNormal)} sans bobine`], ["Électricité", eur2(costElec), null],
-            ["Total", eur2(totalBobine), `${eur2(totalNormal)} sans bobine`]].map(([l, v, s]) => (
-            <div key={l} style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          {/* le prix reel, puis le prix normal entre parentheses (la philosophie de l'ancienne fiche) */}
+          {[["Filament", eur2(costFil), eur2(costNormal)], ["Électricité", eur2(costElec), null],
+            ["Total", eur2(totalBobine), eur2(totalNormal)]].map(([l, v, s]) => (
+            <div key={l} style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
               <span style={{ flex: 1, fontWeight: l === "Total" ? 900 : 700, color: l === "Total" ? "var(--text)" : "var(--text2)" }}>{l}</span>
-              {s && <span style={{ fontSize: 11, color: "var(--muted)" }}>({s})</span>}
-              <span style={{ fontWeight: 900, color: "var(--text)" }}>{v}</span></div>))}
+              <span style={{ fontWeight: 900, color: "var(--text)" }}>{v}</span>
+              {s && <span style={{ fontSize: 11.5, color: "var(--muted)", minWidth: 58 }}>({s})</span>}
+              {!s && <span style={{ minWidth: 58 }}/>}</div>))}
           <div style={{ display: "flex", alignItems: "center", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 7 }}>
             <span style={{ fontWeight: 800, color: "#16a34a" }}>{localNb} élément{localNb > 1 ? "s" : ""}</span>
             {localNb > 1 && <span style={{ fontSize: 11.5, fontWeight: 700, color: "#16a34a" }}>· {eur2(totalBobine / localNb)}/u ({eur2(totalNormal / localNb)}/u)</span>}
@@ -1332,10 +1405,9 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
         onCountChange={setPhotoCount} coverPhoto={p.cover_photo}
         onCoverChange={name => { setP(prev => ({ ...prev, cover_photo: name })); onChanged?.(); }}/>
       {/* les filaments ont deja leur titre repliable (et « Restituer ») */}
-      {fils.length > 0 && <FilamentAccordion filaments={fils} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker} printId={p.id}
-        onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping} onUnmapped={() => { reload(); onChanged?.(); }}/>}
+      {fils.length > 0 && <FilamentsV2 filaments={fils} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker}
+        onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping}/>}
       {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]}/>}
-      {(p.model_3mf || p.source_3mf || (p.design_id && p.mw_profile_id)) && <Files3mf p={p} onGot={() => setP(prev => ({ ...prev, source_3mf: true }))}/>}
       {isAdmin && <ObjectQuotaButton parentType="print" parentId={p.id} label="depuis ce print" refreshKey={refreshKey}
         onOpen={() => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine })}/>}
       {p.status_note && <FicheSection icon="💬" title="Commentaire" tone="#A855F7">
