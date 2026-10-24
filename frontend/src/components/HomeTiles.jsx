@@ -1158,11 +1158,12 @@ const DayHead = ({ children }) => <div style={{ display: "flex", alignItems: "ce
 const lastEdge = x => x.live ? "#3b82f6" : x.partial ? "#f59e0b" : okOf(x) ? "#22c55e" : "#ef4444";
 const lastState = x => x.live ? ["en cours", "#3b82f6", "🖨️"] : x.partial ? ["en partie", "#f59e0b", "◐"] : okOf(x) ? ["réussie", "#16a34a", "✓"] : ["échouée", "#dc2626", "✕"];
 function Last({ p, o, sz, st, lp }) {
-  const nav = useNavigate();
+  const [open, setOpen] = useState(null);
   const live = isLive(st) && lp ? { ...lp, live: true } : null;
   const list = [...(live ? [live] : []), ...groupCards(p)];
   if (!list.length) return null;
-  const fiche = x => nav(x.members ? `/prints?group=${x.group_id}` : `/prints?id=${x.id}`);
+  // la fiche s'ouvre sur place, par-dessus (celle du groupe pour un groupe), comme « À faire »
+  const fiche = x => setOpen(x.members ? { group: x } : { print: x });
   const name = x => x.file_name || x.translated_name || `Impression #${x.id}`;
   const when = x => x.print_date ? utc(x.print_date) : null;
   const hm = d => d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
@@ -1223,6 +1224,7 @@ function Last({ p, o, sz, st, lp }) {
         const days = !!pD && pD.rows >= p0.rows && pD.rows > 0;
         const pl = o.scroll ? { heroH: Math.min(78, Math.max(56, H * 0.35)), stacked: false, rows: rest.length, rh: ROW_H } : days ? pD : p0;
         return <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+          {open && <PrintSheets open={open} setOpen={setOpen}/>}
           {heroOf(hero, pl.heroH, pl.stacked, W)}
           {pl.rows > 0 && (o.scroll ? <Scroller>{rows(rest, W, null, first, days)}</Scroller>
             : rows(rest, W, H - pl.heroH - 6, first, days, pl.rh))}
@@ -1230,6 +1232,20 @@ function Last({ p, o, sz, st, lp }) {
       }}
     </Tile>
   );
+}
+// la fiche d'une impression ou d'un groupe (chargees a la demande : la page Impressions est lourde), montee
+// dans la page (pas dans la tuile) ; ses clics ne remontent pas jusqu'a la tuile
+const LazyPrintDetail = React.lazy(() => import("../pages/Prints").then(m => ({ default: m.PrintDetail })));
+const LazyGroupSheet = React.lazy(() => import("../pages/Prints").then(m => ({ default: m.GroupBottomSheet })));
+function PrintSheets({ open, setOpen }) {
+  const close = () => setOpen(null);
+  return createPortal(<div onClick={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}>
+    <React.Suspense fallback={null}>
+      {open.print && <LazyPrintDetail p={open.print} onClose={close} onDelete={close}/>}
+      {open.group && <LazyGroupSheet groupId={open.group.group_id} name={open.group.group_name || open.group.file_name} prints={[]}
+        number_of_items={open.group.group_number_of_items || 1} cover_print_id={open.group.group_cover_print_id}
+        onClose={close} onSelectPrint={p => setOpen({ print: p })} onDelete={close} onUngroup={close} onUpdated={() => {}}/>}
+    </React.Suspense></div>, document.body);
 }
 // la fenetre : les chiffres, ce qui tourne en grand, puis tout, jour par jour
 function LastZoom({ list, done, heroOf, rows }) {
