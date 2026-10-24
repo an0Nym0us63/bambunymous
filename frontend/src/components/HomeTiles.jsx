@@ -699,7 +699,7 @@ function useDays(n) {
 const Scroller = ({ children, gap = 6 }) => <div onWheel={e => e.stopPropagation()} style={{ flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain",
   display: "flex", flexDirection: "column", gap, marginRight: -6, paddingRight: 6, paddingBottom: 14,
   maskImage: "linear-gradient(to bottom, #000 calc(100% - 22px), transparent)", WebkitMaskImage: "linear-gradient(to bottom, #000 calc(100% - 22px), transparent)" }}>{children}</div>;
-const SCROLL = def => B("scroll", "Défiler dans la tuile", def, { hint: "Toute la liste dans la tuile, qu'on fait défiler au doigt ou à la molette." });
+const SCROLL = def => B("scroll", "Défiler dans la tuile", def, { hint: "Toute la liste dans la tuile, qu'on fait défiler à la molette. Sur un écran tactile, la tuile montre ce qui tient (sinon elle capterait le doigt au lieu de la page)." });
 const rateColor = r => r == null ? "#94a3b8" : r >= 0.9 ? "#22c55e" : r >= 0.7 ? "#f59e0b" : "#ef4444";
 // Aujourd'hui : un anneau de reussite, le compte, l'ecart avec hier ; en grand, face a hier
 function Today({ v, p, o, sz, st, lp }) {
@@ -3685,7 +3685,7 @@ export const TILES = {
     options: [B("thumbs", "Vignettes", true), B("ready", "Seulement ce qui est prêt", false, { hint: "Les modèles imprimables tout de suite avec l'AMS (en tout ou en partie)." }),
       B("weight", "Poids", true), SCROLL(false)] },
   last: { label: "Dernières impressions", w: [1, 2], h: [1, 2, 3, 0.5], render: (d, st, o, it) => <Last p={d.prints} o={o} sz={sz(it)} st={st} lp={d.live}/>,
-    options: [B("when", "Depuis quand", true), B("cost", "Coût", false), B("photo", "Rappel « pas de photo »", true), SCROLL(true)] },
+    options: [B("when", "Depuis quand", true), B("cost", "Coût", false), B("photo", "Rappel « pas de photo »", true), SCROLL(false)] },
   stock: { label: "Stock", w: [1, 2], h: [1, 2, 0.5], render: (d, st, o, it) => <Stock s={d.spools} o={o} sz={sz(it)}/>,
     options: [C("style", "Bobines basses", "dots", [["dots", "en pastilles"], ["list", "en liste"]], { hint: "Autant que la tuile en tient ; l'anneau d'une pastille montre ce qui reste." }),
       C("sort", "Les plus basses", "g", [["g", "en grammes"], ["pct", "en pourcentage"]]), B("kg", "Poids total", true)] },

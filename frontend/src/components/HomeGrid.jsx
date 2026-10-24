@@ -67,6 +67,7 @@ const TITLE_OPT = { key: "_title", label: "Titre de la tuile", hint: "Masqué, l
   def: true, group: "Général" };
 const BG_OPT = { key: "_bg", label: "Fond coloré", hint: "Quand les fonds colorés sont activés pour l'accueil.", def: true, group: "Général" };
 const allOpts = def => [TITLE_OPT, BG_OPT, ...(def.options || []).map(op => op.group ? op : { ...op, group: "Contenu" })];
+const TOUCH_ONLY = typeof window !== "undefined" && !!window.matchMedia?.("(pointer: coarse)").matches && !window.matchMedia?.("(any-pointer: fine)").matches;
 const optsOf = (def, item) => Object.fromEntries(allOpts(def).map(o => [o.key, item.o?.[o.key] ?? o.def]));
 // Fonds colores : une teinte par tuile, jamais proche de celle d'une voisine
 // (a gauche, a droite, au-dessus, au-dessous, ou en coin). La voisine se lit a
@@ -799,7 +800,8 @@ export default function HomeGrid({ status, blocks, top = null }) {
         title="Taille et options"><Settings2 size={14}/></button>
     </>;
     // les options de la tuile (oui/non, ou un choix), propres a cette disposition
-    const o = optsOf(def, item);
+    // sur un ecran tactile, une tuile qui defile capte le doigt et la page ne defile plus : on y montre ce qui tient
+    const o = { ...optsOf(def, item), ...(TOUCH_ONLY ? { scroll: false } : {}) };
     // seulement les options qui servent a la taille choisie (« when ») ; elles se reglent dans leur panneau
     const usable = allOpts(def).filter(op => !op.when || op.when(item, optsOf(def, item)));
     const options = null;
