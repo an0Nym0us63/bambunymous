@@ -98,61 +98,76 @@ export function ContextMenuHost() {
   const close = () => setMenu(null);
   const run = it => { if (it.disabled) return; close(); it.onClick?.(); };
 
-  const list = menu.items.map((it, i) => it === "-" ? (
-    <div key={i} style={{ height: 1, background: "var(--border)", margin: "4px 0" }}/>
-  ) : (
-    <button key={i} onClick={() => run(it)} disabled={it.disabled}
-      style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", textAlign: "left", border: "none",
-        background: "none", cursor: it.disabled ? "default" : "pointer", borderRadius: 8,
-        padding: sheet ? "12px 12px" : "8px 10px", fontSize: sheet ? 14.5 : 13, fontWeight: 600,
-        color: it.danger ? "#ef4444" : "var(--text)", opacity: it.disabled ? 0.45 : 1 }}
-      onMouseEnter={e => { if (!it.disabled) e.currentTarget.style.background = "var(--surface2)"; }}
-      onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
-      <span style={{ width: 20, textAlign: "center", flexShrink: 0 }}>{it.icon || ""}</span>
-      {it.img && <img src={it.img} alt="" style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0,
-        background: "var(--surface2)", border: "1px solid var(--border)" }}/>}
-      <span style={{ flex: 1, minWidth: 0 }}>{it.label}
-        {it.hint && <span style={{ display: "block", fontSize: 11, fontWeight: 500, color: "var(--muted)" }}>{it.hint}</span>}
-      </span>
-    </button>
-  ));
+  // Les actions en groupes (le « - » les separe), chaque groupe dans une carte arrondie ; chaque action a son
+  // pictogramme dans une pastille de sa teinte (it.tone ; rouge pour une action dangereuse). 25/10/2026.
+  const accent = menu.color || "#6366F1";
+  const groups = [];
+  for (const it of menu.items) { if (it === "-") { if (groups.length && groups[groups.length - 1].length) groups.push([]); } else { if (!groups.length) groups.push([]); groups[groups.length - 1].push(it); } }
+  const item = (it, i, last) => {
+    const tone = it.danger ? "#ef4444" : it.tone || "#64748B";
+    return (
+      <button key={i} onClick={() => run(it)} disabled={it.disabled}
+        style={{ display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left", border: "none",
+          background: "none", cursor: it.disabled ? "default" : "pointer", font: "inherit",
+          padding: sheet ? "10px 12px" : "7px 9px", color: it.danger ? "#ef4444" : "var(--text)", opacity: it.disabled ? 0.45 : 1,
+          borderBottom: last ? "none" : "1px solid color-mix(in srgb, var(--border) 70%, transparent)" }}
+        onMouseEnter={e => { if (!it.disabled) e.currentTarget.style.background = `color-mix(in srgb, ${tone} 9%, transparent)`; }}
+        onMouseLeave={e => { e.currentTarget.style.background = "none"; }}>
+        {it.img ? <img src={it.img} alt="" style={{ width: 44, height: 44, borderRadius: 10, objectFit: "cover", flexShrink: 0,
+          background: "var(--surface2)", border: "1px solid var(--border)" }}/>
+          : <span style={{ width: sheet ? 34 : 28, height: sheet ? 34 : 28, borderRadius: sheet ? 10 : 8, flexShrink: 0, display: "flex", alignItems: "center",
+            justifyContent: "center", fontSize: sheet ? 16 : 14, color: tone, background: `color-mix(in srgb, ${tone} 16%, transparent)` }}>{it.icon || "•"}</span>}
+        <span style={{ flex: 1, minWidth: 0, fontSize: sheet ? 14.5 : 13, fontWeight: 700 }}>{it.label}
+          {it.hint && <span style={{ display: "block", fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginTop: 1,
+            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{it.hint}</span>}
+        </span>
+      </button>);
+  };
+  const list = groups.filter(g => g.length).map((g, gi) => (
+    <div key={gi} style={{ borderRadius: sheet ? 16 : 11, overflow: "hidden", background: sheet ? "var(--surface2)" : "transparent",
+      border: sheet ? "1px solid var(--border)" : "none", marginTop: gi ? (sheet ? 10 : 4) : 0,
+      borderTop: !sheet && gi ? "1px solid var(--border)" : undefined, paddingTop: !sheet && gi ? 4 : 0 }}>
+      {g.map((it, i) => item(it, `${gi}-${i}`, i === g.length - 1))}
+    </div>));
   const head = (menu.title || menu.subtitle) && (
-    <div style={{ padding: sheet ? "4px 12px 10px" : "4px 10px 6px", borderBottom: "1px solid var(--border)", marginBottom: 4,
-      display: "flex", alignItems: "center", gap: 10 }}>
-      {menu.img && <img src={menu.img} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", flexShrink: 0,
+    <div style={{ padding: sheet ? "12px 14px" : "6px 9px 8px", marginBottom: sheet ? 10 : 4, borderRadius: sheet ? 16 : 0,
+      display: "flex", alignItems: "center", gap: 12, position: "relative", overflow: "hidden",
+      background: sheet ? `linear-gradient(135deg, color-mix(in srgb, ${accent} 22%, transparent), transparent 70%)` : "none",
+      borderBottom: sheet ? "none" : "1px solid var(--border)" }}>
+      {menu.img && <img src={menu.img} alt="" style={{ width: 56, height: 56, borderRadius: 12, objectFit: "cover", flexShrink: 0,
         background: "var(--surface2)", border: "1px solid var(--border)" }}/>}
       <div style={{ minWidth: 0 }}>
-        {menu.title && <div style={{ fontSize: sheet ? 14 : 12.5, fontWeight: 800, color: "var(--text)",
+        {menu.title && <div style={{ fontSize: sheet ? 16 : 12.5, fontWeight: 900, color: "var(--text)",
           overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{menu.title}</div>}
-        {menu.subtitle && <div style={{ fontSize: 11, color: "var(--muted)" }}>{menu.subtitle}</div>}
+        {menu.subtitle && <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)", marginTop: 1 }}>{menu.subtitle}</div>}
       </div>
     </div>
   );
 
   return (
     <div data-no-pull="" onClick={close} onContextMenu={e => { e.preventDefault(); close(); }}
-      style={{ position: "fixed", inset: 0, zIndex: 8500, background: sheet ? "rgba(0,0,0,0.5)" : "transparent",
-        display: sheet ? "flex" : "block", alignItems: "flex-end", justifyContent: "center" }}>
+      style={{ position: "fixed", inset: 0, zIndex: 8500, background: sheet ? "rgba(2,6,23,0.5)" : "transparent",
+        backdropFilter: sheet ? "blur(4px)" : "none", display: sheet ? "flex" : "block", alignItems: "flex-end", justifyContent: "center" }}>
       {sheet ? (
-        <div onClick={e => e.stopPropagation()} className="sheet-panel"
-          style={{ width: "100%", maxWidth: 520, borderRadius: "18px 18px 0 0", padding: "8px 8px",
-            paddingBottom: "calc(10px + env(safe-area-inset-bottom, 0px))", border: "1px solid var(--border)",
-            animation: "cmUp 0.16s ease", maxHeight: "80vh", overflowY: "auto" }}>
-          <div style={{ width: 36, height: 4, borderRadius: 4, background: "var(--border)", margin: "2px auto 8px" }}/>
+        <div onClick={e => e.stopPropagation()}
+          style={{ width: "100%", maxWidth: 520, borderRadius: "26px 26px 0 0", padding: "8px 12px",
+            paddingBottom: "calc(12px + env(safe-area-inset-bottom, 0px))", border: "1px solid var(--border)", background: "var(--sheet-bg)",
+            boxShadow: "0 -20px 60px rgba(0,0,0,0.35)", animation: "cmUp 0.2s cubic-bezier(.2,.8,.2,1)", maxHeight: "82vh", overflowY: "auto" }}>
+          <div style={{ width: 42, height: 4, borderRadius: 4, background: "var(--border)", margin: "2px auto 10px" }}/>
           {head}{list}
-          <button onClick={close} style={{ width: "100%", marginTop: 6, padding: 12, borderRadius: 12,
-            border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--muted)",
-            fontSize: 14, fontWeight: 700, cursor: "pointer" }}>Annuler</button>
+          <button onClick={close} style={{ width: "100%", marginTop: 10, padding: 13, borderRadius: 14,
+            border: "1px solid var(--border)", background: "var(--surface2)", color: "var(--text2)",
+            fontSize: 14.5, fontWeight: 800, cursor: "pointer" }}>Annuler</button>
         </div>
       ) : (
-        <div ref={box} onClick={e => e.stopPropagation()} className="sheet-panel"
+        <div ref={box} onClick={e => e.stopPropagation()}
           style={{ position: "fixed", left: pos?.left ?? menu.at.x, top: pos?.top ?? menu.at.y,
-            visibility: pos ? "visible" : "hidden", minWidth: 210, maxWidth: 300, padding: 4, borderRadius: 12,
-            border: "1px solid var(--border)", boxShadow: "0 12px 36px rgba(0,0,0,0.35)" }}>
+            visibility: pos ? "visible" : "hidden", minWidth: 230, maxWidth: 320, padding: 5, borderRadius: 14,
+            border: "1px solid var(--border)", background: "var(--sheet-bg)", boxShadow: "0 16px 40px rgba(0,0,0,0.35)" }}>
           {head}{list}
         </div>
       )}
-      <style>{"@keyframes cmUp{from{transform:translateY(30px);opacity:.4}to{transform:none;opacity:1}}"}</style>
+      <style>{"@keyframes cmUp{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}"}</style>
     </div>
   );
 }

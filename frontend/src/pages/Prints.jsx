@@ -1153,25 +1153,6 @@ const V2_STATUS = { SUCCESS: ["Réussie", "#22c55e", "✓"], PARTIAL: ["En parti
   IN_PROGRESS: ["En cours", "#3b82f6", "●"], CANCELLED: ["Annulée", "#94a3b8", "■"] };
 const v2grad = (a, b) => ({ backgroundImage: `linear-gradient(135deg, ${a}, ${b})`, WebkitBackgroundClip: "text", backgroundClip: "text", color: "transparent" });
 
-// une section repliable : pictogramme, titre, resume a droite, chevron
-function FicheSection({ icon, title, summary, open: open0 = true, children, tone = "#64748B" }) {
-  const [open, setOpen] = useState(open0);
-  return (
-    <div style={{ borderRadius: 16, background: "var(--surface2)", border: "1px solid var(--border)", overflow: "hidden" }}>
-      <button onClick={() => setOpen(o => !o)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "11px 14px", background: "none",
-        border: "none", cursor: "pointer", font: "inherit", color: "inherit", textAlign: "left" }}>
-        <span style={{ width: 26, height: 26, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
-          background: `${tone}22`, fontSize: 14 }}>{icon}</span>
-        <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>{title}</span>
-        <span style={{ marginLeft: "auto", minWidth: 0, display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: "var(--muted)",
-          whiteSpace: "nowrap", overflow: "hidden" }}>{summary}</span>
-        <span style={{ fontSize: 11, color: "var(--muted)", transform: open ? "rotate(90deg)" : "none", transition: "transform .15s", flexShrink: 0 }}>▶</span>
-      </button>
-      {open && <div style={{ padding: "0 14px 14px" }}>{children}</div>}
-    </div>
-  );
-}
-
 // Les filaments (nouvelle fiche) : la repartition du poids en une barre de couleurs, puis une rangee par
 // filament, toujours visible. Toucher : la bobine (ou l'associer) ; ⋯ et appui long : les memes actions
 // qu'avant (ouvrir, associer, dissocier) ; « Restituer » dans le titre. Cout reel puis normal entre parentheses.
@@ -1196,7 +1177,8 @@ function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap 
     ],
   });
   return (
-    <div style={{ borderRadius: 16, background: "var(--surface2)", border: "1px solid var(--border)", padding: "11px 12px", display: "flex", flexDirection: "column", gap: 9 }}>
+    <div style={{ borderRadius: 18, background: "linear-gradient(160deg, color-mix(in srgb, #F97316 7%, transparent), transparent 60%), var(--surface2)",
+      border: "1px solid var(--border)", padding: "12px 12px", display: "flex", flexDirection: "column", gap: 10 }}>
       <div onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
         <span style={{ fontSize: 13.5, fontWeight: 800, color: "var(--text)" }}>🧵 Filaments</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{filaments.length} · {gFr(total)}</span>
@@ -1209,23 +1191,25 @@ function FilamentsV2({ filaments, onSpoolClick, onSpoolPick, onRestore, onUnmap 
         <span style={{ fontSize: 11, color: "var(--muted)", transform: open0 ? "rotate(90deg)" : "none", transition: "transform .15s" }}>▶</span>
       </div>
       {/* la repartition du poids */}
-      {total > 0 && <div style={{ display: "flex", height: 8, borderRadius: 6, overflow: "hidden", gap: 2 }}>
+      {total > 0 && <div style={{ display: "flex", height: 9, borderRadius: 6, overflow: "hidden", gap: 3 }}>
         {filaments.map((f, i) => <span key={i} data-tip={`${f.filament_translated_name || f.filament_fila_type || f.filament_name || "Filament"} · ${Math.round(100 * (f.grams_used || 0) / total)} %`}
-          style={{ flex: `${Math.max(0.02, (f.grams_used || 0) / total)} 1 0`, background: hex(f), boxShadow: "inset 0 0 0 1px rgba(0,0,0,.08)" }}/>)}
+          style={{ flex: `${Math.max(0.02, (f.grams_used || 0) / total)} 1 0`, background: hex(f), borderRadius: 4,
+            boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--text) 18%, transparent)" }}/>)}
       </div>}
       {open0 && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {filaments.map((f, i) => (
           <div key={i} onClick={() => open(f)} onContextMenu={e => { e.preventDefault(); menu(e, f); }}
             onPointerDown={e => { const t = setTimeout(() => { navigator.vibrate && navigator.vibrate(20); menu(e, f); }, 600); e.currentTarget._lpt = t; }}
             onPointerUp={e => clearTimeout(e.currentTarget._lpt)} onPointerLeave={e => clearTimeout(e.currentTarget._lpt)} onPointerCancel={e => clearTimeout(e.currentTarget._lpt)}
-            style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 6px 7px 8px", borderRadius: 12, background: "var(--surface)",
-              cursor: f.spool_id || isAdmin ? "pointer" : "default" }}>
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 6px 7px 8px", borderRadius: 12,
+              background: `linear-gradient(90deg, color-mix(in srgb, ${hex(f)} 16%, transparent), color-mix(in srgb, ${hex(f)} 4%, transparent))`,
+              border: `1px solid color-mix(in srgb, ${hex(f)} 22%, var(--border))`, cursor: f.spool_id || isAdmin ? "pointer" : "default" }}>
             <ColorDot hex={f.color_hex} colors={f.filament_colors_array} multicolor={f.filament_multicolor_type} size={24} ring={f.spool_id ? "mapped" : "default"}/>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                 {f.filament_translated_name || f.filament_fila_type || f.filament_name || "Inconnu"}</div>
               <div style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {f.spool_id ? <span data-tip={`Bobine #${f.spool_id}`} style={{ color: "#16a34a", fontWeight: 800 }}>✓ #{f.spool_id} · </span>
+                {f.spool_id ? <span data-tip="Bobine associée" style={{ color: "#16a34a", fontWeight: 800 }}>✓ · </span>
                   : isAdmin ? <span style={{ color: "#d97706", fontWeight: 800 }}>▸ Associer · </span> : null}
                 {/* la marque, et le type s'il n'est pas deja le titre */}
                 {[f.filament_brand, (t => t !== (f.filament_translated_name || f.filament_fila_type || f.filament_name) ? t : null)(f.filament_fila_type || f.filament_type)]
@@ -1276,6 +1260,7 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
     if (!isAdmin) return;
     client.get("/objects/objects/quota", { params: { parent_type: "print", parent_id: pProp.id } }).then(r => setObjQ(r.data)).catch(() => setObjQ(null));
   }, [pProp.id, refreshKey, isAdmin]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [idsOpen, setIdsOpen] = useState(false);
   const [costOpen, setCostOpen0] = useState(() => { try { return localStorage.getItem("bn-fiche-cost") === "1"; } catch { return false; } });
   const setCostOpen = f => setCostOpen0(o => { const v = typeof f === "function" ? f(o) : f; try { localStorage.setItem("bn-fiche-cost", v ? "1" : "0"); } catch { /* rien */ } return v; });
   const [localNb, setLocalNb] = useState(pProp.number_of_items || 1);
@@ -1304,39 +1289,45 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
   const dur = p.duration_seconds || p.estimated_seconds;
   const fils = p.filament_usage || [];
   const more = e => openMenu(e, {
-    title: p.file_name || "Sans nom",
+    title: p.file_name || "Sans nom", subtitle: `${stL} · ${day} ${hour.split(" · ")[0]}`, color: stC,
     items: [
-      { icon: "✏️", label: "Éditer", onClick: () => setEditMode(true) },
-      { icon: "📣", label: "Partager", hint: "Telegram", onClick: () => setSharing(true) },
-      objQ && objQ.remaining > 0 ? { icon: "📦", label: "Créer des objets", hint: `${objQ.used} / ${objQ.total} déjà créés`,
+      { icon: "✏️", label: "Éditer", hint: "Nom, date, état, quantité…", tone: "#3B82F6", onClick: () => setEditMode(true) },
+      { icon: "📣", label: "Partager", hint: "Telegram", tone: "#229ED9", onClick: () => setSharing(true) },
+      objQ && objQ.remaining > 0 ? { icon: "📦", label: "Créer des objets", hint: `${objQ.used} / ${objQ.total} déjà créés`, tone: "#22C55E",
         onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine }) }
-        : objQ ? { icon: "📦", label: "Objets : tous créés", hint: `${objQ.used} / ${objQ.total}`, onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine }) } : null,
-      groupe && { icon: "⛓", label: "Retirer du groupe", hint: groupe, onClick: handleUngroup },
+        : objQ ? { icon: "📦", label: "Objets : tous créés", hint: `${objQ.used} / ${objQ.total}`, tone: "#22C55E", onClick: () => setObjCreate({ name: p.file_name || "Sans nom", cost: totalBobine }) } : null,
+      groupe && { icon: "⛓", label: "Retirer du groupe", hint: groupe, tone: "#A78BFA", onClick: handleUngroup },
       (p.source_3mf || p.model_3mf || (p.design_id && p.mw_profile_id)) && "-",
-      p.source_3mf && { icon: "⤓", label: "Télécharger le 3MF d'origine", hint: "MakerWorld · à retrancher", onClick: () => download3mf(p.id, "source") },
-      !p.source_3mf && p.design_id && p.mw_profile_id && { icon: "⇣", label: "Récupérer le 3MF d'origine", hint: "depuis MakerWorld",
+      p.source_3mf && { icon: "⤓", label: "Télécharger le 3MF d'origine", hint: "MakerWorld · à retrancher", tone: "#F97316", onClick: () => download3mf(p.id, "source") },
+      !p.source_3mf && p.design_id && p.mw_profile_id && { icon: "⇣", label: "Récupérer le 3MF d'origine", hint: "depuis MakerWorld", tone: "#F97316",
         onClick: async () => { try { await client.post(`/makerworld/source3mf/print/${p.id}`); setP(prev => ({ ...prev, source_3mf: true })); toast("3MF d'origine récupéré"); }
           catch (e) { showAlert(e.response?.data?.detail || e.message); } } },
-      p.model_3mf && { icon: "⤓", label: "Télécharger le 3MF tranché", hint: "pour mon imprimante", onClick: () => download3mf(p.id, "sliced") },
+      p.model_3mf && { icon: "⤓", label: "Télécharger le 3MF tranché", hint: "pour mon imprimante", tone: "#F59E0B", onClick: () => download3mf(p.id, "sliced") },
+      (p.job_id || p.design_id) && { icon: "#", label: "Identifiants", hint: "Travail, modèle MakerWorld", tone: "#64748B", onClick: () => setIdsOpen(true) },
       "-",
       { icon: "🗑", label: "Supprimer…", danger: true, onClick: () => setShowDeleteConfirm(true) },
       "-",
-      { icon: "↩", label: "Revenir à l'ancienne fiche", onClick: () => setFicheV2(false) },
+      { icon: "↩", label: "Revenir à l'ancienne fiche", tone: "#6366F1", onClick: () => setFicheV2(false) },
     ],
   });
   const tile = (label, value, sub, c1, c2, onClick, tip) => (
-    <button onClick={onClick} disabled={!onClick} data-tip={tip} style={{ minWidth: 0, padding: "9px 8px", borderRadius: 14, border: "1px solid var(--border)",
-      background: `linear-gradient(160deg, ${c1}14, transparent 70%), var(--surface2)`, cursor: onClick ? "pointer" : "default", textAlign: "left",
-      font: "inherit", color: "inherit", display: "flex", flexDirection: "column", gap: 1 }}>
+    <button onClick={onClick} disabled={!onClick} data-tip={tip} style={{ minWidth: 0, padding: "9px 8px", borderRadius: 16, border: `1px solid color-mix(in srgb, ${c1} 22%, var(--border))`,
+      background: `radial-gradient(90% 70% at 100% 0%, ${c1}22, transparent 70%), var(--surface2)`, cursor: onClick ? "pointer" : "default", textAlign: "left",
+      font: "inherit", color: "inherit", display: "flex", flexDirection: "column", gap: 1, boxShadow: `0 6px 18px -12px ${c1}` }}>
       <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: ".05em", textTransform: "uppercase", color: "var(--muted)", display: "flex", justifyContent: "space-between" }}>{label}</span>
       <span style={{ fontSize: 16, fontWeight: 900, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", ...v2grad(c1, c2) }}>{value}</span>
       {sub && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{sub}</span>}
     </button>);
   // l'en-tete : le plateau en grand, le titre et l'etat poses dessus
   const hero = (
-    <div style={{ position: "relative", height: wide ? 300 : "min(34vh, 270px)", minHeight: 190, borderRadius: wide ? 18 : 0, overflow: "hidden",
-      background: `radial-gradient(70% 80% at 50% 35%, ${stC}26, transparent 70%), var(--surface2)` }}>
-      <img src={apiUrl("/prints/" + p.id + "/image")} alt="" style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%", objectFit: "contain" }}
+    <div style={{ position: "relative", height: wide ? 300 : "min(36vh, 280px)", minHeight: 200, borderRadius: wide ? 20 : 0, overflow: "hidden",
+      background: "var(--surface2)" }}>
+      {/* le fond : l'image floutee et saturee, une lueur de la couleur de l'etat */}
+      <img src={apiUrl("/prints/" + p.id + "/image")} alt="" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%",
+        objectFit: "cover", filter: "blur(26px) saturate(1.6)", opacity: 0.4, transform: "scale(1.3)" }} onError={e => { e.currentTarget.style.display = "none"; }}/>
+      <span aria-hidden="true" style={{ position: "absolute", inset: 0, background: `radial-gradient(60% 70% at 50% 38%, ${stC}33, transparent 72%)` }}/>
+      <img src={apiUrl("/prints/" + p.id + "/image")} alt="" className="bn-plate" style={{ position: "absolute", inset: "4% 8% 26%", width: "84%", height: "70%",
+        objectFit: "contain", filter: "drop-shadow(0 14px 24px rgba(0,0,0,.35))" }}
         onError={e => { e.currentTarget.style.display = "none"; }}/>
       <div style={{ position: "absolute", left: 0, right: 0, bottom: 0, padding: "34px 16px 12px",
         background: "linear-gradient(transparent, color-mix(in srgb, var(--sheet-bg) 92%, transparent) 55%)" }}>
@@ -1346,8 +1337,8 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
         </div>
         {p.original_name && p.original_name !== p.file_name && <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.original_name}</div>}
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800,
-            color: "#fff", background: stC }}>{stI} {stL}</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, fontSize: 11.5, fontWeight: 900,
+            color: "#fff", background: `linear-gradient(135deg, ${stC}, color-mix(in srgb, ${stC} 70%, #ffffff))`, boxShadow: `0 4px 14px ${stC}55` }}>{stI} {stL}</span>
           {groupe && <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "2px 6px 2px 9px", borderRadius: 20, fontSize: 11.5, fontWeight: 800,
             color: "#a78bfa", background: "rgba(167,139,250,0.16)" }}>📁 {groupe}
             <AdminOnly><button onClick={handleUngroup} aria-label="Retirer du groupe" data-tip="Retirer du groupe" style={{ background: "none", border: "none",
@@ -1381,10 +1372,10 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
   const figures = (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: 6 }}>
-        {tile("Quand", day, hour, "#3B82F6", "#60A5FA", null, fmtDate(p.print_date))}
-        {tile("Durée", dur > 0 ? durFr(dur) : "—", p.duration_seconds ? null : dur > 0 ? "estimée" : null, "#8B5CF6", "#C084FC")}
-        {tile("Poids", p.total_weight_g > 0 ? gFr(p.total_weight_g) : "—", null, "#F59E0B", "#FBBF24")}
-        {tile(<>Coût<span>{costOpen ? "▴" : "▾"}</span></>, eur2(totalBobine), `(${eur2(totalNormal)})`, "#16A34A", "#4ADE80", () => setCostOpen(o => !o),
+        {tile("📅 Quand", day, hour, "#3B82F6", "#60A5FA", null, fmtDate(p.print_date))}
+        {tile("⏱ Durée", dur > 0 ? durFr(dur) : "—", p.duration_seconds ? null : dur > 0 ? "estimée" : null, "#8B5CF6", "#C084FC")}
+        {tile("⚖ Poids", p.total_weight_g > 0 ? gFr(p.total_weight_g) : "—", null, "#F59E0B", "#FBBF24")}
+        {tile(<>💶 Coût<span>{costOpen ? "▴" : "▾"}</span></>, eur2(totalBobine), `(${eur2(totalNormal)})`, "#16A34A", "#4ADE80", () => setCostOpen(o => !o),
           "Le prix réel, puis le prix normal entre parenthèses ; touche pour le détail")}
       </div>
       {costOpen && (
@@ -1423,11 +1414,12 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
       {fils.length > 0 && <FilamentsV2 filaments={fils} onSpoolClick={setSelSpool} onSpoolPick={setSpoolPicker}
         onRestore={() => setShowDeleteConfirm("restore")} onUnmap={setUnmapping}/>}
       {p.design_id && <MakerWorldCard designId={p.design_id} prints={[p]}/>}
-      {p.status_note && <FicheSection icon="💬" title="Commentaire" tone="#A855F7">
-        <p style={{ fontSize: 13, color: "var(--text)", margin: 0, lineHeight: 1.5 }}>{p.status_note}</p></FicheSection>}
-      {(p.job_id || p.design_id) && <FicheSection icon="#" title="Identifiants" open={false}>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 11.5, color: "var(--muted)" }}>
-          {p.job_id && <span>Travail : {p.job_id}</span>}{p.design_id && <span>Modèle MakerWorld : {p.design_id}</span>}</div></FicheSection>}
+      {p.status_note && <div style={{ position: "relative", padding: "12px 14px 12px 18px", borderRadius: 16, overflow: "hidden",
+        background: "linear-gradient(135deg, color-mix(in srgb, #A855F7 12%, transparent), transparent 70%), var(--surface2)", border: "1px solid var(--border)" }}>
+        <span aria-hidden="true" style={{ position: "absolute", left: 0, top: 10, bottom: 10, width: 4, borderRadius: 4, background: "linear-gradient(#A855F7, #EC4899)" }}/>
+        <div style={{ fontSize: 10.5, fontWeight: 900, letterSpacing: ".06em", textTransform: "uppercase", color: "#A855F7", marginBottom: 4 }}>💬 Commentaire</div>
+        <p style={{ fontSize: 13.5, color: "var(--text)", margin: 0, lineHeight: 1.5, fontStyle: "italic" }}>« {p.status_note} »</p></div>}
+
     </div>);
   return (
     <>
@@ -1460,6 +1452,26 @@ function PrintDetailV2({ p: pProp, onClose, onDelete, onChanged }) {
           </div>}
         </div>
       </div>
+      {idsOpen && createPortal(<div onClick={() => setIdsOpen(false)} style={{ position: "fixed", inset: 0, zIndex: 6500, background: "rgba(2,6,23,0.5)",
+        backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div onClick={e => e.stopPropagation()} style={{ width: "min(380px, 100%)", borderRadius: 20, overflow: "hidden", background: "var(--sheet-bg)",
+          border: "1px solid var(--border)", boxShadow: "0 30px 80px rgba(0,0,0,0.45)", animation: "bn-pop .2s ease-out" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", background: "linear-gradient(135deg, #64748B38, transparent 70%)" }}>
+            <span style={{ width: 36, height: 36, borderRadius: 11, display: "flex", alignItems: "center", justifyContent: "center", background: "#64748B",
+              color: "#fff", fontWeight: 900 }}>#</span>
+            <span style={{ flex: 1, fontSize: 16, fontWeight: 900, color: "var(--text)" }}>Identifiants</span>
+            <button onClick={() => setIdsOpen(false)} aria-label="Fermer" style={v2Round}>✕</button>
+          </div>
+          <div style={{ padding: "12px 16px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+            {[["Travail (imprimante)", p.job_id], ["Modèle MakerWorld", p.design_id], ["Profil MakerWorld", p.mw_profile_id], ["Impression", p.id]].filter(x => x[1]).map(([l, v]) => (
+              <div key={l} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", borderRadius: 12, background: "var(--surface2)" }}>
+                <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: "var(--muted)" }}>{l}</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", userSelect: "all" }}>{v}</span>
+                <button onClick={() => { try { navigator.clipboard.writeText(String(v)); toast("Copié"); } catch { /* indisponible */ } }} aria-label="Copier"
+                  data-tip="Copier" style={{ border: "none", background: "none", cursor: "pointer", color: "var(--muted)", fontSize: 13 }}>⧉</button>
+              </div>))}
+          </div>
+        </div></div>, document.body)}
       {objCreate && <ObjectCreateSheet parentType="print" parentId={p.id} defaultName={objCreate.name} costFabrication={objCreate.cost}
         onDone={() => { setRefreshKey(k => k + 1); onChanged?.(); }} onClose={() => setObjCreate(null)}/>}
       {sharing && <ShareSheet kind="print" id={p.id} onClose={() => setSharing(false)}/>}
