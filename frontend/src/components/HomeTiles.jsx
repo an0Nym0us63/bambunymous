@@ -1048,75 +1048,137 @@ function FewChip({ n }) {
   return <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 800, color: "#dc2626", padding: "1px 7px", borderRadius: 10, background: "rgba(220,38,38,0.12)",
     whiteSpace: "nowrap" }}>{n} presque vide{n > 1 ? "s" : ""}</span>;
 }
+// ce qui distingue une bobine d'une autre de meme couleur : la marque, la matiere, le sous-type
+const spoolKind = x => { const ft = (x.filament_fila_type || "").trim(), mat = (x.filament_material || "").trim();
+  return ft && mat && !ft.toUpperCase().startsWith(mat.toUpperCase()) ? `${mat} ${ft}` : ft || mat || ""; };
+const spoolShort = x => { const ft = (x.filament_fila_type || "").trim(), mat = (x.filament_material || "").trim();
+  // sous la pastille : le sous-type sans la matiere si elle y est deja (« PLA Matte » -> « Matte »), sinon la matiere
+  const rest = mat && ft.toUpperCase().startsWith(mat.toUpperCase()) ? ft.slice(mat.length).trim() : "";
+  return rest ? `${mat} ${rest}` : ft || mat || "?"; };
+const spoolTip = x => { const pc = spoolPct(x);
+  return `${spoolName(x)}\n${[x.filament_manufacturer, spoolKind(x)].filter(Boolean).join(" · ")}\n${fmtG(x.remaining_weight_g)} restants${pc != null ? ` (${Math.round(pc * 100)} %)` : ""}${x.ams_tray ? ` · dans l'AMS ${x.ams_tray}` : ""}`; };
+const pctColor = pc => pc == null ? "#94a3b8" : pc < 0.15 ? "#ef4444" : pc < 0.35 ? "#f59e0b" : "#22c55e";
 function Stock({ s, o, sz }) {
   const list = Array.isArray(s) ? s : [];
   const kg = list.reduce((a, x) => a + (x.remaining_weight_g || 0), 0);
   const low = list.filter(x => x.remaining_weight_g != null)
     .sort((a, b) => o.sort === "pct" ? (spoolPct(a) ?? 1) - (spoolPct(b) ?? 1) : a.remaining_weight_g - b.remaining_weight_g);
-  const line = x => <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: "var(--text2)", minWidth: 0, height: 22 }}>
-    <SpoolDot color={x.filament_color} pct={spoolPct(x)} size={20}/>
-    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1 }}><W text={spoolName(x)}/></span>
-    <span data-pk="" style={{ fontWeight: 800, color: "#d97706" }}>{Math.round(x.remaining_weight_g)} g</span></div>;
   const few = list.filter(x => (x.remaining_weight_g ?? 999) < 200).length;
+  // une rangee de liste : la pastille, le nom, « marque · sous-type », le poids et une barre
+  const line = (x, h) => { const pc = spoolPct(x), c = pctColor(pc), two = h >= 34;
+    return <div key={x.id} data-tip={spoolTip(x)} style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0, height: h }}>
+      <SpoolDot color={x.filament_color} pct={pc} size={two ? 28 : 20}/>
+      <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><W text={spoolName(x)}/></span>
+        {two && <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {[x.filament_manufacturer, spoolKind(x)].filter(Boolean).join(" · ")}</span>}</span>
+      <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3, flexShrink: 0 }}>
+        <span data-pk="" style={{ fontSize: 12.5, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{fmtG(x.remaining_weight_g)}</span>
+        {two && <span style={{ width: 44, height: 4, borderRadius: 2, background: "var(--border)", overflow: "hidden" }}>
+          <span style={{ display: "block", height: "100%", width: `${(pc ?? 0) * 100}%`, background: c }}/></span>}</span>
+    </div>; };
   const head = <div style={{ display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" }}>
     <span data-pk="" style={{ fontSize: 24, fontWeight: 900, color: "var(--text)", lineHeight: 1.05, ...gradText("#D97706", "#F59E0B") }}>{s === undefined ? "…" : list.length}</span>
     <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--text2)" }}>bobines{o.kg ? ` · ${fmtG(kg)}` : ""}</span>
     {few > 0 && <FewChip n={few}/>}</div>;
   return (
     <Tile icon={<Package size={15}/>} color="#F59E0B" label="Stock" to="/filaments"
-      mini={sz.h === 0.5} summary={<>{list.length}<span style={{ display: "inline-flex", gap: 2 }}>{low.slice(0, 3).map(x => <SpoolDot key={x.id} color={x.filament_color} pct={spoolPct(x)} size={22}/>)}</span></>}
-      zoom={<StockZoom list={list} low={low} kg={kg}/>}>
+      mini={sz.h === 0.5} summary={<>{list.length}<span style={{ display: "inline-flex", gap: 2 }}>{low.slice(0, 3).map(x => <span key={x.id} data-tip={spoolTip(x)}><SpoolDot color={x.filament_color} pct={spoolPct(x)} size={22}/></span>)}</span></>}
+      zoom={<StockZoom list={list} kg={kg}/>}>
       {({ W, H }) => {
         const rest = H - 34;
         if (rest < 20) return head;
-        if (o.style === "list") return <>{head}<div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 6 }}>{low.slice(0, fitRows(rest, 22, 5)).map(line)}</div></>;
-        // les pastilles grandissent pour remplir la case ; trop nombreuses, seules les plus basses qui tiennent
-        // de la place : le poids sous chaque pastille
-        const lg = fitGrid(low.length, W, rest, { gap: 6, max: 60, extra: 15 });
-        const labels = lg.size >= 34;
-        let g = labels ? lg : fitGrid(low.length, W, rest, { gap: 6, max: 56 });
+        if (o.style === "list") {
+          const h = rest >= 3 * 40 ? 36 : 22;
+          return <>{head}<div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 6 }}>{low.slice(0, fitRows(rest, h, 5)).map(x => line(x, h))}</div></>;
+        }
+        // les pastilles grandissent pour remplir la case ; avec la place, le sous-type et le poids dessous
+        const lg = fitGrid(low.length, W, rest, { gap: 6, max: 60, extra: 28 });
+        const two = lg.size >= 36;
+        const lg1 = two ? lg : fitGrid(low.length, W, rest, { gap: 6, max: 60, extra: 15 });
+        const labels = lg1.size >= 30;
+        let g = labels ? lg1 : fitGrid(low.length, W, rest, { gap: 6, max: 56 });
         if (g.size < 26) { const f = fillGrid(W, rest, 26, 6); g = { cols: f.cols, size: Math.min(f.size, Math.max(20, rest - 2)), n: f.n }; }
-        return <>{head}<div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, ${g.size}px)`, gap: 6, alignContent: "center",
+        const cell = Math.max(g.size, labels ? 52 : 0);
+        return <>{head}<div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, minmax(${g.size}px, ${cell}px))`, gap: 6, alignContent: "center",
           justifyContent: "space-evenly", marginTop: 4 }}>
-          {low.slice(0, g.n || low.length).map(x => <span key={x.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1 }}>
-            <SpoolDot color={x.filament_color} pct={spoolPct(x)} size={g.size} title={`${spoolName(x)} · ${Math.round(x.remaining_weight_g)} g`}/>
+          {low.slice(0, g.n || low.length).map(x => <span key={x.id} data-tip={spoolTip(x)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, minWidth: 0 }}>
+            <SpoolDot color={x.filament_color} pct={spoolPct(x)} size={g.size}/>
+            {labels && two && <span style={{ fontSize: 9.5, fontWeight: 700, lineHeight: "13px", color: "var(--text2)", whiteSpace: "nowrap", overflow: "hidden",
+              textOverflow: "ellipsis", maxWidth: "100%" }}>{spoolShort(x)}</span>}
             {labels && <span style={{ fontSize: 10.5, fontWeight: 800, lineHeight: "14px", whiteSpace: "nowrap",
               color: x.remaining_weight_g < 200 ? "#dc2626" : "var(--muted)" }}>{fmtG(x.remaining_weight_g)}</span>}</span>)}</div></>;
       }}
     </Tile>
   );
 }
-function StockZoom({ list, low, kg }) {
+// la fenetre du stock : les chiffres, la repartition par matiere, et chaque bobine avec sa marque, sa matiere,
+// son sous-type ; des filtres pour s'y retrouver
+function StockZoom({ list, kg }) {
+  const [only, setOnly] = useState("low");          // low | all | mat:<x> | brand:<x>
+  const [sort, setSort] = useState("g");
+  const [more, setMore] = useState(false);
   const worth = list.reduce((t, x) => { const pr = x.price_override || x.filament_price; return t + (pr && x.filament_weight_g ? pr * (x.remaining_weight_g || 0) / x.filament_weight_g : 0); }, 0);
   const inAms = list.filter(x => x.ams_tray).length;
-  // par matiere : le nombre de bobines et le poids, en barres
+  const lowN = list.filter(x => (x.remaining_weight_g ?? 999) < 200).length;
   const by = Object.values(list.reduce((m, x) => { const k = x.filament_material || "Autre";
     (m[k] = m[k] || { k, n: 0, g: 0, colors: [] }); m[k].n++; m[k].g += x.remaining_weight_g || 0; m[k].colors.push(x.filament_color); return m; }, {}))
     .sort((a, b) => b.g - a.g);
+  const brands = Object.entries(list.reduce((m, x) => { const k = x.filament_manufacturer || "Sans marque"; m[k] = (m[k] || 0) + 1; return m; }, {}))
+    .sort((a, b) => b[1] - a[1]);
   const top = Math.max(1, ...by.map(x => x.g));
+  const shown = list.filter(x => only === "all" ? true : only === "low" ? (x.remaining_weight_g ?? 999) < 200
+    : only.startsWith("mat:") ? (x.filament_material || "Autre") === only.slice(4) : (x.filament_manufacturer || "Sans marque") === only.slice(6))
+    .sort(sort === "pct" ? (a, b) => (spoolPct(a) ?? 1) - (spoolPct(b) ?? 1) : sort === "name" ? (a, b) => spoolName(a).localeCompare(spoolName(b), "fr")
+      : (a, b) => (a.remaining_weight_g ?? 1e9) - (b.remaining_weight_g ?? 1e9));
+  const chip = (on, c = "#F59E0B") => ({ height: 28, padding: "0 11px", borderRadius: 9, cursor: "pointer", fontWeight: 800, fontSize: 12, border: "1px solid var(--border)",
+    background: on ? c : "var(--surface2)", color: on ? "#fff" : "var(--text2)", whiteSpace: "nowrap" });
+  const pill = (t, c) => <span style={{ fontSize: 10.5, fontWeight: 800, padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap", color: c,
+    background: `${c}1f`, border: `1px solid ${c}40` }}>{t}</span>;
+  const cap = more ? shown.length : 60;
   return <>
-    <Stats items={[["Bobines", list.length], ["Poids", fmtG(kg)], worth ? ["Valeur restante", fmtEur(worth), "#16a34a"] : null, inAms ? ["Dans l'AMS", inAms] : null,
-      ["Sous 200 g", list.filter(x => (x.remaining_weight_g ?? 999) < 200).length, "#dc2626"], ["Sous 15 %", list.filter(x => (spoolPct(x) ?? 1) < 0.15).length, "#d97706"]]}/>
-    {by.length > 1 && <><H2>Par matière</H2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {by.map(x => <div key={x.k} style={{ display: "grid", gridTemplateColumns: "92px minmax(0,1fr) auto", alignItems: "center", gap: 10 }}>
+    <Stats items={[["Bobines", list.length, "#F59E0B"], ["Poids", fmtG(kg), "#D97706"], worth ? ["Valeur restante", fmtEur(worth), "#16a34a"] : null,
+      inAms ? ["Dans l'AMS", inAms, "#3B82F6"] : null, ["Sous 200 g", lowN, "#dc2626"], ["Sous 15 %", list.filter(x => (spoolPct(x) ?? 1) < 0.15).length, "#d97706"]]}/>
+    {by.length > 1 && <><H2>Par matière · touche pour filtrer</H2><div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      {by.map(x => <button key={x.k} type="button" onClick={() => setOnly(o => o === `mat:${x.k}` ? "all" : `mat:${x.k}`)}
+        style={{ display: "grid", gridTemplateColumns: "92px minmax(0,1fr) auto", alignItems: "center", gap: 10, padding: "3px 4px", borderRadius: 10, cursor: "pointer",
+          border: "none", textAlign: "left", background: only === `mat:${x.k}` ? "rgba(245,158,11,0.14)" : "transparent" }}>
         <span style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{x.k}</span>
         <span style={{ height: 14, borderRadius: 7, background: "var(--surface2)", overflow: "hidden", display: "flex" }}>
           {x.colors.map((c, i) => <span key={i} style={{ width: `${(100 * x.g / top) / x.colors.length}%`, background: hexCss(c) }}/>)}</span>
-        <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap" }}>{x.n} · {fmtG(x.g)}</span></div>)}</div></>}
-    <H2>Les plus basses</H2>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 8 }}>
-      {low.slice(0, 40).map(x => { const pc = spoolPct(x); const c = pc == null ? "#94a3b8" : pc < 0.15 ? "#ef4444" : pc < 0.35 ? "#f59e0b" : "#22c55e";
-        return <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 14, background: "var(--surface2)", minWidth: 0 }}>
-          <SpoolDot color={x.filament_color} pct={pc} size={34}/>
-          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+        <span style={{ fontSize: 12.5, fontWeight: 800, color: "var(--text2)", whiteSpace: "nowrap" }}>{x.n} · {fmtG(x.g)}</span></button>)}</div></>}
+    <H2>Les bobines</H2>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+      <button type="button" style={chip(only === "low", "#dc2626")} onClick={() => setOnly("low")}>Presque vides ({lowN})</button>
+      <button type="button" style={chip(only === "all")} onClick={() => setOnly("all")}>Toutes ({list.length})</button>
+      {brands.length > 1 && brands.slice(0, 8).map(([b, n]) => <button key={b} type="button" style={chip(only === `brand:${b}`, "#8B5CF6")}
+        onClick={() => setOnly(o => o === `brand:${b}` ? "all" : `brand:${b}`)}>{b} ({n})</button>)}
+    </div>
+    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+      <Muted>Trier :</Muted>
+      {[["g", "les plus basses"], ["pct", "en %"], ["name", "par nom"]].map(([k, l]) => <button key={k} type="button" style={chip(sort === k, "#3B82F6")} onClick={() => setSort(k)}>{l}</button>)}
+    </div>
+    {!shown.length ? <Muted>Aucune bobine ici.</Muted> : <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 8 }}>
+      {shown.slice(0, cap).map(x => { const pc = spoolPct(x), c = pctColor(pc);
+        return <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 14, minWidth: 0,
+          background: `linear-gradient(135deg, ${hexCss(x.filament_color)}22, transparent 55%), var(--surface2)`, border: "1px solid var(--border)" }}>
+          <SpoolDot color={x.filament_color} pct={pc} size={40}/>
+          <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 }}>
             <div style={{ display: "flex", gap: 8, alignItems: "baseline" }}>
               <span style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 800, color: "var(--text)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{spoolName(x)}</span>
-              <span style={{ fontSize: 13, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{fmtG(x.remaining_weight_g)}</span></div>
-            {(x.filament_manufacturer || x.ams_tray) && <span style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {[x.filament_manufacturer, x.ams_tray && `dans l'AMS ${x.ams_tray}`].filter(Boolean).join(" · ")}</span>}
-            <span style={{ height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
-              <span style={{ display: "block", height: "100%", width: `${(pc ?? 0) * 100}%`, background: c }}/></span>
-          </div></div>; })}</div>
+              <span style={{ fontSize: 13.5, fontWeight: 900, color: c, whiteSpace: "nowrap" }}>{fmtG(x.remaining_weight_g)}</span></div>
+            <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {x.filament_manufacturer && pill(x.filament_manufacturer, "#8B5CF6")}
+              {x.filament_material && pill(x.filament_material, "#F59E0B")}
+              {spoolKind(x) && spoolKind(x) !== x.filament_material && pill(spoolKind(x), "#0EA5E9")}
+              {x.ams_tray && pill(`AMS ${x.ams_tray}`, "#3B82F6")}
+            </div>
+            <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ flex: 1, height: 5, borderRadius: 3, background: "var(--border)", overflow: "hidden" }}>
+                <span style={{ display: "block", height: "100%", width: `${(pc ?? 0) * 100}%`, background: c }}/></span>
+              {pc != null && <span style={{ fontSize: 10.5, fontWeight: 800, color: "var(--muted)" }}>{Math.round(pc * 100)} %</span>}</span>
+          </div></div>; })}</div>}
+    {shown.length > cap && <button type="button" style={{ ...chip(false), alignSelf: "center" }} onClick={() => setMore(true)}>Voir les {shown.length - cap} autres</button>}
   </>;
 }
 // le sechage : un anneau par AMS qui seche, sinon ce qui est a secher

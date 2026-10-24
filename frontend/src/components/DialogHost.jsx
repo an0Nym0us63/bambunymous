@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { _register } from "../utils/dialog";
+import TipHost from "./TipHost";
 
 // Rend les dialogues in-app demandes via showAlert/showConfirm. Monte une seule
 // fois a la racine. Resout la Promise a la fermeture (OK -> true, Annuler -> false).
@@ -21,11 +22,13 @@ export default function DialogHost() {
     return () => window.removeEventListener("keydown", onKey);
   }, [dlg]);
 
-  if (!dlg) return null;
+  // les infobulles maison vivent ici (monte une fois, sur toutes les pages)
+  if (!dlg) return <TipHost/>;
   const isConfirm = dlg.type === "confirm";
   const close = (val) => { dlg.resolve(val); setDlg(null); };
 
-  return (
+  return (<>
+    <TipHost/>
     <div onClick={() => close(isConfirm ? false : undefined)}
       style={{ position: "fixed", inset: 0, zIndex: 9000, background: "rgba(0,0,0,0.6)",
         display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
@@ -54,5 +57,5 @@ export default function DialogHost() {
         </div>
       </div>
     </div>
-  );
+  </>);
 }
