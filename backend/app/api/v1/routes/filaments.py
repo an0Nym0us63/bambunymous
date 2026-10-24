@@ -1261,9 +1261,10 @@ def _spool_out(s: Spool, sib: tuple | None = None) -> SpoolOut:
         external_spool_id=s.external_spool_id,
         found_mode=getattr(s, "found_mode", None),
         # On retranche la bobine courante : l'interface veut savoir ce qu'il
-        # reste A COTE, pas le total du filament.
-        sibling_count=(max(0, sib[0] - 1) if sib else None),
-        sibling_weight_g=(round(max(0.0, sib[1] - (s.remaining_weight_g or 0)), 1)
+        # reste A COTE, pas le total du filament. Une bobine archivee n'est pas
+        # dans le compte (actives seulement) : rien a retrancher (25/10/2026).
+        sibling_count=(max(0, sib[0] - (0 if s.archived else 1)) if sib else None),
+        sibling_weight_g=(round(max(0.0, sib[1] - (0 if s.archived else (s.remaining_weight_g or 0))), 1)
                           if sib else None),
         first_used_at=s.first_used_at,
         last_used_at=s.last_used_at,
