@@ -262,17 +262,21 @@ async def _printed_plates(dids) -> dict:
     dids = [str(d) for d in dids if d]
     if not dids:
         return {}
+    from .makerworld import plate_keys
     async with AsyncSessionLocal() as db:
-        rows = (await db.execute(select(Print.design_id, Print.plate_id).where(
+        rows = (await db.execute(select(Print.design_id, Print.plate_id, Print.mw_profile_id, Print.mw_plates).where(
             Print.design_id.in_(dids), Print.status.in_(("SUCCESS", "PARTIAL"))))).all()
     out = {}
-    for did, plate in rows:
-        try:
-            n = int(str(plate or "1").strip() or 1)
-        except ValueError:
-            continue
-        per = out.setdefault(str(did), {})
-        per[n] = per.get(n, 0) + 1
+    for did, plate, prof, manual in rows:
+        # les plateaux designes a la main (regroupes, renumerotes) passent avant le numero du fichier,
+        # comme sur la fiche (avant le 24/10/2026, « A faire » ne lisait que le numero)
+        for k in plate_keys(plate, prof, manual):
+            try:
+                n = int(str(k.split(":", 1)[1] or "1").strip() or 1)
+            except ValueError:
+                continue
+            per = out.setdefault(str(did), {})
+            per[n] = per.get(n, 0) + 1
     return out
 
 
@@ -282,18 +286,20 @@ async def _printing_plates() -> dict:
     from sqlalchemy import select
     from ..db.session import AsyncSessionLocal
     from ..models.print_history import Print
+    from .makerworld import plate_keys
     try:
         async with AsyncSessionLocal() as db:
-            rows = (await db.execute(select(Print.design_id, Print.plate_id).where(
+            rows = (await db.execute(select(Print.design_id, Print.plate_id, Print.mw_profile_id, Print.mw_plates).where(
                 Print.status == "IN_PROGRESS", Print.design_id.isnot(None)))).all()
     except Exception:
         return {}
     out = {}
-    for did, plate in rows:
-        try:
-            out.setdefault(str(did), set()).add(int(str(plate or "1").strip() or 1))
-        except ValueError:
-            continue
+    for did, plate, prof, manual in rows:
+        for k in plate_keys(plate, prof, manual):
+            try:
+                out.setdefault(str(did), set()).add(int(str(k.split(":", 1)[1] or "1").strip() or 1))
+            except ValueError:
+                continue
     return out
 
 
