@@ -1740,10 +1740,12 @@ function Friends({ f, o, sz }) {
         if (!p.length) {
           const list = o.idle ? others : [];
           if (!list.length) return <Empty>Personne n'imprime en ce moment</Empty>;
-          const g = fitGrid(list.length, bw, H - 22, { gap: 10, max: 64, extra: bw < 215 ? 28 : 30 });
+          // une seule ligne de titre (courte si la tuile est etroite), comptee dans la place des avatars
+          const g = fitGrid(list.length, bw, H - 28, { gap: 10, max: 64, extra: 34 });
           const s2 = Math.max(30, g.size);
           return <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 8, minHeight: 0 }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", textAlign: "center" }}>Personne n'imprime en ce moment</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--muted)", textAlign: "center", whiteSpace: "nowrap", overflow: "hidden",
+              textOverflow: "ellipsis", flexShrink: 0 }}>{bw < 260 ? "Personne n'imprime" : "Personne n'imprime en ce moment"}</span>
             <div style={{ display: "grid", gridTemplateColumns: `repeat(${g.cols}, minmax(0, 1fr))`, gap: 10, justifyItems: "center" }}>
               {list.map(([id, s]) => { const [l, c] = FR_STATE[s.state] || FR_STATE.off;
                 return <span key={id} data-tip={`${s.name || "Copain"}
