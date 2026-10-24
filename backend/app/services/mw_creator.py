@@ -617,20 +617,20 @@ async def check_creator() -> int:
             lines = [f"   • {t} +{_fmt(p)}" for t, p in top[:5]] + ([f"   • … et {len(top) - 5} autre(s)"] if len(top) > 5 else [])
             await N.notify("mw_points", f"💰 +{_fmt(tot)} points MakerWorld",
                            "\n".join([f"🪙 Solde : {_fmt(prof['points']['total'])} points"] + lines),
-                           priority=2, click=profile_url, actions=acts)
+                           priority=2, click=N.mw_me_link(cfg, prof.get("handle")), actions=acts)
             sent += 1
     # Paliers de points : une recompense de la boutique devient accessible
     if on["mw_points_goal"] and old.get("points") is not None:
         kind = N.options_of(cfg, "mw_points_goal").get("kind", "both")
         g = goal_message(_num(old.get("points")), prof["points"]["total"], kind)
         if g:
-            await N.notify("mw_points_goal", g[0], g[1], priority=3, click=profile_url, actions=acts)
+            await N.notify("mw_points_goal", g[0], g[1], priority=3, click=N.mw_me_link(cfg, prof.get("handle")), actions=acts)
             sent += 1
     # Abonnes
     if on["mw_fans"] and prof["fans"] > _num(old.get("fans")):
         n = prof["fans"] - _num(old.get("fans"))
         await N.notify("mw_fans", f"👥 +{n} abonné{'s' if n > 1 else ''} sur MakerWorld",
-                       f"Tu as maintenant {prof['fans']} abonnés.", priority=2, click=profile_url, actions=acts)
+                       f"Tu as maintenant {prof['fans']} abonnés.", priority=2, click=N.mw_me_link(cfg, prof.get("handle")), actions=acts)
         sent += 1
     # Boosts et paliers, modele par modele
     level = N.options_of(cfg, "mw_milestone").get("metric", "both") if on["mw_milestone"] else None
@@ -644,15 +644,15 @@ async def check_creator() -> int:
         if on["mw_comment"] and "c" in o and m["comments"] > _num(o.get("c")):
             n = m["comments"] - _num(o.get("c"))
             await N.notify("mw_comment", f"💬 {'Nouveau commentaire' if n == 1 else f'{n} nouveaux commentaires'}",
-                           f"📄 {name}\n💬 {m['comments']} commentaires au total", click=url,
+                           f"📄 {name}\n💬 {m['comments']} commentaires au total", click=N.mw_model_link(cfg, did),
                            attach=_cover(m.get("cover_url")), icon=_cover(m.get("cover_url")), priority=3,
-                           actions=[("Voir le modèle", url)] + acts)
+                           actions=[("Voir sur MakerWorld", url)] + acts)
             sent += 1
         if on["mw_boost"] and m["boosts"] > _num(o.get("b")):
             n = m["boosts"] - _num(o.get("b"))
             await N.notify("mw_boost", f"⚡ {'Boost reçu' if n == 1 else f'{n} boosts reçus'}",
-                           f"📄 {name}\n⚡ {m['boosts']} boosts au total", click=url, attach=_cover(m.get("cover_url")),
-                           icon=_cover(m.get("cover_url")), priority=3, actions=[("Voir le modèle", url)] + acts)
+                           f"📄 {name}\n⚡ {m['boosts']} boosts au total", click=N.mw_model_link(cfg, did), attach=_cover(m.get("cover_url")),
+                           icon=_cover(m.get("cover_url")), priority=3, actions=[("Voir sur MakerWorld", url)] + acts)
             sent += 1
         if level:
             for key, short, label in (("d", "downloads", "téléchargements"), ("p", "prints", "impressions")):
@@ -663,8 +663,8 @@ async def check_creator() -> int:
                 if hit:
                     await N.notify("mw_milestone", f"🏁 {hit[-1]} {label} !",
                                    f"📄 {name}\n⬇️ {m['downloads']} téléchargements · 🖨️ {m['prints']} impressions",
-                                   click=url, attach=_cover(m.get("cover_url")), icon=_cover(m.get("cover_url")),
-                                   priority=3, actions=[("Voir le modèle", url)] + acts)
+                                   click=N.mw_model_link(cfg, did), attach=_cover(m.get("cover_url")), icon=_cover(m.get("cover_url")),
+                                   priority=3, actions=[("Voir sur MakerWorld", url)] + acts)
                     sent += 1
     await _snap_put(snap)
     return sent

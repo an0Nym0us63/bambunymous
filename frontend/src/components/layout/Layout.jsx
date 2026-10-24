@@ -17,6 +17,7 @@ import MwAssignPicker from "../MwAssignPicker";
 import CardFx from "../CardFx";
 import AchNews from "../AchNews";
 import { Hide } from "../Cachettes";
+import { MwLinkHost } from "../MwCreatorPage";
 
 const nav = [
   { to: "/",          icon: Home,       label: "Accueil"    },
@@ -236,6 +237,7 @@ export default function Layout() {
         <PrankHost/>
         <CardFx/>
         <AchNews/>
+        <MwLinkHost/>
         <MwAssignPicker/>
         <ShareProgress/>
         {!friend && <RfidScanBridge/>}

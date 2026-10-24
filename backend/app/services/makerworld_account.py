@@ -878,6 +878,7 @@ async def check_new_models(creators: list) -> int:
     passage. Premier passage pour un createur : on retient son dernier
     modele sans rien envoyer (pas d'avalanche). Rend le nombre d'envois."""
     from . import notify as N
+    cfg = await N._load()
     st = await N.event_settings("mw_new_model")
     watch = set(st.get("creators") or [])
     if not st.get("enabled") or not watch:
@@ -908,13 +909,14 @@ async def check_new_models(creators: list) -> int:
                 cover += "?x-oss-process=image/resize,w_600/format,webp"
             url = f"https://makerworld.com/fr/models/{x['design_id']}"
             prof = f"https://makerworld.com/fr/@{c['handle']}" if c.get("handle") else None
+            # la notification ouvre la fiche dans l'appli ; les boutons gardent MakerWorld
             ok = await N.notify("mw_new_model", f"🆕 Nouveau modèle de {c.get('name') or 'un créateur suivi'}",
-                                x.get("title_fr") or x.get("title") or "", click=url, attach=cover, priority=3,
-                                actions=[("Voir le modèle", url), ("Profil du créateur", prof)])
+                                x.get("title_fr") or x.get("title") or "", click=N.mw_model_link(cfg, x["design_id"]), attach=cover, priority=3,
+                                actions=[("Voir sur MakerWorld", url), ("Profil du créateur", prof)])
             sent += 1 if ok else 0
         if len(fresh) > 5:
             await N.notify("mw_new_model", f"{c.get('name')} : {len(fresh) - 5} autre(s) nouveau(x) modèle(s)",
-                           "", click=f"https://makerworld.com/fr/@{c.get('handle')}" if c.get("handle") else None)
+                           "", click=N.mw_creator_link(cfg, uid, c.get("handle")))
         seen[uid] = max(last, newest)
     await _set(K_SEEN, json.dumps(seen))
     if sent:

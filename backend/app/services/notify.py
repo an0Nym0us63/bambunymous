@@ -754,6 +754,21 @@ def app_link(cfg, path: str):
     return f"{base}{path}" if base and path is not None else None
 
 
+# MakerWorld (24/10/2026) : une notification ouvre la fiche DANS l'appli (le bouton MakerWorld y est) ;
+# sans adresse d'appli renseignee, le site MakerWorld comme avant
+def mw_model_link(cfg, design_id) -> str:
+    return app_link(cfg, f"/prints?tab=makerworld&model={design_id}") or f"https://makerworld.com/fr/models/{design_id}"
+
+
+def mw_creator_link(cfg, uid, handle=None):
+    return (app_link(cfg, f"/prints?tab=makerworld&creator={uid}") if uid else None) or         (f"https://makerworld.com/fr/@{handle}" if handle else None)
+
+
+def mw_me_link(cfg, handle=None):
+    """Mon profil de createur : l'onglet Createur de la vue MakerWorld."""
+    return app_link(cfg, "/prints?tab=makerworld&mw=creator") or (f"https://makerworld.com/fr/@{handle}" if handle else None)
+
+
 # ── Envoi ──────────────────────────────────────────────────────────────────
 def _error_of(r) -> str:
     try:

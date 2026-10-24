@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useTrackDetail } from "../utils/track";
 import { create } from "zustand";
+import { useSearchParams } from "react-router-dom";
 import client from "../api/client";
 import MwImg from "./MwImg";
 import MakerWorldModelSheet, { prefetchModel } from "./MakerWorldModelSheet";
@@ -113,4 +114,19 @@ export function CreatorPageHost() {
         <MakerWorldModelSheet designId={model.design_id} preview={model} onClose={() => setModel(null)}/></div>}
     </div>
   );
+}
+
+// Les liens des notifications MakerWorld (24/10/2026) : « ?model=… » ouvre la fiche du modele dans l'appli
+// (le bouton MakerWorld y est), « ?creator=… » la page du createur. Monte une fois, dans la mise en page.
+export function MwLinkHost() {
+  const [sp, setSp] = useSearchParams();
+  const model = sp.get("model"), creator = sp.get("creator");
+  const drop = k => { const n = new URLSearchParams(sp); n.delete(k); setSp(n, { replace: true }); };
+  useEffect(() => {
+    if (!creator) return;
+    openCreator({ uid: creator });
+    drop("creator");
+  }, [creator]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!model || !/^\d+$/.test(model)) return null;
+  return <MakerWorldModelSheet designId={model} onClose={() => drop("model")}/>;
 }

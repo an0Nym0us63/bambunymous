@@ -195,8 +195,8 @@ async def check_collections() -> int:
                 if who:
                     lines.append(f"🙋 ajouté depuis BambuNymous par {who}")
                 await N.notify("mw_coll_added", f"➕ Ajouté à « {c['title']} »", "\n".join(lines),
-                               click=url, attach=_cover(x.get("cover_url")), priority=2,
-                               actions=[("Voir le modèle", url)] + acts_app)
+                               click=N.mw_model_link(cfg, x["design_id"]), attach=_cover(x.get("cover_url")), priority=2,
+                               actions=[("Voir sur MakerWorld", url)] + acts_app)
                 sent += 1
             if len(new) > 5:
                 await N.notify("mw_coll_added", f"➕ « {c['title']} » : {len(new) - 5} autre(s) ajout(s)", "",
