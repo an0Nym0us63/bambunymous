@@ -840,12 +840,18 @@ function FSheet({ onClose, top = null, bottom = null, children, z = 1000 }) {
     </div>);
 }
 // la bobine en vedette : son dessin sur un fond de sa couleur, les pastilles, le nom, puis ce qu'on veut mettre dessous
-function FHero({ colors, type, color, chips, name, sub, children }) {
+function FHero({ colors, type, color, chips, name, sub, children, stack = 0 }) {
   return (
     <div style={{ position:"relative", overflow:"hidden", padding:"52px 18px 18px", display:"flex", alignItems:"center", gap:16, flexWrap:"wrap",
       background:`radial-gradient(circle at 18% 45%, ${color}55, transparent 60%), linear-gradient(135deg, ${color}26, transparent 70%), var(--surface2)` }}>
-      <span style={{ display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 8px 18px ${color}66)` }}>
-        <SpoolSVG colors={colors} size={118} type={type}/></span>
+      <span style={{ position:"relative", display:"inline-flex", flexShrink:0, filter:`drop-shadow(0 8px 18px ${color}66)`,
+        marginRight: stack > 0 ? (stack > 1 ? 30 : 18) : 0 }}>
+        {/* d'autres bobines du meme filament en stock : leurs ombres, decalees derriere (deux au plus) */}
+        {stack > 1 && <span aria-hidden="true" style={{ position:"absolute", top:10, left:34, opacity:0.35 }}>
+          <SpoolSVG colors={colors} size={100} type={type}/></span>}
+        {stack > 0 && <span aria-hidden="true" style={{ position:"absolute", top:5, left:18, opacity:0.6 }}>
+          <SpoolSVG colors={colors} size={108} type={type}/></span>}
+        <span style={{ position:"relative", display:"inline-flex" }}><SpoolSVG colors={colors} size={118} type={type}/></span></span>
       <div style={{ flex:"1 1 190px", minWidth:0, display:"flex", flexDirection:"column", gap:6 }}>
         {chips.filter(Boolean).length > 0 && <div style={{ display:"flex", gap:5, flexWrap:"wrap" }}>
           {chips.filter(Boolean).map((c, k) => <React.Fragment key={k}>{c}</React.Fragment>)}</div>}
@@ -1014,6 +1020,7 @@ export function SpoolBottomSheet({ spool, onClose, onArchive, onDelete }) {
         <button onClick={menu} aria-label="Plus d'actions" style={{ ...fBtn, width:48, flex:"0 0 auto" }}>⋯</button>
       </>}>
       <FHero colors={colorsList} type={spool.filament_multicolor_type} color={main} name={name}
+        stack={spool.archived ? 0 : (spool.sibling_count || 0)}
         chips={[fChip(`#${spool.id}`, "#64748B"), spool.archived && fChip("Archivée", "#94a3b8"),
           spool.location && fChip(`📍 ${spool.location}`, "#8B5CF6"),
           !spool.archived && spool.sibling_count > 0 && fChip(`🧵 +${spool.sibling_count} en stock${spool.sibling_weight_g ? ` · ${fmtStock(spool.sibling_weight_g)}` : ""}`, "#22C55E"),
@@ -1302,13 +1309,15 @@ function SpoolCard({ s, colorsList, onClick, menu }) {
       <div style={{ position:"relative", display:"flex", justifyContent:"center", margin:"3px 0 0", filter:`drop-shadow(0 6px 10px ${main}55)` }}>
         {/* d'autres bobines du meme filament en stock : une bobine estompee derriere, et leur nombre en discret
             (pas dans les archives : elles ne sont plus en stock) */}
-        {more > 0 && <span aria-hidden="true" style={{ position:"absolute", top:4, left:"calc(50% - 22px)", opacity:0.35 }}>
-          <SpoolSVG colors={colorsList} empty={false} size={62} type={s.filament_multicolor_type}/></span>}
+        {more > 1 && <span aria-hidden="true" style={{ position:"absolute", top:7, left:"calc(50% - 12px)", opacity:0.3 }}>
+          <SpoolSVG colors={colorsList} empty={false} size={56} type={s.filament_multicolor_type}/></span>}
+        {more > 0 && <span aria-hidden="true" style={{ position:"absolute", top:3, left:"calc(50% - 24px)", opacity:0.6 }}>
+          <SpoolSVG colors={colorsList} empty={false} size={64} type={s.filament_multicolor_type}/></span>}
         <span style={{ position:"relative" }}><SpoolSVG colors={colorsList} empty={false} size={70}
           type={s.filament_multicolor_type}/></span>
         {more > 0 && <span data-tip={`${more} autre${more > 1 ? "s" : ""} bobine${more > 1 ? "s" : ""} de ce filament en stock`
           + (s.sibling_weight_g ? ` (${fmtStock(s.sibling_weight_g)})` : "")}
-          style={{ position:"absolute", right:"calc(50% - 50px)", bottom:2, fontSize:9.5, fontWeight:800, color:"var(--muted)" }}>+{more}</span>}
+          style={{ position:"absolute", right:"calc(50% - 54px)", bottom:2, fontSize:10.5, fontWeight:900, color:"var(--text2)" }}>+{more}</span>}
       </div>
 
       <div style={{ padding:"2px 9px 10px", display:"flex", flexDirection:"column", gap:5 }}>
