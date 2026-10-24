@@ -102,7 +102,10 @@ export default function GalleryCompare({
   });
 
   if (!items?.length) {
-    return <p style={{ textAlign:"center", color:"var(--muted)", fontSize:13, padding:"32px 0" }}>{emptyLabel}</p>;
+    return <div style={{ padding:"26px 16px", borderRadius:18, border:"1px dashed var(--border)", textAlign:"center",
+      background:"radial-gradient(80% 80% at 50% 0%, rgba(236,72,153,0.12), transparent 70%), var(--surface2)" }}>
+      <div style={{ fontSize:30, marginBottom:6 }}>🖼️</div>
+      <p style={{ color:"var(--muted)", fontSize:13, fontWeight:600, margin:0 }}>{emptyLabel}</p></div>;
   }
 
   const visibleItems = items.slice(0, visibleCount);
@@ -136,10 +139,12 @@ export default function GalleryCompare({
               onTouchMove={e => { const t=e.touches[0]; movePress(t.clientX, t.clientY); }}
               onTouchEnd={cancelPress}
               onContextMenu={e => e.preventDefault()}
-              style={{ position:"relative", borderRadius:10, overflow:"hidden", cursor:"pointer",
+              style={{ position:"relative", borderRadius: swatchMode ? 10 : 16, overflow:"hidden", cursor:"pointer",
                 aspectRatio: swatchInfo ? undefined : "1", background:"var(--surface2)",
                 display: swatchInfo ? "flex" : undefined, flexDirection:"column",
-                border: checked ? "2px solid #3b82f6" : "2px solid transparent" }}>
+                border: checked ? "2px solid #3b82f6" : "2px solid transparent",
+                boxShadow: checked ? "0 0 0 3px rgba(59,130,246,0.3), 0 10px 24px -12px #3b82f6" : swatchMode ? "none" : "0 8px 20px -14px rgba(0,0,0,.6)",
+                transform: checked ? "scale(.97)" : "none", transition:"transform .15s, box-shadow .15s" }}>
               {swatchInfo ? (
                 // Nuancier avec ses informations : la couleur occupe toute la
                 // tuile, le texte vit sur un voile translucide en bas. Un
@@ -181,16 +186,17 @@ export default function GalleryCompare({
                   boxShadow:"inset 0 0 0 1px rgba(0,0,0,0.22)" }}/>
               )}
               {photos.length > 1 && !swatchMode && (
-                <span style={{ position:"absolute", top:6, right:6, background:"rgba(0,0,0,0.6)", color:"white",
-                  fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:20 }}>
-                  {photos.length} 📷
+                <span style={{ position:"absolute", top:6, right:6, background:"rgba(15,23,42,0.6)", color:"white",
+                  backdropFilter:"blur(6px)", WebkitBackdropFilter:"blur(6px)",
+                  fontSize:10, fontWeight:800, padding:"2px 7px", borderRadius:20 }}>
+                  📷 {photos.length}
                 </span>
               )}
               {enableCompare && selectMode && (
                 <button onClick={e => { e.stopPropagation(); toggle(item); }}
-                  style={{ position:"absolute", top:6, left:6, width:22, height:22, borderRadius:6,
-                    border: checked ? "none" : "1.5px solid rgba(255,255,255,0.7)",
-                    background: checked ? "#3b82f6" : "rgba(0,0,0,0.35)",
+                  style={{ position:"absolute", top:6, left:6, width:24, height:24, borderRadius:8,
+                    border: checked ? "none" : "1.5px solid rgba(255,255,255,0.8)",
+                    background: checked ? "linear-gradient(135deg, #3B82F6, #6366F1)" : "rgba(15,23,42,0.4)",
                     display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", padding:0 }}>
                   {checked && <Check size={13} color="white" strokeWidth={3}/>}
                 </button>
@@ -199,8 +205,8 @@ export default function GalleryCompare({
                   par-dessus, qui fausseraient la lecture de la teinte. */}
               {!swatchMode && (
                 <div style={{ position:"absolute", bottom:0, left:0, right:0,
-                  background:"linear-gradient(transparent,rgba(0,0,0,0.78))", padding:"22px 8px 6px" }}>
-                  <p style={{ fontSize:"clamp(10px, 1.1vw, 12.5px)", color:"white", fontWeight:700, margin:0,
+                  background:"linear-gradient(transparent, rgba(2,6,23,0.85))", padding:"26px 9px 7px" }}>
+                  <p style={{ fontSize:"clamp(11px, 1.15vw, 13px)", color:"white", fontWeight:800, margin:0, textShadow:"0 1px 4px rgba(0,0,0,.5)",
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getTitle(item)}</p>
                   {getSubtitle && (
                     <p style={{ fontSize:"clamp(9px, 0.95vw, 11px)", color:"rgba(255,255,255,0.75)", margin:"1px 0 0",
@@ -221,12 +227,13 @@ export default function GalleryCompare({
 
       {/* Tray flottant de sélection */}
       {enableCompare && selectedList.length > 0 && (
-        <div style={{ position:"fixed", bottom:76, left:12, right:12, zIndex:500,
-          background:"var(--sheet-bg)", border:"1px solid var(--border)", borderRadius:14,
-          padding:8, display:"flex", alignItems:"center", gap:8, boxShadow:"0 4px 24px rgba(0,0,0,0.35)" }}>
+        <div style={{ position:"fixed", bottom:"calc(76px + env(safe-area-inset-bottom,0px))", left:12, right:12, zIndex:500, maxWidth:620, margin:"0 auto",
+          background:"color-mix(in srgb, var(--sheet-bg) 92%, transparent)", backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)",
+          border:"1px solid rgba(59,130,246,0.5)", borderRadius:18,
+          padding:8, display:"flex", alignItems:"center", gap:8, boxShadow:"0 14px 34px -10px rgba(59,130,246,0.45)" }}>
           <div style={{ display:"flex", gap:4, overflowX:"auto", flex:1 }}>
             {selectedList.map(item => (
-              <div key={getId(item)} style={{ position:"relative", flexShrink:0, width:32, height:32, borderRadius:6, overflow:"hidden" }}>
+              <div key={getId(item)} style={{ position:"relative", flexShrink:0, width:36, height:36, borderRadius:10, overflow:"hidden" }}>
                 {renderCover ? renderCover(item) :
                   <img src={getCoverImage ? getCoverImage(item) : null} alt="" style={{ width:32, height:32, objectFit:"cover" }}/>}
                 <button onClick={() => toggle(item)}
@@ -236,17 +243,17 @@ export default function GalleryCompare({
               </div>
             ))}
           </div>
-          <span style={{ fontSize:11, color:"var(--muted)", flexShrink:0, fontFamily:"monospace" }}>{selectedList.length}/{maxCompare}</span>
+          <span style={{ fontSize:11.5, fontWeight:800, color:"var(--muted)", flexShrink:0 }}>{selectedList.length}/{maxCompare}</span>
           <button onClick={() => setCompareOpen(true)} disabled={selectedList.length < 2}
-            style={{ padding:"6px 12px", borderRadius:8, fontSize:12, fontWeight:700, flexShrink:0,
-              background: selectedList.length<2 ? "var(--border)" : "#3b82f6",
+            style={{ padding:"8px 13px", borderRadius:12, fontSize:12.5, fontWeight:800, flexShrink:0,
+              background: selectedList.length<2 ? "var(--border)" : "linear-gradient(135deg, #3B82F6, #6366F1)",
               color: selectedList.length<2 ? "var(--muted)" : "white",
               border:"none", cursor: selectedList.length<2 ? "default" : "pointer" }}>
             Comparer
           </button>
           <button onClick={() => setSelected(new Map())}
-            style={{ padding:"6px 10px", borderRadius:8, fontSize:12, flexShrink:0,
-              background:"none", border:"1px solid var(--border)", color:"var(--muted)", cursor:"pointer" }}>
+            style={{ padding:"8px 11px", borderRadius:12, fontSize:12.5, fontWeight:800, flexShrink:0,
+              background:"var(--surface2)", border:"1px solid var(--border)", color:"var(--text2)", cursor:"pointer" }}>
             Vider
           </button>
         </div>
@@ -256,25 +263,28 @@ export default function GalleryCompare({
       {enableCompare && compareOpen && (
         <div onClick={() => setCompareOpen(false)} style={{ position:"fixed", inset:0, zIndex:1300,
           background:"rgba(0,0,0,0.7)", display:"flex", alignItems:"flex-end", justifyContent:"center" }}>
-          <div onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)",
-            borderRadius:"20px 20px 0 0", width:"100%", maxWidth:720, maxHeight:"88dvh", overflowY:"auto",
-            padding:"16px 16px calc(16px + env(safe-area-inset-bottom,0px))" }}>
-            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
-              <h3 style={{ fontSize:15, fontWeight:800, color:"var(--text)", margin:0 }}>
+          <div data-no-pull="" onClick={e => e.stopPropagation()} style={{ background:"var(--sheet-bg)",
+            borderRadius:"22px 22px 0 0", width:"100%", maxWidth:720, maxHeight:"88dvh", overflowY:"auto",
+            padding:"0 16px calc(16px + env(safe-area-inset-bottom,0px))" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, margin:"0 -16px 14px", padding:"16px 16px 12px",
+              background:"linear-gradient(135deg, rgba(59,130,246,0.22), transparent 70%)" }}>
+              <span style={{ width:36, height:36, borderRadius:12, display:"flex", alignItems:"center", justifyContent:"center", fontSize:17,
+                background:"linear-gradient(135deg, #3B82F6, #6366F1)", color:"#fff" }}>⚖️</span>
+              <h3 style={{ flex:1, fontSize:16, fontWeight:900, color:"var(--text)", margin:0 }}>
                 Comparer ({selectedList.length})
               </h3>
               <button onClick={() => setCompareOpen(false)}
-                style={{ background:"var(--surface2)", border:"none", borderRadius:"50%", width:28, height:28,
+                style={{ background:"var(--surface2)", border:"1px solid var(--border)", borderRadius:"50%", width:34, height:34,
                   cursor:"pointer", color:"var(--text2)", display:"flex", alignItems:"center", justifyContent:"center" }}>
                 <X size={15}/>
               </button>
             </div>
             <div style={{ display:"flex", gap:10, overflowX:"auto", paddingBottom:6 }}>
               {selectedList.map(item => (
-                <div key={getId(item)} style={{ flexShrink:0, width:160, background:"var(--surface)",
-                  border:"1px solid var(--border)", borderRadius:12, padding:10 }}>
+                <div key={getId(item)} style={{ flexShrink:0, width:164, border:"1px solid var(--border)", borderRadius:16, padding:10,
+                  background:"linear-gradient(160deg, rgba(59,130,246,0.10), transparent 50%), var(--surface2)" }}>
                   <div onClick={() => { if (normPhotos(item).length) openCarousel(item, 0); }}
-                    style={{ width:"100%", aspectRatio:"1", borderRadius:8, overflow:"hidden",
+                    style={{ width:"100%", aspectRatio:"1", borderRadius:12, overflow:"hidden",
                       cursor: normPhotos(item).length ? "pointer" : "default", marginBottom:8, background:"var(--surface2)" }}>
                     {renderCover ? renderCover(item) : (
                       <img src={getCoverImage ? getCoverImage(item) : null} alt={getTitle(item)}
@@ -282,13 +292,13 @@ export default function GalleryCompare({
                         onError={e => { e.currentTarget.style.display="none"; }}/>
                     )}
                   </div>
-                  <p style={{ fontSize:12, fontWeight:700, color:"var(--text)", margin:"0 0 6px",
+                  <p style={{ fontSize:12.5, fontWeight:800, color:"var(--text)", margin:"0 0 6px",
                     overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getTitle(item)}</p>
                   {compareFields.map(([label, fn]) => (
                     <div key={label} style={{ display:"flex", justifyContent:"space-between", gap:6,
-                      fontSize:10, padding:"3px 0", borderTop:"1px solid var(--border)" }}>
-                      <span style={{ color:"var(--muted)" }}>{label}</span>
-                      <span style={{ color:"var(--text)", fontWeight:600, textAlign:"right",
+                      fontSize:11, padding:"4px 0", borderTop:"1px dashed var(--border)" }}>
+                      <span style={{ color:"var(--muted)", fontWeight:700 }}>{label}</span>
+                      <span style={{ color:"var(--text)", fontWeight:900, textAlign:"right",
                         overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{fn(item) ?? "—"}</span>
                     </div>
                   ))}
@@ -308,15 +318,16 @@ export default function GalleryCompare({
           <div onClick={() => setCarousel(null)} style={{ position:"fixed", inset:0, zIndex:2000,
             background:"rgba(0,0,0,0.92)", display:"flex", flexDirection:"column" }}>
             <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"14px 16px" }}>
-              <div>
-                <p style={{ color:"white", fontSize:14, fontWeight:700, margin:0 }}>{getTitle(carousel.item)}</p>
-                <p style={{ color:"rgba(255,255,255,0.6)", fontSize:11, margin:0 }}>
+              <div style={{ minWidth:0 }}>
+                <p style={{ color:"white", fontSize:15, fontWeight:800, margin:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getTitle(carousel.item)}</p>
+                <span style={{ display:"inline-block", marginTop:3, color:"#fff", fontSize:11, fontWeight:800, padding:"1px 8px", borderRadius:20,
+                  background:"rgba(255,255,255,0.14)" }}>
                   {carousel.index + 1} / {photos.length}{current.label ? ` · ${current.label}` : ""}
-                </p>
+                </span>
               </div>
               <button onClick={e => { e.stopPropagation(); setCarousel(null); }}
-                style={{ background:"rgba(255,255,255,0.1)", border:"none", borderRadius:"50%",
-                  width:32, height:32, color:"white", cursor:"pointer",
+                style={{ background:"rgba(255,255,255,0.14)", border:"1px solid rgba(255,255,255,0.2)", borderRadius:"50%",
+                  width:36, height:36, color:"white", cursor:"pointer",
                   display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
                 <X size={16}/>
               </button>
@@ -326,23 +337,23 @@ export default function GalleryCompare({
               onClick={e => e.stopPropagation()}>
               {photos.length > 1 && (
                 <button onClick={() => move(-1)}
-                  style={{ position:"absolute", left:8, background:"rgba(255,255,255,0.1)", border:"none",
-                    borderRadius:"50%", width:36, height:36, color:"white", cursor:"pointer",
+                  style={{ position:"absolute", left:8, background:"rgba(255,255,255,0.14)", border:"1px solid rgba(255,255,255,0.2)",
+                    borderRadius:"50%", width:40, height:40, backdropFilter:"blur(6px)", color:"white", cursor:"pointer",
                     display:"flex", alignItems:"center", justifyContent:"center", zIndex:1 }}>
                   <ChevronLeft size={18}/>
                 </button>
               )}
               {isVideoUrl(current.url) ? (
                 <video src={current.url} controls autoPlay playsInline
-                  style={{ maxWidth:"88vw", maxHeight:"100%", borderRadius:10 }}/>
+                  style={{ maxWidth:"88vw", maxHeight:"100%", borderRadius:16 }}/>
               ) : (
                 <img src={current.url} alt={current.label}
-                  style={{ maxWidth:"88vw", maxHeight:"100%", objectFit:"contain", borderRadius:10 }}/>
+                  style={{ maxWidth:"88vw", maxHeight:"100%", objectFit:"contain", borderRadius:16 }}/>
               )}
               {photos.length > 1 && (
                 <button onClick={() => move(1)}
-                  style={{ position:"absolute", right:8, background:"rgba(255,255,255,0.1)", border:"none",
-                    borderRadius:"50%", width:36, height:36, color:"white", cursor:"pointer",
+                  style={{ position:"absolute", right:8, background:"rgba(255,255,255,0.14)", border:"1px solid rgba(255,255,255,0.2)",
+                    borderRadius:"50%", width:40, height:40, backdropFilter:"blur(6px)", color:"white", cursor:"pointer",
                     display:"flex", alignItems:"center", justifyContent:"center", zIndex:1 }}>
                   <ChevronRight size={18}/>
                 </button>
@@ -354,9 +365,9 @@ export default function GalleryCompare({
               gap:8, padding:"8px 16px 4px" }}>
               {onItemClick && (
                 <button onClick={e=>{e.stopPropagation(); setCarousel(null); onItemClick(carousel.item);}}
-                  style={{ padding:"6px 20px", borderRadius:20, background:"#3b82f6", color:"white",
-                    border:"none", cursor:"pointer", fontSize:12, fontWeight:700 }}>
-                  Fiche
+                  style={{ padding:"9px 22px", borderRadius:20, background:"linear-gradient(135deg, #3B82F6, #6366F1)", color:"white",
+                    border:"none", cursor:"pointer", fontSize:13, fontWeight:800, boxShadow:"0 8px 18px -8px #3B82F6" }}>
+                  📄 Fiche
                 </button>
               )}
               {/* Actions photo : elles etaient cablees en dur sur
@@ -372,16 +383,16 @@ export default function GalleryCompare({
                     if (!(await showConfirm("Supprimer cette photo ?", { danger: true, confirmLabel: "Supprimer" }))) return;
                     await onDeletePhoto(carousel.item, filename);
                     setCarousel(null); onPhotosChanged?.(); }}
-                    style={{ padding:"6px 14px", borderRadius:20, background:"rgba(239,68,68,0.15)",
-                      color:"#ef4444", border:"1px solid rgba(239,68,68,0.3)", cursor:"pointer", fontSize:12, fontWeight:700 }}>
+                    style={{ padding:"9px 16px", borderRadius:20, background:"rgba(239,68,68,0.18)",
+                      color:"#fca5a5", border:"1px solid rgba(239,68,68,0.4)", cursor:"pointer", fontSize:13, fontWeight:800 }}>
                     🗑 Supprimer
                   </button>
                   {onSetPrimaryPhoto && carousel.index !== 0 && (
                     <button onClick={async e => { e.stopPropagation();
                       await onSetPrimaryPhoto(carousel.item, filename);
                       setCarousel(null); onPhotosChanged?.(); }}
-                      style={{ padding:"6px 14px", borderRadius:20, background:"rgba(34,197,94,0.12)",
-                        color:"#22c55e", border:"1px solid rgba(34,197,94,0.25)", cursor:"pointer", fontSize:12, fontWeight:700 }}>
+                      style={{ padding:"9px 16px", borderRadius:20, background:"rgba(34,197,94,0.18)",
+                        color:"#86efac", border:"1px solid rgba(34,197,94,0.4)", cursor:"pointer", fontSize:13, fontWeight:800 }}>
                       ⭐ Principale
                     </button>
                   )}
@@ -394,8 +405,9 @@ export default function GalleryCompare({
               <div onClick={e => e.stopPropagation()}
                 style={{ display:"flex", gap:6, overflowX:"auto", padding:"4px 16px calc(10px + env(safe-area-inset-bottom,0px))" }}>
                 {photos.map((p, i) => {
-                  const st = { width:48, height:48, objectFit:"cover", borderRadius:6, flexShrink:0, cursor:"pointer",
-                    border: i===carousel.index ? "2px solid #3b82f6" : "2px solid transparent", opacity: i===carousel.index ? 1 : 0.55 };
+                  const st = { width:52, height:52, objectFit:"cover", borderRadius:12, flexShrink:0, cursor:"pointer",
+                    border: i===carousel.index ? "2px solid #60a5fa" : "2px solid transparent", opacity: i===carousel.index ? 1 : 0.55,
+                    boxShadow: i===carousel.index ? "0 0 0 3px rgba(96,165,250,0.3)" : "none" };
                   return isVideoUrl(p.url)
                     ? <video key={i} src={p.url} muted loop autoPlay playsInline preload="metadata"
                         onClick={() => setCarousel(c => ({ ...c, index:i }))} style={st}/>

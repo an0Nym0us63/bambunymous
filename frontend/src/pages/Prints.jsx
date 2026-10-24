@@ -2269,12 +2269,13 @@ function PrintsGalleryView({ search, sortF = "recent" }) {
     .filter(t => !q || (t || "").toLowerCase().includes(q)).length : null;
   return (<>
     {hasFriends && (
-      <div style={{ display:"flex", gap:4, background:"var(--surface2)", borderRadius:12, padding:4,
+      <div style={{ display:"flex", gap:3, background:"var(--surface2)", borderRadius:16, padding:3,
         border:"1px solid var(--border)", marginBottom:10 }}>
-        {[["mine", `Ma galerie${nMine != null ? ` (${nMine})` : ""}`], ["friends", `👀 Chez les copains${nFr != null ? ` (${nFr})` : ""}`]].map(([k, l]) => (
-          <button key={k} onClick={() => setWho(k)} style={{ flex:1, padding:"7px 8px", borderRadius:8, fontSize:12,
-            fontWeight:700, cursor:"pointer", border:"none", background: who === k ? "#3b82f6" : "transparent",
-            color: who === k ? "white" : "var(--muted)" }}>{l}</button>
+        {[["mine", `🖼️ Ma galerie${nMine != null ? ` (${nMine})` : ""}`, "#EC4899"], ["friends", `👀 Chez les copains${nFr != null ? ` (${nFr})` : ""}`, "#8B5CF6"]].map(([k, l, c]) => (
+          <button key={k} onClick={() => setWho(k)} style={{ flex:1, padding:"8px 8px", borderRadius:12, fontSize:12.5,
+            fontWeight:800, cursor:"pointer", border:"none", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis",
+            background: who === k ? `linear-gradient(135deg, ${c}, color-mix(in srgb, ${c} 70%, #ffffff))` : "transparent",
+            color: who === k ? "white" : "var(--muted)", boxShadow: who === k ? `0 6px 14px -6px ${c}` : "none" }}>{l}</button>
         ))}
       </div>
     )}
